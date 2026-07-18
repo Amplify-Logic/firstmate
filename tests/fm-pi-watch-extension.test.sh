@@ -344,6 +344,72 @@ EOF
   pass "Pi hung successor falls back to one typed actionable wake"
 }
 
+test_pi_unretired_successor_falls_back_without_retry() {
+  local repo home plugin log release out status
+  repo="$TMP_ROOT/pi-unretired-successor-root"
+  home="$TMP_ROOT/pi-unretired-successor-home"
+  log="$TMP_ROOT/pi-unretired-successor.log"
+  release="$TMP_ROOT/pi-unretired-successor.release"
+  mkdir -p "$repo/bin" "$home/state" "$home/config"
+  install_pi_watch_extension_fixture "$repo"
+  plugin="$repo/.pi/extensions/fm-primary-pi-watch.ts"
+  cat > "$repo/bin/fm-watch-arm.sh" <<'SH'
+#!/usr/bin/env bash
+printf 'arm=%s\n' "$$" >> "${FM_ARM_LOG:?}"
+count=$(wc -l < "$FM_ARM_LOG" | tr -d '[:space:]')
+if [ "$count" -eq 1 ]; then
+  printf 'watcher: started pid=%s (beacon fresh)\n' "$$"
+  printf 'signal: synthetic wake\n'
+  exit 0
+fi
+trap '' TERM INT
+while [ ! -e "$FM_RELEASE_FILE" ]; do sleep 0.02; done
+SH
+  chmod +x "$repo/bin/fm-watch-arm.sh"
+  out=$(PLUGIN="$plugin" FM_HOME="$home" FM_ROOT_OVERRIDE="$repo" FM_ARM_LOG="$log" FM_RELEASE_FILE="$release" FM_PI_ARM_READY_TIMEOUT_MS=20 FM_WATCH_ARM_RETIRE_TIMEOUT_MS=20 FM_WATCH_REARM_RETRY_BASE_MS=5 FM_WATCH_REARM_RETRY_MAX_MS=10 FM_WATCH_REARM_RETRY_LIMIT=2 node --input-type=module 2>&1 <<'EOF'
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { pathToFileURL } from "node:url";
+
+let tool = null;
+let prompt = "";
+let rowsAtPrompt = 0;
+const pi = {
+  on() {},
+  registerCommand() {},
+  registerTool(candidate) {
+    if (candidate.name === "fm_watch_arm_pi") tool = candidate;
+  },
+  sendUserMessage: async (message) => {
+    prompt += message;
+    rowsAtPrompt = existsSync(process.env.FM_ARM_LOG)
+      ? readFileSync(process.env.FM_ARM_LOG, "utf8").trim().split("\n").length
+      : 0;
+  },
+};
+writeFileSync(`${process.env.FM_HOME}/state/.lock`, `${process.pid}\n`);
+const mod = await import(pathToFileURL(process.env.PLUGIN).href);
+mod.default(pi);
+await tool.execute("tool-call-unretired-successor", {}, undefined, undefined, {});
+for (let i = 0; i < 500 && !prompt; i += 1) {
+  await new Promise((resolve) => setTimeout(resolve, 10));
+}
+const rows = existsSync(process.env.FM_ARM_LOG)
+  ? readFileSync(process.env.FM_ARM_LOG, "utf8").trim().split("\n")
+  : [];
+if (rows.length !== 2) throw new Error(`unretired arm overlapped a retry: ${rows.join(" | ")}`);
+if (rowsAtPrompt !== 2) throw new Error(`wake arrived after an overlapping retry (${rowsAtPrompt} arm rows)`);
+if (!prompt.includes("signal: synthetic wake")) throw new Error(`original wake was lost: ${prompt}`);
+if (!prompt.includes("unready successor arm did not exit within 20ms")) throw new Error(`missing unretired-arm failure: ${prompt}`);
+writeFileSync(process.env.FM_RELEASE_FILE, "release\n");
+await new Promise((resolve) => setTimeout(resolve, 80));
+EOF
+)
+  status=$?
+  expect_code 0 "$status" "Pi must fall back without overlapping an unretired successor"
+  [ -z "$out" ] || fail "Pi unretired-successor test printed output: $out"
+  pass "Pi unretired successor falls back without an overlapping retry"
+}
+
 test_pi_empty_close_retries_instead_of_disappearing() {
   local repo home plugin log stop out status
   repo="$TMP_ROOT/pi-empty-close-root"
@@ -1073,6 +1139,74 @@ EOF
   pass "OpenCode hung successor falls back to one typed actionable wake"
 }
 
+test_opencode_unretired_successor_falls_back_without_retry() {
+  local plugin repo home log release out status
+  plugin="$ROOT/.opencode/plugins/fm-primary-watch-arm.js"
+  repo="$TMP_ROOT/opencode-unretired-successor-root"
+  home="$TMP_ROOT/opencode-unretired-successor-home"
+  log="$TMP_ROOT/opencode-unretired-successor.log"
+  release="$TMP_ROOT/opencode-unretired-successor.release"
+  mkdir -p "$repo/bin" "$home/state" "$home/config"
+  git init -q "$repo"
+  : > "$repo/AGENTS.md"
+  : > "$home/state/task.meta"
+  cat > "$repo/bin/fm-watch-arm.sh" <<'SH'
+#!/usr/bin/env bash
+printf 'arm=%s\n' "$$" >> "${FM_ARM_LOG:?}"
+count=$(wc -l < "$FM_ARM_LOG" | tr -d '[:space:]')
+if [ "$count" -eq 1 ]; then
+  printf 'watcher: started pid=%s (beacon fresh)\n' "$$"
+  printf 'signal: synthetic wake\n'
+  exit 0
+fi
+trap '' TERM INT
+while [ ! -e "$FM_RELEASE_FILE" ]; do sleep 0.02; done
+SH
+  chmod +x "$repo/bin/fm-watch-arm.sh"
+  out=$(PLUGIN="$plugin" WORKTREE="$repo" FM_HOME="$home" FM_ARM_LOG="$log" FM_RELEASE_FILE="$release" FM_OPENCODE_ARM_READY_TIMEOUT_MS=20 FM_WATCH_ARM_RETIRE_TIMEOUT_MS=20 FM_WATCH_REARM_RETRY_BASE_MS=5 FM_WATCH_REARM_RETRY_MAX_MS=10 FM_WATCH_REARM_RETRY_LIMIT=2 node 2>&1 <<'EOF'
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { pathToFileURL } from "node:url";
+
+const mod = await import(pathToFileURL(process.env.PLUGIN).href);
+let prompt = "";
+let rowsAtPrompt = 0;
+const client = {
+  session: {
+    promptAsync: async (request) => {
+      prompt += request.body.parts[0].text;
+      rowsAtPrompt = existsSync(process.env.FM_ARM_LOG)
+        ? readFileSync(process.env.FM_ARM_LOG, "utf8").trim().split("\n").length
+        : 0;
+    },
+  },
+};
+const hooks = await mod.FmPrimaryWatchArm({
+  client,
+  directory: process.env.WORKTREE,
+  worktree: process.env.WORKTREE,
+});
+writeFileSync(`${process.env.FM_HOME}/state/.lock`, `${process.pid}\n`);
+await hooks.event({ event: { type: "session.idle", properties: { sessionID: "session-test" } } });
+for (let i = 0; i < 500 && !prompt; i += 1) {
+  await new Promise((resolve) => setTimeout(resolve, 10));
+}
+const rows = existsSync(process.env.FM_ARM_LOG)
+  ? readFileSync(process.env.FM_ARM_LOG, "utf8").trim().split("\n")
+  : [];
+if (rows.length !== 2) throw new Error(`unretired arm overlapped a retry: ${rows.join(" | ")}`);
+if (rowsAtPrompt !== 2) throw new Error(`wake arrived after an overlapping retry (${rowsAtPrompt} arm rows)`);
+if (!prompt.includes("signal: synthetic wake")) throw new Error(`original wake was lost: ${prompt}`);
+if (!prompt.includes("unready successor arm did not exit within 20ms")) throw new Error(`missing unretired-arm failure: ${prompt}`);
+writeFileSync(process.env.FM_RELEASE_FILE, "release\n");
+await new Promise((resolve) => setTimeout(resolve, 80));
+EOF
+)
+  status=$?
+  expect_code 0 "$status" "OpenCode must fall back without overlapping an unretired successor"
+  [ -z "$out" ] || fail "OpenCode unretired-successor test printed output: $out"
+  pass "OpenCode unretired successor falls back without an overlapping retry"
+}
+
 test_opencode_empty_close_retries_instead_of_disappearing() {
   local plugin repo home log stop out status
   plugin="$ROOT/.opencode/plugins/fm-primary-watch-arm.js"
@@ -1407,6 +1541,7 @@ test_pi_extension_reports_external_healthy_watcher
 test_pi_tool_returns_agent_tool_result
 test_pi_actionable_close_starts_single_successor_before_delivery
 test_pi_hung_successor_falls_back_to_typed_wake
+test_pi_unretired_successor_falls_back_without_retry
 test_pi_empty_close_retries_instead_of_disappearing
 test_pi_established_empty_close_honors_retry_limit
 test_pi_actionable_close_rechecks_session_lock
@@ -1421,6 +1556,7 @@ test_opencode_primary_watch_plugin_requires_session_lock
 test_opencode_watch_arm_coordinator_respects_primary_scope
 test_opencode_primary_watch_plugin_rearms_after_wake
 test_opencode_hung_successor_falls_back_to_typed_wake
+test_opencode_unretired_successor_falls_back_without_retry
 test_opencode_empty_close_retries_instead_of_disappearing
 test_opencode_established_empty_close_honors_retry_limit
 test_opencode_actionable_close_rechecks_session_lock

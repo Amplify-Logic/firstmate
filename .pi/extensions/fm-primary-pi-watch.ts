@@ -33,6 +33,7 @@ const retryBaseMs = positiveInteger("FM_WATCH_REARM_RETRY_BASE_MS", 250);
 const retryMaxMs = positiveInteger("FM_WATCH_REARM_RETRY_MAX_MS", 4000);
 const retryLimit = positiveInteger("FM_WATCH_REARM_RETRY_LIMIT", 5);
 const armReadyTimeoutMs = positiveInteger("FM_PI_ARM_READY_TIMEOUT_MS", 12000);
+const armRetireTimeoutMs = positiveInteger("FM_WATCH_ARM_RETIRE_TIMEOUT_MS", 1000);
 
 let child: ChildProcess | null = null;
 let retryTimer: ReturnType<typeof setTimeout> | null = null;
@@ -42,6 +43,7 @@ let seq = 0;
 let restoring = false;
 const armReadiness = new WeakMap<ChildProcess, Promise<boolean>>();
 const abandonedChildren = new WeakSet<ChildProcess>();
+const armClose = new WeakMap<ChildProcess, Promise<void>>();
 
 function positiveInteger(name: string, fallback: number): number {
   const value = Number(process.env[name]);
@@ -174,11 +176,20 @@ export default function (pi: ExtensionAPI) {
     });
   }
 
-  function abandonArm(armChild: ChildProcess | null): void {
-    if (!armChild) return;
+  async function retireArm(armChild: ChildProcess | null): Promise<boolean> {
+    if (!armChild) return true;
     abandonedChildren.add(armChild);
-    if (child === armChild) child = null;
     armChild.kill("SIGTERM");
+    const closed = armClose.get(armChild);
+    if (!closed) return false;
+    return new Promise((resolveRetired) => {
+      const timer = setTimeout(() => resolveRetired(false), armRetireTimeoutMs);
+      timer.unref();
+      void closed.then(() => {
+        clearTimeout(timer);
+        resolveRetired(true);
+      });
+    });
   }
 
   async function restoreAfterActionableClose(predecessorArmPid: string): Promise<string> {
@@ -190,7 +201,9 @@ export default function (pi: ExtensionAPI) {
       if (replacement.ok && successorChild && await waitForReadiness(successorChild)) return "";
       if (replacement.ok) {
         failure = "watcher: FAILED - Pi extension could not verify a ready successor watcher";
-        abandonArm(successorChild);
+        if (!(await retireArm(successorChild))) {
+          return `${failure}\nwatcher: FAILED - Pi extension could not restore watcher continuity because the unready successor arm did not exit within ${armRetireTimeoutMs}ms`;
+        }
       } else {
         failure = /(?:read-only|no live session)/.test(replacement.message)
           ? `watcher: FAILED - Pi extension cannot restore continuity because this session no longer owns the lock\n${replacement.message}`
@@ -259,10 +272,15 @@ export default function (pi: ExtensionAPI) {
     let settled = false;
     let readinessSettled = false;
     let resolveReadiness: (ready: boolean) => void = () => {};
+    let resolveClosed: () => void = () => {};
     const readiness = new Promise<boolean>((resolveReady) => {
       resolveReadiness = resolveReady;
     });
     armReadiness.set(armChild, readiness);
+    const closed = new Promise<void>((resolveClosedChild) => {
+      resolveClosed = resolveClosedChild;
+    });
+    armClose.set(armChild, closed);
     const settleReadiness = (ready: boolean): void => {
       if (readinessSettled) return;
       readinessSettled = true;
@@ -287,6 +305,7 @@ export default function (pi: ExtensionAPI) {
     armChild.on("close", (code: number | null, signal: NodeJS.Signals | null) => {
       if (settled) return;
       settled = true;
+      resolveClosed();
       settleReadiness(false);
       releaseChild();
       if (stopping) return;
@@ -312,6 +331,7 @@ export default function (pi: ExtensionAPI) {
     armChild.on("error", (error: Error) => {
       if (settled) return;
       settled = true;
+      resolveClosed();
       settleReadiness(false);
       releaseChild();
       if (stopping) return;

@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 
 const COORDINATOR_KEY = "__firstmateOpenCodeWatchArm";
 const ARM_READY_TIMEOUT_MS = Number(process.env.FM_OPENCODE_ARM_READY_TIMEOUT_MS || 12000);
+const ARM_RETIRE_TIMEOUT_MS = positiveInteger("FM_WATCH_ARM_RETIRE_TIMEOUT_MS", 1000);
 const REARM_RETRY_BASE_MS = positiveInteger("FM_WATCH_REARM_RETRY_BASE_MS", 250);
 const REARM_RETRY_MAX_MS = positiveInteger("FM_WATCH_REARM_RETRY_MAX_MS", 4000);
 const REARM_RETRY_LIMIT = positiveInteger("FM_WATCH_REARM_RETRY_LIMIT", 5);
@@ -16,6 +17,7 @@ let retryFailures = 0;
 let launchInFlight = null;
 let restorationInFlight = null;
 let abandonedChildren = new WeakSet();
+let armClose = new WeakMap();
 
 function positiveInteger(name, fallback) {
   const value = Number(process.env[name]);
@@ -215,11 +217,20 @@ function waitForRetry(attempt) {
   });
 }
 
-function abandonArm(armChild) {
-  if (!armChild) return;
+async function retireArm(armChild) {
+  if (!armChild) return true;
   abandonedChildren.add(armChild);
-  if (child === armChild) child = null;
   armChild.kill("SIGTERM");
+  const closed = armClose.get(armChild);
+  if (!closed) return false;
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => resolve(false), ARM_RETIRE_TIMEOUT_MS);
+    timer.unref();
+    void closed.then(() => {
+      clearTimeout(timer);
+      resolve(true);
+    });
+  });
 }
 
 function restorationFailure(status) {
@@ -235,7 +246,10 @@ async function restoreAfterActionableClose(paths, sessionID, client, predecessor
     const status = await ensureArm(paths, sessionID, client, predecessorArmPid);
     if (status === "armed") return "";
     failure = restorationFailure(status);
-    abandonArm(child);
+    if (!(await retireArm(child))) {
+      setArmStatus("failed");
+      return `${failure}\nwatcher: FAILED - OpenCode could not restore watcher continuity because the unready successor arm did not exit within ${ARM_RETIRE_TIMEOUT_MS}ms`;
+    }
     if (status === "read-only" || status === "not-primary" || status === "skipped") break;
     if (attempt === REARM_RETRY_LIMIT) break;
     await waitForRetry(attempt + 1);
@@ -287,6 +301,11 @@ function spawnArm(paths, sessionID, client, predecessorArmPid = "") {
   let stdout = "";
   let stderr = "";
   let settled = false;
+  let resolveClosed = null;
+  const closed = new Promise((resolveClosedChild) => {
+    resolveClosed = resolveClosedChild;
+  });
+  armClose.set(armChild, closed);
   const releaseChild = () => {
     if (child === armChild) child = null;
   };
@@ -301,6 +320,7 @@ function spawnArm(paths, sessionID, client, predecessorArmPid = "") {
   armChild.on("close", (code, signal) => {
     if (settled) return;
     settled = true;
+    resolveClosed();
     releaseChild();
     if (abandonedChildren.has(armChild)) return;
     const classification = classifyArmClose(stdout, stderr, code, signal);
@@ -327,6 +347,7 @@ function spawnArm(paths, sessionID, client, predecessorArmPid = "") {
   armChild.on("error", (error) => {
     if (settled) return;
     settled = true;
+    resolveClosed();
     releaseChild();
     if (abandonedChildren.has(armChild)) return;
     if (restorationInFlight) {
