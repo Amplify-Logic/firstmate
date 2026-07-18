@@ -20,9 +20,11 @@
 # The run command rejects a caller-supplied --session flag anywhere before a
 # child-argv delimiter, any leading option before the subcommand, all session
 # lifecycle operations, every server operation, more than one child-argv
-# delimiter, a delimiter on any command other than `agent start`, and
-# `agent start` without exactly one delimiter followed by a non-empty child
-# command; the opaque child argv itself passes through untouched.
+# delimiter, a delimiter on any command other than `agent start`, an option
+# immediately before the delimiter (a value-taking option could swallow the
+# injected --session selector), and `agent start` without exactly one
+# delimiter followed by a non-empty child command; the opaque child argv
+# itself passes through untouched.
 # Session stop is available only through guarded stop or teardown, and session
 # delete is available only through teardown.
 # Both paths perform a fresh refuse-default check immediately before each
@@ -70,11 +72,7 @@ fm_herdr_lab_raw() { # <session> <herdr arguments...>
       before+=("$arg")
     fi
   done
-  if [ "$seen_delimiter" -eq 0 ]; then
-    HERDR_SESSION="$name" herdr "${before[@]+"${before[@]}"}" --session "$name"
-  else
-    HERDR_SESSION="$name" herdr "${before[@]+"${before[@]}"}" --session "$name" "${after[@]+"${after[@]}"}"
-  fi
+  HERDR_SESSION="$name" herdr "${before[@]+"${before[@]}"}" --session "$name" "${after[@]+"${after[@]}"}"
 }
 
 fm_herdr_lab_session_list() { # <session>
@@ -144,7 +142,7 @@ fm_herdr_lab_refuse_if_default() { # <session>
 }
 
 fm_herdr_lab_cli() { # <session> <herdr arguments...>
-  local name=$1 arg delimiter_count=0 child_count=0 seen_delimiter=0
+  local name=$1 arg prev='' delimiter_count=0 child_count=0 seen_delimiter=0
   shift
   fm_herdr_lab_validate_name "$name" || return 1
   [ "$#" -gt 0 ] || { fm_herdr_lab_error "run requires Herdr arguments"; return 1; }
@@ -157,6 +155,14 @@ fm_herdr_lab_cli() { # <session> <herdr arguments...>
   for arg in "$@"; do
     if [ "$arg" = -- ]; then
       delimiter_count=$((delimiter_count + 1))
+      if [ "$seen_delimiter" -eq 0 ]; then
+        case "$prev" in
+          -*)
+            fm_herdr_lab_error "run forbids an option immediately before the child-argv delimiter; a value-taking option could swallow the injected --session selector"
+            return 1
+            ;;
+        esac
+      fi
       seen_delimiter=1
       continue
     fi
@@ -167,6 +173,7 @@ fm_herdr_lab_cli() { # <session> <herdr arguments...>
           return 1
           ;;
       esac
+      prev=$arg
     else
       child_count=$((child_count + 1))
     fi

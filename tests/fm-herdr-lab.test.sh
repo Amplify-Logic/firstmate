@@ -320,6 +320,12 @@ test_unsafe_delimiter_shapes_never_invoke_herdr() {
   after=$(wc -l < "$FAKE_LOG")
   [ "$before" = "$after" ] || fail "agent start with an empty child command reached Herdr instead of being refused first"
 
+  status=0
+  run_with_fake fm_herdr_lab_cli "$name" agent start --some-flag -- claude >/dev/null 2>&1 || status=$?
+  expect_code 1 "$status" "an option immediately before the child-argv delimiter must be refused"
+  after=$(wc -l < "$FAKE_LOG")
+  [ "$before" = "$after" ] || fail "an option before the delimiter reached Herdr instead of being refused first; a value-taking option could swallow the injected --session"
+
   run_with_fake fm_herdr_lab_teardown "$name" || fail "teardown after unsafe-shape test failed"
   pass "fm-herdr-lab: ambiguous or unsafe child-argv shapes are refused before any Herdr call"
 }
