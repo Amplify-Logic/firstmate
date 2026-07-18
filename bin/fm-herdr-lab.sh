@@ -13,10 +13,16 @@
 # Session names must begin with "fm-lab-" and can never be "default".
 # The name command sanitizes the label, caps it at 16 characters, and appends
 # process/random suffixes to keep generated socket paths short.
-# Every Herdr call made here carries a trailing --session <session>.
-# The run command rejects caller-supplied --session flags, any leading option
-# before the subcommand, all session lifecycle operations, and every server
-# operation.
+# Every Herdr call made here carries --session <session>: an ordinary call
+# appends it, while an `agent start ... -- <child argv...>` call places it
+# immediately before the child-argv delimiter so Herdr, never the child,
+# consumes it.
+# The run command rejects a caller-supplied --session flag anywhere before a
+# child-argv delimiter, any leading option before the subcommand, all session
+# lifecycle operations, every server operation, more than one child-argv
+# delimiter, a delimiter on any command other than `agent start`, and
+# `agent start` without exactly one delimiter followed by a non-empty child
+# command; the opaque child argv itself passes through untouched.
 # Session stop is available only through guarded stop or teardown, and session
 # delete is available only through teardown.
 # Both paths perform a fresh refuse-default check immediately before each
@@ -49,9 +55,26 @@ fm_herdr_lab_tripwire_path() { # <session>
 }
 
 fm_herdr_lab_raw() { # <session> <herdr arguments...>
-  local name=$1
+  local name=$1 arg seen_delimiter=0
+  local -a before=() after=()
   shift
-  HERDR_SESSION="$name" herdr "$@" --session "$name"
+  for arg in "$@"; do
+    if [ "$seen_delimiter" -eq 0 ] && [ "$arg" = -- ]; then
+      seen_delimiter=1
+      after=("$arg")
+      continue
+    fi
+    if [ "$seen_delimiter" -eq 1 ]; then
+      after+=("$arg")
+    else
+      before+=("$arg")
+    fi
+  done
+  if [ "$seen_delimiter" -eq 0 ]; then
+    HERDR_SESSION="$name" herdr "${before[@]+"${before[@]}"}" --session "$name"
+  else
+    HERDR_SESSION="$name" herdr "${before[@]+"${before[@]}"}" --session "$name" "${after[@]+"${after[@]}"}"
+  fi
 }
 
 fm_herdr_lab_session_list() { # <session>
@@ -121,7 +144,7 @@ fm_herdr_lab_refuse_if_default() { # <session>
 }
 
 fm_herdr_lab_cli() { # <session> <herdr arguments...>
-  local name=$1 arg
+  local name=$1 arg delimiter_count=0 child_count=0 seen_delimiter=0
   shift
   fm_herdr_lab_validate_name "$name" || return 1
   [ "$#" -gt 0 ] || { fm_herdr_lab_error "run requires Herdr arguments"; return 1; }
@@ -132,13 +155,38 @@ fm_herdr_lab_cli() { # <session> <herdr arguments...>
       ;;
   esac
   for arg in "$@"; do
-    case "$arg" in
-      --session|--session=*)
-        fm_herdr_lab_error "run forbids caller-supplied --session; the helper appends the lab session"
-        return 1
-        ;;
-    esac
+    if [ "$arg" = -- ]; then
+      delimiter_count=$((delimiter_count + 1))
+      seen_delimiter=1
+      continue
+    fi
+    if [ "$seen_delimiter" -eq 0 ]; then
+      case "$arg" in
+        --session|--session=*)
+          fm_herdr_lab_error "run forbids caller-supplied --session; the helper places the lab session"
+          return 1
+          ;;
+      esac
+    else
+      child_count=$((child_count + 1))
+    fi
   done
+  if [ "$delimiter_count" -gt 1 ]; then
+    fm_herdr_lab_error "run forbids more than one child-argv delimiter; it could shift a lifecycle operation past the guard"
+    return 1
+  elif [ "$delimiter_count" -eq 1 ]; then
+    [ "$1 ${2:-}" = "agent start" ] || {
+      fm_herdr_lab_error "run accepts a child-argv delimiter only for 'agent start'; it could shift a lifecycle operation past the guard"
+      return 1
+    }
+    [ "$child_count" -gt 0 ] || {
+      fm_herdr_lab_error "run requires a non-empty child command after 'agent start ... --'"
+      return 1
+    }
+  elif [ "$1 ${2:-}" = "agent start" ]; then
+    fm_herdr_lab_error "run requires 'agent start' to carry an explicit -- delimiter followed by a non-empty child command"
+    return 1
+  fi
   case "$1 ${2:-}" in
     "server "*)
       fm_herdr_lab_error "run forbids server operations; use provision for the named lab server"
