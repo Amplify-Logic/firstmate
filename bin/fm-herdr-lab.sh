@@ -17,14 +17,15 @@
 # appends it, while an `agent start ... -- <child argv...>` call places it
 # immediately before the child-argv delimiter so Herdr, never the child,
 # consumes it.
-# The run command rejects a caller-supplied --session flag anywhere before a
-# child-argv delimiter, any leading option before the subcommand, all session
-# lifecycle operations, every server operation, more than one child-argv
-# delimiter, a delimiter on any command other than `agent start`, an option
-# immediately before the delimiter (a value-taking option could swallow the
-# injected --session selector), and `agent start` without exactly one
-# delimiter followed by a non-empty child command; the opaque child argv
-# itself passes through untouched.
+# The run command rejects a caller-supplied --session flag anywhere before
+# the child-argv delimiter, any leading option before the subcommand, all
+# session lifecycle operations, every server operation, a delimiter on any
+# command other than `agent start`, an option immediately before the
+# delimiter (a value-taking option could swallow the injected --session
+# selector), and `agent start` without a delimiter followed by a non-empty
+# child command. Only the first literal `--` is the delimiter: everything
+# after it, further `--` tokens included, is the opaque child argv and
+# passes through untouched.
 # Session stop is available only through guarded stop or teardown, and session
 # delete is available only through teardown.
 # Both paths perform a fresh refuse-default check immediately before each
@@ -142,7 +143,7 @@ fm_herdr_lab_refuse_if_default() { # <session>
 }
 
 fm_herdr_lab_cli() { # <session> <herdr arguments...>
-  local name=$1 arg prev='' delimiter_count=0 child_count=0 seen_delimiter=0
+  local name=$1 arg prev='' child_count=0 seen_delimiter=0
   shift
   fm_herdr_lab_validate_name "$name" || return 1
   [ "$#" -gt 0 ] || { fm_herdr_lab_error "run requires Herdr arguments"; return 1; }
@@ -153,35 +154,29 @@ fm_herdr_lab_cli() { # <session> <herdr arguments...>
       ;;
   esac
   for arg in "$@"; do
-    if [ "$arg" = -- ]; then
-      delimiter_count=$((delimiter_count + 1))
-      if [ "$seen_delimiter" -eq 0 ]; then
-        case "$prev" in
-          -*)
-            fm_herdr_lab_error "run forbids an option immediately before the child-argv delimiter; a value-taking option could swallow the injected --session selector"
-            return 1
-            ;;
-        esac
-      fi
-      seen_delimiter=1
+    if [ "$seen_delimiter" -eq 1 ]; then
+      child_count=$((child_count + 1))
       continue
     fi
-    if [ "$seen_delimiter" -eq 0 ]; then
-      case "$arg" in
-        --session|--session=*)
-          fm_herdr_lab_error "run forbids caller-supplied --session; the helper places the lab session"
+    if [ "$arg" = -- ]; then
+      case "$prev" in
+        -*)
+          fm_herdr_lab_error "run forbids an option immediately before the child-argv delimiter; a value-taking option could swallow the injected --session selector"
           return 1
           ;;
       esac
-      prev=$arg
-    else
-      child_count=$((child_count + 1))
+      seen_delimiter=1
+      continue
     fi
+    case "$arg" in
+      --session|--session=*)
+        fm_herdr_lab_error "run forbids caller-supplied --session; the helper places the lab session"
+        return 1
+        ;;
+    esac
+    prev=$arg
   done
-  if [ "$delimiter_count" -gt 1 ]; then
-    fm_herdr_lab_error "run forbids more than one child-argv delimiter; it could shift a lifecycle operation past the guard"
-    return 1
-  elif [ "$delimiter_count" -eq 1 ]; then
+  if [ "$seen_delimiter" -eq 1 ]; then
     [ "$1 ${2:-}" = "agent start" ] || {
       fm_herdr_lab_error "run accepts a child-argv delimiter only for 'agent start'; it could shift a lifecycle operation past the guard"
       return 1

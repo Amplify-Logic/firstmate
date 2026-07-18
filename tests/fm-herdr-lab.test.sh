@@ -291,18 +291,25 @@ test_child_argv_never_receives_session_selector() {
   pass "fm-herdr-lab: a child argv containing the literal string --session passes through untouched instead of being treated as the lab selector"
 }
 
+test_child_argv_own_delimiter_passes_through() {
+  local name="fm-lab-child-delim-$$" call_line
+  : > "$FAKE_LOG"
+  run_with_fake fm_herdr_lab_provision "$name" || fail "provision failed"
+  run_with_fake fm_herdr_lab_cli "$name" agent start probe -- npm run build -- --flag >/dev/null \
+    || fail "agent start with a child command carrying its own -- delimiter was refused"
+  call_line=$(grep -F "agent start probe" "$FAKE_LOG")
+  [ "$call_line" = "agent start probe --session $name -- npm run build -- --flag" ] \
+    || fail "child argv with its own -- was altered before reaching Herdr: $call_line"
+  run_with_fake fm_herdr_lab_teardown "$name" || fail "teardown after child-delimiter test failed"
+  pass "fm-herdr-lab: a child command with its own -- passes through untouched after the first delimiter"
+}
+
 test_unsafe_delimiter_shapes_never_invoke_herdr() {
   local name="fm-lab-delimiter-shapes-$$" status=0 before after
   run_with_fake fm_herdr_lab_provision "$name" || fail "provision failed"
   : > "$FAKE_LOG"
 
   before=$(wc -l < "$FAKE_LOG")
-  run_with_fake fm_herdr_lab_cli "$name" agent start probe -- claude -- extra >/dev/null 2>&1 || status=$?
-  expect_code 1 "$status" "more than one child-argv delimiter must be refused"
-  after=$(wc -l < "$FAKE_LOG")
-  [ "$before" = "$after" ] || fail "multiple delimiters reached Herdr instead of being refused first"
-
-  status=0
   run_with_fake fm_herdr_lab_cli "$name" session list -- probe >/dev/null 2>&1 || status=$?
   expect_code 1 "$status" "a delimiter on a command other than agent start must be refused"
   after=$(wc -l < "$FAKE_LOG")
@@ -339,4 +346,5 @@ test_failed_delete_retains_tripwire
 test_timed_out_provision_cancels_late_launch
 test_agent_start_places_session_before_delimiter
 test_child_argv_never_receives_session_selector
+test_child_argv_own_delimiter_passes_through
 test_unsafe_delimiter_shapes_never_invoke_herdr
