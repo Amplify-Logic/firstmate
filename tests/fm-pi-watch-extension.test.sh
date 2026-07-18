@@ -411,11 +411,13 @@ EOF
 }
 
 test_pi_late_unretired_close_resumes_supervision() {
-  local kind repo home plugin log release stop out status
+  local kind repo home plugin log ready retired release stop out status
   for kind in actionable non-actionable; do
     repo="$TMP_ROOT/pi-late-$kind-root"
     home="$TMP_ROOT/pi-late-$kind-home"
     log="$TMP_ROOT/pi-late-$kind.log"
+    ready="$TMP_ROOT/pi-late-$kind.ready"
+    retired="$TMP_ROOT/pi-late-$kind.retired"
     release="$TMP_ROOT/pi-late-$kind.release"
     stop="$TMP_ROOT/pi-late-$kind.stop"
     mkdir -p "$repo/bin" "$home/state" "$home/config"
@@ -431,7 +433,8 @@ if [ "$count" -eq 1 ]; then
   exit 0
 fi
 if [ "$count" -eq 2 ]; then
-  trap '' TERM INT
+  trap 'printf "retired\\n" > "${FM_UNRETIRED_RETIRE_FILE:?}"' TERM INT
+  printf 'ready\n' > "${FM_UNRETIRED_READY_FILE:?}"
   while [ ! -e "$FM_RELEASE_FILE" ]; do sleep 0.02; done
   [ "$FM_LATE_KIND" = actionable ] && printf 'signal: late wake\n'
   exit 0
@@ -441,7 +444,7 @@ trap 'exit 0' TERM INT
 while [ ! -e "$FM_STOP_FILE" ]; do sleep 0.02; done
 SH
     chmod +x "$repo/bin/fm-watch-arm.sh"
-    out=$(PLUGIN="$plugin" FM_HOME="$home" FM_ROOT_OVERRIDE="$repo" FM_ARM_LOG="$log" FM_RELEASE_FILE="$release" FM_STOP_FILE="$stop" FM_LATE_KIND="$kind" FM_PI_ARM_READY_TIMEOUT_MS=20 FM_WATCH_ARM_RETIRE_TIMEOUT_MS=20 FM_WATCH_REARM_RETRY_BASE_MS=5 FM_WATCH_REARM_RETRY_MAX_MS=10 FM_WATCH_REARM_RETRY_LIMIT=2 node --input-type=module 2>&1 <<'EOF'
+    out=$(PLUGIN="$plugin" FM_HOME="$home" FM_ROOT_OVERRIDE="$repo" FM_ARM_LOG="$log" FM_UNRETIRED_READY_FILE="$ready" FM_UNRETIRED_RETIRE_FILE="$retired" FM_RELEASE_FILE="$release" FM_STOP_FILE="$stop" FM_LATE_KIND="$kind" FM_PI_ARM_READY_TIMEOUT_MS=250 FM_WATCH_ARM_RETIRE_TIMEOUT_MS=20 FM_WATCH_REARM_RETRY_BASE_MS=5 FM_WATCH_REARM_RETRY_MAX_MS=10 FM_WATCH_REARM_RETRY_LIMIT=2 node --input-type=module 2>&1 <<'EOF'
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 
@@ -460,11 +463,26 @@ const pi = {
 const rows = () => existsSync(process.env.FM_ARM_LOG)
   ? readFileSync(process.env.FM_ARM_LOG, "utf8").trim().split("\n")
   : [];
+async function waitFor(predicate, message) {
+  for (let i = 0; i < 500; i += 1) {
+    if (predicate()) return;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  throw new Error(message);
+}
 writeFileSync(`${process.env.FM_HOME}/state/.lock`, `${process.pid}\n`);
 const mod = await import(pathToFileURL(process.env.PLUGIN).href);
 mod.default(pi);
 await tool.execute("tool-call-late-close", {}, undefined, undefined, {});
-for (let i = 0; i < 500 && prompts.length < 1; i += 1) await new Promise((resolve) => setTimeout(resolve, 10));
+await waitFor(
+  () => existsSync(process.env.FM_UNRETIRED_READY_FILE),
+  "unretired successor did not enter its retirement wait",
+);
+await waitFor(() => prompts.length >= 1, "original fallback was not delivered");
+await waitFor(
+  () => existsSync(process.env.FM_UNRETIRED_RETIRE_FILE),
+  "unretired successor was not asked to retire before fallback",
+);
 if (rows().length !== 2) throw new Error(`unretired arm overlapped before fallback: ${rows().join(" | ")}`);
 if (!prompts[0]?.includes("original wake")) throw new Error(`missing original fallback: ${prompts.join(" | ")}`);
 writeFileSync(process.env.FM_RELEASE_FILE, "release\n");
@@ -1358,12 +1376,14 @@ EOF
 }
 
 test_opencode_late_unretired_close_resumes_supervision() {
-  local kind plugin repo home log release stop out status
+  local kind plugin repo home log ready retired release stop out status
   for kind in actionable non-actionable; do
     plugin="$ROOT/.opencode/plugins/fm-primary-watch-arm.js"
     repo="$TMP_ROOT/opencode-late-$kind-root"
     home="$TMP_ROOT/opencode-late-$kind-home"
     log="$TMP_ROOT/opencode-late-$kind.log"
+    ready="$TMP_ROOT/opencode-late-$kind.ready"
+    retired="$TMP_ROOT/opencode-late-$kind.retired"
     release="$TMP_ROOT/opencode-late-$kind.release"
     stop="$TMP_ROOT/opencode-late-$kind.stop"
     mkdir -p "$repo/bin" "$home/state" "$home/config"
@@ -1380,7 +1400,8 @@ if [ "$count" -eq 1 ]; then
   exit 0
 fi
 if [ "$count" -eq 2 ]; then
-  trap '' TERM INT
+  trap 'printf "retired\\n" > "${FM_UNRETIRED_RETIRE_FILE:?}"' TERM INT
+  printf 'ready\n' > "${FM_UNRETIRED_READY_FILE:?}"
   while [ ! -e "$FM_RELEASE_FILE" ]; do sleep 0.02; done
   [ "$FM_LATE_KIND" = actionable ] && printf 'signal: late wake\n'
   exit 0
@@ -1390,7 +1411,7 @@ trap 'exit 0' TERM INT
 while [ ! -e "$FM_STOP_FILE" ]; do sleep 0.02; done
 SH
     chmod +x "$repo/bin/fm-watch-arm.sh"
-    out=$(PLUGIN="$plugin" WORKTREE="$repo" FM_HOME="$home" FM_ARM_LOG="$log" FM_RELEASE_FILE="$release" FM_STOP_FILE="$stop" FM_LATE_KIND="$kind" FM_OPENCODE_ARM_READY_TIMEOUT_MS=20 FM_WATCH_ARM_RETIRE_TIMEOUT_MS=20 FM_WATCH_REARM_RETRY_BASE_MS=5 FM_WATCH_REARM_RETRY_MAX_MS=10 FM_WATCH_REARM_RETRY_LIMIT=2 node 2>&1 <<'EOF'
+    out=$(PLUGIN="$plugin" WORKTREE="$repo" FM_HOME="$home" FM_ARM_LOG="$log" FM_UNRETIRED_READY_FILE="$ready" FM_UNRETIRED_RETIRE_FILE="$retired" FM_RELEASE_FILE="$release" FM_STOP_FILE="$stop" FM_LATE_KIND="$kind" FM_OPENCODE_ARM_READY_TIMEOUT_MS=250 FM_WATCH_ARM_RETIRE_TIMEOUT_MS=20 FM_WATCH_REARM_RETRY_BASE_MS=5 FM_WATCH_REARM_RETRY_MAX_MS=10 FM_WATCH_REARM_RETRY_LIMIT=2 node 2>&1 <<'EOF'
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 
@@ -1406,6 +1427,13 @@ const client = {
 const rows = () => existsSync(process.env.FM_ARM_LOG)
   ? readFileSync(process.env.FM_ARM_LOG, "utf8").trim().split("\n")
   : [];
+async function waitFor(predicate, message) {
+  for (let i = 0; i < 500; i += 1) {
+    if (predicate()) return;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  throw new Error(message);
+}
 const hooks = await mod.FmPrimaryWatchArm({
   client,
   directory: process.env.WORKTREE,
@@ -1413,7 +1441,15 @@ const hooks = await mod.FmPrimaryWatchArm({
 });
 writeFileSync(`${process.env.FM_HOME}/state/.lock`, `${process.pid}\n`);
 await hooks.event({ event: { type: "session.idle", properties: { sessionID: "session-test" } } });
-for (let i = 0; i < 500 && prompts.length < 1; i += 1) await new Promise((resolve) => setTimeout(resolve, 10));
+await waitFor(
+  () => existsSync(process.env.FM_UNRETIRED_READY_FILE),
+  "unretired successor did not enter its retirement wait",
+);
+await waitFor(() => prompts.length >= 1, "original fallback was not delivered");
+await waitFor(
+  () => existsSync(process.env.FM_UNRETIRED_RETIRE_FILE),
+  "unretired successor was not asked to retire before fallback",
+);
 if (rows().length !== 2) throw new Error(`unretired arm overlapped before fallback: ${rows().join(" | ")}`);
 if (!prompts[0]?.includes("original wake")) throw new Error(`missing original fallback: ${prompts.join(" | ")}`);
 writeFileSync(process.env.FM_RELEASE_FILE, "release\n");
