@@ -190,6 +190,42 @@ SH
   pass "SIGTERM-ignoring probe is force-killed after a bounded grace period"
 }
 
+test_timed_out_probe_leaves_no_wrapper_descendants() {
+  local out status child_pid tries
+  make_spawn_case hang-descendant opencode
+  local child_pid_file="$CASE_DIR/hang-descendant-child.pid"
+  cat > "$FAKEBIN_DIR/opencode" <<SH
+#!/usr/bin/env bash
+set -u
+printf '%s %s\n' "\$(basename "\$0")" "\$*" >> "\${FM_FAKE_PROBE_LOG:?}"
+bash -c 'trap "" TERM; echo \$\$ > "$child_pid_file"; while :; do sleep 1; done' &
+wait
+SH
+  chmod +x "$FAKEBIN_DIR/opencode"
+
+  out=$(FM_SPAWN_PROBE_TIMEOUT_SECS=1 run_spawn "$ID" "$PROJ_DIR")
+  status=$?
+
+  expect_code 1 "$status" "wrapper probe with hanging descendant should time out"
+  assert_contains "$out" \
+    "error: harness 'opencode' launch binary 'opencode' --version probe timed out after 1s (raise with FM_SPAWN_PROBE_TIMEOUT_SECS); refusing before creating a task endpoint" \
+    "wrapper probe did not produce the timeout refusal"
+  [ -s "$child_pid_file" ] || fail "wrapper never recorded its descendant pid"
+  child_pid=$(cat "$child_pid_file")
+  tries=0
+  while kill -0 "$child_pid" 2>/dev/null && [ "$tries" -lt 20 ]; do
+    sleep 0.1
+    tries=$((tries + 1))
+  done
+  if kill -0 "$child_pid" 2>/dev/null; then
+    kill -9 "$child_pid" 2>/dev/null
+    fail "TERM-resistant descendant (pid $child_pid) survived the timed-out probe"
+  fi
+  [ ! -s "$ENDPOINT_LOG" ] || fail "wrapper probe touched tmux before failing"
+  assert_absent "$HOME_DIR/state/$ID.meta" "wrapper probe wrote task meta"
+  pass "timed-out probe kills TERM-resistant wrapper descendants via its process group"
+}
+
 test_probe_closes_stdin() {
   local out status
   make_spawn_case stdin-probe opencode
@@ -232,6 +268,7 @@ test_present_verified_binaries_spawn_as_before
 test_raw_launch_command_remains_exempt
 test_hanging_version_probe_times_out_before_endpoint_creation
 test_sigterm_ignoring_probe_is_killed_after_grace
+test_timed_out_probe_leaves_no_wrapper_descendants
 test_probe_closes_stdin
 test_invalid_probe_timeout_knob_refuses
 

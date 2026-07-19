@@ -412,18 +412,20 @@ launch_binary_install_hint() {  # <binary>
 
 run_version_probe() {  # <resolved-binary> <timeout-secs>
   local resolved=$1 timeout_secs=$2 pid waited=0 limit
+  set -m
   "$resolved" --version </dev/null >/dev/null 2>&1 &
   pid=$!
+  set +m
   limit=$((timeout_secs * 10))
   while kill -0 "$pid" 2>/dev/null; do
     if [ "$waited" -ge "$limit" ]; then
-      kill "$pid" 2>/dev/null
+      kill -- -"$pid" 2>/dev/null
       local grace=0
       while kill -0 "$pid" 2>/dev/null && [ "$grace" -lt 20 ]; do
         sleep 0.1
         grace=$((grace + 1))
       done
-      kill -0 "$pid" 2>/dev/null && kill -9 "$pid" 2>/dev/null
+      kill -9 -- -"$pid" 2>/dev/null
       wait "$pid" 2>/dev/null
       return 124
     fi
