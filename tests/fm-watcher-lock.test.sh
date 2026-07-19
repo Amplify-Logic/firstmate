@@ -437,14 +437,27 @@ test_watch_restart_rejects_reused_pid() {
 }
 
 test_watch_restart_reports_healthy_peer_without_attaching() {
-  local dir state fakebin out peer identity armpid status
+  local dir state fakebin out ready peer identity armpid status i
   dir=$(make_case restart-healthy-peer)
   state="$dir/state"
   fakebin="$dir/fakebin"
   out="$dir/restart.out"
+  ready="$dir/peer.ready"
   mark_pr_check_migration_complete "$state"
-  node -e 'process.on("SIGTERM", () => {}); setTimeout(() => {}, 300000)' &
+  # Process spawn does not mean Node has installed its signal handler yet.
+  # Wait for an explicit marker so restart cannot deliver TERM during startup.
+  node -e 'process.on("SIGTERM", () => {}); require("fs").writeFileSync(process.argv[1], "ready\n"); setTimeout(() => {}, 300000)' "$ready" &
   peer=$!
+  i=0
+  while [ "$i" -lt 80 ] && [ ! -s "$ready" ] && is_live_non_zombie "$peer"; do
+    sleep 0.1
+    i=$((i + 1))
+  done
+  if [ ! -s "$ready" ]; then
+    kill -KILL "$peer" 2>/dev/null || true
+    wait "$peer" 2>/dev/null || true
+    fail "TERM-resistant peer did not finish installing its signal handler"
+  fi
   identity=$(FM_STATE_OVERRIDE="$state" bash -c '. "$1"; fm_pid_identity "$2"' _ "$LIB" "$peer") || fail "could not identify peer pid"
   mkdir "$state/.watch.lock"
   printf '%s\n' "$peer" > "$state/.watch.lock/pid"
@@ -456,7 +469,11 @@ test_watch_restart_reports_healthy_peer_without_attaching() {
   armpid=$!
   wait_for_exit "$armpid" 80
   status=$?
-  [ "$status" -eq 0 ] || fail "restart did not exit zero after reporting healthy peer (status $status): $(cat "$out")"
+  if [ "$status" -ne 0 ]; then
+    kill -KILL "$peer" "$armpid" 2>/dev/null || true
+    wait "$peer" 2>/dev/null || true
+    fail "restart did not exit zero after reporting healthy peer (status $status): $(cat "$out")"
+  fi
   grep -qF "watcher: healthy pid=$peer" "$out" || fail "restart did not report the healthy peer: $(cat "$out")"
   ! grep -qF 'watcher: attached' "$out" || fail "restart attached to a peer watcher instead of preserving restart ownership contract"
   is_live_non_zombie "$peer" || fail "restart killed a TERM-resistant peer unexpectedly"
