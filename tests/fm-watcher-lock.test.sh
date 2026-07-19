@@ -458,7 +458,15 @@ test_watch_restart_reports_healthy_peer_without_attaching() {
     wait "$peer" 2>/dev/null || true
     fail "TERM-resistant peer did not finish installing its signal handler"
   fi
-  identity=$(FM_STATE_OVERRIDE="$state" bash -c '. "$1"; fm_pid_identity "$2"' _ "$LIB" "$peer") || fail "could not identify peer pid"
+  fail_with_peer_cleanup() {
+    kill -KILL "$peer" ${armpid:+"$armpid"} 2>/dev/null || true
+    wait "$peer" 2>/dev/null || true
+    if [ -n "${armpid:-}" ]; then
+      wait "$armpid" 2>/dev/null || true
+    fi
+    fail "$@"
+  }
+  identity=$(FM_STATE_OVERRIDE="$state" bash -c '. "$1"; fm_pid_identity "$2"' _ "$LIB" "$peer") || fail_with_peer_cleanup "could not identify peer pid"
   mkdir "$state/.watch.lock"
   printf '%s\n' "$peer" > "$state/.watch.lock/pid"
   printf '%s\n' "$dir" > "$state/.watch.lock/fm-home"
@@ -470,13 +478,11 @@ test_watch_restart_reports_healthy_peer_without_attaching() {
   wait_for_exit "$armpid" 80
   status=$?
   if [ "$status" -ne 0 ]; then
-    kill -KILL "$peer" "$armpid" 2>/dev/null || true
-    wait "$peer" 2>/dev/null || true
-    fail "restart did not exit zero after reporting healthy peer (status $status): $(cat "$out")"
+    fail_with_peer_cleanup "restart did not exit zero after reporting healthy peer (status $status): $(cat "$out")"
   fi
-  grep -qF "watcher: healthy pid=$peer" "$out" || fail "restart did not report the healthy peer: $(cat "$out")"
-  ! grep -qF 'watcher: attached' "$out" || fail "restart attached to a peer watcher instead of preserving restart ownership contract"
-  is_live_non_zombie "$peer" || fail "restart killed a TERM-resistant peer unexpectedly"
+  grep -qF "watcher: healthy pid=$peer" "$out" || fail_with_peer_cleanup "restart did not report the healthy peer: $(cat "$out")"
+  ! grep -qF 'watcher: attached' "$out" || fail_with_peer_cleanup "restart attached to a peer watcher instead of preserving restart ownership contract"
+  is_live_non_zombie "$peer" || fail_with_peer_cleanup "restart killed a TERM-resistant peer unexpectedly"
   kill -KILL "$peer" 2>/dev/null || true
   wait "$peer" 2>/dev/null || true
   pass "watch restart reports a healthy peer without attaching to it"
