@@ -1,0 +1,150 @@
+#!/usr/bin/env bash
+# Behavior tests for fm-spawn.sh launch-binary preflight.
+#
+# These tests use a fake tmux endpoint and real isolated git worktrees.
+# The missing-binary case asserts refusal before tmux is touched or task meta is written.
+# The healthy cases assert all six verified launch templates still reach the normal spawn path.
+# Raw launch commands remain exempt because arbitrary shell syntax cannot be resolved reliably without executing it.
+set -u
+
+# shellcheck source=tests/lib.sh
+. "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
+
+SPAWN="$ROOT/bin/fm-spawn.sh"
+TMP_ROOT=$(fm_test_tmproot fm-spawn-launch-preflight)
+
+make_spawn_case() {
+  local name=$1 harness=$2 launch_binary=${3:-}
+  CASE_DIR="$TMP_ROOT/$name"
+  HOME_DIR="$CASE_DIR/home"
+  PROJ_DIR="$CASE_DIR/project"
+  WT_DIR="$CASE_DIR/wt"
+  ENDPOINT_LOG="$CASE_DIR/endpoint.log"
+  LAUNCH_LOG="$CASE_DIR/launch.log"
+  PROBE_LOG="$CASE_DIR/probe.log"
+  ID="preflight-$name"
+  FAKEBIN_DIR=$(fm_fakebin "$CASE_DIR")
+
+  mkdir -p "$HOME_DIR/data/$ID" "$HOME_DIR/projects" "$HOME_DIR/state" "$HOME_DIR/config"
+  printf '%s\n' "$harness" > "$HOME_DIR/config/crew-harness"
+  printf 'brief for %s\n' "$ID" > "$HOME_DIR/data/$ID/brief.md"
+  fm_git_worktree "$PROJ_DIR" "$WT_DIR" "wt-$name"
+  touch "$HOME_DIR/state/.last-watcher-beat"
+  : > "$ENDPOINT_LOG"
+  : > "$LAUNCH_LOG"
+
+  cat > "$FAKEBIN_DIR/tmux" <<'SH'
+#!/usr/bin/env bash
+set -u
+printf '%s\n' "$*" >> "${FM_FAKE_ENDPOINT_LOG:?}"
+case "$*" in
+  *"#{pane_current_path}"*) printf '%s\n' "${FM_FAKE_PANE_PATH:-}"; exit 0 ;;
+esac
+case "${1:-}" in
+  display-message) printf 'firstmate\n'; exit 0 ;;
+  new-window) printf '@42\n'; exit 0 ;;
+  list-windows|has-session|new-session|set-window-option|kill-window) exit 0 ;;
+  send-keys)
+    prev=
+    for arg in "$@"; do
+      if [ "$prev" = "-l" ]; then
+        printf '%s\n' "$arg" >> "${FM_FAKE_LAUNCH_LOG:?}"
+      fi
+      prev=$arg
+    done
+    exit 0
+    ;;
+esac
+exit 0
+SH
+  chmod +x "$FAKEBIN_DIR/tmux"
+  fm_fake_exit0 "$FAKEBIN_DIR" treehouse
+
+  if [ -n "$launch_binary" ]; then
+    cat > "$FAKEBIN_DIR/$launch_binary" <<'SH'
+#!/usr/bin/env bash
+set -u
+printf '%s %s\n' "$(basename "$0")" "$*" >> "${FM_FAKE_PROBE_LOG:?}"
+[ "$#" -eq 1 ] && [ "$1" = "--version" ]
+SH
+    chmod +x "$FAKEBIN_DIR/$launch_binary"
+  fi
+}
+
+run_spawn() {
+  FM_ROOT_OVERRIDE='' FM_HOME="$HOME_DIR" \
+    FM_STATE_OVERRIDE="$HOME_DIR/state" FM_DATA_OVERRIDE="$HOME_DIR/data" \
+    FM_PROJECTS_OVERRIDE="$HOME_DIR/projects" FM_CONFIG_OVERRIDE="$HOME_DIR/config" \
+    FM_SPAWN_NO_GUARD=1 FM_FAKE_PANE_PATH="$WT_DIR" TMUX="fake,1,0" \
+    FM_FAKE_ENDPOINT_LOG="$ENDPOINT_LOG" FM_FAKE_LAUNCH_LOG="$LAUNCH_LOG" \
+    FM_FAKE_PROBE_LOG="$PROBE_LOG" GROK_HOME="$HOME_DIR/grok-home" \
+    PATH="$FAKEBIN_DIR:/usr/bin:/bin" "$SPAWN" "$@" 2>&1
+}
+
+cleanup_task_tmp() {
+  rm -rf "/tmp/fm-$1"
+}
+
+test_missing_verified_binary_refuses_before_endpoint_creation() {
+  local out status
+  make_spawn_case missing-opencode opencode
+
+  out=$(run_spawn "$ID" "$PROJ_DIR")
+  status=$?
+
+  expect_code 1 "$status" "missing verified launch binary should fail"
+  assert_contains "$out" \
+    "error: harness 'opencode' launch binary 'opencode' was not found (install: npm install -g opencode-ai); refusing before creating a task endpoint" \
+    "missing-binary refusal did not name the binary and exact install hint"
+  [ ! -s "$ENDPOINT_LOG" ] || fail "missing-binary refusal touched tmux before failing"
+  assert_absent "$HOME_DIR/state/$ID.meta" "missing-binary refusal wrote task meta"
+  assert_absent "$PROBE_LOG" "missing binary unexpectedly ran a version probe"
+  pass "missing verified binary is refused before endpoint creation or meta"
+}
+
+test_present_verified_binaries_spawn_as_before() {
+  local harness launch_binary out status
+  while IFS='|' read -r harness launch_binary; do
+    make_spawn_case "present-$harness" "$harness" "$launch_binary"
+
+    out=$(run_spawn "$ID" "$PROJ_DIR")
+    status=$?
+
+    expect_code 0 "$status" "present $harness launch binary should spawn"
+    assert_contains "$out" "spawned $ID harness=$harness" "$harness spawn did not reach the healthy path"
+    assert_grep "$launch_binary --version" "$PROBE_LOG" "$harness did not run the expected cheap version probe"
+    assert_grep "new-window" "$ENDPOINT_LOG" "$harness did not create the normal tmux endpoint"
+    assert_present "$HOME_DIR/state/$ID.meta" "$harness healthy spawn did not write task meta"
+    cleanup_task_tmp "$ID"
+  done <<'EOF'
+claude|claude
+codex|codex
+opencode|opencode
+pi|pi
+grok|grok
+cursor|agent
+EOF
+  pass "all six verified adapters preflight and spawn normally when their binaries are present"
+}
+
+test_raw_launch_command_remains_exempt() {
+  local out status launch
+  make_spawn_case raw-exempt claude
+
+  out=$(run_spawn "$ID" "$PROJ_DIR" "custom-agent --flag")
+  status=$?
+
+  expect_code 0 "$status" "raw launch command should remain exempt from verified-adapter preflight"
+  assert_contains "$out" "spawned $ID harness=custom-agent" "raw launch command did not spawn"
+  assert_absent "$PROBE_LOG" "raw launch command unexpectedly ran a first-word probe"
+  launch=$(cat "$LAUNCH_LOG")
+  [ "$launch" = "custom-agent --flag" ] || fail "raw launch command changed"$'\n'"actual: $launch"
+  cleanup_task_tmp "$ID"
+  pass "raw launch command stays exempt from preflight and is sent unchanged"
+}
+
+test_missing_verified_binary_refuses_before_endpoint_creation
+test_present_verified_binaries_spawn_as_before
+test_raw_launch_command_remains_exempt
+
+echo "# all fm-spawn launch-preflight tests passed"
