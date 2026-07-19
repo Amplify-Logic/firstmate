@@ -1,0 +1,178 @@
+#!/usr/bin/env bash
+# Focused behavior coverage for authoritative Herdr worker presentation.
+set -u
+
+# shellcheck source=tests/lib.sh
+. "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
+
+TMP_ROOT=$(fm_test_tmproot fm-visible-status)
+HOME_FIX="$TMP_ROOT/home"
+FAKEBIN=$(fm_fakebin "$TMP_ROOT")
+LOG="$TMP_ROOT/herdr.log"
+STATES="$TMP_ROOT/states"
+mkdir -p "$HOME_FIX/state" "$HOME_FIX/data" "$TMP_ROOT/worktrees"
+
+cat > "$FAKEBIN/herdr" <<'SH'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >> "$FM_VISIBLE_HERDR_LOG"
+exit 0
+SH
+cat > "$FAKEBIN/pi" <<'SH'
+#!/usr/bin/env bash
+exit 0
+SH
+chmod +x "$FAKEBIN/herdr" "$FAKEBIN/pi"
+
+make_worktree() {  # <name> <branch-or-detached>
+  local wt="$TMP_ROOT/worktrees/$1"
+  fm_git_init_commit "$wt"
+  if [ "$2" = detached ]; then
+    git -C "$wt" checkout -q --detach
+  else
+    git -C "$wt" checkout -qb "$2"
+  fi
+  printf '%s' "$wt"
+}
+
+write_task() {  # <id> <project-key> <project-name> <ws> <tab> <pane> <wt> <kind> <harness> <model> [managed]
+  fm_write_meta "$HOME_FIX/state/$1.meta" \
+    "window=fm-lab-visible:$6" \
+    "worktree=$7" \
+    "project=$2" \
+    "harness=$9" \
+    "model=${10}" \
+    "kind=$8" \
+    "backend=herdr" \
+    "herdr_session=fm-lab-visible" \
+    "herdr_workspace_id=$4" \
+    "herdr_tab_id=$5" \
+    "herdr_pane_id=$6" \
+    "herdr_workspace_managed=${11:-1}" \
+    "herdr_project_name=$3" \
+    "herdr_project_key=$2"
+}
+
+JOURNEY_SHIP=$(make_worktree journey-ship fm/journey-release-q7)
+JOURNEY_SCOUT=$(make_worktree journey-scout detached)
+ARTEVO_BLOCK=$(make_worktree artevo-block fm/artevo-block-p2)
+ARTEVO_FAIL=$(make_worktree artevo-fail fm/artevo-fail-z9)
+ARTEVO_PAUSE=$(make_worktree artevo-pause fm/artevo-pause-r2)
+ARTEVO_READY=$(make_worktree artevo-ready fm/artevo-ready-r8)
+LEGACY_WT=$(make_worktree legacy fm/legacy-k1)
+write_task journey-ship /projects/your-magical-journey 'Your Magical Journey' w1 t1 w1:p1 "$JOURNEY_SHIP" ship pi default
+write_task journey-scout /projects/your-magical-journey 'Your Magical Journey' w1 t2 w1:p2 "$JOURNEY_SCOUT" scout codex gpt-5.6
+write_task artevo-block /projects/artevo Artevo w2 t3 w2:p1 "$ARTEVO_BLOCK" ship pi default
+write_task artevo-fail /projects/artevo Artevo w2 t4 w2:p2 "$ARTEVO_FAIL" ship codex gpt-5.6
+write_task artevo-pause /projects/artevo Artevo w2 t5 w2:p3 "$ARTEVO_PAUSE" scout pi default
+write_task artevo-ready /projects/artevo Artevo w2 t6 w2:p4 "$ARTEVO_READY" ship codex gpt-5.6
+write_task legacy-task /projects/legacy 'Legacy Project' oldw oldt oldw:p1 "$LEGACY_WT" ship pi default 0
+
+cat > "$HOME_FIX/data/backlog.md" <<'EOF'
+- [ ] journey-ship - Ship the Journey release (repo: your-magical-journey)
+- [ ] journey-scout - Validate the Journey route (repo: your-magical-journey)
+- [ ] artevo-block - Unblock Artevo deploy (repo: artevo)
+- [ ] artevo-fail - Repair Artevo failure (repo: artevo)
+- [ ] artevo-pause - Wait for Artevo upstream (repo: artevo)
+- [ ] artevo-ready - Prepare Artevo release (repo: artevo)
+- [ ] legacy-task - Refresh legacy task safely (repo: legacy)
+EOF
+cat > "$STATES" <<'EOF'
+journey-ship=working
+journey-scout=parked
+artevo-block=blocked
+artevo-fail=failed
+artevo-pause=paused
+artevo-ready=done
+legacy-task=working
+EOF
+
+run_all() {
+  : > "$LOG"
+  PATH="$FAKEBIN:$PATH" \
+    FM_HOME="$HOME_FIX" \
+    FM_VISIBLE_STATE_FILE="$STATES" \
+    FM_VISIBLE_HERDR_LOG="$LOG" \
+    HERDR_ENV=1 \
+    HERDR_SESSION=fm-lab-visible \
+    HERDR_PANE_ID=ordinary-worker:p9 \
+    "$ROOT/bin/fm-visible-status.sh" --all
+}
+
+test_tasks_projects_axes_and_states() {
+  local out
+  run_all
+  out=$(cat "$LOG")
+  assert_contains "$out" 'tab rename t1 WORKER · Ship the Journey release · 🔵 WORKING' \
+    'Pi ship did not receive the worker contract'
+  assert_contains "$out" 'tab rename t2 WORKER · Validate the Journey route · 🟣 NEEDS LARS' \
+    'Codex scout did not receive the same worker contract'
+  assert_contains "$out" '--display-agent pi · fm/journey-release-q7' \
+    'Pi runtime or named branch was not projected'
+  assert_contains "$out" '--display-agent codex/gpt-5.6 · detached' \
+    'Codex model or detached scout state was not projected'
+  assert_contains "$out" 'workspace rename w1 Your Magical Journey · 🟣 1 NEEDS LARS · 🔵 1 WORKING' \
+    'Journey tasks did not aggregate in one human project workspace'
+  assert_contains "$out" 'workspace rename w2 Artevo · 🔴 1 FAILED · 🟠 1 BLOCKED · 🟡 1 WAITING · 🟢 1 READY' \
+    'authoritative states were not prioritized for the concurrent Artevo project'
+  assert_contains "$out" '--token fm_task_id=journey-ship' \
+    'hidden durable task identity was not preserved'
+  assert_not_contains "$out" 'tab rename t1 fm-journey-ship' \
+    'durable task id leaked into a new human-facing tab'
+  pass 'visible status: concurrent projects, ship/scout, Pi/Codex, outcomes, runtime/model, branches, and authoritative states'
+}
+
+test_legacy_refresh_and_primary_boundary() {
+  local out
+  run_all
+  out=$(cat "$LOG")
+  assert_contains "$out" 'tab rename oldt WORKER · Refresh legacy task safely · 🔵 WORKING' \
+    'legacy task was not safely refreshed by recorded tab id'
+  assert_not_contains "$out" 'workspace rename oldw' \
+    'legacy mixed workspace was renamed to one task project'
+  assert_not_contains "$out" 'FIRSTMATE' \
+    'ordinary worker environment acquired the primary role'
+  assert_not_contains "$out" 'ordinary-worker:p9' \
+    'worker environment pane was mistaken for the primary pane'
+  pass 'visible status: legacy mixed workspace stays in place and worker environments never project FIRSTMATE'
+}
+
+test_cleanup_keeps_stable_target_fallback() {
+  : > "$LOG"
+  PATH="$FAKEBIN:$PATH" FM_HOME="$HOME_FIX" FM_VISIBLE_HERDR_LOG="$LOG" \
+    "$ROOT/bin/fm-visible-status.sh" --clear journey-ship
+  assert_contains "$(cat "$LOG")" '--clear-title --clear-display-agent --clear-state-labels' \
+    'cleanup did not clear presentation metadata'
+  assert_contains "$(cat "$LOG")" 'tab rename t1 fm-journey-ship' \
+    'cleanup did not restore the legacy readable fallback before endpoint close'
+  [ -f "$HOME_FIX/state/journey-ship.meta" ] || fail 'presentation cleanup changed durable task metadata'
+  pass 'visible status: cleanup clears cosmetics while preserving stable metadata and a legacy title fallback'
+}
+
+test_genuine_primary_and_lab_are_structural() {
+  local out
+  : > "$LOG"
+  if ! out=$(PATH="$FAKEBIN:$PATH" FM_HOME="$HOME_FIX" FM_PRIMARY_DRY_RUN=1 \
+    FM_VISIBLE_HERDR_LOG="$LOG" HERDR_ENV=1 HERDR_SESSION=fm-lab-visible \
+    HERDR_PANE_ID=primary:p1 "$ROOT/bin/fm-primary.sh" pi 2>&1); then
+    fail "genuine primary dry-run failed: $out"
+  fi
+  assert_contains "$out" 'role=FIRSTMATE' \
+    'genuine primary launcher did not establish FIRSTMATE identity'
+
+  : > "$LOG"
+  if ! out=$(PATH="$FAKEBIN:$PATH" FM_HOME="$HOME_FIX" FM_PRIMARY_DRY_RUN=1 \
+    FM_PRIMARY_VISIBLE_PREFIX=LAB FM_VISIBLE_HERDR_LOG="$LOG" HERDR_ENV=1 \
+    HERDR_SESSION=fm-lab-visible HERDR_PANE_ID=lab:p1 "$ROOT/bin/fm-primary.sh" pi 2>&1); then
+    fail "lab primary dry-run failed: $out"
+  fi
+  assert_contains "$out" 'role=LAB · PRIMARY' \
+    'guarded lab did not remain visibly LAB'
+  assert_not_contains "$out" 'role=FIRSTMATE' \
+    'guarded lab acquired captain-facing primary identity'
+  pass 'primary boundary: only the primary launcher emits FIRSTMATE and guarded experiments remain LAB'
+}
+
+test_tasks_projects_axes_and_states
+test_legacy_refresh_and_primary_boundary
+test_cleanup_keeps_stable_target_fallback
+test_genuine_primary_and_lab_are_structural
