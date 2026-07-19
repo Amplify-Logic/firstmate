@@ -99,6 +99,7 @@ Auto-detecting tmux stays silent, since that reproduces today's unconfigured def
 Only when none of that resolves anything does firstmate fall back to the hard default, tmux.
 Absent `backend=` in a task's meta always means `tmux`; a herdr task carries an explicit `backend=herdr` line, while other experimental adapters carry their own backend values.
 A herdr spawn refuses loudly if `herdr` or `jq` is missing, or if the installed herdr's protocol is older than the verified minimum (`fm_backend_herdr_version_check`).
+The managed human-presentation flow is additionally capability-gated (`fm_backend_herdr_presentation_capable`, protocol 16); below that it falls back to the prior label-based spawn flow instead of refusing - see "Presentation capability gate" below.
 
 ## Worktree provider stays treehouse
 
@@ -129,6 +130,7 @@ It never derives lifecycle state from the append-only status tail or Herdr's nat
 
 The former workspace labels remain the compatibility vocabulary: `firstmate` for a primary home and `2ndmate-<id>` for a marked secondmate home.
 A secondmate primary pane still uses that home workspace because it has no physical project of its own.
+Its tab keeps the legacy `fm-<id>` title too: `bin/fm-visible-status.sh` skips every `kind=secondmate` task, so the WORKER convention never applies to a secondmate primary.
 New project workers spawned from either a primary or secondmate home use the token-owned project workspace contract instead.
 
 Recovery scans token-owned workspaces whose `fm_owner` equals the active physical home and reads hidden `fm_task_id` from each pane.
@@ -161,11 +163,18 @@ A bounded presentation refresh may rename a legacy task's recorded tab and updat
 If cleanup cannot close a refreshed legacy pane, `fm-visible-status.sh --clear` restores `fm-<id>` before returning so the legacy recovery fallback remains available.
 Other backends keep their existing selector and title contracts.
 
+### Presentation capability gate
+
+The managed presentation surfaces - `workspace report-metadata`, `pane report-metadata --token`, hidden `.tokens` in workspace/pane list output, and `workspace`/`tab rename` - are verified at protocol 16 (herdr 0.7.4).
+`FM_BACKEND_HERDR_MIN_PROTOCOL` stays 14: the adapter's core spawn/capture/send primitives still work there, so the presentation dependency is capability-gated instead of raising the floor, mirroring the protocol-16 events gate.
+Below `FM_BACKEND_HERDR_MIN_PRESENTATION_PROTOCOL` (16), `fm_backend_herdr_presentation_capable` fails closed: a non-secondmate spawn uses the prior label-based flow (an `fm-<id>` tab in the legacy per-home workspace, no identity tokens, and no `herdr_workspace_managed=1` meta), and `bin/fm-visible-status.sh` exits without touching any tab or workspace, so legacy `fm-<id>` recovery labels survive.
+`FM_BACKEND_HERDR_PRESENTATION_FORCE` (1 = capable, 0 = incapable) overrides the probe for tests, exactly like `FM_BACKEND_HERDR_EVENTS_FORCE`.
+
 ### Bounded presentation refresh and primary boundary
 
 `bin/fm-visible-status.sh` refreshes after spawn metadata is written, during session recovery, on status or native blocked transitions, and before cleanup.
 Every Herdr presentation call is best-effort because recorded ids, landed-work checks, and endpoint cleanup remain authoritative.
-The helper updates only recorded task panes and never emits `FIRSTMATE` or `LAB`.
+The helper updates only recorded, non-secondmate task panes and never emits `FIRSTMATE` or `LAB`.
 `bin/fm-primary.sh` is the structural owner of primary projection: only an invocation through the primary launcher may emit `FIRSTMATE`, and its guarded non-default lab mode emits `LAB · PRIMARY` instead.
 An ordinary worker merely carrying `HERDR_ENV=1` can therefore never become the captain-facing primary.
 

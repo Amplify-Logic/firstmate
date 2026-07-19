@@ -731,6 +731,10 @@ case "$BACKEND" in
     HERDR_LABEL_HOME=$FM_HOME
     HERDR_PROJECT_KEY=
     HERDR_PROJECT_NAME=
+    HERDR_PRESENTATION=0
+    if fm_backend_herdr_presentation_capable; then
+      HERDR_PRESENTATION=1
+    fi
     TASK_OUTCOME=$(FM_HOME="$FM_HOME" FM_DATA_OVERRIDE="$DATA" \
       "$FM_ROOT/bin/fm-task-outcome.sh" "$ID" "$OUTCOME")
     HERDR_TAB_TITLE="WORKER · $TASK_OUTCOME · 🟡 WAITING"
@@ -738,13 +742,16 @@ case "$BACKEND" in
       HERDR_LABEL_HOME=$PROJ_ABS
       HERDR_CONTAINER_RAW=$(FM_HOME="$HERDR_LABEL_HOME" fm_backend_herdr_container_ensure "$PROJ_ABS") || exit 1
       HERDR_TAB_TITLE=$W
-    else
+    elif [ "$HERDR_PRESENTATION" -eq 1 ]; then
       HERDR_PROJECT_KEY=$PROJ_ABS_REAL
       HERDR_PROJECT_NAME=$("$FM_ROOT/bin/fm-project-display-name.sh" "$(basename "$PROJ_ABS_REAL")")
       HERDR_CONTAINER_RAW=$(FM_HOME="$HERDR_LABEL_HOME" \
         FM_HERDR_PROJECT_KEY="$HERDR_PROJECT_KEY" \
         FM_HERDR_PROJECT_LABEL="$HERDR_PROJECT_NAME" \
         fm_backend_herdr_container_ensure "$PROJ_ABS") || exit 1
+    else
+      HERDR_TAB_TITLE=$W
+      HERDR_CONTAINER_RAW=$(FM_HOME="$HERDR_LABEL_HOME" fm_backend_herdr_container_ensure "$PROJ_ABS") || exit 1
     fi
     # fm_backend_herdr_container_ensure echoes "<session>:<workspace_id>\t<seeded_default_tab_id>"
     # (the second field empty when this call ADOPTED a pre-existing workspace
@@ -756,7 +763,9 @@ case "$BACKEND" in
     HERDR_SEEDED_DEFAULT_TAB_ID=${HERDR_CONTAINER_RAW#*$'\t'}
     HERDR_SES=${CONTAINER%%:*}
     HERDR_WORKSPACE_ID=${CONTAINER#*:}
-    HERDR_TASK_IDS=$(FM_HOME="$HERDR_LABEL_HOME" fm_backend_herdr_create_task "$CONTAINER" "$HERDR_TAB_TITLE" "$PROJ_ABS" "$HERDR_SEEDED_DEFAULT_TAB_ID" "$ID") || exit 1
+    HERDR_TOKEN_TASK_ID=$ID
+    [ "$HERDR_PRESENTATION" -eq 1 ] || HERDR_TOKEN_TASK_ID=
+    HERDR_TASK_IDS=$(FM_HOME="$HERDR_LABEL_HOME" fm_backend_herdr_create_task "$CONTAINER" "$HERDR_TAB_TITLE" "$PROJ_ABS" "$HERDR_SEEDED_DEFAULT_TAB_ID" "$HERDR_TOKEN_TASK_ID") || exit 1
     read -r HERDR_TAB_ID HERDR_PANE_ID <<EOF
 $HERDR_TASK_IDS
 EOF
@@ -1033,7 +1042,7 @@ META_WINDOW=$T
     echo "herdr_workspace_id=$HERDR_WORKSPACE_ID"
     echo "herdr_tab_id=$HERDR_TAB_ID"
     echo "herdr_pane_id=$HERDR_PANE_ID"
-    if [ "$KIND" != secondmate ]; then
+    if [ "$KIND" != secondmate ] && [ "$HERDR_PRESENTATION" -eq 1 ]; then
       echo "herdr_workspace_managed=1"
       echo "herdr_project_key=$HERDR_PROJECT_KEY"
       echo "herdr_project_name=$HERDR_PROJECT_NAME"
@@ -1059,7 +1068,7 @@ META_WINDOW=$T
   fi
 } > "$STATE/$ID.meta"
 [ "$BACKEND" = orca ] && ORCA_ABORT_CLEANUP=0
-if [ "$BACKEND" = herdr ]; then
+if [ "$BACKEND" = herdr ] && [ "${HERDR_PRESENTATION:-0}" -eq 1 ]; then
   "$FM_ROOT/bin/fm-visible-status.sh" "$ID" >/dev/null 2>&1 || true
 fi
 

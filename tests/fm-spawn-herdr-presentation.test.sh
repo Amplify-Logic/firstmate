@@ -47,9 +47,16 @@ for ((i=0; i<${#args[@]}; i++)); do
   esac
 done
 
+protocol=${FM_FAKE_HERDR_PROTOCOL:-16}
+require_presentation() {
+  [ "$protocol" -ge 16 ] && return 0
+  printf '{"error":{"code":"unknown_method"}}\n' >&2
+  exit 1
+}
+
 case "$cmd $sub" in
   'status --json')
-    printf '{"client":{"version":"0.7.4","protocol":16},"server":{"running":true}}\n'
+    printf '{"client":{"version":"0.7.4","protocol":%s},"server":{"running":true}}\n' "$protocol"
     ;;
   'workspace list') query '{result:{workspaces:.workspaces}}' ;;
   'workspace create')
@@ -62,6 +69,7 @@ case "$cmd $sub" in
       '{result:{workspace:{workspace_id:$ws},tab:{tab_id:$tab},root_pane:{pane_id:$pane}}}'
     ;;
   'workspace report-metadata')
+    require_presentation
     target=${3:-}
     for token in "${tokens[@]}"; do
       key=${token%%=*}; value=${token#*=}
@@ -70,6 +78,7 @@ case "$cmd $sub" in
     done
     ;;
   'workspace rename')
+    require_presentation
     target=${3:-}; value=${4:-}
     query --arg id "$target" --arg value "$value" \
       '.workspaces |= map(if .workspace_id == $id then .label=$value else . end)' | save
@@ -83,6 +92,7 @@ case "$cmd $sub" in
     jq -n --arg tab "$tab" --arg pane "$pane" '{result:{tab:{tab_id:$tab},root_pane:{pane_id:$pane}}}'
     ;;
   'tab rename')
+    require_presentation
     target=${3:-}; value=${4:-}
     query --arg id "$target" --arg value "$value" \
       '.tabs |= map(if .tab_id == $id then .label=$value else . end)' | save
@@ -95,6 +105,7 @@ case "$cmd $sub" in
     query --arg ws "$workspace" '{result:{panes:[.tabs[]|select(.workspace_id==$ws)|{workspace_id,tab_id,pane_id,tokens}]}}'
     ;;
   'pane report-metadata')
+    require_presentation
     target=${3:-}
     for token in "${tokens[@]}"; do
       key=${token%%=*}; value=${token#*=}
@@ -222,3 +233,25 @@ assert_contains "$(cat "$HOME_FIX/state/journey-batch-one.meta")" 'harness=codex
 assert_contains "$(cat "$HOME_FIX/state/journey-single.meta")" 'kind=ship' 'ship kind was not preserved'
 assert_contains "$(cat "$HOME_FIX/state/journey-batch-one.meta")" 'kind=scout' 'scout kind was not preserved'
 pass 'fm-spawn fake Herdr E2E: single, batch, projects, axes, human labels, outcomes, states, and hidden ids converge'
+
+mkdir -p "$HOME_FIX/data/journey-protocol14"
+printf 'fake spawn instructions for journey-protocol14\n' > "$HOME_FIX/data/journey-protocol14/brief.md"
+cat >> "$HOME_FIX/data/backlog.md" <<'EOF'
+- [ ] journey-protocol14 - Keep spawning on an old Herdr build (repo: your-magical-journey)
+EOF
+: > "$HERDR_LOG"
+FM_FAKE_HERDR_PROTOCOL=14 run_spawn journey-protocol14 "$JOURNEY" --harness pi --backend herdr >/dev/null \
+  || fail 'a protocol-14 Herdr build no longer spawns through the label fallback'
+legacy_ws=$(jq -r '.workspaces[]|select(.label=="firstmate")|.workspace_id' "$HERDR_STATE")
+[ -n "$legacy_ws" ] || fail 'protocol-14 fallback did not use the legacy per-home workspace label'
+[ "$(jq -r --arg ws "$legacy_ws" '.tabs[]|select(.workspace_id==$ws)|.label' "$HERDR_STATE")" = 'fm-journey-protocol14' ] \
+  || fail 'protocol-14 fallback tab did not keep the legacy fm-<id> label'
+[ "$(jq -r --arg ws "$legacy_ws" '.workspaces[]|select(.workspace_id==$ws)|.tokens|length' "$HERDR_STATE")" -eq 0 ] \
+  || fail 'protocol-14 fallback attempted hidden workspace identity tokens'
+legacy_log=$(cat "$HERDR_LOG")
+assert_not_contains "$legacy_log" 'report-metadata' 'protocol-14 fallback still called report-metadata'
+assert_not_contains "$legacy_log" 'rename' 'protocol-14 fallback still renamed a tab or workspace'
+legacy_meta=$(cat "$HOME_FIX/state/journey-protocol14.meta")
+assert_contains "$legacy_meta" 'backend=herdr' 'protocol-14 fallback did not record its backend'
+assert_not_contains "$legacy_meta" 'herdr_workspace_managed' 'protocol-14 fallback claimed a managed workspace'
+pass 'fm-spawn fake Herdr E2E: a protocol-14 build spawns through the prior label-based flow untouched by presentation'

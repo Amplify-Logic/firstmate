@@ -148,7 +148,14 @@ SM_WSID=$("$HERDR_LAB_HELPER" run "$SESSION" pane get "$SM_PANE" 2>/dev/null | j
 [ "$SM_WSID" != "$CM1_WSID" ] || fail "the secondmate's tab must NOT land in the primary's workspace, but it shares $CM1_WSID"
 SM_WS_LABEL=$("$HERDR_LAB_HELPER" run "$SESSION" workspace list 2>&1 | jq -r --arg id "$SM_WSID" '.result.workspaces[]? | select(.workspace_id == $id) | .label')
 [ "$SM_WS_LABEL" = "2ndmate-e2esm1" ] || fail "a --secondmate spawn should land in '2ndmate-<id>', got '$SM_WS_LABEL'"
-pass "real herdr E2E: a --secondmate spawn by the PRIMARY lands in the SECONDMATE's own labeled workspace, distinct from the primary's"
+SM_TAB=$("$HERDR_LAB_HELPER" run "$SESSION" pane list --workspace "$SM_WSID" 2>/dev/null \
+  | jq -r --arg pane "$SM_PANE" '.result.panes[]? | select(.pane_id == $pane) | .tab_id' | head -1)
+[ -n "$SM_TAB" ] || fail "could not resolve e2esm1's tab id"
+SM_TAB_LABEL=$("$HERDR_LAB_HELPER" run "$SESSION" tab list --workspace "$SM_WSID" 2>/dev/null \
+  | jq -r --arg id "$SM_TAB" '.result.tabs[]? | select(.tab_id == $id) | .label')
+[ "$SM_TAB_LABEL" = "fm-e2esm1" ] \
+  || fail "the secondmate primary tab must keep its legacy fm-<id> title after the spawn-time presentation refresh, got '$SM_TAB_LABEL'"
+pass "real herdr E2E: a --secondmate spawn by the PRIMARY lands in the SECONDMATE's own labeled workspace with its legacy fm-<id> tab, distinct from the primary's"
 
 # --- 3. a crewmate spawned FROM the secondmate-shaped home lands in the SAME
 # secondmate workspace (this exact path has never run before this test) -----

@@ -66,6 +66,18 @@ write_task artevo-fail /projects/artevo Artevo w2 t4 w2:p2 "$ARTEVO_FAIL" ship c
 write_task artevo-pause /projects/artevo Artevo w2 t5 w2:p3 "$ARTEVO_PAUSE" scout pi default
 write_task artevo-ready /projects/artevo Artevo w2 t6 w2:p4 "$ARTEVO_READY" ship codex gpt-5.6
 write_task legacy-task /projects/legacy 'Legacy Project' oldw oldt oldw:p1 "$LEGACY_WT" ship pi default 0
+fm_write_meta "$HOME_FIX/state/secondmate-task.meta" \
+  "window=fm-lab-visible:sm:p1" \
+  "worktree=$HOME_FIX" \
+  "project=$HOME_FIX" \
+  "harness=pi" \
+  "kind=secondmate" \
+  "backend=herdr" \
+  "herdr_session=fm-lab-visible" \
+  "herdr_workspace_id=smw" \
+  "herdr_tab_id=smt" \
+  "herdr_pane_id=sm:p1" \
+  "home=$HOME_FIX"
 
 cat > "$HOME_FIX/data/backlog.md" <<'EOF'
 - [ ] journey-ship - Ship the Journey release (repo: your-magical-journey)
@@ -92,6 +104,7 @@ run_all() {
     FM_HOME="$HOME_FIX" \
     FM_VISIBLE_STATE_FILE="$STATES" \
     FM_VISIBLE_HERDR_LOG="$LOG" \
+    FM_BACKEND_HERDR_PRESENTATION_FORCE=1 \
     HERDR_ENV=1 \
     HERDR_SESSION=fm-lab-visible \
     HERDR_PANE_ID=ordinary-worker:p9 \
@@ -136,9 +149,34 @@ test_legacy_refresh_and_primary_boundary() {
   pass 'visible status: legacy mixed workspace stays in place and worker environments never project FIRSTMATE'
 }
 
+test_secondmate_keeps_legacy_presentation() {
+  local out
+  run_all
+  out=$(cat "$LOG")
+  assert_not_contains "$out" 'tab rename smt' \
+    'a secondmate tab was renamed to the WORKER convention'
+  assert_not_contains "$out" 'sm:p1' \
+    'a secondmate pane received worker presentation metadata'
+  pass 'visible status: kind=secondmate keeps its legacy fm-<id> tab untouched'
+}
+
+test_incapable_build_projects_nothing() {
+  : > "$LOG"
+  PATH="$FAKEBIN:$PATH" \
+    FM_HOME="$HOME_FIX" \
+    FM_VISIBLE_STATE_FILE="$STATES" \
+    FM_VISIBLE_HERDR_LOG="$LOG" \
+    FM_BACKEND_HERDR_PRESENTATION_FORCE=0 \
+    HERDR_SESSION=fm-lab-visible \
+    "$ROOT/bin/fm-visible-status.sh" --all
+  [ -s "$LOG" ] && fail 'a below-capability Herdr build still received presentation calls'
+  pass 'visible status: below the presentation capability no tab or workspace is touched'
+}
+
 test_cleanup_keeps_stable_target_fallback() {
   : > "$LOG"
   PATH="$FAKEBIN:$PATH" FM_HOME="$HOME_FIX" FM_VISIBLE_HERDR_LOG="$LOG" \
+    FM_BACKEND_HERDR_PRESENTATION_FORCE=1 \
     "$ROOT/bin/fm-visible-status.sh" --clear journey-ship
   assert_contains "$(cat "$LOG")" '--clear-title --clear-display-agent --clear-state-labels' \
     'cleanup did not clear presentation metadata'
@@ -174,5 +212,7 @@ test_genuine_primary_and_lab_are_structural() {
 
 test_tasks_projects_axes_and_states
 test_legacy_refresh_and_primary_boundary
+test_secondmate_keeps_legacy_presentation
+test_incapable_build_projects_nothing
 test_cleanup_keeps_stable_target_fallback
 test_genuine_primary_and_lab_are_structural

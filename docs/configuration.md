@@ -60,6 +60,7 @@ A backend spawn refusal from a missing dependency, version gate, or unauthentica
 Task meta records `backend=` only for a non-default backend; an absent `backend=` means `tmux`, preserving existing default-path meta files.
 A Herdr task additionally records `herdr_session=`, `herdr_workspace_id=`, `herdr_tab_id=`, and `herdr_pane_id=`.
 A managed Herdr project worker also records `herdr_workspace_managed=1`, physical `herdr_project_key=`, human `herdr_project_name=`, and `outcome=` presentation inputs.
+A spawn on a Herdr build below the verified presentation protocol falls back to the prior label-based flow and records none of those managed presentation fields.
 A zellij task additionally records `zellij_session=`, `zellij_tab_id=`, and `zellij_pane_id=`.
 An Orca task additionally records `orca_worktree_id=` and `terminal=`, with `window=fm-<id>` kept as the shared firstmate alias.
 A cmux task additionally records `cmux_workspace_id=` and `cmux_surface_id=`.

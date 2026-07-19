@@ -17,6 +17,9 @@
 # Every operational action continues to use recorded Herdr ids.
 # Herdr API failures are therefore best-effort and never make task control fail.
 # State comes only from fm-crew-state.sh.
+# A kind=secondmate task keeps its legacy fm-<id> tab and is never restyled.
+# On a Herdr build below the verified presentation protocol this script exits
+# without touching any tab or workspace, so legacy fm-<id> labels survive.
 # This script never projects FIRSTMATE or LAB roles: bin/fm-primary.sh owns the
 # structurally guarded primary surface, and lab identity remains lab-owned.
 set -u
@@ -26,6 +29,11 @@ FM_ROOT=${FM_ROOT_OVERRIDE:-$(CDPATH='' cd -- "$SCRIPT_DIR/.." && pwd -P)}
 FM_HOME=${FM_HOME:-${FM_ROOT_OVERRIDE:-$FM_ROOT}}
 STATE=${FM_STATE_OVERRIDE:-$FM_HOME/state}
 SOURCE=firstmate-worker-visible-v1
+
+# fm_backend_herdr_presentation_capable owns the capability verdict shared
+# with fm-spawn.sh's herdr arm.
+# shellcheck source=bin/backends/herdr.sh
+. "$SCRIPT_DIR/backends/herdr.sh"
 
 usage() {
   sed -n '2,/^set -u$/s/^# \{0,1\}//p' "$0"
@@ -206,6 +214,7 @@ update_task() {  # <task-id>
   meta="$STATE/$id.meta"
   [ -f "$meta" ] || return 0
   [ "$(meta_value "$meta" backend)" = herdr ] || return 0
+  [ "$(meta_value "$meta" kind)" != secondmate ] || return 0
   session=$(meta_value "$meta" herdr_session)
   tab=$(meta_value "$meta" herdr_tab_id)
   pane=$(meta_value "$meta" herdr_pane_id)
@@ -260,6 +269,7 @@ clear_task() {  # <task-id>
 case "${1:-}" in
   -h|--help|'') usage ;;
   --all)
+    fm_backend_herdr_presentation_capable || exit 0
     for meta in "$STATE"/*.meta; do
       [ -f "$meta" ] || continue
       update_task "$(basename "$meta" .meta)"
@@ -267,11 +277,13 @@ case "${1:-}" in
     ;;
   --clear)
     [ "$#" -eq 2 ] || { usage >&2; exit 2; }
+    fm_backend_herdr_presentation_capable || exit 0
     clear_task "$2"
     ;;
   --*) usage >&2; exit 2 ;;
   *)
     [ "$#" -eq 1 ] || { usage >&2; exit 2; }
+    fm_backend_herdr_presentation_capable || exit 0
     update_task "$1"
     ;;
 esac

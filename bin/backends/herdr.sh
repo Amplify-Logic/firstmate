@@ -70,6 +70,17 @@ FM_BACKEND_HERDR_MIN_PROTOCOL=14
 # (14): the adapter's spawn/capture/send primitives work on 14, only the push
 # subscriber needs 16.
 FM_BACKEND_HERDR_MIN_EVENTS_PROTOCOL=16
+# The managed presentation surfaces - `workspace report-metadata`, `pane
+# report-metadata --token`, hidden `.tokens` in workspace/pane list output,
+# and `workspace`/`tab rename` - are verified at protocol 16 (herdr 0.7.4).
+# Below this floor the token/label projection fails closed like the events
+# gate above: a non-secondmate spawn keeps the prior label-based flow
+# (fm-<id> tab in the legacy per-home workspace, no identity tokens), and
+# bin/fm-visible-status.sh exits without touching any tab or workspace so
+# legacy fm-<id> recovery labels survive. Distinct from
+# FM_BACKEND_HERDR_MIN_PROTOCOL (14), which still governs the adapter's core
+# spawn/capture/send primitives.
+FM_BACKEND_HERDR_MIN_PRESENTATION_PROTOCOL=16
 # Per-pane escalation dedupe marker prefix, under the state dir. One marker per
 # window (keyed like the watcher's own .stale-<key>): set when a ->blocked edge
 # is enqueued, cleared on any working edge, so exactly one wake fires per
@@ -159,6 +170,26 @@ fm_backend_herdr_version_check() {
     return 1
   fi
   return 0
+}
+
+# fm_backend_herdr_presentation_capable: the capability gate for the managed
+# human-presentation flow (identity tokens, WORKER titles, rename-based
+# refresh). Quiet on purpose - callers fall back to the legacy label flow
+# rather than refusing, so this never writes to stderr the way
+# fm_backend_herdr_version_check does. FM_BACKEND_HERDR_PRESENTATION_FORCE
+# overrides the whole verdict for tests (1 = capable, 0 = incapable),
+# mirroring FM_BACKEND_HERDR_EVENTS_FORCE.
+fm_backend_herdr_presentation_capable() {
+  local protocol
+  case "${FM_BACKEND_HERDR_PRESENTATION_FORCE:-}" in
+    1) return 0 ;;
+    0) return 1 ;;
+  esac
+  command -v herdr >/dev/null 2>&1 || return 1
+  command -v jq >/dev/null 2>&1 || return 1
+  protocol=$(herdr status --json 2>/dev/null | jq -r '.client.protocol // empty' 2>/dev/null)
+  case "$protocol" in ''|*[!0-9]*) return 1 ;; esac
+  [ "$protocol" -ge "$FM_BACKEND_HERDR_MIN_PRESENTATION_PROTOCOL" ]
 }
 
 # fm_backend_herdr_session: resolve which named herdr session this normal
