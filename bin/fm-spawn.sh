@@ -418,6 +418,12 @@ run_version_probe() {  # <resolved-binary> <timeout-secs>
   while kill -0 "$pid" 2>/dev/null; do
     if [ "$waited" -ge "$limit" ]; then
       kill "$pid" 2>/dev/null
+      local grace=0
+      while kill -0 "$pid" 2>/dev/null && [ "$grace" -lt 20 ]; do
+        sleep 0.1
+        grace=$((grace + 1))
+      done
+      kill -0 "$pid" 2>/dev/null && kill -9 "$pid" 2>/dev/null
       wait "$pid" 2>/dev/null
       return 124
     fi

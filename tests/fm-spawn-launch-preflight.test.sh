@@ -166,6 +166,30 @@ SH
   pass "hanging version probe times out and refuses before endpoint creation or meta"
 }
 
+test_sigterm_ignoring_probe_is_killed_after_grace() {
+  local out status
+  make_spawn_case hang-sigterm opencode
+  cat > "$FAKEBIN_DIR/opencode" <<'SH'
+#!/usr/bin/env bash
+set -u
+printf '%s %s\n' "$(basename "$0")" "$*" >> "${FM_FAKE_PROBE_LOG:?}"
+trap '' TERM
+while :; do sleep 1; done
+SH
+  chmod +x "$FAKEBIN_DIR/opencode"
+
+  out=$(FM_SPAWN_PROBE_TIMEOUT_SECS=1 run_spawn "$ID" "$PROJ_DIR")
+  status=$?
+
+  expect_code 1 "$status" "SIGTERM-ignoring probe should still fail via SIGKILL escalation"
+  assert_contains "$out" \
+    "error: harness 'opencode' launch binary 'opencode' --version probe timed out after 1s (raise with FM_SPAWN_PROBE_TIMEOUT_SECS); refusing before creating a task endpoint" \
+    "SIGTERM-ignoring probe did not produce the timeout refusal"
+  [ ! -s "$ENDPOINT_LOG" ] || fail "SIGTERM-ignoring probe touched tmux before failing"
+  assert_absent "$HOME_DIR/state/$ID.meta" "SIGTERM-ignoring probe wrote task meta"
+  pass "SIGTERM-ignoring probe is force-killed after a bounded grace period"
+}
+
 test_probe_closes_stdin() {
   local out status
   make_spawn_case stdin-probe opencode
@@ -207,6 +231,7 @@ test_missing_verified_binary_refuses_before_endpoint_creation
 test_present_verified_binaries_spawn_as_before
 test_raw_launch_command_remains_exempt
 test_hanging_version_probe_times_out_before_endpoint_creation
+test_sigterm_ignoring_probe_is_killed_after_grace
 test_probe_closes_stdin
 test_invalid_probe_timeout_knob_refuses
 
