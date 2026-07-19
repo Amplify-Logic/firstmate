@@ -163,7 +163,7 @@ mark_current_surface() {
 }
 
 prepare_kimi_home() {
-  local source_home managed plugin skills installed source_installed now item tmp_installed tmp_plugin path
+  local source_home managed plugin skills installed source_installed now item tmp_installed tmp_merged tmp_plugin path
   source_home=${FM_KIMI_SOURCE_HOME:-${KIMI_CODE_HOME:-$HOME/.kimi-code}}
   managed=${FM_KIMI_PRIMARY_HOME:-$DATA/primary/kimi-k3}
   [ "$source_home" != "$managed" ] || die "managed Kimi home must differ from its source home"
@@ -222,9 +222,9 @@ prepare_kimi_home() {
         {event: "Stop", command: $stop, timeout: 30}
       ]
     }' > "$tmp_plugin" \
-    || die "could not render the managed Kimi plugin manifest"
+    || { rm -f "$tmp_plugin"; die "could not render the managed Kimi plugin manifest"; }
   mv "$tmp_plugin" "$plugin/kimi.plugin.json" \
-    || die "could not publish the managed Kimi plugin manifest"
+    || { rm -f "$tmp_plugin"; die "could not publish the managed Kimi plugin manifest"; }
   cat > "$skills/SKILL.md" <<'EOF'
 ---
 name: firstmate-session-start
@@ -248,20 +248,23 @@ EOF
       }]
     }
   ' > "$tmp_installed" \
-    || die "could not render the managed Kimi plugin registry"
+    || { rm -f "$tmp_installed"; die "could not render the managed Kimi plugin registry"; }
   source_installed="$source_home/plugins/installed.json"
   if [ -f "$source_installed" ]; then
-    require_command jq
+    tmp_merged=$(mktemp "$managed/plugins/.installed.XXXXXX") \
+      || { rm -f "$tmp_installed"; die "could not stage the merged Kimi plugin registry"; }
     jq --slurpfile managed "$tmp_installed" '
       .version = (.version // 1)
       | .plugins = (((.plugins // []) | map(select(.id != "firstmate-primary"))) + $managed[0].plugins)
-    ' "$source_installed" > "$installed" \
-      || die "could not merge the source and managed Kimi plugin registries"
+    ' "$source_installed" > "$tmp_merged" \
+      || { rm -f "$tmp_installed" "$tmp_merged"; die "could not merge the source and managed Kimi plugin registries"; }
+    rm -f "$tmp_installed"
+    mv "$tmp_merged" "$installed" \
+      || { rm -f "$tmp_merged"; die "could not publish the managed Kimi plugin registry"; }
   else
     mv "$tmp_installed" "$installed" \
-      || die "could not publish the managed Kimi plugin registry"
+      || { rm -f "$tmp_installed"; die "could not publish the managed Kimi plugin registry"; }
   fi
-  [ ! -e "$tmp_installed" ] || rm -f "$tmp_installed"
   chmod 0600 "$managed/config.toml" "$installed" 2>/dev/null || true
   KIMI_PRIMARY_HOME=$managed
 }

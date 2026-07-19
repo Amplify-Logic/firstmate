@@ -254,6 +254,39 @@ test_kimi_version_doctor_and_symlink_refusals() {
   pass "fm-primary: Kimi version, doctor, and managed-path checks fail closed"
 }
 
+test_kimi_corrupt_source_registry_atomicity() {
+  local out rc=0 home="$TMP_ROOT/kimi-atomic-home" source="$TMP_ROOT/kimi-atomic-source"
+  local managed="$home/data/primary/kimi-k3" before leftovers
+  mkdir -p "$home/state" "$home/data" "$source/plugins"
+  cp "$KIMI_SOURCE/config.toml" "$source/config.toml"
+  printf '{"version":1,"plugins":[{"id":"operator-plugin","root":"/safe/operator-plugin","enabled":true}]}\n' \
+    > "$source/plugins/installed.json"
+  ( cd "$TMP_ROOT" && \
+    PATH="$FAKEBIN:$PATH" \
+    FM_HOME="$home" \
+    FM_PRIMARY_DRY_RUN=1 \
+    FM_PRIMARY_TEST_LOG="$LOG" \
+    FM_KIMI_SOURCE_HOME="$source" \
+    "$ROOT/bin/fm-primary.sh" kimi-k3 >/dev/null ) || fail "valid source Kimi registry did not merge"
+  before=$(cat "$managed/plugins/installed.json")
+  printf '{"version":1,"plugins":[' > "$source/plugins/installed.json"
+  out=$( cd "$TMP_ROOT" && \
+    PATH="$FAKEBIN:$PATH" \
+    FM_HOME="$home" \
+    FM_PRIMARY_DRY_RUN=1 \
+    FM_PRIMARY_TEST_LOG="$LOG" \
+    FM_KIMI_SOURCE_HOME="$source" \
+    "$ROOT/bin/fm-primary.sh" kimi-k3 2>&1 ) || rc=$?
+  [ "$rc" -ne 0 ] || fail "corrupt source Kimi registry was accepted"
+  assert_contains "$out" 'could not merge the source and managed Kimi plugin registries' \
+    "corrupt source registry refusal was unclear"
+  [ "$(cat "$managed/plugins/installed.json")" = "$before" ] \
+    || fail "corrupt source registry merge clobbered the prior managed registry"
+  leftovers=$(find "$managed/plugins" -name '.installed.*' -o -name '.manifest.*')
+  [ -z "$leftovers" ] || fail "failed Kimi registry merge leaked temporary files: $leftovers"
+  pass "fm-primary: a corrupt source Kimi registry fails closed and leaves no temp files"
+}
+
 test_lab_role_guard() {
   local out status=0
   out=$(PATH="$FAKEBIN:$PATH" \
@@ -288,4 +321,5 @@ test_visible_role_marks_only_current_surface
 test_shim_install_safety
 test_kimi_primary_only_profile
 test_kimi_version_doctor_and_symlink_refusals
+test_kimi_corrupt_source_registry_atomicity
 test_lab_role_guard
