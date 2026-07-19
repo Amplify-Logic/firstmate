@@ -172,8 +172,13 @@ class as the grok `cursor_y` residual gap recorded in the `harness-adapters`
 skill, but several rows off rather than one.
 
 The fix locates the composer structurally (the last `→ ` row), mirroring the herdr
-adapter's structural scan - which is why herdr was never affected. Verified live
-after the fix:
+adapter's structural scan - which is why herdr was never affected. The scan is
+scoped to panes positively identified as cursor (`fm_tmux_pane_is_cursor`: `node`
+COMM plus the versioned `cursor-agent` bundle path in argv, the same marker the
+liveness probe uses), because other harnesses' output can legitimately contain
+`→ `-prefixed lines and an unscoped scan would misread their empty composer as
+pending; every non-cursor pane keeps the plain `#{cursor_y}` behaviour. Verified
+live after the fix:
 
 ```
 composer_row=15

@@ -12,7 +12,10 @@
 #      the cursor_y row found an empty status line and classified a composer
 #      holding real unsubmitted text as `empty` - a FALSE-EMPTY, the dangerous
 #      direction, because the away-mode injector picks injection targets by
-#      emptiness and would type over pending input.
+#      emptiness and would type over pending input. The structural scan that
+#      fixes this is SCOPED to positively-identified cursor panes (node COMM +
+#      cursor-agent argv): arrow-prefixed lines in another harness's OUTPUT must
+#      never redirect classification off that pane's real composer row.
 #   2. IDLE PLACEHOLDER. cursor draws the terminal cursor as a REVERSE-VIDEO cell
 #      (SGR 7) over the placeholder's FIRST character. Reverse video is neither
 #      dim/faint nor a dark foreground, so fm_composer_strip_ghost keeps that one
@@ -43,6 +46,8 @@ CURSOR_IDLE_ROW="${ESC}[48;2;21;21;21m ${ESC}[2m→ ${ESC}[0;7m${ESC}[48;2;21;21
 # A fake tmux serving a MULTI-ROW pane, so the structural composer scan is
 # exercised the way the real adapter uses it. FM_FAKE_PANE holds the whole pane;
 # capture-pane honours -S/-E for a single row, and #{cursor_y} is FM_FAKE_CY.
+# A companion fake ps prints FM_FAKE_ARGS, so the pane's harness identity
+# (fm_tmux_pane_is_cursor: node COMM + cursor-agent argv) is test-controlled.
 make_fake_tmux() {  # <dir>
   local dir=$1 fb="$1/fakebin"
   mkdir -p "$fb"
@@ -82,8 +87,17 @@ esac
 exit 1
 SH
   chmod +x "$fb/tmux"
+  cat > "$fb/ps" <<'SH'
+#!/usr/bin/env bash
+printf '%s\n' "${FM_FAKE_ARGS:-}"
+SH
+  chmod +x "$fb/ps"
   printf '%s\n' "$fb"
 }
+
+# The verbatim argv the real cursor wrapper leaves behind (exec -a rewrites
+# argv[0], the versioned index.js path survives) - what marks a pane as cursor.
+CURSOR_ARGS="/Users/x/.local/bin/agent --use-system-ca /Users/x/.local/share/cursor-agent/versions/2026.07.16-899851b/index.js --yolo"
 
 # Build a realistic cursor pane: chrome, a completed turn, the composer row at
 # index 5, then the two bottom status rows the terminal cursor actually sits on.
@@ -111,7 +125,7 @@ test_composer_row_found_structurally_not_by_cursor_y() {
   pane="$d/pane.txt"
   make_cursor_pane "$pane" "$CURSOR_IDLE_ROW"
   # cursor_y=8 is the cwd/status row, exactly as the real CLI reports it.
-  PATH="$fb:$PATH" FM_FAKE_PANE="$pane" FM_FAKE_CY=8 \
+  PATH="$fb:$PATH" FM_FAKE_PANE="$pane" FM_FAKE_CY=8 FM_FAKE_ARGS="$CURSOR_ARGS" \
     bash -c ". '$ROOT/bin/fm-tmux-lib.sh'; fm_tmux_cursor_composer_row t" > "$d/row" 2>/dev/null
   [ "$(cat "$d/row")" = "5" ] || fail "structural scan did not find composer row 5: '$(cat "$d/row")'"
   pass "cursor composer row is located structurally, not from #{cursor_y}"
@@ -124,12 +138,61 @@ test_real_typed_text_is_pending_despite_wrong_cursor_y() {
   pane="$d/pane.txt"
   # A composer holding genuine unsubmitted input.
   make_cursor_pane "$pane" " ${ESC}[2m→ ${ESC}[0msome real unsubmitted text"
-  out=$(PATH="$fb:$PATH" FM_FAKE_PANE="$pane" FM_FAKE_CY=8 \
+  out=$(PATH="$fb:$PATH" FM_FAKE_PANE="$pane" FM_FAKE_CY=8 FM_FAKE_ARGS="$CURSOR_ARGS" \
     bash -c ". '$ROOT/bin/fm-tmux-lib.sh'; fm_tmux_composer_state t" 2>/dev/null)
   # The regression: reading the cursor_y row (empty status line) returned `empty`
   # and the away-mode injector would have typed over this text.
   [ "$out" = pending ] || fail "real typed cursor input classified '$out', expected pending"
   pass "real unsubmitted cursor input is pending, not falsely empty"
+}
+
+# A claude-shaped pane: arrow-prefixed bullets in the model's OUTPUT above an
+# EMPTY bare-glyph composer sitting on the cursor_y row (index 4).
+make_claude_pane() {  # <file>
+  local file=$1
+  {
+    printf '  I will proceed in two steps:\n'
+    printf '   → first step\n'
+    printf '   → second step\n'
+    printf '\n'
+    printf ' ❯ \n'
+    printf '\n'
+  } > "$file"
+}
+
+test_noncursor_pane_arrow_output_is_not_hijacked() {
+  local d fb pane out
+  d="$TMP_ROOT/nonhijack"; mkdir -p "$d"
+  fb=$(make_fake_tmux "$d")
+  pane="$d/pane.txt"
+  make_claude_pane "$pane"
+  # The regression class: an unscoped structural scan selected the last "→ "
+  # OUTPUT line and classified this idle claude pane `pending`, deferring
+  # away-mode escalations. A claude COMM must keep the cursor_y row.
+  out=$(PATH="$fb:$PATH" FM_FAKE_PANE="$pane" FM_FAKE_CY=4 FM_FAKE_COMM=claude \
+    bash -c ". '$ROOT/bin/fm-tmux-lib.sh'; fm_tmux_composer_state t" 2>/dev/null)
+  [ "$out" = empty ] || fail "claude pane with arrow-bulleted output classified '$out', expected empty"
+  # An UNATTRIBUTABLE bare node (pi-like) must also keep the cursor_y row: the
+  # scan runs only on a POSITIVE cursor identification, never by default.
+  out=$(PATH="$fb:$PATH" FM_FAKE_PANE="$pane" FM_FAKE_CY=4 FM_FAKE_COMM=node \
+    FM_FAKE_ARGS="/usr/bin/node /opt/somewhere/index.js" \
+    bash -c ". '$ROOT/bin/fm-tmux-lib.sh'; fm_tmux_composer_state t" 2>/dev/null)
+  [ "$out" = empty ] || fail "unattributable node pane classified '$out', expected empty"
+  pass "arrow-prefixed output on a non-cursor pane cannot hijack the composer row"
+}
+
+test_noncursor_pane_submit_verdict_is_not_false_pending() {
+  local d fb pane out
+  d="$TMP_ROOT/nonhijack-submit"; mkdir -p "$d"
+  fb=$(make_fake_tmux "$d")
+  pane="$d/pane.txt"
+  make_claude_pane "$pane"
+  # The fm-send consequence of the same hijack: a false `pending` verdict from
+  # fm_tmux_submit_enter_core reads as a swallowed Enter and fails the steer.
+  out=$(PATH="$fb:$PATH" FM_FAKE_PANE="$pane" FM_FAKE_CY=4 FM_FAKE_COMM=claude \
+    bash -c ". '$ROOT/bin/fm-tmux-lib.sh'; fm_tmux_submit_enter_core t 2 0.01" 2>/dev/null)
+  [ "$out" = empty ] || fail "submit verdict on a claude pane with arrow output was '$out', expected empty"
+  pass "a non-cursor pane with arrow output cannot produce a false pending swallow verdict"
 }
 
 # --- 2. idle placeholder / reverse-video cursor cell -------------------------
@@ -151,7 +214,7 @@ test_idle_placeholder_reads_empty() {
   fb=$(make_fake_tmux "$d")
   pane="$d/pane.txt"
   make_cursor_pane "$pane" "$CURSOR_IDLE_ROW"
-  out=$(PATH="$fb:$PATH" FM_FAKE_PANE="$pane" FM_FAKE_CY=8 \
+  out=$(PATH="$fb:$PATH" FM_FAKE_PANE="$pane" FM_FAKE_CY=8 FM_FAKE_ARGS="$CURSOR_ARGS" \
     bash -c ". '$ROOT/bin/fm-tmux-lib.sh'; fm_tmux_composer_state t" 2>/dev/null)
   [ "$out" = empty ] || fail "idle cursor composer classified '$out', expected empty"
   pass "idle cursor composer ('Add a follow-up') reads empty"
@@ -285,19 +348,12 @@ test_fast_variant_is_never_implicit() {
 # --- 5. liveness ------------------------------------------------------------
 
 test_liveness_uses_argv_for_node_comm() {
-  local d fb out psdir
+  local d fb out
   d="$TMP_ROOT/live"; mkdir -p "$d"
   fb=$(make_fake_tmux "$d")
-  psdir="$d/fakebin"
-  # Fake ps: argv carries the versioned cursor-agent bundle path, exactly as the
-  # real wrapper leaves it (exec -a rewrites argv[0], the index.js arg survives).
-  cat > "$psdir/ps" <<'SH'
-#!/usr/bin/env bash
-printf '%s\n' "${FM_FAKE_ARGS:-}"
-SH
-  chmod +x "$psdir/ps"
-  out=$(PATH="$fb:$PATH" FM_FAKE_COMM=node \
-    FM_FAKE_ARGS="/Users/x/.local/bin/agent --use-system-ca /Users/x/.local/share/cursor-agent/versions/2026.07.16-899851b/index.js --yolo" \
+  # Fake ps (from make_fake_tmux): argv carries the versioned cursor-agent
+  # bundle path, exactly as the real wrapper leaves it.
+  out=$(PATH="$fb:$PATH" FM_FAKE_COMM=node FM_FAKE_ARGS="$CURSOR_ARGS" \
     bash -c ". '$ROOT/bin/fm-tmux-lib.sh'; . '$ROOT/bin/backends/tmux.sh'; fm_backend_tmux_agent_alive t" 2>/dev/null)
   [ "$out" = alive ] || fail "cursor pane (node comm + cursor-agent argv) classified '$out', expected alive"
   pass "cursor liveness resolves through argv when COMM is a bare node"
@@ -307,11 +363,6 @@ test_unattributable_node_stays_unknown() {
   local d fb out
   d="$TMP_ROOT/live2"; mkdir -p "$d"
   fb=$(make_fake_tmux "$d")
-  cat > "$d/fakebin/ps" <<'SH'
-#!/usr/bin/env bash
-printf '%s\n' "${FM_FAKE_ARGS:-}"
-SH
-  chmod +x "$d/fakebin/ps"
   # pi's generic node: still unknown, and NEVER inferred dead (a wrong `dead`
   # would let the secondmate-liveness sweep respawn over a live agent).
   out=$(PATH="$fb:$PATH" FM_FAKE_COMM=node FM_FAKE_ARGS="/usr/bin/node /opt/somewhere/index.js" \
@@ -361,6 +412,8 @@ test_composer_ghost_suite_still_passes() {
 
 test_composer_row_found_structurally_not_by_cursor_y
 test_real_typed_text_is_pending_despite_wrong_cursor_y
+test_noncursor_pane_arrow_output_is_not_hijacked
+test_noncursor_pane_submit_verdict_is_not_false_pending
 test_reverse_video_cursor_cell_survives_ghost_strip
 test_idle_placeholder_reads_empty
 test_fresh_session_placeholder_reads_empty

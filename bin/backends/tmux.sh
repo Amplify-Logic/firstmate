@@ -155,7 +155,7 @@ fm_backend_tmux_current_command() {  # <target>
 #             signal (bin/fm-bootstrap.sh's secondmate-liveness sweep gates a
 #             respawn on `dead` only).
 fm_backend_tmux_agent_alive() {  # <target>
-  local target=$1 comm pid args
+  local target=$1 comm
   comm=$(fm_backend_tmux_current_command "$target") || { printf 'unknown'; return 0; }
   comm=${comm#-}
   case "$comm" in
@@ -165,20 +165,11 @@ fm_backend_tmux_agent_alive() {  # <target>
     node*)
       # A bare "node" is normally `unknown` (pi's launcher execs into a generic
       # node with nothing to attribute it back to pi - see "Known gaps"). cursor
-      # is the exception: its wrapper execs node with the VERSIONED cursor-agent
-      # bundle path still on the command line ("exec -a" rewrites argv[0] but the
-      # index.js path argument survives), so the pane's argv carries an
-      # unambiguous cursor marker even though the COMM is only "node".
-      # Verified 2026-07-19 on Cursor CLI 2026.07.16-899851b: pane_current_command
-      # is "node" while `ps -o args=` shows .../cursor-agent/versions/<v>/index.js.
+      # is the exception: fm_tmux_pane_is_cursor (bin/fm-tmux-lib.sh) resolves
+      # it through the versioned cursor-agent bundle path that survives in argv
+      # ("exec -a" rewrites argv[0] but the index.js path argument does not).
       # Anything else with a node COMM stays `unknown` - never inferred dead.
-      pid=$(tmux display-message -p -t "$target" '#{pane_pid}' 2>/dev/null) || { printf 'unknown'; return 0; }
-      [ -n "$pid" ] || { printf 'unknown'; return 0; }
-      args=$(ps -o args= -p "$pid" 2>/dev/null) || { printf 'unknown'; return 0; }
-      case "$args" in
-        *cursor-agent*) printf 'alive' ;;
-        *) printf 'unknown' ;;
-      esac
+      if fm_tmux_pane_is_cursor "$target"; then printf 'alive'; else printf 'unknown'; fi
       ;;
     *) printf 'unknown' ;;
   esac
