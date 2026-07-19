@@ -143,8 +143,71 @@ test_raw_launch_command_remains_exempt() {
   pass "raw launch command stays exempt from preflight and is sent unchanged"
 }
 
+test_hanging_version_probe_times_out_before_endpoint_creation() {
+  local out status
+  make_spawn_case hang-probe opencode
+  cat > "$FAKEBIN_DIR/opencode" <<'SH'
+#!/usr/bin/env bash
+set -u
+printf '%s %s\n' "$(basename "$0")" "$*" >> "${FM_FAKE_PROBE_LOG:?}"
+sleep 60
+SH
+  chmod +x "$FAKEBIN_DIR/opencode"
+
+  out=$(FM_SPAWN_PROBE_TIMEOUT_SECS=1 run_spawn "$ID" "$PROJ_DIR")
+  status=$?
+
+  expect_code 1 "$status" "hanging version probe should fail"
+  assert_contains "$out" \
+    "error: harness 'opencode' launch binary 'opencode' --version probe timed out after 1s (raise with FM_SPAWN_PROBE_TIMEOUT_SECS); refusing before creating a task endpoint" \
+    "timeout refusal did not name the binary and override knob"
+  [ ! -s "$ENDPOINT_LOG" ] || fail "timed-out probe touched tmux before failing"
+  assert_absent "$HOME_DIR/state/$ID.meta" "timed-out probe wrote task meta"
+  pass "hanging version probe times out and refuses before endpoint creation or meta"
+}
+
+test_probe_closes_stdin() {
+  local out status
+  make_spawn_case stdin-probe opencode
+  cat > "$FAKEBIN_DIR/opencode" <<'SH'
+#!/usr/bin/env bash
+set -u
+printf '%s %s\n' "$(basename "$0")" "$*" >> "${FM_FAKE_PROBE_LOG:?}"
+cat >/dev/null
+exit 0
+SH
+  chmod +x "$FAKEBIN_DIR/opencode"
+
+  out=$(FM_SPAWN_PROBE_TIMEOUT_SECS=2 run_spawn "$ID" "$PROJ_DIR" < /dev/zero)
+  status=$?
+
+  expect_code 0 "$status" "stdin-reading probe should finish immediately because stdin is closed"
+  assert_contains "$out" "spawned $ID harness=opencode" "stdin-closed probe did not reach the healthy spawn path"
+  cleanup_task_tmp "$ID"
+  pass "version probe runs with stdin closed"
+}
+
+test_invalid_probe_timeout_knob_refuses() {
+  local out status
+  make_spawn_case bad-knob opencode opencode
+
+  out=$(FM_SPAWN_PROBE_TIMEOUT_SECS=soon run_spawn "$ID" "$PROJ_DIR")
+  status=$?
+
+  expect_code 1 "$status" "invalid FM_SPAWN_PROBE_TIMEOUT_SECS should fail"
+  assert_contains "$out" \
+    "error: FM_SPAWN_PROBE_TIMEOUT_SECS must be a positive integer number of seconds (got 'soon'); refusing before creating a task endpoint" \
+    "invalid knob refusal did not name the knob and value"
+  [ ! -s "$ENDPOINT_LOG" ] || fail "invalid knob touched tmux before failing"
+  assert_absent "$HOME_DIR/state/$ID.meta" "invalid knob wrote task meta"
+  pass "invalid probe timeout knob is refused before endpoint creation"
+}
+
 test_missing_verified_binary_refuses_before_endpoint_creation
 test_present_verified_binaries_spawn_as_before
 test_raw_launch_command_remains_exempt
+test_hanging_version_probe_times_out_before_endpoint_creation
+test_probe_closes_stdin
+test_invalid_probe_timeout_knob_refuses
 
 echo "# all fm-spawn launch-preflight tests passed"
