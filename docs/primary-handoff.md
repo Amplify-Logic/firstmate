@@ -87,8 +87,16 @@ Manual recovery after `failed` or `aborted`: inspect `state/.primary-handoff`, c
 
 `bin/fm-primary.sh` still refuses to start when another live Firstmate session holds the lock.
 Handoff depends on that refusal: it never steals a live lock.
-When handoff is disabled, `fm-primary.sh` behavior is unchanged except for writing the lightweight `state/.primary-active` marker on real launches so a later opt-in can see which profile is live.
+When handoff is disabled or `config/primary-handoff` is absent, `fm-primary.sh` behavior is completely unchanged: it does not write the marker.
+Only when the config exists with `enabled: true` does `fm-primary.sh` write the lightweight `state/.primary-active` marker on real launches so the supervisor can see which profile is live.
 That marker is not a lock and never authorizes mutation.
+
+## Quota-monitored providers only
+
+Auto-rotation via `check`/`run` only triggers for quota-monitored providers: claude, codex, and grok.
+When the active primary is pi, kimi-k3, or opencode, no quota source exists, `min_remaining` reports `na`, and `check` never auto-hands-off.
+Operators must run `fm-primary-handoff.sh execute --force` (or wait until a monitored provider is active again) to rotate off an unmonitored provider.
+This is an accepted limitation, not a bug.
 
 ## Testing
 

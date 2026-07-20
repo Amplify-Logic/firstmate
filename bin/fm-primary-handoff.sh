@@ -19,6 +19,11 @@
 #   execute  Run the atomic handoff protocol once (manual or from check/run).
 #   run      Polling supervisor loop (single-instance per FM_HOME).
 #
+# Auto-rotation (check/run) only triggers for quota-monitored providers:
+# claude, codex, grok. When the active primary is pi, kimi-k3, or opencode,
+# min_remaining is "na" and check never auto-hands-off; use `execute --force`
+# (or wait until a monitored provider is active again). Accepted limitation.
+#
 # State:
 #   state/.primary-active     written by fm-primary.sh on real launches
 #   state/.primary-handoff    durable phase record for in-flight/completed handoff
@@ -28,7 +33,7 @@
 # Test seams:
 #   FM_HANDOFF_QUOTA_JSON / FM_HANDOFF_QUOTA_AXI
 #   FM_HANDOFF_SIGNAL_CMD / FM_HANDOFF_WAIT_DEAD_CMD / FM_HANDOFF_LAUNCH_CMD
-#   FM_HANDOFF_INJECT_FAIL=flush|signal|wait_dead|release|pre_launch|launch
+#   FM_HANDOFF_INJECT_FAIL=flush|signal|wait_dead|release|pre_launch|launch|post_launch
 #   FM_HANDOFF_WAIT_DEAD_SECS / FM_HANDOFF_NOW / FM_HANDOFF_SKIP_CLI_CHECK
 set -u
 
@@ -90,6 +95,13 @@ fail_record() {
   fm_handoff_write_record
   fm_handoff_log "$msg"
   return 1
+}
+
+# Release cmd_execute's coordination lock and clear its EXIT trap; reads the
+# caller's $coord via dynamic scoping.
+release_coord() {
+  fm_lock_release "$coord" 2>/dev/null || true
+  trap - EXIT
 }
 
 cmd_execute() {
@@ -160,20 +172,19 @@ cmd_execute() {
 
   if fm_handoff_in_cooldown && [ "$force" -ne 1 ]; then
     fm_handoff_log "handoff cooldown active; skipping"
-    fm_lock_release "$coord"
-    trap - EXIT
+    release_coord
     return 0
   fi
 
   if [ -n "$from_arg" ]; then
     active=$(fm_handoff_normalize_profile "$from_arg") || {
-      fm_lock_release "$coord"; trap - EXIT
+      release_coord
       fm_handoff_die "invalid --from profile: $from_arg"
       return 1
     }
   else
     active=$(fm_handoff_read_active_profile) || {
-      fm_lock_release "$coord"; trap - EXIT
+      release_coord
       fm_handoff_die "no state/.primary-active profile; pass --from"
       return 1
     }
@@ -181,20 +192,20 @@ cmd_execute() {
 
   if [ -n "$to_arg" ]; then
     next=$(fm_handoff_normalize_profile "$to_arg") || {
-      fm_lock_release "$coord"; trap - EXIT
+      release_coord
       fm_handoff_die "invalid --to profile: $to_arg"
       return 1
     }
   else
     next=$(fm_handoff_next_profile "$active") || {
-      fm_lock_release "$coord"; trap - EXIT
+      release_coord
       fm_handoff_die "no usable next profile after $active in chain"
       return 1
     }
   fi
 
   if ! fm_handoff_session_live_holder; then
-    fm_lock_release "$coord"; trap - EXIT
+    release_coord
     fm_handoff_die "session lock is not held by a live harness; refusing handoff"
     return 1
   fi
@@ -212,12 +223,12 @@ cmd_execute() {
   completed_at=
   cooldown_until=
   fm_handoff_write_record || {
-    fm_lock_release "$coord"; trap - EXIT
+    release_coord
     return 1
   }
   fm_handoff_assert_never_two_live_holders || {
     abort_record "invariant failed at planning"
-    fm_lock_release "$coord"; trap - EXIT
+    release_coord
     return 1
   }
 
@@ -225,12 +236,12 @@ cmd_execute() {
   fm_handoff_write_record
   if ! fm_handoff_flush_durable; then
     abort_record "flush failed; outgoing still holds the session lock"
-    fm_lock_release "$coord"; trap - EXIT
+    release_coord
     return 1
   fi
   fm_handoff_assert_never_two_live_holders || {
     abort_record "invariant failed after flush"
-    fm_lock_release "$coord"; trap - EXIT
+    release_coord
     return 1
   }
 
@@ -238,22 +249,22 @@ cmd_execute() {
   fm_handoff_write_record
   if ! fm_handoff_signal_outgoing "$outgoing_pid"; then
     abort_record "failed to signal outgoing pid $outgoing_pid"
-    fm_lock_release "$coord"; trap - EXIT
+    release_coord
     return 1
   fi
   if ! fm_handoff_wait_outgoing_dead "$outgoing_pid"; then
     abort_record "outgoing pid $outgoing_pid did not release; incoming not launched"
-    fm_lock_release "$coord"; trap - EXIT
+    release_coord
     return 1
   fi
   if ! fm_handoff_release_session_lock_stale; then
     abort_record "release-stale refused; incoming not launched"
-    fm_lock_release "$coord"; trap - EXIT
+    release_coord
     return 1
   fi
   if ! fm_handoff_assert_never_two_live_holders --require-free; then
     abort_record "session lock still live after release; incoming not launched"
-    fm_lock_release "$coord"; trap - EXIT
+    release_coord
     return 1
   fi
 
@@ -261,12 +272,12 @@ cmd_execute() {
   fm_handoff_write_record
   if ! fm_handoff_launch_incoming "$next"; then
     fail_record "incoming launch failed for $next; session lock left free for recovery"
-    fm_lock_release "$coord"; trap - EXIT
+    release_coord
     return 1
   fi
   if [ "${FM_HANDOFF_INJECT_FAIL:-}" = post_launch ]; then
     fail_record "injected failure at post_launch"
-    fm_lock_release "$coord"; trap - EXIT
+    release_coord
     return 1
   fi
 
@@ -275,7 +286,7 @@ cmd_execute() {
   if fm_handoff_session_live_holder; then
     if [ "$FM_HANDOFF_LIVE_HOLDER_PID" = "$outgoing_pid" ]; then
       fail_record "incoming launch left outgoing pid as lock holder"
-      fm_lock_release "$coord"; trap - EXIT
+      release_coord
       return 1
     fi
     incoming_pid=$FM_HANDOFF_LIVE_HOLDER_PID
@@ -283,13 +294,13 @@ cmd_execute() {
     incoming_pid=${FM_HANDOFF_FAKE_INCOMING_PID:-0}
   else
     fail_record "incoming did not acquire the session lock"
-    fm_lock_release "$coord"; trap - EXIT
+    release_coord
     return 1
   fi
 
   fm_handoff_assert_never_two_live_holders || {
     fail_record "invariant failed after launch"
-    fm_lock_release "$coord"; trap - EXIT
+    release_coord
     return 1
   }
 
@@ -301,8 +312,7 @@ cmd_execute() {
   fm_handoff_write_active "$next" "$incoming_pid"
   fm_handoff_log "handed off primary $from -> $to (reason=$reason)"
   printf 'handed_off: %s -> %s\n' "$from" "$to"
-  fm_lock_release "$coord"
-  trap - EXIT
+  release_coord
   return 0
 }
 

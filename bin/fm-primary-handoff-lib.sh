@@ -311,7 +311,7 @@ fm_handoff_over_threshold() {
   remaining=$(fm_handoff_min_remaining_for_profile "$profile")
   case "$remaining" in
     na|'') return 1 ;;
-    *) [ "$remaining" -le "$threshold" ] ;;
+    *) awk -v r="$remaining" -v t="$threshold" 'BEGIN { exit ((r + 0 <= t + 0) ? 0 : 1) }' ;;
   esac
 }
 

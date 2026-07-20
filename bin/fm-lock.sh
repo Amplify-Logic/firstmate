@@ -63,6 +63,11 @@ if [ "${1:-}" = "release-stale" ]; then
     echo "error: refusing to release a live firstmate session lock (pid $old)" >&2
     exit 1
   fi
+  current=$(cat "$LOCK" 2>/dev/null || true)
+  if [ "$current" != "$old" ]; then
+    echo "error: lock holder changed to pid ${current:-none} during release-stale; refusing" >&2
+    exit 1
+  fi
   rm -f "$LOCK"
   echo "lock released: stale holder pid $old"
   exit 0
