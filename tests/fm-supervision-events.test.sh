@@ -82,6 +82,7 @@ pass "handle_push_transition: a declared-pause crew is absorbed (no fast wake), 
 
 reset_state
 fm_write_meta "$STATE_DIR/tk-cursor.meta" "window=default:wP:p4" "backend=herdr" "kind=ship" "harness=cursor"
+# shellcheck disable=SC2329  # invoked indirectly by handle_push_transition
 fm_backend_capture() {
   # Verbatim busy footer from the 2026-07-19 default:wP:p4 false-blocked incident.
   printf '  → Add a follow-up                                          ctrl+c to stop\n'
