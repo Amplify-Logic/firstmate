@@ -36,6 +36,10 @@ fi
 exit 0
 SH
   chmod +x "$fb/orca"
+  # Spawn preflight resolves the harness binary before any Orca worktree call.
+  # Linux CI does not install claude; without this stub, spawn tests abort at
+  # "launch binary was not found" and never exercise the pathless-error path.
+  fm_fake_exit0 "$fb" claude
   printf '%s\n' "$fb"
 }
 
