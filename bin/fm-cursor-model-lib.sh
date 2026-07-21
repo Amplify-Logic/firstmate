@@ -59,13 +59,31 @@ EOF
 # FM_CURSOR_MODEL_CATALOG, when set to an existing file path, is the sole
 # source (tests and offline checks). Otherwise runs `agent --list-models`.
 fm_cursor_list_models_text() {
-  if [ -n "${FM_CURSOR_MODEL_CATALOG:-}" ]; then
-    [ -f "$FM_CURSOR_MODEL_CATALOG" ] || return 1
-    cat "$FM_CURSOR_MODEL_CATALOG"
+  local key=${FM_CURSOR_MODEL_CATALOG:-} text status
+  if [ "${_fm_cursor_catalog_key+set}" = set ] && [ "$_fm_cursor_catalog_key" = "$key" ]; then
+    if [ "$_fm_cursor_catalog_status" -eq 0 ]; then
+      printf '%s\n' "$_fm_cursor_catalog_text"
+      return 0
+    fi
+    return "$_fm_cursor_catalog_status"
+  fi
+  status=1
+  text=''
+  if [ -n "$key" ]; then
+    if [ -f "$key" ]; then
+      text=$(cat "$key") && status=0
+    fi
+  elif command -v agent >/dev/null 2>&1; then
+    text=$(agent --list-models 2>/dev/null) && status=0
+  fi
+  _fm_cursor_catalog_key=$key
+  _fm_cursor_catalog_text=$text
+  _fm_cursor_catalog_status=$status
+  if [ "$status" -eq 0 ]; then
+    printf '%s\n' "$text"
     return 0
   fi
-  command -v agent >/dev/null 2>&1 || return 1
-  agent --list-models 2>/dev/null
+  return "$status"
 }
 
 # fm_cursor_catalog_has_model: 0 if <model-id> appears as a catalog id (left of

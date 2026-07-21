@@ -162,7 +162,7 @@ record_model_live() {  # <meta> <live-token> <recorded-model>
     && fm_cursor_models_equivalent "$recorded" "$live"; then
     # Clear a stale model_live= from an earlier mismatch once they agree again.
     if grep -q '^model_live=' "$meta" 2>/dev/null; then
-      tmp=$(mktemp "${TMPDIR:-/tmp}/fm-model-live.XXXXXX") || return 0
+      tmp=$(mktemp "$meta.XXXXXX") || return 0
       grep -v '^model_live=' "$meta" > "$tmp" 2>/dev/null || { rm -f "$tmp"; return 0; }
       mv "$tmp" "$meta"
     fi
@@ -171,7 +171,7 @@ record_model_live() {  # <meta> <live-token> <recorded-model>
   if [ "$(meta_value "$meta" model_live)" = "$live" ]; then
     return 0
   fi
-  tmp=$(mktemp "${TMPDIR:-/tmp}/fm-model-live.XXXXXX") || return 0
+  tmp=$(mktemp "$meta.XXXXXX") || return 0
   grep -v '^model_live=' "$meta" > "$tmp" 2>/dev/null || { rm -f "$tmp"; return 0; }
   printf 'model_live=%s\n' "$live" >> "$tmp"
   mv "$tmp" "$meta"
