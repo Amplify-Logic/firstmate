@@ -70,18 +70,28 @@ fm_cursor_catalog_cache_cleanup() {
 
 _fm_cursor_trap_extract() { shift; printf '%s' "${1:-}"; }
 
+# Run any EXIT handler that was installed before this library was sourced, then
+# drop the catalog cache. Kept as a named trap target so the previous command
+# can live in a durable variable (single-quoted trap; no SC2064 early-expand).
+_fm_cursor_catalog_exit_chain() {
+  if [ -n "${_FM_CURSOR_CATALOG_PREV_EXIT:-}" ]; then
+    eval "$_FM_CURSOR_CATALOG_PREV_EXIT"
+  fi
+  fm_cursor_catalog_cache_cleanup
+}
+
 if [ "${_FM_CURSOR_CATALOG_CACHE_PID:-}" != "$$" ] \
   || [ -z "${_FM_CURSOR_CATALOG_CACHE_DIR:-}" ] || [ ! -d "$_FM_CURSOR_CATALOG_CACHE_DIR" ]; then
   if _FM_CURSOR_CATALOG_CACHE_DIR=$(mktemp -d "${TMPDIR:-/tmp}/fm-cursor-catalog.XXXXXX" 2>/dev/null); then
     _FM_CURSOR_CATALOG_CACHE_PID=$$
     _fm_cursor_prev_trap=$(trap -p EXIT)
     if [ -n "$_fm_cursor_prev_trap" ]; then
-      _fm_cursor_prev_cmd=$(eval "_fm_cursor_trap_extract ${_fm_cursor_prev_trap#trap}")
-      trap "$_fm_cursor_prev_cmd; fm_cursor_catalog_cache_cleanup" EXIT
+      _FM_CURSOR_CATALOG_PREV_EXIT=$(eval "_fm_cursor_trap_extract ${_fm_cursor_prev_trap#trap}")
     else
-      trap fm_cursor_catalog_cache_cleanup EXIT
+      _FM_CURSOR_CATALOG_PREV_EXIT=''
     fi
-    unset _fm_cursor_prev_trap _fm_cursor_prev_cmd 2>/dev/null || :
+    trap _fm_cursor_catalog_exit_chain EXIT
+    unset _fm_cursor_prev_trap 2>/dev/null || :
   else
     _FM_CURSOR_CATALOG_CACHE_DIR=''
   fi
