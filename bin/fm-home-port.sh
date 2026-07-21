@@ -43,8 +43,6 @@ never port; see docs/porting.md.
 Environment:
   FM_HOME             active firstmate home (default: tracked root)
   FM_ROOT_OVERRIDE    firstmate repo root
-  FM_DATA_OVERRIDE    data dir
-  FM_CONFIG_OVERRIDE  config dir
 EOF
 }
 
@@ -97,16 +95,6 @@ resolve_home() {
   (cd "$home" && pwd -P)
 }
 
-data_dir() {
-  local home=$1
-  printf '%s\n' "${FM_DATA_OVERRIDE:-$home/data}"
-}
-
-config_dir() {
-  local home=$1
-  printf '%s\n' "${FM_CONFIG_OVERRIDE:-$home/config}"
-}
-
 is_refused_relpath() {
   local rel=$1 prefix base
   case "$rel" in
@@ -138,7 +126,7 @@ scan_path() {
   local hits=0
   local pattern
   # shellcheck disable=SC2016
-  pattern='(FMX_PAIRING_TOKEN[[:space:]]*=|[[:space:]](ghp_|gho_|ghu_|ghs_|ghr_|github_pat_)[A-Za-z0-9_]{20,}|sk-ant-[A-Za-z0-9_-]{20,}|sk-[A-Za-z0-9]{20,}|xox[baprs]-[A-Za-z0-9-]{10,}|AKIA[0-9A-Z]{16}|BEGIN (RSA |OPENSSH |EC |DSA )?PRIVATE KEY|api[_-]?key[[:space:]]*[=:][[:space:]]*['\''\"]?[A-Za-z0-9_-]{20,}|CMUX_SOCKET_PASSWORD[[:space:]]*=)'
+  pattern='(FMX_PAIRING_TOKEN[[:space:]]*=|(^|[^A-Za-z0-9_])(ghp_|gho_|ghu_|ghs_|ghr_|github_pat_)[A-Za-z0-9_]{20,}|sk-ant-[A-Za-z0-9_-]{20,}|sk-[A-Za-z0-9]{20,}|xox[baprs]-[A-Za-z0-9-]{10,}|AKIA[0-9A-Z]{16}|BEGIN (RSA |OPENSSH |EC |DSA )?PRIVATE KEY|api[_-]?key[[:space:]]*[=:][[:space:]]*['\''\"]?[A-Za-z0-9_-]{20,}|CMUX_SOCKET_PASSWORD[[:space:]]*=)'
 
   if [ -d "$path" ]; then
     while IFS= read -r -d '' f; do
@@ -329,7 +317,7 @@ cmd_import() {
 
   scan_path "$source" || die "import source failed secret scan; refusing to write into $home"
 
-  mkdir -p "$(data_dir "$home")" "$(config_dir "$home")"
+  mkdir -p "$home/data" "$home/config"
 
   for rel in "${PORTABLE_DATA_FILES[@]}" "${PORTABLE_CONFIG_FILES[@]}"; do
     [ -f "$source/$rel" ] || continue
@@ -593,11 +581,6 @@ cmd_bootstrap() {
   mkdir -p "$home"
   home=$(cd "$home" && pwd -P)
   mkdir -p "$home/data" "$home/config" "$home/state" "$home/projects"
-
-  # Prefer the tracked root that contains this script when home is the clone.
-  if [ ! -f "$home/bin/fm-bootstrap.sh" ] && [ -f "$FM_ROOT/bin/fm-bootstrap.sh" ]; then
-    :
-  fi
 
   cmd_pull --remote "$remote" --home "$home"
 

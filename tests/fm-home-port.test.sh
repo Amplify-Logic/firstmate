@@ -73,6 +73,18 @@ test_scan_detects_embedded_secret() {
   pass "scan fails loudly on embedded GitHub token"
 }
 
+test_scan_detects_secret_without_leading_space() {
+  local dirty="$TMP_ROOT/dirty-env-file.md"
+  # Deliberate fake token shape for the scanner; not a real credential.
+  printf 'GITHUB_TOKEN=ghp_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n' > "$dirty"
+
+  local out rc=0
+  out=$("$PORT" scan "$dirty" 2>&1) || rc=$?
+  [ "$rc" -ne 0 ] || fail "scan must fail on GITHUB_TOKEN=ghp_ shape, got: $out"
+  assert_contains "$out" 'SECRET_HIT:' "no-space token scan missed SECRET_HIT marker"
+  pass "scan fails loudly on token without leading whitespace"
+}
+
 test_export_aborts_when_portable_file_contains_secret() {
   local home="$TMP_ROOT/secret-in-portable"
   local dest="$TMP_ROOT/secret-in-portable-dest"
@@ -124,6 +136,7 @@ test_help_mentions_secrets_policy() {
 test_export_copies_portable_only
 test_export_refuses_explicit_env_include
 test_scan_detects_embedded_secret
+test_scan_detects_secret_without_leading_space
 test_export_aborts_when_portable_file_contains_secret
 test_import_round_trip_and_refuses_contaminated_source
 test_help_mentions_secrets_policy
