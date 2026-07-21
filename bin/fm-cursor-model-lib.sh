@@ -59,26 +59,38 @@ EOF
 # FM_CURSOR_MODEL_CATALOG, when set to an existing file path, is the sole
 # source (tests and offline checks). Otherwise runs `agent --list-models`.
 fm_cursor_list_models_text() {
-  local key=${FM_CURSOR_MODEL_CATALOG:-} text status
-  if [ "${_fm_cursor_catalog_key+set}" = set ] && [ "$_fm_cursor_catalog_key" = "$key" ]; then
-    if [ "$_fm_cursor_catalog_status" -eq 0 ]; then
-      printf '%s\n' "$_fm_cursor_catalog_text"
-      return 0
-    fi
-    return "$_fm_cursor_catalog_status"
+  local key=${FM_CURSOR_MODEL_CATALOG:-} text status cache stamp
+  if [ -n "$key" ]; then
+    [ -f "$key" ] || return 1
+    stamp=$(stat -f '%m:%z' "$key" 2>/dev/null || stat -c '%Y:%s' "$key" 2>/dev/null) || stamp=''
+    key="$key@$stamp"
+  fi
+  cache="${TMPDIR:-/tmp}/fm-cursor-catalog.$$"
+  if [ -f "$cache.key" ] && [ "$(cat "$cache.key" 2>/dev/null)" = "cached:$key" ]; then
+    status=$(cat "$cache.status" 2>/dev/null) || status=''
+    case "$status" in
+      0)
+        cat "$cache.txt" 2>/dev/null
+        return 0
+        ;;
+      [1-9])
+        return "$status"
+        ;;
+    esac
   fi
   status=1
   text=''
-  if [ -n "$key" ]; then
-    if [ -f "$key" ]; then
-      text=$(cat "$key") && status=0
-    fi
+  if [ -n "${FM_CURSOR_MODEL_CATALOG:-}" ]; then
+    text=$(cat "$FM_CURSOR_MODEL_CATALOG" 2>/dev/null) && status=0
   elif command -v agent >/dev/null 2>&1; then
     text=$(agent --list-models 2>/dev/null) && status=0
   fi
-  _fm_cursor_catalog_key=$key
-  _fm_cursor_catalog_text=$text
-  _fm_cursor_catalog_status=$status
+  rm -f "$cache.key" 2>/dev/null || :
+  printf '%s\n' "$text" > "$cache.txt" 2>/dev/null || :
+  printf '%s\n' "$status" > "$cache.status" 2>/dev/null || :
+  if [ -s "$cache.status" ]; then
+    printf 'cached:%s\n' "$key" > "$cache.key" 2>/dev/null || :
+  fi
   if [ "$status" -eq 0 ]; then
     printf '%s\n' "$text"
     return 0
