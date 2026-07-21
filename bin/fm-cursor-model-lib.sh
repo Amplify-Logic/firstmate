@@ -62,7 +62,7 @@ EOF
 # Chained onto the EXIT trap at source time; callers that install their own
 # EXIT trap after sourcing must include this in it.
 fm_cursor_catalog_cache_cleanup() {
-  if [ -n "${_FM_CURSOR_CATALOG_CACHE_DIR:-}" ]; then
+  if [ -n "${_FM_CURSOR_CATALOG_CACHE_DIR:-}" ] && [ "${_FM_CURSOR_CATALOG_CACHE_PID:-}" = "$$" ]; then
     rm -rf "$_FM_CURSOR_CATALOG_CACHE_DIR" 2>/dev/null || :
     _FM_CURSOR_CATALOG_CACHE_DIR=''
   fi
@@ -70,9 +70,10 @@ fm_cursor_catalog_cache_cleanup() {
 
 _fm_cursor_trap_extract() { shift; printf '%s' "${1:-}"; }
 
-if [ -z "${_FM_CURSOR_CATALOG_CACHE_DIR:-}" ] || [ ! -d "$_FM_CURSOR_CATALOG_CACHE_DIR" ]; then
+if [ "${_FM_CURSOR_CATALOG_CACHE_PID:-}" != "$$" ] \
+  || [ -z "${_FM_CURSOR_CATALOG_CACHE_DIR:-}" ] || [ ! -d "$_FM_CURSOR_CATALOG_CACHE_DIR" ]; then
   if _FM_CURSOR_CATALOG_CACHE_DIR=$(mktemp -d "${TMPDIR:-/tmp}/fm-cursor-catalog.XXXXXX" 2>/dev/null); then
-    export _FM_CURSOR_CATALOG_CACHE_DIR
+    _FM_CURSOR_CATALOG_CACHE_PID=$$
     _fm_cursor_prev_trap=$(trap -p EXIT)
     if [ -n "$_fm_cursor_prev_trap" ]; then
       _fm_cursor_prev_cmd=$(eval "_fm_cursor_trap_extract ${_fm_cursor_prev_trap#trap}")
