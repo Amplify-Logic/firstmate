@@ -28,23 +28,27 @@ fm_cursor_normalize_model_token() {  # <text>
 #   "  Cursor Grok 4.5 Low · 7%                                   Run Everything"
 #   "  GPT-5.6 Sol 1M Extra High · 12%                            Run Everything"
 fm_cursor_parse_footer_model() {  # <capture-text>
-  local line name
+  local line name found=''
   while IFS= read -r line || [ -n "$line" ]; do
     case "$line" in
       *'Run Everything'*)
+        case "$line" in
+          *·*) ;;
+          *) continue ;;
+        esac
         name=${line%%·*}
         name=$(printf '%s' "$name" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
         [ -n "$name" ] || continue
         case "$name" in
-          'Run Everything'|*'ctrl+c to stop'*|*'Add a follow-up'*) continue ;;
+          'Run Everything'|*'Run Everything'*|*'ctrl+c to stop'*|*'Add a follow-up'*) continue ;;
         esac
-        printf '%s' "$name"
-        return 0
+        found=$name
         ;;
     esac
   done <<EOF
 $1
 EOF
+  [ -n "$found" ] && printf '%s' "$found"
   return 0
 }
 
