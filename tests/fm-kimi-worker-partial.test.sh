@@ -42,6 +42,7 @@ test_harness_adapters_keeps_kimi_out_of_verified_workers() {
   local skill="$ROOT/.agents/skills/harness-adapters/SKILL.md"
   assert_grep 'Worker dispatch stays refused' "$skill" \
     "harness-adapters does not keep Kimi worker dispatch refused"
+  # shellcheck disable=SC2016  # single quotes are deliberate: the backticks must stay literal
   assert_grep 'The verified WORKER adapters are `claude`, `codex`, `opencode`, `pi`, `grok`, and `cursor`' "$skill" \
     "verified WORKER adapter list unexpectedly changed"
   if grep -E 'The verified WORKER adapters are .*kimi' "$skill" >/dev/null; then
