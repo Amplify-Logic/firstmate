@@ -104,7 +104,7 @@ resolve_home() {
 }
 
 is_refused_relpath() {
-  local rel=$1 prefix base
+  local rel=$1 prefix base name
   case "$rel" in
     .env|./.env) return 0 ;;
   esac
@@ -407,11 +407,8 @@ ensure_private_repo() {
   assert_remote_private "$slug"
 }
 
-staging_git_init() {
+write_portable_scaffold() {
   local stage=$1
-  git -C "$stage" init -q
-  git -C "$stage" config user.email "firstmate-port@local"
-  git -C "$stage" config user.name "firstmate-port"
   # Keep the portable repo from ever tracking refused paths if someone expands it.
   cat > "$stage/.gitignore" <<'EOF'
 .env
@@ -477,30 +474,35 @@ cmd_push() {
   stage=$(mktemp -d "${TMPDIR:-/tmp}/fm-home-port-push.XXXXXX")
   STAGE_DIR=$stage
   trap report_stage_leftover EXIT
-  staging_git_init "$stage"
-  copy_portable_tree "$home" "$stage"
-  scan_path "$stage" || die "push aborted: secret scan failed before writing the bundle"
 
-  git -C "$stage" add -A
-  if git -C "$stage" diff --cached --quiet; then
-    die "nothing to push (staging tree empty after allowlist copy)"
-  fi
-  git -C "$stage" commit -q -m "Portable Firstmate home sync $(date -u +%Y-%m-%dT%H:%MZ)"
-  git -C "$stage" branch -M main
-  if git -C "$stage" remote get-url origin >/dev/null 2>&1; then
-    git -C "$stage" remote set-url origin "$url"
+  # Commit the portable snapshot onto the remote's existing history so ongoing
+  # captain-triggered UPDATE pushes fast-forward cleanly instead of colliding
+  # with a throwaway unrelated history. Clone succeeds for an empty freshly
+  # created repo too (no HEAD yet); we start main from origin/main when present.
+  local repo="$stage/repo"
+  git clone -q "$url" "$repo" \
+    || die "push aborted: clone of portable repo failed: $url"
+  git -C "$repo" config user.email "firstmate-port@local"
+  git -C "$repo" config user.name "firstmate-port"
+  if git -C "$repo" rev-parse -q --verify origin/main >/dev/null 2>&1; then
+    git -C "$repo" checkout -q -B main origin/main
   else
-    git -C "$stage" remote add origin "$url"
+    git -C "$repo" checkout -q -B main
   fi
-  # First push may need --force only when replacing an unrelated history we just
-  # created empty; prefer non-force. If remote has commits, rebase onto them.
-  if git -C "$stage" fetch -q origin main 2>/dev/null \
-      && git -C "$stage" rev-parse -q --verify origin/main >/dev/null 2>&1; then
-    git -C "$stage" pull --rebase --allow-unrelated-histories origin main \
-      || die "push aborted: rebase onto $slug main failed (remote diverged or conflicts); resolve in $stage or pull first"
+
+  write_portable_scaffold "$repo"
+  copy_portable_tree "$home" "$repo"
+  scan_path "$repo" || die "push aborted: secret scan failed before writing the bundle"
+
+  git -C "$repo" add -A
+  if git -C "$repo" diff --cached --quiet; then
+    die "nothing to push ($slug main already matches local portable material)"
   fi
-  git -C "$stage" push -u origin main \
-    || die "git push to $slug failed after private visibility check"
+  git -C "$repo" commit -q -m "Portable Firstmate home sync $(date -u +%Y-%m-%dT%H:%MZ)"
+  # One-directional: never merge remote into local. A non-fast-forward push means
+  # the remote moved since clone; fail loudly rather than reconcile histories.
+  git -C "$repo" push origin main \
+    || die "push aborted: $slug main diverged since clone (non-fast-forward); no remote changes were merged into local - re-run to retry"
   printf 'PUSH_OK: %s\n' "$slug"
   rm -rf "$stage"
   STAGE_DIR=""
