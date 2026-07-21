@@ -385,7 +385,9 @@ test_cursor_env_marker_beats_inherited_claudecode() {
 
 test_claude_detection_unregressed() {
   local out
-  out=$(CLAUDECODE=1 "$ROOT/bin/fm-harness.sh")
+  # Clear any ambient CURSOR_AGENT from the test runner (e.g. a Cursor-hosted
+  # session) so this assertion measures CLAUDECODE alone.
+  out=$(env -u CURSOR_AGENT CLAUDECODE=1 "$ROOT/bin/fm-harness.sh")
   [ "$out" = claude ] || fail "claude detection regressed: '$out'"
   pass "claude detection is unchanged when CURSOR_AGENT is absent"
 }
