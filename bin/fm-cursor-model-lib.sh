@@ -58,6 +58,34 @@ EOF
 #
 # FM_CURSOR_MODEL_CATALOG, when set to an existing file path, is the sole
 # source (tests and offline checks). Otherwise runs `agent --list-models`.
+# fm_cursor_catalog_cache_cleanup: remove this process's catalog cache dir.
+# Chained onto the EXIT trap at source time; callers that install their own
+# EXIT trap after sourcing must include this in it.
+fm_cursor_catalog_cache_cleanup() {
+  if [ -n "${_FM_CURSOR_CATALOG_CACHE_DIR:-}" ]; then
+    rm -rf "$_FM_CURSOR_CATALOG_CACHE_DIR" 2>/dev/null || :
+    _FM_CURSOR_CATALOG_CACHE_DIR=''
+  fi
+}
+
+_fm_cursor_trap_extract() { shift; printf '%s' "${1:-}"; }
+
+if [ -z "${_FM_CURSOR_CATALOG_CACHE_DIR:-}" ] || [ ! -d "$_FM_CURSOR_CATALOG_CACHE_DIR" ]; then
+  if _FM_CURSOR_CATALOG_CACHE_DIR=$(mktemp -d "${TMPDIR:-/tmp}/fm-cursor-catalog.XXXXXX" 2>/dev/null); then
+    export _FM_CURSOR_CATALOG_CACHE_DIR
+    _fm_cursor_prev_trap=$(trap -p EXIT)
+    if [ -n "$_fm_cursor_prev_trap" ]; then
+      _fm_cursor_prev_cmd=$(eval "_fm_cursor_trap_extract ${_fm_cursor_prev_trap#trap}")
+      trap "$_fm_cursor_prev_cmd; fm_cursor_catalog_cache_cleanup" EXIT
+    else
+      trap fm_cursor_catalog_cache_cleanup EXIT
+    fi
+    unset _fm_cursor_prev_trap _fm_cursor_prev_cmd 2>/dev/null || :
+  else
+    _FM_CURSOR_CATALOG_CACHE_DIR=''
+  fi
+fi
+
 fm_cursor_list_models_text() {
   local key=${FM_CURSOR_MODEL_CATALOG:-} text status cache stamp
   if [ -n "$key" ]; then
@@ -65,8 +93,11 @@ fm_cursor_list_models_text() {
     stamp=$(stat -f '%m:%z' "$key" 2>/dev/null || stat -c '%Y:%s' "$key" 2>/dev/null) || stamp=''
     key="$key@$stamp"
   fi
-  cache="${TMPDIR:-/tmp}/fm-cursor-catalog.$$"
-  if [ -f "$cache.key" ] && [ "$(cat "$cache.key" 2>/dev/null)" = "cached:$key" ]; then
+  cache=''
+  if [ -n "${_FM_CURSOR_CATALOG_CACHE_DIR:-}" ] && [ -d "$_FM_CURSOR_CATALOG_CACHE_DIR" ]; then
+    cache="$_FM_CURSOR_CATALOG_CACHE_DIR/catalog"
+  fi
+  if [ -n "$cache" ] && [ -f "$cache.key" ] && [ "$(cat "$cache.key" 2>/dev/null)" = "cached:$key" ]; then
     status=$(cat "$cache.status" 2>/dev/null) || status=''
     case "$status" in
       0)
@@ -85,11 +116,13 @@ fm_cursor_list_models_text() {
   elif command -v agent >/dev/null 2>&1; then
     text=$(agent --list-models 2>/dev/null) && status=0
   fi
-  rm -f "$cache.key" 2>/dev/null || :
-  printf '%s\n' "$text" > "$cache.txt" 2>/dev/null || :
-  printf '%s\n' "$status" > "$cache.status" 2>/dev/null || :
-  if [ -s "$cache.status" ]; then
-    printf 'cached:%s\n' "$key" > "$cache.key" 2>/dev/null || :
+  if [ -n "$cache" ]; then
+    rm -f "$cache.key" 2>/dev/null || :
+    printf '%s\n' "$text" > "$cache.txt" 2>/dev/null || :
+    printf '%s\n' "$status" > "$cache.status" 2>/dev/null || :
+    if [ -s "$cache.status" ]; then
+      printf 'cached:%s\n' "$key" > "$cache.key" 2>/dev/null || :
+    fi
   fi
   if [ "$status" -eq 0 ]; then
     printf '%s\n' "$text"
