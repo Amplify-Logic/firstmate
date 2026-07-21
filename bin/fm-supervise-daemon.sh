@@ -583,15 +583,18 @@ pane_input_pending() {  # <target> [backend]
 # FM_AFK_SKIP_DELIVERY_PROBE=1 skips the read for harnesses that start the
 # daemon against a stub pane with no real composer (unit/e2e topology only).
 probe_delivery_channel() {  # <backend> <target>
-  local backend=$1 target=$2 composer
+  local backend=$1 target=$2 composer attempt
   [ "${FM_AFK_SKIP_DELIVERY_PROBE:-0}" = 1 ] && return 0
   if pane_is_busy "$target" "$backend"; then
     return 0
   fi
-  composer=$(fm_backend_composer_state "$backend" "$target" 2>/dev/null || printf 'unknown')
-  case "$composer" in
-    empty|pending) return 0 ;;
-  esac
+  for attempt in 1 2 3; do
+    composer=$(fm_backend_composer_state "$backend" "$target" 2>/dev/null || printf 'unknown')
+    case "$composer" in
+      empty|pending) return 0 ;;
+    esac
+    [ "$attempt" -lt 3 ] && sleep "${FM_AFK_PROBE_RETRY_SLEEP:-2}"
+  done
   echo "error: away-mode delivery channel unusable: supervisor composer reads '${composer}' while idle (need empty or pending). Refusing to enter away mode so supervision is not falsely advertised." >&2
   return 1
 }

@@ -1669,17 +1669,43 @@ test_probe_delivery_channel_refuses_idle_unknown() {
   (
     pane_is_busy() { return 1; }
     fm_backend_composer_state() { printf 'unknown'; }
-    if probe_delivery_channel herdr default:wT:p1; then
+    if FM_AFK_PROBE_RETRY_SLEEP=0 probe_delivery_channel herdr default:wT:p1; then
       fail "idle+unknown must refuse the delivery probe"
     fi
   ) || fail "probe refuse subshell failed"
   out=$(
     pane_is_busy() { return 1; }
     fm_backend_composer_state() { printf 'unknown'; }
-    probe_delivery_channel herdr default:wT:p1 2>&1 || true
+    FM_AFK_PROBE_RETRY_SLEEP=0 probe_delivery_channel herdr default:wT:p1 2>&1 || true
   )
   assert_contains "$out" "delivery channel unusable" "probe refusal did not explain the delivery failure"
   pass "probe_delivery_channel: refuses idle+unknown so away mode cannot falsely advertise delivery"
+}
+
+test_probe_delivery_channel_retries_transient_unknown() {
+  local dir reads
+  dir=$(make_supercase probe-retry-transient)
+  (
+    pane_is_busy() { return 1; }
+    fm_backend_composer_state() {
+      echo x >> "$dir/reads"
+      if [ "$(wc -l < "$dir/reads")" -ge 2 ]; then printf 'empty'; else printf 'unknown'; fi
+    }
+    FM_AFK_PROBE_RETRY_SLEEP=0 probe_delivery_channel herdr default:w1:p2 \
+      || fail "a transient unknown that then reads empty must pass the delivery probe"
+  ) || fail "probe transient-retry subshell failed"
+  reads=$(wc -l < "$dir/reads")
+  [ "$reads" -eq 2 ] || fail "probe should stop retrying once the composer reads empty (got $reads reads)"
+  (
+    pane_is_busy() { return 1; }
+    fm_backend_composer_state() { echo x >> "$dir/reads2"; printf 'unknown'; }
+    if FM_AFK_PROBE_RETRY_SLEEP=0 probe_delivery_channel herdr default:w1:p2; then
+      fail "persistent unknown must still refuse after bounded retries"
+    fi
+  ) || fail "probe persistent-unknown subshell failed"
+  reads=$(wc -l < "$dir/reads2")
+  [ "$reads" -eq 3 ] || fail "probe retries must be bounded at 3 reads (got $reads)"
+  pass "probe_delivery_channel: bounded retries pass a transient unknown and still refuse a persistent one"
 }
 
 test_probe_delivery_channel_skips_when_busy_or_override() {
@@ -1813,5 +1839,6 @@ test_inject_msg_herdr_submits_through_backend_dispatch
 test_inject_msg_defers_on_dead_shell_unknown
 test_probe_delivery_channel_accepts_empty_and_pending
 test_probe_delivery_channel_refuses_idle_unknown
+test_probe_delivery_channel_retries_transient_unknown
 test_probe_delivery_channel_skips_when_busy_or_override
 test_startup_abort_clears_afk_flag
