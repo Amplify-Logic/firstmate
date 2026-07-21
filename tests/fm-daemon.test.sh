@@ -1755,7 +1755,19 @@ test_deferred_delivery_probe_runs_on_first_idle() {
   assert_contains "$out" "delivery channel unusable" "deferred probe failure must refuse loudly"
   case "$out" in *NOT-REACHED*) fail "deferred probe refusal must abort the daemon" ;; esac
   [ -e "$dir/state/.afk" ] && fail "deferred probe refusal must clear state/.afk"
-  pass "deferred delivery probe: runs on first idle after a busy start and refuses loudly on failure"
+  (
+    log() { :; }
+    pane_is_busy() { return 1; }
+    fm_backend_composer_state() { printf 'unknown'; }
+    PROBE_DEFERRED=1
+    sleep 30 & WATCHER_PID=$!
+    echo "$WATCHER_PID" > "$dir/watcher.pid"
+    FM_AFK_PROBE_RETRY_SLEEP=0 run_deferred_delivery_probe herdr default:w1:p2 \
+      "$dir/state" "$dir/lock" "$dir/pid" >/dev/null 2>&1
+  ) || true
+  kill -0 "$(cat "$dir/watcher.pid")" 2>/dev/null \
+    && fail "deferred probe refusal must not orphan the watcher child"
+  pass "deferred delivery probe: runs on first idle after a busy start, refuses loudly, and reaps the watcher"
 }
 
 test_startup_abort_clears_afk_flag() {

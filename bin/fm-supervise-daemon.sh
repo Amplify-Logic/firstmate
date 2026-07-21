@@ -618,6 +618,11 @@ run_deferred_delivery_probe() {  # <backend> <target> <state> <lock> <pidfile>
     return 0
   fi
   if ! probe_delivery_channel "$backend" "$target"; then
+    if [ -n "${WATCHER_PID:-}" ]; then
+      kill "$WATCHER_PID" 2>/dev/null || true
+      wait "$WATCHER_PID" 2>/dev/null || true
+      WATCHER_PID=""
+    fi
     startup_abort "$state" "$lock" "$pidfile" \
       "deferred delivery probe refused (backend=$backend target=$target)"
   fi
