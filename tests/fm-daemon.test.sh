@@ -1713,13 +1713,49 @@ test_probe_delivery_channel_skips_when_busy_or_override() {
     pane_is_busy() { return 0; }
     fm_backend_composer_state() { fail "composer_state must not be consulted while busy"; }
     probe_delivery_channel herdr default:w1:p2 || fail "busy supervisor must defer the probe"
+    [ "${PROBE_DEFERRED:-0}" = 1 ] || fail "busy supervisor must mark the probe deferred, not passed"
   ) || fail "probe busy subshell failed"
   (
     pane_is_busy() { fail "busy check must not run when probe is skipped"; }
     FM_AFK_SKIP_DELIVERY_PROBE=1 probe_delivery_channel herdr default:w1:p2 \
       || fail "FM_AFK_SKIP_DELIVERY_PROBE=1 must skip the probe"
+    [ "${PROBE_DEFERRED:-0}" = 0 ] || fail "explicit skip must not leave a deferred probe pending"
   ) || fail "probe skip subshell failed"
-  pass "probe_delivery_channel: skips while busy and when FM_AFK_SKIP_DELIVERY_PROBE=1"
+  pass "probe_delivery_channel: defers while busy and skips when FM_AFK_SKIP_DELIVERY_PROBE=1"
+}
+
+test_deferred_delivery_probe_runs_on_first_idle() {
+  local dir out
+  dir=$(make_supercase probe-deferred-idle)
+  mkdir -p "$dir/state"
+  : > "$dir/state/.afk"
+  (
+    log() { :; }
+    busy=0
+    pane_is_busy() { return "$busy"; }
+    fm_backend_composer_state() { printf 'empty'; }
+    probe_delivery_channel herdr default:w1:p2 || fail "busy start must defer, not refuse"
+    run_deferred_delivery_probe herdr default:w1:p2 "$dir/state" "$dir/lock" "$dir/pid"
+    [ "${PROBE_DEFERRED:-0}" = 1 ] || fail "probe must stay deferred while the pane is still busy"
+    busy=1
+    run_deferred_delivery_probe herdr default:w1:p2 "$dir/state" "$dir/lock" "$dir/pid"
+    [ "${PROBE_DEFERRED:-0}" = 0 ] || fail "first idle cycle must settle the deferred probe"
+    run_deferred_delivery_probe herdr default:w1:p2 "$dir/state" "$dir/lock" "$dir/pid"
+  ) || fail "deferred probe idle subshell failed"
+  out=$(
+    log() { :; }
+    busy=0
+    pane_is_busy() { return "$busy"; }
+    fm_backend_composer_state() { printf 'unknown'; }
+    FM_AFK_PROBE_RETRY_SLEEP=0 probe_delivery_channel herdr default:w1:p2 || echo "UNEXPECTED-STARTUP-REFUSAL"
+    busy=1
+    FM_AFK_PROBE_RETRY_SLEEP=0 run_deferred_delivery_probe herdr default:w1:p2 "$dir/state" "$dir/lock" "$dir/pid" 2>&1
+    echo "NOT-REACHED"
+  ) || true
+  assert_contains "$out" "delivery channel unusable" "deferred probe failure must refuse loudly"
+  case "$out" in *NOT-REACHED*) fail "deferred probe refusal must abort the daemon" ;; esac
+  [ -e "$dir/state/.afk" ] && fail "deferred probe refusal must clear state/.afk"
+  pass "deferred delivery probe: runs on first idle after a busy start and refuses loudly on failure"
 }
 
 test_startup_abort_clears_afk_flag() {
@@ -1841,4 +1877,5 @@ test_probe_delivery_channel_accepts_empty_and_pending
 test_probe_delivery_channel_refuses_idle_unknown
 test_probe_delivery_channel_retries_transient_unknown
 test_probe_delivery_channel_skips_when_busy_or_override
+test_deferred_delivery_probe_runs_on_first_idle
 test_startup_abort_clears_afk_flag

@@ -575,8 +575,12 @@ pane_input_pending() {  # <target> [backend]
 # probe_delivery_channel: refuse to advertise away-mode supervision when the
 # supervisor pane's composer classifier cannot affirmatively see an injectable
 # surface. Returns 0 when delivery is structurally possible (composer empty or
-# pending - pending is deferrable, not permanently broken), or when the pane is
-# mid-turn (busy; the first inject cycle rechecks). Returns 1 on idle+unknown:
+# pending - pending is deferrable, not permanently broken). When the pane is
+# mid-turn (busy) the probe cannot read a composer, so it DEFERS: it sets
+# PROBE_DEFERRED=1 and returns 0, and the main loop re-runs the identical
+# bounded probe on the first idle cycle (away mode is normally started by
+# firstmate from inside its own turn, so busy-at-start is the common path and
+# skipping there would make the self-test vacuous). Returns 1 on idle+unknown:
 # that is the silent permanent non-delivery failure mode from 2026-07-20/21
 # (1630 deferred injects, 0 successful deliveries). On refusal the caller must
 # clear state/.afk so the home does not claim supervision while none can land.
@@ -584,10 +588,12 @@ pane_input_pending() {  # <target> [backend]
 # daemon against a stub pane with no real composer (unit/e2e topology only).
 probe_delivery_channel() {  # <backend> <target>
   local backend=$1 target=$2 composer attempt
-  [ "${FM_AFK_SKIP_DELIVERY_PROBE:-0}" = 1 ] && return 0
+  [ "${FM_AFK_SKIP_DELIVERY_PROBE:-0}" = 1 ] && { PROBE_DEFERRED=0; return 0; }
   if pane_is_busy "$target" "$backend"; then
+    PROBE_DEFERRED=1
     return 0
   fi
+  PROBE_DEFERRED=0
   for attempt in 1 2 3; do
     composer=$(fm_backend_composer_state "$backend" "$target" 2>/dev/null || printf 'unknown')
     case "$composer" in
@@ -597,6 +603,25 @@ probe_delivery_channel() {  # <backend> <target>
   done
   echo "error: away-mode delivery channel unusable: supervisor composer reads '${composer}' while idle (need empty or pending). Refusing to enter away mode so supervision is not falsely advertised." >&2
   return 1
+}
+
+# run_deferred_delivery_probe: settle a probe that was deferred because the
+# supervisor pane was mid-turn at startup. No-op unless PROBE_DEFERRED=1. While
+# the pane is still busy it stays deferred (no unbounded work: one cheap busy
+# read per loop cycle). On the first idle cycle it runs the same bounded probe;
+# a refusal is as loud as a startup refusal - away mode is cleared and the
+# daemon exits rather than claim supervision it cannot deliver.
+run_deferred_delivery_probe() {  # <backend> <target> <state> <lock> <pidfile>
+  local backend=$1 target=$2 state=$3 lock=$4 pidfile=$5
+  [ "${PROBE_DEFERRED:-0}" = 1 ] || return 0
+  if pane_is_busy "$target" "$backend"; then
+    return 0
+  fi
+  if ! probe_delivery_channel "$backend" "$target"; then
+    startup_abort "$state" "$lock" "$pidfile" \
+      "deferred delivery probe refused (backend=$backend target=$target)"
+  fi
+  log "deferred delivery probe passed (backend=$backend target=$target)"
 }
 
 # startup_abort: shared failure path for daemon startup refusals. Clears
@@ -1459,6 +1484,9 @@ fm_super_main() {
       sleep "$INJECT_FAIL_SLEEP"
       continue
     fi
+
+    # --- settle a startup probe deferred by a mid-turn supervisor pane ------
+    run_deferred_delivery_probe "$BACKEND" "$TARGET" "$STATE" "$LOCK" "$PIDFILE"
 
     # --- (re)start watcher if it has exited --------------------------------
     if [ -z "${WATCHER_PID:-}" ] || ! kill -0 "${WATCHER_PID:-}" 2>/dev/null; then
