@@ -590,6 +590,11 @@ cursor_model_with_effort() {  # <model> <effort>
 
 # Resolve the cursor launch model id early (effort folded into the id) so meta
 # and the catalog preflight both see the same token that --model will receive.
+# Acceptance is exact catalog membership: the Cursor CLI itself refuses unknown
+# ids ("Cannot use this model: ..."), so a bare base id (e.g. cursor-grok-4.5)
+# is valid only when `agent --list-models` lists it - some models are listed
+# bare (gpt-5.2, composer-2.5), others only tier-suffixed. No prefix/parent
+# acceptance, so we never record a meta model the CLI would reject.
 LAUNCH_MODEL=$MODEL
 if [ "$HARNESS" = cursor ]; then
   LAUNCH_MODEL=$(cursor_model_with_effort "$MODEL" "$EFFORT")
