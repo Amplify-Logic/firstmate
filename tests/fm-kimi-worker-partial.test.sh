@@ -6,12 +6,17 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 . "$ROOT/tests/lib.sh"
 
 test_kimi_still_refused_from_fm_spawn() {
-  local spawn_head
-  spawn_head=$(sed -n '1,90p' "$ROOT/bin/fm-spawn.sh")
-  assert_not_contains "$spawn_head" 'claude|codex|opencode|pi|grok|kimi' \
-    "partial Kimi worker evidence accidentally entered fm-spawn's verified worker set"
-  # launch_template case list must still omit kimi
-  if grep -E '^\s*kimi\)' "$ROOT/bin/fm-spawn.sh" >/dev/null; then
+  local spawn="$ROOT/bin/fm-spawn.sh"
+  # kimi must not appear anywhere in fm-spawn, in any spelling
+  if grep -inE '\bkimi\b' "$spawn" >/dev/null; then
+    fail "partial Kimi worker evidence accidentally entered fm-spawn"
+  fi
+  # the verified-adapter case lists must keep their known-good shape
+  local case_lists
+  case_lists=$(grep -cE 'claude\|codex\|opencode\|pi\|grok\|cursor\)' "$spawn" || true)
+  [ "$case_lists" -ge 2 ] || \
+    fail "fm-spawn verified-adapter case lists changed shape; re-verify kimi stays refused"
+  if grep -E '^\s*kimi\)' "$spawn" >/dev/null; then
     fail "fm-spawn launch_template gained a kimi branch on partial evidence"
   fi
   pass "fm-spawn still refuses kimi as a worker"
