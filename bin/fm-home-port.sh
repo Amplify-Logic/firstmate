@@ -55,6 +55,14 @@ refuse() {
   printf 'REFUSED: %s\n' "$1" >&2
 }
 
+STAGE_DIR=""
+report_stage_leftover() {
+  local status=$?
+  if [ "$status" -ne 0 ] && [ -n "$STAGE_DIR" ] && [ -d "$STAGE_DIR" ]; then
+    printf 'STAGE LEFT: %s (captain-private staging dir; inspect then remove)\n' "$STAGE_DIR" >&2
+  fi
+}
+
 # Portable allowlist - relative paths under FM_HOME. Optional files may be
 # absent; required ones are validated at export/push time when present in the
 # source home's expected operating set.
@@ -467,6 +475,8 @@ cmd_push() {
   fi
 
   stage=$(mktemp -d "${TMPDIR:-/tmp}/fm-home-port-push.XXXXXX")
+  STAGE_DIR=$stage
+  trap report_stage_leftover EXIT
   staging_git_init "$stage"
   copy_portable_tree "$home" "$stage"
   scan_path "$stage" || die "push aborted: secret scan failed before writing the bundle"
@@ -483,14 +493,17 @@ cmd_push() {
     git -C "$stage" remote add origin "$url"
   fi
   # First push may need --force only when replacing an unrelated history we just
-  # created empty; prefer non-force. If remote has commits, push as update.
-  if gh api "repos/$slug" --jq .size 2>/dev/null | grep -Eq '^[1-9]'; then
-    git -C "$stage" pull --rebase --allow-unrelated-histories origin main 2>/dev/null || true
+  # created empty; prefer non-force. If remote has commits, rebase onto them.
+  if git -C "$stage" fetch -q origin main 2>/dev/null \
+      && git -C "$stage" rev-parse -q --verify origin/main >/dev/null 2>&1; then
+    git -C "$stage" pull --rebase --allow-unrelated-histories origin main \
+      || die "push aborted: rebase onto $slug main failed (remote diverged or conflicts); resolve in $stage or pull first"
   fi
   git -C "$stage" push -u origin main \
     || die "git push to $slug failed after private visibility check"
   printf 'PUSH_OK: %s\n' "$slug"
   rm -rf "$stage"
+  STAGE_DIR=""
 }
 
 cmd_pull() {
@@ -520,6 +533,8 @@ cmd_pull() {
   assert_remote_private "$slug"
 
   stage=$(mktemp -d "${TMPDIR:-/tmp}/fm-home-port-pull.XXXXXX")
+  STAGE_DIR=$stage
+  trap report_stage_leftover EXIT
   git clone -q --depth 1 "$url" "$stage/repo" \
     || die "git clone of portable repo failed: $url"
 
@@ -532,6 +547,7 @@ cmd_pull() {
   cmd_import --source "$stage/repo" --home "$home"
   printf 'PULL_OK: %s -> %s\n' "$slug" "$home"
   rm -rf "$stage"
+  STAGE_DIR=""
 }
 
 print_login_checklist() {
