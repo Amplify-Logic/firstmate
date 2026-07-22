@@ -30,6 +30,8 @@ jobs:
     # Continuity and supervision regressions expanded the sequential suite well past
     # the old ~2-3 minute estimate; keep a hard cap that still fails loud on a hang,
     # but allow a full healthy run (~15-25 minutes) to finish.
+    # Upstream timed-runner comment measured ~13-15+ minutes without Herdr; fork
+    # keeps 30 as the hang tripwire until portable shards land.
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v6
@@ -53,11 +55,20 @@ jobs:
           set -eu
           npm install -g tasks-axi
           tasks-axi --version
-      - run: |
+      # Single owner of serial suite selection, timing markers, and aggregate
+      # failure. Do not re-spell a for-loop over tests/*.test.sh here.
+      - name: Run portable behavior suite
+        run: |
           set -eu
-          for test_script in tests/*.test.sh; do
-            "$test_script"
-          done
+          mkdir -p "$RUNNER_TEMP/fm-test"
+          bin/fm-test-run.sh --all --json "$RUNNER_TEMP/fm-test/fm-test-timing.json"
+      - name: Upload behavior timing artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fm-test-timing
+          path: ${{ runner.temp }}/fm-test/fm-test-timing.json
+          if-no-files-found: warn
 
   macos-stock-bash:
     name: Stock macOS Bash snapshot compatibility
