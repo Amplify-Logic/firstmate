@@ -24,6 +24,8 @@
   <img alt="firstmate - talk to one agent, ship with a crew" src="assets/banner.png" width="100%" />
 </p>
 
+<p align="center"><strong>Never done this before?</strong> Start with <a href="ONBOARDING.md">ONBOARDING.md</a>.</p>
+
 ## What it is
 
 You can run one coding agent easily.
@@ -197,6 +199,7 @@ Firstmate's skills live in two separate places with different audiences:
 
 ## Documentation
 
+- [ONBOARDING.md](ONBOARDING.md) - blank Mac to a running first mate that can dispatch workers (beginner walkthrough).
 - [docs/architecture.md](docs/architecture.md) - how the crew, supervision, worktrees, secondmates, and project modes work.
 - [docs/configuration.md](docs/configuration.md) - environment variables, `FM_HOME`, runtime backend selection, optional X mode, the files you set, and harness support.
 - [docs/porting.md](docs/porting.md) - bring Firstmate up on a second machine and keep captain-private portable material in step with explicit push/pull.
