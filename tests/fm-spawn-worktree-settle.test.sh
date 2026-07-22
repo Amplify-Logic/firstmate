@@ -68,7 +68,9 @@ esac
 exit 0
 SH
   chmod +x "$fakebin/tmux"
-  fm_fake_exit0 "$fakebin" treehouse
+  # CI runners lack real harness binaries; preflight requires a --version-capable
+  # stub on PATH (same pattern as fm-spawn-dispatch-profile / launch-preflight).
+  fm_fake_exit0 "$fakebin" treehouse codex
   printf '%s\n' "$fakebin"
 }
 
@@ -126,14 +128,17 @@ run_settle_spawn() {
 
 # A single stale first read (the exact incident) must not be accepted: the
 # loop should keep polling until two consecutive reads agree, landing on the
-# real settled worktree instead.
+# real settled worktree instead. Feed an explicit sequence (stale, wt, wt) so
+# success does not depend on "forever after" fixture behavior alone.
 test_single_stale_first_read_is_not_accepted() {
-  local rec id out status
+  local rec id out status seqfile
   id=settle-single-stale-z1
-  rec=$(make_settle_case settle-single "$id" 1)
+  rec=$(make_settle_case settle-single "$id" 0)
   read_settle_record "$rec"
+  seqfile="$TMP_ROOT/settle-single/seq"
+  printf '%s\n%s\n%s\n' "$STALE_DIR" "$WT_DIR" "$WT_DIR" > "$seqfile"
 
-  out=$(run_settle_spawn "$id" FM_SPAWN_SETTLE_SLEEP=0)
+  out=$(run_settle_spawn "$id" FM_FAKE_PANE_SEQFILE="$seqfile" FM_SPAWN_SETTLE_SLEEP=0)
   status=$?
   expect_code 0 "$status" "spawn should succeed once the pane settles"
   assert_contains "$out" "spawned $id" "spawn did not report success"
