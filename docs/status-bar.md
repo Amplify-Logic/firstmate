@@ -78,10 +78,11 @@ Outside tmux there is no non-invasive persistent Kimi surface, so the launcher l
 
 ### Cursor CLI
 
-Cursor CLI primary support is certified through `bin/fm-primary.sh cursor-grok` (see [`cursor-harness.md`](cursor-harness.md)).
-Cursor CLI `2026.07.20-8cc9c0b` still exposes no supported third-party status-line, footer, or terminal-UI API.
-The guarded primary launcher therefore installs no companion status bar and leaves the native Cursor footer unchanged.
-Do not invent a wrapper-owned line that would falsely imply a status-line API exists.
+Cursor CLI is worker-only in the status-bar owner: there is no captain-facing Cursor status renderer, and a Cursor primary profile must not gain one as part of status-bar work.
+A captain-facing Cursor renderer is therefore not applicable.
+Cursor CLI exposes no supported third-party status-line, footer, or terminal-UI API, as recorded in [`cursor-harness.md`](cursor-harness.md#8-extension--status-line-surface).
+`bin/fm-primary.sh cursor-grok` certifies primary supervision separately and deliberately installs no companion status bar.
+Adding a wrapper-owned line solely for display would falsely imply a status-line API exists, so the closest safe implementation remains no installation.
 
 ## Local activation after merge
 
