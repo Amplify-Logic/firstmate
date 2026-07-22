@@ -149,10 +149,10 @@ repair_line() {
       printf '%s%s\n' "$prefix" 'repair missing watcher supervision with bin/fm-watch-arm.sh as its own Grok tracked background task, never shell &.'
       ;;
     kimi)
-      printf '%s%s\n' "$prefix" 'resume supervision with bin/fm-watch-arm.sh as one Kimi Bash tool call using run_in_background=true and disable_timeout=true, never shell &.'
+      printf '%s%s\n' "$prefix" 'repair missing watcher supervision with bin/fm-watch-arm.sh as one Kimi Bash tool call using run_in_background=true and disable_timeout=true, never shell &.'
       ;;
     cursor)
-      printf '%s%s\n' "$prefix" 'resume supervision with bin/fm-watch-arm.sh as its own Cursor Agent background shell task, never shell &.'
+      printf '%s%s\n' "$prefix" 'repair missing watcher supervision with bin/fm-watch-arm.sh as its own Cursor Agent background shell task, never shell &.'
       ;;
     *)
       printf '%s%s\n' "$prefix" 'repair missing watcher supervision according to the session-start block for this harness; do not use shell &.'
@@ -176,6 +176,12 @@ ordinary_wake_line() {
       ;;
     grok)
       printf '%s\n' '- Ordinary wake: re-arm exactly one bin/fm-watch-arm.sh Grok tracked background task as directed below.'
+      ;;
+    kimi)
+      printf '%s\n' '- Ordinary wake: re-arm exactly one bin/fm-watch-arm.sh Kimi Bash background call as directed below.'
+      ;;
+    cursor)
+      printf '%s\n' '- Ordinary wake: re-arm exactly one bin/fm-watch-arm.sh Cursor Agent background shell task as directed below.'
       ;;
     *)
       printf '%s\n' '- Ordinary wake: follow the continuation in the harness protocol below; do not use shell &.'
