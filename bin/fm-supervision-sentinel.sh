@@ -55,9 +55,10 @@
 #   FM_SENTINEL_PLATFORM               uname override for tests.
 #   FM_SENTINEL_LAUNCHCTL              launchctl path override for tests.
 #   FM_SENTINEL_DOMAIN                 launchd domain override for tests.
-#   FM_SENTINEL_TEST_ALERT_EXEC        test-only notifier seam pinned into the job as
-#                                      FM_WEDGE_ALARM_EXEC; unset in production, so a
-#                                      production manifest never carries a notifier override.
+#
+# There is deliberately no notifier-override knob: the generated manifest never
+# carries FM_WEDGE_ALARM_EXEC, so nothing can redirect this home's external alert
+# delivery through the launchd job.
 # End usage.
 set -u
 
@@ -216,16 +217,13 @@ fm_sentinel_write_plist() { # <label> <interval>
     if [ -n "${FM_CONFIG_OVERRIDE:-}" ]; then
       fm_sentinel_plist_env FM_CONFIG_OVERRIDE "$FM_CONFIG_OVERRIDE"
     fi
-    # Narrow test-only seam. The launchd job's environment is fixed at write
-    # time, so a real-launchd test cannot otherwise reach the FM_WEDGE_ALARM_EXEC
-    # notifier recorder that keeps every other case in this suite from posting a
-    # desktop notification. Pinning it here makes that guarantee structural
-    # instead of depending on the job resolving a scratch config/wedge-alarm.
-    # Nothing in production sets this, so a production manifest never carries a
-    # notifier override.
-    if [ -n "${FM_SENTINEL_TEST_ALERT_EXEC:-}" ]; then
-      fm_sentinel_plist_env FM_WEDGE_ALARM_EXEC "$FM_SENTINEL_TEST_ALERT_EXEC"
-    fi
+    # No notifier-override knob belongs here. FM_WEDGE_ALARM_EXEC replaces EVERY
+    # channel before any real notifier, so a manifest that carried one would
+    # redirect this home's whole external-alert path for as long as the service
+    # stays loaded; an override that exits non-zero would leave delivery pending
+    # and retry silently forever, which is the exact failure this sentinel exists
+    # to prevent. A test that needs to intercept delivery runs its own copy of
+    # this script beside a stub alert owner instead.
     printf '%s\n' '  </dict>'
     printf '%s\n' '  <key>RunAtLoad</key>' '  <true/>'
     printf '  <key>StartInterval</key>\n  <integer>%s</integer>\n' "$interval"
@@ -236,16 +234,9 @@ fm_sentinel_write_plist() { # <label> <interval>
   mv -f "$pending" "$FM_SENTINEL_PLIST"
 }
 
-fm_sentinel_arm_failure_field() { # <field>
-  [ -f "$FM_SENTINEL_ARM_FAILURE" ] || return 1
-  /usr/bin/awk -F= -v want="$1" '$1 == want { print $2; exit }' "$FM_SENTINEL_ARM_FAILURE"
-}
-
 fm_sentinel_arm_failure_count() {
-  local n
-  n=$(fm_sentinel_arm_failure_field failures 2>/dev/null || printf '0')
-  case "$n" in ''|*[!0-9]*) n=0 ;; esac
-  printf '%s\n' "$n"
+  fm_supervision_arm_failure_status "$FM_SENTINEL_STATE"
+  printf '%s\n' "$FM_SUP_ARM_FAILURES"
 }
 
 # Seconds left before this home may pay for another launchd bootout/bootstrap and
@@ -259,20 +250,12 @@ fm_sentinel_arm_failure_count() {
 # the caller still fails, the warning still says the alarm is unavailable, and
 # every later session start reports the suppressed state until it is repaired.
 #
-# The deadline is read from the record rather than recomputed, so the schedule
-# lives in exactly one place and the session-start banner cannot drift from it.
+# The deadline and its validity bound both come from the record through the shared
+# reader in fm-supervision-lib.sh, so the schedule lives in exactly one place and
+# the session-start banner cannot drift from what is actually enforced here.
 fm_sentinel_arm_cooldown_remaining() {
-  local at now
-  at=$(fm_sentinel_arm_failure_field retry_at 2>/dev/null || true)
-  case "$at" in ''|*[!0-9]*) printf '0\n'; return 0 ;; esac
-  now=$(date +%s)
-  # A wall-clock rollback or a restored state volume must never suppress
-  # registration for longer than one configured cap.
-  if [ "$now" -ge "$at" ] || [ $((at - now)) -gt "$FM_SENTINEL_ARM_RETRY_MAX" ]; then
-    printf '0\n'
-  else
-    printf '%s\n' $((at - now))
-  fi
+  fm_supervision_arm_failure_status "$FM_SENTINEL_STATE"
+  printf '%s\n' "$FM_SUP_ARM_RETRY_IN"
 }
 
 fm_sentinel_record_arm_failure() { # <service>
@@ -305,13 +288,14 @@ fm_sentinel_clear_arm_failure() {
 # One stderr line describing a suppressed registration, for the operator-facing
 # diagnostic. Silent when this home has no failure record.
 fm_sentinel_report_arm_state() {
-  local failures cooldown
-  [ -f "$FM_SENTINEL_ARM_FAILURE" ] || return 0
-  failures=$(fm_sentinel_arm_failure_count)
-  cooldown=$(fm_sentinel_arm_cooldown_remaining)
-  printf 'supervision sentinel: WARNING - launchd registration for this home failed %s time(s), so host outage monitoring is NOT active' "$failures"
-  if [ "$cooldown" -gt 0 ]; then
-    printf '; automatic retry is suppressed for another %ss' "$cooldown"
+  fm_supervision_arm_failure_status "$FM_SENTINEL_STATE"
+  [ "$FM_SUP_ARM_FAILED" = true ] || return 0
+  printf 'supervision sentinel: WARNING - launchd registration for this home failed %s time(s), so host outage monitoring is NOT active' \
+    "$FM_SUP_ARM_FAILURES"
+  if [ "$FM_SUP_ARM_RETRY_IN" -gt 0 ]; then
+    printf '; automatic retry is suppressed for another %ss' "$FM_SUP_ARM_RETRY_IN"
+  elif [ "$FM_SUP_ARM_RETRY_STALE" = true ]; then
+    printf '; its retry deadline is stale (unreadable or beyond its own recorded window) and suppresses nothing, so the next watcher or away-mode entry will try again'
   else
     printf '; the retry cooldown has expired and the next watcher or away-mode entry will try again'
   fi

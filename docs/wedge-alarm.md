@@ -64,7 +64,8 @@ The arm path compares the loaded manifest digest and reloads only that exact ser
 It also requires a recent `state/.supervision-sentinel-last-check`, kickstarting the exact service and refusing registration if no scheduled one-shot check completes within `FM_SENTINEL_CHECK_WAIT_SECS` (15 seconds by default).
 A host that retains the service but never completes a check cannot converge — a job that cannot resolve its own home under the pinned minimal PATH looks exactly like this — so each failure is recorded in `state/.supervision-sentinel.arm-failure` and the next arm skips all launchd mutation until an exponential per-home cooldown expires.
 That cooldown has its own bounds, `FM_SENTINEL_ARM_RETRY_SECS` (60 seconds) doubling to `FM_SENTINEL_ARM_RETRY_MAX_SECS` (one hour), deliberately separate from the repeat-alert schedule: changing how often a continuous outage re-alerts must not change how long a broken registration goes unretried.
-The record stores the computed `retry_at` deadline, so the cooldown check and every reader agree on one schedule rather than recomputing it.
+The record stores both the computed `retry_at` deadline and the `retry_after_secs` window it came from, and `fm_supervision_arm_failure_status` in `bin/fm-supervision-lib.sh` is the single reader both the enforcing arm path and the reporting session-start banner use, so the displayed window can never drift from the enforced one.
+A `retry_at` that is unreadable, or further out than the `retry_after_secs` recorded atomically beside it, is stale evidence that suppresses nothing — that is how a wall-clock rollback or a state volume restored from a machine whose clock ran ahead is prevented from either blocking retries indefinitely or advertising an enormous suppression window nothing honors.
 That cooldown never reports success and never claims host monitoring is healthy: the arm still fails, watcher entry still warns that the host alarm is unavailable, and **every later session start prints a `HOST SUPERVISION SENTINEL - REGISTRATION FAILED` banner** with the remaining suppression window and the recovery command.
 A suppressed registration disables host monitoring exactly as effectively as a deliberate disarm, so it is surfaced exactly as loudly.
 An explicit `enable` bypasses the cooldown for one real attempt, but only a verified registration clears the record: a failed `enable` keeps the evidence and its escalating count.
@@ -89,10 +90,11 @@ This keeps tests from posting a real desktop notification:
 - `tests/wake-helpers.sh` upgrades that default to an on-disk recorder that logs `<channel>\t<summary>` to `$FM_WEDGE_ALARM_LOG`.
 - The host-sentinel suite executes one-shot alert mode through the same recorder.
 - Its title-argv test unsets the seam only after shadowing `osascript` with a file-writing fake.
-- Its opt-in real-launchd smoke pins the same recorder into the generated launchd manifest through `FM_SENTINEL_TEST_ALERT_EXEC`, the one narrow test seam `fm_sentinel_write_plist` propagates as `FM_WEDGE_ALARM_EXEC`.
-  A launchd job's environment is fixed at write time, so without that seam the smoke's safety would rest entirely on the job resolving a scratch `config/wedge-alarm`; if that lookup failed, `auto` would resolve to `osascript` and post a real banner.
-  With it, the interception happens before any real notifier for every channel, including that fallback, so the guarantee is structural.
-  Nothing in production sets `FM_SENTINEL_TEST_ALERT_EXEC`, and `test_arm_registers_one_home_scoped_read_only_launchd_job` asserts an ordinary manifest contains no `FM_WEDGE_ALARM_EXEC` at all.
+- Its opt-in real-launchd smoke does not use this seam at all, because a launchd job's environment is fixed at plist-write time and `fm_sentinel_write_plist` deliberately has **no** notifier-override knob.
+  Instead it launches a *copy* of the sentinel inside the scratch home, next to a stub `fm-supervise-daemon.sh` that only appends its argv to a file.
+  The sentinel resolves its alert owner beside itself, so the launched process has no path to the real daemon — and therefore none to any real notifier — regardless of what any config lookup does.
+- Production plist generation carries no notifier override, and `test_arm_registers_one_home_scoped_read_only_launchd_job` asserts the generated manifest contains no `FM_WEDGE_ALARM_EXEC`.
+  This is deliberate: `FM_WEDGE_ALARM_EXEC` replaces *every* channel before any real notifier, so a manifest carrying one would redirect that home's whole external-alert path for as long as the service stayed loaded, and an override that exited non-zero would leave `delivery=pending` and retry silently forever — the exact silent-outage class this sentinel exists to remove.
 - Production leaves `FM_WEDGE_ALARM_EXEC` unset, so the real channels fire.
 
 The automated tests verify channel selection, summary propagation, and the title/body argv shape without posting a notification.
@@ -101,9 +103,9 @@ The real `osascript`/`herdr` delivery mechanism was verified once by the bounded
 ## Verifying the launchd transport (opt-in, not yet run)
 
 Every default test in `tests/fm-supervision-sentinel.test.sh` drives registration through a fake `launchctl`, so the fake proves the arm/reconcile/disarm logic but not that a real `gui/<uid>` agent runs and delivers.
-`test_real_launchd_scheduled_check_delivers_end_to_end` closes that gap end to end over the real transport: it builds a scratch primary home under `TMPDIR`, derives the exact SHA-256 service identity before registering anything, runs a real `launchctl bootstrap`, waits for a launchd-spawned `scheduled-check` to record host liveness, and asserts the outage summary reached the channel and the marker committed `delivery=sent`.
-Delivery is pinned to a file-writing recorder two independent ways — the scratch `config/wedge-alarm` selects a `command:` channel, and `FM_SENTINEL_TEST_ALERT_EXEC` intercepts every channel inside the job — so no configuration failure can turn it into a real notification.
-Asserting that the recorded channel is `command` rather than `osascript` is what proves `FM_CONFIG_OVERRIDE` actually reached the launchd job.
+`test_real_launchd_scheduled_check_delivers_end_to_end` closes that gap end to end over the real transport: it builds a scratch primary home under `TMPDIR`, derives the exact SHA-256 service identity before registering anything, runs a real `launchctl bootstrap`, waits for a launchd-spawned `scheduled-check` to record host liveness, and asserts the outage summary reached the alert owner and the marker committed `delivery=sent`.
+Its no-real-notification safety is structural rather than configured: launchd runs a *copy* of the sentinel from the scratch home's own `bin/` (alongside copies of only the three libraries it sources), and the sentinel resolves its alert owner as `fm-supervise-daemon.sh` next to itself — which in that copy is a stub that only appends to a file.
+The real daemon is not reachable from the launched process, so no config-lookup failure and no `auto` → `osascript` fallback can turn the smoke into a real banner, and no notifier-override knob has to exist in production for it to work.
 It is gated on `FM_SENTINEL_REAL_LAUNCHD_SMOKE=1` plus macOS plus `/bin/launchctl`, and it skips with an explicit reason otherwise.
 The gate is deliberate: the smoke mutates the caller's own `gui/<uid>` launchd domain, so it must be an attended choice rather than something CI or a parallel shard does implicitly.
 An `EXIT`-registered teardown boots out that one derived label and fails loudly with the exact `launchctl bootout` command if the service somehow survives; it never sweeps other labels.
