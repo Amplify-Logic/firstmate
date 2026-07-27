@@ -175,6 +175,29 @@ fm_sentinel_check_recent() { # <max-age-seconds>
   [ "$(fm_path_age "$FM_SENTINEL_LAST_CHECK")" -le "$1" ]
 }
 
+# The only positive evidence a caller that never held the arm lock may act on:
+# launchd is holding this exact service AND a scheduled check has completed for
+# this home recently enough to prove the service can observe it.
+fm_sentinel_service_verified() { # <launchctl> <service> <max-check-age>
+  "$1" print "$2" >/dev/null 2>&1 || return 1
+  fm_sentinel_check_recent "$3"
+}
+
+# Names the concrete evidence that is missing when a contended arm never observed
+# a verified service. A caller that cannot register must never report success, and
+# must not report a bare failure either: whichever half of the proof is absent is
+# what an operator has to repair.
+fm_sentinel_report_unverified_service() { # <launchctl> <service> <max-check-age>
+  local launchctl=$1 service=$2 max_age=$3
+  if ! "$launchctl" print "$service" >/dev/null 2>&1; then
+    printf 'supervision sentinel: another arm for this home held the registration lock without publishing a service, and launchd is not holding %s; host outage monitoring is NOT active. Run %s enable\n' \
+      "$service" "$FM_SENTINEL_DIR/fm-supervision-sentinel.sh" >&2
+    return 0
+  fi
+  printf 'supervision sentinel: another arm for this home held the registration lock; launchd is holding %s but no scheduled check has completed in the last %ss, so host outage monitoring is UNVERIFIED. Run %s enable\n' \
+    "$service" "$max_age" "$FM_SENTINEL_DIR/fm-supervision-sentinel.sh" >&2
+}
+
 # Bounded wait for launchd to complete one scheduled one-shot check. It polls the
 # recorded proof rather than launchctl's own state, because only a completed check
 # shows the host service can actually observe this home. The deadline is computed
@@ -366,8 +389,7 @@ fm_sentinel_arm_registration() { # <launchctl> <domain> <label> <service> <inter
   # host monitoring works, and it costs no launchd mutation, so a healthy home
   # never consults the failure cooldown below.
   if [ "$loaded_digest" = "$digest" ] \
-    && "$launchctl" print "$service" >/dev/null 2>&1 \
-    && fm_sentinel_check_recent $((interval * 2 + 15)); then
+    && fm_sentinel_service_verified "$launchctl" "$service" $((interval * 2 + 15)); then
     "$launchctl" enable "$service" >/dev/null 2>&1 || true
     fm_sentinel_clear_arm_failure
     return 0
@@ -400,7 +422,7 @@ fm_sentinel_arm_registration() { # <launchctl> <domain> <label> <service> <inter
 }
 
 fm_sentinel_arm() {
-  local platform launchctl label domain service interval deadline rc
+  local platform launchctl label domain service interval max_check_age deadline rc
   fm_sentinel_mode_enabled || return 0
   # Primary scope first: a child task worktree or a non-primary home is a silent
   # no-op on every platform, so an unsupported host reports its real limitation
@@ -423,25 +445,33 @@ fm_sentinel_arm() {
   domain=$(fm_sentinel_domain)
   service="$domain/$label"
 
+  max_check_age=$((interval * 2 + 15))
   if ! fm_lock_try_acquire "$FM_SENTINEL_ARM_LOCK"; then
     # Another home-scoped arm is already converging on the same launchd label.
     # Wait out the holder's OWN legitimate convergence bound - a bootout drain plus
     # the bounded first-check wait - instead of giving up after a fraction of it and
     # telling the captain the alarm is unavailable while registration is in fact
-    # succeeding. If nothing converges in that window, only durable evidence may
-    # claim a failure: the holder records it, so a silent return here can never hide
-    # a suppressed registration from the session-start banner or the diagnostic.
+    # succeeding.
     deadline=$(( $(date +%s) + FM_SENTINEL_CHECK_WAIT + 5 ))
     while :; do
-      if "$launchctl" print "$service" >/dev/null 2>&1 && fm_sentinel_check_recent $((interval * 2 + 15)); then
+      if fm_sentinel_service_verified "$launchctl" "$service" "$max_check_age"; then
         return 0
       fi
       [ "$(date +%s)" -lt "$deadline" ] || break
       sleep 0.2
     done
-    fm_supervision_arm_failure_status "$FM_SENTINEL_STATE"
-    [ "$FM_SUP_ARM_FAILED" = true ] || return 0
-    return 1
+    # The holder is itself a harness-tracked process, and being reaped mid-arm is
+    # the exact failure this sentinel exists to cover. Such a holder leaves the
+    # lock behind and no failure record at all, so make one short attempt to take
+    # it over rather than trusting the absent record. `fm_lock_try_acquire` only
+    # reclaims a lock whose owner pid is provably gone, so this can never evict a
+    # holder that is still converging.
+    if ! fm_lock_try_acquire "$FM_SENTINEL_ARM_LOCK"; then
+      # Nothing was registered here and nothing proves the service works, so this
+      # caller reports the missing evidence rather than an unearned success.
+      fm_sentinel_report_unverified_service "$launchctl" "$service" "$max_check_age"
+      return 1
+    fi
   fi
   fm_sentinel_arm_registration "$launchctl" "$domain" "$label" "$service" "$interval"
   rc=$?

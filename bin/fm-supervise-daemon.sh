@@ -1360,6 +1360,8 @@ fm_super_main() {
   FM_STATE_OVERRIDE="$STATE" . "$FM_DAEMON_DIR/fm-wake-lib.sh"
 
   local WATCH="$FM_DAEMON_DIR/fm-watch.sh"
+  local SENTINEL="$FM_DAEMON_DIR/fm-supervision-sentinel.sh"
+  local SENTINEL_ARMED=0
   local LOG="$STATE/.supervise-daemon.log"
   local WATCH_ERR="$STATE/.supervise-daemon.watcher.err"
   local LOCK="$STATE/.supervise-daemon.lock"
@@ -1514,8 +1516,35 @@ fm_super_main() {
     WATCHER_PID=$!
   }
 
+  # Away mode's host-sentinel registration: at most once per daemon, and only
+  # once THIS daemon has observed an identity-matched live watcher with a fresh
+  # beacon. Away mode is not exempt from the rule bin/fm-watch-arm.sh applies to
+  # the always-on watcher entry; it is simply enforced here, in the process that
+  # can actually observe the watcher it starts, rather than in the entry script
+  # that execs it.
+  #
+  # The generated launchd job sets RunAtLoad, so a bootstrap or kickstart runs a
+  # scheduled host check immediately. Registering at away-mode entry, before the
+  # watcher this daemon starts can beat, made that first check see in-flight work
+  # with no healthy watcher and deliver a real SUPERVISION DOWN alert for the very
+  # outage away mode was starting up to end - on every reboot, since the
+  # gui/<uid> agent is gone while task metadata survives. The alarm's premise is
+  # that supervision was healthy and then stopped, so a home never observed
+  # healthy has no outage to report and stays unregistered until one is.
+  arm_host_sentinel() {
+    [ "$SENTINEL_ARMED" -eq 0 ] || return 0
+    [ -x "$SENTINEL" ] || return 0
+    fm_watcher_healthy "$STATE" "$WATCH" "${FM_GUARD_GRACE:-300}" "$FM_HOME" || return 0
+    SENTINEL_ARMED=1
+    "$SENTINEL" arm && return 0
+    log "WARNING: host-level supervision-outage alarm is unavailable for this home"
+    echo "afk: WARNING - host-level supervision-outage alarm is unavailable" >&2
+  }
+
   local rc reason
   while true; do
+    arm_host_sentinel
+
     # --- pane-gone guard (preserved) ---------------------------------------
     # With the #29 watcher's enqueue-before-suppress, a wake is no longer
     # swallowed by running the watcher with no injection target. We still back

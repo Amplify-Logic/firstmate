@@ -721,6 +721,110 @@ SH
   pass "supervision sentinel: the watcher arm registers the host service only after observing a healthy watcher"
 }
 
+# Away mode is not exempt from the observed-health premise. The away entry execs
+# the daemon, so the registration belongs to the daemon: the one process that can
+# observe the watcher it starts. This asserts the ownership boundary and the gate,
+# since the daemon's supervision loop is not reachable as a unit.
+test_away_mode_defers_host_registration_until_the_daemon_sees_a_healthy_watcher() {
+  local afk="$ROOT/bin/fm-afk-start.sh" daemon="$ROOT/bin/fm-supervise-daemon.sh" body gate arm
+  assert_not_contains "$(cat "$afk")" 'SENTINEL" arm' \
+    "the away entry still registers the host service before any watcher can be observed healthy"
+  body=$(/usr/bin/awk '/^  arm_host_sentinel\(\) \{$/ { p = 1 } p { print } p && /^  \}$/ { exit }' "$daemon")
+  [ -n "$body" ] || fail "the away daemon has no host-sentinel registration helper"
+  assert_contains "$body" 'SENTINEL" arm' "the away daemon's helper never registers the host service"
+  gate=$(printf '%s\n' "$body" | grep -n 'fm_watcher_healthy' | head -1 | cut -d: -f1)
+  arm=$(printf '%s\n' "$body" | grep -n 'SENTINEL" arm' | head -1 | cut -d: -f1)
+  [ -n "$gate" ] || fail "the away daemon registers without observing a healthy watcher: $body"
+  [ "$gate" -lt "$arm" ] || fail "the away daemon registers before it observes a healthy watcher: $body"
+  [ "$(grep -c 'SENTINEL" arm' "$daemon" || true)" -eq 1 ] \
+    || fail "the away daemon registers the host service outside its gated helper"
+  pass "supervision sentinel: away mode defers host registration until the daemon observes a healthy watcher"
+}
+
+install_held_arm_lock() { # <home> <holder-pid>
+  local home=$1 holder=$2 lock owner
+  lock="$home/state/.supervision-sentinel-arm.lock"
+  owner="$lock.owner.held"
+  rm -rf "$owner" "$lock" 2>/dev/null || true
+  mkdir -p "$owner" || return 1
+  printf '%s\n' "$holder" > "$owner/pid" || return 1
+  ln -s "$owner" "$lock"
+}
+
+# A contended arm that never observes a verified service must not report the alarm
+# as healthy. The holder is itself a harness-tracked process, so a reap between
+# taking the lock and recording a failure leaves no durable evidence at all -
+# exactly when an unearned success would hide an unmonitored home.
+test_contended_arm_never_reports_success_without_verified_service_evidence() {
+  local home="$TMP_ROOT/contended" fake="$TMP_ROOT/contended-launchctl" log="$TMP_ROOT/contended-launchctl.log"
+  local loaded="$TMP_ROOT/contended-loaded" failure checked holder err service
+  make_primary "$home"
+  home=$(cd "$home" && pwd -P)
+  checked="$home/state/.supervision-sentinel-last-check"
+  failure="$home/state/.supervision-sentinel.arm-failure"
+  err="$TMP_ROOT/contended.err"
+  make_fake_launchctl "$fake" "$log" "$loaded" "$checked"
+  service=$(fm_sentinel_expected_service "$home") || fail "could not derive the contended service identity"
+  sleep 300 &
+  holder=$!
+  install_held_arm_lock "$home" "$holder" || {
+    kill "$holder" 2>/dev/null || true
+    wait "$holder" 2>/dev/null || true
+    fail "could not install a live-held arm lock"
+  }
+  fail_with_holder() { # <message>
+    kill "$holder" 2>/dev/null || true
+    wait "$holder" 2>/dev/null || true
+    fail "$1"
+  }
+
+  # No service at all: the missing evidence is launchd not holding this label.
+  if run_arm "$home" "$fake" FM_SENTINEL_CHECK_WAIT_SECS=1 2>"$err"; then
+    fail_with_holder "a contended arm reported success while nothing proved the service works"
+  fi
+  assert_contains "$(cat "$err")" "launchd is not holding $service" \
+    "the contended arm did not name the missing launchd service"
+  assert_contains "$(cat "$err")" 'NOT active' "the contended arm implied host monitoring was live"
+  [ "$(grep -c '^bootstrap ' "$log" || true)" -eq 0 ] \
+    || fail_with_holder "a contended arm mutated launchd behind a live lock holder: $(cat "$log")"
+  [ ! -e "$failure" ] || fail_with_holder "a contended arm recorded a failure cooldown it never earned"
+
+  # Service loaded but no scheduled check has landed: the missing evidence is the
+  # completed check, and naming it is what an operator has to repair.
+  : > "$loaded"
+  touch -t 202001010000 "$checked"
+  if run_arm "$home" "$fake" FM_SENTINEL_CHECK_WAIT_SECS=1 2>"$err"; then
+    fail_with_holder "a contended arm reported success off a loaded service with no completed check"
+  fi
+  assert_contains "$(cat "$err")" 'no scheduled check has completed' \
+    "the contended arm did not name the missing completed host check"
+  assert_contains "$(cat "$err")" 'UNVERIFIED' "the contended arm presented unverified monitoring as healthy"
+  [ ! -e "$failure" ] || fail_with_holder "a contended arm recorded a failure cooldown it never earned"
+
+  # The verified pair - launchd holding the exact service plus a recent completed
+  # check - is the only state a caller that never held the lock may call success.
+  date +%s > "$checked"
+  run_arm "$home" "$fake" FM_SENTINEL_CHECK_WAIT_SECS=1 2>"$err" \
+    || fail_with_holder "a contended arm rejected a verified live service: $(cat "$err")"
+  kill "$holder" 2>/dev/null || true
+  wait "$holder" 2>/dev/null || true
+
+  # A holder reaped mid-registration leaves the lock behind and never records a
+  # failure, so one short lock retry after the wait takes it over and registers
+  # rather than trusting that silence. The holder here dies well inside the wait.
+  rm -f "$loaded" "$checked"
+  sleep 2 &
+  holder=$!
+  install_held_arm_lock "$home" "$holder" || fail "could not install the reaped-holder arm lock"
+  run_arm "$home" "$fake" FM_SENTINEL_CHECK_WAIT_SECS=1 2>"$err" \
+    || fail "an arm did not take over a reaped holder's lock: $(cat "$err")"
+  wait "$holder" 2>/dev/null || true
+  [ "$(grep -c '^bootstrap ' "$log" || true)" -eq 1 ] \
+    || fail "taking over a reaped holder's lock did not register the service exactly once: $(cat "$log")"
+  [ ! -e "$failure" ] || fail "a verified takeover registration left a failure record"
+  pass "supervision sentinel: a contended arm retries the lock once, then reports the missing evidence instead of success"
+}
+
 test_real_channel_uses_unambiguous_notification_title_without_posting() {
   local home="$TMP_ROOT/title" fakebin log i
   make_primary "$home"
@@ -835,5 +939,7 @@ test_rolled_back_clock_does_not_suppress_registration_forever
 test_explicit_disarm_is_durable_home_scoped_and_reversible
 test_watch_arm_validates_arguments_before_sentinel_registration
 test_watch_arm_registers_the_host_sentinel_only_after_a_healthy_watcher
+test_away_mode_defers_host_registration_until_the_daemon_sees_a_healthy_watcher
+test_contended_arm_never_reports_success_without_verified_service_evidence
 test_real_channel_uses_unambiguous_notification_title_without_posting
 test_real_launchd_scheduled_check_delivers_end_to_end

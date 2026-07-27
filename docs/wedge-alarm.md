@@ -15,7 +15,7 @@ The classifier-side half of that incident shipped separately (PR #429); this is 
 The durable marker and the tmux flash are unchanged; the active alert is added alongside them.
 
 The same channel owner now carries host-level watcher-outage alarms from `bin/fm-supervision-sentinel.sh`.
-That sentinel is registered with macOS launchd by both watcher entry points, runs outside the harness process tree once a minute, and alerts when tasks are in flight without an identity-matched watcher lock and a fresh `state/.last-watcher-beat`.
+That sentinel is registered with macOS launchd by the always-on watcher arm and by the away-mode daemon, each only after it has observed a healthy watcher; it then runs outside the harness process tree once a minute and alerts when tasks are in flight without an identity-matched watcher lock and a fresh `state/.last-watcher-beat`.
 Every report says `SUPERVISION DOWN` and carries the beacon age, the grace window, and the in-flight task count.
 The outage marker is `state/.supervision-outage-alarm`.
 The turn-end guard and Claude continuity gate write that marker through `note-outage`, a marker-only mode, and never fire a channel: an in-harness hook must return its blocking result immediately, so only the scheduled host check crosses this boundary.
@@ -61,8 +61,8 @@ There is no broad process kill anywhere in this path.
 
 launchd registration is idempotent and home-scoped through a SHA-256 label derived from canonical `FM_HOME` and state paths.
 The arm path compares the loaded manifest digest and reloads only that exact service when its script path, interval, or environment changes.
-Service identity is therefore a function of durable configuration alone: the manifest pins the durable default beacon grace rather than the ambient `FM_GUARD_GRACE` of whoever ran the arm, so a one-off `FM_GUARD_GRACE=30 bin/fm-watch-arm.sh` can neither reconfigure the host check's outage threshold for every later scheduled run nor move the digest and force a bootout/bootstrap on the next ordinary arm.
-When another arm for the same home already holds the registration lock, this arm waits out that holder's own convergence bound instead of declaring the alarm unavailable while registration is still succeeding; only the holder's durable failure record may report a suppressed registration.
+Service identity is therefore a function of durable configuration alone: the manifest pins the durable 300-second default beacon grace rather than the ambient `FM_GUARD_GRACE` of whoever ran the arm, so a one-off `FM_GUARD_GRACE=30 bin/fm-watch-arm.sh` can neither reconfigure the host check's outage threshold for every later scheduled run nor move the digest and force a bootout/bootstrap on the next ordinary arm.
+`FM_GUARD_GRACE` therefore governs the in-session guards and arm health checks only, never the scheduled host check; `docs/configuration.md` states that divergence where the variable is defined.
 It also requires a recent `state/.supervision-sentinel-last-check`, kickstarting the exact service and refusing registration if no scheduled one-shot check completes within `FM_SENTINEL_CHECK_WAIT_SECS` (15 seconds by default).
 A host that retains the service but never completes a check cannot converge — a job that cannot resolve its own home under the pinned minimal PATH looks exactly like this — so each failure is recorded in `state/.supervision-sentinel.arm-failure` and the next arm skips all launchd mutation until an exponential per-home cooldown expires.
 That cooldown has its own bounds, `FM_SENTINEL_ARM_RETRY_SECS` (60 seconds) doubling to `FM_SENTINEL_ARM_RETRY_MAX_SECS` (one hour), deliberately separate from the repeat-alert schedule: changing how often a continuous outage re-alerts must not change how long a broken registration goes unretried.
@@ -71,6 +71,10 @@ A `retry_at` that is unreadable, or further out than the `retry_after_secs` reco
 That cooldown never reports success and never claims host monitoring is healthy: the arm still fails, watcher entry still warns that the host alarm is unavailable, and **every later session start prints a `HOST SUPERVISION SENTINEL - REGISTRATION FAILED` banner** with the remaining suppression window and the recovery command.
 A suppressed registration disables host monitoring exactly as effectively as a deliberate disarm, so it is surfaced exactly as loudly.
 An explicit `enable` bypasses the cooldown for one real attempt, but only a verified registration clears the record: a failed `enable` keeps the evidence and its escalating count.
+
+When another arm for the same home already holds the registration lock, this arm waits out that holder's own convergence bound instead of declaring the alarm unavailable while registration is still succeeding.
+If that wait expires it makes one short attempt to take the lock over, because the holder is itself a harness-tracked process and a holder reaped mid-registration leaves the lock behind with no failure record at all; `fm_lock_try_acquire` reclaims only a lock whose owner pid is provably gone, so this can never evict a holder that is still converging.
+Failing that, it never reports success it did not earn: it names the concrete missing evidence — launchd is not holding the exact service, or the service is loaded but no scheduled check has completed recently enough to prove it can observe this home — so the caller's warning says what to repair rather than that something generic failed.
 In-harness guard checks use the marker-only `note-outage` entry point, never write that launchd-health proof, and never wait on an external notifier.
 The job receives a fixed minimal system PATH rather than persisting the harness process PATH.
 The job runs only `bin/fm-supervision-sentinel.sh scheduled-check`; its plist contains no restart command.
