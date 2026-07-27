@@ -85,7 +85,9 @@ No ordinary harness closure, session end, task cleanup, or watcher stop calls di
 Every check mode respects it too, including the marker-only ones, so a disarmed home accumulates no new outage evidence and fires no channel.
 Only deliberate `bin/fm-supervision-sentinel.sh enable` restores the service and clears that record after launchd health is verified.
 It does not claim outage coverage across logout, reboot, system sleep, a missing state volume, or launchd failure.
-Other operating systems keep the existing turn-end and continuity alarms but currently have no verified host scheduler, and watcher entry prints that limitation instead of claiming an external fallback.
+Other operating systems keep the existing turn-end and continuity alarms but currently have no verified host scheduler, and every surface says so instead of claiming an external fallback.
+A positively proven missing host capability — a non-Darwin host, a missing `launchctl`, or a missing `/usr/bin/shasum` — is the only thing `arm` reports with its own exit status (`FM_SUP_SENTINEL_UNSUPPORTED_EXIT`), so a long-lived caller can stop attempting what can never succeed while every ambiguous failure keeps exit 1 and stays retryable.
+The away daemon stops retrying on that status but never marks itself armed, and records one `unsupported` row stating the away session had in-session guards only; `check` prints the same limitation beside its verdict, so an unsupported host is never rendered as protected.
 
 ## Test safety: no test posts a real notification
 

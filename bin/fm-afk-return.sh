@@ -130,13 +130,15 @@ print_blockers() {  # <file>
 # recorded it. A stretch with no host alarm cannot be re-derived once the daemon is
 # gone, so this is read as historical evidence and reported even when it has
 # already been repaired: an unprotected window the captain never saw is exactly
-# what the return catch-up exists to surface.
+# what the return catch-up exists to surface. `unsupported` rows are the same class
+# of evidence for a host that can never run the scheduled check, and must render as
+# plainly unprotected rather than as an absence of findings.
 summarize_host_alarm_gaps() {
   local at status detail
   [ -s "$HOST_ALARM_GAPS" ] || return 0
   while IFS="$(printf '\t')" read -r at status detail; do
     case "$status" in
-      unavailable|restored) printf '%s (%s)\n' "$detail" "$at" ;;
+      unavailable|restored|unsupported) printf '%s (%s)\n' "$detail" "$at" ;;
     esac
   done < "$HOST_ALARM_GAPS"
 }

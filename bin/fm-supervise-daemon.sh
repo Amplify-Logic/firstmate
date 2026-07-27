@@ -91,7 +91,16 @@
 #          FM_HEARTBEAT_SCAN_SECS   cadence for the catch-all status scan
 #                                   (default 300)
 #          FM_HOUSEKEEPING_TICK     seconds between housekeeping passes while
-#                                   the watcher is mid-cycle (default 15)
+#                                   the watcher is mid-cycle (default 15); also the
+#                                   cadence of this daemon's first host-sentinel
+#                                   registration attempt and its health probe
+#          FM_AFK_SENTINEL_RETRY_MAX_SECS
+#                                   cap on the backoff between this daemon's
+#                                   host-sentinel registration retries, which start
+#                                   at one housekeeping tick and double (default
+#                                   300). Only a verified registration stops the
+#                                   retries; a positively unsupported host stops
+#                                   them and records that it was unprotected
 #          FM_BUSY_REGEX            OR-ed busy signatures (mirrors fm-watch.sh)
 #          FM_COMPOSER_IDLE_RE      empty-composer regex applied after dim-ghost
 #                                   and structural border stripping (default:
@@ -1386,6 +1395,7 @@ fm_super_main() {
   local SENTINEL="$FM_DAEMON_DIR/fm-supervision-sentinel.sh"
   local SENTINEL_GAP="$STATE/$FM_SUP_AWAY_GAP_NAME"
   local SENTINEL_ARMED=0
+  local SENTINEL_UNSUPPORTED=0
   local SENTINEL_GAP_OPEN=0
   local SENTINEL_GAP_SINCE=0
   local SENTINEL_ARM_FAILURES=0
@@ -1575,21 +1585,40 @@ fm_super_main() {
   # cadence: fm_watcher_healthy forks a handful of processes, so a home whose
   # watcher never becomes healthy must not pay that on the loop's ~1s tick.
   arm_host_sentinel() {
-    local now
+    local now rc out
     [ "$SENTINEL_ARMED" -eq 0 ] || return 0
+    [ "$SENTINEL_UNSUPPORTED" -eq 0 ] || return 0
     [ -x "$SENTINEL" ] || return 0
     now=$(_now)
     [ "$now" -ge "$SENTINEL_NEXT_ATTEMPT" ] || return 0
     SENTINEL_NEXT_ATTEMPT=$((now + SENTINEL_RETRY_BASE))
     fm_watcher_healthy "$STATE" "$WATCH" "${FM_GUARD_GRACE:-300}" "$FM_HOME" || return 0
-    if "$SENTINEL" arm; then
+    # Capture the sentinel's own diagnosis instead of letting it stream: it is the
+    # accurate reason for the log and the ledger, and a retried attempt must not
+    # repeat it into an away terminal nobody is reading once per attempt.
+    out=$("$SENTINEL" arm 2>&1)
+    rc=$?
+    if [ "$rc" -eq 0 ]; then
       SENTINEL_ARMED=1
+      [ -z "$out" ] || log "host sentinel arm: $out"
       if [ "$SENTINEL_GAP_OPEN" -eq 1 ]; then
         SENTINEL_GAP_OPEN=0
         sentinel_gap_append "$SENTINEL_GAP" restored \
-          "host outage alarms restored after $((now - SENTINEL_GAP_SINCE))s unavailable and $SENTINEL_ARM_FAILURES failed launchd registration attempt(s) during this away session"
+          "host outage alarms restored after $((now - SENTINEL_GAP_SINCE))s unavailable and $SENTINEL_ARM_FAILURES failed registration attempt(s) during this away session"
         log "host-level supervision-outage alarm restored after ${SENTINEL_ARM_FAILURES} failed registration attempt(s)"
       fi
+      return 0
+    fi
+    # A capability this host does not have cannot be retried into existence, and it
+    # is reported with its own exit status precisely so this is never inferred from
+    # an ambiguous error. Stop attempting for this away session, but never latch
+    # ARMED: an unsupported host is unprotected, and no surface may read otherwise.
+    if [ "$rc" -eq "$FM_SUP_SENTINEL_UNSUPPORTED_EXIT" ]; then
+      SENTINEL_UNSUPPORTED=1
+      sentinel_gap_append "$SENTINEL_GAP" unsupported \
+        "host outage alarms were UNAVAILABLE for this entire away session and only the in-session turn-end and continuity guards applied; no registration and no sentinel enable can change that on this host. ${out:-this host cannot run the scheduled host check}"
+      log "host-level supervision-outage alarms are unavailable on this host, so this away session had in-session guards only and no host backstop: ${out:-missing host capability}"
+      echo "afk: WARNING - host-level supervision-outage alarms are unavailable on this host; only the in-session guards apply" >&2
       return 0
     fi
     SENTINEL_ARM_FAILURES=$((SENTINEL_ARM_FAILURES + 1))
@@ -1602,8 +1631,8 @@ fm_super_main() {
     SENTINEL_GAP_OPEN=1
     SENTINEL_GAP_SINCE=$now
     sentinel_gap_append "$SENTINEL_GAP" unavailable \
-      "host outage alarms unavailable: launchd registration failed for this home while away; retrying up to every ${SENTINEL_RETRY_MAX}s. Run $SENTINEL enable"
-    log "WARNING: host-level supervision-outage alarm is unavailable for this home; retrying up to every ${SENTINEL_RETRY_MAX}s"
+      "host outage alarms unavailable while away; retrying up to every ${SENTINEL_RETRY_MAX}s. ${out:-host registration failed for this home}"
+    log "WARNING: host-level supervision-outage alarm is unavailable for this home; retrying up to every ${SENTINEL_RETRY_MAX}s: ${out:-host registration failed}"
     echo "afk: WARNING - host-level supervision-outage alarm is unavailable" >&2
   }
 

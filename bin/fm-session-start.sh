@@ -299,9 +299,9 @@ if [ "$FM_SUP_ARM_FAILED" = true ]; then
       "$FM_SUP_ARM_RETRY_IN"
   elif [ "$FM_SUP_ARM_RETRY_STALE" = true ]; then
     printf 'The recorded retry deadline is stale (unreadable, or further out than its own recorded window after a clock change or a restored state volume).\n'
-    printf 'It suppresses nothing: the next bin/fm-watch-arm.sh or bin/fm-afk-start.sh will attempt registration again.\n'
+    printf 'It suppresses nothing: the next bin/fm-watch-arm.sh, or the away daemon once it observes a healthy watcher, will attempt registration again.\n'
   else
-    printf 'The retry cooldown has expired; the next bin/fm-watch-arm.sh or bin/fm-afk-start.sh will attempt registration again.\n'
+    printf 'The retry cooldown has expired; the next bin/fm-watch-arm.sh, or the away daemon once it observes a healthy watcher, will attempt registration again.\n'
   fi
   printf 'Run bin/fm-supervision-sentinel.sh enable to retry immediately; it bypasses the cooldown and clears this record only after a verified host check.\n'
   printf 'The in-harness turn-end and continuity guards still block a blind turn end meanwhile.\n'

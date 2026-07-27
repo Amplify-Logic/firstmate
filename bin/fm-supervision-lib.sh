@@ -105,6 +105,15 @@ fm_supervision_unhealthy() {
 # spelled exactly once in the tree.
 FM_SUP_ARM_RECORD_NAME=.supervision-sentinel.arm-failure
 
+# Exit status `bin/fm-supervision-sentinel.sh arm` uses for a positively proven
+# missing HOST capability, as distinct from a failed registration attempt (exit 1).
+# A caller may stop retrying only on this status. Giving up on an ambiguous error
+# would silently abandon a recoverable outage backstop, so anything short of
+# specific evidence that this host lacks a capability stays transient and keeps its
+# retry schedule.
+# shellcheck disable=SC2034 # Read by callers after sourcing.
+FM_SUP_SENTINEL_UNSUPPORTED_EXIT=3
+
 # Canonical basename of the durable away-mode host-alarm availability ledger:
 # one tab-separated `<iso-timestamp> <unavailable|restored> <detail>` row per
 # transition, appended by the away daemon and folded into the return catch-up by

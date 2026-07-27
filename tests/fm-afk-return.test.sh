@@ -158,7 +158,19 @@ test_away_host_alarm_gaps_reach_return_catchup() {
   grep -F $'evidence\thost-alarm\thost outage alarms unavailable' "$gate" >/dev/null \
     || fail "an unclosed away host-alarm gap was not retained in the durable gate"
   [ -e "$ledger" ] || fail "a blocked catch-up cleared the host-alarm ledger before ordinary work was allowed"
-  pass "away host-alarm gaps reach the return catch-up, and only a completed catch-up clears them"
+
+  # A host that can never run the scheduled check is the same class of evidence:
+  # the away session was unprotected, and catch-up must say so rather than stay
+  # silent because nothing "failed".
+  printf 'resolved [key=synthetic-dependency]: refreshed the synthetic token\n' >> "$dir/home/state/repair-task.status"
+  printf '2026-07-27T05:00:00+0200\tunsupported\thost outage alarms were UNAVAILABLE for this entire away session and only the in-session turn-end and continuity guards applied\n' > "$ledger"
+  out=$(run_return "$dir" check) || fail "resolved blocker did not clear return catch-up: $out"
+  assert_contains "$out" 'catch-up host-alarm: host outage alarms were UNAVAILABLE for this entire away session' \
+    "an unsupported host rendered as protected: its away session reported no host-alarm evidence at all"
+  assert_contains "$out" 'only the in-session turn-end and continuity guards applied' \
+    "the unsupported away session did not state which protection actually applied"
+  [ ! -e "$ledger" ] || fail "a completed catch-up left the surfaced host-alarm ledger behind"
+  pass "away host-alarm gaps, including a permanently unsupported host, reach the return catch-up before it clears them"
 }
 
 test_explicit_reclassification_requires_durable_reason() {

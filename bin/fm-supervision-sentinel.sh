@@ -18,6 +18,11 @@
 #
 # Usage:
 #   fm-supervision-sentinel.sh arm         Idempotently register unless deliberately disarmed.
+#                                          Exits 0 when registered or a deliberate no-op, 1 on a
+#                                          retryable failure, and 3 only on positive evidence that
+#                                          this host lacks a capability the scheduled check needs,
+#                                          so a long-lived caller can stop retrying the impossible
+#                                          without ever inferring that from an ambiguous error.
 #   fm-supervision-sentinel.sh enable      Explicitly re-enable and register this home's agent.
 #   fm-supervision-sentinel.sh disarm      Explicitly uninstall and durably mark this home disarmed.
 #   fm-supervision-sentinel.sh check       Report one marker-only health verdict; never notify.
@@ -210,6 +215,43 @@ fm_sentinel_wait_for_check() {
     [ "$(date +%s)" -lt "$deadline" ] || return 1
     sleep 0.2
   done
+}
+
+# Names the one host capability this sentinel needs and does not have, or exits
+# non-zero when the host can run the scheduled check at all. One place decides what
+# "unsupported" means, so the arm's exit status, the operator diagnostic, and the
+# away-mode ledger can never disagree about it.
+#
+# Every branch is POSITIVE evidence of an absent capability, never a failed
+# attempt: an ambiguous error must stay transient, because a caller that stops
+# retrying on ambiguity abandons a backstop that would have recovered on its own.
+fm_sentinel_missing_capability() {
+  local platform=${FM_SENTINEL_PLATFORM:-$(uname)} launchctl
+  if [ "$platform" != Darwin ]; then
+    printf 'this host runs %s and has no verified host scheduler for the sentinel (launchd is macOS-only)\n' "$platform"
+    return 0
+  fi
+  launchctl=$(fm_sentinel_launchctl)
+  if [ ! -x "$launchctl" ]; then
+    printf 'launchctl is missing at %s, so this host cannot register a scheduled check\n' "$launchctl"
+    return 0
+  fi
+  if [ ! -x /usr/bin/shasum ]; then
+    printf '/usr/bin/shasum is missing, so this host cannot derive a stable per-home service identity\n'
+    return 0
+  fi
+  return 1
+}
+
+# One stdout line naming a missing host capability, on the diagnostic's verdict
+# channel. Silent on a host that can run the scheduled check. An OK supervision
+# verdict states that this home's watcher is alive; it must never be read as
+# promising a host-level backstop the host cannot provide.
+fm_sentinel_report_host_capability() {
+  local missing
+  missing=$(fm_sentinel_missing_capability) || return 0
+  printf 'supervision sentinel: NOTE - %s, so host-level outage alarms are UNAVAILABLE here and only the in-session turn-end and continuity guards apply\n' \
+    "$missing"
 }
 
 fm_sentinel_domain() {
@@ -422,16 +464,19 @@ fm_sentinel_arm_registration() { # <launchctl> <domain> <label> <service> <inter
 }
 
 fm_sentinel_arm() {
-  local platform launchctl label domain service interval max_check_age deadline rc
+  local missing launchctl label domain service interval max_check_age deadline rc
   fm_sentinel_mode_enabled || return 0
   # Primary scope first: a child task worktree or a non-primary home is a silent
   # no-op on every platform, so an unsupported host reports its real limitation
   # only where the sentinel would genuinely have been the outage backstop.
   fm_primary_scope_matches "$FM_ROOT" "$FM_SENTINEL_STATE" || return 0
-  platform=${FM_SENTINEL_PLATFORM:-$(uname)}
-  if [ "$platform" != Darwin ]; then
-    printf 'supervision sentinel: no verified host scheduler for %s; watcher outage fallback is unavailable\n' "$platform" >&2
-    return 1
+  # A missing host capability exits with its own status so a long-lived caller can
+  # stop retrying something that can never succeed, while every ambiguous failure
+  # below keeps exit 1 and stays retryable.
+  if missing=$(fm_sentinel_missing_capability); then
+    printf 'supervision sentinel: %s, so host-level outage alarms are UNAVAILABLE here and only the in-session turn-end and continuity guards apply\n' \
+      "$missing" >&2
+    return "$FM_SUP_SENTINEL_UNSUPPORTED_EXIT"
   fi
   if [ -f "$FM_SENTINEL_DISARMED" ] && [ "$FM_SENTINEL_FORCE_ARM" -ne 1 ]; then
     printf 'supervision sentinel: deliberately disarmed for this home; run %s enable to restore host monitoring\n' "$0" >&2
@@ -440,8 +485,9 @@ fm_sentinel_arm() {
   fm_sentinel_normalize_tunables
   interval=$(fm_sentinel_positive_integer "$FM_SENTINEL_INTERVAL" 60 15)
   launchctl=$(fm_sentinel_launchctl)
-  [ -x "$launchctl" ] || { printf 'supervision sentinel: launchctl is unavailable\n' >&2; return 1; }
-  label=$(fm_sentinel_label) || { printf 'supervision sentinel: SHA-256 service identity is unavailable\n' >&2; return 1; }
+  # shasum is present but produced nothing: a tool failure, not a missing host
+  # capability, so this stays a retryable attempt rather than a permanent verdict.
+  label=$(fm_sentinel_label) || { printf 'supervision sentinel: SHA-256 service identity could not be derived for this home\n' >&2; return 1; }
   domain=$(fm_sentinel_domain)
   service="$domain/$label"
 
@@ -524,19 +570,17 @@ fm_sentinel_disarm_service() { # <launchctl> <service>
 }
 
 fm_sentinel_disarm() {
-  local platform launchctl label domain service rc
+  local missing launchctl label domain service rc
   fm_primary_scope_matches "$FM_ROOT" "$FM_SENTINEL_STATE" || {
     printf 'supervision sentinel: disarm is valid only in this home primary scope\n' >&2
     return 1
   }
-  platform=${FM_SENTINEL_PLATFORM:-$(uname)}
-  if [ "$platform" != Darwin ]; then
-    printf 'supervision sentinel: no verified host service to disarm on %s\n' "$platform" >&2
+  if missing=$(fm_sentinel_missing_capability); then
+    printf 'supervision sentinel: %s, so there is no host service here to disarm\n' "$missing" >&2
     return 1
   fi
   launchctl=$(fm_sentinel_launchctl)
-  [ -x "$launchctl" ] || { printf 'supervision sentinel: launchctl is unavailable\n' >&2; return 1; }
-  label=$(fm_sentinel_label) || { printf 'supervision sentinel: SHA-256 service identity is unavailable\n' >&2; return 1; }
+  label=$(fm_sentinel_label) || { printf 'supervision sentinel: SHA-256 service identity could not be derived for this home\n' >&2; return 1; }
   domain=$(fm_sentinel_domain)
   service="$domain/$label"
   if ! fm_lock_try_acquire "$FM_SENTINEL_ARM_LOCK"; then
@@ -861,6 +905,7 @@ fm_sentinel_check() { # <scheduled|diagnostic|note>
     [ "$clear_on_recovery" -eq 0 ] || fm_sentinel_clear_alarm
     if [ "$report" -eq 1 ]; then
       printf 'supervision sentinel: OK - no task metadata in flight for this home; nothing to supervise\n'
+      fm_sentinel_report_host_capability
       fm_sentinel_report_arm_state
     fi
     return 0
@@ -870,6 +915,7 @@ fm_sentinel_check() { # <scheduled|diagnostic|note>
     if [ "$report" -eq 1 ]; then
       printf 'supervision sentinel: OK - %s task(s) in flight with a live identity-matched watcher; last beat %s (grace %ss)\n' \
         "$FM_SUP_IN_FLIGHT" "$FM_SUP_BEACON_DESC" "$FM_SENTINEL_GRACE"
+      fm_sentinel_report_host_capability
       fm_sentinel_report_arm_state
     fi
     return 0
@@ -882,6 +928,7 @@ fm_sentinel_check() { # <scheduled|diagnostic|note>
     if [ "$report" -eq 1 ]; then
       printf '%s\n' "$summary"
       printf 'supervision sentinel: this mode is marker-only; external alert delivery is PENDING and owned by the scheduled host check\n'
+      fm_sentinel_report_host_capability
       fm_sentinel_report_arm_state
       return 1
     fi

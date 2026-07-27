@@ -760,7 +760,94 @@ test_away_mode_defers_host_registration_until_the_daemon_sees_a_healthy_watcher(
   assert_contains "$body" 'SENTINEL_RETRY_MAX' "the away registration retry delay has no cap: $body"
   assert_contains "$body" 'sentinel_gap_append' \
     "the away daemon records no durable evidence that host alarms were unavailable: $body"
+
+  # A permanently unsupported host stops the retries, but never by latching ARMED:
+  # unsupported is unprotected, and no surface may read it as protected.
+  assert_contains "$body" 'FM_SUP_SENTINEL_UNSUPPORTED_EXIT' \
+    "the away daemon retries a permanently unsupported host as though it were transient: $body"
+  assert_contains "$body" 'SENTINEL_UNSUPPORTED=1' \
+    "the away daemon has no distinct latch for a permanently unsupported host: $body"
+  assert_contains "$(printf '%s\n' "$body" | grep -A 6 'FM_SUP_SENTINEL_UNSUPPORTED_EXIT')" 'unsupported' \
+    "the away daemon does not record an unsupported host as its own evidence class: $body"
+  assert_not_contains "$(printf '%s\n' "$body" | grep -A 6 'FM_SUP_SENTINEL_UNSUPPORTED_EXIT')" 'SENTINEL_ARMED=1' \
+    "the away daemon marks an unsupported host as armed, rendering unprotected as protected: $body"
   pass "supervision sentinel: away mode defers host registration to an observed healthy watcher, retries on cadence, and latches only success"
+}
+
+run_arm_on_platform() { # <home> <platform> <launchctl>
+  local home=$1 platform=$2 launchctl=$3
+  FM_SUPERVISION_SENTINEL_MODE=auto \
+    FM_SENTINEL_PLATFORM="$platform" \
+    FM_SENTINEL_LAUNCHCTL="$launchctl" \
+    FM_ROOT_OVERRIDE="$home" \
+    FM_HOME="$home" \
+    FM_STATE_OVERRIDE="$home/state" \
+    "$SENTINEL" arm
+}
+
+# A capability this host does not have is permanent, so `arm` reports it with its
+# own exit status and every surface still says the home is unprotected. Ambiguity is
+# NOT permanent: a caller that stopped retrying on a generic registration failure
+# would abandon a backstop that would have recovered on its own.
+test_missing_host_capability_is_a_distinct_permanent_result() {
+  local home="$TMP_ROOT/unsupported" fake="$TMP_ROOT/unsupported-launchctl" log="$TMP_ROOT/unsupported-launchctl.log"
+  local loaded="$TMP_ROOT/unsupported-loaded" retained="$TMP_ROOT/unsupported-retained-launchctl"
+  local retained_loaded="$TMP_ROOT/unsupported-retained-loaded" checked err out status
+  make_primary "$home"
+  home=$(cd "$home" && pwd -P)
+  checked="$home/state/.supervision-sentinel-last-check"
+  err="$TMP_ROOT/unsupported.err"
+  make_fake_launchctl "$fake" "$log" "$loaded" "$checked"
+
+  # No verified host scheduler for this platform: positive, specific evidence.
+  run_arm_on_platform "$home" Linux "$fake" 2>"$err"
+  status=$?
+  expect_code 3 "$status" "a non-Darwin host did not report a distinct permanently-unsupported result"
+  assert_contains "$(cat "$err")" 'no verified host scheduler' "the unsupported result did not name the missing platform capability"
+  assert_contains "$(cat "$err")" 'UNAVAILABLE' "the unsupported result did not state that host alarms are unavailable"
+  assert_contains "$(cat "$err")" 'only the in-session turn-end and continuity guards apply' \
+    "the unsupported result did not state which protection actually applied instead"
+  [ ! -e "$log" ] || fail "an unsupported host still reached launchd: $(cat "$log")"
+  [ ! -e "$home/state/.supervision-sentinel.arm-failure" ] \
+    || fail "an unsupported host recorded a retry cooldown for something no retry can fix"
+
+  # A missing launchctl is the same class of positive evidence.
+  run_arm_on_platform "$home" Darwin "$TMP_ROOT/unsupported-absent-launchctl" 2>"$err"
+  status=$?
+  expect_code 3 "$status" "a missing launchctl did not report a distinct permanently-unsupported result"
+  assert_contains "$(cat "$err")" 'launchctl is missing at' "the unsupported result did not name the missing launchctl path"
+
+  # A genuine registration failure is ambiguous and must stay retryable: exit 1,
+  # never the permanent status, so the away daemon keeps its capped retry loop.
+  cat > "$retained" <<SH
+#!/usr/bin/env bash
+case "\$1" in
+  print) [ -e "$retained_loaded" ] || exit 1 ;;
+  bootstrap) : > "$retained_loaded" ;;
+  bootout) rm -f "$retained_loaded" ;;
+esac
+exit 0
+SH
+  chmod +x "$retained"
+  FM_SENTINEL_CHECK_WAIT_SECS=1 run_arm_on_platform "$home" Darwin "$retained" 2>"$err"
+  status=$?
+  expect_code 1 "$status" "a retained-but-unconverged launchd registration was reported as permanently unsupported"
+  assert_contains "$(cat "$err")" 'no check completed' "the transient registration failure lost its reason"
+  rm -f "$home/state/.supervision-sentinel.arm-failure"
+
+  # The operator diagnostic must never present an unsupported host as protected: an
+  # OK supervision verdict says the watcher is alive, not that a host backstop exists.
+  out=$(FM_SUPERVISION_SENTINEL_MODE=auto FM_SENTINEL_PLATFORM=Linux \
+    FM_ROOT_OVERRIDE="$home" FM_HOME="$home" FM_STATE_OVERRIDE="$home/state" \
+    "$SENTINEL" check)
+  status=$?
+  expect_code 0 "$status" "the diagnostic must still report its idle verdict on an unsupported host"
+  assert_contains "$out" 'OK - no task metadata in flight' "the diagnostic lost its supervision verdict"
+  assert_contains "$out" 'host-level outage alarms are UNAVAILABLE here' \
+    "the diagnostic rendered an unsupported host as protected: $out"
+  assert_contains "$out" 'only the in-session turn-end and continuity guards apply' \
+    "the diagnostic did not say which protection actually applied on an unsupported host: $out"
+  pass "supervision sentinel: a positively missing host capability is a distinct permanent result and never renders as protected"
 }
 
 install_held_arm_lock() { # <home> <holder-pid>
@@ -963,5 +1050,6 @@ test_watch_arm_validates_arguments_before_sentinel_registration
 test_watch_arm_registers_the_host_sentinel_only_after_a_healthy_watcher
 test_away_mode_defers_host_registration_until_the_daemon_sees_a_healthy_watcher
 test_contended_arm_never_reports_success_without_verified_service_evidence
+test_missing_host_capability_is_a_distinct_permanent_result
 test_real_channel_uses_unambiguous_notification_title_without_posting
 test_real_launchd_scheduled_check_delivers_end_to_end
