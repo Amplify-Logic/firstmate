@@ -99,3 +99,50 @@ fm_supervision_unhealthy() {
   fm_supervision_status "$@"
   [ "$FM_SUP_IN_FLIGHT" -gt 0 ] && [ "$FM_SUP_WATCHER_FRESH" = false ]
 }
+
+# fm_supervision_arm_failure_status <state-dir>
+# Reads the durable host-sentinel registration-failure record and populates:
+#   FM_SUP_ARM_FAILED       true/false - the record exists at all
+#   FM_SUP_ARM_FAILURES     recorded consecutive failure count (0 when unreadable)
+#   FM_SUP_ARM_RETRY_IN     seconds the retry cooldown still suppresses registration
+#   FM_SUP_ARM_RETRY_STALE  true/false - the deadline is unusable, so it suppresses nothing
+#
+# The cooldown counts only while retry_at is in the future AND no further away
+# than the retry_after_secs recorded atomically beside it. A wall-clock rollback,
+# or a state volume restored from a machine whose clock ran ahead, therefore reads
+# as stale evidence that suppresses nothing rather than an enormous fake
+# suppression window. Both bin/fm-supervision-sentinel.sh (which enforces the
+# cooldown) and bin/fm-session-start.sh (which reports it) call this, so the
+# displayed window and the enforced window cannot drift apart.
+# Always returns 0; callers read the vars.
+fm_supervision_arm_failure_status() {
+  local state=$1 record at after now remaining
+  FM_SUP_ARM_FAILED=false
+  FM_SUP_ARM_FAILURES=0
+  FM_SUP_ARM_RETRY_IN=0
+  FM_SUP_ARM_RETRY_STALE=false
+  record="$state/.supervision-sentinel.arm-failure"
+  [ -f "$record" ] || return 0
+  # shellcheck disable=SC2034 # Read by callers after sourcing.
+  FM_SUP_ARM_FAILED=true
+
+  FM_SUP_ARM_FAILURES=$(awk -F= '$1 == "failures" { print $2; exit }' "$record" 2>/dev/null || true)
+  case "$FM_SUP_ARM_FAILURES" in ''|*[!0-9]*) FM_SUP_ARM_FAILURES=0 ;; esac
+
+  at=$(awk -F= '$1 == "retry_at" { print $2; exit }' "$record" 2>/dev/null || true)
+  after=$(awk -F= '$1 == "retry_after_secs" { print $2; exit }' "$record" 2>/dev/null || true)
+  case "$at" in ''|*[!0-9]*) FM_SUP_ARM_RETRY_STALE=true; return 0 ;; esac
+  case "$after" in ''|*[!0-9]*) FM_SUP_ARM_RETRY_STALE=true; return 0 ;; esac
+
+  now=$(date +%s)
+  [ "$now" -lt "$at" ] || return 0
+  remaining=$((at - now))
+  if [ "$remaining" -gt "$after" ]; then
+    # shellcheck disable=SC2034 # Read by callers after sourcing.
+    FM_SUP_ARM_RETRY_STALE=true
+    return 0
+  fi
+  # shellcheck disable=SC2034 # Read by callers after sourcing.
+  FM_SUP_ARM_RETRY_IN=$remaining
+  return 0
+}

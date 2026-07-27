@@ -104,6 +104,8 @@ PRIMARY_HARNESS=$("$SCRIPT_DIR/fm-harness.sh" 2>/dev/null || printf unknown)
 . "$SCRIPT_DIR/fm-tasks-axi-lib.sh"
 # shellcheck source=bin/fm-public-followup-lib.sh
 . "$SCRIPT_DIR/fm-public-followup-lib.sh"
+# shellcheck source=bin/fm-supervision-lib.sh
+. "$SCRIPT_DIR/fm-supervision-lib.sh"
 
 STATUS_TAIL=${FM_SESSION_START_STATUS_TAIL:-5}
 case "$STATUS_TAIL" in ''|*[!0-9]*) STATUS_TAIL=5 ;; esac
@@ -288,24 +290,19 @@ fi
 # so it disables host monitoring just as effectively as a deliberate disarm. It
 # must be as loud, or the accidental unmonitored state stays invisible while the
 # deliberate one is announced.
-if [ -f "$STATE/.supervision-sentinel.arm-failure" ]; then
+fm_supervision_arm_failure_status "$STATE"
+if [ "$FM_SUP_ARM_FAILED" = true ]; then
   subsection "HOST SUPERVISION SENTINEL - REGISTRATION FAILED"
   printf 'Host-level watcher-outage detection is NOT active for this home: launchd registration failed.\n'
-  SENTINEL_RETRY_AT=$(awk -F= '$1 == "retry_at" { print $2; exit }' "$STATE/.supervision-sentinel.arm-failure" 2>/dev/null || true)
-  case "$SENTINEL_RETRY_AT" in
-    ''|*[!0-9]*)
-      printf 'Automatic retry timing is unreadable; the durable record below is the evidence.\n'
-      ;;
-    *)
-      SENTINEL_RETRY_NOW=$(date +%s)
-      if [ "$SENTINEL_RETRY_NOW" -ge "$SENTINEL_RETRY_AT" ]; then
-        printf 'The retry cooldown has expired; the next bin/fm-watch-arm.sh or bin/fm-afk-start.sh will attempt registration again.\n'
-      else
-        printf 'Automatic retry is suppressed for another %ss, and this home has no host-level outage detection until it succeeds.\n' \
-          "$((SENTINEL_RETRY_AT - SENTINEL_RETRY_NOW))"
-      fi
-      ;;
-  esac
+  if [ "$FM_SUP_ARM_RETRY_IN" -gt 0 ]; then
+    printf 'Automatic retry is suppressed for another %ss, and this home has no host-level outage detection until it succeeds.\n' \
+      "$FM_SUP_ARM_RETRY_IN"
+  elif [ "$FM_SUP_ARM_RETRY_STALE" = true ]; then
+    printf 'The recorded retry deadline is stale (unreadable, or further out than its own recorded window after a clock change or a restored state volume).\n'
+    printf 'It suppresses nothing: the next bin/fm-watch-arm.sh or bin/fm-afk-start.sh will attempt registration again.\n'
+  else
+    printf 'The retry cooldown has expired; the next bin/fm-watch-arm.sh or bin/fm-afk-start.sh will attempt registration again.\n'
+  fi
   printf 'Run bin/fm-supervision-sentinel.sh enable to retry immediately; it bypasses the cooldown and clears this record only after a verified host check.\n'
   printf 'The in-harness turn-end and continuity guards still block a blind turn end meanwhile.\n'
   cat "$STATE/.supervision-sentinel.arm-failure"

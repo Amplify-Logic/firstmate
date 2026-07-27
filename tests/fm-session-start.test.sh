@@ -342,10 +342,26 @@ EOF
 
   # An expired cooldown must read differently: monitoring is still down, but the
   # next watcher or away-mode entry will retry on its own.
-  printf 'state=arm-failed\nfailures=1\nfailed_at=1\nretry_at=2\n' > "$home/state/.supervision-sentinel.arm-failure"
+  printf 'state=arm-failed\nfailures=1\nfailed_at=1\nretry_after_secs=60\nretry_at=2\n' > "$home/state/.supervision-sentinel.arm-failure"
   out=$(run_session_start "$home" "$root" "$fakebin:$BASE_PATH")
   assert_contains "$out" 'HOST SUPERVISION SENTINEL - REGISTRATION FAILED' "an expired cooldown stopped being reported"
   assert_contains "$out" 'retry cooldown has expired' "session start did not distinguish an expired cooldown from a live one"
+
+  # A clock rollback or a restored state volume puts retry_at far beyond the window
+  # recorded beside it. The arm path treats that as suppressing nothing, so the
+  # banner must not advertise an enormous suppression interval it will not honor.
+  cat > "$home/state/.supervision-sentinel.arm-failure" <<EOF
+state=arm-failed
+failures=2
+failed_at=1
+retry_after_secs=60
+retry_at=$(( $(date +%s) + 86400 ))
+EOF
+  out=$(run_session_start "$home" "$root" "$fakebin:$BASE_PATH")
+  assert_contains "$out" 'HOST SUPERVISION SENTINEL - REGISTRATION FAILED' "a stale retry deadline stopped being reported"
+  assert_contains "$out" 'retry deadline is stale' "session start presented a stale deadline as an active suppression window"
+  assert_contains "$out" 'It suppresses nothing' "session start did not say a stale deadline will not delay the next retry"
+  assert_not_contains "$out" 'suppressed for another 86400s' "session start printed a suppression window the arm path would ignore"
 
   rm -f "$home/state/.supervision-sentinel.arm-failure"
   out=$(run_session_start "$home" "$root" "$fakebin:$BASE_PATH")

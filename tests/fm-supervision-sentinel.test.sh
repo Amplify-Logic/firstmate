@@ -431,10 +431,10 @@ test_arm_registers_one_home_scoped_read_only_launchd_job() {
   assert_not_contains "$(cat "$plist")" 'fm-watch-arm.sh' "host fallback must not auto-start a watcher"
   assert_not_contains "$(cat "$plist")" 'fm-supervise-daemon.sh' "host fallback must not auto-start an away-mode daemon"
   assert_not_contains "$(cat "$plist")" '--restart' "host fallback must not restart any supervision process"
-  # The notifier seam exists only for the opt-in real-launchd smoke. A manifest
-  # armed without it must never carry a notifier override, or production delivery
-  # would be silently redirected away from the captain's configured channels.
-  assert_not_contains "$(cat "$plist")" 'FM_WEDGE_ALARM_EXEC' "an ordinary arm pinned a notifier override into the production manifest"
+  # There is no notifier-override knob at all. A manifest that carried one would
+  # redirect this home's whole external-alert path for as long as the service stays
+  # loaded, and an override that failed would retry silently forever.
+  assert_not_contains "$(cat "$plist")" 'FM_WEDGE_ALARM_EXEC' "the generated manifest pinned a notifier override"
 
   FM_SUPERVISION_SENTINEL_MODE=auto \
     FM_SENTINEL_PLATFORM=Darwin \
@@ -563,6 +563,51 @@ SH
   pass "supervision sentinel: an unconverged launchd registration backs off per home instead of churning"
 }
 
+test_rolled_back_clock_does_not_suppress_registration_forever() {
+  local home="$TMP_ROOT/stale-cooldown" fake="$TMP_ROOT/stale-launchctl" log="$TMP_ROOT/stale-launchctl.log"
+  local loaded="$TMP_ROOT/stale-loaded" checked failure err out
+  make_primary "$home"
+  home=$(cd "$home" && pwd -P)
+  checked="$home/state/.supervision-sentinel-last-check"
+  failure="$home/state/.supervision-sentinel.arm-failure"
+  err="$TMP_ROOT/stale.err"
+  make_fake_launchctl "$fake" "$log" "$loaded" "$checked"
+
+  # A state volume restored from a machine whose clock ran ahead, or a local clock
+  # rollback: retry_at is far beyond the window retry_after_secs recorded with it.
+  # That evidence cannot be trusted to suppress anything.
+  cat > "$failure" <<EOF
+state=arm-failed
+failures=1
+failed_at=1
+retry_after_secs=60
+retry_at=$(( $(date +%s) + 86400 ))
+home=$home
+EOF
+
+  run_arm "$home" "$fake" 2>"$err" || fail "a stale retry deadline blocked registration: $(cat "$err")"
+  [ ! -e "$failure" ] || fail "a verified registration left the stale failure record behind"
+  [ "$(grep -c '^bootstrap ' "$log" || true)" -eq 1 ] \
+    || fail "a stale retry deadline suppressed the launchd retry: $(cat "$log")"
+
+  # The operator diagnostic must call that stale evidence out rather than print an
+  # enormous active suppression window the arm path would ignore.
+  cat > "$failure" <<EOF
+state=arm-failed
+failures=2
+failed_at=1
+retry_after_secs=60
+retry_at=$(( $(date +%s) + 86400 ))
+home=$home
+EOF
+  printf 'project=test\n' > "$home/state/task.meta"
+  touch -t 202001010000 "$home/state/.last-watcher-beat"
+  out=$(run_mode "$home" "$TMP_ROOT/record-stale" check) && fail "check reported healthy during an outage"
+  assert_contains "$out" 'retry deadline is stale' "the diagnostic presented a stale deadline as an active suppression window"
+  assert_not_contains "$out" 'suppressed for another 86400s' "the diagnostic printed an enormous unenforced suppression window"
+  pass "supervision sentinel: a retry deadline beyond its own recorded window is stale evidence, not a suppression"
+}
+
 test_explicit_disarm_is_durable_home_scoped_and_reversible() {
   local home="$TMP_ROOT/disarm" fake="$TMP_ROOT/disarm-launchctl" log="$TMP_ROOT/disarm-launchctl.log" loaded="$TMP_ROOT/disarm-loaded" checked before after out
   make_primary "$home"
@@ -641,11 +686,17 @@ SH
 # in this file fakes. It is deliberately not part of the default suite: it mutates
 # the caller's own `gui/<uid>` launchd domain, so it must be an explicit, attended
 # choice on a macOS login session rather than something CI or a parallel shard
-# does implicitly. It still never posts a real desktop notification - the
-# launchd-spawned check resolves the scratch home's own config/wedge-alarm, whose
-# only channel writes a file.
+# does implicitly.
+#
+# It cannot post a real desktop notification, and that is structural rather than
+# configured. launchd runs a COPY of the sentinel inside the scratch home, and the
+# sentinel resolves its alert owner as fm-supervise-daemon.sh NEXT TO ITSELF - so
+# the copy's alert owner is a stub that only appends to a file. The real daemon,
+# and therefore every real notifier, is not reachable from the launched process at
+# all, whatever any config lookup does. Production plist generation deliberately
+# has no notifier-override knob to abuse instead.
 test_real_launchd_scheduled_check_delivers_end_to_end() {
-  local home alert_log recorder label service plist i
+  local home alert_log scratch_sentinel label service plist i
   if [ "${FM_SENTINEL_REAL_LAUNCHD_SMOKE:-0}" != 1 ]; then
     pass "supervision sentinel: real-launchd smoke skipped (FM_SENTINEL_REAL_LAUNCHD_SMOKE=1 on an attended macOS login session runs it)"
     return 0
@@ -657,15 +708,17 @@ test_real_launchd_scheduled_check_delivers_end_to_end() {
   make_primary "$home"
   home=$(cd "$home" && pwd -P)
   alert_log="$home/real-launchd-alert.log"
-  recorder="$TMP_ROOT/record-real-launchd"
-  # Two independent guarantees that this never posts a real desktop notification.
-  # The config directive selects a file-writing `command:` channel, and the plist
-  # notifier seam below intercepts EVERY channel before any real notifier runs -
-  # so even an unreadable config falling back to auto -> osascript cannot escape.
-  make_recorder "$recorder" "$alert_log"
-  cat > "$home/config/wedge-alarm" <<EOF
-command:printf '%s\n' "\$1" >> $home/unreached-command-channel.log
-EOF
+  scratch_sentinel="$home/bin/fm-supervision-sentinel.sh"
+
+  cp "$SENTINEL" "$scratch_sentinel"
+  cp "$ROOT/bin/fm-supervision-lib.sh" "$ROOT/bin/fm-primary-scope-lib.sh" \
+    "$ROOT/bin/fm-wake-lib.sh" "$home/bin/" \
+    || fail "could not stage the scratch sentinel's libraries"
+  cat > "$home/bin/fm-supervise-daemon.sh" <<SH
+#!/usr/bin/env bash
+printf '%s\t%s\n' "\$1" "\$2" >> "$alert_log"
+SH
+  chmod +x "$scratch_sentinel" "$home/bin/fm-supervise-daemon.sh"
   printf 'project=test\n' > "$home/state/task.meta"
   touch -t 202001010000 "$home/state/.last-watcher-beat"
 
@@ -675,15 +728,15 @@ EOF
   label=${service##*/}
   FM_SENTINEL_SMOKE_SERVICE="$service"
 
-  FM_SUPERVISION_SENTINEL_MODE=auto FM_ROOT_OVERRIDE="$home" FM_HOME="$home" \
+  FM_SUPERVISION_SENTINEL_MODE=auto FM_HOME="$home" \
     FM_CONFIG_OVERRIDE="$home/config" \
-    FM_SENTINEL_TEST_ALERT_EXEC="$recorder" \
     FM_SENTINEL_CHECK_WAIT_SECS=30 \
-    "$SENTINEL" arm || fail "real launchd did not retain and verify this home service"
+    "$scratch_sentinel" arm || fail "real launchd did not retain and verify this home service"
   plist="$home/state/.supervision-sentinel.plist"
   assert_grep "<string>$label</string>" "$plist" "generated manifest label does not match the derived service identity"
-  assert_grep "<string>$recorder</string>" "$plist" "the smoke manifest did not pin its file-writing notifier recorder"
+  assert_grep "<string>$scratch_sentinel</string>" "$plist" "the smoke manifest did not pin its scratch sentinel copy"
   assert_grep "<string>$home/config</string>" "$plist" "the smoke manifest did not pin its scratch alert configuration"
+  assert_no_grep 'FM_WEDGE_ALARM_EXEC' "$plist" "the manifest carried a notifier override; delivery interception must come from the stub alert owner only"
   /bin/launchctl print "$service" >/dev/null 2>&1 || fail "real launchd is not holding the exact home service"
   [ -s "$home/state/.supervision-sentinel-last-check" ] \
     || fail "a launchd-spawned scheduled-check never recorded host liveness"
@@ -693,16 +746,14 @@ EOF
     sleep 0.2
     i=$((i + 1))
   done
-  [ -s "$alert_log" ] || fail "the launchd-spawned check never reached its configured active channel"
+  [ -s "$alert_log" ] || fail "the launchd-spawned check never reached its alert owner"
+  assert_grep '--active-alert' "$alert_log" "the launchd job did not invoke its alert owner through the one-shot alert entry point"
   assert_grep 'SUPERVISION DOWN: 1 task(s) in flight' "$alert_log" "launchd-delivered alert omitted the outage summary"
-  # The recorded channel proves FM_CONFIG_OVERRIDE reached the job: without it the
-  # job would have resolved `auto` and recorded `osascript` instead.
-  assert_grep 'command' "$alert_log" "the launchd job did not resolve this home's scratch alert configuration"
   assert_grep 'delivery=sent' "$home/state/.supervision-outage-alarm" "launchd-delivered alert did not commit its delivery state"
 
   fm_sentinel_bootout_smoke_service "$service" || fail "exact home service could not be retired after the smoke"
   FM_SENTINEL_SMOKE_SERVICE=
-  pass "supervision sentinel: real launchd bootstrap -> scheduled-check -> configured channel delivers end to end"
+  pass "supervision sentinel: real launchd bootstrap -> scheduled-check -> alert owner delivers end to end"
 }
 
 test_stale_beacon_alert_is_loud_deduplicated_backed_off_and_rearmed
@@ -714,6 +765,7 @@ test_live_identity_matched_watcher_stays_silent
 test_failed_alert_stays_pending_and_retries
 test_arm_registers_one_home_scoped_read_only_launchd_job
 test_unconverged_arm_backs_off_instead_of_churning_launchd
+test_rolled_back_clock_does_not_suppress_registration_forever
 test_explicit_disarm_is_durable_home_scoped_and_reversible
 test_watch_arm_validates_arguments_before_sentinel_registration
 test_real_channel_uses_unambiguous_notification_title_without_posting
