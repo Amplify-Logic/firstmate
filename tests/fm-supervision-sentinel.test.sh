@@ -36,8 +36,18 @@ run_check() {
     "$SENTINEL" check
 }
 
+install_stale_watcher_fixture() { # <home> <holder-pid> <watcher-path>
+  local home=$1 holder=$2 watcher=$3 identity
+  identity=$(FM_STATE_OVERRIDE="$home/state" bash -c '. "$1"; fm_pid_identity "$2"' _ "$ROOT/bin/fm-wake-lib.sh" "$holder") || return 1
+  mkdir -p "$home/state/.watch.lock"
+  printf '%s\n' "$holder" > "$home/state/.watch.lock/pid"
+  printf '%s\n' "$home" > "$home/state/.watch.lock/fm-home"
+  printf '%s\n' "$watcher" > "$home/state/.watch.lock/watcher-path"
+  printf '%s\n' "$identity" > "$home/state/.watch.lock/pid-identity"
+}
+
 test_stale_beacon_alert_is_loud_deduplicated_backed_off_and_rearmed() {
-  local home="$TMP_ROOT/check" recorder="$TMP_ROOT/record-alert" log="$TMP_ROOT/alerts.log" holder identity i text marker delivered next
+  local home="$TMP_ROOT/check" recorder="$TMP_ROOT/record-alert" log="$TMP_ROOT/alerts.log" holder i text marker delivered next
   make_primary "$home"
   make_recorder "$recorder" "$log"
   for i in 1 2 3 4 5 6; do
@@ -45,35 +55,29 @@ test_stale_beacon_alert_is_loud_deduplicated_backed_off_and_rearmed() {
   done
   sleep 60 &
   holder=$!
-  identity=$(FM_STATE_OVERRIDE="$home/state" bash -c '. "$1"; fm_pid_identity "$2"' _ "$ROOT/bin/fm-wake-lib.sh" "$holder") || {
+  install_stale_watcher_fixture "$home" "$holder" "$ROOT/bin/fm-watch.sh" || {
     kill "$holder" 2>/dev/null || true
     wait "$holder" 2>/dev/null || true
     fail "could not identify the stale-beacon watcher fixture"
   }
-  mkdir -p "$home/state/.watch.lock"
-  printf '%s\n' "$holder" > "$home/state/.watch.lock/pid"
-  printf '%s\n' "$home" > "$home/state/.watch.lock/fm-home"
-  printf '%s\n' "$ROOT/bin/fm-watch.sh" > "$home/state/.watch.lock/watcher-path"
-  printf '%s\n' "$identity" > "$home/state/.watch.lock/pid-identity"
   touch -t 202001010000 "$home/state/.last-watcher-beat"
+  marker="$home/state/.supervision-outage-alarm"
 
   run_check "$home" "$recorder"
-  [ -s "$home/state/.supervision-outage-alarm" ] || fail "stale watcher check did not write its durable outage marker"
+  [ -s "$marker" ] || fail "stale watcher check did not write its durable outage marker"
   [ "$(wc -l < "$log" | tr -d '[:space:]')" -eq 1 ] || fail "first outage check did not emit exactly one active alert"
   text=$(cat "$log")
   assert_contains "$text" $'osascript\tSUPERVISION DOWN: 6 task(s) in flight' "active alert did not lead with an unambiguous outage and task count"
   assert_contains "$text" "last watcher beat:" "active alert omitted the outage age evidence"
   assert_contains "$text" "grace 300s" "active alert omitted the configured grace"
   assert_contains "$text" "No automatic restart was attempted" "active alert did not state the conservative recovery result"
-
-  touch -t 202001020000 "$home/state/.last-watcher-beat"
-  run_check "$home" "$recorder"
-  [ "$(wc -l < "$log" | tr -d '[:space:]')" -eq 1 ] || fail "continuous outage emitted a duplicate alert when its evidence key changed"
-  marker="$home/state/.supervision-outage-alarm"
   assert_contains "$(cat "$marker")" 'delivery_count=1' "initial alert did not record the first successful delivery"
   delivered=$(awk -F= '$1 == "delivered_at" { print $2 }' "$marker")
   next=$(awk -F= '$1 == "next_alert_at" { print $2 }' "$marker")
   [ "$((next - delivered))" -eq 300 ] || fail "first repeat delay was not five minutes"
+
+  run_check "$home" "$recorder"
+  [ "$(wc -l < "$log" | tr -d '[:space:]')" -eq 1 ] || fail "one continuous outage emitted a duplicate alert inside its backoff window"
 
   awk -F= '$1 == "next_alert_at" { print "next_alert_at=0"; next } { print }' "$marker" > "$marker.next"
   mv "$marker.next" "$marker"
@@ -84,15 +88,105 @@ test_stale_beacon_alert_is_loud_deduplicated_backed_off_and_rearmed() {
   next=$(awk -F= '$1 == "next_alert_at" { print $2 }' "$marker")
   [ "$((next - delivered))" -eq 600 ] || fail "second repeat did not exponentially back off to ten minutes"
 
+  # Flapping outage: the watcher was re-armed and reaped again between two host
+  # checks, so the beacon evidence moved. That is a new episode and must alert
+  # now instead of inheriting the backed-off schedule of the previous one.
+  touch -t 202001020000 "$home/state/.last-watcher-beat"
+  run_check "$home" "$recorder"
+  [ "$(wc -l < "$log" | tr -d '[:space:]')" -eq 3 ] || fail "a re-reaped watcher stayed silent under the previous episode's backoff"
+  assert_contains "$(cat "$marker")" 'delivery_count=1' "changed outage evidence did not restart the repeat schedule"
+  delivered=$(awk -F= '$1 == "delivered_at" { print $2 }' "$marker")
+  next=$(awk -F= '$1 == "next_alert_at" { print $2 }' "$marker")
+  [ "$((next - delivered))" -eq 300 ] || fail "new outage episode did not reset the backoff to five minutes"
+
   rm -f "$home/state/task-"*.meta
   run_check "$home" "$recorder"
-  [ ! -e "$home/state/.supervision-outage-alarm" ] || fail "healthy/idle transition did not clear the outage episode marker"
+  [ ! -e "$marker" ] || fail "healthy/idle transition did not clear the outage episode marker"
   printf 'project=test\n' > "$home/state/task-new.meta"
   run_check "$home" "$recorder"
   kill "$holder" 2>/dev/null || true
   wait "$holder" 2>/dev/null || true
-  [ "$(wc -l < "$log" | tr -d '[:space:]')" -eq 3 ] || fail "a later outage episode did not re-arm the active alert"
-  pass "supervision sentinel: stale beacon alert deduplicates, backs off, and re-arms after recovery"
+  [ "$(wc -l < "$log" | tr -d '[:space:]')" -eq 4 ] || fail "a later outage episode did not re-arm the active alert"
+  pass "supervision sentinel: stale beacon alert deduplicates, backs off, resets on a new episode, and re-arms"
+}
+
+test_guard_note_outage_records_evidence_without_notifying() {
+  local home="$TMP_ROOT/note" recorder="$TMP_ROOT/record-note" log="$TMP_ROOT/note-alerts.log" marker
+  make_primary "$home"
+  make_recorder "$recorder" "$log"
+  printf 'project=test\n' > "$home/state/task.meta"
+  touch -t 202001010000 "$home/state/.last-watcher-beat"
+  marker="$home/state/.supervision-outage-alarm"
+
+  FM_SUPERVISION_SENTINEL_MODE=auto \
+    FM_ROOT_OVERRIDE="$home" FM_HOME="$home" FM_STATE_OVERRIDE="$home/state" \
+    FM_WEDGE_ALARM_CHANNEL=osascript FM_WEDGE_ALARM_EXEC="$recorder" \
+    "$SENTINEL" note-outage || fail "marker-only outage note failed"
+  [ ! -e "$log" ] || fail "in-harness note-outage crossed the active-channel boundary: $(cat "$log")"
+  [ -s "$marker" ] || fail "note-outage did not record the durable outage evidence"
+  assert_contains "$(cat "$marker")" 'SUPERVISION DOWN: 1 task(s) in flight' "note-outage marker omitted the outage summary"
+  assert_contains "$(cat "$marker")" 'delivery=pending' "note-outage claimed a delivery it never attempted"
+  assert_contains "$(cat "$marker")" 'attempt_at=0' "note-outage left a delivery lease the host check must wait out"
+  [ ! -e "$home/state/.supervision-sentinel-last-check" ] || fail "note-outage forged the launchd liveness proof"
+
+  run_check "$home" "$recorder"
+  [ "$(wc -l < "$log" | tr -d '[:space:]')" -eq 1 ] || fail "the scheduled check did not immediately deliver a noted outage"
+  assert_contains "$(cat "$marker")" 'delivery=sent' "delivered alert did not commit its delivery state"
+
+  # A noted outage must never clobber an already-delivered episode's backoff.
+  FM_SUPERVISION_SENTINEL_MODE=auto \
+    FM_ROOT_OVERRIDE="$home" FM_HOME="$home" FM_STATE_OVERRIDE="$home/state" \
+    FM_WEDGE_ALARM_CHANNEL=osascript FM_WEDGE_ALARM_EXEC="$recorder" \
+    "$SENTINEL" note-outage || fail "repeat outage note failed"
+  assert_contains "$(cat "$marker")" 'delivery=sent' "a later note-outage reset a committed delivery record"
+  [ "$(wc -l < "$log" | tr -d '[:space:]')" -eq 1 ] || fail "note-outage notified after the episode was already delivered"
+
+  assert_not_contains "$(cat "$ROOT/bin/fm-turnend-guard.sh" "$ROOT/bin/fm-continuity-pretool-check.sh")" \
+    'SENTINEL" check' "an in-harness guard still waits on the active-alert boundary"
+  pass "supervision sentinel: in-harness guards record outage evidence without any notifier work"
+}
+
+test_symlinked_home_is_not_reported_as_an_outage() {
+  local real="$TMP_ROOT/symlink-real" link="$TMP_ROOT/symlink-home" rootlink="$TMP_ROOT/symlink-root"
+  local recorder="$TMP_ROOT/record-symlink" log="$TMP_ROOT/symlink.log" holder
+  make_primary "$real"
+  make_recorder "$recorder" "$log"
+  ln -s "$real" "$link"
+  ln -s "$ROOT" "$rootlink"
+  printf 'project=test\n' > "$real/state/task.meta"
+  sleep 60 &
+  holder=$!
+  # bin/fm-watch.sh resolves its home and its own path with `pwd`, so it records
+  # whatever symlinked spelling it was started through, while the host sentinel
+  # resolves both physically with `pwd -P`. The identity check compares the same
+  # physical target, so a healthy watcher is never alarmed over the spelling.
+  install_stale_watcher_fixture "$real" "$holder" "$rootlink/bin/fm-watch.sh" || {
+    kill "$holder" 2>/dev/null || true
+    wait "$holder" 2>/dev/null || true
+    fail "could not identify the symlinked-home watcher fixture"
+  }
+  printf '%s\n' "$link" > "$real/state/.watch.lock/fm-home"
+  touch "$real/state/.last-watcher-beat"
+
+  FM_SUPERVISION_SENTINEL_MODE=auto \
+    FM_ROOT_OVERRIDE="$real" FM_HOME="$real" FM_STATE_OVERRIDE="$real/state" \
+    FM_WEDGE_ALARM_CHANNEL=osascript FM_WEDGE_ALARM_EXEC="$recorder" \
+    "$SENTINEL" check
+  [ ! -e "$log" ] || fail "a healthy watcher reached through a symlinked home was alarmed as down: $(cat "$log")"
+  [ ! -e "$real/state/.supervision-outage-alarm" ] || fail "symlinked-home spelling produced a false outage marker"
+
+  # A genuinely different home must still fail the identity check, with the same
+  # live pid, watcher path, and fresh beacon.
+  mkdir -p "$TMP_ROOT/symlink-other"
+  printf '%s\n' "$TMP_ROOT/symlink-other" > "$real/state/.watch.lock/fm-home"
+  FM_SUPERVISION_SENTINEL_MODE=auto \
+    FM_ROOT_OVERRIDE="$real" FM_HOME="$real" FM_STATE_OVERRIDE="$real/state" \
+    FM_WEDGE_ALARM_CHANNEL=osascript FM_WEDGE_ALARM_EXEC="$recorder" \
+    "$SENTINEL" check
+  kill "$holder" 2>/dev/null || true
+  wait "$holder" 2>/dev/null || true
+  [ -s "$real/state/.supervision-outage-alarm" ] || fail "a foreign home in the watcher lock was accepted as this home"
+  pass "supervision sentinel: watcher identity matches through symlinks but not across homes"
 }
 
 test_failed_alert_stays_pending_and_retries() {
@@ -320,6 +414,8 @@ SH
 }
 
 test_stale_beacon_alert_is_loud_deduplicated_backed_off_and_rearmed
+test_guard_note_outage_records_evidence_without_notifying
+test_symlinked_home_is_not_reported_as_an_outage
 test_live_identity_matched_watcher_stays_silent
 test_failed_alert_stays_pending_and_retries
 test_arm_registers_one_home_scoped_read_only_launchd_job

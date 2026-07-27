@@ -61,6 +61,18 @@ test_gate_scope_and_recovery_exceptions() {
   expect_deny "nested forced teardown is not recovery" "bash -lc 'bin/fm-teardown.sh task --force'" 'fm-teardown.sh' "$unsafe_teardown_reason"
   # shellcheck disable=SC2016  # single quotes are deliberate: "$TEARDOWN_MODE" is literal test data (an unsafe shell-expanded arg the gate must deny), not an expansion here
   expect_deny "dynamic teardown mode is not recovery" 'bin/fm-teardown.sh task "$TEARDOWN_MODE"' 'fm-teardown.sh' "$unsafe_teardown_reason"
+  # The session-start disarm banner names exactly one host-sentinel command, so
+  # exactly that literal invocation is a recovery exception and nothing else is.
+  expect_allow "explicit sentinel re-enable recovery" 'bin/fm-supervision-sentinel.sh enable'
+  expect_allow "nested sentinel re-enable recovery" "bash -lc 'bin/fm-supervision-sentinel.sh enable'"
+  unsafe_sentinel_reason='[watcher-continuity] SUPERVISION DOWN: 1 task(s) in flight; last watcher beat: never (grace 300s). During recovery only the literal bin/fm-supervision-sentinel.sh enable is allowed; arm, disarm, check, and every other host-sentinel invocation stays blocked until supervision is healthy (blocked: fm-supervision-sentinel.sh)'
+  expect_deny "sentinel disarm is not recovery" 'bin/fm-supervision-sentinel.sh disarm' 'fm-supervision-sentinel.sh' "$unsafe_sentinel_reason"
+  expect_deny "sentinel arm is not recovery" 'bin/fm-supervision-sentinel.sh arm' 'fm-supervision-sentinel.sh' "$unsafe_sentinel_reason"
+  expect_deny "sentinel check is not recovery" 'bin/fm-supervision-sentinel.sh check' 'fm-supervision-sentinel.sh' "$unsafe_sentinel_reason"
+  expect_deny "bare sentinel is not recovery" 'bin/fm-supervision-sentinel.sh' 'fm-supervision-sentinel.sh' "$unsafe_sentinel_reason"
+  expect_deny "over-argued sentinel enable is not recovery" 'bin/fm-supervision-sentinel.sh enable disarm' 'fm-supervision-sentinel.sh' "$unsafe_sentinel_reason"
+  # shellcheck disable=SC2016  # single quotes are deliberate: "$MODE" is literal test data (a shell-expanded arg the gate must deny), not an expansion here
+  expect_deny "dynamic sentinel mode is not recovery" 'bin/fm-supervision-sentinel.sh "$MODE"' 'fm-supervision-sentinel.sh' "$unsafe_sentinel_reason"
   expect_deny "unrelated fleet command" 'bin/fm-crew-state.sh task' 'fm-crew-state.sh'
   expect_deny "recovery bundled with unrelated fleet command" 'bin/fm-wake-drain.sh; bin/fm-send.sh task hi' 'fm-send.sh'
   expect_deny "literal nested fleet command" "bash -lc 'bin/fm-bootstrap.sh'" 'fm-bootstrap.sh'

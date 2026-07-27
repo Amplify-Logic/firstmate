@@ -15,8 +15,10 @@ On 2026-07-04, that exact gap left a parked no-mistakes gate unwatched for about
 
 `bin/fm-turnend-guard.sh` closes the gap by checking the primary's own turn-end path.
 When tasks are in flight and there is no live identity-matched watcher with a fresh beacon, a harness hook must either block the turn end or force a bounded follow-up turn that tells the primary to repair the missing or failed watcher cycle using the recovery instruction in its emitted session-start protocol.
-Before rendering that guidance, the guard invokes `bin/fm-supervision-sentinel.sh check`, which deduplicates and emits the backend-independent active alert owned by [`wedge-alarm.md`](wedge-alarm.md).
-The blocking stderr banner remains authoritative if the active channel is unavailable.
+Before rendering that guidance, the guard invokes `bin/fm-supervision-sentinel.sh note-outage`, which records the durable outage marker the host sentinel later alerts on.
+That mode performs local writes only.
+A hook must never wait on external-channel delivery: per-channel notifier timeouts are not bounded in aggregate, and a Stop hook that outruns its harness timeout would lose the very block it exists to render.
+External delivery through the channels owned by [`wedge-alarm.md`](wedge-alarm.md) belongs solely to the scheduled launchd check, and the blocking stderr banner is authoritative regardless.
 
 ## Shared Predicate
 
