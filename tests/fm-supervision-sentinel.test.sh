@@ -47,6 +47,16 @@ make_primary() {
   : > "$dir/AGENTS.md"
 }
 
+# The service identity the sentinel derives for <home>, recomputed independently
+# from the documented SHA-256 of the canonical home and state paths.
+fm_sentinel_expected_service() { # <home> [domain]
+  local home=$1 domain=${2:-} hash
+  home=$(cd "$home" && pwd -P) || return 1
+  [ -n "$domain" ] || domain="gui/$(id -u)"
+  hash=$(printf '%s\t%s' "$home" "$home/state" | /usr/bin/shasum -a 256 | /usr/bin/awk '{print $1}') || return 1
+  printf '%s/works.earendil.firstmate.supervision-sentinel-v1.%s\n' "$domain" "$hash"
+}
+
 make_recorder() {
   local path=$1 log=$2
   cat > "$path" <<SH
@@ -189,7 +199,7 @@ test_guard_note_outage_records_evidence_without_notifying() {
 }
 
 test_in_harness_modes_are_marker_only_and_honor_a_durable_disarm() {
-  local home="$TMP_ROOT/marker-only" recorder="$TMP_ROOT/record-marker-only" log="$TMP_ROOT/marker-only.log" marker mode
+  local home="$TMP_ROOT/marker-only" recorder="$TMP_ROOT/record-marker-only" log="$TMP_ROOT/marker-only.log" marker mode out status
   make_primary "$home"
   make_recorder "$recorder" "$log"
   printf 'project=test\n' > "$home/state/task.meta"
@@ -200,7 +210,15 @@ test_in_harness_modes_are_marker_only_and_honor_a_durable_disarm() {
   # neither in-harness mode alerts even though both see the same outage.
   for mode in check note-outage; do
     rm -f "$marker"
-    run_mode "$home" "$recorder" "$mode" || fail "$mode failed on an unhealthy home"
+    out=$(run_mode "$home" "$recorder" "$mode"); status=$?
+    if [ "$mode" = check ]; then
+      expect_code 1 "$status" "the operator diagnostic must exit non-zero on a detected outage"
+      assert_contains "$out" 'SUPERVISION DOWN: 1 task(s) in flight' "the operator diagnostic did not report the outage"
+      assert_contains "$out" 'external alert delivery is PENDING' "the operator diagnostic did not say host delivery is still owed"
+    else
+      expect_code 0 "$status" "a hook-owned note must not fail the guard that called it"
+      [ -z "$out" ] || fail "note-outage printed to stdout instead of staying silent for hooks: $out"
+    fi
     [ ! -e "$log" ] || fail "$mode crossed the active-channel boundary: $(cat "$log")"
     [ -s "$marker" ] || fail "$mode did not record the durable outage evidence"
     assert_contains "$(cat "$marker")" 'delivery=pending' "$mode claimed a delivery it never attempted"
@@ -208,19 +226,29 @@ test_in_harness_modes_are_marker_only_and_honor_a_durable_disarm() {
     [ ! -e "$home/state/.supervision-sentinel-last-check" ] || fail "$mode forged the launchd liveness proof"
   done
 
+  # The same diagnostic must be unambiguous about a healthy home, with exit 0.
+  rm -f "$home/state/task.meta" "$marker"
+  out=$(run_mode "$home" "$recorder" check); status=$?
+  expect_code 0 "$status" "the operator diagnostic must exit 0 when there is nothing to supervise"
+  assert_contains "$out" 'OK - no task metadata in flight' "the operator diagnostic did not report the idle verdict"
+  printf 'project=test\n' > "$home/state/task.meta"
+
   # A deliberately disarmed home stays silent on every channel and stops
   # accumulating evidence until an explicit verified enable.
   rm -f "$marker"
   printf 'state=disarmed\n' > "$home/state/.supervision-sentinel.disarmed"
   for mode in check note-outage scheduled-check; do
-    run_mode "$home" "$recorder" "$mode" || fail "$mode failed on a disarmed home"
+    out=$(run_mode "$home" "$recorder" "$mode") || fail "$mode failed on a disarmed home"
     [ ! -e "$log" ] || fail "$mode alerted on a deliberately disarmed home: $(cat "$log")"
     [ ! -e "$marker" ] || fail "$mode wrote outage evidence on a deliberately disarmed home"
+    if [ "$mode" = check ]; then
+      assert_contains "$out" 'DISARMED' "the operator diagnostic hid the deliberate disarm"
+    fi
   done
   [ ! -e "$home/state/.supervision-sentinel-last-check" ] \
     || fail "a disarmed home still published host-service liveness"
   rm -f "$home/state/.supervision-sentinel.disarmed"
-  pass "supervision sentinel: check and note-outage stay marker-only and every mode honors a durable disarm"
+  pass "supervision sentinel: check reports a marker-only verdict, note-outage stays silent, and every mode honors a durable disarm"
 }
 
 test_marker_only_evidence_refreshes_a_new_episode_but_never_a_claim() {
@@ -287,7 +315,7 @@ test_symlinked_home_is_not_reported_as_an_outage() {
   FM_SUPERVISION_SENTINEL_MODE=auto \
     FM_ROOT_OVERRIDE="$real" FM_HOME="$real" FM_STATE_OVERRIDE="$real/state" \
     FM_WEDGE_ALARM_CHANNEL=osascript FM_WEDGE_ALARM_EXEC="$recorder" \
-    "$SENTINEL" check
+    "$SENTINEL" check >/dev/null || fail "a healthy watcher reached through a symlinked home was reported as an outage"
   [ ! -e "$log" ] || fail "a healthy watcher reached through a symlinked home was alarmed as down: $(cat "$log")"
   [ ! -e "$real/state/.supervision-outage-alarm" ] || fail "symlinked-home spelling produced a false outage marker"
 
@@ -298,7 +326,7 @@ test_symlinked_home_is_not_reported_as_an_outage() {
   FM_SUPERVISION_SENTINEL_MODE=auto \
     FM_ROOT_OVERRIDE="$real" FM_HOME="$real" FM_STATE_OVERRIDE="$real/state" \
     FM_WEDGE_ALARM_CHANNEL=osascript FM_WEDGE_ALARM_EXEC="$recorder" \
-    "$SENTINEL" check
+    "$SENTINEL" check >/dev/null && fail "a foreign home in the watcher lock was reported as healthy"
   kill "$holder" 2>/dev/null || true
   wait "$holder" 2>/dev/null || true
   [ -s "$real/state/.supervision-outage-alarm" ] || fail "a foreign home in the watcher lock was accepted as this home"
@@ -403,6 +431,10 @@ test_arm_registers_one_home_scoped_read_only_launchd_job() {
   assert_not_contains "$(cat "$plist")" 'fm-watch-arm.sh' "host fallback must not auto-start a watcher"
   assert_not_contains "$(cat "$plist")" 'fm-supervise-daemon.sh' "host fallback must not auto-start an away-mode daemon"
   assert_not_contains "$(cat "$plist")" '--restart' "host fallback must not restart any supervision process"
+  # The notifier seam exists only for the opt-in real-launchd smoke. A manifest
+  # armed without it must never carry a notifier override, or production delivery
+  # would be silently redirected away from the captain's configured channels.
+  assert_not_contains "$(cat "$plist")" 'FM_WEDGE_ALARM_EXEC' "an ordinary arm pinned a notifier override into the production manifest"
 
   FM_SUPERVISION_SENTINEL_MODE=auto \
     FM_SENTINEL_PLATFORM=Darwin \
@@ -477,16 +509,22 @@ exit 0
 SH
   chmod +x "$fake"
 
-  if run_arm "$home" "$fake" FM_SENTINEL_CHECK_WAIT_SECS=1 2>"$err"; then
+  # The registration retry schedule has its own bounds: a short repeat-ALERT
+  # delay must not shorten how long a broken launchd registration goes unretried.
+  if run_arm "$home" "$fake" FM_SENTINEL_CHECK_WAIT_SECS=1 \
+    FM_SENTINEL_REALARM_SECS=60 FM_SENTINEL_ARM_RETRY_SECS=900 2>"$err"; then
     fail "arm reported success without a single completed scheduled check"
   fi
   assert_contains "$(cat "$err")" 'no check completed' "failed registration did not say why it failed"
   [ -s "$failure" ] || fail "a failed registration left no durable per-home failure record"
   assert_contains "$(cat "$failure")" 'failures=1' "first registration failure was not counted"
+  assert_contains "$(cat "$failure")" 'retry_after_secs=900' "registration retry inherited the repeat-alert delay instead of its own"
+  assert_grep 'retry_at=' "$failure" "failure record carries no retry deadline for session start to surface"
+  assert_grep "service=$(fm_sentinel_expected_service "$home")" "$failure" "failure record lost the exact service identity"
   boots=$(grep -c '^bootstrap ' "$log" || true)
   [ "$boots" -eq 1 ] || fail "first arm bootstrapped $boots services instead of one: $(cat "$log")"
 
-  if run_arm "$home" "$fake" FM_SENTINEL_CHECK_WAIT_SECS=1 2>"$err"; then
+  if run_arm "$home" "$fake" FM_SENTINEL_CHECK_WAIT_SECS=1 FM_SENTINEL_ARM_RETRY_SECS=900 2>"$err"; then
     fail "arm inside its failure cooldown must not claim host monitoring is healthy"
   fi
   assert_contains "$(cat "$err")" 'host outage monitoring is NOT active' "cooldown warning implied monitoring was live"
@@ -496,11 +534,21 @@ SH
   [ "$(grep -c '^kickstart ' "$log" || true)" -eq 0 ] || fail "cooldown still kickstarted the service: $(cat "$log")"
   assert_contains "$(cat "$failure")" 'failures=1' "a cooldown skip must not count as another failure"
 
-  # The explicit enable is the documented recovery action, so it always gets one
-  # real attempt rather than inheriting the cooldown of the failure it repairs.
+  # An explicit enable bypasses the cooldown, but a FAILED enable must not erase
+  # the evidence: the suppressed state has to survive to the next session start,
+  # and its count must keep escalating rather than resetting to a first failure.
+  FM_SUPERVISION_SENTINEL_MODE=auto FM_SENTINEL_PLATFORM=Darwin FM_SENTINEL_LAUNCHCTL="$fake" \
+    FM_SENTINEL_CHECK_WAIT_SECS=1 FM_SENTINEL_ARM_RETRY_SECS=900 \
+    FM_ROOT_OVERRIDE="$home" FM_HOME="$home" FM_STATE_OVERRIDE="$home/state" \
+    "$SENTINEL" enable >/dev/null 2>"$err" && fail "enable reported success while no scheduled check completed"
+  [ -s "$failure" ] || fail "a failed enable cleared the durable failure record before verified recovery"
+  assert_contains "$(cat "$failure")" 'failures=2' "a failed enable reset the escalating failure count"
+  [ "$(grep -c '^bootstrap ' "$log" || true)" -eq 2 ] || fail "enable did not bypass the cooldown for one real attempt: $(cat "$log")"
+
+  # Only a verified registration clears it.
   : > "$healthy"
   FM_SUPERVISION_SENTINEL_MODE=auto FM_SENTINEL_PLATFORM=Darwin FM_SENTINEL_LAUNCHCTL="$fake" \
-    FM_SENTINEL_CHECK_WAIT_SECS=1 \
+    FM_SENTINEL_CHECK_WAIT_SECS=1 FM_SENTINEL_ARM_RETRY_SECS=900 \
     FM_ROOT_OVERRIDE="$home" FM_HOME="$home" FM_STATE_OVERRIDE="$home/state" \
     "$SENTINEL" enable >/dev/null 2>"$err" || fail "explicit enable did not override the failure cooldown: $(cat "$err")"
   [ ! -e "$failure" ] || fail "a verified registration left its failure record behind"
@@ -597,7 +645,7 @@ SH
 # launchd-spawned check resolves the scratch home's own config/wedge-alarm, whose
 # only channel writes a file.
 test_real_launchd_scheduled_check_delivers_end_to_end() {
-  local home alert_log label domain service plist uid i
+  local home alert_log recorder label service plist i
   if [ "${FM_SENTINEL_REAL_LAUNCHD_SMOKE:-0}" != 1 ]; then
     pass "supervision sentinel: real-launchd smoke skipped (FM_SENTINEL_REAL_LAUNCHD_SMOKE=1 on an attended macOS login session runs it)"
     return 0
@@ -609,25 +657,33 @@ test_real_launchd_scheduled_check_delivers_end_to_end() {
   make_primary "$home"
   home=$(cd "$home" && pwd -P)
   alert_log="$home/real-launchd-alert.log"
+  recorder="$TMP_ROOT/record-real-launchd"
+  # Two independent guarantees that this never posts a real desktop notification.
+  # The config directive selects a file-writing `command:` channel, and the plist
+  # notifier seam below intercepts EVERY channel before any real notifier runs -
+  # so even an unreadable config falling back to auto -> osascript cannot escape.
+  make_recorder "$recorder" "$alert_log"
   cat > "$home/config/wedge-alarm" <<EOF
-command:printf '%s\n' "\$1" >> $alert_log
+command:printf '%s\n' "\$1" >> $home/unreached-command-channel.log
 EOF
   printf 'project=test\n' > "$home/state/task.meta"
   touch -t 202001010000 "$home/state/.last-watcher-beat"
 
   # Derive the exact service identity before registering anything, so teardown can
   # target this one label even if arm fails partway through.
-  uid=$(id -u)
-  domain="gui/$uid"
-  label="works.earendil.firstmate.supervision-sentinel-v1.$(printf '%s\t%s' "$home" "$home/state" | /usr/bin/shasum -a 256 | /usr/bin/awk '{print $1}')"
-  service="$domain/$label"
+  service=$(fm_sentinel_expected_service "$home") || fail "could not derive the smoke service identity"
+  label=${service##*/}
   FM_SENTINEL_SMOKE_SERVICE="$service"
 
   FM_SUPERVISION_SENTINEL_MODE=auto FM_ROOT_OVERRIDE="$home" FM_HOME="$home" \
+    FM_CONFIG_OVERRIDE="$home/config" \
+    FM_SENTINEL_TEST_ALERT_EXEC="$recorder" \
     FM_SENTINEL_CHECK_WAIT_SECS=30 \
     "$SENTINEL" arm || fail "real launchd did not retain and verify this home service"
   plist="$home/state/.supervision-sentinel.plist"
   assert_grep "<string>$label</string>" "$plist" "generated manifest label does not match the derived service identity"
+  assert_grep "<string>$recorder</string>" "$plist" "the smoke manifest did not pin its file-writing notifier recorder"
+  assert_grep "<string>$home/config</string>" "$plist" "the smoke manifest did not pin its scratch alert configuration"
   /bin/launchctl print "$service" >/dev/null 2>&1 || fail "real launchd is not holding the exact home service"
   [ -s "$home/state/.supervision-sentinel-last-check" ] \
     || fail "a launchd-spawned scheduled-check never recorded host liveness"
@@ -639,6 +695,9 @@ EOF
   done
   [ -s "$alert_log" ] || fail "the launchd-spawned check never reached its configured active channel"
   assert_grep 'SUPERVISION DOWN: 1 task(s) in flight' "$alert_log" "launchd-delivered alert omitted the outage summary"
+  # The recorded channel proves FM_CONFIG_OVERRIDE reached the job: without it the
+  # job would have resolved `auto` and recorded `osascript` instead.
+  assert_grep 'command' "$alert_log" "the launchd job did not resolve this home's scratch alert configuration"
   assert_grep 'delivery=sent' "$home/state/.supervision-outage-alarm" "launchd-delivered alert did not commit its delivery state"
 
   fm_sentinel_bootout_smoke_service "$service" || fail "exact home service could not be retired after the smoke"
