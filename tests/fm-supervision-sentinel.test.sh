@@ -975,7 +975,7 @@ SH
 # all, whatever any config lookup does. Production plist generation deliberately
 # has no notifier-override knob to abuse instead.
 test_real_launchd_scheduled_check_delivers_end_to_end() {
-  local home alert_log scratch_sentinel label service plist i
+  local home alert_log scratch_sentinel label service plist marker i
   if [ "${FM_SENTINEL_REAL_LAUNCHD_SMOKE:-0}" != 1 ]; then
     pass "supervision sentinel: real-launchd smoke skipped (FM_SENTINEL_REAL_LAUNCHD_SMOKE=1 on an attended macOS login session runs it)"
     return 0
@@ -1020,15 +1020,22 @@ SH
   [ -s "$home/state/.supervision-sentinel-last-check" ] \
     || fail "a launchd-spawned scheduled-check never recorded host liveness"
 
+  # Wait on the COMMITTED delivery record, not on the alert-owner log. The
+  # launchd-spawned check appends to that log and only afterwards takes the claim
+  # lock to write delivery=sent, so a wait that stops at the log can sample the
+  # marker while it still reads `pending` and fail an outcome that is merely a few
+  # milliseconds away. delivery=sent is strictly the later of the two writes, so
+  # waiting for it makes every assertion below race-free.
+  marker="$home/state/.supervision-outage-alarm"
   i=0
-  while [ "$i" -lt 300 ] && [ ! -s "$alert_log" ]; do
+  while [ "$i" -lt 300 ] && ! grep -qF 'delivery=sent' "$marker" 2>/dev/null; do
     sleep 0.2
     i=$((i + 1))
   done
   [ -s "$alert_log" ] || fail "the launchd-spawned check never reached its alert owner"
   assert_grep '--active-alert' "$alert_log" "the launchd job did not invoke its alert owner through the one-shot alert entry point"
   assert_grep 'SUPERVISION DOWN: 1 task(s) in flight' "$alert_log" "launchd-delivered alert omitted the outage summary"
-  assert_grep 'delivery=sent' "$home/state/.supervision-outage-alarm" "launchd-delivered alert did not commit its delivery state"
+  assert_grep 'delivery=sent' "$marker" "launchd-delivered alert did not commit its delivery state"
 
   fm_sentinel_bootout_smoke_service "$service" || fail "exact home service could not be retired after the smoke"
   FM_SENTINEL_SMOKE_SERVICE=
