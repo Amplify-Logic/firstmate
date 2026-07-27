@@ -43,7 +43,9 @@
 #   FM_ROOT_OVERRIDE                   Tracked code root override.
 #   FM_STATE_OVERRIDE                  State directory override.
 #   FM_CONFIG_OVERRIDE                 Alert configuration directory override.
-#   FM_GUARD_GRACE                     Watcher-beacon grace seconds (default 300).
+#   FM_GUARD_GRACE                     Watcher-beacon grace seconds for THIS process
+#                                      (default 300). The generated manifest always
+#                                      pins the durable default, never this value.
 #   FM_SUPERVISION_SENTINEL_MODE=off   Disable automatic registration and checks.
 #   FM_SENTINEL_INTERVAL_SECS          launchd check interval (default 60, minimum 15).
 #   FM_SENTINEL_REALARM_SECS           first repeat ALERT delay (default 300, minimum 60).
@@ -70,7 +72,16 @@ FM_SENTINEL_HOME_CANON=$(cd "$FM_HOME" 2>/dev/null && pwd -P) || exit 1
 FM_SENTINEL_STATE="${FM_STATE_OVERRIDE:-$FM_HOME/state}"
 FM_SENTINEL_WATCH="$FM_SENTINEL_DIR/fm-watch.sh"
 FM_SENTINEL_ALERT_OWNER="$FM_SENTINEL_DIR/fm-supervise-daemon.sh"
-FM_SENTINEL_GRACE=${FM_GUARD_GRACE:-300}
+# The durable configured beacon grace. The generated manifest pins THIS value and
+# never the ambient FM_GUARD_GRACE of whoever happened to run the arm, so service
+# identity is a function of durable configuration alone: a one-off
+# `FM_GUARD_GRACE=30 bin/fm-watch-arm.sh` can neither reconfigure the host check's
+# outage threshold for every later scheduled run nor move the manifest digest and
+# force a bootout/bootstrap on the next ordinary arm. An ambient value still
+# applies to the evaluation this process performs, which is what a guard-invoked
+# mode needs to match its caller's own grace.
+FM_SENTINEL_DEFAULT_GRACE=300
+FM_SENTINEL_GRACE=${FM_GUARD_GRACE:-$FM_SENTINEL_DEFAULT_GRACE}
 FM_SENTINEL_INTERVAL=${FM_SENTINEL_INTERVAL_SECS:-60}
 FM_SENTINEL_REALARM=${FM_SENTINEL_REALARM_SECS:-300}
 FM_SENTINEL_MAX_REALARM=${FM_SENTINEL_MAX_REALARM_SECS:-3600}
@@ -129,7 +140,7 @@ fm_sentinel_positive_integer() { # <value> <fallback> [minimum]
 }
 
 fm_sentinel_normalize_tunables() {
-  FM_SENTINEL_GRACE=$(fm_sentinel_positive_integer "$FM_SENTINEL_GRACE" 300 1)
+  FM_SENTINEL_GRACE=$(fm_sentinel_positive_integer "$FM_SENTINEL_GRACE" "$FM_SENTINEL_DEFAULT_GRACE" 1)
   FM_SENTINEL_REALARM=$(fm_sentinel_positive_integer "$FM_SENTINEL_REALARM" 300 60)
   FM_SENTINEL_MAX_REALARM=$(fm_sentinel_positive_integer "$FM_SENTINEL_MAX_REALARM" 3600 300)
   [ "$FM_SENTINEL_MAX_REALARM" -ge "$FM_SENTINEL_REALARM" ] || FM_SENTINEL_MAX_REALARM=$FM_SENTINEL_REALARM
@@ -205,7 +216,7 @@ fm_sentinel_write_plist() { # <label> <interval>
     printf '%s\n' '  <key>EnvironmentVariables</key>' '  <dict>'
     fm_sentinel_plist_env FM_HOME "$FM_SENTINEL_HOME_CANON"
     fm_sentinel_plist_env FM_ROOT_OVERRIDE "$FM_SENTINEL_ROOT_CANON"
-    fm_sentinel_plist_env FM_GUARD_GRACE "$FM_SENTINEL_GRACE"
+    fm_sentinel_plist_env FM_GUARD_GRACE "$FM_SENTINEL_DEFAULT_GRACE"
     fm_sentinel_plist_env FM_SENTINEL_INTERVAL_SECS "$interval"
     fm_sentinel_plist_env FM_SENTINEL_REALARM_SECS "$FM_SENTINEL_REALARM"
     fm_sentinel_plist_env FM_SENTINEL_MAX_REALARM_SECS "$FM_SENTINEL_MAX_REALARM"
@@ -278,8 +289,9 @@ fm_sentinel_clear_arm_failure() {
   rm -f "$FM_SENTINEL_ARM_FAILURE" 2>/dev/null || true
 }
 
-# One stderr line describing a suppressed registration, for the operator-facing
-# diagnostic. Silent when this home has no failure record.
+# One stdout line describing a suppressed registration, on the same verdict
+# channel the operator-facing diagnostic reports through. Silent when this home has
+# no failure record.
 fm_sentinel_report_arm_state() {
   fm_supervision_arm_failure_status "$FM_SENTINEL_STATE"
   [ "$FM_SUP_ARM_FAILED" = true ] || return 0
@@ -388,7 +400,7 @@ fm_sentinel_arm_registration() { # <launchctl> <domain> <label> <service> <inter
 }
 
 fm_sentinel_arm() {
-  local platform launchctl label domain service interval i rc
+  local platform launchctl label domain service interval deadline rc
   fm_sentinel_mode_enabled || return 0
   # Primary scope first: a child task worktree or a non-primary home is a silent
   # no-op on every platform, so an unsupported host reports its real limitation
@@ -413,15 +425,22 @@ fm_sentinel_arm() {
 
   if ! fm_lock_try_acquire "$FM_SENTINEL_ARM_LOCK"; then
     # Another home-scoped arm is already converging on the same launchd label.
-    # Wait briefly for its publication instead of reporting a false failure.
-    i=0
-    while [ "$i" -lt 40 ]; do
+    # Wait out the holder's OWN legitimate convergence bound - a bootout drain plus
+    # the bounded first-check wait - instead of giving up after a fraction of it and
+    # telling the captain the alarm is unavailable while registration is in fact
+    # succeeding. If nothing converges in that window, only durable evidence may
+    # claim a failure: the holder records it, so a silent return here can never hide
+    # a suppressed registration from the session-start banner or the diagnostic.
+    deadline=$(( $(date +%s) + FM_SENTINEL_CHECK_WAIT + 5 ))
+    while :; do
       if "$launchctl" print "$service" >/dev/null 2>&1 && fm_sentinel_check_recent $((interval * 2 + 15)); then
         return 0
       fi
-      sleep 0.05
-      i=$((i + 1))
+      [ "$(date +%s)" -lt "$deadline" ] || break
+      sleep 0.2
     done
+    fm_supervision_arm_failure_status "$FM_SENTINEL_STATE"
+    [ "$FM_SUP_ARM_FAILED" = true ] || return 0
     return 1
   fi
   fm_sentinel_arm_registration "$launchctl" "$domain" "$label" "$service" "$interval"
@@ -794,12 +813,20 @@ fm_sentinel_check() { # <scheduled|diagnostic|note>
       "$FM_SENTINEL_DIR/fm-supervision-sentinel.sh"
     return 0
   fi
-  if [ "$record_host" -eq 1 ]; then
-    # Publish liveness only for launchd's private entry point and only when the
-    # one-shot check exits. Guard-owned checks cannot forge host-service health.
-    trap 'fm_sentinel_record_check || true' EXIT
-  fi
   fm_supervision_status "$FM_SENTINEL_STATE" "$FM_SENTINEL_GRACE"
+  if [ "$record_host" -eq 1 ]; then
+    # Publish liveness only for launchd's private entry point, and only once this
+    # process has provably resolved this home and read its supervision state - that
+    # is the whole claim the proof makes. Guard-owned modes never reach this, so
+    # they still cannot forge host-service health.
+    #
+    # It is recorded HERE rather than from an exit trap because a registration waits
+    # a bounded FM_SENTINEL_CHECK_WAIT_SECS for this proof while the alert delivery
+    # below has no aggregate bound: from the trap, one slow notifier channel pushed
+    # the proof past that wait and a perfectly healthy launchd service was recorded
+    # as a registration failure with a retry cooldown behind it.
+    fm_sentinel_record_check || true
+  fi
   if [ "$FM_SUP_IN_FLIGHT" -eq 0 ]; then
     [ "$clear_on_recovery" -eq 0 ] || fm_sentinel_clear_alarm
     if [ "$report" -eq 1 ]; then

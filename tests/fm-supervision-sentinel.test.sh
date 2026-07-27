@@ -655,6 +655,72 @@ test_watch_arm_validates_arguments_before_sentinel_registration() {
   pass "supervision sentinel: watcher arm validates argv before host registration"
 }
 
+# The generated job sets RunAtLoad, so registration itself triggers a scheduled
+# check. Registering before the watcher is confirmed would therefore alert on the
+# very outage the arm is ending, which is what every reboot looks like: the
+# gui/<uid> agent is gone while task metadata survives. This drives the real
+# bin/fm-watch-arm.sh against a scratch tree whose sentinel records the supervision
+# state it was invoked in, so the ordering is observed rather than asserted.
+test_watch_arm_registers_the_host_sentinel_only_after_a_healthy_watcher() {
+  local home="$TMP_ROOT/arm-order" order out armpid i
+  make_primary "$home"
+  home=$(cd "$home" && pwd -P)
+  order="$home/arm-order.log"
+  out="$home/arm.out"
+  cp "$ROOT/bin/fm-watch-arm.sh" "$ROOT/bin/fm-wake-lib.sh" "$home/bin/" \
+    || fail "could not stage the scratch watcher-arm tree"
+  cat > "$home/bin/fm-watch.sh" <<SH
+#!/usr/bin/env bash
+set -u
+FM_HOME=$home
+. "$home/bin/fm-wake-lib.sh"
+mkdir -p "$home/state/.watch.lock"
+printf '%s\n' "\$\$" > "$home/state/.watch.lock/pid"
+printf '%s\n' "$home" > "$home/state/.watch.lock/fm-home"
+printf '%s\n' "$home/bin/fm-watch.sh" > "$home/state/.watch.lock/watcher-path"
+fm_pid_identity "\$\$" > "$home/state/.watch.lock/pid-identity"
+: > "$home/state/.last-watcher-beat"
+printf 'watcher-healthy\n' >> "$order"
+i=0
+while [ "\$i" -lt 300 ]; do
+  sleep 0.1
+  i=\$((i + 1))
+done
+SH
+  cat > "$home/bin/fm-supervision-sentinel.sh" <<SH
+#!/usr/bin/env bash
+set -u
+FM_HOME=$home
+. "$home/bin/fm-wake-lib.sh"
+if fm_watcher_healthy "$home/state" "$home/bin/fm-watch.sh" 300 "$home"; then
+  printf 'sentinel-arm healthy\n' >> "$order"
+else
+  printf 'sentinel-arm outage\n' >> "$order"
+fi
+SH
+  chmod +x "$home/bin/fm-watch.sh" "$home/bin/fm-supervision-sentinel.sh"
+  printf 'project=test\n' > "$home/state/task.meta"
+
+  FM_HOME="$home" "$home/bin/fm-watch-arm.sh" > "$out" 2>&1 &
+  armpid=$!
+  i=0
+  while [ "$i" -lt 200 ] && ! grep -q '^sentinel-arm ' "$order" 2>/dev/null; do
+    sleep 0.1
+    i=$((i + 1))
+  done
+  kill -TERM "$armpid" 2>/dev/null || true
+  wait "$armpid" 2>/dev/null || true
+
+  assert_contains "$(cat "$out")" 'watcher: started pid=' "the scratch arm never confirmed its own watcher: $(cat "$out")"
+  assert_grep 'sentinel-arm healthy' "$order" "the host service was not registered once the watcher was observed healthy"
+  assert_no_grep 'sentinel-arm outage' "$order" "the host service was registered while the home was still in the outage this arm was resolving"
+  [ "$(head -n 1 "$order")" = watcher-healthy ] \
+    || fail "host registration preceded the watcher it is meant to backstop: $(cat "$order")"
+  [ "$(grep -c '^sentinel-arm ' "$order" || true)" -eq 1 ] \
+    || fail "one arm registered the host service more than once: $(cat "$order")"
+  pass "supervision sentinel: the watcher arm registers the host service only after observing a healthy watcher"
+}
+
 test_real_channel_uses_unambiguous_notification_title_without_posting() {
   local home="$TMP_ROOT/title" fakebin log i
   make_primary "$home"
@@ -768,5 +834,6 @@ test_unconverged_arm_backs_off_instead_of_churning_launchd
 test_rolled_back_clock_does_not_suppress_registration_forever
 test_explicit_disarm_is_durable_home_scoped_and_reversible
 test_watch_arm_validates_arguments_before_sentinel_registration
+test_watch_arm_registers_the_host_sentinel_only_after_a_healthy_watcher
 test_real_channel_uses_unambiguous_notification_title_without_posting
 test_real_launchd_scheduled_check_delivers_end_to_end
