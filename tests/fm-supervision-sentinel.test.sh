@@ -723,22 +723,44 @@ SH
 
 # Away mode is not exempt from the observed-health premise. The away entry execs
 # the daemon, so the registration belongs to the daemon: the one process that can
-# observe the watcher it starts. This asserts the ownership boundary and the gate,
-# since the daemon's supervision loop is not reachable as a unit.
+# observe the watcher it starts. This asserts the ownership boundary, the ordering,
+# the cadence gate, and that ONLY a verified registration latches - a days-long away
+# session must never treat one transient launchd failure as done-trying. The
+# daemon's supervision loop is not reachable as a unit; the record format the
+# catch-up depends on is unit-tested in tests/fm-daemon.test.sh.
 test_away_mode_defers_host_registration_until_the_daemon_sees_a_healthy_watcher() {
-  local afk="$ROOT/bin/fm-afk-start.sh" daemon="$ROOT/bin/fm-supervise-daemon.sh" body gate arm
+  local afk="$ROOT/bin/fm-afk-start.sh" daemon="$ROOT/bin/fm-supervise-daemon.sh"
+  local body probe arm latch cadence
   assert_not_contains "$(cat "$afk")" 'SENTINEL" arm' \
     "the away entry still registers the host service before any watcher can be observed healthy"
   body=$(/usr/bin/awk '/^  arm_host_sentinel\(\) \{$/ { p = 1 } p { print } p && /^  \}$/ { exit }' "$daemon")
   [ -n "$body" ] || fail "the away daemon has no host-sentinel registration helper"
   assert_contains "$body" 'SENTINEL" arm' "the away daemon's helper never registers the host service"
-  gate=$(printf '%s\n' "$body" | grep -n 'fm_watcher_healthy' | head -1 | cut -d: -f1)
+  probe=$(printf '%s\n' "$body" | grep -n 'fm_watcher_healthy' | head -1 | cut -d: -f1)
   arm=$(printf '%s\n' "$body" | grep -n 'SENTINEL" arm' | head -1 | cut -d: -f1)
-  [ -n "$gate" ] || fail "the away daemon registers without observing a healthy watcher: $body"
-  [ "$gate" -lt "$arm" ] || fail "the away daemon registers before it observes a healthy watcher: $body"
+  [ -n "$probe" ] || fail "the away daemon registers without observing a healthy watcher: $body"
+  [ "$probe" -lt "$arm" ] || fail "the away daemon registers before it observes a healthy watcher: $body"
   [ "$(grep -c 'SENTINEL" arm' "$daemon" || true)" -eq 1 ] \
     || fail "the away daemon registers the host service outside its gated helper"
-  pass "supervision sentinel: away mode defers host registration until the daemon observes a healthy watcher"
+
+  # Only success latches, so a transient failure cannot disable host outage
+  # detection for the rest of an unattended away session.
+  [ "$(printf '%s\n' "$body" | grep -c 'SENTINEL_ARMED=1' || true)" -eq 1 ] \
+    || fail "the away daemon latches its host registration in more than one place: $body"
+  latch=$(printf '%s\n' "$body" | grep -n 'SENTINEL_ARMED=1' | head -1 | cut -d: -f1)
+  [ "$arm" -lt "$latch" ] || fail "the away daemon latches host registration before it is verified: $body"
+
+  # The multi-fork health probe and the retry both run on the housekeeping cadence,
+  # never the loop's one-second tick, and the retry delay is capped.
+  cadence=$(printf '%s\n' "$body" | grep -n 'SENTINEL_NEXT_ATTEMPT' | head -1 | cut -d: -f1)
+  [ -n "$cadence" ] || fail "the away daemon has no cadence gate on its health probe: $body"
+  [ "$cadence" -lt "$probe" ] \
+    || fail "the away daemon runs its multi-fork health probe before the cadence gate: $body"
+  assert_contains "$body" 'SENTINEL_RETRY_DELAY' "a failed away registration is never retried: $body"
+  assert_contains "$body" 'SENTINEL_RETRY_MAX' "the away registration retry delay has no cap: $body"
+  assert_contains "$body" 'sentinel_gap_append' \
+    "the away daemon records no durable evidence that host alarms were unavailable: $body"
+  pass "supervision sentinel: away mode defers host registration to an observed healthy watcher, retries on cadence, and latches only success"
 }
 
 install_held_arm_lock() { # <home> <holder-pid>

@@ -28,6 +28,13 @@ STATE="${FM_STATE_OVERRIDE:-$FM_HOME/state}"
 GATE="$STATE/.afk-return-catchup"
 LOCK="$STATE/.afk-return-catchup.lock"
 
+# Canonical names of the shared supervision records (FM_SUP_AWAY_GAP_NAME for the
+# away-mode host-alarm availability ledger folded into catch-up below). Sourcing is
+# side-effect free, so the advertised read-only `guard` mode stays literal.
+# shellcheck source=bin/fm-supervision-lib.sh
+. "$SCRIPT_DIR/fm-supervision-lib.sh"
+HOST_ALARM_GAPS="$STATE/$FM_SUP_AWAY_GAP_NAME"
+
 usage() {
   sed -n '2,7p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
 }
@@ -119,11 +126,27 @@ print_blockers() {  # <file>
   done < "$file"
 }
 
+# Every away stretch the host outage alarm did not cover, as the away daemon
+# recorded it. A stretch with no host alarm cannot be re-derived once the daemon is
+# gone, so this is read as historical evidence and reported even when it has
+# already been repaired: an unprotected window the captain never saw is exactly
+# what the return catch-up exists to surface.
+summarize_host_alarm_gaps() {
+  local at status detail
+  [ -s "$HOST_ALARM_GAPS" ] || return 0
+  while IFS="$(printf '\t')" read -r at status detail; do
+    case "$status" in
+      unavailable|restored) printf '%s (%s)\n' "$detail" "$at" ;;
+    esac
+  done < "$HOST_ALARM_GAPS"
+}
+
 clear_delivery_artifacts() {
   rm -f \
     "$STATE/.subsuper-escalations" \
     "$STATE/.subsuper-escalations.since" \
-    "$STATE/.subsuper-inject-wedged"
+    "$STATE/.subsuper-inject-wedged" \
+    "$HOST_ALARM_GAPS"
 }
 
 return_guard() {
@@ -167,6 +190,7 @@ return_reconcile() {
     escalations=$(cat "$STATE/.subsuper-escalations" 2>/dev/null || true)
     append_evidence escalation "$escalations" "$evidence"
   fi
+  append_evidence host-alarm "$(summarize_host_alarm_gaps)" "$evidence"
 
   scan_open_blockers > "$blockers"
   if [ "$lifecycle_ok" -ne 1 ] || [ -s "$blockers" ]; then

@@ -62,7 +62,11 @@ It assumes the watcher or away daemon can still disappear at any time and bounds
 
 Both supervision entries idempotently register `bin/fm-supervision-sentinel.sh` as a per-home macOS launchd agent, and both register only after observing an identity-matched live watcher with a fresh beacon.
 `bin/fm-watch-arm.sh` registers at most once per arm, once it has observed and reported a healthy watcher.
-Away mode is not exempt: `bin/fm-afk-start.sh` `exec`s the daemon, so the registration belongs to `bin/fm-supervise-daemon.sh`, which registers at most once per daemon and only once it has observed the watcher it started as healthy.
+Away mode is not exempt: `bin/fm-afk-start.sh` `exec`s the daemon, so the registration belongs to `bin/fm-supervise-daemon.sh`, which registers only once it has observed the watcher it started as healthy.
+That daemon runs for days, so only a verified registration latches: a failure schedules another attempt on the housekeeping cadence, doubling to a `AFK_SENTINEL_RETRY_MAX_DEFAULT` cap (300 seconds, overridable with `FM_AFK_SENTINEL_RETRY_MAX_SECS`), so no transient launchd failure can leave the unattended window without host outage detection.
+Both the retry and its `fm_watcher_healthy` probe are gated to that same cadence, so a home whose watcher never becomes healthy cannot make the daemon pay a multi-fork predicate on its one-second loop tick.
+Whether a host alarm covered a given away stretch is not re-derivable once the daemon is gone, so every transition is appended to `state/.supervision-sentinel.away-gap` and folded into the return catch-up as `host-alarm` evidence by `bin/fm-afk-return.sh`, which is also the only owner allowed to clear it.
+An unprotected stretch is therefore visible after the captain returns even when it was already repaired, and a stretch that never closed is visible as an open record.
 The generated job sets `RunAtLoad`, so a bootstrap or kickstart runs a scheduled check immediately; registering before the watcher is confirmed would deliver a real `SUPERVISION DOWN` alert for the very outage that entry is ending — on every reboot, since the `gui/<uid>` agent is gone while task metadata survives.
 The alarm's premise is that supervision was healthy and then stopped, so a home never observed healthy has no outage to report and stays unregistered until one is.
 launchd invokes its one-shot `scheduled-check` mode every 60 seconds outside the harness process tree.

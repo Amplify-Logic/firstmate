@@ -105,6 +105,15 @@ fm_supervision_unhealthy() {
 # spelled exactly once in the tree.
 FM_SUP_ARM_RECORD_NAME=.supervision-sentinel.arm-failure
 
+# Canonical basename of the durable away-mode host-alarm availability ledger:
+# one tab-separated `<iso-timestamp> <unavailable|restored> <detail>` row per
+# transition, appended by the away daemon and folded into the return catch-up by
+# bin/fm-afk-return.sh. An away stretch with no host alarm is not re-derivable
+# after the fact, so this record is historical evidence: only the return catch-up
+# that surfaces it may clear it, never a fresh away entry.
+# shellcheck disable=SC2034 # Read by callers after sourcing.
+FM_SUP_AWAY_GAP_NAME=.supervision-sentinel.away-gap
+
 # fm_supervision_arm_failure_status <state-dir>
 # Reads the durable host-sentinel registration-failure record and populates:
 #   FM_SUP_ARM_RECORD       resolved path of the record, set whether or not it exists

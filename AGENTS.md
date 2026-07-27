@@ -110,7 +110,7 @@ state/               volatile runtime signals; gitignored
   .hash-* .count-* .stale-* .stale-since-* .paused-* .wedge-escalations-* .seen-* .hb-surfaced-* .last-* .heartbeat-streak   watcher internals; never touch
   .watch-triage.log  watcher's absorbed-wake debug log (size-capped); never relied on, safe to delete
   .last-watcher-beat watcher liveness beacon, touched every poll (including while absorbing benign wakes); guard scripts read it
-  .supervision-outage-alarm .supervision-sentinel* host-level watcher-outage alarm and per-home launchd registration state; `.supervision-sentinel.disarmed` is the durable explicit opt-out surfaced at session start; see docs/watcher-continuity.md
+  .supervision-outage-alarm .supervision-sentinel* host-level watcher-outage alarm and per-home launchd registration state; `.supervision-sentinel.disarmed` is the durable explicit opt-out surfaced at session start, `.supervision-sentinel.away-gap` is the away-mode ledger of stretches the host alarm did not cover, surfaced by the return catch-up; see docs/watcher-continuity.md
   .subsuper-* .supervise-daemon.*   sub-supervisor internals; never touch
 .no-mistakes/        local validation state and evidence; gitignored
 ```

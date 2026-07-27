@@ -1847,7 +1847,34 @@ test_startup_abort_clears_afk_flag() {
   pass "startup_abort: clears state/.afk on refused daemon start"
 }
 
+# The away daemon writes this ledger and bin/fm-afk-return.sh parses it, so the
+# tab-separated row shape is a contract between two files. Whether a host alarm
+# covered an away stretch is not re-derivable afterwards, so the record must stay
+# append-only and must survive text a detail string could otherwise break.
+test_sentinel_gap_append_records_a_parseable_row_per_transition() {
+  local dir ledger rows at status detail
+  dir=$(make_supercase sentinel-gap-ledger)
+  ledger="$dir/state/$FM_SUP_AWAY_GAP_NAME"
+
+  sentinel_gap_append "$ledger" unavailable 'launchd registration failed while away'
+  sentinel_gap_append "$ledger" restored $'restored after\t4200s\nand 9 attempts'
+  rows=$(wc -l < "$ledger" | tr -d '[:space:]')
+  [ "$rows" -eq 2 ] || fail "one transition per row was not preserved ($rows rows): $(cat "$ledger")"
+
+  IFS="$(printf '\t')" read -r at status detail < "$ledger"
+  [ "$status" = unavailable ] || fail "the first row lost its status field: $(head -1 "$ledger")"
+  assert_contains "$at" "$(date '+%Y-%m-%dT')" "the first row carries no ISO timestamp: $at"
+  [ "$detail" = 'launchd registration failed while away' ] || fail "the first row lost its detail: $detail"
+
+  IFS="$(printf '\t')" read -r at status detail < <(tail -n 1 "$ledger")
+  [ "$status" = restored ] || fail "the second row lost its status field: $(tail -n 1 "$ledger")"
+  [ "$detail" = 'restored after 4200s and 9 attempts' ] \
+    || fail "embedded tabs/newlines were not flattened out of the detail field: $detail"
+  pass "sentinel_gap_append: one parseable away host-alarm row per transition, tab/newline safe"
+}
+
 test_afk_start_refuses_when_flag_cannot_be_written
+test_sentinel_gap_append_records_a_parseable_row_per_transition
 test_afk_start_ignores_stale_pidfile_without_lock
 test_afk_start_reclaims_stale_daemon_lock_reused_pid
 test_daemon_state_root_uses_fm_home

@@ -174,6 +174,12 @@ FM_HOME="${FM_HOME:-${FM_ROOT_OVERRIDE:-$FM_ROOT}}"
 # shellcheck source=bin/fm-supervisor-target-lib.sh
 . "$FM_DAEMON_DIR/fm-supervisor-target-lib.sh"
 
+# Canonical names of the shared supervision records (FM_SUP_AWAY_GAP_NAME for the
+# away-mode host-alarm availability ledger this daemon appends to). Sourcing is
+# side-effect free.
+# shellcheck source=bin/fm-supervision-lib.sh
+. "$FM_DAEMON_DIR/fm-supervision-lib.sh"
+
 # --- tunables ---------------------------------------------------------------
 # Supervisor backends this daemon knows how to inject into today. zellij, orca,
 # and cmux are real backends elsewhere in firstmate (bin/fm-backend.sh) but this
@@ -188,6 +194,11 @@ STALE_ESCALATE_SECS_DEFAULT=240
 ESCALATE_BATCH_SECS_DEFAULT=90
 HEARTBEAT_SCAN_SECS_DEFAULT=300
 HOUSEKEEPING_TICK_DEFAULT=15
+# Cap on the away daemon's own host-sentinel registration retry delay. The retry
+# starts at one housekeeping tick and doubles up to this bound, so a launchd
+# failure that lasts for days still gets a fresh attempt every few minutes rather
+# than latching host outage detection off for the whole unattended window.
+AFK_SENTINEL_RETRY_MAX_DEFAULT=300
 # Max time a buffered escalation may sit undelivered before the daemon retries
 # the normal flush path and, if that cannot confirm a submit, raises a loud wedge
 # alarm. The escape hatch makes a guard false-positive visible instead of silent.
@@ -239,6 +250,18 @@ _file_age() {  # seconds since mtime; very large if missing
 _hash_text() {
   if command -v md5 >/dev/null 2>&1; then printf '%s' "$1" | md5 -q
   else printf '%s' "$1" | md5sum | cut -d ' ' -f1; fi
+}
+
+# Append one row to the away-mode host-alarm availability ledger. Whether host
+# outage alarms covered a given away stretch cannot be re-derived after the fact,
+# so each transition is recorded durably here and folded into the return catch-up
+# by bin/fm-afk-return.sh. One row per transition keeps it bounded over a days-long
+# away session; the loop below owns the transitions, this owns the record format.
+sentinel_gap_append() {  # <ledger> <unavailable|restored> <detail>
+  local ledger=$1 status=$2 detail=$3
+  printf '%s\t%s\t%s\n' \
+    "$(date '+%Y-%m-%dT%H:%M:%S%z')" "$status" "$(printf '%s' "$detail" | LC_ALL=C tr '\t\r\n' '   ')" \
+    >> "$ledger" 2>/dev/null || true
 }
 
 # --- presence-gating helpers (PURE-ish: side-effect-free reads of state) -----
@@ -1361,7 +1384,15 @@ fm_super_main() {
 
   local WATCH="$FM_DAEMON_DIR/fm-watch.sh"
   local SENTINEL="$FM_DAEMON_DIR/fm-supervision-sentinel.sh"
+  local SENTINEL_GAP="$STATE/$FM_SUP_AWAY_GAP_NAME"
   local SENTINEL_ARMED=0
+  local SENTINEL_GAP_OPEN=0
+  local SENTINEL_GAP_SINCE=0
+  local SENTINEL_ARM_FAILURES=0
+  local SENTINEL_NEXT_ATTEMPT=0
+  local SENTINEL_RETRY_BASE=${FM_HOUSEKEEPING_TICK:-$HOUSEKEEPING_TICK_DEFAULT}
+  local SENTINEL_RETRY_MAX=${FM_AFK_SENTINEL_RETRY_MAX_SECS:-$AFK_SENTINEL_RETRY_MAX_DEFAULT}
+  local SENTINEL_RETRY_DELAY
   local LOG="$STATE/.supervise-daemon.log"
   local WATCH_ERR="$STATE/.supervise-daemon.watcher.err"
   local LOCK="$STATE/.supervise-daemon.lock"
@@ -1371,6 +1402,10 @@ fm_super_main() {
   local CRASH_WINDOW=${FM_CRASH_WINDOW:-$CRASH_WINDOW_DEFAULT}
   local CRASH_BACKOFF=${FM_CRASH_BACKOFF:-$CRASH_BACKOFF_DEFAULT}
   local CRASH_NORMAL_SLEEP=${FM_CRASH_NORMAL_SLEEP:-$CRASH_NORMAL_SLEEP_DEFAULT}
+  case "$SENTINEL_RETRY_BASE" in ''|*[!0-9]*|0) SENTINEL_RETRY_BASE=$HOUSEKEEPING_TICK_DEFAULT ;; esac
+  case "$SENTINEL_RETRY_MAX" in ''|*[!0-9]*|0) SENTINEL_RETRY_MAX=$AFK_SENTINEL_RETRY_MAX_DEFAULT ;; esac
+  [ "$SENTINEL_RETRY_MAX" -ge "$SENTINEL_RETRY_BASE" ] || SENTINEL_RETRY_MAX=$SENTINEL_RETRY_BASE
+  SENTINEL_RETRY_DELAY=$SENTINEL_RETRY_BASE
 
   [ -x "$WATCH" ] || { echo "error: watcher not found or not executable: $WATCH" >&2; exit 1; }
 
@@ -1516,28 +1551,59 @@ fm_super_main() {
     WATCHER_PID=$!
   }
 
-  # Away mode's host-sentinel registration: at most once per daemon, and only
-  # once THIS daemon has observed an identity-matched live watcher with a fresh
-  # beacon. Away mode is not exempt from the rule bin/fm-watch-arm.sh applies to
-  # the always-on watcher entry; it is simply enforced here, in the process that
-  # can actually observe the watcher it starts, rather than in the entry script
-  # that execs it.
+  # Away mode's host-sentinel registration: attempted only once THIS daemon has
+  # observed an identity-matched live watcher with a fresh beacon, latched only by
+  # a VERIFIED registration, and otherwise retried forever under a capped backoff.
   #
-  # The generated launchd job sets RunAtLoad, so a bootstrap or kickstart runs a
-  # scheduled host check immediately. Registering at away-mode entry, before the
-  # watcher this daemon starts can beat, made that first check see in-flight work
-  # with no healthy watcher and deliver a real SUPERVISION DOWN alert for the very
-  # outage away mode was starting up to end - on every reboot, since the
+  # Away mode is not exempt from the rule bin/fm-watch-arm.sh applies to the
+  # always-on watcher entry; it is simply enforced here, in the process that can
+  # actually observe the watcher it starts, rather than in the entry script that
+  # execs it. The generated launchd job sets RunAtLoad, so a bootstrap or kickstart
+  # runs a scheduled host check immediately. Registering at away-mode entry, before
+  # the watcher this daemon starts can beat, made that first check see in-flight
+  # work with no healthy watcher and deliver a real SUPERVISION DOWN alert for the
+  # very outage away mode was starting up to end - on every reboot, since the
   # gui/<uid> agent is gone while task metadata survives. The alarm's premise is
-  # that supervision was healthy and then stopped, so a home never observed
-  # healthy has no outage to report and stays unregistered until one is.
+  # that supervision was healthy and then stopped, so a home never observed healthy
+  # has no outage to report and stays unregistered until one is.
+  #
+  # Only success latches. This daemon runs for days, so treating one transient
+  # launchd failure as done-trying would disable host outage detection for exactly
+  # the unattended window the sentinel exists to cover; the sentinel's own
+  # exponential arm-failure cooldown already keeps repeated arms from churning
+  # launchd. Both the retry and the health probe are gated to the housekeeping
+  # cadence: fm_watcher_healthy forks a handful of processes, so a home whose
+  # watcher never becomes healthy must not pay that on the loop's ~1s tick.
   arm_host_sentinel() {
+    local now
     [ "$SENTINEL_ARMED" -eq 0 ] || return 0
     [ -x "$SENTINEL" ] || return 0
+    now=$(_now)
+    [ "$now" -ge "$SENTINEL_NEXT_ATTEMPT" ] || return 0
+    SENTINEL_NEXT_ATTEMPT=$((now + SENTINEL_RETRY_BASE))
     fm_watcher_healthy "$STATE" "$WATCH" "${FM_GUARD_GRACE:-300}" "$FM_HOME" || return 0
-    SENTINEL_ARMED=1
-    "$SENTINEL" arm && return 0
-    log "WARNING: host-level supervision-outage alarm is unavailable for this home"
+    if "$SENTINEL" arm; then
+      SENTINEL_ARMED=1
+      if [ "$SENTINEL_GAP_OPEN" -eq 1 ]; then
+        SENTINEL_GAP_OPEN=0
+        sentinel_gap_append "$SENTINEL_GAP" restored \
+          "host outage alarms restored after $((now - SENTINEL_GAP_SINCE))s unavailable and $SENTINEL_ARM_FAILURES failed launchd registration attempt(s) during this away session"
+        log "host-level supervision-outage alarm restored after ${SENTINEL_ARM_FAILURES} failed registration attempt(s)"
+      fi
+      return 0
+    fi
+    SENTINEL_ARM_FAILURES=$((SENTINEL_ARM_FAILURES + 1))
+    SENTINEL_NEXT_ATTEMPT=$((now + SENTINEL_RETRY_DELAY))
+    SENTINEL_RETRY_DELAY=$((SENTINEL_RETRY_DELAY * 2))
+    [ "$SENTINEL_RETRY_DELAY" -le "$SENTINEL_RETRY_MAX" ] || SENTINEL_RETRY_DELAY=$SENTINEL_RETRY_MAX
+    # The transition is the signal worth repeating; the retries behind it are not,
+    # and a days-long away session must not fill the log with one line per attempt.
+    [ "$SENTINEL_GAP_OPEN" -eq 0 ] || return 0
+    SENTINEL_GAP_OPEN=1
+    SENTINEL_GAP_SINCE=$now
+    sentinel_gap_append "$SENTINEL_GAP" unavailable \
+      "host outage alarms unavailable: launchd registration failed for this home while away; retrying up to every ${SENTINEL_RETRY_MAX}s. Run $SENTINEL enable"
+    log "WARNING: host-level supervision-outage alarm is unavailable for this home; retrying up to every ${SENTINEL_RETRY_MAX}s"
     echo "afk: WARNING - host-level supervision-outage alarm is unavailable" >&2
   }
 
