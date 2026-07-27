@@ -74,25 +74,29 @@ fm_path_age() {
   echo "$age"
 }
 
-fm_canonical_path() { # <existing-path>
-  local value=$1 dir base
-  [ -n "$value" ] || return 1
-  if [ -d "$value" ]; then
-    (cd "$value" 2>/dev/null && pwd -P)
-    return
+fm_canonical_path() {
+  local path=$1
+  [ -n "$path" ] || return 1
+  if [ -d "$path" ]; then
+    (CDPATH='' cd -- "$path" 2>/dev/null && pwd -P) || return 1
+  else
+    fm_lock_abs_path "$path" || return 1
   fi
-  dir=$(dirname "$value")
-  base=$(basename "$value")
-  dir=$(cd "$dir" 2>/dev/null && pwd -P) || return 1
-  printf '%s/%s\n' "${dir%/}" "$base"
 }
 
-fm_same_path() { # <left> <right>
-  local left=$1 right=$2 left_canon right_canon
-  [ "$left" = "$right" ] && return 0
-  left_canon=$(fm_canonical_path "$left") || return 1
-  right_canon=$(fm_canonical_path "$right") || return 1
-  [ "$left_canon" = "$right_canon" ]
+# Identity of two path spellings that may name the same target. Supervision
+# entry points resolve their own root with `pwd` (watcher, turn-end guard) or
+# `pwd -P` (continuity gate, host sentinel), so a checkout reached through any
+# symlinked component records one spelling in the watcher lock and compares
+# against another. Physical equality keeps the home-scoped singleton exact while
+# refusing to call a healthy watcher dead over a symlink.
+fm_same_path() {
+  local a=$1 b=$2 canon_a canon_b
+  [ -n "$a" ] && [ -n "$b" ] || return 1
+  [ "$a" = "$b" ] && return 0
+  canon_a=$(fm_canonical_path "$a") || return 1
+  canon_b=$(fm_canonical_path "$b") || return 1
+  [ "$canon_a" = "$canon_b" ]
 }
 
 fm_watcher_lock_matches_pid() {

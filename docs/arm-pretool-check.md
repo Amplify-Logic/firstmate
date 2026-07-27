@@ -19,10 +19,9 @@ This policy is not a post-arm liveness guarantee.
 
 Claude also registers `bin/fm-continuity-pretool-check.sh` for Bash PreToolUse events.
 This is a separate, tightly bounded recovery gate rather than another watcher-shape policy.
-It runs only in a primary home, and it denies only an executed `bin/fm-*.sh` command other than `bin/fm-wake-drain.sh`, `bin/fm-watch-arm.sh`, the ordinary literal `bin/fm-teardown.sh`, or the exact literal `bin/fm-supervision-sentinel.sh enable` when task metadata is in flight and no identity-matched live watcher holds that home's lock.
-Ordinary shell commands, fleet-script names used as data, all commands in an idle fleet, child worktrees, wake drain, watcher arm, ordinary literal teardown, and exact sentinel enable remain allowed.
-Sentinel `disarm`, every other sentinel mode, extra arguments, and dynamic mode expressions stay denied because only enable improves recovery safety.
-The denial leads with the supervision outage age and in-flight task count, leaves external delivery pending for the host without waiting on it, then gives Claude reason-specific recovery guidance - drain, re-arm via a tracked Claude background task, and use fail-closed `bin/fm-teardown.sh` for completed tasks - per the contract in [`watcher-continuity.md`](watcher-continuity.md).
+It runs only in a primary home, and it denies only an executed `bin/fm-*.sh` command other than `bin/fm-wake-drain.sh`, `bin/fm-watch-arm.sh`, the ordinary literal `bin/fm-teardown.sh`, or the literal `bin/fm-supervision-sentinel.sh enable`, when task metadata is in flight and no identity-matched live watcher holds that home's lock.
+Ordinary shell commands, fleet-script names used as data, all commands in an idle fleet, child worktrees, wake drain, watcher arm, ordinary literal teardown, and the explicit host-sentinel re-enable named by the session-start disarm banner remain allowed; every other host-sentinel invocation stays denied.
+The denial leads with the supervision outage age and in-flight task count, records the shared durable outage marker without any notifier work, then gives Claude reason-specific recovery guidance - drain, re-arm via a tracked Claude background task, and use fail-closed `bin/fm-teardown.sh` for completed tasks - per the contract in [`watcher-continuity.md`](watcher-continuity.md).
 `bin/fm-continuity-command-policy.mjs` reuses this document's shell lexer and command-position analysis but owns the recovery-versus-other-fleet classification.
 Malformed transport or opaque dynamic syntax fails open so this narrow gate cannot become a blanket Bash block.
 The existing `bin/fm-turnend-guard.sh` Stop integration is unchanged and remains the final backstop.
