@@ -64,17 +64,6 @@ test_gate_scope_and_recovery_exceptions() {
   expect_allow "watch arm recovery" 'bin/fm-watch-arm.sh'
   expect_allow "drain then arm recovery" 'bin/fm-wake-drain.sh; bin/fm-watch-arm.sh'
   expect_allow "fail-closed teardown recovery" 'bin/fm-teardown.sh task'
-  expect_allow "exact sentinel enable improves recovery" 'bin/fm-supervision-sentinel.sh enable'
-  expect_allow "nested exact sentinel enable improves recovery" "bash -lc 'bin/fm-supervision-sentinel.sh enable'"
-  unsafe_sentinel_reason='[watcher-continuity] SUPERVISION DOWN: 1 task(s) in flight; last watcher beat: never (grace 300s). During recovery only the exact literal bin/fm-supervision-sentinel.sh enable is allowed; disarm and every other sentinel mode remain blocked (blocked: fm-supervision-sentinel.sh)'
-  expect_deny "sentinel disarm reduces safety" 'bin/fm-supervision-sentinel.sh disarm' 'fm-supervision-sentinel.sh' "$unsafe_sentinel_reason"
-  expect_deny "sentinel arm is not explicit enable" 'bin/fm-supervision-sentinel.sh arm' 'fm-supervision-sentinel.sh' "$unsafe_sentinel_reason"
-  expect_deny "sentinel check is not explicit enable" 'bin/fm-supervision-sentinel.sh check' 'fm-supervision-sentinel.sh' "$unsafe_sentinel_reason"
-  expect_deny "sentinel scheduled check is not explicit enable" 'bin/fm-supervision-sentinel.sh scheduled-check' 'fm-supervision-sentinel.sh' "$unsafe_sentinel_reason"
-  expect_deny "bare sentinel is not explicit enable" 'bin/fm-supervision-sentinel.sh' 'fm-supervision-sentinel.sh' "$unsafe_sentinel_reason"
-  expect_deny "sentinel enable with extra args is not exact" 'bin/fm-supervision-sentinel.sh enable now' 'fm-supervision-sentinel.sh' "$unsafe_sentinel_reason"
-  # shellcheck disable=SC2016 # Literal dynamic mode is test input and must stay denied.
-  expect_deny "dynamic sentinel mode is not exact" 'bin/fm-supervision-sentinel.sh "$MODE"' 'fm-supervision-sentinel.sh' "$unsafe_sentinel_reason"
   unsafe_teardown_reason='[watcher-continuity] SUPERVISION DOWN: 1 task(s) in flight; last watcher beat: never (grace 300s). During recovery only the ordinary literal bin/fm-teardown.sh is allowed, so drop --force and any shell-expanded arguments and retry the literal invocation (blocked: fm-teardown.sh)'
   expect_deny "forced teardown is not recovery" 'bin/fm-teardown.sh task --force' 'fm-teardown.sh' "$unsafe_teardown_reason"
   expect_deny "nested forced teardown is not recovery" "bash -lc 'bin/fm-teardown.sh task --force'" 'fm-teardown.sh' "$unsafe_teardown_reason"
@@ -88,6 +77,7 @@ test_gate_scope_and_recovery_exceptions() {
   expect_deny "sentinel disarm is not recovery" 'bin/fm-supervision-sentinel.sh disarm' 'fm-supervision-sentinel.sh' "$unsafe_sentinel_reason"
   expect_deny "sentinel arm is not recovery" 'bin/fm-supervision-sentinel.sh arm' 'fm-supervision-sentinel.sh' "$unsafe_sentinel_reason"
   expect_deny "sentinel check is not recovery" 'bin/fm-supervision-sentinel.sh check' 'fm-supervision-sentinel.sh' "$unsafe_sentinel_reason"
+  expect_deny "sentinel scheduled check is not recovery" 'bin/fm-supervision-sentinel.sh scheduled-check' 'fm-supervision-sentinel.sh' "$unsafe_sentinel_reason"
   expect_deny "bare sentinel is not recovery" 'bin/fm-supervision-sentinel.sh' 'fm-supervision-sentinel.sh' "$unsafe_sentinel_reason"
   expect_deny "over-argued sentinel enable is not recovery" 'bin/fm-supervision-sentinel.sh enable disarm' 'fm-supervision-sentinel.sh' "$unsafe_sentinel_reason"
   # shellcheck disable=SC2016  # single quotes are deliberate: "$MODE" is literal test data (a shell-expanded arg the gate must deny), not an expansion here

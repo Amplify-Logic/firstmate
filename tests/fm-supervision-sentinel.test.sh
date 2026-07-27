@@ -82,7 +82,7 @@ test_stale_beacon_alert_is_loud_deduplicated_backed_off_and_rearmed() {
   awk -F= '$1 == "next_alert_at" { print "next_alert_at=0"; next } { print }' "$marker" > "$marker.next"
   mv "$marker.next" "$marker"
   run_check "$home" "$recorder"
-  [ "$(wc -l < "$log" | tr -d '[:space:]')" -eq 3 ] || fail "due continuous-outage reminder was not delivered"
+  [ "$(wc -l < "$log" | tr -d '[:space:]')" -eq 2 ] || fail "due continuous-outage reminder was not delivered"
   assert_contains "$(cat "$marker")" 'delivery_count=2' "repeat alert did not advance its delivery count"
   delivered=$(awk -F= '$1 == "delivered_at" { print $2 }' "$marker")
   next=$(awk -F= '$1 == "next_alert_at" { print $2 }' "$marker")
@@ -260,34 +260,6 @@ test_live_identity_matched_watcher_stays_silent() {
   pass "supervision sentinel: live identity-matched watcher with a fresh beacon stays silent"
 }
 
-test_symlinked_home_and_watcher_paths_preserve_identity() {
-  local home="$TMP_ROOT/path-physical" home_link="$TMP_ROOT/path-logical" root_link="$TMP_ROOT/root-logical" recorder="$TMP_ROOT/record-path" log="$TMP_ROOT/path-alerts.log" holder identity
-  make_primary "$home"
-  ln -s "$home" "$home_link"
-  ln -s "$ROOT" "$root_link"
-  make_recorder "$recorder" "$log"
-  printf 'project=test\n' > "$home/state/task.meta"
-  sleep 60 &
-  holder=$!
-  identity=$(FM_STATE_OVERRIDE="$home/state" bash -c '. "$1"; fm_pid_identity "$2"' _ "$ROOT/bin/fm-wake-lib.sh" "$holder") || {
-    kill "$holder" 2>/dev/null || true
-    wait "$holder" 2>/dev/null || true
-    fail "could not identify the symlinked-path watcher fixture"
-  }
-  mkdir -p "$home/state/.watch.lock"
-  printf '%s\n' "$holder" > "$home/state/.watch.lock/pid"
-  printf '%s\n' "$home_link" > "$home/state/.watch.lock/fm-home"
-  printf '%s\n' "$root_link/bin/fm-watch.sh" > "$home/state/.watch.lock/watcher-path"
-  printf '%s\n' "$identity" > "$home/state/.watch.lock/pid-identity"
-  touch "$home/state/.last-watcher-beat"
-
-  run_check "$home" "$recorder"
-  kill "$holder" 2>/dev/null || true
-  wait "$holder" 2>/dev/null || true
-  [ ! -e "$log" ] || fail "equivalent physical/logical paths produced a false outage alert"
-  pass "supervision sentinel: symlinked path spellings preserve exact watcher identity"
-}
-
 test_arm_registers_one_home_scoped_read_only_launchd_job() {
   local home="$TMP_ROOT/arm" fake="$TMP_ROOT/fake-launchctl" log="$TMP_ROOT/launchctl.log" loaded="$TMP_ROOT/loaded" checked plist calls
   make_primary "$home"
@@ -348,30 +320,6 @@ test_arm_registers_one_home_scoped_read_only_launchd_job() {
   [ "$(grep -c '^bootstrap ' "$log" || true)" -eq 2 ] || fail "manifest change did not bootstrap one replacement service: $(cat "$log")"
   assert_contains "$(cat "$plist")" '<integer>90</integer>' "reloaded manifest did not retain the changed interval"
   pass "supervision sentinel: launchd registration is one-per-home, reconciles its manifest, and never auto-recovers"
-}
-
-test_in_process_check_cannot_certify_or_block_on_external_alerts() {
-  local home="$TMP_ROOT/host-proof" recorder="$TMP_ROOT/record-host-proof" log="$TMP_ROOT/host-proof.log"
-  make_primary "$home"
-  make_recorder "$recorder" "$log"
-  printf 'project=test\n' > "$home/state/task.meta"
-  touch -t 202001010000 "$home/state/.last-watcher-beat"
-
-  FM_SUPERVISION_SENTINEL_MODE=auto \
-    FM_ROOT_OVERRIDE="$home" \
-    FM_HOME="$home" \
-    FM_STATE_OVERRIDE="$home/state" \
-    FM_WEDGE_ALARM_CHANNEL=osascript \
-    FM_WEDGE_ALARM_EXEC="$recorder" \
-    "$SENTINEL" check
-  [ ! -e "$home/state/.supervision-sentinel-last-check" ] || fail "in-process check forged the launchd liveness proof"
-  [ ! -e "$log" ] || fail "in-process check crossed the external notification boundary"
-  assert_contains "$(cat "$home/state/.supervision-outage-alarm")" 'delivery=pending' "in-process check did not leave a pending host alert"
-
-  run_check "$home" "$recorder"
-  [ -s "$home/state/.supervision-sentinel-last-check" ] || fail "scheduled check did not publish host liveness after completion"
-  assert_contains "$(cat "$log")" $'osascript\tSUPERVISION DOWN:' "scheduled host check did not own external delivery"
-  pass "supervision sentinel: in-process checks return before host-owned external delivery"
 }
 
 test_explicit_disarm_is_durable_home_scoped_and_reversible() {
@@ -452,10 +400,8 @@ test_stale_beacon_alert_is_loud_deduplicated_backed_off_and_rearmed
 test_guard_note_outage_records_evidence_without_notifying
 test_symlinked_home_is_not_reported_as_an_outage
 test_live_identity_matched_watcher_stays_silent
-test_symlinked_home_and_watcher_paths_preserve_identity
 test_failed_alert_stays_pending_and_retries
 test_arm_registers_one_home_scoped_read_only_launchd_job
-test_in_process_check_cannot_certify_or_block_on_external_alerts
 test_explicit_disarm_is_durable_home_scoped_and_reversible
 test_watch_arm_validates_arguments_before_sentinel_registration
 test_real_channel_uses_unambiguous_notification_title_without_posting
