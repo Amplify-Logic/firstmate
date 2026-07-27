@@ -282,6 +282,32 @@ if [ -f "$STATE/.supervision-sentinel.disarmed" ]; then
   printf 'It will remain disabled until the session owner explicitly runs bin/fm-supervision-sentinel.sh enable.\n'
   cat "$STATE/.supervision-sentinel.disarmed"
 fi
+# A failed registration SUPPRESSES further launchd retries for a growing cooldown,
+# so it disables host monitoring just as effectively as a deliberate disarm. It
+# must be as loud, or the accidental unmonitored state stays invisible while the
+# deliberate one is announced.
+if [ -f "$STATE/.supervision-sentinel.arm-failure" ]; then
+  subsection "HOST SUPERVISION SENTINEL - REGISTRATION FAILED"
+  printf 'Host-level watcher-outage detection is NOT active for this home: launchd registration failed.\n'
+  SENTINEL_RETRY_AT=$(awk -F= '$1 == "retry_at" { print $2; exit }' "$STATE/.supervision-sentinel.arm-failure" 2>/dev/null || true)
+  case "$SENTINEL_RETRY_AT" in
+    ''|*[!0-9]*)
+      printf 'Automatic retry timing is unreadable; the durable record below is the evidence.\n'
+      ;;
+    *)
+      SENTINEL_RETRY_NOW=$(date +%s)
+      if [ "$SENTINEL_RETRY_NOW" -ge "$SENTINEL_RETRY_AT" ]; then
+        printf 'The retry cooldown has expired; the next bin/fm-watch-arm.sh or bin/fm-afk-start.sh will attempt registration again.\n'
+      else
+        printf 'Automatic retry is suppressed for another %ss, and this home has no host-level outage detection until it succeeds.\n' \
+          "$((SENTINEL_RETRY_AT - SENTINEL_RETRY_NOW))"
+      fi
+      ;;
+  esac
+  printf 'Run bin/fm-supervision-sentinel.sh enable to retry immediately; it bypasses the cooldown and clears this record only after a verified host check.\n'
+  printf 'The in-harness turn-end and continuity guards still block a blind turn end meanwhile.\n'
+  cat "$STATE/.supervision-sentinel.arm-failure"
+fi
 
 # --- 3. wake-drain -------------------------------------------------------
 # Drained records are this turn's first work queue (AGENTS.md section 8); the
