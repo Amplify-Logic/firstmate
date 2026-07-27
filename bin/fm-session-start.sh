@@ -30,7 +30,9 @@
 #   2. bootstrap      - detect-only diagnostics always run. The five
 #                       MUTATING sweeps (legacy PR-check migration, secondmate
 #                       fast-forward, secondmate liveness, X-mode artifact writes, fleet sync) run only
-#                       when this session actually holds the lock.
+#                       when this session actually holds the lock. A durable
+#                       host-sentinel disarm is then surfaced loudly in both
+#                       locked and read-only sessions.
 #   3. wake-drain     - mutates the durable wake queue, so it also only runs
 #                       when locked.
 #   4. context digest - data/projects.md, data/secondmates.md, data/captain.md,
@@ -273,6 +275,12 @@ if [ -n "$BOOT_OUT" ]; then
   printf '%s\n' "$BOOT_OUT"
 else
   printf '(silent - all good)\n'
+fi
+if [ -f "$STATE/.supervision-sentinel.disarmed" ]; then
+  subsection "HOST SUPERVISION SENTINEL - DISARMED"
+  printf 'Host-level watcher-outage detection is deliberately disabled for this home.\n'
+  printf 'It will remain disabled until the session owner explicitly runs bin/fm-supervision-sentinel.sh enable.\n'
+  cat "$STATE/.supervision-sentinel.disarmed"
 fi
 
 # --- 3. wake-drain -------------------------------------------------------

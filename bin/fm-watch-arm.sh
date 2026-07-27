@@ -87,14 +87,6 @@ ARM_PID=${BASHPID:-$$}
 case "$CYCLE_LOG_MAX_BYTES" in ''|*[!0-9]*|0) CYCLE_LOG_MAX_BYTES=262144 ;; esac
 case "$CYCLE_LOG_KEEP_LINES" in ''|*[!0-9]*|0) CYCLE_LOG_KEEP_LINES=1000 ;; esac
 
-# This registration is intentionally best-effort for portability: the ordinary
-# watcher remains the primary mechanism on unsupported hosts. A supported host
-# that cannot retain the launchd service gets an explicit warning before the
-# long-running arm settles in.
-if [ -x "$SENTINEL" ] && ! "$SENTINEL" arm; then
-  echo "watcher: WARNING - host-level supervision-outage alarm is unavailable" >&2
-fi
-
 # The lifecycle ledger is diagnostic evidence, not a supervision dependency.
 # Writes are bounded and best-effort so an observability failure cannot stall an
 # otherwise healthy watcher cycle.
@@ -346,6 +338,15 @@ case "${1:-}" in
   --restart) mode=restart ;;
   *) echo "usage: $(basename "$0") [--restart]" >&2; exit 2 ;;
 esac
+
+# This registration is intentionally best-effort for portability: the ordinary
+# watcher remains the primary mechanism on unsupported hosts. A supported host
+# that cannot retain the launchd service gets an explicit warning before the
+# long-running arm settles in. Validate argv first so a usage error has no
+# registration or notification side effect.
+if [ -x "$SENTINEL" ] && ! "$SENTINEL" arm; then
+  echo "watcher: WARNING - host-level supervision-outage alarm is unavailable" >&2
+fi
 
 if [ "$mode" = restart ]; then
   # Home-scoped stop: only the watcher pid recorded in THIS home's lock.

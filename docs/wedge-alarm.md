@@ -17,8 +17,9 @@ The durable marker and the tmux flash are unchanged; the active alert is added a
 The same channel owner now carries host-level watcher-outage alarms from `bin/fm-supervision-sentinel.sh`.
 That sentinel is registered with macOS launchd by both watcher entry points, runs outside the harness process tree once a minute, and alerts when tasks are in flight without an identity-matched watcher lock and a fresh `state/.last-watcher-beat`.
 The turn-end guard and Claude continuity gate invoke the same deduplicated check, so the first surviving hook or host check reports `SUPERVISION DOWN`, the beacon age, the grace window, and the in-flight task count.
-The outage marker is `state/.supervision-outage-alarm`, and a continuous outage re-alerts at most once per five minutes by default.
-A failed channel leaves delivery pending and retries on the next host check after a short claim lease; only a successful channel consumes the five-minute rate limit.
+The outage marker is `state/.supervision-outage-alarm`.
+A continuous outage repeats after five minutes by default, then backs off exponentially to a one-hour cap so a persistent failure remains visible without training the captain to ignore a fixed-cadence alarm.
+A failed channel leaves delivery pending and retries on the next host check after a short claim lease; only a successful channel advances the backoff.
 
 ## Channels
 
@@ -36,7 +37,7 @@ A failed channel leaves delivery pending and retries on the next host check afte
 An absent `config/wedge-alarm` behaves as `auto`, i.e. default-on on macOS.
 Default-on is deliberate: an away-mode injection wedge or a dead watcher must not stay silent, so the reachable OS channel fires unless the captain explicitly disables it.
 The injection alarm is rate-limited to at most once per max-defer window.
-The host sentinel emits once per outage episode and then at most every five minutes while that same outage persists.
+The host sentinel emits once per outage episode, then repeats on an exponential five-minute-to-one-hour backoff while that same outage persists.
 
 Each channel is best-effort: a missing binary or a non-zero exit logs a warning and the alarm falls through to the next channel, never crashing the daemon loop.
 Every invocation is also process-group bounded by `FM_WEDGE_ALARM_TIMEOUT_SECS` (10 seconds by default), including `command:`, `osascript`, `herdr`, and an `FM_WEDGE_ALARM_EXEC` override.
@@ -55,10 +56,15 @@ There is no broad process kill anywhere in this path.
 
 launchd registration is idempotent and home-scoped through a SHA-256 label derived from canonical `FM_HOME` and state paths.
 The arm path compares the loaded manifest digest and reloads only that exact service when its script path, interval, or environment changes.
-It also requires a recent `state/.supervision-sentinel-last-check`, kickstarting the exact service and refusing registration if no one-shot check completes.
+It also requires a recent `state/.supervision-sentinel-last-check`, kickstarting the exact service and refusing registration if no scheduled one-shot check completes.
+In-harness guard checks use a separate entry point and never write that launchd-health proof.
 The job receives a fixed minimal system PATH rather than persisting the harness process PATH.
-The job runs only `bin/fm-supervision-sentinel.sh check`; its plist contains no restart command.
+The job runs only `bin/fm-supervision-sentinel.sh scheduled-check`; its plist contains no restart command.
 Registration lives in the current logged-in macOS GUI domain, which is the lifetime that also owns the interactive harness sessions; the next watcher arm re-registers after a new login.
+
+Explicit `bin/fm-supervision-sentinel.sh disarm` removes only this home's exact service and leaves `state/.supervision-sentinel.disarmed` for every later session-start digest to surface.
+No ordinary harness closure, session end, task cleanup, or watcher stop calls disarm, and automatic arm attempts respect the durable record.
+Only deliberate `bin/fm-supervision-sentinel.sh enable` restores the service and clears that record after launchd health is verified.
 It does not claim outage coverage across logout, reboot, system sleep, a missing state volume, or launchd failure.
 Other operating systems keep the existing turn-end and continuity alarms but currently have no verified host scheduler, and watcher entry prints that limitation instead of claiming an external fallback.
 
