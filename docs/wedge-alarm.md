@@ -106,6 +106,7 @@ Every default test in `tests/fm-supervision-sentinel.test.sh` drives registratio
 `test_real_launchd_scheduled_check_delivers_end_to_end` closes that gap end to end over the real transport: it builds a scratch primary home under `TMPDIR`, derives the exact SHA-256 service identity before registering anything, runs a real `launchctl bootstrap`, waits for a launchd-spawned `scheduled-check` to record host liveness, and asserts the outage summary reached the alert owner and the marker committed `delivery=sent`.
 Its no-real-notification safety is structural rather than configured: launchd runs a *copy* of the sentinel from the scratch home's own `bin/` (alongside copies of only the three libraries it sources), and the sentinel resolves its alert owner as `fm-supervise-daemon.sh` next to itself — which in that copy is a stub that only appends to a file.
 The real daemon is not reachable from the launched process, so no config-lookup failure and no `auto` → `osascript` fallback can turn the smoke into a real banner, and no notifier-override knob has to exist in production for it to work.
+That safety is also the limit of the claim: the smoke proves the job reaches an alert owner at the expected path, not that the real daemon's notifier body works under launchd (see the split lists below).
 It is gated on `FM_SENTINEL_REAL_LAUNCHD_SMOKE=1` plus macOS plus `/bin/launchctl`, and it skips with an explicit reason otherwise.
 The gate is deliberate: the smoke mutates the caller's own `gui/<uid>` launchd domain, so it must be an attended choice rather than something CI or a parallel shard does implicitly.
 An `EXIT`-registered teardown boots out that one derived label and fails loudly with the exact `launchctl bootout` command if the service somehow survives; it never sweeps other labels.
@@ -116,15 +117,21 @@ FM_SENTINEL_REAL_LAUNCHD_SMOKE=1 tests/fm-supervision-sentinel.test.sh
 
 **This smoke has not been run yet, and no evidence for it is recorded below.**
 It was authored but not executed here, because bootstrapping even a scratch agent writes into the user's `gui/<uid>` launchd domain, which is outside the boundary this change was allowed to touch.
-So the following remain unverified against real launchd rather than a fake:
+
+A successful run would establish, against real launchd rather than a fake:
 
 - that `launchctl bootstrap` in `gui/<uid>` accepts the generated plist and honors `RunAtLoad` plus `StartInterval`,
 - that `fm_primary_scope_matches` resolves `git` on the pinned `/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin` job PATH,
-- that a launchd-spawned check can write `state/` and reach `bin/fm-supervise-daemon.sh --active-alert`,
-- and that `osascript display notification` is delivered and TCC-attributed the same way from a launchd agent as from the interactive shell recorded in the manual run below.
+- and that a launchd-spawned check can write `state/` and invoke an alert owner at the expected path with `--active-alert` and the outage summary.
 
-Until that command is run on a macOS login session, treat the launchd half of this backstop as logic-verified but transport-unverified.
-The in-harness turn-end and continuity banners do not depend on it: they are covered by hermetic tests and remain authoritative on their own.
+The structural stub that makes the smoke safe also bounds what it can prove, so these stay unverified even after a successful run:
+
+- the real `bin/fm-supervise-daemon.sh --active-alert` body under launchd — its `FM_WEDGE_ALARM_LOG_FILE` setup, `wedge_alarm_notify` channel resolution, the `set -m` process-group watchdog in `wedge_alarm_run_bounded`, and `trim_log` — because the smoke launches a stub at that path instead,
+- and that `osascript display notification` is delivered and TCC-attributed the same way from a launchd agent as from the interactive shell recorded in the manual run below, since no real notifier runs in the smoke at all.
+
+Verifying those two would require a run that lets the real daemon post a real banner from a launchd agent, which is deliberately not what this test does.
+Until then, treat the launchd half of this backstop as logic-verified but transport-unverified, and treat the notifier body under launchd as unverified regardless of whether the smoke has been run.
+The in-harness turn-end and continuity banners do not depend on any of it: they are covered by hermetic tests and remain authoritative on their own.
 
 ## Verification (macOS, darwin)
 
