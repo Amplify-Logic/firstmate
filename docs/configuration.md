@@ -121,6 +121,7 @@ In-harness turn-end and continuity guards write only the pending marker and retu
 Directives are `off` (a position-independent kill switch that disables every active alert), `auto`/`default`, `osascript` (macOS Notification Center banner), `herdr` (herdr UI notification), and `command:<cmd>` (run `<cmd>` via `sh -c`, summary on `$1` and stdin).
 An absent file means `auto`, i.e. default-on on macOS: a supervision outage must not be silent.
 The injection alarm fires at most once per max-defer window after a genuine wedge, while one continuous watcher outage repeats after five minutes by default and then backs off exponentially to a one-hour cap.
+A watcher that recovers and is reaped again starts a new outage episode, which resets that backoff and alerts on the next host check.
 Failed watcher-outage delivery remains pending and retries after a short claim lease; only successful delivery advances that backoff.
 A missing or failing channel logs and falls through to the next, never crashing the daemon.
 See [`wedge-alarm.md`](wedge-alarm.md) for the channel reference and macOS verification evidence, and [`examples/wedge-alarm`](examples/wedge-alarm) for a copyable config.

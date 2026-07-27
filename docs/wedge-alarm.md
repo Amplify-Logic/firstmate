@@ -16,11 +16,11 @@ The durable marker and the tmux flash are unchanged; the active alert is added a
 
 The same channel owner now carries host-level watcher-outage alarms from `bin/fm-supervision-sentinel.sh`.
 That sentinel is registered with macOS launchd by both watcher entry points, runs outside the harness process tree once a minute, and alerts when tasks are in flight without an identity-matched watcher lock and a fresh `state/.last-watcher-beat`.
-The turn-end guard and Claude continuity gate immediately return their own `SUPERVISION DOWN` banner and leave a durable pending record without invoking any external channel.
-The next independent scheduled host check owns external delivery with the same beacon age, grace window, and in-flight task count.
+Every report says `SUPERVISION DOWN` and carries the beacon age, the grace window, and the in-flight task count.
 The outage marker is `state/.supervision-outage-alarm`.
+The turn-end guard and Claude continuity gate write that marker through `note-outage`, a marker-only mode, and never fire a channel: an in-harness hook must return its blocking result immediately, so only the scheduled host check crosses this boundary.
 A continuous outage repeats after five minutes by default, then backs off exponentially to a one-hour cap so a persistent failure remains visible without training the captain to ignore a fixed-cadence alarm.
-A changed watcher beat or lock episode means the watcher briefly recovered and died again, so it resets the backoff and alerts immediately rather than inheriting the old outage's delay.
+The backoff is scoped to one episode: when the watcher lock or beacon evidence changes because the watcher recovered and was reaped again, the schedule resets and the new outage alerts at once rather than inheriting an hour-long delay.
 A failed channel leaves delivery pending and retries on the next host check after a short claim lease; only a successful channel advances the backoff.
 
 ## Channels

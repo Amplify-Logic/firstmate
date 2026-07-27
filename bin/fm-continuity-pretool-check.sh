@@ -4,11 +4,11 @@
 # This hook is deliberately narrow. It denies only an executed bin/fm-*.sh fleet
 # command other than bin/fm-session-start.sh, bin/fm-wake-drain.sh,
 # bin/fm-watch-arm.sh, the independently fail-closed bin/fm-teardown.sh, or the
-# exact literal "bin/fm-supervision-sentinel.sh enable", and only when the
-# active primary home has task metadata in flight but no identity-matched live
-# watcher with a fresh beacon holds the home lock. Ordinary shell commands,
-# recovery commands, healthy supervision, fleet-idle homes, and child worktrees
-# are always allowed.
+# exact literal "bin/fm-supervision-sentinel.sh enable" that the session-start
+# disarm banner names, and only when the active primary home has task metadata
+# in flight but no identity-matched live watcher with a fresh beacon holds the
+# home lock. Ordinary shell commands, recovery commands, healthy supervision,
+# fleet-idle homes, and child worktrees are always allowed.
 #
 # The recovery set is keyed on the command word actually executed, so a direct
 # bin/fm-bootstrap.sh stays denied while the bin/fm-bootstrap.sh that
@@ -104,9 +104,10 @@ if fm_watcher_healthy "$STATE" "$WATCH" "${FM_GUARD_GRACE:-300}" "$FM_HOME"; the
   exit 0
 fi
 
-# This hook can be the first surviving process to observe the outage. Leave a
-# durable pending record for the host sentinel, but never cross the external
-# notification boundary here: the blocking banner must return immediately.
+# This hook can be the first surviving process to observe the outage, so it
+# records the durable evidence the host sentinel later alerts on. Marker-only:
+# a PreToolUse gate must decide immediately and never wait on external-channel
+# delivery, which the scheduled launchd check owns.
 SENTINEL="$SCRIPT_DIR/fm-supervision-sentinel.sh"
 if [ -x "$SENTINEL" ]; then
   "$SENTINEL" note-outage >/dev/null 2>&1 || true

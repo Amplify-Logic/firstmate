@@ -65,6 +65,8 @@ test_gate_scope_and_recovery_exceptions() {
   expect_allow "watch arm recovery" 'bin/fm-watch-arm.sh'
   expect_allow "drain then arm recovery" 'bin/fm-wake-drain.sh; bin/fm-watch-arm.sh'
   expect_allow "fail-closed teardown recovery" 'bin/fm-teardown.sh task'
+  # The session-start disarm banner names exactly one host-sentinel command, so
+  # exactly that literal invocation is a recovery exception and nothing else is.
   expect_allow "exact sentinel enable improves recovery" 'bin/fm-supervision-sentinel.sh enable'
   expect_allow "nested exact sentinel enable improves recovery" "bash -lc 'bin/fm-supervision-sentinel.sh enable'"
   unsafe_sentinel_reason='[watcher-continuity] SUPERVISION OUTAGE: down for unknown duration (unknown since when; watcher beat file missing or unreadable); 1 task(s) in flight: task. During recovery only the literal bin/fm-supervision-sentinel.sh enable is allowed; arm, disarm, check, and every other host-sentinel invocation stays blocked until supervision is healthy (blocked: fm-supervision-sentinel.sh)'
@@ -74,6 +76,7 @@ test_gate_scope_and_recovery_exceptions() {
   expect_deny "sentinel scheduled check is not explicit enable" 'bin/fm-supervision-sentinel.sh scheduled-check' 'fm-supervision-sentinel.sh' "$unsafe_sentinel_reason"
   expect_deny "bare sentinel is not explicit enable" 'bin/fm-supervision-sentinel.sh' 'fm-supervision-sentinel.sh' "$unsafe_sentinel_reason"
   expect_deny "sentinel enable with extra args is not exact" 'bin/fm-supervision-sentinel.sh enable now' 'fm-supervision-sentinel.sh' "$unsafe_sentinel_reason"
+  expect_deny "over-argued sentinel enable is not recovery" 'bin/fm-supervision-sentinel.sh enable disarm' 'fm-supervision-sentinel.sh' "$unsafe_sentinel_reason"
   # shellcheck disable=SC2016 # Literal dynamic mode is test input and must stay denied.
   expect_deny "dynamic sentinel mode is not exact" 'bin/fm-supervision-sentinel.sh "$MODE"' 'fm-supervision-sentinel.sh' "$unsafe_sentinel_reason"
   unsafe_teardown_reason='[watcher-continuity] SUPERVISION OUTAGE: down for unknown duration (unknown since when; watcher beat file missing or unreadable); 1 task(s) in flight: task. No live watcher holds this home lock. During recovery only the ordinary literal bin/fm-teardown.sh is allowed, so drop --force and any shell-expanded arguments and retry the literal invocation (blocked: fm-teardown.sh)'

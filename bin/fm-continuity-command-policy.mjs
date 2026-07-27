@@ -4,9 +4,9 @@
 // The shared Lexer, program splitter, and command-position resolver remain owned
 // by fm-arm-command-policy.mjs. This policy only identifies executed firstmate
 // fleet scripts and divides them into recovery commands (session start, wake
-// drain, watcher arm, fail-closed teardown, and exact sentinel enable) versus
-// every other bin/fm-*.sh command. Unparseable or opaque dynamic commands fail
-// open so this gate can never become a blanket shell block.
+// drain, watcher arm, fail-closed teardown, and the explicit host-sentinel
+// re-enable) versus every other bin/fm-*.sh command. Unparseable or opaque
+// dynamic commands fail open so this gate can never become a blanket shell block.
 //
 // Classification is lexical: only a statically visible executed command word is
 // matched against RECOVERY_SCRIPTS. A bin/fm-bootstrap.sh command word therefore
@@ -82,15 +82,20 @@ function literalEvalPayload(position) {
   return payloads.map((payload) => payload.value).join(" ");
 }
 
+function isLiteralWord(word, value) {
+  return Boolean(word) && word.literal && word.subs.length === 0 && word.value === value;
+}
+
 function fleetScriptRecord(name, position, scriptIndex) {
   const argumentsAfterScript = position.words.slice(scriptIndex + 1);
   const unsafeTeardown = name === "fm-teardown.sh"
     && argumentsAfterScript.some((argument) => argument.value === "--force" || !argument.literal);
+  // The session-start disarm banner names exactly one recovery command, so only
+  // that literal `enable` passes. Bare invocation, arm, disarm, check,
+  // scheduled-check, extra arguments, and any dynamically built argument stay
+  // denied while supervision is unhealthy.
   const unsafeSentinel = name === "fm-supervision-sentinel.sh"
-    && !(argumentsAfterScript.length === 1
-      && argumentsAfterScript[0].literal
-      && argumentsAfterScript[0].subs.length === 0
-      && argumentsAfterScript[0].value === "enable");
+    && !(argumentsAfterScript.length === 1 && isLiteralWord(argumentsAfterScript[0], "enable"));
   return { name, unsafeTeardown, unsafeSentinel };
 }
 
@@ -142,9 +147,12 @@ function collectExecutedFleetScripts(command, root, depth = 0) {
 
 export function classifyContinuityCommand(command, root) {
   const scripts = collectExecutedFleetScripts(command, root);
-  const blocked = scripts.find(({ name, unsafeTeardown, unsafeSentinel }) => !RECOVERY_SCRIPTS.has(name) || unsafeTeardown || unsafeSentinel);
+  const blocked = scripts.find(({ name, unsafeTeardown, unsafeSentinel }) =>
+    !RECOVERY_SCRIPTS.has(name) || unsafeTeardown || unsafeSentinel);
   if (!blocked) return { decision: "allow", script: "" };
-  const code = blocked.unsafeTeardown ? "unsafe-teardown" : blocked.unsafeSentinel ? "unsafe-sentinel" : "other-fleet";
+  let code = "other-fleet";
+  if (blocked.unsafeTeardown) code = "unsafe-teardown";
+  else if (blocked.unsafeSentinel) code = "unsafe-sentinel";
   return { decision: "deny", script: blocked.name, code };
 }
 

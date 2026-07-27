@@ -17,15 +17,20 @@
 # The existing guarded recovery path remains human/agent-owned.
 #
 # Usage:
-#   fm-supervision-sentinel.sh arm     Idempotently register unless deliberately disarmed.
-#   fm-supervision-sentinel.sh enable  Explicitly re-enable and register this home's agent.
-#   fm-supervision-sentinel.sh disarm  Explicitly uninstall and durably mark this home disarmed.
-#   fm-supervision-sentinel.sh check   Record an outage for host delivery without notifying.
-#   fm-supervision-sentinel.sh note-outage  Explicit alias used by in-harness guards.
+#   fm-supervision-sentinel.sh arm         Idempotently register unless deliberately disarmed.
+#   fm-supervision-sentinel.sh enable      Explicitly re-enable and register this home's agent.
+#   fm-supervision-sentinel.sh disarm      Explicitly uninstall and durably mark this home disarmed.
+#   fm-supervision-sentinel.sh check       Run one in-process health check and alert.
+#   fm-supervision-sentinel.sh note-outage Record an outage marker only; never notify.
 #
 # `scheduled-check` is the launchd-only entry point. It alone records host-service
 # liveness and crosses the external-alert boundary; in-harness guard modes only
 # leave a durable pending record and return their own loud banner immediately.
+#
+# `note-outage` is the only mode an in-harness turn-end or continuity hook may
+# use. Those hooks must render their blocking banner immediately, so they record
+# durable evidence with local writes alone and never cross the active-channel
+# boundary. External alert delivery belongs to the scheduled host check.
 #
 # Environment:
 #   FM_HOME                            Operational home (default: tracked root).
@@ -194,8 +199,10 @@ fm_sentinel_write_plist() { # <label> <interval>
   mv -f "$pending" "$FM_SENTINEL_PLIST"
 }
 
-fm_sentinel_arm_locked() { # <launchctl> <service> <domain> <label> <interval>
-  local launchctl=$1 service=$2 domain=$3 label=$4 interval=$5 digest loaded_digest i pending rc=0
+# Registration body. Runs only while this home's arm lock is held, so it may
+# return early anywhere: fm_sentinel_arm owns the single matching release.
+fm_sentinel_arm_registration() { # <launchctl> <domain> <label> <service> <interval>
+  local launchctl=$1 domain=$2 label=$3 service=$4 interval=$5 digest loaded_digest i pending rc=0
   if ! fm_sentinel_write_plist "$label" "$interval"; then
     printf 'supervision sentinel: could not write %s\n' "$FM_SENTINEL_PLIST" >&2
     return 1
@@ -205,14 +212,11 @@ fm_sentinel_arm_locked() { # <launchctl> <service> <domain> <label> <interval>
   if "$launchctl" print "$service" >/dev/null 2>&1; then
     "$launchctl" enable "$service" >/dev/null 2>&1 || true
     if [ "$loaded_digest" = "$digest" ]; then
-      if ! fm_sentinel_check_recent $((interval * 2 + 15)); then
-        "$launchctl" kickstart "$service" >/dev/null 2>&1 || true
-        if ! fm_sentinel_wait_for_check; then
-          printf 'supervision sentinel: loaded home service did not complete a check\n' >&2
-          return 1
-        fi
-      fi
-      return 0
+      fm_sentinel_check_recent $((interval * 2 + 15)) && return 0
+      "$launchctl" kickstart "$service" >/dev/null 2>&1 || true
+      fm_sentinel_wait_for_check && return 0
+      printf 'supervision sentinel: loaded home service did not complete a check\n' >&2
+      return 1
     fi
     # The tracked script path or launch settings changed. Reload only this exact
     # home service; never sweep launchd labels or supervision processes.
@@ -285,7 +289,7 @@ fm_sentinel_arm() {
     done
     return 1
   fi
-  fm_sentinel_arm_locked "$launchctl" "$service" "$domain" "$label" "$interval"
+  fm_sentinel_arm_registration "$launchctl" "$domain" "$label" "$service" "$interval"
   rc=$?
   fm_lock_release "$FM_SENTINEL_ARM_LOCK" 2>/dev/null || true
   return "$rc"
@@ -305,7 +309,9 @@ fm_sentinel_write_disarmed() { # <service>
   mv -f "$pending" "$FM_SENTINEL_DISARMED"
 }
 
-fm_sentinel_disarm_locked() { # <launchctl> <service>
+# Uninstall body. Runs only while this home's arm lock is held, so it may return
+# early anywhere: fm_sentinel_disarm owns the single matching release.
+fm_sentinel_disarm_service() { # <launchctl> <service>
   local launchctl=$1 service=$2 i
   if "$launchctl" print "$service" >/dev/null 2>&1; then
     if ! "$launchctl" bootout "$service" >/dev/null 2>&1; then
@@ -322,12 +328,14 @@ fm_sentinel_disarm_locked() { # <launchctl> <service>
       return 1
     fi
   fi
+  # The durable record must land before the generated artifacts are removed, so
+  # a partial disarm can never look like an ordinary unregistered home.
   if ! fm_sentinel_write_disarmed "$service"; then
     printf 'supervision sentinel: service is absent but the durable disarm record could not be written\n' >&2
     return 1
   fi
   rm -f "$FM_SENTINEL_PLIST" "$FM_SENTINEL_LOADED_DIGEST" "$FM_SENTINEL_LAST_CHECK" "$FM_SENTINEL_MARKER" 2>/dev/null || true
-  printf 'supervision sentinel: disarmed for this home; session start will keep reporting this state\n'
+  return 0
 }
 
 fm_sentinel_disarm() {
@@ -350,10 +358,11 @@ fm_sentinel_disarm() {
     printf 'supervision sentinel: this home is already changing its host-service registration\n' >&2
     return 1
   fi
-  fm_sentinel_disarm_locked "$launchctl" "$service"
+  fm_sentinel_disarm_service "$launchctl" "$service"
   rc=$?
   fm_lock_release "$FM_SENTINEL_ARM_LOCK" 2>/dev/null || true
-  return "$rc"
+  [ "$rc" -eq 0 ] || return "$rc"
+  printf 'supervision sentinel: disarmed for this home; session start will keep reporting this state\n'
 }
 
 fm_sentinel_enable() {
@@ -435,7 +444,7 @@ fm_sentinel_clear_alarm() { # [claim-token]
 }
 
 fm_sentinel_claim_alarm() { # <episode-key> <summary>
-  local key=$1 summary=$2 now delivery delivered_at next_alert_at attempt_at deliveries stored_episode episode_changed=0 elapsed token
+  local key=$1 summary=$2 now delivery delivered_at next_alert_at attempt_at deliveries elapsed token episode new_episode=0
   FM_SENTINEL_CLAIM_TOKEN=
   now=$(date +%s)
   # A wedged claim lock must not silence the alarm. Return the storage-failure
@@ -445,17 +454,20 @@ fm_sentinel_claim_alarm() { # <episode-key> <summary>
   delivered_at=$(fm_sentinel_marker_field delivered_at 2>/dev/null || true)
   next_alert_at=$(fm_sentinel_marker_field next_alert_at 2>/dev/null || true)
   attempt_at=$(fm_sentinel_marker_field attempt_at 2>/dev/null || true)
+  episode=$(fm_sentinel_marker_field episode 2>/dev/null || true)
   deliveries=$(fm_sentinel_marker_field delivery_count 2>/dev/null || printf '0')
   stored_episode=$(fm_sentinel_marker_field episode 2>/dev/null || true)
   case "$deliveries" in ''|*[!0-9]*) deliveries=0 ;; esac
-  if [ -n "$stored_episode" ] && [ "$stored_episode" != "$key" ]; then
-    # A changed watcher beat or lock identity proves the watcher ran between
-    # observations. This is a new outage, not a continuation of the old one's
-    # backoff; only an in-progress short claim lease may briefly defer it.
-    episode_changed=1
+  # A changed episode key means the watcher lock pid or beacon evidence moved:
+  # the watcher recovered and was reaped again between two scheduled checks. That
+  # flapping outage is genuinely new, so it restarts the repeat schedule instead
+  # of inheriting a backoff that can already be an hour long. Only an unchanged,
+  # continuous outage keeps backing off.
+  if [ -n "$episode" ] && [ "$episode" != "$key" ]; then
+    new_episode=1
     deliveries=0
   fi
-  if [ "$delivery" = sent ] && [ "$episode_changed" -eq 0 ]; then
+  if [ "$delivery" = sent ] && [ "$new_episode" -eq 0 ]; then
     case "$next_alert_at" in
       ''|*[!0-9]*)
         case "$delivered_at" in
@@ -475,6 +487,9 @@ fm_sentinel_claim_alarm() { # <episode-key> <summary>
         ;;
     esac
   elif [ "$delivery" = pending ]; then
+    # The short claim lease still applies to a new episode: it only defers by
+    # FM_SENTINEL_CLAIM_LEASE_SECS, and honoring it keeps a delivery that is
+    # still in flight from being duplicated by a concurrent check.
     case "$attempt_at" in
       ''|*[!0-9]*) ;;
       *)
@@ -547,14 +562,50 @@ fm_sentinel_record_check() {
   fi
 }
 
-fm_sentinel_check() {
-  local claim_rc key summary
+fm_sentinel_summary() {
+  printf 'SUPERVISION DOWN: %s task(s) in flight; last watcher beat: %s (grace %ss). No automatic restart was attempted; see %s\n' \
+    "$FM_SUP_IN_FLIGHT" "$FM_SUP_BEACON_DESC" "$FM_SENTINEL_GRACE" "$FM_SENTINEL_MARKER"
+}
+
+# Marker-only mode for the in-harness turn-end and continuity guards.
+#
+# Those hooks must render their blocking banner immediately: a Stop hook that
+# outruns its harness timeout loses the block itself, which is the very backstop
+# this sentinel exists to strengthen. So a guard records durable evidence with
+# local writes alone and never forks the alert owner, never backgrounds notifier
+# work, and never writes the launchd-liveness proof. The scheduled host check
+# remains the sole owner of external alert delivery.
+fm_sentinel_note_outage() {
+  local key summary
   fm_sentinel_mode_enabled || return 0
   fm_primary_scope_matches "$FM_ROOT" "$FM_SENTINEL_STATE" || return 0
   [ -f "$FM_SENTINEL_DISARMED" ] && return 0
-  # Publish liveness only for launchd's private entry point and only when the
-  # one-shot check exits. Guard-owned modes cannot forge host-service health.
-  trap 'fm_sentinel_record_check || true' EXIT
+  fm_sentinel_normalize_tunables
+  fm_supervision_status "$FM_SENTINEL_STATE" "$FM_SENTINEL_GRACE"
+  [ "$FM_SUP_IN_FLIGHT" -gt 0 ] || return 0
+  fm_watcher_healthy "$FM_SENTINEL_STATE" "$FM_SENTINEL_WATCH" "$FM_SENTINEL_GRACE" "$FM_HOME" && return 0
+  fm_lock_try_acquire "$FM_SENTINEL_CHECK_LOCK" || return 0
+  if [ ! -e "$FM_SENTINEL_MARKER" ]; then
+    key=$(fm_sentinel_episode_key)
+    summary=$(fm_sentinel_summary)
+    # An unclaimed record with attempt_at=0 leaves no delivery lease to wait out,
+    # so the next scheduled host check claims and alerts on this episode at once.
+    fm_sentinel_write_alarm_record pending '' 0 "$key" "$summary" '' 0 || true
+  fi
+  fm_lock_release "$FM_SENTINEL_CHECK_LOCK" 2>/dev/null || true
+  return 0
+}
+
+fm_sentinel_check() { # [record-host-liveness: 0|1]
+  local record_host=${1:-0} claim_rc key summary
+  fm_sentinel_mode_enabled || return 0
+  fm_primary_scope_matches "$FM_ROOT" "$FM_SENTINEL_STATE" || return 0
+  if [ "$record_host" -eq 1 ]; then
+    [ -f "$FM_SENTINEL_DISARMED" ] && return 0
+    # Publish liveness only for launchd's private entry point and only when the
+    # one-shot check exits. Guard-owned checks cannot forge host-service health.
+    trap 'fm_sentinel_record_check || true' EXIT
+  fi
   fm_sentinel_normalize_tunables
   fm_supervision_status "$FM_SENTINEL_STATE" "$FM_SENTINEL_GRACE"
   if [ "$FM_SUP_IN_FLIGHT" -eq 0 ]; then
@@ -566,7 +617,7 @@ fm_sentinel_check() {
     return 0
   fi
 
-  summary="SUPERVISION DOWN: $FM_SUP_IN_FLIGHT task(s) in flight; last watcher beat: $FM_SUP_BEACON_DESC (grace ${FM_SENTINEL_GRACE}s). No automatic restart was attempted; see $FM_SENTINEL_MARKER"
+  summary=$(fm_sentinel_summary)
   key=$(fm_sentinel_episode_key)
   fm_sentinel_claim_alarm "$key" "$summary"
   claim_rc=$?
@@ -598,8 +649,9 @@ case "${1:-}" in
   arm) [ "$#" -eq 1 ] || { fm_sentinel_usage >&2; exit 2; }; fm_sentinel_arm ;;
   enable) [ "$#" -eq 1 ] || { fm_sentinel_usage >&2; exit 2; }; fm_sentinel_enable ;;
   disarm) [ "$#" -eq 1 ] || { fm_sentinel_usage >&2; exit 2; }; fm_sentinel_disarm ;;
-  check|note-outage) [ "$#" -eq 1 ] || { fm_sentinel_usage >&2; exit 2; }; fm_sentinel_note_outage ;;
-  scheduled-check) [ "$#" -eq 1 ] || { fm_sentinel_usage >&2; exit 2; }; fm_sentinel_check ;;
+  check) [ "$#" -eq 1 ] || { fm_sentinel_usage >&2; exit 2; }; fm_sentinel_check 0 ;;
+  note-outage) [ "$#" -eq 1 ] || { fm_sentinel_usage >&2; exit 2; }; fm_sentinel_note_outage ;;
+  scheduled-check) [ "$#" -eq 1 ] || { fm_sentinel_usage >&2; exit 2; }; fm_sentinel_check 1 ;;
   -h|--help) fm_sentinel_usage ;;
   *) fm_sentinel_usage >&2; exit 2 ;;
 esac

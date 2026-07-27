@@ -19,7 +19,8 @@ After the configured retry bound is exhausted, it delivers the original wake wit
 This is deliberate Option B ordering: the fleet is protected before the model handles the wake whenever restoration succeeds, but the model is never left blind when it does not.
 
 Claude retains its native tracked background-task completion path.
-Its new PreToolUse continuity gate allows session start, wake drain, arm recovery, and independently fail-closed teardown, but refuses other fleet commands while tasks are in flight and no identity-matched live watcher with a fresh beacon holds the home lock.
+Its new PreToolUse continuity gate allows session start, wake drain, arm recovery, independently fail-closed teardown, and the literal `bin/fm-supervision-sentinel.sh enable` that the session-start disarm banner names, but refuses other fleet commands while tasks are in flight and no identity-matched live watcher with a fresh beacon holds the home lock.
+Every other host-sentinel invocation — `arm`, `disarm`, `check`, a bare call, extra arguments, or any dynamically built argument — stays denied in that state, so the one command the banner instructs the owner to run is reachable without widening the gate.
 Allowing `bin/fm-session-start.sh` stops the gate self-blocking the one command AGENTS.md section 3 mandates as a session's first, since a fresh session has tasks in flight and no live watcher by definition.
 The deny guidance keeps the two entry points distinct rather than pointing every denial at a once-per-session command: `bin/fm-wake-drain.sh` is the action that is always safe mid-session, and `bin/fm-session-start.sh` is named only when the hook process's own ancestry does not already hold the home session lock.
 That is a two-branch guidance text, not two decisions: a session that already holds the lock is told to drain, tear down, and re-arm without being pointed back at an out-of-contract mid-session re-run, while a genuine pre-lock session still gets the session-start clause.
@@ -33,8 +34,8 @@ No adapter starts a replacement with shell `&`.
 The existing turn-end guard adapters are unchanged, while the shared guard alarm now uses the canonical outage summary from `bin/fm-supervision-lib.sh`.
 The Claude continuity denial uses that same summary, so both surfaces name every in-flight task and report elapsed time from `state/.last-watcher-beat`, or explicitly report an unknown duration and unknown start when the beacon evidence is missing, unreadable, unsupported, or future-dated.
 The turn-end guard and its adapters remain the final in-harness backstop rather than the normal continuity mechanism.
-On an unhealthy result, both that guard and the Claude continuity gate leave a durable pending outage record and return their loud blocking guidance immediately.
-They never wait on external channels; the independent scheduled host check exclusively owns that delivery.
+On an unhealthy result, both that guard and the Claude continuity gate call `bin/fm-supervision-sentinel.sh note-outage`, which records the shared durable outage marker with local writes alone.
+Neither hook forks a notifier, backgrounds notifier work, or waits on external-channel delivery: they must return their blocking result immediately, and the scheduled host check owns delivery.
 
 ## Known limitation
 
@@ -61,16 +62,20 @@ It assumes the watcher or away daemon can still disappear at any time and bounds
 
 `bin/fm-watch-arm.sh` and `bin/fm-afk-start.sh` idempotently register `bin/fm-supervision-sentinel.sh` as a per-home macOS launchd agent before entering their long-lived foreground work.
 launchd invokes its one-shot `scheduled-check` mode every 60 seconds outside the harness process tree.
-Only that entry point updates `state/.supervision-sentinel-last-check`; the in-harness `note-outage` calls used by the guards cannot certify that launchd is alive.
-The check reuses `fm_supervision_status` plus `fm_watcher_healthy`, so it requires the existing home-scoped watcher lock, PID identity, physically equivalent watcher path and home, and fresh beacon rather than trusting a leftover file, path spelling, or live PID alone.
+Only that entry point updates `state/.supervision-sentinel-last-check`; the marker-only `note-outage` calls made by the guards cannot certify that launchd is alive.
+The check reuses `fm_supervision_status` plus `fm_watcher_healthy`, so it requires the existing home-scoped watcher lock, PID identity, watcher path, and fresh beacon rather than trusting a leftover file or live PID alone.
+Lock home and watcher path are compared by physical target, so a checkout reached through a symlinked path component cannot make a live watcher look foreign to a host check that resolved its own root differently; two genuinely different homes still never match.
 Future-dated beacon timestamps are rejected rather than remaining fresh indefinitely after wall-clock rollback or restore.
 With the default 300-second grace, a stale-beacon outage becomes an active alert within at most roughly 360 seconds instead of remaining silent for hours.
 A missing or dead identity-matched lock is detected on the next host check even while the beacon is still fresh.
 
 The sentinel writes `state/.supervision-outage-alarm`, posts through the channels owned by [`wedge-alarm.md`](wedge-alarm.md), and deduplicates one continuous outage.
 The first repeat waits five minutes by default, then repeats back off exponentially to a one-hour cap instead of firing at one unchanging cadence forever.
-A changed watcher-beat or lock episode proves the watcher briefly ran and was reaped again, resets that backoff, and alerts immediately; only unchanged continuous outages inherit prior delay.
+That backoff belongs to one episode, keyed on the watcher lock pid and beacon evidence.
+When the key changes — the watcher was re-armed and reaped again between two host checks — the outage is genuinely new, so the repeat schedule resets and the alert fires on the next check instead of inheriting a delay of up to an hour.
+Only an unchanged, continuous outage keeps backing off.
 The marker distinguishes pending delivery from a successful alert, so a failed channel retries on the next host check after a short claim lease without consuming the repeat schedule.
+That short lease applies to a new episode too, which keeps a delivery still in flight from being duplicated while deferring the new alert by at most the lease.
 The launchd label is derived from `FM_HOME`, so sibling firstmate homes never share a service identity.
 Its plist runs only `fm-supervision-sentinel.sh scheduled-check`.
 It contains no watcher arm, daemon launch, signal, process sweep, or restart command.
@@ -105,9 +110,9 @@ Only the watcher process touches `state/.last-watcher-beat`; the sentinel reads 
 
 `tests/fm-pi-watch-extension.test.sh` simulates actionable and empty child closes against the actual Pi and OpenCode close handlers, blocks prompt delivery to prove the successor launches first, verifies single-flight behavior, changes the session lock before close to prove ownership is rechecked, and hangs each successor arm to prove bounded fallback delivery includes the typed restoration failure.
 `tests/fm-watcher-lock.test.sh` covers verified-successor attach, the typed self-eviction failure, bounded and successor-linked lifecycle rows, and a SIGSTOP counterfactual that distinguishes a live PID from a stale beacon before classifying termination.
-`tests/fm-continuity-pretool-check.test.sh` proves the Claude gate rejects only non-recovery fleet execution in the precise unhealthy state, treats a stale beacon as unhealthy even with a live identity-matched lock, and preserves the existing Stop registration.
+`tests/fm-continuity-pretool-check.test.sh` proves the Claude gate rejects only non-recovery fleet execution in the precise unhealthy state, treats a stale beacon as unhealthy even with a live identity-matched lock, admits only the literal host-sentinel `enable` while denying its other subcommands, and preserves the existing Stop registration.
 It also asserts both guidance branches verbatim, and that a session holding the home lock still gets the identical allow/deny decisions, so the ancestry test can only ever change guidance text.
-`tests/fm-supervision-sentinel.test.sh` proves six-task stale-beacon detection with a live identity-matched lock, active-alert content, failed-delivery retry, exponential repeat backoff for one unchanged outage, immediate reset after brief watcher recovery, physical/logical path equivalence, recovery re-arming, host-only external delivery and liveness proof, one-per-home launchd registration, manifest reconciliation, explicit durable disarm/re-enable, a one-minute cadence, an unambiguous OS title, and the absence of every automatic recovery command.
+`tests/fm-supervision-sentinel.test.sh` proves six-task stale-beacon detection with a live identity-matched lock, active-alert content, failed-delivery retry, exponential repeat backoff for one continuous outage, an immediate reset when the episode evidence changes, recovery re-arming, marker-only guard notes that never reach a notifier, symlinked-versus-foreign home identity, host-only liveness proof, one-per-home launchd registration, manifest reconciliation, explicit durable disarm/re-enable, a one-minute cadence, an unambiguous OS title, and the absence of every automatic recovery command.
 
 ## Sanitized live evidence, 2026-07-17
 
