@@ -3,11 +3,12 @@
 #
 # This hook is deliberately narrow. It denies only an executed bin/fm-*.sh fleet
 # command other than bin/fm-session-start.sh, bin/fm-wake-drain.sh,
-# bin/fm-watch-arm.sh, or the independently fail-closed bin/fm-teardown.sh, and
-# only when the active primary home has task metadata in flight but no
-# identity-matched live watcher with a fresh beacon holds the home lock.
-# Ordinary shell commands, recovery commands, healthy supervision, fleet-idle
-# homes, and child worktrees are always allowed.
+# bin/fm-watch-arm.sh, the independently fail-closed bin/fm-teardown.sh, or the
+# exact literal "bin/fm-supervision-sentinel.sh enable", and only when the
+# active primary home has task metadata in flight but no identity-matched live
+# watcher with a fresh beacon holds the home lock. Ordinary shell commands,
+# recovery commands, healthy supervision, fleet-idle homes, and child worktrees
+# are always allowed.
 #
 # The recovery set is keyed on the command word actually executed, so a direct
 # bin/fm-bootstrap.sh stays denied while the bin/fm-bootstrap.sh that
@@ -103,12 +104,12 @@ if fm_watcher_healthy "$STATE" "$WATCH" "${FM_GUARD_GRACE:-300}" "$FM_HOME"; the
   exit 0
 fi
 
-# This hook can be the first surviving process to observe the outage. Raise the
-# same deduplicated active alert as the host sentinel before classifying whether
-# this particular command is one of the narrow recovery exceptions.
+# This hook can be the first surviving process to observe the outage. Leave a
+# durable pending record for the host sentinel, but never cross the external
+# notification boundary here: the blocking banner must return immediately.
 SENTINEL="$SCRIPT_DIR/fm-supervision-sentinel.sh"
 if [ -x "$SENTINEL" ]; then
-  "$SENTINEL" check >/dev/null 2>&1 || true
+  "$SENTINEL" note-outage >/dev/null 2>&1 || true
 fi
 
 command -v node >/dev/null 2>&1 || exit 0
@@ -128,6 +129,9 @@ REASON_CODE=${REST#*"$TAB"}
 case "$REASON_CODE" in
   unsafe-teardown)
     REASON="[watcher-continuity] $FM_SUP_OUTAGE_SUMMARY No live watcher holds this home lock. During recovery only the ordinary literal bin/fm-teardown.sh is allowed, so drop --force and any shell-expanded arguments and retry the literal invocation (blocked: $BLOCKED_SCRIPT)"
+    ;;
+  unsafe-sentinel)
+    REASON="[watcher-continuity] $FM_SUP_OUTAGE_SUMMARY During recovery only the literal bin/fm-supervision-sentinel.sh enable is allowed; arm, disarm, check, and every other host-sentinel invocation stays blocked until supervision is healthy (blocked: $BLOCKED_SCRIPT)"
     ;;
   *)
     SESSION_START_CLAUSE=" run the once-per-session bin/fm-session-start.sh instead only if you have not already run it earlier this session;"

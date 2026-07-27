@@ -86,14 +86,35 @@ fm_path_age() {
   echo "$age"
 }
 
+fm_canonical_path() { # <existing-path>
+  local value=$1 dir base
+  [ -n "$value" ] || return 1
+  if [ -d "$value" ]; then
+    (cd "$value" 2>/dev/null && pwd -P)
+    return
+  fi
+  dir=$(dirname "$value")
+  base=$(basename "$value")
+  dir=$(cd "$dir" 2>/dev/null && pwd -P) || return 1
+  printf '%s/%s\n' "${dir%/}" "$base"
+}
+
+fm_same_path() { # <left> <right>
+  local left=$1 right=$2 left_canon right_canon
+  [ "$left" = "$right" ] && return 0
+  left_canon=$(fm_canonical_path "$left") || return 1
+  right_canon=$(fm_canonical_path "$right") || return 1
+  [ "$left_canon" = "$right_canon" ]
+}
+
 fm_watcher_lock_matches_pid() {
   local state=$1 watch_path=$2 pid=$3 home=${4:-$FM_HOME} lockdir lock_home lock_path lock_identity current_identity
   lockdir="$state/.watch.lock"
   lock_home=$(cat "$lockdir/fm-home" 2>/dev/null || true)
   lock_path=$(cat "$lockdir/watcher-path" 2>/dev/null || true)
   lock_identity=$(cat "$lockdir/pid-identity" 2>/dev/null || true)
-  [ "$lock_home" = "$home" ] || return 1
-  [ "$lock_path" = "$watch_path" ] || return 1
+  fm_same_path "$lock_home" "$home" || return 1
+  fm_same_path "$lock_path" "$watch_path" || return 1
   [ -n "$lock_identity" ] || return 1
   current_identity=$(fm_pid_identity "$pid") || return 1
   [ "$current_identity" = "$lock_identity" ]
