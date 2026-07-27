@@ -456,7 +456,6 @@ fm_sentinel_claim_alarm() { # <episode-key> <summary>
   attempt_at=$(fm_sentinel_marker_field attempt_at 2>/dev/null || true)
   episode=$(fm_sentinel_marker_field episode 2>/dev/null || true)
   deliveries=$(fm_sentinel_marker_field delivery_count 2>/dev/null || printf '0')
-  stored_episode=$(fm_sentinel_marker_field episode 2>/dev/null || true)
   case "$deliveries" in ''|*[!0-9]*) deliveries=0 ;; esac
   # A changed episode key means the watcher lock pid or beacon evidence moved:
   # the watcher recovered and was reaped again between two scheduled checks. That
@@ -529,29 +528,6 @@ fm_sentinel_mark_delivered() { # <claim-token> <episode> <summary>
   current=$?
   fm_lock_release "$FM_SENTINEL_CHECK_LOCK" 2>/dev/null || true
   return "$current"
-}
-
-fm_sentinel_note_outage() {
-  local key summary rc
-  fm_sentinel_mode_enabled || return 0
-  fm_primary_scope_matches "$FM_ROOT" "$FM_SENTINEL_STATE" || return 0
-  fm_sentinel_normalize_tunables
-  fm_supervision_status "$FM_SENTINEL_STATE" "$FM_SENTINEL_GRACE"
-  if [ "$FM_SUP_IN_FLIGHT" -eq 0 ] || fm_watcher_healthy "$FM_SENTINEL_STATE" "$FM_SENTINEL_WATCH" "$FM_SENTINEL_GRACE" "$FM_HOME"; then
-    fm_sentinel_clear_alarm
-    return 0
-  fi
-  summary="SUPERVISION DOWN: $FM_SUP_IN_FLIGHT task(s) in flight; last watcher beat: $FM_SUP_BEACON_DESC (grace ${FM_SENTINEL_GRACE}s). No automatic restart was attempted; see $FM_SENTINEL_MARKER"
-  key=$(fm_sentinel_episode_key)
-  fm_lock_try_acquire "$FM_SENTINEL_CHECK_LOCK" || return 0
-  if [ -f "$FM_SENTINEL_MARKER" ]; then
-    fm_lock_release "$FM_SENTINEL_CHECK_LOCK" 2>/dev/null || true
-    return 0
-  fi
-  fm_sentinel_write_alarm_record pending '' 0 "$key" "$summary" '' 0
-  rc=$?
-  fm_lock_release "$FM_SENTINEL_CHECK_LOCK" 2>/dev/null || true
-  return "$rc"
 }
 
 fm_sentinel_record_check() {
