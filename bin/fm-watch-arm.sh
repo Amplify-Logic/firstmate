@@ -17,6 +17,12 @@
 # docs/arm-pretool-check.md for the blessed tree and deny reason codes. It is a
 # pre-execution seatbelt, not a substitute for the verification here.
 #
+# Before forking, this script idempotently arms the macOS host-level outage
+# sentinel (`bin/fm-supervision-sentinel.sh`). launchd owns that read-mostly
+# fallback outside the harness process tree, so it can alert on a stale beacon
+# even if this arm process and its watcher child are reaped together. The
+# sentinel never starts or signals supervision processes.
+#
 # This script forks the watcher as a tracked child, then VERIFIES the outcome
 # before it settles in. It confirms a watcher process is genuinely alive AND the
 # liveness beacon (state/.last-watcher-beat) is fresh within FM_GUARD_GRACE (the
@@ -64,6 +70,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$SCRIPT_DIR/fm-wake-lib.sh"
 
 WATCH="$SCRIPT_DIR/fm-watch.sh"
+SENTINEL="$SCRIPT_DIR/fm-supervision-sentinel.sh"
 WATCH_LOCK="$STATE/.watch.lock"
 BEAT="$STATE/.last-watcher-beat"
 # "Fresh" reuses the guard's threshold so there is one definition of liveness.
@@ -79,6 +86,14 @@ CYCLE_LOG_KEEP_LINES=${FM_WATCH_CYCLE_LOG_KEEP_LINES:-1000}
 ARM_PID=${BASHPID:-$$}
 case "$CYCLE_LOG_MAX_BYTES" in ''|*[!0-9]*|0) CYCLE_LOG_MAX_BYTES=262144 ;; esac
 case "$CYCLE_LOG_KEEP_LINES" in ''|*[!0-9]*|0) CYCLE_LOG_KEEP_LINES=1000 ;; esac
+
+# This registration is intentionally best-effort for portability: the ordinary
+# watcher remains the primary mechanism on unsupported hosts. A supported host
+# that cannot retain the launchd service gets an explicit warning before the
+# long-running arm settles in.
+if [ -x "$SENTINEL" ] && ! "$SENTINEL" arm; then
+  echo "watcher: WARNING - host-level supervision-outage alarm is unavailable" >&2
+fi
 
 # The lifecycle ledger is diagnostic evidence, not a supervision dependency.
 # Writes are bounded and best-effort so an observability failure cannot stall an

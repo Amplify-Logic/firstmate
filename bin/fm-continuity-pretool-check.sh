@@ -4,11 +4,11 @@
 # This hook is deliberately narrow. It denies only an executed bin/fm-*.sh fleet
 # command other than bin/fm-wake-drain.sh, bin/fm-watch-arm.sh, or the
 # independently fail-closed bin/fm-teardown.sh, and only when the active primary
-# home has task metadata in flight but no identity-matched live watcher holds the
-# home lock. Ordinary shell commands, recovery commands, healthy supervision,
-# fleet-idle homes, and child worktrees are always allowed.
+# home has task metadata in flight but no identity-matched live watcher with a
+# fresh beacon holds the home lock. Ordinary shell commands, recovery commands,
+# healthy supervision, fleet-idle homes, and child worktrees are always allowed.
 #
-# The existing turn-end guard remains the unchanged final backstop. This gate
+# The turn-end guard remains the final blocking backstop. This gate
 # closes the long-turn gap before another fleet mutation, but does not replace or
 # weaken the Stop hook.
 #
@@ -81,9 +81,16 @@ POLICY="$SCRIPT_DIR/fm-continuity-command-policy.mjs"
 fm_primary_scope_matches "$FM_ROOT" "$STATE" || exit 0
 fm_supervision_status "$STATE" "${FM_GUARD_GRACE:-300}"
 [ "$FM_SUP_IN_FLIGHT" -gt 0 ] || exit 0
-LOCK_PID=$(cat "$STATE/.watch.lock/pid" 2>/dev/null || true)
-if fm_pid_alive "$LOCK_PID" && fm_watcher_lock_matches_pid "$STATE" "$WATCH" "$LOCK_PID" "$FM_HOME"; then
+if fm_watcher_healthy "$STATE" "$WATCH" "${FM_GUARD_GRACE:-300}" "$FM_HOME"; then
   exit 0
+fi
+
+# This hook can be the first surviving process to observe the outage. Raise the
+# same deduplicated active alert as the host sentinel before classifying whether
+# this particular command is one of the narrow recovery exceptions.
+SENTINEL="$SCRIPT_DIR/fm-supervision-sentinel.sh"
+if [ -x "$SENTINEL" ]; then
+  "$SENTINEL" check >/dev/null 2>&1 || true
 fi
 
 command -v node >/dev/null 2>&1 || exit 0
@@ -102,10 +109,10 @@ REASON_CODE=${REST#*"$TAB"}
 [ "$REASON_CODE" != "$REST" ] || REASON_CODE=""
 case "$REASON_CODE" in
   unsafe-teardown)
-    REASON="[watcher-continuity] tasks are in flight and no live watcher holds this home lock; during recovery only the ordinary literal bin/fm-teardown.sh is allowed, so drop --force and any shell-expanded arguments and retry the literal invocation (blocked: $BLOCKED_SCRIPT)"
+    REASON="[watcher-continuity] SUPERVISION DOWN: $FM_SUP_IN_FLIGHT task(s) in flight; last watcher beat: $FM_SUP_BEACON_DESC (grace ${FM_GUARD_GRACE:-300}s). During recovery only the ordinary literal bin/fm-teardown.sh is allowed, so drop --force and any shell-expanded arguments and retry the literal invocation (blocked: $BLOCKED_SCRIPT)"
     ;;
   *)
-    REASON="[watcher-continuity] tasks are in flight and no live watcher holds this home lock; drain wakes with bin/fm-wake-drain.sh, use fail-closed bin/fm-teardown.sh for completed tasks when needed, then re-arm with bin/fm-watch-arm.sh as a tracked Claude background task before running other fleet commands (blocked: $BLOCKED_SCRIPT)"
+    REASON="[watcher-continuity] SUPERVISION DOWN: $FM_SUP_IN_FLIGHT task(s) in flight; last watcher beat: $FM_SUP_BEACON_DESC (grace ${FM_GUARD_GRACE:-300}s). Drain wakes with bin/fm-wake-drain.sh, use fail-closed bin/fm-teardown.sh for completed tasks when needed, then re-arm with bin/fm-watch-arm.sh as a tracked Claude background task before running other fleet commands (blocked: $BLOCKED_SCRIPT)"
     ;;
 esac
 ESCAPED=$(printf '%s' "$REASON" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' | tr '\n' ' ')

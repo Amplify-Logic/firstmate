@@ -121,6 +121,10 @@
 #                                   its watchdog terminates it and continues to the
 #                                   next channel (default 10; invalid/zero uses the
 #                                   default).
+#          FM_WEDGE_ALARM_TITLE     notification title override used by the
+#                                   host-level supervision-outage sentinel.
+#          FM_WEDGE_ALARM_LOG_FILE  optional bounded log path for one-shot
+#                                   --active-alert mode.
 #          FM_INJECT_CONFIRM_RETRIES Enter-retry attempts on a swallowed Enter
 #                                   (default 3); the digest is typed once, only
 #                                   Enter is retried. Composer-empty detection is
@@ -189,6 +193,7 @@ MAX_DEFER_SECS_DEFAULT=300
 WEDGE_ALARM_TIMEOUT_SECS_DEFAULT=10
 WEDGE_ALARM_LAST_EPOCH=0
 WEDGE_ALARM_NOTIFIER_PID=
+WEDGE_ALARM_DELIVERED=0
 # The captain-relevant verb set and the status classifiers (last_status_line,
 # status_is_captain_relevant, window_to_task, scan_captain_relevant_statuses) now
 # live in bin/fm-classify-lib.sh, shared with the always-on watcher.
@@ -840,8 +845,8 @@ wedge_alarm_via_osascript() {  # <summary>
   command -v osascript >/dev/null 2>&1 || {
     log "wedge alarm: osascript not found; cannot post a macOS notification"; return 1; }
   wedge_alarm_run_bounded osascript osascript -e 'on run argv' \
-    -e 'display notification (item 1 of argv) with title "firstmate: away-mode escalations WEDGED" sound name "Basso"' \
-    -e 'end run' "$summary" >/dev/null 2>&1 && return 0
+    -e 'display notification (item 1 of argv) with title (item 2 of argv) sound name "Basso"' \
+    -e 'end run' "$summary" "${FM_WEDGE_ALARM_TITLE:-firstmate: away-mode escalations WEDGED}" >/dev/null 2>&1 && return 0
   log "wedge alarm: osascript notification failed"
   return 1
 }
@@ -858,7 +863,7 @@ wedge_alarm_via_herdr() {  # <summary>
   esac
   command -v herdr >/dev/null 2>&1 || {
     log "wedge alarm: herdr not found; cannot post a herdr notification"; return 1; }
-  wedge_alarm_run_bounded herdr herdr notification show "firstmate: away-mode escalations WEDGED" \
+  wedge_alarm_run_bounded herdr herdr notification show "${FM_WEDGE_ALARM_TITLE:-firstmate: away-mode escalations WEDGED}" \
     --body "$summary" --sound request >/dev/null 2>&1 && return 0
   log "wedge alarm: herdr notification failed"
   return 1
@@ -909,19 +914,23 @@ wedge_alarm_emit() {  # <channel> <summary>
 wedge_alarm_notify() {  # <summary> <marker>
   local summary=$1 marker=$2 ch
   local -a channels=()
+  WEDGE_ALARM_DELIVERED=0
   while IFS= read -r ch; do
     [ -n "$ch" ] || continue
     channels+=("$ch")
   done < <(wedge_alarm_configured_channels)
   for ch in "${channels[@]}"; do
-    [ "$ch" = off ] && return 0
+    if [ "$ch" = off ]; then
+      WEDGE_ALARM_DELIVERED=1
+      return 0
+    fi
   done
   for ch in "${channels[@]}"; do
     case "$ch" in auto|default) ch=$(wedge_alarm_platform_default) ;; esac
     case "$ch" in
       '') log "wedge alarm: no OS-level alert channel on $(uname); durable marker $marker is the only signal - set config/wedge-alarm (e.g. a command: directive)" ;;
-      osascript|herdr) wedge_alarm_emit "$ch" "$summary" || true ;;
-      command:*) wedge_alarm_emit command "$summary" "${ch#command:}" || true ;;
+      osascript|herdr) wedge_alarm_emit "$ch" "$summary" && WEDGE_ALARM_DELIVERED=1 ;;
+      command:*) wedge_alarm_emit command "$summary" "${ch#command:}" && WEDGE_ALARM_DELIVERED=1 ;;
       *) log "wedge alarm: unrecognized active-alert channel directive (redacted); marker still written" ;;
     esac
   done
@@ -1572,7 +1581,34 @@ fm_super_main() {
 
 # Run only when executed, not when sourced (tests source the classifiers).
 if [ "${BASH_SOURCE[0]}" = "${0}" ]; then
-  fm_super_main "$@"
+  case "${1:-}" in
+    '')
+      fm_super_main
+      ;;
+    --active-alert)
+      if [ "$#" -ne 3 ]; then
+        echo "usage: $(basename "$0") --active-alert <summary> <marker>" >&2
+        exit 2
+      fi
+      # One-shot host-sentinel mode reuses the exact configured alert owner
+      # without starting a watcher or the away-mode daemon. Keep notifier
+      # shutdown bounded if launchd retires this check mid-notification.
+      LOG=${FM_WEDGE_ALARM_LOG_FILE:-}
+      if [ -n "$LOG" ]; then
+        mkdir -p "$(dirname "$LOG")" 2>/dev/null && : >> "$LOG" 2>/dev/null || LOG=
+      fi
+      trap 'wedge_alarm_stop_active_notifier; exit 129' HUP
+      trap 'wedge_alarm_stop_active_notifier; exit 143' TERM
+      trap 'wedge_alarm_stop_active_notifier; exit 130' INT
+      wedge_alarm_notify "$2" "$3"
+      trim_log
+      [ "$WEDGE_ALARM_DELIVERED" -eq 1 ] || exit 1
+      ;;
+    *)
+      echo "usage: $(basename "$0") [--active-alert <summary> <marker>]" >&2
+      exit 2
+      ;;
+  esac
 else
   # Library mode: these functions were SOURCED (only tests do this - production
   # execs the daemon, see bin/fm-afk-start.sh). Make it structurally impossible

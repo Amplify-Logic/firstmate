@@ -85,6 +85,14 @@ fm_supervision_status "$STATE" "$GRACE"
 [ "$FM_SUP_IN_FLIGHT" -gt 0 ] || exit 0
 fm_watcher_healthy "$STATE" "$WATCH" "$GRACE" "$FM_HOME" && exit 0
 
+# Reuse the host sentinel's episode claim and active-alert channel before
+# rendering the blocking banner. This is best-effort and never replaces the
+# block: if the OS channel is unavailable, stderr remains the final backstop.
+SENTINEL="$SCRIPT_DIR/fm-supervision-sentinel.sh"
+if [ -x "$SENTINEL" ]; then
+  "$SENTINEL" check >/dev/null 2>&1 || true
+fi
+
 afk=0
 [ -e "$STATE/.afk" ] && afk=1
 x_mode=0

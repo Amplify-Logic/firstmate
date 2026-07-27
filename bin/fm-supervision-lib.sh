@@ -43,8 +43,12 @@ fm_supervision_status() {
     m=$(fm_sup_stat_mtime "$beat")
     if [ -n "$m" ]; then
       age=$(( $(date +%s) - m ))
-      FM_SUP_BEACON_DESC="${age}s ago"
-      [ "$age" -lt "$grace" ] && FM_SUP_WATCHER_FRESH=true
+      if [ "$age" -lt 0 ]; then
+        FM_SUP_BEACON_DESC="$((-age))s in the future"
+      else
+        FM_SUP_BEACON_DESC="${age}s ago"
+        [ "$age" -lt "$grace" ] && FM_SUP_WATCHER_FRESH=true
+      fi
     else
       # shellcheck disable=SC2034 # Read by callers (fm-guard.sh) after sourcing.
       FM_SUP_BEACON_DESC=unknown

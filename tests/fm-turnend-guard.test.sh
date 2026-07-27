@@ -54,6 +54,17 @@ test_predicate_unhealthy_stale_beacon() {
   pass "fm_supervision_unhealthy: true with in-flight task and a beacon far outside the grace window"
 }
 
+test_predicate_rejects_future_dated_beacon() {
+  local state="$TMP_ROOT/pred-future/state"
+  mkdir -p "$state"
+  : > "$state/task1.meta"
+  touch -t 209901010000 "$state/.last-watcher-beat"
+  fm_supervision_unhealthy "$state" 300 || fail "predicate treated a future-dated beacon as healthy"
+  [ "$FM_SUP_WATCHER_FRESH" = false ] || fail "future-dated beacon must never read as fresh"
+  assert_contains "$FM_SUP_BEACON_DESC" "in the future" "future-dated beacon description omitted the clock-skew evidence"
+  pass "fm_supervision_unhealthy: future-dated beacon is unhealthy instead of fresh forever"
+}
+
 test_predicate_healthy_fresh_beacon() {
   local state="$TMP_ROOT/pred-fresh/state"
   mkdir -p "$state"
@@ -917,6 +928,7 @@ test_grok_hook_invokes_adapter() {
 test_predicate_healthy_no_inflight
 test_predicate_unhealthy_no_beacon
 test_predicate_unhealthy_stale_beacon
+test_predicate_rejects_future_dated_beacon
 test_predicate_healthy_fresh_beacon
 test_predicate_queue_pending_flag
 test_hook_silent_when_no_work_in_flight

@@ -65,9 +65,13 @@ fm_path_mtime() {
 }
 
 fm_path_age() {
-  local path=$1 m
+  local path=$1 m age
   m=$(fm_path_mtime "$path") || { echo 999999; return; }
-  echo $(( $(date +%s) - m ))
+  age=$(( $(date +%s) - m ))
+  # A future-dated heartbeat or lock artifact must never look fresh forever
+  # after a wall-clock rollback or restored timestamp.
+  [ "$age" -ge 0 ] || age=999999
+  echo "$age"
 }
 
 fm_watcher_lock_matches_pid() {

@@ -19,14 +19,39 @@ After the configured retry bound is exhausted, it delivers the original wake wit
 This is deliberate Option B ordering: the fleet is protected before the model handles the wake whenever restoration succeeds, but the model is never left blind when it does not.
 
 Claude retains its native tracked background-task completion path.
-Its new PreToolUse continuity gate allows wake drain, arm recovery, and independently fail-closed teardown, but refuses other fleet commands while tasks are in flight and no identity-matched live watcher holds the home lock.
+Its PreToolUse continuity gate allows wake drain, arm recovery, and independently fail-closed teardown, but refuses other fleet commands while tasks are in flight and no identity-matched live watcher with a fresh beacon holds the home lock.
+The denial leads with `SUPERVISION DOWN`, the beacon age, the grace window, and the in-flight task count before the recovery instruction.
 Allowing an ordinary literal teardown prevents a terminal wake from creating a recovery circle: forced or dynamically constructed teardown remains blocked, ordinary teardown itself still refuses dirty, unlanded, incomplete-scout, and unresolved-decision cases, and the turn-end guard continues to require supervision for any tasks left in flight.
 Codex retains its bounded foreground checkpoint protocol.
 Grok retains its tracked background-task notification protocol.
 No adapter starts a replacement with shell `&`.
 
-The existing turn-end guard implementation and adapters are unchanged.
-They remain the final backstop rather than the normal continuity mechanism.
+The turn-end guard and its adapters remain the final in-harness backstop rather than the normal continuity mechanism.
+On an unhealthy result, both that guard and the Claude continuity gate invoke the same deduplicated active-alert check as the host sentinel before returning their blocking guidance.
+
+## Host-level outage sentinel
+
+This mitigation does not identify or prevent the harness-level process reap.
+It assumes the watcher or away daemon can still disappear at any time and bounds detection outside that process tree.
+
+`bin/fm-watch-arm.sh` and `bin/fm-afk-start.sh` idempotently register `bin/fm-supervision-sentinel.sh` as a per-home macOS launchd agent before entering their long-lived foreground work.
+launchd invokes its one-shot `check` mode every 60 seconds outside the harness process tree.
+The check reuses `fm_supervision_status` plus `fm_watcher_healthy`, so it requires the existing home-scoped watcher lock, PID identity, watcher path, and fresh beacon rather than trusting a leftover file or live PID alone.
+Future-dated beacon timestamps are rejected rather than remaining fresh indefinitely after wall-clock rollback or restore.
+With the default 300-second grace, a stale-beacon outage becomes an active alert within at most roughly 360 seconds instead of remaining silent for hours.
+A missing or dead identity-matched lock is detected on the next host check even while the beacon is still fresh.
+
+The sentinel writes `state/.supervision-outage-alarm`, posts through the channels owned by [`wedge-alarm.md`](wedge-alarm.md), deduplicates one continuous outage, and re-alerts at most every five minutes while it persists.
+The marker distinguishes pending delivery from a successful alert, so a failed channel retries on the next host check after a short claim lease instead of consuming the five-minute rate limit.
+The launchd label is derived from `FM_HOME`, so sibling firstmate homes never share a service identity.
+Its plist runs only `fm-supervision-sentinel.sh check`.
+It contains no watcher arm, daemon launch, signal, process sweep, or restart command.
+
+No automatic recovery is attempted.
+A launchd process cannot recreate the harness completion notification that wakes firstmate after an ordinary watcher reason, and it cannot safely infer the away-mode daemon's supervisor target.
+Starting either owner from launchd could race the existing singleton or create a second supervision cycle while `state/.afk` assigns ownership to the daemon.
+The sentinel therefore makes the outage bounded and loud while leaving recovery to the existing home-scoped, identity-checked paths.
+Linux and other hosts retain the hook alarms but do not yet have a verified host scheduler; watcher entry reports that limitation.
 
 ## Arm-layer cycle contract
 
@@ -41,13 +66,14 @@ The file is size-capped through `FM_WATCH_CYCLE_LOG_MAX_BYTES` and `FM_WATCH_CYC
 `state/.watch-triage.log` remains only the watcher's bounded absorbed-wake debug log and carries no lifecycle semantics.
 
 The default 300-second grace is unchanged.
-Only the watcher process touches `state/.last-watcher-beat`; no helper process can make a wedged watcher appear healthy.
+Only the watcher process touches `state/.last-watcher-beat`; the sentinel reads it but never touches it, so no helper process can make a wedged watcher appear healthy.
 
 ## Regression coverage
 
 `tests/fm-pi-watch-extension.test.sh` simulates actionable and empty child closes against the actual Pi and OpenCode close handlers, blocks prompt delivery to prove the successor launches first, verifies single-flight behavior, changes the session lock before close to prove ownership is rechecked, and hangs each successor arm to prove bounded fallback delivery includes the typed restoration failure.
 `tests/fm-watcher-lock.test.sh` covers verified-successor attach, the typed self-eviction failure, bounded and successor-linked lifecycle rows, and a SIGSTOP counterfactual that distinguishes a live PID from a stale beacon before classifying termination.
-`tests/fm-continuity-pretool-check.test.sh` proves the Claude gate rejects only non-recovery fleet execution in the precise unhealthy state and preserves the existing Stop registration.
+`tests/fm-continuity-pretool-check.test.sh` proves the Claude gate rejects only non-recovery fleet execution in the precise unhealthy state, treats a stale beacon as unhealthy even with a live identity-matched lock, and preserves the existing Stop registration.
+`tests/fm-supervision-sentinel.test.sh` proves six-task stale-beacon detection with a live identity-matched lock, active-alert content, failed-delivery retry, global rate limiting across changing evidence, recovery re-arming, one-per-home launchd registration, manifest reconciliation, a one-minute cadence, an unambiguous OS title, and the absence of every automatic recovery command.
 
 ## Sanitized live evidence, 2026-07-17
 

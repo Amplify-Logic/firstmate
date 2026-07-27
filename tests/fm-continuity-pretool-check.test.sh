@@ -41,7 +41,7 @@ expect_deny() {
   [ ! -s "$OUT" ] || fail "$label deny wrote stdout: $(cat "$OUT")"
   jq -e '.hookSpecificOutput.hookEventName == "PreToolUse" and .hookSpecificOutput.permissionDecision == "deny"' "$ERR" >/dev/null 2>&1 \
     || fail "$label deny omitted Claude's permission decision: $(cat "$ERR")"
-  [ -n "$expected" ] || expected="[watcher-continuity] tasks are in flight and no live watcher holds this home lock; drain wakes with bin/fm-wake-drain.sh, use fail-closed bin/fm-teardown.sh for completed tasks when needed, then re-arm with bin/fm-watch-arm.sh as a tracked Claude background task before running other fleet commands (blocked: $blocked)"
+  [ -n "$expected" ] || expected="[watcher-continuity] SUPERVISION DOWN: 1 task(s) in flight; last watcher beat: never (grace 300s). Drain wakes with bin/fm-wake-drain.sh, use fail-closed bin/fm-teardown.sh for completed tasks when needed, then re-arm with bin/fm-watch-arm.sh as a tracked Claude background task before running other fleet commands (blocked: $blocked)"
   actual=$(jq -r '.systemMessage' "$ERR")
   [ "$actual" = "$expected" ] || fail "$label recovery guidance changed: $actual"
 }
@@ -56,7 +56,7 @@ test_gate_scope_and_recovery_exceptions() {
   expect_allow "watch arm recovery" 'bin/fm-watch-arm.sh'
   expect_allow "drain then arm recovery" 'bin/fm-wake-drain.sh; bin/fm-watch-arm.sh'
   expect_allow "fail-closed teardown recovery" 'bin/fm-teardown.sh task'
-  unsafe_teardown_reason='[watcher-continuity] tasks are in flight and no live watcher holds this home lock; during recovery only the ordinary literal bin/fm-teardown.sh is allowed, so drop --force and any shell-expanded arguments and retry the literal invocation (blocked: fm-teardown.sh)'
+  unsafe_teardown_reason='[watcher-continuity] SUPERVISION DOWN: 1 task(s) in flight; last watcher beat: never (grace 300s). During recovery only the ordinary literal bin/fm-teardown.sh is allowed, so drop --force and any shell-expanded arguments and retry the literal invocation (blocked: fm-teardown.sh)'
   expect_deny "forced teardown is not recovery" 'bin/fm-teardown.sh task --force' 'fm-teardown.sh' "$unsafe_teardown_reason"
   expect_deny "nested forced teardown is not recovery" "bash -lc 'bin/fm-teardown.sh task --force'" 'fm-teardown.sh' "$unsafe_teardown_reason"
   # shellcheck disable=SC2016  # single quotes are deliberate: "$TEARDOWN_MODE" is literal test data (an unsafe shell-expanded arg the gate must deny), not an expansion here
@@ -67,8 +67,8 @@ test_gate_scope_and_recovery_exceptions() {
   pass "continuity gate allows recovery and ordinary commands but denies only other fleet execution"
 }
 
-test_live_lock_allows_fleet_command_even_with_stale_beacon() {
-  local holder identity rc=0
+test_live_lock_with_stale_beacon_still_denies_fleet_command() {
+  local holder identity rc=0 actual
   sleep 300 &
   holder=$!
   identity=$(FM_STATE_OVERRIDE="$STATE" bash -c '. "$1"; fm_pid_identity "$2"' _ "$ROOT/bin/fm-wake-lib.sh" "$holder") \
@@ -83,9 +83,11 @@ test_live_lock_allows_fleet_command_even_with_stale_beacon() {
   run_command 'bin/fm-crew-state.sh task' || rc=$?
   kill "$holder" 2>/dev/null || true
   wait "$holder" 2>/dev/null || true
-  [ "$rc" -eq 0 ] || fail "identity-matched live lock must allow fleet command even when its beacon is stale"
-  [ ! -s "$ERR" ] || fail "live-lock allow wrote stderr: $(cat "$ERR")"
-  pass "continuity gate classifies the lock by live PID identity rather than beacon age"
+  [ "$rc" -eq 2 ] || fail "identity-matched live lock with a stale beacon must deny fleet work, got $rc"
+  actual=$(jq -r '.systemMessage' "$ERR")
+  assert_contains "$actual" 'SUPERVISION DOWN: 1 task(s) in flight' "stale-beacon denial omitted the unambiguous alarm"
+  assert_contains "$actual" 'last watcher beat:' "stale-beacon denial omitted the outage age evidence"
+  pass "continuity gate requires both the identity-matched live lock and a fresh beacon"
 }
 
 test_child_worktree_and_malformed_input_fail_open() {
@@ -120,6 +122,6 @@ test_claude_hook_registration_preserves_stop_backstop() {
 }
 
 test_gate_scope_and_recovery_exceptions
-test_live_lock_allows_fleet_command_even_with_stale_beacon
+test_live_lock_with_stale_beacon_still_denies_fleet_command
 test_child_worktree_and_malformed_input_fail_open
 test_claude_hook_registration_preserves_stop_backstop
