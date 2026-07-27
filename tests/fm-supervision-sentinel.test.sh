@@ -36,8 +36,8 @@ run_check() {
     "$SENTINEL" check
 }
 
-test_stale_beacon_alert_is_loud_deduplicated_and_rearmed() {
-  local home="$TMP_ROOT/check" recorder="$TMP_ROOT/record-alert" log="$TMP_ROOT/alerts.log" holder identity i text
+test_stale_beacon_alert_is_loud_deduplicated_backed_off_and_rearmed() {
+  local home="$TMP_ROOT/check" recorder="$TMP_ROOT/record-alert" log="$TMP_ROOT/alerts.log" holder identity i text marker delivered next
   make_primary "$home"
   make_recorder "$recorder" "$log"
   for i in 1 2 3 4 5 6; do
@@ -69,6 +69,20 @@ test_stale_beacon_alert_is_loud_deduplicated_and_rearmed() {
   touch -t 202001020000 "$home/state/.last-watcher-beat"
   run_check "$home" "$recorder"
   [ "$(wc -l < "$log" | tr -d '[:space:]')" -eq 1 ] || fail "continuous outage emitted a duplicate alert when its evidence key changed"
+  marker="$home/state/.supervision-outage-alarm"
+  assert_contains "$(cat "$marker")" 'delivery_count=1' "initial alert did not record the first successful delivery"
+  delivered=$(awk -F= '$1 == "delivered_at" { print $2 }' "$marker")
+  next=$(awk -F= '$1 == "next_alert_at" { print $2 }' "$marker")
+  [ "$((next - delivered))" -eq 300 ] || fail "first repeat delay was not five minutes"
+
+  awk -F= '$1 == "next_alert_at" { print "next_alert_at=0"; next } { print }' "$marker" > "$marker.next"
+  mv "$marker.next" "$marker"
+  run_check "$home" "$recorder"
+  [ "$(wc -l < "$log" | tr -d '[:space:]')" -eq 2 ] || fail "due continuous-outage reminder was not delivered"
+  assert_contains "$(cat "$marker")" 'delivery_count=2' "repeat alert did not advance its delivery count"
+  delivered=$(awk -F= '$1 == "delivered_at" { print $2 }' "$marker")
+  next=$(awk -F= '$1 == "next_alert_at" { print $2 }' "$marker")
+  [ "$((next - delivered))" -eq 600 ] || fail "second repeat did not exponentially back off to ten minutes"
 
   rm -f "$home/state/task-"*.meta
   run_check "$home" "$recorder"
@@ -77,8 +91,8 @@ test_stale_beacon_alert_is_loud_deduplicated_and_rearmed() {
   run_check "$home" "$recorder"
   kill "$holder" 2>/dev/null || true
   wait "$holder" 2>/dev/null || true
-  [ "$(wc -l < "$log" | tr -d '[:space:]')" -eq 2 ] || fail "a later outage episode did not re-arm the active alert"
-  pass "supervision sentinel: stale beacon with a live identity-matched lock raises one loud six-task alert and re-arms after recovery"
+  [ "$(wc -l < "$log" | tr -d '[:space:]')" -eq 3 ] || fail "a later outage episode did not re-arm the active alert"
+  pass "supervision sentinel: stale beacon alert deduplicates, backs off, and re-arms after recovery"
 }
 
 test_failed_alert_stays_pending_and_retries() {
@@ -168,7 +182,8 @@ test_arm_registers_one_home_scoped_read_only_launchd_job() {
   plist="$home/state/.supervision-sentinel.plist"
   [ -s "$plist" ] || fail "sentinel arm did not write its launchd plist"
   assert_contains "$(cat "$plist")" "$SENTINEL" "launchd plist did not pin the tracked sentinel path"
-  assert_contains "$(cat "$plist")" '<string>check</string>' "launchd plist does not run the read-mostly check mode"
+  assert_contains "$(cat "$plist")" '<string>scheduled-check</string>' "launchd plist does not run the host-liveness check mode"
+  assert_not_contains "$(cat "$plist")" '<string>check</string>' "launchd plist used the in-harness check entry point"
   assert_contains "$(cat "$plist")" '<integer>60</integer>' "launchd plist lost the bounded one-minute check cadence"
   assert_contains "$(cat "$plist")" '/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin' "launchd plist did not pin its minimal host PATH"
   assert_not_contains "$(cat "$plist")" '.pi/agent/bin' "launchd plist persisted a harness-controlled PATH"
@@ -213,6 +228,70 @@ test_arm_registers_one_home_scoped_read_only_launchd_job() {
   pass "supervision sentinel: launchd registration is one-per-home, reconciles its manifest, and never auto-recovers"
 }
 
+test_in_process_check_cannot_certify_launchd_health() {
+  local home="$TMP_ROOT/host-proof" recorder="$TMP_ROOT/record-host-proof" log="$TMP_ROOT/host-proof.log"
+  make_primary "$home"
+  make_recorder "$recorder" "$log"
+
+  run_check "$home" "$recorder"
+  [ ! -e "$home/state/.supervision-sentinel-last-check" ] || fail "in-process check forged the launchd liveness proof"
+  FM_SUPERVISION_SENTINEL_MODE=auto \
+    FM_ROOT_OVERRIDE="$home" \
+    FM_HOME="$home" \
+    FM_STATE_OVERRIDE="$home/state" \
+    FM_WEDGE_ALARM_EXEC="$recorder" \
+    "$SENTINEL" scheduled-check
+  [ -s "$home/state/.supervision-sentinel-last-check" ] || fail "scheduled check did not publish host liveness after completion"
+  pass "supervision sentinel: only the scheduled entry point certifies launchd health"
+}
+
+test_explicit_disarm_is_durable_home_scoped_and_reversible() {
+  local home="$TMP_ROOT/disarm" fake="$TMP_ROOT/disarm-launchctl" log="$TMP_ROOT/disarm-launchctl.log" loaded="$TMP_ROOT/disarm-loaded" checked before after out
+  make_primary "$home"
+  home=$(cd "$home" && pwd -P)
+  checked="$home/state/.supervision-sentinel-last-check"
+  make_fake_launchctl "$fake" "$log" "$loaded" "$checked"
+
+  FM_SUPERVISION_SENTINEL_MODE=auto FM_SENTINEL_PLATFORM=Darwin FM_SENTINEL_LAUNCHCTL="$fake" \
+    FM_ROOT_OVERRIDE="$home" FM_HOME="$home" FM_STATE_OVERRIDE="$home/state" \
+    "$SENTINEL" arm || fail "disarm fixture could not register its home service"
+  out=$(FM_SENTINEL_PLATFORM=Darwin FM_SENTINEL_LAUNCHCTL="$fake" \
+    FM_ROOT_OVERRIDE="$home" FM_HOME="$home" FM_STATE_OVERRIDE="$home/state" \
+    "$SENTINEL" disarm) || fail "explicit disarm failed"
+  assert_contains "$out" 'disarmed for this home' "disarm did not report its durable result"
+  [ ! -e "$loaded" ] || fail "disarm left the exact home service loaded"
+  [ -s "$home/state/.supervision-sentinel.disarmed" ] || fail "disarm did not leave a durable visible record"
+  assert_contains "$(cat "$home/state/.supervision-sentinel.disarmed")" "home=$home" "disarm record lost its canonical home identity"
+  [ ! -e "$home/state/.supervision-sentinel.plist" ] || fail "disarm left its generated manifest installed"
+
+  before=$(grep -c '^bootstrap ' "$log" || true)
+  FM_SUPERVISION_SENTINEL_MODE=auto FM_SENTINEL_PLATFORM=Darwin FM_SENTINEL_LAUNCHCTL="$fake" \
+    FM_ROOT_OVERRIDE="$home" FM_HOME="$home" FM_STATE_OVERRIDE="$home/state" \
+    "$SENTINEL" arm >/dev/null 2>&1 || fail "automatic arm should honor an explicit disarm without failing watcher entry"
+  after=$(grep -c '^bootstrap ' "$log" || true)
+  [ "$after" -eq "$before" ] || fail "ordinary arm silently overrode the durable disarm"
+  [ -s "$home/state/.supervision-sentinel.disarmed" ] || fail "ordinary arm cleared the durable disarm record"
+
+  FM_SUPERVISION_SENTINEL_MODE=off FM_SENTINEL_PLATFORM=Darwin FM_SENTINEL_LAUNCHCTL="$fake" \
+    FM_ROOT_OVERRIDE="$home" FM_HOME="$home" FM_STATE_OVERRIDE="$home/state" \
+    "$SENTINEL" enable >/dev/null || fail "explicit enable did not restore the home service"
+  [ -e "$loaded" ] || fail "explicit enable did not load the exact home service"
+  [ ! -e "$home/state/.supervision-sentinel.disarmed" ] || fail "explicit enable left the disarm record after verified registration"
+
+  assert_not_contains "$(cat "$ROOT/bin/fm-teardown.sh" "$ROOT/bin/fm-session-start.sh" "$ROOT/bin/fm-watch-arm.sh")" \
+    'fm-supervision-sentinel.sh disarm' "ordinary lifecycle code invokes the explicit-only disarm path"
+  pass "supervision sentinel: explicit disarm is durable, home-scoped, visible, and explicitly reversible"
+}
+
+test_watch_arm_validates_arguments_before_sentinel_registration() {
+  local case_line arm_line
+  case_line=$(grep -nF "case \"\${1:-}\" in" "$ROOT/bin/fm-watch-arm.sh" | tail -1 | cut -d: -f1)
+  arm_line=$(grep -nF "\"\$SENTINEL\" arm" "$ROOT/bin/fm-watch-arm.sh" | head -1 | cut -d: -f1)
+  [ -n "$case_line" ] && [ -n "$arm_line" ] && [ "$case_line" -lt "$arm_line" ] \
+    || fail "watcher arm still registers the host service before rejecting bad argv"
+  pass "supervision sentinel: watcher arm validates argv before host registration"
+}
+
 test_real_channel_uses_unambiguous_notification_title_without_posting() {
   local home="$TMP_ROOT/title" fakebin log i
   make_primary "$home"
@@ -240,8 +319,11 @@ SH
   pass "supervision sentinel: OS alert title and body are unambiguous (fake notifier only)"
 }
 
-test_stale_beacon_alert_is_loud_deduplicated_and_rearmed
+test_stale_beacon_alert_is_loud_deduplicated_backed_off_and_rearmed
 test_live_identity_matched_watcher_stays_silent
 test_failed_alert_stays_pending_and_retries
 test_arm_registers_one_home_scoped_read_only_launchd_job
+test_in_process_check_cannot_certify_launchd_health
+test_explicit_disarm_is_durable_home_scoped_and_reversible
+test_watch_arm_validates_arguments_before_sentinel_registration
 test_real_channel_uses_unambiguous_notification_title_without_posting

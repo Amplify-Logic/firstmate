@@ -291,6 +291,28 @@ write_pi_loaded_markers() {
 
 # --- context digest: absent vs empty vs present -----------------------------
 
+test_disarmed_host_sentinel_is_loudly_surfaced() {
+  local rec root home fakebin out
+  rec=$(new_world sentinel-disarmed)
+  IFS='|' read -r root home fakebin <<EOF
+$rec
+EOF
+  make_fake_toolchain "$fakebin"
+  make_fake_ps_claude "$fakebin"
+  cat > "$home/state/.supervision-sentinel.disarmed" <<EOF
+state=disarmed
+disarmed_at=1234
+home=$home
+EOF
+
+  out=$(run_session_start "$home" "$root" "$fakebin:$BASE_PATH")
+  assert_contains "$out" 'HOST SUPERVISION SENTINEL - DISARMED' "session start hid the durable sentinel disarm"
+  assert_contains "$out" 'Host-level watcher-outage detection is deliberately disabled for this home.' "session start did not explain the unmonitored state"
+  assert_contains "$out" 'bin/fm-supervision-sentinel.sh enable' "session start omitted the deliberate re-enable action"
+  assert_contains "$out" 'disarmed_at=1234' "session start did not include the durable disarm evidence"
+  pass "session start: durable host-sentinel disarm is loud and actionable"
+}
+
 test_context_digest_absent_empty_present() {
   local rec root home fakebin out
   rec=$(new_world context-digest)
@@ -907,6 +929,7 @@ EOF
   pass "session start rejects Pi loaded markers from previous sessions"
 }
 
+test_disarmed_host_sentinel_is_loudly_surfaced
 test_context_digest_absent_empty_present
 test_lock_refusal_read_only_path
 test_output_ordering_diagnostics_lead

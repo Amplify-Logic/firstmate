@@ -119,8 +119,8 @@ Beyond the durable alarm markers and the tmux status-line flash available to the
 `FM_WEDGE_ALARM_CHANNEL` overrides the file with a single directive.
 Directives are `off` (a position-independent kill switch that disables every active alert), `auto`/`default`, `osascript` (macOS Notification Center banner), `herdr` (herdr UI notification), and `command:<cmd>` (run `<cmd>` via `sh -c`, summary on `$1` and stdin).
 An absent file means `auto`, i.e. default-on on macOS: a supervision outage must not be silent.
-The injection alarm fires at most once per max-defer window after a genuine wedge, while one continuous watcher outage re-alerts at most every five minutes by default.
-Failed watcher-outage delivery remains pending and retries after a short claim lease; only successful delivery starts the five-minute interval.
+The injection alarm fires at most once per max-defer window after a genuine wedge, while one continuous watcher outage repeats after five minutes by default and then backs off exponentially to a one-hour cap.
+Failed watcher-outage delivery remains pending and retries after a short claim lease; only successful delivery advances that backoff.
 A missing or failing channel logs and falls through to the next, never crashing the daemon.
 See [`wedge-alarm.md`](wedge-alarm.md) for the channel reference and macOS verification evidence, and [`examples/wedge-alarm`](examples/wedge-alarm) for a copyable config.
 
@@ -567,9 +567,11 @@ FM_ESCALATE_BATCH_SECS=90          # buffer window for batched escalation digest
 FM_MAX_DEFER_SECS=300              # max buffered escalation age before retry plus wedge alarm; 0 disables
 FM_WEDGE_ALARM_CHANNEL=            # override config/wedge-alarm with one supervision active-alert directive; off|auto|osascript|herdr|command:<cmd>; absent = auto (macOS -> an OS notification)
 FM_WEDGE_ALARM_EXEC=              # notifier seam: route every channel (osascript, herdr, command:) through this command as `<cmd> <channel> <summary>`; "discard" fires nothing; unset in production; the daemon defaults it to "discard" when sourced so no test posts a real notification (docs/wedge-alarm.md)
-FM_SUPERVISION_SENTINEL_MODE=      # `off` disables host registration/checks; absent = auto (macOS launchd, other hosts report no verified scheduler)
+FM_SUPERVISION_SENTINEL_MODE=      # `off` disables automatic host registration/checks in this process; use the explicit sentinel `disarm` command to uninstall an already-loaded service durably
 FM_SENTINEL_INTERVAL_SECS=         # launchd stale-beacon check interval; default 60, minimum 15
-FM_SENTINEL_REALARM_SECS=          # repeat alert interval during one continuous outage; default 300, minimum 60
+FM_SENTINEL_REALARM_SECS=          # first repeat-alert delay during one continuous outage; default 300, minimum 60
+FM_SENTINEL_MAX_REALARM_SECS=      # cap for exponentially backed-off repeat alerts; default 3600, minimum 300
+FM_SENTINEL_CLAIM_LEASE_SECS=      # retry lease after an in-progress or failed alert delivery; default 30, minimum 1
 FM_WEDGE_ALARM_TIMEOUT_SECS=10    # maximum seconds for each osascript, herdr, override, or command: notifier before its watchdog terminates it and continues to the next channel; invalid or zero values use 10
 FM_INJECT_FAIL_SLEEP=30            # seconds to back off when the supervisor pane is unavailable
 FM_INJECT_CONFIRM_RETRIES=3        # daemon Enter-retry attempts after typing a digest once
