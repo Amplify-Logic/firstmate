@@ -19,6 +19,7 @@ That sentinel is registered with macOS launchd by both watcher entry points, run
 Every report says `SUPERVISION DOWN` and carries the beacon age, the grace window, and the in-flight task count.
 The outage marker is `state/.supervision-outage-alarm`.
 The turn-end guard and Claude continuity gate write that marker through `note-outage`, a marker-only mode, and never fire a channel: an in-harness hook must return its blocking result immediately, so only the scheduled host check crosses this boundary.
+The operator-facing `check` mode is marker-only for the same reason, so `scheduled-check` really is the single owner of external delivery, and every mode returns early on a deliberately disarmed home.
 A continuous outage repeats after five minutes by default, then backs off exponentially to a one-hour cap so a persistent failure remains visible without training the captain to ignore a fixed-cadence alarm.
 The backoff is scoped to one episode: when the watcher lock or beacon evidence changes because the watcher recovered and was reaped again, the schedule resets and the new outage alerts at once rather than inheriting an hour-long delay.
 A failed channel leaves delivery pending and retries on the next host check after a short claim lease; only a successful channel advances the backoff.
@@ -58,7 +59,10 @@ There is no broad process kill anywhere in this path.
 
 launchd registration is idempotent and home-scoped through a SHA-256 label derived from canonical `FM_HOME` and state paths.
 The arm path compares the loaded manifest digest and reloads only that exact service when its script path, interval, or environment changes.
-It also requires a recent `state/.supervision-sentinel-last-check`, kickstarting the exact service and refusing registration if no scheduled one-shot check completes.
+It also requires a recent `state/.supervision-sentinel-last-check`, kickstarting the exact service and refusing registration if no scheduled one-shot check completes within `FM_SENTINEL_CHECK_WAIT_SECS` (15 seconds by default).
+A host that retains the service but never completes a check cannot converge — a job that cannot resolve its own home under the pinned minimal PATH looks exactly like this — so each failure is recorded in `state/.supervision-sentinel.arm-failure` and the next arm skips all launchd mutation until an exponential per-home cooldown expires (five minutes, doubling to the one-hour cap).
+That cooldown never reports success and never claims host monitoring is healthy: the arm still fails, and watcher entry still warns that the host alarm is unavailable.
+An explicit `enable` clears the record so the documented recovery action always gets one real attempt.
 In-harness guard checks use the marker-only `note-outage` entry point, never write that launchd-health proof, and never wait on an external notifier.
 The job receives a fixed minimal system PATH rather than persisting the harness process PATH.
 The job runs only `bin/fm-supervision-sentinel.sh scheduled-check`; its plist contains no restart command.
@@ -66,6 +70,7 @@ Registration lives in the current logged-in macOS GUI domain, which is the lifet
 
 Explicit `bin/fm-supervision-sentinel.sh disarm` removes only this home's exact service and leaves `state/.supervision-sentinel.disarmed` for every later session-start digest to surface.
 No ordinary harness closure, session end, task cleanup, or watcher stop calls disarm, and automatic arm attempts respect the durable record.
+Every check mode respects it too, including the marker-only ones, so a disarmed home accumulates no new outage evidence and fires no channel.
 Only deliberate `bin/fm-supervision-sentinel.sh enable` restores the service and clears that record after launchd health is verified.
 It does not claim outage coverage across logout, reboot, system sleep, a missing state volume, or launchd failure.
 Other operating systems keep the existing turn-end and continuity alarms but currently have no verified host scheduler, and watcher entry prints that limitation instead of claiming an external fallback.
@@ -79,10 +84,35 @@ This keeps tests from posting a real desktop notification:
 - `tests/wake-helpers.sh` upgrades that default to an on-disk recorder that logs `<channel>\t<summary>` to `$FM_WEDGE_ALARM_LOG`.
 - The host-sentinel suite executes one-shot alert mode through the same recorder.
 - Its title-argv test unsets the seam only after shadowing `osascript` with a file-writing fake.
+- Its opt-in real-launchd smoke routes the launchd-spawned check through a `command:` directive that only appends to a file.
 - Production leaves `FM_WEDGE_ALARM_EXEC` unset, so the real channels fire.
 
 The automated tests verify channel selection, summary propagation, and the title/body argv shape without posting a notification.
 The real `osascript`/`herdr` delivery mechanism was verified once by the bounded manual run below.
+
+## Verifying the launchd transport (opt-in, not yet run)
+
+Every default test in `tests/fm-supervision-sentinel.test.sh` drives registration through a fake `launchctl`, so the fake proves the arm/reconcile/disarm logic but not that a real `gui/<uid>` agent runs and delivers.
+`test_real_launchd_scheduled_check_delivers_end_to_end` closes that gap end to end over the real transport: it builds a scratch primary home under `TMPDIR`, derives the exact SHA-256 service identity before registering anything, runs a real `launchctl bootstrap`, waits for a launchd-spawned `scheduled-check` to record host liveness, and asserts the outage summary reached the channel and the marker committed `delivery=sent`.
+It is gated on `FM_SENTINEL_REAL_LAUNCHD_SMOKE=1` plus macOS plus `/bin/launchctl`, and it skips with an explicit reason otherwise.
+The gate is deliberate: the smoke mutates the caller's own `gui/<uid>` launchd domain, so it must be an attended choice rather than something CI or a parallel shard does implicitly.
+An `EXIT`-registered teardown boots out that one derived label and fails loudly with the exact `launchctl bootout` command if the service somehow survives; it never sweeps other labels.
+
+```
+FM_SENTINEL_REAL_LAUNCHD_SMOKE=1 tests/fm-supervision-sentinel.test.sh
+```
+
+**This smoke has not been run yet, and no evidence for it is recorded below.**
+It was authored but not executed here, because bootstrapping even a scratch agent writes into the user's `gui/<uid>` launchd domain, which is outside the boundary this change was allowed to touch.
+So the following remain unverified against real launchd rather than a fake:
+
+- that `launchctl bootstrap` in `gui/<uid>` accepts the generated plist and honors `RunAtLoad` plus `StartInterval`,
+- that `fm_primary_scope_matches` resolves `git` on the pinned `/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin` job PATH,
+- that a launchd-spawned check can write `state/` and reach `bin/fm-supervise-daemon.sh --active-alert`,
+- and that `osascript display notification` is delivered and TCC-attributed the same way from a launchd agent as from the interactive shell recorded in the manual run below.
+
+Until that command is run on a macOS login session, treat the launchd half of this backstop as logic-verified but transport-unverified.
+The in-harness turn-end and continuity banners do not depend on it: they are covered by hermetic tests and remain authoritative on their own.
 
 ## Verification (macOS, darwin)
 

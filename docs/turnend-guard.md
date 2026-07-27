@@ -182,6 +182,7 @@ The normal worker trial repeated that path with a real isolated Codex worker and
 ## Tests
 
 `tests/fm-turnend-guard.test.sh` covers the shared predicate, primary scoping (including a secondmate's own home being guarded like the main primary while its child worktrees stay exempt), `FM_HOME` and `FM_STATE_OVERRIDE` precedence, Pi logical-run latch behavior for no-tool and multi-tool runs, fail-open behavior without `jq`, tracked hook registration for the five repository-native adapters, and the Grok adapter's forced-resume loop guard and permission-mode regression.
+The guard's own suite exercises that call with the sentinel actually enabled and every active channel pointed at an on-disk recorder, proving the block still renders, the durable marker lands with `delivery=pending`, no channel fires, no launchd liveness proof is forged, and a durable disarm silences the sentinel without weakening the block.
 `tests/fm-supervision-sentinel.test.sh` covers the shared active-alert path without posting a real notification.
 `tests/fm-primary.test.sh` verifies the managed Kimi Stop hook registration and primary lifecycle boundary.
 `tests/fm-kimi-worker.test.sh` covers the separate worker Stop-hook home under `state/<id>.kimi-home`.
