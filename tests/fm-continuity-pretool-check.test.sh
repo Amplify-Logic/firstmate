@@ -109,8 +109,8 @@ test_deny_quantifies_stale_outage_and_names_every_task() {
   pass "continuity denial quantifies a stale outage and names every task in flight"
 }
 
-test_live_lock_allows_fleet_command_even_with_stale_beacon() {
-  local holder identity rc=0
+test_live_lock_with_stale_beacon_still_denies_fleet_command() {
+  local holder identity rc=0 actual
   sleep 300 &
   holder=$!
   identity=$(FM_STATE_OVERRIDE="$STATE" bash -c '. "$1"; fm_pid_identity "$2"' _ "$ROOT/bin/fm-wake-lib.sh" "$holder") \
@@ -125,9 +125,12 @@ test_live_lock_allows_fleet_command_even_with_stale_beacon() {
   run_command 'bin/fm-crew-state.sh task' || rc=$?
   kill "$holder" 2>/dev/null || true
   wait "$holder" 2>/dev/null || true
-  [ "$rc" -eq 0 ] || fail "identity-matched live lock must allow fleet command even when its beacon is stale"
-  [ ! -s "$ERR" ] || fail "live-lock allow wrote stderr: $(cat "$ERR")"
-  pass "continuity gate classifies the lock by live PID identity rather than beacon age"
+  [ "$rc" -eq 2 ] || fail "identity-matched live lock with a stale beacon must deny fleet work, got $rc"
+  actual=$(jq -r '.systemMessage' "$ERR")
+  assert_contains "$actual" 'SUPERVISION OUTAGE: down for at least ' "stale-beacon denial omitted the unambiguous alarm"
+  assert_contains "$actual" 'since the last watcher beat' "stale-beacon denial omitted the outage age evidence"
+  assert_contains "$actual" '1 task(s) in flight: task' "stale-beacon denial omitted the in-flight task identity"
+  pass "continuity gate requires both the identity-matched live lock and a fresh beacon"
 }
 
 test_child_worktree_and_malformed_input_fail_open() {
@@ -164,6 +167,6 @@ test_claude_hook_registration_preserves_stop_backstop() {
 test_gate_scope_and_recovery_exceptions
 test_lock_holding_session_gets_guidance_without_session_start
 test_deny_quantifies_stale_outage_and_names_every_task
-test_live_lock_allows_fleet_command_even_with_stale_beacon
+test_live_lock_with_stale_beacon_still_denies_fleet_command
 test_child_worktree_and_malformed_input_fail_open
 test_claude_hook_registration_preserves_stop_backstop

@@ -5,9 +5,9 @@
 # command other than bin/fm-session-start.sh, bin/fm-wake-drain.sh,
 # bin/fm-watch-arm.sh, or the independently fail-closed bin/fm-teardown.sh, and
 # only when the active primary home has task metadata in flight but no
-# identity-matched live watcher holds the home lock. Ordinary shell commands,
-# recovery commands, healthy supervision, fleet-idle homes, and child
-# worktrees are always allowed.
+# identity-matched live watcher with a fresh beacon holds the home lock.
+# Ordinary shell commands, recovery commands, healthy supervision, fleet-idle
+# homes, and child worktrees are always allowed.
 #
 # The recovery set is keyed on the command word actually executed, so a direct
 # bin/fm-bootstrap.sh stays denied while the bin/fm-bootstrap.sh that
@@ -26,7 +26,7 @@
 # with bin/fm-sessionstart-nudge.sh) scopes guidance text only; the allow/deny
 # decision itself is owned entirely by the classifier and is never affected.
 #
-# The existing turn-end guard remains the unchanged final backstop. This gate
+# The turn-end guard remains the final blocking backstop. This gate
 # closes the long-turn gap before another fleet mutation, but does not replace or
 # weaken the Stop hook.
 #
@@ -99,9 +99,16 @@ POLICY="$SCRIPT_DIR/fm-continuity-command-policy.mjs"
 fm_primary_scope_matches "$FM_ROOT" "$STATE" || exit 0
 fm_supervision_status "$STATE" "${FM_GUARD_GRACE:-300}"
 [ "$FM_SUP_IN_FLIGHT" -gt 0 ] || exit 0
-LOCK_PID=$(cat "$STATE/.watch.lock/pid" 2>/dev/null || true)
-if fm_pid_alive "$LOCK_PID" && fm_watcher_lock_matches_pid "$STATE" "$WATCH" "$LOCK_PID" "$FM_HOME"; then
+if fm_watcher_healthy "$STATE" "$WATCH" "${FM_GUARD_GRACE:-300}" "$FM_HOME"; then
   exit 0
+fi
+
+# This hook can be the first surviving process to observe the outage. Raise the
+# same deduplicated active alert as the host sentinel before classifying whether
+# this particular command is one of the narrow recovery exceptions.
+SENTINEL="$SCRIPT_DIR/fm-supervision-sentinel.sh"
+if [ -x "$SENTINEL" ]; then
+  "$SENTINEL" check >/dev/null 2>&1 || true
 fi
 
 command -v node >/dev/null 2>&1 || exit 0

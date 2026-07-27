@@ -83,6 +83,7 @@ test_predicate_future_beacon_is_unknown_not_fresh() {
   [ "$FM_SUP_WATCHER_FRESH" = false ] || fail "future-dated beacon must never read as fresh"
   assert_contains "$FM_SUP_OUTAGE_SUMMARY" 'unknown since when; watcher beat timestamp is' \
     "future-dated beacon was presented as a known outage duration"
+  assert_contains "$FM_SUP_BEACON_DESC" 'in the future' "future-dated beacon description omitted the clock-skew evidence"
   pass "fm_supervision_unhealthy: unsupported future beacon evidence never renders as protected"
 }
 

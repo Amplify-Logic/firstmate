@@ -30,6 +30,9 @@
 # Do not wrap this in `nohup ... &`: Codex/herdr can reap fire-and-forget shell
 # children after the tool call returns, while a tracked background terminal stays
 # attached and has a real lifecycle.
+# Before entering away mode, this entry also idempotently arms the macOS
+# host-level outage sentinel. launchd owns that read-mostly alarm outside this
+# process tree, so a harness reap of the daemon cannot silence its own detector.
 set -eu
 
 FM_AFK_START_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -38,6 +41,7 @@ FM_HOME="${FM_HOME:-${FM_ROOT_OVERRIDE:-$FM_ROOT}}"
 FM_AFK_STATE="${FM_STATE_OVERRIDE:-$FM_HOME/state}"
 FM_AFK_LOCK="$FM_AFK_STATE/.supervise-daemon.lock"
 FM_AFK_DAEMON="$FM_AFK_START_DIR/fm-supervise-daemon.sh"
+FM_AFK_SENTINEL="$FM_AFK_START_DIR/fm-supervision-sentinel.sh"
 
 # shellcheck source=bin/fm-wake-lib.sh
 . "$FM_AFK_START_DIR/fm-wake-lib.sh"
@@ -118,6 +122,9 @@ fm_afk_start_main() {
   esac
 
   mkdir -p "$FM_AFK_STATE"
+  if [ -x "$FM_AFK_SENTINEL" ] && ! "$FM_AFK_SENTINEL" arm; then
+    echo "afk: WARNING - host-level supervision-outage alarm is unavailable" >&2
+  fi
   if [ "${FM_AFK_STATE_PREPARED:-0}" = 1 ]; then
     [ -f "$FM_AFK_STATE/.afk" ] || { echo "afk: launcher-prepared state is missing" >&2; return 1; }
   else
