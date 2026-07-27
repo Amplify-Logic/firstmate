@@ -12,16 +12,24 @@ PRIMARY="$TMP_ROOT/primary"
 STATE="$PRIMARY/state"
 OUT="$TMP_ROOT/out"
 ERR="$TMP_ROOT/err"
+NOTIFY="$TMP_ROOT/notify"
+NOTIFY_LOG="$TMP_ROOT/notify.log"
 
 mkdir -p "$PRIMARY/bin" "$STATE"
 printf '# fixture\n' > "$PRIMARY/AGENTS.md"
 git -C "$PRIMARY" init -q
+cat > "$NOTIFY" <<SH
+#!/usr/bin/env bash
+printf '%s\t%s\n' "\$1" "\$2" >> "$NOTIFY_LOG"
+SH
+chmod +x "$NOTIFY"
 
 run_command() {
   local command=$1 rc=0
   : > "$OUT"
   : > "$ERR"
   FM_ROOT_OVERRIDE="$PRIMARY" FM_HOME="$PRIMARY" FM_STATE_OVERRIDE="$STATE" \
+    FM_SUPERVISION_SENTINEL_MODE=auto FM_WEDGE_ALARM_CHANNEL=osascript FM_WEDGE_ALARM_EXEC="$NOTIFY" \
     "$CHECK" --command "$command" > "$OUT" 2> "$ERR" || rc=$?
   return "$rc"
 }
@@ -56,6 +64,17 @@ test_gate_scope_and_recovery_exceptions() {
   expect_allow "watch arm recovery" 'bin/fm-watch-arm.sh'
   expect_allow "drain then arm recovery" 'bin/fm-wake-drain.sh; bin/fm-watch-arm.sh'
   expect_allow "fail-closed teardown recovery" 'bin/fm-teardown.sh task'
+  expect_allow "exact sentinel enable improves recovery" 'bin/fm-supervision-sentinel.sh enable'
+  expect_allow "nested exact sentinel enable improves recovery" "bash -lc 'bin/fm-supervision-sentinel.sh enable'"
+  unsafe_sentinel_reason='[watcher-continuity] SUPERVISION DOWN: 1 task(s) in flight; last watcher beat: never (grace 300s). During recovery only the exact literal bin/fm-supervision-sentinel.sh enable is allowed; disarm and every other sentinel mode remain blocked (blocked: fm-supervision-sentinel.sh)'
+  expect_deny "sentinel disarm reduces safety" 'bin/fm-supervision-sentinel.sh disarm' 'fm-supervision-sentinel.sh' "$unsafe_sentinel_reason"
+  expect_deny "sentinel arm is not explicit enable" 'bin/fm-supervision-sentinel.sh arm' 'fm-supervision-sentinel.sh' "$unsafe_sentinel_reason"
+  expect_deny "sentinel check is not explicit enable" 'bin/fm-supervision-sentinel.sh check' 'fm-supervision-sentinel.sh' "$unsafe_sentinel_reason"
+  expect_deny "sentinel scheduled check is not explicit enable" 'bin/fm-supervision-sentinel.sh scheduled-check' 'fm-supervision-sentinel.sh' "$unsafe_sentinel_reason"
+  expect_deny "bare sentinel is not explicit enable" 'bin/fm-supervision-sentinel.sh' 'fm-supervision-sentinel.sh' "$unsafe_sentinel_reason"
+  expect_deny "sentinel enable with extra args is not exact" 'bin/fm-supervision-sentinel.sh enable now' 'fm-supervision-sentinel.sh' "$unsafe_sentinel_reason"
+  # shellcheck disable=SC2016 # Literal dynamic mode is test input and must stay denied.
+  expect_deny "dynamic sentinel mode is not exact" 'bin/fm-supervision-sentinel.sh "$MODE"' 'fm-supervision-sentinel.sh' "$unsafe_sentinel_reason"
   unsafe_teardown_reason='[watcher-continuity] SUPERVISION DOWN: 1 task(s) in flight; last watcher beat: never (grace 300s). During recovery only the ordinary literal bin/fm-teardown.sh is allowed, so drop --force and any shell-expanded arguments and retry the literal invocation (blocked: fm-teardown.sh)'
   expect_deny "forced teardown is not recovery" 'bin/fm-teardown.sh task --force' 'fm-teardown.sh' "$unsafe_teardown_reason"
   expect_deny "nested forced teardown is not recovery" "bash -lc 'bin/fm-teardown.sh task --force'" 'fm-teardown.sh' "$unsafe_teardown_reason"
@@ -64,7 +83,9 @@ test_gate_scope_and_recovery_exceptions() {
   expect_deny "unrelated fleet command" 'bin/fm-crew-state.sh task' 'fm-crew-state.sh'
   expect_deny "recovery bundled with unrelated fleet command" 'bin/fm-wake-drain.sh; bin/fm-send.sh task hi' 'fm-send.sh'
   expect_deny "literal nested fleet command" "bash -lc 'bin/fm-bootstrap.sh'" 'fm-bootstrap.sh'
-  pass "continuity gate allows recovery and ordinary commands but denies only other fleet execution"
+  [ ! -e "$NOTIFY_LOG" ] || fail "continuity hook blocked on an external alert channel: $(cat "$NOTIFY_LOG")"
+  assert_contains "$(cat "$STATE/.supervision-outage-alarm")" 'delivery=pending' "continuity hook did not leave host-owned external delivery pending"
+  pass "continuity gate allows exact recovery while leaving external alerts to the host"
 }
 
 test_live_lock_with_stale_beacon_still_denies_fleet_command() {

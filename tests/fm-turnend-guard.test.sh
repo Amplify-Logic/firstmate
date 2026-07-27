@@ -555,6 +555,14 @@ test_hook_runs_fast() {
   pass "fm-turnend-guard: runs well under the generous timing margin (${elapsed_s}s)"
 }
 
+test_hook_never_waits_on_external_alert_delivery() {
+  local content
+  content=$(cat "$ROOT/bin/fm-turnend-guard.sh")
+  assert_contains "$content" "\"\$SENTINEL\" note-outage" "turn-end guard does not use the marker-only sentinel mode"
+  assert_not_contains "$content" "\"\$SENTINEL\" check" "turn-end guard still crosses the synchronous external-alert path"
+  pass "fm-turnend-guard: external alert delivery is host-owned, never hook-blocking"
+}
+
 test_grok_adapter_forces_one_resume_when_unhealthy() {
   local dir fakebin log out status
   dir=$(make_primary_dir "$TMP_ROOT/grok-adapter-block")
@@ -954,6 +962,7 @@ test_hook_silent_in_crewmate_worktree
 test_hook_silent_without_jq
 test_hook_silent_without_stdin
 test_hook_runs_fast
+test_hook_never_waits_on_external_alert_delivery
 test_grok_adapter_forces_one_resume_when_unhealthy
 test_grok_adapter_loop_guard_skips_resume
 test_settings_hook_uses_claude_project_dir

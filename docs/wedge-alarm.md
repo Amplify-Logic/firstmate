@@ -16,9 +16,11 @@ The durable marker and the tmux flash are unchanged; the active alert is added a
 
 The same channel owner now carries host-level watcher-outage alarms from `bin/fm-supervision-sentinel.sh`.
 That sentinel is registered with macOS launchd by both watcher entry points, runs outside the harness process tree once a minute, and alerts when tasks are in flight without an identity-matched watcher lock and a fresh `state/.last-watcher-beat`.
-The turn-end guard and Claude continuity gate invoke the same deduplicated check, so the first surviving hook or host check reports `SUPERVISION DOWN`, the beacon age, the grace window, and the in-flight task count.
+The turn-end guard and Claude continuity gate immediately return their own `SUPERVISION DOWN` banner and leave a durable pending record without invoking any external channel.
+The next independent scheduled host check owns external delivery with the same beacon age, grace window, and in-flight task count.
 The outage marker is `state/.supervision-outage-alarm`.
 A continuous outage repeats after five minutes by default, then backs off exponentially to a one-hour cap so a persistent failure remains visible without training the captain to ignore a fixed-cadence alarm.
+A changed watcher beat or lock episode means the watcher briefly recovered and died again, so it resets the backoff and alerts immediately rather than inheriting the old outage's delay.
 A failed channel leaves delivery pending and retries on the next host check after a short claim lease; only a successful channel advances the backoff.
 
 ## Channels
@@ -57,7 +59,7 @@ There is no broad process kill anywhere in this path.
 launchd registration is idempotent and home-scoped through a SHA-256 label derived from canonical `FM_HOME` and state paths.
 The arm path compares the loaded manifest digest and reloads only that exact service when its script path, interval, or environment changes.
 It also requires a recent `state/.supervision-sentinel-last-check`, kickstarting the exact service and refusing registration if no scheduled one-shot check completes.
-In-harness guard checks use a separate entry point and never write that launchd-health proof.
+In-harness guard checks use the marker-only `note-outage` entry point, never write that launchd-health proof, and never wait on an external notifier.
 The job receives a fixed minimal system PATH rather than persisting the harness process PATH.
 The job runs only `bin/fm-supervision-sentinel.sh scheduled-check`; its plist contains no restart command.
 Registration lives in the current logged-in macOS GUI domain, which is the lifetime that also owns the interactive harness sessions; the next watcher arm re-registers after a new login.
