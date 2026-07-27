@@ -646,7 +646,19 @@ families_for_changed_path() {
       printf '%s\n' "__script__:fm-visible-status.test.sh"
       printf '%s\n' "__script__:fm-herdr-layout-preview-e2e.test.sh"
       ;;
-    bin/fm-watch*|bin/fm-wake*|bin/fm-supervision-lib.sh|bin/fm-supervision-sentinel.sh|\
+    # `case` is first-match, so a supervision path that also needs the watcher
+    # family must name every family here: the later bin/fm-supervision* branch
+    # can no longer contribute its pure-contract-unit coverage.
+    bin/fm-supervision-lib.sh)
+      printf '%s\n' watcher-wake-lock
+      printf '%s\n' pure-contract-unit
+      ;;
+    bin/fm-supervision-sentinel.sh)
+      printf '%s\n' watcher-wake-lock
+      printf '%s\n' pure-contract-unit
+      printf '%s\n' session-bootstrap
+      ;;
+    bin/fm-watch*|bin/fm-wake*|\
     bin/fm-classify-lib.sh|bin/fm-daemon*|bin/fm-turnend-guard*|bin/fm-guard.sh)
       printf '%s\n' watcher-wake-lock
       ;;

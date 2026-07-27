@@ -574,6 +574,7 @@ FM_SENTINEL_INTERVAL_SECS=         # launchd stale-beacon check interval; defaul
 FM_SENTINEL_REALARM_SECS=          # first repeat-alert delay during one continuous outage; default 300, minimum 60
 FM_SENTINEL_MAX_REALARM_SECS=      # cap for exponentially backed-off repeat alerts; default 3600, minimum 300
 FM_SENTINEL_CLAIM_LEASE_SECS=      # retry lease after an in-progress or failed alert delivery; default 30, minimum 1
+FM_SENTINEL_CHECK_WAIT_SECS=       # bounded wait for a registration's first launchd-spawned check; default 15, minimum 1
 FM_WEDGE_ALARM_TIMEOUT_SECS=10    # maximum seconds for each osascript, herdr, override, or command: notifier before its watchdog terminates it and continues to the next channel; invalid or zero values use 10
 FM_INJECT_FAIL_SLEEP=30            # seconds to back off when the supervisor pane is unavailable
 FM_INJECT_CONFIRM_RETRIES=3        # daemon Enter-retry attempts after typing a digest once
