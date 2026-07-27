@@ -303,7 +303,7 @@ if [ "$FM_SUP_ARM_FAILED" = true ]; then
   fi
   printf 'Run bin/fm-supervision-sentinel.sh enable to retry immediately; it bypasses the cooldown and clears this record only after a verified host check.\n'
   printf 'The in-harness turn-end and continuity guards still block a blind turn end meanwhile.\n'
-  cat "$STATE/.supervision-sentinel.arm-failure"
+  cat "$FM_SUP_ARM_RECORD"
 fi
 
 # --- 3. wake-drain -------------------------------------------------------

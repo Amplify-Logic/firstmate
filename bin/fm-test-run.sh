@@ -635,14 +635,14 @@ families_for_changed_path() {
       printf '%s\n' backend-dispatch
       printf '%s\n' real-herdr-gated
       ;;
-    # `case` is first-match, so a supervision path that also needs the watcher
-    # family must name every family here: the later bin/fm-supervision* branch
-    # can no longer contribute its pure-contract-unit coverage.
-    bin/fm-supervision-lib.sh)
-      printf '%s\n' watcher-wake-lock
-      printf '%s\n' pure-contract-unit
-      ;;
-    bin/fm-supervision-sentinel.sh)
+    # Shared supervision core. `case` is first-match, so these paths must name
+    # every family they need: the later bin/fm-supervision* branch can no longer
+    # contribute its pure-contract-unit coverage. Both are listed together
+    # because every consumer of the library is also a consumer of the sentinel's
+    # record format - the turn-end and continuity guards (watcher-wake-lock,
+    # pure-contract-unit) and the session-start registration banner
+    # (session-bootstrap) - so the two must never select different families.
+    bin/fm-supervision-lib.sh|bin/fm-supervision-sentinel.sh)
       printf '%s\n' watcher-wake-lock
       printf '%s\n' pure-contract-unit
       printf '%s\n' session-bootstrap

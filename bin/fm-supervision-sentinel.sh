@@ -95,7 +95,7 @@ FM_SENTINEL_PLIST="$FM_SENTINEL_STATE/.supervision-sentinel.plist"
 FM_SENTINEL_LOADED_DIGEST="$FM_SENTINEL_STATE/.supervision-sentinel.loaded-digest"
 FM_SENTINEL_LAST_CHECK="$FM_SENTINEL_STATE/.supervision-sentinel-last-check"
 FM_SENTINEL_DISARMED="$FM_SENTINEL_STATE/.supervision-sentinel.disarmed"
-FM_SENTINEL_ARM_FAILURE="$FM_SENTINEL_STATE/.supervision-sentinel.arm-failure"
+FM_SENTINEL_ARM_FAILURE="$FM_SENTINEL_STATE/$FM_SUP_ARM_RECORD_NAME"
 FM_SENTINEL_CLAIM_TOKEN=
 FM_SENTINEL_FORCE_ARM=0
 
@@ -234,36 +234,29 @@ fm_sentinel_write_plist() { # <label> <interval>
   mv -f "$pending" "$FM_SENTINEL_PLIST"
 }
 
-fm_sentinel_arm_failure_count() {
-  fm_supervision_arm_failure_status "$FM_SENTINEL_STATE"
-  printf '%s\n' "$FM_SUP_ARM_FAILURES"
-}
-
-# Seconds left before this home may pay for another launchd bootout/bootstrap and
-# its bounded liveness wait. Zero means registration work may proceed.
+# Records one more consecutive registration failure and the deadline before this
+# home may pay for another launchd bootout/bootstrap plus its bounded liveness
+# wait.
 #
 # A host whose launchd service is retained but never completes a scheduled check
 # (no `git` on the pinned job PATH, a home that became a linked worktree, a
-# broken state volume) can never converge. Without this, every watcher and
-# away-mode entry paid a full bootout plus bootstrap plus a bounded wait and
+# broken state volume) can never converge. Without this cooldown, every watcher
+# and away-mode entry paid a full bootout plus bootstrap plus a bounded wait and
 # churned the service forever. The cooldown never claims monitoring is healthy:
 # the caller still fails, the warning still says the alarm is unavailable, and
 # every later session start reports the suppressed state until it is repaired.
 #
-# The deadline and its validity bound both come from the record through the shared
-# reader in fm-supervision-lib.sh, so the schedule lives in exactly one place and
-# the session-start banner cannot drift from what is actually enforced here.
-fm_sentinel_arm_cooldown_remaining() {
-  fm_supervision_arm_failure_status "$FM_SENTINEL_STATE"
-  printf '%s\n' "$FM_SUP_ARM_RETRY_IN"
-}
-
+# The deadline and its validity bound are written together here and read back
+# through the shared reader in fm-supervision-lib.sh, so the schedule lives in
+# exactly one place and the session-start banner cannot drift from what the arm
+# path actually enforces.
 fm_sentinel_record_arm_failure() { # <service>
   local service=$1 failures delay now pending
-  failures=$(($(fm_sentinel_arm_failure_count) + 1))
+  fm_supervision_arm_failure_status "$FM_SENTINEL_STATE"
+  failures=$((FM_SUP_ARM_FAILURES + 1))
   now=$(date +%s)
   delay=$(fm_sentinel_backoff_delay "$failures" "$FM_SENTINEL_ARM_RETRY" "$FM_SENTINEL_ARM_RETRY_MAX")
-  pending=$(mktemp "$FM_SENTINEL_STATE/.supervision-sentinel.arm-failure.XXXXXX") || return 1
+  pending=$(mktemp "$FM_SENTINEL_ARM_FAILURE.XXXXXX") || return 1
   {
     printf 'state=arm-failed\n'
     printf 'failures=%s\n' "$failures"
@@ -348,7 +341,7 @@ fm_sentinel_register_service() { # <launchctl> <domain> <service> <digest> <load
 # Registration body. Runs only while this home's arm lock is held, so it may
 # return early anywhere: fm_sentinel_arm owns the single matching release.
 fm_sentinel_arm_registration() { # <launchctl> <domain> <label> <service> <interval>
-  local launchctl=$1 domain=$2 label=$3 service=$4 interval=$5 digest loaded_digest cooldown pending rc
+  local launchctl=$1 domain=$2 label=$3 service=$4 interval=$5 digest loaded_digest pending rc
   if ! fm_sentinel_write_plist "$label" "$interval"; then
     printf 'supervision sentinel: could not write %s\n' "$FM_SENTINEL_PLIST" >&2
     fm_sentinel_record_arm_failure "$service" || true
@@ -371,10 +364,10 @@ fm_sentinel_arm_registration() { # <launchctl> <domain> <label> <service> <inter
   # cooldown. It deliberately does NOT erase the record here: only a verified
   # registration below may do that, so a failed enable keeps the evidence and its
   # escalating count instead of resetting to a fresh first failure.
-  cooldown=$(fm_sentinel_arm_cooldown_remaining)
-  if [ "$cooldown" -gt 0 ] && [ "$FM_SENTINEL_FORCE_ARM" -ne 1 ]; then
+  fm_supervision_arm_failure_status "$FM_SENTINEL_STATE"
+  if [ "$FM_SUP_ARM_RETRY_IN" -gt 0 ] && [ "$FM_SENTINEL_FORCE_ARM" -ne 1 ]; then
     printf 'supervision sentinel: host registration for this home failed %s time(s); no launchd retry for %ss and host outage monitoring is NOT active. Fix launchd, then run %s enable\n' \
-      "$(fm_sentinel_arm_failure_count)" "$cooldown" "$FM_SENTINEL_DIR/fm-supervision-sentinel.sh" >&2
+      "$FM_SUP_ARM_FAILURES" "$FM_SUP_ARM_RETRY_IN" "$FM_SENTINEL_DIR/fm-supervision-sentinel.sh" >&2
     return 1
   fi
   fm_sentinel_register_service "$launchctl" "$domain" "$service" "$digest" "$loaded_digest"
