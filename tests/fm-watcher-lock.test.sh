@@ -467,7 +467,7 @@ test_lock_owner_death_during_wait_is_reclaimed() {
     . "$1"
     fm_lock_try_acquire "$2" || exit 7
     printf "%s\n" "${BASHPID:-$$}" > "$3"
-    sleep 30
+    exec sleep 30
   ' _ "$LIB" "$lockdir" "$holder_file" &
   holder=$!
   i=0
@@ -475,7 +475,11 @@ test_lock_owner_death_during_wait_is_reclaimed() {
     sleep 0.1
     i=$((i + 1))
   done
-  [ -s "$holder_file" ] || fail "lock holder did not publish its pid"
+  if [ ! -s "$holder_file" ]; then
+    kill "$holder" 2>/dev/null || true
+    wait "$holder" 2>/dev/null || true
+    fail "lock holder did not publish its pid"
+  fi
   FM_LOCK_STALE_AFTER=0 FM_STATE_OVERRIDE="$state" bash -c '
     . "$1"
     i=0

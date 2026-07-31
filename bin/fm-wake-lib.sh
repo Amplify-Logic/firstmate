@@ -162,6 +162,8 @@ fm_lock_remove_stray_owner_link() {
   fi
 }
 
+# ".steal" is a reserved lock-path suffix. A path ending in it is a steal mutex:
+# it never gets a steal mutex of its own, so steal paths cannot nest.
 fm_lock_is_steal_path() {
   case "$1" in
     *.steal) return 0 ;;
@@ -248,6 +250,27 @@ fm_lock_remove_path() {
   rmdir "$lockdir" 2>/dev/null
 }
 
+# Remove a lock path only while it still is the stale object the caller
+# validated. Reclaim of the steal mutex is serialized by nothing (steal paths
+# never nest), so a contender that loses the race must refuse to unlink the
+# fresh lock a winner created after the staleness recheck ran.
+fm_lock_remove_stale_path() {
+  local lockdir=$1 expected_owner=$2 expected_pid=$3
+  if [ ! -e "$lockdir" ] && [ ! -L "$lockdir" ]; then
+    return 0
+  fi
+  if [ -n "$expected_owner" ]; then
+    fm_lock_points_to_owner "$lockdir" "$expected_owner" || return 1
+    rm -f "$lockdir" 2>/dev/null || return 1
+    fm_lock_discard_owner "$expected_owner"
+    return 0
+  fi
+  [ "$(cat "$lockdir/pid" 2>/dev/null || true)" = "$expected_pid" ] || return 1
+  [ -d "$lockdir" ] && [ ! -L "$lockdir" ] || return 1
+  fm_lock_clean_known_files "$lockdir"
+  rmdir "$lockdir" 2>/dev/null
+}
+
 fm_lock_mid_acquire_is_fresh() {
   local lockdir=$1 pid=$2 mid_acquire_stale
   case "$pid" in
@@ -290,15 +313,10 @@ fm_lock_try_reclaim_flat() {
     primary_owner=$(fm_lock_link_owner "$lockdir" 2>/dev/null || true)
   fi
   cur=$(cat "$lockdir/pid" 2>/dev/null || true)
-  if ! fm_lock_recheck_stale_owner "$lockdir" "$primary_owner" "$cur"; then
-    # shellcheck disable=SC2034 # Read by callers after fm_lock_try_acquire returns.
-    FM_LOCK_HELD_PID=$(cat "$lockdir/pid" 2>/dev/null || true)
-    FM_LOCK_OWNER_DIR=
-    return 1
-  fi
-  fm_lock_remove_path "$lockdir" || true
   rc=1
-  if fm_lock_try_create "$lockdir" "$allowed_steal_owner"; then
+  if fm_lock_recheck_stale_owner "$lockdir" "$primary_owner" "$cur" \
+    && fm_lock_remove_stale_path "$lockdir" "$primary_owner" "$cur" \
+    && fm_lock_try_create "$lockdir" "$allowed_steal_owner"; then
     rc=0
   fi
   if [ "$rc" -ne 0 ]; then
@@ -310,7 +328,7 @@ fm_lock_try_reclaim_flat() {
 }
 
 fm_lock_try_acquire() {
-  local lockdir=$1 nest_steal=${2:-1} pid steal rc steal_owner
+  local lockdir=$1 pid steal rc steal_owner
   FM_LOCK_HELD_PID=
   FM_LOCK_OWNER_DIR=
 
@@ -330,13 +348,13 @@ fm_lock_try_acquire() {
 
   # Steal locks never nest: a stale/abandoned steal mutex is reclaimed flatly
   # so acquisition cannot derive lock.steal.steal... until path limits crash.
-  if fm_lock_is_steal_path "$lockdir" || [ "$nest_steal" = 0 ]; then
+  if fm_lock_is_steal_path "$lockdir"; then
     fm_lock_try_reclaim_flat "$lockdir"
     return $?
   fi
 
   steal="$lockdir.steal"
-  if ! fm_lock_try_acquire "$steal" 0; then
+  if ! fm_lock_try_acquire "$steal"; then
     # shellcheck disable=SC2034 # Read by callers after fm_lock_try_acquire returns.
     FM_LOCK_HELD_PID=$(cat "$lockdir/pid" 2>/dev/null || true)
     FM_LOCK_OWNER_DIR=
