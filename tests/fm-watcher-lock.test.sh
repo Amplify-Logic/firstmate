@@ -398,18 +398,54 @@ test_lock_paused_mid_acquire_claim_fails_during_steal() {
   pass "paused mid-acquire claimant backs off to active stealer"
 }
 
+# A recursive acquirer derives lock.steal.steal, then unwinds and removes it
+# again, so an end-state directory scan never sees the nesting it created - the
+# scan alone passes against the recursive implementation. fm_lock_try_create
+# materializes a lock path with exactly two commands (mktemp -d for the owner
+# dir, ln -s for the lock link), so shimming both onto PATH records every lock
+# path an acquirer *attempts* and catches nesting even when it is cleaned up.
+# Echoes the shim dir; the trace lands in <dir>/lock-paths.log.
+install_lock_path_recorder() {
+  local dir=$1 shim trace real_ln real_mktemp
+  shim="$dir/lockshim"
+  trace="$dir/lock-paths.log"
+  mkdir -p "$shim"
+  : > "$trace"
+  real_ln=$(command -v ln)
+  real_mktemp=$(command -v mktemp)
+  cat > "$shim/ln" <<EOF
+#!/usr/bin/env bash
+printf '%s\n' "\$@" >> "$trace"
+exec "$real_ln" "\$@"
+EOF
+  cat > "$shim/mktemp" <<EOF
+#!/usr/bin/env bash
+printf '%s\n' "\$@" >> "$trace"
+exec "$real_mktemp" "\$@"
+EOF
+  chmod +x "$shim/ln" "$shim/mktemp"
+  printf '%s\n' "$shim"
+}
+
+assert_no_nested_steal_attempt() {
+  local dir=$1 what=$2 hit
+  hit=$(grep -m1 '\.steal\.steal' "$dir/lock-paths.log" 2>/dev/null || true)
+  [ -z "$hit" ] || fail "$what attempted to create a nested steal path: $hit"
+}
+
 test_lock_abandoned_steal_reclaimed_without_nesting() {
-  local dir state lockdir dead rc newpid nested
+  local dir state lockdir dead rc newpid nested shim
   dir=$(make_case lock-abandoned-steal)
   state="$dir/state"
   lockdir="$state/.contend.lock"
   dead=$(dead_pid)
+  shim=$(install_lock_path_recorder "$dir")
   mkdir "$lockdir" "$lockdir.steal"
   printf '%s\n' "$dead" > "$lockdir/pid"
   printf '%s\n' "$dead" > "$lockdir.steal/pid"
   touch -t 200001010000 "$lockdir" "$lockdir.steal"
   rc=0
-  newpid=$(FM_LOCK_STALE_AFTER=0 FM_STATE_OVERRIDE="$state" bash -c '
+  newpid=$(PATH="$shim:$PATH" FM_LOCK_STALE_AFTER=0 FM_STATE_OVERRIDE="$state" bash -c '
     . "$1"
     if fm_lock_try_acquire "$2"; then cat "$2/pid"; else exit 7; fi
   ' _ "$LIB" "$lockdir") || rc=$?
@@ -417,17 +453,19 @@ test_lock_abandoned_steal_reclaimed_without_nesting() {
   [ "$newpid" != "$dead" ] || fail "stale primary was not replaced behind abandoned steal"
   nested=$(find "$state" -maxdepth 1 -name '.contend.lock.steal.steal*' 2>/dev/null | wc -l | tr -d ' ')
   [ "$nested" -eq 0 ] || fail "reclaim created nested steal paths: $(find "$state" -maxdepth 1 -name '.contend.lock.steal*' | tr '\n' ' ')"
+  assert_no_nested_steal_attempt "$dir" "reclaim of an abandoned steal mutex"
   [ ! -e "$lockdir.steal" ] && [ ! -L "$lockdir.steal" ] \
     || fail "steal mutex was left behind after successful reclaim"
   pass "abandoned steal mutex is reclaimed flatly without nesting"
 }
 
 test_lock_steal_chain_does_not_recurse() {
-  local dir state lockdir dead rc i cur before after
+  local dir state lockdir dead rc i cur before after shim
   dir=$(make_case lock-steal-chain)
   state="$dir/state"
   lockdir="$state/.contend.lock"
   dead=$(dead_pid)
+  shim=$(install_lock_path_recorder "$dir")
   mkdir "$lockdir"
   printf '%s\n' "$dead" > "$lockdir/pid"
   touch -t 200001010000 "$lockdir"
@@ -442,13 +480,14 @@ test_lock_steal_chain_does_not_recurse() {
   done
   before=$(find "$state" -maxdepth 1 -name '.contend.lock.steal*' | wc -l | tr -d ' ')
   rc=0
-  FM_LOCK_STALE_AFTER=0 FM_STATE_OVERRIDE="$state" bash -c '
+  PATH="$shim:$PATH" FM_LOCK_STALE_AFTER=0 FM_STATE_OVERRIDE="$state" bash -c '
     . "$1"
     fm_lock_try_acquire "$2"
   ' _ "$LIB" "$lockdir" || rc=$?
   [ "$rc" -eq 0 ] || fail "steal-chain reclaim failed (rc=$rc)"
   after=$(find "$state" -maxdepth 1 -name '.contend.lock.steal*' | wc -l | tr -d ' ')
   [ "$after" -le "$before" ] || fail "reclaim created nested steal paths (before=$before after=$after)"
+  assert_no_nested_steal_attempt "$dir" "reclaim behind a preseeded steal chain"
   # Twelve steal suffixes were preseeded; a thirteenth must not appear.
   [ ! -e "$lockdir.steal.steal.steal.steal.steal.steal.steal.steal.steal.steal.steal.steal.steal" ] \
     && [ ! -L "$lockdir.steal.steal.steal.steal.steal.steal.steal.steal.steal.steal.steal.steal.steal" ] \
@@ -538,12 +577,13 @@ test_lock_live_pid_reuse_without_matching_identity_is_not_stolen_by_watcher() {
 }
 
 test_lock_stale_steal_concurrent_single_winner_no_nested_steal() {
-  local dir state lockdir dead marker i pids pid wins nested
+  local dir state lockdir dead marker i pids pid wins nested shim
   dir=$(make_case lock-stale-steal-concurrency)
   state="$dir/state"
   lockdir="$state/.contend.lock"
   marker="$dir/wins"
   dead=$(dead_pid)
+  shim=$(install_lock_path_recorder "$dir")
   mkdir "$lockdir" "$lockdir.steal"
   printf '%s\n' "$dead" > "$lockdir/pid"
   printf '%s\n' "$dead" > "$lockdir.steal/pid"
@@ -552,7 +592,7 @@ test_lock_stale_steal_concurrent_single_winner_no_nested_steal() {
   pids=
   i=1
   while [ "$i" -le 40 ]; do
-    FM_LOCK_STALE_AFTER=0 FM_STATE_OVERRIDE="$state" bash -c '
+    PATH="$shim:$PATH" FM_LOCK_STALE_AFTER=0 FM_STATE_OVERRIDE="$state" bash -c '
       . "$1"
       if fm_lock_try_acquire "$2"; then
         printf "%s\n" "${BASHPID:-$$}" >> "$3"
@@ -569,6 +609,7 @@ test_lock_stale_steal_concurrent_single_winner_no_nested_steal() {
   [ "$wins" -eq 1 ] || fail "expected exactly one winner reclaiming abandoned steal, got $wins"
   nested=$(find "$state" -maxdepth 1 -name '.contend.lock.steal.steal*' 2>/dev/null | wc -l | tr -d ' ')
   [ "$nested" -eq 0 ] || fail "concurrent abandoned-steal reclaim created nested steal paths"
+  assert_no_nested_steal_attempt "$dir" "concurrent abandoned-steal reclaim"
   pass "concurrent abandoned-steal reclaim yields one winner without nesting"
 }
 
