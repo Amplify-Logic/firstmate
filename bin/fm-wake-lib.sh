@@ -1,5 +1,11 @@
 #!/usr/bin/env bash
 # Shared durable wake queue and portable lock helpers.
+#
+# ".steal" is a reserved lock-path suffix: fm_lock_try_acquire derives
+# "<lock>.steal" as the mutex that serializes reclaim of a stale "<lock>", and a
+# path already ending in ".steal" is treated as that mutex, so it gets no mutex
+# of its own and steal paths cannot nest. Callers must never name a lock path
+# "<something>.steal".
 
 FM_WAKE_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 FM_WAKE_DEFAULT_ROOT="$(cd "$FM_WAKE_LIB_DIR/.." && pwd)"
