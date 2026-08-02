@@ -81,6 +81,8 @@ The busy probe includes the negative idle assertion that prevents Kimi's `thinki
 
 The interrupt probe refuses to count a turn that simply ran to completion, so `FM_HARNESS_EXAM_BUSY_SECONDS` must stay long enough for an interrupted turn to end measurably early.
 
+It also fails closed when the busy signature was never observed, because an unobserved turn has no boundary for the recorded key to end.
+
 ## Artifacts
 
 `results.json` is the machine-readable result.

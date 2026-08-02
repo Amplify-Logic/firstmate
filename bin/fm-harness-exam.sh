@@ -590,7 +590,7 @@ probe_composer() {
 
 probe_busy_interrupt_liveness() {
   local prompt alive_before alive_after interrupt_text busy_seen_at interrupt_elapsed
-  local turn_ended=0 ended_early=0 interrupt_seen=0
+  local turn_ended=0 ended_early=0 interrupt_seen=0 busy_observed=0
   capture_pane 03-idle-negative 100
   capture_processes 06-liveness-before
   if pane_text_matches "$BUSY_REGEX"; then
@@ -599,6 +599,7 @@ probe_busy_interrupt_liveness() {
   prompt="Use the shell tool to run exactly: sleep $BUSY_SECONDS; printf 'FM_EXAM_BUSY_DONE\\n'. Do not run it in the background and do not do anything else."
   submit_text "$prompt" || true
   if wait_for_regex "$BUSY_REGEX"; then
+    busy_observed=1
     busy_seen_at=$SECONDS
     capture_pane 03-busy 160
     record_result busy pass "recorded signature appeared during a real tool turn and not while idle" \
@@ -632,10 +633,13 @@ probe_busy_interrupt_liveness() {
   if [ "$INTERRUPT_REGEX" != - ] && printf '%s' "$interrupt_text" | grep -qiE "$INTERRUPT_REGEX"; then
     interrupt_seen=1
   fi
-  printf 'busy_seconds=%s\nelapsed_to_not_busy=%s\nturn_ended=%s\nended_before_natural_completion=%s\ninterrupt_regex=%s\ninterrupt_regex_matched=%s\n' \
-    "$BUSY_SECONDS" "$interrupt_elapsed" "$turn_ended" "$ended_early" "$INTERRUPT_REGEX" "$interrupt_seen" \
+  printf 'busy_observed=%s\nbusy_seconds=%s\nelapsed_to_not_busy=%s\nturn_ended=%s\nended_before_natural_completion=%s\ninterrupt_regex=%s\ninterrupt_regex_matched=%s\n' \
+    "$busy_observed" "$BUSY_SECONDS" "$interrupt_elapsed" "$turn_ended" "$ended_early" "$INTERRUPT_REGEX" "$interrupt_seen" \
     > "$ARTIFACTS/04-interrupt-timing.txt"
-  if [ "$alive_after" = "$ALIVE_VERDICT" ] && agent_marker_matches "$ARTIFACTS/04-interrupt.processes.txt" \
+  if [ "$busy_observed" != 1 ]; then
+    record_result interrupt fail "the busy signature was never observed, so no turn boundary existed for the recorded key to end" \
+      "evidence/04-interrupt.ansi,evidence/04-interrupt.processes.txt,evidence/04-interrupt-timing.txt"
+  elif [ "$alive_after" = "$ALIVE_VERDICT" ] && agent_marker_matches "$ARTIFACTS/04-interrupt.processes.txt" \
      && [ "$turn_ended" = 1 ] && { [ "$interrupt_seen" = 1 ] || [ "$ended_early" = 1 ]; }; then
     record_result interrupt pass "recorded key ended the ${BUSY_SECONDS}s tool turn after ${interrupt_elapsed}s while the runtime process survived" \
       "evidence/04-interrupt.ansi,evidence/04-interrupt.processes.txt,evidence/04-interrupt-timing.txt"
