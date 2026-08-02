@@ -46,7 +46,9 @@ The runtime receives its real unattended flag, but its tool access starts in the
 
 The lab links only known authentication files from `--source-home` and copies mutable configuration where an adapter needs it.
 
-The source home is never modified by the exam.
+The exam writes no configuration, session, or artifact state into the source home.
+
+Those authentication links stay shared exactly as `fm-spawn.sh` bridges them into a worker home, so a runtime that refreshes its own OAuth token writes that refresh back to the source credential file.
 
 Kimi receives a dedicated `KIMI_CODE_HOME`, and source hook blocks are removed before the exam hook is installed.
 
@@ -65,7 +67,7 @@ Use `--keep-lab` only when the temporary runtime home itself is needed for diagn
 | Autonomy | The adapter's unattended mode lets a real shell tool create a nonce proof without an approval response. |
 | Composer | A settled composer reads `empty`, and literal unsubmitted input reads `pending`. |
 | Busy | A deterministic long shell tool call shows the adapter's recorded busy regex, while settled idle chrome does not. |
-| Interrupt | The recorded key ends the active turn and leaves the same runtime process alive. |
+| Interrupt | The recorded key ends the active turn, leaves the same runtime process alive, and either prints the recorded interrupt text or ends the turn before the deterministic tool call could have finished on its own. |
 | Turn-end | A native adapter hook writes both an external marker and captured payload after a completed turn. |
 | Liveness | The backend verdict plus raw process command and argv match the adapter record. |
 | Exit | The recorded command returns the pane to its shell. |
@@ -76,6 +78,8 @@ Pi intentionally expects the current backend liveness verdict `unknown` while al
 This records the known classifier limitation instead of pretending Pi has an `alive` verdict.
 
 The busy probe includes the negative idle assertion that prevents Kimi's `thinking` footer from being mistaken for `thinking...` activity.
+
+The interrupt probe refuses to count a turn that simply ran to completion, so `FM_HARNESS_EXAM_BUSY_SECONDS` must stay long enough for an interrupted turn to end measurably early.
 
 ## Artifacts
 
