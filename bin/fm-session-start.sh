@@ -394,7 +394,9 @@ fi
 
 # A promise to reply in a public thread must survive compaction and restart.
 # Both predicates stop at inert presence checks when this home has not opted in.
-if fm_pf_relay_active "$FM_HOME" \
+# Reconciliation prunes registrations and clears legacy X links, so it belongs to
+# the session that holds the fleet lock and never to a read-only one.
+if [ "$READ_ONLY" -eq 0 ] && fm_pf_relay_active "$FM_HOME" \
   && { fm_pf_has_registrations "$STATE" || fm_pf_has_events "$STATE"; }; then
   PUBLIC_FOLLOWUP=$("$SCRIPT_DIR/fm-public-followup.sh" pending 2>/dev/null) || PUBLIC_FOLLOWUP=
   if [ -n "$PUBLIC_FOLLOWUP" ]; then
