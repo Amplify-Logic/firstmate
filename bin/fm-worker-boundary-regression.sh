@@ -506,7 +506,14 @@ def kv_value(output: bytes, key: str) -> str:
     return ""
 
 
-def gateway_probes(gateway: Path, root: Path) -> Tuple[Dict[str, str], Dict[str, str]]:
+def canary_present(path: Path) -> bool:
+    try:
+        return path.is_file() and path.stat().st_size > 0
+    except OSError:
+        return False
+
+
+def gateway_probes(gateway: Path, root: Path) -> Tuple[Dict[str, str], Dict[str, str], Dict[str, str]]:
     env = gateway_env(root)
     Path(env["TMPDIR"]).mkdir(mode=0o700, exist_ok=True)
     first_raw = json.dumps(valid_action_request(), separators=(",", ":")).encode()
@@ -541,15 +548,17 @@ def gateway_probes(gateway: Path, root: Path) -> Tuple[Dict[str, str], Dict[str,
         start_new_session=True,
     )
     if crashing.stdin is not None:
-        crashing.stdin.write(b'{"task_id":"synthetic-interrupted"')
-        crashing.stdin.flush()
+        with contextlib.suppress(OSError):
+            crashing.stdin.write(b'{"task_id":"synthetic-interrupted"')
+            crashing.stdin.flush()
     time.sleep(0.05)
-    with contextlib.suppress(ProcessLookupError):
+    with contextlib.suppress(OSError):
         os.killpg(crashing.pid, signal.SIGKILL)
     with contextlib.suppress(subprocess.TimeoutExpired):
         crashing.wait(timeout=1)
     if crashing.stdin is not None:
-        crashing.stdin.close()
+        with contextlib.suppress(OSError):
+            crashing.stdin.close()
 
     restart = subprocess.run(
         [str(gateway), "status", "--digest", digest],
@@ -566,11 +575,21 @@ def gateway_probes(gateway: Path, root: Path) -> Tuple[Dict[str, str], Dict[str,
         "gateway.actionrequest-flooded": "RATE_LIMITED" if accepted < flood_total else "ACCEPTED_ALL",
         "recovery.crash-restart": "STATE_PRESERVED" if first.returncode == 0 and restart.returncode == 0 else "STATE_LOST",
     }
+    state_canaries = {
+        "gateway.database-read": Path(paths["gateway_database"]),
+        "gateway.inbox-read": Path(paths["gateway_inbox"]),
+        "gateway.audit-write": Path(paths["gateway_audit"]),
+    }
     if first.returncode != 0:
         for probe in ALL_PROBES:
             if probe.startswith("gateway.actionrequest-"):
                 results[probe] = "NO_BASELINE"
-    return results, paths
+        unmeasured = {probe: "NO_BASELINE" for probe in state_canaries}
+    else:
+        unmeasured = {
+            probe: "NO_CANARY" for probe, path in state_canaries.items() if not canary_present(path)
+        }
+    return results, paths, unmeasured
 
 
 def launcher_env(fixture: Dict[str, Any], worker_home: Path) -> Dict[str, str]:
@@ -586,7 +605,7 @@ def launcher_env(fixture: Dict[str, Any], worker_home: Path) -> Dict[str, str]:
 
 
 def terminate_process(process: subprocess.Popen[bytes]) -> None:
-    with contextlib.suppress(ProcessLookupError):
+    with contextlib.suppress(OSError):
         os.killpg(process.pid, signal.SIGKILL)
     with contextlib.suppress(subprocess.TimeoutExpired):
         process.wait(timeout=1)
@@ -976,7 +995,7 @@ def run_pack(args: argparse.Namespace) -> int:
     read_fd = inherited_socket.fileno()
     actual: Dict[str, str] = {}
     try:
-        gateway_results, gateway_paths = gateway_probes(gateway, temp_root)
+        gateway_results, gateway_paths, gateway_unmeasured = gateway_probes(gateway, temp_root)
         actual.update(gateway_results)
         fixture, managers = make_fixture(temp_root, gateway_paths, read_fd)
         fixture_path = temp_root / "worker" / "fixture.json"
@@ -1025,6 +1044,7 @@ def run_pack(args: argparse.Namespace) -> int:
         actual.update(artifact_probes(artifact_adapter, temp_root, env))
         actual.update(source_invariant_probes(manifest, repo))
         actual["launcher.drift"] = launcher_attestation_probe(Path(args.attestation).resolve() if args.attestation else None, manifest)
+        actual.update(gateway_unmeasured)
         records, failed = record_results(actual, args.target)
         report = {
             "schema": SCHEMA,

@@ -26,6 +26,8 @@ Only the probes a scenario is allowed to report are taken from the payload resul
 The verdicts the harness derives from captured output are additionally gated on the scenario having reported, so a launcher adapter that exits cleanly without ever starting the payload scores no probe at all.
 A resource ceiling is only recognized from a signal kill, because an ordinary nonzero exit is a refused or broken launch rather than an enforced limit.
 The gateway request probes likewise report `NO_BASELINE` when the gateway rejects the valid baseline request, since rejections prove nothing once nothing is accepted.
+The gateway database, inbox, and audit boundaries carry the same requirement: they report `NO_BASELINE` without an accepted baseline request and `NO_CANARY` when the state the baseline should have written is missing or empty, because an unreadable path that was never created denies nothing.
+The harness verifies those state canaries itself before the payload is asked to reach them, and its verdict is not overridable by the payload result.
 
 The committed source manifest intentionally describes the current workspace gateway and ambient launcher.
 It therefore remains red until the fixed-path runner, gateway channels, artifact importer, and trusted installation verifier replace those sources.

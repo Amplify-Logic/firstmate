@@ -135,45 +135,75 @@ PY
 pass "ambient launch and workspace gateway reproduce only synthetic boundary exposures"
 
 NOOP_ADAPTER="$TMP/noop-adapter.sh"
-NOOP_REPORT="$TMP/noop.json"
 cat >"$NOOP_ADAPTER" <<'SH'
 #!/usr/bin/env bash
 exit 0
 SH
-chmod +x "$NOOP_ADAPTER"
+REJECTING_GATEWAY="$TMP/rejecting-gateway.sh"
+cat >"$REJECTING_GATEWAY" <<'SH'
+#!/usr/bin/env bash
+exit 1
+SH
+STATELESS_GATEWAY="$TMP/stateless-gateway.sh"
+cat >"$STATELESS_GATEWAY" <<'SH'
+#!/usr/bin/env bash
+printf 'digest=%s\n' synthetic-stateless-digest
+exit 0
+SH
+chmod +x "$NOOP_ADAPTER" "$REJECTING_GATEWAY" "$STATELESS_GATEWAY"
+
 set +e
-"$PACK" --target native-account --launcher-adapter "$NOOP_ADAPTER" --report "$NOOP_REPORT" \
-  >"$TMP/noop.stdout" 2>"$TMP/noop.stderr"
+"$PACK" --target native-account --launcher-adapter "$NOOP_ADAPTER" --gateway "$REJECTING_GATEWAY" \
+  --report "$TMP/noop.json" >"$TMP/noop.stdout" 2>"$TMP/noop.stderr"
 noop_rc=$?
 set -e
-expect_code 1 "$noop_rc" "launcher adapter that never runs the payload"
-[ ! -s "$TMP/noop.stderr" ] || fail "a silent launcher adapter must fail as verdicts, not as setup errors"
-python3 - "$NOOP_REPORT" <<'PY'
+expect_code 1 "$noop_rc" "launcher and gateway that prove nothing"
+[ ! -s "$TMP/noop.stderr" ] || fail "a silent launcher and a rejecting gateway must fail as verdicts, not as setup errors"
+python3 - "$TMP/noop.json" <<'PY'
 import json
 import sys
 
 report = json.load(open(sys.argv[1], encoding="utf-8"))
 records = {record["probe"]: record for record in report["records"]}
-payload_measured = [
-    probe
-    for probe in records
-    if probe.startswith(("network.", "descriptor.", "ipc.", "credential.", "privacy.", "control."))
-    or probe in (
-        "gateway.database-read",
-        "gateway.inbox-read",
-        "gateway.audit-write",
-        "terminal.control-output",
-        "resource.memory",
-        "resource.processes",
-        "resource.output",
-        "resource.wall-clock",
-    )
-]
-assert len(payload_measured) == 27, payload_measured
-for probe in payload_measured:
-    assert records[probe]["result"] == "FAIL", (probe, records[probe]["actual"])
+assert report["summary"]["failed"] == 40, report["summary"]
+expected_states = {
+    "terminal.control-output": "NOT_RUN",
+    "resource.output": "NOT_RUN",
+    "resource.memory": "NOT_REPORTED",
+    "resource.processes": "NOT_REPORTED",
+    "resource.wall-clock": "UNBOUNDED",
+    "network.ipv4": "NOT_RUN",
+    "gateway.database-read": "NO_BASELINE",
+    "gateway.inbox-read": "NO_BASELINE",
+    "gateway.audit-write": "NO_BASELINE",
+    "gateway.actionrequest-malformed": "NO_BASELINE",
+    "gateway.actionrequest-replayed": "NO_BASELINE",
+    "gateway.actionrequest-oversized": "NO_BASELINE",
+    "gateway.actionrequest-flooded": "NO_BASELINE",
+}
+for probe, state in expected_states.items():
+    assert records[probe]["actual"] == state, (probe, records[probe]["actual"])
 PY
-pass "a launcher adapter that never runs the payload turns no probe green"
+pass "a silent launcher and a gateway that accepts no baseline turn no probe green"
+
+set +e
+"$PACK" --target native-account --launcher-adapter "$NOOP_ADAPTER" --gateway "$STATELESS_GATEWAY" \
+  --report "$TMP/stateless.json" >"$TMP/stateless.stdout" 2>"$TMP/stateless.stderr"
+stateless_rc=$?
+set -e
+expect_code 1 "$stateless_rc" "gateway that accepts the baseline but writes no state"
+[ ! -s "$TMP/stateless.stderr" ] || fail "a stateless gateway must fail as verdicts, not as setup errors"
+python3 - "$TMP/stateless.json" <<'PY'
+import json
+import sys
+
+report = json.load(open(sys.argv[1], encoding="utf-8"))
+records = {record["probe"]: record for record in report["records"]}
+for probe in ("gateway.database-read", "gateway.inbox-read", "gateway.audit-write"):
+    assert records[probe]["actual"] == "NO_CANARY", (probe, records[probe]["actual"])
+    assert records[probe]["result"] == "FAIL"
+PY
+pass "gateway state boundaries need an existing canary before they can pass"
 
 VERIFY_SOURCE="$TMP/install-verifier.py"
 PRIV_SOURCE="$TMP/privileged.py"
