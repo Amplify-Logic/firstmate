@@ -93,6 +93,12 @@ test_faster_paths_use_configured_authority_without_stacked_review() {
     "local-only brief hard-coded captain-only authority"
   assert_no_grep "Firstmate then reviews your branch diff" "$brief" \
     "local-only brief retained a personal review stacked on the selected delivery path"
+  assert_no_grep "make \`--intent\` preserve all relevant content from this brief" "$brief" \
+    "local-only brief must not include the no-mistakes --intent contract"
+  id="brief-direct-intent-a4"
+  FM_HOME="$home" "$ROOT/bin/fm-brief.sh" "$id" direct-proj >/dev/null 2>&1
+  assert_no_grep "make \`--intent\` preserve all relevant content from this brief" "$home/data/$id/brief.md" \
+    "direct-PR brief must not include the no-mistakes --intent contract"
   pass "fm-brief.sh: faster paths use configured authority without stacked review"
 }
 
@@ -116,7 +122,15 @@ test_no_mistakes_dod_wording() {
     "no-mistakes DOD must render literal backticks around help"
   assert_no_grep "no-mistakes' own guidance" "$brief" \
     "no-mistakes DOD regressed to the apostrophe form that breaks bash -n"
-  pass "fm-brief.sh: no-mistakes DOD wording avoids the apostrophe regression"
+  assert_grep "make \`--intent\` preserve all relevant content from this brief" "$brief" \
+    "no-mistakes DOD must retain the accepted task contract"
+  assert_grep "carrying only each requirement's current accepted form" "$brief" \
+    "no-mistakes DOD must replace superseded requirements with their accepted form"
+  assert_grep "retain direct requirements instead of substituting a diff summary" "$brief" \
+    "no-mistakes DOD must keep direct requirements rather than a diff summary"
+  assert_grep "exclude generic operational, status, delivery, and other scaffold boilerplate unless it is task-specific" "$brief" \
+    "no-mistakes DOD must exclude generic scaffold boilerplate from intent"
+  pass "fm-brief.sh: no-mistakes DOD preserves the full accepted task intent"
 }
 
 test_ship_project_memory_wording() {
