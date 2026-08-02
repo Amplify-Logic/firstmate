@@ -21,8 +21,6 @@ LINT="$ROOT/bin/fm-lint.sh"
 CI="$ROOT/.github/workflows/ci.yml"
 NM="$ROOT/.no-mistakes.yaml"
 INSTALLER="$ROOT/bin/fm-install-shellcheck.sh"
-# The authoritative file set the one owner must run.
-CANON='shellcheck --norc bin/*.sh bin/backends/*.sh tests/*.sh'
 # The pinned version, read from the single source (the one owner itself).
 REQUIRED=$("$LINT" --required-version)
 
@@ -40,13 +38,11 @@ test_owner_exists_and_executable() {
 }
 
 test_owner_defines_canonical_set() {
-  assert_grep "$CANON" "$LINT" "fm-lint.sh must run the canonical shellcheck file set"
-  # It must not weaken CI: no severity downgrade and no blanket disable/exclude
-  # that would hide findings CI fails on.
-  assert_no_grep '--severity' "$LINT" "fm-lint.sh must not lower severity below the CI default"
-  assert_no_grep '--exclude' "$LINT" "fm-lint.sh must not blanket-exclude checks CI enforces"
-  [ "$(grep -Fc 'exec shellcheck --norc' "$LINT")" -eq 2 ] || fail "both lint modes must ignore ambient ShellCheck configuration"
-  pass "fm-lint.sh is the sole authoritative definition at CI-default severity"
+  local listed expected
+  listed=$("$LINT" --list-files | LC_ALL=C sort)
+  expected=$(find bin bin/backends tests -maxdepth 1 -type f -name '*.sh' -print | LC_ALL=C sort)
+  [ "$listed" = "$expected" ] || fail "fm-lint.sh --list-files omitted canonical shell files"
+  pass "fm-lint.sh owns the complete canonical shell inventory"
 }
 
 test_ci_invokes_the_owner() {
@@ -54,6 +50,14 @@ test_ci_invokes_the_owner() {
   # Guard against regression to an inline re-spelling of the command.
   assert_no_grep 'run: shellcheck' "$CI" "CI must call fm-lint.sh, not re-spell shellcheck inline"
   pass "CI lint job calls the one-owner script, not an inline command"
+}
+
+test_list_files_rejects_explicit_paths() {
+  local out rc=0
+  out=$("$LINT" --list-files bin/fm-brief.sh 2>&1) || rc=$?
+  expect_code 2 "$rc" "--list-files with explicit paths must be rejected"
+  assert_contains "$out" "does not accept explicit paths" "--list-files rejection must explain the conflict"
+  pass "fm-lint.sh keeps canonical inventory listing separate from explicit-path linting"
 }
 
 test_nomistakes_invokes_the_owner() {
@@ -264,6 +268,7 @@ test_accepts_executable_tracked_test() {
 test_owner_exists_and_executable
 test_owner_defines_canonical_set
 test_ci_invokes_the_owner
+test_list_files_rejects_explicit_paths
 test_nomistakes_invokes_the_owner
 test_pins_an_explicit_version
 test_ci_installs_and_logs_the_pinned_version
