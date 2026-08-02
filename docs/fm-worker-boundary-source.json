@@ -24,7 +24,8 @@
     "FM_ACTION_AUDIT_LOG",
     "FM_ACTION_GATEWAY_ROOT",
     "FM_ACTION_CAPTAIN_SECRET",
-    "FM_DATA_OVERRIDE"
+    "FM_DATA_OVERRIDE",
+    "FM_ACTION_GATEWAY_NOW"
   ],
   "required_socket_purposes": [
     "dispatch",

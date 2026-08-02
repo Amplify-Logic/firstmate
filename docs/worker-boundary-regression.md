@@ -61,8 +61,10 @@ Use `--source-manifest PATH` for the reviewed installation manifest and `--attes
 
 ## Source manifest contract
 
-Each privileged path declares its fixed installation path and the source that verifies every ancestor with `stat`, UID, and root-ownership checks.
+Each privileged path declares its kind, its fixed installation path under one of the approved system prefixes printed by `--help`, and the source that verifies every ancestor with `stat`, UID, and root-ownership checks.
+An absolute path outside those prefixes fails, because a correct-looking path the installer does not own is not a trusted installation.
 Every privileged source is scanned for worker-selected file input and production trust-state environment overrides.
+The scanned override set mirrors the production path overrides owned by `docs/action-gateway.md`.
 Each required channel has one unique purpose and schema identifier.
 Each channel source must contain its schema and purpose identifiers plus an OS peer-credential primitive such as `getpeereid`, `SO_PEERCRED`, or `LOCAL_PEERCRED`.
 The launcher attestation is an exact key-value allowlist, so missing fields or drift fail rather than falling back to ambient execution.

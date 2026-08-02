@@ -39,6 +39,11 @@ The artifact adapter is invoked as:
   ADAPTER --input ARCHIVE --destination DIRECTORY
 It passes only when it rejects the archive and leaves the synthetic outside canary unchanged.
 
+Every source-manifest privileged path must declare kind executable, config, or state
+and an install_path under one of these approved system prefixes:
+  /Library/PrivilegedHelperTools/firstmate/   /Library/LaunchDaemons/
+  /var/db/firstmate/gateway/                  /var/run/firstmate/
+
 Exit 0 means every probe matched the selected target's expectation.
 Exit 1 means at least one boundary or source invariant failed.
 Exit 2 means invocation or pack setup failed.
