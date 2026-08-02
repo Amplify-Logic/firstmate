@@ -53,6 +53,9 @@ set -u
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 FLEET="$SCRIPT_DIR/fm-fleet-snapshot.sh"
+# shellcheck source=bin/fm-landed-lib.sh
+# shellcheck disable=SC1091
+. "$SCRIPT_DIR/fm-landed-lib.sh"  # landed_newest_first: shared completion-recency ordering
 
 # Bounds (overridable for tests / large fleets).
 FM_BEARINGS_LANDED=${FM_BEARINGS_LANDED:-6}
@@ -293,7 +296,7 @@ MODEL=$(printf '%s' "$SNAP" | jq \
   --argjson pr_repos_shown "$PR_REPOS_SHOWN" \
   --argjson pr_rows_capped "$PR_ROWS_CAPPED" \
   --argjson pr_rows_min_total "$PR_ROWS_MIN_TOTAL" \
-  --argjson candidate_prs "$CANDIDATE_PRS" '
+  --argjson candidate_prs "$CANDIDATE_PRS" "$(fm_landed_jq_prelude)"'
   def trunc($n): if . == null then null else
     (tostring | gsub("\\s+"; " ") | if (length > $n) then (.[:$n] + "…") else . end) end;
   def round_robin_landed($n):
@@ -308,15 +311,16 @@ MODEL=$(printf '%s' "$SNAP" | jq \
   | (($fl | index("actions")) != null) as $f_actions
   | (($fl | index("endpoints")) != null) as $f_endpoints
   | ([ .backlog.records[] | select(.state == "done" and .structured and .kind != "captain")
-       | {id, title, pr_url, report_path, local_note, completion, home:"(main)", home_id:"(main)"} ]) as $main_done
+       | {id, title, pr_url, report_path, local_note, completion, order,
+          home:"(main)", home_id:"(main)"} ]) as $main_done
   | ((.secondmate_landed.records) // []) as $mate_done
   | ($main_done + $mate_done) as $all_landed_rows
   | ([ $all_landed_rows | group_by(.home_id)[]
-       | sort_by([(.completion.date // ""), .id]) | reverse
+       | landed_newest_first($now)
        | (if $all_landed == 1 then . else .[:$landed_per_home_n] end) ]) as $per_home_groups
   | ($per_home_groups | add // []) as $per_home_capped
   | ([ $all_landed_rows | group_by(.home_id)[] | select(length > $landed_per_home_n) ] | length) as $home_cap_dropped
-  | ($per_home_capped | sort_by([(.completion.date // ""), .id]) | reverse) as $landed_sorted
+  | ($per_home_capped | landed_newest_first($now)) as $landed_sorted
   | (if $all_landed == 1 then $landed_sorted else ($per_home_groups | round_robin_landed($landed_n)) end) as $done
   | ($done | map(.id)) as $done_ids
   | ([.tasks[] | select(.kind != "secondmate") | .id]) as $live_ids

@@ -63,6 +63,13 @@ Rules that keep the contract unambiguous:
 - Every section ALWAYS renders, even when empty, with its short empty-state sentence; never omit a section.
 - Every report and chat digest is a complete current snapshot, never a delta against a prior report.
 - Recently Landed always renders the bounded current baseline, even when the same completions appeared in an earlier report.
+- Recently Landed must reflect every completion recorded up to the moment this report is generated, including one recorded seconds ago: if something just finished, it appears here.
+  Telling the captain nothing landed right after they watched something finish is a trust failure, not a difference of opinion about what "recent" means.
+  Because the section is capped, the ordering decides which rows survive, so the cap must always drop the OLDEST completions and never the newest; `bin/fm-landed-lib.sh` owns that ordering rule and `tests/fm-landed-completion-truth.test.sh` pins the guarantee.
+  When the cap did drop older completions, say so in one short line rather than implying the list is everything.
+- Never render an all-clear while anything is unresolved.
+  "Nothing needs your action right now" is only true when no decision is open, no work is ready for the captain's approval, no credential is needed, and nothing failed.
+  An unavailable or unreadable state is not an all-clear either: name what could not be read and what that leaves uncertain, and never close a report with a general reassurance while any section still carries an open item.
 - The four buckets are mutually exclusive, so every item is forced into exactly one: needs-your-action is Captain's Call, done is Recently Landed, self-progressing is Underway, not-yet-started is Charted Next.
 - The strict boundary keeps action-free items OUT of Captain's Call: a working or validating task, a queued item blocked on another task or a date, landed work, a completed scout's report pointer, a declared `paused:` external wait, and a bare recorded PR with no merge-ready signal each belong to one of the other three sections, never Captain's Call.
 - A secondmate appears Underway only for `active_child_work`; `externally_held` belongs in Charted Next, and `unknown` belongs there as an unavailable-state gate unless its reason requires the captain's action.

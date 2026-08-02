@@ -1225,6 +1225,10 @@ test_landed_default_preserves_internal_order_for_ties() {
   printf '## Done\n' > "$home/data/backlog.md"
   tie_a=$(make_landed_secondmate "$home" tie-a)
   tie_b=$(make_landed_secondmate "$home" tie-b)
+  # append_landed_row writes rows top-down inside the Done section, and the Done
+  # section is maintained newest-first, so the FIRST row written to each home is
+  # that home's most recent completion. Same-date rows therefore tie-break on
+  # recording position, not on id (bin/fm-landed-lib.sh owns that rule).
   append_landed_row "$tie_b" tie-b-a "Tie B A" 2026-07-10
   append_landed_row "$tie_b" tie-b-z "Tie B Z" 2026-07-10
   append_landed_row "$tie_a" tie-a-a "Tie A A" 2026-07-10
@@ -1232,10 +1236,10 @@ test_landed_default_preserves_internal_order_for_ties() {
   fakebin=$(make_fakebin "$home")
   json=$(run "$home" "$fakebin" --json)
   actual=$(printf '%s' "$json" | jq -r '.landed[] | "\(.owner)/\(.id)"')
-  expected='tie-a/tie-a-z
-tie-b/tie-b-z
-tie-a/tie-a-a
-tie-b/tie-b-a'
+  expected='tie-a/tie-a-a
+tie-b/tie-b-a
+tie-a/tie-a-z
+tie-b/tie-b-z'
   [ "$actual" = "$expected" ] || fail "landed tie ordering changed: $actual"
   pass "landed selection preserves deterministic home and internal tie ordering"
 }

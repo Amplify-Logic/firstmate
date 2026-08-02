@@ -15,6 +15,7 @@ HARNESS="$ROOT/.agents/skills/harness-adapters/SKILL.md"
 CODEXAPP="$ROOT/.agents/skills/firstmate-codexapp/SKILL.md"
 FMX="$ROOT/.agents/skills/fmx-respond/SKILL.md"
 UPDATE="$ROOT/.agents/skills/updatefirstmate/SKILL.md"
+BEARINGS="$ROOT/.agents/skills/bearings/SKILL.md"
 
 section_9() {
   awk '
@@ -123,13 +124,38 @@ test_outward_facing_skill_points_reference_section_9_owner() {
     "X reply safety does not state that it supplements section 9"
   assert_grep "under \`AGENTS.md\` section 9 without firstmate's internal vocabulary" "$UPDATE" \
     "Firstmate update reporting does not reference section 9"
+  assert_grep "The chat follows \`AGENTS.md\` section 9" "$BEARINGS" \
+    "the bearings chat digest does not reference section 9"
   pass "outward-facing skill handoffs point to the section 9 owner"
+}
+
+# The pure-upstream trial (data/fm-upstream-trial-verdict-v2/report.md) recorded two
+# captain-facing wording failures alongside the completion-truth defect: internal
+# mechanics leaking into the visible surface, and an "all clear" announced while a
+# completion problem was still unresolved. Bearings is the surface that reports fleet
+# outcomes, so it is where both rules have to hold.
+test_bearings_forbids_premature_all_clear() {
+  assert_grep "Never render an all-clear while anything is unresolved." "$BEARINGS" \
+    "bearings does not forbid a premature all-clear"
+  assert_grep "An unavailable or unreadable state is not an all-clear either" "$BEARINGS" \
+    "bearings treats unreadable state as an all-clear"
+  pass "bearings forbids a premature all-clear while anything is unresolved"
+}
+
+test_bearings_guarantees_completion_truth() {
+  assert_grep "including one recorded seconds ago" "$BEARINGS" \
+    "bearings does not require completions recorded up to report time"
+  assert_grep "drop the OLDEST completions and never the newest" "$BEARINGS" \
+    "bearings does not pin the cap direction that keeps the newest completion visible"
+  assert_grep "fm-landed-lib.sh" "$BEARINGS" \
+    "bearings does not point at the ordering owner"
+  pass "bearings guarantees a just-finished completion appears in the next report"
 }
 
 test_section_9_owner_is_not_duplicated_into_skills() {
   local duplicate_count file
   duplicate_count=0
-  for file in "$BOOTSTRAP" "$AFK" "$DECISION" "$RECOVERY" "$HARNESS" "$CODEXAPP" "$UPDATE"; do
+  for file in "$BOOTSTRAP" "$AFK" "$DECISION" "$RECOVERY" "$HARNESS" "$CODEXAPP" "$UPDATE" "$BEARINGS"; do
     if grep -Fq "When evidence uses an internal label, rewrite it before sending:" "$file"; then
       duplicate_count=$((duplicate_count + 1))
     fi
@@ -145,3 +171,5 @@ test_mapping_list_covers_high_risk_internal_families
 test_verbatim_internal_evidence_is_rejected_from_chat
 test_outward_facing_skill_points_reference_section_9_owner
 test_section_9_owner_is_not_duplicated_into_skills
+test_bearings_forbids_premature_all_clear
+test_bearings_guarantees_completion_truth

@@ -123,6 +123,9 @@ validate_positive_bound FM_SNAPSHOT_REGISTRY_TIMEOUT "$FM_SNAPSHOT_REGISTRY_TIME
 # shellcheck source=bin/fm-ff-lib.sh
 # shellcheck disable=SC1091
 . "$SCRIPT_DIR/fm-ff-lib.sh"  # validate_secondmate_home: shared seeded-home boundary checks
+# shellcheck source=bin/fm-landed-lib.sh
+# shellcheck disable=SC1091
+. "$SCRIPT_DIR/fm-landed-lib.sh"  # landed_newest_first: shared completion-recency ordering
 
 usage() {
   cat <<'EOF'
@@ -533,7 +536,7 @@ secondmate_home_summary_json() {  # <backlog-json> <tasks-json>
     --argjson decisions_n "$FM_SNAPSHOT_SECONDMATE_DECISIONS" \
     --argjson landed_n "$FM_SNAPSHOT_SECONDMATE_LANDED_PER_HOME" \
     --argjson backlog "$1" \
-    --argjson tasks "$2" '
+    --argjson tasks "$2" "$(fm_landed_jq_prelude)"'
     def trunc($n):
       tostring | gsub("\\s+"; " ")
       | if length > $n then .[:$n] + "…" else . end;
@@ -549,8 +552,9 @@ secondmate_home_summary_json() {  # <backlog-json> <tasks-json>
          | {id:(.id | trunc(120)),title:(.title | trunc(120)),
             pr_url:((.pr_url // null) | if . == null then null else trunc(500) end),
             report_path:((.report_path // null) | if . == null then null else trunc(500) end),
-            local_note:((.local_note // null) | if . == null then null else trunc(120) end),completion} ]
-       | sort_by([(.completion.date // ""), .id]) | reverse) as $landed_all
+            local_note:((.local_note // null) | if . == null then null else trunc(120) end),
+            completion,order} ]
+       | landed_newest_first($generated)) as $landed_all
     | ([ $tasks[] | select(.current_state.state == "unknown") ]) as $unknown_children
     | ([ $owned_in_flight[] | select(.id as $id | [$tasks[].id] | index($id) | not) ]) as $orphan_in_flight
     | ([ $tasks[]
@@ -1140,7 +1144,7 @@ EOF
 }
 
 secondmate_landed_from_current_json() {  # <secondmate-current-json>
-  jq -n --argjson current "$1" '
+  jq -n --argjson current "$1" --arg generated "$SNAPSHOT_NOW" "$(fm_landed_jq_prelude)"'
     {records:[ $current.records[]
       | select(.provenance.selected == "structured-home") as $mate
       | $mate.landed[]
@@ -1151,7 +1155,7 @@ secondmate_landed_from_current_json() {  # <secondmate-current-json>
      unreadable:[ $current.records[]
        | select(.current.state == "unknown")
        | .home // ("<" + .id + ": unavailable>")]}
-    | .records |= sort_by([(.completion.date // ""), .id]) | .records |= reverse'
+    | .records |= landed_newest_first($generated)'
 }
 
 scout_report_lines() {
