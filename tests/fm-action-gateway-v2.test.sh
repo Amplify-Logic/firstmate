@@ -342,11 +342,14 @@ test_distinct_peer_credential_protocols() {
   mkdir -p "$SOCKET_ROOT"
   $GW serve --socket-root "$SOCKET_ROOT" >"$TMP/server.out" 2>"$TMP/server.err" &
   SERVER_PID=$!
-  for _ in $(seq 1 100); do
-    [ -S "$SOCKET_ROOT/prepare.sock" ] && [ -S "$SOCKET_ROOT/approval.sock" ] && [ -S "$SOCKET_ROOT/execution.sock" ] && break
+  for _ in $(seq 1 250); do
+    grep -q 'fm.gateway-listeners.v2' "$TMP/server.out" 2>/dev/null && break
     sleep 0.02
   done
-  [ -S "$SOCKET_ROOT/prepare.sock" ] || fail "prepare socket did not start: $(cat "$TMP/server.err")"
+  grep -q 'fm.gateway-listeners.v2' "$TMP/server.out" 2>/dev/null || fail "server never advertised readiness: $(cat "$TMP/server.err")"
+  for channel in prepare approval execution; do
+    [ -S "$SOCKET_ROOT/$channel.sock" ] || fail "$channel socket missing after advertised readiness: $(cat "$TMP/server.err")"
+  done
 
   cap=$(issue_cap prepare socket-job)
   bad_cap=$(issue_cap prepare socket-job "$(( $(id -u) + 1 ))")

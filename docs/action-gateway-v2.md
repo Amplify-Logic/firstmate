@@ -49,6 +49,7 @@ The execution socket uses schema `fm.execution.v2` and a capability scoped to th
 Every accepted connection obtains operating-system peer credentials with `getpeereid` on Darwin or `SO_PEERCRED` on Linux.
 Each protocol uses a four-byte network-order length followed by one bounded strict JSON frame.
 Every connection carries a bounded read and reply deadline, so a silent or dribbling client cannot hold a channel open indefinitely.
+A channel reports readiness only once its listener and its own database connection are open, and the service refuses to keep running once any channel stops serving, so it never advertises a boundary it cannot enforce.
 Every failed request, including an unexpected internal failure, returns a refusal frame and leaves the channel serving.
 A schema sent to the wrong socket is refused.
 Capabilities are random bearer values stored only as SHA-256 hashes in the gateway database.

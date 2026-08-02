@@ -1078,6 +1078,18 @@ def handle_connection(
             send_frame(connection, {"ok": False, "error": refusal_text(exc)})
 
 
+def serve_channel(
+    path: Path,
+    handler: Callable[[sqlite3.Connection, Any, int], Dict[str, Any]],
+    ready: threading.Event,
+    stopped: threading.Event,
+) -> None:
+    try:
+        serve_socket(path, handler, ready)
+    finally:
+        stopped.set()
+
+
 def serve_socket(path: Path, handler: Callable[[sqlite3.Connection, Any, int], Dict[str, Any]], ready: threading.Event) -> None:
     with contextlib.suppress(FileNotFoundError):
         path.unlink()
@@ -1086,8 +1098,8 @@ def serve_socket(path: Path, handler: Callable[[sqlite3.Connection, Any, int], D
         listener.bind(str(path))
         path.chmod(0o600)
         listener.listen(16)
-        ready.set()
         with open_database() as db:
+            ready.set()
             while True:
                 try:
                     connection, _ = listener.accept()
@@ -1112,21 +1124,21 @@ def serve(root: Path) -> None:
         root / "approval.sock": protocol_approval,
         root / "execution.sock": protocol_execution,
     }
-    threads: List[threading.Thread] = []
     readiness: List[threading.Event] = []
+    stopped = threading.Event()
     for path, handler in handlers.items():
         ready = threading.Event()
-        thread = threading.Thread(target=serve_socket, args=(path, handler, ready), daemon=True)
+        thread = threading.Thread(target=serve_channel, args=(path, handler, ready, stopped), daemon=True)
         thread.start()
-        threads.append(thread)
         readiness.append(ready)
     for ready in readiness:
         if not ready.wait(5):
             fail("protocol socket failed to start")
     print(jcs({"schema": "fm.gateway-listeners.v2", "prepare": str(root / "prepare.sock"), "approval": str(root / "approval.sock"), "execution": str(root / "execution.sock")}))
     sys.stdout.flush()
-    for thread in threads:
-        thread.join()
+    while not stopped.wait(1):
+        pass
+    fail("a protocol channel stopped serving; the gateway refuses to serve a partial boundary")
 
 
 def read_stdin_bounded() -> bytes:
