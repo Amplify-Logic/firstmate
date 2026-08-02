@@ -374,7 +374,8 @@ The record is written only when a platform or explicit budget is actually known,
 The `fmx-respond` skill decides whether the stashed mention is an actionable request, a question, or a pure acknowledgment.
 Actionable reversible requests are run through intake, backlog, dispatch, investigation, or ship flow as appropriate.
 If the work completes in that turn, the public reply reports the outcome.
-If the request spawns a longer-running task, firstmate posts an acknowledgement through the normal answer endpoint, links the task to the mention with `bin/fm-x-link.sh`, and posts up to three completion follow-ups on genuine milestones, always finishing with a `--final` one when the task reaches a terminal state.
+If the request spawns a longer-running task, firstmate posts an acknowledgement through the normal answer endpoint, links the task to the mention with `bin/fm-x-link.sh`, and posts up to three completion follow-ups on genuine milestones, finishing with a `--final` one for ordinary X-linked work.
+When a typed promised-final commitment is registered, `bin/fm-public-followup.sh` owns the terminal reply and clears the legacy link after its receipt is validated.
 That link stores optional reply-platform context so Discord-originated follow-ups keep Discord's larger message budget after the inbox file has been drained.
 Platform/budget resolution is layered and independent of the task link: a per-axis `FMX_REPLY_PLATFORM` / `FMX_REPLY_MAX_CHARS` override (how `bin/fm-x-followup.sh` passes a recorded link's context) wins.
 For either axis without an override, `bin/fm-x-lib.sh:fmx_resolve_reply_context` owns the source order: the durable per-request registry is consulted first, then the still-present inbox payload, then - for a follow-up posted live by request_id - an authoritative relay lookup via `POST /connector/request-context` (`{request_id}` in, `{platform, reply_max_chars}` back).
@@ -410,6 +411,27 @@ When an image is attached, the dry-run record uses compact `{media_type, bytes, 
 In dry-run, `fm-x-dismiss.sh` records `{request_id, endpoint:"dismiss"}` to the same outbox path, prints a `DRY RUN` summary, echoes the `request_id`, and exits 0.
 The live answer and follow-up bodies intentionally stay the same shape, including optional `image`; the relay distinguishes them by endpoint, and dismiss stays `{request_id}`.
 These paths need `jq` to build the JSON payload, but they run before token and network checks, so they need neither `FMX_PAIRING_TOKEN` nor `curl`.
+
+### Promised public replies (state/public-followup)
+
+A relay request that spawns real work can leave firstmate owing a specific public reply in a specific thread.
+That promise is a typed obligation owned by `tasks-axi public-followup`, while the private request context stays in `state/x-context/`.
+`bin/fm-public-followup.sh` registers a commitment, reconciles typed terminal work results into it, and posts the final reply through `bin/fm-x-reply.sh --followup`.
+Run `bin/fm-public-followup.sh --help` for the exact commands and flags.
+
+Registration creates the private `state/public-followup/` transport with mode 0700.
+Its `registry/`, `events/`, `consumed/`, and `rejected/` children hold bounded bindings, pending results, accepted-event identity, and inspectable refusals; `surfaced` records the last event signature surfaced by polling.
+Only the home holding the relay consent and opaque thread binding posts outward.
+Work routed elsewhere reports a typed terminal result with `bin/fm-public-followup-emit.sh` and never receives the thread binding.
+A terminal event id derives from its identity tuple, so duplicate reports and restart replay resolve to the same event.
+
+Activation uses the existing `.env` `FMX_PAIRING_TOKEN` contract with no second flag.
+Without that token, callers stop after one file test with no `tasks-axi` call, backlog scan, output, or `state/public-followup/` artifact.
+A relay-enabled home without a registered commitment stops at an O(1) directory-presence check.
+Unreconciled results ride the existing relay poll rather than a new process or timer, and the session-start digest surfaces only active unresolved commitments.
+`bin/fm-teardown.sh` refuses cleanup while the exact work still owes a public reply unless `--force` carries explicit discard approval.
+`FM_PF_RETRY_BACKOFF_SECS` controls the next-attempt time recorded after a retryable delivery error.
+See [verification/public-followup.md](verification/public-followup.md) for restart and inert-home evidence.
 
 ## Environment variables
 
@@ -465,6 +487,7 @@ FMX_DISCORD_REPLY_MAX_CHARS=1900   # Discord reply per-message split budget; val
 FMX_X_THREAD_MAX=25     # maximum messages in one auto-split reply thread
 FMX_FOLLOWUP_MAX_AGE_SECS=604800   # local window for posting X-mode completion follow-ups (7 days)
 FMX_FOLLOWUP_MAX_COUNT=3   # local cap on X-mode completion follow-ups per linked mention
+FM_PF_RETRY_BACKOFF_SECS=900   # seconds before retrying a promised-public-reply delivery after a retryable error
 FM_LOCK_STALE_AFTER=2   # seconds before dead-pid lock records can be reclaimed; mid-acquire locks keep at least 2s grace
 FM_GUARD_GRACE=300      # seconds before guard warnings, arm health checks, and the primary turn-end guard treat a watcher beacon as stale
 FM_ARM_CONFIRM_TIMEOUT=10   # seconds fm-watch-arm waits to confirm a fresh watcher before reporting FAILED; the default is 30 on Git Bash/MSYS
