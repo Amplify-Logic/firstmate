@@ -91,6 +91,27 @@ EOF
   printf '%s\n' "$home"
 }
 
+# make_fake_ps_claude <fakebin>: fm-lock.sh's harness_pid() and holder_alive()
+# walk real `ps` output for a harness command name, so whether a session start
+# acquires the fleet lock otherwise depends on the host's process ancestry - it
+# succeeds under a developer's harness and fails on a CI runner. This fake
+# reports every queried pid as a live `claude`, which makes the ancestry walk
+# match on its first step and lock acquisition deterministic everywhere.
+# Mirrors tests/fm-session-start.test.sh's fake ps.
+make_fake_ps_claude() {  # <fakebin>
+  local fakebin=$1
+  cat > "$fakebin/ps" <<'SH'
+#!/usr/bin/env bash
+set -u
+case "$*" in
+  *"comm="*) printf '/usr/local/bin/claude\n'; exit 0 ;;
+  *"args="*) printf 'claude\n'; exit 0 ;;
+esac
+exit 1
+SH
+  chmod +x "$fakebin/ps"
+}
+
 run_pf() {  # <home> <args...>
   local home=$1
   shift
@@ -963,17 +984,23 @@ test_relay_poll_stays_inert_and_surfaces_once() {
 test_session_start_surfaces_only_when_owed() {
   local off on out
   off=$(make_home startup-off relay-off)
+  make_fake_ps_claude "$off/fakebin"
   out=$(PATH="$off/fakebin:$PATH" FM_ROOT_OVERRIDE="$ROOT" FM_HOME="$off" \
     FM_STATE_OVERRIDE="$off/state" FM_DATA_OVERRIDE="$off/data" \
     FM_CONFIG_OVERRIDE="$off/config" "$SESSION_START" 2>&1)
+  assert_not_contains "$out" "READ-ONLY SESSION" \
+    "the relay-disabled startup case must own the fleet lock, or it proves nothing"
   assert_not_contains "$out" "Public commitments" \
     "a relay-disabled home must not gain a public-commitments section at startup"
 
   on=$(make_home startup-on)
+  make_fake_ps_claude "$on/fakebin"
   seed_commitment "$on" pf-start req-start discord main work-start
   out=$(PATH="$on/fakebin:$PATH" FM_ROOT_OVERRIDE="$ROOT" FM_HOME="$on" \
     FM_STATE_OVERRIDE="$on/state" FM_DATA_OVERRIDE="$on/data" \
     FM_CONFIG_OVERRIDE="$on/config" "$SESSION_START" 2>&1)
+  assert_not_contains "$out" "READ-ONLY SESSION" \
+    "the owing startup case must own the fleet lock, or it proves nothing"
   assert_contains "$out" "Public commitments awaiting delivery" \
     "an unresolved commitment must be surfaced at startup"
   assert_contains "$out" "unresolved pf-start state=pending-work platform=discord" \
@@ -983,6 +1010,44 @@ test_session_start_surfaces_only_when_owed() {
   assert_not_contains "$out" "please fix worker placement" \
     "the startup summary must not carry raw request text"
   pass "startup surfaces unresolved public commitments only in a relay home that owes one"
+}
+
+# Reconciling the registry against the backlog prunes registration records and
+# clears legacy X links, so it belongs to the session holding the fleet lock.
+# A lock-refused startup must therefore stay silent about public commitments and
+# leave the registry exactly as it found it, even for a record reconciliation
+# would otherwise drop.
+test_session_start_read_only_neither_surfaces_nor_reconciles() {
+  local home registry out
+  home=$(make_home startup-readonly)
+  make_fake_ps_claude "$home/fakebin"
+  seed_commitment "$home" pf-readonly req-readonly discord main work-readonly
+
+  # A registration whose obligation is no longer in the backlog: exactly what
+  # `pending` deletes once it can reconcile.
+  registry="$home/state/public-followup/registry"
+  printf 'obligation_id=pf-gone\nrelation_id=rel-code\nwork_home=main\nwork_id=work-gone\ngeneration=1\nplatform=discord\nrequest_id=req-gone\n' \
+    > "$registry/pf-gone"
+  chmod 600 "$registry/pf-gone"
+
+  # A live pid this test owns, which is never the pid fm-lock.sh reports for
+  # itself, so the lock reads as held by another live session.
+  printf '%s\n' "$$" > "$home/state/.lock"
+
+  out=$(PATH="$home/fakebin:$PATH" FM_ROOT_OVERRIDE="$ROOT" FM_HOME="$home" \
+    FM_STATE_OVERRIDE="$home/state" FM_DATA_OVERRIDE="$home/data" \
+    FM_CONFIG_OVERRIDE="$home/config" "$SESSION_START" 2>&1)
+  assert_contains "$out" "READ-ONLY SESSION" \
+    "a lock held by another live session must start a read-only session"
+  assert_not_contains "$out" "Public commitments" \
+    "a read-only startup must not surface public commitments"
+  assert_not_contains "$out" "unresolved pf-readonly" \
+    "a read-only startup must not run the reconciling pending listing"
+  assert_present "$registry/pf-readonly" \
+    "a read-only startup must leave the live registration in place"
+  assert_present "$registry/pf-gone" \
+    "a read-only startup must not prune a stale registration behind the lock holder"
+  pass "a lock-refused startup neither surfaces nor reconciles public commitments"
 }
 
 # --- 9. typed records stay public-safe ----------------------------------------
@@ -1031,4 +1096,5 @@ test_relay_enabled_empty_state_makes_no_calls
 test_exhausted_binding_is_not_retried
 test_relay_poll_stays_inert_and_surfaces_once
 test_session_start_surfaces_only_when_owed
+test_session_start_read_only_neither_surfaces_nor_reconciles
 test_typed_records_exclude_raw_public_material
