@@ -3,7 +3,8 @@
 // It intentionally escapes raw HTML and supports the report-oriented Markdown
 // surface used by Firstmate: headings, paragraphs, emphasis, links and images
 // restricted to http/https/mailto/relative targets, blockquotes, lists, fenced
-// code, rules, and pipe tables.
+// code, pipe tables, and thematic breaks of three or more dashes, asterisks, or
+// underscores, whether or not they are separated by spaces.
 // A list item owns every following line indented past its own marker, and that
 // block is rendered as Markdown in its own right, so nested lists, tables,
 // rules, quotes, and fenced code stay inside the item they document.
@@ -11,9 +12,8 @@
 // line after a list ends the list rather than continuing its last item; that a
 // continuation which is a single paragraph joins the item's own line while any
 // richer continuation renders as blocks after it; and that setext headings,
-// reference-style links, four-space code blocks, task-list checkboxes,
-// spaced thematic breaks such as "* * *", and two-space hard line breaks are
-// not recognised anywhere.
+// reference-style links, four-space code blocks, task-list checkboxes, and
+// two-space hard line breaks are not recognised anywhere.
 // It also owns the private page naming: the page is written 0600 under a 0700
 // output directory and its path is printed on stdout.
 import crypto from "node:crypto";
@@ -204,7 +204,7 @@ function render(markdown) {
       out.push("</tbody></table></div>");
       continue;
     }
-    if (/^\s*(?:-{3,}|\*{3,}|_{3,})\s*$/.test(line)) {
+    if (/^[ \t]*(?:(?:-[ \t]*){3,}|(?:\*[ \t]*){3,}|(?:_[ \t]*){3,})$/.test(line)) {
       flushBlocks();
       out.push("<hr>");
       continue;

@@ -75,6 +75,23 @@ cat > "$TMP_ROOT/blocks.md" <<'MD'
 4. fourth step
 MD
 
+cat > "$TMP_ROOT/breaks.md" <<'MD'
+Before the break.
+
+* * *
+
+- alpha
+- beta
+
+- - -
+
+After the break.
+
+_ _ _
+
+Tail paragraph.
+MD
+
 file_mode() {
   if [ "$(uname)" = Darwin ]; then
     stat -f %Lp "$1"
@@ -134,6 +151,15 @@ assert_contains "$blocks_flat" "<li>second step <blockquote>" "an indented quote
 assert_contains "$blocks_flat" "<li>third step <p>extra paragraph one</p> <p>extra paragraph two</p>" \
   "continuation paragraphs collapsed into one run of text"
 pass "indented tables, quotes, and paragraphs render inside the step they belong to"
+
+breaks_out=$(cd "$TMP_ROOT" && FM_HOME="$HOME_DIR" FM_ROOT_OVERRIDE="$ROOT" "$READ" --no-open breaks.md)
+breaks_flat=$(tr '\n' ' ' < "$breaks_out")
+rules=$(grep -o '<hr>' "$breaks_out" | wc -l | tr -d ' ')
+[ "$rules" = 3 ] || fail "expected 3 thematic breaks from spaced markers, rendered $rules"
+assert_not_contains "$(cat "$breaks_out")" "<em>" "a spaced thematic break was parsed as a stray emphasised bullet"
+assert_contains "$breaks_flat" "<hr> <ul> <li>alpha </li> <li>beta </li> </ul> <hr>" \
+  "a list next to a thematic break was absorbed into a stray bullet"
+pass "spaced thematic breaks render as rules and never swallow an adjacent list"
 
 first=$(FM_HOME="$HOME_DIR" FM_ROOT_OVERRIDE="$ROOT" "$READ" --no-open sample-task)
 second=$(FM_HOME="$HOME_DIR" FM_ROOT_OVERRIDE="$ROOT" "$READ" --no-open sample-task)
