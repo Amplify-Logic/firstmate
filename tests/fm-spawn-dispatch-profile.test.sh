@@ -106,7 +106,7 @@ assert_meta_profile() {
 }
 
 test_no_profile_keeps_claude_launch_unchanged() {
-  local rec id out status expected launch
+  local rec id out status expected launch task_tmp
   id=profile-off-z1
   rec=$(make_spawn_case profile-off claude "$id")
   read_case_record "$rec"
@@ -116,11 +116,16 @@ test_no_profile_keeps_claude_launch_unchanged() {
   expect_code 0 "$status" "claude spawn without profile flags should succeed"
   assert_contains "$out" "spawned $id harness=claude" "spawn did not report claude"
   assert_meta_profile "$HOME_DIR/state/$id.meta" claude default default
+  task_tmp="/tmp/fm-$id"
+  assert_grep "tasktmp=$task_tmp" "$HOME_DIR/state/$id.meta" \
+    "spawn meta did not record the task temp root"
+  [ -d "$task_tmp/gotmp" ] || fail "spawn did not create the task Go temp directory"
 
   launch=$(cat "$LAUNCH_LOG")
   expected="CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION=false claude --dangerously-skip-permissions \"\$(cat '$HOME_DIR/data/$id/brief.md')\""
   [ "$launch" = "$expected" ] || fail "no-profile claude launch changed"$'\n'"expected: $expected"$'\n'"actual:   $launch"
-  pass "no --model/--effort records defaults and keeps the claude launch byte-identical"
+  rm -rf "$task_tmp"
+  pass "no-profile spawn preserves the launch and publishes its task temp root"
 }
 
 test_relative_home_overrides_launch_with_absolute_cross_process_paths() {
