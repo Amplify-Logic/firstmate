@@ -10,6 +10,7 @@ The pack opens only temporary local IPv4, IPv6, UDP, HTTP, and Unix-socket liste
 It never reads a real keychain, SSH agent, Git helper, browser profile, clipboard, TCC database, Docker socket, gateway state directory, or credential.
 It performs no privileged operation and makes no system configuration change.
 The bounded resource probes allocate at most 80 MiB, start at most 33 short-lived children, emit at most 128 KiB, and are killed by a process-group timeout when the launcher does not enforce a tighter limit.
+Every step of that timeout cleanup is itself bounded, so a payload that escapes its process group and keeps its output pipes open aborts the run with exit 2 and a named scenario instead of blocking the pack forever.
 
 ## Expected outcomes
 

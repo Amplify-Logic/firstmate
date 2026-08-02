@@ -4,6 +4,8 @@ set -eu
 
 # shellcheck source=tests/lib.sh disable=SC1091
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
+# shellcheck source=bin/fm-timeout-lib.sh disable=SC1091
+. "$ROOT/bin/fm-timeout-lib.sh"
 
 PACK="$ROOT/bin/fm-worker-boundary-regression.sh"
 MANIFEST="$ROOT/docs/fm-worker-boundary-source.json"
@@ -204,6 +206,42 @@ for probe in ("gateway.database-read", "gateway.inbox-read", "gateway.audit-writ
     assert records[probe]["result"] == "FAIL"
 PY
 pass "gateway state boundaries need an existing canary before they can pass"
+
+ESCAPING_ADAPTER="$TMP/escaping-adapter.sh"
+cat >"$ESCAPING_ADAPTER" <<'SH'
+#!/usr/bin/env bash
+set -eu
+scenario=
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --scenario) scenario=$2; shift 2 ;;
+    *) shift ;;
+  esac
+done
+[ "$scenario" = wall-clock ] || exit 0
+python3 -c '
+import os
+import time
+if os.fork() == 0:
+    os.setsid()
+    time.sleep(20)
+os._exit(0)
+'
+exit 0
+SH
+chmod +x "$ESCAPING_ADAPTER"
+set +e
+fm_run_timeout 90 "$PACK" --target native-account --launcher-adapter "$ESCAPING_ADAPTER" \
+  --gateway "$STATELESS_GATEWAY" --report "$TMP/escaping.json" \
+  >"$TMP/escaping.stdout" 2>"$TMP/escaping.stderr"
+escaping_rc=$?
+set -e
+expect_code 2 "$escaping_rc" "payload that escapes its process group and holds its pipes"
+grep -q 'survived termination' "$TMP/escaping.stderr" \
+  || fail "an unkillable payload must name the stuck scenario: $(cat "$TMP/escaping.stderr")"
+grep -q 'wall-clock' "$TMP/escaping.stderr" \
+  || fail "the stuck scenario must be identified: $(cat "$TMP/escaping.stderr")"
+pass "timeout cleanup stays bounded when a payload escapes its process group"
 
 VERIFY_SOURCE="$TMP/install-verifier.py"
 PRIV_SOURCE="$TMP/privileged.py"

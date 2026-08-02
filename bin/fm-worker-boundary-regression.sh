@@ -69,6 +69,7 @@ MANIFEST_SCHEMA = "fm-worker-boundary-source.v1"
 MAX_CAPTURE = 65536
 PAYLOAD_TIMEOUT = 8.0
 RESOURCE_TIMEOUT = 1.5
+CLEANUP_TIMEOUT = 5.0
 
 CAPABILITY_PROBES = [
     "network.ipv4",
@@ -605,8 +606,13 @@ def launcher_env(fixture: Dict[str, Any], worker_home: Path) -> Dict[str, str]:
 
 
 def terminate_process(process: subprocess.Popen[bytes]) -> None:
-    with contextlib.suppress(OSError):
+    try:
         os.killpg(process.pid, signal.SIGKILL)
+    except ProcessLookupError:
+        pass
+    except OSError:
+        with contextlib.suppress(OSError):
+            process.kill()
     with contextlib.suppress(subprocess.TimeoutExpired):
         process.wait(timeout=1)
 
@@ -658,7 +664,16 @@ def invoke_payload(
         return process.returncode, stdout, stderr, False
     except subprocess.TimeoutExpired:
         terminate_process(process)
-        stdout, stderr = process.communicate()
+        try:
+            stdout, stderr = process.communicate(timeout=CLEANUP_TIMEOUT)
+        except subprocess.TimeoutExpired:
+            for stream in (process.stdout, process.stderr):
+                if stream is not None:
+                    with contextlib.suppress(OSError):
+                        stream.close()
+            raise subprocess.SubprocessError(
+                f"payload scenario {scenario} survived termination and still holds its output pipes"
+            ) from None
         return process.returncode or -9, stdout, stderr, True
 
 
