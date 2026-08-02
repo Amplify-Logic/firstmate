@@ -158,10 +158,11 @@ done
 # Resolve the owning home to a real absolute directory before composing any path
 # under it, so a relative or symlinked argument cannot make the destination
 # ambiguous in a later message or write.
+HOME_DIR_ARG=$HOME_DIR
 case "$HOME_DIR" in
   /*) ;;
-  *) HOME_DIR=$(CDPATH='' cd -- "$HOME_DIR" 2>/dev/null && pwd -P) \
-       || die "--home is not a reachable directory: $1" ;;
+  *) HOME_DIR=$(CDPATH='' cd -- "$HOME_DIR_ARG" 2>/dev/null && pwd -P) \
+       || die "--home is not a reachable directory: $HOME_DIR_ARG" ;;
 esac
 [ -d "$HOME_DIR" ] && [ ! -L "$HOME_DIR" ] \
   || die "--home must name an existing directory, got '$HOME_DIR'"
