@@ -64,7 +64,7 @@ No `/back` is needed. The first genuine message is the return signal:
   If it reports a firstmate-actionable `blocked:` event, remediate it immediately through the normal lifecycle, or explicitly reclassify it with a durable reason and close its decision key with `resolved [key=...]`, then run `bin/fm-afk-return.sh check`.
   Once the daemon stops, resume full per-wake responsiveness through the emitted primary-harness supervision protocol while blocker handling proceeds, so the gate never creates a blind wait.
   Do not answer a Bearings request or perform any other ordinary captain work until the check exits successfully.
-- A message **with** the sentinel marker (`FM_INJECT_MARK`, U+2063 INVISIBLE SEPARATOR) -> it is a daemon escalation; stay afk and process it.
+- A message with a current typed operational prefix or the legacy bare sentinel marker -> it is a daemon escalation; stay afk and process it.
 - Re-invoking `/afk` while already away -> stay afk (refresh the flag); this
   does **not** trigger an exit.
 
@@ -78,11 +78,11 @@ what**. "Away" never means "approves more." A PR ready for merge, a
 needs-decision finding, or anything destructive still waits for the captain's
 explicit word - the daemon just batches the notification.
 
-## Sentinel marker contract
+## Operational-input marker contract
 
-The daemon prefixes every injection with `FM_INJECT_MARK` (U+2063 INVISIBLE SEPARATOR), which has no normal keyboard keystroke and survives terminal transport as UTF-8 text.
-This is how firstmate tells a daemon escalation apart from a real message in the same pane.
-The marker travels with the message text; it does not rely on harness-level typed-vs-injected detection, which is not portable across claude, codex, opencode, pi, and grok.
+`bin/fm-operational-input.sh` constructs every current daemon injection as the typed `away-supervisor` kind after U+2063 `FIRSTMATE_OP: `.
+The legacy bare U+2063 marker remains recognized for older visible transcripts.
+The untypeable leading marker travels with the message text, so firstmate can distinguish an internal escalation from a real captain message across supported worker runtimes.
 
 ## Busy-guard and composer guard
 

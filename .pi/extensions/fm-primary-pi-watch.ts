@@ -6,6 +6,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
+import { encodeFirstmateOperationalInput } from "./lib/fm-operational-input.ts";
 
 type ArmResult = {
   ok: boolean;
@@ -139,10 +140,11 @@ export default function (pi: ExtensionAPI) {
   process.once("exit", cleanupOnProcessExit);
 
   async function sendWake(message: string): Promise<void> {
-    await pi.sendUserMessage(
+    const content = encodeFirstmateOperationalInput(
+      "watcher",
       `FIRSTMATE WATCHER WAKE: ${message}\n\nRun bin/fm-wake-drain.sh first and handle the queued wake. Watcher continuity is extension-owned.`,
-      { deliverAs: "followUp" },
     );
+    await pi.sendUserMessage(content, { deliverAs: "followUp" });
   }
 
   function surfaceFailure(message: string): void {
