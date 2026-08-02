@@ -68,6 +68,7 @@ SH
   ln -s "$ROOT/bin/fm-pr-lib.sh" "$fake/bin/fm-pr-lib.sh"
   # fm-capability-lib.sh: teardown records capability outcomes before meta removal.
   ln -s "$ROOT/bin/fm-capability-lib.sh" "$fake/bin/fm-capability-lib.sh"
+  ln -s "$ROOT/bin/fm-secondmate-registry-lib.sh" "$fake/bin/fm-secondmate-registry-lib.sh"
   # fm-guard.sh: stub (teardown calls it with `|| true`).
   cat > "$fake/bin/fm-guard.sh" <<'SH'
 #!/usr/bin/env bash
