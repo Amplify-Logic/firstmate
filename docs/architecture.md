@@ -292,7 +292,8 @@ When a reply has a real visual artifact, `--image <path>` attaches one local PNG
 Actionable reversible requests run through firstmate's normal intake, backlog, dispatch, investigation, or ship lifecycle.
 Work that completes in the answering turn gets one outcome reply.
 Work that spawns a longer-running task gets an acknowledgement reply first; `bin/fm-x-link.sh` records `x_request=`, `x_request_ts=`, `x_followups=0`, and optional reply-platform context in that task's `state/<id>.meta`, while durable per-request context preserves the original platform and budget independently of task links and inbox cleanup.
-Later milestone and completion wakes use `bin/fm-x-followup.sh` to post up to three public-safe follow-ups through the relay's `connector/followup` endpoint, ending with a `--final` one that always clears the link.
+Later milestone wakes use `bin/fm-x-followup.sh` to post up to three public-safe follow-ups through the relay's `connector/followup` endpoint, ending with a `--final` one for ordinary X-linked work.
+A typed promised-final commitment owns its terminal reply through `bin/fm-public-followup.sh`; after its receipt is validated, `bin/fm-x-followup.sh --clear <task-id>` removes any legacy link without posting another reply.
 The [X mode configuration reference](configuration.md#x-mode-env) owns the exact context retention, platform-resolution, and fail-safe posting contract.
 If recovery relinks the same relay request onto a successor task, `fm-x-link.sh --carry-count <n> --carry-ts <epoch> --carry-platform <x|discord> --carry-max <n>` preserves the consumed follow-up count, original 7-day window, and reply split budget instead of granting a fresh local budget or falling back to the wrong platform.
 The follow-up helper forwards `--image <path>` to the same reply client when a follow-up needs an image.
@@ -304,6 +305,16 @@ If an image is attached to a split reply, the relay puts it on the first/opener 
 For preview testing, `FMX_DRY_RUN` makes `fm-x-reply.sh` and `fm-x-dismiss.sh` skip the public post or dismiss call and record the would-be payload under `state/x-outbox/`, including `texts` when the reply would be a thread and an `endpoint` marker when the preview is a completion follow-up or dismiss, while the rest of the poll -> compose -> would-post loop still succeeds.
 Attached images are recorded as compact `{media_type, bytes, source_path}` metadata in dry-run instead of base64 bytes.
 X mode remains layered on top of the existing check mechanism without changing its request-handling behavior.
+
+A promised final public reply is a stronger commitment than a milestone follow-up because forgetting it is publicly visible.
+Intake turns that promise into a typed obligation owned by `tasks-axi public-followup`, and every later step reads the obligation from disk rather than conversation memory.
+`tasks-axi` alone validates a terminal result's source home, work id, generation, schema, outcome, and deliverables.
+`state/x-context/` remains the owner of the private request context, and `bin/fm-x-reply.sh` remains the outward posting path.
+`bin/fm-public-followup.sh` composes those owners with an activation gate, a private terminal-event inbox, and idempotent delivery.
+Work routed to another home reports a typed terminal result through `bin/fm-public-followup-emit.sh`; the child never learns the thread, and firstmate never recovers the result by parsing a free-form completion sentence.
+A terminal event id is derived from its identity tuple, so duplicate reports and restart replay converge without coordination.
+Reconciliation rides the existing relay poll and session-start digest rather than a new process or timer, and both stop at the existing `.env` activation gate when X mode is off.
+The [X mode configuration reference](configuration.md#promised-public-replies-statepublic-followup) owns the operator contract, and the `fmx-respond` skill owns the procedure.
 
 ## Project memory belongs to projects
 

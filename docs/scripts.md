@@ -118,4 +118,7 @@ The shared no-mistakes gate refusal for fleet lifecycle entrypoints is summarize
 | `fm-x-reply.sh`          | Post or dry-run preview a composed X-mode reply or follow-up                         |
 | `fm-x-dismiss.sh`        | Dismiss a skipped X-mode mention at the relay without replying                       |
 | `fm-x-link.sh`           | Link a spawned task to its originating X-mode mention in task meta                   |
-| `fm-x-followup.sh`       | Detect, post, and cap completion follow-ups for an X-mode-linked task                |
+| `fm-x-followup.sh`       | Detect, post, clear, and cap completion follow-ups for an X-mode-linked task         |
+| `fm-public-followup-lib.sh` | Gate and locate private promised-public-reply transport                           |
+| `fm-public-followup.sh`  | Reconcile typed terminal results and deliver a promised public reply once            |
+| `fm-public-followup-emit.sh` | Report a typed terminal result to the home that owns the public reply             |
