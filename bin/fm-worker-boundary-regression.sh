@@ -566,6 +566,10 @@ def gateway_probes(gateway: Path, root: Path) -> Tuple[Dict[str, str], Dict[str,
         "gateway.actionrequest-flooded": "RATE_LIMITED" if accepted < flood_total else "ACCEPTED_ALL",
         "recovery.crash-restart": "STATE_PRESERVED" if first.returncode == 0 and restart.returncode == 0 else "STATE_LOST",
     }
+    if first.returncode != 0:
+        for probe in ALL_PROBES:
+            if probe.startswith("gateway.actionrequest-"):
+                results[probe] = "NO_BASELINE"
     return results, paths
 
 
@@ -643,23 +647,32 @@ def contains_terminal_control(data: bytes) -> bool:
     return b"\x1b" in data or b"\x07" in data or b"\x9b" in data
 
 
-def merge_payload_results(actual: Dict[str, str], result_path: Path, scenario: str) -> bool:
-    allowed = PAYLOAD_REPORTABLE_PROBES.get(scenario, ())
-    if not allowed:
-        return False
+def read_payload_result(result_path: Path) -> Optional[Dict[str, Any]]:
     try:
         reported = read_json(result_path)
     except (OSError, ValueError, json.JSONDecodeError):
+        return None
+    return reported if isinstance(reported, dict) else None
+
+
+def merge_payload_results(actual: Dict[str, str], result_path: Path, scenario: str) -> bool:
+    allowed = PAYLOAD_REPORTABLE_PROBES.get(scenario, ())
+    reported = read_payload_result(result_path)
+    if not allowed or reported is None:
         return False
-    if not isinstance(reported, dict):
-        return False
-    merged = False
+    complete = True
     for probe in allowed:
         value = reported.get(probe)
         if isinstance(value, str) and value:
             actual[probe] = value
-            merged = True
-    return merged
+        else:
+            complete = False
+    return complete
+
+
+def payload_ran_marker(result_path: Path, probe: str, marker: str) -> bool:
+    reported = read_payload_result(result_path)
+    return reported is not None and reported.get(probe) == marker
 
 
 def write_hostile_archives(root: Path) -> Dict[str, Path]:
@@ -977,24 +990,26 @@ def run_pack(args: argparse.Namespace) -> int:
             rc, stdout, _stderr, timed_out = invoke_payload(
                 script, "capabilities", fixture_path, result_path, env, read_fd, launcher_adapter, PAYLOAD_TIMEOUT
             )
-            if rc == 0 and not timed_out:
-                merge_payload_results(actual, result_path, "capabilities")
+            if rc == 0 and not timed_out and merge_payload_results(actual, result_path, "capabilities"):
                 actual["terminal.control-output"] = "SANITIZED" if not contains_terminal_control(stdout) else "UNSANITIZED"
 
             for scenario, probe in (("memory", "resource.memory"), ("processes", "resource.processes")):
                 rc, _stdout, _stderr, timed_out = invoke_payload(
                     script, scenario, fixture_path, result_path, env, read_fd, launcher_adapter, PAYLOAD_TIMEOUT
                 )
-                if rc == 0 and not timed_out:
-                    if not merge_payload_results(actual, result_path, scenario):
-                        actual[probe] = "NOT_REPORTED"
-                else:
-                    actual[probe] = "HARNESS_KILLED" if timed_out else "BLOCKED_BY_LIMIT"
+                if timed_out:
+                    actual[probe] = "HARNESS_KILLED"
+                elif rc < 0:
+                    actual[probe] = "BLOCKED_BY_LIMIT"
+                elif rc > 0:
+                    actual[probe] = "NOT_RUN"
+                elif not merge_payload_results(actual, result_path, scenario):
+                    actual[probe] = "NOT_REPORTED"
 
             rc, stdout, _stderr, timed_out = invoke_payload(
                 script, "output", fixture_path, result_path, env, read_fd, launcher_adapter, PAYLOAD_TIMEOUT
             )
-            if rc == 0 and not timed_out:
+            if rc == 0 and not timed_out and payload_ran_marker(result_path, "resource.output", "EMITTED"):
                 actual["resource.output"] = "BOUNDED" if len(stdout) <= MAX_CAPTURE else "UNBOUNDED"
 
             rc, _stdout, _stderr, timed_out = invoke_payload(
@@ -1002,8 +1017,10 @@ def run_pack(args: argparse.Namespace) -> int:
             )
             if timed_out:
                 actual["resource.wall-clock"] = "HARNESS_KILLED"
-            else:
-                actual["resource.wall-clock"] = "UNBOUNDED" if rc == 0 else "BOUNDED"
+            elif rc == 0:
+                actual["resource.wall-clock"] = "UNBOUNDED"
+            elif rc < 0:
+                actual["resource.wall-clock"] = "BOUNDED"
 
         actual.update(artifact_probes(artifact_adapter, temp_root, env))
         actual.update(source_invariant_probes(manifest, repo))

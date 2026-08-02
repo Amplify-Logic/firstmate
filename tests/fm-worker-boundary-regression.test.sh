@@ -134,6 +134,47 @@ assert "SYNTHETIC_SECRET_NOT_REAL" not in encoded
 PY
 pass "ambient launch and workspace gateway reproduce only synthetic boundary exposures"
 
+NOOP_ADAPTER="$TMP/noop-adapter.sh"
+NOOP_REPORT="$TMP/noop.json"
+cat >"$NOOP_ADAPTER" <<'SH'
+#!/usr/bin/env bash
+exit 0
+SH
+chmod +x "$NOOP_ADAPTER"
+set +e
+"$PACK" --target native-account --launcher-adapter "$NOOP_ADAPTER" --report "$NOOP_REPORT" \
+  >"$TMP/noop.stdout" 2>"$TMP/noop.stderr"
+noop_rc=$?
+set -e
+expect_code 1 "$noop_rc" "launcher adapter that never runs the payload"
+[ ! -s "$TMP/noop.stderr" ] || fail "a silent launcher adapter must fail as verdicts, not as setup errors"
+python3 - "$NOOP_REPORT" <<'PY'
+import json
+import sys
+
+report = json.load(open(sys.argv[1], encoding="utf-8"))
+records = {record["probe"]: record for record in report["records"]}
+payload_measured = [
+    probe
+    for probe in records
+    if probe.startswith(("network.", "descriptor.", "ipc.", "credential.", "privacy.", "control."))
+    or probe in (
+        "gateway.database-read",
+        "gateway.inbox-read",
+        "gateway.audit-write",
+        "terminal.control-output",
+        "resource.memory",
+        "resource.processes",
+        "resource.output",
+        "resource.wall-clock",
+    )
+]
+assert len(payload_measured) == 27, payload_measured
+for probe in payload_measured:
+    assert records[probe]["result"] == "FAIL", (probe, records[probe]["actual"])
+PY
+pass "a launcher adapter that never runs the payload turns no probe green"
+
 VERIFY_SOURCE="$TMP/install-verifier.py"
 PRIV_SOURCE="$TMP/privileged.py"
 SOCKET_SOURCE="$TMP/sockets.py"

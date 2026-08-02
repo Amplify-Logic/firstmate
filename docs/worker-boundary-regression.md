@@ -20,9 +20,12 @@ Both modes must reject symlink and traversal artifacts, sanitize terminal contro
 Both modes must pass the source and installation invariants declared in `docs/fm-worker-boundary-source.json`.
 
 A probe is only ever green on positive evidence.
-A probe whose payload did not run records `NOT_RUN`, a scenario that exits cleanly without reporting its own verdict records `NOT_REPORTED`, and a canary that could not be created records `CANARY_UNAVAILABLE`.
+A probe whose payload did not run records `NOT_RUN`, a scenario that exits cleanly without reporting every verdict it owns records `NOT_REPORTED`, and a canary that could not be created records `CANARY_UNAVAILABLE`.
 All three fail, because an unmeasured capability is not an enforced one.
 Only the probes a scenario is allowed to report are taken from the payload result file, so a launcher adapter cannot report gateway, artifact, terminal, recovery, drift, or source verdicts on the harness's behalf.
+The verdicts the harness derives from captured output are additionally gated on the scenario having reported, so a launcher adapter that exits cleanly without ever starting the payload scores no probe at all.
+A resource ceiling is only recognized from a signal kill, because an ordinary nonzero exit is a refused or broken launch rather than an enforced limit.
+The gateway request probes likewise report `NO_BASELINE` when the gateway rejects the valid baseline request, since rejections prove nothing once nothing is accepted.
 
 The committed source manifest intentionally describes the current workspace gateway and ambient launcher.
 It therefore remains red until the fixed-path runner, gateway channels, artifact importer, and trusted installation verifier replace those sources.
