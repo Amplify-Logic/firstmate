@@ -63,7 +63,9 @@ case "${SOURCE##*.}" in
   *) fail "refusing non-Markdown file: $SOURCE (expected .md or .markdown)" ;;
 esac
 
-OUTPUT=$(node "$SCRIPT_DIR/fm-read.mjs" "$SOURCE" "$FM_HOME/.lavish")
+if ! OUTPUT=$(node "$SCRIPT_DIR/fm-read.mjs" "$SOURCE" "$FM_HOME/.lavish"); then
+  fail "could not render $SOURCE into $FM_HOME/.lavish"
+fi
 [ -n "$OUTPUT" ] || fail "renderer did not report an output page for $SOURCE"
 
 if [ "$NO_OPEN" -eq 1 ]; then

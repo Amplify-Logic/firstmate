@@ -2,8 +2,12 @@
 // Self-contained Markdown-to-HTML renderer for fm-read.sh.
 // It intentionally escapes raw HTML and supports the report-oriented Markdown
 // surface used by Firstmate: headings, paragraphs, emphasis, links and images
-// restricted to http/https/mailto/relative targets, blockquotes, nested lists,
-// fenced code, rules, and pipe tables.
+// restricted to http/https/mailto/relative targets, blockquotes, nested lists
+// whose wrapped lines and fenced code stay inside their item, fenced code,
+// rules, and pipe tables.
+// A list continuation must be indented, so an unindented line after a list ends
+// the list instead of continuing its last item, and indented code blocks are
+// read as continuation text rather than as code.
 // It also owns the private page naming: the page is written 0600 under a 0700
 // output directory and its path is printed on stdout.
 import crypto from "node:crypto";
@@ -76,12 +80,19 @@ function render(markdown) {
   let paragraph = [];
   const lists = [];
   let quote = [];
+  let itemText = [];
 
   const flushParagraph = () => {
     if (paragraph.length) out.push(`<p>${inline(paragraph.join(" ").trim())}</p>`);
     paragraph = [];
   };
+  const openItem = () => lists.length > 0 && lists[lists.length - 1].open;
+  const flushItemText = () => {
+    if (itemText.length) out.push(inline(itemText.join(" ").trim()));
+    itemText = [];
+  };
   const closeLevel = () => {
+    flushItemText();
     const level = lists.pop();
     if (level.open) out.push("</li>");
     out.push(`</${level.type}>`);
@@ -105,16 +116,18 @@ function render(markdown) {
 
   for (let i = 0; i < lines.length; i += 1) {
     const line = lines[i];
-    const fence = line.match(/^\s*```([^`]*)$/);
+    const fence = line.match(/^([ \t]*)```([^`]*)$/);
     if (fence) {
-      flushBlocks();
+      const width = fence[1].length;
+      if (width > 0 && openItem()) flushItemText();
+      else flushBlocks();
       const body = [];
       i += 1;
-      while (i < lines.length && !/^\s*```\s*$/.test(lines[i])) {
-        body.push(lines[i]);
+      while (i < lines.length && !/^[ \t]*```[ \t]*$/.test(lines[i])) {
+        body.push(lines[i].slice(Math.min(lines[i].match(/^[ \t]*/)[0].length, width)));
         i += 1;
       }
-      const language = fence[1].trim().replace(/[^A-Za-z0-9_-]/g, "");
+      const language = fence[2].trim().replace(/[^A-Za-z0-9_-]/g, "");
       out.push(`<pre><code${language ? ` class="language-${language}"` : ""}>${escapeHtml(body.join("\n"))}</code></pre>`);
       continue;
     }
@@ -167,6 +180,7 @@ function render(markdown) {
     const ordered = line.match(/^([ \t]*)\d+[.)][ \t]+(.+)$/);
     if (unordered || ordered) {
       flushParagraph();
+      flushItemText();
       const [, pad, content] = unordered || ordered;
       const indent = pad.replaceAll("\t", "  ").length;
       const type = unordered ? "ul" : "ol";
@@ -185,7 +199,13 @@ function render(markdown) {
       continue;
     }
     if (!line.trim()) {
-      flushBlocks();
+      flushParagraph();
+      flushItemText();
+      flushQuote();
+      continue;
+    }
+    if (openItem() && /^[ \t]/.test(line)) {
+      itemText.push(line.trim());
       continue;
     }
     closeList();
@@ -223,6 +243,7 @@ const html = `<!doctype html>\n<html><head><meta charset="utf-8"><meta name="vie
 const outputDir = path.resolve(outputDirArg);
 const output = path.join(outputDir, `read-${slug}-${digest}.html`);
 fs.mkdirSync(outputDir, { recursive: true, mode: 0o700 });
+fs.chmodSync(outputDir, 0o700);
 fs.writeFileSync(output, html, { mode: 0o600 });
 fs.chmodSync(output, 0o600);
 process.stdout.write(`${output}\n`);

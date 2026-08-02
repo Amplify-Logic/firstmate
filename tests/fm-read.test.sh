@@ -48,6 +48,18 @@ Safe [docs](https://example.com/a) link.
 - second top
 MD
 
+cat > "$TMP_ROOT/steps.md" <<'MD'
+1. first item
+ wrapped continuation
+2. second item
+
+3. third item
+   ```sh
+   echo run
+   ```
+4. fourth item
+MD
+
 file_mode() {
   if [ "$(uname)" = Darwin ]; then
     stat -f %Lp "$1"
@@ -85,6 +97,17 @@ assert_contains "$edge" ">3</td>" "a row wider than its header silently lost tra
 assert_contains "$edge_flat" "<li>top level <ul> <li>nested child" "an indented sub-item was flattened to a sibling"
 pass "renderer keeps identifiers, rules, tables, and nesting intact and refuses unsafe URL schemes"
 
+steps_out=$(cd "$TMP_ROOT" && FM_HOME="$HOME_DIR" FM_ROOT_OVERRIDE="$ROOT" "$READ" --no-open steps.md)
+steps_flat=$(tr '\n' ' ' < "$steps_out")
+lists=$(grep -o '<ol>' "$steps_out" | wc -l | tr -d ' ')
+items=$(grep -o '<li>' "$steps_out" | wc -l | tr -d ' ')
+[ "$lists" = 1 ] || fail "continuation lines split one ordered list into $lists lists, silently renumbering it"
+[ "$items" = 4 ] || fail "expected 4 list items, rendered $items"
+assert_contains "$steps_flat" "<li>first item wrapped continuation" "a wrapped line was ejected from its list item"
+assert_contains "$steps_flat" '<li>third item <pre><code class="language-sh">echo run</code></pre>' \
+  "an indented fenced block was ejected from its list item"
+pass "wrapped lines and indented code stay inside their list item without renumbering"
+
 first=$(FM_HOME="$HOME_DIR" FM_ROOT_OVERRIDE="$ROOT" "$READ" --no-open sample-task)
 second=$(FM_HOME="$HOME_DIR" FM_ROOT_OVERRIDE="$ROOT" "$READ" --no-open sample-task)
 [ "$first" = "$second" ] || fail "same report rendered to different output names"
@@ -97,6 +120,25 @@ pass "bare task ids resolve, name and title their page, and reuse a deterministi
 [ "$(file_mode "$first")" = 600 ] || fail "private report page is not owner-only: $(file_mode "$first")"
 [ "$(file_mode "$HOME_DIR/.lavish")" = 700 ] || fail "private page directory is not owner-only: $(file_mode "$HOME_DIR/.lavish")"
 pass "rendered pages and their directory stay owner-only"
+
+LOOSE_HOME="$TMP_ROOT/loose-home"
+mkdir -p "$LOOSE_HOME/data/other-task" "$LOOSE_HOME/.lavish"
+chmod 755 "$LOOSE_HOME/.lavish"
+printf '# Other report\n' > "$LOOSE_HOME/data/other-task/report.md"
+loose=$(FM_HOME="$LOOSE_HOME" FM_ROOT_OVERRIDE="$ROOT" "$READ" --no-open other-task)
+[ "$(file_mode "$LOOSE_HOME/.lavish")" = 700 ] || fail "a pre-existing page directory was left readable: $(file_mode "$LOOSE_HOME/.lavish")"
+[ "$(file_mode "$loose")" = 600 ] || fail "page in a pre-existing directory is not owner-only: $(file_mode "$loose")"
+pass "a pre-existing page directory is tightened to owner-only"
+
+BLOCKED_HOME="$TMP_ROOT/blocked-home"
+mkdir -p "$BLOCKED_HOME/data/blocked-task"
+printf '# Blocked report\n' > "$BLOCKED_HOME/data/blocked-task/report.md"
+printf 'not a directory\n' > "$BLOCKED_HOME/.lavish"
+if FM_HOME="$BLOCKED_HOME" FM_ROOT_OVERRIDE="$ROOT" "$READ" --no-open blocked-task >"$TMP_ROOT/blocked.out" 2>&1; then
+  fail "an unrenderable output directory was accepted"
+fi
+assert_contains "$(cat "$TMP_ROOT/blocked.out")" "fm-read: could not render" "a renderer failure did not produce a clean refusal"
+pass "renderer failures refuse with the script's own message"
 
 if FM_HOME="$HOME_DIR" FM_ROOT_OVERRIDE="$ROOT" "$READ" --no-open "$TMP_ROOT/notes.txt" >"$TMP_ROOT/non-md.out" 2>&1; then
   fail "non-Markdown input was accepted"
