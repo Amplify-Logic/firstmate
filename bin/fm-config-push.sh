@@ -145,8 +145,8 @@ while IFS='|' read -r id home _window meta; do
     errors=1
     continue
   }
-  fm_lock_acquire_wait "$home_lock" || {
-    echo "  config-reread: error - could not acquire per-home lock"
+  fm_lock_acquire_wait "$home_lock" "$FM_CONFIG_INHERIT_LOCK_WAIT_SECS" || {
+    echo "  config-reread: error - could not acquire per-home lock within ${FM_CONFIG_INHERIT_LOCK_WAIT_SECS}s"
     errors=1
     continue
   }

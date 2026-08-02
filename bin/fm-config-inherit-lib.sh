@@ -444,11 +444,23 @@ propagate_inheritable_config() {
 # config push so the live secondmate can re-read exact post-write bytes.
 # Kept under state/ (gitignored operational dir) so it never dirties the home.
 FM_CONFIG_REREAD_INSTRUCTION_PREFIX_REL="state/.fm-inherited-config-reread"
+# Every pending, sent, retry-staged, and quarantined generation path is derived
+# from that one prefix, so the constant stays the single place it is defined.
+FM_CONFIG_REREAD_STATE_REL="${FM_CONFIG_REREAD_INSTRUCTION_PREFIX_REL%/*}"
+FM_CONFIG_REREAD_BASENAME="${FM_CONFIG_REREAD_INSTRUCTION_PREFIX_REL##*/}"
 FM_CONFIG_REREAD_MAX_SENT=16
-FM_CONFIG_REREAD_RETRY_ROOT_REL="state/.fm-inherited-config-reread-retry"
+FM_CONFIG_REREAD_RETRY_ROOT_REL="$FM_CONFIG_REREAD_STATE_REL/$FM_CONFIG_REREAD_BASENAME-retry"
+FM_CONFIG_REREAD_QUARANTINE_REL="$FM_CONFIG_REREAD_STATE_REL/$FM_CONFIG_REREAD_BASENAME-quarantine"
 FM_CONFIG_REREAD_MAX_PENDING=16
 FM_CONFIG_REREAD_MAX_QUARANTINE=16
 FM_CONFIG_INHERIT_LOCK_REL="state/.fm-inherited-config.lock"
+# Bounded wait for the per-home inheritance lock. A live-but-wedged holder must
+# surface as a concrete diagnostic instead of stalling a session-start sweep,
+# a mid-session config push, or a spawn forever.
+FM_CONFIG_INHERIT_LOCK_WAIT_SECS=${FM_CONFIG_INHERIT_LOCK_WAIT_SECS:-30}
+case "$FM_CONFIG_INHERIT_LOCK_WAIT_SECS" in
+  ''|*[!0-9]*|0) FM_CONFIG_INHERIT_LOCK_WAIT_SECS=30 ;;
+esac
 
 # Framing lines for the config-reread instruction. Defaults/rules only - never
 # an enforcement claim, and never a parsed summary of file contents.
@@ -496,7 +508,7 @@ fm_config_reread_retry_dir() {
 fm_config_reread_pending_stages() {
   local source_home=$1 id=$2 retry_dir stage
   retry_dir=$(fm_config_reread_retry_dir "$source_home" "$id") || return 1
-  for stage in "$retry_dir"/.fm-inherited-config-reread.*; do
+  for stage in "$retry_dir"/"$FM_CONFIG_REREAD_BASENAME".*; do
     case "$stage" in
       *.report) continue ;;
     esac
@@ -509,7 +521,7 @@ fm_config_reread_pending_stages() {
 fm_config_reread_pending_reports() {
   local source_home=$1 id=$2 retry_dir report
   retry_dir=$(fm_config_reread_retry_dir "$source_home" "$id") || return 1
-  for report in "$retry_dir"/.fm-inherited-config-reread.*.report; do
+  for report in "$retry_dir"/"$FM_CONFIG_REREAD_BASENAME".*.report; do
     [ -f "$report" ] && [ ! -L "$report" ] || continue
     printf '%s\n' "$report"
   done | LC_ALL=C sort
@@ -547,25 +559,35 @@ fm_config_reread_retry_pending() {
   return "$rc"
 }
 
-fm_config_reread_new_retry_stage_path() {
-  local source_home=$1 id=$2 retry_dir sequence sequence_file sequence_tmp generation stage
-  retry_dir=$(fm_config_reread_retry_dir "$source_home" "$id") || return 1
-  mkdir -p "$retry_dir" 2>/dev/null || return 1
-  chmod 0700 "$retry_dir" 2>/dev/null || return 1
-  sequence=$(cat "$retry_dir/.sequence" 2>/dev/null || true)
+# fm_config_reread_generation_token <dir>
+# One monotonic, lexically age-ordered generation token per directory: a UTC
+# timestamp plus a zero-padded per-directory sequence. Every generation name that
+# is later pruned oldest-first carries this token.
+fm_config_reread_generation_token() {
+  local dir=$1 sequence sequence_file sequence_tmp stamp
+  [ -n "$dir" ] || return 1
+  sequence=$(cat "$dir/.sequence" 2>/dev/null || true)
   case "$sequence" in
     ''|*[!0-9]*) sequence=0 ;;
   esac
   sequence=$((sequence + 1))
-  sequence_file="$retry_dir/.sequence"
-  sequence_tmp=$(umask 077; mktemp "$retry_dir/.sequence.XXXXXX" 2>/dev/null) || return 1
+  sequence_file="$dir/.sequence"
+  sequence_tmp=$(umask 077; mktemp "$dir/.sequence.XXXXXX" 2>/dev/null) || return 1
   if ! printf '%s\n' "$sequence" > "$sequence_tmp" || ! chmod 0600 "$sequence_tmp" 2>/dev/null || ! mv -f "$sequence_tmp" "$sequence_file" 2>/dev/null; then
     rm -f "$sequence_tmp"
     return 1
   fi
-  generation=$(date -u +%Y%m%dT%H%M%S 2>/dev/null) || return 1
-  generation="$generation.$(printf '%08d' "$sequence")"
-  stage=$(umask 077; mktemp "$retry_dir/.fm-inherited-config-reread.$generation.XXXXXX" 2>/dev/null) || return 1
+  stamp=$(date -u +%Y%m%dT%H%M%S 2>/dev/null) || return 1
+  printf '%s.%s\n' "$stamp" "$(printf '%08d' "$sequence")"
+}
+
+fm_config_reread_new_retry_stage_path() {
+  local source_home=$1 id=$2 retry_dir generation stage
+  retry_dir=$(fm_config_reread_retry_dir "$source_home" "$id") || return 1
+  mkdir -p "$retry_dir" 2>/dev/null || return 1
+  chmod 0700 "$retry_dir" 2>/dev/null || return 1
+  generation=$(fm_config_reread_generation_token "$retry_dir") || return 1
+  stage=$(umask 077; mktemp "$retry_dir/$FM_CONFIG_REREAD_BASENAME.$generation.XXXXXX" 2>/dev/null) || return 1
   printf '%s\n' "$stage"
 }
 
@@ -652,7 +674,7 @@ fm_config_reread_adopt_exact_temp() {
 
 fm_config_reread_pending_instructions() {
   local state=$1 pending instruction
-  for pending in "$state"/.fm-inherited-config-reread.*.pending; do
+  for pending in "$state"/"$FM_CONFIG_REREAD_BASENAME".*.pending; do
     [ -f "$pending" ] && [ ! -L "$pending" ] || continue
     instruction=${pending%.pending}
     printf '%s\n' "$instruction"
@@ -661,8 +683,8 @@ fm_config_reread_pending_instructions() {
 
 fm_config_reread_has_pending() {
   local dest_home=$1 state pending
-  state="$dest_home/${FM_CONFIG_REREAD_INSTRUCTION_PREFIX_REL%/*}"
-  for pending in "$state"/.fm-inherited-config-reread.*.pending; do
+  state="$dest_home/$FM_CONFIG_REREAD_STATE_REL"
+  for pending in "$state"/"$FM_CONFIG_REREAD_BASENAME".*.pending; do
     [ -f "$pending" ] && [ ! -L "$pending" ] || continue
     return 0
   done
@@ -671,10 +693,10 @@ fm_config_reread_has_pending() {
 
 fm_config_reread_cleanup_sent() {
   local dest_home=$1 state path paths sorted total remove
-  state="$dest_home/${FM_CONFIG_REREAD_INSTRUCTION_PREFIX_REL%/*}"
+  state="$dest_home/$FM_CONFIG_REREAD_STATE_REL"
   [ -d "$state" ] || return 0
   paths=""
-  for path in "$state"/.fm-inherited-config-reread.*; do
+  for path in "$state"/"$FM_CONFIG_REREAD_BASENAME".*; do
     case "$path" in
       *.pending) continue ;;
     esac
@@ -725,7 +747,7 @@ fm_config_reread_mark_pending() {
 fm_config_reread_publish_stage() {
   local dest_home=$1 stage=$2 state final pending_pointer tmp
   [ -f "$stage" ] && [ ! -L "$stage" ] || return 1
-  state="$dest_home/${FM_CONFIG_REREAD_INSTRUCTION_PREFIX_REL%/*}"
+  state="$dest_home/$FM_CONFIG_REREAD_STATE_REL"
   mkdir -p "$state" 2>/dev/null || return 1
   final="$state/${stage##*/}"
   if [ -f "$final.pending" ] && [ ! -L "$final.pending" ]; then
@@ -798,8 +820,8 @@ fm_config_reread_send_pointer() {
 # fm_config_reread_discard_pending <dest-home>
 fm_config_reread_discard_pending() {
   local dest_home=$1 id=${2:-} source_home=${3:-} state pending instruction retry_dir retry_stage rc=0
-  state="$dest_home/${FM_CONFIG_REREAD_INSTRUCTION_PREFIX_REL%/*}"
-  for pending in "$state"/.fm-inherited-config-reread.*.pending; do
+  state="$dest_home/$FM_CONFIG_REREAD_STATE_REL"
+  for pending in "$state"/"$FM_CONFIG_REREAD_BASENAME".*.pending; do
     [ -f "$pending" ] && [ ! -L "$pending" ] || continue
     instruction=${pending%.pending}
     rm -f "$pending" 2>/dev/null || rc=1
@@ -808,7 +830,7 @@ fm_config_reread_discard_pending() {
   if [ -n "$id" ] && [ -n "$source_home" ]; then
     retry_dir=$(fm_config_reread_retry_dir "$source_home" "$id") || rc=1
     if [ -d "$retry_dir" ]; then
-      for retry_stage in "$retry_dir"/.fm-inherited-config-reread.*; do
+      for retry_stage in "$retry_dir"/"$FM_CONFIG_REREAD_BASENAME".*; do
         [ -f "$retry_stage" ] && [ ! -L "$retry_stage" ] || continue
         rm -f "$retry_stage" 2>/dev/null || rc=1
       done
@@ -855,14 +877,20 @@ fm_config_reread_quarantine_prune() {
   done
 }
 
+fm_config_reread_quarantine_root() {
+  local home=$1
+  [ -n "$home" ] || return 1
+  printf '%s/%s\n' "$home" "$FM_CONFIG_REREAD_QUARANTINE_REL"
+}
+
 fm_config_reread_quarantine_dir() {
-  local home=$1 state root quarantine
-  state="$home/${FM_CONFIG_REREAD_INSTRUCTION_PREFIX_REL%/*}"
-  root="$state/.fm-inherited-config-reread-quarantine"
+  local home=$1 root generation quarantine
+  root=$(fm_config_reread_quarantine_root "$home") || return 1
   mkdir -p "$root" 2>/dev/null || return 1
   chmod 0700 "$root" 2>/dev/null || return 1
   fm_config_reread_quarantine_prune "$root" $((FM_CONFIG_REREAD_MAX_QUARANTINE - 1)) || return 1
-  quarantine=$(umask 077; mktemp -d "$root/generation.XXXXXX" 2>/dev/null) || return 1
+  generation=$(fm_config_reread_generation_token "$root") || return 1
+  quarantine=$(umask 077; mktemp -d "$root/generation.$generation.XXXXXX" 2>/dev/null) || return 1
   chmod 0700 "$quarantine" 2>/dev/null || return 1
   printf '%s\n' "$quarantine"
 }
@@ -871,9 +899,9 @@ fm_config_reread_quarantine_pending() {
   local dest_home=$1 id=${2:-} source_home=${3:-}
   local state pending instruction retry_dir retry_stage dest_quarantine source_quarantine
   local dest_has_artifacts source_has_artifacts rc=0
-  state="$dest_home/${FM_CONFIG_REREAD_INSTRUCTION_PREFIX_REL%/*}"
+  state="$dest_home/$FM_CONFIG_REREAD_STATE_REL"
   dest_has_artifacts=0
-  for pending in "$state"/.fm-inherited-config-reread.*.pending; do
+  for pending in "$state"/"$FM_CONFIG_REREAD_BASENAME".*.pending; do
     [ -f "$pending" ] && [ ! -L "$pending" ] || continue
     dest_has_artifacts=1
     break
@@ -882,7 +910,7 @@ fm_config_reread_quarantine_pending() {
   if [ "$dest_has_artifacts" -eq 1 ]; then
     dest_quarantine=$(fm_config_reread_quarantine_dir "$dest_home" 2>/dev/null || true)
   fi
-  for pending in "$state"/.fm-inherited-config-reread.*.pending; do
+  for pending in "$state"/"$FM_CONFIG_REREAD_BASENAME".*.pending; do
     [ -f "$pending" ] && [ ! -L "$pending" ] || continue
     instruction=${pending%.pending}
     if [ -n "$dest_quarantine" ] && mv -f "$pending" "$dest_quarantine/${pending##*/}" 2>/dev/null; then
@@ -902,7 +930,7 @@ fm_config_reread_quarantine_pending() {
     retry_dir=$(fm_config_reread_retry_dir "$source_home" "$id") || retry_dir=
     source_has_artifacts=0
     if [ -d "$retry_dir" ]; then
-      for retry_stage in "$retry_dir"/.fm-inherited-config-reread.*; do
+      for retry_stage in "$retry_dir"/"$FM_CONFIG_REREAD_BASENAME".*; do
         [ -f "$retry_stage" ] && [ ! -L "$retry_stage" ] || continue
         source_has_artifacts=1
         break
@@ -913,7 +941,7 @@ fm_config_reread_quarantine_pending() {
       source_quarantine=$(fm_config_reread_quarantine_dir "$source_home" 2>/dev/null || true)
     fi
     if [ -d "$retry_dir" ]; then
-      for retry_stage in "$retry_dir"/.fm-inherited-config-reread.*; do
+      for retry_stage in "$retry_dir"/"$FM_CONFIG_REREAD_BASENAME".*; do
         [ -f "$retry_stage" ] && [ ! -L "$retry_stage" ] || continue
         if [ -n "$source_quarantine" ] && mv -f "$retry_stage" "$source_quarantine/${retry_stage##*/}" 2>/dev/null; then
           :
@@ -958,7 +986,7 @@ fm_config_send_reread_nudge() {
     printf 'CONFIG_REREAD: secondmate %s: send failed: destination home is not readable\n' "$id"
     return 1
   }
-  state="$dest_home_abs/${FM_CONFIG_REREAD_INSTRUCTION_PREFIX_REL%/*}"
+  state="$dest_home_abs/$FM_CONFIG_REREAD_STATE_REL"
   changed_items=$(fm_config_reread_changed_items "$report")
   pending_paths=""
   stage_paths=""
