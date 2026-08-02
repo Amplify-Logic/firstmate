@@ -60,6 +60,21 @@ cat > "$TMP_ROOT/steps.md" <<'MD'
 4. fourth item
 MD
 
+cat > "$TMP_ROOT/blocks.md" <<'MD'
+1. first step
+   | Item | Result |
+   | - | - |
+   | Reader | Works |
+2. second step
+   > quoted note
+3. third step
+
+   extra paragraph one
+
+   extra paragraph two
+4. fourth step
+MD
+
 file_mode() {
   if [ "$(uname)" = Darwin ]; then
     stat -f %Lp "$1"
@@ -107,6 +122,18 @@ assert_contains "$steps_flat" "<li>first item wrapped continuation" "a wrapped l
 assert_contains "$steps_flat" '<li>third item <pre><code class="language-sh">echo run</code></pre>' \
   "an indented fenced block was ejected from its list item"
 pass "wrapped lines and indented code stay inside their list item without renumbering"
+
+blocks_out=$(cd "$TMP_ROOT" && FM_HOME="$HOME_DIR" FM_ROOT_OVERRIDE="$ROOT" "$READ" --no-open blocks.md)
+blocks_flat=$(tr '\n' ' ' < "$blocks_out")
+block_lists=$(grep -o '<ol>' "$blocks_out" | wc -l | tr -d ' ')
+block_items=$(grep -o '<li>' "$blocks_out" | wc -l | tr -d ' ')
+[ "$block_lists" = 1 ] || fail "an indented block split one ordered list into $block_lists lists, silently renumbering it"
+[ "$block_items" = 4 ] || fail "expected 4 numbered steps, rendered $block_items"
+assert_contains "$blocks_flat" '<li>first step <div class="tw"><table>' "an indented table was hoisted out of the step it documents"
+assert_contains "$blocks_flat" "<li>second step <blockquote>" "an indented quote was flattened into literal text"
+assert_contains "$blocks_flat" "<li>third step <p>extra paragraph one</p> <p>extra paragraph two</p>" \
+  "continuation paragraphs collapsed into one run of text"
+pass "indented tables, quotes, and paragraphs render inside the step they belong to"
 
 first=$(FM_HOME="$HOME_DIR" FM_ROOT_OVERRIDE="$ROOT" "$READ" --no-open sample-task)
 second=$(FM_HOME="$HOME_DIR" FM_ROOT_OVERRIDE="$ROOT" "$READ" --no-open sample-task)

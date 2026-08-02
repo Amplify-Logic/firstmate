@@ -2,12 +2,18 @@
 // Self-contained Markdown-to-HTML renderer for fm-read.sh.
 // It intentionally escapes raw HTML and supports the report-oriented Markdown
 // surface used by Firstmate: headings, paragraphs, emphasis, links and images
-// restricted to http/https/mailto/relative targets, blockquotes, nested lists
-// whose wrapped lines and fenced code stay inside their item, fenced code,
-// rules, and pipe tables.
-// A list continuation must be indented, so an unindented line after a list ends
-// the list instead of continuing its last item, and indented code blocks are
-// read as continuation text rather than as code.
+// restricted to http/https/mailto/relative targets, blockquotes, lists, fenced
+// code, rules, and pipe tables.
+// A list item owns every following line indented past its own marker, and that
+// block is rendered as Markdown in its own right, so nested lists, tables,
+// rules, quotes, and fenced code stay inside the item they document.
+// The known limits are that a continuation must be indented, so an unindented
+// line after a list ends the list rather than continuing its last item; that a
+// continuation which is a single paragraph joins the item's own line while any
+// richer continuation renders as blocks after it; and that setext headings,
+// reference-style links, four-space code blocks, task-list checkboxes,
+// spaced thematic breaks such as "* * *", and two-space hard line breaks are
+// not recognised anywhere.
 // It also owns the private page naming: the page is written 0600 under a 0700
 // output directory and its path is printed on stdout.
 import crypto from "node:crypto";
@@ -74,35 +80,53 @@ function isTableDivider(line, columns) {
   return cells.length === columns && cells.every((cell) => /^:?-+:?$/.test(cell));
 }
 
+function indentWidth(line) {
+  return line.match(/^[ \t]*/)[0].replaceAll("\t", "  ").length;
+}
+
+function dedent(block) {
+  let common = Infinity;
+  for (const line of block) if (line.trim()) common = Math.min(common, indentWidth(line));
+  if (!Number.isFinite(common) || common === 0) return block;
+  return block.map((line) => {
+    if (!line.trim()) return "";
+    let dropped = 0;
+    let index = 0;
+    while (index < line.length && dropped < common && (line[index] === " " || line[index] === "\t")) {
+      dropped += line[index] === "\t" ? 2 : 1;
+      index += 1;
+    }
+    return line.slice(index);
+  });
+}
+
 function render(markdown) {
   const lines = markdown.replaceAll("\r\n", "\n").replaceAll("\r", "\n").split("\n");
   const out = [];
   let paragraph = [];
-  const lists = [];
+  let list = null;
   let quote = [];
-  let itemText = [];
+  let itemLines = [];
 
   const flushParagraph = () => {
     if (paragraph.length) out.push(`<p>${inline(paragraph.join(" ").trim())}</p>`);
     paragraph = [];
   };
-  const openItem = () => lists.length > 0 && lists[lists.length - 1].open;
-  const flushItemText = () => {
-    if (itemText.length) out.push(inline(itemText.join(" ").trim()));
-    itemText = [];
-  };
-  const closeLevel = () => {
-    flushItemText();
-    const level = lists.pop();
-    if (level.open) out.push("</li>");
-    out.push(`</${level.type}>`);
+  const openItem = () => list !== null && list.open;
+  const flushItemBlock = () => {
+    if (!itemLines.length) return;
+    const block = render(dedent(itemLines).join("\n"));
+    itemLines = [];
+    const lone = block.startsWith("<p>") && block.endsWith("</p>") && !block.slice(3, -4).includes("</p>");
+    const content = lone ? block.slice(3, -4) : block;
+    if (content) out.push(content);
   };
   const closeList = () => {
-    while (lists.length) closeLevel();
-  };
-  const openLevel = (type, indent) => {
-    lists.push({ type, indent, open: false });
-    out.push(`<${type}>`);
+    if (!list) return;
+    flushItemBlock();
+    if (list.open) out.push("</li>");
+    out.push(`</${list.type}>`);
+    list = null;
   };
   const flushQuote = () => {
     if (quote.length) out.push(`<blockquote>${render(quote.join("\n"))}</blockquote>`);
@@ -113,14 +137,31 @@ function render(markdown) {
     closeList();
     flushQuote();
   };
+  const nextContent = (from) => {
+    for (let j = from; j < lines.length; j += 1) if (lines[j].trim()) return j;
+    return -1;
+  };
 
   for (let i = 0; i < lines.length; i += 1) {
     const line = lines[i];
+    const blank = !line.trim();
+    if (openItem()) {
+      const next = blank ? nextContent(i + 1) : i;
+      if (next >= 0 && indentWidth(lines[next]) > list.indent) {
+        itemLines.push(line);
+        continue;
+      }
+    }
+    if (blank) {
+      flushParagraph();
+      flushItemBlock();
+      flushQuote();
+      continue;
+    }
     const fence = line.match(/^([ \t]*)```([^`]*)$/);
     if (fence) {
+      flushBlocks();
       const width = fence[1].length;
-      if (width > 0 && openItem()) flushItemText();
-      else flushBlocks();
       const body = [];
       i += 1;
       while (i < lines.length && !/^[ \t]*```[ \t]*$/.test(lines[i])) {
@@ -180,32 +221,18 @@ function render(markdown) {
     const ordered = line.match(/^([ \t]*)\d+[.)][ \t]+(.+)$/);
     if (unordered || ordered) {
       flushParagraph();
-      flushItemText();
+      flushItemBlock();
       const [, pad, content] = unordered || ordered;
-      const indent = pad.replaceAll("\t", "  ").length;
       const type = unordered ? "ul" : "ol";
-      while (lists.length && indent < lists[lists.length - 1].indent) closeLevel();
-      const top = lists[lists.length - 1];
-      if (!top || indent > top.indent) {
-        openLevel(type, indent);
-      } else if (top.type !== type) {
-        closeLevel();
-        openLevel(type, indent);
+      if (list && list.type !== type) closeList();
+      if (!list) {
+        list = { type, indent: 0, open: false };
+        out.push(`<${type}>`);
       }
-      const level = lists[lists.length - 1];
-      if (level.open) out.push("</li>");
+      if (list.open) out.push("</li>");
       out.push(`<li>${inline(content)}`);
-      level.open = true;
-      continue;
-    }
-    if (!line.trim()) {
-      flushParagraph();
-      flushItemText();
-      flushQuote();
-      continue;
-    }
-    if (openItem() && /^[ \t]/.test(line)) {
-      itemText.push(line.trim());
+      list.indent = pad.replaceAll("\t", "  ").length;
+      list.open = true;
       continue;
     }
     closeList();
