@@ -37,7 +37,7 @@ The provider account is the local test safe-sink identity, while the executor re
 Every mutation uses `BEGIN IMMEDIATE`, uniqueness constraints, foreign keys, full synchronous writes, and WAL journaling.
 Request IDs, broker nonces, idempotency keys, request fingerprints, challenges, approvals, signature hashes, capabilities, and consumed tokens have database uniqueness constraints.
 Tombstones remain in SQLite when the JSONL evidence file rotates or disappears.
-Each command and the service run recovery once at startup, transactionally changing every interrupted `executing` request to `unknown` and recording that provider reconciliation is required.
+Every command that reads or advances request state, and the service itself, run recovery once at startup, transactionally changing every interrupted `executing` request to `unknown` and recording that provider reconciliation is required.
 Recovery never runs per request, so a concurrent caller on another socket cannot rewrite a live execution window.
 An unknown request cannot return to approval or execution through any implemented protocol.
 

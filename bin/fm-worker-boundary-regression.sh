@@ -39,6 +39,15 @@ The artifact adapter is invoked as:
   ADAPTER --input ARCHIVE --destination DIRECTORY
 It passes only when it rejects the archive and leaves the synthetic outside canary unchanged.
 
+The gateway under test is invoked as:
+  GATEWAY prepare < REQUEST
+  GATEWAY status --digest DIGEST
+  GATEWAY inspect-test-paths   (optional, probed once the baseline request is accepted)
+inspect-test-paths must print one JSON object with schema fm.gateway-test-paths.v2.
+Its string database, approval_state, and audit members name the state the baseline wrote.
+The state canaries follow those declared paths, so a gateway that keeps no filesystem approval
+file is still scored, and a gateway that fails or answers otherwise keeps the default layout.
+
 Every source-manifest privileged path must declare kind executable, config, or state
 and an install_path under one of these approved system prefixes:
   /Library/PrivilegedHelperTools/firstmate/   /Library/LaunchDaemons/

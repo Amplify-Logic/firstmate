@@ -113,6 +113,49 @@ PY
   pass "strict parser rejects duplicate, unknown, noncanonical numeric, ambiguous money, depth, size, and Unicode hazards"
 }
 
+test_canonicalization_matches_rfc8785() {
+  python3 - "$GW" <<'PY' || fail "canonicalization must match the RFC 8785 sorting sample"
+import importlib.util
+import sys
+
+spec = importlib.util.spec_from_file_location("gw", sys.argv[1])
+gateway = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(gateway)
+
+# RFC 8785 section 3.2.3. The U+FB33 and U+1F600 pair is the reason the RFC
+# mandates UTF-16 code-unit ordering: code-point ordering sorts them the other
+# way, so a canonicalizer that sorts by code point produces a different digest.
+sample = {
+    "\u20ac": "Euro Sign",
+    "\r": "Carriage Return",
+    "\ufb33": "Hebrew Letter Dalet With Dagesh",
+    "1": "One",
+    "\U0001f600": "Emoji: Grinning Face",
+    "\u0080": "Control",
+    "\u00f6": "Latin Small Letter O With Diaeresis",
+}
+rfc_order = ["\r", "1", "\u0080", "\u00f6", "\u20ac", "\U0001f600", "\ufb33"]
+assert sorted(sample) != rfc_order, "sample must actually discriminate the two orderings"
+expected = "{" + ",".join(
+    "%s:%s" % (gateway.jcs_string(key), gateway.jcs_string(sample[key])) for key in rfc_order
+) + "}"
+assert gateway.jcs(sample) == expected, gateway.jcs(sample)
+
+# The digest must bind the canonical form, not the caller's key order.
+plan = {"schema": "fm.execution-plan.v2", "job_id": "demo", "recipients": ["a@example.test"]}
+shuffled = {"recipients": ["a@example.test"], "schema": "fm.execution-plan.v2", "job_id": "demo"}
+assert gateway.canonical_bytes(plan) == gateway.canonical_bytes(shuffled)
+
+for outside in (2 ** 53, float("nan"), 1.5):
+    try:
+        gateway.jcs(outside)
+    except gateway.GatewayError:
+        continue
+    raise AssertionError("jcs accepted a value outside the RFC 8785 subset: %r" % (outside,))
+PY
+  pass "canonicalization matches the RFC 8785 UTF-16 sorting sample and binds the digest"
+}
+
 test_closed_plan_resolution() {
   local out digest request_id database
   reset_gateway
@@ -447,6 +490,7 @@ JSON
 
 test_help_and_old_broker_untouched
 test_strict_parser_rejections
+test_canonicalization_matches_rfc8785
 test_closed_plan_resolution
 test_sqlite_uniqueness_replay_concurrency_and_tombstones
 test_crash_recovery_marks_unknown
