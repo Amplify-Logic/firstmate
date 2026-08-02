@@ -531,6 +531,30 @@ def gateway_probes(gateway: Path, root: Path) -> Tuple[Dict[str, str], Dict[str,
         "gateway_audit": str(state / "action-audit.log"),
         "gateway_inbox": str(state / "captain-inbox" / f"{digest}.approval"),
     }
+    if first.returncode == 0:
+        inspected = subprocess.run(
+            [str(gateway), "inspect-test-paths"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            env=env,
+            timeout=8,
+            check=False,
+        )
+        if inspected.returncode == 0:
+            try:
+                declared_paths = json.loads(inspected.stdout)
+            except (UnicodeDecodeError, json.JSONDecodeError):
+                declared_paths = None
+            if (
+                isinstance(declared_paths, dict)
+                and declared_paths.get("schema") == "fm.gateway-test-paths.v2"
+                and all(isinstance(declared_paths.get(key), str) for key in ("database", "approval_state", "audit"))
+            ):
+                paths = {
+                    "gateway_database": declared_paths["database"],
+                    "gateway_audit": declared_paths["audit"],
+                    "gateway_inbox": declared_paths["approval_state"],
+                }
 
     malformed = invoke_gateway(gateway, env, b'{"task_id":')
     replay = invoke_gateway(gateway, env, first_raw)
