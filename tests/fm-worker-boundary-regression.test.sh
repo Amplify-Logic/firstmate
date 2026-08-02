@@ -86,7 +86,6 @@ for record in records.values():
 
 observed_ambient_exposures = {
     "network.ipv4": "REACHABLE",
-    "network.ipv6": "REACHABLE",
     "network.dns": "REACHABLE",
     "network.doh": "REACHABLE",
     "credential.ssh-agent-env": "PRESENT",
@@ -104,9 +103,23 @@ for probe, actual in observed_ambient_exposures.items():
     assert records[probe]["actual"] == actual, (probe, records[probe]["actual"])
     assert records[probe]["result"] == "FAIL"
 
+# An IPv6 canary that cannot bind is unmeasured, never enforced, so it still fails.
+assert records["network.ipv6"]["actual"] in ("REACHABLE", "CANARY_UNAVAILABLE"), records["network.ipv6"]["actual"]
+assert records["network.ipv6"]["result"] == "FAIL"
+
 assert records["gateway.actionrequest-malformed"]["actual"] == "REJECTED"
 assert records["gateway.actionrequest-replayed"]["actual"] == "REJECTED"
 assert records["recovery.crash-restart"]["actual"] == "STATE_PRESERVED"
+
+# The ambient launcher bounds nothing, so a probe recorded as bounded, sanitized,
+# or limited here would mean the payload never ran rather than that it was denied.
+assert records["terminal.control-output"]["actual"] == "UNSANITIZED"
+assert records["resource.output"]["actual"] == "UNBOUNDED"
+assert records["resource.memory"]["actual"] == "ALLOCATED"
+assert records["resource.processes"]["actual"] == "SPAWNED"
+assert records["resource.wall-clock"]["actual"] == "HARNESS_KILLED"
+assert records["launcher.drift"]["actual"] == "UNATTESTED"
+
 assert records["source.root-owned-ancestor-chain"]["actual"] == "FAIL"
 assert records["source.no-worker-selected-privileged-open"]["actual"] == "FAIL"
 assert records["source.no-production-trust-override"]["actual"] == "FAIL"
@@ -173,6 +186,23 @@ assert actual
 assert set(actual.values()) == {"PASS"}, actual
 PY
 pass "source invariant checker accepts only a complete fixed-path and peer-credential manifest"
+
+HOSTILE_MANIFEST="$TMP/hostile-source.json"
+printf '%s\n' '["fm-worker-boundary-source.v1"]' >"$HOSTILE_MANIFEST"
+set +e
+hostile_result=$("$PACK" --check-source-only --source-manifest "$HOSTILE_MANIFEST" 2>"$TMP/hostile.stderr")
+hostile_rc=$?
+set -e
+expect_code 1 "$hostile_rc" "well-formed but wrongly shaped manifest"
+[ ! -s "$TMP/hostile.stderr" ] || fail "a wrongly shaped manifest must fail as a verdict, not as a traceback"
+python3 - "$hostile_result" <<'PY'
+import json
+import sys
+actual = json.loads(sys.argv[1])
+assert actual
+assert set(actual.values()) == {"FAIL"}, actual
+PY
+pass "source invariant checker reports FAIL rather than crashing on a wrongly shaped manifest"
 
 [ -x "$PACK" ] || fail "boundary pack must be executable"
 [ -f "$MANIFEST" ] || fail "committed current-source manifest must exist"

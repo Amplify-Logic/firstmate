@@ -118,6 +118,15 @@ OTHER_PROBES = [
 
 ALL_PROBES = CAPABILITY_PROBES + OTHER_PROBES
 
+# The payload and any launcher adapter sit on the untrusted side of the boundary
+# under test, so a scenario may only report its own probes. Every other verdict
+# is harness-owned and is never taken from the result file.
+PAYLOAD_REPORTABLE_PROBES: Dict[str, Tuple[str, ...]] = {
+    "capabilities": tuple(CAPABILITY_PROBES),
+    "memory": ("resource.memory",),
+    "processes": ("resource.processes",),
+}
+
 BLOCKED_EXPECTATIONS: Dict[str, List[str]] = {
     probe: ["BLOCKED"] for probe in CAPABILITY_PROBES
 }
@@ -295,7 +304,7 @@ def payload_capabilities(fixture: Dict[str, Any]) -> Dict[str, str]:
     if endpoints.get("ipv6"):
         observed["network.ipv6"] = "REACHABLE" if connect_tcp("::1", endpoints["ipv6"], socket.AF_INET6) else "BLOCKED"
     else:
-        observed["network.ipv6"] = "BLOCKED"
+        observed["network.ipv6"] = "CANARY_UNAVAILABLE"
     observed["network.dns"] = "REACHABLE" if connect_udp("127.0.0.1", endpoints["dns"], socket.AF_INET, b"SYNTHETIC-DNS-QUERY") else "BLOCKED"
     observed["network.doh"] = "REACHABLE" if connect_doh("127.0.0.1", endpoints["doh"]) else "BLOCKED"
     observed["network.loopback-tcp"] = "REACHABLE" if connect_tcp("127.0.0.1", endpoints["loopback_tcp"], socket.AF_INET) else "BLOCKED"
@@ -348,16 +357,16 @@ def payload_resource(scenario: str) -> Dict[str, str]:
         finally:
             for child in children:
                 with contextlib.suppress(OSError):
-                    child.terminate()
+                    child.kill()
             for child in children:
-                with contextlib.suppress(OSError):
-                    child.wait(timeout=0.5)
+                with contextlib.suppress(OSError, subprocess.SubprocessError):
+                    child.wait(timeout=1)
     raise ValueError(f"unknown resource scenario: {scenario}")
 
 
 def payload_main(args: argparse.Namespace) -> int:
     fixture = read_json(Path(args.fixture))
-    if fixture.get("synthetic_canary") != "SYNTHETIC_CANARY_ONLY":
+    if not isinstance(fixture, dict) or fixture.get("synthetic_canary") != "SYNTHETIC_CANARY_ONLY":
         print("boundary payload refused non-synthetic fixture", file=sys.stderr)
         return 2
     scenario = args.scenario
@@ -634,6 +643,25 @@ def contains_terminal_control(data: bytes) -> bool:
     return b"\x1b" in data or b"\x07" in data or b"\x9b" in data
 
 
+def merge_payload_results(actual: Dict[str, str], result_path: Path, scenario: str) -> bool:
+    allowed = PAYLOAD_REPORTABLE_PROBES.get(scenario, ())
+    if not allowed:
+        return False
+    try:
+        reported = read_json(result_path)
+    except (OSError, ValueError, json.JSONDecodeError):
+        return False
+    if not isinstance(reported, dict):
+        return False
+    merged = False
+    for probe in allowed:
+        value = reported.get(probe)
+        if isinstance(value, str) and value:
+            actual[probe] = value
+            merged = True
+    return merged
+
+
 def write_hostile_archives(root: Path) -> Dict[str, Path]:
     archives: Dict[str, Path] = {}
     traversal = root / "traversal.tar"
@@ -691,15 +719,21 @@ def resolve_source(repo: Path, value: str) -> Path:
     return Path(value.replace("${REPO}", str(repo))).resolve()
 
 
+def manifest_list(manifest: Dict[str, Any], key: str) -> List[Any]:
+    value = manifest.get(key)
+    return value if isinstance(value, list) else []
+
+
 def source_invariant_probes(manifest_path: Path, repo: Path) -> Dict[str, str]:
+    failed = {probe: "FAIL" for probe in OTHER_PROBES if probe.startswith("source.")}
     try:
         manifest = read_json(manifest_path)
     except (OSError, ValueError, json.JSONDecodeError):
-        return {probe: "FAIL" for probe in OTHER_PROBES if probe.startswith("source.")}
-    if manifest.get("schema") != MANIFEST_SCHEMA:
-        return {probe: "FAIL" for probe in OTHER_PROBES if probe.startswith("source.")}
+        return failed
+    if not isinstance(manifest, dict) or manifest.get("schema") != MANIFEST_SCHEMA:
+        return failed
 
-    privileged_paths = manifest.get("privileged_paths", [])
+    privileged_paths = manifest_list(manifest, "privileged_paths")
     root_chain = bool(privileged_paths)
     approved_prefixes = (
         "/Library/PrivilegedHelperTools/firstmate/",
@@ -708,6 +742,9 @@ def source_invariant_probes(manifest_path: Path, repo: Path) -> Dict[str, str]:
         "/var/run/firstmate/",
     )
     for entry in privileged_paths:
+        if not isinstance(entry, dict):
+            root_chain = False
+            continue
         install_path = str(entry.get("install_path", ""))
         path_kind = entry.get("kind")
         check_source = entry.get("ancestor_check_source")
@@ -724,11 +761,11 @@ def source_invariant_probes(manifest_path: Path, repo: Path) -> Dict[str, str]:
         if not all(token in text.lower() for token in required_tokens):
             root_chain = False
 
-    privileged_sources = [resolve_source(repo, str(path)) for path in manifest.get("privileged_sources", [])]
+    privileged_sources = [resolve_source(repo, str(path)) for path in manifest_list(manifest, "privileged_sources")]
     no_worker_path = bool(privileged_sources)
     no_override = bool(privileged_sources)
     worker_path_tokens = ("--file", "worker_selected_path", "request[\"path\"]", "request.get(\"path\")")
-    trust_override_tokens = tuple(manifest.get("forbidden_production_trust_env", []))
+    trust_override_tokens = tuple(str(token) for token in manifest_list(manifest, "forbidden_production_trust_env"))
     for source in privileged_sources:
         try:
             text = source.read_text(encoding="utf-8")
@@ -741,13 +778,17 @@ def source_invariant_probes(manifest_path: Path, repo: Path) -> Dict[str, str]:
         if any(token in text for token in trust_override_tokens):
             no_override = False
 
-    sockets = manifest.get("sockets", [])
-    required_purposes = set(manifest.get("required_socket_purposes", []))
+    sockets = manifest_list(manifest, "sockets")
+    required_purposes = {str(purpose) for purpose in manifest_list(manifest, "required_socket_purposes")}
     purposes: List[str] = []
     schemas: List[str] = []
     schema_ok = bool(sockets) and bool(required_purposes)
     peer_ok = bool(sockets) and bool(required_purposes)
     for entry in sockets:
+        if not isinstance(entry, dict):
+            schema_ok = False
+            peer_ok = False
+            continue
         purpose = str(entry.get("purpose", ""))
         schema = str(entry.get("schema", ""))
         source_value = entry.get("source")
@@ -791,8 +832,12 @@ def launcher_attestation_probe(attestation: Optional[Path], manifest_path: Path)
         manifest = read_json(manifest_path)
     except (OSError, ValueError, json.JSONDecodeError):
         return "DRIFTED"
-    required = manifest.get("launcher_attestation", {})
-    if not required or any(value.get(key) != expected for key, expected in required.items()):
+    if not isinstance(value, dict) or not isinstance(manifest, dict):
+        return "DRIFTED"
+    required = manifest.get("launcher_attestation")
+    if not isinstance(required, dict) or not required:
+        return "DRIFTED"
+    if any(value.get(key) != expected for key, expected in required.items()):
         return "DRIFTED"
     return "ATTESTED"
 
@@ -932,30 +977,33 @@ def run_pack(args: argparse.Namespace) -> int:
             rc, stdout, _stderr, timed_out = invoke_payload(
                 script, "capabilities", fixture_path, result_path, env, read_fd, launcher_adapter, PAYLOAD_TIMEOUT
             )
-            if rc == 0 and not timed_out and result_path.exists():
-                actual.update(read_json(result_path))
-            actual["terminal.control-output"] = "SANITIZED" if not contains_terminal_control(stdout) else "UNSANITIZED"
+            if rc == 0 and not timed_out:
+                merge_payload_results(actual, result_path, "capabilities")
+                actual["terminal.control-output"] = "SANITIZED" if not contains_terminal_control(stdout) else "UNSANITIZED"
 
             for scenario, probe in (("memory", "resource.memory"), ("processes", "resource.processes")):
                 rc, _stdout, _stderr, timed_out = invoke_payload(
                     script, scenario, fixture_path, result_path, env, read_fd, launcher_adapter, PAYLOAD_TIMEOUT
                 )
-                if rc == 0 and not timed_out and result_path.exists():
-                    actual.update(read_json(result_path))
-                elif probe not in actual:
-                    actual[probe] = "BLOCKED_BY_LIMIT" if not timed_out else "HARNESS_KILLED"
+                if rc == 0 and not timed_out:
+                    if not merge_payload_results(actual, result_path, scenario):
+                        actual[probe] = "NOT_REPORTED"
+                else:
+                    actual[probe] = "HARNESS_KILLED" if timed_out else "BLOCKED_BY_LIMIT"
 
             rc, stdout, _stderr, timed_out = invoke_payload(
                 script, "output", fixture_path, result_path, env, read_fd, launcher_adapter, PAYLOAD_TIMEOUT
             )
-            del rc, timed_out
-            actual["resource.output"] = "BOUNDED" if len(stdout) <= MAX_CAPTURE else "UNBOUNDED"
+            if rc == 0 and not timed_out:
+                actual["resource.output"] = "BOUNDED" if len(stdout) <= MAX_CAPTURE else "UNBOUNDED"
 
             rc, _stdout, _stderr, timed_out = invoke_payload(
                 script, "wall-clock", fixture_path, result_path, env, read_fd, launcher_adapter, RESOURCE_TIMEOUT
             )
-            actual["resource.wall-clock"] = "HARNESS_KILLED" if timed_out else "BOUNDED"
-            del rc
+            if timed_out:
+                actual["resource.wall-clock"] = "HARNESS_KILLED"
+            else:
+                actual["resource.wall-clock"] = "UNBOUNDED" if rc == 0 else "BOUNDED"
 
         actual.update(artifact_probes(artifact_adapter, temp_root, env))
         actual.update(source_invariant_probes(manifest, repo))

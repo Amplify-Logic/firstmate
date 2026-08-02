@@ -19,6 +19,11 @@ Both modes must reject malformed, replayed, oversized, and flooded ActionRequest
 Both modes must reject symlink and traversal artifacts, sanitize terminal controls, enforce resource ceilings, preserve or reconcile state across restart, and refuse launcher drift.
 Both modes must pass the source and installation invariants declared in `docs/fm-worker-boundary-source.json`.
 
+A probe is only ever green on positive evidence.
+A probe whose payload did not run records `NOT_RUN`, a scenario that exits cleanly without reporting its own verdict records `NOT_REPORTED`, and a canary that could not be created records `CANARY_UNAVAILABLE`.
+All three fail, because an unmeasured capability is not an enforced one.
+Only the probes a scenario is allowed to report are taken from the payload result file, so a launcher adapter cannot report gateway, artifact, terminal, recovery, drift, or source verdicts on the harness's behalf.
+
 The committed source manifest intentionally describes the current workspace gateway and ambient launcher.
 It therefore remains red until the fixed-path runner, gateway channels, artifact importer, and trusted installation verifier replace those sources.
 The ambient run must also reproduce the same synthetic equivalents of the observed direct-network, SSH-agent, keychain, Chrome, clipboard, Docker-socket, gateway-inbox, and gateway-audit exposures.
