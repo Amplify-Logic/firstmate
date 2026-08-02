@@ -33,12 +33,13 @@ run_prepare() {
 }
 
 test_help_and_old_broker_untouched() {
-  local help
+  local help landed=054aa7f
   help=$($GW --help)
   assert_contains "$help" 'sub-order items 1 through 4' "help scope"
   assert_contains "$help" 'no outward executor' "help execution boundary"
-  git -C "$ROOT" diff --quiet HEAD -- bin/fm-action-gateway.sh || fail "landed broker must remain untouched"
-  pass "gateway v2 is separate and the landed broker remains untouched"
+  git -C "$ROOT" cat-file -e "$landed^{commit}" 2>/dev/null || fail "landed broker commit $landed must be reachable"
+  git -C "$ROOT" diff --quiet "$landed" -- bin/fm-action-gateway.sh || fail "landed broker must remain untouched since $landed"
+  pass "gateway v2 is separate and the landed broker remains untouched since $landed"
 }
 
 test_strict_parser_rejections() {
@@ -283,6 +284,52 @@ print(response.decode())
 PY
 }
 
+stall_then_rpc() {
+  local socket_path=$1 payload=$2
+  python3 - "$socket_path" "$payload" <<'PY'
+import socket
+import struct
+import sys
+
+path, payload = sys.argv[1:]
+stalled = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+stalled.connect(path)
+stalled.sendall(b"\x00\x00")
+body = payload.encode()
+sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+sock.settimeout(30)
+sock.connect(path)
+sock.sendall(struct.pack("!I", len(body)) + body)
+header = sock.recv(4)
+assert len(header) == 4
+length = struct.unpack("!I", header)[0]
+response = bytearray()
+while len(response) < length:
+    chunk = sock.recv(length - len(response))
+    assert chunk
+    response.extend(chunk)
+stalled.close()
+sock.close()
+print(response.decode())
+PY
+}
+
+envelope_for() {
+  local capability=$1 request_json=$2 idem=$3 nonce=$4 target=${5:-}
+  python3 - "$capability" "$request_json" "$idem" "$nonce" "$target" <<'PY'
+import json
+import sys
+
+capability, request_json, idem, nonce, target = sys.argv[1:]
+action = json.loads(request_json)
+action["idempotency_key"] = idem
+action["nonce"] = nonce
+if target:
+    action["target"] = target
+print(json.dumps({"schema": "fm.prepare.v2", "capability": capability, "action": action}, separators=(",", ":")))
+PY
+}
+
 issue_cap() {
   local purpose=$1 job=$2 uid=${3:-$(id -u)}
   $GW issue-capability --purpose "$purpose" --job-id "$job" --uid "$uid" | awk -F= '$1=="capability" {print $2}'
@@ -338,6 +385,15 @@ PY
   execution_payload="{\"schema\":\"fm.execution.v2\",\"capability\":\"$execution_cap\",\"request_id\":\"$request_id\",\"idempotency_key\":\"socket-idem\"}"
   response=$(rpc "$SOCKET_ROOT/execution.sock" "$execution_payload")
   assert_contains "$response" 'requires a signed approved immutable plan' "execution state binding"
+
+  local crafted_payload survivor_payload
+  crafted_payload=$(envelope_for "$cap" "$request_json" socket-idem-crafted socket-nonce-crafted 'https://[::1')
+  response=$(rpc "$SOCKET_ROOT/prepare.sock" "$crafted_payload")
+  assert_contains "$response" 'target is not a parseable URL' "crafted target is a refusal, not a crash"
+
+  survivor_payload=$(envelope_for "$cap" "$request_json" socket-idem-survivor socket-nonce-survivor)
+  response=$(stall_then_rpc "$SOCKET_ROOT/prepare.sock" "$survivor_payload")
+  assert_contains "$response" '"ok":true' "channel survives a crafted target and a stalled client"
 
   kill "$SERVER_PID"
   wait "$SERVER_PID" 2>/dev/null || true

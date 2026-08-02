@@ -37,7 +37,8 @@ The provider account is the local test safe-sink identity, while the executor re
 Every mutation uses `BEGIN IMMEDIATE`, uniqueness constraints, foreign keys, full synchronous writes, and WAL journaling.
 Request IDs, broker nonces, idempotency keys, request fingerprints, challenges, approvals, signature hashes, capabilities, and consumed tokens have database uniqueness constraints.
 Tombstones remain in SQLite when the JSONL evidence file rotates or disappears.
-Opening the database transactionally changes every interrupted `executing` request to `unknown` and records that provider reconciliation is required.
+Each command and the service run recovery once at startup, transactionally changing every interrupted `executing` request to `unknown` and recording that provider reconciliation is required.
+Recovery never runs per request, so a concurrent caller on another socket cannot rewrite a live execution window.
 An unknown request cannot return to approval or execution through any implemented protocol.
 
 ## Narrow protocols
@@ -47,6 +48,8 @@ The approval socket uses schema `fm.approval.v2` and a capability scoped to the 
 The execution socket uses schema `fm.execution.v2` and a capability scoped to the executor peer UID.
 Every accepted connection obtains operating-system peer credentials with `getpeereid` on Darwin or `SO_PEERCRED` on Linux.
 Each protocol uses a four-byte network-order length followed by one bounded strict JSON frame.
+Every connection carries a bounded read and reply deadline, so a silent or dribbling client cannot hold a channel open indefinitely.
+Every failed request, including an unexpected internal failure, returns a refusal frame and leaves the channel serving.
 A schema sent to the wrong socket is refused.
 Capabilities are random bearer values stored only as SHA-256 hashes in the gateway database.
 No approval token, requester role environment variable, caller-selected state path, shell command, executable path, adapter, or redirect is accepted by the production protocol.

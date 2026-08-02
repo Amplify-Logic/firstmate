@@ -26,6 +26,7 @@ import base64
 import binascii
 import contextlib
 import ctypes
+import errno
 import hashlib
 import json
 import math
@@ -65,6 +66,7 @@ MAX_PREPARES_PER_WINDOW = 8
 RATE_WINDOW_SECONDS = 60
 PLAN_TTL_SECONDS = 300
 CHALLENGE_TTL_SECONDS = 60
+CONNECTION_DEADLINE_SECONDS = 5.0
 SAFE_INTEGER = 9_007_199_254_740_991
 DIGEST_RE = re.compile(r"[0-9a-f]{64}")
 ID_RE = re.compile(r"[A-Za-z0-9._-]{1,96}")
@@ -207,8 +209,6 @@ def strict_json(raw: bytes, maximum: int = MAX_REQUEST_BYTES) -> Any:
             parse_float=reject_float,
             parse_constant=reject_constant,
         )
-    except DuplicateKey:
-        raise
     except GatewayError:
         raise
     except (json.JSONDecodeError, UnicodeError, RecursionError, ValueError) as exc:
@@ -302,16 +302,20 @@ def normalized_email(value: Any) -> Dict[str, str]:
 
 def normalized_endpoint(target: Any) -> Dict[str, Any]:
     raw = required_string(target, "target", 2048)
-    parsed = urllib.parse.urlsplit(raw)
+    try:
+        parsed = urllib.parse.urlsplit(raw)
+        hostname = parsed.hostname
+    except ValueError as exc:
+        fail(f"target is not a parseable URL: {exc}")
     if parsed.username or parsed.password or parsed.query or parsed.fragment:
         fail("target credentials, query, and fragment are refused")
     scheme = parsed.scheme.lower()
     if scheme not in ("https", "smtp"):
         fail("target scheme must be https or smtp")
-    if not parsed.hostname:
+    if not hostname:
         fail("target must have a complete host")
     try:
-        host = parsed.hostname.encode("idna").decode("ascii").lower()
+        host = hostname.encode("idna").decode("ascii").lower()
     except UnicodeError:
         fail("target host cannot be normalized")
     try:
@@ -330,7 +334,7 @@ def normalized_endpoint(target: Any) -> Dict[str, Any]:
         "url": urllib.parse.urlunsplit((scheme, netloc, path, "", "")),
         "scheme": scheme,
         "host_punycode": host,
-        "host_unicode": unicodedata.normalize("NFC", parsed.hostname),
+        "host_unicode": unicodedata.normalize("NFC", hostname),
         "port": normalized_port,
         "path": path,
     }
@@ -557,8 +561,18 @@ def connect_database() -> sqlite3.Connection:
     initialize_schema(connection)
     with contextlib.suppress(OSError):
         db_path.chmod(0o600)
-    recover_interrupted(connection)
     return connection
+
+
+@contextlib.contextmanager
+def open_database() -> Iterable[sqlite3.Connection]:
+    """Own one connection for a command or a socket thread and always close it."""
+    connection = connect_database()
+    try:
+        with connection:
+            yield connection
+    finally:
+        connection.close()
 
 
 def initialize_schema(db: sqlite3.Connection) -> None:
@@ -676,7 +690,10 @@ def append_audit(db: sqlite3.Connection, event_type: str, request_id: Optional[s
 
 
 def recover_interrupted(db: sqlite3.Connection) -> None:
+    """Reconcile executions a crash interrupted; a process runs this once at startup."""
     now = int(time.time())
+    if db.execute("SELECT 1 FROM requests WHERE state='executing' LIMIT 1").fetchone() is None:
+        return
     with transaction(db):
         rows = list(db.execute("SELECT request_id,digest FROM requests WHERE state='executing'"))
         for row in rows:
@@ -1004,23 +1021,27 @@ def peer_credentials(connection: socket.socket) -> Tuple[int, int]:
     fail("no supported peer-credential primitive on this platform")
 
 
-def receive_frame(connection: socket.socket) -> bytes:
-    header = bytearray()
-    while len(header) < 4:
-        chunk = connection.recv(4 - len(header))
-        if not chunk:
-            fail("truncated protocol frame")
-        header.extend(chunk)
-    length = struct.unpack("!I", header)[0]
+def receive_frame(connection: socket.socket, deadline: float) -> bytes:
+    def receive_exactly(size: int) -> bytes:
+        buffer = bytearray()
+        while len(buffer) < size:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                fail("protocol frame deadline exceeded")
+            connection.settimeout(remaining)
+            try:
+                chunk = connection.recv(min(8192, size - len(buffer)))
+            except TimeoutError:
+                fail("protocol frame deadline exceeded")
+            if not chunk:
+                fail("truncated protocol frame")
+            buffer.extend(chunk)
+        return bytes(buffer)
+
+    length = struct.unpack("!I", receive_exactly(4))[0]
     if length == 0 or length > MAX_FRAME_BYTES:
         fail("protocol frame size refused")
-    body = bytearray()
-    while len(body) < length:
-        chunk = connection.recv(min(8192, length - len(body)))
-        if not chunk:
-            fail("truncated protocol frame")
-        body.extend(chunk)
-    return bytes(body)
+    return receive_exactly(length)
 
 
 def send_frame(connection: socket.socket, value: Dict[str, Any]) -> None:
@@ -1028,30 +1049,64 @@ def send_frame(connection: socket.socket, value: Dict[str, Any]) -> None:
     connection.sendall(struct.pack("!I", len(body)) + body)
 
 
+def refusal_text(exc: BaseException) -> str:
+    if isinstance(exc, (GatewayError, sqlite3.Error, OSError)):
+        return str(exc) or type(exc).__name__
+    return f"gateway refused the request: {type(exc).__name__}"
+
+
+def handle_connection(
+    db: sqlite3.Connection,
+    connection: socket.socket,
+    handler: Callable[[sqlite3.Connection, Any, int], Dict[str, Any]],
+) -> None:
+    deadline = time.monotonic() + CONNECTION_DEADLINE_SECONDS
+    try:
+        connection.settimeout(CONNECTION_DEADLINE_SECONDS)
+        peer_uid, _peer_gid = peer_credentials(connection)
+        message = strict_json(receive_frame(connection, deadline), MAX_FRAME_BYTES)
+        connection.settimeout(CONNECTION_DEADLINE_SECONDS)
+        result = handler(db, message, peer_uid)
+        send_frame(connection, {"ok": True, "result": result})
+    except Exception as exc:
+        if not isinstance(exc, (GatewayError, sqlite3.Error, OSError)):
+            print(f"fm-action-gateway-v2: handler failure: {type(exc).__name__}: {exc}", file=sys.stderr, flush=True)
+        if db.in_transaction:
+            with contextlib.suppress(sqlite3.Error):
+                db.execute("ROLLBACK")
+        with contextlib.suppress(Exception):
+            send_frame(connection, {"ok": False, "error": refusal_text(exc)})
+
+
 def serve_socket(path: Path, handler: Callable[[sqlite3.Connection, Any, int], Dict[str, Any]], ready: threading.Event) -> None:
     with contextlib.suppress(FileNotFoundError):
         path.unlink()
     listener = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-    listener.bind(str(path))
-    path.chmod(0o600)
-    listener.listen(16)
-    ready.set()
-    while True:
-        connection, _ = listener.accept()
-        with connection:
-            try:
-                peer_uid, _peer_gid = peer_credentials(connection)
-                message = strict_json(receive_frame(connection), MAX_FRAME_BYTES)
-                with connect_database() as db:
-                    result = handler(db, message, peer_uid)
-                send_frame(connection, {"ok": True, "result": result})
-            except (GatewayError, sqlite3.Error, OSError) as exc:
-                with contextlib.suppress(OSError, GatewayError):
-                    send_frame(connection, {"ok": False, "error": str(exc)})
+    try:
+        listener.bind(str(path))
+        path.chmod(0o600)
+        listener.listen(16)
+        ready.set()
+        with open_database() as db:
+            while True:
+                try:
+                    connection, _ = listener.accept()
+                except OSError as exc:
+                    if exc.errno in (errno.EBADF, errno.EINVAL, errno.ENOTSOCK):
+                        return
+                    print(f"fm-action-gateway-v2: accept failed on {path.name}: {exc}", file=sys.stderr, flush=True)
+                    time.sleep(0.05)
+                    continue
+                with connection:
+                    handle_connection(db, connection, handler)
+    finally:
+        listener.close()
 
 
 def serve(root: Path) -> None:
     ensure_private_directory(root)
+    with open_database() as db:
+        recover_interrupted(db)
     handlers = {
         root / "prepare.sock": protocol_prepare,
         root / "approval.sock": protocol_approval,
@@ -1122,19 +1177,21 @@ def main(argv: Sequence[str]) -> int:
         job_id = action.get("task_id")
         if not isinstance(job_id, str):
             fail("ActionRequest task_id is required")
-        with connect_database() as db:
+        with open_database() as db:
+            recover_interrupted(db)
             result = prepare_action(db, action, os.getuid(), job_id)
         emit_key_values(result)
         return 0
     if args.command == "status":
-        with connect_database() as db:
+        with open_database() as db:
+            recover_interrupted(db)
             emit_key_values(status_action(db, args.digest))
         return 0
     if args.command == "inspect-test-paths":
         print(jcs({"schema": "fm.gateway-test-paths.v2", "database": str(database_path()), "approval_state": str(database_path()), "audit": str(audit_path())}))
         return 0
     if args.command == "issue-capability":
-        with connect_database() as db:
+        with open_database() as db:
             with transaction(db):
                 token = issue_capability(db, args.purpose, args.job_id, args.uid, int(time.time()))
         print(f"capability={token}")
@@ -1146,7 +1203,8 @@ def main(argv: Sequence[str]) -> int:
         serve(root)
         return 0
     if args.command == "test-mark-executing":
-        with connect_database() as db:
+        with open_database() as db:
+            recover_interrupted(db)
             row = get_request_by_digest(db, args.digest)
             with transaction(db):
                 db.execute("UPDATE requests SET state='executing' WHERE request_id=?", (row["request_id"],))
