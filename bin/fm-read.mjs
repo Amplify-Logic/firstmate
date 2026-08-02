@@ -1,16 +1,23 @@
 #!/usr/bin/env node
 // Self-contained Markdown-to-HTML renderer for fm-read.sh.
 // It intentionally escapes raw HTML and supports the report-oriented Markdown
-// surface used by Firstmate: headings, paragraphs, emphasis, links, images,
-// blockquotes, lists, fenced code, rules, and pipe tables.
+// surface used by Firstmate: headings, paragraphs, emphasis, links and images
+// restricted to http/https/mailto/relative targets, blockquotes, nested lists,
+// fenced code, rules, and pipe tables.
+// It also owns the private page naming: the page is written 0600 under a 0700
+// output directory and its path is printed on stdout.
+import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 
-const [source, output] = process.argv.slice(2);
-if (!source || !output) {
-  console.error("usage: fm-read.mjs <source.md> <output.html>");
+const [sourceArg, outputDirArg] = process.argv.slice(2);
+if (!sourceArg || !outputDirArg) {
+  console.error("usage: fm-read.mjs <source.md> <output-dir>");
   process.exit(2);
 }
+
+const CODE_MARK = String.fromCharCode(0);
+const CODE_SLOT = new RegExp(`${CODE_MARK}CODE(\\d+)${CODE_MARK}`, "g");
 
 const escapeHtml = (value) => value
   .replaceAll("&", "&amp;")
@@ -19,23 +26,35 @@ const escapeHtml = (value) => value
   .replaceAll('"', "&quot;")
   .replaceAll("'", "&#39;");
 
+function safeUrl(href) {
+  const probe = href.replace(/[^\x21-\x7E]/g, "").toLowerCase();
+  if (!/^[a-z][a-z0-9+.-]*:/.test(probe)) return href;
+  return /^(?:https?|mailto):/.test(probe) ? href : "";
+}
+
 function inline(value) {
   const code = [];
   let text = value.replace(/`([^`]+)`/g, (_match, body) => {
     code.push(`<code>${escapeHtml(body)}</code>`);
-    return `\u0000CODE${code.length - 1}\u0000`;
+    return `${CODE_MARK}CODE${code.length - 1}${CODE_MARK}`;
   });
   text = escapeHtml(text);
   text = text.replace(/!\[([^\]]*)\]\(([^\s)]+)(?:\s+&quot;([^&]*)&quot;)?\)/g,
-    (_match, alt, href, title) => `<img src="${href}" alt="${alt}"${title ? ` title="${title}"` : ""}>`);
+    (_match, alt, href, title) => {
+      const src = safeUrl(href);
+      return src ? `<img src="${src}" alt="${alt}"${title ? ` title="${title}"` : ""}>` : alt;
+    });
   text = text.replace(/\[([^\]]+)\]\(([^\s)]+)(?:\s+&quot;([^&]*)&quot;)?\)/g,
-    (_match, label, href, title) => `<a href="${href}"${title ? ` title="${title}"` : ""}>${label}</a>`);
+    (_match, label, href, title) => {
+      const url = safeUrl(href);
+      return url ? `<a href="${url}"${title ? ` title="${title}"` : ""}>${label}</a>` : label;
+    });
   text = text.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
-  text = text.replace(/__([^_]+)__/g, "<strong>$1</strong>");
-  text = text.replace(/(^|[^*])\*([^*]+)\*/g, "$1<em>$2</em>");
-  text = text.replace(/(^|[^_])_([^_]+)_/g, "$1<em>$2</em>");
+  text = text.replace(/(^|[^\w])__([^_]+)__(?!\w)/g, "$1<strong>$2</strong>");
+  text = text.replace(/(^|[^\w*])\*([^*]+)\*(?!\w)/g, "$1<em>$2</em>");
+  text = text.replace(/(^|[^\w])_([^_]+)_(?!\w)/g, "$1<em>$2</em>");
   text = text.replace(/~~([^~]+)~~/g, "<del>$1</del>");
-  return text.replace(/\u0000CODE(\d+)\u0000/g, (_match, index) => code[Number(index)]);
+  return text.replace(CODE_SLOT, (_match, index) => code[Number(index)]);
 }
 
 function tableCells(line) {
@@ -45,25 +64,34 @@ function tableCells(line) {
   return value.split(/(?<!\\)\|/).map((cell) => cell.trim().replaceAll("\\|", "|"));
 }
 
-function isTableDivider(line) {
+function isTableDivider(line, columns) {
+  if (!line.includes("|")) return false;
   const cells = tableCells(line);
-  return cells.length > 0 && cells.every((cell) => /^:?-{3,}:?$/.test(cell));
+  return cells.length === columns && cells.every((cell) => /^:?-+:?$/.test(cell));
 }
 
 function render(markdown) {
   const lines = markdown.replaceAll("\r\n", "\n").replaceAll("\r", "\n").split("\n");
   const out = [];
   let paragraph = [];
-  let listType = "";
+  const lists = [];
   let quote = [];
 
   const flushParagraph = () => {
     if (paragraph.length) out.push(`<p>${inline(paragraph.join(" ").trim())}</p>`);
     paragraph = [];
   };
+  const closeLevel = () => {
+    const level = lists.pop();
+    if (level.open) out.push("</li>");
+    out.push(`</${level.type}>`);
+  };
   const closeList = () => {
-    if (listType) out.push(`</${listType}>`);
-    listType = "";
+    while (lists.length) closeLevel();
+  };
+  const openLevel = (type, indent) => {
+    lists.push({ type, indent, open: false });
+    out.push(`<${type}>`);
   };
   const flushQuote = () => {
     if (quote.length) out.push(`<blockquote>${render(quote.join("\n"))}</blockquote>`);
@@ -97,9 +125,9 @@ function render(markdown) {
       out.push(`<h${level}>${inline(heading[2])}</h${level}>`);
       continue;
     }
-    if (i + 1 < lines.length && line.includes("|") && isTableDivider(lines[i + 1])) {
+    const headers = line.includes("|") ? tableCells(line) : null;
+    if (headers && i + 1 < lines.length && isTableDivider(lines[i + 1], headers.length)) {
       flushBlocks();
-      const headers = tableCells(line);
       const alignments = tableCells(lines[i + 1]).map((cell) => cell.startsWith(":") && cell.endsWith(":") ? "center" : cell.endsWith(":") ? "right" : "left");
       i += 2;
       const rows = [];
@@ -113,7 +141,10 @@ function render(markdown) {
       out.push("</tr></thead><tbody>");
       rows.forEach((row) => {
         out.push("<tr>");
-        headers.forEach((_cell, index) => out.push(`<td style="text-align:${alignments[index] || "left"}">${inline(row[index] || "")}</td>`));
+        const width = Math.max(headers.length, row.length);
+        for (let cell = 0; cell < width; cell += 1) {
+          out.push(`<td style="text-align:${alignments[cell] || "left"}">${inline(row[cell] || "")}</td>`);
+        }
         out.push("</tr>");
       });
       out.push("</tbody></table></div>");
@@ -132,33 +163,46 @@ function render(markdown) {
       continue;
     }
     if (quote.length) flushQuote();
-    const unordered = line.match(/^\s*[-+*]\s+(.+)$/);
-    const ordered = line.match(/^\s*\d+[.)]\s+(.+)$/);
+    const unordered = line.match(/^([ \t]*)[-+*][ \t]+(.+)$/);
+    const ordered = line.match(/^([ \t]*)\d+[.)][ \t]+(.+)$/);
     if (unordered || ordered) {
       flushParagraph();
-      const nextType = unordered ? "ul" : "ol";
-      if (listType !== nextType) {
-        closeList();
-        listType = nextType;
-        out.push(`<${listType}>`);
+      const [, pad, content] = unordered || ordered;
+      const indent = pad.replaceAll("\t", "  ").length;
+      const type = unordered ? "ul" : "ol";
+      while (lists.length && indent < lists[lists.length - 1].indent) closeLevel();
+      const top = lists[lists.length - 1];
+      if (!top || indent > top.indent) {
+        openLevel(type, indent);
+      } else if (top.type !== type) {
+        closeLevel();
+        openLevel(type, indent);
       }
-      out.push(`<li>${inline((unordered || ordered)[1])}</li>`);
+      const level = lists[lists.length - 1];
+      if (level.open) out.push("</li>");
+      out.push(`<li>${inline(content)}`);
+      level.open = true;
       continue;
     }
     if (!line.trim()) {
       flushBlocks();
       continue;
     }
-    if (listType) closeList();
+    closeList();
     paragraph.push(line.trim());
   }
   flushBlocks();
   return out.join("\n");
 }
 
-const markdown = fs.readFileSync(source, "utf8");
-const body = render(markdown);
-const title = escapeHtml(path.basename(source, path.extname(source)).replaceAll("-", " ").replace(/\b\w/g, (letter) => letter.toUpperCase()));
+const source = fs.realpathSync(sourceArg);
+const body = render(fs.readFileSync(source, "utf8"));
+const stem = path.basename(source, path.extname(source));
+const parent = path.basename(path.dirname(source));
+const label = stem.toLowerCase() === "report" && parent ? parent : stem;
+const slug = label.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "report";
+const digest = crypto.createHash("sha256").update(source).digest("hex").slice(0, 10);
+const title = escapeHtml(label.replaceAll("-", " ").replace(/\b\w/g, (letter) => letter.toUpperCase()));
 const css = `
 :root{--ink:#f2efe9;--dim:#a9a394;--line:#2b2f3a;--bg:#0e1116;--card:#161a22;--accent:#7aa7ff}
 @media (prefers-color-scheme:light){:root{--ink:#1a1c20;--dim:#5d6470;--line:#e2dfd8;--bg:#fbfaf7;--card:#fff;--accent:#2f5fd0}}
@@ -168,7 +212,7 @@ const css = `
 main{max-width:820px;margin:0 auto;padding:52px 24px 110px;min-width:0}h1,h2,h3,h4,h5,h6{line-height:1.34;padding-bottom:4px}
 h1{font-size:2.3rem;letter-spacing:-.4px;margin:0 0 22px}h2{font-size:1.5rem;margin:46px 0 12px;letter-spacing:-.2px;border-bottom:1px solid var(--line);padding-top:6px}
 h3{font-size:1.14rem;margin:30px 0 8px}h4,h5,h6{font-size:1rem;margin:22px 0 6px;color:var(--dim);text-transform:uppercase;letter-spacing:.6px}
-p,li{max-width:74ch}p{margin:0 0 15px}ul,ol{padding-left:22px;margin:0 0 15px}li{margin-bottom:7px}strong{font-weight:680}a{color:var(--accent)}
+p,li{max-width:74ch}p{margin:0 0 15px}ul,ol{padding-left:22px;margin:0 0 15px}li{margin-bottom:7px}li>ul,li>ol{margin:7px 0 0}strong{font-weight:680}a{color:var(--accent)}
 hr{border:0;border-top:1px solid var(--line);margin:40px 0}blockquote{margin:16px 0;padding:2px 0 2px 18px;border-left:3px solid var(--accent);color:var(--dim)}
 code{background:rgba(127,127,127,.16);padding:1px 6px;border-radius:5px;font-size:.87em;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;word-break:break-word}
 pre{max-width:100%;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:15px 17px;overflow-x:auto;margin:16px 0;line-height:1.55}pre code{background:none;padding:0;font-size:.85rem;word-break:normal}
@@ -176,4 +220,9 @@ pre{max-width:100%;background:var(--card);border:1px solid var(--line);border-ra
 th,td{text-align:left;padding:11px 15px;border-bottom:1px solid var(--line);vertical-align:top}th{background:rgba(127,127,127,.09);font-size:.79rem;text-transform:uppercase;letter-spacing:.5px;color:var(--dim)}tr:last-child td{border-bottom:0}img{max-width:100%;height:auto}
 `;
 const html = `<!doctype html>\n<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title><style>${css}</style></head><body><main>\n${body}\n</main></body></html>\n`;
-fs.writeFileSync(output, html);
+const outputDir = path.resolve(outputDirArg);
+const output = path.join(outputDir, `read-${slug}-${digest}.html`);
+fs.mkdirSync(outputDir, { recursive: true, mode: 0o700 });
+fs.writeFileSync(output, html, { mode: 0o600 });
+fs.chmodSync(output, 0o600);
+process.stdout.write(`${output}\n`);

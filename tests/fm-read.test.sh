@@ -8,6 +8,9 @@ set -eu
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 READ="$ROOT/bin/fm-read.sh"
 TMP_ROOT=$(fm_test_tmproot fm-read-tests)
+# The renderer reports normalised absolute paths, so compare against a fixture
+# root normalised the same way (TMPDIR commonly carries a trailing slash).
+TMP_ROOT=${TMP_ROOT//\/\//\/}
 HOME_DIR="$TMP_ROOT/home"
 FAKEBIN="$TMP_ROOT/bin"
 LOG="$TMP_ROOT/lavish.log"
@@ -28,6 +31,31 @@ cat > "$TMP_ROOT/notes.md" <<'MD'
 MD
 printf 'not markdown\n' > "$TMP_ROOT/notes.txt"
 
+cat > "$TMP_ROOT/edge.md" <<'MD'
+Evidence: status_file_write=ok for LAVISH_AXI_LINK_HOST and FM_READ_TEST_LOG.
+
+Danger [click](javascript:alert(1)) beside a | pipe in prose
+---
+
+Safe [docs](https://example.com/a) link.
+
+| A | B |
+| - | - |
+| 1 | 2 | 3 |
+
+- top level
+  - nested child
+- second top
+MD
+
+file_mode() {
+  if [ "$(uname)" = Darwin ]; then
+    stat -f %Lp "$1"
+  else
+    stat -c %a "$1"
+  fi
+}
+
 cat > "$FAKEBIN/lavish-axi" <<'SH'
 #!/usr/bin/env bash
 printf 'host=%s link=%s port=%s file=%s\n' \
@@ -44,13 +72,31 @@ assert_contains "$(cat "$out")" "<h1>Explicit heading</h1>" "explicit path outpu
 [ ! -e "$LOG" ] || fail "--no-open launched Lavish"
 pass "explicit paths render headings and --no-open does not launch"
 
+edge_out=$(cd "$TMP_ROOT" && FM_HOME="$HOME_DIR" FM_ROOT_OVERRIDE="$ROOT" "$READ" --no-open edge.md)
+edge=$(cat "$edge_out")
+edge_flat=$(tr '\n' ' ' < "$edge_out")
+assert_contains "$edge" "status_file_write=ok for LAVISH_AXI_LINK_HOST and FM_READ_TEST_LOG." \
+  "snake_case identifiers were mangled by intra-word emphasis"
+assert_not_contains "$edge" 'href="javascript' "an unsafe URL scheme reached the rendered page"
+assert_contains "$edge" '<a href="https://example.com/a">docs</a>' "a safe http link was dropped by scheme filtering"
+assert_contains "$edge" "<hr>" "a rule after pipe-bearing prose was swallowed by a bogus table"
+assert_contains "$edge" '<th style="text-align:left">A</th>' "a single-dash table divider was not recognised"
+assert_contains "$edge" ">3</td>" "a row wider than its header silently lost trailing cells"
+assert_contains "$edge_flat" "<li>top level <ul> <li>nested child" "an indented sub-item was flattened to a sibling"
+pass "renderer keeps identifiers, rules, tables, and nesting intact and refuses unsafe URL schemes"
+
 first=$(FM_HOME="$HOME_DIR" FM_ROOT_OVERRIDE="$ROOT" "$READ" --no-open sample-task)
 second=$(FM_HOME="$HOME_DIR" FM_ROOT_OVERRIDE="$ROOT" "$READ" --no-open sample-task)
 [ "$first" = "$second" ] || fail "same report rendered to different output names"
-case "$first" in "$HOME_DIR/.lavish/read-"*.html) ;; *) fail "output was not written under the private .lavish directory: $first" ;; esac
+case "$first" in "$HOME_DIR/.lavish/read-sample-task-"*.html) ;; *) fail "task report page was not named for its task id: $first" ;; esac
+assert_contains "$(cat "$first")" "<title>Sample Task</title>" "task report page was not titled for its task id"
 assert_contains "$(cat "$first")" "<h1>Report heading</h1>" "bare-id output lost the source heading"
 assert_contains "$(cat "$first")" '<div class="tw"><table>' "report table was not placed in its overflow wrapper"
-pass "bare task ids resolve and deterministic output names are reused"
+pass "bare task ids resolve, name and title their page, and reuse a deterministic output name"
+
+[ "$(file_mode "$first")" = 600 ] || fail "private report page is not owner-only: $(file_mode "$first")"
+[ "$(file_mode "$HOME_DIR/.lavish")" = 700 ] || fail "private page directory is not owner-only: $(file_mode "$HOME_DIR/.lavish")"
+pass "rendered pages and their directory stay owner-only"
 
 if FM_HOME="$HOME_DIR" FM_ROOT_OVERRIDE="$ROOT" "$READ" --no-open "$TMP_ROOT/notes.txt" >"$TMP_ROOT/non-md.out" 2>&1; then
   fail "non-Markdown input was accepted"

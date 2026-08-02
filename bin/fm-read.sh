@@ -3,7 +3,8 @@
 #
 # Accepts either a Markdown path or a bare task id, which resolves to
 # $FM_HOME/data/<id>/report.md. The self-contained HTML page has a stable source-
-# derived name under $FM_HOME/.lavish/ and is refreshed on every invocation.
+# derived name under $FM_HOME/.lavish/, named and titled for the task id when the
+# source is a task report, and is refreshed on every invocation.
 # Lavish is bound to IPv4 loopback and no feedback poll is started.
 #
 # Usage:
@@ -62,16 +63,8 @@ case "${SOURCE##*.}" in
   *) fail "refusing non-Markdown file: $SOURCE (expected .md or .markdown)" ;;
 esac
 
-SOURCE=$(node -e 'const fs=require("node:fs"); process.stdout.write(fs.realpathSync(process.argv[1]))' "$SOURCE")
-STEM=$(basename "$SOURCE")
-STEM=${STEM%.*}
-SLUG=$(printf '%s' "$STEM" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9][^a-z0-9]*/-/g; s/^-//; s/-$//')
-[ -n "$SLUG" ] || SLUG=report
-DIGEST=$(node -e 'const crypto=require("node:crypto"); process.stdout.write(crypto.createHash("sha256").update(process.argv[1]).digest("hex").slice(0,10))' "$SOURCE")
-OUTPUT_DIR="$FM_HOME/.lavish"
-OUTPUT="$OUTPUT_DIR/read-$SLUG-$DIGEST.html"
-mkdir -p "$OUTPUT_DIR"
-node "$SCRIPT_DIR/fm-read.mjs" "$SOURCE" "$OUTPUT"
+OUTPUT=$(node "$SCRIPT_DIR/fm-read.mjs" "$SOURCE" "$FM_HOME/.lavish")
+[ -n "$OUTPUT" ] || fail "renderer did not report an output page for $SOURCE"
 
 if [ "$NO_OPEN" -eq 1 ]; then
   printf '%s\n' "$OUTPUT"
