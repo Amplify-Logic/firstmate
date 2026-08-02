@@ -32,9 +32,12 @@
 # Safety:
 # The autonomy probes deliberately use each adapter's unattended flag, but the
 # runtime is confined to a fresh repository and private HOME.
-# Only credential files needed to authenticate are linked from --source-home.
-# The script never updates a runtime, edits the source home, or uses the ambient
-# tmux server.
+# Only credential files needed to authenticate are linked from --source-home,
+# matching how fm-spawn.sh bridges auth into an isolated worker home; those
+# links stay shared, so a runtime's own OAuth token refresh is written back to
+# the source credential file.
+# The script never updates a runtime, writes configuration, session, or artifact
+# state into the source home, or uses the ambient tmux server.
 
 set -uo pipefail
 
@@ -47,6 +50,8 @@ EXPECTATIONS="$SCRIPT_DIR/fm-harness-exam-adapters.tsv"
 PROBES=(autonomy composer busy interrupt turn-end liveness exit resume)
 TIMEOUT=45
 BUSY_SECONDS=${FM_HARNESS_EXAM_BUSY_SECONDS:-20}
+BUSY_SECONDS_MIN=10
+STARTUP_DIALOG_LIMIT=4
 KEEP_LAB=0
 MODEL=""
 OUTPUT=""
@@ -86,34 +91,26 @@ load_expectation() {
   return 0
 }
 
-expectation_field() {
-  local adapter=$1 field=$2 index
-  case "$field" in
-    binary) index=2 ;;
-    autonomy) index=3 ;;
-    busy) index=4 ;;
-    interrupt) index=5 ;;
-    exit) index=7 ;;
-    resume) index=8 ;;
-    liveness) index=9 ;;
-    hook) index=12 ;;
-    model) index=13 ;;
-    dialog) index=14 ;;
-    *) return 1 ;;
-  esac
-  awk -F '\t' -v a="$adapter" -v i="$index" '!/^#/ && $1 == a { print $i; exit }' "$EXPECTATIONS"
-}
-
 print_plan() {
-  local adapter=$1 field
+  local adapter=$1
   load_expectation "$adapter" || {
     echo "error: unsupported adapter '$adapter' (expected one of: $(list_adapters | paste -sd, -))" >&2
     return 2
   }
   printf 'adapter\t%s\n' "$ADAPTER"
-  for field in binary autonomy busy interrupt exit resume liveness hook model dialog; do
-    printf '%s\t%s\n' "$field" "$(expectation_field "$adapter" "$field")"
-  done
+  printf 'binary\t%s\n' "$BINARY"
+  printf 'autonomy\t%s\n' "$AUTONOMY_FLAG"
+  printf 'busy\t%s\n' "$BUSY_REGEX"
+  printf 'interrupt\t%s\n' "$INTERRUPT_KEYS"
+  printf 'interrupt_regex\t%s\n' "$INTERRUPT_REGEX"
+  printf 'exit\t%s\n' "$EXIT_COMMAND"
+  printf 'resume\t%s\n' "$RESUME_MODE"
+  printf 'liveness\t%s\n' "$ALIVE_VERDICT"
+  printf 'comm_regex\t%s\n' "$COMM_REGEX"
+  printf 'argv_regex\t%s\n' "$ARGV_REGEX"
+  printf 'hook\t%s\n' "$HOOK_KIND"
+  printf 'model\t%s\n' "$DEFAULT_MODEL"
+  printf 'dialog\t%s\n' "$STARTUP_DIALOG"
   printf 'probes\t%s\n' "$(IFS=,; echo "${PROBES[*]}")"
 }
 
@@ -339,11 +336,7 @@ build_launch_command() {
       ;;
     *) return 1 ;;
   esac
-  if [ "$resume" = 0 ]; then
-    RESUME_CMD=$LAUNCH_CMD
-  else
-    RESUME_CMD=$LAUNCH_CMD
-  fi
+  RESUME_CMD=$LAUNCH_CMD
 }
 
 capture_pane() {
@@ -458,20 +451,25 @@ handle_startup_dialog() {
 }
 
 wait_for_composer() {
-  local deadline=$((SECONDS + TIMEOUT)) state text handled_hash="" hash
+  local deadline=$((SECONDS + TIMEOUT)) state text matched handled=0 hash seen=""
   [ -e "$ARTIFACTS/00-startup-dialogs.txt" ] || : > "$ARTIFACTS/00-startup-dialogs.txt"
   while [ "$SECONDS" -lt "$deadline" ]; do
     pane_exists || { sleep 1; continue; }
     state=$(fm_backend_composer_state tmux "$TARGET" 2>/dev/null || printf unknown)
     [ "$state" = empty ] && return 0
     text=$(fm_backend_capture tmux "$TARGET" 80 2>/dev/null || true)
-    if printf '%s' "$text" | grep -qiE 'trust|workspace trust|required|bypass permissions|dangerously|approval mode'; then
-      hash=$(printf '%s' "$text" | shasum -a 256 | awk '{print $1}')
-      if [ "$hash" != "$handled_hash" ]; then
-        printf '%s\n---\n' "$text" >> "$ARTIFACTS/00-startup-dialogs.txt"
-        handle_startup_dialog "$text"
-        handled_hash=$hash
-      fi
+    matched=$(printf '%s' "$text" | grep -iE 'trust|workspace trust|required|bypass permissions|dangerously|approval mode' || true)
+    if [ -n "$matched" ] && [ "$handled" -lt "$STARTUP_DIALOG_LIMIT" ]; then
+      hash=$(printf '%s' "$matched" | shasum -a 256 | awk '{print $1}')
+      case " $seen " in
+        *" $hash "*) ;;
+        *)
+          printf '%s\n---\n' "$text" >> "$ARTIFACTS/00-startup-dialogs.txt"
+          handle_startup_dialog "$text"
+          seen="$seen $hash"
+          handled=$((handled + 1))
+          ;;
+      esac
     fi
     sleep 1
   done
@@ -555,27 +553,44 @@ launch_runtime() {
   tmux send-keys -t "$TARGET" Enter
 }
 
+clear_composer() {
+  local attempt state
+  for attempt in 1 2 3; do
+    case "$attempt" in
+      1) tmux send-keys -t "$TARGET" C-u ;;
+      2) tmux send-keys -t "$TARGET" C-a C-k ;;
+      *) tmux send-keys -t "$TARGET" -N 64 BSpace ;;
+    esac
+    sleep 0.5
+    state=$(fm_backend_composer_state tmux "$TARGET" 2>/dev/null || printf unknown)
+    [ "$state" = empty ] && { printf '%s' "$state"; return 0; }
+  done
+  printf '%s' "$state"
+  return 1
+}
+
 probe_composer() {
-  local idle pending
+  local idle pending cleared
   idle=$(fm_backend_composer_state tmux "$TARGET" 2>/dev/null || printf unknown)
   capture_pane 02-composer-idle 80
   tmux send-keys -t "$TARGET" -l FM_EXAM_PENDING
   sleep 1
   pending=$(fm_backend_composer_state tmux "$TARGET" 2>/dev/null || printf unknown)
   capture_pane 02-composer-pending 80
-  tmux send-keys -t "$TARGET" C-u
-  sleep 0.5
-  if [ "$idle" = empty ] && [ "$pending" = pending ]; then
-    record_result composer pass "idle classified empty and real unsubmitted text classified pending" \
-      "evidence/02-composer-idle.ansi,evidence/02-composer-pending.ansi"
+  cleared=$(clear_composer) || true
+  capture_pane 02-composer-cleared 80
+  if [ "$idle" = empty ] && [ "$pending" = pending ] && [ "$cleared" = empty ]; then
+    record_result composer pass "idle classified empty, real unsubmitted text classified pending, and the composer cleared back to empty" \
+      "evidence/02-composer-idle.ansi,evidence/02-composer-pending.ansi,evidence/02-composer-cleared.ansi"
   else
-    record_result composer fail "expected empty then pending, got $idle then $pending" \
-      "evidence/02-composer-idle.ansi,evidence/02-composer-pending.ansi"
+    record_result composer fail "expected empty then pending then empty, got $idle then $pending then $cleared" \
+      "evidence/02-composer-idle.ansi,evidence/02-composer-pending.ansi,evidence/02-composer-cleared.ansi"
   fi
 }
 
 probe_busy_interrupt_liveness() {
-  local prompt alive_after interrupt_text
+  local prompt alive_before alive_after interrupt_text busy_seen_at interrupt_elapsed
+  local turn_ended=0 ended_early=0 interrupt_seen=0
   capture_pane 03-idle-negative 100
   capture_processes 06-liveness-before
   if pane_text_matches "$BUSY_REGEX"; then
@@ -584,10 +599,12 @@ probe_busy_interrupt_liveness() {
   prompt="Use the shell tool to run exactly: sleep $BUSY_SECONDS; printf 'FM_EXAM_BUSY_DONE\\n'. Do not run it in the background and do not do anything else."
   submit_text "$prompt" || true
   if wait_for_regex "$BUSY_REGEX"; then
+    busy_seen_at=$SECONDS
     capture_pane 03-busy 160
     record_result busy pass "recorded signature appeared during a real tool turn and not while idle" \
       "evidence/03-busy.ansi,evidence/03-idle-negative.txt"
   else
+    busy_seen_at=$SECONDS
     capture_pane 03-busy-missing 160
     record_result busy fail "recorded signature did not appear during the deterministic long tool turn" \
       "evidence/03-busy-missing.ansi,evidence/03-idle-negative.txt"
@@ -603,18 +620,28 @@ probe_busy_interrupt_liveness() {
   fi
   send_key_list "$INTERRUPT_KEYS" || true
   sleep 1
-  wait_until_not_busy || true
+  if wait_until_not_busy; then turn_ended=1; fi
+  interrupt_elapsed=$((SECONDS - busy_seen_at))
+  if [ "$turn_ended" = 1 ] && [ "$interrupt_elapsed" -lt "$((BUSY_SECONDS - 2))" ]; then
+    ended_early=1
+  fi
   capture_pane 04-interrupt 180
   capture_processes 04-interrupt
   alive_after=$(fm_backend_agent_alive tmux "$TARGET" 2>/dev/null || printf unknown)
   interrupt_text=$(cat "$ARTIFACTS/04-interrupt.txt")
+  if [ "$INTERRUPT_REGEX" != - ] && printf '%s' "$interrupt_text" | grep -qiE "$INTERRUPT_REGEX"; then
+    interrupt_seen=1
+  fi
+  printf 'busy_seconds=%s\nelapsed_to_not_busy=%s\nturn_ended=%s\nended_before_natural_completion=%s\ninterrupt_regex=%s\ninterrupt_regex_matched=%s\n' \
+    "$BUSY_SECONDS" "$interrupt_elapsed" "$turn_ended" "$ended_early" "$INTERRUPT_REGEX" "$interrupt_seen" \
+    > "$ARTIFACTS/04-interrupt-timing.txt"
   if [ "$alive_after" = "$ALIVE_VERDICT" ] && agent_marker_matches "$ARTIFACTS/04-interrupt.processes.txt" \
-     && { [ "$INTERRUPT_REGEX" = - ] || printf '%s' "$interrupt_text" | grep -qiE "$INTERRUPT_REGEX" || ! pane_text_matches "$BUSY_REGEX"; }; then
-    record_result interrupt pass "recorded key ended the turn while the runtime process survived" \
-      "evidence/04-interrupt.ansi,evidence/04-interrupt.processes.txt"
+     && [ "$turn_ended" = 1 ] && { [ "$interrupt_seen" = 1 ] || [ "$ended_early" = 1 ]; }; then
+    record_result interrupt pass "recorded key ended the ${BUSY_SECONDS}s tool turn after ${interrupt_elapsed}s while the runtime process survived" \
+      "evidence/04-interrupt.ansi,evidence/04-interrupt.processes.txt,evidence/04-interrupt-timing.txt"
   else
-    record_result interrupt fail "interrupt did not leave the expected live runtime process" \
-      "evidence/04-interrupt.ansi,evidence/04-interrupt.processes.txt"
+    record_result interrupt fail "expected a live runtime plus recorded interrupt text or a turn end before the ${BUSY_SECONDS}s tool call could finish, got backend=$alive_after ended=$turn_ended elapsed=${interrupt_elapsed}s interrupt_text=$interrupt_seen" \
+      "evidence/04-interrupt.ansi,evidence/04-interrupt.processes.txt,evidence/04-interrupt-timing.txt"
   fi
 }
 
@@ -723,6 +750,15 @@ prepare_run() {
   command -v tmux >/dev/null 2>&1 || { echo "error: tmux is required" >&2; return 1; }
   command -v jq >/dev/null 2>&1 || { echo "error: jq is required" >&2; return 1; }
   command -v "$BINARY" >/dev/null 2>&1 || { echo "error: adapter binary '$BINARY' is not installed" >&2; return 1; }
+  case "$BUSY_SECONDS" in ''|*[!0-9]*) echo "error: FM_HARNESS_EXAM_BUSY_SECONDS must be a positive integer" >&2; return 1 ;; esac
+  [ "$BUSY_SECONDS" -ge "$BUSY_SECONDS_MIN" ] || {
+    echo "error: FM_HARNESS_EXAM_BUSY_SECONDS must be at least $BUSY_SECONDS_MIN so an interrupt stays distinguishable from natural turn completion" >&2
+    return 1
+  }
+  [ "$TIMEOUT" -gt "$BUSY_SECONDS" ] || {
+    echo "error: --timeout must exceed the $BUSY_SECONDS second busy turn" >&2
+    return 1
+  }
   stamp=$(date -u +%Y%m%dT%H%M%SZ)
   base=${FM_HOME:-$ROOT}
   [ -n "$OUTPUT" ] || OUTPUT="$base/data/harness-exam/$ADAPTER-$stamp"

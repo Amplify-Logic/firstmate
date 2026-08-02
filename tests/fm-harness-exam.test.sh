@@ -32,6 +32,10 @@ test_probe_set_and_kimi_plan() {
   assert_contains "$plan" $'busy\tthinking\\.\\.\\.|Running a command' \
     "Kimi plan lost its two busy phases"
   assert_contains "$plan" $'interrupt\tC-c' "Kimi plan lost Ctrl+C"
+  assert_contains "$plan" $'interrupt_regex\tInterrupted by user' \
+    "Kimi plan hides the interrupt text the probe is scored on"
+  assert_contains "$plan" $'comm_regex\tkimi' "Kimi plan hides the liveness comm marker"
+  assert_contains "$plan" $'argv_regex\tkimi-code|/kimi([ /]|$)' "Kimi plan hides the liveness argv marker"
   assert_contains "$plan" $'resume\tcontinue' "Kimi plan lost continue resume"
   assert_contains "$plan" $'liveness\talive' "Kimi plan lost its liveness verdict"
   assert_contains "$plan" $'model\tkimi-code/k3' "Kimi plan lost its pinned model"
