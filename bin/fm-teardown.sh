@@ -890,7 +890,7 @@ validate_firstmate_home_for_removal() {
       if ! secondmate_registry_validate_bindings "$SECONDMATE_REG" secondmate_registry_path_key "$expected_id" "$abs_home_path" "$FM_HOME" "$FM_ROOT"; then
         case "$SECONDMATE_REGISTRY_ERROR" in
           overlapping\ secondmate\ home\ assignment:*)
-            echo "REFUSED: unsafe $label removal target $home contains a registered secondmate home; $SECONDMATE_REGISTRY_ERROR" >&2
+            echo "REFUSED: unsafe $label removal target $home contains registered secondmate home; $SECONDMATE_REGISTRY_ERROR" >&2
             ;;
           *) echo "REFUSED: $SECONDMATE_REGISTRY_ERROR" >&2 ;;
         esac
