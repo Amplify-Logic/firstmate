@@ -857,8 +857,8 @@ if [ "$KIND" = secondmate ]; then
     echo "error: could not resolve secondmate inheritance lock for $PROJ_ABS" >&2
     exit 1
   }
-  if ! fm_lock_acquire_wait "$CONFIG_INHERIT_LOCK"; then
-    echo "error: could not acquire secondmate inheritance lock for $PROJ_ABS" >&2
+  if ! fm_lock_acquire_wait "$CONFIG_INHERIT_LOCK" "$FM_CONFIG_INHERIT_LOCK_WAIT_SECS"; then
+    echo "error: could not acquire secondmate inheritance lock for $PROJ_ABS within ${FM_CONFIG_INHERIT_LOCK_WAIT_SECS}s" >&2
     exit 1
   fi
   CONFIG_INHERIT_LOCK_HELD=1
@@ -1483,7 +1483,7 @@ fi
 if [ "$KIND" = secondmate ]; then
   if ! fm_config_reread_discard_pending "$PROJ_ABS" "$ID" "$FM_HOME"; then
     if fm_config_reread_quarantine_pending "$PROJ_ABS" "$ID" "$FM_HOME"; then
-      echo "CONFIG_REREAD: secondmate $ID: quarantined pre-relaunch generations after cleanup failure (destination=$PROJ_ABS/state/.fm-inherited-config-reread-quarantine source=$FM_HOME/state/.fm-inherited-config-reread-quarantine)" >&2
+      echo "CONFIG_REREAD: secondmate $ID: quarantined pre-relaunch generations after cleanup failure (destination=$(fm_config_reread_quarantine_root "$PROJ_ABS") source=$(fm_config_reread_quarantine_root "$FM_HOME"))" >&2
     else
       echo "CONFIG_REREAD: secondmate $ID: cleanup failed; pre-relaunch generations were force-cleared where possible (destination=$PROJ_ABS source=$FM_HOME)" >&2
     fi

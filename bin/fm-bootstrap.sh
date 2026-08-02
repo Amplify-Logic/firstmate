@@ -14,6 +14,7 @@
 #                 "TANGLE: <remediation>",
 #                 "SECONDMATE_SYNC: secondmate <id>: skipped: <reason>",
 #                 "NUDGE_SECONDMATES: secondmate <id>: send failed: <reason>",
+#                 "CONFIG_REREAD: secondmate <id>: send failed: <reason>",
 #                 "BOOTSTRAP_INFO: nudged fm-<id> with '<message>'",
 #                 "SECONDMATE_LIVENESS: secondmate <id>: skipped: <reason>|respawn failed: <reason>",
 #                 "TOOLCHAIN_DRIFT: <runtime> installed <version>, certified
@@ -408,8 +409,8 @@ secondmate_sync() {
       echo "CONFIG_REREAD: secondmate $id: send failed: could not resolve per-home lock"
       continue
     }
-    fm_lock_acquire_wait "$home_lock" || {
-      echo "CONFIG_REREAD: secondmate $id: send failed: could not acquire per-home lock"
+    fm_lock_acquire_wait "$home_lock" "$FM_CONFIG_INHERIT_LOCK_WAIT_SECS" || {
+      echo "CONFIG_REREAD: secondmate $id: send failed: could not acquire per-home lock within ${FM_CONFIG_INHERIT_LOCK_WAIT_SECS}s"
       continue
     }
     reread_skip_pending=0

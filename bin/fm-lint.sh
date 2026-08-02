@@ -44,15 +44,32 @@ fm_lint_worker_stop() {
 }
 
 fm_lint_worker() {  # <manifest> <output-dir> <shard-index>
-  local manifest=$1 output_dir=$2 shard_index=$3 tab index path output rc=0
+  local manifest=$1 output_dir=$2 shard_index=$3 tab index path output expected rc=0
   local -a roots
   roots=()
+  output="$output_dir/shard.$shard_index"
+  expected=-1
+  if [ -f "$manifest" ] && [ -r "$manifest" ]; then
+    expected=$(awk 'END {print NR + 0}' "$manifest" 2>/dev/null | tr -d '[:space:]')
+    case "$expected" in ''|*[!0-9]*) expected=-1 ;; esac
+  fi
+  if [ "$expected" -lt 0 ]; then
+    printf 'fm-lint.sh: shard %s manifest is missing or unreadable: %s\n' \
+      "$shard_index" "$manifest" > "$output.out"
+    printf '%s\n' 2 > "$output.rc"
+    return 2
+  fi
   tab=$(printf '\t')
   while IFS="$tab" read -r index path || [ -n "${index:-}${path:-}" ]; do
     [ -n "${index:-}" ] || continue
     roots+=("$path")
   done < "$manifest"
-  output="$output_dir/shard.$shard_index"
+  if [ "${#roots[@]}" -ne "$expected" ]; then
+    printf 'fm-lint.sh: shard %s read %s of %s manifest roots: %s\n' \
+      "$shard_index" "${#roots[@]}" "$expected" "$manifest" > "$output.out"
+    printf '%s\n' 2 > "$output.rc"
+    return 2
+  fi
   if [ "${#roots[@]}" -gt 0 ]; then
     trap 'fm_lint_worker_stop; exit 129' HUP
     trap 'fm_lint_worker_stop; exit 130' INT
@@ -154,6 +171,7 @@ fi
 
 # Canonical file set: the ONE authoritative definition. Callers consume it
 # through this script or --list-files; they never re-spell the inventory.
+ROOT_COUNT=${#ROOTS[@]}
 TMP_ROOT=$(mktemp -d "${TMPDIR:-/tmp}/fm-lint.XXXXXX") || exit 1
 ACTIVE_PIDS=()
 # shellcheck disable=SC2329 # Registered by the EXIT and signal traps below.
@@ -161,6 +179,7 @@ fm_lint_cleanup() {
   local pid
   for pid in "${ACTIVE_PIDS[@]:-}"; do
     [ -n "$pid" ] || continue
+    kill -TERM -- "-$pid" 2>/dev/null || true
     kill -TERM "$pid" 2>/dev/null || true
   done
   for pid in "${ACTIVE_PIDS[@]:-}"; do
@@ -223,6 +242,26 @@ while [ "$worker" -lt "$SHARD_COUNT" ]; do
   worker=$((worker + 1))
 done
 
+# Fail closed: a truncated weight file, a failed shard write, or an unreadable
+# manifest must never be reported as a clean shard.
+ASSIGNED_COUNT=0
+worker=0
+while [ "$worker" -lt "$SHARD_COUNT" ]; do
+  shard_count=$(awk 'END {print NR + 0}' "$TMP_ROOT/manifest.$worker" 2>/dev/null | tr -d '[:space:]')
+  case "$shard_count" in
+    ''|*[!0-9]*)
+      printf 'fm-lint.sh: shard %s manifest is unreadable; refusing to report a partial lint.\n' "$worker" >&2
+      exit 2
+      ;;
+  esac
+  ASSIGNED_COUNT=$((ASSIGNED_COUNT + shard_count))
+  worker=$((worker + 1))
+done
+if [ "$ASSIGNED_COUNT" -ne "$ROOT_COUNT" ]; then
+  printf 'fm-lint.sh: shard manifests cover %s of %s roots; refusing to report a partial lint.\n' \
+    "$ASSIGNED_COUNT" "$ROOT_COUNT" >&2
+  exit 2
+fi
 fm_lint_run_worker() {  # <worker-index>
   local worker_index=$1 manifest
   manifest="$TMP_ROOT/manifest.$worker_index"
@@ -230,9 +269,17 @@ fm_lint_run_worker() {  # <worker-index>
     "${BASH:-bash}" "$SELF" --internal-worker "$manifest" "$OUTPUT_DIR" "$worker_index"
 }
 
+# Bash job control makes each background worker its own process-group leader, so
+# fm_lint_cleanup can stop a complete worker tree with no external dependency.
 fm_lint_start_worker() {
+  local monitor_was_on=0
+  case "$-" in
+    *m*) monitor_was_on=1 ;;
+  esac
+  set -m
   fm_lint_run_worker "$1" &
   ACTIVE_PIDS+=("$!")
+  [ "$monitor_was_on" -eq 1 ] || set +m
 }
 
 fm_lint_wait_workers() {
