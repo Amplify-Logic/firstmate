@@ -22,7 +22,7 @@
 # runtime is listed only once its --version output has been parsed on a real
 # machine. Recording a version nobody verified would rebuild the exact blindness
 # this manifest exists to remove. A dated re-verification of one behavior on a
-# newer build is not a certification and does not move this column; only a full
+# newer build is not a certification and does not move this column; only a
 # certification record in the evidence path does.
 #
 # Deliberately absent, pending a machine that has it installed:
