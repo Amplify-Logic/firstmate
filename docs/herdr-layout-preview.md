@@ -19,9 +19,9 @@ Human outcomes instead of task slugs, `NEEDS LARS` / `FAILED` / `BLOCKED` in pla
 Opening a worker looks exactly like it does today.
 No 22-character token is ever shown, and nothing about how work is identified or controlled changes.
 
-**What is lost.** One thing, and it is real: the per-project count line, `Your Magical Journey · 🟣 1 NEEDS LARS · 🔵 2 WORKING`.
-After convergence there is no project row left to carry it, so you read the fleet by scanning eight rows instead of three summaries.
-At eight workers that is a fair trade; at thirty it would not be, and the fix for that is a small upstream request, described at the end.
+**What is lost.** One thing: the per-project count line, `Your Magical Journey · 🟣 1 NEEDS LARS · 🔵 2 WORKING`, is not part of the recommended layout, so out of the box you read the fleet by scanning eight rows instead of three summaries.
+It is recoverable in the fork if we want it back, on a single summary row rather than one row per project, and the end of this document says how.
+At eight workers scanning is a fair trade; at thirty it would not be, and that is when the summary row becomes worth building.
 
 **Recommendation.** Go ahead with AFTER-B below.
 It is the only one of the two candidates that survives real use: I tried the version that keeps a project heading with its workers indented underneath, and it breaks the first time a worker starts out of order, which happens constantly on a real fleet.
@@ -32,7 +32,8 @@ The evidence is in this document.
 Every layout below was staged in a real, throwaway Herdr workspace of its own, using the guarded lab helper for every single operation including cleanup.
 The live fleet was never touched, and the check that proves the live fleet was unchanged passed after each of the three runs.
 
-The synthetic fleet is eight workers across three projects, covering every state the fleet list can show.
+The synthetic fleet is eight workers across three projects, covering five of the six states the fleet list can show: `NEEDS LARS`, `FAILED`, `BLOCKED`, `WORKING` and `READY`.
+The sixth state, the paused `🟡 WAITING`, is not exercised by these captures, so the yellow slot of the count line and the AFTER-B row format are unverified for that one state.
 Seven start in project order; the eighth, `Fix the crash on the last booking step`, deliberately starts last, for a project whose other workers started first.
 That eighth worker is the whole experiment: it is what a normal day looks like.
 
@@ -177,7 +178,7 @@ Opening any of these workers gives exactly what you get today:
 | Rows at 8 workers, 3 projects | 3 | 11 | 8 |
 | Project shown for every worker | yes | only while ordering holds | yes |
 | Survives a worker starting out of order | yes | **no** | yes |
-| Per-project count line | yes | yes, but can contradict the layout | no |
+| Per-project count line | yes | yes, but can contradict the layout | not as staged, recoverable as one pinned summary row |
 | `NEEDS LARS` / `FAILED` / `BLOCKED` prominent | yes | yes | yes |
 | Human outcome instead of a task slug | yes | yes | yes |
 | Runtime and branch visible | yes | yes | yes |
@@ -186,25 +187,35 @@ Opening any of these workers gives exactly what you get today:
 
 ## What is honestly given up, and what it would take to get back
 
-Two things go, and only one of them matters.
+Two things go with AFTER-B as staged, and they are not equally hard to get back.
 
-**The per-project count line goes, and that is a real loss.**
+**The per-project count line is not in the recommended layout, but it is recoverable in the fork.**
 At eight workers, scanning eight labelled rows for a purple dot is fine.
-At twenty-five it would be worse than three summary rows, and I would not recommend the change at that scale without the fix below.
+At twenty-five it would be worse than three summary rows, so at that scale it is worth building the row described here first.
 
-**Same-project workers no longer sit together.**
+The recovery works by the same mechanism that makes AFTER-B work.
+Herdr's workspace order is creation order, and a later workspace always appends, so a holder workspace created before any worker keeps position 1 permanently and never has to be moved.
+AFTER-A already proves the two halves of this are possible: a non-worker holder workspace is stageable, and its row is renamed on each state change exactly the way `update_project` renames project rows today, which is where captures 03 and 04 get their live `Your Magical Journey · 🟣 1 NEEDS LARS · 🔵 2 WORKING` header rows from.
+What broke AFTER-A was adjacency, and a single fleet-summary row pinned at the top does not depend on adjacency at all.
+So one first-created row could carry the counts for every project, at the cost of one extra row rather than one per project.
+
+Not yet verified: whether a first-created workspace still holds position 1 across a Herdr session restart.
+That needs testing before anyone commits to the summary row.
+
+**Same-project workers no longer sit together, and that one really is upstream's to fix.**
 They appear in the order they started.
 Because every row names its project this is a scanning cost rather than a correctness problem, and sorting by urgency is not available either, for the same reason: the list order cannot be controlled.
 
-**Getting both back is an upstream request, not a fork feature.**
+**The upstream ask is worth raising for real grouping and sorting.**
 Herdr would need to let a row declare a parent, or let the list be sorted, so grouping does not depend on creation order.
 That is a small, well-defined ask and it benefits upstream's own supervisor tree, which has exactly the same weakness: their `└ ` child rows drift away from their parent the same way AFTER-A's did.
 Worth raising with Kun Chen; worth doing regardless of whether he takes it.
+It is no longer the only way to keep the count line, though, because the pinned summary row above does not need it.
 
 ## What is in this branch
 
 Nothing here changes the live fleet.
-The only change to a file the running fleet uses is a mechanical one that moved four label-formatting helpers into a library so the preview reuses the exact same state words and colours instead of copying them.
+The only change to a file the running fleet uses is a mechanical one that moved three label-formatting helpers into a library so the preview reuses the exact same state words and colours instead of copying them.
 `bin/fm-visible-status.sh` behaves identically, verified by its existing tests.
 
 - `bin/fm-visible-format-lib.sh` - the state vocabulary (`NEEDS LARS`, `FAILED`, colours, ordering), now owned in one place.

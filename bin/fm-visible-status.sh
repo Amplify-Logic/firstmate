@@ -41,8 +41,8 @@ SOURCE=firstmate-worker-visible-v1
 . "$SCRIPT_DIR/backends/herdr.sh"
 # shellcheck source=bin/fm-cursor-model-lib.sh
 . "$SCRIPT_DIR/fm-cursor-model-lib.sh"
-# fm_visible_state, fm_visible_icon, fm_visible_rank and fm_visible_aggregate
-# own the captain-facing state vocabulary shared with the layout preview.
+# fm_visible_state, fm_visible_icon and fm_visible_aggregate own the
+# captain-facing state vocabulary shared with the layout preview.
 # shellcheck source=bin/fm-visible-format-lib.sh
 . "$SCRIPT_DIR/fm-visible-format-lib.sh"
 
@@ -188,8 +188,8 @@ herdr_call() {  # <session> <args...>
 }
 
 project_stats() {  # <project-key>
-  local key=$1 meta id state rank
-  local needs=0 failed=0 blocked=0 working=0 waiting=0 ready=0 best=99
+  local key=$1 meta id state
+  local needs=0 failed=0 blocked=0 working=0 waiting=0 ready=0
   for meta in "$STATE"/*.meta; do
     [ -f "$meta" ] || continue
     [ "$(meta_value "$meta" backend)" = herdr ] || continue
@@ -197,8 +197,6 @@ project_stats() {  # <project-key>
     [ "$(project_key "$meta")" = "$key" ] || continue
     id=$(basename "$meta" .meta)
     state=$(fm_visible_state "$(canonical_state "$id")")
-    rank=$(fm_visible_rank "$state")
-    [ "$rank" -ge "$best" ] || best=$rank
     case "$state" in
       'NEEDS LARS') needs=$((needs + 1)) ;;
       FAILED) failed=$((failed + 1)) ;;

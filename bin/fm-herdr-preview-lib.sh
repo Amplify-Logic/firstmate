@@ -23,6 +23,10 @@
 # Every builder takes an already-resolved state and icon so this file never
 # becomes a second owner of the state vocabulary; the caller resolves them
 # through bin/fm-visible-format-lib.sh.
+# The three today-formats are deliberately restated here rather than shared,
+# so the live label writers in bin/fm-visible-status.sh stay untouched before
+# the captain's decision; consolidate them into bin/fm-visible-format-lib.sh
+# once the layout decision lands.
 
 # shellcheck source=bin/fm-visible-format-lib.sh
 . "$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)/fm-visible-format-lib.sh"

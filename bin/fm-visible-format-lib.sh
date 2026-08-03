@@ -5,13 +5,13 @@
 #
 #   fm_visible_state <canonical-state>   -> NEEDS LARS|FAILED|BLOCKED|WORKING|WAITING|READY
 #   fm_visible_icon <visible-state>      -> the state's colour dot
-#   fm_visible_rank <visible-state>      -> 1..7, lower is more urgent
 #   fm_visible_aggregate <stats>         -> "🟣 1 NEEDS LARS · 🔵 2 WORKING"
 #
 # <stats> is the six space-separated counts
-# "<needs> <failed> <blocked> <working> <waiting> <ready>", ordered exactly as
-# fm_visible_rank ranks them, and fm_visible_aggregate emits only non-zero
-# groups, most urgent first, or "no tasks" when every count is zero.
+# "<needs> <failed> <blocked> <working> <waiting> <ready>", already in urgency
+# order, and fm_visible_aggregate's own loop is the single owner of that order:
+# it emits only non-zero groups, most urgent first, or "no tasks" when every
+# count is zero.
 #
 # This is the single owner of that vocabulary.
 # bin/fm-visible-status.sh renders the live fleet with it, and
@@ -40,18 +40,6 @@ fm_visible_icon() {  # <visible-state>
     WORKING) printf '🔵' ;;
     WAITING) printf '🟡' ;;
     READY) printf '🟢' ;;
-  esac
-}
-
-fm_visible_rank() {  # <visible-state>
-  case "$1" in
-    'NEEDS LARS') printf 1 ;;
-    FAILED) printf 2 ;;
-    BLOCKED) printf 3 ;;
-    WORKING) printf 4 ;;
-    WAITING) printf 5 ;;
-    READY) printf 6 ;;
-    *) printf 7 ;;
   esac
 }
 

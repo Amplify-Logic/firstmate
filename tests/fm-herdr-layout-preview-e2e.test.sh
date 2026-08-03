@@ -47,13 +47,23 @@ mkdir -p "$OUT_DIR"
 # the three staging runs is in flight.
 LAB_SESSION=""
 cleanup() {
-  [ -z "$LAB_SESSION" ] || "$HERDR_LAB_HELPER" teardown "$LAB_SESSION" >/dev/null 2>&1 || true
+  local status=$? report
+  # The default-session fleet tripwire only reports a violation on the
+  # teardown's stderr, so the failure path must never discard it.
+  if [ -n "$LAB_SESSION" ] \
+    && ! report=$("$HERDR_LAB_HELPER" teardown "$LAB_SESSION" 2>&1); then
+    printf 'guarded lab teardown or default-session tripwire failed for %s, which may still exist:\n%s\n' \
+      "$LAB_SESSION" "$report" >&2
+  fi
   rm -rf "$TMP_ROOT"
+  exit "$status"
 }
 trap cleanup EXIT
 
+# </dev/null so a herdr subcommand can never consume the stdin of a caller's
+# read loop and silently truncate a capture.
 lab() {  # <herdr arguments...>
-  "$HERDR_LAB_HELPER" run "$LAB_SESSION" "$@"
+  "$HERDR_LAB_HELPER" run "$LAB_SESSION" "$@" </dev/null
 }
 
 lab_open() {  # <label>
@@ -70,8 +80,10 @@ lab_close() {
 
 # --- the synthetic fleet ----------------------------------------------------
 #
-# Eight workers across three projects, covering every visible state, at the
-# scale the trial verdict said upstream's flat list starts to degrade at.
+# Eight workers across three projects, covering five of the six visible states
+# - NEEDS LARS, FAILED, BLOCKED, WORKING and READY - at the scale the trial
+# verdict said upstream's flat list starts to degrade at. No record is `paused`,
+# so WAITING and its yellow aggregate slot are not exercised by these captures.
 # Fields: task-id | project | canonical-state | runtime | branch | outcome
 # LATE is deliberately a Your Magical Journey worker started last, after both
 # other projects already have workers.
@@ -263,7 +275,7 @@ stage_before() {
 
 stage_after_a() {
   local project record out ws tab pane state icon
-  lab_open fm-layout-after-a
+  lab_open fm-after-a
   PROJECT_WS=()
   for project in "${PROJECTS[@]}"; do
     out=$(workspace_create "$(fm_preview_project_row "$project" "$(project_stats "$project" "${WORKERS[@]}")")")
@@ -320,7 +332,7 @@ stage_after_a() {
 
 stage_after_b() {
   local project record out ws tab pane state icon
-  lab_open fm-layout-after-b
+  lab_open fm-after-b
   for project in "${PROJECTS[@]}"; do
     for record in "${WORKERS[@]}"; do
       [ "$(field "$record" 2)" = "$project" ] || continue
