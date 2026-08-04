@@ -21,7 +21,7 @@ make_cli() { # <name>
   cat > "$FAKEBIN/$1" <<'SH'
 #!/usr/bin/env bash
 if [ "${1:-}" = --version ] && [ "$(basename "$0")" = kimi ]; then
-  printf '%s\n' "${FM_PRIMARY_TEST_KIMI_VERSION:-0.27.0}"
+  printf '%s\n' "${FM_PRIMARY_TEST_KIMI_VERSION:-0.31.1}"
   exit 0
 fi
 if [ "${1:-}" = --version ] && [ "$(basename "$0")" = agent ]; then
@@ -265,8 +265,12 @@ test_kimi_version_doctor_and_symlink_refusals() {
     FM_PRIMARY_TEST_KIMI_VERSION=0.28.0 \
     FM_KIMI_SOURCE_HOME="$KIMI_SOURCE" \
     "$ROOT/bin/fm-primary.sh" kimi-k3 2>&1) || rc=$?
-  [ "$rc" -ne 0 ] || fail "unverified Kimi version was accepted"
-  assert_contains "$out" 'verified only for 0.27.0; found 0.28.0' "Kimi version refusal was unclear"
+  # Kimi ships a self-updater, so version drift warns and launches; only the
+  # functional doctor check below still fails a launch closed.
+  [ "$rc" -eq 0 ] || fail "drifted Kimi version blocked the launch instead of warning"
+  assert_contains "$out" 'carries evidence for 0.31.1; found 0.28.0' "Kimi drift warning was unclear"
+  assert_contains "$out" 'launching anyway' "Kimi drift warning did not say the launch proceeds"
+  assert_contains "$out" 'kimi-code/k3' "drifted Kimi did not reach its launch command"
 
   rc=0
   out=$(PATH="$FAKEBIN:$PATH" \
@@ -293,7 +297,7 @@ test_kimi_version_doctor_and_symlink_refusals() {
   assert_contains "$out" 'managed Kimi integration file is an unrelated symlink' \
     "managed Kimi symlink refusal was unclear"
   [ "$(cat "$sentinel")" = 'do-not-overwrite' ] || fail "managed Kimi setup overwrote the symlink target"
-  pass "fm-primary: Kimi version, doctor, and managed-path checks fail closed"
+  pass "fm-primary: Kimi version warns, doctor and managed-path checks fail closed"
 }
 
 test_kimi_corrupt_source_registry_atomicity() {
