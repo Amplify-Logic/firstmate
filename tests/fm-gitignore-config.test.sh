@@ -43,5 +43,19 @@ test_unrelated_path_stays_visible() {
   pass "an unrelated path outside config/ remains visible to git"
 }
 
+test_nested_config_dir_stays_visible() {
+  # Anchoring guard: the ignore rule must match only the repo-root config/
+  # directory. An unanchored `config/` pattern also matches a directory named
+  # config at any depth, which silently swallows unrelated paths (the bare
+  # Actual-* incident class), so a nested config-named path elsewhere in the
+  # tree must remain visible to Git.
+  local nested
+  nested="$(random_leaf docs)/$(random_leaf sub)/config/$(random_leaf file)"
+  git -C "$ROOT" check-ignore -q "$nested" \
+    && fail "git unexpectedly ignores $nested (config/ rule must be anchored to the repo root)"
+  pass "a config-named directory elsewhere in the tree remains visible to git"
+}
+
 test_config_dir_ignored_as_category
 test_unrelated_path_stays_visible
+test_nested_config_dir_stays_visible
