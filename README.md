@@ -74,7 +74,7 @@ All three have verified turn-end guard paths when launched with their documented
 Pick whichever one matches your subscription and workflow.
 
 Codex and OpenCode are also verified and supported as primary harnesses; Codex uses bounded foreground checkpoints, and OpenCode uses a TUI plugin, so both carry more harness-specific supervision tradeoffs than the three co-primaries.
-Kimi Code 0.27.0 is verified as a primary through `bin/fm-primary.sh kimi-k3` and as a worker through `fm-spawn --harness kimi` (see [docs/kimi-harness.md](docs/kimi-harness.md)).
+Kimi Code 0.27.0 is verified as a primary through `bin/fm-primary.sh kimi-k3` and as a worker through `fm-spawn --harness kimi` (see [docs/kimi-harness.md](docs/kimi-harness.md)); primary launch warns on version drift rather than blocking, so a newer Kimi still starts.
 
 ### Install and launch
 

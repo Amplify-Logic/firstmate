@@ -113,7 +113,8 @@ Cursor primary is certified, but Cursor CLI exposes no third-party status-line A
 ## Kimi worker + primary (WORKER verified 2026-07-23 on 0.27.0; PRIMARY certified 2026-07-19)
 
 Kimi Code PRIMARY launch runs through `bin/fm-primary.sh kimi-k3` with `--yolo`.
-Version drift from the recorded evidence build warns and launches; it does not block, because Kimi ships a self-updater.
+The certified primary build is Kimi Code 0.27.0, while `KIMI_VALIDATED_VERSION` in `bin/fm-primary.sh` records 0.31.1 as the newest build carrying primary hook evidence.
+Version drift from that evidence build warns and launches; it does not block, because Kimi ships a self-updater.
 `kimi doctor` against the managed home is the functional gate that can still fail a launch.
 The primary launcher supplies `FM_PRIMARY_HARNESS=kimi` because Kimi does not expose a stable native child-process marker.
 Its isolated managed plugin owns native session-start skill injection plus blockable PreToolUse and Stop hooks without editing the operator's source Kimi home.

@@ -47,7 +47,11 @@
 #
 # Kimi is verified as a PRIMARY here and, separately, as a WORKER via
 # fm-spawn --harness kimi (docs/kimi-harness.md, 2026-07-23).
-# KIMI_VALIDATED_VERSION records the newest build carrying primary evidence.
+# The certified primary build is 0.27.0, which is what docs/toolchain-manifest.tsv
+# transcribes from that evidence file. KIMI_VALIDATED_VERSION below is deliberately
+# a different, newer value: it records the newest build carrying primary hook
+# evidence and sets only the warning threshold here, so the two reading differently
+# is intentional rather than a drift bug.
 # A different installed version WARNS and launches anyway; it does not block.
 # Kimi ships a self-updater, so an exact-equality gate in front of it turned
 # every publisher release into an unscheduled outage of the certified primary
@@ -106,6 +110,10 @@ FM_HOME=${FM_HOME:-$FM_ROOT}
 STATE=${FM_STATE_OVERRIDE:-$FM_HOME/state}
 DATA=${FM_DATA_OVERRIDE:-$FM_HOME/data}
 # Newest Kimi build with primary evidence; drift from it warns, never blocks.
+# Not the certified primary, which stays 0.27.0 in docs/toolchain-manifest.tsv:
+# this value only decides when the warning fires, so it tracks the newest evidence
+# build to keep the warning on genuinely unevidenced ones. `kimi doctor` against
+# the managed home is the functional gate.
 KIMI_VALIDATED_VERSION=0.31.1
 # Cursor stays an exact-match block: its Stop turn-end hook is unverified
 # (docs/cursor-harness.md), so drift there is not merely uncertified.

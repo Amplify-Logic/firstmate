@@ -55,8 +55,6 @@ Rewrite that field when relocating a managed home, or the probe measures the wro
 
 Worker (crewmate/scout) certification is complete for the surfaces below on Kimi Code 0.27.0.
 
-Worker (crewmate/scout) certification is complete for the surfaces below on Kimi Code 0.27.0.
-
 ## Worker surfaces verified live
 
 ### Launch and autonomy (2026-07-21, reconfirmed 2026-07-23)
