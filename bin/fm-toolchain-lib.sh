@@ -26,7 +26,8 @@
 # what bin/fm-primary.sh's exact-match Kimi pin used to do: it took the
 # certified primary down rather than leaving it merely uncertified, and it
 # stayed down once the pinned build no longer existed on disk. That gate now
-# warns and launches, on this same reasoning; bin/fm-primary.sh owns it.
+# accepts every build it holds primary evidence for, warns on the rest, and
+# launches either way, on this same reasoning; bin/fm-primary.sh owns it.
 # Cursor keeps its exact-match block deliberately, because its Stop turn-end
 # hook is unverified rather than merely drifted (docs/cursor-harness.md).
 #

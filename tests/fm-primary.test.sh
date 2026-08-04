@@ -265,8 +265,8 @@ test_kimi_version_doctor_and_symlink_refusals() {
     FM_PRIMARY_TEST_KIMI_VERSION=0.28.0 \
     FM_KIMI_SOURCE_HOME="$KIMI_SOURCE" \
     "$ROOT/bin/fm-primary.sh" kimi-k3 2>&1) || rc=$?
-  # Kimi ships a self-updater, so version drift warns and launches; only the
-  # functional doctor check below still fails a launch closed.
+  # Kimi ships a self-updater, so a build with no primary evidence warns and
+  # launches; only the functional doctor check below still fails a launch closed.
   [ "$rc" -eq 0 ] || fail "drifted Kimi version blocked the launch instead of warning"
   assert_contains "$out" 'carries evidence for 0.27.0 (certified) and 0.31.1 (newest evidence); found 0.28.0' \
     "the unevidenced-Kimi warning did not name both accepted builds"
@@ -397,6 +397,28 @@ test_lab_role_guard() {
   pass "fm-primary: LAB role cannot appear as FIRSTMATE or run in default Herdr"
 }
 
+# KIMI_CERTIFIED_VERSION is a hand-copied second copy of the kimi row's certified
+# column, and a version constant silently drifting from its source is the exact
+# failure this manifest exists to prevent, so the transcription is proved here
+# instead of parsed at launch time. KIMI_VALIDATED_VERSION has no manifest
+# counterpart and is deliberately free to differ, so it gets no such guard.
+test_kimi_certified_constant_matches_manifest() {
+  local constant certified
+  constant=$(sed -n 's/^KIMI_CERTIFIED_VERSION=\(.*\)$/\1/p' "$ROOT/bin/fm-primary.sh")
+  [ -n "$constant" ] || fail "bin/fm-primary.sh no longer defines KIMI_CERTIFIED_VERSION"
+  # Match the row by its tab-separated runtime column, never a loose substring,
+  # so a mention of kimi elsewhere in the manifest cannot satisfy this.
+  certified=$(awk -F'\t' '
+    /^#/ { next }
+    $1 == "kimi" { print $3; found = 1 }
+    END { exit !found }
+  ' "$ROOT/docs/toolchain-manifest.tsv") \
+    || fail "docs/toolchain-manifest.tsv has no kimi row to transcribe"
+  [ "$constant" = "$certified" ] \
+    || fail "KIMI_CERTIFIED_VERSION is $constant but the manifest's kimi certified column is $certified"
+  pass "fm-primary: KIMI_CERTIFIED_VERSION transcribes the manifest's kimi certified column"
+}
+
 test_cursor_grok_primary_profile() {
   local out status=0
   out=$(dry cursor-grok)
@@ -429,6 +451,7 @@ test_cursor_grok_primary_profile() {
   pass "fm-primary: Cursor Grok is pinned, lifecycle-integrated, and version-gated"
 }
 
+test_kimi_certified_constant_matches_manifest
 test_profiles_and_root
 test_unknown_dependency_and_integration_refusals
 test_active_lock_refusal

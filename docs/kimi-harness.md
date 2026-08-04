@@ -29,7 +29,9 @@ Its primary hook mechanics were re-verified live on 0.31.1 on 2026-08-04; see [P
 ## Primary hook mechanics on 0.31.1 (2026-08-04)
 
 Re-verified because the certified 0.27.0 build no longer exists on the captain's machine, which took the exact-match launch gate in `bin/fm-primary.sh` down with it.
-`bin/fm-primary.sh` no longer blocks on version equality; drift now warns and launches, and `KIMI_VALIDATED_VERSION` records this build.
+`bin/fm-primary.sh` no longer blocks on version equality.
+It accepts two evidenced builds quietly, the certified 0.27.0 in `KIMI_CERTIFIED_VERSION` and this build in `KIMI_VALIDATED_VERSION`, identifying each in one short line at launch.
+Only a build carrying neither kind of primary evidence warns, and even that one launches; `kimi doctor` against the managed home is the functional gate that can still fail a launch closed.
 
 | Component | Value |
 |---|---|
