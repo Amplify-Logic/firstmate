@@ -21,7 +21,8 @@ Claude also registers `bin/fm-continuity-pretool-check.sh` for Bash PreToolUse e
 This is a separate, tightly bounded recovery gate rather than another watcher-shape policy.
 It runs only in a primary home, and it denies only an executed `bin/fm-*.sh` command other than `bin/fm-session-start.sh`, `bin/fm-wake-drain.sh`, `bin/fm-watch-arm.sh`, or the ordinary literal `bin/fm-teardown.sh` when task metadata is in flight and no identity-matched live watcher holds that home's lock.
 Ordinary shell commands, fleet-script names used as data, all commands in an idle fleet, child worktrees, session start, wake drain, watcher arm, and ordinary literal teardown remain allowed.
-The denial gives Claude reason-specific recovery guidance — drain, re-arm via a tracked Claude background task, and use fail-closed `bin/fm-teardown.sh` for completed tasks — per the contract in [`watcher-continuity.md`](watcher-continuity.md).
+The denial gives Claude reason-specific recovery guidance — drain with `bin/fm-wake-drain.sh` as the action that is always safe mid-session, run the once-per-session `bin/fm-session-start.sh` only for the pre-lock case where the session has not started yet, use fail-closed `bin/fm-teardown.sh` for completed tasks, then re-arm via a tracked Claude background task — per the contract in [`watcher-continuity.md`](watcher-continuity.md).
+Only the executed command word is classified, so a direct `bin/fm-bootstrap.sh` remains denied while the `bin/fm-bootstrap.sh` that `bin/fm-session-start.sh` invokes inside its own process is allowed with its composing recovery script.
 `bin/fm-continuity-command-policy.mjs` reuses this document's shell lexer and command-position analysis but owns the recovery-versus-other-fleet classification.
 Malformed transport or opaque dynamic syntax fails open so this narrow gate cannot become a blanket Bash block.
 The existing `bin/fm-turnend-guard.sh` Stop integration is unchanged and remains the final backstop.

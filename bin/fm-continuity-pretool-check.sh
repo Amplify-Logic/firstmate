@@ -9,6 +9,18 @@
 # recovery commands, healthy supervision, fleet-idle homes, and child
 # worktrees are always allowed.
 #
+# The recovery set is keyed on the command word actually executed, so a direct
+# bin/fm-bootstrap.sh stays denied while the bin/fm-bootstrap.sh that
+# bin/fm-session-start.sh runs inside its own process is allowed. That is not a
+# hole: session start takes the per-home session lock first, and holding that
+# lock is exactly what gates bootstrap's five mutating sweeps (see the ORDERING
+# header in fm-session-start.sh).
+#
+# The deny guidance keeps the two entry points distinct. bin/fm-wake-drain.sh is
+# the cheap action that is always safe mid-session; the once-per-session
+# bin/fm-session-start.sh (AGENTS.md section 3) belongs only to the pre-lock
+# case this gate must not self-block.
+#
 # The existing turn-end guard remains the unchanged final backstop. This gate
 # closes the long-turn gap before another fleet mutation, but does not replace or
 # weaken the Stop hook.
@@ -106,7 +118,7 @@ case "$REASON_CODE" in
     REASON="[watcher-continuity] tasks are in flight and no live watcher holds this home lock; during recovery only the ordinary literal bin/fm-teardown.sh is allowed, so drop --force and any shell-expanded arguments and retry the literal invocation (blocked: $BLOCKED_SCRIPT)"
     ;;
   *)
-    REASON="[watcher-continuity] tasks are in flight and no live watcher holds this home lock; run bin/fm-session-start.sh to drain wakes and reconcile, use fail-closed bin/fm-teardown.sh for completed tasks when needed, then re-arm with bin/fm-watch-arm.sh as a tracked Claude background task before running other fleet commands (blocked: $BLOCKED_SCRIPT)"
+    REASON="[watcher-continuity] tasks are in flight and no live watcher holds this home lock; drain wakes with bin/fm-wake-drain.sh, the safe mid-session action; run the once-per-session bin/fm-session-start.sh instead only when this session has not started yet and no watcher has ever held this lock; use fail-closed bin/fm-teardown.sh for completed tasks when needed, then re-arm with bin/fm-watch-arm.sh as a tracked Claude background task before running other fleet commands (blocked: $BLOCKED_SCRIPT)"
     ;;
 esac
 ESCAPED=$(printf '%s' "$REASON" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' | tr '\n' ' ')

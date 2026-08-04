@@ -20,6 +20,9 @@ This is deliberate Option B ordering: the fleet is protected before the model ha
 
 Claude retains its native tracked background-task completion path.
 Its new PreToolUse continuity gate allows session start, wake drain, arm recovery, and independently fail-closed teardown, but refuses other fleet commands while tasks are in flight and no identity-matched live watcher holds the home lock.
+Allowing `bin/fm-session-start.sh` stops the gate self-blocking the one command AGENTS.md section 3 mandates as a session's first, since a fresh session has tasks in flight and no live watcher by definition.
+The deny guidance keeps the two entry points distinct rather than pointing every denial at a once-per-session command: `bin/fm-wake-drain.sh` is the cheap action that is always safe mid-session, and `bin/fm-session-start.sh` is named only for the pre-lock case where the session has not started yet.
+The recovery set is keyed on the executed command word, so a direct `bin/fm-bootstrap.sh` stays denied while the `bin/fm-bootstrap.sh` that `bin/fm-session-start.sh` runs inside its own process is allowed with it; session start acquires the per-home session lock first, and holding that lock is what gates bootstrap's mutating sweeps.
 Allowing an ordinary literal teardown prevents a terminal wake from creating a recovery circle: forced or dynamically constructed teardown remains blocked, ordinary teardown itself still refuses dirty, unlanded, incomplete-scout, and unresolved-decision cases, and the turn-end guard continues to require supervision for any tasks left in flight.
 Codex retains its bounded foreground checkpoint protocol.
 Grok retains its tracked background-task notification protocol.
@@ -67,7 +70,7 @@ grok 0.2.103 (89c3d36fb6f1) [stable]
 ```
 
 Claude ran an arm fixture through its native tracked background option, observed background completion, allowed the wake drain, and refused the next unrelated fleet command before its body executed.
-The captured system message exactly named `[watcher-continuity]`, `bin/fm-wake-drain.sh`, tracked Claude re-arm through `bin/fm-watch-arm.sh`, and the blocked `fm-crew-state.sh` command.
+The captured system message exactly named `[watcher-continuity]`, `bin/fm-wake-drain.sh` as the safe mid-session action, the once-per-session `bin/fm-session-start.sh` reserved for the pre-lock case, fail-closed `bin/fm-teardown.sh`, tracked Claude re-arm through `bin/fm-watch-arm.sh`, and the blocked `fm-crew-state.sh` command.
 Command: `FM_CLAUDE_LIVE_E2E=1 tests/fm-claude-continuity-live-e2e.test.sh`.
 Observed result: `ok - Claude 2.1.214 (Claude Code) live E2E refused only the post-completion fleet command with exact re-arm guidance`.
 

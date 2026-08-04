@@ -7,6 +7,14 @@
 // drain, watcher arm, and fail-closed teardown) versus every other bin/fm-*.sh
 // command. Unparseable or opaque dynamic commands fail open so this gate can
 // never become a blanket shell block.
+//
+// Classification is lexical: only a statically visible executed command word is
+// matched against RECOVERY_SCRIPTS. A bin/fm-bootstrap.sh command word therefore
+// stays denied wherever it executes, including when it is bundled after
+// fm-session-start.sh. The fm-bootstrap.sh that fm-session-start.sh runs as its
+// own subprocess is not a command word here and is allowed along with its
+// composing script, whose header documents that it acquires the per-home session
+// lock before those mutating sweeps run.
 
 import path from "node:path";
 import { fileURLToPath } from "node:url";

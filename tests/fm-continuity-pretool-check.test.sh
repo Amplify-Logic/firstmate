@@ -41,7 +41,7 @@ expect_deny() {
   [ ! -s "$OUT" ] || fail "$label deny wrote stdout: $(cat "$OUT")"
   jq -e '.hookSpecificOutput.hookEventName == "PreToolUse" and .hookSpecificOutput.permissionDecision == "deny"' "$ERR" >/dev/null 2>&1 \
     || fail "$label deny omitted Claude's permission decision: $(cat "$ERR")"
-  [ -n "$expected" ] || expected="[watcher-continuity] tasks are in flight and no live watcher holds this home lock; run bin/fm-session-start.sh to drain wakes and reconcile, use fail-closed bin/fm-teardown.sh for completed tasks when needed, then re-arm with bin/fm-watch-arm.sh as a tracked Claude background task before running other fleet commands (blocked: $blocked)"
+  [ -n "$expected" ] || expected="[watcher-continuity] tasks are in flight and no live watcher holds this home lock; drain wakes with bin/fm-wake-drain.sh, the safe mid-session action; run the once-per-session bin/fm-session-start.sh instead only when this session has not started yet and no watcher has ever held this lock; use fail-closed bin/fm-teardown.sh for completed tasks when needed, then re-arm with bin/fm-watch-arm.sh as a tracked Claude background task before running other fleet commands (blocked: $blocked)"
   actual=$(jq -r '.systemMessage' "$ERR")
   [ "$actual" = "$expected" ] || fail "$label recovery guidance changed: $actual"
 }
@@ -64,7 +64,17 @@ test_gate_scope_and_recovery_exceptions() {
   expect_deny "dynamic teardown mode is not recovery" 'bin/fm-teardown.sh task "$TEARDOWN_MODE"' 'fm-teardown.sh' "$unsafe_teardown_reason"
   expect_deny "unrelated fleet command" 'bin/fm-crew-state.sh task' 'fm-crew-state.sh'
   expect_deny "recovery bundled with unrelated fleet command" 'bin/fm-wake-drain.sh; bin/fm-send.sh task hi' 'fm-send.sh'
+  # These three assert the direct-versus-transitive bootstrap boundary side by
+  # side so neither reads as contradicting the other. The gate classifies the
+  # command words it is handed, so every bin/fm-bootstrap.sh in executed
+  # position denies, bundled after session start or nested in a literal shell
+  # payload alike. The bin/fm-bootstrap.sh that the allowed
+  # bin/fm-session-start.sh above runs inside its own process is not a command
+  # word this gate sees; permitting it is inherent to allowing the composing
+  # recovery script, not a classifier feature, and fm-session-start.sh gates
+  # those mutating sweeps on first holding the per-home session lock.
   expect_deny "literal nested fleet command" "bash -lc 'bin/fm-bootstrap.sh'" 'fm-bootstrap.sh'
+  expect_deny "direct bootstrap bundled after session start" 'bin/fm-session-start.sh; bin/fm-bootstrap.sh' 'fm-bootstrap.sh'
   pass "continuity gate allows recovery and ordinary commands but denies only other fleet execution"
 }
 
