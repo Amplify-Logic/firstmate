@@ -2,7 +2,7 @@
 
 Empirical verification record for Kimi Code as a Firstmate harness.
 Primary support is certified separately through `bin/fm-primary.sh kimi-k3`.
-This document owns the WORKER certification record.
+This document owns the WORKER certification record and the dated re-verification of primary hook mechanics on builds newer than that certification.
 
 The distilled operating facts live in the `harness-adapters` skill.
 Exact primary launch flags live in `bin/fm-primary.sh`.
