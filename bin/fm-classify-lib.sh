@@ -1,12 +1,31 @@
 #!/usr/bin/env bash
 # Shared wake classifier: the common source of truth for captain-relevant status
-# tests, declared-external-wait vocabulary, the declared-pause recheck cadence and
+# tests, the declared-wait vocabulary, the declared-pause recheck cadence and
 # shared-blocker grouping fold, and the working/paused absorb classification that
 # makes no-verb signal and stale-pane wakes safe to absorb.
 # Sourced by BOTH the always-on watcher
 # (bin/fm-watch.sh) and the away-mode daemon (bin/fm-supervise-daemon.sh) so the
 # overlapping triage policy lives in one place instead of two copies that can
 # drift apart.
+#
+# The declared-wait vocabulary has two verbs, and their re-surface policy differs
+# deliberately:
+#   - paused:   a bounded external wait expected to clear on its own (an upstream
+#               release, a rate-limit reset). The stale path absorbs it but
+#               re-surfaces it once per FM_PAUSE_RESURFACE_SECS so the recheck
+#               can detect the wait clearing while the crew still idles.
+#   - captain-held: a decision the captain owes (fm-decision-hold.sh). It also
+#               absorbs, but it never re-surfaces: only the captain's answer
+#               clears it, so nothing the recheck can observe changes, and an
+#               hourly nag would train the reader to ignore the digest - the same
+#               harm as a false wedge alarm. The durable backlog owns surfacing
+#               the decision on the captain's return, and teardown refuses while
+#               it is unresolved, so silence cannot rot it invisibly.
+#   - Neither verb is a wedge: an idle pane under either is expected. A live
+#               worker is told apart from a dead one by fm_backend_agent_alive
+#               (and by fm-crew-state.sh's state read), never by the status verb;
+#               both are declared waits. An idle pane with NO declared wait still
+#               escalates on FM_STALE_ESCALATE_SECS.
 #
 # Most functions are pure, side-effect-free reads of status files: each takes
 # what it needs as arguments and touches no globals beyond the optional
@@ -61,12 +80,32 @@ FM_CLASSIFY_CAPTAIN_RE_DEFAULT='done:|needs-decision:|blocked:|failed:|PR ready|
 # drift between the two consumers. FM_CLASSIFY_PAUSED_VERB overrides it.
 FM_CLASSIFY_PAUSED_VERB_DEFAULT='paused'
 
-# Bounded re-surface cadence for a declared pause or a dead-agent captain hold.
+# The captain-held verb. Firstmate appends
+#   captain-held [key=<slug>]: tracked by <hold-id>
+# when a task's still-open decision is transferred to its durable backlog owner
+# (fm-decision-hold.sh). Like paused: it is a DECLARED wait - the idle pane is
+# expected, so the stale path must never wedge-age it - but it is NOT a bounded
+# external wait: nothing the supervision recheck can observe (the pane is still
+# idle, the transfer is still declared) can change until the captain answers.
+# Re-surfacing it on a cadence would therefore be a pure nag that trains the
+# reader to ignore the digest - the same harm a false wedge alarm causes - so
+# captain-held absorbs silently after its first appearance. It cannot rot
+# invisibly without that re-surface: the decision is durably tracked in the
+# backlog, teardown refuses while it is unresolved, and the captain's return flow
+# surfaces it. A live worker at the decision gate is a healthy parked crew and a
+# dead one is an exited worker; both are declared waits and neither wedges, told
+# apart by fm_backend_agent_alive. This constant is the ONE definition of the
+# verb; consumers use status_is_captain_held / status_is_paused_or_captain_held.
+# FM_CLASSIFY_CAPTAIN_HELD_VERB overrides it.
+FM_CLASSIFY_CAPTAIN_HELD_VERB_DEFAULT='captain-held'
+
+# Bounded re-surface cadence for a declared external-wait pause (paused:).
 # Far longer than the wedge threshold (FM_STALE_ESCALATE_SECS, default 240s), it
-# avoids nagging a deliberate wait while ensuring a forgotten hold cannot rot
-# invisibly - it re-surfaces once for a recheck every window. One hour by default;
-# both consumers read FM_PAUSE_RESURFACE_SECS with this default so the cadence has
-# one owner.
+# avoids nagging a deliberate wait while ensuring a wait that cleared on its own
+# cannot rot invisibly - it re-surfaces once for a recheck every window. One hour
+# by default; both consumers read FM_PAUSE_RESURFACE_SECS with this default so
+# the cadence has one owner. A captain-held transfer does NOT re-surface on this
+# cadence - see FM_CLASSIFY_CAPTAIN_HELD_VERB_DEFAULT for that decision.
 FM_PAUSE_RESURFACE_SECS_DEFAULT=3600
 # A wait that names an explicit captain decision cannot clear until the captain
 # acts, so the ordinary hourly recheck would only repeat the same escalation.
@@ -135,17 +174,27 @@ status_is_paused() {  # <status-line>
   [ "$verb" = "${FM_CLASSIFY_PAUSED_VERB:-$FM_CLASSIFY_PAUSED_VERB_DEFAULT}" ]
 }
 
-# 0 if a status line declares either an external-wait pause or a verified
-# captain-held transfer.
-# Both declarations can intentionally leave an exited crew's endpoint idle, so
-# the watcher applies its bounded pause cadence when agent death confirms that
-# no live decision gate is being silenced.
-status_is_paused_or_captain_held() {  # <status-line>
+# 0 if a status line's leading verb is the captain-held transfer verb
+# (captain-held [key=<slug>]: <note>). The declared-wait sibling of
+# status_is_paused: never wedge-aged, but absorbed without the bounded re-surface
+# (see FM_CLASSIFY_CAPTAIN_HELD_VERB_DEFAULT for the cadence call).
+status_is_captain_held() {  # <status-line>
   local line=$1 verb
-  status_is_paused "$line" && return 0
   [ -n "$line" ] || return 1
   verb=$(status_line_verb "$line")
   [ "$verb" = "${FM_CLASSIFY_CAPTAIN_HELD_VERB:-$FM_CLASSIFY_CAPTAIN_HELD_VERB_DEFAULT}" ]
+}
+
+# 0 if a status line declares either an external-wait pause or a verified
+# captain-held transfer. This is the shared "declared wait" predicate: a crew (or
+# firstmate steering it) deliberately parked an idle pane, so neither the watcher
+# nor the away-mode daemon may age it into a possible-wedge escalation. The two
+# verbs differ only in their re-surface policy (status_is_paused re-surfaces on
+# the bounded pause cadence; status_is_captain_held absorbs silently); consumers
+# read that difference from the library, never by hardcoding a verb literal.
+status_is_paused_or_captain_held() {  # <status-line>
+  status_is_paused "$1" && return 0
+  status_is_captain_held "$1"
 }
 
 # --- durable keyed decisions ------------------------------------------------

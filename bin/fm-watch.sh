@@ -365,7 +365,9 @@ wedge_timer_check() {  # <window> <since-file> <triage-label> <escalation-count-
 # watcher and the away-mode daemon group identically. EVERY due task is appended,
 # including several that resolve to one backend window: collapsing a window is the
 # fold's job, and filtering here would hide the older task's age and its blocker
-# from the group the fold builds.
+# from the group the fold builds. Only paused: waits are collected: a
+# captain-held transfer never re-surfaces on any cadence (fm-classify-lib.sh owns
+# that call), so grouping one in would reintroduce the nag through the back door.
 pause_recheck_collect_due() {  # <due-file>
   local due=$1 meta task win last statusf mtime age rf rf_age pause_secs
   rm -f "$due"
@@ -375,7 +377,7 @@ pause_recheck_collect_due() {  # <due-file>
     win=$(fm_backend_target_of_meta "$meta")
     [ -n "$win" ] || continue
     last=$(last_status_line "$STATE/$task.status")
-    status_is_paused_or_captain_held "$last" || continue
+    status_is_paused "$last" || continue
     statusf="$STATE/$task.status"
     mtime=$(stat_mtime "$statusf")
     case "$mtime" in ''|*[!0-9]*) mtime=$(date +%s) ;; esac
@@ -447,18 +449,22 @@ pause_recheck_commit_due() {  # <due-file> <fallback-marker>
 }
 
 # Absorb a stale pane under a declared external-wait pause (paused:) or a
-# dead-agent captain-held transfer, and re-surface it once every
-# pause_resurface_secs_for_line window for a recheck so it cannot rot invisibly.
-# Called on any stale poll once pause_state_class permits the bounded cadence, so
-# it must be cheap: it NEVER re-reads crew state. The re-surface age is anchored
-# on the status file mtime, not a per-hash marker, so a churny idle pane (a ticking
-# clock, a token counter) cannot keep resetting the cadence the way a hash-tied
-# timer would. A .paused-resurfaced-<key> throttle marker records the last
-# re-surface epoch so, once past the window, it fires once per window rather than
-# every poll. One re-surface covers every wait that is due fleet-wide, grouped by
-# blocking reason, and throttles all of them, so a shared blocker costs one wake
-# instead of one per task. Advances the stale suppressor to <hash> and flags the
-# key paused.
+# dead-agent captain-held transfer. A paused: wait re-surfaces once every
+# pause_resurface_secs_for_line window for a recheck - its wait may clear on its
+# own (upstream landed, rate-limit reset) and the recheck detects that; a
+# captain-held transfer never re-surfaces, because only the captain's answer
+# clears it and nothing the recheck can observe changes (fm-classify-lib.sh owns
+# that call, see FM_CLASSIFY_CAPTAIN_HELD_VERB_DEFAULT). Called on any stale poll
+# once pause_state_class permits the bounded cadence, so it must be cheap: it
+# reads exactly one status line beyond what it already has, never crew state. The
+# re-surface age is anchored on the status file mtime, not a per-hash marker, so
+# a churny idle pane (a ticking clock, a token counter) cannot keep resetting the
+# cadence the way a hash-tied timer would. A .paused-resurfaced-<key> throttle
+# marker records the last re-surface epoch so, once past the window, it fires
+# once per window rather than every poll. One re-surface covers every paused:
+# wait that is due fleet-wide, grouped by blocking reason, and throttles all of
+# them, so a shared blocker costs one wake instead of one per task. Advances the
+# stale suppressor to <hash> and flags the key paused.
 handle_paused_stale() {  # <window> <task> <hash>
   local win=$1 task=$2 h=$3 key statusf mtime age rf rf_age reason last pause_secs due
   key=$(printf '%s' "$win" | tr ':/.' '___')
@@ -473,7 +479,15 @@ handle_paused_stale() {  # <window> <task> <hash>
   rf_age=$(age_of "$rf")   # 999999 when no prior re-surface
   last=$(last_status_line "$statusf")
   pause_secs=$(pause_resurface_secs_for_line "$last")
-  if [ "$age" -ge "$pause_secs" ] && [ "$rf_age" -ge "$pause_secs" ]; then
+  # Only the captain-held verb is withheld from the re-surface: its wait clears
+  # solely when the captain answers, so a recheck can find no change and would
+  # be a pure nag. Every other line keeps the bounded cadence, including a pane
+  # classified paused from crew state alone, whose own status log names no verb
+  # for the sweep to find - withholding that one would leave its trigger
+  # unthrottled and re-firing every poll. Both verbs stay on this declared-wait
+  # absorb path and never reach the wedge timer.
+  if [ "$age" -ge "$pause_secs" ] && [ "$rf_age" -ge "$pause_secs" ] \
+     && ! status_is_captain_held "$last"; then
     due="$STATE/.paused-recheck-due.$$"
     pause_recheck_collect_due "$due"
     reason=$(pause_recheck_reason_for_due "$win" "$due")
@@ -482,7 +496,7 @@ handle_paused_stale() {  # <window> <task> <hash>
     rm -f "$due"
     wake "$reason"
   fi
-  triage_log "absorbed stale (paused, awaiting external, age ${age}s): $win"
+  triage_log "absorbed stale (declared wait, age ${age}s): $win"
 }
 
 clear_pause_state() {  # <window>

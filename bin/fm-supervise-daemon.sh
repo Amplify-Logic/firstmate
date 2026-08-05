@@ -412,6 +412,17 @@ classify_stale() {  # <window> <state>
     printf 'pause|paused (awaiting external), rechecked on a long cadence: %s' "$last"
     return
   fi
+  if [ -n "$last" ] && status_is_captain_held "$last"; then
+    # A verified captain-held transfer is a declared wait too (fm-classify-lib.sh's
+    # status_is_captain_held): the idle pane is expected, so it is never a wedge,
+    # and it is never re-surfaced on the pause cadence either - only the captain's
+    # answer clears it, so a recheck would be a pure nag (the durable backlog owns
+    # surfacing it on the captain's return). It self-handles with NO marker: a
+    # .subsuper-stale-* marker would age it into a false possible-wedge escalation
+    # and a .subsuper-paused-* marker would re-surface it.
+    printf 'self|captain-held (declared wait), absorbed: %s' "$last"
+    return
+  fi
   if [ -n "$last" ] && status_is_captain_relevant "$last"; then
     # Independent of free-text captain-relevant matching: a nonterminal progress
     # verb (working:) must never take the terminal stale path. Seen-status dedupe
@@ -515,6 +526,12 @@ reconcile_pause_tracking() {  # <window> <state> <last-status-line>
   if status_is_paused "$last"; then
     stale_marker_remove "$win" "$state"
     pause_marker_record "$win" "$state"
+  elif status_is_captain_held "$last"; then
+    # A captain-held transfer is a declared wait that neither wedges nor
+    # re-surfaces (fm-classify-lib.sh): clear any tracking of either kind so a
+    # leftover marker cannot age it into a false possible-wedge escalation or an
+    # awaiting-external recheck.
+    clear_pause_tracking "$win" "$state"
   elif [ -e "$marker" ] || [ -e "$state/.paused-$watcher_key" ]; then
     clear_pause_tracking "$win" "$state"
   fi
@@ -1129,7 +1146,12 @@ housekeeping() {  # <state>
     fi
     task=$(window_to_task "$win" "$state")
     last=$(last_status_line "$state/$task.status")
-    if [ -n "$last" ] && status_is_paused "$last"; then
+    # A declared wait - a paused: external wait OR a verified captain-held
+    # transfer (fm-classify-lib.sh's status_is_paused_or_captain_held is the one
+    # owner of the vocabulary) - must never age into a possible-wedge escalation.
+    # reconcile parks a paused: wait on the long re-surface cadence and clears
+    # tracking for a captain-held transfer.
+    if [ -n "$last" ] && status_is_paused_or_captain_held "$last"; then
       reconcile_pause_tracking "$win" "$state" "$last"
       continue
     fi
@@ -1386,25 +1408,35 @@ handle_wake() {  # <reason> <state>
       if [ "$kind" = "stale" ]; then
         task=$(window_to_task "$arg" "$state")
         last=$(last_status_line "$state/$task.status")
-        # Clear wedge aging only for terminal (or legacy free-text) captain lines.
-        # Nonterminal progress verbs keep possible-wedge markers even if free text
-        # once looked captain-relevant or was written into a seen marker.
-        _clear_wedge=0
-        if [ -n "$last" ] && status_is_captain_relevant "$last"; then
-          if status_is_terminal_verb "$last"; then
-            _clear_wedge=1
-          else
-            case "$(status_line_verb "$last")" in
-              working|resolved|captain-held) _clear_wedge=0 ;;
-              *) _clear_wedge=1 ;;
-            esac
-          fi
-        fi
-        if [ "$_clear_wedge" = 1 ]; then
+        # A captain-held transfer (fm-classify-lib.sh's status_is_captain_held) is
+        # absorbed with NO persistence marker: a .subsuper-stale-* marker would
+        # age it into a false possible-wedge escalation every window, and a
+        # .subsuper-paused-* marker would re-surface a nag only the captain's
+        # answer can clear.
+        if [ -n "$last" ] && status_is_captain_held "$last"; then
+          pause_marker_remove "$arg" "$state"
           stale_marker_remove "$arg" "$state"
         else
-          pause_marker_remove "$arg" "$state"
-          stale_marker_record "$arg" "$state"
+          # Clear wedge aging only for terminal (or legacy free-text) captain lines.
+          # Nonterminal progress verbs keep possible-wedge markers even if free text
+          # once looked captain-relevant or was written into a seen marker.
+          _clear_wedge=0
+          if [ -n "$last" ] && status_is_captain_relevant "$last"; then
+            if status_is_terminal_verb "$last"; then
+              _clear_wedge=1
+            else
+              case "$(status_line_verb "$last")" in
+                working|resolved) _clear_wedge=0 ;;
+                *) _clear_wedge=1 ;;
+              esac
+            fi
+          fi
+          if [ "$_clear_wedge" = 1 ]; then
+            stale_marker_remove "$arg" "$state"
+          else
+            pause_marker_remove "$arg" "$state"
+            stale_marker_record "$arg" "$state"
+          fi
         fi
       fi
       log "self-handle: $reason -> $distilled"

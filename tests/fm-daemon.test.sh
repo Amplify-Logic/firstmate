@@ -433,6 +433,71 @@ test_housekeeping_paused_unpaused_cleared() {
   pass "housekeeping clears a paused marker once the crew is no longer declaring the pause"
 }
 
+# A verified captain-held transfer (fm-decision-hold.sh's durable decision
+# transfer) is a DECLARED wait like paused:, so the daemon must never wedge-age
+# it. Unlike paused: it is also never re-surfaced on the bounded pause cadence:
+# only the captain's answer clears it, so an hourly "still held" nag adds no
+# information (the durable backlog owns surfacing it on return) and re-trains
+# the reader to ignore the digest - the same harm a false wedge causes.
+# classify_stale self-handles it and handle_wake records NO persistence marker
+# of either kind, so housekeeping has nothing to age.
+test_stale_captain_held_classifies_self_and_records_no_marker() {
+  local dir state out key
+  dir=$(make_supercase stale-captain-held)
+  state="$dir/state"
+  printf 'captain-held [key=api-shape]: tracked by held-route-1\n' > "$state/held-c1.status"
+  key=$(printf '%s' "held-c1" | tr ':/.' '___')
+  out=$(FM_STATE_OVERRIDE="$state" classify_stale "sess:fm-held-c1" "$state")
+  case "$out" in self\|*) ;; *) fail "captain-held stale did not self-handle: $out" ;; esac
+  case "$out" in *possible\ wedge*) fail "captain-held stale was framed as a wedge: $out" ;; esac
+  FM_STATE_OVERRIDE="$state" handle_wake "stale: sess:fm-held-c1" "$state"
+  [ ! -e "$state/.subsuper-stale-$key" ] || fail "captain-held transfer recorded a wedge marker"
+  [ ! -e "$state/.subsuper-paused-$key" ] || fail "captain-held transfer recorded a pause marker"
+  [ ! -s "$state/.subsuper-escalations" ] || fail "a captain-held transfer escalated on the wake itself"
+  pass "a captain-held transfer is absorbed with no wedge or pause marker"
+}
+
+# A stale marker that predates the declared-wait handling (or a race) must never
+# age a captain-held transfer into a possible-wedge escalation: housekeeping
+# reconciles it away instead.
+test_housekeeping_captain_held_stale_marker_never_wedges() {
+  local dir state fakebin win pane key
+  dir=$(make_supercase captain-held-no-wedge)
+  state="$dir/state"; fakebin="$dir/fakebin"
+  win="sess:fm-held-c2"; pane="$dir/pane.txt"
+  printf 'captain-held [key=api-shape]: tracked by held-route-2\n' > "$state/held-c2.status"
+  printf 'idle prompt $\n' > "$pane"
+  key=$(printf '%s' "held-c2" | tr ':/.' '___')
+  echo $(( $(date +%s) - 5000 )) > "$state/.subsuper-stale-$key"
+  PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$win" FM_FAKE_TMUX_CAPTURE="$pane" \
+    FM_STATE_OVERRIDE="$state" FM_STALE_ESCALATE_SECS=240 housekeeping "$state"
+  grep -F "possible wedge" "$state/.subsuper-escalations" >/dev/null 2>&1 \
+    && fail "captain-held transfer was escalated as a possible wedge"
+  [ ! -e "$state/.subsuper-stale-$key" ] || fail "captain-held stale marker was not cleared"
+  pass "housekeeping never wedge-escalates a captain-held transfer (aged marker is cleared)"
+}
+
+# A pause-cadence marker that predates the handling (or a race) must not
+# re-surface a captain-held transfer as an awaiting-external recheck either: the
+# wait cannot self-clear, so the recheck would be a pure nag. Housekeeping clears
+# it without escalating.
+test_housekeeping_captain_held_pause_marker_never_resurfaces() {
+  local dir state fakebin win pane key
+  dir=$(make_supercase captain-held-no-resurface)
+  state="$dir/state"; fakebin="$dir/fakebin"
+  win="sess:fm-held-c3"; pane="$dir/pane.txt"
+  printf 'captain-held [key=api-shape]: tracked by held-route-3\n' > "$state/held-c3.status"
+  printf 'idle prompt $\n' > "$pane"
+  key=$(printf '%s' "held-c3" | tr ':/.' '___')
+  echo $(( $(date +%s) - 5000 )) > "$state/.subsuper-paused-$key"
+  PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$win" FM_FAKE_TMUX_CAPTURE="$pane" \
+    FM_STATE_OVERRIDE="$state" FM_PAUSE_RESURFACE_SECS=240 housekeeping "$state"
+  grep -F "awaiting external" "$state/.subsuper-escalations" >/dev/null 2>&1 \
+    && fail "captain-held transfer was re-surfaced on the pause cadence"
+  [ ! -e "$state/.subsuper-paused-$key" ] || fail "captain-held pause marker was not cleared"
+  pass "housekeeping never re-surfaces a captain-held transfer on the pause cadence"
+}
+
 test_housekeeping_stale_marker_transitions_to_pause() {
   local dir state fakebin win pane key
   dir=$(make_supercase stale-to-paused)
@@ -2094,6 +2159,9 @@ test_housekeeping_paused_dedupes_shared_window
 test_housekeeping_captain_gated_pause_uses_longer_cadence
 test_housekeeping_paused_resumed_cleared
 test_housekeeping_paused_unpaused_cleared
+test_stale_captain_held_classifies_self_and_records_no_marker
+test_housekeeping_captain_held_stale_marker_never_wedges
+test_housekeeping_captain_held_pause_marker_never_resurfaces
 test_housekeeping_stale_marker_transitions_to_pause
 test_housekeeping_pause_marker_transitions_to_clear
 test_housekeeping_herdr_persistent_stale_resolves_meta

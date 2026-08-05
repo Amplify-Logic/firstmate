@@ -116,12 +116,13 @@ log_last_line() {
   grep -v '^[[:space:]]*$' "$LOG" 2>/dev/null | tail -1
 }
 # Map a status-log verb onto a canonical state for the fallback path. `paused` is
-# the deliberate-external-wait verb (fm-classify-lib.sh's FM_CLASSIFY_PAUSED_VERB):
-# a crew with no active run and an idle pane that declared a known external wait
-# reports `paused` distinctly, so a supervisor reading this sees a declared pause
-# and its reason rather than a wedge-suspect idle.
+# the declared-wait verb set (fm-classify-lib.sh's status_is_paused_or_captain_held,
+# covering both the bounded external-wait paused: and the verified captain-held
+# transfer): a crew with no active run and an idle pane that declared a wait
+# reports `paused` distinctly, so a supervisor reading this sees a declared wait
+# rather than a wedge-suspect idle.
 map_log_state() {  # <line>
-  if status_is_paused "$1"; then
+  if status_is_paused_or_captain_held "$1"; then
     echo paused
     return
   fi
@@ -443,16 +444,18 @@ status_log_mtime_epoch() {
   fi
 }
 
-# 0 when the status log's last paused:/blocked: line is newer than the terminal
-# failed/cancelled run we attributed. Recency, not source rank, decides.
-# When the run's end time cannot be determined, a trailing paused:/blocked: is
-# treated as newer (the worker's last append after observing the failure).
+# 0 when the status log's last declared-wait (paused:/captain-held) or blocked:
+# line is newer than the terminal failed/cancelled run we attributed. Recency,
+# not source rank, decides. When the run's end time cannot be determined, a
+# trailing declared-wait/blocked: line is treated as newer (the worker's last
+# append after observing the failure). The verb set comes from the shared
+# vocabulary (fm-classify-lib.sh), so a captain-held transfer ages the same way
+# a declared pause does.
 status_log_newer_than_terminal_run() {
   local log_epoch run_epoch pair field
-  case "$LOG_VERB" in
-    paused|blocked) ;;
-    *) return 1 ;;
-  esac
+  if [ "$LOG_VERB" != blocked ] && ! status_is_paused_or_captain_held "$LOG_LINE"; then
+    return 1
+  fi
   log_epoch=$(status_log_mtime_epoch)
   case "$log_epoch" in ''|*[!0-9]*) return 1 ;; esac
 
@@ -671,18 +674,18 @@ if [ "$HAVE_RUN" = 1 ]; then
   esac
 
   # Recency override: a terminal failed/cancelled run must not outrank a newer
-  # declared pause or block. Without this, crew_absorb_class returns none and
-  # the watcher floods bare stale: wakes every poll (declared-pause-lost).
+  # declared wait (paused:/captain-held) or block. Without this, crew_absorb_class
+  # returns none and the watcher floods bare stale: wakes every poll
+  # (declared-pause-lost). The declared-wait test comes from the shared vocabulary
+  # (fm-classify-lib.sh), never a second verb list here.
   case "$RUN_STATE" in
     failed)
-      case "$LOG_VERB" in
-        paused|blocked)
-          if status_log_newer_than_terminal_run; then
-            emit "$(map_log_state "$LOG_LINE")" status-log \
-              "$(status_line_note "$LOG_LINE")${SEP}terminal run superseded by newer status-log"
-          fi
-          ;;
-      esac
+      if [ "$LOG_VERB" = blocked ] || status_is_paused_or_captain_held "$LOG_LINE"; then
+        if status_log_newer_than_terminal_run; then
+          emit "$(map_log_state "$LOG_LINE")" status-log \
+            "$(status_line_note "$LOG_LINE")${SEP}terminal run superseded by newer status-log"
+        fi
+      fi
       ;;
   esac
 
