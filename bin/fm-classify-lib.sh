@@ -94,10 +94,11 @@ FM_CLASSIFY_PAUSED_VERB_DEFAULT='paused'
 # backlog, teardown refuses while it is unresolved, and the captain's return flow
 # surfaces it. A live worker at the decision gate is a healthy parked crew and a
 # dead one is an exited worker; both are declared waits and neither wedges, told
-# apart by fm_backend_agent_alive. This constant is the ONE definition of the
-# verb; consumers use status_is_captain_held / status_is_paused_or_captain_held.
-# FM_CLASSIFY_CAPTAIN_HELD_VERB overrides it.
-FM_CLASSIFY_CAPTAIN_HELD_VERB_DEFAULT='captain-held'
+# apart by fm_backend_agent_alive. This block owns that POLICY; the verb constant
+# itself (FM_CLASSIFY_CAPTAIN_HELD_VERB_DEFAULT) has ONE assignment, with its
+# decision-closing siblings below (FM_CLASSIFY_RESOLVE_VERB_DEFAULT), and
+# FM_CLASSIFY_CAPTAIN_HELD_VERB overrides it. Consumers use status_is_captain_held
+# / status_is_paused_or_captain_held.
 
 # Bounded re-surface cadence for a declared external-wait pause (paused:).
 # Far longer than the wedge threshold (FM_STALE_ESCALATE_SECS, default 240s), it
@@ -117,6 +118,9 @@ FM_PAUSE_CAPTAIN_RESURFACE_SECS_DEFAULT=28800
 # status decision opened by needs-decision or blocked. See status_open_decisions
 # below for the status-fold contract. The transfer verb is written only after
 # fm-decision-hold.sh has verified the corresponding captain-held backlog item.
+# This is the ONE assignment of FM_CLASSIFY_CAPTAIN_HELD_VERB_DEFAULT; the
+# declared-wait policy for that verb (silent absorb, never wedge-aged) lives in
+# the captain-held block above.
 FM_CLASSIFY_RESOLVE_VERB_DEFAULT='resolved'
 FM_CLASSIFY_CAPTAIN_HELD_VERB_DEFAULT='captain-held'
 
