@@ -354,17 +354,22 @@ wedge_timer_check() {  # <window> <since-file> <triage-label> <escalation-count-
 }
 
 # Absorb a stale pane under a declared external-wait pause (paused:) or a
-# dead-agent captain-held transfer, and re-surface it once every
-# PAUSE_RESURFACE_SECS for a recheck so it cannot rot invisibly. Called on any
-# stale poll once pause_state_class permits the bounded cadence, so it must be
-# cheap: it NEVER re-reads crew state. The re-surface age is anchored on the
-# status file mtime, not a per-hash marker, so a churny idle pane (a ticking
-# clock, a token counter) cannot keep resetting the cadence the way a hash-tied
-# timer would. A .paused-resurfaced-<key> throttle marker records the last
-# re-surface epoch so, once past the window, it fires once per window rather than
-# every poll. Advances the stale suppressor to <hash> and flags the key paused.
+# dead-agent captain-held transfer. A paused: wait re-surfaces once every
+# PAUSE_RESURFACE_SECS for a recheck - its wait may clear on its own (upstream
+# landed, rate-limit reset) and the recheck detects that; a captain-held transfer
+# never re-surfaces, because only the captain's answer clears it and nothing the
+# recheck can observe changes (fm-classify-lib.sh owns that call, see
+# FM_CLASSIFY_CAPTAIN_HELD_VERB_DEFAULT). Called on any stale poll once
+# pause_state_class permits the bounded cadence, so it must be cheap: it reads
+# exactly one status line beyond what it already has, never crew state. The
+# re-surface age is anchored on the status file mtime, not a per-hash marker, so
+# a churny idle pane (a ticking clock, a token counter) cannot keep resetting the
+# cadence the way a hash-tied timer would. A .paused-resurfaced-<key> throttle
+# marker records the last re-surface epoch so, once past the window, it fires
+# once per window rather than every poll. Advances the stale suppressor to <hash>
+# and flags the key paused.
 handle_paused_stale() {  # <window> <task> <hash>
-  local win=$1 task=$2 h=$3 key statusf mtime age rf rf_age reason
+  local win=$1 task=$2 h=$3 key statusf mtime age rf rf_age reason last
   key=$(printf '%s' "$win" | tr ':/.' '___')
   printf '%s' "$h" > "$STATE/.stale-$key"
   : > "$STATE/.paused-$key"
@@ -375,13 +380,20 @@ handle_paused_stale() {  # <window> <task> <hash>
   age=$(( $(date +%s) - mtime ))
   rf="$STATE/.paused-resurfaced-$key"
   rf_age=$(age_of "$rf")   # 999999 when no prior re-surface
-  if [ "$age" -ge "$PAUSE_RESURFACE_SECS" ] && [ "$rf_age" -ge "$PAUSE_RESURFACE_SECS" ]; then
+  last=$(last_status_line "$statusf")
+  # Only a genuine paused: external wait re-surfaces: its wait may clear on its
+  # own, so the recheck can find a change. A captain-held transfer clears only
+  # when the captain answers; re-surfacing it would be a pure nag, so it absorbs
+  # silently. Both stay on this declared-wait absorb path and never reach the
+  # wedge timer.
+  if [ "$age" -ge "$PAUSE_RESURFACE_SECS" ] && [ "$rf_age" -ge "$PAUSE_RESURFACE_SECS" ] \
+     && status_is_paused "$last"; then
     reason="stale: $win (paused ${age}s, awaiting external - declared pause, rechecked on a long cadence not a wedge; confirm the wait still holds)"
     fm_wake_append stale "$win" "$reason" || exit 1
     date +%s > "$rf"
     wake "$reason"
   fi
-  triage_log "absorbed stale (paused, awaiting external, age ${age}s): $win"
+  triage_log "absorbed stale (declared wait, age ${age}s): $win"
 }
 
 clear_pause_state() {  # <window>

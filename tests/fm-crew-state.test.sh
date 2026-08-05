@@ -979,6 +979,26 @@ test_no_run_idle_pane_paused() {
   pass "no run + idle pane on a paused: status reports state: paused with its reason"
 }
 
+# (g'') no run + idle pane on a verified captain-held transfer -> state: paused,
+# exactly like a declared external-wait pause: the transfer is a declared wait
+# (fm-classify-lib.sh), so a supervisor reading the crew must see a declared
+# pause rather than a wedge-suspect unknown.
+test_no_run_idle_pane_captain_held() {
+  reset_fakes
+  local d; d=$(new_case captain-held)
+  make_repo_on_branch "$d/wt" fm/feat-held
+  make_fakebin "$d" >/dev/null
+  fm_write_meta "$d/state/feat-held.meta" "window=fm:fm-feat-held" "worktree=$d/wt" "kind=ship"
+  printf 'captain-held [key=q1]: tracked by held-q1\n' > "$d/state/feat-held.status"
+  FM_FAKE_AXI_STATUS=""
+  FM_FAKE_BUSY=0
+  local out; out=$(run_crew_state "$d" feat-held)
+  assert_contains "$out" "state: paused" "captain-held log -> paused"
+  assert_contains "$out" "source: status-log" "idle captain-held -> status-log source"
+  assert_contains "$out" "tracked by held-q1" "the hold id is carried in the detail"
+  pass "no run + idle pane on a captain-held: transfer reports state: paused with its hold id"
+}
+
 test_no_run_idle_pane_custom_paused_verb() {
   reset_fakes
   local d; d=$(new_case custom-paused)
@@ -1333,6 +1353,7 @@ test_no_run_herdr_idle_agent_status_and_idle_pane_stays_idle
 test_no_run_idle_pane_uses_log
 test_no_run_idle_pane_uses_keyed_log
 test_no_run_idle_pane_paused
+test_no_run_idle_pane_captain_held
 test_no_run_idle_pane_custom_paused_verb
 test_no_run_idle_secondmate_resolved_event_not_state
 test_dead_window_ignores_stale_status_log
