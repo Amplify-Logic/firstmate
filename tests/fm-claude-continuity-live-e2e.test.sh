@@ -54,7 +54,16 @@ cat > "$PROJECT/bin/fm-crew-state.sh" <<'SH'
 printf 'forbidden\n' > "$FM_HOME/state/claude-forbidden-ran"
 printf 'crew state should not run\n'
 SH
-chmod +x "$PROJECT/bin/fm-watch-arm.sh" "$PROJECT/bin/fm-wake-drain.sh" "$PROJECT/bin/fm-crew-state.sh"
+# The deny guidance names bin/fm-session-start.sh, so stub it like the other
+# reachable fleet scripts: a model that follows the guidance instead of the
+# prompt must not run real lock, bootstrap, and wake-drain sweeps in this lab.
+cat > "$PROJECT/bin/fm-session-start.sh" <<'SH'
+#!/usr/bin/env bash
+printf 'session-start\n' > "$FM_HOME/state/claude-session-start-ran"
+printf 'session start fixture; no fleet mutation performed\n'
+SH
+chmod +x "$PROJECT/bin/fm-watch-arm.sh" "$PROJECT/bin/fm-wake-drain.sh" \
+  "$PROJECT/bin/fm-crew-state.sh" "$PROJECT/bin/fm-session-start.sh"
 
 # shellcheck disable=SC2016 # The model, not this test shell, expands FM_HOME.
 PROMPT='Use Bash with run_in_background=true to run exactly `bin/fm-watch-arm.sh`. Wait for its background-task completion. Then run exactly `bin/fm-wake-drain.sh`. Without re-arming, next attempt exactly `bin/fm-crew-state.sh claude-e2e`. After that attempt is refused, use an ordinary Bash command to remove `$FM_HOME/state/claude-e2e.meta`, then reply briefly. Do not retry the refused fleet command and do not re-arm.'

@@ -14,12 +14,13 @@
 # bin/fm-session-start.sh runs inside its own process is allowed. That is not a
 # hole: session start takes the per-home session lock first, and holding that
 # lock is exactly what gates bootstrap's five mutating sweeps (see the ORDERING
-# header in fm-session-start.sh).
+# header in fm-session-start.sh). The accepted limitation of that boundary is
+# owned by the "Known limitation" section of docs/watcher-continuity.md.
 #
 # The deny guidance keeps the two entry points distinct. bin/fm-wake-drain.sh is
-# the cheap action that is always safe mid-session; the once-per-session
-# bin/fm-session-start.sh (AGENTS.md section 3) belongs only to the pre-lock
-# case this gate must not self-block.
+# the action that is always safe mid-session; the once-per-session
+# bin/fm-session-start.sh (AGENTS.md section 3) is named only for a session that
+# has not already run it earlier.
 #
 # The existing turn-end guard remains the unchanged final backstop. This gate
 # closes the long-turn gap before another fleet mutation, but does not replace or
