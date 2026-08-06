@@ -413,14 +413,23 @@ classify_stale() {  # <window> <state>
     return
   fi
   if [ -n "$last" ] && status_is_captain_held "$last"; then
-    # A verified captain-held transfer is a declared wait too (fm-classify-lib.sh's
+    # A verified captain-held transfer is a declared wait (fm-classify-lib.sh's
     # status_is_captain_held): the idle pane is expected, so it is never a wedge,
     # and it is never re-surfaced on the pause cadence either - only the captain's
-    # answer clears it, so a recheck would be a pure nag (the durable backlog owns
-    # surfacing it on the captain's return). It self-handles with NO marker: a
-    # .subsuper-stale-* marker would age it into a false possible-wedge escalation
-    # and a .subsuper-paused-* marker would re-surface it.
-    printf 'self|captain-held (declared wait), absorbed: %s' "$last"
+    # answer clears it, so a recheck would be a pure nag (the durable backlog
+    # owns surfacing the decision on the captain's return). Live vs dead is told
+    # apart by fm_backend_agent_alive, never by the status verb: a HEALTHY idle
+    # pane absorbs with no marker of either kind, while a CONFIDENTLY DEAD agent
+    # escalates once (the wake itself is one-shot per distinct hash, so the
+    # escalation is bounded, not a repeating nag) - the work is lost the moment
+    # the answer arrives, which is precisely when it hurts most. The caller
+    # handles the distinct actions without re-reading the status file.
+    alive=$(fm_backend_agent_alive "$(task_window_backend "$win" "$state")" "$win" 2>/dev/null) || alive=unknown
+    if [ "$alive" = dead ]; then
+      printf 'escalate|captain-held, agent exited (work at risk once the answer lands): %s' "$last"
+    else
+      printf 'absorb|captain-held (declared wait), absorbed: %s' "$last"
+    fi
     return
   fi
   if [ -n "$last" ] && status_is_captain_relevant "$last"; then
@@ -431,7 +440,7 @@ classify_stale() {  # <window> <state>
     # captain lines without those verbs keep the terminal escalate/dedupe path.
     if ! status_is_terminal_verb "$last"; then
       case "$(status_line_verb "$last")" in
-        working|resolved|captain-held)
+        working|resolved)
           printf 'self|transient stale (%s): %s' "$win" "$last"
           return
           ;;
@@ -514,7 +523,8 @@ clear_pause_tracking() {  # <window> <state>
   watcher_key=$(_stale_key "$win")
   rm -f "$state/.subsuper-paused-$key" "$state/.subsuper-stale-$key" \
     "$state/.paused-$watcher_key" "$state/.paused-rechecked-$watcher_key" "$state/.paused-resurfaced-$watcher_key" \
-    "$state/.stale-$watcher_key" "$state/.stale-since-$watcher_key" "$state/.wedge-escalations-$watcher_key"
+    "$state/.stale-$watcher_key" "$state/.stale-since-$watcher_key" "$state/.wedge-escalations-$watcher_key" \
+    "$state/.captain-held-surfaced-$watcher_key"
 }
 
 reconcile_pause_tracking() {  # <window> <state> <last-status-line>
@@ -1400,6 +1410,20 @@ handle_wake() {  # <reason> <state>
       fi
       log "self-handle (paused): $reason -> $distilled"
       ;;
+    absorb)
+      # A verified captain-held transfer is a declared wait (fm-classify-lib.sh's
+      # status_is_captain_held): absorb with NO persistence marker of either kind
+      # - a .subsuper-stale-* marker would age it into a false possible-wedge
+      # escalation and a .subsuper-paused-* marker would re-surface a nag only
+      # the captain's answer can clear. classify_stale already split live vs dead
+      # (a dead agent escalates instead of arriving here), so this branch must
+      # not re-read the status file or re-run the verb test.
+      if [ "$kind" = "stale" ]; then
+        pause_marker_remove "$arg" "$state"
+        stale_marker_remove "$arg" "$state"
+      fi
+      log "self-handle (absorb): $reason -> $distilled"
+      ;;
     *)
       # Transient (non-terminal) stale: record/refresh the wedge marker so
       # housekeeping can age it, and drop any pause marker (a crew that left its
@@ -1408,35 +1432,25 @@ handle_wake() {  # <reason> <state>
       if [ "$kind" = "stale" ]; then
         task=$(window_to_task "$arg" "$state")
         last=$(last_status_line "$state/$task.status")
-        # A captain-held transfer (fm-classify-lib.sh's status_is_captain_held) is
-        # absorbed with NO persistence marker: a .subsuper-stale-* marker would
-        # age it into a false possible-wedge escalation every window, and a
-        # .subsuper-paused-* marker would re-surface a nag only the captain's
-        # answer can clear.
-        if [ -n "$last" ] && status_is_captain_held "$last"; then
-          pause_marker_remove "$arg" "$state"
+        # Clear wedge aging only for terminal (or legacy free-text) captain lines.
+        # Nonterminal progress verbs keep possible-wedge markers even if free text
+        # once looked captain-relevant or was written into a seen marker.
+        _clear_wedge=0
+        if [ -n "$last" ] && status_is_captain_relevant "$last"; then
+          if status_is_terminal_verb "$last"; then
+            _clear_wedge=1
+          else
+            case "$(status_line_verb "$last")" in
+              working|resolved) _clear_wedge=0 ;;
+              *) _clear_wedge=1 ;;
+            esac
+          fi
+        fi
+        if [ "$_clear_wedge" = 1 ]; then
           stale_marker_remove "$arg" "$state"
         else
-          # Clear wedge aging only for terminal (or legacy free-text) captain lines.
-          # Nonterminal progress verbs keep possible-wedge markers even if free text
-          # once looked captain-relevant or was written into a seen marker.
-          _clear_wedge=0
-          if [ -n "$last" ] && status_is_captain_relevant "$last"; then
-            if status_is_terminal_verb "$last"; then
-              _clear_wedge=1
-            else
-              case "$(status_line_verb "$last")" in
-                working|resolved) _clear_wedge=0 ;;
-                *) _clear_wedge=1 ;;
-              esac
-            fi
-          fi
-          if [ "$_clear_wedge" = 1 ]; then
-            stale_marker_remove "$arg" "$state"
-          else
-            pause_marker_remove "$arg" "$state"
-            stale_marker_record "$arg" "$state"
-          fi
+          pause_marker_remove "$arg" "$state"
+          stale_marker_record "$arg" "$state"
         fi
       fi
       log "self-handle: $reason -> $distilled"

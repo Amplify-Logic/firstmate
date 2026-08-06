@@ -11,7 +11,11 @@
 # absorbed without a wedge timer, while its status/turn-end signals still carry
 # the outcome. A declared external-wait pause is the separate idle absorb case
 # and re-surfaces only on its long bounded cadence, although its initial no-verb
-# status signal still surfaces in normal mode.
+# status signal still surfaces in normal mode. A captain-held transfer is the
+# other declared wait: it never re-surfaces on any cadence, a healthy idle pane
+# absorbs completely silently, and only a CONFIDENTLY DEAD agent surfaces once
+# (fm_backend_agent_alive tells the two apart, never the verb) because the work
+# is lost the moment the captain's answer lands.
 # While state/.afk exists, the daemon owns triage and this watcher queues and exits
 # on every wake. Printed reason lines:
 #   signal: <file>...      status/turn-end signals, surfaced when a listed status
@@ -449,24 +453,29 @@ pause_recheck_commit_due() {  # <due-file> <fallback-marker>
 }
 
 # Absorb a stale pane under a declared external-wait pause (paused:) or a
-# dead-agent captain-held transfer. A paused: wait re-surfaces once every
+# captain-held transfer. A paused: wait re-surfaces once every
 # pause_resurface_secs_for_line window for a recheck - its wait may clear on its
-# own (upstream landed, rate-limit reset) and the recheck detects that; a
-# captain-held transfer never re-surfaces, because only the captain's answer
-# clears it and nothing the recheck can observe changes (fm-classify-lib.sh owns
-# that call, see FM_CLASSIFY_CAPTAIN_HELD_VERB_DEFAULT). Called on any stale poll
-# once pause_state_class permits the bounded cadence, so it must be cheap: it
-# reads exactly one status line beyond what it already has, never crew state. The
-# re-surface age is anchored on the status file mtime, not a per-hash marker, so
-# a churny idle pane (a ticking clock, a token counter) cannot keep resetting the
-# cadence the way a hash-tied timer would. A .paused-resurfaced-<key> throttle
-# marker records the last re-surface epoch so, once past the window, it fires
-# once per window rather than every poll. One re-surface covers every paused:
-# wait that is due fleet-wide, grouped by blocking reason, and throttles all of
-# them, so a shared blocker costs one wake instead of one per task. Advances the
-# stale suppressor to <hash> and flags the key paused.
+# own (upstream landed, rate-limit reset) and the recheck detects that, and one
+# re-surface covers every paused: wait that is due fleet-wide, grouped by
+# blocking reason, so a shared blocker costs one wake instead of one per task. A
+# captain-held transfer never re-surfaces on any cadence: only the captain's
+# answer clears it, and nothing the recheck can observe changes. Live vs dead is
+# told apart by fm_backend_agent_alive, never by the status verb: a HEALTHY idle
+# pane absorbs completely silently (the decision is durably tracked), while a
+# CONFIDENTLY DEAD agent surfaces exactly once because the work is lost the
+# moment the answer arrives - the hold must not suppress that reading. The
+# .captain-held-surfaced-<key> marker records the surfaced line so one hold
+# state wakes at most once; the .paused-resurfaced-<key> throttle records the
+# last paused: re-surface epoch so that cadence fires once per window rather
+# than every poll (fm-classify-lib.sh owns the vocabulary call). Called on any
+# stale poll once pause_state_class permits the bounded cadence, so it must be
+# cheap: it reads exactly one status line beyond what it already has, never
+# crew state. The re-surface age is anchored on the status file mtime, not a
+# per-hash marker, so a churny idle pane (a ticking clock, a token counter)
+# cannot keep resetting the cadence the way a hash-tied timer would. Advances
+# the stale suppressor to <hash> and flags the key paused.
 handle_paused_stale() {  # <window> <task> <hash>
-  local win=$1 task=$2 h=$3 key statusf mtime age rf rf_age reason last pause_secs due
+  local win=$1 task=$2 h=$3 key statusf mtime age rf rf_age reason last surf pause_secs due
   key=$(printf '%s' "$win" | tr ':/.' '___')
   printf '%s' "$h" > "$STATE/.stale-$key"
   : > "$STATE/.paused-$key"
@@ -486,7 +495,22 @@ handle_paused_stale() {  # <window> <task> <hash>
   # for the sweep to find - withholding that one would leave its trigger
   # unthrottled and re-firing every poll. Both verbs stay on this declared-wait
   # absorb path and never reach the wedge timer.
-  if [ "$age" -ge "$pause_secs" ] && [ "$rf_age" -ge "$pause_secs" ] \
+  if [ -n "$last" ] && status_is_captain_held "$last"; then
+    # Captain-held: a declared wait that never wedge-ages and never re-surfaces.
+    # A healthy idle pane (fm_backend_agent_alive says alive/unknown) absorbs
+    # silently; a confidently dead agent surfaces once with the loss-risk reason,
+    # then stays silent (the surfaced-line marker keys the one-shot).
+    surf="$STATE/.captain-held-surfaced-$key"
+    if [ "$(cat "$surf" 2>/dev/null || true)" != "$last" ]; then
+      alive=$(fm_backend_agent_alive "$(window_backend "$win")" "$win" 2>/dev/null) || alive=unknown
+      if [ "$alive" = dead ]; then
+        reason="stale: $win (captain-held, agent exited: the worker is gone while a decision is owed, so its work is at risk once the answer lands)"
+        fm_wake_append stale "$win" "$reason" || exit 1
+        printf '%s' "$last" > "$surf"
+        wake "$reason"
+      fi
+    fi
+  elif [ "$age" -ge "$pause_secs" ] && [ "$rf_age" -ge "$pause_secs" ] \
      && ! status_is_captain_held "$last"; then
     due="$STATE/.paused-recheck-due.$$"
     pause_recheck_collect_due "$due"
@@ -504,7 +528,8 @@ clear_pause_state() {  # <window>
   key=${win//:/_}
   key=${key//\//_}
   key=${key//./_}
-  rm -f "$STATE/.paused-$key" "$STATE/.paused-rechecked-$key" "$STATE/.paused-resurfaced-$key"
+  rm -f "$STATE/.paused-$key" "$STATE/.paused-rechecked-$key" "$STATE/.paused-resurfaced-$key" \
+    "$STATE/.captain-held-surfaced-$key"
 }
 
 clear_pause_tracking() {  # <window>
@@ -547,6 +572,17 @@ pause_state_class() {  # <window> <task>
   if [ "$class" = working ]; then
     rm -f "$recheck_file"
     printf 'working'
+    return
+  fi
+  if status_is_captain_held "$last"; then
+    # A captain-held transfer is a declared wait (fm-classify-lib.sh's
+    # status_is_captain_held): route it to handle_paused_stale, which absorbs a
+    # healthy idle pane silently and surfaces a confidently dead agent exactly
+    # once. Checked only after the provably-working branch so a validating crew
+    # behind a stale hold line keeps its wedge timer and a frozen run still
+    # escalates.
+    rm -f "$recheck_file"
+    printf 'paused'
     return
   fi
   if [ "$(window_kind "$win")" != secondmate ]; then

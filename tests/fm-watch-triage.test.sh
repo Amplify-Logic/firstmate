@@ -955,15 +955,14 @@ test_pause_due_fold_dedupes_shared_window() {
 #   - paused:   a bounded external wait that can clear on its own. A dead-agent
 #               paused: pane re-surfaces on the bounded pause cadence so the
 #               recheck can detect the wait clearing while the crew still idles.
-#   - captain-held: clears only when the captain answers. A dead-agent
-#               captain-held pane absorbs SILENTLY - re-surfacing it would be a
-#               pure nag (nothing the recheck can observe changes), and the
-#               durable backlog owns surfacing the decision on the captain's
-#               return. The confirmed-dead agent is told apart from a live one by
-#               fm_backend_agent_alive, never by the status verb.
-# A still-live agent at an external-decision gate (either verb) is the
-# disconfirming case: it must surface once, while the unchanged hash must not
-# append the same wake on every watcher re-arm.
+#   - captain-held: clears only when the captain answers, so it NEVER re-surfaces
+#               on any cadence - a periodic nag would re-train readers to ignore
+#               the digest. A HEALTHY idle pane (live agent) absorbs completely
+#               silently; a CONFIDENTLY DEAD agent surfaces exactly once, because
+#               the work is lost the moment the answer arrives (the hold must
+#               not suppress that reading). Live vs dead is told apart by
+#               fm_backend_agent_alive, never by the status verb, and neither
+#               case ever wedge-ages or repeats.
 test_declared_wait_policies_paused_bounded_captain_held_silent() {
   local dir state fakebin out capture_file statusf window key pane_hash sig pid back round wakes bare
   dir=$(make_case exited-declared-pause); state="$dir/state"; fakebin="$dir/fakebin"
@@ -1013,10 +1012,12 @@ test_declared_wait_policies_paused_bounded_captain_held_silent() {
   pane_hash=$(hash_text "idle bare shell after captain-held transfer")
   printf '%s' "$pane_hash" > "$state/.hash-$key"
   printf '1\n' > "$state/.count-$key"
-  # The dead agent plus the captain-held transfer is a declared wait: absorb it
-  # silently across repeated unchanged polls - no stopped-crew stale, no bounded
-  # re-surface, and never a wedge. The captain-gated cadence is configured short
-  # here so the only thing holding the re-surface back is the verb policy itself.
+  # The dead agent plus the captain-held transfer is a declared wait: the hold
+  # suppresses the REPEATING nag, never the dead reading, so the exited agent
+  # surfaces EXACTLY once (with the loss-risk reason) and then stays silent
+  # across unchanged polls - no stopped-crew stale, no bounded re-surface, and
+  # never a wedge. The captain-gated cadence is configured short here so the only
+  # thing holding a re-surface back is the verb policy itself.
   round=1
   while [ "$round" -le 4 ]; do
     PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CAPTURE="$capture_file" \
@@ -1030,7 +1031,12 @@ test_declared_wait_policies_paused_bounded_captain_held_silent() {
   done
   wakes=$(awk -F '\t' -v w="$window" '$3 == "stale" && $4 == w { n++ } END { print n + 0 }' "$state/.wake-queue" 2>/dev/null || true)
   case "$wakes" in ''|*[!0-9]*) wakes=0 ;; esac
-  [ "$wakes" -eq 0 ] || fail "dead-agent captain-held surfaced $wakes stale wakes across unchanged polls"
+  [ "$wakes" -eq 1 ] || fail "dead-agent captain-held surfaced $wakes stale wakes, expected exactly one"
+  grep -F "agent exited" "$state/.wake-queue" >/dev/null \
+    || fail "dead-agent captain-held's one surface did not carry the loss-risk reason"
+  bare=$(awk -F '\t' -v w="$window" '$3 == "stale" && $4 == w && $5 == "stale: " w { n++ } END { print n + 0 }' "$state/.wake-queue" 2>/dev/null || true)
+  case "$bare" in ''|*[!0-9]*) bare=0 ;; esac
+  [ "$bare" -eq 0 ] || fail "dead-agent captain-held surfaced as $bare bare stopped-crew stale wakes"
   grep -F "awaiting external" "$state/.wake-queue" >/dev/null \
     && fail "dead-agent captain-held was re-surfaced on the pause cadence"
   grep -F "possible wedge" "$state/.wake-queue" >/dev/null \
@@ -1080,10 +1086,10 @@ test_declared_wait_policies_paused_bounded_captain_held_silent() {
   [ "$bare" -eq 1 ] || fail "live external-decision gate lost its immediate bare stale surface"
 
   # A LIVE agent under a captain-held transfer is a healthy parked crew at the
-  # decision gate: it surfaces ONCE (so firstmate sees the parked gate), then
-  # absorbs silently. Past the pause threshold it must NOT re-surface - only the
-  # captain's answer changes anything, so an awaiting-external recheck would be a
-  # pure nag.
+  # decision gate: it absorbs completely SILENTLY - the decision is durably
+  # tracked in the backlog, so there is nothing to report until the captain
+  # answers, and a stale peek would be noise. Never a wedge, never a pause
+  # re-surface, and no dead-agent surface (the agent is alive).
   dir=$(make_case live-captain-held); state="$dir/state"; fakebin="$dir/fakebin"
   out="$dir/watch.out"; capture_file="$dir/pane.txt"; statusf="$state/gate.status"
   window="test:fm-gate"
@@ -1098,19 +1104,8 @@ test_declared_wait_policies_paused_bounded_captain_held_silent() {
   pane_hash=$(hash_text "idle at the captain-decision gate")
   printf '%s' "$pane_hash" > "$state/.hash-$key"
   printf '1\n' > "$state/.count-$key"
-  PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CAPTURE="$capture_file" \
-    FM_FAKE_TMUX_CURRENT_COMMAND=grok FM_FAKE_CREW_STATE='state: paused · source: status-log · captain-held [key=route]: tracked by held-decision-route' \
-    FM_STATE_OVERRIDE="$state" FM_CREW_STATE_BIN="$fakebin/fm-crew-state.sh" FM_PAUSE_RESURFACE_SECS=999 FM_POLL=1 FM_SIGNAL_GRACE=1 \
-    FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 "$WATCH" >> "$out" &
-  pid=$!
-  wait_for_exit "$pid" 40 || fail "live captain-held gate did not surface once"
-  # Backdate the re-surface throttle and the status file, then re-arm rounds:
-  # the unfixed code would re-surface an awaiting-external recheck here; the
-  # declared-wait policy must keep absorbing silently.
-  echo $(( $(date +%s) - 5000 )) > "$state/.paused-resurfaced-$key"
-  echo $(( $(date +%s) - 5000 )) > "$state/.paused-rechecked-$key"
   round=1
-  while [ "$round" -le 4 ]; do
+  while [ "$round" -le 5 ]; do
     PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CAPTURE="$capture_file" \
       FM_FAKE_TMUX_CURRENT_COMMAND=grok FM_FAKE_CREW_STATE='state: paused · source: status-log · captain-held [key=route]: tracked by held-decision-route' \
       FM_STATE_OVERRIDE="$state" FM_CREW_STATE_BIN="$fakebin/fm-crew-state.sh" FM_PAUSE_RESURFACE_SECS=240 FM_POLL=1 FM_SIGNAL_GRACE=1 \
@@ -1119,13 +1114,17 @@ test_declared_wait_policies_paused_bounded_captain_held_silent() {
     if wait_live "$pid" 15; then reap "$pid"; else wait "$pid" || fail "live captain-held watcher round $round failed"; fi
     round=$((round + 1))
   done
-  wakes=$(awk -F '\t' -v w="$window" '$3 == "stale" && $4 == w { n++ } END { print n + 0 }' "$state/.wake-queue")
-  [ "$wakes" -eq 1 ] || fail "live captain-held gate should surface once, got $wakes wakes"
+  wakes=$(awk -F '\t' -v w="$window" '$3 == "stale" && $4 == w { n++ } END { print n + 0 }' "$state/.wake-queue" 2>/dev/null || true)
+  case "$wakes" in ''|*[!0-9]*) wakes=0 ;; esac
+  [ "$wakes" -eq 0 ] || fail "healthy idle captain-held surfaced $wakes stale wakes, expected silence"
+  grep -F "agent exited" "$state/.wake-queue" >/dev/null \
+    && fail "healthy idle captain-held was surfaced as a dead agent"
   grep -F "awaiting external" "$state/.wake-queue" >/dev/null \
     && fail "live captain-held gate was re-surfaced on the pause cadence"
   grep -F "possible wedge" "$state/.wake-queue" >/dev/null \
     && fail "live captain-held gate was escalated as a possible wedge"
-  pass "declared-wait policies: paused: is bounded, captain-held is silent, a live decision gate still surfaces once"
+  [ -e "$state/.paused-$key" ] || fail "live captain-held gate lost its declared-wait marker"
+  pass "declared-wait policies: paused: is bounded, captain-held absorbs silently when healthy and surfaces a dead agent once"
 }
 
 test_secondmate_paused_resurfaces_in_normal_mode() {
