@@ -14,17 +14,26 @@
 #               re-surfaces it once per FM_PAUSE_RESURFACE_SECS so the recheck
 #               can detect the wait clearing while the crew still idles.
 #   - captain-held: a decision the captain owes (fm-decision-hold.sh). It also
-#               absorbs, but it never re-surfaces: only the captain's answer
-#               clears it, so nothing the recheck can observe changes, and an
-#               hourly nag would train the reader to ignore the digest - the same
-#               harm as a false wedge alarm. The durable backlog owns surfacing
-#               the decision on the captain's return, and teardown refuses while
-#               it is unresolved, so silence cannot rot it invisibly.
-#   - Neither verb is a wedge: an idle pane under either is expected. A live
-#               worker is told apart from a dead one by fm_backend_agent_alive
-#               (and by fm-crew-state.sh's state read), never by the status verb;
-#               both are declared waits. An idle pane with NO declared wait still
-#               escalates on FM_STALE_ESCALATE_SECS.
+#               absorbs, and it never re-surfaces on any cadence: only the
+#               captain's answer clears it, so nothing a recheck can observe
+#               changes, and a periodic nag would train the reader to ignore the
+#               digest - the same harm as a false wedge alarm. A HEALTHY idle
+#               pane (live agent) absorbs completely silently; a CONFIDENTLY DEAD
+#               agent surfaces exactly once, because the work is lost the moment
+#               the answer arrives - precisely when it hurts most. Live vs dead is
+#               told apart by fm_backend_agent_alive, never by the status verb;
+#               both are declared waits, so neither ever wedge-ages and neither
+#               ever repeats.
+#   - Neither verb is a wedge: an idle pane under either is expected, and an idle
+#               pane with NO declared wait still escalates on
+#               FM_STALE_ESCALATE_SECS.
+#
+# The silence of a healthy captain-held pane cannot rot the decision invisibly:
+# the transfer is durably recorded in the backlog (fm-decision-hold.sh) and the
+# captain's return flow surfaces it. Note the teardown unresolved-decision gate
+# is SCOUT-ONLY (fm-teardown.sh runs fm-decision-hold.sh verify only for scout
+# tasks), so a ship task carries no such gate; the durable backlog record and
+# the return flow are the compensating controls that apply to both kinds.
 #
 # Most functions are pure, side-effect-free reads of status files: each takes
 # what it needs as arguments and touches no globals beyond the optional
@@ -84,16 +93,18 @@ FM_CLASSIFY_PAUSED_VERB_DEFAULT='paused'
 # external wait: nothing the supervision recheck can observe (the pane is still
 # idle, the transfer is still declared) can change until the captain answers.
 # Re-surfacing it on a cadence would therefore be a pure nag that trains the
-# reader to ignore the digest - the same harm a false wedge alarm causes - so
-# captain-held absorbs silently after its first appearance. It cannot rot
-# invisibly without that re-surface: the decision is durably tracked in the
-# backlog, teardown refuses while it is unresolved, and the captain's return flow
-# surfaces it. A live worker at the decision gate is a healthy parked crew and a
-# dead one is an exited worker; both are declared waits and neither wedges, told
-# apart by fm_backend_agent_alive. This block owns that POLICY; the verb constant
-# itself (FM_CLASSIFY_CAPTAIN_HELD_VERB_DEFAULT) has ONE assignment, with its
-# decision-closing siblings below (FM_CLASSIFY_RESOLVE_VERB_DEFAULT), and
-# FM_CLASSIFY_CAPTAIN_HELD_VERB overrides it. Consumers use status_is_captain_held
+# reader to ignore the digest - the same harm a false wedge alarm causes - so a
+# captain-held pane absorbs after its first sight. A HEALTHY idle pane (live
+# agent, fm_backend_agent_alive) absorbs completely silently; a CONFIDENTLY DEAD
+# agent surfaces exactly once (the hold must not suppress that reading, because
+# the work is lost the moment the answer arrives), then stays silent. Neither
+# repeats and neither wedge-ages. The silence cannot rot the decision invisibly:
+# the transfer is durably recorded in the backlog and the captain's return flow
+# surfaces it. Teardown's unresolved-decision gate is scout-only, so ship tasks
+# rely on that durable record, not a teardown gate. This block owns that POLICY;
+# the verb constant itself (FM_CLASSIFY_CAPTAIN_HELD_VERB_DEFAULT) has ONE
+# assignment, with its decision-closing siblings below (FM_CLASSIFY_RESOLVE_VERB_DEFAULT),
+# and FM_CLASSIFY_CAPTAIN_HELD_VERB overrides it. Consumers use status_is_captain_held
 # / status_is_paused_or_captain_held.
 
 # Bounded re-surface cadence for a declared external-wait pause (paused:).
@@ -147,7 +158,10 @@ status_is_captain_relevant() {
   status_is_paused "$line" && return 1
   verb=$(status_line_verb "$line")
   case "$verb" in
-    working|resolved|captain-held|"${FM_CLASSIFY_PAUSED_VERB:-$FM_CLASSIFY_PAUSED_VERB_DEFAULT}")
+    working|\
+    "${FM_CLASSIFY_RESOLVE_VERB:-$FM_CLASSIFY_RESOLVE_VERB_DEFAULT}"|\
+    "${FM_CLASSIFY_CAPTAIN_HELD_VERB:-$FM_CLASSIFY_CAPTAIN_HELD_VERB_DEFAULT}"|\
+    "${FM_CLASSIFY_PAUSED_VERB:-$FM_CLASSIFY_PAUSED_VERB_DEFAULT}")
       return 1
       ;;
   esac

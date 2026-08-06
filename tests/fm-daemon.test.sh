@@ -339,16 +339,18 @@ test_housekeeping_paused_unpaused_cleared() {
 # only the captain's answer clears it, so an hourly "still held" nag adds no
 # information (the durable backlog owns surfacing it on return) and re-trains
 # the reader to ignore the digest - the same harm a false wedge causes.
-# classify_stale self-handles it and handle_wake records NO persistence marker
-# of either kind, so housekeeping has nothing to age.
-test_stale_captain_held_classifies_self_and_records_no_marker() {
+# classify_stale absorbs it (declared wait, live or unknown agent) and
+# handle_wake records NO persistence marker of either kind, so housekeeping has
+# nothing to age. A CONFIDENTLY DEAD agent instead escalates once - the
+# dead-agent surface is tested separately.
+test_stale_captain_held_classifies_absorb_and_records_no_marker() {
   local dir state out key
   dir=$(make_supercase stale-captain-held)
   state="$dir/state"
   printf 'captain-held [key=api-shape]: tracked by held-route-1\n' > "$state/held-c1.status"
   key=$(printf '%s' "held-c1" | tr ':/.' '___')
   out=$(FM_STATE_OVERRIDE="$state" classify_stale "sess:fm-held-c1" "$state")
-  case "$out" in self\|*) ;; *) fail "captain-held stale did not self-handle: $out" ;; esac
+  case "$out" in absorb\|*) ;; *) fail "captain-held stale did not absorb: $out" ;; esac
   case "$out" in *possible\ wedge*) fail "captain-held stale was framed as a wedge: $out" ;; esac
   FM_STATE_OVERRIDE="$state" handle_wake "stale: sess:fm-held-c1" "$state"
   [ ! -e "$state/.subsuper-stale-$key" ] || fail "captain-held transfer recorded a wedge marker"
@@ -357,9 +359,50 @@ test_stale_captain_held_classifies_self_and_records_no_marker() {
   pass "a captain-held transfer is absorbed with no wedge or pause marker"
 }
 
+# Ruling-1 bound: the captain-held line suppresses the REPEATING wedge nag, never
+# a CONFIDENTLY DEAD agent reading - the work is lost the moment the captain's
+# answer lands, so the dead agent must still surface once. Live vs dead is told
+# apart by fm_backend_agent_alive (here a fake tmux whose pane_current_command is
+# a bare shell), never by the status verb. The escalate is one-shot: the wake
+# itself fires once per distinct hash, so the escalation is bounded, not the
+# old repeating possible-wedge nag, and no wedge marker may survive for
+# housekeeping to re-age.
+test_stale_captain_held_dead_agent_escalates_once() {
+  local dir state fakebin out key
+  dir=$(make_supercase stale-captain-held-dead)
+  state="$dir/state"; fakebin="$dir/fakebin"
+  printf 'captain-held [key=api-shape]: tracked by held-route-4\n' > "$state/held-c4.status"
+  key=$(printf '%s' "held-c4" | tr ':/.' '___')
+  cat > "$fakebin/tmux" <<'SH'
+#!/usr/bin/env bash
+set -u
+case "${1:-}" in
+  display-message)
+    case "$*" in *pane_current_command*) printf '%s\n' "${FM_FAKE_TMUX_CURRENT_COMMAND:-}"; exit 0 ;; esac
+    exit 1 ;;
+esac
+exit 1
+SH
+  chmod +x "$fakebin/tmux"
+  out=$(PATH="$fakebin:$PATH" FM_FAKE_TMUX_CURRENT_COMMAND=zsh \
+    FM_STATE_OVERRIDE="$state" classify_stale "sess:fm-held-c4" "$state")
+  case "$out" in escalate\|*agent\ exited*) ;; *) fail "dead-agent captain-held did not escalate once: $out" ;; esac
+  case "$out" in *possible\ wedge*) fail "dead-agent captain-held was framed as a wedge: $out" ;; esac
+  PATH="$fakebin:$PATH" FM_FAKE_TMUX_CURRENT_COMMAND=zsh \
+    FM_STATE_OVERRIDE="$state" handle_wake "stale: sess:fm-held-c4" "$state"
+  [ ! -e "$state/.subsuper-stale-$key" ] || fail "dead-agent captain-held escalate left a wedge marker to re-age"
+  grep -F "captain-held, agent exited" "$state/.subsuper-escalations" >/dev/null \
+    || fail "dead-agent captain-held escalate did not reach the escalation buffer"
+  pass "a confidently dead agent under a captain-held transfer escalates once, never wedge-aged"
+}
+
 # A stale marker that predates the declared-wait handling (or a race) must never
 # age a captain-held transfer into a possible-wedge escalation: housekeeping
-# reconciles it away instead.
+# reconciles it away instead. This is the FIX-PROVING case for the new
+# reconcile branch: a leftover .subsuper-stale-* wedge marker with NO pause
+# marker is cleared only by the status_is_captain_held branch - the old
+# reconcile's marker-presence elif never ran and housekeeping escalated the
+# aged wedge marker as a possible wedge.
 test_housekeeping_captain_held_stale_marker_never_wedges() {
   local dir state fakebin win pane key
   dir=$(make_supercase captain-held-no-wedge)
@@ -380,7 +423,10 @@ test_housekeeping_captain_held_stale_marker_never_wedges() {
 # A pause-cadence marker that predates the handling (or a race) must not
 # re-surface a captain-held transfer as an awaiting-external recheck either: the
 # wait cannot self-clear, so the recheck would be a pure nag. Housekeeping clears
-# it without escalating.
+# it without escalating. REGRESSION GUARD, not a fix-proving test: with a
+# .subsuper-paused-<key> marker present the OLD reconcile already cleared it via
+# its marker-presence elif, so this pins the captain-held path against regression
+# while the discriminating (fix-proving) case is the stale-marker test above.
 test_housekeeping_captain_held_pause_marker_never_resurfaces() {
   local dir state fakebin win pane key
   dir=$(make_supercase captain-held-no-resurface)
@@ -1933,7 +1979,8 @@ test_housekeeping_resumed_stale_cleared
 test_housekeeping_paused_resurfaces_and_resets
 test_housekeeping_paused_resumed_cleared
 test_housekeeping_paused_unpaused_cleared
-test_stale_captain_held_classifies_self_and_records_no_marker
+test_stale_captain_held_classifies_absorb_and_records_no_marker
+test_stale_captain_held_dead_agent_escalates_once
 test_housekeeping_captain_held_stale_marker_never_wedges
 test_housekeeping_captain_held_pause_marker_never_resurfaces
 test_housekeeping_stale_marker_transitions_to_pause
