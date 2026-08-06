@@ -35,12 +35,13 @@ They remain the final backstop rather than the normal continuity mechanism.
 
 The session-start allowance is not restricted to a genuinely first invocation, and this gate does not try to detect one.
 `bin/fm-lock.sh` treats a recorded holder PID equal to the current harness PID as a successful re-acquire, so a mid-session re-run of `bin/fm-session-start.sh` — not only the fresh case where no lock exists yet — also passes this gate, acquires the lock, and runs bootstrap's five mutating sweeps.
-The gate's own trigger condition is watcher liveness, which is independent of session-lock ownership, so it cannot distinguish the two cases from where it sits.
+The gate's own trigger condition is watcher liveness, which is independent of session-lock ownership, so it does not currently distinguish the two cases from where it sits.
+`bin/fm-sessionstart-nudge.sh`'s `lock_is_in_ancestry()` shows the same-process distinction is feasible - it walks the PID ancestry of an equivalent Claude hook process to decide whether the current harness session already holds the home lock - but adding that ancestry-walk logic to this fleet-wide deny gate is a deliberate scope deferral, not a technical limitation, tracked as separate follow-up work.
 
-That is accepted rather than patched, for three reasons.
+That is accepted rather than patched now, for three reasons.
 The session lock, not watcher liveness, is the actual mutation authority for those sweeps.
 The sweeps a re-run performs are the same ones AGENTS.md section 3 step 2 already gates on holding that lock, so a lock-holding re-run does nothing the documented contract does not already permit.
-And "run session-start exactly once per session" is a behavioral contract owned and enforced by AGENTS.md and agent discipline, not by a PreToolUse gate; a half-enforced first-invocation check here would be less trustworthy than this stated limitation.
+And "run session-start exactly once per session" is a behavioral contract owned and enforced by AGENTS.md and agent discipline, not by a PreToolUse gate; adding ancestry-walk detection to this gate is beyond the current fix's risk budget, and a half-enforced first-invocation check here would be less trustworthy than this stated limitation.
 
 The practical consequence is that this gate transitively permits mutations it denies when invoked directly, including the `bin/fm-visible-status.sh --all` Herdr presentation projection, which records `model_live=` onto a task meta when the live model label differs from the recorded spawn model, and the secondmate reread nudges that session start and bootstrap perform inside their own processes.
 
