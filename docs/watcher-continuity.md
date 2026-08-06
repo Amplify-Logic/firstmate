@@ -42,7 +42,7 @@ The session lock, not watcher liveness, is the actual mutation authority for tho
 The sweeps a re-run performs are the same ones AGENTS.md section 3 step 2 already gates on holding that lock, so a lock-holding re-run does nothing the documented contract does not already permit.
 And "run session-start exactly once per session" is a behavioral contract owned and enforced by AGENTS.md and agent discipline, not by a PreToolUse gate; a half-enforced first-invocation check here would be less trustworthy than this stated limitation.
 
-The practical consequence is that this gate transitively permits mutations it denies when invoked directly, including the `bin/fm-visible-status.sh --all` read and the secondmate reread nudges that session start and bootstrap perform inside their own processes.
+The practical consequence is that this gate transitively permits mutations it denies when invoked directly, including the `bin/fm-visible-status.sh --all` Herdr presentation projection, which records `model_live=` onto a task meta when the live model label differs from the recorded spawn model, and the secondmate reread nudges that session start and bootstrap perform inside their own processes.
 
 ## Arm-layer cycle contract
 
