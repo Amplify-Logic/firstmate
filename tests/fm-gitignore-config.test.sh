@@ -22,15 +22,47 @@ random_leaf() {
   printf '%s-%s' "$1" "$$-$RANDOM-$RANDOM"
 }
 
+# git check-ignore consults every ignore source: the tracked .gitignore, the
+# per-worktree .git/info/exclude that fm-spawn writes, and core.excludesFile.
+# A bare match therefore cannot prove the tracked rule is what protects the
+# path, so the positive assertion pins the reported source to .gitignore and
+# the negative one pins the "no source matched" exit status rather than
+# accepting any failure.
+assert_ignored_by_tracked_gitignore() {
+  local path=$1 why=$2 out status
+  out="$(git -C "$ROOT" check-ignore -v -- "$path" 2>&1)"
+  status=$?
+  case "$status" in
+    0) ;;
+    1) fail "git does not ignore $path ($why)" ;;
+    *) fail "git check-ignore failed for $path (exit $status): $out" ;;
+  esac
+  case "$out" in
+    .gitignore:*) ;;
+    *) fail "$path is ignored by another source, not the tracked .gitignore ($why): $out" ;;
+  esac
+}
+
+assert_not_ignored() {
+  local path=$1 why=$2 out status
+  out="$(git -C "$ROOT" check-ignore -v -- "$path" 2>&1)"
+  status=$?
+  case "$status" in
+    1) ;;
+    0) fail "git unexpectedly ignores $path ($why): $out" ;;
+    *) fail "git check-ignore failed for $path (exit $status): $out" ;;
+  esac
+}
+
 test_config_dir_ignored_as_category() {
   local direct nested sample
   direct="$(random_leaf config/unlisted-key)"
   nested="config/$(random_leaf nested-dir)/$(random_leaf deep-file)"
   for sample in "$direct" "$nested" config/some-new-key.admin; do
-    git -C "$ROOT" check-ignore -q "$sample" \
-      || fail "git does not ignore $sample (config/ must be ignored as a directory)"
+    assert_ignored_by_tracked_gitignore "$sample" \
+      "config/ must be ignored as a directory"
   done
-  pass "config/ is ignored as a directory, covering unlisted and nested paths"
+  pass "config/ is ignored as a directory by the tracked .gitignore, covering unlisted and nested paths"
 }
 
 test_unrelated_path_stays_visible() {
@@ -38,8 +70,7 @@ test_unrelated_path_stays_visible() {
   # coverage above is proven by contrast rather than an always-ignoring rule.
   local sibling
   sibling="$(random_leaf not-config)"
-  git -C "$ROOT" check-ignore -q "$sibling" \
-    && fail "git unexpectedly ignores $sibling (outside config/)"
+  assert_not_ignored "$sibling" "outside config/"
   pass "an unrelated path outside config/ remains visible to git"
 }
 
@@ -51,8 +82,7 @@ test_nested_config_dir_stays_visible() {
   # tree must remain visible to Git.
   local nested
   nested="$(random_leaf docs)/$(random_leaf sub)/config/$(random_leaf file)"
-  git -C "$ROOT" check-ignore -q "$nested" \
-    && fail "git unexpectedly ignores $nested (config/ rule must be anchored to the repo root)"
+  assert_not_ignored "$nested" "the config/ rule must be anchored to the repo root"
   pass "a config-named directory elsewhere in the tree remains visible to git"
 }
 
