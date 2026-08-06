@@ -149,7 +149,15 @@ test_bearings_guarantees_completion_truth() {
     "bearings does not pin the cap direction that keeps the newest completion visible"
   assert_grep "fm-landed-lib.sh" "$BEARINGS" \
     "bearings does not point at the ordering owner"
-  pass "bearings guarantees a just-finished completion appears in the next report"
+  # The guarantee has to be scoped to what the ordering can actually deliver: an
+  # undated Done row can rotate out under the cap, and a completion never recorded
+  # into Done cannot appear at all, so an unconditional promise would tell the agent
+  # to trust the list in exactly the cases it is known to be incomplete.
+  assert_grep "recorded with its completion date" "$BEARINGS" \
+    "bearings promises completion truth without scoping it to a recorded completion date"
+  assert_grep "Two recording gaps sit outside that guarantee" "$BEARINGS" \
+    "bearings does not name the recording gaps its ordering cannot cover"
+  pass "bearings scopes the completion-truth guarantee to what the ordering delivers"
 }
 
 test_section_9_owner_is_not_duplicated_into_skills() {

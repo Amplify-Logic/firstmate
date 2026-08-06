@@ -63,9 +63,11 @@ Rules that keep the contract unambiguous:
 - Every section ALWAYS renders, even when empty, with its short empty-state sentence; never omit a section.
 - Every report and chat digest is a complete current snapshot, never a delta against a prior report.
 - Recently Landed always renders the bounded current baseline, even when the same completions appeared in an earlier report.
-- Recently Landed must reflect every completion recorded up to the moment this report is generated, including one recorded seconds ago: if something just finished, it appears here.
+- Recently Landed must reflect every completion the backlog recorded with its completion date up to the moment this report is generated, including one recorded seconds ago.
   Telling the captain nothing landed right after they watched something finish is a trust failure, not a difference of opinion about what "recent" means.
   Because the section is capped, the ordering decides which rows survive, so the cap must always drop the OLDEST completions and never the newest; `bin/fm-landed-lib.sh` owns that ordering rule and `tests/fm-landed-completion-truth.test.sh` pins the guarantee.
+  Two recording gaps sit outside that guarantee and must never be reported as proof that nothing landed: a Done row left without a completion date ranks below every dated row and can rotate out under the cap, and a completion never written into Done at all cannot appear here whatever the ordering does.
+  So when the captain has just watched something finish and this section does not show it, treat that as a recording problem to name explicitly rather than as an empty result to pass on.
   When the cap did drop older completions, say so in one short line rather than implying the list is everything.
 - Never render an all-clear while anything is unresolved.
   "Nothing needs your action right now" is only true when no decision is open, no work is ready for the captain's approval, no credential is needed, and nothing failed.

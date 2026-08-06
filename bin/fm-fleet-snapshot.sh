@@ -554,7 +554,8 @@ secondmate_home_summary_json() {  # <backlog-json> <tasks-json>
             report_path:((.report_path // null) | if . == null then null else trunc(500) end),
             local_note:((.local_note // null) | if . == null then null else trunc(120) end),
             completion,order} ]
-       | landed_newest_first($generated)) as $landed_all
+       | landed_newest_first
+       | map(del(.order))) as $landed_all
     | ([ $tasks[] | select(.current_state.state == "unknown") ]) as $unknown_children
     | ([ $owned_in_flight[] | select(.id as $id | [$tasks[].id] | index($id) | not) ]) as $orphan_in_flight
     | ([ $tasks[]
@@ -1144,7 +1145,7 @@ EOF
 }
 
 secondmate_landed_from_current_json() {  # <secondmate-current-json>
-  jq -n --argjson current "$1" --arg generated "$SNAPSHOT_NOW" "$(fm_landed_jq_prelude)"'
+  jq -n --argjson current "$1" "$(fm_landed_jq_prelude)"'
     {records:[ $current.records[]
       | select(.provenance.selected == "structured-home") as $mate
       | $mate.landed[]
@@ -1155,7 +1156,7 @@ secondmate_landed_from_current_json() {  # <secondmate-current-json>
      unreadable:[ $current.records[]
        | select(.current.state == "unknown")
        | .home // ("<" + .id + ": unavailable>")]}
-    | .records |= landed_newest_first($generated)'
+    | .records |= landed_newest_first'
 }
 
 scout_report_lines() {

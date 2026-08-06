@@ -316,11 +316,11 @@ MODEL=$(printf '%s' "$SNAP" | jq \
   | ((.secondmate_landed.records) // []) as $mate_done
   | ($main_done + $mate_done) as $all_landed_rows
   | ([ $all_landed_rows | group_by(.home_id)[]
-       | landed_newest_first($now)
+       | landed_newest_first
        | (if $all_landed == 1 then . else .[:$landed_per_home_n] end) ]) as $per_home_groups
   | ($per_home_groups | add // []) as $per_home_capped
   | ([ $all_landed_rows | group_by(.home_id)[] | select(length > $landed_per_home_n) ] | length) as $home_cap_dropped
-  | ($per_home_capped | landed_newest_first($now)) as $landed_sorted
+  | ($per_home_capped | landed_newest_first) as $landed_sorted
   | (if $all_landed == 1 then $landed_sorted else ($per_home_groups | round_robin_landed($landed_n)) end) as $done
   | ($done | map(.id)) as $done_ids
   | ([.tasks[] | select(.kind != "secondmate") | .id]) as $live_ids

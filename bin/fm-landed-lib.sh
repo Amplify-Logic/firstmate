@@ -13,52 +13,66 @@
 #
 # A capped newest-first list is only truthful if the cap drops the OLDEST rows.
 # The previous key, `sort_by([(.completion.date // ""), .id]) | reverse`, broke
-# that invariant in two ways, and both hid a completion the captain had just
-# watched finish:
-#
-#   1. A Done row with no recorded completion date got the empty string, which
-#      sorts BELOW every real date. A completion recorded but not yet dated was
-#      therefore ranked as the oldest thing in the fleet and was the first row
-#      the cap discarded.
-#   2. Completion dates are day-granularity, so every completion recorded today
-#      ties. The tie was broken on `.id`, which is unrelated to recency, so a
-#      just-finished task with an alphabetically-low id lost its place to
-#      same-day completions that had finished earlier.
+# that invariant and hid a completion the captain had just watched finish:
+# completion dates are day-granularity, so every completion recorded on the same
+# day tied, and the tie was broken on `.id`, which is unrelated to recency. A
+# just-finished task with an alphabetically-low id therefore lost its place to
+# same-day completions that had finished earlier and was the first row the cap
+# discarded. That is the defect this rule fixes, and it is the only one: a
+# mis-ordering cannot empty a landed list, so an EMPTY landed section has a
+# different cause and is not addressed here.
 #
 # THE RULE
 #
-# Rank by completion date descending, then by recording position within the Done
-# section, earliest position first. Two inputs make that truthful:
+# Rank dated rows above undated rows; within the dated set, rank by completion
+# date descending, then by recording position within the Done section, earliest
+# position first. Three properties make that truthful:
 #
-#   * An undated Done row is dated as of the snapshot's own generation time
-#     rather than treated as infinitely old. Nothing has dated it, so the only
-#     moment we can prove it existed is now; ranking it as "just now" is both
-#     the honest reading and the safe failure direction, because over-reporting
-#     a recent completion is recoverable and hiding one is the trust bug.
+#   * DATED EVIDENCE WINS. An undated Done row sorts BELOW every dated row and is
+#     never re-dated as "now". An earlier approach dated undated rows as of the
+#     snapshot's generation time; that let a hand-edited or manual-backend home
+#     full of undated rows displace genuinely dated completions out of a capped
+#     list, which is the same trust failure inverted and is worse than an undated
+#     row sorting last. Undated rows tie-break among themselves by recording
+#     position, newest-first, exactly as dated rows do.
 #   * `order` is the row's 1-based position in the parsed backlog (assigned by
 #     fm-fleet-snapshot.sh's backlog_json). The Done section is maintained
-#     newest-first, so a LOWER order is MORE recent, which is why the key
-#     negates it: the surrounding `reverse` then leaves order ascending.
+#     newest-first, so a LOWER order is MORE recent, which is why the key negates
+#     it. That depends on Done actually being written newest-first: `tasks-axi
+#     done` PREPENDS each completed row (verified against tasks-axi 0.2.3), and
+#     bin/fm-teardown.sh's manual-backlog instruction tells the captain to insert
+#     the finished row at the TOP of Done together with its completion date for
+#     the same reason.
+#   * Equal keys keep their INPUT order, because the sort is a stable ascending
+#     sort of the reversed input, re-reversed. That is what lets a caller publish
+#     rows in this order and re-sort them later without `order`: the fleet layer
+#     strips the internal `order` field from the rows it publishes, and each
+#     home's already-correct newest-first order survives every later re-sort.
 #
-# Consumers must project `order` onto their landed rows before sorting; a row
-# without it falls back to 0 and simply keeps its input position among its ties.
+# A row that carries no `order` is treated as order 0, which ranks it AHEAD of
+# every row with a positive order inside the same date group; it does not keep its
+# input position relative to those rows. Rows that all lack `order` tie, so they
+# do keep their input order relative to each other. A consumer that needs
+# position-accurate ranking across rows must project `order` onto them.
 #
-# CONSEQUENCE THE TESTS RELY ON
+# WHAT THIS GUARANTEES, AND WHAT IT DOES NOT
 #
-# With this ordering, the newest completion in a home is always at index 0 of
-# that home's group, so the per-home cap and the round-robin merge can never
-# discard it. tests/fm-bearings-completion-truth.test.sh pins that property.
+# With this ordering, the newest DATED completion in a home is always at index 0
+# of that home's group, so the per-home cap and the round-robin merge can never
+# discard it. tests/fm-landed-completion-truth.test.sh pins that property. The
+# guarantee is scoped to a completion recorded as a structured `- [x] <id> - <rest>`
+# Done row carrying its completion date: an undated row ranks below every dated
+# one and can rotate out under the cap, and a completion never recorded into Done
+# at all cannot appear at all.
 
-# Emits the jq prelude defining landed_newest_first($now). Callers interpolate it
-# ahead of their own program text, e.g. jq "$(fm_landed_jq_prelude)"'<program>'.
-# $now is any ISO-8601 instant or YYYY-MM-DD date; only the leading date is used,
-# so a caller can pass its existing generation timestamp unchanged.
+# Emits the jq prelude defining landed_newest_first. Callers interpolate it ahead
+# of their own program text, e.g. jq "$(fm_landed_jq_prelude)"'<program>'.
 fm_landed_jq_prelude() {
   cat <<'JQ'
-def landed_recency_key($now):
-  ((.completion.date // "") | if . == "" then ($now[:10]) else . end) as $date
-  | [$date, (0 - (.order // 0))];
-def landed_newest_first($now):
-  sort_by(landed_recency_key($now)) | reverse;
+def landed_recency_key:
+  (.completion.date // "") as $date
+  | [(if $date == "" then 0 else 1 end), $date, (0 - (.order // 0))];
+def landed_newest_first:
+  reverse | sort_by(landed_recency_key) | reverse;
 JQ
 }

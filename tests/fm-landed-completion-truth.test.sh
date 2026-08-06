@@ -1,24 +1,26 @@
 #!/usr/bin/env bash
 # Regression tests for the completion-truth property of firstmate's captain-facing
-# landed surface: a task that JUST completed must appear in the very next report.
+# landed surface: a task whose completion was JUST recorded with its date must appear
+# in the very next report.
 #
-# The failure this pins was found live in the pure-upstream trial
-# (data/fm-upstream-trial-verdict-v2/report.md): Bearings answered "No recent
-# completions are in the current baseline" immediately after a scout finished and
-# reported its results, and the recap repeated the omission. Our own surface shared
-# the defect. Every landed view caps its list, so the newest-first ordering is what
-# decides which rows survive the cap; when that ordering was wrong, the cap silently
-# discarded the newest completion instead of the oldest.
+# What these tests pin is a just-finished row being CUT from a capped, NON-EMPTY
+# landed list, reproduced directly against this fork. Every landed view caps its list
+# with no time window at all, so the newest-first ordering is what decides which rows
+# survive the cap; when that ordering was wrong, the cap silently discarded the newest
+# completion instead of the oldest. Completion dates are day-granularity, so same-day
+# completions tied and the tie was broken on id: a just-finished task with an
+# alphabetically-low id lost its place to same-day completions that had finished
+# earlier. That is the DEFAULT tasks-axi path and the defect actually fixed here.
 #
-# Two independent ways a just-finished completion used to vanish, both covered here:
-#   1. A Done row with no completion date sorted below every dated row, so it was the
-#      first row the cap dropped. This is the hand-edited / "manual" backlog path.
-#   2. Completion dates are day-granularity, so same-day completions tied and the tie
-#      was broken on id. A just-finished task with an alphabetically-low id lost its
-#      place to same-day completions that had finished earlier. This is the DEFAULT
-#      tasks-axi path, and the one that reproduces the trial failure.
+# SCOPE, stated plainly: the pure-upstream trial
+# (data/fm-upstream-trial-verdict-v2/report.md) reported a literally EMPTY "No recent
+# completions are in the current baseline" section. A mis-ordering cannot produce that
+# state, because both caps are positive-bounded slices and the round-robin takes index
+# 0 of every non-empty home group. That symptom is NOT explained by this change and
+# may have a separate cause; nothing here claims to fix it.
 #
-# bin/fm-landed-lib.sh owns the ordering rule these tests hold to.
+# bin/fm-landed-lib.sh owns the ordering rule these tests hold to, including the
+# ruling that a dated completion always outranks an undated one.
 set -u
 
 # shellcheck source=tests/lib.sh
@@ -122,24 +124,64 @@ test_just_finished_same_day_completion_leads_landed() {
 }
 
 # The hand-edited / manual-backend path: a completion is recorded but not yet dated.
-# An undated row must never be treated as the oldest thing in the fleet.
-test_undated_completion_is_not_ranked_as_oldest() {
-  local home fakebin json ids rows i
+#
+# This expectation is deliberately INVERTED from the one this file first shipped with,
+# which asserted that an undated row LEADS the landed list because the ordering dated
+# it as of the snapshot's own generation time. That approach is superseded: it let a
+# home full of undated rows displace genuinely dated completions out of a capped list,
+# which is the same trust failure inverted. The ruled contract, pinned here, is that
+# dated evidence wins - an undated row sorts BELOW every dated row - while undated
+# rows keep recording-position order among themselves so the newest of them still
+# leads its own group.
+test_undated_completion_sorts_below_every_dated_row() {
+  local home fakebin json ids expected
   home=$(make_home undated)
-  rows=("$(done_row just-now "The scout that just finished" "done" "")")
-  for i in 1 2 3 4 5 6; do
-    rows+=("$(done_row "older-$i" "Older landing $i" "merged" "$(printf '2026-07-%02d' "$i")")")
+  write_backlog "$home" \
+    "$(done_row undated-first "Recorded first, still undated" "done" "")" \
+    "$(done_row undated-second "Recorded second, still undated" "done" "")" \
+    "$(done_row dated-jul-09 "Dated landing 09" "merged" "2026-07-09")" \
+    "$(done_row dated-jul-05 "Dated landing 05" "merged" "2026-07-05")" \
+    "$(done_row dated-jul-01 "Dated landing 01" "merged" "2026-07-01")"
+  fakebin=$(make_fakebin "$home")
+  json=$(run_bearings "$home" "$fakebin" --json)
+  ids=$(landed_ids "$json")
+  expected='dated-jul-09
+dated-jul-05
+dated-jul-01
+undated-first
+undated-second'
+
+  [ "$ids" = "$expected" ] || fail "undated rows must sort below every dated row, got: $ids"
+  # The superseded behaviour ranked an undated row as "just now", so it led the list;
+  # this assertion is what fails if that behaviour ever returns.
+  [ "$(printf '%s\n' "$ids" | head -1)" = "dated-jul-09" ] \
+    || fail "a dated completion must lead landed ahead of any undated row, got: $ids"
+  pass "an undated completion sorts below every dated row and keeps recording order"
+}
+
+# The failure direction the ruling protects: an undated row must never push a dated
+# completion out of a CAPPED list. Under the superseded "date it as now" behaviour the
+# eight undated rows below would have filled the whole cap and cut the dated row.
+test_undated_rows_cannot_displace_dated_completions_under_the_cap() {
+  local home fakebin json ids count rows i
+  home=$(make_home undated-displacement)
+  rows=()
+  for i in 1 2 3 4 5 6 7 8; do
+    rows+=("$(done_row "undated-$i" "Undated landing $i" "done" "")")
   done
+  rows+=("$(done_row dated-kept "Dated landing that must survive the cap" "merged" "2026-07-01")")
   write_backlog "$home" "${rows[@]}"
   fakebin=$(make_fakebin "$home")
   json=$(run_bearings "$home" "$fakebin" --json)
   ids=$(landed_ids "$json")
+  count=$(printf '%s\n' "$ids" | grep -c .)
 
-  printf '%s\n' "$ids" | grep -qx 'just-now' \
-    || fail "an undated completion vanished from landed: $ids"
-  [ "$(printf '%s\n' "$ids" | head -1)" = "just-now" ] \
-    || fail "an undated completion must rank as recent, not oldest, got: $ids"
-  pass "an undated completion is ranked as recent rather than oldest"
+  [ "$count" -lt 9 ] || fail "expected the landed list to be capped, got $count rows"
+  printf '%s\n' "$ids" | grep -qx 'dated-kept' \
+    || fail "undated rows displaced a dated completion out of the capped list: $ids"
+  [ "$(printf '%s\n' "$ids" | head -1)" = "dated-kept" ] \
+    || fail "the dated completion must lead a list of otherwise undated rows, got: $ids"
+  pass "undated rows cannot displace a dated completion out of the capped list"
 }
 
 # The cap is the mechanism that turned a mis-ordering into a disappearance, so pin the
@@ -195,9 +237,12 @@ test_completion_recorded_after_an_earlier_report_appears_next_run() {
 }
 
 # The same ordering must hold for work a secondmate completed in its own home, which
-# reaches the captain only through the bounded cross-home roll-up.
+# reaches the captain only through the bounded cross-home roll-up. The roll-up is also
+# where the recording position could leak: `order` is an internal backlog parse index,
+# so the canonical machine contract must keep publishing rows without it while each
+# home's newest-first order still survives every later re-sort.
 test_secondmate_just_finished_completion_survives_rollup() {
-  local home mate fakebin json ids rows i
+  local home mate fakebin json canonical ids rows i
   home=$(make_home mate-rollup)
   mate="$TMP_ROOT/mate-rollup-home"
   mkdir -p "$mate/state" "$mate/data" "$mate/config" "$mate/projects" "$mate/bin"
@@ -221,11 +266,23 @@ test_secondmate_just_finished_completion_survives_rollup() {
     || fail "a secondmate's just-finished completion vanished from landed: $ids"
   [ ! -s "$home/net.log" ] \
     || fail "the cross-home roll-up must make no network call, got: $(cat "$home/net.log")"
+
+  canonical=$(PATH="$fakebin:$PATH" FM_HOME="$home" NET_LOG="$home/net.log" \
+    "$ROOT/bin/fm-fleet-snapshot.sh" --json)
+  printf '%s' "$canonical" | jq -e '
+    ([.secondmate_current.records[].landed[]?] + [.secondmate_landed.records[]?]) as $published
+    | ($published | length) > 0
+      and ($published | all(has("order") | not))
+      and (.secondmate_current.records[0].landed[0].id == "mate-just-now")
+      and (.secondmate_landed.records[0].id == "mate-just-now")
+  ' >/dev/null \
+    || fail "the published landed contract must stay order-free and newest-first: $canonical"
   pass "a secondmate's just-finished completion survives the cross-home roll-up"
 }
 
 test_just_finished_same_day_completion_leads_landed
-test_undated_completion_is_not_ranked_as_oldest
+test_undated_completion_sorts_below_every_dated_row
+test_undated_rows_cannot_displace_dated_completions_under_the_cap
 test_cap_drops_oldest_never_newest
 test_completion_recorded_after_an_earlier_report_appears_next_run
 test_secondmate_just_finished_completion_survives_rollup

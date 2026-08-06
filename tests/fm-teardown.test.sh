@@ -544,6 +544,13 @@ test_teardown_manual_backend_prompts_hand_edit_even_when_tasks_axi_present() {
   out=$(run_teardown "$case_dir") || fail "teardown failed with manual backlog backend"
   printf '%s\n' "$out" | grep -F 'Update data/backlog.md - move task-x1 to Done' >/dev/null \
     || fail "teardown did not prompt manual backlog update under opt-out: $out"
+  # The landed ordering ranks a dated completion above an undated one and breaks
+  # same-day ties on top-of-Done position (bin/fm-landed-lib.sh), so a hand edit that
+  # appends an undated row would re-create the defect that ordering fixes.
+  printf '%s\n' "$out" | grep -F 'TOP row of that section' >/dev/null \
+    || fail "manual backlog prompt did not require top-of-Done placement: $out"
+  printf '%s\n' "$out" | grep -F 'record its completion date' >/dev/null \
+    || fail "manual backlog prompt did not require a completion date: $out"
   printf '%s\n' "$out" | grep -F 'tasks-axi done' >/dev/null \
     && fail "teardown prompted tasks-axi despite manual backend opt-out: $out"
   pass "teardown honors config/backlog-backend=manual even when tasks-axi is compatible"
