@@ -28,8 +28,14 @@ random_leaf() {
 # path, so the positive assertion pins the reported source to .gitignore and
 # the negative one pins the "no source matched" exit status rather than
 # accepting any failure.
+#
+# `-v` reports the last matching pattern as
+# <source>:<linenum>:<pattern><TAB><pathname>, and it exits 0 for a negated
+# pattern too: a `!config/<name>` re-include under a `/config/*`-style rule
+# leaves the path committable while still reporting a match. Matching on
+# polarity is what separates "ignored" from "matched".
 assert_ignored_by_tracked_gitignore() {
-  local path=$1 why=$2 out status
+  local path=$1 why=$2 out status matched ignore_source pattern
   out="$(git -C "$ROOT" check-ignore -v -- "$path" 2>&1)"
   status=$?
   case "$status" in
@@ -37,9 +43,16 @@ assert_ignored_by_tracked_gitignore() {
     1) fail "git does not ignore $path ($why)" ;;
     *) fail "git check-ignore failed for $path (exit $status): $out" ;;
   esac
-  case "$out" in
-    .gitignore:*) ;;
-    *) fail "$path is ignored by another source, not the tracked .gitignore ($why): $out" ;;
+  matched=${out%%$'\t'*}
+  ignore_source=${matched%%:*}
+  pattern=${matched#*:}
+  pattern=${pattern#*:}
+  [ "$ignore_source" = .gitignore ] \
+    || fail "$path is ignored by another source, not the tracked .gitignore ($why): $out"
+  case "$pattern" in
+    '!'*)
+      fail "$path matches negated pattern $pattern, so it stays committable ($why): $out"
+      ;;
   esac
 }
 
