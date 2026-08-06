@@ -1,10 +1,14 @@
 #!/usr/bin/env bash
-# .gitignore must ignore config/ as a directory, not by exact filename.
+# .gitignore must ignore the repo-root config/ directory as a whole - by
+# directory, not by exact filename - and must not reach a config-named
+# directory anywhere else in the tree.
 #
 # A name-by-name list silently stops ignoring any new or home-local file under
 # config/ (fm-gitignore-config-name-by-name): an unrecognized file there makes
 # the working tree read as dirty, which then blocks guarded sync paths that
 # refuse to touch a dirty home.
+# An unanchored config/ rule fails the other way, silently swallowing unrelated
+# paths under any nested directory named config.
 set -u
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
