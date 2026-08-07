@@ -87,7 +87,7 @@ secondmate_registry_line_for_id() {
   SECONDMATE_REGISTRY_ERROR=
   case "$id" in ''|*[!A-Za-z0-9._-]*) return 1 ;; esac
   if [ -L "$reg" ]; then
-    SECONDMATE_REGISTRY_ERROR="secondmate registry is a symlink and is refused: $reg"
+    SECONDMATE_REGISTRY_ERROR="secondmate registry is unavailable or unsafe: $reg (registry is a symlink and is refused)"
     return 2
   fi
   [ -f "$reg" ] || return 1
@@ -164,7 +164,7 @@ secondmate_registry_validate_bindings() {
   esac
   case "$expected_id" in *[!A-Za-z0-9._-]*) SECONDMATE_REGISTRY_ERROR="invalid secondmate id: $expected_id"; return 1 ;; esac
   if [ -L "$reg" ]; then
-    SECONDMATE_REGISTRY_ERROR="secondmate registry is a symlink and is refused: $reg"
+    SECONDMATE_REGISTRY_ERROR="secondmate registry is unavailable or unsafe: $reg (registry is a symlink and is refused)"
     return 1
   fi
   if [ ! -f "$reg" ]; then
