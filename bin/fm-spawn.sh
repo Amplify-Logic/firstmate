@@ -136,6 +136,8 @@ CONFIG="${FM_CONFIG_OVERRIDE:-$FM_HOME/config}"
 SUB_HOME_MARKER=".fm-secondmate-home"
 # shellcheck source=bin/fm-ff-lib.sh
 . "$SCRIPT_DIR/fm-ff-lib.sh"
+# shellcheck source=bin/fm-secondmate-registry-lib.sh disable=SC1091
+. "$SCRIPT_DIR/fm-secondmate-registry-lib.sh"
 # shellcheck source=bin/fm-config-inherit-lib.sh
 . "$SCRIPT_DIR/fm-config-inherit-lib.sh"
 # shellcheck source=bin/fm-backend.sh
@@ -823,7 +825,11 @@ if [ "$KIND" = secondmate ]; then
   [ -n "$FIRSTMATE_HOME" ] || { echo "error: no firstmate home supplied or registered for $ID" >&2; exit 1; }
   PROJ_ABS=$(validate_firstmate_home_for_spawn "$ID" "$FIRSTMATE_HOME")
   if [ -e "$DATA/secondmates.md" ] || [ -L "$DATA/secondmates.md" ]; then
-    if ! secondmate_registry_validate_bindings "$DATA/secondmates.md" resolve_path "$ID" "$FIRSTMATE_HOME" "$FM_HOME" "$FM_ROOT"; then
+    # Scoped: a malformed or unresolvable line for an unrelated secondmate must
+    # not abort spawning a healthy one, because that would change which worker
+    # runs the captain's work. Defects of this entry, and the duplicate and
+    # overlap checks it takes part in, still refuse.
+    if ! secondmate_registry_validate_bindings "$DATA/secondmates.md" resolve_path "$ID" "$FIRSTMATE_HOME" "$FM_HOME" "$FM_ROOT" scoped; then
       echo "error: $SECONDMATE_REGISTRY_ERROR" >&2
       exit 1
     fi
@@ -1335,7 +1341,6 @@ fi
 if [ "$KIND" = secondmate ]; then
   MODE=secondmate
   YOLO=off
-  : "${SECONDMATE_PROJECTS:=}"
 else
   PROJ_NAME=$(basename "$PROJ_ABS")
   read -r MODE YOLO <<EOF

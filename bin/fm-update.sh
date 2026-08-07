@@ -36,6 +36,8 @@ STATE="${FM_STATE_OVERRIDE:-$FM_HOME/state}"
 SECONDMATES_MD="$FM_HOME/data/secondmates.md"
 # shellcheck source=bin/fm-ff-lib.sh
 . "$SCRIPT_DIR/fm-ff-lib.sh"
+# shellcheck source=bin/fm-secondmate-registry-lib.sh disable=SC1091
+. "$SCRIPT_DIR/fm-secondmate-registry-lib.sh"
 
 "$SCRIPT_DIR/fm-guard.sh" || true
 

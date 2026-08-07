@@ -787,20 +787,21 @@ validate_removal_target() {
   printf '%s\n' "$abs_target"
 }
 
+# This scan only asks whether any registered home sits inside the removal
+# target, so an unrelated entry that cannot be parsed or resolved is skipped
+# rather than refusing the whole teardown. Refusing on somebody else's bad line
+# would force the operator into hand deletion outside every guard.
 registered_descendant_home_for_removal() {
   local reg=$1 target=$2 line id registered_home registered_abs
   [ -f "$reg" ] || return 1
-  if ! secondmate_registry_validate_bindings "$reg" secondmate_registry_path_key; then
+  if ! secondmate_registry_validate_bindings "$reg" secondmate_registry_path_key '' '' '' '' scoped; then
     echo "REFUSED: $SECONDMATE_REGISTRY_ERROR" >&2
     return 2
   fi
   while IFS= read -r line || [ -n "$line" ]; do
     case "$line" in
       "- "*)
-        if ! secondmate_registry_parse_line "$line"; then
-          echo "REFUSED: malformed secondmate registry entry: $line" >&2
-          return 2
-        fi
+        secondmate_registry_parse_line "$line" || continue
         id=$SECONDMATE_REGISTRY_ID
         registered_home=$SECONDMATE_REGISTRY_HOME
         registered_abs=$(removal_target_abs_path "$registered_home" 2>/dev/null || true)
@@ -877,7 +878,8 @@ safe_rm_rf_child_worktree() {
 }
 
 validate_firstmate_home_for_removal() {
-  local home=$1 label=$2 expected_id=${3:-} abs_home_path marker_id conflict conflict_rc child_id child_home
+  local home=$1 label=$2 expected_id=${3:-} registry=${4:-$SECONDMATE_REG}
+  local abs_home_path marker_id conflict conflict_rc child_id child_home
   [ -n "$home" ] || return 0
   [ -e "$home" ] || return 0
   abs_home_path=$(validate_removal_target "$home" "$label") || return 1
@@ -891,8 +893,15 @@ validate_firstmate_home_for_removal() {
       echo "REFUSED: unsafe $label removal target $home is marked for secondmate ${marker_id:-unknown}, expected $expected_id" >&2
       return 1
     fi
-    if [ -e "$SECONDMATE_REG" ] || [ -L "$SECONDMATE_REG" ]; then
-      if ! secondmate_registry_validate_bindings "$SECONDMATE_REG" secondmate_registry_path_key "$expected_id" "$abs_home_path" "$FM_HOME" "$FM_ROOT"; then
+    # The marker above already proved this home belongs to $expected_id, so a
+    # missing registry entry - deregistered early, or orphaned by a partial
+    # decommission - must not strand the home outside guarded cleanup. Scoped
+    # validation tolerates only that absent-binding case: a binding that exists
+    # and points elsewhere still refuses, as does a defect of this entry.
+    # $registry is the parent home's own registry for a nested secondmate, which
+    # is where nested entries actually live.
+    if [ -e "$registry" ] || [ -L "$registry" ]; then
+      if ! secondmate_registry_validate_bindings "$registry" secondmate_registry_path_key "$expected_id" "$abs_home_path" "$FM_HOME" "$FM_ROOT" scoped; then
         case "$SECONDMATE_REGISTRY_ERROR" in
           overlapping\ secondmate\ home\ assignment:*)
             echo "REFUSED: unsafe $label removal target $home contains registered secondmate home; $SECONDMATE_REGISTRY_ERROR" >&2
@@ -930,10 +939,10 @@ EOF
 }
 
 remove_firstmate_home() {
-  local home=$1 label=$2 expected_id=${3:-} abs_home_path
+  local home=$1 label=$2 expected_id=${3:-} registry=${4:-$SECONDMATE_REG} abs_home_path
   [ -n "$home" ] || return 0
   [ -e "$home" ] || return 0
-  abs_home_path=$(validate_firstmate_home_for_removal "$home" "$label" "$expected_id") || return 1
+  abs_home_path=$(validate_firstmate_home_for_removal "$home" "$label" "$expected_id" "$registry") || return 1
   [ -n "$abs_home_path" ] || return 0
   if firstmate_home_has_treehouse_slot "$abs_home_path"; then
     command -v treehouse >/dev/null 2>&1 || {
@@ -964,7 +973,9 @@ validate_firstmate_home_children_removal() {
     if [ "$child_kind" = secondmate ]; then
       child_home=$(meta_value "$child_meta" home)
       [ -n "$child_home" ] || child_home=$child_wt
-      validate_firstmate_home_for_removal "$child_home" "child firstmate home" "$child_id" >/dev/null || return 1
+      # A nested secondmate is registered in its parent home's registry, never
+      # in the top-level one, so validate the child against that file.
+      validate_firstmate_home_for_removal "$child_home" "child firstmate home" "$child_id" "$home/data/secondmates.md" >/dev/null || return 1
       validate_firstmate_home_children_removal "$child_home" || return 1
     elif [ "$child_backend" = orca ]; then
       child_orca_worktree_id=$(require_orca_worktree_id "$child_meta") || return 1
@@ -1017,7 +1028,7 @@ cleanup_firstmate_home_children() {
       [ -n "$child_home" ] || child_home=$child_wt
       if [ -n "$child_home" ] && [ -d "$child_home" ]; then
         cleanup_firstmate_home_children "$child_home"
-        remove_firstmate_home "$child_home" "child firstmate home" "$child_id"
+        remove_firstmate_home "$child_home" "child firstmate home" "$child_id" "$home/data/secondmates.md"
       fi
     elif [ "$child_backend" = orca ]; then
       if [ -n "$child_wt" ] && [ -d "$child_wt" ]; then
