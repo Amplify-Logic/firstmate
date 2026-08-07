@@ -453,10 +453,8 @@ status_log_mtime_epoch() {
 # treated as newer (the worker's last append after observing the failure).
 status_log_newer_than_terminal_run() {
   local log_epoch run_epoch pair field
-  case "$LOG_VERB" in
-    paused|blocked) ;;
-    *) return 1 ;;
-  esac
+  if [ "$LOG_VERB" = blocked ]; then :
+  else status_is_paused "$LOG_LINE" || return 1; fi
   log_epoch=$(status_log_mtime_epoch)
   case "$log_epoch" in ''|*[!0-9]*) return 1 ;; esac
 
