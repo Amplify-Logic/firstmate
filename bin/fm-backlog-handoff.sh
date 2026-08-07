@@ -61,9 +61,15 @@ ID=$1
 shift
 
 secondmate_home() {
-  local id=$1 home
+  local id=$1 home rc=0
   [ -f "$REG" ] || { echo "error: no secondmate registry at $REG" >&2; return 1; }
-  home=$(secondmate_registry_field "$REG" "$id" home || true)
+  home=$(secondmate_registry_field "$REG" "$id" home) || rc=$?
+  # A refused registry is not the same as an unregistered id, and saying "no
+  # home" for a symlinked registry sends the operator hunting the wrong fault.
+  if [ "$rc" -eq 2 ]; then
+    echo "error: ${SECONDMATE_REGISTRY_ERROR:-secondmate registry is unavailable or unsafe: $REG}" >&2
+    return 1
+  fi
   [ -n "$home" ] || { echo "error: secondmate $id has no home in $REG" >&2; return 1; }
   printf '%s\n' "$home"
 }

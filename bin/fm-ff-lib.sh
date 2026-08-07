@@ -238,7 +238,9 @@ dirty_status() {
 # for durable fields such as home= when an older/incomplete meta lacks them.
 # Output is pipe-delimited: id|home|window|meta-file.
 live_secondmate_meta_records() {
-  local state=$1 registry=${2:-} meta id home window
+  local state=$1 registry=${2:-} meta id home window registry_rc
+  # The refusal is reported once per listing, not once per secondmate.
+  local fm_ff_registry_warned=
   [ -d "$state" ] || return 0
   for meta in "$state"/*.meta; do
     [ -f "$meta" ] || continue
@@ -246,7 +248,14 @@ live_secondmate_meta_records() {
     id=$(basename "$meta" .meta)
     home=$(grep '^home=' "$meta" 2>/dev/null | tail -1 | cut -d= -f2- || true)
     if [ -z "$home" ] && [ -n "$registry" ]; then
-      home=$(secondmate_registry_field "$registry" "$id" home || true)
+      registry_rc=0
+      home=$(secondmate_registry_field "$registry" "$id" home) || registry_rc=$?
+      # Falling through with an empty home would report every secondmate as
+      # unregistered when the registry itself is what was refused.
+      if [ "$registry_rc" -eq 2 ] && [ -z "$fm_ff_registry_warned" ]; then
+        fm_ff_registry_warned=1
+        echo "${SECONDMATE_REGISTRY_ERROR:-secondmate registry is unavailable or unsafe: $registry}" >&2
+      fi
     fi
     window=$(grep '^window=' "$meta" 2>/dev/null | tail -1 | cut -d= -f2- || true)
     printf '%s|%s|%s|%s\n' "$id" "$home" "$window" "$meta"
