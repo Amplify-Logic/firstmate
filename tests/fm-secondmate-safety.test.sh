@@ -2343,6 +2343,129 @@ test_secondmate_force_teardown_discards_child_work
 test_secondmate_force_teardown_refuses_child_quarantine_symlink
 test_secondmate_force_teardown_preserves_child_on_unproven_lock
 test_secondmate_force_teardown_allows_operational_dir_symlinks_inside_home
+# Ruling A/E: a defect in an UNRELATED registry entry must not block work on a
+# healthy secondmate. Refusing here would force hand deletion outside the guard.
+test_secondmate_teardown_tolerates_unrelated_malformed_entry() {
+  local home subhome fakebin err log
+  home="$TMP_ROOT/unrelated-malformed-home"
+  subhome="$TMP_ROOT/unrelated-malformed-subhome"
+  err="$TMP_ROOT/unrelated-malformed.err"
+  mkdir -p "$home/state" "$home/data" "$subhome/state"
+  printf 'domain\n' > "$subhome/.fm-secondmate-home"
+  cat > "$home/state/domain.meta" <<EOF
+window=firstmate:fm-domain
+worktree=$subhome
+project=$subhome
+harness=echo
+kind=secondmate
+mode=secondmate
+yolo=off
+home=$subhome
+projects=alpha
+EOF
+  cat > "$home/data/secondmates.md" <<EOF
+- domain - design domain (home: $subhome; scope: design domain; projects: alpha; added 2026-06-22)
+- legacy - a hand-edited entry missing its structured suffix
+- gone - vanished domain (home: $TMP_ROOT/no-such-home/deeper; scope: gone; projects: beta; added 2026-06-22)
+EOF
+  fakebin=$(make_fake_tmux "$TMP_ROOT/unrelated-malformed-fake")
+  log="$TMP_ROOT/unrelated-malformed-fake/tmux.log"
+  if ! PATH="$fakebin:$PATH" FM_HOME="$home" FM_FAKE_TMUX_LOG="$log" FM_FAKE_TMUX_CAPTURE="$TMP_ROOT/unrelated-malformed-fake/pane.txt" \
+    "$ROOT/bin/fm-teardown.sh" domain >/dev/null 2>"$err"; then
+    fail "teardown of a healthy secondmate was blocked by unrelated registry entries"$'\n'"$(cat "$err")"
+  fi
+  [ ! -d "$subhome" ] || fail "teardown left the healthy secondmate home in place"
+  pass "secondmate teardown ignores defects in unrelated registry entries"
+}
+
+# Ruling B: the on-disk marker already proves ownership, so a home whose entry
+# was removed early stays removable through the guard.
+test_secondmate_teardown_accepts_marker_proven_unregistered_home() {
+  local home subhome fakebin err log
+  home="$TMP_ROOT/marker-proven-home"
+  subhome="$TMP_ROOT/marker-proven-subhome"
+  err="$TMP_ROOT/marker-proven.err"
+  mkdir -p "$home/state" "$home/data" "$subhome/state"
+  printf 'domain\n' > "$subhome/.fm-secondmate-home"
+  cat > "$home/state/domain.meta" <<EOF
+window=firstmate:fm-domain
+worktree=$subhome
+project=$subhome
+harness=echo
+kind=secondmate
+mode=secondmate
+yolo=off
+home=$subhome
+projects=alpha
+EOF
+  printf '# Secondmates\n' > "$home/data/secondmates.md"
+  fakebin=$(make_fake_tmux "$TMP_ROOT/marker-proven-fake")
+  log="$TMP_ROOT/marker-proven-fake/tmux.log"
+  if ! PATH="$fakebin:$PATH" FM_HOME="$home" FM_FAKE_TMUX_LOG="$log" FM_FAKE_TMUX_CAPTURE="$TMP_ROOT/marker-proven-fake/pane.txt" \
+    "$ROOT/bin/fm-teardown.sh" domain >/dev/null 2>"$err"; then
+    fail "teardown refused a marker-proven home whose registry entry was already removed"$'\n'"$(cat "$err")"
+  fi
+  [ ! -d "$subhome" ] || fail "teardown left the marker-proven home in place"
+  pass "secondmate teardown accepts a marker-proven home with no registry entry"
+}
+
+# Only the ABSENT binding is tolerated: one that exists and points elsewhere is
+# still a contradiction and must refuse.
+test_secondmate_teardown_refuses_contradicting_registry_binding() {
+  local home subhome elsewhere fakebin err log
+  home="$TMP_ROOT/contradicting-home"
+  subhome="$TMP_ROOT/contradicting-subhome"
+  elsewhere="$TMP_ROOT/contradicting-elsewhere"
+  err="$TMP_ROOT/contradicting.err"
+  mkdir -p "$home/state" "$home/data" "$subhome/state" "$elsewhere"
+  printf 'domain\n' > "$subhome/.fm-secondmate-home"
+  cat > "$home/state/domain.meta" <<EOF
+window=firstmate:fm-domain
+worktree=$subhome
+project=$subhome
+harness=echo
+kind=secondmate
+mode=secondmate
+yolo=off
+home=$subhome
+projects=alpha
+EOF
+  cat > "$home/data/secondmates.md" <<EOF
+- domain - design domain (home: $elsewhere; scope: design domain; projects: alpha; added 2026-06-22)
+EOF
+  fakebin=$(make_fake_tmux "$TMP_ROOT/contradicting-fake")
+  log="$TMP_ROOT/contradicting-fake/tmux.log"
+  if PATH="$fakebin:$PATH" FM_HOME="$home" FM_FAKE_TMUX_LOG="$log" FM_FAKE_TMUX_CAPTURE="$TMP_ROOT/contradicting-fake/pane.txt" \
+    "$ROOT/bin/fm-teardown.sh" domain >/dev/null 2>"$err"; then
+    fail "teardown accepted a home that the registry binds elsewhere"
+  fi
+  [ -d "$subhome" ] || fail "teardown removed the home after a contradicting-binding refusal"
+  grep -F 'is registered at' "$err" >/dev/null || fail "teardown did not explain the contradicting registry binding"
+  pass "secondmate teardown refuses a home the registry binds elsewhere"
+}
+
+# Ruling C: the snapshot must not report as healthy a line the shared parser
+# rejects. One owner for the grammar, no second copy to drift.
+test_fleet_snapshot_agrees_with_shared_registry_parser() {
+  local home out
+  home="$TMP_ROOT/snapshot-agreement-home"
+  mkdir -p "$home/state" "$home/data" "$TMP_ROOT/snapshot-agreement-good"
+  cat > "$home/data/secondmates.md" <<EOF
+- design - ui work (home: $TMP_ROOT/snapshot-agreement-good; scope: ui; projects: alpha; added 2026-07-30)
+- my id - bad id charset (home: /h; scope: s; projects: p; added 2026-07-30)
+- empty - empty scope (home: /h2; scope: ; projects: p; added 2026-07-30)
+EOF
+  out=$(FM_HOME="$home" FM_STATE_OVERRIDE="$home/state" FM_DATA_OVERRIDE="$home/data" \
+    "$ROOT/bin/fm-fleet-snapshot.sh" 2>/dev/null) || fail "fleet snapshot failed to run"
+  printf '%s' "$out" | grep -F '"/h"' >/dev/null \
+    && fail "snapshot reported a home for an id the shared parser rejects"
+  printf '%s' "$out" | grep -F '"/h2"' >/dev/null \
+    && fail "snapshot reported a home for an empty-scope entry the shared parser rejects"
+  printf '%s' "$out" | grep -F 'malformed secondmate registry entry' >/dev/null \
+    || fail "snapshot did not flag the entries the shared parser rejects"
+  pass "fleet snapshot and the shared registry parser agree on rejected entries"
+}
+
 test_secondmate_force_teardown_refuses_operational_dir_symlink_outside_home
 test_secondmate_teardown_refuses_registered_nested_home
 test_secondmate_teardown_refuses_child_registry_nested_home
@@ -2351,6 +2474,10 @@ test_secondmate_force_teardown_refuses_child_active_home_descendant
 test_secondmate_force_teardown_refuses_child_repo_descendant
 test_secondmate_force_teardown_refuses_unregistered_child_worktree
 test_secondmate_teardown_path_boundary_matrix
+test_secondmate_teardown_tolerates_unrelated_malformed_entry
+test_secondmate_teardown_accepts_marker_proven_unregistered_home
+test_secondmate_teardown_refuses_contradicting_registry_binding
+test_fleet_snapshot_agrees_with_shared_registry_parser
 test_secondmate_idle_pane_is_not_stale
 test_secondmate_charter_brief_is_idle_by_default
 test_backlog_handoff_aborts_safely
