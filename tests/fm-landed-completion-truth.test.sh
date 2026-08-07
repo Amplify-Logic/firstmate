@@ -16,8 +16,15 @@
 # (data/fm-upstream-trial-verdict-v2/report.md) reported a literally EMPTY "No recent
 # completions are in the current baseline" section. A mis-ordering cannot produce that
 # state, because both caps are positive-bounded slices and the round-robin takes index
-# 0 of every non-empty home group. That symptom is NOT explained by this change and
-# may have a separate cause; nothing here claims to fix it.
+# 0 of every non-empty home group. That symptom is NOT explained or fixed by this
+# change. Two separate causes were verified against this fork and both still return an
+# empty list against the finished fix, so both stay open as follow-ups: a Done row that
+# is not in the structured `- [x] <id> - <rest>` form is silently excluded from landed,
+# so even a NON-empty Done section can render an empty list; and a completion never
+# written into Done at all - for example when the completion or cleanup step fails -
+# never appears while the task still sits in In flight. Neither belongs here: the first
+# is the backlog parser's structured-row contract, which every section shares, and the
+# second is the completion/cleanup recording path.
 #
 # bin/fm-landed-lib.sh owns the ordering rule these tests hold to, including the
 # ruling that a dated completion always outranks an undated one.
@@ -73,6 +80,20 @@ run_bearings() {  # <home> <fakebin> <args...>
   local home=$1 fakebin=$2; shift 2
   PATH="$fakebin:$PATH" FM_HOME="$home" FM_BEARINGS_NOW="$NOW" NET_LOG="$home/net.log" \
     "$BEARINGS" "$@"
+}
+
+# A registered secondmate home with its own valid structured backlog, which is what the
+# cross-home roll-up requires before a home's Done reaches the captain at all.
+make_mate_home() {  # <parent> <id>
+  local parent=$1 id=$2 mate
+  mate="$TMP_ROOT/$(basename "$parent")-$id-home"
+  mkdir -p "$mate/state" "$mate/data" "$mate/config" "$mate/projects" "$mate/bin"
+  printf '# Firstmate fixture\n' > "$mate/AGENTS.md"
+  printf '%s\n' "$id" > "$mate/.fm-secondmate-home"
+  printf '## In flight\n\n## Queued\n\n## Done\n' > "$mate/data/backlog.md"
+  printf -- '- %s - fixture domain (home: %s; scope: fixture work; projects: firstmate; added 2026-07-11)\n' \
+    "$id" "$mate" >> "$parent/data/secondmates.md"
+  printf '%s\n' "$mate"
 }
 
 # Write a Done section the way `tasks-axi done` actually writes it: newest completion
@@ -280,9 +301,49 @@ test_secondmate_just_finished_completion_survives_rollup() {
   pass "a secondmate's just-finished completion survives the cross-home roll-up"
 }
 
+# The overall cap is a GLOBAL bound, so balancing across homes alone breaks the same
+# promise from the other end: the merge takes index 0 of every home in deterministic id
+# order, and once the fleet has more homes than the cap has slots, the homes that sort
+# last fall off the end - taking the newest completion in the fleet with them if it
+# happens to live in one of them. The merge therefore reserves its first slot for the
+# row bin/fm-landed-lib.sh ranks newest across every home, and balances the rest.
+test_just_finished_completion_survives_when_homes_exceed_the_cap() {
+  local home fakebin json ids mate i id
+  home=$(make_home homes-exceed-cap)
+  # The main home sorts first under "(main)" and holds only an OLD completion, so every
+  # slot ahead of the last home is already claimed by a home that sorts earlier.
+  write_backlog "$home" "$(done_row main-old "Main home older landing" "merged" "2026-07-01")"
+  for i in 1 2 3 4 5 6 7; do
+    id=$(printf 'mate-%02d' "$i")
+    mate=$(make_mate_home "$home" "$id")
+    if [ "$i" -eq 7 ]; then
+      write_backlog "$mate" "$(done_row "$id-just-now" "Secondmate work that just finished" "done" "$TODAY")"
+    else
+      write_backlog "$mate" "$(done_row "$id-old" "Older landing $i" "merged" "$(printf '2026-06-%02d' "$i")")"
+    fi
+  done
+  fakebin=$(make_fakebin "$home")
+  json=$(run_bearings "$home" "$fakebin" --json)
+  ids=$(landed_ids "$json")
+
+  printf '%s\n' "$ids" | grep -qx 'mate-07-just-now' \
+    || fail "the overall cap cut the newest completion in the fleet: $ids"
+  [ "$(printf '%s\n' "$ids" | head -1)" = "mate-07-just-now" ] \
+    || fail "the newest completion in the fleet must lead landed across homes, got: $ids"
+  # The reservation costs exactly one slot: the rest of the list stays balanced across
+  # homes in deterministic id order, and the cap is still disclosed.
+  printf '%s' "$json" | jq -e '
+    (.landed | length) == 6
+      and ([.landed[].id] | unique | length) == 6
+      and ([.omitted[].surface] | any(test("landed showing 6 of 8")))
+  ' >/dev/null || fail "the reservation broke the balanced merge or the cap disclosure: $json"
+  pass "the newest completion in the fleet survives a cap smaller than the home count"
+}
+
 test_just_finished_same_day_completion_leads_landed
 test_undated_completion_sorts_below_every_dated_row
 test_undated_rows_cannot_displace_dated_completions_under_the_cap
 test_cap_drops_oldest_never_newest
 test_completion_recorded_after_an_earlier_report_appears_next_run
 test_secondmate_just_finished_completion_survives_rollup
+test_just_finished_completion_survives_when_homes_exceed_the_cap

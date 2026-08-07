@@ -1190,6 +1190,11 @@ dominant/dominant-landed-05'
   pass "landed selection refills capacity after sparse homes exhaust"
 }
 
+# Every home here lands on the SAME date with the same recording position, so they all
+# tie for newest and the merge's reserved first slot resolves to the row already at the
+# front - leaving this expectation exactly as it was. What it pins is therefore the
+# home-order tie-break alone; the case where a later-sorting home holds the fleet's
+# newest completion is pinned by tests/fm-landed-completion-truth.test.sh instead.
 test_landed_default_uses_deterministic_home_order_when_homes_exceed_cap() {
   local home mate fakebin json actual expected i id
   home=$(make_home landed-home-order)

@@ -30,7 +30,9 @@
 # The default landed baseline is balanced across homes: each home keeps its internal
 # newest-first ordering, homes iterate in deterministic id order, sparse homes do not
 # waste capacity, and --all-landed switches back to the complete global newest-first
-# order.
+# order. Balance alone would drop the newest completion in the fleet once there are
+# more homes than the overall cap has slots, so the merge reserves the first slot for
+# the row bin/fm-landed-lib.sh ranks newest across every home and balances the rest.
 #
 # Flags:
 #   (default)        compact projection, TOON, local-only
@@ -105,9 +107,10 @@ Default fields: schema, home, generated, prs, in_flight{id,kind,state,doing},
   unhealthy_endpoints{...} (only when non-empty), omitted{surface,reveal}.
 landed merges this home's Done with registered secondmate homes' Done, bounded by
   a per-home cap (FM_BEARINGS_LANDED_PER_HOME) and an overall cap (FM_BEARINGS_LANDED),
-  with omitted[] disclosure. Default selection is balanced across deterministic home
-  order while preserving each home's internal newest-first order; sparse homes do
-  not waste capacity. --all-landed reveals the full global newest-first set.
+  with omitted[] disclosure. Default selection reserves the first slot for the newest
+  completion in the fleet, then balances the rest across deterministic home order while
+  preserving each home's internal newest-first order; sparse homes do not waste
+  capacity. --all-landed reveals the full global newest-first set.
 For every registered secondmate, validated structured state from its own home is
   authoritative. Parent events and bounded terminal reads are labeled fallback or
   contradiction evidence and never become current work.
@@ -304,7 +307,12 @@ MODEL=$(printf '%s' "$SNAP" | jq \
     | [range(0; (($groups | map(length) | max) // 0)) as $i
        | $groups[]
        | select(length > $i)
-       | .[$i]][:$n];
+       | .[$i]] as $merged
+    | ($merged | map(landed_recency_key) | max) as $top
+    | ([$merged | to_entries[] | select((.value | landed_recency_key) == $top) | .key] | first) as $newest
+    | (if $newest == null then $merged
+       else [$merged[$newest]] + [$merged | to_entries[] | select(.key != $newest) | .value]
+       end)[:$n];
   ($fields | split(",") | map(gsub("^\\s+|\\s+$"; "")) | map(select(. != ""))) as $fl
   | (($fl | index("bodies")) != null) as $f_bodies
   | (($fl | index("paths")) != null) as $f_paths

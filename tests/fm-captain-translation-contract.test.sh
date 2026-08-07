@@ -135,28 +135,40 @@ test_outward_facing_skill_points_reference_section_9_owner() {
 # completion problem was still unresolved. Bearings is the surface that reports fleet
 # outcomes, so it is where both rules have to hold.
 test_bearings_forbids_premature_all_clear() {
-  assert_grep "Never render an all-clear while anything is unresolved." "$BEARINGS" \
-    "bearings does not forbid a premature all-clear"
-  assert_grep "An unavailable or unreadable state is not an all-clear either" "$BEARINGS" \
+  assert_grep "Never render an all-clear verdict while anything is unresolved." "$BEARINGS" \
+    "bearings does not forbid a premature all-clear verdict"
+  assert_grep "CLAIM ABOUT FLEET WORK OUTCOMES" "$BEARINGS" \
+    "bearings does not scope the ban to verdicts and work-outcome claims"
+  assert_grep "Do not turn an unavailable or unreadable state into a verdict that work is fine" "$BEARINGS" \
     "bearings treats unreadable state as an all-clear"
-  pass "bearings forbids a premature all-clear while anything is unresolved"
+  # The ban must not swallow the always-render rule: a truthful empty-state sentence
+  # for one section is a fact about that section, not an all-clear about the fleet,
+  # so suppressing it would trade one trust failure for another.
+  assert_grep "A section's own empty-state sentence is not such a verdict" "$BEARINGS" \
+    "bearings lets the all-clear ban suppress a factual empty-state sentence"
+  assert_grep "Every section ALWAYS renders, even when empty, with its short empty-state sentence" "$BEARINGS" \
+    "bearings dropped the always-render empty-state rule"
+  pass "bearings forbids a premature all-clear verdict without suppressing empty-state facts"
 }
 
 test_bearings_guarantees_completion_truth() {
   assert_grep "including one recorded seconds ago" "$BEARINGS" \
     "bearings does not require completions recorded up to report time"
-  assert_grep "drop the OLDEST completions and never the newest" "$BEARINGS" \
+  assert_grep "always keeps a slot and the cap can never be what drops it" "$BEARINGS" \
     "bearings does not pin the cap direction that keeps the newest completion visible"
   assert_grep "fm-landed-lib.sh" "$BEARINGS" \
     "bearings does not point at the ordering owner"
   # The guarantee has to be scoped to what the ordering can actually deliver: an
-  # undated Done row can rotate out under the cap, and a completion never recorded
-  # into Done cannot appear at all, so an unconditional promise would tell the agent
-  # to trust the list in exactly the cases it is known to be incomplete.
+  # undated Done row can rotate out under the cap, a completion never recorded into
+  # Done cannot appear at all, and only the fleet-newest row is reserved against the
+  # cap once there are more homes than slots. An unconditional promise would tell the
+  # agent to trust the list in exactly the cases it is known to be incomplete.
   assert_grep "recorded with its completion date" "$BEARINGS" \
     "bearings promises completion truth without scoping it to a recorded completion date"
-  assert_grep "Two recording gaps sit outside that guarantee" "$BEARINGS" \
-    "bearings does not name the recording gaps its ordering cannot cover"
+  assert_grep "Three gaps sit outside that guarantee" "$BEARINGS" \
+    "bearings does not name the gaps its ordering cannot cover"
+  assert_grep "more homes than the cap has slots" "$BEARINGS" \
+    "bearings does not name the home-count gap, so a capacity drop reads as a recording failure"
   pass "bearings scopes the completion-truth guarantee to what the ordering delivers"
 }
 

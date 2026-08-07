@@ -58,12 +58,19 @@
 # WHAT THIS GUARANTEES, AND WHAT IT DOES NOT
 #
 # With this ordering, the newest DATED completion in a home is always at index 0
-# of that home's group, so the per-home cap and the round-robin merge can never
-# discard it. tests/fm-landed-completion-truth.test.sh pins that property. The
-# guarantee is scoped to a completion recorded as a structured `- [x] <id> - <rest>`
-# Done row carrying its completion date: an undated row ranks below every dated
-# one and can rotate out under the cap, and a completion never recorded into Done
-# at all cannot appear at all.
+# of that home's group, so no per-home cap can discard it, and the cross-home merge
+# in bin/fm-bearings-snapshot.sh reserves its first slot for the row this rule ranks
+# newest across every home, so no overall cap can discard THAT one.
+# tests/fm-landed-completion-truth.test.sh pins both properties.
+#
+# The guarantee is scoped to a completion recorded as a structured
+# `- [x] <id> - <rest>` Done row carrying its completion date. Three cases sit
+# outside it: an undated row ranks below every dated one and can rotate out under
+# the cap, a completion never recorded into Done at all cannot appear at all, and a
+# home's own newest row can still rotate out of a merged list once the fleet has
+# more homes than the overall cap has slots, because only the fleet-newest row is
+# reserved and the remaining slots are shared across homes rather than filled
+# strictly oldest-last.
 
 # Emits the jq prelude defining landed_newest_first. Callers interpolate it ahead
 # of their own program text, e.g. jq "$(fm_landed_jq_prelude)"'<program>'.
