@@ -19,8 +19,12 @@
 #
 # The deny guidance keeps the two entry points distinct. bin/fm-wake-drain.sh is
 # the action that is always safe mid-session; the once-per-session
-# bin/fm-session-start.sh (AGENTS.md section 3) is named only for a session that
-# has not already run it earlier.
+# bin/fm-session-start.sh (AGENTS.md section 3) is named only when this hook
+# process's own ancestry does not already hold the home session lock, so a
+# session that has already run it is never pointed back at an out-of-contract
+# mid-session re-run. That ancestry check (fm_session_lock_in_ancestry, shared
+# with bin/fm-sessionstart-nudge.sh) scopes guidance text only; the allow/deny
+# decision itself is owned entirely by the classifier and is never affected.
 #
 # The existing turn-end guard remains the unchanged final backstop. This gate
 # closes the long-turn gap before another fleet mutation, but does not replace or
@@ -119,7 +123,9 @@ case "$REASON_CODE" in
     REASON="[watcher-continuity] tasks are in flight and no live watcher holds this home lock; during recovery only the ordinary literal bin/fm-teardown.sh is allowed, so drop --force and any shell-expanded arguments and retry the literal invocation (blocked: $BLOCKED_SCRIPT)"
     ;;
   *)
-    REASON="[watcher-continuity] tasks are in flight and no live watcher holds this home lock; drain wakes with bin/fm-wake-drain.sh, the safe mid-session action; run the once-per-session bin/fm-session-start.sh instead only if you have not already run it earlier this session; use fail-closed bin/fm-teardown.sh for completed tasks when needed, then re-arm with bin/fm-watch-arm.sh as a tracked Claude background task before running other fleet commands (blocked: $BLOCKED_SCRIPT)"
+    SESSION_START_CLAUSE=" run the once-per-session bin/fm-session-start.sh instead only if you have not already run it earlier this session;"
+    fm_session_lock_in_ancestry "$STATE" && SESSION_START_CLAUSE=""
+    REASON="[watcher-continuity] tasks are in flight and no live watcher holds this home lock; drain wakes with bin/fm-wake-drain.sh, the safe mid-session action;$SESSION_START_CLAUSE use fail-closed bin/fm-teardown.sh for completed tasks when needed, then re-arm with bin/fm-watch-arm.sh as a tracked Claude background task before running other fleet commands (blocked: $BLOCKED_SCRIPT)"
     ;;
 esac
 ESCAPED=$(printf '%s' "$REASON" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' | tr '\n' ' ')
