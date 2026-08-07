@@ -558,7 +558,7 @@ pause_state_class() {  # <window> <task>
   last=$(last_status_line "$STATE/$task.status")
   recheck_file="$STATE/.paused-rechecked-$key"
   if ! status_declared_wait "$STATE/$task.status"; then
-    rm -f "$recheck_file"
+    rm -f "$recheck_file" "$STATE/.captain-held-surfaced-$key"
     crew_absorb_class "$task"
     return
   fi
@@ -1240,6 +1240,10 @@ EOF
                 *)       handle_paused_stale "$w" "$task" "$h" ;;
               esac
             else
+              # The hold's quiet-state ended (resolved or superseded): drop the
+              # dead-agent one-shot marker so a later re-opened identical hold
+              # still surfaces (deterministic hold ids make digests repeatable).
+              rm -f "$STATE/.captain-held-surfaced-$key"
               wedge_timer_check "$w" "$ssf" "non-terminal stale" "$ewf"
             fi
           fi

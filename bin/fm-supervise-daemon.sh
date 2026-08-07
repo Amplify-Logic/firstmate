@@ -400,19 +400,22 @@ classify_signal() {  # <reason-after-colon> <state>
 # first sight of a non-terminal stale it returns "self" and the caller records a
 # timestamp marker; persistence is escalated by housekeeping's recheck, not here.
 classify_stale() {  # <window> <state>
-  local win=$1 state=$2 task last seen alive surf digest
+  local win=$1 state=$2 task last seen alive digest
   task=$(window_to_task "$win" "$state")
   last=$(last_status_line "$state/$task.status")
-  if [ -n "$last" ] && status_is_paused "$last"; then
-    # A DECLARED external-wait pause (fm-classify-lib.sh): an idle pane is EXPECTED,
-    # so this is not a wedge. The caller records a pause marker (long re-surface
-    # cadence in housekeeping) rather than a wedge stale marker. Cheap: reuses the
-    # status line already read, no fm-crew-state.sh call, mirroring the daemon's
-    # existing status-log classification.
-    printf 'pause|paused (awaiting external), rechecked on a long cadence: %s' "$last"
-    return
-  fi
-  if status_is_captain_held "$last" || { status_is_resolved "$last" && status_has_open_captain_hold "$state/$task.status"; }; then
+  # An open captain-held transfer is checked BEFORE the last-line pause test,
+  # matching the watcher's handle_paused_stale precedence: a stream with an
+  # open hold plus a NEWER trailing paused: line gets hold quiet-state (no
+  # bounded re-surface) in both modes. The fold is only a declared wait while
+  # the last line still belongs to the declared-wait stream (paused,
+  # captain-held, or a resolved: line masking a sibling hold); any other newer
+  # verb (working:, done:, failed:) supersedes the quiet-state, so a
+  # provably-working crew behind a stale hold line keeps its wedge timer and a
+  # malformed hold line (an invalid key slug) falls through to normal stale
+  # handling instead of silently swallowing a dead agent behind an empty-digest
+  # sentinel.
+  if status_has_open_captain_hold "$state/$task.status" \
+    && { status_is_paused "$last" || status_is_captain_held "$last" || status_is_resolved "$last"; }; then
     # An open captain-held transfer is a declared wait (fm-classify-lib.sh owns
     # the policy; status_open_captain_holds is the stream-truth fold, so a
     # still-open hold b keeps its quiet state even when a trailing resolved:
@@ -425,19 +428,18 @@ classify_stale() {  # <window> <state>
     # timer - only a crew that is NOT provably working absorbs. Live vs dead is
     # told apart by fm_backend_agent_alive, never by the status verb: a healthy
     # idle pane absorbs with no marker of either kind; a confidently dead agent
-    # escalates once per open-hold state (the
-    # .subsuper-captain-held-surfaced-<task> marker keys the one-shot on the
-    # fold digest, mirroring the watcher's .captain-held-surfaced-<window>
-    # marker, so a pane-content change cannot re-alert forever).
+    # escalates once per open-hold state, and handle_wake records the
+    # .subsuper-captain-held-surfaced-<task> marker (keyed on the fold digest,
+    # mirroring the watcher's .captain-held-surfaced-<window> marker) only
+    # AFTER the escalation is durably buffered, so a pane-content change cannot
+    # re-alert forever and a daemon death cannot swallow the surface.
     if [ "$(crew_absorb_class "$task")" = working ]; then
       : # fall through to the transient/terminal stale handling below
     else
       alive=$(fm_backend_agent_alive "$(task_window_backend "$win" "$state")" "$win" 2>/dev/null) || alive=unknown
-      digest=$(status_open_captain_holds "$state/$task.status")
       if [ "$alive" = dead ]; then
-        surf="$state/.subsuper-captain-held-surfaced-$(_stale_key "$task")"
-        if [ "$(cat "$surf" 2>/dev/null || true)" != "$digest" ]; then
-          printf '%s' "$digest" > "$surf"
+        digest=$(status_open_captain_holds "$state/$task.status")
+        if [ "$(cat "$state/.subsuper-captain-held-surfaced-$(_stale_key "$task")" 2>/dev/null || true)" != "$digest" ]; then
           printf 'escalate|captain-held, agent exited (work at risk once the answer lands): %s' "$(printf '%s' "$digest" | tr '\n' ' ')"
         else
           printf 'absorb|captain-held (declared wait), absorbed (dead agent already surfaced): %s' "$last"
@@ -447,6 +449,15 @@ classify_stale() {  # <window> <state>
       fi
       return
     fi
+  fi
+  if [ -n "$last" ] && status_is_paused "$last"; then
+    # A DECLARED external-wait pause (fm-classify-lib.sh): an idle pane is EXPECTED,
+    # so this is not a wedge. The caller records a pause marker (long re-surface
+    # cadence in housekeeping) rather than a wedge stale marker. Cheap: reuses the
+    # status line already read, no fm-crew-state.sh call, mirroring the daemon's
+    # existing status-log classification.
+    printf 'pause|paused (awaiting external), rechecked on a long cadence: %s' "$last"
+    return
   fi
   if [ -n "$last" ] && status_is_captain_relevant "$last"; then
     # Independent of free-text captain-relevant matching: a nonterminal progress
@@ -539,8 +550,7 @@ clear_pause_tracking() {  # <window> <state>
   watcher_key=$(_stale_key "$win")
   rm -f "$state/.subsuper-paused-$key" "$state/.subsuper-stale-$key" \
     "$state/.paused-$watcher_key" "$state/.paused-rechecked-$watcher_key" "$state/.paused-resurfaced-$watcher_key" \
-    "$state/.stale-$watcher_key" "$state/.stale-since-$watcher_key" "$state/.wedge-escalations-$watcher_key" \
-    "$state/.captain-held-surfaced-$watcher_key"
+    "$state/.stale-$watcher_key" "$state/.stale-since-$watcher_key" "$state/.wedge-escalations-$watcher_key"
 }
 
 reconcile_pause_tracking() {  # <window> <state> <last-status-line>
@@ -557,9 +567,22 @@ reconcile_pause_tracking() {  # <window> <state> <last-status-line>
     # re-surfaces (fm-classify-lib.sh's status_open_captain_holds fold, stream
     # truth): clear any tracking of either kind so a leftover marker cannot age
     # it into a false possible-wedge escalation or an awaiting-external recheck.
+    # The watcher's .captain-held-surfaced-<window> one-shot and this daemon's
+    # .subsuper-captain-held-surfaced-<task> one-shot are NOT cleared here: a
+    # hold that is still open must keep its dead-agent surface one-shot, or the
+    # daemon would re-alert an agent the watcher already surfaced in normal
+    # mode.
     clear_pause_tracking "$win" "$state"
   elif [ -e "$marker" ] || [ -e "$state/.paused-$watcher_key" ]; then
     clear_pause_tracking "$win" "$state"
+  fi
+  # A dead-agent one-shot marker outlives its hold otherwise: hold ids are
+  # deterministic, so a hold resolved and later re-opened for the same key
+  # yields an identical fold digest and the stale marker would suppress the new
+  # hold's surface (and the files accumulate). Sweep it whenever the fold no
+  # longer has an open hold.
+  if ! status_has_open_captain_hold "$state/$task.status"; then
+    rm -f "$state/.subsuper-captain-held-surfaced-$key"
   fi
 }
 
@@ -1199,6 +1222,19 @@ housekeeping() {  # <state>
     esac
   done
 
+  # (1c) dead-agent one-shot markers must not outlive their hold: hold ids are
+  # deterministic, so a hold resolved and later re-opened for the same key
+  # yields an identical fold digest, and a stale .subsuper-captain-held-surfaced-*
+  # marker would suppress the new hold's surface (and the files accumulate).
+  # Sweep any marker whose fold no longer has an open hold.
+  for surf in "$state"/.subsuper-captain-held-surfaced-*; do
+    [ -e "$surf" ] || continue
+    task="${surf##*.subsuper-captain-held-surfaced-}"
+    if ! status_has_open_captain_hold "$state/$task.status"; then
+      rm -f "$surf"
+    fi
+  done
+
   # (2b) pause re-surface recheck. A DECLARED external-wait pause idles by design,
   # so it is rechecked on a much longer cadence than a wedge (PAUSE_RESURFACE_SECS,
   # or PAUSE_CAPTAIN_RESURFACE_SECS when the wait names a captain decision) and
@@ -1420,6 +1456,19 @@ handle_wake() {  # <reason> <state>
       # housekeeping re-escalates the same pane as a false wedge later.
       [ "$kind" = "stale" ] && stale_marker_remove "$arg" "$state"
       mark_escalated_seen "$kind" "$arg" "$state"
+      # A confidently dead agent under a captain-held transfer escalates once:
+      # record the one-shot marker only AFTER the escalation is durably buffered
+      # (enqueue-before-suppress, the same ordering the watcher uses), so a
+      # daemon death between the buffer append and the marker cannot swallow the
+      # only dead-agent surface - the next wake re-escalates instead of reading
+      # "already surfaced".
+      case "$distilled" in
+        "captain-held, agent exited"*)
+          task=$(window_to_task "$arg" "$state")
+          digest=$(status_open_captain_holds "$state/$task.status")
+          printf '%s' "$digest" > "$state/.subsuper-captain-held-surfaced-$(_stale_key "$task")"
+          ;;
+      esac
       [ "${FM_ESCALATE_BATCH_SECS:-$ESCALATE_BATCH_SECS_DEFAULT}" -le 0 ] && { escalate_flush "$state" || true; }
       ;;
     pause)

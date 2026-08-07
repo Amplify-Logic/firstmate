@@ -1158,6 +1158,20 @@ test_status_open_captain_holds_fold_is_stream_truth() {
   pass "captain-held quiet-state is stream-truth: resolved: closes a key, open siblings and non-hold supersession behave"
 }
 
+# A malformed [key=...] token in the POST-COLON position folds under the default
+# key exactly as it did before post-colon extraction existed: the line is a real
+# decision, just malformed keyed, so it must not vanish from the open-decision
+# set (the lost-open-decision failure the fold exists to prevent).
+test_postcolon_invalid_key_folds_under_default() {
+  local dir state f open
+  dir=$(make_case postcolon-bad-key); state="$dir/state"; f="$state/d.status"
+  printf 'needs-decision: [key=bad key] pick one\n' > "$f"
+  open=$(status_open_decisions "$f")
+  printf '%s' "$open" | grep -F $'default\tneeds-decision\t' >/dev/null \
+    || fail "a malformed post-colon key vanished from the open-decision set: $open"
+  pass "an invalid post-colon key folds under default instead of dropping the decision"
+}
+
 # Ruling: quiet treatment must never outlive the hold. Once resolve appends its
 # closing resolved: line (fm-decision-hold.sh), the stopped crew's pane returns
 # to NORMAL stale handling: the watcher surfaces it as a bare stopped-crew
@@ -1869,6 +1883,7 @@ test_pause_due_fold_preserves_empty_notes
 test_pause_due_fold_dedupes_shared_window
 test_declared_wait_policies_paused_bounded_captain_held_silent
 test_status_open_captain_holds_fold_is_stream_truth
+test_postcolon_invalid_key_folds_under_default
 test_resolved_hold_returns_pane_to_normal_stale_handling
 test_multihold_resolved_one_keeps_quiet_state
 test_secondmate_paused_resurfaces_in_normal_mode
