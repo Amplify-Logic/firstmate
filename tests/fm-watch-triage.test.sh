@@ -1127,6 +1127,119 @@ test_declared_wait_policies_paused_bounded_captain_held_silent() {
   pass "declared-wait policies: paused: is bounded, captain-held absorbs silently when healthy and surfaces a dead agent once"
 }
 
+# The captain-held quiet-state fold is STREAM-TRUTH (fm-classify-lib.sh owns the
+# policy): a captain-held line opens its key, an explicit resolved: line closes
+# it, and the declared-wait gate follows the fold only while the last line still
+# belongs to the hold stream. This pins the fold contract directly so the
+# watcher and daemon consumers inherit it.
+test_status_open_captain_holds_fold_is_stream_truth() {
+  local dir state f
+  dir=$(make_case fold-captain-holds); state="$dir/state"; f="$state/t.status"
+  printf 'captain-held [key=a]: tracked by held-a\n' > "$f"
+  status_has_open_captain_hold "$f" || fail "a lone captain-held line must fold open"
+  status_declared_wait "$f" || fail "a lone captain-held line must be a declared wait"
+  printf 'resolved: [key=a]: retired by fm-decision-hold (held-a)\n' >> "$f"
+  [ -z "$(status_open_captain_holds "$f")" ] || fail "a resolved hold must fold closed"
+  status_has_open_captain_hold "$f" && fail "a resolved hold must not be an open hold"
+  status_declared_wait "$f" && fail "a resolved hold must not be a declared wait"
+  # Multi-hold: hold b stays open when only a resolved. The trailing resolved:
+  # line is still part of the hold stream, so the declared-wait gate stays true
+  # (a last-line test would misread it as "no hold").
+  printf 'captain-held [key=a]: tracked by held-a\ncaptain-held [key=b]: tracked by held-b\nresolved: [key=a]: retired\n' > "$f"
+  status_has_open_captain_hold "$f" || fail "hold b must stay open when only a resolved"
+  status_declared_wait "$f" || fail "a still-open hold b must remain a declared wait"
+  printf 'resolved: [key=b]: retired\n' >> "$f"
+  [ -z "$(status_open_captain_holds "$f")" ] || fail "resolving b must close the last open hold"
+  status_declared_wait "$f" && fail "an all-resolved stream must not be a declared wait"
+  # A non-hold line supersedes quiet-state even while the fold is open: a crew
+  # that moved on to a newer verb is no longer silently absorbed by the hold.
+  printf 'captain-held [key=a]: tracked by held-a\nworking: still churning\n' > "$f"
+  status_declared_wait "$f" && fail "a newer working: line must supersede the hold quiet-state"
+  pass "captain-held quiet-state is stream-truth: resolved: closes a key, open siblings and non-hold supersession behave"
+}
+
+# Ruling: quiet treatment must never outlive the hold. Once resolve appends its
+# closing resolved: line (fm-decision-hold.sh), the stopped crew's pane returns
+# to NORMAL stale handling: the watcher surfaces it as a bare stopped-crew
+# stale instead of absorbing it behind the retired hold.
+test_resolved_hold_returns_pane_to_normal_stale_handling() {
+  local dir state fakebin out capture_file statusf window key pane_hash sig pid round wakes bare
+  dir=$(make_case resolved-hold-stale); state="$dir/state"; fakebin="$dir/fakebin"
+  out="$dir/watch.out"; capture_file="$dir/pane.txt"; statusf="$state/held.status"
+  window="test:fm-held"
+  printf 'idle bare shell after the hold resolved\n' > "$capture_file"
+  printf 'window=%s\nkind=ship\nharness=grok\nbackend=tmux\n' "$window" > "$state/held.meta"
+  printf 'captain-held [key=route]: tracked by held-decision-route\nresolved: [key=route]: retired by fm-decision-hold (held-decision-route)\n' > "$statusf"
+  back=$(( $(date +%s) - 500 ))
+  if [ "$(uname)" = Darwin ]; then touch -mt "$(date -r "$back" '+%Y%m%d%H%M.%S')" "$statusf"
+  else touch -m -d "@$back" "$statusf"; fi
+  sig=$(seen_sig "$statusf"); printf '%s' "$sig" > "$state/.seen-held_status"
+  key=$(printf '%s' "$window" | tr ':/.' '___')
+  pane_hash=$(hash_text "idle bare shell after the hold resolved")
+  printf '%s' "$pane_hash" > "$state/.hash-$key"
+  printf '1\n' > "$state/.count-$key"
+  # With the hold retired the pane is a plain stopped crew: it surfaces a bare
+  # stale wake on first sight (never absorbed, never a wedge label), then stays
+  # quiet across unchanged polls via the suppressor.
+  round=1
+  while [ "$round" -le 4 ]; do
+    PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CAPTURE="$capture_file" \
+      FM_FAKE_TMUX_CURRENT_COMMAND=zsh FM_FAKE_CREW_STATE='state: stopped · source: pane · bare shell' \
+      FM_STATE_OVERRIDE="$state" FM_CREW_STATE_BIN="$fakebin/fm-crew-state.sh" FM_PAUSE_RESURFACE_SECS=240 FM_POLL=1 FM_SIGNAL_GRACE=1 \
+      FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 "$WATCH" >> "$out" &
+    pid=$!
+    if wait_live "$pid" 15; then reap "$pid"; else wait "$pid" || fail "resolved-hold watcher round $round failed"; fi
+    round=$((round + 1))
+  done
+  wakes=$(awk -F '\t' -v w="$window" '$3 == "stale" && $4 == w { n++ } END { print n + 0 }' "$state/.wake-queue" 2>/dev/null || true)
+  case "$wakes" in ''|*[!0-9]*) wakes=0 ;; esac
+  [ "$wakes" -eq 1 ] || fail "resolved hold surfaced $wakes stale wakes, expected one bare surface"
+  bare=$(awk -F '\t' -v w="$window" '$3 == "stale" && $4 == w && $5 == "stale: " w { n++ } END { print n + 0 }' "$state/.wake-queue" 2>/dev/null || true)
+  case "$bare" in ''|*[!0-9]*) bare=0 ;; esac
+  [ "$bare" -eq 1 ] || fail "resolved hold lost its bare stopped-crew surface (got $bare)"
+  grep -F "agent exited" "$state/.wake-queue" >/dev/null \
+    && fail "a resolved hold must not carry the dead-agent loss-risk surface"
+  grep -F "possible wedge" "$state/.wake-queue" >/dev/null \
+    && fail "a resolved hold's surface was escalated as a possible wedge"
+  pass "after resolve emits its closing line the stopped crew surfaces normally again"
+}
+
+# Stream-truth through the watcher: a trailing resolved: line for hold a must
+# NOT mask a still-open hold b. The pane stays silently absorbed behind b (the
+# captain still owes the b decision) until b is resolved too.
+test_multihold_resolved_one_keeps_quiet_state() {
+  local dir state fakebin out capture_file statusf window key pane_hash sig pid round wakes
+  dir=$(make_case multihold-quiet); state="$dir/state"; fakebin="$dir/fakebin"
+  out="$dir/watch.out"; capture_file="$dir/pane.txt"; statusf="$state/gate.status"
+  window="test:fm-gate"
+  printf 'idle at the captain-decision gate\n' > "$capture_file"
+  printf 'window=%s\nkind=ship\nharness=grok\nbackend=tmux\n' "$window" > "$state/gate.meta"
+  printf 'captain-held [key=route]: tracked by held-decision-route\ncaptain-held [key=access]: tracked by held-decision-access\nresolved: [key=route]: retired by fm-decision-hold (held-decision-route)\n' > "$statusf"
+  back=$(( $(date +%s) - 500 ))
+  if [ "$(uname)" = Darwin ]; then touch -mt "$(date -r "$back" '+%Y%m%d%H%M.%S')" "$statusf"
+  else touch -m -d "@$back" "$statusf"; fi
+  sig=$(seen_sig "$statusf"); printf '%s' "$sig" > "$state/.seen-gate_status"
+  key=$(printf '%s' "$window" | tr ':/.' '___')
+  pane_hash=$(hash_text "idle at the captain-decision gate")
+  printf '%s' "$pane_hash" > "$state/.hash-$key"
+  printf '1\n' > "$state/.count-$key"
+  round=1
+  while [ "$round" -le 5 ]; do
+    PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CAPTURE="$capture_file" \
+      FM_FAKE_TMUX_CURRENT_COMMAND=grok FM_FAKE_CREW_STATE='state: paused · source: status-log · captain-held [key=access]: tracked by held-decision-access' \
+      FM_STATE_OVERRIDE="$state" FM_CREW_STATE_BIN="$fakebin/fm-crew-state.sh" FM_PAUSE_RESURFACE_SECS=240 FM_POLL=1 FM_SIGNAL_GRACE=1 \
+      FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 "$WATCH" >> "$out" &
+    pid=$!
+    if wait_live "$pid" 15; then reap "$pid"; else wait "$pid" || fail "multihold watcher round $round failed"; fi
+    round=$((round + 1))
+  done
+  wakes=$(awk -F '\t' -v w="$window" '$3 == "stale" && $4 == w { n++ } END { print n + 0 }' "$state/.wake-queue" 2>/dev/null || true)
+  case "$wakes" in ''|*[!0-9]*) wakes=0 ;; esac
+  [ "$wakes" -eq 0 ] || fail "still-open hold b surfaced $wakes stale wakes, expected silence behind the open hold"
+  [ -e "$state/.paused-$key" ] || fail "still-open hold b lost its declared-wait marker"
+  pass "a trailing resolved: line for one hold does not retire a sibling still-open hold"
+}
+
 test_secondmate_paused_resurfaces_in_normal_mode() {
   local dir state fakebin out capture_file statusf window key pane_hash sig pid back
   dir=$(make_case secondmate-paused-resurface); state="$dir/state"; fakebin="$dir/fakebin"
@@ -1755,6 +1868,9 @@ test_pause_due_fold_is_shared_and_groups_by_reason
 test_pause_due_fold_preserves_empty_notes
 test_pause_due_fold_dedupes_shared_window
 test_declared_wait_policies_paused_bounded_captain_held_silent
+test_status_open_captain_holds_fold_is_stream_truth
+test_resolved_hold_returns_pane_to_normal_stale_handling
+test_multihold_resolved_one_keeps_quiet_state
 test_secondmate_paused_resurfaces_in_normal_mode
 test_secondmate_nonpaused_stale_remains_suppressed
 test_secondmate_unpause_clears_pause_tracking

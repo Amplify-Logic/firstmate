@@ -463,10 +463,11 @@ test_stale_captain_held_classifies_absorb_and_records_no_marker() {
 # a CONFIDENTLY DEAD agent reading - the work is lost the moment the captain's
 # answer lands, so the dead agent must still surface once. Live vs dead is told
 # apart by fm_backend_agent_alive (here a fake tmux whose pane_current_command is
-# a bare shell), never by the status verb. The escalate is one-shot: the wake
-# itself fires once per distinct hash, so the escalation is bounded, not the
-# old repeating possible-wedge nag, and no wedge marker may survive for
-# housekeeping to re-age.
+# a bare shell), never by the status verb. The escalate is one-shot: the
+# .subsuper-captain-held-surfaced-<task> marker keys the dead-agent surface on
+# the open-hold digest (mirroring the watcher's .captain-held-surfaced-<window>
+# marker), so a pane-content change or a repeated wake cannot re-alert forever,
+# and no wedge marker may survive for housekeeping to re-age.
 test_stale_captain_held_dead_agent_escalates_once() {
   local dir state fakebin out key
   dir=$(make_supercase stale-captain-held-dead)
@@ -484,16 +485,88 @@ esac
 exit 1
 SH
   chmod +x "$fakebin/tmux"
-  out=$(PATH="$fakebin:$PATH" FM_FAKE_TMUX_CURRENT_COMMAND=zsh \
-    FM_STATE_OVERRIDE="$state" classify_stale "sess:fm-held-c4" "$state")
-  case "$out" in escalate\|*agent\ exited*) ;; *) fail "dead-agent captain-held did not escalate once: $out" ;; esac
-  case "$out" in *possible\ wedge*) fail "dead-agent captain-held was framed as a wedge: $out" ;; esac
   PATH="$fakebin:$PATH" FM_FAKE_TMUX_CURRENT_COMMAND=zsh \
     FM_STATE_OVERRIDE="$state" handle_wake "stale: sess:fm-held-c4" "$state"
-  [ ! -e "$state/.subsuper-stale-$key" ] || fail "dead-agent captain-held escalate left a wedge marker to re-age"
   grep -F "captain-held, agent exited" "$state/.subsuper-escalations" >/dev/null \
     || fail "dead-agent captain-held escalate did not reach the escalation buffer"
+  grep -F "possible wedge" "$state/.subsuper-escalations" >/dev/null \
+    && fail "dead-agent captain-held was framed as a wedge"
+  [ ! -e "$state/.subsuper-stale-$key" ] || fail "dead-agent captain-held escalate left a wedge marker to re-age"
+  [ -e "$state/.subsuper-captain-held-surfaced-$key" ] \
+    || fail "dead-agent captain-held escalate did not record its one-shot marker"
+  # The one-shot holds: a repeated wake for the same open hold must NOT add a
+  # second escalation line, and the direct classifier now reads absorb.
+  PATH="$fakebin:$PATH" FM_FAKE_TMUX_CURRENT_COMMAND=zsh \
+    FM_STATE_OVERRIDE="$state" handle_wake "stale: sess:fm-held-c4" "$state"
+  lines=$(grep -cF "captain-held, agent exited" "$state/.subsuper-escalations")
+  [ "$lines" -eq 1 ] || fail "dead-agent captain-held re-escalated on a repeated wake ($lines lines)"
+  out=$(PATH="$fakebin:$PATH" FM_FAKE_TMUX_CURRENT_COMMAND=zsh \
+    FM_STATE_OVERRIDE="$state" classify_stale "sess:fm-held-c4" "$state")
+  case "$out" in absorb\|*already\ surfaced*) ;; *) fail "dead-agent captain-held one-shot did not hold on re-classify: $out" ;; esac
   pass "a confidently dead agent under a captain-held transfer escalates once, never wedge-aged"
+}
+
+# Ruling-2 parity: away mode must keep normal-mode coverage. A captain-held task
+# whose crew is PROVABLY WORKING (fm-crew-state.sh reports an active run-step)
+# is not a declared wait - the hold is routing state, not a liveness exemption -
+# so classify_stale falls through to the transient-stale handling and
+# handle_wake records a wedge marker that housekeeping ages while the captain is
+# away.
+test_stale_captain_held_provably_working_keeps_wedge_coverage() {
+  local dir state fakebin out key
+  dir=$(make_supercase stale-captain-held-working)
+  state="$dir/state"; fakebin="$dir/fakebin"
+  printf 'captain-held [key=api-shape]: tracked by held-route-7\n' > "$state/held-c7.status"
+  key=$(printf '%s' "held-c7" | tr ':/.' '___')
+  cat > "$fakebin/crew-state-working.sh" <<'SH'
+#!/usr/bin/env bash
+printf 'state: working · source: run-step · active no-mistakes step\n'
+SH
+  chmod +x "$fakebin/crew-state-working.sh"
+  out=$(FM_CREW_STATE_BIN="$fakebin/crew-state-working.sh" FM_STATE_OVERRIDE="$state" \
+    classify_stale "sess:fm-held-c7" "$state")
+  case "$out" in absorb\|*) fail "provably-working captain-held must not absorb: $out" ;; esac
+  case "$out" in self\|transient*) ;; *) fail "provably-working captain-held should route to transient stale: $out" ;; esac
+  FM_CREW_STATE_BIN="$fakebin/crew-state-working.sh" FM_STATE_OVERRIDE="$state" \
+    handle_wake "stale: sess:fm-held-c7" "$state"
+  [ -e "$state/.subsuper-stale-$key" ] || fail "provably-working captain-held lost its wedge marker"
+  [ -e "$state/.subsuper-captain-held-surfaced-$key" ] \
+    && fail "provably-working captain-held recorded a dead-agent surface marker"
+  [ ! -s "$state/.subsuper-escalations" ] || fail "provably-working captain-held escalated on the wake itself"
+  pass "a provably-working crew behind a captain-held line keeps its wedge coverage in away mode"
+}
+
+# Stream-truth retirement in the daemon: once resolve appends its closing
+# resolved: line, the last line is resolved: and the fold is empty, so
+# classify_stale no longer absorbs - the pane returns to normal stale handling
+# and a wedge marker is recorded again.
+test_stale_resolved_hold_returns_to_normal_stale_handling() {
+  local dir state out key
+  dir=$(make_supercase stale-resolved-hold)
+  state="$dir/state"
+  printf 'captain-held [key=api-shape]: tracked by held-route-9\nresolved: [key=api-shape]: retired by fm-decision-hold (held-route-9)\n' > "$state/held-c9.status"
+  key=$(printf '%s' "held-c9" | tr ':/.' '___')
+  out=$(FM_STATE_OVERRIDE="$state" classify_stale "sess:fm-held-c9" "$state")
+  case "$out" in absorb\|*) fail "a resolved hold must not absorb: $out" ;; esac
+  case "$out" in self\|transient*) ;; *) fail "a resolved hold should route to transient stale: $out" ;; esac
+  FM_STATE_OVERRIDE="$state" handle_wake "stale: sess:fm-held-c9" "$state"
+  [ -e "$state/.subsuper-stale-$key" ] || fail "a resolved hold must regain wedge-marker coverage"
+  pass "a resolved hold returns the pane to normal stale handling in away mode"
+}
+
+# Stream-truth multi-hold in the daemon: a trailing resolved: line for hold a
+# must not mask a still-open hold b - the pane keeps its declared-wait
+# absorption until b is resolved too (a last-line test would misread the
+# trailing resolved: as "no hold" and wedge the pane).
+test_stale_multihold_resolved_one_keeps_other_open() {
+  local dir state out
+  dir=$(make_supercase stale-multihold)
+  state="$dir/state"
+  printf 'captain-held [key=a]: tracked by held-a\ncaptain-held [key=b]: tracked by held-b\nresolved: [key=a]: retired by fm-decision-hold (held-a)\n' > "$state/held-mb.status"
+  out=$(FM_STATE_OVERRIDE="$state" classify_stale "sess:fm-held-mb" "$state")
+  case "$out" in absorb\|*) ;; *) fail "a still-open hold b must keep absorbing despite resolved a: $out" ;; esac
+  case "$out" in *possible\ wedge*) fail "a still-open hold b was framed as a wedge: $out" ;; esac
+  pass "a still-open hold keeps its declared-wait absorption when a sibling hold resolved"
 }
 
 # A stale marker that predates the declared-wait handling (or a race) must never
@@ -2207,6 +2280,9 @@ test_housekeeping_paused_resumed_cleared
 test_housekeeping_paused_unpaused_cleared
 test_stale_captain_held_classifies_absorb_and_records_no_marker
 test_stale_captain_held_dead_agent_escalates_once
+test_stale_captain_held_provably_working_keeps_wedge_coverage
+test_stale_resolved_hold_returns_to_normal_stale_handling
+test_stale_multihold_resolved_one_keeps_other_open
 test_housekeeping_captain_held_stale_marker_never_wedges
 test_housekeeping_captain_held_pause_marker_never_resurfaces
 test_housekeeping_stale_marker_transitions_to_pause

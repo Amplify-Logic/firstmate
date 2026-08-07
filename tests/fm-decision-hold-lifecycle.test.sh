@@ -276,6 +276,45 @@ EOF
   pass "captain holds are idempotent, distinct, teardown-safe, Bearings-visible, and durably routed before close"
 }
 
+# Ruling: quiet treatment must never outlive the hold. resolve retires the
+# captain-held quiet-state from the origin status stream: after the hold closes
+# it appends `resolved: [key=<key>]: retired by fm-decision-hold (<hold-id>)`,
+# and the status_open_captain_holds fold closes that key. Without the emit the
+# last status line would stay `captain-held:` forever, so both supervision
+# consumers would keep the idle pane silently absorbed after the captain
+# already answered.
+test_resolve_emits_closing_status_line_retiring_the_hold() {
+  local home id hold open
+  home=$(make_home resolve-emits-closing)
+  id=sample-emit-review
+  mkdir -p "$home/data/$id"
+  tasks_in "$home" add "$id" "Emit review" --kind scout --repo sample --start >/dev/null \
+    || fail "could not create origin fixture"
+  write_origin_meta "$home" "$id"
+  printf 'needs-decision [key=emit]: choose the emit shape\n' > "$home/state/$id.status"
+  hold=$(run_decisions "$home" hold "$id" emit \
+    --title "Choose the emit shape" --reason "captain emit pending" --repo sample) \
+    || fail "could not register emit hold"
+  run_decisions "$home" complete "$id" emit >/dev/null \
+    || fail "completion gate failed"
+  grep -F "captain-held [key=emit]:" "$home/state/$id.status" >/dev/null \
+    || fail "complete did not transfer the decision to a captain-held status line"
+  tasks_in "$home" add emit-dep "Emit dependent" --kind ship --repo sample >/dev/null \
+    || fail "could not create dependent"
+  tasks_in "$home" block emit-dep --by "$hold" >/dev/null || fail "could not block dependent"
+  printf 'Use the compact emit shape.\n' > "$home/emit-decision.txt"
+  run_decisions "$home" resolve "$id" emit --decision-file "$home/emit-decision.txt" \
+    --routed-to emit-dep >/dev/null || fail "resolve failed"
+  grep -F "resolved: [key=emit]: retired by fm-decision-hold ($hold)" "$home/state/$id.status" >/dev/null \
+    || fail "resolve did not append the closing resolved: line"
+  # The last line is now resolved:, so the single-line quiet-state predicates
+  # are false, and the stream fold has no open holds either.
+  open=$(bash -c '. "$1"; status_open_captain_holds "$2"' _ \
+    "$ROOT/bin/fm-classify-lib.sh" "$home/state/$id.status")
+  [ -z "$open" ] || fail "resolved hold still folds open: $open"
+  pass "resolve appends a closing resolved: line so quiet treatment cannot outlive the hold"
+}
+
 test_scout_teardown_always_requires_inventory_verification() {
   local home id
   home=$(make_home unconditional-teardown)
@@ -554,6 +593,7 @@ test_uninventoried_report_decision_refuses_completion
 
 test_scout_teardown_always_requires_inventory_verification
 test_structured_holds_survive_teardown_and_route_resolution
+test_resolve_emits_closing_status_line_retiring_the_hold
 test_origin_slug_validation_precedes_path_construction
 test_visual_review_uses_shared_completion_owner
 test_none_inventory_and_resolved_prose_do_not_create_holds
