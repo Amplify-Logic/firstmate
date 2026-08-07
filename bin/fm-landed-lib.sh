@@ -44,41 +44,53 @@
 #     the finished row at the TOP of Done together with its completion date for
 #     the same reason.
 #   * Equal keys keep their INPUT order, because the sort is a stable ascending
-#     sort of the reversed input, re-reversed. That is what lets a caller publish
-#     rows in this order and re-sort them later without `order`: the fleet layer
-#     strips the internal `order` field from the rows it publishes, and each
-#     home's already-correct newest-first order survives every later re-sort.
+#     sort of the reversed input, re-reversed. The internal `order` field is never
+#     published: the fleet layer publishes `recency_rank` in its place, the row's
+#     1-based position in its OWN home's newest-first order, where 1 is that
+#     home's newest completion. The key falls back to `recency_rank` when `order`
+#     is absent, so a published row re-sorts to the same place and same-date rows
+#     keep real recency evidence across the publish boundary.
 #
-# A row that carries no `order` is treated as order 0, which ranks it AHEAD of
-# every row with a positive order inside the same date group; it does not keep its
-# input position relative to those rows. Rows that all lack `order` tie, so they
-# do keep their input order relative to each other. A consumer that needs
-# position-accurate ranking across rows must project `order` onto them.
+# A row that carries neither `order` nor `recency_rank` is treated as key 0, which
+# ranks it AHEAD of every row with a positive order or rank inside the same date
+# group; it does not keep its input position relative to those rows. Rows that
+# lack both tie, so they do keep their input order relative to each other. A
+# consumer that needs position-accurate ranking across rows must project one of
+# the two fields onto them.
 #
 # WHAT THIS GUARANTEES, AND WHAT IT DOES NOT
 #
 # With this ordering, the newest DATED completion in a home is always at index 0
 # of that home's group, so no per-home cap can discard it, and the cross-home merge
-# in bin/fm-bearings-snapshot.sh reserves its first slot for the row this rule ranks
-# newest across every home, so no overall cap can discard THAT one.
+# in bin/fm-bearings-snapshot.sh reserves a leading slot for every home whose
+# newest dated completion carries the fleet's newest completion date, so no overall
+# cap can discard a just-finished dated completion in favour of an older or undated
+# row, whichever home recorded it.
 # tests/fm-landed-completion-truth.test.sh pins both properties.
 #
 # The guarantee is scoped to a completion recorded as a structured
 # `- [x] <id> - <rest>` Done row carrying its completion date. Three cases sit
 # outside it: an undated row ranks below every dated one and can rotate out under
 # the cap, a completion never recorded into Done at all cannot appear at all, and a
-# home's own newest row can still rotate out of a merged list once the fleet has
-# more homes than the overall cap has slots, because only the fleet-newest row is
-# reserved and the remaining slots are shared across homes rather than filled
-# strictly oldest-last.
+# row that does not carry the fleet's newest completion date can still rotate out
+# of a merged list once the fleet has more homes than the overall cap has slots,
+# because only rows at that newest date are reserved and the remaining slots are
+# shared across homes rather than filled strictly oldest-last. Completion dates are
+# day-granularity and nothing in the system records anything finer, so when more
+# homes tie at the newest date than the overall cap has slots, the later-sorting
+# tied homes still drop.
 
-# Emits the jq prelude defining landed_newest_first. Callers interpolate it ahead
+# Emits the jq prelude defining the library's TWO public entry points:
+# landed_newest_first, the newest-first ordering itself, and landed_recency_key,
+# the per-row sort key it ranks by, which callers use directly when they need to
+# locate or compare newest rows without re-sorting. Both are exported surface;
+# inlining or renaming either breaks callers that interpolate this prelude ahead
 # of their own program text, e.g. jq "$(fm_landed_jq_prelude)"'<program>'.
 fm_landed_jq_prelude() {
   cat <<'JQ'
 def landed_recency_key:
   (.completion.date // "") as $date
-  | [(if $date == "" then 0 else 1 end), $date, (0 - (.order // 0))];
+  | [(if $date == "" then 0 else 1 end), $date, (0 - (.order // .recency_rank // 0))];
 def landed_newest_first:
   reverse | sort_by(landed_recency_key) | reverse;
 JQ

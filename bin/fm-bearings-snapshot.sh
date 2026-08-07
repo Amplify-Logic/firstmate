@@ -31,8 +31,14 @@
 # newest-first ordering, homes iterate in deterministic id order, sparse homes do not
 # waste capacity, and --all-landed switches back to the complete global newest-first
 # order. Balance alone would drop the newest completion in the fleet once there are
-# more homes than the overall cap has slots, so the merge reserves the first slot for
-# the row bin/fm-landed-lib.sh ranks newest across every home and balances the rest.
+# more homes than the overall cap has slots, so the merge reserves a leading slot for
+# every home whose newest dated completion - the row bin/fm-landed-lib.sh ranks first
+# in that home, published with recency_rank 1 - carries the fleet's newest completion
+# date, and balances the rest. Completion dates are day-granularity and nothing in
+# the system records anything finer, so a same-date cross-home tie reserves EVERY
+# tied home's newest row rather than letting home-id order cut a later-sorting
+# home's just-finished completion; only a cap with fewer slots than tied homes can
+# still drop one, and omitted[] discloses it.
 #
 # Flags:
 #   (default)        compact projection, TOON, local-only
@@ -57,7 +63,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 FLEET="$SCRIPT_DIR/fm-fleet-snapshot.sh"
 # shellcheck source=bin/fm-landed-lib.sh
 # shellcheck disable=SC1091
-. "$SCRIPT_DIR/fm-landed-lib.sh"  # landed_newest_first: shared completion-recency ordering
+. "$SCRIPT_DIR/fm-landed-lib.sh"  # landed_newest_first + landed_recency_key: shared completion-recency ordering
 
 # Bounds (overridable for tests / large fleets).
 FM_BEARINGS_LANDED=${FM_BEARINGS_LANDED:-6}
@@ -107,10 +113,11 @@ Default fields: schema, home, generated, prs, in_flight{id,kind,state,doing},
   unhealthy_endpoints{...} (only when non-empty), omitted{surface,reveal}.
 landed merges this home's Done with registered secondmate homes' Done, bounded by
   a per-home cap (FM_BEARINGS_LANDED_PER_HOME) and an overall cap (FM_BEARINGS_LANDED),
-  with omitted[] disclosure. Default selection reserves the first slot for the newest
-  completion in the fleet, then balances the rest across deterministic home order while
-  preserving each home's internal newest-first order; sparse homes do not waste
-  capacity. --all-landed reveals the full global newest-first set.
+  with omitted[] disclosure. Default selection reserves a leading slot for every home
+  whose newest dated completion carries the fleet's newest completion date, then
+  balances the rest across deterministic home order while preserving each home's
+  internal newest-first order; sparse homes do not waste capacity. --all-landed
+  reveals the full global newest-first set.
 For every registered secondmate, validated structured state from its own home is
   authoritative. Parent events and bounded terminal reads are labeled fallback or
   contradiction evidence and never become current work.
@@ -304,14 +311,17 @@ MODEL=$(printf '%s' "$SNAP" | jq \
     (tostring | gsub("\\s+"; " ") | if (length > $n) then (.[:$n] + "…") else . end) end;
   def round_robin_landed($n):
     . as $groups
+    | ($groups | length) as $g
     | [range(0; (($groups | map(length) | max) // 0)) as $i
        | $groups[]
        | select(length > $i)
        | .[$i]] as $merged
-    | ($merged | map(landed_recency_key) | max) as $top
-    | ([$merged | to_entries[] | select((.value | landed_recency_key) == $top) | .key] | first) as $newest
-    | (if $newest == null then $merged
-       else [$merged[$newest]] + [$merged | to_entries[] | select(.key != $newest) | .value]
+    | $merged[:$g] as $heads
+    | ([$heads[] | .completion.date // "" | select(. != "")] | max) as $top_date
+    | (if $top_date == null then $merged
+       else [$heads[] | select((.completion.date // "") == $top_date)]
+            + [$heads[] | select((.completion.date // "") != $top_date)]
+            + $merged[$g:]
        end)[:$n];
   ($fields | split(",") | map(gsub("^\\s+|\\s+$"; "")) | map(select(. != ""))) as $fl
   | (($fl | index("bodies")) != null) as $f_bodies

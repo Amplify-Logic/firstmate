@@ -40,6 +40,13 @@
 #     decisions_open and are also preserved in queued with hold metadata.
 #   secondmate_landed: {records[],truncated[],unreadable[]} - the compatibility
 #     landed-work roll-up derived from secondmate_current.
+#   recency_rank: stable PUBLISHED CONTRACT on every landed row in
+#     fm-secondmate-home-summary.v1 landed[], fm-fleet-snapshot.v1
+#     secondmate_current.records[].landed[], and secondmate_landed.records[].
+#     It is the row's 1-based position in its OWN home's newest-first landed
+#     ordering, where 1 is that home's newest completion. It replaces the
+#     internal backlog parse position (order), which is never published, and it
+#     is per-home recency evidence rather than a cross-home ordering.
 #   secondmate_guidance: return-channel action note for renderers and bearings.
 #
 # Compatibility: JSON is the primary machine-readable surface.
@@ -125,7 +132,7 @@ validate_positive_bound FM_SNAPSHOT_REGISTRY_TIMEOUT "$FM_SNAPSHOT_REGISTRY_TIME
 . "$SCRIPT_DIR/fm-ff-lib.sh"  # validate_secondmate_home: shared seeded-home boundary checks
 # shellcheck source=bin/fm-landed-lib.sh
 # shellcheck disable=SC1091
-. "$SCRIPT_DIR/fm-landed-lib.sh"  # landed_newest_first: shared completion-recency ordering
+. "$SCRIPT_DIR/fm-landed-lib.sh"  # landed_newest_first + landed_recency_key: shared completion-recency ordering
 
 usage() {
   cat <<'EOF'
@@ -555,7 +562,8 @@ secondmate_home_summary_json() {  # <backlog-json> <tasks-json>
             local_note:((.local_note // null) | if . == null then null else trunc(120) end),
             completion,order} ]
        | landed_newest_first
-       | map(del(.order))) as $landed_all
+       | to_entries
+       | map(.value + {recency_rank:(.key + 1)} | del(.order))) as $landed_all
     | ([ $tasks[] | select(.current_state.state == "unknown") ]) as $unknown_children
     | ([ $owned_in_flight[] | select(.id as $id | [$tasks[].id] | index($id) | not) ]) as $orphan_in_flight
     | ([ $tasks[]

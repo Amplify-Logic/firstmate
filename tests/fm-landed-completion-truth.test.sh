@@ -260,17 +260,13 @@ test_completion_recorded_after_an_earlier_report_appears_next_run() {
 # The same ordering must hold for work a secondmate completed in its own home, which
 # reaches the captain only through the bounded cross-home roll-up. The roll-up is also
 # where the recording position could leak: `order` is an internal backlog parse index,
-# so the canonical machine contract must keep publishing rows without it while each
-# home's newest-first order still survives every later re-sort.
+# so the canonical machine contract must keep publishing rows without it, carrying the
+# documented recency_rank ordinal - 1 is that home's newest - in its place so each
+# home's newest-first evidence still survives every later re-sort.
 test_secondmate_just_finished_completion_survives_rollup() {
   local home mate fakebin json canonical ids rows i
   home=$(make_home mate-rollup)
-  mate="$TMP_ROOT/mate-rollup-home"
-  mkdir -p "$mate/state" "$mate/data" "$mate/config" "$mate/projects" "$mate/bin"
-  printf '# Firstmate fixture\n' > "$mate/AGENTS.md"
-  printf 'mate\n' > "$mate/.fm-secondmate-home"
-  printf -- '- mate - fixture domain (home: %s; scope: fixture work; projects: firstmate; added 2026-07-11)\n' \
-    "$mate" > "$home/data/secondmates.md"
+  mate=$(make_mate_home "$home" mate)
   write_backlog "$home" "$(done_row main-old "Main home older landing" "merged" "2026-07-02")"
 
   rows=("$(done_row mate-just-now "Secondmate work that just finished" "done" "$TODAY")")
@@ -294,10 +290,12 @@ test_secondmate_just_finished_completion_survives_rollup() {
     ([.secondmate_current.records[].landed[]?] + [.secondmate_landed.records[]?]) as $published
     | ($published | length) > 0
       and ($published | all(has("order") | not))
+      and ($published | all(.recency_rank >= 1))
       and (.secondmate_current.records[0].landed[0].id == "mate-just-now")
+      and (.secondmate_current.records[0].landed[0].recency_rank == 1)
       and (.secondmate_landed.records[0].id == "mate-just-now")
   ' >/dev/null \
-    || fail "the published landed contract must stay order-free and newest-first: $canonical"
+    || fail "the published landed contract must stay order-free and carry newest-first recency_rank: $canonical"
   pass "a secondmate's just-finished completion survives the cross-home roll-up"
 }
 
@@ -305,8 +303,9 @@ test_secondmate_just_finished_completion_survives_rollup() {
 # promise from the other end: the merge takes index 0 of every home in deterministic id
 # order, and once the fleet has more homes than the cap has slots, the homes that sort
 # last fall off the end - taking the newest completion in the fleet with them if it
-# happens to live in one of them. The merge therefore reserves its first slot for the
-# row bin/fm-landed-lib.sh ranks newest across every home, and balances the rest.
+# happens to live in one of them. The merge therefore reserves a leading slot for every
+# home whose newest dated completion carries the fleet's newest completion date, and
+# balances the rest.
 test_just_finished_completion_survives_when_homes_exceed_the_cap() {
   local home fakebin json ids mate i id
   home=$(make_home homes-exceed-cap)
@@ -340,6 +339,42 @@ test_just_finished_completion_survives_when_homes_exceed_the_cap() {
   pass "the newest completion in the fleet survives a cap smaller than the home count"
 }
 
+# Two homes land on the SAME newest date while the fleet has more homes than the cap
+# has slots. Day-granularity dates provide no finer evidence anywhere in the system,
+# so the reservation must hold a leading slot for EVERY home whose newest dated
+# completion carries the fleet's newest date - otherwise the tie breaks on home-id
+# order and a later-sorting home's just-finished completion is cut from the list.
+test_same_day_cross_home_tie_keeps_later_sorting_homes_completion() {
+  local home fakebin json ids mate i id
+  home=$(make_home same-day-cross-home)
+  write_backlog "$home" "$(done_row main-old "Main home older landing" "merged" "2026-07-01")"
+  for i in 1 2 3 4 5 6 7; do
+    id=$(printf 'mate-%02d' "$i")
+    mate=$(make_mate_home "$home" "$id")
+    if [ "$i" -eq 2 ]; then
+      write_backlog "$mate" "$(done_row "$id-same-day" "Earlier-sorting home same-day landing" "merged" "$TODAY")"
+    elif [ "$i" -eq 7 ]; then
+      write_backlog "$mate" "$(done_row "$id-just-now" "Later-sorting home work that just finished" "done" "$TODAY")"
+    else
+      write_backlog "$mate" "$(done_row "$id-old" "Older landing $i" "merged" "$(printf '2026-06-%02d' "$i")")"
+    fi
+  done
+  fakebin=$(make_fakebin "$home")
+  json=$(run_bearings "$home" "$fakebin" --json)
+  ids=$(landed_ids "$json")
+
+  printf '%s\n' "$ids" | grep -qx 'mate-07-just-now' \
+    || fail "a same-day tie broke on home order and cut the later-sorting home's just-finished completion: $ids"
+  printf '%s\n' "$ids" | grep -qx 'mate-02-same-day' \
+    || fail "reserving the later-sorting home must not drop the earlier-sorting home's same-day completion: $ids"
+  printf '%s' "$json" | jq -e '
+    (.landed | length) == 6
+      and ([.landed[].id] | unique | length) == 6
+      and ([.omitted[].surface] | any(test("landed showing 6 of 8")))
+  ' >/dev/null || fail "the same-day reservation broke the balanced merge or the cap disclosure: $json"
+  pass "a same-day cross-home tie keeps every tied home's newest completion under the cap"
+}
+
 test_just_finished_same_day_completion_leads_landed
 test_undated_completion_sorts_below_every_dated_row
 test_undated_rows_cannot_displace_dated_completions_under_the_cap
@@ -347,3 +382,4 @@ test_cap_drops_oldest_never_newest
 test_completion_recorded_after_an_earlier_report_appears_next_run
 test_secondmate_just_finished_completion_survives_rollup
 test_just_finished_completion_survives_when_homes_exceed_the_cap
+test_same_day_cross_home_tie_keeps_later_sorting_homes_completion

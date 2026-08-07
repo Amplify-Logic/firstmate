@@ -160,9 +160,10 @@ test_bearings_guarantees_completion_truth() {
     "bearings does not point at the ordering owner"
   # The guarantee has to be scoped to what the ordering can actually deliver: an
   # undated Done row can rotate out under the cap, a completion never recorded into
-  # Done cannot appear at all, and only the fleet-newest row is reserved against the
-  # cap once there are more homes than slots. An unconditional promise would tell the
-  # agent to trust the list in exactly the cases it is known to be incomplete.
+  # Done cannot appear at all, and only rows at the fleet's newest completion date
+  # are reserved against the cap once there are more homes than slots. An
+  # unconditional promise would tell the agent to trust the list in exactly the
+  # cases it is known to be incomplete.
   assert_grep "recorded with its completion date" "$BEARINGS" \
     "bearings promises completion truth without scoping it to a recorded completion date"
   assert_grep "Three gaps sit outside that guarantee" "$BEARINGS" \
