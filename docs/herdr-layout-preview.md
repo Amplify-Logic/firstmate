@@ -189,7 +189,7 @@ Opening any of these workers gives exactly what you get today:
 
 Two things go with AFTER-B as staged, and they are not equally hard to get back.
 
-**The per-project count line is not in the recommended layout, but it is recoverable in the fork.**
+**The per-project count line is not in the recommended layout, and only partly recoverable in the fork.**
 At eight workers, scanning eight labelled rows for a purple dot is fine.
 At twenty-five it would be worse than three summary rows, so at that scale it is worth building the row described here first.
 
