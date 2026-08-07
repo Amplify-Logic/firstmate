@@ -309,8 +309,8 @@ This distinction matters when reading the next result: a tool absent from a plai
 
 ### Local deny-list hardening
 
-Run in a scratch firstmate-shaped project containing `AGENTS.md`, `state/`, a full copy of `bin/`, and a Claude settings file containing the recommended local deny-list JSON above.
-The result validates the recommended local deny-list JSON above, not tracked repo state.
+Run in a scratch firstmate-shaped project containing `AGENTS.md`, `state/`, a full copy of `bin/`, and a Claude settings file containing the then-recommended 18-name local deny list: the JSON above plus `TaskCreate` and `TaskUpdate`, which the plan-only allowance has since dropped from the recommendation.
+The result validates the local deny-list mechanism, not tracked repo state.
 Asking for deferred entries explicitly returned:
 
 ```text
