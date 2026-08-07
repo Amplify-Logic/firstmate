@@ -121,6 +121,8 @@ PROJECTS="${FM_PROJECTS_OVERRIDE:-$FM_HOME/projects}"
 CONFIG="${FM_CONFIG_OVERRIDE:-$FM_HOME/config}"
 STATE="${FM_STATE_OVERRIDE:-$FM_HOME/state}"
 DATA="${FM_DATA_OVERRIDE:-$FM_HOME/data}"
+# shellcheck source=bin/fm-path-lib.sh disable=SC1091
+. "$SCRIPT_DIR/fm-path-lib.sh"
 # shellcheck source=bin/fm-tasks-axi-lib.sh disable=SC1091
 . "$SCRIPT_DIR/fm-tasks-axi-lib.sh"
 # shellcheck source=bin/fm-tangle-lib.sh disable=SC1091
@@ -661,13 +663,8 @@ x_mode_setup() {
 
   mkdir -p "$STATE" "$CONFIG" 2>/dev/null || { fmx_arm_failed; return 0; }
 
-  case "$FM_HOME" in
-    /*) shim_home=$FM_HOME ;;
-    *)
-      shim_home=$(CDPATH='' cd -- "$FM_HOME" 2>/dev/null && pwd -P) \
-        || { fmx_arm_failed; return 0; }
-      ;;
-  esac
+  shim_home=$(fm_path_resolve_directory "$FM_HOME") || { fmx_arm_failed; return 0; }
+  [ -n "$shim_home" ] || { fmx_arm_failed; return 0; }
   shim_body=$(fmx_poll_shim_content "$shim_home" "$FM_ROOT")
   x_mode_write_if_changed "$shim" "$shim_body" 700 || { fmx_arm_failed; return 0; }
   fmx_poll_shim_valid "$shim" "$shim_home" "$FM_ROOT" \
