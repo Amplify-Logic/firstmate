@@ -20,8 +20,8 @@ Opening a worker looks exactly like it does today.
 No 22-character token is ever shown, and nothing about how work is identified or controlled changes.
 
 **What is lost.** One thing: the per-project count line, `Your Magical Journey · 🟣 1 NEEDS LARS · 🔵 2 WORKING`, is not part of the recommended layout, so out of the box you read the fleet by scanning eight rows instead of three summaries.
-It is recoverable in the fork if we want it back, on a single summary row rather than one row per project, and the end of this document says how.
-At eight workers scanning is a fair trade; at thirty it would not be, and that is when the summary row becomes worth building.
+Counts are partly recoverable in the fork, on a single summary row rather than one row per project, though at fleet scale that row most likely carries fleet totals rather than a per-project breakdown, for width reasons the end of this document sets out.
+At eight workers scanning is a fair trade; at thirty it would not be, and that is when the summary row becomes worth building and testing.
 
 **Recommendation.** Go ahead with AFTER-B below.
 It is the only one of the two candidates that survives real use: I tried the version that keeps a project heading with its workers indented underneath, and it breaks the first time a worker starts out of order, which happens constantly on a real fleet.
@@ -178,7 +178,7 @@ Opening any of these workers gives exactly what you get today:
 | Rows at 8 workers, 3 projects | 3 | 11 | 8 |
 | Project shown for every worker | yes | only while ordering holds | yes |
 | Survives a worker starting out of order | yes | **no** | yes |
-| Per-project count line | yes | yes, but can contradict the layout | not as staged, recoverable as one pinned summary row |
+| Per-project count line | yes | yes, but can contradict the layout | not as staged, partly recoverable as one pinned summary row |
 | `NEEDS LARS` / `FAILED` / `BLOCKED` prominent | yes | yes | yes |
 | Human outcome instead of a task slug | yes | yes | yes |
 | Runtime and branch visible | yes | yes | yes |
@@ -195,12 +195,19 @@ At twenty-five it would be worse than three summary rows, so at that scale it is
 
 The recovery works by the same mechanism that makes AFTER-B work.
 Herdr's workspace order is creation order, and a later workspace always appends, so a holder workspace created before any worker keeps position 1 permanently and never has to be moved.
-AFTER-A already proves the two halves of this are possible: a non-worker holder workspace is stageable, and its row is renamed on each state change exactly the way `update_project` renames project rows today, which is where captures 03 and 04 get their live `Your Magical Journey · 🟣 1 NEEDS LARS · 🔵 2 WORKING` header rows from.
+AFTER-A already proves the two halves of this are possible: a non-worker holder workspace is stageable, and its row is renamed on each state change exactly the way `update_project` renames project rows today.
+Capture 03 stages three such holder rows, the first of which reads `Your Magical Journey · 🟣 1 NEEDS LARS · 🔵 2 WORKING`.
+Capture 04 is the stronger evidence for the claim, because it shows that same holder row recounted after the late worker arrived, as `Your Magical Journey · 🟣 1 NEEDS LARS · 🔴 1 FAILED · 🔵 2 WORKING`.
+That recounted row is a holder row being re-rendered on a state change, which is exactly what a summary row would have to do.
 What broke AFTER-A was adjacency, and a single fleet-summary row pinned at the top does not depend on adjacency at all.
-So one first-created row could carry the counts for every project, at the cost of one extra row rather than one per project.
+So one first-created row could carry counts that no longer depend on where anything sits, at the cost of one extra row rather than one per project.
 
-Not yet verified: whether a first-created workspace still holds position 1 across a Herdr session restart.
-That needs testing before anyone commits to the summary row.
+Two things are not yet verified, and both need testing before anyone commits to the summary row.
+First, whether a first-created workspace still holds position 1 across a Herdr session restart.
+Second, whether a single summary row stays legible at realistic width, which is the more likely of the two to bite.
+[`docs/herdr-backend.md`](herdr-backend.md) records a real Herdr pane measuring 54 columns in the environment it was verified in, and the widest of the three staged project rows is already 51 characters, so concatenating every project's counts onto one row runs to several hundred characters in a sidebar that truncates.
+At the twenty-five-worker scale that motivates the summary row, per-project counts on one row are very likely too wide to read, so the realistic version of that row carries fleet totals rather than a per-project breakdown.
+That is still worth having, but it is less than what the three project rows give you today, and it is the honest size of what this recovery buys.
 
 **Same-project workers no longer sit together, and that one really is upstream's to fix.**
 They appear in the order they started.
@@ -210,7 +217,7 @@ Because every row names its project this is a scanning cost rather than a correc
 Herdr would need to let a row declare a parent, or let the list be sorted, so grouping does not depend on creation order.
 That is a small, well-defined ask and it benefits upstream's own supervisor tree, which has exactly the same weakness: their `└ ` child rows drift away from their parent the same way AFTER-A's did.
 Worth raising with Kun Chen; worth doing regardless of whether he takes it.
-It is no longer the only way to keep the count line, though, because the pinned summary row above does not need it.
+It is no longer the only way to get counts back, though, because the pinned summary row above does not need it, and it stays the only way to get a per-project breakdown back at a scale where one row cannot hold one.
 
 ## What is in this branch
 
