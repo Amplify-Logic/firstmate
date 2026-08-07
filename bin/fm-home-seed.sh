@@ -183,7 +183,7 @@ registry_home_conflict_for_assignment() {
       "- "*)
         if ! secondmate_registry_parse_line "$line"; then
           echo "error: malformed secondmate registry entry: $line" >&2
-          return 1
+          return 2
         fi
         registered_id=$SECONDMATE_REGISTRY_ID
         registered_home=$SECONDMATE_REGISTRY_HOME
@@ -212,7 +212,7 @@ registry_id_conflict_for_assignment() {
       "- "*)
         if ! secondmate_registry_parse_line "$line"; then
           echo "error: malformed secondmate registry entry: $line" >&2
-          return 1
+          return 2
         fi
         registered_id=$SECONDMATE_REGISTRY_ID
         [ "$registered_id" = "$id" ] || continue
@@ -445,7 +445,7 @@ verify_firstmate_home() {
 }
 
 validate_home_assignment() {
-  local id=$1 home=$2 marker_id id_conflict conflict conflict_type owner registered_home
+  local id=$1 home=$2 marker_id id_conflict conflict conflict_type owner registered_home probe_rc
   if [ -f "$home/$SUB_HOME_MARKER" ]; then
     marker_id=$(cat "$home/$SUB_HOME_MARKER" 2>/dev/null || true)
     if [ "$marker_id" != "$id" ]; then
@@ -453,12 +453,22 @@ validate_home_assignment() {
       return 1
     fi
   fi
-  id_conflict=$(registry_id_conflict_for_assignment "$id" "$home" || true)
+  probe_rc=0
+  id_conflict=$(registry_id_conflict_for_assignment "$id" "$home") || probe_rc=$?
+  if [ "$probe_rc" -eq 2 ]; then
+    echo "error: cannot check secondmate id conflicts while the registry has a malformed entry" >&2
+    return 1
+  fi
   if [ -n "$id_conflict" ]; then
     echo "error: secondmate id $id is already registered to home $id_conflict; retire it before assigning $home" >&2
     return 1
   fi
-  conflict=$(registry_home_conflict_for_assignment "$id" "$home" || true)
+  probe_rc=0
+  conflict=$(registry_home_conflict_for_assignment "$id" "$home") || probe_rc=$?
+  if [ "$probe_rc" -eq 2 ]; then
+    echo "error: cannot check secondmate home conflicts while the registry has a malformed entry" >&2
+    return 1
+  fi
   [ -n "$conflict" ] || return 0
   IFS=$'\t' read -r conflict_type owner registered_home <<EOF
 $conflict
