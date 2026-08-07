@@ -40,9 +40,38 @@ test_owner_exists_and_executable() {
 test_owner_defines_canonical_set() {
   local listed expected
   listed=$("$LINT" --list-files | LC_ALL=C sort)
-  expected=$(find bin bin/backends tests -maxdepth 1 -type f -name '*.sh' -print | LC_ALL=C sort)
+  # The owner globs these directories, and a glob includes symlinked scripts.
+  # Plain -type f would omit them and false-fail the moment a symlinked test is
+  # added, which tests/fm-gotmp.test.sh already does for bin/ siblings.
+  expected=$(find -L bin bin/backends tests -maxdepth 1 \( -type f -o -type l \) -name '*.sh' -print | LC_ALL=C sort)
   [ "$listed" = "$expected" ] || fail "fm-lint.sh --list-files omitted canonical shell files"
   pass "fm-lint.sh owns the complete canonical shell inventory"
+}
+
+# The canonical-set assertion above legitimately replaced a source grep, but the
+# two guards that kept bin/fm-lint.sh from lowering severity below the CI default
+# or blanket-excluding checks CI enforces were dropped with nothing in their
+# place. Prove that contract through the real lint interface instead: a fixture
+# carrying a default-severity finding must still fail.
+test_default_severity_still_fails() {
+  if ! pinned_ready; then
+    pass "SKIP (ShellCheck $REQUIRED not resolved): default-severity guard"
+    return
+  fi
+  local tmp fixture out rc=0
+  tmp=$(fm_test_tmproot fm-lint-severity)
+  mkdir -p "$tmp"
+  fixture="$tmp/severity-fixture.sh"
+  # SC2034 is a warning, below ShellCheck's "error" severity: it is exactly what
+  # a lowered --severity or a blanket --exclude would silently stop reporting.
+  printf '%s\n' '#!/usr/bin/env bash' 'unused_variable=1' > "$fixture"
+  out=$("$LINT" "$fixture" 2>&1) || rc=$?
+  [ "$rc" -ne 0 ] || fail "fm-lint.sh accepted a default-severity finding; severity or exclusions were weakened"
+  case "$out" in
+    *SC2034*) ;;
+    *) fail "fm-lint.sh did not report the default-severity finding: $out" ;;
+  esac
+  pass "fm-lint.sh still fails on a default-severity finding"
 }
 
 test_ci_invokes_the_owner() {
@@ -267,6 +296,7 @@ test_accepts_executable_tracked_test() {
 
 test_owner_exists_and_executable
 test_owner_defines_canonical_set
+test_default_severity_still_fails
 test_ci_invokes_the_owner
 test_list_files_rejects_explicit_paths
 test_nomistakes_invokes_the_owner

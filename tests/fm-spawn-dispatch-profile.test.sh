@@ -80,10 +80,22 @@ make_seeded_secondmate_home() {
   printf 'charter for %s\n' "$id" > "$home/data/charter.md"
 }
 
+SPAWN_HOMES_FILE=$(fm_test_tmproot fm-spawn-profile-homes)/homes
+mkdir -p "$(dirname "$SPAWN_HOMES_FILE")"
+: > "$SPAWN_HOMES_FILE"
+trap 'clear_spawn_task_tmps' EXIT
+
+register_spawn_home() {
+  printf '%s\n' "$( (CDPATH='' cd -- "$1" 2>/dev/null && pwd -P) || printf '%s' "$1")" >> "$SPAWN_HOMES_FILE"
+}
+
 run_spawn() {
   local home=$1 wt=$2 fakebin=$3 launchlog=$4
   shift 4
   : > "$launchlog"
+  # Every spawn creates a task temp root outside this suite's TMP_ROOT, so
+  # remember the home and clear those roots on exit however the run ends.
+  register_spawn_home "$home"
   FM_ROOT_OVERRIDE='' FM_HOME="$home" \
     FM_STATE_OVERRIDE="$home/state" FM_DATA_OVERRIDE="$home/data" \
     FM_PROJECTS_OVERRIDE="$home/projects" FM_CONFIG_OVERRIDE="$home/config" \
@@ -105,6 +117,29 @@ assert_meta_profile() {
   assert_grep "effort=$effort" "$meta" "meta missing effort=$effort"
 }
 
+# The temp root is spawn's own published value, not a spelling this test repeats.
+spawn_task_tmp_from_meta() {
+  grep '^tasktmp=' "$1" 2>/dev/null | tail -1 | cut -d= -f2- || true
+}
+
+# Clear the task temp roots of every spawn this suite performed. Reading the
+# root back from each meta keeps the test honest: it never repeats spawn's own
+# spelling of the path, so a leaked directory from an earlier failed run cannot
+# make an assertion pass spuriously.
+clear_spawn_task_tmps() {
+  local home meta root
+  [ -f "$SPAWN_HOMES_FILE" ] || return 0
+  while IFS= read -r home || [ -n "$home" ]; do
+    [ -d "$home/state" ] || continue
+    for meta in "$home"/state/*.meta; do
+      [ -f "$meta" ] || continue
+      root=$(spawn_task_tmp_from_meta "$meta")
+      case "$root" in ''|/) continue ;; esac
+      rm -rf "$root"
+    done
+  done < "$SPAWN_HOMES_FILE"
+}
+
 test_no_profile_keeps_claude_launch_unchanged() {
   local rec id out status expected launch task_tmp
   id=profile-off-z1
@@ -116,15 +151,13 @@ test_no_profile_keeps_claude_launch_unchanged() {
   expect_code 0 "$status" "claude spawn without profile flags should succeed"
   assert_contains "$out" "spawned $id harness=claude" "spawn did not report claude"
   assert_meta_profile "$HOME_DIR/state/$id.meta" claude default default
-  task_tmp="/tmp/fm-$id"
-  assert_grep "tasktmp=$task_tmp" "$HOME_DIR/state/$id.meta" \
-    "spawn meta did not record the task temp root"
+  task_tmp=$(spawn_task_tmp_from_meta "$HOME_DIR/state/$id.meta")
+  [ -n "$task_tmp" ] || fail "spawn meta did not record the task temp root"
   [ -d "$task_tmp/gotmp" ] || fail "spawn did not create the task Go temp directory"
 
   launch=$(cat "$LAUNCH_LOG")
   expected="CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION=false claude --dangerously-skip-permissions \"\$(cat '$HOME_DIR/data/$id/brief.md')\""
   [ "$launch" = "$expected" ] || fail "no-profile claude launch changed"$'\n'"expected: $expected"$'\n'"actual:   $launch"
-  rm -rf "$task_tmp"
   pass "no-profile spawn preserves the launch and publishes its task temp root"
 }
 
@@ -133,6 +166,7 @@ test_relative_home_overrides_launch_with_absolute_cross_process_paths() {
   id=profile-relative-paths-z1b
   rec=$(make_spawn_case profile-relative-paths pi "$id")
   read_case_record "$rec"
+  register_spawn_home "$HOME_DIR"
   home_real=$(cd "$HOME_DIR" && pwd -P)
   mkdir -p "$CASE_DIR/cdpath/home/state" "$CASE_DIR/cdpath/home/data"
   : > "$LAUNCH_LOG"
@@ -163,6 +197,7 @@ test_home_defaults_preserve_absolute_or_resolve_relative_paths() {
   absolute_id=profile-absolute-home-defaults-z1d
   rec=$(make_spawn_case profile-home-defaults pi "$relative_id" "$absolute_id")
   read_case_record "$rec"
+  register_spawn_home "$HOME_DIR"
   home_real=$(cd "$HOME_DIR" && pwd -P)
 
   : > "$LAUNCH_LOG"
