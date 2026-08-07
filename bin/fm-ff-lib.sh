@@ -254,7 +254,7 @@ live_secondmate_meta_records() {
       # unregistered when the registry itself is what was refused.
       if [ "$registry_rc" -eq 2 ] && [ -z "$fm_ff_registry_warned" ]; then
         fm_ff_registry_warned=1
-        echo "${SECONDMATE_REGISTRY_ERROR:-secondmate registry is unavailable or unsafe: $registry}" >&2
+        secondmate_registry_symlink_refusal "$registry" >&2
       fi
     fi
     window=$(grep '^window=' "$meta" 2>/dev/null | tail -1 | cut -d= -f2- || true)

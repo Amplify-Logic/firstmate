@@ -86,10 +86,11 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 FM_ROOT="${FM_ROOT_OVERRIDE:-$(cd "$SCRIPT_DIR/.." && pwd)}"
 # shellcheck source=bin/fm-path-lib.sh disable=SC1091
 . "$SCRIPT_DIR/fm-path-lib.sh"
-# The registry isolation check resolves this home, and its resolver refuses a
-# relative path, so a relative FM_HOME would otherwise refuse every guarded
-# secondmate and child home removal.
-FM_HOME=$(fm_path_require_directory FM_HOME "${FM_HOME:-${FM_ROOT_OVERRIDE:-$FM_ROOT}}") || exit 1
+# The registry isolation check resolves the active home and the code root, and
+# its resolver refuses a relative path, so a relative FM_HOME or FM_ROOT_OVERRIDE
+# would otherwise refuse every guarded secondmate and child home removal.
+FM_ROOT=$(fm_path_require_directory FM_ROOT "$FM_ROOT") || exit 1
+FM_HOME=$(fm_path_require_directory FM_HOME "${FM_HOME:-$FM_ROOT}") || exit 1
 STATE="${FM_STATE_OVERRIDE:-$FM_HOME/state}"
 DATA="${FM_DATA_OVERRIDE:-$FM_HOME/data}"
 CONFIG="${FM_CONFIG_OVERRIDE:-$FM_HOME/config}"
@@ -817,6 +818,17 @@ registered_descendant_home_for_removal() {
   return 1
 }
 
+# Absence of a registered descendant is the scan's rc=1 and is tolerated;
+# rc=2 is a refused registry and must keep refusing.
+descendant_conflict_for() {
+  local reg=$1 target=$2 conflict rc=0
+  conflict=$(registered_descendant_home_for_removal "$reg" "$target") || rc=$?
+  case "$rc" in
+    0|1) printf '%s\n' "$conflict" ;;
+    *) return 1 ;;
+  esac
+}
+
 validate_firstmate_operational_dirs_for_removal() {
   local home=$1 label=$2 name dir abs_home abs_dir
   abs_home=$(removal_target_abs_path "$home")
@@ -879,7 +891,7 @@ safe_rm_rf_child_worktree() {
 
 validate_firstmate_home_for_removal() {
   local home=$1 label=$2 expected_id=${3:-} registry=${4:-$SECONDMATE_REG}
-  local abs_home_path marker_id conflict conflict_rc child_id child_home
+  local abs_home_path marker_id conflict child_id child_home
   [ -n "$home" ] || return 0
   [ -e "$home" ] || return 0
   abs_home_path=$(validate_removal_target "$home" "$label") || return 1
@@ -913,20 +925,9 @@ validate_firstmate_home_for_removal() {
     fi
   fi
   validate_firstmate_operational_dirs_for_removal "$abs_home_path" "$label" || return 1
-  conflict=
-  if conflict=$(registered_descendant_home_for_removal "$SECONDMATE_REG" "$abs_home_path"); then
-    :
-  else
-    conflict_rc=$?
-    [ "$conflict_rc" -eq 1 ] || return 1
-  fi
+  conflict=$(descendant_conflict_for "$SECONDMATE_REG" "$abs_home_path") || return 1
   if [ -z "$conflict" ]; then
-    if conflict=$(registered_descendant_home_for_removal "$abs_home_path/data/secondmates.md" "$abs_home_path"); then
-      :
-    else
-      conflict_rc=$?
-      [ "$conflict_rc" -eq 1 ] || return 1
-    fi
+    conflict=$(descendant_conflict_for "$abs_home_path/data/secondmates.md" "$abs_home_path") || return 1
   fi
   if [ -n "$conflict" ]; then
     IFS=$'\t' read -r child_id child_home <<EOF

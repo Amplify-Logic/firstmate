@@ -817,7 +817,12 @@ if [ "$KIND" = secondmate ]; then
     FIRSTMATE_HOME=$(grep '^home=' "$STATE/$ID.meta" | cut -d= -f2- || true)
   fi
   if [ -z "$FIRSTMATE_HOME" ]; then
-    FIRSTMATE_HOME=$(secondmate_registry_value "$ID" home || true)
+    REGISTRY_HOME_RC=0
+    FIRSTMATE_HOME=$(secondmate_registry_value "$ID" home) || REGISTRY_HOME_RC=$?
+    if [ "$REGISTRY_HOME_RC" -eq 2 ]; then
+      echo "error: $(secondmate_registry_symlink_refusal "$DATA/secondmates.md")" >&2
+      exit 1
+    fi
   fi
 fi
 

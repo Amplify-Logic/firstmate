@@ -78,6 +78,13 @@ secondmate_registry_parse_line() {
   [ -n "$SECONDMATE_REGISTRY_SCOPE" ] || return 1
 }
 
+# rc=2 from the read helpers below is produced only by this refusal, and they
+# usually run inside a command substitution where SECONDMATE_REGISTRY_ERROR
+# cannot reach the caller, so rc=2 call sites rebuild the exact message here.
+secondmate_registry_symlink_refusal() {
+  printf 'secondmate registry is unavailable or unsafe: %s (registry is a symlink and is refused)\n' "$1"
+}
+
 # Returns 2 when the registry itself cannot be read safely, and 1 when the file
 # is fine but holds no single usable entry for the id.
 # Callers must keep those apart: a refused symlink is an operator-visible fault
@@ -87,7 +94,7 @@ secondmate_registry_line_for_id() {
   SECONDMATE_REGISTRY_ERROR=
   case "$id" in ''|*[!A-Za-z0-9._-]*) return 1 ;; esac
   if [ -L "$reg" ]; then
-    SECONDMATE_REGISTRY_ERROR="secondmate registry is unavailable or unsafe: $reg (registry is a symlink and is refused)"
+    SECONDMATE_REGISTRY_ERROR=$(secondmate_registry_symlink_refusal "$reg")
     return 2
   fi
   [ -f "$reg" ] || return 1
@@ -164,7 +171,7 @@ secondmate_registry_validate_bindings() {
   esac
   case "$expected_id" in *[!A-Za-z0-9._-]*) SECONDMATE_REGISTRY_ERROR="invalid secondmate id: $expected_id"; return 1 ;; esac
   if [ -L "$reg" ]; then
-    SECONDMATE_REGISTRY_ERROR="secondmate registry is unavailable or unsafe: $reg (registry is a symlink and is refused)"
+    SECONDMATE_REGISTRY_ERROR=$(secondmate_registry_symlink_refusal "$reg")
     return 1
   fi
   if [ ! -f "$reg" ]; then

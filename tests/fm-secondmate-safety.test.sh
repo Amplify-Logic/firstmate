@@ -2172,6 +2172,45 @@ test_secondmate_charter_brief_is_idle_by_default() {
   pass "secondmate charter brief is idle by default and does not self-initiate work"
 }
 
+# A symlinked registry must be NAMED as the refused cause on every read path,
+# never degraded to a generic error or reported as an unregistered/homeless id.
+test_symlinked_registry_read_paths_name_the_symlink() {
+  local home fakebin log err out rc refusal
+  home="$TMP_ROOT/symlinked-registry-read-home"
+  mkdir -p "$home/data" "$home/state"
+  printf -- '- domain - feature work (home: /tmp/nowhere; scope: feature work; projects: alpha; added 2026-08-07)\n' \
+    > "$TMP_ROOT/symlinked-registry-real.md"
+  ln -s "$TMP_ROOT/symlinked-registry-real.md" "$home/data/secondmates.md"
+  refusal="secondmate registry is unavailable or unsafe: $home/data/secondmates.md (registry is a symlink and is refused)"
+
+  fakebin=$(make_fake_tmux "$TMP_ROOT/symlinked-registry-fake")
+  log="$TMP_ROOT/symlinked-registry-fake/tmux.log"
+  err="$TMP_ROOT/symlinked-registry-read.err"
+  if PATH="$fakebin:$PATH" FM_HOME="$home" FM_FAKE_TMUX_LOG="$log" \
+    FM_FAKE_TMUX_CAPTURE="$TMP_ROOT/symlinked-registry-fake/pane.txt" \
+    "$ROOT/bin/fm-spawn.sh" domain codex --secondmate >/dev/null 2>"$err"; then
+    fail "secondmate spawn resolved a home through a symlinked registry"
+  fi
+  grep -F "$refusal" "$err" >/dev/null || fail "spawn did not name the symlinked registry"
+  if grep -F 'no firstmate home supplied or registered' "$err" >/dev/null; then
+    fail "spawn reported a missing home instead of the registry refusal"
+  fi
+
+  cat > "$home/data/backlog.md" <<'EOF'
+## Queued
+- [ ] item-a - queued work (repo: alpha)
+EOF
+  rc=0
+  out=$(FM_HOME="$home" "$ROOT/bin/fm-backlog-handoff.sh" domain item-a 2>&1) || rc=$?
+  [ "$rc" -ne 0 ] || fail "backlog handoff read a symlinked registry"
+  printf '%s\n' "$out" | grep -F "$refusal" >/dev/null \
+    || fail "backlog handoff did not name the symlinked registry"
+  if printf '%s\n' "$out" | grep -F 'has no home' >/dev/null; then
+    fail "backlog handoff reported no home instead of the registry refusal"
+  fi
+  pass "spawn and backlog handoff name a refused symlinked registry"
+}
+
 test_backlog_handoff_aborts_safely() {
   # The happy move (verbatim into the Queued section, out-of-scope left alone,
   # idempotent re-run) is asserted in the lifecycle e2e. Here: every refusal path
@@ -2480,5 +2519,6 @@ test_secondmate_teardown_refuses_contradicting_registry_binding
 test_fleet_snapshot_agrees_with_shared_registry_parser
 test_secondmate_idle_pane_is_not_stale
 test_secondmate_charter_brief_is_idle_by_default
+test_symlinked_registry_read_paths_name_the_symlink
 test_backlog_handoff_aborts_safely
 test_backlog_handoff_refuses_done_items_and_non_secondmate_homes

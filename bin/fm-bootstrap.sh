@@ -338,7 +338,7 @@ secondmate_sync() {
         meta_home=$(secondmate_registry_field "$DATA/secondmates.md" "$id" home) || registry_rc=$?
         # Report the refused registry rather than a home that merely looks unset.
         if [ "$registry_rc" -eq 2 ]; then
-          echo "NUDGE_SECONDMATES: secondmate $id: send failed: ${SECONDMATE_REGISTRY_ERROR:-secondmate registry is unavailable or unsafe: $DATA/secondmates.md}"
+          echo "NUDGE_SECONDMATES: secondmate $id: send failed: $(secondmate_registry_symlink_refusal "$DATA/secondmates.md")"
           continue
         fi
       fi

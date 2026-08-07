@@ -71,6 +71,10 @@ sweep_live_secondmate_metas "$STATE" origin no
 
 # Registry backstop: a secondmate registered in data/secondmates.md but without
 # a live meta (e.g. between restarts) is still its persistent on-disk home.
+if [ -L "$SECONDMATES_MD" ]; then
+  echo "error: $(secondmate_registry_symlink_refusal "$SECONDMATES_MD")" >&2
+  exit 1
+fi
 if [ -f "$SECONDMATES_MD" ]; then
   while IFS= read -r line || [ -n "$line" ]; do
     case "$line" in
