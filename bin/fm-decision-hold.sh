@@ -367,6 +367,25 @@ EOF
   printf 'verified: %s unresolved-decision inventory\n' "$origin"
 }
 
+# Retire the captain-held quiet-state from the origin status stream: a hold
+# that ends must end its quiet treatment (standing ruling - quiet treatment must
+# never outlive the hold). status_open_captain_holds closes this key on the
+# appended resolved: line, so the watcher and away-mode daemon stop treating the
+# pane as a declared wait immediately, even before the crew writes its next
+# status line. The append is guarded on the status file existing (the transfer
+# line itself is only written by `complete` when a meta exists) and is
+# idempotent: a repeated append for an already-closed hold just re-closes the
+# key in the fold. Called from BOTH resolve completion paths (the idempotent
+# early return and the main close), so an interrupted resolve that later re-runs
+# still retires the quiet-state it closed.
+retire_origin_hold_status() {  # <origin> <key> <hold-id>
+  local origin=$1 key=$2 id=$3
+  if [ -f "$STATE/$origin.status" ]; then
+    printf '%s: [key=%s]: retired by fm-decision-hold (%s)\n' \
+      "${FM_CLASSIFY_RESOLVE_VERB:-$FM_CLASSIFY_RESOLVE_VERB_DEFAULT}" "$key" "$id" >> "$STATE/$origin.status"
+  fi
+}
+
 command_resolve() {
   local origin=${1:-} key=${2:-} decision_file='' id='' decision='' decision_digest='' body='' routed='' routed_csv='' dep show blocked state hold_show hold_body resolution_recorded=0
   [ "$#" -ge 2 ] || { usage >&2; exit 2; }
@@ -397,6 +416,7 @@ command_resolve() {
     hold_show=$(task_show "$id")
     hold_body=$(show_field "$hold_show" body)
     verify_resolution_identity "$id" "$hold_body" "$decision_digest" "$routed_csv"
+    retire_origin_hold_status "$origin" "$key" "$id"
     printf 'resolved: %s\n' "$id"
     return 0
   fi
@@ -450,18 +470,7 @@ command_resolve() {
   done
   tasks_axi "done" "$id" >/dev/null || fail "could not close resolved captain hold $id"
   verify_hold_resolved "$id" || fail "captain hold $id did not retain its durable resolution record"
-  # Retire the captain-held quiet-state from the origin status stream: a hold
-  # that ends must end its quiet treatment (standing ruling - quiet treatment
-  # must never outlive the hold). status_open_captain_holds closes this key on
-  # the appended resolved: line, so the watcher and away-mode daemon stop
-  # treating the pane as a declared wait immediately, even before the crew
-  # writes its next status line. The append is guarded on the status file
-  # existing (the transfer line itself is only written by `complete` when a meta
-  # exists).
-  if [ -f "$STATE/$origin.status" ]; then
-    printf '%s: [key=%s]: retired by fm-decision-hold (%s)\n' \
-      "${FM_CLASSIFY_RESOLVE_VERB:-$FM_CLASSIFY_RESOLVE_VERB_DEFAULT}" "$key" "$id" >> "$STATE/$origin.status"
-  fi
+  retire_origin_hold_status "$origin" "$key" "$id"
   printf 'resolved: %s -> %s\n' "$id" "$routed"
 }
 

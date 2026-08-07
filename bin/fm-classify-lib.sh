@@ -264,12 +264,21 @@ _fm_decision_key() {  # <status-line> -> key slug, or "default" when no token
   # A keyed decision carries its key either in the verb prefix
   # (`needs-decision [key=q1]: note`) or as the first token after the colon
   # (`resolved: [key=q1]: note`, the fm-decision-hold resolve emit). A
-  # `[key=...]` token deeper in the note prose is free text, never a key.
+  # `[key=...]` token deeper in the note prose is free text, never a key. An
+  # INVALID slug in the verb prefix is a malformed keyed line and drops it
+  # (return 1, the fold skips it); an invalid slug in the post-colon position
+  # falls back to the default key exactly as it did before post-colon
+  # extraction existed, so `needs-decision: [key=bad key] pick one` still folds
+  # under default instead of vanishing from the open-decision set.
   prefix=${line%%:*}
   case "$prefix" in
     *\[key=*\]*)
       k=${prefix#*\[key=}
       k=${k%%\]*}
+      case "$k" in
+        ''|*[!A-Za-z0-9._-]*) return 1 ;;
+        *) printf '%s' "$k" ;;
+      esac
       ;;
     *)
       rest=${line#*:}
@@ -278,14 +287,14 @@ _fm_decision_key() {  # <status-line> -> key slug, or "default" when no token
         \[key=*\]*)
           k=${rest#\[key=}
           k=${k%%\]*}
+          case "$k" in
+            ''|*[!A-Za-z0-9._-]*) printf 'default' ;;
+            *) printf '%s' "$k" ;;
+          esac
           ;;
-        *) printf 'default'; return 0 ;;
+        *) printf 'default' ;;
       esac
       ;;
-  esac
-  case "$k" in
-    ''|*[!A-Za-z0-9._-]*) return 1 ;;
-    *) printf '%s' "$k" ;;
   esac
 }
 # Drop the record for <key> from a newline-terminated "<key>\t<verb>\t<note>" set.
@@ -391,7 +400,12 @@ status_declared_wait() {  # <status-file>
   local f=$1 last
   last=$(last_status_line "$f")
   status_is_paused "$last" && return 0
-  status_is_captain_held "$last" && return 0
+  # A captain-held last line is a declared wait only while its fold is open: a
+  # VALID hold line always opens its key, and requiring the fold guards the
+  # malformed case (an invalid key slug) so a confidently dead agent behind such
+  # a line still gets normal stale handling instead of being silently absorbed
+  # behind an empty fold digest.
+  status_is_captain_held "$last" && status_has_open_captain_hold "$f" && return 0
   status_is_resolved "$last" && status_has_open_captain_hold "$f"
 }
 # Fold material routed-work phases in the same keyed event stream.

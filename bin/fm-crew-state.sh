@@ -676,22 +676,19 @@ if [ "$HAVE_RUN" = 1 ]; then
   # declared pause or block. Without this, crew_absorb_class returns none and
   # the watcher floods bare stale: wakes every poll (declared-pause-lost). The
   # verb test lives inside status_log_newer_than_terminal_run (one site, not a
-  # second list that must stay in sync with the caller).
+  # second list that must stay in sync with the caller). A captain-held transfer
+  # after a terminal failure is reported ALONGSIDE the failure, never instead of
+  # it: the failed run is a fact about what happened, the hold is only routing
+  # state, so the failure wins and the hold is named so no reader loses it
+  # (fm-classify-lib.sh's status_is_captain_held). Both belong to the same
+  # failed state, so they share one block (the recency emit exits when it
+  # fires; the hold append applies only when the failure is not superseded).
   case "$RUN_STATE" in
     failed)
       if status_log_newer_than_terminal_run; then
         emit "$(map_log_state "$LOG_LINE")" status-log \
           "$(status_line_note "$LOG_LINE")${SEP}terminal run superseded by newer status-log"
       fi
-      ;;
-  esac
-
-  # A captain-held transfer after a terminal failure is reported ALONGSIDE the
-  # failure, never instead of it: the failed run is a fact about what happened,
-  # the hold is only routing state, so the failure wins and the hold is named so
-  # no reader loses it (fm-classify-lib.sh's status_is_captain_held).
-  case "$RUN_STATE" in
-    failed)
       if status_is_captain_held "$LOG_LINE"; then
         RUN_DETAIL="$RUN_DETAIL${SEP}hold: $(status_line_note "$LOG_LINE")"
       fi

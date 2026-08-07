@@ -307,6 +307,13 @@ test_resolve_emits_closing_status_line_retiring_the_hold() {
     --routed-to emit-dep >/dev/null || fail "resolve failed"
   grep -F "resolved: [key=emit]: retired by fm-decision-hold ($hold)" "$home/state/$id.status" >/dev/null \
     || fail "resolve did not append the closing resolved: line"
+  # The idempotent early return (a re-run of an already-resolved hold) must also
+  # append the closing line, or an interrupted resolve that later re-runs never
+  # retires the quiet-state it closed.
+  run_decisions "$home" resolve "$id" emit --decision-file "$home/emit-decision.txt" \
+    --routed-to emit-dep >/dev/null || fail "idempotent resolve re-run failed"
+  lines=$(grep -cF "retired by fm-decision-hold ($hold)" "$home/state/$id.status")
+  [ "$lines" -ge 2 ] || fail "idempotent resolve re-run did not append the closing line again"
   # The last line is now resolved:, so the single-line quiet-state predicates
   # are false, and the stream fold has no open holds either.
   open=$(bash -c '. "$1"; status_open_captain_holds "$2"' _ \

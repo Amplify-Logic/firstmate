@@ -469,6 +469,75 @@ test_stale_multihold_resolved_one_keeps_other_open() {
   pass "a still-open hold keeps its declared-wait absorption when a sibling hold resolved"
 }
 
+# Ruling-driven review finding: the daemon's reconcile must NOT wipe the
+# watcher's dead-agent one-shot marker while the hold is still open - a hold
+# that is open keeps its one-shot in BOTH consumers, or a dead agent the
+# watcher already surfaced in normal mode would be re-alerted in away mode.
+test_reconcile_keeps_watcher_one_shot_while_hold_open() {
+  local dir state win watcher_key
+  dir=$(make_supercase captain-held-keeps-watcher-shot)
+  state="$dir/state"; win="sess:fm-held-c11"
+  printf 'captain-held [key=api-shape]: tracked by held-route-11\n' > "$state/held-c11.status"
+  watcher_key=$(printf '%s' "$win" | tr ':/.' '___')
+  printf 'digest-x\n' > "$state/.captain-held-surfaced-$watcher_key"
+  FM_STATE_OVERRIDE="$state" reconcile_pause_tracking "$win" "$state" \
+    "captain-held [key=api-shape]: tracked by held-route-11"
+  [ -e "$state/.captain-held-surfaced-$watcher_key" ] \
+    || fail "reconcile wiped the watcher's one-shot while the hold is still open"
+  pass "an open hold keeps the watcher's dead-agent one-shot across daemon reconcile"
+}
+
+# Precedence parity with the watcher: a stream with an open hold plus a NEWER
+# trailing paused: line gets hold quiet-state in BOTH modes (the watcher's
+# handle_paused_stale checks the hold fold before the paused elif). The daemon
+# must not give the same stream the bounded pause re-surface cadence.
+test_stale_hold_beats_trailing_paused_matching_watcher() {
+  local dir state out
+  dir=$(make_supercase hold-beats-paused)
+  state="$dir/state"
+  printf 'captain-held [key=api-shape]: tracked by held-route-13\npaused: holding while the captain decides\n' > "$state/held-c13.status"
+  out=$(FM_STATE_OVERRIDE="$state" classify_stale "sess:fm-held-c13" "$state")
+  case "$out" in pause\|*) fail "a trailing paused: outranked the open hold's quiet-state: $out" ;; esac
+  case "$out" in absorb\|*) ;; *) fail "an open hold plus a trailing paused: must get hold quiet-state (watcher parity): $out" ;; esac
+  pass "an open hold wins over a newer trailing paused: line, matching the watcher"
+}
+
+# A malformed captain-held line (an invalid key slug) is not a declared wait:
+# the fold cannot open a key for it, so both consumers must fall back to normal
+# stale handling instead of silently absorbing a dead agent behind an empty
+# digest sentinel.
+test_stale_malformed_hold_is_not_a_declared_wait() {
+  local dir state out key
+  dir=$(make_supercase malformed-hold)
+  state="$dir/state"
+  printf 'captain-held [key=bad key]: tracked by held-bad\n' > "$state/held-bad.status"
+  status_declared_wait "$state/held-bad.status" && fail "a malformed hold line must not be a declared wait"
+  key=$(printf '%s' "held-bad" | tr ':/.' '___')
+  out=$(FM_STATE_OVERRIDE="$state" classify_stale "sess:fm-held-bad" "$state")
+  case "$out" in absorb\|*) fail "a malformed hold line must not absorb: $out" ;; esac
+  case "$out" in self\|transient*) ;; *) fail "a malformed hold line should route to transient stale: $out" ;; esac
+  FM_STATE_OVERRIDE="$state" handle_wake "stale: sess:fm-held-bad" "$state"
+  [ -e "$state/.subsuper-stale-$key" ] || fail "a malformed hold line must regain normal wedge-marker coverage"
+  pass "a malformed captain-held line is not a declared wait: normal stale handling resumes"
+}
+
+# The daemon's dead-agent one-shot marker must not outlive its hold: a resolved
+# hold leaves .subsuper-captain-held-surfaced-* behind, and deterministic hold
+# ids would let the stale marker suppress the NEXT open hold's surface.
+test_reconcile_clears_daemon_one_shot_when_hold_resolves() {
+  local dir state win key
+  dir=$(make_supercase daemon-shot-cleared)
+  state="$dir/state"; win="sess:fm-held-c15"
+  printf 'captain-held [key=api-shape]: tracked by held-route-15\nresolved: [key=api-shape]: retired by fm-decision-hold (held-route-15)\n' > "$state/held-c15.status"
+  key=$(printf '%s' "held-c15" | tr ':/.' '___')
+  printf 'digest-x\n' > "$state/.subsuper-captain-held-surfaced-$key"
+  FM_STATE_OVERRIDE="$state" reconcile_pause_tracking "$win" "$state" \
+    "resolved: [key=api-shape]: retired by fm-decision-hold (held-route-15)"
+  [ -e "$state/.subsuper-captain-held-surfaced-$key" ] \
+    && fail "a resolved hold left the daemon one-shot marker behind"
+  pass "the daemon's dead-agent one-shot marker is swept once the hold resolves"
+}
+
 # A stale marker that predates the declared-wait handling (or a race) must never
 # age a captain-held transfer into a possible-wedge escalation: housekeeping
 # reconciles it away instead. This is the FIX-PROVING case for the new
@@ -2057,6 +2126,10 @@ test_stale_captain_held_dead_agent_escalates_once
 test_stale_captain_held_provably_working_keeps_wedge_coverage
 test_stale_resolved_hold_returns_to_normal_stale_handling
 test_stale_multihold_resolved_one_keeps_other_open
+test_reconcile_keeps_watcher_one_shot_while_hold_open
+test_stale_hold_beats_trailing_paused_matching_watcher
+test_stale_malformed_hold_is_not_a_declared_wait
+test_reconcile_clears_daemon_one_shot_when_hold_resolves
 test_housekeeping_captain_held_stale_marker_never_wedges
 test_housekeeping_captain_held_pause_marker_never_resurfaces
 test_housekeeping_stale_marker_transitions_to_pause
