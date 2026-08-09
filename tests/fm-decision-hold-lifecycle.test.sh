@@ -322,6 +322,53 @@ test_resolve_emits_closing_status_line_retiring_the_hold() {
   pass "resolve appends a closing resolved: line so quiet treatment cannot outlive the hold"
 }
 
+# Ruling (quiet-state-regrant-via-resolved-hold): a crew that re-uses a
+# previously-resolved decision key in a NEW needs-decision line must not get a
+# fresh captain-held transfer pointing at the RETIRED backlog item - that would
+# silently regrant the hold quiet-state to a done hold whose compensating
+# controls (the active-hold captain return flow) never fire, letting the new
+# decision rot invisibly. complete refuses loudly, mirroring command_hold, so
+# the crew switches to a new key and the status line stays captain-relevant.
+test_complete_refuses_reused_resolved_decision_key() {
+  local home id hold lines open
+  home=$(make_home reused-resolved-key)
+  id=sample-reuse-review
+  mkdir -p "$home/data/$id"
+  tasks_in "$home" add "$id" "Reuse review" --kind scout --repo sample --start >/dev/null \
+    || fail "could not create origin fixture"
+  write_origin_meta "$home" "$id"
+  printf 'needs-decision [key=reuse]: pick the first shape\n' > "$home/state/$id.status"
+  hold=$(run_decisions "$home" hold "$id" reuse \
+    --title "Pick the first shape" --reason "captain reuse pending" --repo sample) \
+    || fail "could not register reuse hold"
+  run_decisions "$home" complete "$id" reuse >/dev/null \
+    || fail "completion gate failed"
+  printf 'Use the first shape.\n' > "$home/reuse-decision.txt"
+  tasks_in "$home" add reuse-dep "Reuse dependent" --kind ship --repo sample >/dev/null \
+    || fail "could not create dependent"
+  tasks_in "$home" block reuse-dep --by "$hold" >/dev/null || fail "could not block dependent"
+  run_decisions "$home" resolve "$id" reuse --decision-file "$home/reuse-decision.txt" \
+    --routed-to reuse-dep >/dev/null || fail "resolve failed"
+  # The crew re-uses the retired key for a new question; the old status stream
+  # already closed reuse with the resolve emit, so this line re-opens it.
+  printf 'needs-decision [key=reuse]: pick a NEW shape\n' >> "$home/state/$id.status"
+  before=$(grep -cF "captain-held [key=reuse]:" "$home/state/$id.status")
+  if run_decisions "$home" complete "$id" reuse > "$home/reuse-complete.out" 2> "$home/reuse-complete.err"; then
+    after=$(grep -cF "captain-held [key=reuse]:" "$home/state/$id.status")
+    [ "$after" -gt "$before" ] \
+      && fail "re-used resolved key re-opened the fold (captain-held count $before -> $after) before the guard"
+    fail "complete accepted a re-used resolved decision key"
+  fi
+  grep -F "captain decision $hold is already durably resolved; use a new decision key" "$home/reuse-complete.err" >/dev/null \
+    || fail "complete refused without the new-key message: $(cat "$home/reuse-complete.err")"
+  after=$(grep -cF "captain-held [key=reuse]:" "$home/state/$id.status")
+  [ "$after" -eq "$before" ] || fail "the refused complete appended a captain-held transfer anyway"
+  open=$(bash -c '. "$1"; status_open_captain_holds "$2"' _ \
+    "$ROOT/bin/fm-classify-lib.sh" "$home/state/$id.status")
+  [ -z "$open" ] || fail "the refused complete left the hold fold open: $open"
+  pass "complete refuses a re-used resolved decision key so quiet-state cannot regrant"
+}
+
 test_scout_teardown_always_requires_inventory_verification() {
   local home id
   home=$(make_home unconditional-teardown)
@@ -601,6 +648,7 @@ test_uninventoried_report_decision_refuses_completion
 test_scout_teardown_always_requires_inventory_verification
 test_structured_holds_survive_teardown_and_route_resolution
 test_resolve_emits_closing_status_line_retiring_the_hold
+test_complete_refuses_reused_resolved_decision_key
 test_origin_slug_validation_precedes_path_construction
 test_visual_review_uses_shared_completion_owner
 test_none_inventory_and_resolved_prose_do_not_create_holds

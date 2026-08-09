@@ -496,7 +496,8 @@ handle_paused_stale() {  # <window> <task> <hash>
   # for the sweep to find - withholding that one would leave its trigger
   # unthrottled and re-firing every poll. Both verbs stay on this declared-wait
   # absorb path and never reach the wedge timer.
-  if status_has_open_captain_hold "$statusf"; then
+  digest=$(status_open_captain_holds "$statusf")
+  if [ -n "$digest" ] && status_declared_wait "$statusf"; then
     # An open captain-held transfer (stream-truth fold, fm-classify-lib.sh): a
     # declared wait that never wedge-ages and never re-surfaces on any cadence.
     # A healthy idle pane (fm_backend_agent_alive says alive/unknown) absorbs
@@ -506,7 +507,6 @@ handle_paused_stale() {  # <window> <task> <hash>
     # and a later resolution (which empties or changes the fold) naturally
     # supersedes it.
     surf="$STATE/.captain-held-surfaced-$key"
-    digest=$(status_open_captain_holds "$statusf")
     if [ "$(cat "$surf" 2>/dev/null || true)" != "$digest" ]; then
       alive=$(fm_backend_agent_alive "$(window_backend "$win")" "$win" 2>/dev/null) || alive=unknown
       if [ "$alive" = dead ]; then

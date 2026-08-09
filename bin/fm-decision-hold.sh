@@ -275,7 +275,7 @@ command_hold() {
 }
 
 command_complete() {
-  local origin=${1:-} meta previous='' supplied='' keys='' key status_file open raw_open key_seen=0 has_meta=0
+  local origin=${1:-} meta previous='' supplied='' keys='' key status_file open raw_open key_seen=0 has_meta=0 id show state
   [ "$#" -ge 2 ] || { usage >&2; exit 2; }
   validate_slug origin-id "$origin"
   shift
@@ -323,11 +323,21 @@ EOF
     fi
 
     # Transfer any still-open status decision to its durable backlog owner so the
-    # live status fold does not duplicate the same Captain's Call item.
+    # live status fold does not duplicate the same Captain's Call item. A key
+    # whose durable hold is DONE is a re-use (the crew wrote a fresh
+    # needs-decision under a retired key): refuse loudly like command_hold so the
+    # status line cannot silently regrant the hold quiet-state to a retired
+    # backlog item, the harm class this branch kills. verify_hold_durable
+    # accepts a durably resolved hold so re-completion stays idempotent; only
+    # the transfer (which would RE-OPEN the fold) needs the done guard.
     while IFS=$'\t' read -r key _verb _summary; do
       [ -n "$key" ] || continue
       list_has_key "$keys" "$key" || continue
-      printf 'captain-held [key=%s]: tracked by %s\n' "$key" "$(hold_id "$origin" "$key")" >> "$status_file"
+      id=$(hold_id "$origin" "$key")
+      show=$(task_show "$id") || fail "captain decision $id is absent from $FM_HOME/data/backlog.md"
+      state=$(show_field "$show" state)
+      [ "$state" != "done" ] || fail "captain decision $id is already durably resolved; use a new decision key for a new decision"
+      printf 'captain-held [key=%s]: tracked by %s\n' "$key" "$id" >> "$status_file"
       key_seen=1
     done <<EOF
 $raw_open

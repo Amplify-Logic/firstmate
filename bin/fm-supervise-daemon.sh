@@ -414,8 +414,8 @@ classify_stale() {  # <window> <state>
   # malformed hold line (an invalid key slug) falls through to normal stale
   # handling instead of silently swallowing a dead agent behind an empty-digest
   # sentinel.
-  if status_has_open_captain_hold "$state/$task.status" \
-    && { status_is_paused "$last" || status_is_captain_held "$last" || status_is_resolved "$last"; }; then
+  digest=$(status_open_captain_holds "$state/$task.status")
+  if [ -n "$digest" ] && status_declared_wait "$state/$task.status"; then
     # An open captain-held transfer is a declared wait (fm-classify-lib.sh owns
     # the policy; status_open_captain_holds is the stream-truth fold, so a
     # still-open hold b keeps its quiet state even when a trailing resolved:
@@ -438,7 +438,6 @@ classify_stale() {  # <window> <state>
     else
       alive=$(fm_backend_agent_alive "$(task_window_backend "$win" "$state")" "$win" 2>/dev/null) || alive=unknown
       if [ "$alive" = dead ]; then
-        digest=$(status_open_captain_holds "$state/$task.status")
         if [ "$(cat "$state/.subsuper-captain-held-surfaced-$(_stale_key "$task")" 2>/dev/null || true)" != "$digest" ]; then
           printf 'escalate|captain-held, agent exited (work at risk once the answer lands): %s' "$(printf '%s' "$digest" | tr '\n' ' ')"
         else
@@ -1150,7 +1149,7 @@ _pause_recheck_flush() {  # <state> <due-file>
 #  3) heartbeat scan: every HEARTBEAT_SCAN_SECS, grep state/*.status for a
 #     captain-relevant line the per-wake classifier missed and escalate it.
 housekeeping() {  # <state>
-  local state=$1 now due f key task win marker age last max_defer oldest pause_secs
+  local state=$1 now due f key task win marker age last max_defer oldest pause_secs surf
   local pause_due pause_floor pause_captain_secs
   now=$(_now)
   migrate_watcher_pause_markers "$state"
@@ -1442,7 +1441,7 @@ is_wake_reason() {  # <reason>
 # --- dispatch one wake reason to self-handle or escalate --------------------
 # Side effects: logging, marker records, escalation buffer appends.
 handle_wake() {  # <reason> <state>
-  local reason=$1 state=$2 decision action distilled task last
+  local reason=$1 state=$2 decision action distilled task last digest
   local kind="" arg=""
   if should_force_self "$reason"; then
     log "wake force-self (FM_INJECT_SKIP): $reason"
