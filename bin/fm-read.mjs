@@ -17,6 +17,8 @@
 // Headings carry GitHub-style anchor ids slugged from their visible text and
 // de-duplicated within the page by numeric suffix, so in-document
 // table-of-contents links resolve and scroll.
+// Literal NUL bytes are stripped before parsing, so document content can never
+// forge the NUL-delimited placeholder markers used for stashed code and tags.
 // It also owns the private page naming: the page is written 0600 under a 0700
 // output directory and its path is printed on stdout.
 import crypto from "node:crypto";
@@ -30,7 +32,6 @@ if (!sourceArg || !outputDirArg) {
 }
 
 const CODE_MARK = String.fromCharCode(0);
-const CODE_SLOT = new RegExp(`${CODE_MARK}CODE(\\d+)${CODE_MARK}`, "g");
 
 const escapeHtml = (value) => value
   .replaceAll("&", "&amp;")
@@ -83,9 +84,8 @@ function inline(value) {
   text = text.replace(/(^|[^\w*])\*([^*]+)\*(?!\w)/g, "$1<em>$2</em>");
   text = text.replace(/(^|[^\w])_([^_]+)_(?!\w)/g, "$1<em>$2</em>");
   text = text.replace(/~~([^~]+)~~/g, "<del>$1</del>");
-  for (let previous = null; previous !== text;) {
-    previous = text;
-    text = text.replace(CODE_SLOT, (_match, index) => code[Number(index)]);
+  for (let index = code.length - 1; index >= 0; index -= 1) {
+    text = text.replaceAll(`${CODE_MARK}CODE${index}${CODE_MARK}`, () => code[index]);
   }
   return text;
 }
@@ -124,7 +124,7 @@ function dedent(block) {
 }
 
 function render(markdown) {
-  const lines = markdown.replaceAll("\r\n", "\n").replaceAll("\r", "\n").split("\n");
+  const lines = markdown.replaceAll("\u0000", "").replaceAll("\r\n", "\n").replaceAll("\r", "\n").split("\n");
   const out = [];
   let paragraph = [];
   let list = null;

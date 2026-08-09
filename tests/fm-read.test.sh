@@ -204,6 +204,25 @@ assert_contains "$anchors" 'href="https://example.com/pkg/__init__.py"' "a URL w
 assert_contains "$anchors" 'href="https://example.com/dir/_private_/x"' "a URL with single underscores was mangled by emphasis"
 pass "headings carry de-duplicated GitHub-style anchors and URLs survive emphasis intact"
 
+# shellcheck disable=SC2016  # the backticks are literal Markdown code-span fixture data
+printf '# Nul marker\n\n`\000CODE0\000` tail text\n' > "$TMP_ROOT/nul.md"
+(cd "$TMP_ROOT" && FM_HOME="$HOME_DIR" FM_ROOT_OVERRIDE="$ROOT" \
+  FM_LAVISH_BIN="$FAKEBIN/lavish-axi" FM_READ_TEST_LOG="$LOG" \
+  "$READ" --no-open nul.md > "$TMP_ROOT/nul.path" 2>&1) &
+nul_pid=$!
+for _ in $(seq 1 50); do
+  kill -0 "$nul_pid" 2>/dev/null || break
+  sleep 0.2
+done
+if kill -0 "$nul_pid" 2>/dev/null; then
+  kill "$nul_pid" 2>/dev/null || true
+  fail "renderer hung on a NUL-delimited marker sequence"
+fi
+wait "$nul_pid" || fail "renderer failed on a NUL-delimited marker sequence: $(cat "$TMP_ROOT/nul.path")"
+nul_out=$(cat "$(cat "$TMP_ROOT/nul.path")")
+assert_contains "$nul_out" "<code>CODE0</code> tail text" "NUL bytes were not stripped before parsing"
+pass "a NUL-delimited marker sequence renders promptly instead of hanging"
+
 first=$(FM_HOME="$HOME_DIR" FM_ROOT_OVERRIDE="$ROOT" FM_LAVISH_BIN="$FAKEBIN/lavish-axi" \
   FM_READ_TEST_LOG="$LOG" "$READ" --no-open sample-task)
 second=$(FM_HOME="$HOME_DIR" FM_ROOT_OVERRIDE="$ROOT" FM_LAVISH_BIN="$FAKEBIN/lavish-axi" \
