@@ -559,20 +559,23 @@ reconcile_pause_tracking() {  # <window> <state> <last-status-line>
   key=$(_stale_key "$task")
   marker="$state/.subsuper-paused-$key"
   watcher_key=$(_stale_key "$win")
-  if status_is_paused "$last"; then
+  if status_has_open_captain_hold "$state/$task.status"; then
+    # An open captain-held transfer is a declared wait (fm-classify-lib.sh's
+    # status_open_captain_holds fold, stream truth): it never wedge-ages and
+    # never re-surfaces on any cadence. Check it BEFORE the paused verb so a
+    # held stream with a newer trailing paused: line is governed by the hold
+    # policy (classify_stale's hold branch runs first too), never the bounded
+    # awaiting-external cadence. Clear any tracking of either kind so a leftover
+    # marker cannot age it into a false possible-wedge escalation or an
+    # awaiting-external recheck. The watcher's .captain-held-surfaced-<window>
+    # one-shot and this daemon's .subsuper-captain-held-surfaced-<task> one-shot
+    # are NOT cleared here: a hold that is still open must keep its dead-agent
+    # surface one-shot, or the daemon would re-alert an agent the watcher
+    # already surfaced in normal mode.
+    clear_pause_tracking "$win" "$state"
+  elif status_is_paused "$last"; then
     stale_marker_remove "$win" "$state"
     pause_marker_record "$win" "$state"
-  elif status_has_open_captain_hold "$state/$task.status"; then
-    # An open captain-held transfer is a declared wait that neither wedges nor
-    # re-surfaces (fm-classify-lib.sh's status_open_captain_holds fold, stream
-    # truth): clear any tracking of either kind so a leftover marker cannot age
-    # it into a false possible-wedge escalation or an awaiting-external recheck.
-    # The watcher's .captain-held-surfaced-<window> one-shot and this daemon's
-    # .subsuper-captain-held-surfaced-<task> one-shot are NOT cleared here: a
-    # hold that is still open must keep its dead-agent surface one-shot, or the
-    # daemon would re-alert an agent the watcher already surfaced in normal
-    # mode.
-    clear_pause_tracking "$win" "$state"
   elif [ -e "$marker" ] || [ -e "$state/.paused-$watcher_key" ]; then
     clear_pause_tracking "$win" "$state"
   fi
@@ -1229,7 +1232,16 @@ housekeeping() {  # <state>
   # Sweep any marker whose fold no longer has an open hold.
   for surf in "$state"/.subsuper-captain-held-surfaced-*; do
     [ -e "$surf" ] || continue
-    task="${surf##*.subsuper-captain-held-surfaced-}"
+    key="${surf##*.subsuper-captain-held-surfaced-}"
+    # The marker suffix is _stale_key(task) (tr ':/.' '___'), which is lossy for
+    # task ids containing '.' (allowed by the slug charset). Resolve the window
+    # the same way loop (2b) does so $state/$task.status resolves even for such
+    # ids; an unresolvable marker is orphaned and swept.
+    win=$(window_for_task "$key" "$state" 2>/dev/null || true)
+    if [ -z "$win" ]; then
+      rm -f "$surf"; continue
+    fi
+    task=$(window_to_task "$win" "$state")
     if ! status_has_open_captain_hold "$state/$task.status"; then
       rm -f "$surf"
     fi

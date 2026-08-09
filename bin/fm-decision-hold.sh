@@ -381,7 +381,7 @@ EOF
 retire_origin_hold_status() {  # <origin> <key> <hold-id>
   local origin=$1 key=$2 id=$3
   if [ -f "$STATE/$origin.status" ]; then
-    printf '%s: [key=%s]: retired by fm-decision-hold (%s)\n' \
+    printf '%s [key=%s]: retired by fm-decision-hold (%s)\n' \
       "${FM_CLASSIFY_RESOLVE_VERB:-$FM_CLASSIFY_RESOLVE_VERB_DEFAULT}" "$key" "$id" >> "$STATE/$origin.status"
   fi
 }

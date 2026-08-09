@@ -38,7 +38,7 @@
 #
 # Quiet treatment must never outlive the hold that justified it (the standing
 # 2026-08-05 ruling): the quiet-state is STREAM-TRUTH, not the last status line.
-# fm-decision-hold.sh resolve appends a closing resolved: [key=<k>]: line to the
+# fm-decision-hold.sh resolve appends a closing resolved [key=<k>]: line to the
 # origin status file when it retires a hold, and status_open_captain_holds folds
 # the stream (a captain-held line opens its key, a resolved: line closes it), so
 # a still-open hold keeps its quiet state even when a later resolved: line masks
@@ -378,17 +378,13 @@ pause_due_fold() {  # <due-file> <formatter>
 }
 
 _fm_decision_key() {  # <status-line> -> key slug, or "default" when no token
-  local line=$1 prefix rest k
-  # A keyed decision carries its key either in the verb prefix
-  # (`needs-decision [key=q1]: note`) or as the first token after the colon
-  # (`resolved: [key=q1]: note`, the fm-decision-hold resolve emit). A
-  # `[key=...]` token deeper in the note prose is free text, never a key. An
-  # INVALID slug in the verb prefix is a malformed keyed line and drops it
-  # (return 1, the fold skips it); an invalid slug in the post-colon position
-  # falls back to the default key exactly as it did before post-colon
-  # extraction existed, so `needs-decision: [key=bad key] pick one` still folds
-  # under default instead of vanishing from the open-decision set.
-  prefix=${line%%:*}
+  local prefix=${1%%:*} k
+  # A keyed decision carries its key in the verb prefix (`needs-decision [key=q1]:
+  # note`, the fm-decision-hold resolve emit `resolved [key=q1]: note`). A
+  # `[key=...]` token after the colon or deeper in the note prose is free text,
+  # never a key: reverting to the prefix-only read keeps legacy post-colon-keyed
+  # lines (`needs-decision: [key=q1] pick one`) folding under the default key
+  # exactly as they always did, so a keyless `resolved:` still closes them.
   case "$prefix" in
     *\[key=*\]*)
       k=${prefix#*\[key=}
@@ -398,21 +394,7 @@ _fm_decision_key() {  # <status-line> -> key slug, or "default" when no token
         *) printf '%s' "$k" ;;
       esac
       ;;
-    *)
-      rest=${line#*:}
-      rest=${rest#"${rest%%[![:space:]]*}"}
-      case "$rest" in
-        \[key=*\]*)
-          k=${rest#\[key=}
-          k=${k%%\]*}
-          case "$k" in
-            ''|*[!A-Za-z0-9._-]*) printf 'default' ;;
-            *) printf '%s' "$k" ;;
-          esac
-          ;;
-        *) printf 'default' ;;
-      esac
-      ;;
+    *) printf 'default' ;;
   esac
 }
 # Drop the record for <key> from a newline-terminated "<key>\t<verb>\t<note>" set.
@@ -464,7 +446,7 @@ status_open_decisions() {  # <status-file>
 
 # Fold the captain-held transfer stream into the set of holds whose quiet
 # treatment is still justified. A `captain-held [key=<k>]:` line OPENS its key;
-# only an explicit `resolved: [key=<k>]:` line CLOSES it (fm-decision-hold.sh
+# only an explicit `resolved [key=<k>]:` line CLOSES it (fm-decision-hold.sh
 # resolve appends exactly that when it retires a hold), so quiet treatment can
 # never outlive the hold that justified it (the standing ruling). This is the
 # STREAM-TRUTH quiet-state read: a last-line test cannot represent "hold b is

@@ -559,7 +559,19 @@ pause_state_class() {  # <window> <task>
   recheck_file="$STATE/.paused-rechecked-$key"
   if ! status_declared_wait "$STATE/$task.status"; then
     rm -f "$recheck_file" "$STATE/.captain-held-surfaced-$key"
-    crew_absorb_class "$task"
+    class=$(crew_absorb_class "$task")
+    if [ "$class" = paused ] && status_is_captain_held "$last"; then
+      # A paused verdict behind a captain-held last line that is NOT a declared
+      # wait (a malformed hold: invalid key slug, so the fold never opened) comes
+      # only from the captain-held -> paused mapping, and handle_paused_stale's
+      # paused branch requires status_is_paused on the last line, which such a
+      # line never satisfies - so passing 'paused' would swallow the agent
+      # forever. Treat it as a stopped crew (normal stale handling, surfaced
+      # once); a provably-working one already reports working.
+      printf 'none'
+      return
+    fi
+    printf '%s' "$class"
     return
   fi
   if [ -e "$STATE/.paused-$key" ] && [ "$(age_of "$recheck_file")" -lt "$STALE_ESCALATE_SECS" ]; then
@@ -1117,7 +1129,7 @@ EOF
     key=${key//\//_}
     key=${key//./_}
     last=$(last_status_line "$STATE/$task.status")
-    if ! status_declared_wait "$STATE/$task.status" && [ -e "$STATE/.paused-$key" ]; then
+    if [ -e "$STATE/.paused-$key" ] && ! status_declared_wait "$STATE/$task.status"; then
       clear_pause_tracking "$w"
     fi
     if [ "$kind" = secondmate ] && ! status_is_paused "$last"; then

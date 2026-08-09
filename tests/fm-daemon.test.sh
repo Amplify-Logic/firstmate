@@ -544,7 +544,7 @@ test_stale_resolved_hold_returns_to_normal_stale_handling() {
   local dir state out key
   dir=$(make_supercase stale-resolved-hold)
   state="$dir/state"
-  printf 'captain-held [key=api-shape]: tracked by held-route-9\nresolved: [key=api-shape]: retired by fm-decision-hold (held-route-9)\n' > "$state/held-c9.status"
+  printf 'captain-held [key=api-shape]: tracked by held-route-9\nresolved [key=api-shape]: retired by fm-decision-hold (held-route-9)\n' > "$state/held-c9.status"
   key=$(printf '%s' "held-c9" | tr ':/.' '___')
   out=$(FM_STATE_OVERRIDE="$state" classify_stale "sess:fm-held-c9" "$state")
   case "$out" in absorb\|*) fail "a resolved hold must not absorb: $out" ;; esac
@@ -562,7 +562,7 @@ test_stale_multihold_resolved_one_keeps_other_open() {
   local dir state out
   dir=$(make_supercase stale-multihold)
   state="$dir/state"
-  printf 'captain-held [key=a]: tracked by held-a\ncaptain-held [key=b]: tracked by held-b\nresolved: [key=a]: retired by fm-decision-hold (held-a)\n' > "$state/held-mb.status"
+  printf 'captain-held [key=a]: tracked by held-a\ncaptain-held [key=b]: tracked by held-b\nresolved [key=a]: retired by fm-decision-hold (held-a)\n' > "$state/held-mb.status"
   out=$(FM_STATE_OVERRIDE="$state" classify_stale "sess:fm-held-mb" "$state")
   case "$out" in absorb\|*) ;; *) fail "a still-open hold b must keep absorbing despite resolved a: $out" ;; esac
   case "$out" in *possible\ wedge*) fail "a still-open hold b was framed as a wedge: $out" ;; esac
@@ -628,14 +628,33 @@ test_reconcile_clears_daemon_one_shot_when_hold_resolves() {
   local dir state win key
   dir=$(make_supercase daemon-shot-cleared)
   state="$dir/state"; win="sess:fm-held-c15"
-  printf 'captain-held [key=api-shape]: tracked by held-route-15\nresolved: [key=api-shape]: retired by fm-decision-hold (held-route-15)\n' > "$state/held-c15.status"
+  printf 'captain-held [key=api-shape]: tracked by held-route-15\nresolved [key=api-shape]: retired by fm-decision-hold (held-route-15)\n' > "$state/held-c15.status"
   key=$(printf '%s' "held-c15" | tr ':/.' '___')
   printf 'digest-x\n' > "$state/.subsuper-captain-held-surfaced-$key"
   FM_STATE_OVERRIDE="$state" reconcile_pause_tracking "$win" "$state" \
-    "resolved: [key=api-shape]: retired by fm-decision-hold (held-route-15)"
+    "resolved [key=api-shape]: retired by fm-decision-hold (held-route-15)"
   [ -e "$state/.subsuper-captain-held-surfaced-$key" ] \
     && fail "a resolved hold left the daemon one-shot marker behind"
   pass "the daemon's dead-agent one-shot marker is swept once the hold resolves"
+}
+
+# reconcile_pause_tracking must give an open captain-held fold precedence over a
+# newer trailing paused: line, matching classify_stale's hold-first ordering:
+# the held stream is governed by the hold policy (never the bounded pause
+# cadence), so no pause marker may be recorded for it and any leftover pause
+# tracking is cleared.
+test_reconcile_hold_beats_trailing_paused() {
+  local dir state win key
+  dir=$(make_supercase reconcile-hold-beats-paused)
+  state="$dir/state"; win="sess:fm-held-c16"
+  printf 'captain-held [key=api-shape]: tracked by held-route-16\npaused: waiting on the answer\n' > "$state/held-c16.status"
+  key=$(printf '%s' "held-c16" | tr ':/.' '___')
+  FM_STATE_OVERRIDE="$state" reconcile_pause_tracking "$win" "$state" "paused: waiting on the answer"
+  [ -e "$state/.subsuper-paused-$key" ] \
+    && fail "an open hold recorded a pause marker for a trailing paused: line"
+  [ -e "$state/.paused-$(printf '%s' "$win" | tr ':/.' '___')" ] \
+    && fail "an open hold left watcher pause tracking behind"
+  pass "an open hold takes precedence over a trailing paused: line in reconcile"
 }
 
 # A stale marker that predates the declared-wait handling (or a race) must never
@@ -684,6 +703,26 @@ test_housekeeping_captain_held_pause_marker_never_resurfaces() {
     && fail "captain-held transfer was re-surfaced on the pause cadence"
   [ ! -e "$state/.subsuper-paused-$key" ] || fail "captain-held pause marker was not cleared"
   pass "housekeeping never re-surfaces a captain-held transfer on the pause cadence"
+}
+
+# The (1c) sweep resolves the task from the lossy marker suffix the same way the
+# pause loop does: a task id containing '.' (a valid slug) must not have its
+# dead-agent one-shot marker deleted while its hold is still open, or every
+# stale wake would re-escalate the loss-risk surface forever.
+test_housekeeping_lossy_task_key_sweep_keeps_open_hold_marker() {
+  local dir state fakebin win pane key
+  dir=$(make_supercase lossy-sweep)
+  state="$dir/state"; fakebin="$dir/fakebin"
+  win="sess:fm-held.dot1"; pane="$dir/pane.txt"
+  printf 'captain-held [key=api-shape]: tracked by held-route-dot\n' > "$state/held.dot1.status"
+  printf 'idle prompt $\n' > "$pane"
+  key=$(printf '%s' "held.dot1" | tr ':/.' '___')
+  printf 'digest-x\n' > "$state/.subsuper-captain-held-surfaced-$key"
+  PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$win" FM_FAKE_TMUX_CAPTURE="$pane" \
+    FM_STATE_OVERRIDE="$state" housekeeping "$state"
+  [ -e "$state/.subsuper-captain-held-surfaced-$key" ] \
+    || fail "the (1c) sweep deleted the one-shot marker of an open hold with a dot in its task id"
+  pass "the (1c) sweep resolves lossy task ids so open-hold one-shot markers survive"
 }
 
 test_housekeeping_stale_marker_transitions_to_pause() {
@@ -2356,8 +2395,10 @@ test_reconcile_keeps_watcher_one_shot_while_hold_open
 test_stale_hold_beats_trailing_paused_matching_watcher
 test_stale_malformed_hold_is_not_a_declared_wait
 test_reconcile_clears_daemon_one_shot_when_hold_resolves
+test_reconcile_hold_beats_trailing_paused
 test_housekeeping_captain_held_stale_marker_never_wedges
 test_housekeeping_captain_held_pause_marker_never_resurfaces
+test_housekeeping_lossy_task_key_sweep_keeps_open_hold_marker
 test_housekeeping_stale_marker_transitions_to_pause
 test_housekeeping_pause_marker_transitions_to_clear
 test_housekeeping_herdr_persistent_stale_resolves_meta

@@ -1138,17 +1138,17 @@ test_status_open_captain_holds_fold_is_stream_truth() {
   printf 'captain-held [key=a]: tracked by held-a\n' > "$f"
   status_has_open_captain_hold "$f" || fail "a lone captain-held line must fold open"
   status_declared_wait "$f" || fail "a lone captain-held line must be a declared wait"
-  printf 'resolved: [key=a]: retired by fm-decision-hold (held-a)\n' >> "$f"
+  printf 'resolved [key=a]: retired by fm-decision-hold (held-a)\n' >> "$f"
   [ -z "$(status_open_captain_holds "$f")" ] || fail "a resolved hold must fold closed"
   status_has_open_captain_hold "$f" && fail "a resolved hold must not be an open hold"
   status_declared_wait "$f" && fail "a resolved hold must not be a declared wait"
   # Multi-hold: hold b stays open when only a resolved. The trailing resolved:
   # line is still part of the hold stream, so the declared-wait gate stays true
   # (a last-line test would misread it as "no hold").
-  printf 'captain-held [key=a]: tracked by held-a\ncaptain-held [key=b]: tracked by held-b\nresolved: [key=a]: retired\n' > "$f"
+  printf 'captain-held [key=a]: tracked by held-a\ncaptain-held [key=b]: tracked by held-b\nresolved [key=a]: retired\n' > "$f"
   status_has_open_captain_hold "$f" || fail "hold b must stay open when only a resolved"
   status_declared_wait "$f" || fail "a still-open hold b must remain a declared wait"
-  printf 'resolved: [key=b]: retired\n' >> "$f"
+  printf 'resolved [key=b]: retired\n' >> "$f"
   [ -z "$(status_open_captain_holds "$f")" ] || fail "resolving b must close the last open hold"
   status_declared_wait "$f" && fail "an all-resolved stream must not be a declared wait"
   # A non-hold line supersedes quiet-state even while the fold is open: a crew
@@ -1172,6 +1172,24 @@ test_postcolon_invalid_key_folds_under_default() {
   pass "an invalid post-colon key folds under default instead of dropping the decision"
 }
 
+# The captain's ruling restored the prefix-only key read: legacy post-colon
+# keyed lines (`needs-decision: [key=q1] pick one`) keep folding under the
+# default key exactly as they always did, so a keyless `resolved:` still closes
+# them. A stream that only ever resolves the default key can never strand an
+# open decision under a key no one resolves (the quiet-state-never-outlives-its
+# hold bug class this branch exists to kill).
+test_postcolon_keyed_lines_stay_under_default_key() {
+  local dir state f open
+  dir=$(make_case postcolon-legacy-default); state="$dir/state"; f="$state/l.status"
+  printf 'needs-decision: [key=q1] pick one\n' > "$f"
+  open=$(status_open_decisions "$f")
+  printf '%s' "$open" | grep -F $'default\tneeds-decision\t' >/dev/null \
+    || fail "a post-colon keyed needs-decision must fold under default: $open"
+  printf 'resolved: pick one answered\n' >> "$f"
+  [ -z "$(status_open_decisions "$f")" ] || fail "a keyless resolved: must close the default fold"
+  pass "post-colon keyed lines stay under the default key and a keyless resolved: closes them"
+}
+
 # Ruling: quiet treatment must never outlive the hold. Once resolve appends its
 # closing resolved: line (fm-decision-hold.sh), the stopped crew's pane returns
 # to NORMAL stale handling: the watcher surfaces it as a bare stopped-crew
@@ -1183,7 +1201,7 @@ test_resolved_hold_returns_pane_to_normal_stale_handling() {
   window="test:fm-held"
   printf 'idle bare shell after the hold resolved\n' > "$capture_file"
   printf 'window=%s\nkind=ship\nharness=grok\nbackend=tmux\n' "$window" > "$state/held.meta"
-  printf 'captain-held [key=route]: tracked by held-decision-route\nresolved: [key=route]: retired by fm-decision-hold (held-decision-route)\n' > "$statusf"
+  printf 'captain-held [key=route]: tracked by held-decision-route\nresolved [key=route]: retired by fm-decision-hold (held-decision-route)\n' > "$statusf"
   back=$(( $(date +%s) - 500 ))
   if [ "$(uname)" = Darwin ]; then touch -mt "$(date -r "$back" '+%Y%m%d%H%M.%S')" "$statusf"
   else touch -m -d "@$back" "$statusf"; fi
@@ -1228,7 +1246,7 @@ test_multihold_resolved_one_keeps_quiet_state() {
   window="test:fm-gate"
   printf 'idle at the captain-decision gate\n' > "$capture_file"
   printf 'window=%s\nkind=ship\nharness=grok\nbackend=tmux\n' "$window" > "$state/gate.meta"
-  printf 'captain-held [key=route]: tracked by held-decision-route\ncaptain-held [key=access]: tracked by held-decision-access\nresolved: [key=route]: retired by fm-decision-hold (held-decision-route)\n' > "$statusf"
+  printf 'captain-held [key=route]: tracked by held-decision-route\ncaptain-held [key=access]: tracked by held-decision-access\nresolved [key=route]: retired by fm-decision-hold (held-decision-route)\n' > "$statusf"
   back=$(( $(date +%s) - 500 ))
   if [ "$(uname)" = Darwin ]; then touch -mt "$(date -r "$back" '+%Y%m%d%H%M.%S')" "$statusf"
   else touch -m -d "@$back" "$statusf"; fi
@@ -1252,6 +1270,52 @@ test_multihold_resolved_one_keeps_quiet_state() {
   [ "$wakes" -eq 0 ] || fail "still-open hold b surfaced $wakes stale wakes, expected silence behind the open hold"
   [ -e "$state/.paused-$key" ] || fail "still-open hold b lost its declared-wait marker"
   pass "a trailing resolved: line for one hold does not retire a sibling still-open hold"
+}
+
+# A malformed hold line (invalid key slug, so the fold never opens) is NOT a
+# declared wait: the watcher must fall back to NORMAL stale handling instead of
+# silently absorbing the crew forever. The paused verdict that crew state
+# reports for such a line comes only from the captain-held -> paused mapping
+# (status_is_paused on the last line is false, so handle_paused_stale's paused
+# branch would swallow it); the fix overrides that verdict so a dead or idle
+# agent surfaces a bare stale wake once, then stays quiet.
+test_malformed_hold_surfaces_normal_stale() {
+  local dir state fakebin out capture_file statusf window key pane_hash sig pid round wakes bare
+  dir=$(make_case malformed-hold-stale); state="$dir/state"; fakebin="$dir/fakebin"
+  out="$dir/watch.out"; capture_file="$dir/pane.txt"; statusf="$state/bad.status"
+  window="test:fm-bad"
+  printf 'idle at a bogus decision gate\n' > "$capture_file"
+  printf 'window=%s\nkind=ship\nharness=grok\nbackend=tmux\n' "$window" > "$state/bad.meta"
+  printf 'captain-held [key=bad key]: tracked by held-bad\n' > "$statusf"
+  back=$(( $(date +%s) - 500 ))
+  if [ "$(uname)" = Darwin ]; then touch -mt "$(date -r "$back" '+%Y%m%d%H%M.%S')" "$statusf"
+  else touch -m -d "@$back" "$statusf"; fi
+  sig=$(seen_sig "$statusf"); printf '%s' "$sig" > "$state/.seen-bad_status"
+  key=$(printf '%s' "$window" | tr ':/.' '___')
+  pane_hash=$(hash_text "idle at a bogus decision gate")
+  printf '%s' "$pane_hash" > "$state/.hash-$key"
+  printf '1\n' > "$state/.count-$key"
+  round=1
+  while [ "$round" -le 4 ]; do
+    PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CAPTURE="$capture_file" \
+      FM_FAKE_TMUX_CURRENT_COMMAND=zsh FM_FAKE_CREW_STATE='state: paused · source: pane · bare shell' \
+      FM_STATE_OVERRIDE="$state" FM_CREW_STATE_BIN="$fakebin/fm-crew-state.sh" FM_PAUSE_RESURFACE_SECS=240 FM_POLL=1 FM_SIGNAL_GRACE=1 \
+      FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 "$WATCH" >> "$out" &
+    pid=$!
+    if wait_live "$pid" 15; then reap "$pid"; else wait "$pid" || fail "malformed-hold watcher round $round failed"; fi
+    round=$((round + 1))
+  done
+  wakes=$(awk -F '\t' -v w="$window" '$3 == "stale" && $4 == w { n++ } END { print n + 0 }' "$state/.wake-queue" 2>/dev/null || true)
+  case "$wakes" in ''|*[!0-9]*) wakes=0 ;; esac
+  [ "$wakes" -eq 1 ] || fail "malformed hold surfaced $wakes stale wakes, expected one bare surface"
+  bare=$(awk -F '\t' -v w="$window" '$3 == "stale" && $4 == w && $5 == "stale: " w { n++ } END { print n + 0 }' "$state/.wake-queue" 2>/dev/null || true)
+  case "$bare" in ''|*[!0-9]*) bare=0 ;; esac
+  [ "$bare" -eq 1 ] || fail "malformed hold lost its normal stopped-crew surface (got $bare)"
+  grep -F "agent exited" "$state/.wake-queue" >/dev/null \
+    && fail "a malformed hold must not carry the dead-agent loss-risk surface"
+  grep -F "possible wedge" "$state/.wake-queue" >/dev/null \
+    && fail "a malformed hold's surface was escalated as a possible wedge"
+  pass "a malformed hold line gets normal stale handling instead of a silent absorb"
 }
 
 test_secondmate_paused_resurfaces_in_normal_mode() {
@@ -1883,9 +1947,11 @@ test_pause_due_fold_preserves_empty_notes
 test_pause_due_fold_dedupes_shared_window
 test_declared_wait_policies_paused_bounded_captain_held_silent
 test_status_open_captain_holds_fold_is_stream_truth
+test_postcolon_keyed_lines_stay_under_default_key
 test_postcolon_invalid_key_folds_under_default
 test_resolved_hold_returns_pane_to_normal_stale_handling
 test_multihold_resolved_one_keeps_quiet_state
+test_malformed_hold_surfaces_normal_stale
 test_secondmate_paused_resurfaces_in_normal_mode
 test_secondmate_nonpaused_stale_remains_suppressed
 test_secondmate_unpause_clears_pause_tracking

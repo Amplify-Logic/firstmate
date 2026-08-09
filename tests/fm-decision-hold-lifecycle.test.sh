@@ -278,7 +278,7 @@ EOF
 
 # Ruling: quiet treatment must never outlive the hold. resolve retires the
 # captain-held quiet-state from the origin status stream: after the hold closes
-# it appends `resolved: [key=<key>]: retired by fm-decision-hold (<hold-id>)`,
+# it appends `resolved [key=<key>]: retired by fm-decision-hold (<hold-id>)`,
 # and the status_open_captain_holds fold closes that key. Without the emit the
 # last status line would stay `captain-held:` forever, so both supervision
 # consumers would keep the idle pane silently absorbed after the captain
@@ -305,7 +305,7 @@ test_resolve_emits_closing_status_line_retiring_the_hold() {
   printf 'Use the compact emit shape.\n' > "$home/emit-decision.txt"
   run_decisions "$home" resolve "$id" emit --decision-file "$home/emit-decision.txt" \
     --routed-to emit-dep >/dev/null || fail "resolve failed"
-  grep -F "resolved: [key=emit]: retired by fm-decision-hold ($hold)" "$home/state/$id.status" >/dev/null \
+  grep -F "resolved [key=emit]: retired by fm-decision-hold ($hold)" "$home/state/$id.status" >/dev/null \
     || fail "resolve did not append the closing resolved: line"
   # The idempotent early return (a re-run of an already-resolved hold) must also
   # append the closing line, or an interrupted resolve that later re-runs never
