@@ -80,13 +80,31 @@ fm_worktree_claim_rewrite() {
   mv -f "$tmp" "$meta"
 }
 
+# fm_worktree_claim_allocation_begin <state-dir>
+# Call before asking the provider to assign a path.
+fm_worktree_claim_allocation_begin() {
+  local state=$1
+  FM_WORKTREE_CLAIM_ALLOCATION_LOCK="$state/.worktree-lease-claims.lock"
+  fm_lock_acquire_wait "$FM_WORKTREE_CLAIM_ALLOCATION_LOCK"
+}
+
+fm_worktree_claim_allocation_cancel() {
+  if [ -n "${FM_WORKTREE_CLAIM_ALLOCATION_LOCK:-}" ]; then
+    fm_lock_release "$FM_WORKTREE_CLAIM_ALLOCATION_LOCK"
+    FM_WORKTREE_CLAIM_ALLOCATION_LOCK=
+  fi
+}
+
 # fm_worktree_claim_acquired <state-dir> <task-id> <worktree>
-# Call only after the provider has assigned and the caller has validated the
-# worktree. The provider assignment is authoritative over older path claims.
+# Call after the provider has assigned and the caller has validated the worktree.
 fm_worktree_claim_acquired() {
-  local state=$1 owner=$2 worktree=$3 lock meta claimed rc=0
+  local state=$1 owner=$2 worktree=$3 lock meta claimed rc=0 held=0
   lock="$state/.worktree-lease-claims.lock"
-  fm_lock_acquire_wait "$lock"
+  if [ "${FM_WORKTREE_CLAIM_ALLOCATION_LOCK:-}" = "$lock" ]; then
+    held=1
+  else
+    fm_lock_acquire_wait "$lock"
+  fi
   for meta in "$state"/*.meta; do
     [ -e "$meta" ] || [ -L "$meta" ] || continue
     [ "$meta" != "$state/$owner.meta" ] || continue
@@ -98,22 +116,36 @@ fm_worktree_claim_acquired() {
     fi
   done
   fm_lock_release "$lock"
+  [ "$held" -eq 0 ] || FM_WORKTREE_CLAIM_ALLOCATION_LOCK=
   return "$rc"
 }
 
-# fm_worktree_claim_released <state-dir> <task-id> <worktree>
-# Call immediately after the provider confirms return/removal, before unrelated
-# cleanup that may fail and leave the task's meta record behind.
-fm_worktree_claim_released() {
-  local state=$1 owner=$2 worktree=$3 lock meta claimed rc=0
+# fm_worktree_claim_release <state-dir> <task-id> <worktree> <release-function>
+# The release function performs every path mutation and the provider return.
+fm_worktree_claim_release() {
+  local state=$1 owner=$2 worktree=$3 release_function=$4
+  local lock meta claimed reassigned rc=0
   lock="$state/.worktree-lease-claims.lock"
   meta="$state/$owner.meta"
   fm_lock_acquire_wait "$lock"
-  if [ -e "$meta" ] || [ -L "$meta" ]; then
+  if [ -f "$meta" ] && [ ! -L "$meta" ]; then
     claimed=$(fm_worktree_claim_meta_value "$meta" worktree)
     if fm_worktree_claim_paths_match "$claimed" "$worktree"; then
-      fm_worktree_claim_rewrite "$meta" released "$owner" "$claimed" || rc=1
+      if "$release_function"; then
+        fm_worktree_claim_rewrite "$meta" released "$owner" "$claimed" || rc=1
+      else
+        rc=1
+      fi
+    else
+      reassigned=$(fm_worktree_claim_meta_value "$meta" worktree_reassigned_path)
+      if ! fm_worktree_claim_paths_match "$reassigned" "$worktree"; then
+        echo "error: worktree $worktree is not durably claimed by $owner" >&2
+        rc=1
+      fi
     fi
+  else
+    echo "error: missing or unsafe worktree claimant record $meta" >&2
+    rc=1
   fi
   fm_lock_release "$lock"
   return "$rc"

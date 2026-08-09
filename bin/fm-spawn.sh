@@ -303,7 +303,7 @@ orca_spawn_abort_cleanup() {
   fi
   return "$status"
 }
-trap 'orca_spawn_abort_cleanup || :; fm_cursor_catalog_cache_cleanup' EXIT
+trap 'fm_worktree_claim_allocation_cancel; orca_spawn_abort_cleanup || :; fm_cursor_catalog_cache_cleanup' EXIT
 
 # Batch dispatch (see header): when the first positional is an `id=repo` pair, treat every
 # positional as one and spawn each by re-execing this script in single-task mode. We use
@@ -1026,6 +1026,7 @@ EOF
     T="$CMUX_WORKSPACE_ID:$CMUX_SURFACE_ID"
     ;;
   orca)
+    fm_worktree_claim_allocation_begin "$STATE"
     set +e
     ORCA_WT_RAW=$(fm_backend_orca_worktree_create "$PROJ_ABS" "$W")
     ORCA_WT_STATUS=$?
@@ -1093,6 +1094,7 @@ spawn_send_key() {  # <target> <key>
   esac
 }
 if [ "$KIND" != secondmate ] && [ "$BACKEND" != orca ]; then
+  fm_worktree_claim_allocation_begin "$STATE"
   spawn_send_text_line "$WT_TARGET" 'treehouse get'
 
   # Wait for the treehouse subshell: the pane's cwd moves from the project to the worktree.
