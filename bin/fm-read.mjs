@@ -14,6 +14,9 @@
 // richer continuation renders as blocks after it; and that setext headings,
 // reference-style links, four-space code blocks, task-list checkboxes, and
 // two-space hard line breaks are not recognised anywhere.
+// Headings carry GitHub-style anchor ids slugged from their visible text and
+// de-duplicated within the page by numeric suffix, so in-document
+// table-of-contents links resolve and scroll.
 // It also owns the private page naming: the page is written 0600 under a 0700
 // output directory and its path is printed on stdout.
 import crypto from "node:crypto";
@@ -42,29 +45,49 @@ function safeUrl(href) {
   return /^(?:https?|mailto):/.test(probe) ? href : "";
 }
 
+const anchorIds = new Set();
+
+function anchorId(text) {
+  const plain = text
+    .replace(/`([^`]*)`/g, "$1")
+    .replace(/!\[([^\]]*)\]\([^)]*\)/g, "$1")
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1");
+  const base = plain.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "section";
+  let id = base;
+  for (let n = 1; anchorIds.has(id); n += 1) id = `${base}-${n}`;
+  anchorIds.add(id);
+  return id;
+}
+
 function inline(value) {
   const code = [];
-  let text = value.replace(/`([^`]+)`/g, (_match, body) => {
-    code.push(`<code>${escapeHtml(body)}</code>`);
+  const slot = (markup) => {
+    code.push(markup);
     return `${CODE_MARK}CODE${code.length - 1}${CODE_MARK}`;
-  });
+  };
+  let text = value.replace(/`([^`]+)`/g, (_match, body) => slot(`<code>${escapeHtml(body)}</code>`));
   text = escapeHtml(text);
   text = text.replace(/!\[([^\]]*)\]\(([^\s)]+)(?:\s+&quot;([^&]*)&quot;)?\)/g,
     (_match, alt, href, title) => {
       const src = safeUrl(href);
-      return src ? `<img src="${src}" alt="${alt}"${title ? ` title="${title}"` : ""}>` : alt;
+      return src ? slot(`<img src="${src}" alt="${alt}"${title ? ` title="${title}"` : ""}>`) : alt;
     });
   text = text.replace(/\[([^\]]+)\]\(([^\s)]+)(?:\s+&quot;([^&]*)&quot;)?\)/g,
     (_match, label, href, title) => {
       const url = safeUrl(href);
-      return url ? `<a href="${url}"${title ? ` title="${title}"` : ""}>${label}</a>` : label;
+      if (!url) return label;
+      return `${slot(`<a href="${url}"${title ? ` title="${title}"` : ""}>`)}${label}${slot("</a>")}`;
     });
   text = text.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
   text = text.replace(/(^|[^\w])__([^_]+)__(?!\w)/g, "$1<strong>$2</strong>");
   text = text.replace(/(^|[^\w*])\*([^*]+)\*(?!\w)/g, "$1<em>$2</em>");
   text = text.replace(/(^|[^\w])_([^_]+)_(?!\w)/g, "$1<em>$2</em>");
   text = text.replace(/~~([^~]+)~~/g, "<del>$1</del>");
-  return text.replace(CODE_SLOT, (_match, index) => code[Number(index)]);
+  for (let previous = null; previous !== text;) {
+    previous = text;
+    text = text.replace(CODE_SLOT, (_match, index) => code[Number(index)]);
+  }
+  return text;
 }
 
 function tableCells(line) {
@@ -176,7 +199,7 @@ function render(markdown) {
     if (heading) {
       flushBlocks();
       const level = heading[1].length;
-      out.push(`<h${level}>${inline(heading[2])}</h${level}>`);
+      out.push(`<h${level} id="${anchorId(heading[2])}">${inline(heading[2])}</h${level}>`);
       continue;
     }
     const headers = line.includes("|") ? tableCells(line) : null;
@@ -242,14 +265,6 @@ function render(markdown) {
   return out.join("\n");
 }
 
-const source = fs.realpathSync(sourceArg);
-const body = render(fs.readFileSync(source, "utf8"));
-const stem = path.basename(source, path.extname(source));
-const parent = path.basename(path.dirname(source));
-const label = stem.toLowerCase() === "report" && parent ? parent : stem;
-const slug = label.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "report";
-const digest = crypto.createHash("sha256").update(source).digest("hex").slice(0, 10);
-const title = escapeHtml(label.replaceAll("-", " ").replace(/\b\w/g, (letter) => letter.toUpperCase()));
 const css = `
 :root{--ink:#f2efe9;--dim:#a9a394;--line:#2b2f3a;--bg:#0e1116;--card:#161a22;--accent:#7aa7ff}
 @media (prefers-color-scheme:light){:root{--ink:#1a1c20;--dim:#5d6470;--line:#e2dfd8;--bg:#fbfaf7;--card:#fff;--accent:#2f5fd0}}
@@ -266,11 +281,24 @@ pre{max-width:100%;background:var(--card);border:1px solid var(--line);border-ra
 .tw{max-width:100%;overflow-x:auto;margin:18px 0;border:1px solid var(--line);border-radius:10px}table{border-collapse:collapse;width:100%;min-width:420px;font-size:.95rem}
 th,td{text-align:left;padding:11px 15px;border-bottom:1px solid var(--line);vertical-align:top}th{background:rgba(127,127,127,.09);font-size:.79rem;text-transform:uppercase;letter-spacing:.5px;color:var(--dim)}tr:last-child td{border-bottom:0}img{max-width:100%;height:auto}
 `;
-const html = `<!doctype html>\n<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title><style>${css}</style></head><body><main>\n${body}\n</main></body></html>\n`;
-const outputDir = path.resolve(outputDirArg);
-const output = path.join(outputDir, `read-${slug}-${digest}.html`);
-fs.mkdirSync(outputDir, { recursive: true, mode: 0o700 });
-fs.chmodSync(outputDir, 0o700);
-fs.writeFileSync(output, html, { mode: 0o600 });
-fs.chmodSync(output, 0o600);
-process.stdout.write(`${output}\n`);
+try {
+  const source = fs.realpathSync(sourceArg);
+  const body = render(fs.readFileSync(source, "utf8"));
+  const stem = path.basename(source, path.extname(source));
+  const parent = path.basename(path.dirname(source));
+  const label = stem.toLowerCase() === "report" && parent ? parent : stem;
+  const slug = label.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "report";
+  const digest = crypto.createHash("sha256").update(source).digest("hex").slice(0, 10);
+  const title = escapeHtml(label.replaceAll("-", " ").replace(/\b\w/g, (letter) => letter.toUpperCase()));
+  const html = `<!doctype html>\n<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title><style>${css}</style></head><body><main>\n${body}\n</main></body></html>\n`;
+  const outputDir = path.resolve(outputDirArg);
+  const output = path.join(outputDir, `read-${slug}-${digest}.html`);
+  fs.mkdirSync(outputDir, { recursive: true, mode: 0o700 });
+  fs.chmodSync(outputDir, 0o700);
+  fs.writeFileSync(output, html, { mode: 0o600 });
+  fs.chmodSync(output, 0o600);
+  process.stdout.write(`${output}\n`);
+} catch (err) {
+  console.error(`fm-read.mjs: ${err.message}`);
+  process.exit(1);
+}
