@@ -148,6 +148,8 @@ SUB_HOME_MARKER=".fm-secondmate-home"
 . "$SCRIPT_DIR/fm-pr-lib.sh"
 # shellcheck source=bin/fm-cursor-model-lib.sh
 . "$SCRIPT_DIR/fm-cursor-model-lib.sh"
+# shellcheck source=bin/fm-worktree-lease-lib.sh
+. "$SCRIPT_DIR/fm-worktree-lease-lib.sh"
 # Fail closed before any fleet mutation: a no-mistakes gate agent must never spawn
 # a direct report (see bin/fm-gate-refuse-lib.sh).
 fm_refuse_if_gate_agent
@@ -1156,6 +1158,16 @@ if [ "$KIND" != secondmate ] && [ "$BACKEND" != orca ]; then
   fi
 
   validate_spawn_worktree "treehouse get" "$T"
+fi
+
+# The provider assignment is authoritative: clear an older task's durable claim
+# before this task records the newly assigned path. fm-worktree-lease-lib owns
+# the return/allocation race and its state-local serialization.
+if [ "$KIND" != secondmate ]; then
+  fm_worktree_claim_acquired "$STATE" "$ID" "$WT" || {
+    echo "error: cannot reconcile the worktree lease for $WT; refusing to launch with conflicting task records" >&2
+    exit 1
+  }
 fi
 
 # Per-task temp root: /tmp/fm-<id>/ with Go's build temp nested at gotmp/. Go won't
