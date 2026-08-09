@@ -5,7 +5,7 @@
 # teardown removes that task's meta file. Once a provider has assigned a path,
 # fm_worktree_claim_acquired clears every other meta file's claim to the same
 # canonical path before the new task records its own claim. Once teardown has
-# returned or removed a worktree, fm_worktree_claim_released clears that task's
+# returned or removed a worktree, fm_worktree_claim_release clears that task's
 # claim immediately. Both transitions share one state-local lock, so a return
 # racing a new allocation cannot resurrect or preserve two owners.
 #
