@@ -20,6 +20,7 @@ FM_PR_OWNER=
 FM_PR_REPO=
 FM_PR_NUMBER=
 FM_PR_DATA_PROVIDER=
+FM_PR_DATA_VERSION=
 FM_PR_DATA_URL=
 FM_PR_DATA_HOST=
 FM_PR_DATA_PATH=
@@ -30,6 +31,7 @@ FM_PR_META_HOST=
 FM_PR_META_PATH=
 FM_PR_META_NUMBER=
 FM_PR_REG_ID=
+FM_PR_REG_VERSION=
 FM_PR_REG_PROVIDER=
 FM_PR_REG_URL=
 FM_PR_REG_HOST=
@@ -57,6 +59,7 @@ FM_PR_POLL_EXPECT_DATA_IDENTITY=
 FM_PR_POLL_EXPECT_CHECK_IDENTITY=
 FM_PR_POLL_TEMPLATE=
 FM_PR_POLL_STATE_DEVICE=
+FM_PR_GITHUB_V1_TEMPLATE_HASH=f4913807dcf7b407987d300c2ea01a5b1a28188ce40d84a9f2f37f68e4e05f99
 
 fm_task_id_path_safe() {
   local id=${1-}
@@ -298,24 +301,39 @@ fm_pr_metadata_identity_parse() {
   [ -n "$FM_PR_META_URL" ]
 }
 
-# Sidecar layout: provider, url, host, path, number, one per line. A sidecar
-# written before the provider tag existed has a URL on its first line and one
-# line fewer, so it fails both the field count and the provider comparison and
-# is refused rather than misread as a provider-tagged record.
+# Sidecar layout is provider, url, host, path, number, one per line.
+# The GitHub-only v1 layout remains accepted as url, owner, repo, number.
 fm_pr_poll_data_parse() {
-  local file=$1 provider url host path number
+  local file=$1 first provider url host path number owner repo
   FM_PR_DATA_PROVIDER=
+  FM_PR_DATA_VERSION=
   FM_PR_DATA_URL=
   FM_PR_DATA_HOST=
   FM_PR_DATA_PATH=
   FM_PR_DATA_NUMBER=
   [ -f "$file" ] && [ ! -L "$file" ] || return 1
   exec 8< "$file" || return 1
-  IFS= read -r provider <&8 || { exec 8<&-; return 1; }
-  IFS= read -r url <&8 || { exec 8<&-; return 1; }
-  IFS= read -r host <&8 || { exec 8<&-; return 1; }
-  IFS= read -r path <&8 || { exec 8<&-; return 1; }
-  IFS= read -r number <&8 || { exec 8<&-; return 1; }
+  IFS= read -r first <&8 || { exec 8<&-; return 1; }
+  case "$first" in
+    github|gitlab)
+      provider=$first
+      IFS= read -r url <&8 || { exec 8<&-; return 1; }
+      IFS= read -r host <&8 || { exec 8<&-; return 1; }
+      IFS= read -r path <&8 || { exec 8<&-; return 1; }
+      IFS= read -r number <&8 || { exec 8<&-; return 1; }
+      FM_PR_DATA_VERSION=2
+      ;;
+    *)
+      url=$first
+      IFS= read -r owner <&8 || { exec 8<&-; return 1; }
+      IFS= read -r repo <&8 || { exec 8<&-; return 1; }
+      IFS= read -r number <&8 || { exec 8<&-; return 1; }
+      provider=github
+      host=github.com
+      path="$owner/$repo"
+      FM_PR_DATA_VERSION=1
+      ;;
+  esac
   if IFS= read -r _extra <&8; then
     exec 8<&-
     return 1
@@ -333,15 +351,12 @@ fm_pr_poll_data_parse() {
   FM_PR_DATA_NUMBER=$FM_PR_NUMBER
 }
 
-# Registration layout: version tag, task id, then the same provider-tagged
-# identity as the sidecar, then the two hashes and the two file identities.
-# The version tag moved to v2 with the provider tag, so a registration written
-# by the previous release is recognised as old and refused. The non-executing
-# migration in bin/fm-pr-check-migrate.sh then rebuilds that poll from the
-# task's recorded pull request URL.
+# Registration layout is version, task id, identity, two hashes, and two file identities.
+# V1 carries the GitHub url, owner, repo, and number, while v2 carries the provider-tagged identity.
 fm_pr_poll_registration_parse() {
-  local file=$1 version id provider url host path number data_hash template_hash data_identity check_identity
+  local file=$1 version id provider url host path number owner repo data_hash template_hash data_identity check_identity
   FM_PR_REG_ID=
+  FM_PR_REG_VERSION=
   FM_PR_REG_PROVIDER=
   FM_PR_REG_URL=
   FM_PR_REG_HOST=
@@ -355,11 +370,27 @@ fm_pr_poll_registration_parse() {
   exec 7< "$file" || return 1
   IFS= read -r version <&7 || { exec 7<&-; return 1; }
   IFS= read -r id <&7 || { exec 7<&-; return 1; }
-  IFS= read -r provider <&7 || { exec 7<&-; return 1; }
-  IFS= read -r url <&7 || { exec 7<&-; return 1; }
-  IFS= read -r host <&7 || { exec 7<&-; return 1; }
-  IFS= read -r path <&7 || { exec 7<&-; return 1; }
-  IFS= read -r number <&7 || { exec 7<&-; return 1; }
+  case "$version" in
+    fm-pr-poll-registration-v1)
+      IFS= read -r url <&7 || { exec 7<&-; return 1; }
+      IFS= read -r owner <&7 || { exec 7<&-; return 1; }
+      IFS= read -r repo <&7 || { exec 7<&-; return 1; }
+      IFS= read -r number <&7 || { exec 7<&-; return 1; }
+      provider=github
+      host=github.com
+      path="$owner/$repo"
+      FM_PR_REG_VERSION=1
+      ;;
+    fm-pr-poll-registration-v2)
+      IFS= read -r provider <&7 || { exec 7<&-; return 1; }
+      IFS= read -r url <&7 || { exec 7<&-; return 1; }
+      IFS= read -r host <&7 || { exec 7<&-; return 1; }
+      IFS= read -r path <&7 || { exec 7<&-; return 1; }
+      IFS= read -r number <&7 || { exec 7<&-; return 1; }
+      FM_PR_REG_VERSION=2
+      ;;
+    *) exec 7<&-; return 1 ;;
+  esac
   IFS= read -r data_hash <&7 || { exec 7<&-; return 1; }
   IFS= read -r template_hash <&7 || { exec 7<&-; return 1; }
   IFS= read -r data_identity <&7 || { exec 7<&-; return 1; }
@@ -372,8 +403,8 @@ fm_pr_poll_registration_parse() {
   fm_pr_task_id_valid "$id" || return 1
   fm_pr_url_parse "$url" || return 1
   [ "$provider" = "$FM_PR_PROVIDER" ] || return 1
-  case "$provider:$version" in
-    github:fm-pr-poll-registration-v1|github:fm-pr-poll-registration-v2|gitlab:fm-pr-poll-registration-v2) ;;
+  case "$provider:$FM_PR_REG_VERSION" in
+    github:1|github:2|gitlab:2) ;;
     *) return 1 ;;
   esac
   [ "$host" = "$FM_PR_HOST" ] || return 1
@@ -567,14 +598,19 @@ fm_pr_poll_artifacts_valid() {
   fm_pr_private_file_valid "$registration" 600 "$state_device" || return 1
   [ -f "$meta" ] && [ ! -L "$meta" ] || return 1
   [ "$(fm_pr_file_link_count "$meta")" = 1 ] || return 1
-  cmp -s "$template" "$check" || return 1
+  fm_pr_poll_registration_parse "$registration" || return 1
+  case "$FM_PR_REG_VERSION" in
+    1) [ "$(fm_pr_sha256 "$check")" = "$FM_PR_GITHUB_V1_TEMPLATE_HASH" ] || return 1 ;;
+    2) cmp -s "$template" "$check" || return 1 ;;
+    *) return 1 ;;
+  esac
   fm_pr_poll_data_parse "$data" || return 1
   data_hash=$(fm_pr_sha256 "$data") || return 1
   template_hash=$(fm_pr_sha256 "$check") || return 1
   data_identity=$(fm_pr_file_identity "$data") || return 1
   check_identity=$(fm_pr_file_identity "$check") || return 1
-  fm_pr_poll_registration_parse "$registration" || return 1
   [ "$FM_PR_REG_ID" = "$id" ] || return 1
+  [ "$FM_PR_REG_VERSION" = "$FM_PR_DATA_VERSION" ] || return 1
   [ "$FM_PR_REG_PROVIDER" = "$FM_PR_DATA_PROVIDER" ] || return 1
   [ "$FM_PR_REG_URL" = "$FM_PR_DATA_URL" ] || return 1
   [ "$FM_PR_REG_HOST" = "$FM_PR_DATA_HOST" ] || return 1

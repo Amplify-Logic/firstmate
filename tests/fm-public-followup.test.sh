@@ -662,6 +662,30 @@ test_secondmate_retirement_guards_all_child_work() {
   pass "secondmate retirement guards every commitment in the retiring home"
 }
 
+test_secondmate_parent_binding_tolerates_missing_registry() {
+  local parent child
+  parent=$(make_home teardown-missing-registry-parent)
+  child=$(make_home teardown-missing-registry-child)
+  printf '%s\n' mate > "$child/.fm-secondmate-home"
+  seed_commitment "$parent" pf-missing-registry req-missing-registry x secondmate:mate work-child
+  fm_write_meta "$parent/state/mate.meta" "kind=secondmate" "home=$child"
+  fm_write_meta "$child/state/work-child.meta" \
+    "window=firstmate:fm-work-child" "endpoint_task_id=work-child" \
+    "worktree=$child" "project=$child" "kind=ship" "mode=local-only"
+  rm -f "$parent/data/secondmates.md"
+
+  PATH="$child/fakebin:$PATH" FM_ROOT_OVERRIDE="$ROOT" FM_HOME="$child" \
+    FM_STATE_OVERRIDE="$child/state" FM_DATA_OVERRIDE="$child/data" \
+    FM_PUBLIC_FOLLOWUP_PRIMARY_HOME="$parent" \
+    expect_failure "a missing parent registry must not bypass commitment enforcement" \
+    "$TEARDOWN" work-child
+  assert_contains "$EXPECT_OUT" "still owes a public reply" \
+    "marker-proven ownership must tolerate a missing registry and enforce the commitment"
+  assert_not_contains "$EXPECT_OUT" "cannot resolve the primary home" \
+    "a missing registry must not strand marker-proven cleanup"
+  pass "secondmate parent resolution tolerates a missing registry"
+}
+
 test_posted_legacy_link_without_registration_refuses() {
   local home log
   home=$(make_home posted-legacy-link)
@@ -1115,6 +1139,7 @@ test_outward_delivery_stays_with_the_owning_home
 test_delivery_requires_registration_before_posting
 test_secondmate_teardown_requires_parent_binding
 test_secondmate_retirement_guards_all_child_work
+test_secondmate_parent_binding_tolerates_missing_registry
 test_posted_legacy_link_without_registration_refuses
 test_relay_disabled_unmarked_teardown_skips_public_path
 test_relay_disabled_parent_allows_marked_child_teardown

@@ -762,20 +762,81 @@ test_static_poll_contract() {
 }
 
 test_github_v1_registration_stays_valid() {
-  local dir state before_data before_check out
+  local dir state before_data before_check before_registration data_hash check_hash data_identity check_identity out
   dir=$(make_case github-v1-registration)
   state="$dir/home/state"
   write_poll_meta "$state" task-a https://github.com/o/r/pull/10
-  run_check_entry "$dir" task-a https://github.com/o/r/pull/10 >/dev/null \
-    || fail "could not arm the GitHub compatibility fixture"
-  sed '1s/fm-pr-poll-registration-v2/fm-pr-poll-registration-v1/' \
-    "$state/task-a.pr-poll-registration" > "$state/task-a.pr-poll-registration.tmp"
-  mv "$state/task-a.pr-poll-registration.tmp" "$state/task-a.pr-poll-registration"
+  printf '%s\n%s\n%s\n%s\n' https://github.com/o/r/pull/10 o r 10 > "$state/task-a.pr-poll"
+  # Exact bin/fm-pr-poll.sh bytes from the pre-batch base commit 36556396.
+  cat > "$state/task-a.check.sh" <<'SH'
+#!/usr/bin/env bash
+# Static watcher program for a validated PR poll sidecar.
+# It emits exactly one merged line for MERGED and stays silent otherwise.
+set -u
+LC_ALL=C
+export LC_ALL
+
+if [ "$#" -eq 5 ] && [ "$1" = --validated ]; then
+  url=$2
+  owner=$3
+  repo=$4
+  number=$5
+elif [ "$#" -eq 0 ]; then
+  case "$0" in
+    *.check.sh) data=${0%.check.sh}.pr-poll ;;
+    *) exit 0 ;;
+  esac
+
+  [ -f "$data" ] && [ ! -L "$data" ] || exit 0
+  { exec 3< "$data"; } 2>/dev/null || exit 0
+  IFS= read -r url <&3 || exit 0
+  IFS= read -r owner <&3 || exit 0
+  IFS= read -r repo <&3 || exit 0
+  IFS= read -r number <&3 || exit 0
+  if IFS= read -r _extra <&3; then
+    exit 0
+  fi
+  exec 3<&-
+else
+  exit 0
+fi
+
+[ "${#owner}" -ge 1 ] && [ "${#owner}" -le 39 ] || exit 0
+case "$owner" in
+  *[!A-Za-z0-9-]*|-*|*-|*--*) exit 0 ;;
+esac
+[ "${#repo}" -ge 1 ] && [ "${#repo}" -le 100 ] || exit 0
+case "$repo" in
+  .|..|*[!A-Za-z0-9._-]*) exit 0 ;;
+esac
+case "$number" in
+  [1-9]*) ;;
+  *) exit 0 ;;
+esac
+case "$number" in
+  *[!0-9]*) exit 0 ;;
+esac
+[ "$url" = "https://github.com/$owner/$repo/pull/$number" ] || exit 0
+
+state=$(gh pr view "$url" --json state -q .state 2>/dev/null) || exit 0
+[ "$state" = MERGED ] && printf '%s\n' merged
+exit 0
+SH
+  chmod 0600 "$state/task-a.pr-poll" "$state/task-a.check.sh"
+  data_hash=$(fm_pr_sha256 "$state/task-a.pr-poll")
+  check_hash=$(fm_pr_sha256 "$state/task-a.check.sh")
+  data_identity=$(fm_pr_file_identity "$state/task-a.pr-poll")
+  check_identity=$(fm_pr_file_identity "$state/task-a.check.sh")
+  printf '%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n' \
+    fm-pr-poll-registration-v1 task-a https://github.com/o/r/pull/10 o r 10 \
+    "$data_hash" "$check_hash" "$data_identity" "$check_identity" \
+    > "$state/task-a.pr-poll-registration"
   chmod 0600 "$state/task-a.pr-poll-registration"
   fm_pr_poll_artifacts_valid "$state" task-a "$POLL" \
-    || fail "a provider-tagged GitHub v1 registration no longer validates"
+    || fail "a genuine pre-batch GitHub v1 registration no longer validates"
   before_data=$(fm_pr_sha256 "$state/task-a.pr-poll")
   before_check=$(fm_pr_sha256 "$state/task-a.check.sh")
+  before_registration=$(fm_pr_sha256 "$state/task-a.pr-poll-registration")
   out=$(FM_HOME="$dir/home" PATH="$dir/fakebin:$BASE_PATH" "$MIGRATE") \
     || fail "migration rejected an already-valid GitHub v1 registration"
   assert_not_contains "$out" "PR_CHECK_MIGRATION" \
@@ -784,12 +845,19 @@ test_github_v1_registration_stays_valid() {
     || fail "migration rewrote an existing GitHub sidecar"
   [ "$(fm_pr_sha256 "$state/task-a.check.sh")" = "$before_check" ] \
     || fail "migration rewrote an existing GitHub poll"
+  [ "$(fm_pr_sha256 "$state/task-a.pr-poll-registration")" = "$before_registration" ] \
+    || fail "migration rewrote an existing GitHub registration"
+  [ ! -e "$state/.pr-check-quarantine" ] \
+    || fail "migration quarantined an existing GitHub v1 poll"
   : > "$dir/gh.log"
   : > "$dir/glab.log"
   out=$(FM_TEST_GH_STATE=MERGED run_poll "$dir")
   [ "$out" = merged ] || fail "the compatible GitHub poll no longer reports a merge"
   [ -s "$dir/gh.log" ] || fail "the compatible GitHub poll did not invoke gh"
   [ ! -s "$dir/glab.log" ] || fail "the compatible GitHub poll invoked glab"
+  printf 'tampered\n' >> "$state/task-a.pr-poll"
+  ! fm_pr_poll_artifacts_valid "$state" task-a "$POLL" \
+    || fail "a tampered GitHub v1 sidecar retained authenticated status"
   pass "GitHub v1 registrations remain valid, silent, and GitHub-only"
 }
 

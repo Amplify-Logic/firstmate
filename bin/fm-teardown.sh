@@ -178,8 +178,10 @@ public_followup_resolve_primary_home() {
     [ "$meta_home" = "$child" ] || return 1
   fi
   registry="$parent/data/secondmates.md"
-  secondmate_registry_validate_bindings "$registry" secondmate_registry_path_key \
-    "$id" "$child" "$parent" "$FM_ROOT" scoped || return 1
+  if [ -e "$registry" ] || [ -L "$registry" ]; then
+    secondmate_registry_validate_bindings "$registry" secondmate_registry_path_key \
+      "$id" "$child" "$parent" "$FM_ROOT" scoped || return 1
+  fi
   printf '%s\n' "$parent"
 }
 if [ -f "$FM_HOME/$SUB_HOME_MARKER" ]; then
