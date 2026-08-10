@@ -1,7 +1,7 @@
 # GitLab merge request watch verification
 
-Empirical record for the merge watch on GitLab, alongside the existing GitHub watch.
-Every command below was run on 2026-07-21 and its output is reproduced exactly.
+Upstream-sourced empirical record for the merge watch on GitLab, alongside the existing GitHub watch.
+The commands and output below were recorded upstream on 2026-07-21 and have not been verified on this fork or on macOS.
 
 ## Versions
 
@@ -162,10 +162,11 @@ $ PATH="$noglab" fm-pr-check.sh e6 https://github.com/kunchenguid/firstmate/pull
 armed: state/e6.check.sh
 ```
 
-## Upgrade path from an existing armed watch
+## Upstream upgrade-path evidence
 
-The stored record gained the provider tag, so its version moved to `fm-pr-poll-registration-v2` and a record written by the previous release no longer parses.
-The existing non-executing migration handles that: it never runs the old artifact, and rebuilds the poll from the task's recorded pull request URL.
+Upstream recorded the following migration behavior after the stored record gained the provider tag and moved to `fm-pr-poll-registration-v2`.
+This fork provider-gates that migration so an existing GitHub registration remains valid and no migration diagnostic is emitted on a GitHub home.
+In the upstream run, the non-executing migration never ran the old artifact and rebuilt the poll from the task's recorded pull request URL.
 Starting from a poll armed exactly as the previous release wrote it:
 
 ```

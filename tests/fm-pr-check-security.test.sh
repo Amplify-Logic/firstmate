@@ -761,6 +761,38 @@ test_static_poll_contract() {
   pass "static poll is silent except for one merged line and remains watcher-bounded"
 }
 
+test_github_v1_registration_stays_valid() {
+  local dir state before_data before_check out
+  dir=$(make_case github-v1-registration)
+  state="$dir/home/state"
+  write_poll_meta "$state" task-a https://github.com/o/r/pull/10
+  run_check_entry "$dir" task-a https://github.com/o/r/pull/10 >/dev/null \
+    || fail "could not arm the GitHub compatibility fixture"
+  sed '1s/fm-pr-poll-registration-v2/fm-pr-poll-registration-v1/' \
+    "$state/task-a.pr-poll-registration" > "$state/task-a.pr-poll-registration.tmp"
+  mv "$state/task-a.pr-poll-registration.tmp" "$state/task-a.pr-poll-registration"
+  chmod 0600 "$state/task-a.pr-poll-registration"
+  fm_pr_poll_artifacts_valid "$state" task-a "$POLL" \
+    || fail "a provider-tagged GitHub v1 registration no longer validates"
+  before_data=$(fm_pr_sha256 "$state/task-a.pr-poll")
+  before_check=$(fm_pr_sha256 "$state/task-a.check.sh")
+  out=$(FM_HOME="$dir/home" PATH="$dir/fakebin:$BASE_PATH" "$MIGRATE") \
+    || fail "migration rejected an already-valid GitHub v1 registration"
+  assert_not_contains "$out" "PR_CHECK_MIGRATION" \
+    "an already-valid GitHub v1 registration must not print a migration line"
+  [ "$(fm_pr_sha256 "$state/task-a.pr-poll")" = "$before_data" ] \
+    || fail "migration rewrote an existing GitHub sidecar"
+  [ "$(fm_pr_sha256 "$state/task-a.check.sh")" = "$before_check" ] \
+    || fail "migration rewrote an existing GitHub poll"
+  : > "$dir/gh.log"
+  : > "$dir/glab.log"
+  out=$(FM_TEST_GH_STATE=MERGED run_poll "$dir")
+  [ "$out" = merged ] || fail "the compatible GitHub poll no longer reports a merge"
+  [ -s "$dir/gh.log" ] || fail "the compatible GitHub poll did not invoke gh"
+  [ ! -s "$dir/glab.log" ] || fail "the compatible GitHub poll invoked glab"
+  pass "GitHub v1 registrations remain valid, silent, and GitHub-only"
+}
+
 test_atomic_interruption_leaves_no_partial_artifact() {
   local dir rc
   dir=$(make_case interrupted-write)
@@ -2855,6 +2887,7 @@ test_invalid_entrypoints_have_zero_side_effects
 test_valid_recording_and_merge_derivation
 test_rejected_metacharacter_bytes_are_inert
 test_static_poll_contract
+test_github_v1_registration_stays_valid
 test_atomic_interruption_leaves_no_partial_artifact
 test_concurrent_watcher_sees_only_complete_publication
 test_postrename_poll_validation_revokes_and_retries

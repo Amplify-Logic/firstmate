@@ -161,27 +161,25 @@ PUBLIC_FOLLOWUP_PARENT_UNRESOLVED=0
 PUBLIC_FOLLOWUP_PARENT_RELAY_ACTIVE=0
 PUBLIC_FOLLOWUP_RELAY_ACTIVE=0
 public_followup_resolve_primary_home() {
-  local parent=$1 child=$2 id=$3 parent_meta registry lines line_count meta_home registry_home
+  local parent=$1 child=$2 id=$3 parent_meta registry meta_home
   fm_pf_home_id_valid "secondmate:$id" || return 1
   case "$parent" in /*) ;; *) return 1 ;; esac
   parent=$(CDPATH='' cd -- "$parent" 2>/dev/null && pwd -P) || return 1
   child=$(CDPATH='' cd -- "$child" 2>/dev/null && pwd -P) || return 1
   [ "$parent" != "$child" ] || return 1
+  [ -f "$child/$SUB_HOME_MARKER" ] && [ ! -L "$child/$SUB_HOME_MARKER" ] || return 1
+  [ "$(sed -n '1p' "$child/$SUB_HOME_MARKER" 2>/dev/null)" = "$id" ] || return 1
   parent_meta="$parent/state/$id.meta"
-  [ -f "$parent_meta" ] && [ ! -L "$parent_meta" ] || return 1
-  [ "$(fm_meta_get "$parent_meta" kind)" = secondmate ] || return 1
-  meta_home=$(fm_meta_get "$parent_meta" home)
-  meta_home=$(CDPATH='' cd -- "$meta_home" 2>/dev/null && pwd -P) || return 1
-  [ "$meta_home" = "$child" ] || return 1
+  if [ -e "$parent_meta" ]; then
+    [ -f "$parent_meta" ] && [ ! -L "$parent_meta" ] || return 1
+    [ "$(fm_meta_get "$parent_meta" kind)" = secondmate ] || return 1
+    meta_home=$(fm_meta_get "$parent_meta" home)
+    meta_home=$(CDPATH='' cd -- "$meta_home" 2>/dev/null && pwd -P) || return 1
+    [ "$meta_home" = "$child" ] || return 1
+  fi
   registry="$parent/data/secondmates.md"
-  [ -f "$registry" ] && [ ! -L "$registry" ] || return 1
-  lines=$(awk -v wanted="$id" '$1 == "-" && $2 == wanted { print }' "$registry" 2>/dev/null || true)
-  line_count=$(printf '%s\n' "$lines" | grep -c . || true)
-  [ "$line_count" -eq 1 ] || return 1
-  line=$(printf '%s\n' "$lines")
-  registry_home=$(printf '%s\n' "$line" | sed -n 's/^[^(]*(home: \([^;)]*\);.*/\1/p')
-  registry_home=$(CDPATH='' cd -- "$registry_home" 2>/dev/null && pwd -P) || return 1
-  [ "$registry_home" = "$child" ] || return 1
+  secondmate_registry_validate_bindings "$registry" secondmate_registry_path_key \
+    "$id" "$child" "$parent" "$FM_ROOT" scoped || return 1
   printf '%s\n' "$parent"
 }
 if [ -f "$FM_HOME/$SUB_HOME_MARKER" ]; then
@@ -192,8 +190,6 @@ if [ -f "$FM_HOME/$SUB_HOME_MARKER" ]; then
     if fm_pf_relay_active "$FM_PUBLIC_FOLLOWUP_PRIMARY_HOME"; then
       PUBLIC_FOLLOWUP_PARENT_RELAY_ACTIVE=1
     fi
-  elif fm_pf_relay_active "$FM_HOME"; then
-    PUBLIC_FOLLOWUP_PARENT_RELAY_ACTIVE=1
   fi
   if [ "$PUBLIC_FOLLOWUP_PARENT_RELAY_ACTIVE" = 1 ]; then
     PUBLIC_FOLLOWUP_PARENT_UNRESOLVED=1

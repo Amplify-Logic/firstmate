@@ -224,6 +224,17 @@ $(fm_pf_registry_ids "$state")
 EOF
 }
 
+fm_pf_registry_ids_for_home() {
+  local state=$1 home_id=$2 id
+  while IFS= read -r id; do
+    [ -n "$id" ] || continue
+    [ "$(fm_pf_registry_get "$state" "$id" work_home)" = "$home_id" ] || continue
+    printf '%s\n' "$id"
+  done <<EOF
+$(fm_pf_registry_ids "$state")
+EOF
+}
+
 # --- pending-event signature ------------------------------------------------
 
 # Consumed by the sourcing scripts, not by this library.

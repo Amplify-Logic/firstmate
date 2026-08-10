@@ -467,6 +467,7 @@ FM_STATE_OVERRIDE=       # alternate state dir, mainly for tests
 FM_DATA_OVERRIDE=        # alternate data dir, mainly for tests
 FM_PROJECTS_OVERRIDE=    # alternate projects dir, mainly for tests
 FM_CONFIG_OVERRIDE=      # alternate config dir, mainly for tests
+FM_PUBLIC_FOLLOWUP_PRIMARY_HOME=  # internal parent-home binding injected into relay-enabled secondmate launches
 FM_CAPABILITY_LOG=       # override path for data/capability-outcomes.log, mainly for tests
 FM_CAPABILITY_NOW=       # unix epoch "now" for the capability recency window, mainly for tests
 FM_CAPABILITY_WINDOW_SECS=604800  # capability evidence recency window (7 days)

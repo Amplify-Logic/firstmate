@@ -652,7 +652,7 @@ cmd_deliver() {
           die "obligation '$id' is already $delivery, but its legacy X link could not be cleared; the registration was retained for reconciliation" 1
         fi
       else
-        link_status=1
+        link_status=0
         public_followup_legacy_link_status "$payload" || link_status=$?
         case "$link_status" in
           0) die "obligation '$id' is already $delivery, but its legacy X link cannot be cleared without a valid registration; reconcile it before any later terminal follow-up" 1 ;;
@@ -813,7 +813,11 @@ cmd_guard_work() {
 
   # Reading the registration records needs no tools, so establish whether this
   # work is bound to any commitment before deciding anything else.
-  bound=$(fm_pf_registry_ids_for_work "$STATE" "$work_home" "$work_id")
+  if [ "$work_home" = "secondmate:$work_id" ]; then
+    bound=$(fm_pf_registry_ids_for_home "$STATE" "$work_home")
+  else
+    bound=$(fm_pf_registry_ids_for_work "$STATE" "$work_home" "$work_id")
+  fi
   [ -n "$bound" ] || exit 0
 
   # From here the work IS bound to a public promise, so an unreadable state is a

@@ -606,24 +606,24 @@ test_delivery_requires_registration_before_posting() {
 }
 
 test_secondmate_teardown_requires_parent_binding() {
-  local parent child
+  local parent child out rc
   parent=$(make_home teardown-parent)
   child=$(make_home teardown-child)
   printf '%s\n' mate > "$child/.fm-secondmate-home"
   seed_commitment "$parent" pf-teardown req-teardown x secondmate:mate work-child
   fm_write_meta "$parent/state/mate.meta" "kind=secondmate" "home=$child"
+  fm_git_init_commit "$child/projects/worktree"
   fm_write_meta "$child/state/work-child.meta" \
     "window=firstmate:fm-work-child" "endpoint_task_id=work-child" \
-    "worktree=$child" "project=$child" "kind=ship" "mode=local-only"
+    "worktree=$child/projects/worktree" "project=$child/projects/worktree" "kind=ship" "mode=local-only"
 
-  PATH="$child/fakebin:$PATH" FM_ROOT_OVERRIDE="$ROOT" FM_HOME="$child" \
+  rc=0
+  out=$(PATH="$child/fakebin:$PATH" FM_ROOT_OVERRIDE="$ROOT" FM_HOME="$child" \
     FM_STATE_OVERRIDE="$child/state" FM_DATA_OVERRIDE="$child/data" \
-    expect_failure "marked child teardown without a parent must refuse cleanup" \
-    "$TEARDOWN" work-child
-  assert_contains "$EXPECT_OUT" "cannot resolve the primary home for marked secondmate mate" \
-    "missing parent binding must be an actionable teardown refusal"
-  assert_present "$child/state/work-child.meta" \
-    "missing parent binding must preserve the child work metadata"
+    FM_CONFIG_OVERRIDE="$child/config" "$TEARDOWN" work-child 2>&1) || rc=$?
+  [ "$rc" -eq 0 ] || fail "a pre-binding secondmate task must tear down cleanly: $out"
+  assert_absent "$child/state/work-child.meta" \
+    "a pre-binding secondmate task must not be stranded by a missing new environment binding"
 
   parent=$(make_home teardown-valid-parent)
   child=$(make_home teardown-valid-child)
@@ -648,7 +648,37 @@ test_secondmate_teardown_requires_parent_binding() {
   esac
   assert_present "$child/state/work-child.meta" \
     "an owed parent commitment must preserve the child work metadata"
-  pass "marked secondmate teardown resolves its parent and fails closed when unavailable"
+  pass "secondmate teardown tolerates legacy launches and enforces valid parent bindings"
+}
+
+test_secondmate_retirement_guards_all_child_work() {
+  local home
+  home=$(make_home retirement-guard)
+  seed_commitment "$home" pf-retire req-retire discord secondmate:mate work-child
+  expect_failure "secondmate retirement must see commitments for any child task" \
+    run_pf "$home" guard-work secondmate:mate mate
+  assert_contains "$EXPECT_OUT" "public commitment pf-retire is still pending-work" \
+    "retirement must not bypass a commitment bound to a task inside the secondmate home"
+  pass "secondmate retirement guards every commitment in the retiring home"
+}
+
+test_posted_legacy_link_without_registration_refuses() {
+  local home log
+  home=$(make_home posted-legacy-link)
+  log="$home/curl.log"; : > "$log"
+  seed_commitment "$home" pf-legacy req-legacy discord main work-legacy
+  fm_write_meta "$home/state/work-legacy.meta" \
+    "x_request=req-legacy" "x_request_ts=1700000000" "x_followups=1"
+  emit_terminal "$home" "$home" pf-legacy main work-legacy >/dev/null || fail "emit failed"
+  run_pf "$home" consume >/dev/null || fail "consume failed"
+  FAKE_CURL_LOG="$log" run_pf "$home" deliver pf-legacy >/dev/null || fail "initial delivery failed"
+  fm_write_meta "$home/state/work-legacy.meta" \
+    "x_request=req-legacy" "x_request_ts=1700000000" "x_followups=1"
+  expect_failure "a posted obligation with a stale legacy link must refuse" \
+    run_pf "$home" deliver pf-legacy
+  assert_contains "$EXPECT_OUT" "legacy X link cannot be cleared without a valid registration" \
+    "the stale-link reconciliation refusal must be reachable"
+  pass "posted obligations refuse while an unregistered legacy link remains"
 }
 
 test_relay_disabled_unmarked_teardown_skips_public_path() {
@@ -735,13 +765,13 @@ test_secondmate_parent_binding_matches_literal_id() {
   PATH="$child/fakebin:$PATH" FM_ROOT_OVERRIDE="$ROOT" FM_HOME="$child" \
     FM_STATE_OVERRIDE="$child/state" FM_DATA_OVERRIDE="$child/data" \
     FM_CONFIG_OVERRIDE="$child/config" FM_PUBLIC_FOLLOWUP_PRIMARY_HOME="$parent" \
-    expect_failure "a near-match registry id must not satisfy a dotted parent binding" \
+  expect_failure "an unrelated near-match registry id must not block commitment enforcement" \
     "$TEARDOWN" work-literal
-  assert_contains "$EXPECT_OUT" "cannot resolve the primary home for marked secondmate mate.id" \
-    "a dotted id must be matched as an exact registry field"
+  assert_contains "$EXPECT_OUT" "still owes a public reply" \
+    "marker-proven ownership must tolerate an unrelated registry entry and enforce the commitment"
   assert_present "$child/state/work-literal.meta" \
-    "a near-match parent binding must preserve the child work metadata"
-  pass "secondmate parent resolution matches the durable registry id literally"
+    "an owed commitment must preserve the child work metadata"
+  pass "secondmate parent resolution skips unrelated registry entries"
 }
 
 test_traversal_registration_is_refused_before_delivery() {
@@ -1084,6 +1114,8 @@ test_interrupted_delivery_refuses_to_repost
 test_outward_delivery_stays_with_the_owning_home
 test_delivery_requires_registration_before_posting
 test_secondmate_teardown_requires_parent_binding
+test_secondmate_retirement_guards_all_child_work
+test_posted_legacy_link_without_registration_refuses
 test_relay_disabled_unmarked_teardown_skips_public_path
 test_relay_disabled_parent_allows_marked_child_teardown
 test_secondmate_parent_binding_matches_literal_id

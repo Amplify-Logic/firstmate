@@ -369,10 +369,13 @@ fm_pr_poll_registration_parse() {
     return 1
   fi
   exec 7<&-
-  [ "$version" = fm-pr-poll-registration-v2 ] || return 1
   fm_pr_task_id_valid "$id" || return 1
   fm_pr_url_parse "$url" || return 1
   [ "$provider" = "$FM_PR_PROVIDER" ] || return 1
+  case "$provider:$version" in
+    github:fm-pr-poll-registration-v1|github:fm-pr-poll-registration-v2|gitlab:fm-pr-poll-registration-v2) ;;
+    *) return 1 ;;
+  esac
   [ "$host" = "$FM_PR_HOST" ] || return 1
   [ "$path" = "$FM_PR_PATH" ] || return 1
   [ "$number" = "$FM_PR_NUMBER" ] || return 1
