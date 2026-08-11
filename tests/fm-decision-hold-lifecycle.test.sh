@@ -307,19 +307,65 @@ test_resolve_emits_closing_status_line_retiring_the_hold() {
     --routed-to emit-dep >/dev/null || fail "resolve failed"
   grep -F "resolved [key=emit]: retired by fm-decision-hold ($hold)" "$home/state/$id.status" >/dev/null \
     || fail "resolve did not append the closing resolved: line"
-  # The idempotent early return (a re-run of an already-resolved hold) must also
-  # append the closing line, or an interrupted resolve that later re-runs never
-  # retires the quiet-state it closed.
+  # The idempotent early return (a re-run of an already-resolved hold) must NOT
+  # emit again once the transfer is closed: a crew that reused the key would
+  # otherwise see the new decision closed by the old resolution's closing line.
+  # It retires only the interrupted case (durable resolved, closing line never
+  # landed - the transfer still folds open), reproduced below by removing the
+  # closing line.
   run_decisions "$home" resolve "$id" emit --decision-file "$home/emit-decision.txt" \
     --routed-to emit-dep >/dev/null || fail "idempotent resolve re-run failed"
   lines=$(grep -cF "retired by fm-decision-hold ($hold)" "$home/state/$id.status")
-  [ "$lines" -ge 2 ] || fail "idempotent resolve re-run did not append the closing line again"
+  [ "$lines" -eq 1 ] || fail "idempotent re-run re-emitted the closing line after the transfer closed (count $lines)"
+  grep -vF "retired by fm-decision-hold" "$home/state/$id.status" > "$home/state/$id.status.tmp" \
+    && mv "$home/state/$id.status.tmp" "$home/state/$id.status"
+  run_decisions "$home" resolve "$id" emit --decision-file "$home/emit-decision.txt" \
+    --routed-to emit-dep >/dev/null || fail "interrupted-resolve re-run failed"
+  lines=$(grep -cF "retired by fm-decision-hold ($hold)" "$home/state/$id.status")
+  [ "$lines" -ge 1 ] || fail "interrupted-resolve re-run did not retire the still-open transfer"
   # The last line is now resolved:, so the single-line quiet-state predicates
   # are false, and the stream fold has no open holds either.
   open=$(bash -c '. "$1"; status_open_captain_holds "$2"' _ \
     "$ROOT/bin/fm-classify-lib.sh" "$home/state/$id.status")
   [ -z "$open" ] || fail "resolved hold still folds open: $open"
   pass "resolve appends a closing resolved: line so quiet treatment cannot outlive the hold"
+}
+
+# Ruling (resolved-retry-closes-new-decision): an idempotent resolve re-run must
+# not emit the closing resolved: line when the crew has since reused the key in
+# a fresh needs-decision - the old resolution would silently close the new
+# decision in the status fold, hiding it from supervision.
+test_resolve_retry_does_not_close_a_reused_key() {
+  local home id hold lines open
+  home=$(make_home reused-retry)
+  id=sample-retry-review
+  mkdir -p "$home/data/$id"
+  tasks_in "$home" add "$id" "Retry review" --kind scout --repo sample --start >/dev/null \
+    || fail "could not create origin fixture"
+  write_origin_meta "$home" "$id"
+  printf 'needs-decision [key=retry]: pick the first shape\n' > "$home/state/$id.status"
+  hold=$(run_decisions "$home" hold "$id" retry \
+    --title "Pick the first shape" --reason "captain retry pending" --repo sample) \
+    || fail "could not register retry hold"
+  run_decisions "$home" complete "$id" retry >/dev/null \
+    || fail "completion gate failed"
+  tasks_in "$home" add retry-dep "Retry dependent" --kind ship --repo sample >/dev/null \
+    || fail "could not create dependent"
+  tasks_in "$home" block retry-dep --by "$hold" >/dev/null || fail "could not block dependent"
+  printf 'Use the first shape.\n' > "$home/retry-decision.txt"
+  run_decisions "$home" resolve "$id" retry --decision-file "$home/retry-decision.txt" \
+    --routed-to retry-dep >/dev/null || fail "resolve failed"
+  # The crew re-uses the retired key for a new question.
+  printf 'needs-decision [key=retry]: pick a NEW shape\n' >> "$home/state/$id.status"
+  run_decisions "$home" resolve "$id" retry --decision-file "$home/retry-decision.txt" \
+    --routed-to retry-dep >/dev/null || fail "old resolve retry failed"
+  lines=$(grep -cF "retired by fm-decision-hold" "$home/state/$id.status")
+  [ "$lines" -eq 1 ] || fail "old resolve retry re-emitted the closing line over the reused key (count $lines)"
+  open=$(bash -c '. "$1"; status_open_decisions "$2"' _ \
+    "$ROOT/bin/fm-classify-lib.sh" "$home/state/$id.status")
+  printf '%s\n' "$open" | cut -f1 | grep -qxF "retry" \
+    || fail "the reused decision was closed by the old resolve retry: $(printf '%s' "$open" | tr '\n' ' ')"
+  pass "an old resolve retry cannot close a re-used decision key"
 }
 
 # Ruling (quiet-state-regrant-via-resolved-hold): a crew that re-uses a
@@ -648,6 +694,7 @@ test_uninventoried_report_decision_refuses_completion
 test_scout_teardown_always_requires_inventory_verification
 test_structured_holds_survive_teardown_and_route_resolution
 test_resolve_emits_closing_status_line_retiring_the_hold
+test_resolve_retry_does_not_close_a_reused_key
 test_complete_refuses_reused_resolved_decision_key
 test_origin_slug_validation_precedes_path_construction
 test_visual_review_uses_shared_completion_owner

@@ -657,6 +657,24 @@ test_reconcile_hold_beats_trailing_paused() {
   pass "an open hold takes precedence over a trailing paused: line in reconcile"
 }
 
+# Ruling (daemon-bypasses-shared-declared-wait-owner): reconcile_pause_tracking's
+# hold branch must gate on the SHARED declared-wait predicate, not on the fold
+# alone. An open hold with a NEWER working: last line is not a declared wait (a
+# provably-working crew behind a stale hold line keeps its wedge timer), so the
+# reconcile must not clear its wedge marker into silence.
+test_reconcile_open_hold_working_last_keeps_wedge_marker() {
+  local dir state win key
+  dir=$(make_supercase reconcile-hold-working)
+  state="$dir/state"; win="sess:fm-held-w3"
+  printf 'captain-held [key=api-shape]: tracked by held-route-3\nworking: applying the decision\n' > "$state/held-w3.status"
+  key=$(printf '%s' "held-w3" | tr ':/.' '___')
+  echo 12345 > "$state/.subsuper-stale-$key"
+  FM_STATE_OVERRIDE="$state" reconcile_pause_tracking "$win" "$state" "working: applying the decision"
+  [ -e "$state/.subsuper-stale-$key" ] \
+    || fail "a working crew behind a stale hold line lost its wedge marker in reconcile"
+  pass "an open hold with a newer working: line keeps the wedge marker (shared declared-wait gate)"
+}
+
 # A stale marker that predates the declared-wait handling (or a race) must never
 # age a captain-held transfer into a possible-wedge escalation: housekeeping
 # reconciles it away instead. This is the FIX-PROVING case for the new
@@ -2396,6 +2414,7 @@ test_stale_hold_beats_trailing_paused_matching_watcher
 test_stale_malformed_hold_is_not_a_declared_wait
 test_reconcile_clears_daemon_one_shot_when_hold_resolves
 test_reconcile_hold_beats_trailing_paused
+test_reconcile_open_hold_working_last_keeps_wedge_marker
 test_housekeeping_captain_held_stale_marker_never_wedges
 test_housekeeping_captain_held_pause_marker_never_resurfaces
 test_housekeeping_lossy_task_key_sweep_keeps_open_hold_marker

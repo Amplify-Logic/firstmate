@@ -553,12 +553,20 @@ clear_pause_tracking() {  # <window> <state>
 }
 
 reconcile_pause_tracking() {  # <window> <state> <last-status-line>
-  local win=$1 state=$2 last=$3 task key marker watcher_key
+  local win=$1 state=$2 last=$3 task key marker watcher_key digest
   task=$(window_to_task "$win" "$state")
   key=$(_stale_key "$task")
   marker="$state/.subsuper-paused-$key"
   watcher_key=$(_stale_key "$win")
-  if status_has_open_captain_hold "$state/$task.status"; then
+  digest=$(status_open_captain_holds "$state/$task.status")
+  # The hold branch is gated on the SHARED declared-wait predicate
+  # (status_declared_wait, fm-classify-lib.sh's one owner), exactly like
+  # classify_stale and the watcher's handle_paused_stale: quiet-state applies
+  # only while the last line still belongs to the hold stream. A newer
+  # working:/done:/failed: line supersedes the hold, so a provably-working crew
+  # behind a stale hold line keeps its wedge marker and a terminal failed run
+  # is never masked by routing state.
+  if [ -n "$digest" ] && status_declared_wait "$state/$task.status"; then
     # An open captain-held transfer is a declared wait (fm-classify-lib.sh's
     # status_open_captain_holds fold, stream truth): it never wedge-ages and
     # never re-surfaces on any cadence. Check it BEFORE the paused verb so a
@@ -583,7 +591,7 @@ reconcile_pause_tracking() {  # <window> <state> <last-status-line>
   # yields an identical fold digest and the stale marker would suppress the new
   # hold's surface (and the files accumulate). Sweep it whenever the fold no
   # longer has an open hold.
-  if ! status_has_open_captain_hold "$state/$task.status"; then
+  if [ -z "$digest" ]; then
     rm -f "$state/.subsuper-captain-held-surfaced-$key"
   fi
 }

@@ -397,7 +397,7 @@ retire_origin_hold_status() {  # <origin> <key> <hold-id>
 }
 
 command_resolve() {
-  local origin=${1:-} key=${2:-} decision_file='' id='' decision='' decision_digest='' body='' routed='' routed_csv='' dep show blocked state hold_show hold_body resolution_recorded=0
+  local origin=${1:-} key=${2:-} decision_file='' id='' decision='' decision_digest='' body='' routed='' routed_csv='' dep show blocked state hold_show hold_body resolution_recorded=0 hold_fold
   [ "$#" -ge 2 ] || { usage >&2; exit 2; }
   shift 2
   while [ "$#" -gt 0 ]; do
@@ -426,7 +426,19 @@ command_resolve() {
     hold_show=$(task_show "$id")
     hold_body=$(show_field "$hold_show" body)
     verify_resolution_identity "$id" "$hold_body" "$decision_digest" "$routed_csv"
-    retire_origin_hold_status "$origin" "$key" "$id"
+    # Idempotent retry: retire the quiet-state only while the captain-held
+    # transfer this resolution owns is still open in the origin status fold
+    # (the interrupted-resolve case: the durable updates landed but the closing
+    # line never did). A completed resolve already closed the transfer, so a
+    # re-run must not emit again: a crew that reused the key in a fresh
+    # needs-decision would otherwise see the NEW decision silently closed by
+    # the old resolution's closing line. status_open_captain_holds is the one
+    # shared fold (fm-classify-lib.sh); key is a validated slug, so the key
+    # field match is exact.
+    hold_fold=$(status_open_captain_holds "$STATE/$origin.status")
+    if [ -n "$hold_fold" ] && printf '%s\n' "$hold_fold" | cut -f1 | grep -qxF "$key"; then
+      retire_origin_hold_status "$origin" "$key" "$id"
+    fi
     printf 'resolved: %s\n' "$id"
     return 0
   fi
