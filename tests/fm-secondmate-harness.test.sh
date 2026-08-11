@@ -859,10 +859,21 @@ reread_pending_path() {
   printf '%s.pending\n' "$(reread_instruction_path "$1")"
 }
 
+reread_message() {
+  printf '%s %s\n' "$FM_CONFIG_REREAD_NUDGE" "$1"
+}
+
+reread_path_from_message() {
+  sed "s|.*$FM_CONFIG_REREAD_NUDGE ||"
+}
+
 reread_retry_stage_path() {
   local home=$1 id=$2 retry_dir path latest=
   retry_dir="$home/state/.fm-inherited-config-reread-retry/$id"
   for path in "$retry_dir"/.fm-inherited-config-reread.*; do
+    case "$path" in
+      *.ready) continue ;;
+    esac
     [ -f "$path" ] && [ ! -L "$path" ] || continue
     latest="$path"
   done
@@ -1073,7 +1084,7 @@ test_bootstrap_rereads_after_partial_propagation() {
     || fail "partial bootstrap propagation did not retain the completed config write"
   instruction=$(reread_instruction_path "$w/sm") || fail "partial bootstrap reread instruction missing"
   assert_present "$instruction" "partial bootstrap propagation did not write a reread instruction"
-  pointer="CONFIG_REREAD: $(reread_instruction_path "$w/sm")"
+  pointer=$(reread_message "$(reread_instruction_path "$w/sm")")
   assert_contains "$(cat "$log")" "$pointer" \
     "partial bootstrap propagation did not route the instruction pointer"
   pass "B11 bootstrap rereads completed config writes after partial propagation"
@@ -1228,7 +1239,7 @@ test_config_push_rereads_after_partial_propagation() {
     || fail "partial propagation did not retain the completed config write"
   instruction=$(reread_instruction_path "$w/sm") || fail "partial propagation reread instruction missing"
   assert_present "$instruction" "partial propagation did not write a reread instruction"
-  pointer="CONFIG_REREAD: $(reread_instruction_path "$w/sm")"
+  pointer=$(reread_message "$(reread_instruction_path "$w/sm")")
   assert_contains "$(cat "$log")" "$pointer" \
     "partial propagation did not route the instruction pointer"
   pass "B14 config-push rereads completed config writes after partial propagation"
@@ -1342,7 +1353,7 @@ test_config_reread_per_home_changed_sets_and_exact_bytes() {
     "beta instruction must not leak alpha-only stale harness bytes as a standalone scalar block incorrectly"
 
   # Routed send used the from-firstmate marker and carried only the pointer.
-  pointer="CONFIG_REREAD: $(reread_instruction_path "$w/alpha")"
+  pointer=$(reread_message "$(reread_instruction_path "$w/alpha")")
   assert_contains "$(cat "$log")" "[fm-from-firstmate]" "reread send must be marked"
   assert_contains "$(cat "$log")" "$pointer" "reread send must point to the durable instruction file"
   assert_not_contains "$(cat "$log")" '"harness": "grok"' "sent message must not inline multiline JSON"
@@ -1448,7 +1459,7 @@ test_config_reread_isolation_and_absent_and_send_failure() {
   second_instr=$(reread_instruction_path "$w/alpha") || fail "alpha second generation missing"
   [ "$first_instr" != "$second_instr" ] || fail "successive pushes reused the same generation path"
   cmp -s "$first_copy" "$first_instr" || fail "later push overwrote the earlier generation bytes"
-  second_pointer="CONFIG_REREAD: $second_instr"
+  second_pointer=$(reread_message "$second_instr")
   assert_present "$(reread_pending_path "$w/alpha")" \
     "alpha second generation did not remain pending"
 
@@ -1459,10 +1470,10 @@ test_config_reread_isolation_and_absent_and_send_failure() {
   expect_code 0 "$retry_status" "send failure should be retryable"
   assert_contains "$retry_out" "config-reread: sent" \
     "retry should report the reread as sent"
-  retry_pointer="CONFIG_REREAD: $(reread_instruction_path "$w/beta")"
+  retry_pointer=$(reread_message "$(reread_instruction_path "$w/beta")")
   assert_contains "$(cat "$retry_log")" "$retry_pointer" \
     "retry did not resend the durable pointer"
-  assert_contains "$(cat "$retry_log")" "CONFIG_REREAD: $first_instr" \
+  assert_contains "$(cat "$retry_log")" "$(reread_message "$first_instr")" \
     "retry did not resend the first pending generation"
   assert_contains "$(cat "$retry_log")" "$second_pointer" \
     "retry did not resend the second pending generation"
@@ -1514,7 +1525,7 @@ SH
     "successful publication retry should report delivery"
   instr=$(reread_instruction_path "$w/alpha") \
     || fail "publication retry did not publish an instruction"
-  assert_contains "$(cat "$log")" "CONFIG_REREAD: $instr" \
+  assert_contains "$(cat "$log")" "$(reread_message "$instr")" \
     "publication retry did not send the durable pointer"
   assert_no_reread_retry_stages "$w/home" alpha
   pass "B20 config reread publication failures retain exact generations for retry"
@@ -1565,8 +1576,8 @@ SH
   expect_code 0 "$retry_status" "a later changed push should retry an instruction-write failure"
   assert_contains "$retry_out" "config-reread: sent" \
     "later changed push did not deliver the retained exact generation"
-  old_instr=$(grep 'CONFIG_REREAD:' "$log" | head -n 1 | sed 's/.*CONFIG_REREAD: //')
-  new_instr=$(grep 'CONFIG_REREAD:' "$log" | tail -n 1 | sed 's/.*CONFIG_REREAD: //')
+  old_instr=$(grep -F "$FM_CONFIG_REREAD_NUDGE" "$log" | head -n 1 | reread_path_from_message)
+  new_instr=$(grep -F "$FM_CONFIG_REREAD_NUDGE" "$log" | tail -n 1 | reread_path_from_message)
   [ -n "$old_instr" ] && [ -n "$new_instr" ] && [ "$old_instr" != "$new_instr" ] \
     || fail "later changed push did not deliver both generations"
   instr="$old_instr"
@@ -1634,8 +1645,8 @@ SH
   log="$w/config-reread-exact-temp-fallback.tmux.log"
   retry_out=$(run_config_push "$w" "$log" 2>/dev/null); retry_status=$?
   expect_code 0 "$retry_status" "later push should deliver retained exact temporary bytes"
-  old_instr=$(grep 'CONFIG_REREAD:' "$log" | head -n 1 | sed 's/.*CONFIG_REREAD: //')
-  new_instr=$(grep 'CONFIG_REREAD:' "$log" | tail -n 1 | sed 's/.*CONFIG_REREAD: //')
+  old_instr=$(grep -F "$FM_CONFIG_REREAD_NUDGE" "$log" | head -n 1 | reread_path_from_message)
+  new_instr=$(grep -F "$FM_CONFIG_REREAD_NUDGE" "$log" | tail -n 1 | reread_path_from_message)
   [ -n "$old_instr" ] && [ -n "$new_instr" ] && [ "$old_instr" != "$new_instr" ] \
     || fail "later push did not deliver both exact generations"
   assert_contains "$(cat "$old_instr")" \
@@ -1645,6 +1656,43 @@ SH
     "later push did not deliver the new destination bytes"
   assert_no_reread_retry_stages "$w/home" sm
   pass "B21 config reread preserves exact bytes when temporary adoption also fails"
+}
+
+test_config_reread_ignores_incomplete_temp_and_distinguishes_receiver_message() {
+  local w head retry_dir partial report instruction pending fakebin log out status message
+  w=$(new_world config-reread-partial-temp)
+  head=$(git -C "$w/main" rev-parse HEAD)
+  add_sm_worktree "$w" sm "$head"
+  retry_dir="$w/home/state/.fm-inherited-config-reread-retry/sm"
+  mkdir -p "$retry_dir" "$w/sm/state"
+  partial="$retry_dir/.fm-inherited-config-reread.20260812T000000.00000001.tmp.partial"
+  printf 'truncated generation\n' > "$partial"
+  report="$w/empty-reread.report"
+  : > "$report"
+  fakebin=$(make_fake_toolchain "$w")
+  log="$w/config-reread-partial-temp.tmux.log"
+  out=$(PATH="$fakebin:$BASE_PATH" FM_HOME="$w/home" FM_ROOT_OVERRIDE="$ROOT" \
+    FM_SEND_SETTLE=0 FM_FAKE_TMUX_LOG="$log" \
+    fm_config_send_reread_nudge sm "$w/sm" "$report" 2>&1); status=$?
+  expect_code 0 "$status" "an incomplete retry temporary should be inert"
+  [ ! -s "$log" ] || fail "an incomplete retry temporary was published"
+  assert_present "$partial" "incomplete retry temporary was unexpectedly removed"
+
+  instruction="$w/sm/state/.fm-inherited-config-reread.receiver-contract"
+  printf 'exact generation\n' > "$instruction"
+  pending="$instruction.pending"
+  fm_config_reread_mark_pending "$instruction" "$pending" \
+    || fail "could not prepare receiver-contract generation"
+  out=$(PATH="$fakebin:$BASE_PATH" FM_HOME="$w/home" FM_ROOT_OVERRIDE="$ROOT" \
+    FM_SEND_SETTLE=0 FM_FAKE_TMUX_LOG="$log" \
+    fm_config_reread_send_pointer sm "$instruction" 2>&1); status=$?
+  expect_code 0 "$status" "receiver-contract message should send"
+  message=$(reread_message "$instruction")
+  assert_contains "$(cat "$log")" "$message" \
+    "receiver-facing message was not self-describing"
+  assert_not_contains "$message" "CONFIG_REREAD:" \
+    "receiver-facing message collides with sender diagnostics"
+  pass "B21 incomplete config reread temporaries stay inert and messages are distinct"
 }
 
 test_config_reread_serializes_concurrent_pushes() {
@@ -1704,8 +1752,8 @@ SH
   [ "$first_instr" != "$second_instr" ] || fail "concurrent pushes reused a generation"
   [ "$(cat "$w/sm/config/crew-harness")" = two ] \
     || fail "concurrent pushes did not converge the latest config bytes"
-  first_line=$(grep -n -F "CONFIG_REREAD: $first_instr" "$log" | head -n 1 | cut -d: -f1)
-  second_line=$(grep -n -F "CONFIG_REREAD: $second_instr" "$log" | head -n 1 | cut -d: -f1)
+  first_line=$(grep -n -F "$(reread_message "$first_instr")" "$log" | head -n 1 | cut -d: -f1)
+  second_line=$(grep -n -F "$(reread_message "$second_instr")" "$log" | head -n 1 | cut -d: -f1)
   [ -n "$first_line" ] && [ -n "$second_line" ] && [ "$first_line" -lt "$second_line" ] \
     || fail "concurrent pushes delivered generations out of order"
   pass "B21 config reread serializes concurrent propagation and delivery"
@@ -1737,7 +1785,7 @@ test_config_reread_full_retry_queue_drains_before_new_push() {
   [ "$(cat "$w/sm/config/crew-harness")" = new ] \
     || fail "the new config generation did not propagate after retry draining"
   assert_no_reread_retry_stages "$w/home" sm
-  pointer_count=$(grep -c 'CONFIG_REREAD:' "$log" 2>/dev/null || true)
+  pointer_count=$(grep -c -F "$FM_CONFIG_REREAD_NUDGE" "$log" 2>/dev/null || true)
   [ "$pointer_count" -ge 17 ] \
     || fail "full retry queue did not deliver all pending generations before the new one"
   pass "B22 full config reread retry queues drain before new publication"
@@ -2114,6 +2162,7 @@ test_config_reread_isolation_and_absent_and_send_failure
 test_config_reread_publication_failure_retries_exact_generation
 test_config_reread_write_failure_retains_exact_retry_generation
 test_config_reread_exact_temp_survives_adoption_failure
+test_config_reread_ignores_incomplete_temp_and_distinguishes_receiver_message
 test_config_reread_serializes_concurrent_pushes
 test_config_reread_full_retry_queue_drains_before_new_push
 test_config_reread_cleanup_runs_after_mixed_delivery_failure

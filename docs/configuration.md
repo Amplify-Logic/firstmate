@@ -338,9 +338,10 @@ If that send fails, bootstrap keeps an idempotent retry marker and emits `NUDGE_
 The same bootstrap run emits `SECONDMATE_LIVENESS:` only when a live secondmate endpoint is skipped or respawn fails; already-live and successfully respawned endpoints are handled silently.
 For a mid-session inherited local-material edit where tracked-file sync is not needed, run `bin/fm-config-push.sh`.
 It uses the same live secondmate discovery and propagation helper as bootstrap, prints each live home's `crew-dispatch.json`, `crew-harness`, `backlog-backend`, and `data/captain-shared.md` result as `pushed`, `unchanged`, `skipped`, or `error`, and exits non-zero for real propagation errors or config-reread delivery failures.
-When allowlisted config changes for an already-running home, it sends only a pointer to the private exact-content reread instruction owned by `secondmate-provisioning`; unchanged config sends no pointer unless an earlier generation remains pending.
+When allowlisted config changes for an already-running home, it sends only a self-describing reread imperative naming the private exact-content instruction owned by `secondmate-provisioning`; unchanged config sends no message unless an earlier generation remains pending.
 The locked bootstrap inheritance pass uses the same per-home changed-set and reread path for already-running homes.
 Each of those writers waits a bounded `FM_CONFIG_INHERIT_LOCK_WAIT_SECS` for the destination home's inheritance lock; a home whose lock is still held by a running spawn or push is reported as a `CONFIG_REREAD:` send failure and retried from its pending generation on the next run instead of blocking the sweep.
+The routed receiver message is a distinct self-describing imperative that tells the secondmate to re-read and apply the exact contents from the named private instruction path, while `CONFIG_REREAD:` remains reserved for sender-side failure diagnostics.
 That live discovery starts from `state/*.meta` records with `kind=secondmate`; `data/secondmates.md` only backfills `home=` for older or incomplete meta records.
 Skipped items, such as a destination checkout that does not yet gitignore the item, are visible warnings but not hard failures.
 

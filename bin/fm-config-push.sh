@@ -10,7 +10,7 @@
 # fast-forward tracked files.
 # After a successful per-home propagation that changes any allowlisted config/*
 # item, writes a generation-specific literal-content reread instruction and
-# sends its pointer to that live secondmate via fm-config-inherit-lib.sh
+# sends a self-describing reread imperative to that live secondmate via fm-config-inherit-lib.sh
 # (fm_config_send_reread_nudge).
 # Unchanged config and data/captain-shared.md-only updates send no reread
 # message unless a previous send failure is pending for that home.
@@ -27,7 +27,7 @@ live secondmate home.
 This is local-material-only:
   - does not fast-forward tracked files
   - after successful config/* changes, writes a generation-specific
-    literal-content reread instruction and sends its pointer to that live secondmate
+    literal-content reread instruction and sends a self-describing reread imperative
     (no message when config is unchanged unless a previous send failure is pending)
   - reports each live home and each inheritable item as pushed, unchanged,
     skipped, or error

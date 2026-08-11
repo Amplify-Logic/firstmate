@@ -99,9 +99,9 @@ A separate literal-content config reread is required whenever inherited `config/
 The locked bootstrap convergence path and mid-session `bin/fm-config-push.sh` use the shared propagation report to build a private generation-specific instruction from the validated destination bytes for only the allowlisted config items that changed in that home, in deterministic allowlist order.
 Each changed path has clear delimiters and its exact unparsed bytes, or `ABSENT` when propagation removed it; the instruction includes no digest, selected profile, parsed summary, or generated interpretation.
 `data/captain-shared.md` is not config and is never inlined into the instruction or message.
-Delivery uses the existing routed secondmate path with only a single-line `CONFIG_REREAD: <absolute instruction path>` pointer.
+Delivery uses the existing routed secondmate path with a self-describing single-line imperative that names the absolute exact-content instruction path.
 Publication and send failures retain bounded private retry state and emit a concrete `CONFIG_REREAD:` diagnostic without claiming the agent reread the values.
-The per-home inheritance lock serializes propagation, generation publication, and pointer delivery so concurrent pushes cannot deliver an older generation after a newer one.
+The per-home inheritance lock serializes propagation, generation publication, and imperative delivery so concurrent pushes cannot deliver an older generation after a newer one.
 A newly launched or relaunched secondmate reads converged files at launch, so stale pending generations are discarded or quarantined rather than redundantly delivered.
 Successfully delivered and quarantined generations have bounded histories, while pending generations remain until delivery succeeds or a relaunch supersedes them.
 These values remain defaults and rules only; they never make `fm-spawn` reject a deliberate explicit runtime choice.
