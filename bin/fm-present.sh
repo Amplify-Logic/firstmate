@@ -130,12 +130,20 @@ receipt_claim() {
     set -C
     umask 077
     printf 'fm-present-v1\nmilestone=%s\nartifact-sha256=%s\n' "$milestone" "$artifact_digest" > "$receipt"
-  ) 2>/dev/null
+  ) 2>/dev/null || return 1
   CLAIMED_RECEIPT=$receipt
 }
 
-presentation_failed() {
+receipt_cleanup() {
   [ -z "$CLAIMED_RECEIPT" ] || rm -f "$CLAIMED_RECEIPT"
+}
+
+receipt_commit() {
+  CLAIMED_RECEIPT=
+  trap - EXIT HUP INT TERM
+}
+
+presentation_failed() {
   print_fallback "$1"
 }
 
@@ -217,6 +225,10 @@ case "$KIND" in
 esac
 
 receipt_claim "$MILESTONE" "$ARTIFACT_DIGEST" || print_fallback "$TARGET"
+trap receipt_cleanup EXIT
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 case "$KIND" in
   report)
@@ -238,3 +250,5 @@ case "$KIND" in
     printf '%s\n' "$TARGET"
     ;;
 esac
+
+receipt_commit

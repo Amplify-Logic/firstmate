@@ -25,6 +25,8 @@ cat > "$FAKEBIN/fm-read" <<'SH'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >> "$FM_PRESENT_REPORT_LOG"
 [ "${FM_PRESENT_FAIL_REPORT:-0}" != 1 ] || exit 1
+[ "${FM_PRESENT_SIGNAL_REPORT:-0}" != 1 ] || { kill -TERM "$PPID"; exit 1; }
+[ -z "${FM_PRESENT_REPORT_DELAY:-}" ] || sleep "$FM_PRESENT_REPORT_DELAY"
 printf 'http://127.0.0.1:4389/session/report\n'
 SH
 
@@ -144,3 +146,24 @@ run_present reveal "$TMP_ROOT/artifacts/retry.txt" >/dev/null
 [ "$(wc -l < "$OPEN_LOG" | tr -d ' ')" -eq $((before_failed_reveal + 3)) ] \
   || fail "failed reveal presentation consumed its receipt"
 pass "failed owner and open presentations remain retryable"
+
+printf '\nConcurrent claim.\n' >> "$HOME_DIR/data/sample-report/report.md"
+before_concurrent=$(wc -l < "$REPORT_LOG" | tr -d ' ')
+FM_PRESENT_REPORT_DELAY=0.2 run_present report sample-report >/dev/null &
+first_pid=$!
+FM_PRESENT_REPORT_DELAY=0.2 run_present report sample-report >/dev/null &
+second_pid=$!
+wait "$first_pid"
+wait "$second_pid"
+[ "$(wc -l < "$REPORT_LOG" | tr -d ' ')" -eq $((before_concurrent + 1)) ] \
+  || fail "concurrent presentation bypassed the atomic receipt claim"
+
+printf '\nInterrupted claim.\n' >> "$HOME_DIR/data/sample-report/report.md"
+before_interrupted=$(wc -l < "$REPORT_LOG" | tr -d ' ')
+if FM_PRESENT_SIGNAL_REPORT=1 run_present report sample-report >/dev/null 2>&1; then
+  fail "interrupted presentation unexpectedly succeeded"
+fi
+run_present report sample-report >/dev/null
+[ "$(wc -l < "$REPORT_LOG" | tr -d ' ')" -eq $((before_interrupted + 2)) ] \
+  || fail "interrupted presentation consumed its receipt"
+pass "atomic claims deduplicate concurrency and interruptions remain retryable"
