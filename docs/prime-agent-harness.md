@@ -128,6 +128,11 @@ Two teardown-ordering facts were verified the hard way in the end-to-end lab:
 - The TUI client auto-relaunches its daemon supervisor on reconnect, so `fm-teardown` runs the daemon stop only AFTER the endpoint (window) is dead; a stop issued first left a relaunched supervisor and a resurrected state dir.
 - A live session worker WATCHES its supervisor and launches a replacement when it dies (`failed to launch replacement supervisor` in the worker log), so workers must exit first. Worker sockets are namespaced by the task's supervisor hash - `$TMPDIR/prime-agent-<uid>/worker-<hash>-*.sock`, with the hash recoverable from the task's `.supervisor-launch-<hash>.lock` dir - so `prime_agent_daemon_stop` TERMing stays scoped to the task even on a shared tmpdir. Note `stop <id>` unbinds the worker socket before the worker process fully exits, so the socket alone is not a liveness test during shutdown.
 
+Socket-path matching is deliberately asymmetric in `prime_agent_daemon_stop`, because `lsof -U` prints a unix socket's `sun_path` exactly as the binding process passed to `bind()`:
+
+- Supervisor socket: matched via the PHYSICAL task path (`pwd -P`), because `fm-spawn` substitutes the physically resolved state path (`STATE_REAL`) into `--daemon-socket`, so that is the form the supervisor binds.
+- Worker sockets: matched via the LOGICAL `${TMPDIR%/}` (trailing slash stripped, never physically resolved), because prime-agent composes them from Node's `os.tmpdir()` - `$TMPDIR` verbatim. Lab evidence 2026-08-07: `lsof` showed `/var/folders/1g/.../prime-agent-501/worker-*.sock` with no `/private` prefix, so a physically resolved dir would silently no-op the worker kill on macOS and reopen the watchdog-relaunch hazard.
+
 With real treehouse in the loop (its `return` reaps worktree-cwd processes), the verified end state of a full spawn/teardown cycle was: no prime-agent processes, no socket listeners, the containment home removed, no `~/.prime`.
 
 ### Env markers (harness detection)

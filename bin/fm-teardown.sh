@@ -223,8 +223,12 @@ remove_grok_turnend_auth() {
 prime_agent_daemon_stop() {  # <state-dir> <id>
   local state_dir=$1 id=$2 pastate sock ids sid sup
   pastate="$state_dir/$id.prime-agent-home"
-  # Resolve symlinks (macOS /tmp -> /private/tmp): lsof prints the PHYSICAL
-  # socket path, so an unresolved task path would never match a listener.
+  # Resolve symlinks (macOS /tmp -> /private/tmp): lsof prints a unix socket's
+  # sun_path exactly as the binding process passed to bind(), and fm-spawn
+  # substitutes the PHYSICAL state path (STATE_REAL) into --daemon-socket, so
+  # the supervisor binds the physical form and the task path must be resolved
+  # the same way to match its listener. Worker sockets below are the opposite
+  # case - see the LOGICAL $TMPDIR note there.
   [ -d "$pastate" ] && pastate=$(cd "$pastate" && pwd -P)
   sock="$pastate/daemon.sock"
   [ -S "$sock" ] || return 0
@@ -262,9 +266,15 @@ prime_agent_daemon_stop() {  # <state-dir> <id>
   done
   if [ -n "$hash" ]; then
     local wdir
+    # LOGICAL $TMPDIR, only the trailing slash stripped - never resolve this
+    # physically. prime-agent binds worker sockets under Node's os.tmpdir(),
+    # i.e. $TMPDIR verbatim, and lsof prints sun_path exactly as bound (lab
+    # 2026-08-07: /var/folders/.../prime-agent-501/worker-*.sock, no /private
+    # prefix). A physically resolved wdir would silently no-op the worker
+    # kill on macOS. Asymmetric with the supervisor socket above, which IS
+    # physical because fm-spawn passes the resolved STATE_REAL path.
     wdir="${TMPDIR:-/tmp}"
     wdir="${wdir%/}/prime-agent-$(id -u)"
-    [ -d "$wdir" ] && wdir=$(cd "$wdir" && pwd -P)
     for wsock in "$wdir"/worker-"$hash"-*.sock; do
       [ -S "$wsock" ] || continue
       for wpid in $(lsof -U 2>/dev/null | awk -v s="$wsock" '$NF == s {print $2}' | sort -u); do
