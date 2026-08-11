@@ -359,13 +359,55 @@ test_resolve_retry_does_not_close_a_reused_key() {
   printf 'needs-decision [key=retry]: pick a NEW shape\n' >> "$home/state/$id.status"
   run_decisions "$home" resolve "$id" retry --decision-file "$home/retry-decision.txt" \
     --routed-to retry-dep >/dev/null || fail "old resolve retry failed"
-  lines=$(grep -cF "retired by fm-decision-hold" "$home/state/$id.status")
+  lines=$(grep -cF "retired by fm-decision-hold" "$home/state/$id.status" || true)
   [ "$lines" -eq 1 ] || fail "old resolve retry re-emitted the closing line over the reused key (count $lines)"
   open=$(bash -c '. "$1"; status_open_decisions "$2"' _ \
     "$ROOT/bin/fm-classify-lib.sh" "$home/state/$id.status")
   printf '%s\n' "$open" | cut -f1 | grep -qxF "retry" \
     || fail "the reused decision was closed by the old resolve retry: $(printf '%s' "$open" | tr '\n' ' ')"
   pass "an old resolve retry cannot close a re-used decision key"
+}
+
+# Ruling (resolve-retry-closes-new-decision-after-interruption): when a resolve
+# was INTERRUPTED (durable resolved, closing status line never landed) and the
+# crew then reuses the key in a fresh needs-decision, the old transfer still
+# folds open - the retry must still NOT retire it, or the closing line would
+# silently close the new decision.
+test_resolve_retry_interrupted_then_reused_does_not_close_decision() {
+  local home id hold lines open
+  home=$(make_home interrupted-reused-retry)
+  id=sample-inter-retry
+  mkdir -p "$home/data/$id"
+  tasks_in "$home" add "$id" "Inter retry review" --kind scout --repo sample --start >/dev/null \
+    || fail "could not create origin fixture"
+  write_origin_meta "$home" "$id"
+  printf 'needs-decision [key=inter]: pick the first shape\n' > "$home/state/$id.status"
+  hold=$(run_decisions "$home" hold "$id" inter \
+    --title "Pick the first shape" --reason "captain inter pending" --repo sample) \
+    || fail "could not register inter hold"
+  run_decisions "$home" complete "$id" inter >/dev/null \
+    || fail "completion gate failed"
+  tasks_in "$home" add inter-dep "Inter dependent" --kind ship --repo sample >/dev/null \
+    || fail "could not create dependent"
+  tasks_in "$home" block inter-dep --by "$hold" >/dev/null || fail "could not block dependent"
+  printf 'Use the first shape.\n' > "$home/inter-decision.txt"
+  run_decisions "$home" resolve "$id" inter --decision-file "$home/inter-decision.txt" \
+    --routed-to inter-dep >/dev/null || fail "resolve failed"
+  # Simulate the interruption: the durable resolution landed but the closing
+  # status line never did, so the captain-held transfer still folds open.
+  grep -vF "retired by fm-decision-hold" "$home/state/$id.status" > "$home/state/$id.status.tmp" \
+    && mv "$home/state/$id.status.tmp" "$home/state/$id.status"
+  # The crew then reuses the retired key for a new question.
+  printf 'needs-decision [key=inter]: pick a NEW shape\n' >> "$home/state/$id.status"
+  run_decisions "$home" resolve "$id" inter --decision-file "$home/inter-decision.txt" \
+    --routed-to inter-dep >/dev/null || fail "interrupted-then-reused retry failed"
+  lines=$(grep -cF "retired by fm-decision-hold" "$home/state/$id.status" || true)
+  [ "$lines" -eq 0 ] || fail "the retry retired the reused decision (retired count $lines)"
+  open=$(bash -c '. "$1"; status_open_decisions "$2"' _ \
+    "$ROOT/bin/fm-classify-lib.sh" "$home/state/$id.status")
+  printf '%s\n' "$open" | cut -f1 | grep -qxF "inter" \
+    || fail "the reused decision was closed by the interrupted retry: $(printf '%s' "$open" | tr '\n' ' ')"
+  pass "an interrupted resolve retry cannot close a decision re-opened under the same key"
 }
 
 # Ruling (quiet-state-regrant-via-resolved-hold): a crew that re-uses a
@@ -376,7 +418,7 @@ test_resolve_retry_does_not_close_a_reused_key() {
 # decision rot invisibly. complete refuses loudly, mirroring command_hold, so
 # the crew switches to a new key and the status line stays captain-relevant.
 test_complete_refuses_reused_resolved_decision_key() {
-  local home id hold lines open
+  local home id hold lines open meta_before
   home=$(make_home reused-resolved-key)
   id=sample-reuse-review
   mkdir -p "$home/data/$id"
@@ -395,11 +437,18 @@ test_complete_refuses_reused_resolved_decision_key() {
   tasks_in "$home" block reuse-dep --by "$hold" >/dev/null || fail "could not block dependent"
   run_decisions "$home" resolve "$id" reuse --decision-file "$home/reuse-decision.txt" \
     --routed-to reuse-dep >/dev/null || fail "resolve failed"
-  # The crew re-uses the retired key for a new question; the old status stream
-  # already closed reuse with the resolve emit, so this line re-opens it.
+  # The crew re-uses the retired key for a new question and adds a brand-new
+  # decision too (held like any new decision); the old status stream already
+  # closed reuse with the resolve emit, so the reuse line re-opens it and the
+  # fresh line opens a new key.
   printf 'needs-decision [key=reuse]: pick a NEW shape\n' >> "$home/state/$id.status"
+  printf 'needs-decision [key=fresh]: pick a fresh shape\n' >> "$home/state/$id.status"
+  run_decisions "$home" hold "$id" fresh \
+    --title "Pick the fresh shape" --reason "captain fresh pending" --repo sample >/dev/null \
+    || fail "could not register fresh hold"
+  meta_before=$(cat "$home/state/$id.meta")
   before=$(grep -cF "captain-held [key=reuse]:" "$home/state/$id.status")
-  if run_decisions "$home" complete "$id" reuse > "$home/reuse-complete.out" 2> "$home/reuse-complete.err"; then
+  if run_decisions "$home" complete "$id" reuse fresh > "$home/reuse-complete.out" 2> "$home/reuse-complete.err"; then
     after=$(grep -cF "captain-held [key=reuse]:" "$home/state/$id.status")
     [ "$after" -gt "$before" ] \
       && fail "re-used resolved key re-opened the fold (captain-held count $before -> $after) before the guard"
@@ -409,6 +458,12 @@ test_complete_refuses_reused_resolved_decision_key() {
     || fail "complete refused without the new-key message: $(cat "$home/reuse-complete.err")"
   after=$(grep -cF "captain-held [key=reuse]:" "$home/state/$id.status")
   [ "$after" -eq "$before" ] || fail "the refused complete appended a captain-held transfer anyway"
+  # The refusal must happen BEFORE the metadata attestation: a failed complete
+  # may not leave decisions_reviewed=1 and an updated key inventory that a
+  # later verify could accept as durably-resolved and allow teardown past the
+  # fresh open decision.
+  [ "$(cat "$home/state/$id.meta")" = "$meta_before" ] \
+    || fail "the refused complete mutated the completion metadata: $(cat "$home/state/$id.meta")"
   open=$(bash -c '. "$1"; status_open_captain_holds "$2"' _ \
     "$ROOT/bin/fm-classify-lib.sh" "$home/state/$id.status")
   [ -z "$open" ] || fail "the refused complete left the hold fold open: $open"
@@ -695,6 +750,7 @@ test_scout_teardown_always_requires_inventory_verification
 test_structured_holds_survive_teardown_and_route_resolution
 test_resolve_emits_closing_status_line_retiring_the_hold
 test_resolve_retry_does_not_close_a_reused_key
+test_resolve_retry_interrupted_then_reused_does_not_close_decision
 test_complete_refuses_reused_resolved_decision_key
 test_origin_slug_validation_precedes_path_construction
 test_visual_review_uses_shared_completion_owner

@@ -318,18 +318,32 @@ $open
 EOF
 
   if [ "$has_meta" = 1 ]; then
+    # Preflight BEFORE attesting completion in the metadata: an open status
+    # decision whose durable hold is DONE is a re-use (the crew wrote a fresh
+    # needs-decision under a retired key). Refusing after the meta append would
+    # leave decisions_reviewed=1 and the updated key inventory behind, which a
+    # later verify could accept as durably-resolved keys and allow teardown
+    # past the fresh open decision.
+    while IFS=$'\t' read -r key _verb _summary; do
+      [ -n "$key" ] || continue
+      list_has_key "$keys" "$key" || continue
+      id=$(hold_id "$origin" "$key")
+      show=$(task_show "$id") || fail "captain decision $id is absent from $FM_HOME/data/backlog.md"
+      state=$(show_field "$show" state)
+      [ "$state" != "done" ] || fail "captain decision $id is already durably resolved; use a new decision key for a new decision"
+    done <<EOF
+$raw_open
+EOF
+
     if [ "$(meta_value "$meta" decisions_reviewed)" != 1 ] || [ "$previous" != "$keys" ]; then
       printf 'decisions_reviewed=1\ndecision_keys=%s\n' "$keys" >> "$meta"
     fi
 
     # Transfer any still-open status decision to its durable backlog owner so the
-    # live status fold does not duplicate the same Captain's Call item. A key
-    # whose durable hold is DONE is a re-use (the crew wrote a fresh
-    # needs-decision under a retired key): refuse loudly like command_hold so the
-    # status line cannot silently regrant the hold quiet-state to a retired
-    # backlog item, the harm class this branch kills. verify_hold_durable
-    # accepts a durably resolved hold so re-completion stays idempotent; only
-    # the transfer (which would RE-OPEN the fold) needs the done guard.
+    # live status fold does not duplicate the same Captain's Call item. The
+    # preflight above already refused a done (re-used) key before the metadata
+    # attestation; this loop keeps the same guard as defense-in-depth against a
+    # durable-state race between the preflight and the append.
     while IFS=$'\t' read -r key _verb _summary; do
       [ -n "$key" ] || continue
       list_has_key "$keys" "$key" || continue
@@ -397,7 +411,7 @@ retire_origin_hold_status() {  # <origin> <key> <hold-id>
 }
 
 command_resolve() {
-  local origin=${1:-} key=${2:-} decision_file='' id='' decision='' decision_digest='' body='' routed='' routed_csv='' dep show blocked state hold_show hold_body resolution_recorded=0 hold_fold
+  local origin=${1:-} key=${2:-} decision_file='' id='' decision='' decision_digest='' body='' routed='' routed_csv='' dep show blocked state hold_show hold_body resolution_recorded=0 hold_fold decision_open
   [ "$#" -ge 2 ] || { usage >&2; exit 2; }
   shift 2
   while [ "$#" -gt 0 ]; do
@@ -429,14 +443,20 @@ command_resolve() {
     # Idempotent retry: retire the quiet-state only while the captain-held
     # transfer this resolution owns is still open in the origin status fold
     # (the interrupted-resolve case: the durable updates landed but the closing
-    # line never did). A completed resolve already closed the transfer, so a
-    # re-run must not emit again: a crew that reused the key in a fresh
-    # needs-decision would otherwise see the NEW decision silently closed by
-    # the old resolution's closing line. status_open_captain_holds is the one
-    # shared fold (fm-classify-lib.sh); key is a validated slug, so the key
-    # field match is exact.
+    # line never did) AND no fresh decision has since re-opened the key. A
+    # completed resolve already closed the transfer, so a re-run must not emit
+    # again: a crew that reused the key in a fresh needs-decision would
+    # otherwise see the NEW decision silently closed by the old resolution's
+    # closing line. The decision-fold check covers the interrupted-then-reused
+    # case: the old transfer still folds open, but the new needs-decision is
+    # open in status_open_decisions, so retiring would close it. Both folds are
+    # fm-classify-lib.sh's one shared owner; key is a validated slug, so the
+    # key field matches are exact.
     hold_fold=$(status_open_captain_holds "$STATE/$origin.status")
-    if [ -n "$hold_fold" ] && printf '%s\n' "$hold_fold" | cut -f1 | grep -qxF "$key"; then
+    decision_open=$(status_open_decisions "$STATE/$origin.status")
+    if [ -n "$hold_fold" ] \
+      && printf '%s\n' "$hold_fold" | cut -f1 | grep -qxF "$key" \
+      && ! printf '%s\n' "$decision_open" | cut -f1 | grep -qxF "$key"; then
       retire_origin_hold_status "$origin" "$key" "$id"
     fi
     printf 'resolved: %s\n' "$id"
