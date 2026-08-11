@@ -24,6 +24,7 @@ printf 'folder artifact\n' > "$TMP_ROOT/artifacts/folder/item.txt"
 cat > "$FAKEBIN/fm-read" <<'SH'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >> "$FM_PRESENT_REPORT_LOG"
+[ "${FM_PRESENT_FAIL_REPORT:-0}" != 1 ] || exit 1
 printf 'http://127.0.0.1:4389/session/report\n'
 SH
 
@@ -34,10 +35,11 @@ case "${1:-}" in
   generate)
     mkdir -p "$FM_HOME/.lavish"
     cat > "$FM_HOME/.lavish/captain-decisions.html" <<'HTML'
-<script id="fm-decision-data" type="application/json">{"generated_at":"changes-each-generation","decisions":[{"id":"hold-choice","origin":"choice-origin","key":"route","reason":"Choose north or south"}]}</script>
+<script id="fm-decision-data" type="application/json">{"generated_at":"changes-each-generation","decisions":[{"id":"hold-choice","origin":"choice-origin","key":"route","reason":"Choose north or south"},{"id":"hold-retry","origin":"retry-origin","key":"retry","reason":"Retry the presentation"}]}</script>
 HTML
     ;;
   open)
+    [ "${FM_PRESENT_FAIL_DECISION:-0}" != 1 ] || exit 1
     printf 'http://127.0.0.1:4388/session/decision\n'
     ;;
 esac
@@ -46,6 +48,9 @@ SH
 cat > "$FAKEBIN/open" <<'SH'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >> "$FM_PRESENT_OPEN_LOG"
+if [ "${FM_PRESENT_FAIL_OPEN:-0}" = 1 ]; then
+  exit 1
+fi
 if [ "${FM_PRESENT_FAIL_REVEAL:-0}" = 1 ] && [ "${1:-}" = -R ]; then
   exit 1
 fi
@@ -118,3 +123,24 @@ FM_PRESENT_FAIL_REVEAL=1 run_present reveal "$TMP_ROOT/artifacts/fallback.txt" >
 assert_grep "-R $TMP_ROOT/artifacts/fallback.txt" "$OPEN_LOG" "plain-text fallback skipped reveal-first routing"
 assert_grep "-t $TMP_ROOT/artifacts/fallback.txt" "$OPEN_LOG" "failed reveal did not use open -t for plain text"
 pass "open -t is used only after plain-text reveal fails"
+
+printf '\nRetry after failure.\n' >> "$HOME_DIR/data/sample-report/report.md"
+before_failed_report=$(wc -l < "$REPORT_LOG" | tr -d ' ')
+FM_PRESENT_FAIL_REPORT=1 run_present report sample-report >/dev/null
+run_present report sample-report >/dev/null
+[ "$(wc -l < "$REPORT_LOG" | tr -d ' ')" -eq $((before_failed_report + 2)) ] \
+  || fail "failed report presentation consumed its receipt"
+
+before_failed_decision=$(grep -c '^open ' "$DECISION_LOG")
+FM_PRESENT_FAIL_DECISION=1 run_present decision retry-origin >/dev/null
+run_present decision retry-origin >/dev/null
+[ "$(grep -c '^open ' "$DECISION_LOG")" -eq $((before_failed_decision + 2)) ] \
+  || fail "failed decision presentation consumed its receipt"
+
+printf 'retry reveal\n' > "$TMP_ROOT/artifacts/retry.txt"
+before_failed_reveal=$(wc -l < "$OPEN_LOG" | tr -d ' ')
+FM_PRESENT_FAIL_OPEN=1 run_present reveal "$TMP_ROOT/artifacts/retry.txt" >/dev/null
+run_present reveal "$TMP_ROOT/artifacts/retry.txt" >/dev/null
+[ "$(wc -l < "$OPEN_LOG" | tr -d ' ')" -eq $((before_failed_reveal + 3)) ] \
+  || fail "failed reveal presentation consumed its receipt"
+pass "failed owner and open presentations remain retryable"

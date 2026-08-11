@@ -29,6 +29,7 @@ READ_BIN=${FM_PRESENT_READ_BIN:-$SCRIPT_DIR/fm-read.sh}
 DECISION_BIN=${FM_PRESENT_DECISION_BIN:-$SCRIPT_DIR/fm-decision-surface.sh}
 OPEN_BIN=${FM_PRESENT_OPEN_BIN:-open}
 GUI_MODE=${FM_PRESENT_GUI:-auto}
+CLAIMED_RECEIPT=
 
 usage() {
   awk '
@@ -130,6 +131,12 @@ receipt_claim() {
     umask 077
     printf 'fm-present-v1\nmilestone=%s\nartifact-sha256=%s\n' "$milestone" "$artifact_digest" > "$receipt"
   ) 2>/dev/null
+  CLAIMED_RECEIPT=$receipt
+}
+
+presentation_failed() {
+  [ -z "$CLAIMED_RECEIPT" ] || rm -f "$CLAIMED_RECEIPT"
+  print_fallback "$1"
 }
 
 decision_artifact() {
@@ -213,20 +220,20 @@ receipt_claim "$MILESTONE" "$ARTIFACT_DIGEST" || print_fallback "$TARGET"
 
 case "$KIND" in
   report)
-    "$READ_BIN" "$ROUTE_INPUT" || print_fallback "$TARGET"
+    "$READ_BIN" "$ROUTE_INPUT" || presentation_failed "$TARGET"
     ;;
   decision)
-    "$DECISION_BIN" open --page "$TARGET" || print_fallback "$TARGET"
+    "$DECISION_BIN" open --page "$TARGET" || presentation_failed "$TARGET"
     ;;
   reveal)
     if [ -d "$TARGET" ]; then
-      "$OPEN_BIN" "$TARGET" >/dev/null 2>&1 || print_fallback "$TARGET"
+      "$OPEN_BIN" "$TARGET" >/dev/null 2>&1 || presentation_failed "$TARGET"
     elif "$OPEN_BIN" -R "$TARGET" >/dev/null 2>&1; then
       :
     elif plain_text_file "$TARGET"; then
-      "$OPEN_BIN" -t "$TARGET" >/dev/null 2>&1 || print_fallback "$TARGET"
+      "$OPEN_BIN" -t "$TARGET" >/dev/null 2>&1 || presentation_failed "$TARGET"
     else
-      print_fallback "$TARGET"
+      presentation_failed "$TARGET"
     fi
     printf '%s\n' "$TARGET"
     ;;
