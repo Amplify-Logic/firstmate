@@ -1132,7 +1132,8 @@ EOF
     if [ -e "$STATE/.paused-$key" ] && ! status_declared_wait "$STATE/$task.status"; then
       clear_pause_tracking "$w"
     fi
-    if [ "$kind" = secondmate ] && ! status_is_paused "$last"; then
+    if [ "$kind" = secondmate ] && ! status_is_paused "$last" \
+      && ! status_declared_wait "$STATE/$task.status"; then
       continue
     fi
     tail40=$(fm_backend_capture "$(window_backend "$w")" "$w" 40 "$(window_label "$w")" 2>/dev/null) || continue

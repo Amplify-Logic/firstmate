@@ -1459,6 +1459,11 @@ handle_wake() {  # <reason> <state>
     signal:*) kind=signal; arg="${reason#signal: }"
               decision=$(classify_signal "$arg" "$state") ;;
     stale:*)  kind=stale; arg="${reason#stale: }"
+              # The watcher emits annotated stale reasons ("<window> (detail)")
+              # for its direct stale surfaces, and classification plus the
+              # marker keys need the bare window, so parse the annotation off
+              # before the shared owner sees it.
+              arg="${arg%% (*}"
               decision=$(classify_stale "$arg" "$state") ;;
     check:*)  decision=$(classify_check "$reason") ;;
     heartbeat|heartbeat:*) decision=$(classify_heartbeat) ;;

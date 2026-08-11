@@ -1371,6 +1371,53 @@ test_secondmate_nonpaused_stale_remains_suppressed() {
   pass "a non-paused secondmate retains normal stale suppression"
 }
 
+test_secondmate_captain_held_dead_agent_surfaces_once() {
+  local dir state fakebin out capture_file statusf window key pane_hash sig pid round wakes bare
+  dir=$(make_case secondmate-captain-held-dead); state="$dir/state"; fakebin="$dir/fakebin"
+  out="$dir/watch.out"; capture_file="$dir/pane.txt"; statusf="$state/secondmate-hold.status"
+  window="test:fm-secondmate-hold"
+  printf 'idle bare shell after a captain-held transfer
+' > "$capture_file"
+  printf 'window=%s\nkind=secondmate\n' "$window" > "$state/secondmate-hold.meta"
+  printf 'captain-held [key=hold-shape]: tracked by held-route
+' > "$statusf"
+  back=$(( $(date +%s) - 500 ))
+  if [ "$(uname)" = Darwin ]; then touch -mt "$(date -r "$back" '+%Y%m%d%H%M.%S')" "$statusf"
+  else touch -m -d "@$back" "$statusf"; fi
+  sig=$(seen_sig "$statusf"); printf '%s' "$sig" > "$state/.seen-secondmate-hold_status"
+  key=$(printf '%s' "$window" | tr '.:/' '___')
+  pane_hash=$(hash_text "idle bare shell after a captain-held transfer")
+  printf '%s' "$pane_hash" > "$state/.hash-$key"
+  printf '1\n' > "$state/.count-$key"
+  # A captain-held secondmate is a declared wait like any other crew: the hold
+  # must reach the dead-agent one-shot handling instead of being skipped as an
+  # unrelated idle secondmate. A confidently dead agent surfaces exactly once,
+  # then stays silent across unchanged polls.
+  round=1
+  while [ "$round" -le 4 ]; do
+    PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CAPTURE="$capture_file" \
+      FM_FAKE_TMUX_CURRENT_COMMAND=zsh FM_FAKE_CREW_STATE='state: stopped · source: pane · bare shell' \
+      FM_STATE_OVERRIDE="$state" FM_CREW_STATE_BIN="$fakebin/fm-crew-state.sh" FM_PAUSE_RESURFACE_SECS=240 FM_POLL=1 FM_SIGNAL_GRACE=1 \
+      FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 "$WATCH" >> "$out" &
+    pid=$!
+    if wait_live "$pid" 15; then reap "$pid"; else wait "$pid" || fail "captain-held secondmate dead-agent watcher round $round failed"; fi
+    round=$((round + 1))
+  done
+  wakes=$(awk -F '\t' -v w="$window" '$3 == "stale" && $4 == w { n++ } END { print n + 0 }' "$state/.wake-queue" 2>/dev/null || true)
+  case "$wakes" in ''|*[!0-9]*) wakes=0 ;; esac
+  [ "$wakes" -eq 1 ] || fail "dead-agent captain-held secondmate surfaced $wakes stale wakes, expected exactly one"
+  grep -F "agent exited" "$state/.wake-queue" >/dev/null \
+    || fail "dead-agent captain-held secondmate's one surface did not carry the loss-risk reason"
+  bare=$(awk -F '\t' -v w="$window" '$3 == "stale" && $4 == w && $5 == "stale: " w { n++ } END { print n + 0 }' "$state/.wake-queue" 2>/dev/null || true)
+  case "$bare" in ''|*[!0-9]*) bare=0 ;; esac
+  [ "$bare" -eq 0 ] || fail "dead-agent captain-held secondmate surfaced as $bare bare stopped-crew stale wakes"
+  grep -F "awaiting external" "$state/.wake-queue" >/dev/null \
+    && fail "dead-agent captain-held secondmate was re-surfaced on the pause cadence"
+  grep -F "possible wedge" "$state/.wake-queue" >/dev/null \
+    && fail "dead-agent captain-held secondmate was framed as a wedge"
+  pass "a confidently dead secondmate under a captain-held transfer surfaces once, never wedge-aged"
+}
+
 test_secondmate_unpause_clears_pause_tracking() {
   local dir state fakebin out statusf window key pid
   dir=$(make_case secondmate-unpause-clears); state="$dir/state"; fakebin="$dir/fakebin"
@@ -1954,6 +2001,7 @@ test_multihold_resolved_one_keeps_quiet_state
 test_malformed_hold_surfaces_normal_stale
 test_secondmate_paused_resurfaces_in_normal_mode
 test_secondmate_nonpaused_stale_remains_suppressed
+test_secondmate_captain_held_dead_agent_surfaces_once
 test_secondmate_unpause_clears_pause_tracking
 test_nonterminal_stale_pause_transitions_reclassify_unchanged_hash
 test_nonterminal_paused_rechecks_authoritative_state

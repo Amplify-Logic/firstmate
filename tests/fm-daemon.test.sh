@@ -485,8 +485,11 @@ esac
 exit 1
 SH
   chmod +x "$fakebin/tmux"
+  # The watcher emits the wake with an annotation ("stale: <window> (detail)");
+  # the daemon parses the bare window before classification, so the annotated
+  # form must escalate exactly like the bare one.
   PATH="$fakebin:$PATH" FM_FAKE_TMUX_CURRENT_COMMAND=zsh \
-    FM_STATE_OVERRIDE="$state" handle_wake "stale: sess:fm-held-c4" "$state"
+    FM_STATE_OVERRIDE="$state" handle_wake "stale: sess:fm-held-c4 (captain-held, agent exited: the worker is gone while a decision is owed, so its work is at risk once the answer lands)" "$state"
   grep -F "captain-held, agent exited" "$state/.subsuper-escalations" >/dev/null \
     || fail "dead-agent captain-held escalate did not reach the escalation buffer"
   grep -F "possible wedge" "$state/.subsuper-escalations" >/dev/null \
@@ -494,10 +497,11 @@ SH
   [ ! -e "$state/.subsuper-stale-$key" ] || fail "dead-agent captain-held escalate left a wedge marker to re-age"
   [ -e "$state/.subsuper-captain-held-surfaced-$key" ] \
     || fail "dead-agent captain-held escalate did not record its one-shot marker"
-  # The one-shot holds: a repeated wake for the same open hold must NOT add a
-  # second escalation line, and the direct classifier now reads absorb.
+  # The one-shot holds: a repeated annotated wake for the same open hold must
+  # NOT add a second escalation line, and the direct classifier now reads
+  # absorb.
   PATH="$fakebin:$PATH" FM_FAKE_TMUX_CURRENT_COMMAND=zsh \
-    FM_STATE_OVERRIDE="$state" handle_wake "stale: sess:fm-held-c4" "$state"
+    FM_STATE_OVERRIDE="$state" handle_wake "stale: sess:fm-held-c4 (captain-held, agent exited: the worker is gone while a decision is owed, so its work is at risk once the answer lands)" "$state"
   lines=$(grep -cF "captain-held, agent exited" "$state/.subsuper-escalations")
   [ "$lines" -eq 1 ] || fail "dead-agent captain-held re-escalated on a repeated wake ($lines lines)"
   out=$(PATH="$fakebin:$PATH" FM_FAKE_TMUX_CURRENT_COMMAND=zsh \
