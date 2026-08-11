@@ -418,9 +418,9 @@ secondmate_sync() {
       *" $id "*) reread_skip_pending=1 ;;
     esac
     if [ "$reread_skip_pending" -eq 0 ] \
-      && fm_config_reread_retry_queue_is_full "$FM_HOME" "$id"; then
+      && fm_config_reread_retry_queue_is_full "$FM_HOME" "$id" "$home_real"; then
       fm_config_reread_retry_pending "$id" "$home_real" || true
-      if fm_config_reread_retry_queue_is_full "$FM_HOME" "$id"; then
+      if fm_config_reread_retry_queue_is_full "$FM_HOME" "$id" "$home_real"; then
         echo "CONFIG_REREAD: secondmate $id: send failed: retry instruction queue is full"
         fm_lock_release "$home_lock" || true
         continue

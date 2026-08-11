@@ -150,9 +150,9 @@ while IFS='|' read -r id home _window meta; do
     errors=1
     continue
   }
-  if fm_config_reread_retry_queue_is_full "$FM_HOME" "$id"; then
+  if fm_config_reread_retry_queue_is_full "$FM_HOME" "$id" "$home_real"; then
     fm_config_reread_retry_pending "$id" "$home_real" || true
-    if fm_config_reread_retry_queue_is_full "$FM_HOME" "$id"; then
+    if fm_config_reread_retry_queue_is_full "$FM_HOME" "$id" "$home_real"; then
       echo "  config-reread: error - retry instruction queue is full"
       errors=1
       fm_lock_release "$home_lock" || true
@@ -174,7 +174,9 @@ while IFS='|' read -r id home _window meta; do
   fi
   print_item_report "$report"
   reread_pending=0
-  if fm_config_reread_has_pending "$home_real" || fm_config_reread_has_staged "$FM_HOME" "$id"; then
+  if fm_config_reread_has_pending "$home_real" \
+    || fm_config_reread_has_snapshot "$home_real" \
+    || fm_config_reread_has_staged "$FM_HOME" "$id"; then
     reread_pending=1
   fi
   if reread_out=$(FM_HOME="$FM_HOME" FM_ROOT_OVERRIDE="$FM_ROOT" \

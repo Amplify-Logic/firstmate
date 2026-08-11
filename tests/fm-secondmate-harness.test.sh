@@ -892,6 +892,18 @@ reread_retry_report_path() {
   printf '%s\n' "$latest"
 }
 
+reread_snapshot_path() {
+  local home=$1 root path latest=
+  root="$home/state/.fm-inherited-config-reread-snapshots"
+  for path in "$root"/generation.*; do
+    [ -d "$path" ] && [ ! -L "$path" ] || continue
+    [ -f "$path/.ready" ] && [ ! -L "$path/.ready" ] || continue
+    latest="$path"
+  done
+  [ -n "$latest" ] || return 1
+  printf '%s\n' "$latest"
+}
+
 reread_mode() {
   if [ "$(uname)" = Darwin ]; then
     stat -f %Lp "$1"
@@ -1658,6 +1670,89 @@ SH
   pass "B21 config reread preserves exact bytes when temporary adoption also fails"
 }
 
+test_config_reread_snapshot_survives_assembly_failures() {
+  local mode w head fakebin real_mktemp real_cat snapshot out status log retry_status first_instr
+  for mode in temporary streaming; do
+    w=$(new_world "config-reread-snapshot-$mode")
+    head=$(git -C "$w/main" rev-parse HEAD)
+    add_sm_worktree "$w" sm "$head"
+    mkdir -p "$w/sm/config" "$w/sm/state"
+    printf 'old\n' > "$w/sm/config/crew-harness"
+    printf 'captured-%s\n' "$mode" > "$w/home/config/crew-harness"
+    fakebin=$(make_fake_toolchain "$w")
+    if [ "$mode" = temporary ]; then
+      real_mktemp=$(command -v mktemp)
+      cat > "$fakebin/mktemp" <<SH
+#!/usr/bin/env bash
+case "\$*" in
+  *'.fm-inherited-config-reread.'*'.tmp.XXXXXX') exit 1 ;;
+esac
+exec "$real_mktemp" "\$@"
+SH
+      chmod +x "$fakebin/mktemp"
+    else
+      real_cat=$(command -v cat)
+      cat > "$fakebin/cat" <<SH
+#!/usr/bin/env bash
+case "\${1:-}" in
+  *'.fm-inherited-config-reread-snapshots/'*'/crew-harness.content') exit 1 ;;
+esac
+exec "$real_cat" "\$@"
+SH
+      chmod +x "$fakebin/cat"
+    fi
+    out=$(PATH="$fakebin:$BASE_PATH" FM_HOME="$w/home" FM_ROOT_OVERRIDE="$w/main" \
+      FM_SEND_SETTLE=0 "$ROOT/bin/fm-config-push.sh" 2>&1); status=$?
+    expect_code 1 "$status" "$mode assembly failure should remain diagnostic"
+    assert_contains "$out" "retained exact snapshot" \
+      "$mode assembly failure did not report its retained snapshot"
+    snapshot=$(reread_snapshot_path "$w/sm") \
+      || fail "$mode assembly failure did not retain a retryable snapshot"
+    [ "$(cat "$snapshot/crew-harness.content")" = "captured-$mode" ] \
+      || fail "$mode assembly failure retained the wrong destination bytes"
+
+    printf 'changed-after-%s\n' "$mode" > "$w/home/config/crew-harness"
+    rm -f "$fakebin/mktemp" "$fakebin/cat"
+    log="$w/config-reread-snapshot-$mode.tmux.log"
+    out=$(run_config_push "$w" "$log" 2>/dev/null); retry_status=$?
+    expect_code 0 "$retry_status" "$mode assembly failure should retry"
+    first_instr=$(grep -F "$FM_CONFIG_REREAD_NUDGE" "$log" | head -n 1 | reread_path_from_message)
+    assert_contains "$(cat "$first_instr")" "captured-$mode" \
+      "$mode assembly retry rebuilt the earlier generation from newer bytes"
+  done
+  pass "B21 exact snapshots survive temporary and streaming assembly failures"
+}
+
+test_config_reread_snapshot_capture_failure_is_explicit() {
+  local w head fakebin real_cp out status snapshot_count
+  w=$(new_world config-reread-snapshot-capture-failure)
+  head=$(git -C "$w/main" rev-parse HEAD)
+  add_sm_worktree "$w" sm "$head"
+  mkdir -p "$w/sm/config" "$w/sm/state"
+  printf 'old\n' > "$w/sm/config/crew-harness"
+  printf 'new\n' > "$w/home/config/crew-harness"
+  fakebin=$(make_fake_toolchain "$w")
+  real_cp=$(command -v cp)
+  cat > "$fakebin/cp" <<SH
+#!/usr/bin/env bash
+target=
+for arg in "\$@"; do target="\$arg"; done
+case "\$target" in
+  *'.fm-inherited-config-reread-snapshots/'*'/crew-harness.content') exit 1 ;;
+esac
+exec "$real_cp" "\$@"
+SH
+  chmod +x "$fakebin/cp"
+  out=$(PATH="$fakebin:$BASE_PATH" FM_HOME="$w/home" FM_ROOT_OVERRIDE="$w/main" \
+    FM_SEND_SETTLE=0 "$ROOT/bin/fm-config-push.sh" 2>&1); status=$?
+  expect_code 1 "$status" "snapshot capture failure should remain diagnostic"
+  assert_contains "$out" "could not capture exact post-write snapshot" \
+    "snapshot capture failure did not surface its distinct diagnostic"
+  snapshot_count=$(fm_config_reread_pending_snapshots "$w/sm" | wc -l | tr -d ' ')
+  [ "$snapshot_count" = 0 ] || fail "snapshot capture failure left a phantom generation"
+  pass "B21 snapshot capture failures are explicit and leave no phantom generation"
+}
+
 test_config_reread_ignores_incomplete_temp_and_distinguishes_receiver_message() {
   local w head retry_dir partial report instruction pending fakebin log out status message
   w=$(new_world config-reread-partial-temp)
@@ -2162,6 +2257,8 @@ test_config_reread_isolation_and_absent_and_send_failure
 test_config_reread_publication_failure_retries_exact_generation
 test_config_reread_write_failure_retains_exact_retry_generation
 test_config_reread_exact_temp_survives_adoption_failure
+test_config_reread_snapshot_survives_assembly_failures
+test_config_reread_snapshot_capture_failure_is_explicit
 test_config_reread_ignores_incomplete_temp_and_distinguishes_receiver_message
 test_config_reread_serializes_concurrent_pushes
 test_config_reread_full_retry_queue_drains_before_new_push

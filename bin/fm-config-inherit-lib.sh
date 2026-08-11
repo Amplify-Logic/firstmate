@@ -451,6 +451,7 @@ FM_CONFIG_REREAD_BASENAME="${FM_CONFIG_REREAD_INSTRUCTION_PREFIX_REL##*/}"
 FM_CONFIG_REREAD_MAX_SENT=16
 FM_CONFIG_REREAD_RETRY_ROOT_REL="$FM_CONFIG_REREAD_STATE_REL/$FM_CONFIG_REREAD_BASENAME-retry"
 FM_CONFIG_REREAD_QUARANTINE_REL="$FM_CONFIG_REREAD_STATE_REL/$FM_CONFIG_REREAD_BASENAME-quarantine"
+FM_CONFIG_REREAD_SNAPSHOT_ROOT_REL="$FM_CONFIG_REREAD_STATE_REL/$FM_CONFIG_REREAD_BASENAME-snapshots"
 FM_CONFIG_REREAD_MAX_PENDING=16
 FM_CONFIG_REREAD_MAX_QUARANTINE=16
 FM_CONFIG_INHERIT_LOCK_REL="state/.fm-inherited-config.lock"
@@ -531,9 +532,119 @@ fm_config_reread_has_staged() {
 }
 
 fm_config_reread_retry_queue_is_full() {
-  local source_home=$1 id=$2 count
+  local source_home=$1 id=$2 dest_home=${3:-} count snapshot_count=0
   count=$(fm_config_reread_pending_stages "$source_home" "$id" | wc -l | tr -d ' ')
+  if [ -n "$dest_home" ]; then
+    snapshot_count=$(fm_config_reread_pending_snapshots "$dest_home" | wc -l | tr -d ' ')
+  fi
+  count=$((count + snapshot_count))
   [ "$count" -ge "$FM_CONFIG_REREAD_MAX_PENDING" ]
+}
+
+fm_config_reread_pending_snapshots() {
+  local dest_home=$1 root snapshot
+  root="$dest_home/$FM_CONFIG_REREAD_SNAPSHOT_ROOT_REL"
+  for snapshot in "$root"/generation.*; do
+    [ -d "$snapshot" ] && [ ! -L "$snapshot" ] || continue
+    [ -f "$snapshot/.ready" ] && [ ! -L "$snapshot/.ready" ] || continue
+    printf '%s\n' "$snapshot"
+  done | LC_ALL=C sort
+}
+
+fm_config_reread_has_snapshot() {
+  local dest_home=$1 snapshot
+  while IFS= read -r snapshot; do
+    [ -n "$snapshot" ] && return 0
+  done < <(fm_config_reread_pending_snapshots "$dest_home")
+  return 1
+}
+
+fm_config_reread_capture_snapshot() {
+  local dest_home=$1 report=$2 root generation snapshot tmp item dest first=1
+  root="$dest_home/$FM_CONFIG_REREAD_SNAPSHOT_ROOT_REL"
+  mkdir -p "$root" 2>/dev/null || return 1
+  chmod 0700 "$root" 2>/dev/null || return 1
+  generation=$(fm_config_reread_generation_token "$root") || return 1
+  snapshot="$root/generation.$generation"
+  tmp=$(umask 077; mktemp -d "$root/.snapshot.tmp.XXXXXX" 2>/dev/null) || return 1
+  chmod 0700 "$tmp" 2>/dev/null || { rmdir "$tmp" 2>/dev/null || true; return 1; }
+  : > "$tmp/manifest" || { rmdir "$tmp" 2>/dev/null || true; return 1; }
+  while IFS= read -r item; do
+    [ -n "$item" ] || continue
+    fm_config_reread_is_allowlisted_item "$item" || continue
+    first=0
+    dest="$dest_home/config/$item"
+    if [ -f "$dest" ] && [ ! -L "$dest" ]; then
+      if ! cp "$dest" "$tmp/$item.content" 2>/dev/null \
+        || ! chmod 0600 "$tmp/$item.content" 2>/dev/null \
+        || ! printf '%s\tPRESENT\n' "$item" >> "$tmp/manifest"; then
+        rm -f "$tmp"/*.content "$tmp/manifest" 2>/dev/null || true
+        rmdir "$tmp" 2>/dev/null || true
+        return 1
+      fi
+    elif ! printf '%s\tABSENT\n' "$item" >> "$tmp/manifest"; then
+      rm -f "$tmp"/*.content "$tmp/manifest" 2>/dev/null || true
+      rmdir "$tmp" 2>/dev/null || true
+      return 1
+    fi
+  done < <(fm_config_reread_changed_items "$report")
+  if [ "$first" = 1 ] || ! chmod 0600 "$tmp/manifest" 2>/dev/null \
+    || ! : > "$tmp/.ready" || ! chmod 0600 "$tmp/.ready" 2>/dev/null \
+    || ! mv -f "$tmp" "$snapshot" 2>/dev/null; then
+    rm -f "$tmp"/*.content "$tmp/manifest" "$tmp/.ready" 2>/dev/null || true
+    rmdir "$tmp" 2>/dev/null || true
+    return 1
+  fi
+  printf '%s\n' "$snapshot"
+}
+
+fm_config_reread_remove_snapshot() {
+  local snapshot=$1 item status
+  [ -d "$snapshot" ] && [ ! -L "$snapshot" ] || return 1
+  while IFS=$'\t' read -r item status; do
+    [ "$status" = PRESENT ] || continue
+    fm_config_reread_is_allowlisted_item "$item" || return 1
+    rm -f "$snapshot/$item.content" 2>/dev/null || return 1
+  done < "$snapshot/manifest"
+  rm -f "$snapshot/manifest" "$snapshot/.ready" 2>/dev/null || return 1
+  rmdir "$snapshot" 2>/dev/null || return 1
+}
+
+fm_config_write_reread_snapshot_instruction() {
+  local snapshot=$1 instruction_path=$2 item status rel parent tmp first=1
+  FM_CONFIG_REREAD_FAILED_TEMP=""
+  [ -d "$snapshot" ] && [ ! -L "$snapshot" ] || return 1
+  [ -f "$snapshot/.ready" ] && [ ! -L "$snapshot/.ready" ] || return 1
+  parent=${instruction_path%/*}
+  mkdir -p "$parent" 2>/dev/null || return 1
+  tmp=$(umask 077; mktemp "$instruction_path.tmp.XXXXXX" 2>/dev/null) || return 1
+  chmod 0600 "$tmp" 2>/dev/null || { rm -f "$tmp"; return 1; }
+  while IFS=$'\t' read -r item status; do
+    fm_config_reread_is_allowlisted_item "$item" || { rm -f "$tmp"; return 1; }
+    case "$status" in PRESENT|ABSENT) ;; *) rm -f "$tmp"; return 1 ;; esac
+    rel="config/$item"
+    if [ "$first" = 1 ]; then
+      printf '%s\n' "$FM_CONFIG_REREAD_FRAMING" >> "$tmp" || { rm -f "$tmp"; return 1; }
+      first=0
+    fi
+    printf '\n%s\n-----BEGIN %s-----\n' "$rel" "$rel" >> "$tmp" || { rm -f "$tmp"; return 1; }
+    if [ "$status" = PRESENT ]; then
+      cat "$snapshot/$item.content" >> "$tmp" || { rm -f "$tmp"; return 1; }
+    else
+      printf 'ABSENT\n' >> "$tmp" || { rm -f "$tmp"; return 1; }
+    fi
+    printf '%s\n' "-----END $rel-----" >> "$tmp" || { rm -f "$tmp"; return 1; }
+  done < "$snapshot/manifest"
+  [ "$first" = 0 ] || { rm -f "$tmp"; return 1; }
+  if ! : > "$tmp.ready" || ! chmod 0600 "$tmp.ready" 2>/dev/null; then
+    rm -f "$tmp" "$tmp.ready"
+    return 1
+  fi
+  if ! mv -f "$tmp" "$instruction_path" 2>/dev/null; then
+    FM_CONFIG_REREAD_FAILED_TEMP="$tmp"
+    return 1
+  fi
+  rm -f "$tmp.ready" 2>/dev/null || true
 }
 
 fm_config_reread_retry_pending() {
@@ -812,7 +923,7 @@ fm_config_reread_send_pointer() {
 
 # fm_config_reread_discard_pending <dest-home>
 fm_config_reread_discard_pending() {
-  local dest_home=$1 id=${2:-} source_home=${3:-} state pending instruction retry_dir retry_stage rc=0
+  local dest_home=$1 id=${2:-} source_home=${3:-} state pending instruction snapshot retry_dir retry_stage rc=0
   state="$dest_home/$FM_CONFIG_REREAD_STATE_REL"
   for pending in "$state"/"$FM_CONFIG_REREAD_BASENAME".*.pending; do
     [ -f "$pending" ] && [ ! -L "$pending" ] || continue
@@ -820,6 +931,10 @@ fm_config_reread_discard_pending() {
     rm -f "$pending" 2>/dev/null || rc=1
     rm -f "$instruction" 2>/dev/null || rc=1
   done
+  while IFS= read -r snapshot; do
+    [ -n "$snapshot" ] || continue
+    fm_config_reread_remove_snapshot "$snapshot" || rc=1
+  done < <(fm_config_reread_pending_snapshots "$dest_home")
   if [ -n "$id" ] && [ -n "$source_home" ]; then
     retry_dir=$(fm_config_reread_retry_dir "$source_home" "$id") || rc=1
     if [ -d "$retry_dir" ]; then
@@ -890,7 +1005,7 @@ fm_config_reread_quarantine_dir() {
 
 fm_config_reread_quarantine_pending() {
   local dest_home=$1 id=${2:-} source_home=${3:-}
-  local state pending instruction retry_dir retry_stage dest_quarantine source_quarantine
+  local state pending instruction snapshot retry_dir retry_stage dest_quarantine source_quarantine
   local dest_has_artifacts source_has_artifacts rc=0
   state="$dest_home/$FM_CONFIG_REREAD_STATE_REL"
   dest_has_artifacts=0
@@ -899,6 +1014,9 @@ fm_config_reread_quarantine_pending() {
     dest_has_artifacts=1
     break
   done
+  if fm_config_reread_has_snapshot "$dest_home"; then
+    dest_has_artifacts=1
+  fi
   dest_quarantine=""
   if [ "$dest_has_artifacts" -eq 1 ]; then
     dest_quarantine=$(fm_config_reread_quarantine_dir "$dest_home" 2>/dev/null || true)
@@ -919,6 +1037,16 @@ fm_config_reread_quarantine_pending() {
       rc=1
     fi
   done
+  while IFS= read -r snapshot; do
+    [ -n "$snapshot" ] || continue
+    if [ -n "$dest_quarantine" ] \
+      && mv -f "$snapshot" "$dest_quarantine/snapshot-${snapshot##*/}" 2>/dev/null; then
+      :
+    else
+      fm_config_reread_remove_snapshot "$snapshot" || true
+      rc=1
+    fi
+  done < <(fm_config_reread_pending_snapshots "$dest_home")
   if [ -n "$id" ] && [ -n "$source_home" ]; then
     retry_dir=$(fm_config_reread_retry_dir "$source_home" "$id") || retry_dir=
     source_has_artifacts=0
@@ -969,8 +1097,8 @@ fm_config_reread_quarantine_pending() {
 # non-zero - never claim the live agent reread the values.
 fm_config_send_reread_nudge() {
   local id=$1 dest_home=$2 report=$3
-  local dest_home_abs state source_home_abs changed_items pending_paths stage_paths delivery_paths
-  local stage_path stage_name instruction_path current_stage_path exact_tmp
+  local dest_home_abs state source_home_abs changed_items pending_paths snapshot_paths delivery_paths
+  local snapshot_path stage_paths stage_path stage_name instruction_path current_stage_path exact_tmp
   local send_failures
   [ -n "$id" ] || return 1
   [ -n "$dest_home" ] || return 1
@@ -982,6 +1110,7 @@ fm_config_send_reread_nudge() {
   state="$dest_home_abs/$FM_CONFIG_REREAD_STATE_REL"
   changed_items=$(fm_config_reread_changed_items "$report")
   pending_paths=""
+  snapshot_paths=$(fm_config_reread_pending_snapshots "$dest_home_abs")
   stage_paths=""
   if [ "${FM_CONFIG_REREAD_SKIP_PENDING:-0}" != 1 ]; then
     pending_paths=$(fm_config_reread_pending_instructions "$state")
@@ -992,38 +1121,57 @@ fm_config_send_reread_nudge() {
   fi
   send_failures=0
   if [ -n "$changed_items" ]; then
+    snapshot_path=$(fm_config_reread_capture_snapshot "$dest_home_abs" "$report") || {
+      printf 'CONFIG_REREAD: secondmate %s: send failed: could not capture exact post-write snapshot\n' "$id"
+      return 1
+    }
+    if [ -n "$snapshot_paths" ]; then
+      snapshot_paths+=$'\n'
+    fi
+    snapshot_paths+="$snapshot_path"
+  fi
+  while IFS= read -r snapshot_path; do
+    [ -n "$snapshot_path" ] || continue
     source_home_abs=$(cd "${FM_HOME:-}" 2>/dev/null && pwd -P || true)
     if [ -z "$source_home_abs" ]; then
-      printf 'CONFIG_REREAD: secondmate %s: send failed: could not reserve retry instruction\n' "$id"
+      printf 'CONFIG_REREAD: secondmate %s: send failed: retained exact snapshot %s; could not reserve retry instruction\n' "$id" "$snapshot_path"
       return 1
     fi
-    if fm_config_reread_retry_queue_is_full "$source_home_abs" "$id"; then
-      printf 'CONFIG_REREAD: secondmate %s: send failed: retry instruction queue is full\n' "$id"
+    if fm_config_reread_retry_queue_is_full "$source_home_abs" "$id" "$dest_home_abs"; then
+      printf 'CONFIG_REREAD: secondmate %s: send failed: retained exact snapshot %s; retry instruction queue is full\n' "$id" "$snapshot_path"
       return 1
     fi
     current_stage_path=$(fm_config_reread_new_retry_stage_path "$source_home_abs" "$id") || {
-      printf 'CONFIG_REREAD: secondmate %s: send failed: could not reserve retry instruction\n' "$id"
+      printf 'CONFIG_REREAD: secondmate %s: send failed: retained exact snapshot %s; could not reserve retry instruction\n' "$id" "$snapshot_path"
       return 1
     }
-    if ! fm_config_write_reread_instruction "$dest_home_abs" "$report" "$current_stage_path"; then
+    if ! fm_config_write_reread_snapshot_instruction "$snapshot_path" "$current_stage_path"; then
       exact_tmp=${FM_CONFIG_REREAD_FAILED_TEMP:-}
       if [ -n "$exact_tmp" ] \
         && fm_config_reread_adopt_exact_temp "$exact_tmp" "$current_stage_path"; then
+        fm_config_reread_remove_snapshot "$snapshot_path" || true
         printf 'CONFIG_REREAD: secondmate %s: send failed: could not publish retry instruction; retained exact retry generation %s\n' "$id" "$current_stage_path"
       elif [ -n "$exact_tmp" ] && [ -f "$exact_tmp" ]; then
         rm -f "$current_stage_path" 2>/dev/null || true
+        fm_config_reread_remove_snapshot "$snapshot_path" || true
         printf 'CONFIG_REREAD: secondmate %s: send failed: retained exact retry temporary %s\n' "$id" "$exact_tmp"
       else
         rm -f "$current_stage_path" 2>/dev/null || true
-        printf 'CONFIG_REREAD: secondmate %s: send failed: could not retain exact retry generation\n' "$id"
+        printf 'CONFIG_REREAD: secondmate %s: send failed: retained exact snapshot %s; could not assemble retry instruction\n' "$id" "$snapshot_path"
       fi
       return 1
     fi
+    fm_config_reread_remove_snapshot "$snapshot_path" || {
+      printf 'CONFIG_REREAD: secondmate %s: send failed: exact retry generation retained but snapshot cleanup failed\n' "$id"
+      return 1
+    }
     if [ -n "$stage_paths" ]; then
       stage_paths+=$'\n'
     fi
     stage_paths+="$current_stage_path"
-  fi
+  done <<EOF
+$snapshot_paths
+EOF
   delivery_paths="$pending_paths"
   while IFS= read -r stage_path; do
     [ -n "$stage_path" ] || continue
