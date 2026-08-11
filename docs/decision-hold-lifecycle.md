@@ -25,7 +25,9 @@ The `--force` path remains the explicit captain-approved discard escape hatch.
 
 The `resolve` subcommand requires a decision file and at least one existing dependent task whose structured `blocked-by` edge points to the hold.
 It records the decision digest and routed task identities as a retry identity in the hold body, clears each dependency edge through tasks-axi, and marks the hold Done only after those writes succeed.
+It then appends a keyed `resolved:` event to the origin status stream so the shared classifier retires the transfer's quiet state immediately.
 An exact retry can finish a partial routing operation, while a changed decision or routed-task set is rejected.
+A retry appends a missing closing event only when the old transfer remains open and no fresh decision has reused its key.
 A failed intermediate step leaves the hold open.
 
 ## Structured read surfaces
