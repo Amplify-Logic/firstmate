@@ -598,8 +598,12 @@ pause_state_class() {  # <window> <task>
     # to handle_paused_stale, which absorbs a healthy idle pane silently and
     # surfaces a confidently dead agent exactly once. Checked only after the
     # provably-working branch so a validating crew behind a stale hold line
-    # keeps its wedge timer and a frozen run still escalates.
-    rm -f "$recheck_file"
+    # keeps its wedge timer and a frozen run still escalates. Stamp the recheck
+    # file instead of removing it so a confidently dead held pane is re-read by
+    # the expensive crew_absorb_class at most once per STALE_ESCALATE_SECS (the
+    # cheap branch returns 'paused' for a dead agent without clearing the
+    # stamp); live panes clear it and keep the base per-poll re-check.
+    date +%s > "$recheck_file"
     printf 'paused'
     return
   fi
@@ -1132,8 +1136,7 @@ EOF
     if [ -e "$STATE/.paused-$key" ] && ! status_declared_wait "$STATE/$task.status"; then
       clear_pause_tracking "$w"
     fi
-    if [ "$kind" = secondmate ] && ! status_is_paused "$last" \
-      && ! status_declared_wait "$STATE/$task.status"; then
+    if [ "$kind" = secondmate ] && ! status_declared_wait "$STATE/$task.status"; then
       continue
     fi
     tail40=$(fm_backend_capture "$(window_backend "$w")" "$w" 40 "$(window_label "$w")" 2>/dev/null) || continue
