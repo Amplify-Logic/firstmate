@@ -510,6 +510,41 @@ SH
   pass "a confidently dead agent under a captain-held transfer escalates once, never wedge-aged"
 }
 
+# Ruling-2 parity (cross-mode single surface): normal mode records its one-shot
+# in .captain-held-surfaced-<window-key> while away mode uses
+# .subsuper-captain-held-surfaced-<task-key>. A hold already surfaced in
+# normal mode must not escalate again when supervision hands off to the
+# away-mode daemon for the same unchanged hold state.
+test_stale_captain_held_dead_agent_single_surface_across_modes() {
+  local dir state fakebin key digest out
+  dir=$(make_supercase stale-captain-held-cross)
+  state="$dir/state"; fakebin="$dir/fakebin"
+  printf 'captain-held [key=api-shape]: tracked by held-route-6\n' > "$state/held-c6.status"
+  key=$(printf '%s' "held-c6" | tr ':/.' '___')
+  cat > "$fakebin/tmux" <<'SH'
+#!/usr/bin/env bash
+set -u
+case "${1:-}" in
+  display-message)
+    case "$*" in *pane_current_command*) printf '%s\n' "${FM_FAKE_TMUX_CURRENT_COMMAND:-}"; exit 0 ;; esac
+    exit 1 ;;
+esac
+exit 1
+SH
+  chmod +x "$fakebin/tmux"
+  digest=$(bash -c '. "$1"; status_open_captain_holds "$2"' _ \
+    "$ROOT/bin/fm-classify-lib.sh" "$state/held-c6.status")
+  # The watcher already surfaced this exact hold state in normal mode.
+  printf '%s' "$digest" > "$state/.captain-held-surfaced-$(printf '%s' 'sess:fm-held-c6' | tr ':/.' '___')"
+  out=$(PATH="$fakebin:$PATH" FM_FAKE_TMUX_CURRENT_COMMAND=zsh \
+    FM_STATE_OVERRIDE="$state" classify_stale "sess:fm-held-c6" "$state")
+  case "$out" in absorb\|*already\ surfaced*) ;; *) fail "away mode re-escalated a hold normal mode already surfaced: $out" ;; esac
+  PATH="$fakebin:$PATH" FM_FAKE_TMUX_CURRENT_COMMAND=zsh \
+    FM_STATE_OVERRIDE="$state" handle_wake "stale: sess:fm-held-c6" "$state"
+  [ ! -s "$state/.subsuper-escalations" ] || fail "cross-mode duplicate reached the escalation buffer"
+  pass "a dead-agent captain-held hold surfaces once across supervision modes"
+}
+
 # Ruling-2 parity: away mode must keep normal-mode coverage. A captain-held task
 # whose crew is PROVABLY WORKING (fm-crew-state.sh reports an active run-step)
 # is not a declared wait - the hold is routing state, not a liveness exemption -
@@ -2410,6 +2445,7 @@ test_housekeeping_paused_resumed_cleared
 test_housekeeping_paused_unpaused_cleared
 test_stale_captain_held_classifies_absorb_and_records_no_marker
 test_stale_captain_held_dead_agent_escalates_once
+test_stale_captain_held_dead_agent_single_surface_across_modes
 test_stale_captain_held_provably_working_keeps_wedge_coverage
 test_stale_resolved_hold_returns_to_normal_stale_handling
 test_stale_multihold_resolved_one_keeps_other_open

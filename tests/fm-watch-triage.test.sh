@@ -1127,6 +1127,48 @@ test_declared_wait_policies_paused_bounded_captain_held_silent() {
   pass "declared-wait policies: paused: is bounded, captain-held absorbs silently when healthy and surfaces a dead agent once"
 }
 
+# Cross-mode single surface: away mode records its dead-agent one-shot in
+# .subsuper-captain-held-surfaced-<task>; normal mode must not surface the same
+# unchanged hold state a second time when supervision hands back after AFK.
+test_captain_held_dead_agent_away_marker_absorbs_in_normal_mode() {
+  local dir state fakebin out capture_file statusf window key pane_hash sig pid round wakes digest
+  dir=$(make_case away-surfaced-captain-held); state="$dir/state"; fakebin="$dir/fakebin"
+  out="$dir/watch.out"; capture_file="$dir/pane.txt"; statusf="$state/held.status"
+  window="test:fm-held"
+  printf 'idle bare shell after captain-held transfer\n' > "$capture_file"
+  printf 'window=%s\nkind=ship\nharness=grok\nbackend=tmux\n' "$window" > "$state/held.meta"
+  printf 'captain-held [key=route]: tracked by held-decision-route\n' > "$statusf"
+  back=$(( $(date +%s) - 500 ))
+  if [ "$(uname)" = Darwin ]; then touch -mt "$(date -r "$back" '+%Y%m%d%H%M.%S')" "$statusf"
+  else touch -m -d "@$back" "$statusf"; fi
+  sig=$(seen_sig "$statusf"); printf '%s' "$sig" > "$state/.seen-held_status"
+  key=$(printf '%s' "$window" | tr ':/.' '___')
+  pane_hash=$(hash_text "idle bare shell after captain-held transfer")
+  printf '%s' "$pane_hash" > "$state/.hash-$key"
+  printf '1\n' > "$state/.count-$key"
+  # Away mode already surfaced this exact hold state: its task-keyed marker
+  # holds the fold digest, so normal mode must absorb silently.
+  digest=$(bash -c '. "$1"; status_open_captain_holds "$2"' _ \
+    "$ROOT/bin/fm-classify-lib.sh" "$statusf")
+  printf '%s' "$digest" > "$state/.subsuper-captain-held-surfaced-held"
+  round=1
+  while [ "$round" -le 2 ]; do
+    PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CAPTURE="$capture_file" \
+      FM_FAKE_TMUX_CURRENT_COMMAND=zsh FM_FAKE_CREW_STATE='state: stopped · source: pane · bare shell' \
+      FM_STATE_OVERRIDE="$state" FM_CREW_STATE_BIN="$fakebin/fm-crew-state.sh" FM_PAUSE_RESURFACE_SECS=240 FM_POLL=1 FM_SIGNAL_GRACE=1 \
+      FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 "$WATCH" >> "$out" &
+    pid=$!
+    if wait_live "$pid" 15; then reap "$pid"; else wait "$pid" || fail "captain-held away-surfaced watcher round $round failed"; fi
+    round=$((round + 1))
+  done
+  wakes=$(awk -F '\t' -v w="$window" '$3 == "stale" && $4 == w { n++ } END { print n + 0 }' "$state/.wake-queue" 2>/dev/null || true)
+  case "$wakes" in ''|*[!0-9]*) wakes=0 ;; esac
+  [ "$wakes" -eq 0 ] || fail "normal mode re-surfaced a dead-agent hold away mode already surfaced ($wakes wakes)"
+  grep -F "agent exited" "$state/.wake-queue" >/dev/null \
+    && fail "normal mode re-emitted the loss-risk reason for an away-surfaced hold"
+  pass "a dead-agent captain-held hold already surfaced in away mode absorbs in normal mode"
+}
+
 # The captain-held quiet-state fold is STREAM-TRUTH (fm-classify-lib.sh owns the
 # policy): a captain-held line opens its key, an explicit resolved: line closes
 # it, and the declared-wait gate follows the fold only while the last line still
@@ -1993,6 +2035,7 @@ test_pause_due_fold_is_shared_and_groups_by_reason
 test_pause_due_fold_preserves_empty_notes
 test_pause_due_fold_dedupes_shared_window
 test_declared_wait_policies_paused_bounded_captain_held_silent
+test_captain_held_dead_agent_away_marker_absorbs_in_normal_mode
 test_status_open_captain_holds_fold_is_stream_truth
 test_postcolon_keyed_lines_stay_under_default_key
 test_postcolon_invalid_key_folds_under_default

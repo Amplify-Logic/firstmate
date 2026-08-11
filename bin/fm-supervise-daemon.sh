@@ -438,7 +438,12 @@ classify_stale() {  # <window> <state>
     else
       alive=$(fm_backend_agent_alive "$(task_window_backend "$win" "$state")" "$win" 2>/dev/null) || alive=unknown
       if [ "$alive" = dead ]; then
-        if [ "$(cat "$state/.subsuper-captain-held-surfaced-$(_stale_key "$task")" 2>/dev/null || true)" != "$digest" ]; then
+        # One surface per hold state GLOBALLY across supervision modes: absorb
+        # when either the away-mode marker or the watcher's normal-mode marker
+        # already holds this fold digest, so switching between normal and AFK
+        # supervision cannot re-escalate the same unchanged dead agent.
+        if [ "$(cat "$state/.subsuper-captain-held-surfaced-$(_stale_key "$task")" 2>/dev/null || true)" != "$digest" ] \
+          && [ "$(cat "$state/.captain-held-surfaced-$(printf '%s' "$win" | tr ':/.' '___')" 2>/dev/null || true)" != "$digest" ]; then
           printf 'escalate|captain-held, agent exited (work at risk once the answer lands): %s' "$(printf '%s' "$digest" | tr '\n' ' ')"
         else
           printf 'absorb|captain-held (declared wait), absorbed (dead agent already surfaced): %s' "$last"
@@ -1491,6 +1496,7 @@ handle_wake() {  # <reason> <state>
           task=$(window_to_task "$arg" "$state")
           digest=$(status_open_captain_holds "$state/$task.status")
           printf '%s' "$digest" > "$state/.subsuper-captain-held-surfaced-$(_stale_key "$task")"
+          printf '%s' "$digest" > "$state/.captain-held-surfaced-$(printf '%s' "$arg" | tr ':/.' '___')"
           ;;
       esac
       [ "${FM_ESCALATE_BATCH_SECS:-$ESCALATE_BATCH_SECS_DEFAULT}" -le 0 ] && { escalate_flush "$state" || true; }

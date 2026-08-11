@@ -507,12 +507,19 @@ handle_paused_stale() {  # <window> <task> <hash>
     # and a later resolution (which empties or changes the fold) naturally
     # supersedes it.
     surf="$STATE/.captain-held-surfaced-$key"
-    if [ "$(cat "$surf" 2>/dev/null || true)" != "$digest" ]; then
+    # Away mode records the same one-shot in .subsuper-captain-held-surfaced
+    # (task-keyed), so the surface is global across supervision modes: if
+    # either marker already holds this fold digest, this hold state woke
+    # before and must not wake again when supervision changes hands.
+    surf_away="$STATE/.subsuper-captain-held-surfaced-$(printf '%s' "$task" | tr ':/.' '___')"
+    if [ "$(cat "$surf" 2>/dev/null || true)" != "$digest" ] \
+      && [ "$(cat "$surf_away" 2>/dev/null || true)" != "$digest" ]; then
       alive=$(fm_backend_agent_alive "$(window_backend "$win")" "$win" 2>/dev/null) || alive=unknown
       if [ "$alive" = dead ]; then
         reason="stale: $win (captain-held, agent exited: the worker is gone while a decision is owed, so its work is at risk once the answer lands)"
         fm_wake_append stale "$win" "$reason" || exit 1
         printf '%s' "$digest" > "$surf"
+        printf '%s' "$digest" > "$surf_away"
         wake "$reason"
       fi
     fi
