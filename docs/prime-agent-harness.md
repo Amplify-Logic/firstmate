@@ -40,7 +40,7 @@ A later turn that used the Python tool spawned `.../lab/agent/kernel-venv/bin/py
 
 The CLI sets `process.title = "prime-agent"` (`packages/coding-agent/src/cli-main.ts:18`).
 In a live pane: `#{pane_current_command}` = `node`, the pane pid is the shell, and the foreground child reports `ps -o comm=` = `prime-agent` and `ps -o args=` = `prime-agent`.
-This is the same node+argv resolution class as cursor; `bin/fm-tmux-lib.sh`'s `fm_tmux_pane_is_prime_agent` checks the pane pid and its direct children for a `prime-agent` argv.
+This is the same node+argv resolution class as cursor; `bin/fm-tmux-lib.sh`'s `fm_tmux_pane_is_prime_agent` walks the pane's descendant tree, bounded at five levels, for a `prime-agent` argv.
 
 ### Busy signature
 
