@@ -105,9 +105,9 @@ test_prime_marker_beats_pi_marker() {
   # Every PRIME_AGENT_* marker must outrank the inherited pi marker, whichever
   # one a worker's environment happens to carry.
   for marker in PRIME_AGENT_INTERNAL_DAEMON_WORKER PRIME_AGENT_CODING_AGENT_DIR \
-                PRIME_AGENT_LAUNCHER_PATH PRIME_AGENT_BUILD_ID; do
+                PRIME_AGENT_KERNEL_VENV PRIME_AGENT_LAUNCHER_PATH PRIME_AGENT_BUILD_ID; do
     out=$(env -u PRIME_AGENT_INTERNAL_DAEMON_WORKER -u PRIME_AGENT_CODING_AGENT_DIR \
-          -u PRIME_AGENT_LAUNCHER_PATH -u PRIME_AGENT_BUILD_ID \
+          -u PRIME_AGENT_KERNEL_VENV -u PRIME_AGENT_LAUNCHER_PATH -u PRIME_AGENT_BUILD_ID \
           "$marker"=1 PI_CODING_AGENT=true "$ROOT/bin/fm-harness.sh")
     [ "$out" = prime-agent ] || fail "$marker with PI_CODING_AGENT=true detected '$out', expected prime-agent"
   done
@@ -117,8 +117,8 @@ test_prime_marker_beats_pi_marker() {
 test_pi_detection_unregressed() {
   local out
   out=$(env -u PRIME_AGENT_INTERNAL_DAEMON_WORKER -u PRIME_AGENT_CODING_AGENT_DIR \
-        -u PRIME_AGENT_LAUNCHER_PATH -u PRIME_AGENT_BUILD_ID -u CURSOR_AGENT \
-        PI_CODING_AGENT=true "$ROOT/bin/fm-harness.sh")
+        -u PRIME_AGENT_KERNEL_VENV -u PRIME_AGENT_LAUNCHER_PATH -u PRIME_AGENT_BUILD_ID \
+        -u CURSOR_AGENT -u CLAUDECODE PI_CODING_AGENT=true "$ROOT/bin/fm-harness.sh")
   [ "$out" = pi ] || fail "pi detection regressed: '$out'"
   pass "pi detection is unchanged when no PRIME_AGENT_* marker is present"
 }

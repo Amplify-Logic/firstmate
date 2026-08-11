@@ -31,8 +31,11 @@ make_spawn_case() {
     # prime-agent's per-task daemon socket lives under the state dir and AF_UNIX
     # caps sun_path at 104 bytes, so a TMPDIR-anchored state home is a REAL
     # runtime refusal on macOS, not a test artifact. These cases get a short
-    # state dir, symlinked so $HOME_DIR/state assertions keep working.
-    STATE_DIR_SHORT=$(mktemp -d /tmp/fm-pa-state.XXXXXX)
+    # state dir, symlinked so $HOME_DIR/state assertions keep working. The
+    # guard measures the PHYSICAL path (/tmp resolves to /private/tmp on
+    # macOS), so the template must stay short enough for the longest case id
+    # after that resolution.
+    STATE_DIR_SHORT=$(mktemp -d /tmp/pa.XXXXXX)
     FM_TEST_CLEANUP_DIRS+=("$STATE_DIR_SHORT")
     ln -s "$STATE_DIR_SHORT" "$HOME_DIR/state"
   else

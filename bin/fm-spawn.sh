@@ -696,12 +696,32 @@ if [ "$HARNESS" = prime-agent ]; then
   # The per-task daemon socket lives at $STATE/<id>.prime-agent-home/daemon.sock
   # and AF_UNIX sockets cap sun_path at 104 bytes (hit live in the test lab on
   # macOS's deep TMPDIR). Refuse an over-long path here, before any endpoint,
-  # rather than letting the daemon fail to bind at worker runtime. The 30
-  # covers "/<id>.prime-agent-home/daemon.sock" minus the id itself plus the
-  # separators; the 100 threshold leaves a few bytes for symlink
-  # canonicalization (e.g. /tmp -> /private/tmp).
-  if [ $(( ${#STATE} + ${#ID} + 30 )) -gt 100 ]; then
-    echo "error: prime-agent daemon socket path '$STATE/$ID.prime-agent-home/daemon.sock' risks exceeding the 104-byte AF_UNIX limit; use a shorter task id or state home" >&2
+  # rather than letting the daemon fail to bind at worker runtime. The launch
+  # substitutes the PHYSICAL state path (STATE_REAL, pwd -P), so the guard must
+  # measure that, not the logical $STATE: symlink canonicalization can add more
+  # bytes than any slack (e.g. /tmp -> /private/tmp adds 8). $STATE may not
+  # exist yet (its mkdir happens later), so resolve the nearest existing
+  # ancestor and re-append the missing tail. The 30 covers
+  # "/<id>.prime-agent-home/daemon.sock" minus the id itself plus the
+  # separators; the 100 threshold keeps a few spare bytes under 104.
+  pa_state_phys=$STATE
+  pa_state_tail=
+  while [ -n "$pa_state_phys" ] && [ ! -d "$pa_state_phys" ]; do
+    pa_state_tail="/${pa_state_phys##*/}$pa_state_tail"
+    pa_state_phys=${pa_state_phys%/*}
+  done
+  if [ -n "$pa_state_phys" ]; then
+    pa_state_phys=$(cd "$pa_state_phys" 2>/dev/null && pwd -P) || pa_state_phys=${STATE%"$pa_state_tail"}
+  fi
+  if [ "$pa_state_phys" = / ]; then
+    pa_state_phys=
+  fi
+  pa_state_phys=$pa_state_phys$pa_state_tail
+  if [ -z "$pa_state_phys" ]; then
+    pa_state_phys=$STATE
+  fi
+  if [ $(( ${#pa_state_phys} + ${#ID} + 30 )) -gt 100 ]; then
+    echo "error: prime-agent daemon socket path '$pa_state_phys/$ID.prime-agent-home/daemon.sock' risks exceeding the 104-byte AF_UNIX limit; use a shorter task id or state home" >&2
     exit 1
   fi
 fi

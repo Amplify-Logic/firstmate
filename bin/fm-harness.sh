@@ -55,6 +55,7 @@ detect_own() {
   # CURSOR_AGENT below (verified 2026-08-06, v0.7.0; data/fm-prime-agent-trial-t1).
   if [ -n "${PRIME_AGENT_INTERNAL_DAEMON_WORKER:-}" ] || \
      [ -n "${PRIME_AGENT_CODING_AGENT_DIR:-}" ] || \
+     [ -n "${PRIME_AGENT_KERNEL_VENV:-}" ] || \
      [ -n "${PRIME_AGENT_LAUNCHER_PATH:-}" ] || \
      [ -n "${PRIME_AGENT_BUILD_ID:-}" ]; then
     echo prime-agent; return

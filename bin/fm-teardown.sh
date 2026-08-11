@@ -262,7 +262,9 @@ prime_agent_daemon_stop() {  # <state-dir> <id>
   done
   if [ -n "$hash" ]; then
     local wdir
-    wdir="${TMPDIR:-/tmp}/prime-agent-$(id -u)"
+    wdir="${TMPDIR:-/tmp}"
+    wdir="${wdir%/}/prime-agent-$(id -u)"
+    [ -d "$wdir" ] && wdir=$(cd "$wdir" && pwd -P)
     for wsock in "$wdir"/worker-"$hash"-*.sock; do
       [ -S "$wsock" ] || continue
       for wpid in $(lsof -U 2>/dev/null | awk -v s="$wsock" '$NF == s {print $2}' | sort -u); do
@@ -1105,7 +1107,7 @@ validate_firstmate_home_children_removal() {
 }
 
 cleanup_firstmate_home_children() {
-  local home=$1 sub_state child_meta child_id child_t child_wt child_proj child_kind child_home child_backend child_orca_worktree_id child_return_rc
+  local home=$1 sub_state child_meta child_id child_t child_wt child_proj child_kind child_home child_backend child_harness child_orca_worktree_id child_return_rc
   sub_state="$home/state"
   [ -d "$sub_state" ] || return 0
   for child_meta in "$sub_state"/*.meta; do
@@ -1115,6 +1117,7 @@ cleanup_firstmate_home_children() {
     child_proj=$(meta_value "$child_meta" project)
     child_kind=$(meta_value "$child_meta" kind)
     [ -n "$child_kind" ] || child_kind=ship
+    child_harness=$(meta_value "$child_meta" harness)
     child_backend=$(fm_backend_of_meta "$child_meta")
     if [ "$child_backend" = orca ]; then
       child_t=$(meta_value "$child_meta" terminal)
@@ -1165,6 +1168,9 @@ cleanup_firstmate_home_children() {
       else
         safe_rm_rf_child_worktree "$child_wt" "$child_proj"
       fi
+    fi
+    if [ "$child_harness" = prime-agent ]; then
+      prime_agent_daemon_stop "$sub_state" "$child_id" || true
     fi
     remove_grok_turnend_auth "$sub_state" "$child_id"
     remove_pr_poll_artifacts "$sub_state" "$child_id" || return 1
