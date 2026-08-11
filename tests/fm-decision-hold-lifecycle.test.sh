@@ -410,6 +410,52 @@ test_resolve_retry_interrupted_then_reused_does_not_close_decision() {
   pass "an interrupted resolve retry cannot close a decision re-opened under the same key"
 }
 
+# Ruling (resolve-race-closes-reused-decision): a live origin that re-opens the
+# same key in a fresh needs-decision WHILE the initial resolve's durable updates
+# are running must not have that new decision closed by the resolve's closing
+# line. The decisions fold collapses to the latest note per key, so the guard
+# snapshots the key's open note before the updates and withholds the closing
+# line when the note changed by retire time; the durable resolution still lands.
+test_resolve_does_not_close_a_reopened_key() {
+  local home id hold lines open show
+  home=$(make_home reopened-key-race)
+  id=sample-race-review
+  mkdir -p "$home/data/$id"
+  tasks_in "$home" add "$id" "Race review" --kind scout --repo sample --start >/dev/null \
+    || fail "could not create origin fixture"
+  write_origin_meta "$home" "$id"
+  printf 'needs-decision [key=race]: pick the first shape\n' > "$home/state/$id.status"
+  hold=$(run_decisions "$home" hold "$id" race \
+    --title "Pick the race shape" --reason "captain race pending" --repo sample) \
+    || fail "could not register race hold"
+  tasks_in "$home" add race-dep "Race dependent" --kind ship --repo sample >/dev/null \
+    || fail "could not create dependent"
+  tasks_in "$home" block race-dep --by "$hold" >/dev/null || fail "could not block dependent"
+  # A live origin re-opens the key while the resolve's durable updates run: the
+  # fake tasks-axi appends the fresh needs-decision on the resolve's first
+  # update call, between verify_hold_active and the closing line.
+  cat > "$home/fakebin/tasks-axi" <<'EOF'
+#!/usr/bin/env bash
+if [ "${1:-}" = update ]; then
+  printf 'needs-decision [key=race]: pick a NEW shape (re-opened mid-resolution)\n' >> "$FM_STATE_OVERRIDE/sample-race-review.status"
+fi
+exec "$REAL_TASKS_AXI" "$@"
+EOF
+  chmod +x "$home/fakebin/tasks-axi"
+  printf 'Use the first shape.\n' > "$home/race-decision.txt"
+  run_decisions "$home" resolve "$id" race --decision-file "$home/race-decision.txt" \
+    --routed-to race-dep >/dev/null || fail "initial resolve failed"
+  lines=$(grep -cF "retired by fm-decision-hold" "$home/state/$id.status" || true)
+  [ "$lines" -eq 0 ] || fail "resolve closed a key re-opened mid-resolution (retired count $lines)"
+  open=$(bash -c '. "$1"; status_open_decisions "$2"' _ \
+    "$ROOT/bin/fm-classify-lib.sh" "$home/state/$id.status")
+  printf '%s\n' "$open" | cut -f1 | grep -qxF "race" \
+    || fail "the re-opened decision was hidden by the initial resolve: $(printf '%s' "$open" | tr '\n' ' ')"
+  show=$(tasks_in "$home" show "$hold" --full)
+  assert_contains "$show" "state: done" "durable resolution did not land despite the withheld closing line"
+  pass "an initial resolve cannot close a key re-opened while it was routing"
+}
+
 # Ruling (quiet-state-regrant-via-resolved-hold): a crew that re-uses a
 # previously-resolved decision key in a NEW needs-decision line must not get a
 # fresh captain-held transfer pointing at the RETIRED backlog item - that would
@@ -751,6 +797,7 @@ test_structured_holds_survive_teardown_and_route_resolution
 test_resolve_emits_closing_status_line_retiring_the_hold
 test_resolve_retry_does_not_close_a_reused_key
 test_resolve_retry_interrupted_then_reused_does_not_close_decision
+test_resolve_does_not_close_a_reopened_key
 test_complete_refuses_reused_resolved_decision_key
 test_origin_slug_validation_precedes_path_construction
 test_visual_review_uses_shared_completion_owner

@@ -512,7 +512,18 @@ command_resolve() {
   done
   tasks_axi "done" "$id" >/dev/null || fail "could not close resolved captain hold $id"
   verify_hold_resolved "$id" || fail "captain hold $id did not retain its durable resolution record"
-  retire_origin_hold_status "$origin" "$key" "$id"
+  # A live origin may have re-opened the key in a fresh needs-decision while
+  # the durable updates ran. The closing line drops the key from both folds,
+  # so withhold it when the key is open in status_open_decisions at retire
+  # time: the normal flow has the key closed by its captain-held line, so an
+  # open key here means a fresh decision superseded the one being resolved and
+  # must stay visible. Mirrors the retry path's decision-fold check.
+  decision_open=$(status_open_decisions "$STATE/$origin.status")
+  if printf '%s\n' "$decision_open" | cut -f1 | grep -qxF "$key"; then
+    printf 'warning: origin re-opened decision key %s during resolution; closing line withheld\n' "$key" >&2
+  else
+    retire_origin_hold_status "$origin" "$key" "$id"
+  fi
   printf 'resolved: %s -> %s\n' "$id" "$routed"
 }
 
