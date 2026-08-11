@@ -57,7 +57,8 @@ How the reply lands depends on whether the work finishes during this turn:
      The exact resolution and fail-safe posting contract is owned by `docs/configuration.md`.
      If a recovery respawns the same relay request onto a successor task, relink with the paired `--carry-count <n> --carry-ts <epoch>` flags plus any prior `x_platform=` and `x_reply_max_chars=` as `--carry-platform <x|discord> --carry-max <n>` so the successor keeps the consumed follow-up count, original 7-day window, and reply split budget.
   4. **Follow up on genuine milestones, sparingly.** Firstmate gets up to **three** follow-ups per mention, within a 7-day window, chained in the same thread - spend them only on changes the captain would actually want to hear about (e.g. investigation done and a build started, work shipped or ready, or the task failing), never on routine internal churn.
-     A task without a promised-final commitment posts its final outcome - shipped / reported / merged / failed - with `--final`, which clears the link regardless of how many follow-ups remain. A typed promised-final commitment uses the deterministic consumer instead.
+     A task without a promised-final commitment posts its final outcome - shipped / reported / merged / failed - with `--final`, which clears the link regardless of how many follow-ups remain.
+     A typed promised-final commitment uses the deterministic consumer instead.
      That posting happens on the task's milestone and completion wakes (see "Completion follow-up" below), not this turn.
 
 So every drained mention sorts into one of three cases (the worthiness judgment, widened):
@@ -199,7 +200,9 @@ This skill's own responsibility during the mention-handling turn is linking the 
 - On each such milestone, firstmate checks whether a follow-up is still due with `bin/fm-x-followup.sh --check <task-id>` (prints the `request_id` when the link exists, the count is under the cap, and the window has not lapsed; silent otherwise, pruning an exhausted or expired link).
 - If due, it composes a short, public-safe update and posts it with `bin/fm-x-followup.sh <task-id> --text-file <path>` (or stdin), which posts via the relay's follow-up endpoint; a successful non-final post increments the counter and keeps the link so a later milestone can still post against it.
   When the update carries one real visual artifact, add `--image <path>`; the helper forwards it to `bin/fm-x-reply.sh --followup` so the same image contract used for ordinary replies applies here too.
-- On a terminal wake (PR merged / scout report / local merge / failed), firstmate posts the task's **final** outcome ("done, here's the result"; for a failure, an honest "this one didn't pan out") with `bin/fm-x-followup.sh <task-id> --final --text-file <path>` only when no promised-final public commitment is registered for that work. When the promised-final procedure above applies, `bin/fm-public-followup.sh consume` and `deliver` own the terminal reply and clear the legacy link at the validated receipt boundary, so do not call `fm-x-followup.sh --final` for the same outcome. If delivery reports that link cleanup needs reconciliation, do not post anything else; `bin/fm-x-followup.sh --clear <task-id>` is the clear-only recovery command in the bound work home.
+- On a terminal wake (PR merged / scout report / local merge / failed), firstmate posts the task's **final** outcome ("done, here's the result"; for a failure, an honest "this one didn't pan out") with `bin/fm-x-followup.sh <task-id> --final --text-file <path>` only when no promised-final public commitment is registered for that work.
+  When the promised-final procedure above applies, `bin/fm-public-followup.sh consume` and `deliver` own the terminal reply and clear the legacy link at the validated receipt boundary, so do not call `fm-x-followup.sh --final` for the same outcome.
+  If delivery reports that link cleanup needs reconciliation, do not post anything else; `bin/fm-x-followup.sh --clear <task-id>` is the clear-only recovery command in the bound work home.
 - Every follow-up is held to the exact same public-safety bar as every reply here: outcomes only, no task ids, internals, captain-private material, or secrets. Past the window, past the cap, or on the relay's own rejection of an exhausted binding, a follow-up attempt is skipped silently and the link is cleared - never treated as a failure worth retrying.
 - If either a follow-up's platform or explicit budget cannot be authoritatively resolved from per-request context, inbox payload, or relay answer, `bin/fm-x-followup.sh` does NOT post it: the fail-safe holds it (the link is kept, exit non-zero) rather than use a local default. This is a retryable hold - a later milestone wake retries it once both values are recoverable.
 
@@ -233,7 +236,10 @@ This section is the sole owner of that procedure.
    - "still waiting on its bound work" means the work has not reported a typed terminal result yet - do not post.
    - "recorded as retryable" means nothing was posted; retry on a later wake.
    - "held" means the thread's platform or budget is unresolvable right now; retry once it is recoverable.
-   - "mid-delivery" means a previous post started and its outcome was never recorded. Do NOT deliver again. Establish whether that post landed, then either close it with `record-posted <id> --attempt <n> --chunks <exact-count>` or escalate. Posting again would put a second reply in a public thread.
+   - "mid-delivery" means a previous post started and its outcome was never recorded.
+     Do NOT deliver again.
+     Establish whether that post landed, then either close it with `record-posted <id> --attempt <n> --chunks <exact-count>` or escalate.
+     Posting again would put a second reply in a public thread.
    - "the relay no longer accepts a follow-up" is a captain decision, not a retry.
 
 Cleanup refuses while a commitment is still owed for that exact work, so never reach for `--force` to get past it.
