@@ -119,6 +119,27 @@ test_normal_correlated_reply_resolves_once() {
   pass "normal correlated reply resolves once (idempotent)"
 }
 
+test_delivery_confirmation_cannot_regress_resolved_phase() {
+  local home state corr rec lock waiter_pid
+  home=$(setup_parent delivery-resolve-race)
+  state="$home/state"
+  corr=$(fm_pending_reply_create "$home" "$state" domain "race report")
+  rec=$(fm_pending_reply_path "$state" "$corr")
+  fm_pending_reply_set "$rec" phase delivery_unknown
+  lock=$(fm_pending_reply_lock_path "$rec")
+  fm_lock_acquire_wait "$lock"
+  fm_pending_reply_mark_delivered "$state" "$corr" 1234 &
+  waiter_pid=$!
+  fm_pending_reply_set_unlocked "$rec" phase resolved
+  fm_lock_release "$lock"
+  wait "$waiter_pid" || fail "delayed delivery confirmation failed"
+  [ "$(fm_pending_reply_get "$rec" phase)" = resolved ] \
+    || fail "delivery confirmation regressed a resolved expectation"
+  [ "$(fm_pending_reply_get "$rec" delivered_epoch)" = 1234 ] \
+    || fail "delivery confirmation did not retain its independent fact"
+  pass "delivery confirmation cannot regress a concurrent resolved transition"
+}
+
 test_completed_turn_no_report_triggers_one_recovery() {
   local home state corr hook_log rec
   home=$(setup_parent one-recovery)
@@ -894,6 +915,7 @@ test_dead_secondmate_escalates_without_reposting() {
 # --- run --------------------------------------------------------------------
 
 test_normal_correlated_reply_resolves_once
+test_delivery_confirmation_cannot_regress_resolved_phase
 test_completed_turn_no_report_triggers_one_recovery
 test_recovery_attempt_is_never_reinjected
 test_recovery_reply_resolves_original

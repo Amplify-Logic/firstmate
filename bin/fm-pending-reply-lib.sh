@@ -171,14 +171,26 @@ fm_pending_reply_corr_reusable() {  # <state-dir> <corr_id> <task_id>
   return 1
 }
 
-# Rewrite one key in a pending-reply record atomically. Other keys preserved.
-fm_pending_reply_set() {  # <record-path> <key> <value>
-  local rec=$1 key=$2 value=$3 dir base tmp line lock rc=0
+fm_pending_reply_lock_path() {  # <record-path>
+  printf '%s/.%s.lock' "$(dirname "$1")" "$(basename "$1")"
+}
+
+fm_pending_reply_with_record_lock() {  # <record-path> <function> [args...]
+  local rec=$1 callback=$2 lock
+  shift 2
+  lock=$(fm_pending_reply_lock_path "$rec")
+  (
+    fm_lock_acquire_wait "$lock"
+    trap 'fm_lock_release "$lock"' EXIT
+    "$callback" "$@"
+  )
+}
+
+fm_pending_reply_set_unlocked() {  # <record-path> <key> <value>
+  local rec=$1 key=$2 value=$3 dir base tmp line rc=0
   [ -f "$rec" ] || return 1
   dir=$(dirname "$rec")
   base=$(basename "$rec")
-  lock="$dir/.${base}.lock"
-  fm_lock_acquire_wait "$lock"
   tmp="$dir/.${base}.tmp.$$"
   : > "$tmp" || rc=1
   while IFS= read -r line || [ -n "$line" ]; do
@@ -190,8 +202,12 @@ fm_pending_reply_set() {  # <record-path> <key> <value>
   printf '%s=%s\n' "$key" "$value" >> "$tmp" || rc=1
   [ "$rc" -eq 0 ] && mv -f "$tmp" "$rec" || rc=1
   [ "$rc" -eq 0 ] || rm -f "$tmp"
-  fm_lock_release "$lock"
   return "$rc"
+}
+
+# Rewrite one key in a pending-reply record atomically. Other keys preserved.
+fm_pending_reply_set() {  # <record-path> <key> <value>
+  fm_pending_reply_with_record_lock "$1" fm_pending_reply_set_unlocked "$@"
 }
 
 # Embed or replace a correlation token after the from-firstmate marker.
@@ -283,6 +299,13 @@ EOF
 
 # Mark delivery success for an existing expectation. Never resolves.
 fm_pending_reply_mark_delivered() {  # <state-dir> <corr_id> [confirmed-epoch]
+  local rec
+  rec=$(fm_pending_reply_path "$1" "$2")
+  [ -f "$rec" ] || return 1
+  fm_pending_reply_with_record_lock "$rec" fm_pending_reply_mark_delivered_locked "$@"
+}
+
+fm_pending_reply_mark_delivered_locked() {  # <state-dir> <corr_id> [confirmed-epoch]
   local state=$1 corr=$2 confirmed_epoch=${3-} rec phase delivered now
   rec=$(fm_pending_reply_path "$state" "$corr")
   [ -f "$rec" ] || return 1
@@ -294,10 +317,10 @@ fm_pending_reply_mark_delivered() {  # <state-dir> <corr_id> [confirmed-epoch]
   delivered=$(fm_pending_reply_get "$rec" delivered_epoch)
   if [ -z "$delivered" ]; then
     now=${confirmed_epoch:-$(fm_pending_reply_now)}
-    fm_pending_reply_set "$rec" delivered_epoch "$now" || return 1
+    fm_pending_reply_set_unlocked "$rec" delivered_epoch "$now" || return 1
   fi
   if [ "$phase" = delivery_unknown ]; then
-    fm_pending_reply_set "$rec" phase awaiting_report || return 1
+    fm_pending_reply_set_unlocked "$rec" phase awaiting_report || return 1
   fi
   return 0
 }
@@ -318,6 +341,13 @@ fm_pending_reply_write_delivery_confirmation() {  # <state-dir> <corr_id> <state
 }
 
 fm_pending_reply_prepare_delivery() {  # <state-dir> <corr_id>
+  local rec
+  rec=$(fm_pending_reply_path "$1" "$2")
+  [ -f "$rec" ] || return 1
+  fm_pending_reply_with_record_lock "$rec" fm_pending_reply_prepare_delivery_locked "$@"
+}
+
+fm_pending_reply_prepare_delivery_locked() {  # <state-dir> <corr_id>
   local state=$1 corr=$2 rec delivered marker now
   rec=$(fm_pending_reply_path "$state" "$corr")
   [ -f "$rec" ] || return 1
@@ -345,6 +375,13 @@ fm_pending_reply_confirm_delivery() {  # <state-dir> <corr_id>
 }
 
 fm_pending_reply_reconcile_delivery() {  # <state-dir> <corr_id>
+  local rec
+  rec=$(fm_pending_reply_path "$1" "$2")
+  [ -f "$rec" ] || return 1
+  fm_pending_reply_with_record_lock "$rec" fm_pending_reply_reconcile_delivery_locked "$@"
+}
+
+fm_pending_reply_reconcile_delivery_locked() {  # <state-dir> <corr_id>
   local state=$1 corr=$2 rec delivered marker entry delivery_state value epoch
   local grace now age phase
   rec=$(fm_pending_reply_path "$state" "$corr")
@@ -363,7 +400,7 @@ fm_pending_reply_reconcile_delivery() {  # <state-dir> <corr_id>
     confirmed)
       epoch=$value
       case "$epoch" in ''|*[!0-9]*) return 1 ;; esac
-      fm_pending_reply_mark_delivered "$state" "$corr" "$epoch" || return 1
+      fm_pending_reply_mark_delivered_locked "$state" "$corr" "$epoch" || return 1
       rm -f "$marker" 2>/dev/null || true
       return 0
       ;;
@@ -377,7 +414,7 @@ fm_pending_reply_reconcile_delivery() {  # <state-dir> <corr_id>
       [ "$age" -ge "$grace" ] || return 1
       phase=$(fm_pending_reply_get "$rec" phase)
       [ "$phase" = awaiting_report ] || return 1
-      fm_pending_reply_set "$rec" phase delivery_unknown || return 1
+      fm_pending_reply_set_unlocked "$rec" phase delivery_unknown || return 1
       return 0
       ;;
   esac
@@ -387,6 +424,13 @@ fm_pending_reply_reconcile_delivery() {  # <state-dir> <corr_id>
 # Drop an undelivered expectation after a failed send so transport failure does
 # not masquerade as a missed report later.
 fm_pending_reply_discard_undelivered() {  # <state-dir> <corr_id>
+  local rec
+  rec=$(fm_pending_reply_path "$1" "$2")
+  [ -f "$rec" ] || return 0
+  fm_pending_reply_with_record_lock "$rec" fm_pending_reply_discard_undelivered_locked "$@"
+}
+
+fm_pending_reply_discard_undelivered_locked() {  # <state-dir> <corr_id>
   local state=$1 corr=$2 rec delivered marker
   rec=$(fm_pending_reply_path "$state" "$corr")
   [ -f "$rec" ] || return 0
@@ -465,6 +509,13 @@ fm_pending_reply_resolve_via_of_line() {  # <line>
 # Idempotently resolve an expectation from a correlated parent report.
 # Returns 0 when the record is resolved after the call (already or newly).
 fm_pending_reply_try_resolve() {  # <state-dir> <corr_id> [status-file-override]
+  local rec
+  rec=$(fm_pending_reply_path "$1" "$2")
+  [ -f "$rec" ] || return 1
+  fm_pending_reply_with_record_lock "$rec" fm_pending_reply_try_resolve_locked "$@"
+}
+
+fm_pending_reply_try_resolve_locked() {  # <state-dir> <corr_id> [status-file-override]
   local state=$1 corr=$2 status_override=${3-}
   local rec phase delivered marker delivery_entry delivery_state status_file signature previous line via now
   local unconfirmed=0
@@ -492,19 +543,19 @@ fm_pending_reply_try_resolve() {  # <state-dir> <corr_id> [status-file-override]
   line=$(fm_pending_reply_find_resolve_line "$status_file" "$corr")
   if [ -z "$line" ]; then
     if [ -z "$status_override" ] && [ "$unconfirmed" = 0 ]; then
-      fm_pending_reply_set "$rec" parent_status_scan_signature "$signature" || return 1
+      fm_pending_reply_set_unlocked "$rec" parent_status_scan_signature "$signature" || return 1
     fi
     return 1
   fi
   via=$(fm_pending_reply_resolve_via_of_line "$line")
   now=$(fm_pending_reply_now)
-  fm_pending_reply_set "$rec" phase resolved || return 1
+  fm_pending_reply_set_unlocked "$rec" phase resolved || return 1
   if [ -z "$delivered" ]; then
-    fm_pending_reply_mark_delivered "$state" "$corr" "$now" || return 1
+    fm_pending_reply_mark_delivered_locked "$state" "$corr" "$now" || return 1
     rm -f "$marker" 2>/dev/null || true
   fi
-  fm_pending_reply_set "$rec" resolved_epoch "$now" || return 1
-  fm_pending_reply_set "$rec" resolved_via "$via" || return 1
+  fm_pending_reply_set_unlocked "$rec" resolved_epoch "$now" || return 1
+  fm_pending_reply_set_unlocked "$rec" resolved_via "$via" || return 1
   return 0
 }
 
@@ -512,6 +563,13 @@ fm_pending_reply_try_resolve() {  # <state-dir> <corr_id> [status-file-override]
 # busy_state must be one of: busy | idle | unknown. A confidently dead agent is
 # handled before this function so a bare shell is never mistaken for an idle turn.
 fm_pending_reply_observe_busy() {  # <state-dir> <corr_id> <busy_state>
+  local rec
+  rec=$(fm_pending_reply_path "$1" "$2")
+  [ -f "$rec" ] || return 1
+  fm_pending_reply_with_record_lock "$rec" fm_pending_reply_observe_busy_locked "$@"
+}
+
+fm_pending_reply_observe_busy_locked() {  # <state-dir> <corr_id> <busy_state>
   local state=$1 corr=$2 busy_state=$3
   local rec phase delivered now seen completed field_seen field_completed
   rec=$(fm_pending_reply_path "$state" "$corr")
@@ -535,7 +593,7 @@ fm_pending_reply_observe_busy() {  # <state-dir> <corr_id> <busy_state>
   case "$busy_state" in
     busy)
       if [ "$seen" != 1 ]; then
-        fm_pending_reply_set "$rec" "$field_seen" 1 || return 1
+        fm_pending_reply_set_unlocked "$rec" "$field_seen" 1 || return 1
       fi
       ;;
     idle)
@@ -543,7 +601,7 @@ fm_pending_reply_observe_busy() {  # <state-dir> <corr_id> <busy_state>
         # Prefer a busy->idle transition. Also accept a pure idle after delivery
         # when the first observation already missed the busy window (fast turns).
         now=$(fm_pending_reply_now)
-        fm_pending_reply_set "$rec" "$field_completed" "$now" || return 1
+        fm_pending_reply_set_unlocked "$rec" "$field_completed" "$now" || return 1
       fi
       ;;
     unknown)
@@ -643,6 +701,16 @@ fm_pending_reply_recovery_message() {  # <record-path>
   printf '%s' "$msg"
 }
 
+fm_pending_reply_claim_recovery_locked() {  # <record-path> <sender-pid> <sender-identity> <epoch>
+  local rec=$1 sender_pid=$2 sender_identity=$3 now=$4
+  [ "$(fm_pending_reply_get "$rec" phase)" = awaiting_report ] || return 1
+  [ -z "$(fm_pending_reply_get "$rec" recovery_attempted_epoch)" ] || return 1
+  fm_pending_reply_set_unlocked "$rec" recovery_sender_pid "$sender_pid" || return 1
+  fm_pending_reply_set_unlocked "$rec" recovery_sender_identity "$sender_identity" || return 1
+  fm_pending_reply_set_unlocked "$rec" recovery_attempted_epoch "$now" || return 1
+  fm_pending_reply_set_unlocked "$rec" phase recovery_sending
+}
+
 # Deliver the recovery message once. Caller must hold phase awaiting_report with
 # turn completed and grace elapsed. Uses FM_PENDING_REPLY_SEND_HOOK when set
 # (tests), otherwise invokes fm-send with FM_PENDING_REPLY_EXISTING_CORR so a
@@ -674,10 +742,8 @@ fm_pending_reply_send_recovery() {  # <state-dir> <corr_id>
   msg=$(fm_pending_reply_recovery_message "$rec")
   sender_pid=${BASHPID:-$$}
   sender_identity=$(fm_pending_reply_pid_identity "$sender_pid") || return 1
-  fm_pending_reply_set "$rec" recovery_sender_pid "$sender_pid" || return 1
-  fm_pending_reply_set "$rec" recovery_sender_identity "$sender_identity" || return 1
-  fm_pending_reply_set "$rec" recovery_attempted_epoch "$now" || return 1
-  fm_pending_reply_set "$rec" phase recovery_sending || return 1
+  fm_pending_reply_with_record_lock "$rec" fm_pending_reply_claim_recovery_locked \
+    "$rec" "$sender_pid" "$sender_identity" "$now" || return 1
   if [ -n "${FM_PENDING_REPLY_SEND_HOOK:-}" ]; then
     # Hook receives: task_id message
     # shellcheck disable=SC2086
@@ -718,28 +784,42 @@ fm_pending_reply_sender_alive() {  # <record-path>
 }
 
 fm_pending_reply_finish_recovery() {  # <state-dir> <corr_id> <confirmed|failed>
+  local rec
+  rec=$(fm_pending_reply_path "$1" "$2")
+  [ -f "$rec" ] || return 1
+  fm_pending_reply_with_record_lock "$rec" fm_pending_reply_finish_recovery_locked "$@"
+}
+
+fm_pending_reply_finish_recovery_locked() {  # <state-dir> <corr_id> <confirmed|failed>
   local state=$1 corr=$2 outcome=$3 rec phase now sent
   rec=$(fm_pending_reply_path "$state" "$corr")
   [ -f "$rec" ] || return 1
   phase=$(fm_pending_reply_get "$rec" phase)
   [ "$phase" = recovery_sending ] || return 1
-  fm_pending_reply_set "$rec" recovery_delivery_outcome "$outcome" || return 1
+  fm_pending_reply_set_unlocked "$rec" recovery_delivery_outcome "$outcome" || return 1
   if [ "$outcome" = confirmed ]; then
     sent=$(fm_pending_reply_get "$rec" recovery_sent_epoch)
     if [ -z "$sent" ]; then
       now=$(fm_pending_reply_now)
-      fm_pending_reply_set "$rec" recovery_sent_epoch "$now" || return 1
+      fm_pending_reply_set_unlocked "$rec" recovery_sent_epoch "$now" || return 1
     fi
-    fm_pending_reply_set "$rec" recovery_turn_seen_busy 0 || return 1
-    fm_pending_reply_set "$rec" recovery_turn_completed_epoch "" || return 1
-    fm_pending_reply_set "$rec" phase recovery_sent || return 1
+    fm_pending_reply_set_unlocked "$rec" recovery_turn_seen_busy 0 || return 1
+    fm_pending_reply_set_unlocked "$rec" recovery_turn_completed_epoch "" || return 1
+    fm_pending_reply_set_unlocked "$rec" phase recovery_sent || return 1
   else
     [ "$outcome" = failed ] || return 1
-    fm_pending_reply_set "$rec" phase recovery_failed || return 1
+    fm_pending_reply_set_unlocked "$rec" phase recovery_failed || return 1
   fi
 }
 
 fm_pending_reply_reconcile_recovery() {  # <state-dir> <corr_id>
+  local rec
+  rec=$(fm_pending_reply_path "$1" "$2")
+  [ -f "$rec" ] || return 1
+  fm_pending_reply_with_record_lock "$rec" fm_pending_reply_reconcile_recovery_locked "$@"
+}
+
+fm_pending_reply_reconcile_recovery_locked() {  # <state-dir> <corr_id>
   local state=$1 corr=$2 rec phase attempted outcome
   rec=$(fm_pending_reply_path "$state" "$corr")
   [ -f "$rec" ] || return 1
@@ -750,28 +830,35 @@ fm_pending_reply_reconcile_recovery() {  # <state-dir> <corr_id>
   case "$attempted" in *[!0-9]*) return 1 ;; esac
   outcome=$(fm_pending_reply_get "$rec" recovery_delivery_outcome)
   case "$outcome" in
-    confirmed) fm_pending_reply_finish_recovery "$state" "$corr" confirmed; return $? ;;
-    failed) fm_pending_reply_finish_recovery "$state" "$corr" failed; return $? ;;
+    confirmed) fm_pending_reply_finish_recovery_locked "$state" "$corr" confirmed; return $? ;;
+    failed) fm_pending_reply_finish_recovery_locked "$state" "$corr" failed; return $? ;;
     unknown)
-      fm_pending_reply_set "$rec" phase recovery_unknown || return 1
+      fm_pending_reply_set_unlocked "$rec" phase recovery_unknown || return 1
       return 0
       ;;
   esac
   fm_pending_reply_sender_alive "$rec" && return 1
-  fm_pending_reply_set "$rec" recovery_delivery_outcome unknown || return 1
-  fm_pending_reply_set "$rec" phase recovery_unknown || return 1
+  fm_pending_reply_set_unlocked "$rec" recovery_delivery_outcome unknown || return 1
+  fm_pending_reply_set_unlocked "$rec" phase recovery_unknown || return 1
 }
 
 # Escalate once after a missed recovery report or failed delivery outcome.
 # Retains the durable unresolved record. Never loops.
 fm_pending_reply_maybe_escalate() {  # <state-dir> <corr_id>
+  local rec
+  rec=$(fm_pending_reply_path "$1" "$2")
+  [ -f "$rec" ] || return 1
+  fm_pending_reply_with_record_lock "$rec" fm_pending_reply_maybe_escalate_locked "$@"
+}
+
+fm_pending_reply_maybe_escalate_locked() {  # <state-dir> <corr_id>
   local state=$1 corr=$2
   local rec phase completed now task_id summary payload parent_status outcome
   rec=$(fm_pending_reply_path "$state" "$corr")
   [ -f "$rec" ] || return 1
   phase=$(fm_pending_reply_get "$rec" phase)
   if [ "$phase" = delivery_unknown ]; then
-    fm_pending_reply_reconcile_delivery "$state" "$corr" || true
+    fm_pending_reply_reconcile_delivery_locked "$state" "$corr" || true
     phase=$(fm_pending_reply_get "$rec" phase)
     [ "$phase" = delivery_unknown ] || return 0
   fi
@@ -784,7 +871,7 @@ fm_pending_reply_maybe_escalate() {  # <state-dir> <corr_id>
     *) return 1 ;;
   esac
   # Resolve wins if a late report arrived between completion and this call.
-  if fm_pending_reply_try_resolve "$state" "$corr"; then
+  if fm_pending_reply_try_resolve_locked "$state" "$corr"; then
     return 0
   fi
   task_id=$(fm_pending_reply_get "$rec" task_id)
@@ -808,8 +895,8 @@ fm_pending_reply_maybe_escalate() {  # <state-dir> <corr_id>
     printf 'blocked: %s\n' "$payload" >> "$parent_status" 2>/dev/null || return 1
   fi
   now=$(fm_pending_reply_now)
-  fm_pending_reply_set "$rec" escalated_epoch "$now" || return 1
-  fm_pending_reply_set "$rec" phase escalated || return 1
+  fm_pending_reply_set_unlocked "$rec" escalated_epoch "$now" || return 1
+  fm_pending_reply_set_unlocked "$rec" phase escalated || return 1
   return 0
 }
 
@@ -865,12 +952,19 @@ fm_pending_reply_detect_wrong_home() {  # <state-dir> <corr_id> <secondmate-home
 # automatic relaunch owner; this guard only reports that a requested answer
 # cannot arrive through the recorded endpoint.
 fm_pending_reply_escalate_dead() {  # <state-dir> <corr_id>
+  local rec
+  rec=$(fm_pending_reply_path "$1" "$2")
+  [ -f "$rec" ] || return 1
+  fm_pending_reply_with_record_lock "$rec" fm_pending_reply_escalate_dead_locked "$@"
+}
+
+fm_pending_reply_escalate_dead_locked() {  # <state-dir> <corr_id>
   local state=$1 corr=$2 rec phase task_id summary parent_status payload now
   rec=$(fm_pending_reply_path "$state" "$corr")
   [ -f "$rec" ] || return 1
   phase=$(fm_pending_reply_get "$rec" phase)
   case "$phase" in resolved|escalated) return 0 ;; esac
-  if fm_pending_reply_try_resolve "$state" "$corr"; then
+  if fm_pending_reply_try_resolve_locked "$state" "$corr"; then
     return 0
   fi
   task_id=$(fm_pending_reply_get "$rec" task_id)
@@ -883,8 +977,8 @@ fm_pending_reply_escalate_dead() {  # <state-dir> <corr_id>
     printf 'blocked: %s\n' "$payload" >> "$parent_status" 2>/dev/null || return 1
   fi
   now=$(fm_pending_reply_now)
-  fm_pending_reply_set "$rec" escalated_epoch "$now" || return 1
-  fm_pending_reply_set "$rec" phase escalated || return 1
+  fm_pending_reply_set_unlocked "$rec" escalated_epoch "$now" || return 1
+  fm_pending_reply_set_unlocked "$rec" phase escalated || return 1
 }
 
 # One reconciliation tick for a single record: resolve, observe, recover, escalate.
