@@ -67,7 +67,7 @@ Use `--keep-lab` only when the temporary runtime home itself is needed for diagn
 | Probe | Outside-the-pane assertion |
 |---|---|
 | Autonomy | The adapter's unattended mode lets a real shell tool create a nonce proof without an approval response. |
-| Composer | A settled composer reads `empty`, and literal unsubmitted input reads `pending`. |
+| Composer | A settled composer reads `empty`, literal unsubmitted input reads `pending`, and the composer clears back to `empty`. |
 | Busy | A deterministic long shell tool call shows the adapter's recorded busy regex, while settled idle chrome does not. |
 | Interrupt | The recorded key ends the active turn, leaves the same runtime process alive, and either prints the recorded interrupt text or ends the turn before the deterministic tool call could have finished on its own. |
 | Turn-end | A native adapter hook writes both an external marker and captured payload after a completed turn. |
