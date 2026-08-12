@@ -21,15 +21,13 @@
 // forge the NUL-delimited placeholder markers used for stashed code and tags.
 // It also owns the private page naming: the page is written 0600 under a 0700
 // output directory and its path is printed on stdout.
+// Invoked as a command it writes that page; imported as a module it exports
+// render(markdown) -> HTML body and touches neither argv nor the filesystem, so
+// bin/fm-chart-room.mjs renders reports through this one Markdown owner.
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-
-const [sourceArg, outputDirArg] = process.argv.slice(2);
-if (!sourceArg || !outputDirArg) {
-  console.error("usage: fm-read.mjs <source.md> <output-dir>");
-  process.exit(2);
-}
+import { fileURLToPath } from "node:url";
 
 const CODE_MARK = String.fromCharCode(0);
 
@@ -281,24 +279,38 @@ pre{max-width:100%;background:var(--card);border:1px solid var(--line);border-ra
 .tw{max-width:100%;overflow-x:auto;margin:18px 0;border:1px solid var(--line);border-radius:10px}table{border-collapse:collapse;width:100%;min-width:420px;font-size:.95rem}
 th,td{text-align:left;padding:11px 15px;border-bottom:1px solid var(--line);vertical-align:top}th{background:rgba(127,127,127,.09);font-size:.79rem;text-transform:uppercase;letter-spacing:.5px;color:var(--dim)}tr:last-child td{border-bottom:0}img{max-width:100%;height:auto}
 `;
-try {
-  const source = fs.realpathSync(sourceArg);
-  const body = render(fs.readFileSync(source, "utf8"));
-  const stem = path.basename(source, path.extname(source));
-  const parent = path.basename(path.dirname(source));
-  const label = stem.toLowerCase() === "report" && parent ? parent : stem;
-  const slug = label.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "report";
-  const digest = crypto.createHash("sha256").update(source).digest("hex").slice(0, 10);
-  const title = escapeHtml(label.replaceAll("-", " ").replace(/\b\w/g, (letter) => letter.toUpperCase()));
-  const html = `<!doctype html>\n<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title><style>${css}</style></head><body><main>\n${body}\n</main></body></html>\n`;
-  const outputDir = path.resolve(outputDirArg);
-  const output = path.join(outputDir, `read-${slug}-${digest}.html`);
-  fs.mkdirSync(outputDir, { recursive: true, mode: 0o700 });
-  fs.chmodSync(outputDir, 0o700);
-  fs.writeFileSync(output, html, { mode: 0o600 });
-  fs.chmodSync(output, 0o600);
-  process.stdout.write(`${output}\n`);
-} catch (err) {
-  console.error(`fm-read.mjs: ${err.message}`);
-  process.exit(1);
+export { render };
+
+function main(sourceArg, outputDirArg) {
+  if (!sourceArg || !outputDirArg) {
+    console.error("usage: fm-read.mjs <source.md> <output-dir>");
+    process.exit(2);
+  }
+  try {
+    const source = fs.realpathSync(sourceArg);
+    const body = render(fs.readFileSync(source, "utf8"));
+    const stem = path.basename(source, path.extname(source));
+    const parent = path.basename(path.dirname(source));
+    const label = stem.toLowerCase() === "report" && parent ? parent : stem;
+    const slug = label.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "report";
+    const digest = crypto.createHash("sha256").update(source).digest("hex").slice(0, 10);
+    const title = escapeHtml(label.replaceAll("-", " ").replace(/\b\w/g, (letter) => letter.toUpperCase()));
+    const html = `<!doctype html>\n<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title><style>${css}</style></head><body><main>\n${body}\n</main></body></html>\n`;
+    const outputDir = path.resolve(outputDirArg);
+    const output = path.join(outputDir, `read-${slug}-${digest}.html`);
+    fs.mkdirSync(outputDir, { recursive: true, mode: 0o700 });
+    fs.chmodSync(outputDir, 0o700);
+    fs.writeFileSync(output, html, { mode: 0o600 });
+    fs.chmodSync(output, 0o600);
+    process.stdout.write(`${output}\n`);
+  } catch (err) {
+    console.error(`fm-read.mjs: ${err.message}`);
+    process.exit(1);
+  }
+}
+
+// Run the writer only when invoked as a command; importing this module for
+// render() alone (bin/fm-chart-room.mjs) must not touch argv or the filesystem.
+if (process.argv[1] && fs.realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  main(...process.argv.slice(2));
 }
