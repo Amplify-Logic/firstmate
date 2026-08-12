@@ -87,8 +87,9 @@ export const FmPrimaryTurnendGuard = async ({ client, directory, worktree }) => 
           body: { parts: [{ type: "text", text }] },
         });
         skipNextIdle = true;
-      } catch {
+      } catch (error) {
         skipNextIdle = false;
+        console.error("turn-end guard delivery failed", error);
       }
     },
   };

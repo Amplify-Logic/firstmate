@@ -29,7 +29,7 @@
 # an explicit backend-target escape-hatch target, and the --key path are never
 # marked - their behavior is unchanged.
 #
-# Every newly marked secondmate request also receives a privacy-safe correlation
+# A newly marked secondmate request with FM_PENDING_REPLY_EXPECT_REPORT=1 receives a privacy-safe correlation
 # id and a durable parent expectation under state/pending-replies/ before
 # delivery. Delivery success and reply success are separate facts: a successful
 # submit never resolves the expectation. FM_PENDING_REPLY_EXISTING_CORR reuses
@@ -68,8 +68,6 @@ fi
 
 # shellcheck source=bin/fm-backend.sh
 . "$SCRIPT_DIR/fm-backend.sh"
-# shellcheck source=bin/fm-marker-lib.sh
-. "$SCRIPT_DIR/fm-marker-lib.sh"
 # shellcheck source=bin/fm-pending-reply-lib.sh
 . "$SCRIPT_DIR/fm-pending-reply-lib.sh"
 
@@ -223,8 +221,8 @@ if [ "${1:-}" = "--key" ]; then
   fi
 else
   MESSAGE=$*
-  if [ "$MARK_FROM_FIRSTMATE" = 1 ]; then
-    existing_corr=${FM_PENDING_REPLY_EXISTING_CORR:-$(fm_pending_reply_extract_corr "$MESSAGE")}
+  if [ "$MARK_FROM_FIRSTMATE" = 1 ] && { [ "${FM_PENDING_REPLY_EXPECT_REPORT:-1}" = 1 ] || [ -n "${FM_PENDING_REPLY_EXISTING_CORR:-}" ]; }; then
+    existing_corr=${FM_PENDING_REPLY_EXISTING_CORR:-}
     if [ -n "$existing_corr" ] \
       && fm_pending_reply_corr_reusable "$STATE" "$existing_corr" "$TARGET_TASK_ID"; then
       PENDING_REPLY_CORR=$existing_corr

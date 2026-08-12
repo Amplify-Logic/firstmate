@@ -747,6 +747,21 @@ EOF
       and (.current.reason | contains("done=done"))
       and (.current.reason | contains("failed=failed"))
   ' >/dev/null || fail "terminal in-flight child states were silently dropped: $canonical"
+  cat > "$mate/data/backlog.md" <<'EOF'
+## In flight
+
+## Queued
+
+## Done
+EOF
+  canonical=$(PATH="$fakebin:$PATH" FM_HOME="$home" FM_SNAPSHOT_NOW=2026-07-11T18:00:00Z \
+    "$ROOT/bin/fm-fleet-snapshot.sh" --json)
+  printf '%s' "$canonical" | jq -e '
+    .secondmate_current.records[] | select(.id == "states")
+    | .current.state == "no_active_work"
+      and .active_children == []
+      and .decisions_open == []
+  ' >/dev/null || fail "unowned terminal child metadata invalidated the home summary: $canonical"
   pass "nonprogressing child states are explicit and inconsistent terminal rows invalidate"
 }
 

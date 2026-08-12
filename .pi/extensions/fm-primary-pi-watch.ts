@@ -148,8 +148,8 @@ export default function (pi: ExtensionAPI) {
   }
 
   function surfaceFailure(message: string): void {
-    void sendWake(message).catch(() => {
-      // Pi owns delivery errors; continuity restoration never waits on prompting.
+    void sendWake(message).catch((error) => {
+      console.error("watcher wake delivery failed", error);
     });
   }
 
@@ -320,7 +320,8 @@ export default function (pi: ExtensionAPI) {
           if (stopping) return;
           const message = failure ? `${classification.message}\n\n${failure}` : classification.message;
           await sendWake(message);
-        })().catch(() => {
+        })().catch((error) => {
+          console.error("watcher continuity restoration failed", error);
         });
         return;
       }

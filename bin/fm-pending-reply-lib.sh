@@ -68,6 +68,8 @@ _FM_PENDING_REPLY_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd 2>/dev/n
 . "$_FM_PENDING_REPLY_LIB_DIR/fm-backend.sh"
 # shellcheck source=bin/fm-tmux-lib.sh
 . "$_FM_PENDING_REPLY_LIB_DIR/fm-tmux-lib.sh"
+# shellcheck source=bin/fm-wake-lib.sh
+. "$_FM_PENDING_REPLY_LIB_DIR/fm-wake-lib.sh"
 
 FM_PENDING_REPLY_SCHEMA='fm-pending-reply.v1'
 FM_PENDING_REPLY_CORR_RE='corr=[A-Fa-f0-9]{16}'
@@ -171,20 +173,25 @@ fm_pending_reply_corr_reusable() {  # <state-dir> <corr_id> <task_id>
 
 # Rewrite one key in a pending-reply record atomically. Other keys preserved.
 fm_pending_reply_set() {  # <record-path> <key> <value>
-  local rec=$1 key=$2 value=$3 dir base tmp line
+  local rec=$1 key=$2 value=$3 dir base tmp line lock rc=0
   [ -f "$rec" ] || return 1
   dir=$(dirname "$rec")
   base=$(basename "$rec")
+  lock="$dir/.${base}.lock"
+  fm_lock_acquire_wait "$lock"
   tmp="$dir/.${base}.tmp.$$"
-  : > "$tmp" || return 1
+  : > "$tmp" || rc=1
   while IFS= read -r line || [ -n "$line" ]; do
     case "$line" in
       "${key}="*) continue ;;
     esac
-    printf '%s\n' "$line" >> "$tmp" || return 1
+    printf '%s\n' "$line" >> "$tmp" || rc=1
   done < "$rec"
-  printf '%s=%s\n' "$key" "$value" >> "$tmp" || return 1
-  mv -f "$tmp" "$rec"
+  printf '%s=%s\n' "$key" "$value" >> "$tmp" || rc=1
+  [ "$rc" -eq 0 ] && mv -f "$tmp" "$rec" || rc=1
+  [ "$rc" -eq 0 ] || rm -f "$tmp"
+  fm_lock_release "$lock"
+  return "$rc"
 }
 
 # Embed or replace a correlation token after the from-firstmate marker.
@@ -535,10 +542,8 @@ fm_pending_reply_observe_busy() {  # <state-dir> <corr_id> <busy_state>
       if [ -z "$completed" ]; then
         # Prefer a busy->idle transition. Also accept a pure idle after delivery
         # when the first observation already missed the busy window (fast turns).
-        if [ "$seen" = 1 ] || [ "$seen" = 0 ]; then
-          now=$(fm_pending_reply_now)
-          fm_pending_reply_set "$rec" "$field_completed" "$now" || return 1
-        fi
+        now=$(fm_pending_reply_now)
+        fm_pending_reply_set "$rec" "$field_completed" "$now" || return 1
       fi
       ;;
     unknown)
@@ -614,10 +619,9 @@ fm_pending_reply_busy_state_from_observation() {  # <record-path> <observation>
 # a completion event without a busy/idle pair).
 fm_pending_reply_mark_turn_completed() {  # <state-dir> <corr_id> [which: request|recovery]
   local state=$1 corr=$2 which=${3:-request}
-  local rec phase field now
+  local rec field now
   rec=$(fm_pending_reply_path "$state" "$corr")
   [ -f "$rec" ] || return 1
-  phase=$(fm_pending_reply_get "$rec" phase)
   case "$which" in
     request) field=request_turn_completed_epoch ;;
     recovery) field=recovery_turn_completed_epoch ;;
@@ -625,10 +629,6 @@ fm_pending_reply_mark_turn_completed() {  # <state-dir> <corr_id> [which: reques
   esac
   now=$(fm_pending_reply_now)
   fm_pending_reply_set "$rec" "$field" "$now" || return 1
-  # Keep phase consistent with which turn completed.
-  if [ "$which" = recovery ] && [ "$phase" = awaiting_report ]; then
-    : # recovery completion only meaningful after recovery_sent
-  fi
   return 0
 }
 
@@ -1065,4 +1065,19 @@ fm_pending_reply_task_has_open() {  # <state-dir> <task_id>
     return 0
   done
   return 1
+}
+
+fm_pending_reply_remove_task() {  # <state-dir> <task_id>
+  local state=$1 task_id=$2 dir rec corr lock
+  dir=$(fm_pending_reply_dir "$state")
+  [ -d "$dir" ] || return 0
+  for rec in "$dir"/*; do
+    [ -f "$rec" ] || continue
+    [ "$(fm_pending_reply_get "$rec" task_id)" = "$task_id" ] || continue
+    corr=$(basename "$rec")
+    lock="$dir/.${corr}.lock"
+    fm_lock_acquire_wait "$lock"
+    rm -f "$rec" "$(fm_pending_reply_delivery_confirmation_path "$state" "$corr")"
+    fm_lock_release "$lock"
+  done
 }
