@@ -766,6 +766,8 @@ test_tick_skips_terminal_and_reuses_target_observation() {
       printf 'busy'
     }
     fm_backend_capture() { fail "native busy observations should not capture"; }
+    # Intentional override invoked indirectly through fm_pending_reply_tick.
+    # shellcheck disable=SC2329
     fm_pending_reply_find_resolve_line() {
       local status_file=$1 corr=$2 line
       printf '%s\t%s\n' "$status_file" "$corr" >> "$scan_log"
