@@ -44,11 +44,11 @@ The ambient tmux server is never used.
 
 The runtime receives its real unattended flag, but its tool access starts in the throwaway repository.
 
-The lab links only known authentication files from `--source-home` and copies mutable configuration where an adapter needs it.
+The lab copies only the selected adapter's known authentication and configuration files from `--source-home`.
 
 The exam writes no configuration, session, or artifact state into the source home.
 
-Those authentication links stay shared exactly as `fm-spawn.sh` bridges them into a worker home, so a runtime that refreshes its own OAuth token writes that refresh back to the source credential file.
+The isolated copies are read-only and never write token refreshes back to the source home.
 
 Kimi receives a dedicated `KIMI_CODE_HOME`, and source hook blocks are removed before the exam hook is installed.
 

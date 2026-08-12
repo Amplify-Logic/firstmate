@@ -36,7 +36,7 @@ test_probe_set_and_kimi_plan() {
     "Kimi plan hides the interrupt text the probe is scored on"
   assert_contains "$plan" $'comm_regex\tkimi' "Kimi plan hides the liveness comm marker"
   assert_contains "$plan" $'argv_regex\tkimi-code|/kimi([ /]|$)' "Kimi plan hides the liveness argv marker"
-  assert_contains "$plan" $'resume\tcontinue' "Kimi plan lost continue resume"
+  assert_contains "$plan" $'resume\t--continue' "Kimi plan lost continue resume"
   assert_contains "$plan" $'liveness\talive' "Kimi plan lost its liveness verdict"
   assert_contains "$plan" $'model\tkimi-code/k3' "Kimi plan lost its pinned model"
   pass "Kimi plan is driven by the certified adapter facts"
@@ -48,6 +48,76 @@ test_pi_known_liveness_limit_is_explicit() {
   assert_contains "$plan" $'liveness\tunknown' "Pi must not claim an unsupported alive verdict"
   assert_grep 'pi-coding-agent' "$EXPECTATIONS" "Pi raw argv marker is missing"
   pass "Pi liveness records the backend limitation and the raw process marker"
+}
+
+test_codex_resume_uses_recorded_session_id() {
+  local dir command
+  dir=$(fm_test_tmproot harness-exam-codex-resume)
+  export FM_HARNESS_EXAM_SOURCE_ONLY=1
+  # shellcheck source=bin/fm-harness-exam.sh
+  . "$EXAM"
+  unset FM_HARNESS_EXAM_SOURCE_ONLY
+  load_expectation codex
+  LAB_HOME="$dir/home"
+  LAB_ROOT="$dir/lab"
+  MODEL=-
+  build_launch_command 1 01234567-89ab-cdef-0123-456789abcdef
+  command=$RESUME_CMD
+  assert_contains "$command" "'resume' '01234567-89ab-cdef-0123-456789abcdef'" \
+    "Codex resume does not use the recorded session id"
+  assert_not_contains "$command" "--last" "Codex resume still bypasses the adapter record"
+  pass "Codex resume command is driven by the recorded per-adapter fact"
+}
+
+test_credentials_are_selected_read_only_copies() {
+  local dir source lab
+  dir=$(fm_test_tmproot harness-exam-credentials)
+  source="$dir/source"
+  lab="$dir/lab"
+  mkdir -p "$source/.codex" "$source/.claude" "$lab"
+  printf 'codex-token\n' > "$source/.codex/auth.json"
+  printf 'model = "test"\n' > "$source/.codex/config.toml"
+  printf 'claude-token\n' > "$source/.claude/.credentials.json"
+  export FM_HARNESS_EXAM_SOURCE_ONLY=1
+  # shellcheck source=bin/fm-harness-exam.sh
+  . "$EXAM"
+  unset FM_HARNESS_EXAM_SOURCE_ONLY
+  ADAPTER=codex
+  SOURCE_HOME="$source"
+  LAB_HOME="$lab"
+  prepare_credential_bridges
+  [ -f "$lab/.codex/auth.json" ] || fail "selected Codex authentication was not copied"
+  [ ! -L "$lab/.codex/auth.json" ] || fail "selected Codex authentication remains linked to its source"
+  [ ! -w "$lab/.codex/auth.json" ] || fail "selected Codex authentication copy is writable"
+  assert_absent "$lab/.claude/.credentials.json" "unselected Claude credential crossed into the Codex lab"
+  printf 'changed\n' > "$source/.codex/auth.json"
+  [ "$(cat "$lab/.codex/auth.json")" = codex-token ] || fail "isolated credential changed with its source"
+  pass "only the selected adapter receives isolated read-only credential copies"
+}
+
+test_ambient_tmux_survives_full_failed_exam() {
+  command -v tmux >/dev/null 2>&1 || { pass "ambient tmux survival skipped because tmux is unavailable"; return; }
+  local dir socket runtime_path rc
+  dir=$(fm_test_tmproot harness-exam-ambient-tmux)
+  socket="$dir/ambient.sock"
+  runtime_path="$dir/bin"
+  mkdir -p "$runtime_path"
+  cat > "$runtime_path/kimi" <<'EOF'
+#!/usr/bin/env bash
+if [ "${1:-}" = --version ]; then printf 'fake-kimi 1\n'; exit 0; fi
+exit 0
+EOF
+  chmod +x "$runtime_path/kimi"
+  tmux -S "$socket" new-session -d -s unrelated
+  set +e
+  TMUX="$socket,999,0" PATH="$runtime_path:$PATH" "$EXAM" kimi --timeout 11 --output "$dir/output" >/dev/null 2>&1
+  rc=$?
+  set -e
+  [ "$rc" -ne 0 ] || fail "fake runtime unexpectedly passed the full exam"
+  tmux -S "$socket" has-session -t unrelated 2>/dev/null \
+    || fail "full exam cleanup killed an unrelated tmux session"
+  tmux -S "$socket" kill-session -t unrelated
+  pass "full exam cleanup preserves unrelated tmux sessions"
 }
 
 test_unknown_adapter_refuses_before_output() {
@@ -144,7 +214,10 @@ assert_executable "$0"
 test_supported_adapter_matrix
 test_probe_set_and_kimi_plan
 test_pi_known_liveness_limit_is_explicit
+test_codex_resume_uses_recorded_session_id
+test_credentials_are_selected_read_only_copies
 test_unknown_adapter_refuses_before_output
 test_hook_fixtures_are_isolated_per_adapter
 test_renderer_fails_closed_and_emits_scorecard
 test_documented_isolation_and_evidence_contract
+test_ambient_tmux_survives_full_failed_exam

@@ -32,10 +32,10 @@
 # Safety:
 # The autonomy probes deliberately use each adapter's unattended flag, but the
 # runtime is confined to a fresh repository and private HOME.
-# Only credential files needed to authenticate are linked from --source-home,
-# matching how fm-spawn.sh bridges auth into an isolated worker home; those
-# links stay shared, so a runtime's own OAuth token refresh is written back to
-# the source credential file.
+# Only the selected adapter's authentication and configuration files are copied
+# from --source-home into the isolated home.
+# Those copies are read-only, so the runtime cannot write back to the source
+# credential files.
 # The script never updates a runtime, writes configuration, session, or artifact
 # state into the source home, or uses the ambient tmux server.
 
@@ -72,6 +72,7 @@ HOOK_MARKER=""
 HOOK_RAW=""
 RUN_FAILED=0
 CLEANED=0
+TMUX_SOCKET=""
 
 usage() {
   awk 'NR == 1 { next } /^#$/ { if (seen) print ""; next } /^# / { seen=1; sub(/^# /, ""); print; next } seen { exit }' "$0"
@@ -127,37 +128,35 @@ append_arg() {
   LAUNCH_CMD+=$(shell_quote "$value")
 }
 
-append_resume_arg() {
-  local value=$1
-  if [ -n "$RESUME_CMD" ]; then RESUME_CMD+=" "; fi
-  RESUME_CMD+=$(shell_quote "$value")
-}
-
-link_if_present() {
+copy_readonly_if_present() {
   local source=$1 destination=$2
   [ -e "$source" ] || return 0
   mkdir -p "$(dirname "$destination")"
-  [ -e "$destination" ] || ln -s "$source" "$destination"
-}
-
-copy_if_present() {
-  local source=$1 destination=$2
-  [ -f "$source" ] || return 0
-  mkdir -p "$(dirname "$destination")"
-  cp "$source" "$destination"
+  cp -RL "$source" "$destination"
+  chmod -R a-w "$destination"
 }
 
 prepare_credential_bridges() {
-  link_if_present "$SOURCE_HOME/.claude/.credentials.json" "$LAB_HOME/.claude/.credentials.json"
-  link_if_present "$SOURCE_HOME/.codex/auth.json" "$LAB_HOME/.codex/auth.json"
-  copy_if_present "$SOURCE_HOME/.codex/config.toml" "$LAB_HOME/.codex/config.toml"
-  link_if_present "$SOURCE_HOME/.pi/agent/auth.json" "$LAB_HOME/.pi/agent/auth.json"
-  link_if_present "$SOURCE_HOME/.local/share/opencode/auth.json" "$LAB_HOME/.local/share/opencode/auth.json"
-  copy_if_present "$SOURCE_HOME/.cursor/cli-config.json" "$LAB_HOME/.cursor/cli-config.json"
-  link_if_present "$SOURCE_HOME/.cursor/auth.json" "$LAB_HOME/.cursor/auth.json"
-  copy_if_present "$SOURCE_HOME/.grok/config.toml" "$LAB_HOME/.grok/config.toml"
-  link_if_present "$SOURCE_HOME/.grok/auth.json" "$LAB_HOME/.grok/auth.json"
-  link_if_present "$SOURCE_HOME/.grok/credentials" "$LAB_HOME/.grok/credentials"
+  case "$ADAPTER" in
+    claude) copy_readonly_if_present "$SOURCE_HOME/.claude/.credentials.json" "$LAB_HOME/.claude/.credentials.json" ;;
+    codex)
+      copy_readonly_if_present "$SOURCE_HOME/.codex/auth.json" "$LAB_HOME/.codex/auth.json"
+      copy_readonly_if_present "$SOURCE_HOME/.codex/config.toml" "$LAB_HOME/.codex/config.toml"
+      ;;
+    opencode) copy_readonly_if_present "$SOURCE_HOME/.local/share/opencode/auth.json" "$LAB_HOME/.local/share/opencode/auth.json" ;;
+    pi) copy_readonly_if_present "$SOURCE_HOME/.pi/agent/auth.json" "$LAB_HOME/.pi/agent/auth.json" ;;
+    grok)
+      copy_readonly_if_present "$SOURCE_HOME/.grok/config.toml" "$LAB_HOME/.grok/config.toml"
+      copy_readonly_if_present "$SOURCE_HOME/.grok/auth.json" "$LAB_HOME/.grok/auth.json"
+      copy_readonly_if_present "$SOURCE_HOME/.grok/credentials" "$LAB_HOME/.grok/credentials"
+      ;;
+    cursor)
+      copy_readonly_if_present "$SOURCE_HOME/.cursor/cli-config.json" "$LAB_HOME/.cursor/cli-config.json"
+      copy_readonly_if_present "$SOURCE_HOME/.cursor/auth.json" "$LAB_HOME/.cursor/auth.json"
+      ;;
+    kimi) ;;
+    *) return 1 ;;
+  esac
 }
 
 write_hook_recorder() {
@@ -250,19 +249,20 @@ prepare_kimi_home() {
   else
     : > "$LAB_HOME/.kimi-code/config.toml"
   fi
-  link_if_present "$source/credentials" "$LAB_HOME/.kimi-code/credentials"
-  link_if_present "$source/oauth" "$LAB_HOME/.kimi-code/oauth"
-  link_if_present "$source/device_id" "$LAB_HOME/.kimi-code/device_id"
+  copy_readonly_if_present "$source/credentials" "$LAB_HOME/.kimi-code/credentials"
+  copy_readonly_if_present "$source/oauth" "$LAB_HOME/.kimi-code/oauth"
+  copy_readonly_if_present "$source/device_id" "$LAB_HOME/.kimi-code/device_id"
   {
     printf '\n[[hooks]]\n'
     printf 'event = "Stop"\n'
     printf 'command = "bash %s"\n' "$(shell_quote "$recorder")"
     printf 'timeout = 10\n'
   } >> "$LAB_HOME/.kimi-code/config.toml"
+  chmod a-w "$LAB_HOME/.kimi-code/config.toml"
 }
 
 build_launch_command() {
-  local resume=${1:-0} cursor_id=${2:-} model=${MODEL:-$DEFAULT_MODEL}
+  local resume=${1:-0} resume_id=${2:-} model=${MODEL:-$DEFAULT_MODEL}
   LAUNCH_CMD=""
   RESUME_CMD=""
   case "$ADAPTER" in
@@ -272,7 +272,7 @@ build_launch_command() {
       append_arg claude
       append_arg --dangerously-skip-permissions
       [ "$model" = - ] || { append_arg --model; append_arg "$model"; }
-      [ "$resume" = 0 ] || append_arg --continue
+      [ "$resume" = 0 ] || append_arg "$RESUME_MODE"
       ;;
     codex)
       append_arg env
@@ -284,7 +284,8 @@ build_launch_command() {
         append_arg "notify=[\"bash\",\"$LAB_ROOT/hook-recorder.sh\"]"
       else
         append_arg resume
-        append_arg --last
+        [ "$RESUME_MODE" = session-id ] && [ -n "$resume_id" ] || return 1
+        append_arg "$resume_id"
         append_arg --dangerously-bypass-approvals-and-sandbox
         append_arg -c
         append_arg "notify=[\"bash\",\"$LAB_ROOT/hook-recorder.sh\"]"
@@ -296,7 +297,7 @@ build_launch_command() {
       append_arg 'OPENCODE_CONFIG_CONTENT={"permission":{"*":"allow"}}'
       append_arg opencode
       [ "$model" = - ] || { append_arg --model; append_arg "$model"; }
-      [ "$resume" = 0 ] || append_arg --continue
+      [ "$resume" = 0 ] || append_arg "$RESUME_MODE"
       ;;
     pi)
       append_arg pi
@@ -305,7 +306,7 @@ build_launch_command() {
       append_arg -e
       append_arg "$LAB_ROOT/pi-turn-end.ts"
       [ "$model" = - ] || { append_arg --model; append_arg "$model"; }
-      [ "$resume" = 0 ] || append_arg --continue
+      [ "$resume" = 0 ] || append_arg "$RESUME_MODE"
       ;;
     grok)
       append_arg env
@@ -313,7 +314,7 @@ build_launch_command() {
       append_arg grok
       append_arg --always-approve
       [ "$model" = - ] || { append_arg --model; append_arg "$model"; }
-      [ "$resume" = 0 ] || append_arg --continue
+      [ "$resume" = 0 ] || append_arg "$RESUME_MODE"
       ;;
     cursor)
       append_arg agent
@@ -322,8 +323,8 @@ build_launch_command() {
       append_arg "$WORKSPACE"
       [ "$model" = - ] || { append_arg --model; append_arg "$model"; }
       if [ "$resume" != 0 ]; then
-        [ -n "$cursor_id" ] || return 1
-        append_arg "--resume=$cursor_id"
+        [ -n "$resume_id" ] || return 1
+        append_arg "--resume=$resume_id"
       fi
       ;;
     kimi)
@@ -332,7 +333,7 @@ build_launch_command() {
       append_arg kimi
       append_arg --yolo
       [ "$model" = - ] || { append_arg --model; append_arg "$model"; }
-      [ "$resume" = 0 ] || append_arg --continue
+      [ "$resume" = 0 ] || append_arg "$RESUME_MODE"
       ;;
     *) return 1 ;;
   esac
@@ -421,14 +422,14 @@ cleanup_lab() {
   [ "$CLEANED" = 0 ] || return 0
   CLEANED=1
   if [ -n "$LAB_ROOT" ]; then
-    TMUX_TMPDIR="$LAB_ROOT/tmux" tmux kill-server >/dev/null 2>&1 || true
+    if [ -n "$TMUX_SOCKET" ]; then tmux -S "$TMUX_SOCKET" kill-session -t "$SESSION" >/dev/null 2>&1 || true; fi
     if [ "$KEEP_LAB" = 0 ]; then rm -rf "$LAB_ROOT"; fi
   fi
 }
 
-on_exit() {
-  cleanup_lab
-}
+on_exit() { cleanup_lab; }
+on_interrupt() { trap - EXIT INT TERM; cleanup_lab; exit 130; }
+on_terminate() { trap - EXIT INT TERM; cleanup_lab; exit 143; }
 
 pane_exists() {
   fm_backend_target_exists tmux "$TARGET"
@@ -436,7 +437,7 @@ pane_exists() {
 
 pane_text_matches() {
   local regex=$1
-  fm_backend_capture tmux "$TARGET" 120 2>/dev/null | grep -qiE "$regex"
+  tmux capture-pane -p -t "$TARGET" 2>/dev/null | grep -qiE "$regex"
 }
 
 handle_startup_dialog() {
@@ -458,7 +459,7 @@ wait_for_composer() {
     state=$(fm_backend_composer_state tmux "$TARGET" 2>/dev/null || printf unknown)
     [ "$state" = empty ] && return 0
     text=$(fm_backend_capture tmux "$TARGET" 80 2>/dev/null || true)
-    matched=$(printf '%s' "$text" | grep -iE 'trust|workspace trust|required|bypass permissions|dangerously|approval mode' || true)
+    matched=$(printf '%s' "$text" | grep -iE 'trust|workspace trust|required|bypass permissions|dangerously|approval mode|choose.*theme|theme.*looks best|security notes|Claude Code can make mistakes' || true)
     if [ -n "$matched" ] && [ "$handled" -lt "$STARTUP_DIALOG_LIMIT" ]; then
       hash=$(printf '%s' "$matched" | shasum -a 256 | awk '{print $1}')
       case " $seen " in
@@ -476,45 +477,20 @@ wait_for_composer() {
   return 1
 }
 
-wait_for_regex() {
-  local regex=$1 deadline=$((SECONDS + TIMEOUT))
+wait_for() {
+  local predicate=$1 deadline=$((SECONDS + TIMEOUT))
+  shift
   while [ "$SECONDS" -lt "$deadline" ]; do
-    pane_text_matches "$regex" && return 0
+    "$predicate" "$@" && return 0
     pane_exists || return 1
     sleep 1
   done
   return 1
 }
 
-wait_for_file() {
-  local file=$1 deadline=$((SECONDS + TIMEOUT))
-  while [ "$SECONDS" -lt "$deadline" ]; do
-    [ -s "$file" ] && return 0
-    pane_exists || return 1
-    sleep 1
-  done
-  return 1
-}
-
-wait_for_marker() {
-  local file=$1 deadline=$((SECONDS + TIMEOUT))
-  while [ "$SECONDS" -lt "$deadline" ]; do
-    [ -e "$file" ] && return 0
-    pane_exists || return 1
-    sleep 1
-  done
-  return 1
-}
-
-wait_until_not_busy() {
-  local deadline=$((SECONDS + TIMEOUT))
-  while [ "$SECONDS" -lt "$deadline" ]; do
-    if ! pane_text_matches "$BUSY_REGEX"; then return 0; fi
-    pane_exists || return 1
-    sleep 1
-  done
-  return 1
-}
+file_has_content() { [ -s "$1" ]; }
+file_exists() { [ -e "$1" ]; }
+pane_text_does_not_match() { ! pane_text_matches "$1"; }
 
 submit_text() {
   local text=$1 verdict
@@ -577,7 +553,12 @@ probe_composer() {
   sleep 1
   pending=$(fm_backend_composer_state tmux "$TARGET" 2>/dev/null || printf unknown)
   capture_pane 02-composer-pending 80
-  cleared=$(clear_composer) || true
+  if ! cleared=$(clear_composer); then
+    capture_pane 02-composer-cleared 80
+    record_result composer fail "expected empty then pending then empty, got $idle then $pending then $cleared" \
+      "evidence/02-composer-idle.ansi,evidence/02-composer-pending.ansi,evidence/02-composer-cleared.ansi"
+    return 1
+  fi
   capture_pane 02-composer-cleared 80
   if [ "$idle" = empty ] && [ "$pending" = pending ] && [ "$cleared" = empty ]; then
     record_result composer pass "idle classified empty, real unsubmitted text classified pending, and the composer cleared back to empty" \
@@ -586,19 +567,19 @@ probe_composer() {
     record_result composer fail "expected empty then pending then empty, got $idle then $pending then $cleared" \
       "evidence/02-composer-idle.ansi,evidence/02-composer-pending.ansi,evidence/02-composer-cleared.ansi"
   fi
+  return 0
 }
 
 probe_busy_interrupt_liveness() {
-  local prompt alive_before alive_after interrupt_text busy_seen_at interrupt_elapsed
+  local prompt alive_after interrupt_text busy_seen_at interrupt_elapsed
   local turn_ended=0 ended_early=0 interrupt_seen=0 busy_observed=0
   capture_pane 03-idle-negative 100
-  capture_processes 06-liveness-before
   if pane_text_matches "$BUSY_REGEX"; then
     record_result busy fail "recorded busy regex also matched the settled idle pane" "evidence/03-idle-negative.txt"
   fi
   prompt="Use the shell tool to run exactly: sleep $BUSY_SECONDS; printf 'FM_EXAM_BUSY_DONE\\n'. Do not run it in the background and do not do anything else."
   submit_text "$prompt" || true
-  if wait_for_regex "$BUSY_REGEX"; then
+  if wait_for pane_text_matches "$BUSY_REGEX"; then
     busy_observed=1
     busy_seen_at=$SECONDS
     capture_pane 03-busy 160
@@ -611,17 +592,9 @@ probe_busy_interrupt_liveness() {
       "evidence/03-busy-missing.ansi,evidence/03-idle-negative.txt"
   fi
   capture_processes 06-liveness-busy
-  alive_before=$(fm_backend_agent_alive tmux "$TARGET" 2>/dev/null || printf unknown)
-  if [ "$alive_before" = "$ALIVE_VERDICT" ] && agent_marker_matches "$ARTIFACTS/06-liveness-busy.processes.txt"; then
-    record_result liveness pass "backend verdict and raw process markers matched the adapter record" \
-      "evidence/06-liveness-busy.processes.txt"
-  else
-    record_result liveness fail "expected backend=$ALIVE_VERDICT plus comm=$COMM_REGEX and argv=$ARGV_REGEX, got backend=$alive_before" \
-      "evidence/06-liveness-busy.processes.txt"
-  fi
   send_key_list "$INTERRUPT_KEYS" || true
   sleep 1
-  if wait_until_not_busy; then turn_ended=1; fi
+  if wait_for pane_text_does_not_match "$BUSY_REGEX"; then turn_ended=1; fi
   interrupt_elapsed=$((SECONDS - busy_seen_at))
   if [ "$turn_ended" = 1 ] && [ "$interrupt_elapsed" -lt "$((BUSY_SECONDS - 2))" ]; then
     ended_early=1
@@ -649,7 +622,7 @@ probe_busy_interrupt_liveness() {
   fi
 }
 
-probe_autonomy_turnend() {
+probe_autonomy() {
   local proof="$WORKSPACE/.fm-exam-autonomy" token="FM_EXAM_AUTONOMY_${RANDOM}_${RANDOM}" prompt mode_present=0
   rm -f "$HOOK_MARKER" "$HOOK_RAW" "$proof"
   if [ "$ADAPTER" = pi ] || printf '%s' "$LAUNCH_CMD" | grep -qE -- "$AUTONOMY_FLAG"; then
@@ -658,7 +631,7 @@ probe_autonomy_turnend() {
   printf '%s\n' "$token" > "$ARTIFACTS/resume-token.txt"
   prompt="Use the shell tool without asking for approval to run exactly: printf '%s\\n' '$token' > '$proof'. Then reply exactly $token and remember that token for this session."
   submit_text "$prompt" || true
-  if [ "$mode_present" = 1 ] && wait_for_file "$proof" && [ "$(cat "$proof" 2>/dev/null)" = "$token" ]; then
+  if [ "$mode_present" = 1 ] && wait_for file_has_content "$proof" && [ "$(cat "$proof" 2>/dev/null)" = "$token" ]; then
     capture_pane 01-autonomy 180
     printf 'launch=%s\nautonomy=%s\nproof=%s\n' "$LAUNCH_CMD" "$AUTONOMY_FLAG" "$(cat "$proof")" \
       > "$ARTIFACTS/01-autonomy-command.txt"
@@ -669,8 +642,13 @@ probe_autonomy_turnend() {
     record_result autonomy fail "the recorded unattended mode was absent or its tool proof was not created" \
       "evidence/01-autonomy-failed.ansi"
   fi
-  if wait_for_marker "$HOOK_MARKER" && [ -s "$HOOK_RAW" ]; then
+  if wait_for file_exists "$HOOK_MARKER" && [ -s "$HOOK_RAW" ]; then
     cp "$HOOK_RAW" "$ARTIFACTS/05-turn-end-payload.txt"
+  fi
+}
+
+probe_turnend() {
+  if [ -s "$ARTIFACTS/05-turn-end-payload.txt" ]; then
     record_result turn-end pass "the native per-turn hook produced an external marker and raw payload" \
       "evidence/05-turn-end-payload.txt"
   else
@@ -678,6 +656,18 @@ probe_autonomy_turnend() {
     [ -e "$HOOK_RAW" ] && cp "$HOOK_RAW" "$ARTIFACTS/05-turn-end-payload.txt"
     record_result turn-end fail "the completed turn produced no independently recorded hook evidence" \
       "evidence/05-turn-end-payload.txt,evidence/05-turn-end-missing.ansi"
+  fi
+}
+
+probe_liveness() {
+  local verdict
+  verdict=$(fm_backend_agent_alive tmux "$TARGET" 2>/dev/null || printf unknown)
+  if [ "$verdict" = "$ALIVE_VERDICT" ] && agent_marker_matches "$ARTIFACTS/06-liveness-busy.processes.txt"; then
+    record_result liveness pass "backend verdict and raw process markers matched the adapter record" \
+      "evidence/06-liveness-busy.processes.txt"
+  else
+    record_result liveness fail "expected backend=$ALIVE_VERDICT plus comm=$COMM_REGEX and argv=$ARGV_REGEX, got backend=$verdict" \
+      "evidence/06-liveness-busy.processes.txt"
   fi
 }
 
@@ -710,13 +700,24 @@ cursor_resume_id() {
     | tail -1 | sed -E 's/.*--resume[= ]//' || true
 }
 
+codex_resume_id() {
+  find "$LAB_HOME/.codex/sessions" -type f -name '*.jsonl' -print 2>/dev/null \
+    | sort | tail -1 | grep -Eo '[0-9a-fA-F]{8}-[0-9a-fA-F-]{27}' || true
+}
+
 probe_resume() {
-  local token cursor_id="" restored=0
+  local token cursor_id="" restored=0 resume_evidence
   token=$(cat "$ARTIFACTS/resume-token.txt" 2>/dev/null || true)
   if [ "$RESUME_MODE" = cursor-id ]; then
     cursor_id=$(cursor_resume_id)
     if [ -z "$cursor_id" ]; then
       record_result resume fail "the exit evidence did not contain Cursor's resume id" "evidence/07-exit.txt"
+      return 0
+    fi
+  elif [ "$RESUME_MODE" = session-id ]; then
+    cursor_id=$(codex_resume_id)
+    if [ -z "$cursor_id" ]; then
+      record_result resume fail "the isolated Codex home did not contain a recorded session id" "evidence/07-exit.txt"
       return 0
     fi
   fi
@@ -740,8 +741,10 @@ probe_resume() {
     fi
   fi
   if [ "$restored" = 1 ]; then
+    resume_evidence="evidence/08-resume-command.txt,evidence/08-resume-initial.ansi"
+    [ -f "$ARTIFACTS/08-resume-recall.ansi" ] && resume_evidence+=",evidence/08-resume-recall.ansi"
     record_result resume pass "the recorded resume path restored evidence from the prior conversation" \
-      "evidence/08-resume-command.txt,evidence/08-resume-initial.ansi,evidence/08-resume-recall.ansi"
+      "$resume_evidence"
   else
     capture_pane 08-resume-failed 220
     record_result resume fail "the resumed runtime did not restore or recall the prior conversation token" \
@@ -778,7 +781,12 @@ prepare_run() {
   HOOK_MARKER="$LAB_ROOT/turn-ended"
   HOOK_RAW="$LAB_ROOT/turn-end.raw"
   mkdir -p "$LAB_HOME" "$WORKSPACE" "$LAB_ROOT/tmux"
-  trap on_exit EXIT INT TERM
+  export TMUX_TMPDIR="$LAB_ROOT/tmux"
+  unset TMUX
+  TMUX_SOCKET="$TMUX_TMPDIR/tmux-$(id -u)/default"
+  trap on_exit EXIT
+  trap on_interrupt INT
+  trap on_terminate TERM
   git -C "$WORKSPACE" init -q
   printf '# Firstmate worker-runtime exam lab\n' > "$WORKSPACE/README.md"
   git -C "$WORKSPACE" add README.md
@@ -791,8 +799,6 @@ prepare_run() {
   printf 'adapter=%s\nversion=%s\nlab=%s\nworkspace=%s\nstartup_dialog=%s\n' \
     "$ADAPTER" "$VERSION" "$LAB_ROOT" "$WORKSPACE" "$STARTUP_DIALOG" \
     > "$ARTIFACTS/run-context.txt"
-  export TMUX_TMPDIR="$LAB_ROOT/tmux"
-  unset TMUX
 }
 
 run_exam() {
@@ -812,9 +818,15 @@ run_exam() {
     return 1
   fi
   capture_pane 00-startup 120
-  probe_composer
+  probe_autonomy
+  if ! probe_composer; then
+    record_missing_results
+    render_results
+    return 1
+  fi
   probe_busy_interrupt_liveness
-  probe_autonomy_turnend
+  probe_turnend
+  probe_liveness
   probe_exit
   probe_resume
   record_missing_results
