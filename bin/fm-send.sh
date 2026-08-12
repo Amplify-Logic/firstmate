@@ -223,6 +223,9 @@ else
   MESSAGE=$*
   if [ "$MARK_FROM_FIRSTMATE" = 1 ] && { [ "${FM_PENDING_REPLY_EXPECT_REPORT:-1}" = 1 ] || [ -n "${FM_PENDING_REPLY_EXISTING_CORR:-}" ]; }; then
     existing_corr=${FM_PENDING_REPLY_EXISTING_CORR:-}
+    if [ -z "$existing_corr" ]; then
+      existing_corr=$(fm_pending_reply_extract_corr "$MESSAGE")
+    fi
     if [ -n "$existing_corr" ] \
       && fm_pending_reply_corr_reusable "$STATE" "$existing_corr" "$TARGET_TASK_ID"; then
       PENDING_REPLY_CORR=$existing_corr
@@ -242,6 +245,10 @@ else
       echo "error: failed to durably prepare pending-reply delivery for $TARGET_TASK_ID" >&2
       exit 1
     fi
+  elif [ "$MARK_FROM_FIRSTMATE" = 1 ]; then
+    # No report expected: no correlation id, but the from-firstmate carrier is
+    # still required so the secondmate routes its reply off-chat.
+    fm_message_mark_from_firstmate "$MESSAGE" MESSAGE
   fi
   # Slash commands open a completion popup in some TUIs (verified on codex);
   # submitting too fast selects nothing, so give the popup time to settle before

@@ -161,8 +161,8 @@ test_supported_producers_use_the_canonical_owner() {
   assert_contains "$spawn" 'cursor) printf' "Cursor launch template disappeared"
   # shellcheck disable=SC2016 # The source assertion intentionally matches a literal runtime variable.
   assert_contains "$spawn" '"$FM_ROOT/bin/fm-operational-input.sh" encode launch-brief' "Kimi launch instructions do not use the canonical constructor"
-  [ "$(grep -o 'encode launch-brief' "$ROOT/bin/fm-spawn.sh" | wc -l | tr -d ' ')" -ge 7 ] \
-    || fail "not every positional worker launch uses the typed launch-brief constructor"
+  [ "$(grep -o '__ENCODED_BRIEF__' "$ROOT/bin/fm-spawn.sh" | wc -l | tr -d ' ')" -ge 7 ] \
+    || fail "not every positional worker launch consumes the typed launch brief"
   pass "operational input: every supported producer delegates construction to the canonical owner"
 }
 
