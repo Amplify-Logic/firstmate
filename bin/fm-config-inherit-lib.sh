@@ -1137,10 +1137,6 @@ fm_config_send_reread_nudge() {
       printf 'CONFIG_REREAD: secondmate %s: send failed: retained exact snapshot %s; could not reserve retry instruction\n' "$id" "$snapshot_path"
       return 1
     fi
-    if fm_config_reread_retry_queue_is_full "$source_home_abs" "$id" "$dest_home_abs"; then
-      printf 'CONFIG_REREAD: secondmate %s: send failed: retained exact snapshot %s; retry instruction queue is full\n' "$id" "$snapshot_path"
-      return 1
-    fi
     current_stage_path=$(fm_config_reread_new_retry_stage_path "$source_home_abs" "$id") || {
       printf 'CONFIG_REREAD: secondmate %s: send failed: retained exact snapshot %s; could not reserve retry instruction\n' "$id" "$snapshot_path"
       return 1

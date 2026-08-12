@@ -1886,6 +1886,122 @@ test_config_reread_full_retry_queue_drains_before_new_push() {
   pass "B22 full config reread retry queues drain before new publication"
 }
 
+test_config_reread_at_bound_change_still_delivers() {
+  local w head retry_dir path n fakebin log out status pointer_count
+  w=$(new_world config-reread-at-bound)
+  head=$(git -C "$w/main" rev-parse HEAD)
+  add_sm_worktree "$w" sm "$head"
+  mkdir -p "$w/sm/config" "$w/sm/state"
+  printf 'old\n' > "$w/sm/config/crew-harness"
+  printf 'new\n' > "$w/home/config/crew-harness"
+  retry_dir="$w/home/state/.fm-inherited-config-reread-retry/sm"
+  mkdir -p "$retry_dir"
+  for n in $(seq -w 1 15); do
+    path="$retry_dir/.fm-inherited-config-reread.20260721T000000.$n"
+    printf 'generation-%s\n' "$n" > "$path"
+    chmod 0600 "$path"
+  done
+  fakebin=$(make_fake_toolchain "$w")
+  log="$w/config-reread-at-bound.tmux.log"
+  out=$(PATH="$fakebin:$BASE_PATH" FM_HOME="$w/home" FM_ROOT_OVERRIDE="$w/main" \
+    FM_SEND_SETTLE=0 FM_FAKE_TMUX_LOG="$log" \
+    "$ROOT/bin/fm-config-push.sh" 2>&1); status=$?
+  expect_code 0 "$status" "a change landing at the retry-queue bound should still deliver"
+  assert_not_contains "$out" "retry instruction queue is full" \
+    "a count-neutral snapshot conversion was refused by the capacity bound"
+  [ "$(cat "$w/sm/config/crew-harness")" = new ] \
+    || fail "the at-bound config generation did not propagate"
+  reread_snapshot_path "$w/sm" >/dev/null 2>&1 \
+    && fail "an at-bound delivery left a retained snapshot behind"
+  assert_no_reread_retry_stages "$w/home" sm
+  pointer_count=$(grep -c -F "$FM_CONFIG_REREAD_NUDGE" "$log" 2>/dev/null || true)
+  [ "$pointer_count" -ge 16 ] \
+    || fail "an at-bound change did not deliver every queued generation (sent=$pointer_count)"
+  out=$(PATH="$fakebin:$BASE_PATH" FM_HOME="$w/home" FM_ROOT_OVERRIDE="$w/main" \
+    FM_SEND_SETTLE=0 \
+    "$ROOT/bin/fm-config-push.sh" 2>&1); status=$?
+  expect_code 0 "$status" "a repeated push after an at-bound delivery should make progress"
+  assert_not_contains "$out" "retry instruction queue is full" \
+    "a repeated push re-ran the same capacity refusal"
+  pass "B27 config changes landing at the retry-queue bound still deliver"
+}
+
+test_config_reread_snapshot_conversion_not_refused_by_bound() {
+  local w head retry_dir snap_root snap path n fakebin log out status pointer_count
+  w=$(new_world config-reread-snapshot-conversion)
+  head=$(git -C "$w/main" rev-parse HEAD)
+  add_sm_worktree "$w" sm "$head"
+  mkdir -p "$w/sm/config" "$w/sm/state"
+  printf 'same\n' > "$w/sm/config/crew-harness"
+  printf 'same\n' > "$w/home/config/crew-harness"
+  retry_dir="$w/home/state/.fm-inherited-config-reread-retry/sm"
+  mkdir -p "$retry_dir"
+  for n in $(seq -w 1 15); do
+    path="$retry_dir/.fm-inherited-config-reread.20260721T000000.$n"
+    printf 'generation-%s\n' "$n" > "$path"
+    chmod 0600 "$path"
+  done
+  snap_root="$w/sm/state/.fm-inherited-config-reread-snapshots"
+  snap="$snap_root/generation.20260721T000000.00000001"
+  mkdir -p "$snap"
+  chmod 0700 "$snap_root" "$snap"
+  printf 'snapshot-exact\n' > "$snap/crew-harness.content"
+  printf 'crew-harness\tPRESENT\n' > "$snap/manifest"
+  : > "$snap/.ready"
+  chmod 0600 "$snap/crew-harness.content" "$snap/manifest" "$snap/.ready"
+  fakebin=$(make_fake_toolchain "$w")
+  log="$w/config-reread-snapshot-conversion.tmux.log"
+  out=$(PATH="$fakebin:$BASE_PATH" FM_HOME="$w/home" FM_ROOT_OVERRIDE="$w/main" \
+    FM_SEND_SETTLE=0 FM_FAKE_TMUX_LOG="$log" \
+    "$ROOT/bin/fm-config-push.sh" 2>&1); status=$?
+  expect_code 0 "$status" "converting a retained snapshot at the bound should succeed"
+  assert_not_contains "$out" "retry instruction queue is full" \
+    "a retained snapshot was counted as an extra generation at the bound"
+  reread_snapshot_path "$w/sm" >/dev/null 2>&1 \
+    && fail "a converted snapshot was left behind after delivery"
+  assert_no_reread_retry_stages "$w/home" sm
+  grep -rq 'snapshot-exact' "$w/sm/state" \
+    || fail "the converted snapshot generation did not deliver its exact bytes"
+  pointer_count=$(grep -c -F "$FM_CONFIG_REREAD_NUDGE" "$log" 2>/dev/null || true)
+  [ "$pointer_count" -ge 16 ] \
+    || fail "the bound-full drain did not deliver every generation (sent=$pointer_count)"
+  pass "B27 snapshot-to-stage conversion is never refused by the capacity bound"
+}
+
+test_config_reread_over_capacity_refusal_is_distinct() {
+  local w head retry_dir path n fakebin out status stage_count
+  w=$(new_world config-reread-over-capacity)
+  head=$(git -C "$w/main" rev-parse HEAD)
+  add_sm_worktree "$w" sm "$head"
+  mkdir -p "$w/sm/config" "$w/sm/state"
+  printf 'old\n' > "$w/sm/config/crew-harness"
+  printf 'new\n' > "$w/home/config/crew-harness"
+  retry_dir="$w/home/state/.fm-inherited-config-reread-retry/sm"
+  mkdir -p "$retry_dir"
+  for n in $(seq -w 1 16); do
+    path="$retry_dir/.fm-inherited-config-reread.20260721T000000.$n"
+    printf 'generation-%s\n' "$n" > "$path"
+    chmod 0600 "$path"
+  done
+  fakebin=$(make_fake_toolchain "$w")
+  out=$(PATH="$fakebin:$BASE_PATH" FM_HOME="$w/home" FM_ROOT_OVERRIDE="$w/main" \
+    FM_SEND_SETTLE=0 FM_FAKE_TMUX_FAIL_LITERAL=1 \
+    "$ROOT/bin/fm-config-push.sh" 2>&1); status=$?
+  expect_code 1 "$status" "an undrainable full queue should refuse the push"
+  assert_contains "$out" "retry instruction queue is full" \
+    "an undrainable full queue did not surface its distinct diagnostic"
+  assert_contains "$out" "send failed" \
+    "the failed drain attempt did not surface its own send diagnostic"
+  [ "$(cat "$w/sm/config/crew-harness")" = old ] \
+    || fail "an over-capacity refusal still propagated the new generation"
+  reread_snapshot_path "$w/sm" >/dev/null 2>&1 \
+    && fail "an over-capacity refusal left a phantom snapshot generation"
+  stage_count=$(fm_config_reread_pending_stages "$w/home" sm | wc -l | tr -d ' ')
+  [ "$stage_count" = 16 ] \
+    || fail "an over-capacity refusal dropped queued generations (count=$stage_count)"
+  pass "B27 an undrainable full retry queue refuses distinctly with no phantom generation"
+}
+
 test_config_reread_cleanup_runs_after_mixed_delivery_failure() {
   local w head fakebin state_real fail_path path n report out status count
   w=$(new_world config-reread-mixed-delivery)
@@ -2262,6 +2378,9 @@ test_config_reread_snapshot_capture_failure_is_explicit
 test_config_reread_ignores_incomplete_temp_and_distinguishes_receiver_message
 test_config_reread_serializes_concurrent_pushes
 test_config_reread_full_retry_queue_drains_before_new_push
+test_config_reread_at_bound_change_still_delivers
+test_config_reread_snapshot_conversion_not_refused_by_bound
+test_config_reread_over_capacity_refusal_is_distinct
 test_config_reread_cleanup_runs_after_mixed_delivery_failure
 test_config_reread_stops_after_failed_generation
 test_config_reread_skips_when_unchanged_and_reads_after_push
