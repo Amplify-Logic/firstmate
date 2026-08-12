@@ -73,6 +73,7 @@ HOOK_RAW=""
 RUN_FAILED=0
 CLEANED=0
 TMUX_SOCKET=""
+TMUX_DIR=""
 
 usage() {
   awk 'NR == 1 { next } /^#$/ { if (seen) print ""; next } /^# / { seen=1; sub(/^# /, ""); print; next } seen { exit }' "$0"
@@ -169,7 +170,7 @@ set -uo pipefail
   printf 'args='
   printf '%q ' "\$@"
   printf '\\nstdin=\\n'
-  cat 2>/dev/null || true
+  [ -t 0 ] || cat 2>/dev/null || true
   printf '\\n---\\n'
 } >> $(shell_quote "$HOOK_RAW")
 touch $(shell_quote "$HOOK_MARKER")
@@ -418,13 +419,22 @@ render_results() {
   rm -f "$jsonl"
 }
 
+prepare_tmux_socket() {
+  TMUX_DIR=$(mktemp -d "${TMPDIR:-/tmp}/fm-exam-tmux.XXXXXX") || return 1
+  export TMUX_TMPDIR="$TMUX_DIR"
+  unset TMUX
+  TMUX_SOCKET="$TMUX_TMPDIR/tmux-$(id -u)/default"
+}
+
 cleanup_lab() {
   [ "$CLEANED" = 0 ] || return 0
   CLEANED=1
-  if [ -n "$LAB_ROOT" ]; then
-    if [ -n "$TMUX_SOCKET" ]; then tmux -S "$TMUX_SOCKET" kill-session -t "$SESSION" >/dev/null 2>&1 || true; fi
-    if [ "$KEEP_LAB" = 0 ]; then rm -rf "$LAB_ROOT"; fi
+  if [ -n "$TMUX_SOCKET" ]; then tmux -S "$TMUX_SOCKET" kill-session -t "$SESSION" >/dev/null 2>&1 || true; fi
+  if [ -n "$LAB_ROOT" ] && [ "$KEEP_LAB" = 0 ]; then
+    chmod -R u+w "$LAB_ROOT" 2>/dev/null || true
+    rm -rf "$LAB_ROOT"
   fi
+  if [ -n "$TMUX_DIR" ]; then rm -rf "$TMUX_DIR"; fi
 }
 
 on_exit() { cleanup_lab; }
@@ -438,6 +448,18 @@ pane_exists() {
 pane_text_matches() {
   local regex=$1
   tmux capture-pane -p -t "$TARGET" 2>/dev/null | grep -qiE "$regex"
+}
+
+composer_chrome_rendered() {
+  local cy row
+  cy=$(tmux display-message -p -t "$TARGET" '#{cursor_y}' 2>/dev/null) || return 1
+  case "$cy" in ''|*[!0-9]*) return 1 ;; esac
+  if command -v fm_tmux_cursor_composer_row >/dev/null 2>&1; then
+    row=$(fm_tmux_cursor_composer_row "$TARGET" 2>/dev/null || true)
+    [ -z "$row" ] || cy=$row
+  fi
+  row=$(tmux capture-pane -p -t "$TARGET" -S "$cy" -E "$cy" 2>/dev/null) || return 1
+  [ -n "${row//[[:space:]]/}" ]
 }
 
 handle_startup_dialog() {
@@ -457,7 +479,7 @@ wait_for_composer() {
   while [ "$SECONDS" -lt "$deadline" ]; do
     pane_exists || { sleep 1; continue; }
     state=$(fm_backend_composer_state tmux "$TARGET" 2>/dev/null || printf unknown)
-    [ "$state" = empty ] && return 0
+    if [ "$state" = empty ] && composer_chrome_rendered; then return 0; fi
     text=$(fm_backend_capture tmux "$TARGET" 80 2>/dev/null || true)
     matched=$(printf '%s' "$text" | grep -iE 'trust|workspace trust|required|bypass permissions|dangerously|approval mode|choose.*theme|theme.*looks best|security notes|Claude Code can make mistakes' || true)
     if [ -n "$matched" ] && [ "$handled" -lt "$STARTUP_DIALOG_LIMIT" ]; then
@@ -655,12 +677,15 @@ probe_turnend() {
   else
     capture_pane 05-turn-end-missing 180
     evidence="evidence/05-turn-end-missing.ansi"
-    if [ -e "$HOOK_RAW" ]; then
-      cp "$HOOK_RAW" "$ARTIFACTS/05-turn-end-payload.txt"
-      evidence="evidence/05-turn-end-payload.txt,$evidence"
+    if [ -s "$HOOK_RAW" ]; then
+      cp "$HOOK_RAW" "$ARTIFACTS/05-turn-end-late-payload.txt"
+      evidence="evidence/05-turn-end-late-payload.txt,$evidence"
+      record_result turn-end fail "the native hook payload arrived only after the scored autonomy-turn window" \
+        "$evidence"
+    else
+      record_result turn-end fail "the completed turn produced no independently recorded hook evidence" \
+        "$evidence"
     fi
-    record_result turn-end fail "the completed turn produced no independently recorded hook evidence" \
-      "$evidence"
   fi
 }
 
@@ -713,6 +738,10 @@ codex_resume_id() {
 probe_resume() {
   local token cursor_id="" restored=0 resume_evidence
   token=$(cat "$ARTIFACTS/resume-token.txt" 2>/dev/null || true)
+  if [ -z "$token" ]; then
+    record_result resume fail "the autonomy-turn resume nonce was never recorded, so restored-conversation evidence cannot be verified" ""
+    return 0
+  fi
   if [ "$RESUME_MODE" = cursor-id ]; then
     cursor_id=$(cursor_resume_id)
     if [ -z "$cursor_id" ]; then
@@ -785,10 +814,8 @@ prepare_run() {
   WORKSPACE="$LAB_ROOT/workspace"
   HOOK_MARKER="$LAB_ROOT/turn-ended"
   HOOK_RAW="$LAB_ROOT/turn-end.raw"
-  mkdir -p "$LAB_HOME" "$WORKSPACE" "$LAB_ROOT/tmux"
-  export TMUX_TMPDIR="$LAB_ROOT/tmux"
-  unset TMUX
-  TMUX_SOCKET="$TMUX_TMPDIR/tmux-$(id -u)/default"
+  mkdir -p "$LAB_HOME" "$WORKSPACE"
+  prepare_tmux_socket || return 1
   trap on_exit EXIT
   trap on_interrupt INT
   trap on_terminate TERM

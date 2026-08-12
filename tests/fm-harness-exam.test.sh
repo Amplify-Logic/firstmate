@@ -202,6 +202,146 @@ test_renderer_fails_closed_and_emits_scorecard() {
   pass "renderer emits JSON and Markdown while missing evidence fails closed"
 }
 
+test_cleanup_removes_readonly_credential_copies() {
+  local dir
+  dir=$(fm_test_tmproot harness-exam-cleanup)
+  export FM_HARNESS_EXAM_SOURCE_ONLY=1
+  # shellcheck source=bin/fm-harness-exam.sh
+  . "$EXAM"
+  unset FM_HARNESS_EXAM_SOURCE_ONLY
+  LAB_ROOT="$dir/lab"
+  mkdir -p "$LAB_ROOT/home/.kimi-code/oauth"
+  printf 'token\n' > "$LAB_ROOT/home/.kimi-code/oauth/access"
+  chmod -R a-w "$LAB_ROOT/home/.kimi-code/oauth"
+  cleanup_lab
+  assert_absent "$LAB_ROOT" "read-only credential copies survived lab cleanup"
+  pass "cleanup restores write permission and removes the whole lab"
+}
+
+test_resume_probe_fails_closed_without_recorded_nonce() {
+  local dir
+  dir=$(fm_test_tmproot harness-exam-resume-nonce)
+  export FM_HARNESS_EXAM_SOURCE_ONLY=1
+  # shellcheck source=bin/fm-harness-exam.sh
+  . "$EXAM"
+  unset FM_HARNESS_EXAM_SOURCE_ONLY
+  load_expectation kimi || fail "could not load the kimi expectation row"
+  OUTPUT="$dir/output"
+  ARTIFACTS="$OUTPUT/evidence"
+  RESULTS_TSV="$OUTPUT/.results.tsv"
+  mkdir -p "$ARTIFACTS"
+  : > "$RESULTS_TSV"
+  probe_resume
+  awk -F '\t' '$1 == "resume" && $2 == "fail" { found=1 } END { exit !found }' "$RESULTS_TSV" \
+    || fail "a missing resume nonce did not fail the resume probe"
+  assert_absent "$ARTIFACTS/08-resume-command.txt" "the resume runtime was launched without a recorded nonce"
+  pass "resume fails closed when the autonomy nonce was never recorded"
+}
+
+test_hook_recorder_captures_piped_stdin_without_blocking() {
+  local dir
+  dir=$(fm_test_tmproot harness-exam-recorder)
+  export FM_HARNESS_EXAM_SOURCE_ONLY=1
+  # shellcheck source=bin/fm-harness-exam.sh
+  . "$EXAM"
+  unset FM_HARNESS_EXAM_SOURCE_ONLY
+  LAB_ROOT="$dir"
+  HOOK_RAW="$dir/turn-end.raw"
+  HOOK_MARKER="$dir/turn-ended"
+  mkdir -p "$LAB_ROOT"
+  write_hook_recorder
+  assert_grep '[ -t 0 ] || cat' "$dir/hook-recorder.sh" "the recorder lost its TTY stdin guard"
+  printf '{"event":"stop"}\n' | "$dir/hook-recorder.sh" stop-hook
+  assert_present "$HOOK_MARKER" "the recorder did not touch its marker"
+  assert_grep '{"event":"stop"}' "$HOOK_RAW" "the recorder did not capture piped stdin"
+  "$dir/hook-recorder.sh" < /dev/null
+  pass "the hook recorder records piped payloads and never blocks on stdin"
+}
+
+test_socket_path_fits_stock_macos_tmpdir() {
+  local dir saved had_tmpdir rel stock_tmpdir_len=49 lock_suffix_len=5 sun_path_limit=103
+  dir=$(fm_test_tmproot harness-exam-socket)
+  export FM_HARNESS_EXAM_SOURCE_ONLY=1
+  # shellcheck source=bin/fm-harness-exam.sh
+  . "$EXAM"
+  unset FM_HARNESS_EXAM_SOURCE_ONLY
+  saved=${TMPDIR:-}
+  had_tmpdir=${TMPDIR+set}
+  TMPDIR="$dir/stock"
+  mkdir -p "$TMPDIR"
+  prepare_tmux_socket || fail "could not create the short lab socket directory"
+  rel=${TMUX_SOCKET#"$TMPDIR"}
+  if [ "$had_tmpdir" = set ]; then TMPDIR=$saved; else unset TMPDIR; fi
+  case "$TMUX_SOCKET" in
+    "$dir/stock"/*) : ;;
+    *) fail "the lab socket escaped the temporary directory: $TMUX_SOCKET" ;;
+  esac
+  [ "$((stock_tmpdir_len + ${#rel} + lock_suffix_len))" -le "$sun_path_limit" ] \
+    || fail "socket suffix is ${#rel} bytes, too long under the stock macOS TMPDIR"
+  rm -rf "$TMUX_DIR"
+  TMUX_DIR=""
+  pass "the lab tmux socket path fits the stock macOS TMPDIR for every adapter"
+}
+
+test_turnend_late_payload_keeps_distinct_evidence_name() {
+  local dir
+  dir=$(fm_test_tmproot harness-exam-late-hook)
+  export FM_HARNESS_EXAM_SOURCE_ONLY=1
+  # shellcheck source=bin/fm-harness-exam.sh
+  . "$EXAM"
+  unset FM_HARNESS_EXAM_SOURCE_ONLY
+  OUTPUT="$dir/output"
+  ARTIFACTS="$OUTPUT/evidence"
+  RESULTS_TSV="$OUTPUT/.results.tsv"
+  HOOK_RAW="$dir/turn-end.raw"
+  TARGET='@none'
+  export TMUX_TMPDIR="$dir/tmux"
+  mkdir -p "$ARTIFACTS" "$dir/tmux"
+  : > "$RESULTS_TSV"
+  printf 'late payload\n' > "$HOOK_RAW"
+  probe_turnend
+  assert_present "$ARTIFACTS/05-turn-end-late-payload.txt" "the late payload was not retained under its own name"
+  assert_absent "$ARTIFACTS/05-turn-end-payload.txt" "a failed probe reused the passing evidence filename"
+  awk -F '\t' '$1 == "turn-end" && $2 == "fail" && $3 ~ /after the scored/ { found=1 } END { exit !found }' "$RESULTS_TSV" \
+    || fail "the late-payload failure summary does not state the payload arrived after the scored window"
+  pass "a late hook payload is retained under a distinct non-passing evidence name"
+}
+
+test_startup_wait_rejects_blank_boot_frame() {
+  command -v tmux >/dev/null 2>&1 || { pass "composer settle test skipped because tmux is unavailable"; return; }
+  local dir
+  dir=$(fm_test_tmproot harness-exam-early-empty)
+  export FM_HARNESS_EXAM_SOURCE_ONLY=1
+  # shellcheck source=bin/fm-harness-exam.sh
+  . "$EXAM"
+  unset FM_HARNESS_EXAM_SOURCE_ONLY
+  ADAPTER=kimi
+  ARTIFACTS="$dir/evidence"
+  mkdir -p "$ARTIFACTS"
+  TIMEOUT=3
+  SESSION=exam-settle
+  prepare_tmux_socket || fail "could not create the short lab socket directory"
+  TARGET=$(tmux new-session -dP -F '#{window_id}' -s "$SESSION" 'printf "\033[2J\033[H"; sleep 30') \
+    || fail "could not start the blank-frame pane"
+  sleep 1
+  if wait_for_composer; then
+    tmux kill-server >/dev/null 2>&1 || true
+    fail "a blank mid-boot frame was accepted as a settled composer"
+  fi
+  tmux kill-session -t "$SESSION" >/dev/null 2>&1 || true
+  TARGET=$(tmux new-session -dP -F '#{window_id}' -s "$SESSION" 'printf "│ > │"; sleep 30') \
+    || fail "could not start the rendered-composer pane"
+  sleep 1
+  if ! wait_for_composer; then
+    tmux kill-server >/dev/null 2>&1 || true
+    fail "a rendered bordered composer was not accepted as settled"
+  fi
+  tmux kill-server >/dev/null 2>&1 || true
+  rm -rf "$TMUX_DIR"
+  TMUX_DIR=""
+  pass "the startup wait requires rendered composer chrome before accepting empty"
+}
+
 test_documented_isolation_and_evidence_contract() {
   local doc="$ROOT/docs/harness-exam.md"
   assert_grep 'private Unix home' "$doc" "documentation omits private home isolation"
@@ -225,5 +365,11 @@ test_credentials_are_selected_read_only_copies
 test_unknown_adapter_refuses_before_output
 test_hook_fixtures_are_isolated_per_adapter
 test_renderer_fails_closed_and_emits_scorecard
+test_cleanup_removes_readonly_credential_copies
+test_resume_probe_fails_closed_without_recorded_nonce
+test_hook_recorder_captures_piped_stdin_without_blocking
+test_socket_path_fits_stock_macos_tmpdir
+test_turnend_late_payload_keeps_distinct_evidence_name
+test_startup_wait_rejects_blank_boot_frame
 test_documented_isolation_and_evidence_contract
 test_ambient_tmux_survives_full_failed_exam

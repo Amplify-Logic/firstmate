@@ -38,7 +38,9 @@ A failed or missing observation exits nonzero and remains visible in the scoreca
 
 ## Isolation and credentials
 
-Each run creates a fresh git repository, a private Unix home, and a private tmux socket beneath a temporary lab directory.
+Each run creates a fresh git repository and a private Unix home beneath a temporary lab directory.
+
+Each run also creates a private tmux socket in its own short temporary directory, so the socket path stays under the platform Unix-socket path limit for every adapter name even with the stock macOS per-user `TMPDIR`.
 
 The ambient tmux server is never used.
 
@@ -83,6 +85,8 @@ The interrupt probe refuses to count a turn that simply ran to completion, so `F
 
 It also fails closed when the busy signature was never observed, because an unobserved turn has no boundary for the recorded key to end.
 
+The startup wait accepts an empty composer only after real composer chrome is rendered on the classified row, so a blank mid-boot frame cannot start the probes before the runtime is ready for input.
+
 ## Artifacts
 
 `results.json` is the machine-readable result.
@@ -90,6 +94,8 @@ It also fails closed when the busy signature was never observed, because an unob
 `scorecard.md` is the human-readable summary.
 
 `evidence/` contains plain and ANSI pane captures, runtime version output, launch and resume commands, process listings, the autonomy proof, and the raw turn-end payload.
+
+A hook payload that arrives only after the scored autonomy-turn window is retained as `evidence/05-turn-end-late-payload.txt`, so a failed turn-end probe never reuses the passing evidence filename.
 
 `bin/fm-harness-exam-adapters.tsv` is the checked-in expectation record that drives all seven adapters.
 
