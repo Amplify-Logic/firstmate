@@ -18,11 +18,14 @@
 #
 # Usage:
 #   fm-supervision-sentinel.sh arm         Idempotently register unless deliberately disarmed.
-#                                          Exits 0 when registered or a deliberate no-op, 1 on a
-#                                          retryable failure, and 3 only on positive evidence that
-#                                          this host lacks a capability the scheduled check needs,
-#                                          so a long-lived caller can stop retrying the impossible
-#                                          without ever inferring that from an ambiguous error.
+#                                          Exits 0 only on a verified registration, 1 on a
+#                                          retryable failure, 3 only on positive evidence that
+#                                          this host lacks a capability the scheduled check needs
+#                                          (so a long-lived caller can stop retrying the impossible
+#                                          without ever inferring that from an ambiguous error),
+#                                          and 4 on a deliberate no-op (a durably disarmed home,
+#                                          FM_SUPERVISION_SENTINEL_MODE=off, or a non-primary
+#                                          scope), which is neither protection nor a failure.
 #   fm-supervision-sentinel.sh enable      Explicitly re-enable and register this home's agent.
 #   fm-supervision-sentinel.sh disarm      Explicitly uninstall and durably mark this home disarmed.
 #   fm-supervision-sentinel.sh check       Report one marker-only health verdict; never notify.
@@ -110,7 +113,7 @@ FM_SENTINEL_CHECK_LOCK="$FM_SENTINEL_STATE/.supervision-sentinel-check.lock"
 FM_SENTINEL_PLIST="$FM_SENTINEL_STATE/.supervision-sentinel.plist"
 FM_SENTINEL_LOADED_DIGEST="$FM_SENTINEL_STATE/.supervision-sentinel.loaded-digest"
 FM_SENTINEL_LAST_CHECK="$FM_SENTINEL_STATE/.supervision-sentinel-last-check"
-FM_SENTINEL_DISARMED="$FM_SENTINEL_STATE/.supervision-sentinel.disarmed"
+FM_SENTINEL_DISARMED="$FM_SENTINEL_STATE/$FM_SUP_DISARM_RECORD_NAME"
 FM_SENTINEL_ARM_FAILURE="$FM_SENTINEL_STATE/$FM_SUP_ARM_RECORD_NAME"
 FM_SENTINEL_CLAIM_TOKEN=
 FM_SENTINEL_FORCE_ARM=0
@@ -465,11 +468,11 @@ fm_sentinel_arm_registration() { # <launchctl> <domain> <label> <service> <inter
 
 fm_sentinel_arm() {
   local missing launchctl label domain service interval max_check_age deadline rc
-  fm_sentinel_mode_enabled || return 0
+  fm_sentinel_mode_enabled || return "$FM_SUP_SENTINEL_NOOP_EXIT"
   # Primary scope first: a child task worktree or a non-primary home is a silent
   # no-op on every platform, so an unsupported host reports its real limitation
   # only where the sentinel would genuinely have been the outage backstop.
-  fm_primary_scope_matches "$FM_ROOT" "$FM_SENTINEL_STATE" || return 0
+  fm_primary_scope_matches "$FM_ROOT" "$FM_SENTINEL_STATE" || return "$FM_SUP_SENTINEL_NOOP_EXIT"
   # A missing host capability exits with its own status so a long-lived caller can
   # stop retrying something that can never succeed, while every ambiguous failure
   # below keeps exit 1 and stays retryable.
@@ -480,7 +483,7 @@ fm_sentinel_arm() {
   fi
   if [ -f "$FM_SENTINEL_DISARMED" ] && [ "$FM_SENTINEL_FORCE_ARM" -ne 1 ]; then
     printf 'supervision sentinel: deliberately disarmed for this home; run %s enable to restore host monitoring\n' "$0" >&2
-    return 0
+    return "$FM_SUP_SENTINEL_NOOP_EXIT"
   fi
   fm_sentinel_normalize_tunables
   interval=$(fm_sentinel_positive_integer "$FM_SENTINEL_INTERVAL" 60 15)
@@ -527,7 +530,7 @@ fm_sentinel_arm() {
 
 fm_sentinel_write_disarmed() { # <service>
   local service=$1 pending
-  pending=$(mktemp "$FM_SENTINEL_STATE/.supervision-sentinel.disarmed.XXXXXX") || return 1
+  pending=$(mktemp "$FM_SENTINEL_DISARMED.XXXXXX") || return 1
   {
     printf 'state=disarmed\n'
     printf 'disarmed_at=%s\n' "$(date +%s)"
@@ -861,8 +864,13 @@ fm_sentinel_note_outage() {
 #               completely silent so a blocking banner is never delayed, and it
 #               never retires an episode: a hook only reports what it measured.
 #
-# Every mode honors the durable disarm record: a deliberately disarmed home must
-# stay silent on every channel until an explicit verified `enable`.
+# Every mode honors the durable disarm record: a deliberately disarmed home
+# evaluates nothing, records no outage evidence, and stays silent on every
+# EXTERNAL channel until an explicit verified `enable`. The scheduled entry point
+# still records its local host-liveness proof first, because that proof is what
+# `enable`'s bounded registration wait observes: the launchd job keeps running
+# while the home is disarmed, and a proof gated behind the disarm record would
+# make the one documented recovery command time out forever.
 fm_sentinel_check() { # <scheduled|diagnostic|note>
   local mode=$1 record_host=0 clear_on_recovery=1 report=0 claim_rc key summary
   case "$mode" in
@@ -882,11 +890,6 @@ fm_sentinel_check() { # <scheduled|diagnostic|note>
       "$FM_SENTINEL_HOME_CANON"
     return 0
   fi
-  if [ -f "$FM_SENTINEL_DISARMED" ]; then
-    [ "$report" -eq 0 ] || printf 'supervision sentinel: host monitoring is DISARMED for this home; run %s enable to restore it\n' \
-      "$FM_SENTINEL_DIR/fm-supervision-sentinel.sh"
-    return 0
-  fi
   fm_supervision_status "$FM_SENTINEL_STATE" "$FM_SENTINEL_GRACE"
   if [ "$record_host" -eq 1 ]; then
     # Publish liveness only for launchd's private entry point, and only once this
@@ -899,7 +902,17 @@ fm_sentinel_check() { # <scheduled|diagnostic|note>
     # below has no aggregate bound: from the trap, one slow notifier channel pushed
     # the proof past that wait and a perfectly healthy launchd service was recorded
     # as a registration failure with a retry cooldown behind it.
+    #
+    # It also lands BEFORE the disarm gate below: the proof is a local marker, not
+    # an alert, and gating it on the disarm record deadlocked `enable`, whose
+    # registration wait needs a launchd-spawned check to complete while the home
+    # is still disarmed.
     fm_sentinel_record_check || true
+  fi
+  if [ -f "$FM_SENTINEL_DISARMED" ]; then
+    [ "$report" -eq 0 ] || printf 'supervision sentinel: host monitoring is DISARMED for this home; run %s enable to restore it\n' \
+      "$FM_SENTINEL_DIR/fm-supervision-sentinel.sh"
+    return 0
   fi
   if [ "$FM_SUP_IN_FLIGHT" -eq 0 ]; then
     [ "$clear_on_recovery" -eq 0 ] || fm_sentinel_clear_alarm

@@ -68,6 +68,8 @@ set -u
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=bin/fm-wake-lib.sh
 . "$SCRIPT_DIR/fm-wake-lib.sh"
+# shellcheck source=bin/fm-supervision-lib.sh
+. "$SCRIPT_DIR/fm-supervision-lib.sh"
 
 WATCH="$SCRIPT_DIR/fm-watch.sh"
 SENTINEL="$SCRIPT_DIR/fm-supervision-sentinel.sh"
@@ -366,10 +368,16 @@ esac
 # above, so a usage error still has no registration or notification side effect.
 sentinel_armed=0
 arm_host_sentinel() {
+  local rc=0
   [ "$sentinel_armed" -eq 0 ] || return 0
   sentinel_armed=1
   [ -x "$SENTINEL" ] || return 0
-  "$SENTINEL" arm && return 0
+  "$SENTINEL" arm || rc=$?
+  [ "$rc" -eq 0 ] && return 0
+  # A deliberate no-op (durably disarmed home, sentinel mode off, non-primary
+  # scope) already reported itself if it had anything to say; it is not the
+  # unavailable-alarm failure this warning names.
+  [ "$rc" -eq "$FM_SUP_SENTINEL_NOOP_EXIT" ] && return 0
   echo "watcher: WARNING - host-level supervision-outage alarm is unavailable" >&2
 }
 

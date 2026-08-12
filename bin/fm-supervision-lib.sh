@@ -105,6 +105,12 @@ fm_supervision_unhealthy() {
 # spelled exactly once in the tree.
 FM_SUP_ARM_RECORD_NAME=.supervision-sentinel.arm-failure
 
+# Canonical basename of the durable host-sentinel deliberate-disarm record,
+# shared for the same reason: the session-start banner and the sentinel must
+# never disagree about which file marks a deliberately disarmed home.
+# shellcheck disable=SC2034 # Read by callers after sourcing.
+FM_SUP_DISARM_RECORD_NAME=.supervision-sentinel.disarmed
+
 # Exit status `bin/fm-supervision-sentinel.sh arm` uses for a positively proven
 # missing HOST capability, as distinct from a failed registration attempt (exit 1).
 # A caller may stop retrying only on this status. Giving up on an ambiguous error
@@ -113,6 +119,14 @@ FM_SUP_ARM_RECORD_NAME=.supervision-sentinel.arm-failure
 # retry schedule.
 # shellcheck disable=SC2034 # Read by callers after sourcing.
 FM_SUP_SENTINEL_UNSUPPORTED_EXIT=3
+
+# Exit status `bin/fm-supervision-sentinel.sh arm` uses for a deliberate no-op:
+# a durably disarmed home, FM_SUPERVISION_SENTINEL_MODE=off, or a non-primary
+# scope. The sentinel declined on purpose rather than tried and lost, so a
+# caller must neither treat the home as protected nor spend failure evidence,
+# retries, or backoff on it; exit 0 is reserved for a verified registration.
+# shellcheck disable=SC2034 # Read by callers after sourcing.
+FM_SUP_SENTINEL_NOOP_EXIT=4
 
 # Canonical basename of the durable away-mode host-alarm availability ledger:
 # one tab-separated `<iso-timestamp> <unavailable|restored> <detail>` row per

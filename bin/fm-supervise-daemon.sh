@@ -1396,6 +1396,7 @@ fm_super_main() {
   local SENTINEL_GAP="$STATE/$FM_SUP_AWAY_GAP_NAME"
   local SENTINEL_ARMED=0
   local SENTINEL_UNSUPPORTED=0
+  local SENTINEL_NOOP_LOGGED=0
   local SENTINEL_GAP_OPEN=0
   local SENTINEL_GAP_SINCE=0
   local SENTINEL_ARM_FAILURES=0
@@ -1606,6 +1607,20 @@ fm_super_main() {
         sentinel_gap_append "$SENTINEL_GAP" restored \
           "host outage alarms restored after $((now - SENTINEL_GAP_SINCE))s unavailable and $SENTINEL_ARM_FAILURES failed registration attempt(s) during this away session"
         log "host-level supervision-outage alarm restored after ${SENTINEL_ARM_FAILURES} failed registration attempt(s)"
+      fi
+      return 0
+    fi
+    # A deliberate no-op (durably disarmed home, sentinel mode off, non-primary
+    # scope) is neither a verified registration nor a failure. It must not latch
+    # ARMED, because the home is deliberately unprotected; it must not touch the
+    # gap ledger, so an open gap stays open for the return catch-up to report and
+    # no spurious unavailable/restored row is appended; and it must not spend the
+    # failure count or backoff, so the base-cadence retry survives to observe a
+    # mid-away `enable` and verify it normally.
+    if [ "$rc" -eq "$FM_SUP_SENTINEL_NOOP_EXIT" ]; then
+      if [ "$SENTINEL_NOOP_LOGGED" -eq 0 ]; then
+        SENTINEL_NOOP_LOGGED=1
+        log "host sentinel arm: deliberate no-op, not a registration and not a failure: ${out:-sentinel mode off or non-primary scope}"
       fi
       return 0
     fi

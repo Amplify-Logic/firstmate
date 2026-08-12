@@ -280,11 +280,11 @@ if [ -n "$BOOT_OUT" ]; then
 else
   printf '(silent - all good)\n'
 fi
-if [ -f "$STATE/.supervision-sentinel.disarmed" ]; then
+if [ -f "$STATE/$FM_SUP_DISARM_RECORD_NAME" ]; then
   subsection "HOST SUPERVISION SENTINEL - DISARMED"
   printf 'Host-level watcher-outage detection is deliberately disabled for this home.\n'
   printf 'It will remain disabled until the session owner explicitly runs bin/fm-supervision-sentinel.sh enable.\n'
-  cat "$STATE/.supervision-sentinel.disarmed"
+  cat "$STATE/$FM_SUP_DISARM_RECORD_NAME"
 fi
 # A failed registration SUPPRESSES further launchd retries for a growing cooldown,
 # so it disables host monitoring just as effectively as a deliberate disarm. It

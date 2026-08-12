@@ -233,8 +233,11 @@ test_in_harness_modes_are_marker_only_and_honor_a_durable_disarm() {
   assert_contains "$out" 'OK - no task metadata in flight' "the operator diagnostic did not report the idle verdict"
   printf 'project=test\n' > "$home/state/task.meta"
 
-  # A deliberately disarmed home stays silent on every channel and stops
-  # accumulating evidence until an explicit verified enable.
+  # A deliberately disarmed home stays silent on every EXTERNAL channel and stops
+  # accumulating outage evidence until an explicit verified enable. The scheduled
+  # host check still records its LOCAL liveness proof first: that marker is what
+  # enable's bounded registration wait observes, so a proof gated on the disarm
+  # record would deadlock the one documented recovery command forever.
   rm -f "$marker"
   printf 'state=disarmed\n' > "$home/state/.supervision-sentinel.disarmed"
   for mode in check note-outage scheduled-check; do
@@ -244,10 +247,15 @@ test_in_harness_modes_are_marker_only_and_honor_a_durable_disarm() {
     if [ "$mode" = check ]; then
       assert_contains "$out" 'DISARMED' "the operator diagnostic hid the deliberate disarm"
     fi
+    if [ "$mode" = scheduled-check ]; then
+      [ -s "$home/state/.supervision-sentinel-last-check" ] \
+        || fail "a disarmed home's scheduled check withheld the local liveness proof enable waits on"
+    else
+      [ ! -e "$home/state/.supervision-sentinel-last-check" ] \
+        || fail "$mode forged the launchd liveness proof on a disarmed home"
+    fi
   done
-  [ ! -e "$home/state/.supervision-sentinel-last-check" ] \
-    || fail "a disarmed home still published host-service liveness"
-  rm -f "$home/state/.supervision-sentinel.disarmed"
+  rm -f "$home/state/.supervision-sentinel.disarmed" "$home/state/.supervision-sentinel-last-check"
   pass "supervision sentinel: check reports a marker-only verdict, note-outage stays silent, and every mode honors a durable disarm"
 }
 
@@ -627,13 +635,20 @@ test_explicit_disarm_is_durable_home_scoped_and_reversible() {
   assert_contains "$(cat "$home/state/.supervision-sentinel.disarmed")" "home=$home" "disarm record lost its canonical home identity"
   [ ! -e "$home/state/.supervision-sentinel.plist" ] || fail "disarm left its generated manifest installed"
 
+  # An ordinary arm on a disarmed home is a deliberate no-op: it must not
+  # register, must not exit 0 (that is reserved for a verified registration),
+  # and must not record a failure, because it neither protected the home nor
+  # tried and lost.
   before=$(grep -c '^bootstrap ' "$log" || true)
   FM_SUPERVISION_SENTINEL_MODE=auto FM_SENTINEL_PLATFORM=Darwin FM_SENTINEL_LAUNCHCTL="$fake" \
     FM_ROOT_OVERRIDE="$home" FM_HOME="$home" FM_STATE_OVERRIDE="$home/state" \
-    "$SENTINEL" arm >/dev/null 2>&1 || fail "automatic arm should honor an explicit disarm without failing watcher entry"
+    "$SENTINEL" arm >/dev/null 2>&1
+  expect_code 4 $? "automatic arm on a disarmed home did not report the deliberate no-op status"
   after=$(grep -c '^bootstrap ' "$log" || true)
   [ "$after" -eq "$before" ] || fail "ordinary arm silently overrode the durable disarm"
   [ -s "$home/state/.supervision-sentinel.disarmed" ] || fail "ordinary arm cleared the durable disarm record"
+  [ ! -e "$home/state/.supervision-sentinel.arm-failure" ] \
+    || fail "a deliberate no-op arm recorded a registration failure it never attempted"
 
   FM_SUPERVISION_SENTINEL_MODE=off FM_SENTINEL_PLATFORM=Darwin FM_SENTINEL_LAUNCHCTL="$fake" \
     FM_ROOT_OVERRIDE="$home" FM_HOME="$home" FM_STATE_OVERRIDE="$home/state" \
@@ -644,6 +659,71 @@ test_explicit_disarm_is_durable_home_scoped_and_reversible() {
   assert_not_contains "$(cat "$ROOT/bin/fm-teardown.sh" "$ROOT/bin/fm-session-start.sh" "$ROOT/bin/fm-watch-arm.sh")" \
     'fm-supervision-sentinel.sh disarm' "ordinary lifecycle code invokes the explicit-only disarm path"
   pass "supervision sentinel: explicit disarm is durable, home-scoped, visible, and explicitly reversible"
+}
+
+# Regression: disarm -> enable must converge against a transport that does NOT
+# forge the liveness proof. make_fake_launchctl stamps the last-check file from
+# bootstrap/kickstart directly, which masked a deadlock: while the durable disarm
+# record exists, a launchd-spawned scheduled-check that returns before recording
+# the proof leaves enable's bounded registration wait nothing to observe, so the
+# one documented recovery command timed out and preserved the disarm record
+# forever. This fake launchd runs the REAL scheduled-check on bootstrap and
+# kickstart, exactly as RunAtLoad does, so the proof exists only if that check
+# records it on the still-disarmed home.
+test_disarm_then_enable_restores_host_monitoring() {
+  local home="$TMP_ROOT/reenable" fake="$TMP_ROOT/reenable-launchctl" log="$TMP_ROOT/reenable-launchctl.log"
+  local loaded="$TMP_ROOT/reenable-loaded" recorder="$TMP_ROOT/record-reenable" alerts="$TMP_ROOT/reenable-alerts.log" checked out
+  make_primary "$home"
+  home=$(cd "$home" && pwd -P)
+  checked="$home/state/.supervision-sentinel-last-check"
+  make_recorder "$recorder" "$alerts"
+  cat > "$fake" <<SH
+#!/usr/bin/env bash
+printf '%s' "\$1" >> "$log"
+shift
+for arg in "\$@"; do printf ' <%s>' "\$arg" >> "$log"; done
+printf '\\n' >> "$log"
+run_scheduled_check() {
+  FM_SUPERVISION_SENTINEL_MODE=auto FM_SENTINEL_PLATFORM=Darwin FM_SENTINEL_LAUNCHCTL="$fake" FM_ROOT_OVERRIDE="$home" FM_HOME="$home" FM_STATE_OVERRIDE="$home/state" FM_WEDGE_ALARM_CHANNEL=osascript FM_WEDGE_ALARM_EXEC="$recorder" "$SENTINEL" scheduled-check
+}
+case "\$(tail -n 1 "$log")" in
+  print*) [ -e "$loaded" ] ;;
+  bootstrap*) : > "$loaded"; run_scheduled_check ;;
+  bootout*) rm -f "$loaded" ;;
+  kickstart*) run_scheduled_check ;;
+  enable*) exit 0 ;;
+  *) exit 2 ;;
+esac
+SH
+  chmod +x "$fake"
+
+  FM_SUPERVISION_SENTINEL_MODE=auto FM_SENTINEL_PLATFORM=Darwin FM_SENTINEL_LAUNCHCTL="$fake" \
+    FM_SENTINEL_CHECK_WAIT_SECS=5 \
+    FM_ROOT_OVERRIDE="$home" FM_HOME="$home" FM_STATE_OVERRIDE="$home/state" \
+    "$SENTINEL" arm || fail "re-enable fixture could not register against the real-check transport"
+  FM_SENTINEL_PLATFORM=Darwin FM_SENTINEL_LAUNCHCTL="$fake" \
+    FM_ROOT_OVERRIDE="$home" FM_HOME="$home" FM_STATE_OVERRIDE="$home/state" \
+    "$SENTINEL" disarm >/dev/null || fail "re-enable fixture could not disarm"
+  [ -s "$home/state/.supervision-sentinel.disarmed" ] || fail "re-enable fixture left no durable disarm record"
+
+  # An outage begins while the home is disarmed: the enable-time launchd check
+  # must record the local proof yet still cross no external channel and write no
+  # outage marker for the deliberately disarmed home.
+  printf 'project=test\n' > "$home/state/task.meta"
+  touch -t 202001010000 "$home/state/.last-watcher-beat"
+
+  out=$(FM_SUPERVISION_SENTINEL_MODE=auto FM_SENTINEL_PLATFORM=Darwin FM_SENTINEL_LAUNCHCTL="$fake" \
+    FM_SENTINEL_CHECK_WAIT_SECS=5 \
+    FM_ROOT_OVERRIDE="$home" FM_HOME="$home" FM_STATE_OVERRIDE="$home/state" \
+    "$SENTINEL" enable) || fail "enable after disarm deadlocked instead of restoring host monitoring: $out"
+  assert_contains "$out" 'enabled for this home' "enable did not report the restored service"
+  [ ! -e "$home/state/.supervision-sentinel.disarmed" ] || fail "a verified enable left the durable disarm record behind"
+  [ -e "$loaded" ] || fail "enable did not load the exact home service"
+  [ -s "$checked" ] || fail "the launchd-spawned check on the disarmed home never recorded the local liveness proof"
+  [ ! -e "$alerts" ] || fail "the enable-time check on a disarmed home crossed the external channel: $(cat "$alerts")"
+  [ ! -e "$home/state/.supervision-outage-alarm" ] || fail "the enable-time check wrote outage evidence on a disarmed home"
+  [ ! -e "$home/state/.supervision-sentinel.arm-failure" ] || fail "a verified enable left an arm-failure record"
+  pass "supervision sentinel: disarm then enable restores host monitoring without forged liveness or external noise"
 }
 
 test_watch_arm_validates_arguments_before_sentinel_registration() {
@@ -667,7 +747,7 @@ test_watch_arm_registers_the_host_sentinel_only_after_a_healthy_watcher() {
   home=$(cd "$home" && pwd -P)
   order="$home/arm-order.log"
   out="$home/arm.out"
-  cp "$ROOT/bin/fm-watch-arm.sh" "$ROOT/bin/fm-wake-lib.sh" "$home/bin/" \
+  cp "$ROOT/bin/fm-watch-arm.sh" "$ROOT/bin/fm-wake-lib.sh" "$ROOT/bin/fm-supervision-lib.sh" "$home/bin/" \
     || fail "could not stage the scratch watcher-arm tree"
   cat > "$home/bin/fm-watch.sh" <<SH
 #!/usr/bin/env bash
@@ -934,6 +1014,41 @@ test_contended_arm_never_reports_success_without_verified_service_evidence() {
   pass "supervision sentinel: a contended arm retries the lock once, then reports the missing evidence instead of success"
 }
 
+# A deliberate no-op must be distinguishable from both a verified registration
+# and a genuine failure, so exit 0 can never latch a deliberately unprotected
+# home as protected. The disarmed cause is asserted beside the disarm lifecycle
+# above; these are the process-local mode and scope causes.
+test_deliberate_noop_arm_is_a_distinct_non_failure_result() {
+  local home="$TMP_ROOT/noop" fake="$TMP_ROOT/noop-launchctl" log="$TMP_ROOT/noop-launchctl.log"
+  local loaded="$TMP_ROOT/noop-loaded" checked err status
+  make_primary "$home"
+  home=$(cd "$home" && pwd -P)
+  checked="$home/state/.supervision-sentinel-last-check"
+  err="$TMP_ROOT/noop.err"
+  make_fake_launchctl "$fake" "$log" "$loaded" "$checked"
+
+  FM_SUPERVISION_SENTINEL_MODE=off FM_SENTINEL_PLATFORM=Darwin FM_SENTINEL_LAUNCHCTL="$fake" \
+    FM_ROOT_OVERRIDE="$home" FM_HOME="$home" FM_STATE_OVERRIDE="$home/state" \
+    "$SENTINEL" arm 2>"$err"
+  status=$?
+  expect_code 4 "$status" "sentinel mode off did not report the deliberate no-op status"
+  [ ! -e "$log" ] || fail "a mode-off no-op still reached launchd: $(cat "$log")"
+  [ ! -e "$home/state/.supervision-sentinel.arm-failure" ] \
+    || fail "a mode-off no-op recorded a registration failure it never attempted"
+
+  rm -f "$home/AGENTS.md"
+  FM_SUPERVISION_SENTINEL_MODE=auto FM_SENTINEL_PLATFORM=Darwin FM_SENTINEL_LAUNCHCTL="$fake" \
+    FM_ROOT_OVERRIDE="$home" FM_HOME="$home" FM_STATE_OVERRIDE="$home/state" \
+    "$SENTINEL" arm 2>"$err"
+  status=$?
+  expect_code 4 "$status" "a non-primary scope did not report the deliberate no-op status"
+  [ ! -s "$err" ] || fail "a non-primary no-op printed a diagnostic instead of staying silent: $(cat "$err")"
+  [ ! -e "$log" ] || fail "a non-primary no-op still reached launchd: $(cat "$log")"
+  [ ! -e "$home/state/.supervision-sentinel.arm-failure" ] \
+    || fail "a non-primary no-op recorded a registration failure it never attempted"
+  pass "supervision sentinel: a deliberate no-op arm reports its own status with no launchd mutation and no failure record"
+}
+
 test_real_channel_uses_unambiguous_notification_title_without_posting() {
   local home="$TMP_ROOT/title" fakebin log i
   make_primary "$home"
@@ -1053,10 +1168,12 @@ test_arm_registers_one_home_scoped_read_only_launchd_job
 test_unconverged_arm_backs_off_instead_of_churning_launchd
 test_rolled_back_clock_does_not_suppress_registration_forever
 test_explicit_disarm_is_durable_home_scoped_and_reversible
+test_disarm_then_enable_restores_host_monitoring
 test_watch_arm_validates_arguments_before_sentinel_registration
 test_watch_arm_registers_the_host_sentinel_only_after_a_healthy_watcher
 test_away_mode_defers_host_registration_until_the_daemon_sees_a_healthy_watcher
 test_contended_arm_never_reports_success_without_verified_service_evidence
 test_missing_host_capability_is_a_distinct_permanent_result
+test_deliberate_noop_arm_is_a_distinct_non_failure_result
 test_real_channel_uses_unambiguous_notification_title_without_posting
 test_real_launchd_scheduled_check_delivers_end_to_end
