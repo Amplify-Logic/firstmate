@@ -20,9 +20,11 @@ CALLS="$TMP_ROOT/herdr-calls.txt"
 LISTING="$TMP_ROOT/plugin-list.json"
 PANE_STATUS="$TMP_ROOT/pane-status"
 
-mkdir -p "$HOME_DIR/data/sample-report-r1" "$HOME_DIR/config"
+mkdir -p "$HOME_DIR/data/sample-report-r1" "$HOME_DIR/data/goals" "$HOME_DIR/config"
 printf '# Sample\n\nWhat the scout found.\n' > "$HOME_DIR/data/sample-report-r1/report.md"
 printf 'not markdown\n' > "$HOME_DIR/data/plain.txt"
+printf '# Artevo\n\nThe end state.\n' > "$HOME_DIR/data/goals/artevo-workspace.md"
+printf '# Notes\n\nBeside the report.\n' > "$HOME_DIR/data/sample-report-r1/notes.md"
 
 cat > "$FAKEBIN/herdr" <<SH
 #!/usr/bin/env bash
@@ -142,6 +144,29 @@ test_a_plain_markdown_path_falls_back_to_its_own_path() {
   pass "a Markdown file outside the records falls back to its own path"
 }
 
+# Only data/<task-id>/report.md has a chart-room view. Everything else under the
+# records - a goal charter the captain is handed, a note filed beside a report -
+# must be named by its own path rather than by a link that leads to nothing.
+test_only_a_task_report_earns_a_chart_room_link() {
+  local out file
+  file="$HOME_DIR/data/sample-report-r1/report.md"
+  out=$(FM_BACKEND=tmux overlay "$file" 2>&1)
+  assert_contains "$out" "http://127.0.0.1:4390/report/sample-report-r1" \
+    "a task report given by path lost its chart-room link"
+
+  file="$HOME_DIR/data/goals/artevo-workspace.md"
+  out=$(FM_BACKEND=tmux overlay "$file" 2>&1)
+  assert_contains "$out" "$file" "a goal charter should fall back to its own path"
+  assert_not_contains "$out" "/report/goals" "a goal charter must not be given a report link that 404s"
+
+  file="$HOME_DIR/data/sample-report-r1/notes.md"
+  out=$(FM_BACKEND=tmux overlay "$file" 2>&1)
+  assert_contains "$out" "$file" "a note beside a report should fall back to its own path"
+  assert_not_contains "$out" "/report/sample-report-r1" \
+    "a note beside a report must not be given that report's link"
+  pass "only data/<task-id>/report.md earns a chart-room link; the rest name their own path"
+}
+
 test_a_missing_or_wrong_source_is_a_real_error() {
   local out status
   out=$(overlay no-such-task-q9 2>&1)
@@ -163,4 +188,5 @@ test_an_explicit_plugin_and_placement_win
 test_a_refused_pane_steps_aside_with_a_link
 test_link_only_never_touches_the_terminal
 test_a_plain_markdown_path_falls_back_to_its_own_path
+test_only_a_task_report_earns_a_chart_room_link
 test_a_missing_or_wrong_source_is_a_real_error

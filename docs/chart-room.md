@@ -81,6 +81,10 @@ That last lane is deliberate.
 Work can be untagged, but it cannot be invisible, and a chart that disagrees with the records shows the disagreement instead of hiding it.
 The same applies at fleet level: work whose project matches nothing on the register is listed on the home page rather than dropped.
 
+The same rule covers a record that cannot be read at all.
+Identity is enumerated first, then each record is read on its own; when that read fails or its output does not parse, the piece of work is still shown, by name, marked as one whose record could not be read.
+It is never dropped, and one bad record never blanks the page around it.
+
 ## Language
 
 The chart room's own words are the captain's: shipped, under way, charted next, your call, on ice.

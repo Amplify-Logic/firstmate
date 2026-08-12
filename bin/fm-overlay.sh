@@ -95,12 +95,26 @@ case "$PLACEMENT" in
   *) fail "placement must be one of overlay, popup, split, tab, zoomed: $PLACEMENT" ;;
 esac
 
+FM_HOME_DIR=$(cd "$FM_HOME" 2>/dev/null && pwd) || FM_HOME_DIR=$FM_HOME
+
 SOURCE=
 if [ -f "$INPUT" ]; then
   SOURCE=$INPUT
-  case "$(cd "$(dirname "$INPUT")" && pwd)" in
-    "$FM_HOME"/data/*) TASK_ID=$(basename "$(cd "$(dirname "$INPUT")" && pwd)") ;;
-  esac
+  # Only data/<task-id>/report.md has a chart-room /report/ view. Any other
+  # Markdown under the records - a goal charter, a note beside a report - is
+  # named by its own path, because a derived link there would 404.
+  if [ "$(basename "$INPUT")" = report.md ]; then
+    PARENT=$(cd "$(dirname "$INPUT")" && pwd)
+    case "$PARENT" in
+      "$FM_HOME_DIR"/data/*/*) ;;
+      "$FM_HOME_DIR"/data/*)
+        CANDIDATE=$(basename "$PARENT")
+        if printf '%s\n' "$CANDIDATE" | grep -Eq '^[A-Za-z0-9][A-Za-z0-9._-]*$'; then
+          TASK_ID=$CANDIDATE
+        fi
+        ;;
+    esac
+  fi
 elif printf '%s\n' "$INPUT" | grep -Eq '^[A-Za-z0-9][A-Za-z0-9._-]*$'; then
   REPORT="$FM_HOME/data/$INPUT/report.md"
   [ -f "$REPORT" ] || fail "no Markdown source found; looked for '$INPUT' and '$REPORT'"

@@ -24,13 +24,17 @@
 // `render` and `data` exist so the derivation can be tested without a socket.
 
 import { createServer } from "node:http";
-import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, realpathSync, statSync } from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { spawn } from "node:child_process";
 import { render as renderMarkdown } from "./fm-read.mjs";
 
 const LOOPBACK = "127.0.0.1";
 const SHOW_CONCURRENCY = 8;
+// A child that never answers must not hold a request open forever: one page is
+// one read of the records, so a read that stalls is a failure, not a wait.
+const CHILD_TIMEOUT_MS = 15000;
 const ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 
 function fail(message, code = 1) {
@@ -57,12 +61,24 @@ function runCapture(command, args, cwd) {
     const child = spawn(command, args, { cwd, encoding: "utf8" });
     let stdout = "";
     let stderr = "";
+    let settled = false;
+    let timer = null;
+    const settle = (action, value) => {
+      if (settled) return;
+      settled = true;
+      if (timer) clearTimeout(timer);
+      action(value);
+    };
+    timer = setTimeout(() => {
+      child.kill("SIGKILL");
+      settle(reject, new Error(`${command} ${args.join(" ")} did not answer within ${CHILD_TIMEOUT_MS / 1000}s`));
+    }, CHILD_TIMEOUT_MS);
     child.stdout.on("data", (chunk) => { stdout += chunk; });
     child.stderr.on("data", (chunk) => { stderr += chunk; });
-    child.on("error", (error) => reject(new Error(`${command} could not run: ${error.message}`)));
+    child.on("error", (error) => settle(reject, new Error(`${command} could not run: ${error.message}`)));
     child.on("close", (status) => {
-      if (status !== 0) reject(new Error(`${command} ${args.join(" ")} failed: ${(stderr || stdout).trim()}`));
-      else resolve(stdout);
+      if (status !== 0) settle(reject, new Error(`${command} ${args.join(" ")} failed: ${(stderr || stdout).trim()}`));
+      else settle(resolve, stdout);
     });
   });
 }
@@ -118,16 +134,23 @@ function blank(value) {
   return !value || value === "-" || value === "none";
 }
 
+// A record that was enumerated but cannot be read is still a piece of work the
+// captain has. Dropping it would make the chart quietly disagree with the
+// records, which is the one thing this surface exists to prevent, so it comes
+// back as itself with its standing marked unknown and every other record renders.
+function unreadableTask(id) {
+  return { id, title: id, unreadable: true };
+}
+
 async function loadTasks(home) {
   const listed = taskIdsFromList(await runCapture("tasks-axi", ["list"], home));
-  const shown = await mapPool(listed, SHOW_CONCURRENCY, async (id) => {
+  return mapPool(listed, SHOW_CONCURRENCY, async (id) => {
     try {
-      return parseShow(await runCapture("tasks-axi", ["show", id, "--full"], home));
+      return parseShow(await runCapture("tasks-axi", ["show", id, "--full"], home)) || unreadableTask(id);
     } catch {
-      return null;
+      return unreadableTask(id);
     }
   });
-  return shown.filter(Boolean);
 }
 
 function loadRegistry(home) {
@@ -291,6 +314,7 @@ function originOf(task) {
 }
 
 function bucketOf(task) {
+  if (task.unreadable) return "unreadable";
   if (task.state === "done") return "shipped";
   if (task.state === "in_flight") return "underway";
   if (task.held === "yes") return task.hold_kind === "captain" ? "decision" : "iced";
@@ -303,6 +327,7 @@ const STANDING = {
   next: "Charted next",
   decision: "Your call",
   iced: "On ice",
+  unreadable: "Could not be read",
 };
 
 function daysSince(date, today) {
@@ -448,6 +473,7 @@ export function buildModel({ home, tasks, projects, meta, archive, charters }) {
     unregistered: { items: unregistered, counts: countBuckets(unregistered) },
     decisions: items.filter((item) => item.bucket === "decision").sort(decisionOrder),
     iced: items.filter((item) => item.bucket === "iced"),
+    unreadable: items.filter((item) => item.bucket === "unreadable"),
     byId: new Map(items.map((item) => [item.id, item])),
   };
 }
@@ -457,7 +483,7 @@ function titleCase(name) {
 }
 
 function countBuckets(items) {
-  const counts = { shipped: 0, underway: 0, next: 0, decision: 0, iced: 0 };
+  const counts = { shipped: 0, underway: 0, next: 0, decision: 0, iced: 0, unreadable: 0 };
   for (const item of items) counts[item.bucket] += 1;
   return counts;
 }
@@ -596,6 +622,7 @@ li.next-i{color:var(--ink)}li.next-i .dot{color:var(--ink-soft)}
 li.planned-i{color:var(--ink-soft);font-style:italic}li.planned-i .dot{color:var(--line)}
 li.gate-i{background:var(--signal-soft);font-weight:600}li.gate-i .dot,li.gate-i .state{color:var(--signal)}
 li.iced-i{color:var(--ink-soft)}li.iced-i .dot{color:var(--ink-soft)}
+li.unreadable-i{background:var(--signal-soft);border:1px dashed #e4c8c2}li.unreadable-i .dot,li.unreadable-i .state{color:var(--signal)}
 .more{font-size:12.5px;color:var(--teal);padding:4px 8px;cursor:pointer;font-weight:600}
 .more:hover{text-decoration:underline}
 li.folded{display:none}
@@ -701,6 +728,9 @@ function standsPhrase(project) {
   if (counts.decision > 0) parts.push(counts.decision === 1 ? "1 answer wanted from you" : `${counts.decision} answers wanted from you`);
   if (counts.next > 0) parts.push(`${counts.next} charted next`);
   if (counts.iced > 0) parts.push(`${counts.iced} on ice`);
+  if (counts.unreadable > 0) {
+    parts.push(counts.unreadable === 1 ? "1 whose record could not be read" : `${counts.unreadable} whose records could not be read`);
+  }
   if (parts.length === 0) return counts.shipped > 0 ? "All quiet - everything filed here is finished." : "Nothing filed here yet.";
   return `${parts.join(", ")}.`;
 }
@@ -718,6 +748,7 @@ function homePage(model) {
         <span><b>${project.counts.next}</b> charted next</span>
         <span class="yours"><b>${project.counts.decision}</b> your call</span>
         <span><b>${project.counts.iced}</b> on ice</span>
+        ${project.counts.unreadable > 0 ? `<span class="yours"><b>${project.counts.unreadable}</b> could not be read</span>` : ""}
       </div>
     </a>`).join("");
 
@@ -725,6 +756,10 @@ function homePage(model) {
     ? `<div class="map-title" style="margin-top:26px">Not filed under a project</div>
        <div class="map-sub">${model.unregistered.items.length} piece${model.unregistered.items.length === 1 ? "" : "s"} of work whose project could not be matched. Shown so nothing hides.</div>
        <ul class="items">${model.unregistered.items.map((item) => itemRow(item, "")).join("")}</ul>`
+    : "";
+
+  const unreadableNote = model.unreadable.length > 0
+    ? `<div class="map-sub" style="margin-top:18px">${model.unreadable.length} piece${model.unreadable.length === 1 ? " of work could not be read" : "s of work could not be read"} from the records just now, so ${model.unreadable.length === 1 ? "it is listed" : "they are listed"} by name only rather than left out.</div>`
     : "";
 
   const icedNote = model.iced.length > 0
@@ -740,6 +775,7 @@ function homePage(model) {
   <div class="map-sub">Read from the live records on ${escapeHtml(model.date)}. Open a project for its goal map.</div>
   <div class="rows">${rows}</div>
   ${icedNote}
+  ${unreadableNote}
   ${strays}
 </main>
 ${overlayMarkup()}`,
@@ -747,13 +783,14 @@ ${overlayMarkup()}`,
   });
 }
 
-const DOTS = { shipped: "&#10004;", underway: "&#9679;", next: "&#9675;", decision: "&#9873;", iced: "&#10073;&#10073;" };
-const ROW_CLASS = { shipped: "done-i", underway: "underway-i", next: "next-i", decision: "gate-i", iced: "iced-i" };
+const DOTS = { shipped: "&#10004;", underway: "&#9679;", next: "&#9675;", decision: "&#9873;", iced: "&#10073;&#10073;", unreadable: "&#9888;" };
+const ROW_CLASS = { shipped: "done-i", underway: "underway-i", next: "next-i", decision: "gate-i", iced: "iced-i", unreadable: "unreadable-i" };
 
 function itemRow(item, project, folded = false) {
   const state = item.bucket === "underway"
     ? `<span class="state">${item.isScout ? "DIGGING" : "WORKING"}</span>`
-    : item.bucket === "decision" ? '<span class="state">YOURS</span>' : "";
+    : item.bucket === "decision" ? '<span class="state">YOURS</span>'
+      : item.bucket === "unreadable" ? '<span class="state">UNREADABLE</span>' : "";
   return `<li class="${ROW_CLASS[item.bucket]} clickable${folded ? " folded" : ""}" role="button" tabindex="0" data-node="${escapeHtml(item.id)}" data-project="${escapeHtml(project)}"><span class="dot">${DOTS[item.bucket]}</span><span class="t">${escapeHtml(clamp(item.title, 110))}</span>${state}</li>`;
 }
 
@@ -785,6 +822,7 @@ function goalDetailMarkup(lane) {
     [lane.counts.next, "charted next"],
     [lane.counts.decision, "waiting on your answer"],
     [lane.counts.iced, "on ice"],
+    [lane.counts.unreadable, "whose records could not be read"],
   ].filter(([count]) => count > 0).map(([count, label]) => `${count} ${label}`);
   const paragraphs = [];
   if (lane.other) {
@@ -809,6 +847,7 @@ function laneMarkup(lane, project) {
   const next = lane.items.filter((item) => item.bucket === "next");
   const decisions = lane.items.filter((item) => item.bucket === "decision");
   const iced = lane.items.filter((item) => item.bucket === "iced");
+  const unreadable = lane.items.filter((item) => item.bucket === "unreadable");
   const node = `data-node="${escapeHtml(goalNodeId(lane))}" data-project="${escapeHtml(project)}"`;
   const planned = lane.planned.length > 0
     ? `<ul class="items">${lane.planned.map((entry) => `<li class="planned-i clickable" role="button" tabindex="0" ${node}><span class="dot">&#9676;</span><span class="t">Planned: ${escapeHtml(entry)}</span></li>`).join("")}</ul>`
@@ -820,9 +859,11 @@ function laneMarkup(lane, project) {
     bucketBlock(lane.onIce ? "Waiting with the ice" : "Charted next", "", next, project, 8),
     decisions.length > 0 ? `<div class="bucket"><h3>Your call</h3><ul class="items">${decisions.map((item) => itemRow(item, project)).join("")}</ul></div>` : "",
     iced.length > 0 ? bucketBlock("On ice", "", iced, project, 8) : "",
+    bucketBlock("Could not be read", "", unreadable, project, 8),
     planned ? `<div class="bucket"><h3>Planned, not yet filed</h3>${planned}</div>` : "",
   ].join("");
-  const body = shipped.length + underway.length + next.length + decisions.length + iced.length + lane.planned.length === 0
+  const body = shipped.length + underway.length + next.length + decisions.length + iced.length
+    + unreadable.length + lane.planned.length === 0
     ? '<div class="empty">Nothing filed under this goal yet.</div>'
     : `${bucketBlock("Shipped", "done", shipped, project, 3)}${bucketBlock("Under way", "underway", underway, project, 8)}${nextBlock}`;
   return `<div class="lane${lane.onIce ? " iced" : ""}${lane.other ? " other" : ""}">
@@ -839,6 +880,7 @@ function flatProjectMarkup(project) {
     bucketBlock("Under way", "underway", project.items.filter((item) => item.bucket === "underway"), project.name, 0),
     bucketBlock("Charted next", "", project.items.filter((item) => item.bucket === "next"), project.name, 0),
     bucketBlock("On ice", "", project.items.filter((item) => item.bucket === "iced"), project.name, 0),
+    bucketBlock("Could not be read", "", project.items.filter((item) => item.bucket === "unreadable"), project.name, 0),
     bucketBlock("Shipped", "done", project.items.filter((item) => item.bucket === "shipped"), project.name, 8),
   ].join("");
   return `<div class="lanes"><div class="lane">${buckets || '<div class="empty">Nothing is filed under this project yet.</div>'}</div></div>`;
@@ -877,6 +919,9 @@ ${overlayMarkup()}`,
 }
 
 function plainState(item) {
+  if (item.bucket === "unreadable") {
+    return "Its record could not be read just now, so where it stands is unknown. It is shown here rather than dropped, so the chart never quietly disagrees with the records.";
+  }
   if (item.bucket === "shipped") return item.isScout ? "Finished - the findings are written up." : "Shipped.";
   if (item.bucket === "underway") return item.isScout ? "Being investigated right now." : "Being built right now.";
   if (item.bucket === "decision") return "Waiting on your answer.";
@@ -1083,42 +1128,51 @@ async function serve(home, port) {
   console.log("every page is read from the live records when you open it; stop with Ctrl-C");
 }
 
-const args = parseArgs(process.argv.slice(2));
-switch (args.command) {
-  case "serve": {
-    if (!args.home || !args.port) fail("serve requires --home and --port", 2);
-    await serve(args.home, Number(args.port));
-    break;
+async function main(argv) {
+  const args = parseArgs(argv);
+  switch (args.command) {
+    case "serve": {
+      if (!args.home || !args.port) fail("serve requires --home and --port", 2);
+      await serve(args.home, Number(args.port));
+      break;
+    }
+    case "render": {
+      if (!args.home || !args.path) fail("render requires --home and --path", 2);
+      const model = await loadModel(args.home);
+      const [routePath, rawQuery] = args.path.split("?");
+      const query = Object.fromEntries(new URLSearchParams(rawQuery || "").entries());
+      const rendered = renderRoute(model, routePath, query);
+      process.stdout.write(rendered.body);
+      if (rendered.status !== 200) process.exitCode = 3;
+      break;
+    }
+    case "data": {
+      if (!args.home) fail("data requires --home", 2);
+      const model = await loadModel(args.home);
+      process.stdout.write(`${JSON.stringify({
+        schema: "fm-chart-room.v1",
+        date: model.date,
+        projects: model.projects.map((project) => ({
+          name: project.name,
+          charter: Boolean(project.charter),
+          draft: Boolean(project.charter?.draft),
+          counts: project.counts,
+          lanes: project.lanes?.map((lane) => ({ id: lane.id, title: lane.title, other: lane.other, onIce: Boolean(lane.onIce), planned: lane.planned.length, items: lane.items.map((item) => item.id) })) || null,
+        })),
+        decisions: model.decisions.map((item) => ({ id: item.id, project: item.project, unblocks: item.dependents.length, waiting_days: item.waitingDays })),
+        iced: model.iced.map((item) => ({ id: item.id, project: item.project, reason: item.reason })),
+        unreadable: model.unreadable.map((item) => item.id),
+        unregistered: model.unregistered.items.map((item) => item.id),
+      }, null, 2)}\n`);
+      break;
+    }
+    default:
+      fail(`unknown engine command: ${args.command}`, 2);
   }
-  case "render": {
-    if (!args.home || !args.path) fail("render requires --home and --path", 2);
-    const model = await loadModel(args.home);
-    const [routePath, rawQuery] = args.path.split("?");
-    const query = Object.fromEntries(new URLSearchParams(rawQuery || "").entries());
-    const rendered = renderRoute(model, routePath, query);
-    process.stdout.write(rendered.body);
-    if (rendered.status !== 200) process.exitCode = 3;
-    break;
-  }
-  case "data": {
-    if (!args.home) fail("data requires --home", 2);
-    const model = await loadModel(args.home);
-    process.stdout.write(`${JSON.stringify({
-      schema: "fm-chart-room.v1",
-      date: model.date,
-      projects: model.projects.map((project) => ({
-        name: project.name,
-        charter: Boolean(project.charter),
-        draft: Boolean(project.charter?.draft),
-        counts: project.counts,
-        lanes: project.lanes?.map((lane) => ({ id: lane.id, title: lane.title, other: lane.other, onIce: Boolean(lane.onIce), planned: lane.planned.length, items: lane.items.map((item) => item.id) })) || null,
-      })),
-      decisions: model.decisions.map((item) => ({ id: item.id, project: item.project, unblocks: item.dependents.length, waiting_days: item.waitingDays })),
-      iced: model.iced.map((item) => ({ id: item.id, project: item.project, reason: item.reason })),
-      unregistered: model.unregistered.items.map((item) => item.id),
-    }, null, 2)}\n`);
-    break;
-  }
-  default:
-    fail(`unknown engine command: ${args.command}`, 2);
+}
+
+// Run the commands only when invoked as a command; importing this module for
+// buildModel, loadModel, or renderRoute must not consume argv or exit.
+if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  await main(process.argv.slice(2));
 }

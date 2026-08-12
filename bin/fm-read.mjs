@@ -44,9 +44,7 @@ function safeUrl(href) {
   return /^(?:https?|mailto):/.test(probe) ? href : "";
 }
 
-const anchorIds = new Set();
-
-function anchorId(text) {
+function anchorId(text, anchorIds) {
   const plain = text
     .replace(/`([^`]*)`/g, "$1")
     .replace(/!\[([^\]]*)\]\([^)]*\)/g, "$1")
@@ -121,7 +119,7 @@ function dedent(block) {
   });
 }
 
-function render(markdown) {
+function renderBlocks(markdown, anchorIds) {
   const lines = markdown.replaceAll("\u0000", "").replaceAll("\r\n", "\n").replaceAll("\r", "\n").split("\n");
   const out = [];
   let paragraph = [];
@@ -136,7 +134,7 @@ function render(markdown) {
   const openItem = () => list !== null && list.open;
   const flushItemBlock = () => {
     if (!itemLines.length) return;
-    const block = render(dedent(itemLines).join("\n"));
+    const block = renderBlocks(dedent(itemLines).join("\n"), anchorIds);
     itemLines = [];
     const lone = block.startsWith("<p>") && block.endsWith("</p>") && !block.slice(3, -4).includes("</p>");
     const content = lone ? block.slice(3, -4) : block;
@@ -150,7 +148,7 @@ function render(markdown) {
     list = null;
   };
   const flushQuote = () => {
-    if (quote.length) out.push(`<blockquote>${render(quote.join("\n"))}</blockquote>`);
+    if (quote.length) out.push(`<blockquote>${renderBlocks(quote.join("\n"), anchorIds)}</blockquote>`);
     quote = [];
   };
   const flushBlocks = () => {
@@ -197,7 +195,7 @@ function render(markdown) {
     if (heading) {
       flushBlocks();
       const level = heading[1].length;
-      out.push(`<h${level} id="${anchorId(heading[2])}">${inline(heading[2])}</h${level}>`);
+      out.push(`<h${level} id="${anchorId(heading[2], anchorIds)}">${inline(heading[2])}</h${level}>`);
       continue;
     }
     const headers = line.includes("|") ? tableCells(line) : null;
@@ -261,6 +259,13 @@ function render(markdown) {
   }
   flushBlocks();
   return out.join("\n");
+}
+
+// One document, one set of heading ids: de-duplication is scoped to the page
+// being rendered, so a second render of the same source produces the same
+// anchors as the first and an in-document link keeps resolving.
+function render(markdown) {
+  return renderBlocks(markdown, new Set());
 }
 
 const css = `

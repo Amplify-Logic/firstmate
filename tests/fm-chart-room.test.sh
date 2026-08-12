@@ -92,6 +92,28 @@ run_tasks add beta-first-b1 "The one piece of beta work" --kind ship --repo beta
 # Work whose project matches nothing on the register must stay visible.
 run_tasks add gamma-orphan-g1 "Work with no project on the register" --kind ship --repo gamma
 
+# Two identities the shadowed reader below refuses to hydrate: one whose read
+# fails outright, one whose output does not parse.
+run_tasks add alpha-unreadable-u1 "The record that refuses to be read" --kind ship --repo alpha
+run_tasks add alpha-garbled-u2 "The record whose output makes no sense" --kind ship --repo alpha
+
+# A reader that answers for every identity except those two, so the enumerated
+# set stays the same while two of its records cannot be hydrated.
+BROKEN_BIN="$TMP_ROOT/broken-bin"
+mkdir -p "$BROKEN_BIN"
+REAL_TASKS_AXI=$(command -v tasks-axi)
+cat > "$BROKEN_BIN/tasks-axi" <<SH
+#!/usr/bin/env bash
+if [ "\${1:-}" = show ]; then
+  case "\${2:-}" in
+    alpha-unreadable-u1) printf 'tasks-axi: that record could not be read\n' >&2; exit 1 ;;
+    alpha-garbled-u2) printf 'not the scalar format at all\n'; exit 0 ;;
+  esac
+fi
+exec "$REAL_TASKS_AXI" "\$@"
+SH
+chmod +x "$BROKEN_BIN/tasks-axi"
+
 MODEL="$HOME_DIR/model.json"
 chart data > "$MODEL" || fail "chart room could not derive the model"
 
@@ -218,6 +240,36 @@ test_unknown_addresses_refuse_plainly() {
   pass "unknown and unsafe addresses refuse with a plain page"
 }
 
+# The whole design rests on nothing hiding. A record tasks-axi list enumerated
+# but whose own record cannot be read must therefore still be on the page,
+# marked, and it must not take the rest of the page down with it.
+test_a_record_that_cannot_be_read_stays_visible_and_marked() {
+  local model home_page project_page
+  model=$(PATH="$BROKEN_BIN:$PATH" chart data) \
+    || fail "one record that cannot be read must not fail the whole derivation"
+  printf '%s' "$model" | jq -e '.unreadable | index("alpha-unreadable-u1")' >/dev/null \
+    || fail "a record whose read failed was dropped instead of kept"
+  printf '%s' "$model" | jq -e '.unreadable | index("alpha-garbled-u2")' >/dev/null \
+    || fail "a record whose output did not parse was dropped instead of kept"
+  # Everything else still derives: the charted lanes are untouched.
+  [ "$(printf '%s' "$model" | jq -r '.projects[] | select(.name=="alpha") | .lanes[] | select(.id=="g1") | .items | length')" = 3 ] \
+    || fail "two unreadable records disturbed the rest of the model"
+
+  home_page=$(PATH="$BROKEN_BIN:$PATH" chart render /) \
+    || fail "the fleet home must still render when a record cannot be read"
+  assert_contains "$home_page" "alpha-unreadable-u1" "a record that cannot be read vanished from the home page"
+  assert_contains "$home_page" "alpha-garbled-u2" "a record that did not parse vanished from the home page"
+  assert_contains "$home_page" "could not be read" "an unreadable record was not marked as such"
+  assert_contains "$home_page" "UNREADABLE" "the unreadable rows carry no marker"
+  assert_contains "$home_page" "gamma-orphan-g1" "one unreadable record blanked the rest of the home page"
+
+  project_page=$(PATH="$BROKEN_BIN:$PATH" chart render /p/alpha) \
+    || fail "the goal map must still render when a record cannot be read"
+  assert_contains "$project_page" "Lay the weekly run foundation" \
+    "one unreadable record emptied the goal map"
+  pass "a record that cannot be read stays visible and marked, and the rest still renders"
+}
+
 test_the_chart_room_speaks_the_captains_language() {
   local pages term
   pages=$(chart render /; chart render /p/alpha; chart render /p/alpha/node/alpha-decision-d1)
@@ -238,4 +290,5 @@ test_a_project_is_claimed_by_its_own_name_and_its_aliases
 test_a_project_without_a_charter_still_renders
 test_every_view_is_reachable_and_nothing_is_a_dead_end
 test_unknown_addresses_refuse_plainly
+test_a_record_that_cannot_be_read_stays_visible_and_marked
 test_the_chart_room_speaks_the_captains_language
