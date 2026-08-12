@@ -177,12 +177,16 @@ function loadArchive(home) {
     const repo = rest.match(/\(repo: ([^)]*)\)/)?.[1] || "";
     const kind = rest.match(/\(kind: ([^)]*)\)/)?.[1] || "";
     const closed = rest.match(/\((?:done|reported|archived) (\d{4}-\d{2}-\d{2})\)/)?.[1] || "";
+    // An archived headline carries its delivery link inline. Lift it out so the
+    // card reads as a sentence and the link becomes something to click.
+    const pr = rest.match(/(https:\/\/[^\s)]+)/)?.[1] || "";
     const title = rest
       .replace(/\s*blocked-by:.*$/, "")
+      .replace(/\s*https:\/\/\S+/g, "")
       .replace(/\s*\([^)]*\)\s*$/g, "")
       .split(" (repo:")[0]
       .trim();
-    entries.push({ id, title, repo, kind, closed, archived: true });
+    entries.push({ id, title, repo, kind, closed, pr, archived: true });
   }
   return entries;
 }
@@ -404,7 +408,7 @@ export function buildModel({ home, tasks, projects, meta, archive, charters }) {
       origin: "",
       report: reportFor(home, entry.id),
       originReport: null,
-      pr: (meta.get(entry.id) || {}).pr || "",
+      pr: [(meta.get(entry.id) || {}).pr, entry.pr].find((link) => /^https:\/\//.test(link || "")) || "",
       archived: true,
     });
   }
@@ -616,13 +620,13 @@ footer{padding:0 28px 24px;color:var(--ink-soft);font-size:12.5px}
 .sheet-pad{padding:20px 24px 22px}
 .detail h2{font:650 19px/1.34 Georgia,serif;margin:0 0 4px;padding-bottom:3px;overflow-wrap:anywhere}
 .detail .kind{font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--teal)}
-.detail.decision .kind{color:var(--signal)}
+.detail.is-decision .kind{color:var(--signal)}
 .detail p{margin:10px 0;overflow-wrap:anywhere}
 .detail .links{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
 .detail .links a{text-decoration:none;font-size:13.5px;padding:7px 13px;border-radius:7px;border:1px solid var(--line);background:#fffdf7}
 .detail .links a:hover{background:var(--paper-deep)}
 .detail .note{font-size:12.5px;color:var(--ink-soft);margin-top:14px}
-.detail .close{float:right;border:0;background:none;font-size:20px;cursor:pointer;color:var(--ink-soft);padding:4px 8px}
+.sheet-pad .close{float:right;border:0;background:none;font-size:20px;cursor:pointer;color:var(--ink-soft);padding:4px 8px}
 .standalone{max-width:640px;margin:24px auto;padding:0 24px}
 .report{padding:8px 28px 40px}
 .report main{padding:0}
@@ -792,7 +796,7 @@ function goalDetailMarkup(lane) {
     paragraphs.push(`<p><b>Planned, not yet filed as work:</b></p><ul>${lane.planned.map((entry) => `<li>${escapeHtml(entry)}</li>`).join("")}</ul>`);
     paragraphs.push('<p class="note">Planned lines are intent recorded on the chart, not work under way. Say the word and any of them becomes real work.</p>');
   }
-  return `<div class="detail work">
+  return `<div class="detail">
     <div class="kind">Goal</div>
     <h2>${escapeHtml(lane.title)}</h2>
     ${paragraphs.join("")}
@@ -915,7 +919,7 @@ function detailMarkup(model, item) {
   const answer = item.bucket === "decision"
     ? '<p class="note">Answer it on the decisions page or just say it in chat - both land in the same records, and the waiting work starts on its own.</p>'
     : "";
-  return `<div class="detail ${item.bucket === "decision" ? "decision" : "work"}">
+  return `<div class="detail${item.bucket === "decision" ? " is-decision" : ""}">
     <div class="kind">${item.bucket === "decision" ? "Your call" : "Work"}</div>
     <h2>${escapeHtml(item.title)}</h2>
     ${paragraphs.join("")}
