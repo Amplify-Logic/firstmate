@@ -648,14 +648,19 @@ probe_autonomy() {
 }
 
 probe_turnend() {
+  local evidence
   if [ -s "$ARTIFACTS/05-turn-end-payload.txt" ]; then
     record_result turn-end pass "the native per-turn hook produced an external marker and raw payload" \
       "evidence/05-turn-end-payload.txt"
   else
     capture_pane 05-turn-end-missing 180
-    [ -e "$HOOK_RAW" ] && cp "$HOOK_RAW" "$ARTIFACTS/05-turn-end-payload.txt"
+    evidence="evidence/05-turn-end-missing.ansi"
+    if [ -e "$HOOK_RAW" ]; then
+      cp "$HOOK_RAW" "$ARTIFACTS/05-turn-end-payload.txt"
+      evidence="evidence/05-turn-end-payload.txt,$evidence"
+    fi
     record_result turn-end fail "the completed turn produced no independently recorded hook evidence" \
-      "evidence/05-turn-end-payload.txt,evidence/05-turn-end-missing.ansi"
+      "$evidence"
   fi
 }
 
@@ -736,7 +741,7 @@ probe_resume() {
       restored=1
     else
       submit_text "Reply with exactly the resume token I asked you to remember in the previous turn." || true
-      if wait_for_regex "$token"; then restored=1; fi
+      if wait_for pane_text_matches "$token"; then restored=1; fi
       capture_pane 08-resume-recall 220
     fi
   fi

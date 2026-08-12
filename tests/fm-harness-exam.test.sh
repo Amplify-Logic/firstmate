@@ -101,7 +101,7 @@ test_ambient_tmux_survives_full_failed_exam() {
   dir=$(fm_test_tmproot harness-exam-ambient-tmux)
   socket="$dir/ambient.sock"
   runtime_path="$dir/bin"
-  mkdir -p "$runtime_path"
+  mkdir -p "$runtime_path" "$dir/source-home"
   cat > "$runtime_path/kimi" <<'EOF'
 #!/usr/bin/env bash
 if [ "${1:-}" = --version ]; then printf 'fake-kimi 1\n'; exit 0; fi
@@ -110,10 +110,16 @@ EOF
   chmod +x "$runtime_path/kimi"
   tmux -S "$socket" new-session -d -s unrelated
   set +e
-  TMUX="$socket,999,0" PATH="$runtime_path:$PATH" "$EXAM" kimi --timeout 11 --output "$dir/output" >/dev/null 2>&1
+  TMUX="$socket,999,0" PATH="$runtime_path:$PATH" \
+    FM_HARNESS_EXAM_BUSY_SECONDS=10 FM_KIMI_SOURCE_HOME='' \
+    "$EXAM" kimi --timeout 11 --output "$dir/output" --source-home "$dir/source-home" >/dev/null 2>&1
   rc=$?
   set -e
   [ "$rc" -ne 0 ] || fail "fake runtime unexpectedly passed the full exam"
+  [ -f "$dir/output/evidence/run-context.txt" ] \
+    || fail "the exam exited before creating lab state, so the survival check proved nothing"
+  [ -f "$dir/output/results.json" ] \
+    || fail "the exam never rendered a scorecard, so the full failure path did not run"
   tmux -S "$socket" has-session -t unrelated 2>/dev/null \
     || fail "full exam cleanup killed an unrelated tmux session"
   tmux -S "$socket" kill-session -t unrelated
