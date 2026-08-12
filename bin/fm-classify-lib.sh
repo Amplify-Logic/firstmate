@@ -63,8 +63,12 @@ FM_CLASSIFY_PAUSED_VERB_DEFAULT='paused'
 # invisibly - it re-surfaces once for a recheck every window. One hour by default;
 # both consumers read FM_PAUSE_RESURFACE_SECS with this default so the cadence has
 # one owner.
-# shellcheck disable=SC2034 # Read by the watcher and daemon (fm-watch.sh, fm-supervise-daemon.sh), not this lib.
 FM_PAUSE_RESURFACE_SECS_DEFAULT=3600
+# A wait that names an explicit captain decision cannot clear until the captain
+# acts, so the ordinary hourly recheck would only repeat the same escalation.
+# Eight hours by default; both consumers read FM_PAUSE_CAPTAIN_RESURFACE_SECS
+# with this default so that longer cadence has one owner.
+FM_PAUSE_CAPTAIN_RESURFACE_SECS_DEFAULT=28800
 
 # The resolution verb and durable-backlog-transfer verb that CLOSE a keyed
 # status decision opened by needs-decision or blocked. See status_open_decisions
@@ -171,6 +175,39 @@ status_line_note() {  # <status-line> -> text after the first colon, trimmed
     *:*) local n=${1#*:}; printf '%s' "${n#"${n%%[![:space:]]*}"}" ;;
     *) printf '%s' "$1" ;;
   esac
+}
+
+# Normalized grouping key for a declared-pause reason: lowercase, collapsed
+# whitespace. Identical blockers written with different casing still share one
+# recheck; distinct notes stay distinct. An empty note yields an empty key.
+status_pause_reason_key() {  # <status-line> -> grouping key
+  local n
+  n=$(status_line_note "$1")
+  n=$(printf '%s' "$n" | LC_ALL=C tr '[:upper:]' '[:lower:]' | LC_ALL=C tr -s '[:space:]' ' ')
+  n=${n#"${n%%[![:space:]]*}"}
+  n=${n%"${n##*[![:space:]]}"}
+  printf '%s' "$n"
+}
+
+# 0 if the wait names an explicit captain decision, including a captain-held
+# transfer. Those waits cannot clear until the captain acts.
+status_pause_is_captain_gated() {  # <status-line>
+  local verb key
+  verb=$(status_line_verb "$1")
+  [ "$verb" = "${FM_CLASSIFY_CAPTAIN_HELD_VERB:-$FM_CLASSIFY_CAPTAIN_HELD_VERB_DEFAULT}" ] && return 0
+  key=$(status_pause_reason_key "$1")
+  [ -n "$key" ] || return 1
+  printf '%s' "$key" | grep -qiE '(^|[^[:alnum:]])captain([^[:alnum:]]|$)'
+}
+
+# Seconds before this declared wait re-surfaces. Captain-gated waits use the
+# longer cadence; every other pause uses the ordinary one.
+pause_resurface_secs_for_line() {  # <status-line> -> seconds
+  if status_pause_is_captain_gated "$1"; then
+    printf '%s\n' "${FM_PAUSE_CAPTAIN_RESURFACE_SECS:-$FM_PAUSE_CAPTAIN_RESURFACE_SECS_DEFAULT}"
+  else
+    printf '%s\n' "${FM_PAUSE_RESURFACE_SECS:-$FM_PAUSE_RESURFACE_SECS_DEFAULT}"
+  fi
 }
 _fm_decision_key() {  # <status-line> -> key slug, or "default" when no token
   local prefix=${1%%:*} k

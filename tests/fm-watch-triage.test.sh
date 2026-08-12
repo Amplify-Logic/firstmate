@@ -248,6 +248,53 @@ test_status_is_paused_classifier() {
   pass "status_is_paused: only the leading paused verb matches, and paused is not captain-relevant"
 }
 
+# Grouping key: trim, collapse whitespace, lowercase, so identical blockers
+# written with different casing still share one recheck.
+test_status_pause_reason_key() {
+  [ "$(status_pause_reason_key 'paused: Waiting for captain merge')" = \
+    "$(status_pause_reason_key 'paused:   waiting  for   CAPTAIN merge  ')" ] \
+    || fail "pause reason keys did not normalize case and whitespace"
+  [ "$(status_pause_reason_key 'paused: waiting for captain merge')" != \
+    "$(status_pause_reason_key 'paused: waiting for the upstream release')" ] \
+    || fail "distinct pause reasons collapsed to one key"
+  [ "$(status_pause_reason_key 'paused:')" = "" ] \
+    || fail "an empty pause note did not yield an empty key"
+  pass "status_pause_reason_key normalizes identical blockers and keeps distinct reasons apart"
+}
+
+# A wait that names an explicit captain decision cannot clear until the captain
+# acts, so it uses the longer captain cadence. Ordinary external waits do not.
+test_status_pause_is_captain_gated() {
+  status_pause_is_captain_gated 'paused: waiting for the captain merge decision on open PRs' \
+    || fail "a pause naming a captain merge was not captain-gated"
+  status_pause_is_captain_gated "paused: holding for the captain's word" \
+    || fail "a pause naming the captain's word was not captain-gated"
+  status_pause_is_captain_gated 'captain-held [key=merge]: tracked by task-decision-merge' \
+    || fail "a captain-held transfer was not captain-gated"
+  status_pause_is_captain_gated 'paused: holding for the upstream tool release' \
+    && fail "an ordinary upstream wait was misclassified as captain-gated"
+  status_pause_is_captain_gated 'paused: rate-limit reset at 04:00' \
+    && fail "a scheduled wait was misclassified as captain-gated"
+  pass "status_pause_is_captain_gated matches captain-named waits only"
+}
+
+test_pause_resurface_secs_for_line() {
+  local ordinary captain
+  ordinary=$(pause_resurface_secs_for_line 'paused: holding for the upstream release')
+  captain=$(pause_resurface_secs_for_line 'paused: waiting for the captain merge decision')
+  [ "$ordinary" = "$FM_PAUSE_RESURFACE_SECS_DEFAULT" ] \
+    || fail "ordinary pause cadence was $ordinary, not the shared default"
+  [ "$captain" = "$FM_PAUSE_CAPTAIN_RESURFACE_SECS_DEFAULT" ] \
+    || fail "captain-gated cadence was $captain, not the longer default"
+  [ "$captain" -gt "$ordinary" ] \
+    || fail "captain-gated cadence was not longer than the ordinary pause cadence"
+  ordinary=$(FM_PAUSE_RESURFACE_SECS=120 pause_resurface_secs_for_line 'paused: holding for upstream')
+  captain=$(FM_PAUSE_CAPTAIN_RESURFACE_SECS=999 pause_resurface_secs_for_line 'paused: waiting for captain merge')
+  [ "$ordinary" = 120 ] || fail "FM_PAUSE_RESURFACE_SECS override was not honored"
+  [ "$captain" = 999 ] || fail "FM_PAUSE_CAPTAIN_RESURFACE_SECS override was not honored"
+  pass "pause_resurface_secs_for_line uses the longer captain cadence only for captain-gated waits"
+}
+
 # crew_absorb_class: the single fm-crew-state.sh read that returns BOTH absorb
 # reasons - working (active run/busy pane), paused (declared external wait), or none
 # (surface it) - so the watcher's stale path gets both for one bounded call.
@@ -644,6 +691,65 @@ test_nonterminal_stale_paused_absorbed_then_resurfaced() {
   pass "a declared pause is absorbed on first sight, then re-surfaced as a recheck past the threshold, never wedge-escalated"
 }
 
+# Several declared pauses that share one blocker must re-surface as one wake,
+# not one per task. Distinct reasons stay separate (the next cycle can fire them).
+test_paused_recheck_groups_shared_reason() {
+  local dir state fakebin out drain_out capture_file pane_hash sig pid back \
+    win_a win_b win_c win_d key_a key_b key_c key_d statusf
+  dir=$(make_case paused-group-shared); state="$dir/state"; fakebin="$dir/fakebin"
+  out="$dir/watch.out"; drain_out="$dir/drain.out"; capture_file="$dir/pane.txt"
+  win_a="test:fm-merge-a"; win_b="test:fm-merge-b"; win_c="test:fm-merge-c"
+  win_d="test:fm-upstream-d"
+  printf 'idle, holding\n' > "$capture_file"
+  pane_hash=$(hash_text "idle, holding")
+  back=$(( $(date +%s) - 500 ))
+  seed_paused_window() {
+    local win=$1 task=$2 note=$3
+    printf 'window=%s\nkind=ship\n' "$win" > "$state/$task.meta"
+    statusf="$state/$task.status"
+    printf 'paused: %s\n' "$note" > "$statusf"
+    if [ "$(uname)" = Darwin ]; then touch -mt "$(date -r "$back" '+%Y%m%d%H%M.%S')" "$statusf"
+    else touch -m -d "@$back" "$statusf"; fi
+    sig=$(seen_sig "$statusf"); printf '%s' "$sig" > "$state/.seen-${task}_status"
+    key=$(printf '%s' "$win" | tr ':/.' '___')
+    printf '%s' "$pane_hash" > "$state/.hash-$key"
+    printf '1\n' > "$state/.count-$key"
+    : > "$state/.paused-$key"
+  }
+  seed_paused_window "$win_a" merge-a "waiting for the captain merge decision"
+  seed_paused_window "$win_b" merge-b "Waiting  for the  captain merge decision"
+  seed_paused_window "$win_c" merge-c "waiting for the captain merge decision"
+  seed_paused_window "$win_d" upstream-d "holding for the upstream tool release"
+  key_a=$(printf '%s' "$win_a" | tr ':/.' '___')
+  key_b=$(printf '%s' "$win_b" | tr ':/.' '___')
+  key_c=$(printf '%s' "$win_c" | tr ':/.' '___')
+  key_d=$(printf '%s' "$win_d" | tr ':/.' '___')
+  export FM_FAKE_CREW_STATE='state: paused · source: status-log · waiting for the captain merge decision'
+
+  PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$win_a" FM_FAKE_TMUX_CAPTURE="$capture_file" \
+    FM_FAKE_TMUX_CURRENT_COMMAND=zsh \
+    FM_STATE_OVERRIDE="$state" FM_CREW_STATE_BIN="$fakebin/fm-crew-state.sh" \
+    FM_PAUSE_RESURFACE_SECS=240 FM_PAUSE_CAPTAIN_RESURFACE_SECS=240 \
+    FM_POLL=1 FM_SIGNAL_GRACE=1 FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 \
+    "$WATCH" > "$out" &
+  pid=$!
+  wait_for_exit "$pid" 40 || fail "watcher did not re-surface grouped declared pauses: $(cat "$out")"
+  grep -F "sharing one wait" "$out" >/dev/null \
+    || fail "shared-reason pauses did not re-surface as one grouped item: $(cat "$out")"
+  grep -F "$win_a" "$out" >/dev/null || fail "grouped recheck omitted $win_a: $(cat "$out")"
+  grep -F "$win_b" "$out" >/dev/null || fail "grouped recheck omitted $win_b: $(cat "$out")"
+  grep -F "$win_c" "$out" >/dev/null || fail "grouped recheck omitted $win_c: $(cat "$out")"
+  grep -F "possible wedge" "$out" >/dev/null && fail "grouped pause recheck was mislabeled a possible wedge"
+  [ -e "$state/.paused-resurfaced-$key_a" ] || fail "grouped recheck did not throttle $win_a"
+  [ -e "$state/.paused-resurfaced-$key_b" ] || fail "grouped recheck did not throttle $win_b"
+  [ -e "$state/.paused-resurfaced-$key_c" ] || fail "grouped recheck did not throttle $win_c"
+  [ -e "$state/.paused-resurfaced-$key_d" ] || fail "distinct-reason pause was not throttled in the same recheck cycle"
+  FM_STATE_OVERRIDE="$state" "$DRAIN" > "$drain_out" 2>/dev/null || fail "drain after grouped pause recheck failed"
+  n=$(grep -c "$(printf '\tstale\t')" "$drain_out" || true)
+  [ "$n" -eq 1 ] || fail "grouped pause recheck enqueued $n stale wakes, not one"
+  pass "declared pauses that share one blocker re-surface as a single grouped recheck"
+}
+
 # A captain-held crew can leave a stable backend endpoint after its agent exits.
 # fm-crew-state then authoritatively reports stopped rather than paused, but the
 # confirmed-dead agent plus the declared wait or captain-held transfer must retain
@@ -672,7 +778,8 @@ test_exited_declared_pause_is_bounded_but_live_gate_surfaces() {
   while [ "$round" -le 6 ]; do
     PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CAPTURE="$capture_file" \
       FM_FAKE_TMUX_CURRENT_COMMAND=zsh FM_FAKE_CREW_STATE='state: stopped · source: pane · bare shell' \
-      FM_STATE_OVERRIDE="$state" FM_CREW_STATE_BIN="$fakebin/fm-crew-state.sh" FM_PAUSE_RESURFACE_SECS=240 FM_POLL=1 FM_SIGNAL_GRACE=1 \
+      FM_STATE_OVERRIDE="$state" FM_CREW_STATE_BIN="$fakebin/fm-crew-state.sh" \
+      FM_PAUSE_RESURFACE_SECS=240 FM_PAUSE_CAPTAIN_RESURFACE_SECS=240 FM_POLL=1 FM_SIGNAL_GRACE=1 \
       FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 "$WATCH" >> "$out" &
     pid=$!
     if wait_live "$pid" 15; then reap "$pid"; else wait "$pid" || fail "dead-agent watcher round $round failed"; fi
@@ -701,7 +808,8 @@ test_exited_declared_pause_is_bounded_but_live_gate_surfaces() {
   printf '1\n' > "$state/.count-$key"
   PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CAPTURE="$capture_file" \
     FM_FAKE_TMUX_CURRENT_COMMAND=zsh FM_FAKE_CREW_STATE='state: stopped · source: pane · bare shell' \
-    FM_STATE_OVERRIDE="$state" FM_CREW_STATE_BIN="$fakebin/fm-crew-state.sh" FM_PAUSE_RESURFACE_SECS=240 FM_POLL=1 FM_SIGNAL_GRACE=1 \
+    FM_STATE_OVERRIDE="$state" FM_CREW_STATE_BIN="$fakebin/fm-crew-state.sh" \
+    FM_PAUSE_RESURFACE_SECS=240 FM_PAUSE_CAPTAIN_RESURFACE_SECS=240 FM_POLL=1 FM_SIGNAL_GRACE=1 \
     FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 "$WATCH" > "$out" &
   pid=$!
   wait_for_exit "$pid" 40 || fail "captain-held dead-agent pane did not re-surface on the bounded cadence"
@@ -1356,6 +1464,9 @@ test_scan_captain_relevant_statuses_classifier
 test_classifier_primitives
 test_crew_is_provably_working_classifier
 test_status_is_paused_classifier
+test_status_pause_reason_key
+test_status_pause_is_captain_gated
+test_pause_resurface_secs_for_line
 test_crew_absorb_class_classifier
 test_signal_crew_provably_working_classifier
 test_provably_working_signal_absorbed
@@ -1371,6 +1482,7 @@ test_wedge_escalation_resets_when_pane_becomes_active
 test_herdr_stale_three_way_liveness
 test_nonterminal_stale_not_working_surfaced
 test_nonterminal_stale_paused_absorbed_then_resurfaced
+test_paused_recheck_groups_shared_reason
 test_exited_declared_pause_is_bounded_but_live_gate_surfaces
 test_secondmate_paused_resurfaces_in_normal_mode
 test_secondmate_nonpaused_stale_remains_suppressed

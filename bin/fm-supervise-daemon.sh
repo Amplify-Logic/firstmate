@@ -86,6 +86,9 @@
 #                                   as a possible wedge (default 240)
 #          FM_PAUSE_RESURFACE_SECS  idle seconds before a declared external wait
 #                                   re-surfaces as a recheck (default 3600)
+#          FM_PAUSE_CAPTAIN_RESURFACE_SECS
+#                                   idle seconds before a captain-named wait
+#                                   re-surfaces (default 28800)
 #          FM_ESCALATE_BATCH_SECS   buffer window for batched escalation
 #                                   digests; 0 = flush immediately (default 90)
 #          FM_HEARTBEAT_SCAN_SECS   cadence for the catch-all status scan
@@ -1030,6 +1033,40 @@ _oldest_line_age() {  # <buf> -> seconds since the oldest buffered item first ar
   fi
 }
 
+# Group due declared pauses by normalized reason and escalate one item per
+# distinct blocker. Shared-reason waits become a single recheck; a distinct
+# reason stays its own item. Resets every grouped marker so the window repeats.
+_pause_recheck_flush() {  # <state> <due-file>
+  local state=$1 due=$2 rkey wins count max_age note gated line age win marker display gated_flag
+  [ -s "$due" ] || return 0
+  while IFS= read -r rkey; do
+    [ -n "$rkey" ] || continue
+    wins=""; count=0; max_age=0; note=""; gated=0
+    while IFS="$(printf '\t')" read -r k age win marker display gated_flag; do
+      [ "$k" = "$rkey" ] || continue
+      count=$((count + 1))
+      [ "$age" -gt "$max_age" ] && max_age=$age
+      [ -n "$note" ] || note=$display
+      [ "$gated_flag" = 1 ] && gated=1
+      if [ -z "$wins" ]; then
+        wins=$win
+      else
+        wins="$wins, $win"
+      fi
+      _now > "$marker"
+    done < "$due"
+    if [ "$count" -eq 1 ]; then
+      line="paused ${max_age}s (awaiting external, recheck whether the wait still holds): $wins"
+    else
+      line="paused ${max_age}s (awaiting external, $count tasks sharing one wait, recheck whether the wait still holds): $note [$wins]"
+    fi
+    if [ "$gated" = 1 ]; then
+      line="$line (cannot clear until the captain acts)"
+    fi
+    escalate_add "$state" "$line"
+  done < <(cut -f1 "$due" | awk 'NF && !seen[$0]++')
+}
+
 # --- housekeeping (runs every tick while the watcher is mid-cycle) ----------
 # Four cheap jobs, each guarded so an empty/quiet fleet costs near zero:
 #  1) batch flush: if the escalation buffer's oldest content is older than
@@ -1039,13 +1076,14 @@ _oldest_line_age() {  # <buf> -> seconds since the oldest buffered item first ar
 #     Never silently defer forever.
 #  2) stale recheck: for each pending stale marker past STALE_ESCALATE_SECS,
 #     re-peek the pane; still idle -> escalate (wedge); resumed -> clear marker.
-#  2b) pause re-surface: for each declared-pause marker past PAUSE_RESURFACE_SECS,
-#     re-peek; busy/gone -> clear; still idle + still paused -> escalate a recheck
-#     digest and reset the window (repeating bounded re-surface, never a wedge).
+#  2b) pause re-surface: for each declared-pause marker past its cadence,
+#     re-peek; busy/gone -> clear; still idle + still paused -> record a due
+#     recheck. Due waits that share one blocking reason escalate as one item.
 #  3) heartbeat scan: every HEARTBEAT_SCAN_SECS, grep state/*.status for a
 #     captain-relevant line the per-wake classifier missed and escalate it.
 housekeeping() {  # <state>
   local state=$1 now due f key task win marker age last max_defer oldest pause_secs
+  local pause_due reason_key display gated
   now=$(_now)
   migrate_watcher_pause_markers "$state"
 
@@ -1108,12 +1146,15 @@ housekeeping() {  # <state>
   done
 
   # (2b) pause re-surface recheck. A DECLARED external-wait pause idles by design,
-  # so it is rechecked on a much longer cadence than a wedge (PAUSE_RESURFACE_SECS)
-  # and never escalated as one - but it MUST re-surface, so a forgotten pause cannot
+  # so it is rechecked on a much longer cadence than a wedge (PAUSE_RESURFACE_SECS,
+  # or PAUSE_CAPTAIN_RESURFACE_SECS when the wait names a captain decision) and
+  # never escalated as one - but it MUST re-surface, so a forgotten pause cannot
   # rot invisibly. Past the window: busy (resumed) or gone -> drop; still idle and
-  # still declaring the pause -> escalate a recheck digest and reset the marker so
-  # the window repeats.
-  pause_secs=${FM_PAUSE_RESURFACE_SECS:-$FM_PAUSE_RESURFACE_SECS_DEFAULT}
+  # still declaring the pause -> record a due recheck. Due waits that share one
+  # blocking reason escalate as a single item; distinct reasons stay separate.
+  # Each grouped marker resets so the window repeats.
+  pause_due="$state/.subsuper-pause-due.$$"
+  rm -f "$pause_due"
   for marker in "$state"/.subsuper-paused-*; do
     [ -e "$marker" ] || continue
     key="${marker##*.subsuper-paused-}"
@@ -1127,6 +1168,7 @@ housekeeping() {  # <state>
       reconcile_pause_tracking "$win" "$state" "$last"
       continue
     fi
+    pause_secs=$(pause_resurface_secs_for_line "$last")
     age=$(( now - $(cat "$marker" 2>/dev/null || echo "$now") ))
     [ "$age" -ge "$pause_secs" ] || continue
     stale_window_is_busy "$win" "$state"
@@ -1136,14 +1178,21 @@ housekeeping() {  # <state>
       *)
         last=$(last_status_line "$state/$task.status")
         if [ -n "$last" ] && status_is_paused "$last"; then
-          escalate_add "$state" "paused ${age}s (awaiting external, recheck whether the wait still holds): $win"
-          _now > "$marker"
+          reason_key=$(status_pause_reason_key "$last")
+          [ -n "$reason_key" ] || reason_key="unspecified wait"
+          display=$(status_line_note "$last" | LC_ALL=C tr '\t\r\n' '   ')
+          gated=0
+          status_pause_is_captain_gated "$last" && gated=1
+          printf '%s\t%s\t%s\t%s\t%s\t%s\n' \
+            "$reason_key" "$age" "$win" "$marker" "$display" "$gated" >> "$pause_due"
         else
           rm -f "$marker"
         fi
         ;;
     esac
   done
+  _pause_recheck_flush "$state" "$pause_due"
+  rm -f "$pause_due"
 
   # (3) heartbeat scan (catch-all for a captain-relevant status the per-wake
   #     classifier may have missed). Cheap: status files only, no tmux. The
