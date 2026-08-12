@@ -547,6 +547,20 @@ pause_marker_remove() {  # <window> <state>
   rm -f "$state/.subsuper-paused-$key"
 }
 
+# Drop the dead-agent one-shot for this hold state in BOTH marker namespaces
+# (fm-classify-lib.sh's captain_held_surfaced_markers owns the pair). Sweeping
+# only this daemon's task-keyed marker would leave the watcher's window-keyed
+# one behind, and since both modes READ both, that survivor suppresses the next
+# surface forever: hold ids are deterministic, so a key resolved and re-opened
+# folds to the same digest. This is the single removal site in the daemon.
+clear_captain_held_surfaced() {  # <window> <task> <state>
+  local win=$1 task=$2 state=$3 m
+  while IFS= read -r m; do
+    [ -n "$m" ] || continue
+    rm -f "$m"
+  done < <(captain_held_surfaced_markers "$state" "$win" "$task")
+}
+
 clear_pause_tracking() {  # <window> <state>
   local win=$1 state=$2 task key watcher_key
   task=$(window_to_task "$win" "$state")
@@ -594,10 +608,12 @@ reconcile_pause_tracking() {  # <window> <state> <last-status-line>
   # A dead-agent one-shot marker outlives its hold otherwise: hold ids are
   # deterministic, so a hold resolved and later re-opened for the same key
   # yields an identical fold digest and the stale marker would suppress the new
-  # hold's surface (and the files accumulate). Sweep it whenever the fold no
-  # longer has an open hold.
+  # hold's surface (and the files accumulate). Sweep BOTH namespaces whenever
+  # the fold no longer has an open hold - a marker left in either one is read by
+  # both modes, so an asymmetric sweep just moves the suppression instead of
+  # ending it.
   if [ -z "$digest" ]; then
-    rm -f "$state/.subsuper-captain-held-surfaced-$key"
+    clear_captain_held_surfaced "$win" "$task" "$state"
   fi
 }
 
@@ -1241,7 +1257,9 @@ housekeeping() {  # <state>
   # deterministic, so a hold resolved and later re-opened for the same key
   # yields an identical fold digest, and a stale .subsuper-captain-held-surfaced-*
   # marker would suppress the new hold's surface (and the files accumulate).
-  # Sweep any marker whose fold no longer has an open hold.
+  # Sweep BOTH namespaces for any marker whose fold no longer has an open hold:
+  # a surface writes the window-keyed and task-keyed markers together and both
+  # modes read both, so clearing one alone only moves the suppression.
   for surf in "$state"/.subsuper-captain-held-surfaced-*; do
     [ -e "$surf" ] || continue
     key="${surf##*.subsuper-captain-held-surfaced-}"
@@ -1255,7 +1273,7 @@ housekeeping() {  # <state>
     fi
     task=$(window_to_task "$win" "$state")
     if ! status_has_open_captain_hold "$state/$task.status"; then
-      rm -f "$surf"
+      clear_captain_held_surfaced "$win" "$task" "$state"
     fi
   done
 

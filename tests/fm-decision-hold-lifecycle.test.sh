@@ -413,9 +413,11 @@ test_resolve_retry_interrupted_then_reused_does_not_close_decision() {
 # Ruling (resolve-race-closes-reused-decision): a live origin that re-opens the
 # same key in a fresh needs-decision WHILE the initial resolve's durable updates
 # are running must not have that new decision closed by the resolve's closing
-# line. The decisions fold collapses to the latest note per key, so the guard
-# snapshots the key's open note before the updates and withholds the closing
-# line when the note changed by retire time; the durable resolution still lands.
+# line. The guard takes no snapshot: it re-reads status_open_decisions AFTER the
+# durable updates and withholds the closing line whenever the key is open at
+# retire time. The normal flow has the key already closed by its captain-held
+# line, so an open key there means a fresh decision superseded the one being
+# resolved; the durable resolution still lands.
 test_resolve_does_not_close_a_reopened_key() {
   local home id hold lines open show
   home=$(make_home reopened-key-race)

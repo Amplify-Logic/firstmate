@@ -457,8 +457,18 @@ status_open_decisions() {  # <status-file>
 status_open_captain_holds() {  # <status-file>
   local f=$1 line verb key held resolve open='' note
   [ -f "$f" ] || return 0
-  resolve=${FM_CLASSIFY_RESOLVE_VERB:-$FM_CLASSIFY_RESOLVE_VERB_DEFAULT}
   held=${FM_CLASSIFY_CAPTAIN_HELD_VERB:-$FM_CLASSIFY_CAPTAIN_HELD_VERB_DEFAULT}
+  # Cheap pre-gate, one fork instead of the fold's several command substitutions
+  # per line. Every quiet-state consumer runs this on a HOT path (the watcher's
+  # handle_paused_stale on each stale poll, the daemon's classify_stale and
+  # reconcile_pause_tracking on each stale wake), and the overwhelming majority
+  # of status files carry no hold at all. A key can only open on a line whose
+  # verb is the held verb, so a file with no occurrence of that verb anywhere
+  # folds to the empty set by construction: skipping the fold here is exact, not
+  # an approximation. A false hit (the verb appearing in prose) just runs the
+  # fold and still returns the same answer.
+  grep -qF -e "$held" -- "$f" 2>/dev/null || return 0
+  resolve=${FM_CLASSIFY_RESOLVE_VERB:-$FM_CLASSIFY_RESOLVE_VERB_DEFAULT}
   while IFS= read -r line || [ -n "$line" ]; do
     verb=$(status_line_verb "$line")
     key=$(_fm_decision_key "$line") || continue
@@ -486,16 +496,58 @@ status_has_open_captain_hold() {  # <status-file>
   [ -n "$(status_open_captain_holds "$1")" ]
 }
 
-# 0 when the task is currently a declared wait. The paused: half stays
-# last-line (a later event supersedes a pause). The captain-held half is
-# STREAM-TRUTH: quiet treatment applies only while the hold stream is open AND
-# the last line still belongs to it - a captain-held line, or a resolved: line
-# that masks a still-open hold (hold b open under a trailing resolved: for hold
-# a). Any other newer line (working:, done:, failed:, needs-decision:) supersedes
-# the quiet-state, so a stopped crew behind an open hold still gets normal stale
-# handling unless it is provably working (the parity guard in the consumers).
-# This is the outer gate the watcher and daemon use before entering
-# declared-wait handling; it reads the status FILE, not a single line.
+# The two paths that record the ONE dead-agent surface of a captain-held hold
+# state. It is a single logical fact kept under two namespaces, because the two
+# supervision modes key it differently: the always-on watcher by WINDOW
+# (.captain-held-surfaced-<window>) and the away-mode daemon by TASK
+# (.subsuper-captain-held-surfaced-<task>). Both modes WRITE both and READ both,
+# so both must also be SWEPT together the moment a hold closes: hold ids are
+# deterministic, so a key that is resolved and later re-opened folds to the SAME
+# digest, and a survivor in either namespace would suppress the new hold's
+# surface for good. This function is the ONE owner of that namespace pair; it is
+# a pure read that prints the two paths, one per line, and the caller removes
+# them (each consumer has a single clear_captain_held_surfaced wrapper).
+captain_held_surfaced_markers() {  # <state-dir> <window> <task>
+  local state=$1 win=$2 task=$3
+  printf '%s/.captain-held-surfaced-%s\n' "$state" "$(printf '%s' "$win" | tr ':/.' '___')"
+  printf '%s/.subsuper-captain-held-surfaced-%s\n' "$state" "$(printf '%s' "$task" | tr ':/.' '___')"
+}
+
+# The last non-blank status line that is NOT a closing resolve-verb line. The
+# `resolved [key=<k>]:` line fm-decision-hold.sh appends when it retires a hold
+# is an event ABOUT THE HOLD, not a fresh statement of what the crew is doing,
+# so status_declared_wait looks back past it to find the crew's own last word.
+# Only status_declared_wait's look-back branch calls this, and only when the
+# last line IS such a line and no hold is left open, so the per-line verb parse
+# stays off the hot path.
+_fm_last_non_resolve_line() {  # <status-file>
+  local f=$1 line resolve out=''
+  [ -e "$f" ] || return 0
+  resolve=${FM_CLASSIFY_RESOLVE_VERB:-$FM_CLASSIFY_RESOLVE_VERB_DEFAULT}
+  while IFS= read -r line || [ -n "$line" ]; do
+    case "${line//[[:space:]]/}" in '') continue ;; esac
+    [ "$(status_line_verb "$line")" = "$resolve" ] && continue
+    out=$line
+  done < "$f"
+  printf '%s' "$out"
+}
+
+# 0 when the task is currently a declared wait. Both halves read the EFFECTIVE
+# last line, which is the last line that states what the crew is doing: a
+# closing resolve-verb line is an event about a hold, so it never counts as that
+# statement for either half. The captain-held half is STREAM-TRUTH: quiet
+# treatment applies only while the hold stream is open AND the effective last
+# line still belongs to it - a captain-held line, or a resolved: line that masks
+# a still-open hold (hold b open under a trailing resolved: for hold a). The
+# paused: half is last-line with the same look-back: a later real event
+# supersedes a pause, but the closing line fm-decision-hold.sh appends when it
+# retires a sibling hold must not mask a still-valid paused: declaration, or the
+# pane ages straight back into the false possible-wedge alarm. Any other newer
+# line (working:, done:, failed:, needs-decision:) supersedes the quiet-state, so
+# a stopped crew behind an open hold still gets normal stale handling unless it
+# is provably working (the parity guard in the consumers). This is the outer
+# gate the watcher and daemon use before entering declared-wait handling; it
+# reads the status FILE, not a single line.
 status_declared_wait() {  # <status-file>
   local f=$1 last
   last=$(last_status_line "$f")
@@ -506,7 +558,12 @@ status_declared_wait() {  # <status-file>
   # a line still gets normal stale handling instead of being silently absorbed
   # behind an empty fold digest.
   status_is_captain_held "$last" && status_has_open_captain_hold "$f" && return 0
-  status_is_resolved "$last" && status_has_open_captain_hold "$f"
+  status_is_resolved "$last" || return 1
+  status_has_open_captain_hold "$f" && return 0
+  # The trailing resolve-verb line closed the last open hold, so it decided
+  # nothing about the crew: fall back to the effective last line. A preceding
+  # paused: declaration still holds; any other verb still supersedes it.
+  status_is_paused "$(_fm_last_non_resolve_line "$f")"
 }
 # Fold material routed-work phases in the same keyed event stream.
 # A working or declared-pause event opens or replaces one phase for its key.
@@ -596,8 +653,14 @@ signal_reason_is_actionable() {  # <file> ...
 #   working - an actively-running no-mistakes step (running/fixing/ci) or a busy
 #             pane; the crew is legitimately mid-work on a static-looking pane
 #             (e.g. waiting on CI);
-#   paused  - the crew's authoritative current state is a declared external-wait
-#             pause (paused:), which is EXPECTED to idle;
+#   paused  - the crew's authoritative current state is a DECLARED WAIT, which is
+#             EXPECTED to idle. The token covers the whole declared-wait verb set
+#             (bin/fm-crew-state.sh's map_log_state routes both through
+#             status_is_paused_or_captain_held): a bounded external-wait pause
+#             (paused:) AND a verified captain-held transfer. Consumers that must
+#             tell the two apart read the verb from this library rather than
+#             inferring it from this token - the watcher's malformed-hold guard
+#             depends on exactly that distinction;
 #   none    - neither, so the wake must surface (a stopped/finished/parked/failed/
 #             torn-down/unknown crew, or an unreadable verdict).
 # One fm-crew-state.sh read serves BOTH absorb reasons at once. Reading the state

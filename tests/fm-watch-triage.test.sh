@@ -1169,6 +1169,63 @@ test_captain_held_dead_agent_away_marker_absorbs_in_normal_mode() {
   pass "a dead-agent captain-held hold already surfaced in away mode absorbs in normal mode"
 }
 
+# One-shot markers must never outlive their hold, in EITHER namespace. Normal
+# mode records the dead-agent surface under .captain-held-surfaced-<window> and
+# away mode under .subsuper-captain-held-surfaced-<task>, both modes write both
+# and read both, so a sweep that clears only one leaves a survivor that
+# suppresses the next surface for good. Hold ids are deterministic, so a key
+# resolved and then re-opened folds to the SAME digest: this drives one pure
+# normal-mode stream (surface, resolve, re-open) and asserts the re-opened hold
+# surfaces again.
+test_reopened_hold_surfaces_despite_the_previous_one_shot() {
+  local dir state fakebin out capture_file statusf window key pane_hash pid held wakes phase back
+  dir=$(make_case reopened-hold-one-shot); state="$dir/state"; fakebin="$dir/fakebin"
+  out="$dir/watch.out"; capture_file="$dir/pane.txt"; statusf="$state/held.status"
+  window="test:fm-held"
+  printf 'idle bare shell after the captain-held transfer\n' > "$capture_file"
+  printf 'window=%s\nkind=ship\nharness=grok\nbackend=tmux\n' "$window" > "$state/held.meta"
+  key=$(printf '%s' "$window" | tr ':/.' '___')
+  pane_hash=$(hash_text "idle bare shell after the captain-held transfer")
+  printf '%s' "$pane_hash" > "$state/.hash-$key"
+  printf '1\n' > "$state/.count-$key"
+  held='captain-held [key=route]: tracked by held-decision-route'
+  # Phase 1 opens the hold, phase 2 retires it, phase 3 re-opens the SAME key so
+  # the fold digest matches phase 1 exactly. Each phase back-dates the status
+  # file and re-primes the .seen-* signature so only the stale path runs.
+  for phase in 1 2 3; do
+    case "$phase" in
+      1) printf '%s\n' "$held" > "$statusf" ;;
+      2) printf 'resolved [key=route]: retired by fm-decision-hold (held-decision-route)\n' >> "$statusf" ;;
+      3) printf '%s\n' "$held" >> "$statusf" ;;
+    esac
+    back=$(( $(date +%s) - 500 ))
+    if [ "$(uname)" = Darwin ]; then touch -mt "$(date -r "$back" '+%Y%m%d%H%M.%S')" "$statusf"
+    else touch -m -d "@$back" "$statusf"; fi
+    printf '%s' "$(seen_sig "$statusf")" > "$state/.seen-held_status"
+    PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CAPTURE="$capture_file" \
+      FM_FAKE_TMUX_CURRENT_COMMAND=zsh FM_FAKE_CREW_STATE='state: stopped · source: pane · bare shell' \
+      FM_STATE_OVERRIDE="$state" FM_CREW_STATE_BIN="$fakebin/fm-crew-state.sh" FM_PAUSE_RESURFACE_SECS=240 FM_POLL=1 FM_SIGNAL_GRACE=1 \
+      FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 "$WATCH" >> "$out" &
+    pid=$!
+    if wait_live "$pid" 20; then reap "$pid"; else wait "$pid" || fail "reopened-hold watcher phase $phase failed"; fi
+    if [ "$phase" = 1 ]; then
+      grep -F "agent exited" "$state/.wake-queue" >/dev/null \
+        || fail "the first open hold did not surface its dead agent"
+    fi
+    if [ "$phase" = 2 ]; then
+      [ ! -e "$state/.captain-held-surfaced-$key" ] \
+        || fail "a resolved hold kept the watcher's window-keyed one-shot marker"
+      [ ! -e "$state/.subsuper-captain-held-surfaced-held" ] \
+        || fail "a resolved hold kept the away-mode task-keyed one-shot marker"
+    fi
+  done
+  wakes=$(grep -cF "agent exited" "$state/.wake-queue" 2>/dev/null || true)
+  case "$wakes" in ''|*[!0-9]*) wakes=0 ;; esac
+  [ "$wakes" -eq 2 ] \
+    || fail "a re-opened hold with an identical digest surfaced $wakes dead-agent wakes, expected 2"
+  pass "a re-opened captain-held hold is not suppressed by a one-shot marker of either namespace"
+}
+
 # The captain-held quiet-state fold is STREAM-TRUTH (fm-classify-lib.sh owns the
 # policy): a captain-held line opens its key, an explicit resolved: line closes
 # it, and the declared-wait gate follows the fold only while the last line still
@@ -1198,6 +1255,29 @@ test_status_open_captain_holds_fold_is_stream_truth() {
   printf 'captain-held [key=a]: tracked by held-a\nworking: still churning\n' > "$f"
   status_declared_wait "$f" && fail "a newer working: line must supersede the hold quiet-state"
   pass "captain-held quiet-state is stream-truth: resolved: closes a key, open siblings and non-hold supersession behave"
+}
+
+# The closing `resolved [key=<k>]:` line fm-decision-hold.sh appends when it
+# retires a hold is an event ABOUT THE HOLD, not a fresh statement of what the
+# crew is doing. It must not mask a still-valid paused: declaration that came
+# before it, or the pane ages straight back into the false possible-wedge alarm
+# this branch exists to kill. The look-back skips ONLY resolve-verb lines, so a
+# newer real verb still supersedes the pause.
+test_closing_resolved_line_does_not_mask_a_declared_pause() {
+  local dir state f
+  dir=$(make_case resolved-masks-pause); state="$dir/state"; f="$state/p.status"
+  printf 'captain-held [key=a]: tracked by held-a\npaused: waiting on the upstream release\nresolved [key=a]: retired by fm-decision-hold (held-a)\n' > "$f"
+  [ -z "$(status_open_captain_holds "$f")" ] \
+    || fail "the closing resolved: line must close the only open hold"
+  status_declared_wait "$f" \
+    || fail "a hold's closing resolved: line masked the still-valid paused: declaration"
+  printf 'paused: waiting on the upstream release\nworking: back on it\nresolved [key=a]: retired\n' > "$f"
+  status_declared_wait "$f" \
+    && fail "a newer working: line must still supersede the declared pause"
+  printf 'captain-held [key=a]: tracked by held-a\nresolved [key=a]: retired\n' > "$f"
+  status_declared_wait "$f" \
+    && fail "a fully resolved hold with no pause behind it must not be a declared wait"
+  pass "a hold's closing resolved: line does not mask a preceding declared pause"
 }
 
 # A malformed [key=...] token in the POST-COLON position folds under the default
@@ -2036,7 +2116,9 @@ test_pause_due_fold_preserves_empty_notes
 test_pause_due_fold_dedupes_shared_window
 test_declared_wait_policies_paused_bounded_captain_held_silent
 test_captain_held_dead_agent_away_marker_absorbs_in_normal_mode
+test_reopened_hold_surfaces_despite_the_previous_one_shot
 test_status_open_captain_holds_fold_is_stream_truth
+test_closing_resolved_line_does_not_mask_a_declared_pause
 test_postcolon_keyed_lines_stay_under_default_key
 test_postcolon_invalid_key_folds_under_default
 test_resolved_hold_returns_pane_to_normal_stale_handling

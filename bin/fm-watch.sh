@@ -476,7 +476,7 @@ pause_recheck_commit_due() {  # <due-file> <fallback-marker>
 # cannot keep resetting the cadence the way a hash-tied timer would. Advances
 # the stale suppressor to <hash> and flags the key paused.
 handle_paused_stale() {  # <window> <task> <hash>
-  local win=$1 task=$2 h=$3 key statusf mtime age rf rf_age reason last surf digest alive pause_secs due
+  local win=$1 task=$2 h=$3 key statusf mtime age rf rf_age reason last surf surf_away digest alive pause_secs due
   key=$(printf '%s' "$win" | tr ':/.' '___')
   printf '%s' "$h" > "$STATE/.stale-$key"
   : > "$STATE/.paused-$key"
@@ -536,21 +536,37 @@ handle_paused_stale() {  # <window> <task> <hash>
   triage_log "absorbed stale (declared wait, age ${age}s): $win"
 }
 
-clear_pause_state() {  # <window>
-  local win=$1 key
-  key=${win//:/_}
-  key=${key//\//_}
-  key=${key//./_}
-  rm -f "$STATE/.paused-$key" "$STATE/.paused-rechecked-$key" "$STATE/.paused-resurfaced-$key" \
-    "$STATE/.captain-held-surfaced-$key"
+# Drop the dead-agent one-shot for this hold state in BOTH marker namespaces
+# (fm-classify-lib.sh's captain_held_surfaced_markers owns the pair). Sweeping
+# only the watcher's own window-keyed marker would leave the daemon's task-keyed
+# one behind, and since both modes READ both, that survivor suppresses the next
+# surface forever: hold ids are deterministic, so a key resolved and re-opened
+# folds to the same digest. This is the single removal site in the watcher; the
+# task is resolved from the window only when a caller does not already have it.
+clear_captain_held_surfaced() {  # <window> [task]
+  local win=$1 task=${2:-} m
+  [ -n "$task" ] || task=$(window_to_task "$win" "$STATE")
+  while IFS= read -r m; do
+    [ -n "$m" ] || continue
+    rm -f "$m"
+  done < <(captain_held_surfaced_markers "$STATE" "$win" "$task")
 }
 
-clear_pause_tracking() {  # <window>
-  local win=$1 key
+clear_pause_state() {  # <window> [task]
+  local win=$1 task=${2:-} key
   key=${win//:/_}
   key=${key//\//_}
   key=${key//./_}
-  clear_pause_state "$win"
+  rm -f "$STATE/.paused-$key" "$STATE/.paused-rechecked-$key" "$STATE/.paused-resurfaced-$key"
+  clear_captain_held_surfaced "$win" "$task"
+}
+
+clear_pause_tracking() {  # <window> [task]
+  local win=$1 task=${2:-} key
+  key=${win//:/_}
+  key=${key//\//_}
+  key=${key//./_}
+  clear_pause_state "$win" "$task"
   rm -f "$STATE/.stale-$key" "$STATE/.stale-since-$key" "$STATE/.wedge-escalations-$key"
 }
 
@@ -565,7 +581,8 @@ pause_state_class() {  # <window> <task>
   last=$(last_status_line "$STATE/$task.status")
   recheck_file="$STATE/.paused-rechecked-$key"
   if ! status_declared_wait "$STATE/$task.status"; then
-    rm -f "$recheck_file" "$STATE/.captain-held-surfaced-$key"
+    rm -f "$recheck_file"
+    clear_captain_held_surfaced "$win" "$task"
     class=$(crew_absorb_class "$task")
     if [ "$class" = paused ] && status_is_captain_held "$last"; then
       # A paused verdict behind a captain-held last line that is NOT a declared
@@ -1141,7 +1158,7 @@ EOF
     key=${key//./_}
     last=$(last_status_line "$STATE/$task.status")
     if [ -e "$STATE/.paused-$key" ] && ! status_declared_wait "$STATE/$task.status"; then
-      clear_pause_tracking "$w"
+      clear_pause_tracking "$w" "$task"
     fi
     if [ "$kind" = secondmate ] && ! status_declared_wait "$STATE/$task.status"; then
       continue
@@ -1165,7 +1182,7 @@ EOF
       # Busy corroboration still includes the shared footer regex.
       liveness=$(window_liveness_state "$w" "$tail40")
       if [ "$n" -ge 2 ] && [ "$liveness" = finished-idle ]; then
-        clear_pause_tracking "$w"
+        clear_pause_tracking "$w" "$task"
         rm -f "$ssf" "$ewf"
         triage_log "absorbed stale (registered agent idle at composer, healthy finish): $w"
       elif [ "$n" -ge 2 ] && [ "$liveness" != busy ]; then
@@ -1174,7 +1191,7 @@ EOF
         if [ "$kind" = secondmate ]; then
           case "$(pause_state_class "$w" "$task")" in
             paused) handle_paused_stale "$w" "$task" "$h" ;;
-            *)      clear_pause_tracking "$w" ;;
+            *)      clear_pause_tracking "$w" "$task" ;;
           esac
         elif afk_present; then
           # Daemon owns triage: one-shot per distinct stale hash, as before.
@@ -1239,7 +1256,7 @@ EOF
             task=$(window_to_task "$w" "$STATE")
             case "$(pause_state_class "$w" "$task")" in
               working)
-                clear_pause_tracking "$w"
+                clear_pause_tracking "$w" "$task"
                 printf '%s' "$h" > "$sf"
                 date +%s > "$ssf"
                 triage_log "absorbed non-terminal stale (provably working): $w"
@@ -1256,7 +1273,7 @@ EOF
             if [ -e "$pf" ] || status_declared_wait "$STATE/$task.status"; then
               case "$(pause_state_class "$w" "$task")" in
                 paused)  handle_paused_stale "$w" "$task" "$h" ;;
-                working) clear_pause_state "$w"
+                working) clear_pause_state "$w" "$task"
                          printf '%s' "$h" > "$sf"
                          wedge_timer_check "$w" "$ssf" "non-terminal stale (provably working after a declared pause)" "$ewf"
                          triage_log "absorbed non-terminal stale (provably working): $w" ;;
@@ -1266,7 +1283,7 @@ EOF
               # The hold's quiet-state ended (resolved or superseded): drop the
               # dead-agent one-shot marker so a later re-opened identical hold
               # still surfaces (deterministic hold ids make digests repeatable).
-              rm -f "$STATE/.captain-held-surfaced-$key"
+              clear_captain_held_surfaced "$w" "$task"
               wedge_timer_check "$w" "$ssf" "non-terminal stale" "$ewf"
             fi
           fi
@@ -1275,7 +1292,7 @@ EOF
         # Pane busy or not yet stably stale: reset pending escalation bookkeeping.
         rm -f "$ssf" "$ewf"
         if [ -e "$pf" ] && { [ "$n" -ge 2 ] || ! status_declared_wait "$STATE/$(window_to_task "$w" "$STATE").status"; }; then
-          clear_pause_tracking "$w"
+          clear_pause_tracking "$w" "$task"
         fi
       fi
     else
@@ -1286,10 +1303,10 @@ EOF
       if ! afk_present && status_declared_wait "$STATE/$task.status" && ! window_is_busy "$w" "$tail40"; then
         case "$(pause_state_class "$w" "$task")" in
           paused) handle_paused_stale "$w" "$task" "$h" ;;
-          *)      clear_pause_tracking "$w" ;;
+          *)      clear_pause_tracking "$w" "$task" ;;
         esac
       else
-        [ -e "$pf" ] && clear_pause_tracking "$w"
+        [ -e "$pf" ] && clear_pause_tracking "$w" "$task"
       fi
     fi
   done < <(recorded_windows)

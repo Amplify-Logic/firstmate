@@ -660,21 +660,27 @@ test_stale_malformed_hold_is_not_a_declared_wait() {
   pass "a malformed captain-held line is not a declared wait: normal stale handling resumes"
 }
 
-# The daemon's dead-agent one-shot marker must not outlive its hold: a resolved
-# hold leaves .subsuper-captain-held-surfaced-* behind, and deterministic hold
-# ids would let the stale marker suppress the NEXT open hold's surface.
+# The dead-agent one-shot markers must not outlive their hold, in EITHER
+# namespace: a resolved hold leaves .subsuper-captain-held-surfaced-* AND the
+# watcher's .captain-held-surfaced-* behind, both modes read both, and
+# deterministic hold ids would let either survivor suppress the NEXT open hold's
+# surface. A sweep that clears only its own namespace just moves the bug.
 test_reconcile_clears_daemon_one_shot_when_hold_resolves() {
-  local dir state win key
+  local dir state win key watcher_key
   dir=$(make_supercase daemon-shot-cleared)
   state="$dir/state"; win="sess:fm-held-c15"
   printf 'captain-held [key=api-shape]: tracked by held-route-15\nresolved [key=api-shape]: retired by fm-decision-hold (held-route-15)\n' > "$state/held-c15.status"
   key=$(printf '%s' "held-c15" | tr ':/.' '___')
+  watcher_key=$(printf '%s' "$win" | tr ':/.' '___')
   printf 'digest-x\n' > "$state/.subsuper-captain-held-surfaced-$key"
+  printf 'digest-x\n' > "$state/.captain-held-surfaced-$watcher_key"
   FM_STATE_OVERRIDE="$state" reconcile_pause_tracking "$win" "$state" \
     "resolved [key=api-shape]: retired by fm-decision-hold (held-route-15)"
   [ -e "$state/.subsuper-captain-held-surfaced-$key" ] \
     && fail "a resolved hold left the daemon one-shot marker behind"
-  pass "the daemon's dead-agent one-shot marker is swept once the hold resolves"
+  [ -e "$state/.captain-held-surfaced-$watcher_key" ] \
+    && fail "a resolved hold left the watcher's one-shot marker behind for the daemon to trip over"
+  pass "both dead-agent one-shot namespaces are swept once the hold resolves"
 }
 
 # reconcile_pause_tracking must give an open captain-held fold precedence over a
