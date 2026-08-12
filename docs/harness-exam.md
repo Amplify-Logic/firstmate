@@ -52,6 +52,10 @@ The exam writes no configuration, session, or artifact state into the source hom
 
 The isolated copies are read-only and never write token refreshes back to the source home.
 
+Claude receives a read-only copy of the home-root `.claude.json` account and onboarding state, so the lab home does not boot as a first-run install, plus `.claude/.credentials.json` when that file-based token exists.
+
+On macOS the Claude OAuth token lives in the login keychain, which the OS scopes to the user session rather than to `HOME`, so the lab runtime reaches that same keychain item in place instead of through an isolated file copy.
+
 Kimi receives a dedicated `KIMI_CODE_HOME`, and source hook blocks are removed before the exam hook is installed.
 
 Codex receives a dedicated `CODEX_HOME`.

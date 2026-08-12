@@ -139,7 +139,17 @@ copy_readonly_if_present() {
 
 prepare_credential_bridges() {
   case "$ADAPTER" in
-    claude) copy_readonly_if_present "$SOURCE_HOME/.claude/.credentials.json" "$LAB_HOME/.claude/.credentials.json" ;;
+    claude)
+      # The home-root ~/.claude.json holds account and onboarding state;
+      # without it the lab boots as a first-run install and parks on
+      # onboarding instead of reaching the probes.
+      copy_readonly_if_present "$SOURCE_HOME/.claude.json" "$LAB_HOME/.claude.json"
+      # File-based OAuth tokens exist only on Linux installs; macOS keeps
+      # them in the login keychain, which securityd scopes to the user
+      # session rather than to HOME, so the lab runtime reaches the same
+      # keychain item without any file bridge.
+      copy_readonly_if_present "$SOURCE_HOME/.claude/.credentials.json" "$LAB_HOME/.claude/.credentials.json"
+      ;;
     codex)
       copy_readonly_if_present "$SOURCE_HOME/.codex/auth.json" "$LAB_HOME/.codex/auth.json"
       copy_readonly_if_present "$SOURCE_HOME/.codex/config.toml" "$LAB_HOME/.codex/config.toml"

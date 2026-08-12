@@ -78,6 +78,7 @@ test_credentials_are_selected_read_only_copies() {
   printf 'codex-token\n' > "$source/.codex/auth.json"
   printf 'model = "test"\n' > "$source/.codex/config.toml"
   printf 'claude-token\n' > "$source/.claude/.credentials.json"
+  printf '{"hasCompletedOnboarding":true}\n' > "$source/.claude.json"
   export FM_HARNESS_EXAM_SOURCE_ONLY=1
   # shellcheck source=bin/fm-harness-exam.sh
   . "$EXAM"
@@ -90,8 +91,17 @@ test_credentials_are_selected_read_only_copies() {
   [ ! -L "$lab/.codex/auth.json" ] || fail "selected Codex authentication remains linked to its source"
   [ ! -w "$lab/.codex/auth.json" ] || fail "selected Codex authentication copy is writable"
   assert_absent "$lab/.claude/.credentials.json" "unselected Claude credential crossed into the Codex lab"
+  assert_absent "$lab/.claude.json" "unselected Claude account state crossed into the Codex lab"
   printf 'changed\n' > "$source/.codex/auth.json"
   [ "$(cat "$lab/.codex/auth.json")" = codex-token ] || fail "isolated credential changed with its source"
+  ADAPTER=claude
+  LAB_HOME="$dir/claude-lab"
+  mkdir -p "$LAB_HOME"
+  prepare_credential_bridges
+  [ -f "$LAB_HOME/.claude.json" ] || fail "Claude home-root account and onboarding state was not bridged"
+  [ ! -w "$LAB_HOME/.claude.json" ] || fail "Claude account state copy is writable"
+  [ -f "$LAB_HOME/.claude/.credentials.json" ] || fail "Claude file-based credential was not bridged"
+  assert_absent "$LAB_HOME/.codex" "unselected Codex credential crossed into the Claude lab"
   pass "only the selected adapter receives isolated read-only credential copies"
 }
 
