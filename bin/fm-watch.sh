@@ -420,14 +420,14 @@ pause_recheck_reason_for_due() {  # <trigger-window> <due-file>
 
 # Stamp the re-surface throttle for every window this recheck covers and put
 # each on the bounded pause cadence. Called ONLY once the wake is durably
-# queued, so a failed enqueue cannot silence a due wait for a full window. With
-# no due entries the trigger's own throttle is still stamped, so the fallback
-# reason above cannot re-fire on every poll.
+# queued, so a failed enqueue cannot silence a due wait for a full window. The
+# trigger is always throttled - it is what the wake is keyed on - whether or not
+# the sweep saw it, so a trigger the sweep missed cannot re-fire every poll.
 pause_recheck_commit_due() {  # <due-file> <fallback-marker>
   local due=$1 fallback=$2 now marker win
   now=$(date +%s)
+  printf '%s\n' "$now" > "$fallback"
   if [ ! -s "$due" ]; then
-    printf '%s\n' "$now" > "$fallback"
     return 0
   fi
   while IFS= read -r marker; do

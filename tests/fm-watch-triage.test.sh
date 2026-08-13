@@ -779,6 +779,32 @@ test_pause_due_fold_is_shared_and_groups_by_reason() {
   pass "the shared pause-due record and fold group by blocker and expose the throttles for a post-report commit"
 }
 
+# Empty pause notes are a documented input (empty key -> "unspecified wait").
+# Bash IFS=<tab> read would collapse the empty display field and shift the
+# trailing gated flag into the note, so grouped rechecks would show "0"/"1"
+# as the blocker and drop captain-gated annotation.
+test_pause_due_fold_preserves_empty_notes() {
+  local dir state due out
+  dir=$(make_case pause-due-empty-note); state="$dir/state"
+  due="$state/due.tsv"
+  fold_fmt() { printf '%s|%s|%s|%s|%s\n' "$1" "$2" "$3" "$4" "$5"; }
+
+  : > "$due"
+  pause_due_append "$due" "paused:" 100 "s:a" "$state/.m-a"
+  pause_due_append "$due" "paused:   " 250 "s:b" "$state/.m-b"
+  out=$(pause_due_fold "$due" fold_fmt)
+  printf '%s\n' "$out" | grep -F '2|250|unspecified wait|s:a, s:b|0' >/dev/null \
+    || fail "empty pause notes did not group as one unspecified wait: $out"
+
+  : > "$due"
+  printf 'unspecified wait\t100\ts:a\t%s\t\t0\n' "$state/.m-a" >> "$due"
+  printf 'unspecified wait\t200\ts:b\t%s\t\t1\n' "$state/.m-b" >> "$due"
+  out=$(pause_due_fold "$due" fold_fmt)
+  printf '%s\n' "$out" | grep -F '2|200||s:a, s:b|1' >/dev/null \
+    || fail "empty display field shifted later columns (note/gated lost): $out"
+  pass "pause_due_fold keeps empty notes and the gated flag on their own fields"
+}
+
 # A captain-held crew can leave a stable backend endpoint after its agent exits.
 # fm-crew-state then authoritatively reports stopped rather than paused, but the
 # confirmed-dead agent plus the declared wait or captain-held transfer must retain
@@ -1513,6 +1539,7 @@ test_nonterminal_stale_not_working_surfaced
 test_nonterminal_stale_paused_absorbed_then_resurfaced
 test_paused_recheck_groups_shared_reason
 test_pause_due_fold_is_shared_and_groups_by_reason
+test_pause_due_fold_preserves_empty_notes
 test_exited_declared_pause_is_bounded_but_live_gate_surfaces
 test_secondmate_paused_resurfaces_in_normal_mode
 test_secondmate_nonpaused_stale_remains_suppressed

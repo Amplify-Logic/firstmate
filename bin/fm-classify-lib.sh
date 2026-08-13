@@ -223,6 +223,9 @@ pause_due_append() {  # <due-file> <status-line> <age> <window> <throttle-marker
   reason_key=$(status_pause_reason_key "$last")
   [ -n "$reason_key" ] || reason_key="unspecified wait"
   display=$(status_line_note "$last" | LC_ALL=C tr '\t\r\n' '   ')
+  display=${display#"${display%%[![:space:]]*}"}
+  display=${display%"${display##*[![:space:]]}"}
+  [ -n "$display" ] || display=$reason_key
   gated=0
   status_pause_is_captain_gated "$last" && gated=1
   printf '%s\t%s\t%s\t%s\t%s\t%s\n' \
@@ -245,12 +248,18 @@ pause_due_windows() {  # <due-file>
 # and prints that caller's wording; the grouping decision itself lives here.
 pause_due_fold() {  # <due-file> <formatter>
   local due=$1 fmt=$2 rkey wins count max_age note gated
-  local k age_i win_i display_i gated_flag
+  local rec rec_us k age_i win_i display_i gated_flag
   [ -s "$due" ] || return 0
   while IFS= read -r rkey; do
     [ -n "$rkey" ] || continue
     wins=""; count=0; max_age=0; note=""; gated=0
-    while IFS="$(printf '\t')" read -r k age_i win_i _ display_i gated_flag; do
+    while IFS= read -r rec; do
+      [ -n "$rec" ] || continue
+      # Tab is IFS-whitespace, so IFS=<tab> read collapses consecutive tabs and
+      # shifts later fields when the display note is empty. ASCII US is not
+      # whitespace, so empty fields survive the split.
+      rec_us=${rec//$'\t'/$'\037'}
+      IFS=$'\037' read -r k age_i win_i _ display_i gated_flag <<< "$rec_us"
       [ "$k" = "$rkey" ] || continue
       count=$((count + 1))
       [ "$age_i" -gt "$max_age" ] && max_age=$age_i
