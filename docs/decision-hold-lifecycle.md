@@ -18,6 +18,7 @@ A post-teardown visual review can complete against the surviving report and dura
 It accepts `--none` as an explicit semantic inventory result, not as inferred absence.
 It verifies every listed identity against tasks-axi before recording completion.
 For an open keyed status decision, it appends a `captain-held [key=<key>]: ...` transfer event only after the matching backlog hold is durable.
+It refuses the whole completion, before recording any attestation, when a still-open status decision reuses a key whose durable hold is already Done, so a genuinely new decision takes a new key instead of silently reviving a retired hold.
 `bin/fm-classify-lib.sh` recognizes that transfer as closing the live status copy without claiming that the captain has answered it.
 
 Scout teardown calls the script's read-only `verify` subcommand after checking for the report and before removing any source state.
