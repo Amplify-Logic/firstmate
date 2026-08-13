@@ -1793,10 +1793,32 @@ spawn_wait_agent_up() {  # <target> <strict>
 # print one that silently starts an agent with no brief at all. That case gets
 # an explicit TWO-STEP recovery instead: launch the TUI, then deliver the
 # pointer into it as a separate fm-send text delivery.
-spawn_refuse_agent_never_started() {  # <phase>
-  local phase=$1 pointer sq_pointer recovery
+spawn_print_in_pane_recovery() {
+  local pointer sq_pointer recovery sq_home sq_send
   pointer="Read $BRIEF and execute it fully. Work in the current directory - it is your isolated task worktree."
   sq_pointer=$(shell_quote "$pointer")
+  sq_home=$(shell_quote "$FM_HOME")
+  sq_send=$(shell_quote "$FM_ROOT/bin/fm-send.sh")
+  echo "Recover it without retyping the brief through the shell:"
+  echo "  1. Interrupt the pane twice: FM_HOME=$sq_home $sq_send $(shell_quote "$ID") --key C-c (run it twice)"
+  case "$LAUNCH_TEMPLATE" in
+    *__ENCODED_BRIEF__*)
+      recovery=$(spawn_render_launch "$sq_pointer")
+      echo "  2. Send this ONE-LINE relaunch to the same pane; it points at the brief file instead of pasting it:"
+      echo "       cd $(shell_quote "$WT") && $recovery"
+      ;;
+    *)
+      recovery=$(spawn_render_launch "")
+      echo "  2. Start $HARNESS in the same pane. It cannot take a brief on its launch line at all, so this command carries none and step 3 delivers the brief separately:"
+      echo "       cd $(shell_quote "$WT") && $recovery"
+      echo "  3. Wait for the TUI to accept input, then deliver the brief as a FILE POINTER into it:"
+      echo "       FM_HOME=$sq_home $sq_send $(shell_quote "$ID") $sq_pointer"
+      ;;
+  esac
+}
+
+spawn_refuse_agent_never_started() {  # <phase>
+  local phase=$1
   {
     echo "error: $ID: no agent is running in $T after $SPAWN_AGENT_UP_POLLS_DONE of $SPAWN_AGENT_UP_BOUND_DESC (last liveness read: ${SPAWN_AGENT_UP_LAST_STATE:-none}); refusing to report this spawn as started"
     if [ "$phase" = brief ]; then
@@ -1805,22 +1827,7 @@ spawn_refuse_agent_never_started() {  # <phase>
       echo "The launch command carries the brief, so it went into a pane that is still a plain shell: the brief becomes shell continuation input, no agent starts, and the pane keeps looking alive."
     fi
     echo "Nothing was torn down. $ID keeps its worktree ($WT), its brief ($BRIEF), and its durable record ($STATE/$ID.meta), so it is recoverable in place."
-    echo "Recover it without retyping the brief through the shell:"
-    echo "  1. Interrupt the pane twice: FM_HOME=$FM_HOME $FM_ROOT/bin/fm-send.sh $ID --key C-c (run it twice)"
-    case "$LAUNCH_TEMPLATE" in
-      *__ENCODED_BRIEF__*)
-        recovery=$(spawn_render_launch "$sq_pointer")
-        echo "  2. Send this ONE-LINE relaunch to the same pane; it points at the brief file instead of pasting it:"
-        echo "       cd $(shell_quote "$WT") && $recovery"
-        ;;
-      *)
-        recovery=$(spawn_render_launch "")
-        echo "  2. Start $HARNESS in the same pane. It cannot take a brief on its launch line at all, so this command carries none and step 3 delivers the brief separately:"
-        echo "       cd $(shell_quote "$WT") && $recovery"
-        echo "  3. Wait for the TUI to accept input, then deliver the brief as a FILE POINTER into it:"
-        echo "       FM_HOME=$FM_HOME $FM_ROOT/bin/fm-send.sh $ID $sq_pointer"
-        ;;
-    esac
+    spawn_print_in_pane_recovery
     echo "Never paste a multi-line brief inline through a shell: that is what spills."
   } >&2
   exit 1
@@ -1835,8 +1842,10 @@ spawn_refuse_agent_never_started() {  # <phase>
 # right positional for either kind - the project dir for ship/scout, the
 # validated firstmate home for a secondmate.
 spawn_render_respawn_command() {
-  local cmd
-  cmd="FM_HOME=$FM_HOME $FM_ROOT/bin/fm-spawn.sh $ID $(shell_quote "$PROJ_ABS")"
+  local cmd sq_home sq_spawn
+  sq_home=$(shell_quote "$FM_HOME")
+  sq_spawn=$(shell_quote "$FM_ROOT/bin/fm-spawn.sh")
+  cmd="FM_HOME=$sq_home $sq_spawn $(shell_quote "$ID") $(shell_quote "$PROJ_ABS")"
   case "$KIND" in
     scout) cmd="$cmd --scout" ;;
     secondmate) cmd="$cmd --secondmate" ;;
@@ -1847,6 +1856,22 @@ spawn_render_respawn_command() {
   [ -z "$OUTCOME" ] || cmd="$cmd --outcome $(shell_quote "$OUTCOME")"
   [ -z "$TASK_TYPE" ] || cmd="$cmd --task-type $(shell_quote "$TASK_TYPE")"
   printf '%s' "$cmd"
+}
+
+spawn_warn_unverified_delivery() {  # <unreadable|unsupported>
+  local reason=$1 sq_home sq_peek
+  sq_home=$(shell_quote "$FM_HOME")
+  sq_peek=$(shell_quote "$FM_ROOT/bin/fm-peek.sh")
+  {
+    echo "warning: $ID: this spawn could not confirm that $HARNESS actually owns the $BACKEND pane before the brief was delivered, so the brief may have gone into a shell."
+    case "$reason" in
+      unsupported) echo "The $BACKEND backend cannot report agent liveness for the $HARNESS harness at all; delivery proceeded UNVERIFIED." ;;
+      unreadable) echo "The $BACKEND pane could not be read for the $HARNESS harness; delivery proceeded UNVERIFIED." ;;
+    esac
+    echo "If the brief does not land, peek with: FM_HOME=$sq_home $sq_peek $(shell_quote "$ID")"
+    echo "If it is sitting at a shell rather than an agent:"
+    spawn_print_in_pane_recovery
+  } >&2
 }
 
 # spawn_refuse_endpoint_missing <launch|brief>: the endpoint is structurally
@@ -1897,7 +1922,7 @@ if [ "$RAW_LAUNCH" -eq 0 ]; then
         # An UNSUPPORTED check is not a failed one, and it must not take away a
         # spawn that worked before this gate existed. Proceed on the old
         # sleep-and-type path, but say so once and loudly.
-        echo "warning: $ID: backend '$BACKEND' has no agent-liveness reader, so the agent-up check could not run; $HARNESS's brief is being typed into $T UNVERIFIED - confirm the agent received it with: FM_HOME=$FM_HOME $FM_ROOT/bin/fm-peek.sh $ID" >&2
+        spawn_warn_unverified_delivery unsupported
         ;;
       *) spawn_refuse_agent_never_started brief ;;
     esac
@@ -1911,7 +1936,9 @@ if [ "$RAW_LAUNCH" -eq 0 ]; then
     spawn_wait_agent_up "$T" 0 || agent_up_rc=$?
     case "$agent_up_rc" in
       1) spawn_refuse_agent_never_started launch ;;
+      2) spawn_warn_unverified_delivery unreadable ;;
       3) spawn_refuse_endpoint_missing launch ;;
+      4) spawn_warn_unverified_delivery unsupported ;;
     esac
   fi
 fi

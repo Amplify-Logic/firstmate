@@ -227,7 +227,7 @@ test_kimi_refusal_prints_a_two_step_file_pointer_recovery() {
     "kimi refusal did not render the launch from this task's own template"
   assert_contains "$out" "3. Wait for the TUI to accept input" \
     "kimi refusal did not print the separate brief-delivery step"
-  assert_contains "$out" "fm-send.sh $ID 'Read $HOME_DIR/data/$ID/brief.md and execute it fully" \
+  assert_contains "$out" "fm-send.sh' '$ID' 'Read $HOME_DIR/data/$ID/brief.md and execute it fully" \
     "kimi refusal did not deliver the brief as a file pointer through fm-send"
   assert_not_contains "$out" "it points at the brief file instead of pasting it" \
     "kimi refusal claimed a brief-carrying relaunch its launch line cannot carry"
@@ -292,7 +292,7 @@ test_happy_path_launch_is_unchanged() {
 # outside the pane, so liveness is genuinely unavailable. That must not become a
 # refusal, and must not burn the whole bound waiting for an answer that will
 # never come.
-test_unreadable_liveness_neither_refuses_nor_burns_the_bound() {
+test_unreadable_liveness_warns_without_refusing_or_burning_the_bound() {
   local out status probes
   make_case pi-node pi pi
   set_command_sequence zsh node
@@ -302,6 +302,15 @@ test_unreadable_liveness_neither_refuses_nor_burns_the_bound() {
 
   expect_code 0 "$status" "an unreadable-liveness harness should still spawn"
   assert_contains "$out" "spawned $ID harness=pi" "pi spawn did not reach the healthy path"
+  assert_contains "$out" "could not confirm that pi actually owns the tmux pane" \
+    "the warning did not name the unreadable harness and backend"
+  assert_contains "$out" "tmux pane could not be read for the pi harness" \
+    "the warning did not explain that the pane was unreadable"
+  assert_contains "$out" "brief may have gone into a shell" \
+    "the warning did not explain the unverified delivery risk"
+  assert_contains "$out" "fm-peek.sh' '$ID'" "the warning did not say how to inspect the pane"
+  assert_contains "$out" "fm-send.sh' '$ID' --key C-c" \
+    "the warning did not reuse the refusal recovery"
   # Each inconclusive read costs a few pane queries (the node case also asks
   # whether the process is cursor or prime-agent), so this bounds the number of
   # WAIT ROUNDS loosely rather than exactly: running the 40-poll bound out would
@@ -310,7 +319,7 @@ test_unreadable_liveness_neither_refuses_nor_burns_the_bound() {
   [ "$probes" -le 12 ] \
     || fail "unreadable liveness polled $probes times - it should settle in a few reads, not run to the bound"
   cleanup_task_tmp "$ID"
-  pass "an unreadable liveness answer neither refuses the spawn nor waits out the bound"
+  pass "an unreadable liveness answer warns without refusing or waiting out the bound"
 }
 
 # A wait that cannot be trusted to terminate is the thing being removed, so a
@@ -347,8 +356,8 @@ test_invalid_bound_knobs_are_refused() {
 # through a fake Orca CLI instead of tmux. Orca is one of the backends with no
 # agent-liveness reader (fm_backend_agent_state answers `unverified`), which is
 # the state this fixture exists to reach - tmux can never produce it.
-make_orca_case() {  # <name>
-  local name=$1 fakebin
+make_orca_case() {  # <name> [harness]
+  local name=$1 harness=${2:-kimi} fakebin
   CASE_DIR="$TMP_ROOT/$name"
   HOME_DIR="$CASE_DIR/home"
   PROJ_DIR="$CASE_DIR/project"
@@ -389,12 +398,12 @@ fi
 exit 0
 SH
   chmod +x "$fakebin/orca"
-  cat > "$fakebin/kimi" <<'SH'
+  cat > "$fakebin/$harness" <<'SH'
 #!/usr/bin/env bash
 set -u
 [ "$#" -eq 1 ] && [ "$1" = "--version" ]
 SH
-  chmod +x "$fakebin/kimi"
+  chmod +x "$fakebin/$harness"
   # Call 1 is the repo lookup (absent), 2 creates it, 3 creates the worktree and
   # hands back the implicit terminal fm-spawn then launches into.
   printf '1\n' > "$ORCA_RESP/1.exit"
@@ -430,14 +439,39 @@ test_unverified_liveness_backend_still_spawns_and_warns() {
 
   expect_code 0 "$status" "kimi on a backend with no liveness reader should still spawn"$'\n'"$out"
   assert_contains "$out" "spawned $ID harness=kimi" "an unsupported liveness check removed a working spawn"
-  assert_contains "$out" "backend 'orca' has no agent-liveness reader" \
+  assert_contains "$out" "orca backend cannot report agent liveness for the kimi harness at all" \
     "the spawn did not name the backend whose check could not run"
   assert_contains "$out" "UNVERIFIED" "the warning did not say the brief delivery was unverified"
-  warnings=$(printf '%s\n' "$out" | grep -c 'has no agent-liveness reader' || true)
+  warnings=$(printf '%s\n' "$out" | grep -c 'cannot report agent liveness' || true)
   [ "$warnings" = 1 ] || fail "expected exactly one unverified-backend warning, saw $warnings"
   assert_grep 'launch-brief:' "$ORCA_LOG" "the brief was never delivered through the Orca terminal"
   cleanup_task_tmp "$ID"
   pass "an unsupported liveness check warns and proceeds instead of removing a working spawn"
+}
+
+test_unverified_non_kimi_backend_still_spawns_and_warns() {
+  local out status
+  make_orca_case orca-unverified-claude claude
+
+  out=$( env \
+    FM_ROOT_OVERRIDE='' FM_HOME="$HOME_DIR" FM_STATE_OVERRIDE="$HOME_DIR/state" \
+    FM_DATA_OVERRIDE="$HOME_DIR/data" FM_PROJECTS_OVERRIDE="$HOME_DIR/projects" \
+    FM_CONFIG_OVERRIDE="$HOME_DIR/config" FM_SPAWN_NO_GUARD=1 \
+    FM_SPAWN_AGENT_UP_SLEEP=0 FM_ORCA_LOG="$ORCA_LOG" \
+    FM_ORCA_RESPONSES="$ORCA_RESP" PATH="$FAKEBIN_DIR:$PATH" \
+    "$SPAWN" "$ID" "$PROJ_DIR" claude --backend orca 2>&1 )
+  status=$?
+
+  expect_code 0 "$status" "claude on an unsupported liveness backend should still spawn"$'\n'"$out"
+  assert_contains "$out" "spawned $ID harness=claude" "unsupported non-kimi spawn did not succeed"
+  assert_contains "$out" "could not confirm that claude actually owns the orca pane" \
+    "unsupported non-kimi warning did not name its harness and backend"
+  assert_contains "$out" "orca backend cannot report agent liveness for the claude harness at all" \
+    "unsupported non-kimi warning did not explain why verification was unavailable"
+  assert_contains "$out" "fm-send.sh' '$ID' --key C-c" \
+    "unsupported non-kimi warning did not include the shared recovery"
+  cleanup_task_tmp "$ID"
+  pass "an unsupported non-kimi liveness check warns and proceeds"
 }
 
 # make_herdr_case <name> <harness> <launch-binary>: a fake Herdr CLI holding its
@@ -619,6 +653,8 @@ test_missing_endpoint_refuses_on_the_first_read() {
     "refusal told the caller to interrupt a pane that no longer exists"
   assert_not_contains "$out" "Send this ONE-LINE relaunch" \
     "refusal told the caller to relaunch into a pane that no longer exists"
+  assert_not_contains "$out" "delivery proceeded UNVERIFIED" \
+    "a gone endpoint was downgraded from refusal to an unverified warning"
   gone_line=$(grep -n '<pane><send-keys>' "$HERDR_LOG" | head -1 | cut -d: -f1)
   [ -n "$gone_line" ] || fail "the launch was never submitted, so the endpoint never went missing"
   polls_after=$(awk -v n="$gone_line" 'NR > n && /<pane><get>/' "$HERDR_LOG" | wc -l | tr -d ' ')
@@ -655,9 +691,10 @@ test_dead_shell_refuses_before_typing_the_brief
 test_kimi_refusal_prints_a_two_step_file_pointer_recovery
 test_dead_shell_refusal_is_recoverable_and_actionable
 test_happy_path_launch_is_unchanged
-test_unreadable_liveness_neither_refuses_nor_burns_the_bound
+test_unreadable_liveness_warns_without_refusing_or_burning_the_bound
 test_invalid_bound_knobs_are_refused
 test_unverified_liveness_backend_still_spawns_and_warns
+test_unverified_non_kimi_backend_still_spawns_and_warns
 test_missing_endpoint_refuses_on_the_first_read
 test_missing_endpoint_respawn_command_carries_kind_and_axes
 
