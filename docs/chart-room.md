@@ -100,4 +100,5 @@ Nothing calls it by default.
 
 It never installs anything.
 The viewer is third-party code that runs inside the captain's own session, so installing one is his call.
-When no viewer is installed, when the terminal is not Herdr, or when the pane refuses to open, the helper prints the loopback address of the same content and exits successfully - a missing overlay never fails the caller that only wanted to show something.
+When no viewer is installed, when the terminal is not Herdr, or when the pane refuses to open, the helper prints where to read the same content and exits successfully - a missing overlay never fails the caller that only wanted to show something.
+What it prints is the chart room's `/report/<task-id>` address when the file is a task report, and the file's own path for any other Markdown, because a derived link for a goal charter or a note beside a report would lead nowhere.
