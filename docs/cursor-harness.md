@@ -9,7 +9,7 @@ one owner; the exact launch flags live in `bin/fm-spawn.sh`. This document is th
 EVIDENCE: dated commands, verbatim output, and the limitations behind each
 decision. Regression coverage is `tests/fm-cursor-adapter.test.sh`.
 
-**Re-certified 2026-08-13** in both roles on:
+**PRIMARY certified and WORKER partially re-verified 2026-08-13** on:
 
 | Component | Version |
 |---|---|

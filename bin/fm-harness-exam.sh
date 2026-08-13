@@ -794,12 +794,13 @@ probe_liveness() {
 }
 
 probe_exit() {
-  local deadline=$((SECONDS + TIMEOUT)) verdict
+  local deadline verdict
   # Wait for the previous turn to finish first. An exit command typed while a
   # turn is still running is swallowed as follow-up text rather than executed
   # (observed on cursor: "/quit" was appended to the running prompt and the
   # runtime stayed live), which scores a working exit path as a failure.
   wait_for pane_text_does_not_match "$BUSY_REGEX" >/dev/null 2>&1 || true
+  deadline=$((SECONDS + TIMEOUT))
   capture_pane 07-before-exit 100
   tmux send-keys -t "$TARGET" -l "$EXIT_COMMAND"
   sleep 1.2

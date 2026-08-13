@@ -315,7 +315,7 @@ The model arms through `fm_watch_arm_pi`, never a foreground bash arm; the watch
 `bin/fm-session-start.sh` reports when the live Pi session has not loaded both the turn-end guard and watcher extensions, and points at plain `pi` after project trust as the fix, with `-e` as a trust-free fallback.
 When a secondmate is launched on Pi, `fm-spawn.sh --secondmate` launches Pi with both `-e .pi/extensions/fm-primary-turnend-guard.ts` and `-e .pi/extensions/fm-primary-pi-watch.ts`, both already present in the secondmate home's git worktree.
 
-## cursor (re-certified 2026-08-13 in BOTH roles on `2026.08.11-e8db854`, Grok 4.6)
+## cursor (PRIMARY certified; WORKER partially re-verified 2026-08-13 on `2026.08.11-e8db854`, Grok 4.6)
 
 Cursor CLI (the `agent` binary), running Cursor Grok 4.6.
 Primary launch: `bin/fm-primary.sh cursor-grok` → `agent --yolo --model cursor-grok-4.6-high` with `FM_PRIMARY_HARNESS=cursor`.
@@ -331,7 +331,7 @@ For the effort-in-model-id axis, see the [launch-profile-axes table](#launch-pro
 | Fact | Value |
 |---|---|
 | Busy-pane signature | `ctrl+c to stop` (the footer hint, shown iff a turn is running). Do NOT match the spinner verb: it changes mid-turn (`⠰⠳ Working` while reasoning, `⠠⠛ Running` during a tool call), so matching the verb reads a tool-executing pane as idle. ASCII, avoiding the braille spinner's locale fragility. |
-| Exit command | `/quit` or `/exit` (both "Exit"), clean status 0. Prints `To resume this session: agent --resume=<chatId>`. |
+| Exit command | `/quit` or `/exit` (both "Exit"), clean status 0. Read the chat id from `~/.cursor/chats/<workspace-hash>/<chatId>/` for recovery. |
 | Interrupt | single `Ctrl+C` (cancels the turn, pane survives) |
 | Autonomy | `--yolo` (alias of `--force`, "Run Everything"); auto-approves every tool execution, verified fully unattended |
 | Env marker | `CURSOR_AGENT=1`. Cursor does NOT clear an inherited `CLAUDECODE=1`, so `bin/fm-harness.sh` tests `CURSOR_AGENT` FIRST - otherwise a cursor worker spawned from a claude-hosted firstmate misreports as claude and gets steered with claude's vocabulary. |
