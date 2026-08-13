@@ -129,15 +129,11 @@ jobs:
   tests-portable-serial:
     name: Behavior portable serial
     runs-on: ubuntu-latest
-    # Ubuntu CI measured this lane at 19m10s on main at fe7161d and 17m46s on
-    # fm/fm-chart-room-build-b4, both without this change and already at 89-96
-    # percent of the former cap.
-    # The pre-existing capacity problem was exposed, not introduced, by this
-    # change's ~27s test file, with the worst observed case including it at ~19m50s.
-    # This cap restores real headroom while remaining a hang tripwire above
-    # observed p99 script cost and suite wall, not the expected healthy end.
-    # A full re-shard is tracked separately.
-    timeout-minutes: 25
+    # Measured serial remainder is ~13 min wall without Herdr. Cap is a hang
+    # tripwire above observed p99 script cost and suite wall, not the expected
+    # healthy end (interim 25m full-suite slack reduced after sharding).
+    # Fork keeps a 20m hang tripwire here; full-suite 30m comment retired with shards.
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v6
         with:
