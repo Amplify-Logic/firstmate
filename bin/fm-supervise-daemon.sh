@@ -1080,7 +1080,7 @@ _pause_recheck_flush() {  # <state> <due-file>
 #     captain-relevant line the per-wake classifier missed and escalate it.
 housekeeping() {  # <state>
   local state=$1 now due f key task win marker age last max_defer oldest pause_secs
-  local pause_due
+  local pause_due pause_floor pause_captain_secs
   now=$(_now)
   migrate_watcher_pause_markers "$state"
 
@@ -1150,6 +1150,13 @@ housekeeping() {  # <state>
   # still declaring the pause -> record a due recheck. Due waits that share one
   # blocking reason escalate as a single item; distinct reasons stay separate.
   # Each grouped marker resets so the window repeats.
+  #
+  # Cheapest gate first: no marker can be due before the shorter of the two
+  # cadences, and that bound is pure arithmetic. Only markers that already
+  # cleared it pay for pause_resurface_secs_for_line, which forks.
+  pause_floor=${FM_PAUSE_RESURFACE_SECS:-$FM_PAUSE_RESURFACE_SECS_DEFAULT}
+  pause_captain_secs=${FM_PAUSE_CAPTAIN_RESURFACE_SECS:-$FM_PAUSE_CAPTAIN_RESURFACE_SECS_DEFAULT}
+  [ "$pause_captain_secs" -lt "$pause_floor" ] && pause_floor=$pause_captain_secs
   pause_due="$state/.subsuper-pause-due.$$"
   rm -f "$pause_due"
   for marker in "$state"/.subsuper-paused-*; do
@@ -1165,8 +1172,9 @@ housekeeping() {  # <state>
       reconcile_pause_tracking "$win" "$state" "$last"
       continue
     fi
-    pause_secs=$(pause_resurface_secs_for_line "$last")
     age=$(( now - $(cat "$marker" 2>/dev/null || echo "$now") ))
+    [ "$age" -ge "$pause_floor" ] || continue
+    pause_secs=$(pause_resurface_secs_for_line "$last")
     [ "$age" -ge "$pause_secs" ] || continue
     stale_window_is_busy "$win" "$state"
     case "$?" in

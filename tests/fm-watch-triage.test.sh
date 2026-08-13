@@ -750,6 +750,53 @@ test_paused_recheck_groups_shared_reason() {
   pass "declared pauses that share one blocker re-surface as a single grouped recheck"
 }
 
+# Several metas can name ONE backend window (recorded_windows dedupes the same
+# glob by target for exactly that reason). The re-surface throttle and the
+# bounded-cadence flag are both keyed on the window, so an undeduped sweep would
+# report one window twice as "2 tasks sharing one wait" and stamp the identical
+# marker twice.
+test_paused_recheck_dedupes_shared_window() {
+  local dir state fakebin out drain_out capture_file pane_hash sig pid back \
+    win key statusf task n hits
+  dir=$(make_case paused-dedupe-window); state="$dir/state"; fakebin="$dir/fakebin"
+  out="$dir/watch.out"; drain_out="$dir/drain.out"; capture_file="$dir/pane.txt"
+  win="test:fm-shared"
+  printf 'idle, holding\n' > "$capture_file"
+  pane_hash=$(hash_text "idle, holding")
+  back=$(( $(date +%s) - 500 ))
+  for task in shared-one shared-two; do
+    printf 'window=%s\nkind=ship\n' "$win" > "$state/$task.meta"
+    statusf="$state/$task.status"
+    printf 'paused: waiting for the upstream tool release\n' > "$statusf"
+    if [ "$(uname)" = Darwin ]; then touch -mt "$(date -r "$back" '+%Y%m%d%H%M.%S')" "$statusf"
+    else touch -m -d "@$back" "$statusf"; fi
+    sig=$(seen_sig "$statusf"); printf '%s' "$sig" > "$state/.seen-${task}_status"
+  done
+  key=$(printf '%s' "$win" | tr ':/.' '___')
+  printf '%s' "$pane_hash" > "$state/.hash-$key"
+  printf '1\n' > "$state/.count-$key"
+  : > "$state/.paused-$key"
+  export FM_FAKE_CREW_STATE='state: paused · source: status-log · waiting for the upstream tool release'
+
+  PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$win" FM_FAKE_TMUX_CAPTURE="$capture_file" \
+    FM_FAKE_TMUX_CURRENT_COMMAND=zsh \
+    FM_STATE_OVERRIDE="$state" FM_CREW_STATE_BIN="$fakebin/fm-crew-state.sh" \
+    FM_PAUSE_RESURFACE_SECS=240 FM_PAUSE_CAPTAIN_RESURFACE_SECS=240 \
+    FM_POLL=1 FM_SIGNAL_GRACE=1 FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 \
+    "$WATCH" > "$out" &
+  pid=$!
+  wait_for_exit "$pid" 40 || fail "watcher did not re-surface the shared-window pause: $(cat "$out")"
+  grep -F "sharing one wait" "$out" >/dev/null \
+    && fail "two metas on one window were counted as separate due tasks: $(cat "$out")"
+  hits=$(grep -o -F "$win" "$out" | grep -c .)
+  [ "$hits" -eq 1 ] || fail "one window was listed $hits times in the recheck: $(cat "$out")"
+  [ -e "$state/.paused-resurfaced-$key" ] || fail "the deduped recheck did not throttle $win"
+  FM_STATE_OVERRIDE="$state" "$DRAIN" > "$drain_out" 2>/dev/null || fail "drain after deduped pause recheck failed"
+  n=$(grep -c "$(printf '\tstale\t')" "$drain_out" || true)
+  [ "$n" -eq 1 ] || fail "deduped pause recheck enqueued $n stale wakes, not one"
+  pass "metas sharing one backend window re-surface as a single deduped recheck"
+}
+
 # The due-record format and the group-by-reason fold have ONE owner in
 # fm-classify-lib.sh, called by both the watcher and the away-mode daemon, so the
 # two supervisors cannot drift apart. Pin the grouping itself plus the marker and
@@ -1538,6 +1585,7 @@ test_herdr_stale_three_way_liveness
 test_nonterminal_stale_not_working_surfaced
 test_nonterminal_stale_paused_absorbed_then_resurfaced
 test_paused_recheck_groups_shared_reason
+test_paused_recheck_dedupes_shared_window
 test_pause_due_fold_is_shared_and_groups_by_reason
 test_pause_due_fold_preserves_empty_notes
 test_exited_declared_pause_is_bounded_but_live_gate_surfaces

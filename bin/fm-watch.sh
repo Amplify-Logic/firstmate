@@ -360,8 +360,15 @@ wedge_timer_check() {  # <window> <since-file> <triage-label> <escalation-count-
 # Collect every declared pause that is due for re-surface into the shared TSV
 # work file. bin/fm-classify-lib.sh owns the record format and the fold, so the
 # watcher and the away-mode daemon group identically.
+#
+# Deduped by resolved backend target the way recorded_windows is: several metas
+# can name one window, and the throttle marker plus the bounded-cadence flag are
+# both keyed on the window, so a second record for a target already collected is
+# the same window listed twice and the same marker stamped twice. The filter sits
+# at the append, not at the target resolution, so a non-due task cannot claim the
+# slot and hide a due one sharing its window.
 pause_recheck_collect_due() {  # <due-file>
-  local due=$1 meta task win last statusf mtime age rf rf_age pause_secs
+  local due=$1 meta task win last statusf mtime age rf rf_age pause_secs seen=
   rm -f "$due"
   for meta in "$STATE"/*.meta; do
     [ -e "$meta" ] || continue
@@ -378,6 +385,10 @@ pause_recheck_collect_due() {  # <due-file>
     rf_age=$(age_of "$rf")
     pause_secs=$(pause_resurface_secs_for_line "$last")
     [ "$age" -ge "$pause_secs" ] && [ "$rf_age" -ge "$pause_secs" ] || continue
+    case "$seen" in
+      *"|$win|"*) continue ;;
+    esac
+    seen="$seen|$win|"
     pause_due_append "$due" "$last" "$age" "$win" "$rf"
   done
 }
