@@ -506,12 +506,15 @@ handle_paused_stale() {  # <window> <task> <hash>
     # DIGEST (status_open_captain_holds), so one hold state wakes at most once
     # and a later resolution (which empties or changes the fold) naturally
     # supersedes it.
-    surf="$STATE/.captain-held-surfaced-$key"
-    # Away mode records the same one-shot in .subsuper-captain-held-surfaced
-    # (task-keyed), so the surface is global across supervision modes: if
-    # either marker already holds this fold digest, this hold state woke
-    # before and must not wake again when supervision changes hands.
-    surf_away="$STATE/.subsuper-captain-held-surfaced-$(printf '%s' "$task" | tr ':/.' '___')"
+    # Both paths come from fm-classify-lib.sh's captain_held_surfaced_markers,
+    # the ONE owner of the namespace pair, in its documented order: the
+    # window-keyed marker this mode writes first, then away mode's task-keyed
+    # one. Away mode records the same one-shot, so the surface is global across
+    # supervision modes: if either marker already holds this fold digest, this
+    # hold state woke before and must not wake again when supervision changes
+    # hands. Reading the paths from the owner is what keeps a surface from being
+    # written under one name and swept under another.
+    { IFS= read -r surf; IFS= read -r surf_away; } < <(captain_held_surfaced_markers "$STATE" "$win" "$task")
     if [ "$(cat "$surf" 2>/dev/null || true)" != "$digest" ] \
       && [ "$(cat "$surf_away" 2>/dev/null || true)" != "$digest" ]; then
       alive=$(fm_backend_agent_alive "$(window_backend "$win")" "$win" 2>/dev/null) || alive=unknown
@@ -543,13 +546,15 @@ handle_paused_stale() {  # <window> <task> <hash>
 # surface forever: hold ids are deterministic, so a key resolved and re-opened
 # folds to the same digest. This is the single removal site in the watcher; the
 # task is resolved from the window only when a caller does not already have it.
-clear_captain_held_surfaced() {  # <window> [task]
-  local win=$1 task=${2:-} m
-  [ -n "$task" ] || task=$(window_to_task "$win" "$STATE")
+# The argument order matches the away-mode daemon's identically-named wrapper
+# exactly, so the two stay interchangeable for a test shell that sources both.
+clear_captain_held_surfaced() {  # <state-dir> <window> [task]
+  local state=$1 win=$2 task=${3:-} m
+  [ -n "$task" ] || task=$(window_to_task "$win" "$state")
   while IFS= read -r m; do
     [ -n "$m" ] || continue
     rm -f "$m"
-  done < <(captain_held_surfaced_markers "$STATE" "$win" "$task")
+  done < <(captain_held_surfaced_markers "$state" "$win" "$task")
 }
 
 clear_pause_state() {  # <window> [task]
@@ -558,7 +563,7 @@ clear_pause_state() {  # <window> [task]
   key=${key//\//_}
   key=${key//./_}
   rm -f "$STATE/.paused-$key" "$STATE/.paused-rechecked-$key" "$STATE/.paused-resurfaced-$key"
-  clear_captain_held_surfaced "$win" "$task"
+  clear_captain_held_surfaced "$STATE" "$win" "$task"
 }
 
 clear_pause_tracking() {  # <window> [task]
@@ -582,7 +587,7 @@ pause_state_class() {  # <window> <task>
   recheck_file="$STATE/.paused-rechecked-$key"
   if ! status_declared_wait "$STATE/$task.status"; then
     rm -f "$recheck_file"
-    clear_captain_held_surfaced "$win" "$task"
+    clear_captain_held_surfaced "$STATE" "$win" "$task"
     class=$(crew_absorb_class "$task")
     if [ "$class" = paused ] && status_is_captain_held "$last"; then
       # A paused verdict behind a captain-held last line that is NOT a declared
@@ -1283,7 +1288,7 @@ EOF
               # The hold's quiet-state ended (resolved or superseded): drop the
               # dead-agent one-shot marker so a later re-opened identical hold
               # still surfaces (deterministic hold ids make digests repeatable).
-              clear_captain_held_surfaced "$w" "$task"
+              clear_captain_held_surfaced "$STATE" "$w" "$task"
               wedge_timer_check "$w" "$ssf" "non-terminal stale" "$ewf"
             fi
           fi

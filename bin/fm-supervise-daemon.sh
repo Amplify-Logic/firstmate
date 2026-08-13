@@ -400,7 +400,7 @@ classify_signal() {  # <reason-after-colon> <state>
 # first sight of a non-terminal stale it returns "self" and the caller records a
 # timestamp marker; persistence is escalated by housekeeping's recheck, not here.
 classify_stale() {  # <window> <state>
-  local win=$1 state=$2 task last seen alive digest
+  local win=$1 state=$2 task last seen alive digest surf_win surf_task
   task=$(window_to_task "$win" "$state")
   last=$(last_status_line "$state/$task.status")
   # An open captain-held transfer is checked BEFORE the last-line pause test,
@@ -442,8 +442,9 @@ classify_stale() {  # <window> <state>
         # when either the away-mode marker or the watcher's normal-mode marker
         # already holds this fold digest, so switching between normal and AFK
         # supervision cannot re-escalate the same unchanged dead agent.
-        if [ "$(cat "$state/.subsuper-captain-held-surfaced-$(_stale_key "$task")" 2>/dev/null || true)" != "$digest" ] \
-          && [ "$(cat "$state/.captain-held-surfaced-$(printf '%s' "$win" | tr ':/.' '___')" 2>/dev/null || true)" != "$digest" ]; then
+        { IFS= read -r surf_win; IFS= read -r surf_task; } < <(captain_held_surfaced_markers "$state" "$win" "$task")
+        if [ "$(cat "$surf_task" 2>/dev/null || true)" != "$digest" ] \
+          && [ "$(cat "$surf_win" 2>/dev/null || true)" != "$digest" ]; then
           printf 'escalate|captain-held, agent exited (work at risk once the answer lands): %s' "$(printf '%s' "$digest" | tr '\n' ' ')"
         else
           printf 'absorb|captain-held (declared wait), absorbed (dead agent already surfaced): %s' "$last"
@@ -552,9 +553,13 @@ pause_marker_remove() {  # <window> <state>
 # only this daemon's task-keyed marker would leave the watcher's window-keyed
 # one behind, and since both modes READ both, that survivor suppresses the next
 # surface forever: hold ids are deterministic, so a key resolved and re-opened
-# folds to the same digest. This is the single removal site in the daemon.
-clear_captain_held_surfaced() {  # <window> <task> <state>
-  local win=$1 task=$2 state=$3 m
+# folds to the same digest. This is the single removal site in the daemon; the
+# task is resolved from the window only when a caller does not already have it.
+# The argument order matches the watcher's identically-named wrapper exactly, so
+# the two stay interchangeable for a test shell that sources both.
+clear_captain_held_surfaced() {  # <state-dir> <window> [task]
+  local state=$1 win=$2 task=${3:-} m
+  [ -n "$task" ] || task=$(window_to_task "$win" "$state")
   while IFS= read -r m; do
     [ -n "$m" ] || continue
     rm -f "$m"
@@ -613,7 +618,7 @@ reconcile_pause_tracking() {  # <window> <state> <last-status-line>
   # both modes, so an asymmetric sweep just moves the suppression instead of
   # ending it.
   if [ -z "$digest" ]; then
-    clear_captain_held_surfaced "$win" "$task" "$state"
+    clear_captain_held_surfaced "$state" "$win" "$task"
   fi
 }
 
@@ -1255,25 +1260,36 @@ housekeeping() {  # <state>
 
   # (1c) dead-agent one-shot markers must not outlive their hold: hold ids are
   # deterministic, so a hold resolved and later re-opened for the same key
-  # yields an identical fold digest, and a stale .subsuper-captain-held-surfaced-*
-  # marker would suppress the new hold's surface (and the files accumulate).
-  # Sweep BOTH namespaces for any marker whose fold no longer has an open hold:
-  # a surface writes the window-keyed and task-keyed markers together and both
-  # modes read both, so clearing one alone only moves the suppression.
-  for surf in "$state"/.subsuper-captain-held-surfaced-*; do
+  # yields an identical fold digest, and a stale marker would suppress the new
+  # hold's surface (and the files accumulate). This is the ONLY collector for
+  # either namespace, so it globs BOTH: a surface writes the window-keyed and
+  # the task-keyed marker together and both modes read both, so a sweep that
+  # visits one namespace alone just moves the suppression to the other. An
+  # orphan whose window no longer resolves is dropped by whichever pass finds
+  # it, which is why the torn-down case needs both globs rather than a paired
+  # removal: with the task gone there is nothing left to derive the twin from.
+  for surf in "$state"/.subsuper-captain-held-surfaced-* "$state"/.captain-held-surfaced-*; do
     [ -e "$surf" ] || continue
-    key="${surf##*.subsuper-captain-held-surfaced-}"
-    # The marker suffix is _stale_key(task) (tr ':/.' '___'), which is lossy for
-    # task ids containing '.' (allowed by the slug charset). Resolve the window
-    # the same way loop (2b) does so $state/$task.status resolves even for such
-    # ids; an unresolvable marker is orphaned and swept.
-    win=$(window_for_task "$key" "$state" 2>/dev/null || true)
+    # The marker suffix is _stale_key(<task> or <window>) (tr ':/.' '___'), which
+    # is lossy for ids containing '.' (allowed by the slug charset). Resolve the
+    # window the same way loop (2b) does so $state/$task.status resolves even for
+    # such ids; an unresolvable marker is orphaned and swept.
+    case "$surf" in
+      *.subsuper-captain-held-surfaced-*)
+        key="${surf##*.subsuper-captain-held-surfaced-}"
+        win=$(window_for_task "$key" "$state" 2>/dev/null || true)
+        ;;
+      *)
+        key="${surf##*.captain-held-surfaced-}"
+        win=$(window_for_window_key "$key" "$state" 2>/dev/null || true)
+        ;;
+    esac
     if [ -z "$win" ]; then
       rm -f "$surf"; continue
     fi
     task=$(window_to_task "$win" "$state")
     if ! status_has_open_captain_hold "$state/$task.status"; then
-      clear_captain_held_surfaced "$win" "$task" "$state"
+      clear_captain_held_surfaced "$state" "$win" "$task"
     fi
   done
 
@@ -1358,6 +1374,24 @@ window_for_task() {  # <task-key> [state]
   for w in $(tmux list-windows -a -F '#{session_name}:#{window_name}' 2>/dev/null | grep ':fm-' || true); do
     t=$(window_to_task "$w" "$state")
     [ "$(_stale_key "$t")" = "$key" ] && { printf '%s' "$w"; return 0; }
+  done
+  return 1
+}
+
+# The window-keyed sibling of window_for_task: find a recorded or live window
+# target whose own _stale_key matches the marker key. The watcher keys its
+# dead-agent one-shot by WINDOW, so the (1c) sweep needs this reverse lookup to
+# tell a marker whose hold is still open from an orphan whose task is gone.
+window_for_window_key() {  # <window-key> [state]
+  local key=$1 state=${2:-$(_state_root)} meta w
+  for meta in "$state"/*.meta; do
+    [ -e "$meta" ] || continue
+    w=$(fm_backend_target_of_meta "$meta")
+    [ -n "$w" ] || continue
+    [ "$(_stale_key "$w")" = "$key" ] && { printf '%s' "$w"; return 0; }
+  done
+  for w in $(tmux list-windows -a -F '#{session_name}:#{window_name}' 2>/dev/null | grep ':fm-' || true); do
+    [ "$(_stale_key "$w")" = "$key" ] && { printf '%s' "$w"; return 0; }
   done
   return 1
 }
@@ -1472,7 +1506,7 @@ is_wake_reason() {  # <reason>
 # --- dispatch one wake reason to self-handle or escalate --------------------
 # Side effects: logging, marker records, escalation buffer appends.
 handle_wake() {  # <reason> <state>
-  local reason=$1 state=$2 decision action distilled task last digest
+  local reason=$1 state=$2 decision action distilled task last digest m
   local kind="" arg=""
   if should_force_self "$reason"; then
     log "wake force-self (FM_INJECT_SKIP): $reason"
@@ -1513,8 +1547,10 @@ handle_wake() {  # <reason> <state>
         "captain-held, agent exited"*)
           task=$(window_to_task "$arg" "$state")
           digest=$(status_open_captain_holds "$state/$task.status")
-          printf '%s' "$digest" > "$state/.subsuper-captain-held-surfaced-$(_stale_key "$task")"
-          printf '%s' "$digest" > "$state/.captain-held-surfaced-$(printf '%s' "$arg" | tr ':/.' '___')"
+          while IFS= read -r m; do
+            [ -n "$m" ] || continue
+            printf '%s' "$digest" > "$m"
+          done < <(captain_held_surfaced_markers "$state" "$arg" "$task")
           ;;
       esac
       [ "${FM_ESCALATE_BATCH_SECS:-$ESCALATE_BATCH_SECS_DEFAULT}" -le 0 ] && { escalate_flush "$state" || true; }

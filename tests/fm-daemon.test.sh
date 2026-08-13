@@ -788,6 +788,57 @@ test_housekeeping_lossy_task_key_sweep_keeps_open_hold_marker() {
   pass "the (1c) sweep resolves lossy task ids so open-hold one-shot markers survive"
 }
 
+# The (1c) ORPHAN branch has to be symmetric too. A task torn down while its hold
+# was still open leaves BOTH one-shot markers behind and neither resolves back to
+# a window, so a sweep that visits only the task-keyed namespace strands the
+# window-keyed twin with nothing left in bin/ to collect it. Hold ids are
+# deterministic, so a task later recreated under the same id that re-opens the
+# same decision key folds to a byte-identical digest, and that stranded marker
+# suppresses its dead-agent surface permanently.
+test_housekeeping_orphan_sweep_clears_both_namespaces() {
+  local dir state fakebin win key watcher_key digest out
+  dir=$(make_supercase orphan-both-namespaces)
+  state="$dir/state"; fakebin="$dir/fakebin"
+  win="sess:fm-held-c17"
+  key=$(printf '%s' "held-c17" | tr ':/.' '___')
+  watcher_key=$(printf '%s' "$win" | tr ':/.' '___')
+  cat > "$fakebin/tmux" <<'SH'
+#!/usr/bin/env bash
+set -u
+case "${1:-}" in
+  display-message)
+    case "$*" in *pane_current_command*) printf '%s\n' "${FM_FAKE_TMUX_CURRENT_COMMAND:-}"; exit 0 ;; esac
+    exit 1 ;;
+esac
+exit 1
+SH
+  chmod +x "$fakebin/tmux"
+  # The surface that wrote both markers, captured before the teardown.
+  printf 'captain-held [key=api-shape]: tracked by held-route-17\n' > "$dir/held-c17.status"
+  digest=$(bash -c '. "$1"; status_open_captain_holds "$2"' _ \
+    "$ROOT/bin/fm-classify-lib.sh" "$dir/held-c17.status")
+  printf '%s' "$digest" > "$state/.subsuper-captain-held-surfaced-$key"
+  printf '%s' "$digest" > "$state/.captain-held-surfaced-$watcher_key"
+  # Torn down: no meta, no status file and no live window, so neither marker
+  # resolves back to a window.
+  PATH="$fakebin:$PATH" FM_STATE_OVERRIDE="$state" housekeeping "$state"
+  [ -e "$state/.subsuper-captain-held-surfaced-$key" ] \
+    && fail "the orphan sweep left the task-keyed one-shot marker behind"
+  [ -e "$state/.captain-held-surfaced-$watcher_key" ] \
+    && fail "the orphan sweep left the window-keyed one-shot marker behind"
+  # The task is recreated under the same id and re-opens the same decision key,
+  # so its fold digest is identical to the swept one: the new dead agent must
+  # still surface rather than be absorbed by a marker that outlived its hold.
+  cp "$dir/held-c17.status" "$state/held-c17.status"
+  out=$(PATH="$fakebin:$PATH" FM_FAKE_TMUX_CURRENT_COMMAND=zsh \
+    FM_STATE_OVERRIDE="$state" classify_stale "$win" "$state")
+  case "$out" in
+    escalate\|*"agent exited"*) ;;
+    *) fail "a re-opened hold after an orphan sweep was suppressed by a stale marker: $out" ;;
+  esac
+  pass "the (1c) orphan branch sweeps both namespaces so a recreated task still surfaces"
+}
+
 test_housekeeping_stale_marker_transitions_to_pause() {
   local dir state fakebin win pane key
   dir=$(make_supercase stale-to-paused)
@@ -2464,6 +2515,7 @@ test_reconcile_open_hold_working_last_keeps_wedge_marker
 test_housekeeping_captain_held_stale_marker_never_wedges
 test_housekeeping_captain_held_pause_marker_never_resurfaces
 test_housekeeping_lossy_task_key_sweep_keeps_open_hold_marker
+test_housekeeping_orphan_sweep_clears_both_namespaces
 test_housekeeping_stale_marker_transitions_to_pause
 test_housekeeping_pause_marker_transitions_to_clear
 test_housekeeping_herdr_persistent_stale_resolves_meta
