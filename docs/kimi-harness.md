@@ -73,6 +73,8 @@ There is no positional interactive prompt for a brief.
 `fm-spawn` therefore launches the TUI first, then delivers `brief.md` via the backend send path.
 Because that delivery is typed into the pane, `fm-spawn` first requires positive proof that the agent owns it, and refuses rather than typing the brief into a pane that is still a bare shell.
 The `FM_KIMI_BRIEF_SETTLE_SECS` settle (default 2) still follows that proof, because a live process is not yet a TUI ready to accept input.
+On a backend with no agent-liveness reader at all (zellij, Orca, cmux) that proof cannot be gathered, so the spawn proceeds on the settle-and-type path and warns once on stderr that the delivery went out unverified.
+Because kimi's launch line cannot carry a brief, a refusal here prints a two-step recovery: start the TUI with the rendered launch command, then deliver `brief.md` into it as a file pointer via `fm-send.sh`.
 
 ### Trust dialog (2026-07-21)
 
