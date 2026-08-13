@@ -138,6 +138,9 @@
 #                   turn-end extension, written by this script; same pi-fork
 #                   extension API, kept outside the worktree like pi's)
 #     __OPINPUT__   absolute path to the canonical operational-input encoder
+#   The brief placeholder receives one of two arguments, chosen by BACKEND, not by
+#   harness: the whole encoded brief inline (every backend but herdr), or a one-line
+#   pointer at the brief file (herdr). See "brief delivery shape" below for why.
 # Per-harness turn-end hooks are installed automatically; some live outside the worktree.
 # grok uses a firstmate-owned global hook under ${GROK_HOME:-$HOME/.grok}/hooks
 # plus a gitignored .fm-grok-turnend worktree pointer and a state token.
@@ -1667,7 +1670,22 @@ sq_piwatch=$(shell_quote "$PROJ_ABS/.pi/extensions/fm-primary-pi-watch.ts")
 sq_pastate=$(shell_quote "$STATE_REAL/$ID.prime-agent-home")
 sq_primeext=$(shell_quote "$STATE/$ID.prime-ext.ts")
 sq_opinput=$(shell_quote "$FM_ROOT/bin/fm-operational-input.sh")
-sq_encoded_brief=$(shell_quote "$ENCODED_BRIEF")
+
+# spawn_brief_pointer: the one-line instruction that sends an agent to its own
+# brief file instead of pasting the brief at it. One owner for both the herdr
+# launch shape below and the recovery this script prints when a launch fails,
+# so the two can never drift into naming different files or different work.
+#
+# A secondmate gets the bare instruction: it is launched in its own firstmate
+# home, not in a disposable task worktree, so the worktree sentence a ship or
+# scout crewmate needs would tell it something false about where it is.
+spawn_brief_pointer() {
+  if [ "$KIND" = secondmate ]; then
+    printf '%s' "Read $BRIEF and execute it fully."
+  else
+    printf '%s' "Read $BRIEF and execute it fully. Work in the current directory - it is your isolated task worktree."
+  fi
+}
 # LAUNCH_MODEL was resolved earlier (cursor effort fold + catalog preflight).
 MODELFLAG=$(model_flag_for_harness "$HARNESS" "$LAUNCH_MODEL")
 EFFORTFLAG=$(effort_flag_for_harness "$HARNESS" "$EFFORT")
@@ -1707,7 +1725,48 @@ spawn_render_launch() {  # <shell-quoted-brief-arg>
   fi
   printf '%s' "$rendered"
 }
-LAUNCH=$(spawn_render_launch "$sq_encoded_brief")
+# --- brief delivery shape ----------------------------------------------------
+#
+# The brief reaches the agent one of two ways, and which one is a BACKEND
+# decision, not a harness one.
+#
+#   inline  - the launch line carries the whole encoded brief as its prompt
+#             argument. Every backend except herdr keeps this, unchanged.
+#   pointer - the launch line carries a one-line instruction that names the
+#             brief FILE, and the agent reads it. Used on herdr.
+#
+# Why herdr gets the pointer (recorded 2026-08-13/2026-08-14, herdr backend):
+# five consecutive first-attempt spawns carrying the inline brief - three
+# cursor, two claude - all failed the agent-up gate, and every pane showed the
+# launch line sitting in a plain shell with the brief spilled behind it as
+# quote continuation, so the launch never ran as a command. The same tasks
+# came up within seconds on the file-pointer relaunch this script already
+# prints as its recovery: six of six, across both harnesses. The one variable
+# between them is the payload. An inline brief is a multi-kilobyte, MULTI-LINE
+# paste (this repo's own scaffold renders ~10KB across ~95 lines), and every
+# newline in it is a submit into whatever is reading the pane; a pointer is a
+# single short line with no newline in it at all. Delivering a brief that way
+# is a bet on a terminal, a shell, and a line editor all keeping ~10KB of
+# quoted continuation intact, and herdr loses that bet reliably.
+#
+# The harness axis is untouched: this changes only WHICH ARGUMENT the launch
+# template's brief placeholder receives, so every adapter keeps its own verified
+# launch shape, and kimi - which has no launch-line brief at all - gets the same
+# pointer as its separate post-launch delivery instead of a pasted brief.
+#
+# The pointer is still constructed through the canonical operational-input
+# encoder, so what the agent receives stays typed launch-brief input exactly
+# like the inline form.
+BRIEF_DELIVERY=inline
+if [ "$BACKEND" = herdr ] && [ "$RAW_LAUNCH" -eq 0 ]; then
+  BRIEF_DELIVERY=pointer
+fi
+DELIVERED_BRIEF=$ENCODED_BRIEF
+if [ "$BRIEF_DELIVERY" = pointer ]; then
+  DELIVERED_BRIEF=$(spawn_brief_pointer | "$FM_ROOT/bin/fm-operational-input.sh" encode launch-brief) \
+    || { echo "error: brief pointer could not be encoded; refusing to start $ID" >&2; exit 1; }
+fi
+LAUNCH=$(spawn_render_launch "$(shell_quote "$DELIVERED_BRIEF")")
 # --- agent-up verification ---------------------------------------------------
 #
 # Until an agent actually owns the endpoint, the pane is still a plain shell,
@@ -1813,10 +1872,15 @@ spawn_wait_agent_up() {  # <target> <strict>
 # print one that silently starts an agent with no brief at all. That case gets
 # an explicit TWO-STEP recovery instead: launch the TUI, then deliver the
 # pointer into it as a separate fm-send text delivery.
+#
+# The pointer printed here stays the RAW instruction, not the encoded launch
+# input the pointer-delivery launch above sends: this is a command a reader
+# copies and runs by hand, and the encoder's leading invisible separator does
+# not survive that reliably. Both forms carry the same instruction from
+# spawn_brief_pointer, so the file they name cannot drift.
 spawn_print_in_pane_recovery() {
-  local pointer sq_pointer recovery sq_home sq_send
-  pointer="Read $BRIEF and execute it fully. Work in the current directory - it is your isolated task worktree."
-  sq_pointer=$(shell_quote "$pointer")
+  local sq_pointer recovery sq_home sq_send
+  sq_pointer=$(shell_quote "$(spawn_brief_pointer)")
   sq_home=$(shell_quote "$FM_HOME")
   sq_send=$(shell_quote "$FM_ROOT/bin/fm-send.sh")
   echo "Recover it without retyping the brief through the shell:"
@@ -1843,6 +1907,8 @@ spawn_refuse_agent_never_started() {  # <phase>
     echo "error: $ID: no agent is running in $T after $SPAWN_AGENT_UP_POLLS_DONE of $SPAWN_AGENT_UP_BOUND_DESC (last liveness read: ${SPAWN_AGENT_UP_LAST_STATE:-none}); refusing to report this spawn as started"
     if [ "$phase" = brief ]; then
       echo "The brief was NOT delivered: typing it into a pane that is still a plain shell is the dead-pane spill, where the brief becomes shell input and no agent ever reads it."
+    elif [ "$BRIEF_DELIVERY" = pointer ]; then
+      echo "The launch command went into a pane that is still a plain shell. It carried only a one-line pointer at the brief file, so nothing spilled and the brief itself is untouched - but no agent started, and the pane keeps looking alive."
     else
       echo "The launch command carries the brief, so it went into a pane that is still a plain shell: the brief becomes shell continuation input, no agent starts, and the pane keeps looking alive."
     fi
@@ -1949,7 +2015,11 @@ if [ "$RAW_LAUNCH" -eq 0 ]; then
     # Liveness only proves the process is up; the TUI still needs a beat before
     # it accepts input, which is what this settle has always been for.
     sleep "${FM_KIMI_BRIEF_SETTLE_SECS:-2}"
-    spawn_send_literal "$T" "$ENCODED_BRIEF"
+    # DELIVERED_BRIEF, not ENCODED_BRIEF: on a pointer-delivery backend this
+    # separate send is the ONLY place kimi's brief is typed, so it has to carry
+    # the same one-line pointer the launch line carries for every other adapter
+    # there. Everywhere else the two are the same value.
+    spawn_send_literal "$T" "$DELIVERED_BRIEF"
     sleep 0.5
     spawn_send_key "$T" Enter
   else
