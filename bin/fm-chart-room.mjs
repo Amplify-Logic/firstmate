@@ -633,8 +633,8 @@ li.iced-i{color:var(--ink-soft)}li.iced-i .dot{color:var(--ink-soft)}
 li.unreadable-i{background:var(--signal-soft);border:1px dashed #e4c8c2}li.unreadable-i .dot,li.unreadable-i .state{color:var(--signal)}
 .more{font-size:12.5px;color:var(--teal);padding:4px 8px;cursor:pointer;font-weight:600}
 .more:hover{text-decoration:underline}
-li.folded{display:none}
-.bucket.open li.folded{display:flex}
+ul.items li.folded{display:none}
+.bucket.open ul.items li.folded{display:flex}
 .rows{display:flex;flex-direction:column;gap:10px}
 .row{display:block;text-decoration:none;border:1px solid var(--line);border-radius:10px;background:#fffdf7;padding:14px 16px;min-width:0}
 .row:hover{background:var(--paper-deep)}
