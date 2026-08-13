@@ -677,7 +677,7 @@ test_missing_endpoint_respawn_command_carries_kind_and_axes() {
   status=$?
 
   expect_code 1 "$status" "a scout spawn whose endpoint vanished should refuse"$'\n'"$out"
-  assert_contains "$out" "fm-spawn.sh $ID" "refusal did not print the re-spawn command"
+  assert_contains "$out" "fm-spawn.sh' '$ID'" "refusal did not print the safely quoted re-spawn command"
   assert_contains "$out" "--scout --harness 'claude' --backend 'herdr'" \
     "the re-spawn command dropped this task's kind or resolved axes, so a copy-paste would come back as a different task"
   assert_not_contains "$out" "Re-spawn with the same axis flags you used here" \
