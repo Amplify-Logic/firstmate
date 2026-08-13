@@ -195,7 +195,7 @@ export default function (pi: ExtensionAPI) {
         readyTimer.unref();
       };
       // Silent children still expire at spawn grace (default: ready timeout).
-      // First stdout starts the ready budget so spawn latency is not hung.
+      // First stdout starts the ready budget so spawn latency does not consume it.
       spawnTimer = setTimeout(() => finish(false), armSpawnGraceMs);
       spawnTimer.unref();
       armChild.stdout?.once("data", startReadyTimer);
