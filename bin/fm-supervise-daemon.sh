@@ -1033,38 +1033,35 @@ _oldest_line_age() {  # <buf> -> seconds since the oldest buffered item first ar
   fi
 }
 
-# Group due declared pauses by normalized reason and escalate one item per
-# distinct blocker. Shared-reason waits become a single recheck; a distinct
-# reason stays its own item. Resets every grouped marker so the window repeats.
+# Digest wording for one grouped blocker. The grouping itself is pause_due_fold
+# in bin/fm-classify-lib.sh, shared with the watcher.
+_pause_recheck_line() {  # <count> <max-age> <note> <windows> <gated>
+  local count=$1 max_age=$2 note=$3 wins=$4 gated=$5 line
+  if [ "$count" -eq 1 ]; then
+    line="paused ${max_age}s (awaiting external, recheck whether the wait still holds): $wins"
+  else
+    line="paused ${max_age}s (awaiting external, $count tasks sharing one wait, recheck whether the wait still holds): $note [$wins]"
+  fi
+  if [ "$gated" = 1 ]; then
+    line="$line (cannot clear until the captain acts)"
+  fi
+  printf '%s\n' "$line"
+}
+
+# Escalate one item per distinct blocker, then reset every grouped marker so the
+# window repeats. The markers are stamped only after the digest lines are in the
+# buffer: a failed escalate_add must not silence a due wait for a whole window.
 _pause_recheck_flush() {  # <state> <due-file>
-  local state=$1 due=$2 rkey wins count max_age note gated line age win marker display gated_flag
+  local state=$1 due=$2 line marker
   [ -s "$due" ] || return 0
-  while IFS= read -r rkey; do
-    [ -n "$rkey" ] || continue
-    wins=""; count=0; max_age=0; note=""; gated=0
-    while IFS="$(printf '\t')" read -r k age win marker display gated_flag; do
-      [ "$k" = "$rkey" ] || continue
-      count=$((count + 1))
-      [ "$age" -gt "$max_age" ] && max_age=$age
-      [ -n "$note" ] || note=$display
-      [ "$gated_flag" = 1 ] && gated=1
-      if [ -z "$wins" ]; then
-        wins=$win
-      else
-        wins="$wins, $win"
-      fi
-      _now > "$marker"
-    done < "$due"
-    if [ "$count" -eq 1 ]; then
-      line="paused ${max_age}s (awaiting external, recheck whether the wait still holds): $wins"
-    else
-      line="paused ${max_age}s (awaiting external, $count tasks sharing one wait, recheck whether the wait still holds): $note [$wins]"
-    fi
-    if [ "$gated" = 1 ]; then
-      line="$line (cannot clear until the captain acts)"
-    fi
-    escalate_add "$state" "$line"
-  done < <(cut -f1 "$due" | awk 'NF && !seen[$0]++')
+  while IFS= read -r line; do
+    [ -n "$line" ] || continue
+    escalate_add "$state" "$line" || return 1
+  done < <(pause_due_fold "$due" _pause_recheck_line)
+  while IFS= read -r marker; do
+    [ -n "$marker" ] || continue
+    _now > "$marker"
+  done < <(pause_due_markers "$due")
 }
 
 # --- housekeeping (runs every tick while the watcher is mid-cycle) ----------
@@ -1083,7 +1080,7 @@ _pause_recheck_flush() {  # <state> <due-file>
 #     captain-relevant line the per-wake classifier missed and escalate it.
 housekeeping() {  # <state>
   local state=$1 now due f key task win marker age last max_defer oldest pause_secs
-  local pause_due reason_key display gated
+  local pause_due
   now=$(_now)
   migrate_watcher_pause_markers "$state"
 
@@ -1178,13 +1175,7 @@ housekeeping() {  # <state>
       *)
         last=$(last_status_line "$state/$task.status")
         if [ -n "$last" ] && status_is_paused "$last"; then
-          reason_key=$(status_pause_reason_key "$last")
-          [ -n "$reason_key" ] || reason_key="unspecified wait"
-          display=$(status_line_note "$last" | LC_ALL=C tr '\t\r\n' '   ')
-          gated=0
-          status_pause_is_captain_gated "$last" && gated=1
-          printf '%s\t%s\t%s\t%s\t%s\t%s\n' \
-            "$reason_key" "$age" "$win" "$marker" "$display" "$gated" >> "$pause_due"
+          pause_due_append "$pause_due" "$last" "$age" "$win" "$marker"
         else
           rm -f "$marker"
         fi

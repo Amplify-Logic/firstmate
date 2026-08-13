@@ -209,6 +209,63 @@ pause_resurface_secs_for_line() {  # <status-line> -> seconds
     printf '%s\n' "${FM_PAUSE_RESURFACE_SECS:-$FM_PAUSE_RESURFACE_SECS_DEFAULT}"
   fi
 }
+
+# --- declared-pause recheck grouping ---------------------------------------
+# Both supervisors gather the pauses that are due for a recheck into a TSV work
+# file and report one item per distinct blocker. The record format and the
+# group-by-reason fold have a single owner here, so the watcher and the daemon
+# cannot drift apart; each caller supplies only its own wording and decides for
+# itself when the throttles are safe to commit.
+#
+# Record: <reason-key>\t<age>\t<window>\t<throttle-marker>\t<display-note>\t<gated>
+pause_due_append() {  # <due-file> <status-line> <age> <window> <throttle-marker>
+  local due=$1 last=$2 age=$3 win=$4 marker=$5 reason_key display gated
+  reason_key=$(status_pause_reason_key "$last")
+  [ -n "$reason_key" ] || reason_key="unspecified wait"
+  display=$(status_line_note "$last" | LC_ALL=C tr '\t\r\n' '   ')
+  gated=0
+  status_pause_is_captain_gated "$last" && gated=1
+  printf '%s\t%s\t%s\t%s\t%s\t%s\n' \
+    "$reason_key" "$age" "$win" "$marker" "$display" "$gated" >> "$due"
+}
+
+# The throttle marker / window of every due record, one per line, so a caller
+# can commit its re-surface state after - never before - its report is durable.
+pause_due_markers() {  # <due-file>
+  [ -s "$1" ] || return 0
+  cut -f4 "$1"
+}
+pause_due_windows() {  # <due-file>
+  [ -s "$1" ] || return 0
+  cut -f3 "$1"
+}
+
+# One formatted line per distinct blocker. <formatter> is invoked as
+#   <formatter> <count> <max-age> <note> <windows> <gated>
+# and prints that caller's wording; the grouping decision itself lives here.
+pause_due_fold() {  # <due-file> <formatter>
+  local due=$1 fmt=$2 rkey wins count max_age note gated
+  local k age_i win_i display_i gated_flag
+  [ -s "$due" ] || return 0
+  while IFS= read -r rkey; do
+    [ -n "$rkey" ] || continue
+    wins=""; count=0; max_age=0; note=""; gated=0
+    while IFS="$(printf '\t')" read -r k age_i win_i _ display_i gated_flag; do
+      [ "$k" = "$rkey" ] || continue
+      count=$((count + 1))
+      [ "$age_i" -gt "$max_age" ] && max_age=$age_i
+      [ -n "$note" ] || note=$display_i
+      [ "$gated_flag" = 1 ] && gated=1
+      if [ -z "$wins" ]; then
+        wins=$win_i
+      else
+        wins="$wins, $win_i"
+      fi
+    done < "$due"
+    "$fmt" "$count" "$max_age" "$note" "$wins" "$gated"
+  done < <(cut -f1 "$due" | awk 'NF && !seen[$0]++')
+}
+
 _fm_decision_key() {  # <status-line> -> key slug, or "default" when no token
   local prefix=${1%%:*} k
   case "$prefix" in

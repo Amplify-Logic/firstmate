@@ -357,15 +357,11 @@ wedge_timer_check() {  # <window> <since-file> <triage-label> <escalation-count-
   esac
 }
 
-# Collect every declared pause that is due for re-surface, group by normalized
-# reason, mark each throttle, and print one wake reason. Shared-reason waits
-# become a single item; distinct reasons join with " | ". A lone due pause keeps
-# the historical single-window wording so existing triage stays stable.
-pause_recheck_reason_for_due_pauses() {  # <trigger-window>
-  local trigger=$1 meta task win last statusf mtime age rf rf_age pause_secs
-  local reason_key display gated due line rkey wins count max_age note gated_flag
-  local k age_i win_i marker_i display_i parts
-  due="$STATE/.paused-recheck-due.$$"
+# Collect every declared pause that is due for re-surface into the shared TSV
+# work file. bin/fm-classify-lib.sh owns the record format and the fold, so the
+# watcher and the away-mode daemon group identically.
+pause_recheck_collect_due() {  # <due-file>
+  local due=$1 meta task win last statusf mtime age rf rf_age pause_secs
   rm -f "$due"
   for meta in "$STATE"/*.meta; do
     [ -e "$meta" ] || continue
@@ -382,53 +378,66 @@ pause_recheck_reason_for_due_pauses() {  # <trigger-window>
     rf_age=$(age_of "$rf")
     pause_secs=$(pause_resurface_secs_for_line "$last")
     [ "$age" -ge "$pause_secs" ] && [ "$rf_age" -ge "$pause_secs" ] || continue
-    reason_key=$(status_pause_reason_key "$last")
-    [ -n "$reason_key" ] || reason_key="unspecified wait"
-    display=$(status_line_note "$last" | LC_ALL=C tr '\t\r\n' '   ')
-    gated=0
-    status_pause_is_captain_gated "$last" && gated=1
-    printf '%s\t%s\t%s\t%s\t%s\t%s\n' \
-      "$reason_key" "$age" "$win" "$rf" "$display" "$gated" >> "$due"
+    pause_due_append "$due" "$last" "$age" "$win" "$rf"
   done
+}
+
+# Wake wording for one grouped blocker. A lone due pause keeps the historical
+# single-window phrasing so existing triage stays stable.
+pause_recheck_wake_line() {  # <count> <max-age> <note> <windows> <gated>
+  local count=$1 max_age=$2 note=$3 wins=$4 gated=$5 line
+  if [ "$count" -eq 1 ]; then
+    line="stale: $wins (paused ${max_age}s, awaiting external - declared pause, rechecked on a long cadence not a wedge; confirm the wait still holds)"
+  else
+    line="stale: $count tasks sharing one wait (paused, awaiting external - declared pause, rechecked on a long cadence not a wedge; confirm the wait still holds): $note [$wins]"
+  fi
+  if [ "$gated" = 1 ]; then
+    line="$line (cannot clear until the captain acts)"
+  fi
+  printf '%s\n' "$line"
+}
+
+# One wake reason for the whole due set: shared-reason waits become a single
+# item, distinct reasons join with " | ". An empty due set (the trigger raced a
+# status write, or was classified paused from crew state alone) falls back to
+# the historical single-window wording for the trigger.
+pause_recheck_reason_for_due() {  # <trigger-window> <due-file>
+  local trigger=$1 due=$2 line parts=""
   if [ ! -s "$due" ]; then
-    rm -f "$due"
     printf 'stale: %s (paused, awaiting external - declared pause, rechecked on a long cadence not a wedge; confirm the wait still holds)' "$trigger"
     return 0
   fi
-  parts=""
-  while IFS= read -r rkey; do
-    [ -n "$rkey" ] || continue
-    wins=""; count=0; max_age=0; note=""; gated=0
-    while IFS="$(printf '\t')" read -r k age_i win_i marker_i display_i gated_flag; do
-      [ "$k" = "$rkey" ] || continue
-      count=$((count + 1))
-      [ "$age_i" -gt "$max_age" ] && max_age=$age_i
-      [ -n "$note" ] || note=$display_i
-      [ "$gated_flag" = 1 ] && gated=1
-      if [ -z "$wins" ]; then
-        wins=$win_i
-      else
-        wins="$wins, $win_i"
-      fi
-      date +%s > "$marker_i"
-      : > "$STATE/.paused-$(printf '%s' "$win_i" | tr ':/.' '___')"
-    done < "$due"
-    if [ "$count" -eq 1 ]; then
-      line="stale: $wins (paused ${max_age}s, awaiting external - declared pause, rechecked on a long cadence not a wedge; confirm the wait still holds)"
-    else
-      line="stale: $count tasks sharing one wait (paused, awaiting external - declared pause, rechecked on a long cadence not a wedge; confirm the wait still holds): $note [$wins]"
-    fi
-    if [ "$gated" = 1 ]; then
-      line="$line (cannot clear until the captain acts)"
-    fi
+  while IFS= read -r line; do
+    [ -n "$line" ] || continue
     if [ -z "$parts" ]; then
       parts=$line
     else
       parts="$parts | $line"
     fi
-  done < <(cut -f1 "$due" | awk 'NF && !seen[$0]++')
-  rm -f "$due"
+  done < <(pause_due_fold "$due" pause_recheck_wake_line)
   printf '%s' "$parts"
+}
+
+# Stamp the re-surface throttle for every window this recheck covers and put
+# each on the bounded pause cadence. Called ONLY once the wake is durably
+# queued, so a failed enqueue cannot silence a due wait for a full window. With
+# no due entries the trigger's own throttle is still stamped, so the fallback
+# reason above cannot re-fire on every poll.
+pause_recheck_commit_due() {  # <due-file> <fallback-marker>
+  local due=$1 fallback=$2 now marker win
+  now=$(date +%s)
+  if [ ! -s "$due" ]; then
+    printf '%s\n' "$now" > "$fallback"
+    return 0
+  fi
+  while IFS= read -r marker; do
+    [ -n "$marker" ] || continue
+    printf '%s\n' "$now" > "$marker"
+  done < <(pause_due_markers "$due")
+  while IFS= read -r win; do
+    [ -n "$win" ] || continue
+    : > "$STATE/.paused-$(printf '%s' "$win" | tr ':/.' '___')"
+  done < <(pause_due_windows "$due")
 }
 
 # Absorb a stale pane under a declared external-wait pause (paused:) or a
@@ -442,7 +451,7 @@ pause_recheck_reason_for_due_pauses() {  # <trigger-window>
 # re-surface epoch so, once past the window, it fires once per window rather than
 # every poll. Advances the stale suppressor to <hash> and flags the key paused.
 handle_paused_stale() {  # <window> <task> <hash>
-  local win=$1 task=$2 h=$3 key statusf mtime age rf rf_age reason last pause_secs
+  local win=$1 task=$2 h=$3 key statusf mtime age rf rf_age reason last pause_secs due
   key=$(printf '%s' "$win" | tr ':/.' '___')
   printf '%s' "$h" > "$STATE/.stale-$key"
   : > "$STATE/.paused-$key"
@@ -456,8 +465,12 @@ handle_paused_stale() {  # <window> <task> <hash>
   last=$(last_status_line "$statusf")
   pause_secs=$(pause_resurface_secs_for_line "$last")
   if [ "$age" -ge "$pause_secs" ] && [ "$rf_age" -ge "$pause_secs" ]; then
-    reason=$(pause_recheck_reason_for_due_pauses "$win")
-    fm_wake_append stale "$win" "$reason" || exit 1
+    due="$STATE/.paused-recheck-due.$$"
+    pause_recheck_collect_due "$due"
+    reason=$(pause_recheck_reason_for_due "$win" "$due")
+    fm_wake_append stale "$win" "$reason" || { rm -f "$due"; exit 1; }
+    pause_recheck_commit_due "$due" "$rf"
+    rm -f "$due"
     wake "$reason"
   fi
   triage_log "absorbed stale (paused, awaiting external, age ${age}s): $win"

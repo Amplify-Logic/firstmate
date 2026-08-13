@@ -750,6 +750,35 @@ test_paused_recheck_groups_shared_reason() {
   pass "declared pauses that share one blocker re-surface as a single grouped recheck"
 }
 
+# The due-record format and the group-by-reason fold have ONE owner in
+# fm-classify-lib.sh, called by both the watcher and the away-mode daemon, so the
+# two supervisors cannot drift apart. Pin the grouping itself plus the marker and
+# window accessors each caller commits its re-surface throttles through - the
+# throttles are stamped only after that caller's report is durable.
+test_pause_due_fold_is_shared_and_groups_by_reason() {
+  local dir state due out
+  dir=$(make_case pause-due-fold); state="$dir/state"
+  due="$state/due.tsv"; : > "$due"
+  pause_due_append "$due" "paused: waiting for the captain merge decision" 900 "s:a" "$state/.m-a"
+  pause_due_append "$due" "paused: Waiting  for the  CAPTAIN merge decision" 300 "s:b" "$state/.m-b"
+  pause_due_append "$due" "paused: holding for the upstream tool release" 400 "s:c" "$state/.m-c"
+  fold_fmt() { printf '%s|%s|%s|%s|%s\n' "$1" "$2" "$3" "$4" "$5"; }
+  out=$(pause_due_fold "$due" fold_fmt)
+  [ "$(printf '%s\n' "$out" | grep -c .)" -eq 2 ] \
+    || fail "the shared fold did not group three due pauses onto two distinct blockers: $out"
+  printf '%s\n' "$out" | grep -F '2|900|waiting for the captain merge decision|s:a, s:b|1' >/dev/null \
+    || fail "the shared fold lost the grouped count, max age, window list, or captain gating: $out"
+  printf '%s\n' "$out" | grep -F '1|400|holding for the upstream tool release|s:c|0' >/dev/null \
+    || fail "the shared fold folded a distinct reason into the shared group: $out"
+  [ "$(pause_due_markers "$due" | tr '\n' ' ')" = "$state/.m-a $state/.m-b $state/.m-c " ] \
+    || fail "pause_due_markers did not expose every throttle marker for a post-report commit"
+  [ "$(pause_due_windows "$due" | tr '\n' ' ')" = "s:a s:b s:c " ] \
+    || fail "pause_due_windows did not expose every due window"
+  [ -z "$(pause_due_fold "$state/absent.tsv" fold_fmt)" ] \
+    || fail "the shared fold reported groups for an empty due set"
+  pass "the shared pause-due record and fold group by blocker and expose the throttles for a post-report commit"
+}
+
 # A captain-held crew can leave a stable backend endpoint after its agent exits.
 # fm-crew-state then authoritatively reports stopped rather than paused, but the
 # confirmed-dead agent plus the declared wait or captain-held transfer must retain
@@ -1483,6 +1512,7 @@ test_herdr_stale_three_way_liveness
 test_nonterminal_stale_not_working_surfaced
 test_nonterminal_stale_paused_absorbed_then_resurfaced
 test_paused_recheck_groups_shared_reason
+test_pause_due_fold_is_shared_and_groups_by_reason
 test_exited_declared_pause_is_bounded_but_live_gate_surfaces
 test_secondmate_paused_resurfaces_in_normal_mode
 test_secondmate_nonpaused_stale_remains_suppressed
