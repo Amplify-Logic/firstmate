@@ -579,16 +579,8 @@ SH
   chmod +x "$fakebin/$launch_binary"
 }
 
-# A structurally gone pane can never come back and host an agent, so polling it
-# out to the bound only delays a failure the first read already proved - and the
-# in-pane recovery the bare-shell refusal prints would be a dead instruction
-# there, since there is no pane left to interrupt or type into.
-test_missing_endpoint_refuses_on_the_first_read() {
-  local out status gone_line polls_after
-  command -v jq >/dev/null 2>&1 || { echo 'skip: jq not found (required by the herdr adapter)'; return 0; }
-  make_herdr_case herdr-missing claude claude
-
-  out=$( env \
+run_herdr_spawn() {  # <extra-spawn-args...>
+  env \
     FM_ROOT_OVERRIDE='' \
     FM_HOME="$HOME_DIR" \
     FM_STATE_OVERRIDE="$HOME_DIR/state" \
@@ -604,14 +596,25 @@ test_missing_endpoint_refuses_on_the_first_read() {
     FM_FAKE_WT_ROOT="$HERDR_WT_ROOT" \
     HERDR_SESSION="fm-agentup-fake" \
     PATH="$FAKEBIN_DIR:$PATH" \
-    "$SPAWN" "$ID" "$PROJ_DIR" --harness claude --backend herdr 2>&1 )
+    "$SPAWN" "$ID" "$PROJ_DIR" --harness claude --backend herdr "$@" 2>&1
+}
+
+# A structurally gone pane can never come back and host an agent, so polling it
+# out to the bound only delays a failure the first read already proved - and the
+# in-pane recovery the bare-shell refusal prints would be a dead instruction
+# there, since there is no pane left to interrupt or type into.
+test_missing_endpoint_refuses_on_the_first_read() {
+  local out status gone_line polls_after
+  command -v jq >/dev/null 2>&1 || { echo 'skip: jq not found (required by the herdr adapter)'; return 0; }
+  make_herdr_case herdr-missing claude claude
+
+  out=$(run_herdr_spawn)
   status=$?
 
   expect_code 1 "$status" "a spawn whose endpoint vanished should refuse"$'\n'"$out"
   assert_contains "$out" "is gone" "refusal did not say the endpoint was gone"
   assert_contains "$out" "RE-SPAWN the task onto a fresh endpoint" \
     "refusal did not tell the caller to re-spawn"
-  assert_contains "$out" "fm-spawn.sh $ID" "refusal did not print the re-spawn command"
   assert_not_contains "$out" "--key C-c" \
     "refusal told the caller to interrupt a pane that no longer exists"
   assert_not_contains "$out" "Send this ONE-LINE relaunch" \
@@ -625,6 +628,28 @@ test_missing_endpoint_refuses_on_the_first_read() {
   pass "a structurally gone endpoint refuses on the first read and asks for a re-spawn"
 }
 
+# The re-spawn command must BE the command to run. A bare `fm-spawn.sh <id>
+# <path>` re-resolves the harness from config and the backend from detection and
+# comes back kind=ship, so a scout would silently return as a crewmate - the
+# recovery would quietly change what the task is.
+test_missing_endpoint_respawn_command_carries_kind_and_axes() {
+  local out status
+  command -v jq >/dev/null 2>&1 || { echo 'skip: jq not found (required by the herdr adapter)'; return 0; }
+  make_herdr_case herdr-missing-scout claude claude
+
+  out=$(run_herdr_spawn --scout)
+  status=$?
+
+  expect_code 1 "$status" "a scout spawn whose endpoint vanished should refuse"$'\n'"$out"
+  assert_contains "$out" "fm-spawn.sh $ID" "refusal did not print the re-spawn command"
+  assert_contains "$out" "--scout --harness 'claude' --backend 'herdr'" \
+    "the re-spawn command dropped this task's kind or resolved axes, so a copy-paste would come back as a different task"
+  assert_not_contains "$out" "Re-spawn with the same axis flags you used here" \
+    "the refusal still asks the reader to reconstruct flags the command should already carry"
+  cleanup_task_tmp "$ID"
+  pass "the re-spawn command carries this task's own kind and resolved axes"
+}
+
 test_kimi_brief_is_typed_only_after_the_agent_is_up
 test_dead_shell_refuses_before_typing_the_brief
 test_kimi_refusal_prints_a_two_step_file_pointer_recovery
@@ -634,5 +659,6 @@ test_unreadable_liveness_neither_refuses_nor_burns_the_bound
 test_invalid_bound_knobs_are_refused
 test_unverified_liveness_backend_still_spawns_and_warns
 test_missing_endpoint_refuses_on_the_first_read
+test_missing_endpoint_respawn_command_carries_kind_and_axes
 
 echo "# all fm-spawn-agent-up tests passed"

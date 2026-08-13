@@ -51,10 +51,21 @@
 #   reading the shared liveness owner (fm_backend_agent_state) rather than
 #   sleeping and hoping. The wait is hard-bounded the same way (default 60
 #   polls, 1s sleep; FM_SPAWN_AGENT_UP_MAX_POLLS and FM_SPAWN_AGENT_UP_SLEEP),
-#   and every refusal names the bound it waited out. A pane still proven to be a
-#   bare shell at the bound refuses loudly instead of leaving the brief spilled
-#   into that shell; nothing is torn down, so the task stays recoverable and the
-#   refusal prints the exact one-line, file-pointer relaunch to send.
+#   and every refusal names both the polls it actually performed and that bound.
+#   A pane still proven to be a bare shell at the bound refuses loudly instead
+#   of leaving the brief spilled into that shell, and a structurally gone
+#   endpoint refuses on its FIRST read rather than waiting out a bound whose
+#   answer can never change. Nothing is torn down either way, so the task stays
+#   recoverable in place and the refusal prints the exact recovery for THIS
+#   task, in one of three shapes: a one-line file-pointer relaunch for an
+#   adapter whose launch line can carry a brief; a two-step
+#   launch-then-file-pointer delivery for one that cannot (kimi, which has no
+#   positional interactive brief); and a fully-flagged re-spawn command carrying
+#   this task's own kind and resolved axes when the endpoint itself is gone.
+#   A backend with no liveness reader at all (zellij, orca, cmux) cannot RUN the
+#   check, and an unsupported check must never remove a spawn that worked
+#   before, so those proceed exactly as they did and warn once on stderr rather
+#   than refusing.
 #   For cursor, the effort axis is folded into the launch model id (see
 #   cursor_model_with_effort) and that launch id is what meta model= records.
 #   When agent --list-models (or FM_CURSOR_MODEL_CATALOG) is available, an
@@ -138,7 +149,7 @@ set -eu
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 usage() {
-  sed -n '2,89p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '2,100p' "$0" | sed 's/^# \{0,1\}//'
 }
 
 case "${1:-}" in
@@ -1815,6 +1826,29 @@ spawn_refuse_agent_never_started() {  # <phase>
   exit 1
 }
 
+# spawn_render_respawn_command: the command that re-creates THIS task, rendered
+# from its own resolved kind and axes so it can be copied and run as printed.
+# A bare `fm-spawn.sh <id> <path>` would re-resolve the harness from config and
+# the backend from detection, and would come back kind=ship: a scout would
+# silently return as a crewmate, and a secondmate home would be treated as an
+# ordinary project and get a crewmate spawned into it. PROJ_ABS is already the
+# right positional for either kind - the project dir for ship/scout, the
+# validated firstmate home for a secondmate.
+spawn_render_respawn_command() {
+  local cmd
+  cmd="FM_HOME=$FM_HOME $FM_ROOT/bin/fm-spawn.sh $ID $(shell_quote "$PROJ_ABS")"
+  case "$KIND" in
+    scout) cmd="$cmd --scout" ;;
+    secondmate) cmd="$cmd --secondmate" ;;
+  esac
+  cmd="$cmd --harness $(shell_quote "$HARNESS") --backend $(shell_quote "$BACKEND")"
+  [ -z "$MODEL" ] || cmd="$cmd --model $(shell_quote "$MODEL")"
+  [ -z "$EFFORT" ] || cmd="$cmd --effort $(shell_quote "$EFFORT")"
+  [ -z "$OUTCOME" ] || cmd="$cmd --outcome $(shell_quote "$OUTCOME")"
+  [ -z "$TASK_TYPE" ] || cmd="$cmd --task-type $(shell_quote "$TASK_TYPE")"
+  printf '%s' "$cmd"
+}
+
 # spawn_refuse_endpoint_missing <launch|brief>: the endpoint is structurally
 # gone, not merely agent-less. No further polling can undo that, so this fires
 # on the first read rather than waiting out the bound, and the recovery is a
@@ -1831,9 +1865,8 @@ spawn_refuse_endpoint_missing() {  # <phase>
       echo "The launch command carried the brief into an endpoint that no longer exists, so no agent ever read it."
     fi
     echo "Nothing was torn down. $ID keeps its worktree ($WT), its brief ($BRIEF), and its durable record ($STATE/$ID.meta)."
-    echo "A gone endpoint can never come back and host an agent, so do NOT relaunch into it - there is nothing there to interrupt or type into. RE-SPAWN the task onto a fresh endpoint instead:"
-    echo "       FM_HOME=$FM_HOME $FM_ROOT/bin/fm-spawn.sh $ID $(shell_quote "$PROJ_ABS")"
-    echo "Re-spawn with the same axis flags you used here (harness=$HARNESS backend=$BACKEND); the existing brief ($BRIEF) is reused as is."
+    echo "A gone endpoint can never come back and host an agent, so do NOT relaunch into it - there is nothing there to interrupt or type into. RE-SPAWN the task onto a fresh endpoint instead, with this exact command; the existing brief ($BRIEF) is reused as is:"
+    echo "       $(spawn_render_respawn_command)"
   } >&2
   exit 1
 }
@@ -1864,7 +1897,7 @@ if [ "$RAW_LAUNCH" -eq 0 ]; then
         # An UNSUPPORTED check is not a failed one, and it must not take away a
         # spawn that worked before this gate existed. Proceed on the old
         # sleep-and-type path, but say so once and loudly.
-        echo "warning: $ID: backend '$BACKEND' has no agent-liveness reader, so the agent-up check could not run; $HARNESS's brief is being typed into $T UNVERIFIED - confirm the agent received it (bin/fm-peek.sh $ID)." >&2
+        echo "warning: $ID: backend '$BACKEND' has no agent-liveness reader, so the agent-up check could not run; $HARNESS's brief is being typed into $T UNVERIFIED - confirm the agent received it with: FM_HOME=$FM_HOME $FM_ROOT/bin/fm-peek.sh $ID" >&2
         ;;
       *) spawn_refuse_agent_never_started brief ;;
     esac
