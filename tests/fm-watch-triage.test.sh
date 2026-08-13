@@ -751,23 +751,28 @@ test_paused_recheck_groups_shared_reason() {
 }
 
 # Several metas can name ONE backend window (recorded_windows dedupes the same
-# glob by target for exactly that reason). The re-surface throttle and the
-# bounded-cadence flag are both keyed on the window, so an undeduped sweep would
-# report one window twice as "2 tasks sharing one wait" and stamp the identical
-# marker twice.
+# glob by target for exactly that reason). Collapsing that window is pause_due_fold's
+# job alone, so the watcher appends EVERY due task: filtering during collection
+# would report the first-globbed task's age instead of the oldest, which is the
+# drift the shared fold exists to prevent. shared-one globs first and is the
+# younger, so the reported age can only be right if both records reached the fold.
 test_paused_recheck_dedupes_shared_window() {
   local dir state fakebin out drain_out capture_file pane_hash sig pid back \
-    win key statusf task n hits
+    win key statusf task n hits reported age_of_task
   dir=$(make_case paused-dedupe-window); state="$dir/state"; fakebin="$dir/fakebin"
   out="$dir/watch.out"; drain_out="$dir/drain.out"; capture_file="$dir/pane.txt"
   win="test:fm-shared"
   printf 'idle, holding\n' > "$capture_file"
   pane_hash=$(hash_text "idle, holding")
-  back=$(( $(date +%s) - 500 ))
   for task in shared-one shared-two; do
+    case "$task" in
+      shared-one) age_of_task=300 ;;
+      *) age_of_task=900 ;;
+    esac
     printf 'window=%s\nkind=ship\n' "$win" > "$state/$task.meta"
     statusf="$state/$task.status"
     printf 'paused: waiting for the upstream tool release\n' > "$statusf"
+    back=$(( $(date +%s) - age_of_task ))
     if [ "$(uname)" = Darwin ]; then touch -mt "$(date -r "$back" '+%Y%m%d%H%M.%S')" "$statusf"
     else touch -m -d "@$back" "$statusf"; fi
     sig=$(seen_sig "$statusf"); printf '%s' "$sig" > "$state/.seen-${task}_status"
@@ -790,6 +795,12 @@ test_paused_recheck_dedupes_shared_window() {
     && fail "two metas on one window were counted as separate due tasks: $(cat "$out")"
   hits=$(grep -o -F "$win" "$out" | grep -c .)
   [ "$hits" -eq 1 ] || fail "one window was listed $hits times in the recheck: $(cat "$out")"
+  reported=$(sed -n 's/.*paused \([0-9][0-9]*\)s.*/\1/p' "$out" | head -1)
+  case "$reported" in
+    ''|*[!0-9]*) fail "the shared-window recheck reported no pause age: $(cat "$out")" ;;
+  esac
+  [ "$reported" -ge 880 ] \
+    || fail "the group reported ${reported}s - the older task's age never reached the fold: $(cat "$out")"
   [ -e "$state/.paused-resurfaced-$key" ] || fail "the deduped recheck did not throttle $win"
   FM_STATE_OVERRIDE="$state" "$DRAIN" > "$drain_out" 2>/dev/null || fail "drain after deduped pause recheck failed"
   n=$(grep -c "$(printf '\tstale\t')" "$drain_out" || true)
