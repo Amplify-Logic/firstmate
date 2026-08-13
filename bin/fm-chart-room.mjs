@@ -364,6 +364,12 @@ function today() {
   return local.toISOString().slice(0, 10);
 }
 
+// A record whose own title is missing still has to be actionable, so its
+// identity is the name of last resort. No row can render without one.
+function named(id, ...candidates) {
+  return candidates.find((candidate) => !blank(candidate)) || id;
+}
+
 // One derived model per request. Everything the routes render is computed here,
 // so the page, the goal map, and a node overlay can never disagree with each other.
 export function buildModel({ home, tasks, projects, meta, archive, charters }) {
@@ -385,8 +391,8 @@ export function buildModel({ home, tasks, projects, meta, archive, charters }) {
     const origin = originOf(task);
     items.push({
       id: task.id,
-      title: blank(fields.outcome) ? task.title : fields.outcome,
-      backlogTitle: task.title,
+      title: named(task.id, fields.outcome, task.title),
+      backlogTitle: named(task.id, task.title),
       project: projectOf(index, task.repo),
       repo: blank(task.repo) ? "" : task.repo,
       bucket,
@@ -414,8 +420,8 @@ export function buildModel({ home, tasks, projects, meta, archive, charters }) {
     seen.add(entry.id);
     items.push({
       id: entry.id,
-      title: entry.title,
-      backlogTitle: entry.title,
+      title: named(entry.id, entry.title),
+      backlogTitle: named(entry.id, entry.title),
       project: projectOf(index, entry.repo),
       repo: entry.repo,
       bucket: "shipped",
@@ -440,6 +446,8 @@ export function buildModel({ home, tasks, projects, meta, archive, charters }) {
 
   const byProject = new Map(projects.map((project) => [project.name, []]));
   const unregistered = [];
+  // A record that could not be read names no project, so it always lands here
+  // rather than under one: this bucket is the single place it surfaces.
   for (const item of items) {
     if (item.project && byProject.has(item.project)) byProject.get(item.project).push(item);
     else unregistered.push(item);
@@ -728,9 +736,6 @@ function standsPhrase(project) {
   if (counts.decision > 0) parts.push(counts.decision === 1 ? "1 answer wanted from you" : `${counts.decision} answers wanted from you`);
   if (counts.next > 0) parts.push(`${counts.next} charted next`);
   if (counts.iced > 0) parts.push(`${counts.iced} on ice`);
-  if (counts.unreadable > 0) {
-    parts.push(counts.unreadable === 1 ? "1 whose record could not be read" : `${counts.unreadable} whose records could not be read`);
-  }
   if (parts.length === 0) return counts.shipped > 0 ? "All quiet - everything filed here is finished." : "Nothing filed here yet.";
   return `${parts.join(", ")}.`;
 }
@@ -748,7 +753,6 @@ function homePage(model) {
         <span><b>${project.counts.next}</b> charted next</span>
         <span class="yours"><b>${project.counts.decision}</b> your call</span>
         <span><b>${project.counts.iced}</b> on ice</span>
-        ${project.counts.unreadable > 0 ? `<span class="yours"><b>${project.counts.unreadable}</b> could not be read</span>` : ""}
       </div>
     </a>`).join("");
 
@@ -822,7 +826,6 @@ function goalDetailMarkup(lane) {
     [lane.counts.next, "charted next"],
     [lane.counts.decision, "waiting on your answer"],
     [lane.counts.iced, "on ice"],
-    [lane.counts.unreadable, "whose records could not be read"],
   ].filter(([count]) => count > 0).map(([count, label]) => `${count} ${label}`);
   const paragraphs = [];
   if (lane.other) {
@@ -847,7 +850,6 @@ function laneMarkup(lane, project) {
   const next = lane.items.filter((item) => item.bucket === "next");
   const decisions = lane.items.filter((item) => item.bucket === "decision");
   const iced = lane.items.filter((item) => item.bucket === "iced");
-  const unreadable = lane.items.filter((item) => item.bucket === "unreadable");
   const node = `data-node="${escapeHtml(goalNodeId(lane))}" data-project="${escapeHtml(project)}"`;
   const planned = lane.planned.length > 0
     ? `<ul class="items">${lane.planned.map((entry) => `<li class="planned-i clickable" role="button" tabindex="0" ${node}><span class="dot">&#9676;</span><span class="t">Planned: ${escapeHtml(entry)}</span></li>`).join("")}</ul>`
@@ -859,11 +861,9 @@ function laneMarkup(lane, project) {
     bucketBlock(lane.onIce ? "Waiting with the ice" : "Charted next", "", next, project, 8),
     decisions.length > 0 ? `<div class="bucket"><h3>Your call</h3><ul class="items">${decisions.map((item) => itemRow(item, project)).join("")}</ul></div>` : "",
     iced.length > 0 ? bucketBlock("On ice", "", iced, project, 8) : "",
-    bucketBlock("Could not be read", "", unreadable, project, 8),
     planned ? `<div class="bucket"><h3>Planned, not yet filed</h3>${planned}</div>` : "",
   ].join("");
-  const body = shipped.length + underway.length + next.length + decisions.length + iced.length
-    + unreadable.length + lane.planned.length === 0
+  const body = shipped.length + underway.length + next.length + decisions.length + iced.length + lane.planned.length === 0
     ? '<div class="empty">Nothing filed under this goal yet.</div>'
     : `${bucketBlock("Shipped", "done", shipped, project, 3)}${bucketBlock("Under way", "underway", underway, project, 8)}${nextBlock}`;
   return `<div class="lane${lane.onIce ? " iced" : ""}${lane.other ? " other" : ""}">
@@ -880,7 +880,6 @@ function flatProjectMarkup(project) {
     bucketBlock("Under way", "underway", project.items.filter((item) => item.bucket === "underway"), project.name, 0),
     bucketBlock("Charted next", "", project.items.filter((item) => item.bucket === "next"), project.name, 0),
     bucketBlock("On ice", "", project.items.filter((item) => item.bucket === "iced"), project.name, 0),
-    bucketBlock("Could not be read", "", project.items.filter((item) => item.bucket === "unreadable"), project.name, 0),
     bucketBlock("Shipped", "done", project.items.filter((item) => item.bucket === "shipped"), project.name, 8),
   ].join("");
   return `<div class="lanes"><div class="lane">${buckets || '<div class="empty">Nothing is filed under this project yet.</div>'}</div></div>`;

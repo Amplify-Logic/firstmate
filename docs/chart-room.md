@@ -84,6 +84,8 @@ The same applies at fleet level: work whose project matches nothing on the regis
 The same rule covers a record that cannot be read at all.
 Identity is enumerated first, then each record is read on its own; when that read fails or its output does not parse, the piece of work is still shown, by name, marked as one whose record could not be read.
 It is never dropped, and one bad record never blanks the page around it.
+A record like that names no project, so the fleet home is where it surfaces rather than any one project's map.
+A record that is read only as far as its identity keeps that identity as its name, because a row the captain cannot name is a row he cannot act on.
 
 ## Language
 

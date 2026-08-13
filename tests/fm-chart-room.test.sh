@@ -92,13 +92,15 @@ run_tasks add beta-first-b1 "The one piece of beta work" --kind ship --repo beta
 # Work whose project matches nothing on the register must stay visible.
 run_tasks add gamma-orphan-g1 "Work with no project on the register" --kind ship --repo gamma
 
-# Two identities the shadowed reader below refuses to hydrate: one whose read
-# fails outright, one whose output does not parse.
+# Three identities the shadowed reader below will not hydrate whole: one whose
+# read fails outright, one whose output does not parse, and one that parses only
+# as far as its identity.
 run_tasks add alpha-unreadable-u1 "The record that refuses to be read" --kind ship --repo alpha
 run_tasks add alpha-garbled-u2 "The record whose output makes no sense" --kind ship --repo alpha
+run_tasks add alpha-partial-u3 "The record that stops after its identity" --kind ship --repo alpha
 
-# A reader that answers for every identity except those two, so the enumerated
-# set stays the same while two of its records cannot be hydrated.
+# A reader that answers for every identity except those three, so the enumerated
+# set stays the same while three of its records cannot be hydrated.
 BROKEN_BIN="$TMP_ROOT/broken-bin"
 mkdir -p "$BROKEN_BIN"
 REAL_TASKS_AXI=$(command -v tasks-axi)
@@ -108,6 +110,7 @@ if [ "\${1:-}" = show ]; then
   case "\${2:-}" in
     alpha-unreadable-u1) printf 'tasks-axi: that record could not be read\n' >&2; exit 1 ;;
     alpha-garbled-u2) printf 'not the scalar format at all\n'; exit 0 ;;
+    alpha-partial-u3) printf 'task:\n  id: alpha-partial-u3\n'; exit 0 ;;
   esac
 fi
 exec "$REAL_TASKS_AXI" "\$@"
@@ -262,6 +265,11 @@ test_a_record_that_cannot_be_read_stays_visible_and_marked() {
   assert_contains "$home_page" "could not be read" "an unreadable record was not marked as such"
   assert_contains "$home_page" "UNREADABLE" "the unreadable rows carry no marker"
   assert_contains "$home_page" "gamma-orphan-g1" "one unreadable record blanked the rest of the home page"
+  # A record that parses only as far as its identity must still carry a name to
+  # act on. The identity alone reaches the markup as a row attribute either way,
+  # so pin the visible text rather than the row.
+  assert_contains "$home_page" '<span class="t">alpha-partial-u3</span>' \
+    "a half-read record rendered as a row with no name in it"
 
   project_page=$(PATH="$BROKEN_BIN:$PATH" chart render /p/alpha) \
     || fail "the goal map must still render when a record cannot be read"
