@@ -808,6 +808,68 @@ test_paused_recheck_dedupes_shared_window() {
   pass "metas sharing one backend window re-surface as a single deduped recheck"
 }
 
+# The trigger reaches handle_paused_stale on AUTHORITATIVE crew state, while the
+# due sweep reads the status LOG, so a crew that fm-crew-state reports paused
+# without a paused: line is legitimately absent from a due set that other tasks
+# fill. Its throttle must still be stamped once the grouped wake is durable, or
+# nothing bounds the trigger and it re-fires on every single poll - the wake
+# storm the whole bounded cadence exists to prevent.
+test_paused_recheck_throttles_a_trigger_missing_from_the_due_set() {
+  local dir state fakebin out drain_out capture_file pane_hash sig pid back \
+    trigger_win due_win trigger_key due_key statusf n stamp
+  dir=$(make_case paused-trigger-not-due); state="$dir/state"; fakebin="$dir/fakebin"
+  out="$dir/watch.out"; drain_out="$dir/drain.out"; capture_file="$dir/pane.txt"
+  trigger_win="test:fm-crew-paused"; due_win="test:fm-upstream-e"
+  trigger_key=$(printf '%s' "$trigger_win" | tr ':/.' '___')
+  due_key=$(printf '%s' "$due_win" | tr ':/.' '___')
+  printf 'idle, holding\n' > "$capture_file"
+  pane_hash=$(hash_text "idle, holding")
+  back=$(( $(date +%s) - 500 ))
+  backdate() {
+    if [ "$(uname)" = Darwin ]; then touch -mt "$(date -r "$back" '+%Y%m%d%H%M.%S')" "$1"
+    else touch -m -d "@$back" "$1"; fi
+  }
+  # The trigger: paused per crew state, but its status log names no pause verb,
+  # so pause_recheck_collect_due cannot see it.
+  printf 'window=%s\nkind=ship\n' "$trigger_win" > "$state/crew-paused.meta"
+  statusf="$state/crew-paused.status"
+  printf 'working: fetching the upstream tarball\n' > "$statusf"
+  backdate "$statusf"
+  sig=$(seen_sig "$statusf"); printf '%s' "$sig" > "$state/.seen-crew-paused_status"
+  printf '%s' "$pane_hash" > "$state/.hash-$trigger_key"
+  printf '1\n' > "$state/.count-$trigger_key"
+  # The other task fills the due set from its declared status line.
+  printf 'window=%s\nkind=ship\n' "$due_win" > "$state/upstream-e.meta"
+  statusf="$state/upstream-e.status"
+  printf 'paused: holding for the upstream tool release\n' > "$statusf"
+  backdate "$statusf"
+  sig=$(seen_sig "$statusf"); printf '%s' "$sig" > "$state/.seen-upstream-e_status"
+  export FM_FAKE_CREW_STATE_crew_paused='state: paused · source: pane · awaiting an external fetch'
+  export FM_FAKE_CREW_STATE='state: paused · source: status-log · holding for the upstream tool release'
+
+  PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$trigger_win" FM_FAKE_TMUX_CAPTURE="$capture_file" \
+    FM_FAKE_TMUX_CURRENT_COMMAND=zsh \
+    FM_STATE_OVERRIDE="$state" FM_CREW_STATE_BIN="$fakebin/fm-crew-state.sh" \
+    FM_PAUSE_RESURFACE_SECS=240 FM_PAUSE_CAPTAIN_RESURFACE_SECS=240 \
+    FM_POLL=1 FM_SIGNAL_GRACE=1 FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 \
+    "$WATCH" > "$out" &
+  pid=$!
+  wait_for_exit "$pid" 40 || fail "watcher did not re-surface the due declared pause: $(cat "$out")"
+  grep -F "$due_win" "$out" >/dev/null \
+    || fail "the due declared pause was not reported: $(cat "$out")"
+  [ -e "$state/.paused-resurfaced-$due_key" ] || fail "the due pause was not throttled"
+  [ -e "$state/.paused-resurfaced-$trigger_key" ] \
+    || fail "the trigger was left unthrottled by a due set that omits it, so it re-fires every poll"
+  stamp=$(cat "$state/.paused-resurfaced-$trigger_key" 2>/dev/null || echo 0)
+  [ "$(( $(date +%s) - stamp ))" -lt 60 ] \
+    || fail "the trigger throttle was not stamped with this recheck's epoch: $stamp"
+  FM_STATE_OVERRIDE="$state" "$DRAIN" > "$drain_out" 2>/dev/null || fail "drain after the recheck failed"
+  n=$(grep -c "$(printf '\tstale\t')" "$drain_out" || true)
+  [ "$n" -eq 1 ] || fail "the recheck enqueued $n stale wakes, not one"
+  unset FM_FAKE_CREW_STATE_crew_paused
+  pass "a trigger absent from the due set is still throttled after the grouped wake is durable"
+}
+
 # The due-record format and the group-by-reason fold have ONE owner in
 # fm-classify-lib.sh, called by both the watcher and the away-mode daemon, so the
 # two supervisors cannot drift apart. Pin the grouping itself plus the marker and
@@ -1620,6 +1682,7 @@ test_nonterminal_stale_not_working_surfaced
 test_nonterminal_stale_paused_absorbed_then_resurfaced
 test_paused_recheck_groups_shared_reason
 test_paused_recheck_dedupes_shared_window
+test_paused_recheck_throttles_a_trigger_missing_from_the_due_set
 test_pause_due_fold_is_shared_and_groups_by_reason
 test_pause_due_fold_preserves_empty_notes
 test_pause_due_fold_dedupes_shared_window

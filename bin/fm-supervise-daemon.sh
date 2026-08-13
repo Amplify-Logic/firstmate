@@ -40,7 +40,8 @@
 #     escalated only after it has been idle for STALE_ESCALATE_SECS
 #     (configurable), rechecked once. A wedged crewmate is therefore detected
 #     within STALE_ESCALATE_SECS + a tick, never lost. A declared pause instead
-#     gets its own longer PAUSE_RESURFACE_SECS recheck, never a wedge escalation.
+#     gets its own longer recheck cadence (the pause knobs below), never a wedge
+#     escalation.
 #     Crewmates are autonomous, so a delayed stale response does not stall a
 #     healthy crewmate's own progress.
 #     Buffered escalation delivery also has a max-defer alarm: if a digest stays
@@ -477,8 +478,9 @@ stale_marker_remove() {  # <window> <state>
 }
 
 # Pause marker: state/.subsuper-paused-<key> holds the epoch a declared pause was
-# first observed idle. Housekeeping ages it against PAUSE_RESURFACE_SECS (much
-# longer than a wedge) and re-surfaces the pause once per window. Recording is
+# first observed idle. Housekeeping ages it against that wait's re-surface cadence
+# (much longer than a wedge) and re-surfaces the pause once per window, sharing one
+# recheck with any other due wait naming the same blocker. Recording is
 # create-if-absent so the timestamp is stable across a churny idle pane (many
 # distinct stale hashes map to one marker), keeping the cadence hash-immune.
 pause_marker_record() {  # <window> <state> - create if absent

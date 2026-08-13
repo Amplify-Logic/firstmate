@@ -110,7 +110,8 @@ That keeps a tmux pane nested inside herdr on the tmux transport, matching the r
 Target detection uses `FM_SUPERVISOR_TARGET`, then `$TMUX_PANE`, then `"${HERDR_SESSION:-default}:${HERDR_PANE_ID}"` under herdr, then the legacy `firstmate:0` tmux fallback with a warning.
 Selecting any other supervisor backend, including `zellij`, `orca`, or `cmux`, refuses at daemon startup instead of trying tmux injection primitives against a non-tmux pane.
 `bin/fm-afk-launch.sh` forwards documented daemon tuning variables that are set in the launcher process into the fresh non-visible terminal, including `FM_PAUSE_RESURFACE_SECS`, `FM_PAUSE_CAPTAIN_RESURFACE_SECS`, `FM_STALE_ESCALATE_SECS`, `FM_ESCALATE_BATCH_SECS`, `FM_MAX_DEFER_SECS`, and `FM_INJECT_SKIP`.
-Unset knobs are omitted so the daemon keeps its defaults.
+Unset knobs are omitted so the daemon keeps its defaults, and `FM_AFK_LAUNCH_DAEMON_KNOBS` in that script is the exact forwarded allowlist.
+The harness-hosted `start-native` path needs no forwarding: the daemon inherits the launching session's environment directly.
 
 ## Supervision active alert channels (config/wedge-alarm)
 

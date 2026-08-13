@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Shared wake classifier: the common source of truth for captain-relevant status
-# tests, declared-external-wait vocabulary, and the working/paused absorb
-# classification that makes no-verb signal and stale-pane wakes safe to absorb.
+# tests, declared-external-wait vocabulary, the declared-pause recheck cadence and
+# shared-blocker grouping fold, and the working/paused absorb classification that
+# makes no-verb signal and stale-pane wakes safe to absorb.
 # Sourced by BOTH the always-on watcher
 # (bin/fm-watch.sh) and the away-mode daemon (bin/fm-supervise-daemon.sh) so the
 # overlapping triage policy lives in one place instead of two copies that can
@@ -13,7 +14,10 @@
 # daemon keeps its escalation-digest seen-markers; the watcher keeps its .seen-*
 # signatures).
 #
-# The one exception is the absorb classification (crew_absorb_class and its
+# The pause-due helpers are the narrow exception to "reads only": they append to
+# and re-read the work file the caller names, and touch nothing else.
+#
+# The other exception is the absorb classification (crew_absorb_class and its
 # working/paused wrappers). It is NOT a pure status-file read: it reuses
 # bin/fm-crew-state.sh, which may make a bounded no-mistakes call, to decide
 # whether a crew that just stopped its turn or went stale is working, deliberately

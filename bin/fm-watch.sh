@@ -23,8 +23,11 @@
 #                          line, since the crew's own log gets no new entry once
 #                          firstmate hands it to a no-mistakes validation. A declared
 #                          external-wait pause is absorbed instead with its own long
-#                          re-surface cadence, never as a wedge. Only when neither
-#                          absorb class applies does the log's last line decide:
+#                          re-surface cadence, never as a wedge; one re-surface
+#                          reports every wait that is due, grouped by blocking
+#                          reason, so the queued wake names the trigger window
+#                          while its reason stands for all of them. Only when
+#                          neither absorb class applies does the log's last line decide:
 #                          terminal (captain-relevant) or non-terminal (no verb),
 #                          both surfaced at once. A registered Herdr agent at its
 #                          idle/done composer is healthy and starts no wedge timer;
@@ -445,14 +448,17 @@ pause_recheck_commit_due() {  # <due-file> <fallback-marker>
 
 # Absorb a stale pane under a declared external-wait pause (paused:) or a
 # dead-agent captain-held transfer, and re-surface it once every
-# PAUSE_RESURFACE_SECS for a recheck so it cannot rot invisibly. Called on any
-# stale poll once pause_state_class permits the bounded cadence, so it must be
-# cheap: it NEVER re-reads crew state. The re-surface age is anchored on the
-# status file mtime, not a per-hash marker, so a churny idle pane (a ticking
+# pause_resurface_secs_for_line window for a recheck so it cannot rot invisibly.
+# Called on any stale poll once pause_state_class permits the bounded cadence, so
+# it must be cheap: it NEVER re-reads crew state. The re-surface age is anchored
+# on the status file mtime, not a per-hash marker, so a churny idle pane (a ticking
 # clock, a token counter) cannot keep resetting the cadence the way a hash-tied
 # timer would. A .paused-resurfaced-<key> throttle marker records the last
 # re-surface epoch so, once past the window, it fires once per window rather than
-# every poll. Advances the stale suppressor to <hash> and flags the key paused.
+# every poll. One re-surface covers every wait that is due fleet-wide, grouped by
+# blocking reason, and throttles all of them, so a shared blocker costs one wake
+# instead of one per task. Advances the stale suppressor to <hash> and flags the
+# key paused.
 handle_paused_stale() {  # <window> <task> <hash>
   local win=$1 task=$2 h=$3 key statusf mtime age rf rf_age reason last pause_secs due
   key=$(printf '%s' "$win" | tr ':/.' '___')
@@ -1137,7 +1143,7 @@ EOF
           #     genuinely frozen run still escalates past STALE_ESCALATE_SECS;
           #   - paused: the crew declared an external wait, or a declared pause or
           #     captain hold is paired with a confidently dead agent, so absorb on
-          #     the long PAUSE_RESURFACE_SECS cadence instead of wedge-escalating;
+          #     the long declared-pause re-surface cadence instead of wedge-escalating;
           #   - none: no running pipeline, idle pane, no busy signature, no declared
           #     pause - the crew has STOPPED. Surface immediately so firstmate peeks
           #     (it may be done via an interactive menu that wrote no done: status,
