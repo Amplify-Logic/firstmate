@@ -882,6 +882,7 @@ test_pause_due_fold_is_shared_and_groups_by_reason() {
   pause_due_append "$due" "paused: waiting for the captain merge decision" 900 "s:a" "$state/.m-a"
   pause_due_append "$due" "paused: Waiting  for the  CAPTAIN merge decision" 300 "s:b" "$state/.m-b"
   pause_due_append "$due" "paused: holding for the upstream tool release" 400 "s:c" "$state/.m-c"
+  # shellcheck disable=SC2329 # Invoked by name through pause_due_fold.
   fold_fmt() { printf '%s|%s|%s|%s|%s\n' "$1" "$2" "$3" "$4" "$5"; }
   out=$(pause_due_fold "$due" fold_fmt)
   [ "$(printf '%s\n' "$out" | grep -c .)" -eq 2 ] \
@@ -907,6 +908,7 @@ test_pause_due_fold_preserves_empty_notes() {
   local dir state due out
   dir=$(make_case pause-due-empty-note); state="$dir/state"
   due="$state/due.tsv"
+  # shellcheck disable=SC2329 # Invoked by name through pause_due_fold.
   fold_fmt() { printf '%s|%s|%s|%s|%s\n' "$1" "$2" "$3" "$4" "$5"; }
 
   : > "$due"
