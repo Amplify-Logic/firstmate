@@ -624,7 +624,9 @@ case "$cmd $sub" in
     fi
     ;;
   'agent get')
-    if [ -n "${FM_FAKE_HERDR_AGENT:-}" ] && [ ! -f "$gone" ]; then
+    if [ "${FM_FAKE_HERDR_UNREADABLE:-0}" = 1 ] && [ ! -f "$gone" ]; then
+      printf '{"error":{"code":"unexpected_agent_error"}}\n'
+    elif [ -n "${FM_FAKE_HERDR_AGENT:-}" ] && [ ! -f "$gone" ]; then
       jq -n --arg s "$FM_FAKE_HERDR_AGENT" '{result:{agent:{agent_status:$s}}}'
     else
       printf '{"error":{"code":"agent_not_found"}}\n'
@@ -693,6 +695,12 @@ test_missing_endpoint_refuses_on_the_first_read() {
 
   expect_code 1 "$status" "a spawn whose endpoint vanished should refuse"$'\n'"$out"
   assert_contains "$out" "is gone" "refusal did not say the endpoint was gone"
+  assert_contains "$out" "carried only a one-line pointer into an endpoint" \
+    "refusal did not describe the pointer carried into the missing endpoint"
+  assert_contains "$out" "the brief itself was not pasted and remains untouched" \
+    "refusal did not say the brief remained untouched"
+  assert_not_contains "$out" "launch command carried the brief" \
+    "refusal claimed the missing endpoint received the inline brief"
   assert_contains "$out" "RE-SPAWN the task onto a fresh endpoint" \
     "refusal did not tell the caller to re-spawn"
   assert_not_contains "$out" "--key C-c" \
@@ -708,6 +716,27 @@ test_missing_endpoint_refuses_on_the_first_read() {
     || fail "a gone endpoint was polled $polls_after times out of a 40-poll bound instead of refusing on the first read"
   cleanup_task_tmp "$ID"
   pass "a structurally gone endpoint refuses on the first read and asks for a re-spawn"
+}
+
+test_herdr_unreadable_warning_describes_pointer_delivery() {
+  local out status
+  command -v jq >/dev/null 2>&1 || { echo 'skip: jq not found (required by the herdr adapter)'; return 0; }
+  make_herdr_case herdr-unreadable claude claude
+
+  out=$(FM_FAKE_HERDR_KEEP_PANE=1 FM_FAKE_HERDR_UNREADABLE=1 run_herdr_spawn)
+  status=$?
+
+  expect_code 0 "$status" "a herdr spawn with unreadable liveness should proceed with a warning"$'\n'"$out"
+  assert_contains "$out" "before the brief pointer was delivered" \
+    "warning did not identify pointer delivery"
+  assert_contains "$out" "the one-line pointer may have gone into a shell" \
+    "warning did not describe the unverified pointer risk"
+  assert_contains "$out" "the brief itself was not pasted and remains untouched" \
+    "warning did not say the brief remained untouched"
+  assert_not_contains "$out" "the brief may have gone into a shell" \
+    "warning claimed the inline brief may have entered the shell"
+  cleanup_task_tmp "$ID"
+  pass "a herdr unreadable warning describes pointer delivery"
 }
 
 # The re-spawn command must BE the command to run. A bare `fm-spawn.sh <id>
@@ -852,6 +881,7 @@ test_invalid_bound_knobs_are_refused
 test_unverified_liveness_backend_still_spawns_and_warns
 test_unverified_non_kimi_backend_still_spawns_and_warns
 test_missing_endpoint_refuses_on_the_first_read
+test_herdr_unreadable_warning_describes_pointer_delivery
 test_missing_endpoint_respawn_command_carries_kind_and_axes
 test_herdr_launch_points_at_the_brief_file_instead_of_pasting_it
 test_herdr_cursor_launch_points_at_the_brief_file

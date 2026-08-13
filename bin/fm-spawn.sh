@@ -1949,7 +1949,11 @@ spawn_warn_unverified_delivery() {  # <unreadable|unsupported>
   sq_home=$(shell_quote "$FM_HOME")
   sq_peek=$(shell_quote "$FM_ROOT/bin/fm-peek.sh")
   {
-    echo "warning: $ID: this spawn could not confirm that $HARNESS actually owns the $BACKEND pane before the brief was delivered, so the brief may have gone into a shell."
+    if [ "$BRIEF_DELIVERY" = pointer ]; then
+      echo "warning: $ID: this spawn could not confirm that $HARNESS actually owns the $BACKEND pane before the brief pointer was delivered, so the one-line pointer may have gone into a shell; the brief itself was not pasted and remains untouched."
+    else
+      echo "warning: $ID: this spawn could not confirm that $HARNESS actually owns the $BACKEND pane before the brief was delivered, so the brief may have gone into a shell."
+    fi
     case "$reason" in
       unsupported) echo "The $BACKEND backend cannot report agent liveness for the $HARNESS harness at all; delivery proceeded UNVERIFIED." ;;
       unreadable) echo "The $BACKEND pane could not be read for the $HARNESS harness; delivery proceeded UNVERIFIED." ;;
@@ -1972,6 +1976,8 @@ spawn_refuse_endpoint_missing() {  # <phase>
     echo "error: $ID: the endpoint $T is gone (liveness read: ${SPAWN_AGENT_UP_LAST_STATE:-missing}) after $SPAWN_AGENT_UP_POLLS_DONE of $SPAWN_AGENT_UP_BOUND_DESC; refusing to report this spawn as started"
     if [ "$phase" = brief ]; then
       echo "The brief was NOT delivered: there is no pane left to deliver it into."
+    elif [ "$BRIEF_DELIVERY" = pointer ]; then
+      echo "The launch command carried only a one-line pointer into an endpoint that no longer exists, so no agent ever read it; the brief itself was not pasted and remains untouched."
     else
       echo "The launch command carried the brief into an endpoint that no longer exists, so no agent ever read it."
     fi
