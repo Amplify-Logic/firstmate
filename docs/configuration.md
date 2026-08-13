@@ -109,9 +109,12 @@ Without overrides, backend detection uses `$TMUX_PANE` first, then `HERDR_ENV=1`
 That keeps a tmux pane nested inside herdr on the tmux transport, matching the runtime backend's innermost-first rule.
 Target detection uses `FM_SUPERVISOR_TARGET`, then `$TMUX_PANE`, then `"${HERDR_SESSION:-default}:${HERDR_PANE_ID}"` under herdr, then the legacy `firstmate:0` tmux fallback with a warning.
 Selecting any other supervisor backend, including `zellij`, `orca`, or `cmux`, refuses at daemon startup instead of trying tmux injection primitives against a non-tmux pane.
-`bin/fm-afk-launch.sh` forwards documented daemon tuning variables that are set in the launcher process into the fresh non-visible terminal, including `FM_PAUSE_RESURFACE_SECS`, `FM_PAUSE_CAPTAIN_RESURFACE_SECS`, `FM_STALE_ESCALATE_SECS`, `FM_ESCALATE_BATCH_SECS`, `FM_MAX_DEFER_SECS`, and `FM_INJECT_SKIP`.
-Unset knobs are omitted so the daemon keeps its defaults, and `FM_AFK_LAUNCH_DAEMON_KNOBS` in that script is the exact forwarded allowlist.
-The harness-hosted `start-native` path needs no forwarding: the daemon inherits the launching session's environment directly.
+`bin/fm-afk-launch.sh` builds the daemon command as an explicit `exec env`, so the fresh non-visible terminal inherits nothing from the launcher process and only the variables listed in that script's `FM_AFK_LAUNCH_DAEMON_KNOBS` allowlist are settable on this path.
+That allowlist is the cadence, batch, heartbeat, wedge-alarm, injection-retry, crash-backoff, and daemon-log set - `FM_PAUSE_RESURFACE_SECS`, `FM_PAUSE_CAPTAIN_RESURFACE_SECS`, `FM_STALE_ESCALATE_SECS`, `FM_ESCALATE_BATCH_SECS`, `FM_HEARTBEAT_SCAN_SECS`, `FM_HOUSEKEEPING_TICK`, `FM_MAX_DEFER_SECS`, `FM_INJECT_SKIP`, and the rest named there - and the script is the authoritative list rather than this sentence.
+The other daemon-relevant variables documented in the environment block below are not forwarded on this path and keep their defaults whatever the launcher process exports.
+That covers the `FM_SENTINEL_*` host-sentinel knobs - `FM_SUPERVISION_SENTINEL_MODE` is on the allowlist despite the similar name - and the watcher and classifier knobs the daemon's one-shot watcher reads, such as `FM_POLL`, `FM_SIGNAL_GRACE`, `FM_CAPTAIN_RE`, `FM_CLASSIFY_PAUSED_VERB`, and `FM_WEDGE_DEMAND_INSPECT_COUNT`.
+Allowlisted knobs that are unset are omitted so the daemon keeps its defaults.
+The harness-hosted `start-native` path needs no forwarding and is unaffected by the allowlist: the daemon inherits the launching session's environment directly.
 
 ## Supervision active alert channels (config/wedge-alarm)
 
@@ -565,7 +568,7 @@ FM_SEND_RETRIES=3       # fm-send Enter-retry attempts after typing the line onc
 FM_SEND_SLEEP=0.4       # seconds between fm-send submit checks
 FM_SEND_SETTLE=1        # seconds fm-send waits after a successful text submit; 0 disables
 FM_PENDING_REPLY_GRACE_SECS=120   # seconds after marked secondmate delivery before a completed turn without a correlated parent report can trigger one repost request
-# sub-supervisor (bin/fm-supervise-daemon.sh); presence-gated via /afk
+# sub-supervisor (bin/fm-supervise-daemon.sh); presence-gated via /afk. Only the FM_AFK_LAUNCH_DAEMON_KNOBS allowlist reaches a daemon started by the terminal-backed launcher; see "Away-mode supervisor backend" above for which knobs those are.
 FM_SUPERVISOR_BACKEND=             # optional supervisor pane backend override; tmux/herdr only, otherwise detects $TMUX_PANE then HERDR_ENV/HERDR_PANE_ID before tmux fallback
 FM_SUPERVISOR_TARGET=              # optional supervisor pane target override; tmux target or herdr <session>:<pane-id>, otherwise auto-detected
 FM_INJECT_SKIP=heartbeat           # |-prefixes force-self-handled bypassing classification; empty disables
