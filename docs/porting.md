@@ -50,7 +50,7 @@ Exact flags remain in `bin/fm-home-port.sh --help` and its header.
 
 `.env` and any live API credentials stay on each machine.
 Each machine holds its own.
-`bin/fm-home-port.sh` refuses to include them and fails loudly rather than silently skipping, so a future operator cannot assume they came across.
+`bin/fm-home-port.sh` refuses to include them and reports that refusal loudly rather than silently skipping, so a future operator cannot assume they came across.
 It also scans exported material for accidentally embedded credentials before writing or pushing a bundle.
 
 The standing loud-refusal set, when present in the source home, is `.env`, `state/`, `projects/`, `config/action-captain-secret`, `config/cmux-socket-password`, `config/x-mode.env`, `data/projects.md`, and `data/secondmates.md`.
