@@ -852,6 +852,29 @@ test_pause_due_fold_preserves_empty_notes() {
   pass "pause_due_fold keeps empty notes and the gated flag on their own fields"
 }
 
+# The daemon keys its throttles per TASK, so two tasks sharing one backend window
+# legitimately hold two markers and append two records for one window. The report
+# counts distinct windows, not records, so that never reads "2 tasks sharing one
+# wait: [w, w]" - while pause_due_markers still exposes BOTH throttles, since
+# dropping one would orphan its marker and re-fire it every tick.
+test_pause_due_fold_dedupes_shared_window() {
+  local dir state due out
+  dir=$(make_case pause-due-shared-window); state="$dir/state"
+  due="$state/due.tsv"; : > "$due"
+  fold_fmt() { printf '%s|%s|%s|%s|%s\n' "$1" "$2" "$3" "$4" "$5"; }
+  pause_due_append "$due" "paused: holding for the upstream tool release" 300 "s:w" "$state/.m-one"
+  pause_due_append "$due" "paused: holding for the upstream tool release" 900 "s:w" "$state/.m-two"
+  pause_due_append "$due" "paused: holding for the upstream tool release" 400 "s:x" "$state/.m-three"
+  out=$(pause_due_fold "$due" fold_fmt)
+  [ "$(printf '%s\n' "$out" | grep -c .)" -eq 1 ] \
+    || fail "one blocker across a shared window did not fold to a single item: $out"
+  printf '%s\n' "$out" | grep -F '2|900|holding for the upstream tool release|s:w, s:x|0' >/dev/null \
+    || fail "a window named twice was counted twice or listed twice: $out"
+  [ "$(pause_due_markers "$due" | tr '\n' ' ')" = "$state/.m-one $state/.m-two $state/.m-three " ] \
+    || fail "collapsing the window list dropped a throttle marker, which would orphan it"
+  pass "pause_due_fold counts distinct windows while exposing every throttle marker"
+}
+
 # A captain-held crew can leave a stable backend endpoint after its agent exits.
 # fm-crew-state then authoritatively reports stopped rather than paused, but the
 # confirmed-dead agent plus the declared wait or captain-held transfer must retain
@@ -1588,6 +1611,7 @@ test_paused_recheck_groups_shared_reason
 test_paused_recheck_dedupes_shared_window
 test_pause_due_fold_is_shared_and_groups_by_reason
 test_pause_due_fold_preserves_empty_notes
+test_pause_due_fold_dedupes_shared_window
 test_exited_declared_pause_is_bounded_but_live_gate_surfaces
 test_secondmate_paused_resurfaces_in_normal_mode
 test_secondmate_nonpaused_stale_remains_suppressed

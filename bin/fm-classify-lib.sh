@@ -246,13 +246,20 @@ pause_due_windows() {  # <due-file>
 # One formatted line per distinct blocker. <formatter> is invoked as
 #   <formatter> <count> <max-age> <note> <windows> <gated>
 # and prints that caller's wording; the grouping decision itself lives here.
+#
+# The reported window list and its count are per distinct WINDOW, not per record.
+# Several records can name one backend window - the daemon keys its throttles per
+# task, so two tasks sharing a window legitimately hold two markers - and a window
+# named twice would report as "2 tasks sharing one wait: [w, w]". Age, note and
+# gating still fold over every record, and pause_due_markers stays whole, so each
+# caller commits every throttle it collected regardless of this collapse.
 pause_due_fold() {  # <due-file> <formatter>
-  local due=$1 fmt=$2 rkey wins count max_age note gated
+  local due=$1 fmt=$2 rkey wins count max_age note gated seen_wins
   local rec rec_us k age_i win_i display_i gated_flag
   [ -s "$due" ] || return 0
   while IFS= read -r rkey; do
     [ -n "$rkey" ] || continue
-    wins=""; count=0; max_age=0; note=""; gated=0
+    wins=""; count=0; max_age=0; note=""; gated=0; seen_wins=
     while IFS= read -r rec; do
       [ -n "$rec" ] || continue
       # Tab is IFS-whitespace, so IFS=<tab> read collapses consecutive tabs and
@@ -261,10 +268,14 @@ pause_due_fold() {  # <due-file> <formatter>
       rec_us=${rec//$'\t'/$'\037'}
       IFS=$'\037' read -r k age_i win_i _ display_i gated_flag <<< "$rec_us"
       [ "$k" = "$rkey" ] || continue
-      count=$((count + 1))
       [ "$age_i" -gt "$max_age" ] && max_age=$age_i
       [ -n "$note" ] || note=$display_i
       [ "$gated_flag" = 1 ] && gated=1
+      case "$seen_wins" in
+        *"|$win_i|"*) continue ;;
+      esac
+      seen_wins="$seen_wins|$win_i|"
+      count=$((count + 1))
       if [ -z "$wins" ]; then
         wins=$win_i
       else
