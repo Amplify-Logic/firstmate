@@ -1100,9 +1100,9 @@ validate_spawn_worktree() {  # <source> <inspect-target>
 # The agent-up wait's bound is validated HERE, before the endpoint exists and
 # before anything has been typed into it, for the same reason the worktree
 # settle bound below is validated before its first send: a malformed knob
-# discovered only after the launch line (which carries the brief for every
-# adapter but kimi) has been submitted would refuse a spawn whose agent is
-# already up and working on the task.
+# discovered only after the launch line (which carries the launch-brief input
+# for every adapter but kimi) has been submitted would refuse a spawn whose
+# agent is already up and working on the task.
 SPAWN_AGENT_UP_POLLS=${FM_SPAWN_AGENT_UP_MAX_POLLS:-60}
 SPAWN_AGENT_UP_SLEEP_S=${FM_SPAWN_AGENT_UP_SLEEP:-1}
 if [ "$RAW_LAUNCH" -eq 0 ]; then
@@ -1772,9 +1772,9 @@ LAUNCH=$(spawn_render_launch "$(shell_quote "$DELIVERED_BRIEF")")
 # Until an agent actually owns the endpoint, the pane is still a plain shell,
 # and everything typed into it is SHELL input. That is the dead-pane brief
 # spill (recorded 2026-08-12, reproduced across claude, pi, and cursor targets
-# on herdr): the launch line - which carries the brief for every verified
-# adapter except kimi - lands in a shell that never starts the agent, the brief
-# becomes zsh `quote>` continuation soup, and the pane still LOOKS alive, so a
+# on herdr): the launch line - which carries launch-brief input for every
+# verified adapter except kimi - lands in a shell that never starts the agent,
+# the brief becomes zsh `quote>` continuation soup, and the pane still LOOKS alive, so a
 # later fm-send happily "succeeds" into that same shell. The failure was silent
 # because nothing between "Enter was sent" and "spawned <id>" ever asked
 # whether an agent had appeared.
