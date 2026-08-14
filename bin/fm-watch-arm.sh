@@ -97,7 +97,7 @@ CONFIRM_TIMEOUT=${FM_ARM_CONFIRM_TIMEOUT:-$ARM_CONFIRM_DEFAULT}
 # minutes of supervision. While the sweep is provably running, extend the window
 # by this much instead of TERMing the child. The bound still applies: a sweep
 # that outlasts it fails with its own distinct reason, never silently.
-MIGRATION_PROGRESS="$STATE/.pr-check-migration.progress"
+MIGRATION_PROGRESS_PREFIX="$STATE/.pr-check-migration.progress."
 MIGRATION_GRACE=${FM_ARM_MIGRATION_GRACE:-120}
 case "$MIGRATION_GRACE" in ''|*[!0-9]*) MIGRATION_GRACE=120 ;; esac
 # Poll interval while attached to an existing healthy watcher.
@@ -265,11 +265,16 @@ healthy_watcher() {
 # stale record must never buy a dead sweep more of the confirmation window.
 MIGRATION_SWEEP_PID=
 migration_sweeping() {
-  local pid
+  local record pid
   MIGRATION_SWEEP_PID=
-  pid=$(cat "$MIGRATION_PROGRESS" 2>/dev/null || true)
-  fm_pid_alive "$pid" || return 1
-  MIGRATION_SWEEP_PID=$pid
+  for record in "$MIGRATION_PROGRESS_PREFIX"*; do
+    [ -e "$record" ] || continue
+    pid=$(cat "$record" 2>/dev/null || true)
+    fm_pid_alive "$pid" || continue
+    MIGRATION_SWEEP_PID=$pid
+    return 0
+  done
+  return 1
 }
 
 report_attached() {

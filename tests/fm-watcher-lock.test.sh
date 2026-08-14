@@ -998,7 +998,7 @@ test_arm_waits_for_peer_beacon_after_child_stands_down() {
 }
 
 test_arm_fails_loud_when_no_fresh_watcher_confirmable() {
-  local dir state fakebin armout live armpid status
+  local dir state fakebin armout live dead_migration armpid status
   dir=$(make_case arm-failed-stale)
   state="$dir/state"
   fakebin="$dir/fakebin"
@@ -1015,7 +1015,8 @@ test_arm_fails_loud_when_no_fresh_watcher_confirmable() {
   # A migration progress record left behind by a killed sweep names a dead pid.
   # It must buy no extra confirmation time and must not rewrite this failure as
   # a migration-in-progress one: the answer here is still a missing watcher.
-  printf '%s\n' "$(dead_pid)" > "$state/.pr-check-migration.progress"
+  dead_migration=$(dead_pid)
+  printf '%s\n' "$dead_migration" > "$state/.pr-check-migration.progress.$dead_migration"
   PATH="$fakebin:$PATH" FM_STATE_OVERRIDE="$state" FM_POLL=5 FM_SIGNAL_GRACE=1 FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 FM_ARM_CONFIRM_TIMEOUT=3 "$WATCH_ARM" > "$armout" &
   armpid=$!
   wait_for_exit "$armpid" 120
@@ -1211,7 +1212,7 @@ test_arm_keeps_extension_after_migration_finishes() {
 }
 
 test_arm_recovers_from_interrupted_migration_sweep() {
-  local dir state fakebin armout peer migrate_pid orphan armpid i lock_pid
+  local dir state fakebin armout peer migrate_pid progress orphan armpid i lock_pid
   dir=$(make_case arm-interrupted-migration)
   state="$dir/state"
   fakebin="$dir/fakebin"
@@ -1219,12 +1220,13 @@ test_arm_recovers_from_interrupted_migration_sweep() {
   peer=$(seed_term_proof_recorded_watcher "$dir" "$state") || fail "could not seed a TERM-proof recorded watcher"
   FM_HOME="$dir" "$MIGRATE" --checks-safe > "$dir/migrate.out" 2>&1 &
   migrate_pid=$!
+  progress="$state/.pr-check-migration.progress.$migrate_pid"
   i=0
-  while [ "$i" -lt 200 ] && [ ! -f "$state/.pr-check-migration.progress" ]; do
+  while [ "$i" -lt 200 ] && [ ! -f "$progress" ]; do
     sleep 0.05
     i=$((i + 1))
   done
-  [ "$(cat "$state/.pr-check-migration.progress" 2>/dev/null || true)" = "$migrate_pid" ] \
+  [ "$(cat "$progress" 2>/dev/null || true)" = "$migrate_pid" ] \
     || fail "migration did not publish an in-flight record naming the sweep process"
   kill -KILL "$migrate_pid" 2>/dev/null || fail "could not interrupt the migration sweep"
   wait "$migrate_pid" 2>/dev/null || true
@@ -1234,7 +1236,7 @@ test_arm_recovers_from_interrupted_migration_sweep() {
   # naming a dead pid, a lock recording a dead holder, and an owner staging dir
   # nothing points at. Re-arming must still reach a confirmed watcher.
   [ ! -e "$state/.pr-check-migration-v1" ] || fail "interrupted sweep left a completion marker"
-  [ -f "$state/.pr-check-migration.progress" ] || fail "interrupted sweep left no in-flight record"
+  [ -f "$progress" ] || fail "interrupted sweep left no in-flight record"
   orphan="$state/.watch.lock.owner.interrupted"
   mkdir "$orphan"
   printf '%s\n' "$(dead_pid)" > "$orphan/pid"
@@ -1251,7 +1253,8 @@ test_arm_recovers_from_interrupted_migration_sweep() {
     || fail "arm did not confirm a watcher after an interrupted migration sweep: $(cat "$armout")"
   ! grep -qF 'watcher: FAILED' "$armout" || fail "arm reported a failure after an interrupted migration sweep"
   [ ! -e "$orphan" ] || fail "arm left the interrupted sweep's orphaned owner staging dir in place"
-  [ ! -e "$state/.pr-check-migration.progress" ] || fail "completed sweep left its in-flight record behind"
+  ! compgen -G "$state/.pr-check-migration.progress.*" >/dev/null \
+    || fail "completed sweep left an in-flight record behind"
   grep -qx fm-pr-check-migration-v1 "$state/.pr-check-migration-v1" \
     || fail "re-arming did not repair the interrupted migration's completion marker"
   kill "$armpid" "$lock_pid" 2>/dev/null || true

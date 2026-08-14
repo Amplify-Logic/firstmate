@@ -5,10 +5,10 @@
 # and registered custom checks remain armed, and every other task poll is
 # quarantined for private review. A current X-mode shim is preserved by exact
 # content, while the recognized older byte-static shim is refreshed in place.
-# A run that takes the full sweep publishes state/.pr-check-migration.progress
-# naming the live sweep process for as long as that sweep runs, so
+# A run that takes the full sweep publishes state/.pr-check-migration.progress.<pid>
+# naming that sweep process for as long as it runs, so
 # bin/fm-watch-arm.sh can tell a slow sweep apart from a watcher that will never
-# appear. The record is advisory: readers must check the recorded pid is alive.
+# appear. Records are advisory: readers must check each recorded pid is alive.
 # Usage: fm-pr-check-migrate.sh [--checks-safe]
 set -u
 
@@ -275,15 +275,18 @@ fi
 # process for the whole sweep. It is advisory evidence only: a failure to write
 # it must never stop the migration, and a stale record left by a killed sweep
 # names a dead pid, which every reader must check before trusting it.
-PROGRESS="$STATE/.pr-check-migration.progress"
+PROGRESS="$STATE/.pr-check-migration.progress.${BASHPID:-$$}"
 progress_clear() {
-  local owner
-  owner=$(cat "$PROGRESS" 2>/dev/null || true)
-  [ "$owner" = "${BASHPID:-$$}" ] || return 0
   rm -f -- "$PROGRESS" 2>/dev/null || true
 }
 progress_publish() {
-  local tmp
+  local tmp record pid
+  for record in "$STATE"/.pr-check-migration.progress.*; do
+    [ -e "$record" ] || continue
+    pid=$(cat "$record" 2>/dev/null || true)
+    fm_pid_alive "$pid" && continue
+    rm -f -- "$record" 2>/dev/null || true
+  done
   tmp=$(mktemp "$STATE/.fm-pr-check-progress.XXXXXX" 2>/dev/null) || return 0
   if printf '%s\n' "${BASHPID:-$$}" > "$tmp" 2>/dev/null \
     && chmod 0600 "$tmp" 2>/dev/null \
