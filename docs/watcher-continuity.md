@@ -119,6 +119,10 @@ An actionable child output returns that reason normally.
 A zero/empty child return rechecks the home lock and beacon, attaches to a verified healthy successor when one exists, or emits `watcher: FAILED - cycle ended without an actionable reason` and exits nonzero.
 An attached arm follows verified identity-matched successors and reports the same typed failure if that chain ends without one.
 
+A freshly started watcher runs the non-executing PR check migration before it can take the lock or beat, so a full sweep sits inside the confirmation window.
+While that sweep is provably running the arm extends the window by `FM_ARM_MIGRATION_GRACE` instead of stopping its own healthy child, and a sweep that outlasts even the extension fails with `watcher: FAILED - PR check migration still running pid=<N>, watcher not confirmed yet` rather than the generic missing-beacon wording.
+Both the watcher and the arm reclaim abandoned singleton artifacts at startup: a lock whose recorded holder is dead, and owner staging dirs no lock points at whose recorded holder is dead, which a process killed mid-acquire would otherwise leave behind for good.
+
 The arm layer appends one tab-separated record per observed cycle to `state/.watch-cycle-exits.log`.
 Each record includes arm and watcher PIDs, start and end timestamps, exit code and signal, classified reason, beacon age, lock identity before and after close, and successor disposition.
 The file is size-capped through `FM_WATCH_CYCLE_LOG_MAX_BYTES` and `FM_WATCH_CYCLE_LOG_KEEP_LINES`.
