@@ -1052,6 +1052,19 @@ seed_term_proof_recorded_watcher() {  # <dir> <state> -> peer pid
   printf '%s\n' "$peer"
 }
 
+seed_slow_stopping_recorded_watcher() {  # <dir> <state> -> peer pid
+  local dir=$1 state=$2 peer identity
+  bash -c 'trap "sleep 2; exit 0" TERM; while :; do :; done' >/dev/null 2>&1 &
+  peer=$!
+  identity=$(FM_STATE_OVERRIDE="$state" bash -c '. "$1"; fm_pid_identity "$2"' _ "$LIB" "$peer") || return 1
+  mkdir -p "$state/.watch.lock"
+  printf '%s\n' "$peer" > "$state/.watch.lock/pid"
+  printf '%s\n' "$dir" > "$state/.watch.lock/fm-home"
+  printf '%s\n' "$WATCH" > "$state/.watch.lock/watcher-path"
+  printf '%s\n' "$identity" > "$state/.watch.lock/pid-identity"
+  printf '%s\n' "$peer"
+}
+
 # Owner staging dirs in the watch lock's namespace: two that no lock points at
 # and that are provably abandoned, and two that must survive a startup sweep.
 seed_lock_owner_dirs() {  # <state>
@@ -1168,6 +1181,33 @@ test_arm_extends_confirmation_window_while_migration_sweeps() {
   grep -q 'reason=migration-in-progress' "$state/.watch-cycle-exits.log" \
     || fail "migration-stalled cycle was not classified in the lifecycle ledger"
   pass "arm extends its confirmation window for a running migration sweep and names it instead of blaming the beacon"
+}
+
+test_arm_keeps_extension_after_migration_finishes() {
+  local dir state fakebin armout peer armpid i lock_pid
+  dir=$(make_case arm-post-migration-window)
+  state="$dir/state"
+  fakebin="$dir/fakebin"
+  armout="$dir/arm.out"
+  peer=$(seed_slow_stopping_recorded_watcher "$dir" "$state") \
+    || fail "could not seed a slowly stopping recorded watcher"
+  PATH="$fakebin:$PATH" FM_HOME="$dir" FM_POLL=5 FM_SIGNAL_GRACE=1 FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 \
+    FM_ARM_CONFIRM_TIMEOUT=1 FM_ARM_MIGRATION_GRACE=5 "$WATCH_ARM" > "$armout" &
+  armpid=$!
+  i=0
+  while [ "$i" -lt 100 ]; do
+    grep -qF 'watcher: started pid=' "$armout" 2>/dev/null && break
+    sleep 0.1
+    i=$((i + 1))
+  done
+  lock_pid=$(cat "$state/.watch.lock/pid" 2>/dev/null || true)
+  grep -qF "watcher: started pid=$lock_pid (beacon fresh)" "$armout" \
+    || fail "arm dropped its extension when the migration finished: $(cat "$armout")"
+  ! grep -qF 'watcher: FAILED' "$armout" || fail "arm timed out after a completed migration sweep"
+  kill "$armpid" "$lock_pid" "$peer" 2>/dev/null || true
+  wait "$armpid" 2>/dev/null || true
+  wait "$peer" 2>/dev/null || true
+  pass "arm preserves a bounded confirmation interval after a long migration sweep finishes"
 }
 
 test_arm_recovers_from_interrupted_migration_sweep() {
@@ -1483,6 +1523,7 @@ test_arm_waits_for_peer_beacon_after_child_stands_down
 test_arm_fails_loud_when_no_fresh_watcher_confirmable
 test_startup_reclaims_orphaned_lock_owner_dirs
 test_arm_extends_confirmation_window_while_migration_sweeps
+test_arm_keeps_extension_after_migration_finishes
 test_arm_recovers_from_interrupted_migration_sweep
 test_cycle_exit_ledger_links_successor_and_stays_bounded
 test_stopped_watcher_is_live_but_stale_then_exit_is_classified

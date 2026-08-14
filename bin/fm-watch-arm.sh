@@ -553,6 +553,8 @@ owned_child_finished() {
 deadline=$(( $(date +%s) + CONFIRM_TIMEOUT ))
 migration_deadline=$(( deadline + MIGRATION_GRACE ))
 migration_stalled=0
+migration_seen=0
+migration_post_deadline=0
 while :; do
   if healthy_watcher; then
     if [ "$HEALTHY_PID" = "$child" ]; then
@@ -588,11 +590,24 @@ while :; do
     owned_child_finished "$rc"
     exit $?
   fi
-  if [ "$(date +%s)" -ge "$deadline" ]; then
-    if migration_sweeping; then
+  now=$(date +%s)
+  migration_running=0
+  migration_sweeping && migration_running=1
+  if [ "$migration_running" -eq 1 ]; then
+    migration_seen=1
+    migration_post_deadline=0
+  elif [ "$migration_seen" -eq 1 ] && [ "$migration_post_deadline" -eq 0 ]; then
+    migration_post_deadline=$(( now + CONFIRM_TIMEOUT ))
+    [ "$migration_post_deadline" -le "$migration_deadline" ] || migration_post_deadline=$migration_deadline
+  fi
+  if [ "$now" -ge "$deadline" ]; then
+    if [ "$migration_running" -eq 1 ]; then
       # The child is healthy and blocked on the pre-lock sweep, not missing.
-      [ "$(date +%s)" -lt "$migration_deadline" ] && { sleep 0.2; continue; }
+      [ "$now" -lt "$migration_deadline" ] && { sleep 0.2; continue; }
       migration_stalled=1
+    elif [ "$migration_post_deadline" -gt "$now" ]; then
+      sleep 0.2
+      continue
     fi
     break
   fi

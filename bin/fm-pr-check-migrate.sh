@@ -277,6 +277,9 @@ fi
 # names a dead pid, which every reader must check before trusting it.
 PROGRESS="$STATE/.pr-check-migration.progress"
 progress_clear() {
+  local owner
+  owner=$(cat "$PROGRESS" 2>/dev/null || true)
+  [ "$owner" = "${BASHPID:-$$}" ] || return 0
   rm -f -- "$PROGRESS" 2>/dev/null || true
 }
 progress_publish() {
