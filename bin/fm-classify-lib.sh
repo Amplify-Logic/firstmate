@@ -532,15 +532,43 @@ _fm_last_non_resolve_line() {  # <status-file>
   printf '%s' "$out"
 }
 
-# 0 when the task is currently a declared wait. Both halves read the EFFECTIVE
-# last line, which is the last line that states what the crew is doing: a
-# closing resolve-verb line is an event about a hold, so it never counts as that
-# statement for either half. The captain-held half is STREAM-TRUTH: quiet
+_fm_last_resolve_closed_captain_hold() {  # <status-file>
+  local f=$1 line verb key held resolve open='' stripped closed=1
+  [ -f "$f" ] || return 1
+  held=${FM_CLASSIFY_CAPTAIN_HELD_VERB:-$FM_CLASSIFY_CAPTAIN_HELD_VERB_DEFAULT}
+  resolve=${FM_CLASSIFY_RESOLVE_VERB:-$FM_CLASSIFY_RESOLVE_VERB_DEFAULT}
+  while IFS= read -r line || [ -n "$line" ]; do
+    stripped=${line//[[:space:]]/}
+    [ -n "$stripped" ] || continue
+    closed=1
+    verb=$(status_line_verb "$line")
+    key=$(_fm_decision_key "$line") || continue
+    case "$verb" in
+      "$held")
+        open=$(_fm_decision_drop "$open" "$key")
+        [ -n "$open" ] && open="${open}"$'\n'
+        open="${open}${key}"$'\t\n'
+        ;;
+      "$resolve")
+        case "$open" in
+          *$'\n'"$key"$'\t'*|"$key"$'\t'*) closed=0 ;;
+        esac
+        open=$(_fm_decision_drop "$open" "$key")
+        ;;
+    esac
+  done < "$f"
+  return "$closed"
+}
+
+# 0 when the task is currently a declared wait. A resolve line is looked past
+# only when it actually closed an open captain-held transfer; an ordinary
+# paused-to-resolved activity transition ends the pause. The captain-held half
+# is STREAM-TRUTH: quiet
 # treatment applies only while the hold stream is open AND the effective last
 # line still belongs to it - a captain-held line, or a resolved: line that masks
 # a still-open hold (hold b open under a trailing resolved: for hold a). The
-# paused: half is last-line with the same look-back: a later real event
-# supersedes a pause, but the closing line fm-decision-hold.sh appends when it
+# paused: half is last-line with the hold-retirement look-back: a later real
+# event supersedes a pause, but the closing line fm-decision-hold.sh appends when it
 # retires a sibling hold must not mask a still-valid paused: declaration, or the
 # pane ages straight back into the false possible-wedge alarm. Any other newer
 # line (working:, done:, failed:, needs-decision:) supersedes the quiet-state, so
@@ -560,6 +588,7 @@ status_declared_wait() {  # <status-file>
   status_is_captain_held "$last" && status_has_open_captain_hold "$f" && return 0
   status_is_resolved "$last" || return 1
   status_has_open_captain_hold "$f" && return 0
+  _fm_last_resolve_closed_captain_hold "$f" || return 1
   # The trailing resolve-verb line closed the last open hold, so it decided
   # nothing about the crew: fall back to the effective last line. A preceding
   # paused: declaration still holds; any other verb still supersedes it.

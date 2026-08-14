@@ -558,12 +558,11 @@ clear_captain_held_surfaced() {  # <state-dir> <window> [task]
 }
 
 clear_pause_state() {  # <window> [task]
-  local win=$1 task=${2:-} key
+  local win=$1 key
   key=${win//:/_}
   key=${key//\//_}
   key=${key//./_}
   rm -f "$STATE/.paused-$key" "$STATE/.paused-rechecked-$key" "$STATE/.paused-resurfaced-$key"
-  clear_captain_held_surfaced "$STATE" "$win" "$task"
 }
 
 clear_pause_tracking() {  # <window> [task]

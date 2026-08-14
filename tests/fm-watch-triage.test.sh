@@ -1151,6 +1151,18 @@ test_captain_held_dead_agent_away_marker_absorbs_in_normal_mode() {
   digest=$(bash -c '. "$1"; status_open_captain_holds "$2"' _ \
     "$ROOT/bin/fm-classify-lib.sh" "$statusf")
   printf '%s' "$digest" > "$state/.subsuper-captain-held-surfaced-held"
+  : > "$state/.paused-$key"
+  PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CAPTURE="$capture_file" \
+    FM_FAKE_TMUX_CURRENT_COMMAND=zsh FM_FAKE_CREW_STATE='state: working · source: run-step · validating (running)' \
+    FM_STATE_OVERRIDE="$state" FM_CREW_STATE_BIN="$fakebin/fm-crew-state.sh" FM_STALE_ESCALATE_SECS=999 FM_POLL=1 FM_SIGNAL_GRACE=1 \
+    FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 "$WATCH" >> "$out" &
+  pid=$!
+  wait_numeric_file "$state/.stale-since-$key" 20 \
+    || { reap "$pid"; fail "working reconciliation did not resume wedge tracking"; }
+  reap "$pid"
+  [ "$(cat "$state/.subsuper-captain-held-surfaced-held" 2>/dev/null || true)" = "$digest" ] \
+    || fail "working reconciliation cleared the unchanged hold's one-shot marker"
+  rm -f "$state/.stale-since-$key"
   round=1
   while [ "$round" -le 2 ]; do
     PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CAPTURE="$capture_file" \
@@ -1277,6 +1289,9 @@ test_closing_resolved_line_does_not_mask_a_declared_pause() {
   printf 'captain-held [key=a]: tracked by held-a\nresolved [key=a]: retired\n' > "$f"
   status_declared_wait "$f" \
     && fail "a fully resolved hold with no pause behind it must not be a declared wait"
+  printf 'paused [key=release]: waiting on the upstream release\nresolved [key=release]: upstream landed\n' > "$f"
+  status_declared_wait "$f" \
+    && fail "an ordinary keyed resolved: transition must close its paused: activity"
   pass "a hold's closing resolved: line does not mask a preceding declared pause"
 }
 
