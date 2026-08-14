@@ -539,28 +539,12 @@ handle_paused_stale() {  # <window> <task> <hash>
   triage_log "absorbed stale (declared wait, age ${age}s): $win"
 }
 
-# Drop the dead-agent one-shot for this hold state in BOTH marker namespaces
-# (fm-classify-lib.sh's captain_held_surfaced_markers owns the pair). Sweeping
-# only the watcher's own window-keyed marker would leave the daemon's task-keyed
-# one behind, and since both modes READ both, that survivor suppresses the next
-# surface forever: hold ids are deterministic, so a key resolved and re-opened
-# folds to the same digest. This is the single removal site in the watcher; the
-# task is resolved from the window only when a caller does not already have it.
-# The argument order matches the away-mode daemon's identically-named wrapper
-# exactly, so the two stay interchangeable for a test shell that sources both.
-clear_captain_held_surfaced() {  # <state-dir> <window> [task]
-  local state=$1 win=$2 task=${3:-} m
-  [ -n "$task" ] || task=$(window_to_task "$win" "$state")
-  while IFS= read -r m; do
-    [ -n "$m" ] || continue
-    rm -f "$m"
-  done < <(captain_held_surfaced_markers "$state" "$win" "$task")
-}
-
 reconcile_captain_held_surfaced() {  # <window> <task>
-  local win=$1 task=$2
-  status_has_open_captain_hold "$STATE/$task.status" \
-    || clear_captain_held_surfaced "$STATE" "$win" "$task"
+  local win=$1 task=$2 fold surf surf_away
+  fold=$(status_open_captain_holds "$STATE/$task.status")
+  { IFS= read -r surf; IFS= read -r surf_away; } \
+    < <(captain_held_surfaced_markers "$STATE" "$win" "$task")
+  reconcile_captain_held_surfaced_markers "$fold" "$surf" "$surf_away"
 }
 
 clear_pause_state() {  # <window> [task]
@@ -1167,9 +1151,9 @@ EOF
     key=${key//\//_}
     key=${key//./_}
     last=$(last_status_line "$STATE/$task.status")
+    reconcile_captain_held_surfaced "$w" "$task"
     if [ -e "$STATE/.paused-$key" ] && ! status_declared_wait "$STATE/$task.status"; then
       clear_pause_tracking "$w" "$task"
-      reconcile_captain_held_surfaced "$w" "$task"
     fi
     if [ "$kind" = secondmate ] && ! status_declared_wait "$STATE/$task.status"; then
       continue

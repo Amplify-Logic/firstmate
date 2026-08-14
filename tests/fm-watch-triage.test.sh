@@ -1208,8 +1208,8 @@ test_reopened_hold_surfaces_despite_the_previous_one_shot() {
     case "$phase" in
       1) printf '%s\n' "$held" > "$statusf" ;;
       2) printf 'resolved [key=route]: retired by fm-decision-hold (held-decision-route)\n' >> "$statusf"
-         : > "$state/.paused-$key"
-         printf 'window=%s\nkind=secondmate\nharness=grok\nbackend=tmux\n' "$window" > "$state/held.meta" ;;
+         rm -f "$state/.paused-$key"
+         printf 'window=%s\nkind=ship\nharness=grok\nbackend=tmux\n' "$window" > "$state/held.meta" ;;
       3) printf '%s\n' "$held" >> "$statusf"
          printf 'window=%s\nkind=ship\nharness=grok\nbackend=tmux\n' "$window" > "$state/held.meta" ;;
     esac
@@ -1218,7 +1218,7 @@ test_reopened_hold_surfaces_despite_the_previous_one_shot() {
     else touch -m -d "@$back" "$statusf"; fi
     printf '%s' "$(seen_sig "$statusf")" > "$state/.seen-held_status"
     PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CAPTURE="$capture_file" \
-      FM_FAKE_TMUX_CURRENT_COMMAND=zsh FM_FAKE_CREW_STATE='state: stopped · source: pane · bare shell' \
+      FM_FAKE_TMUX_CURRENT_COMMAND=zsh FM_FAKE_CREW_STATE="$(if [ "$phase" = 2 ]; then printf 'state: finished-idle · source: herdr · idle'; else printf 'state: stopped · source: pane · bare shell'; fi)" \
       FM_STATE_OVERRIDE="$state" FM_CREW_STATE_BIN="$fakebin/fm-crew-state.sh" FM_PAUSE_RESURFACE_SECS=240 FM_POLL=1 FM_SIGNAL_GRACE=1 \
       FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 "$WATCH" >> "$out" &
     pid=$!
@@ -1239,6 +1239,31 @@ test_reopened_hold_surfaces_despite_the_previous_one_shot() {
   [ "$wakes" -eq 2 ] \
     || fail "a re-opened hold with an identical digest surfaced $wakes dead-agent wakes, expected 2"
   pass "a re-opened captain-held hold is not suppressed by a one-shot marker of either namespace"
+}
+
+test_resolved_hold_busy_pane_clears_both_one_shots() {
+  local dir state fakebin out capture_file statusf window key pid
+  dir=$(make_case resolved-hold-busy); state="$dir/state"; fakebin="$dir/fakebin"
+  out="$dir/watch.out"; capture_file="$dir/pane.txt"; statusf="$state/held.status"
+  window="test:fm-held"
+  printf 'active tool output after the hold resolved\n' > "$capture_file"
+  printf 'window=%s\nkind=ship\nharness=grok\nbackend=tmux\n' "$window" > "$state/held.meta"
+  printf 'captain-held [key=route]: tracked by held-decision-route\nresolved [key=route]: retired by fm-decision-hold (held-decision-route)\n' > "$statusf"
+  printf '%s' "$(seen_sig "$statusf")" > "$state/.seen-held_status"
+  key=$(printf '%s' "$window" | tr ':/.' '___')
+  printf 'old-digest' > "$state/.captain-held-surfaced-$key"
+  printf 'old-digest' > "$state/.subsuper-captain-held-surfaced-held"
+  PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CAPTURE="$capture_file" \
+    FM_FAKE_TMUX_CURRENT_COMMAND=node FM_FAKE_CREW_STATE='state: working · source: run-step · active' \
+    FM_STATE_OVERRIDE="$state" FM_CREW_STATE_BIN="$fakebin/fm-crew-state.sh" FM_POLL=1 FM_SIGNAL_GRACE=1 \
+    FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 "$WATCH" > "$out" &
+  pid=$!
+  if wait_live "$pid" 15; then reap "$pid"; else wait "$pid" || fail "resolved-hold busy watcher failed"; fi
+  [ ! -e "$state/.captain-held-surfaced-$key" ] \
+    || fail "a busy pane retained the resolved hold's window marker"
+  [ ! -e "$state/.subsuper-captain-held-surfaced-held" ] \
+    || fail "a busy pane retained the resolved hold's task marker"
+  pass "a busy pane cannot strand either one-shot after its hold resolves"
 }
 
 # The captain-held quiet-state fold is STREAM-TRUTH (fm-classify-lib.sh owns the
@@ -2135,6 +2160,7 @@ test_pause_due_fold_dedupes_shared_window
 test_declared_wait_policies_paused_bounded_captain_held_silent
 test_captain_held_dead_agent_away_marker_absorbs_in_normal_mode
 test_reopened_hold_surfaces_despite_the_previous_one_shot
+test_resolved_hold_busy_pane_clears_both_one_shots
 test_status_open_captain_holds_fold_is_stream_truth
 test_closing_resolved_line_does_not_mask_a_declared_pause
 test_postcolon_keyed_lines_stay_under_default_key

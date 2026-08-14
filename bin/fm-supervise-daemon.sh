@@ -548,22 +548,11 @@ pause_marker_remove() {  # <window> <state>
   rm -f "$state/.subsuper-paused-$key"
 }
 
-# Drop the dead-agent one-shot for this hold state in BOTH marker namespaces
-# (fm-classify-lib.sh's captain_held_surfaced_markers owns the pair). Sweeping
-# only this daemon's task-keyed marker would leave the watcher's window-keyed
-# one behind, and since both modes READ both, that survivor suppresses the next
-# surface forever: hold ids are deterministic, so a key resolved and re-opened
-# folds to the same digest. This is the single removal site in the daemon; the
-# task is resolved from the window only when a caller does not already have it.
-# The argument order matches the watcher's identically-named wrapper exactly, so
-# the two stay interchangeable for a test shell that sources both.
-clear_captain_held_surfaced() {  # <state-dir> <window> [task]
-  local state=$1 win=$2 task=${3:-} m
-  [ -n "$task" ] || task=$(window_to_task "$win" "$state")
-  while IFS= read -r m; do
-    [ -n "$m" ] || continue
-    rm -f "$m"
-  done < <(captain_held_surfaced_markers "$state" "$win" "$task")
+reconcile_captain_held_surfaced() {  # <state-dir> <window> <task> <fold-state>
+  local state=$1 win=$2 task=$3 fold=$4 surf surf_away
+  { IFS= read -r surf; IFS= read -r surf_away; } \
+    < <(captain_held_surfaced_markers "$state" "$win" "$task")
+  reconcile_captain_held_surfaced_markers "$fold" "$surf" "$surf_away"
 }
 
 clear_pause_tracking() {  # <window> <state>
@@ -617,9 +606,7 @@ reconcile_pause_tracking() {  # <window> <state> <last-status-line>
   # the fold no longer has an open hold - a marker left in either one is read by
   # both modes, so an asymmetric sweep just moves the suppression instead of
   # ending it.
-  if [ -z "$digest" ]; then
-    clear_captain_held_surfaced "$state" "$win" "$task"
-  fi
+  reconcile_captain_held_surfaced "$state" "$win" "$task" "$digest"
 }
 
 migrate_watcher_pause_markers() {  # <state>
@@ -1288,9 +1275,8 @@ housekeeping() {  # <state>
       rm -f "$surf"; continue
     fi
     task=$(window_to_task "$win" "$state")
-    if ! status_has_open_captain_hold "$state/$task.status"; then
-      clear_captain_held_surfaced "$state" "$win" "$task"
-    fi
+    reconcile_captain_held_surfaced "$state" "$win" "$task" \
+      "$(status_open_captain_holds "$state/$task.status")"
   done
 
   # (2b) pause re-surface recheck. A DECLARED external-wait pause idles by design,

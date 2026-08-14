@@ -509,13 +509,17 @@ status_has_open_captain_hold() {  # <status-file>
 # so both must also be SWEPT together the moment a hold closes: hold ids are
 # deterministic, so a key that is resolved and later re-opened folds to the SAME
 # digest, and a survivor in either namespace would suppress the new hold's
-# surface for good. This function is the ONE owner of that namespace pair; it is
-# a pure read that prints the two paths, one per line, and the caller removes
-# them (each consumer has a single clear_captain_held_surfaced wrapper).
+# surface for good. This function is the ONE owner of that namespace pair and
+# prints the two paths, one per line.
 captain_held_surfaced_markers() {  # <state-dir> <window> <task>
   local state=$1 win=$2 task=$3
   printf '%s/.captain-held-surfaced-%s\n' "$state" "$(printf '%s' "$win" | tr ':/.' '___')"
   printf '%s/.subsuper-captain-held-surfaced-%s\n' "$state" "$(printf '%s' "$task" | tr ':/.' '___')"
+}
+
+reconcile_captain_held_surfaced_markers() {  # <fold-state> <window-marker> <task-marker>
+  local fold=$1 window_marker=$2 task_marker=$3
+  [ -n "$fold" ] || rm -f "$window_marker" "$task_marker"
 }
 
 # The last non-blank status line that is NOT a closing resolve-verb line. The
