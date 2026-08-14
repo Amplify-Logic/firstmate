@@ -46,6 +46,11 @@
 # writes its next status line. Consumers that decide quiet-state call
 # status_has_open_captain_hold / status_declared_wait with the status file;
 # single-line contexts keep status_is_captain_held.
+# A captain-held one-shot marker lives exactly as long as its hold fold is open.
+# Every cleanup path must preserve both marker namespaces while the fold is open
+# and clear both through captain_held_surfaced_markers when it closes: clearing
+# early permits a second contractually one-shot alert, while clearing late can
+# suppress a later hold that reuses the same key.
 #
 # The silence of a healthy captain-held pane cannot rot the decision invisibly:
 # the transfer is durably recorded in the backlog (fm-decision-hold.sh) and the

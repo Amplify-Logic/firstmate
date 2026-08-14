@@ -1207,8 +1207,11 @@ test_reopened_hold_surfaces_despite_the_previous_one_shot() {
   for phase in 1 2 3; do
     case "$phase" in
       1) printf '%s\n' "$held" > "$statusf" ;;
-      2) printf 'resolved [key=route]: retired by fm-decision-hold (held-decision-route)\n' >> "$statusf" ;;
-      3) printf '%s\n' "$held" >> "$statusf" ;;
+      2) printf 'resolved [key=route]: retired by fm-decision-hold (held-decision-route)\n' >> "$statusf"
+         : > "$state/.paused-$key"
+         printf 'window=%s\nkind=secondmate\nharness=grok\nbackend=tmux\n' "$window" > "$state/held.meta" ;;
+      3) printf '%s\n' "$held" >> "$statusf"
+         printf 'window=%s\nkind=ship\nharness=grok\nbackend=tmux\n' "$window" > "$state/held.meta" ;;
     esac
     back=$(( $(date +%s) - 500 ))
     if [ "$(uname)" = Darwin ]; then touch -mt "$(date -r "$back" '+%Y%m%d%H%M.%S')" "$statusf"

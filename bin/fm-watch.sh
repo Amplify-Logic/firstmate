@@ -557,6 +557,12 @@ clear_captain_held_surfaced() {  # <state-dir> <window> [task]
   done < <(captain_held_surfaced_markers "$state" "$win" "$task")
 }
 
+reconcile_captain_held_surfaced() {  # <window> <task>
+  local win=$1 task=$2
+  status_has_open_captain_hold "$STATE/$task.status" \
+    || clear_captain_held_surfaced "$STATE" "$win" "$task"
+}
+
 clear_pause_state() {  # <window> [task]
   local win=$1 key
   key=${win//:/_}
@@ -586,7 +592,7 @@ pause_state_class() {  # <window> <task>
   recheck_file="$STATE/.paused-rechecked-$key"
   if ! status_declared_wait "$STATE/$task.status"; then
     rm -f "$recheck_file"
-    clear_captain_held_surfaced "$STATE" "$win" "$task"
+    reconcile_captain_held_surfaced "$win" "$task"
     class=$(crew_absorb_class "$task")
     if [ "$class" = paused ] && status_is_captain_held "$last"; then
       # A paused verdict behind a captain-held last line that is NOT a declared
@@ -1163,6 +1169,7 @@ EOF
     last=$(last_status_line "$STATE/$task.status")
     if [ -e "$STATE/.paused-$key" ] && ! status_declared_wait "$STATE/$task.status"; then
       clear_pause_tracking "$w" "$task"
+      reconcile_captain_held_surfaced "$w" "$task"
     fi
     if [ "$kind" = secondmate ] && ! status_declared_wait "$STATE/$task.status"; then
       continue
@@ -1287,7 +1294,7 @@ EOF
               # The hold's quiet-state ended (resolved or superseded): drop the
               # dead-agent one-shot marker so a later re-opened identical hold
               # still surfaces (deterministic hold ids make digests repeatable).
-              clear_captain_held_surfaced "$STATE" "$w" "$task"
+              reconcile_captain_held_surfaced "$w" "$task"
               wedge_timer_check "$w" "$ssf" "non-terminal stale" "$ewf"
             fi
           fi
