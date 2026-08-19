@@ -89,7 +89,8 @@ The only other write path is an authenticated photo drop.
 `POST /upload` requires the same session cookie plus Host and Origin checks as login.
 The body may be `multipart/form-data` with a `photo` file field, or a raw image body whose `Content-Type` is one of `image/jpeg`, `image/png`, `image/webp`, `image/heic`, or `image/heif`.
 The server accepts those declared types only after magic-byte sniffing (JPEG, PNG, WebP, HEIC/HEIF); a matching header is not enough.
-The request is capped at 15 MB and returns 413 when larger, 415 when the type or magic bytes are not an allowed image, and 429 after 30 uploads in one hour on the same session.
+The request is capped at 15 MB and returns 413 when larger or 415 when the type or magic bytes are not an allowed image.
+The per-session rolling-hour limit counts authenticated, non-empty attempts within that cap, including attempts later rejected as unsupported, and returns 429 after 30 such attempts.
 
 Files land under `data/bridge-inbox/` (created mode 0700) with a unique timestamped name such as `20260819T113530Z-<hex>.jpg` and a sibling `.json` sidecar recording `received_at`, `original_name`, `size`, and `content_type`.
 Names never overwrite; the directory is quarantined storage only.
