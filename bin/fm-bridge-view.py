@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import base64
+import fcntl
 import hashlib
 import hmac
 import html
@@ -29,6 +30,7 @@ import sys
 import threading
 import time
 import unicodedata
+from contextlib import contextmanager
 from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -180,7 +182,19 @@ def generate_passcode() -> str:
 class SessionStore:
     def __init__(self, path: Path) -> None:
         self.path = path
+        self.lock_path = path.with_suffix(path.suffix + ".lock")
         self.lock = threading.Lock()
+
+    @contextmanager
+    def _locked(self):
+        with self.lock:
+            fd = os.open(str(self.lock_path), os.O_RDWR | os.O_CREAT, 0o600)
+            try:
+                fcntl.flock(fd, fcntl.LOCK_EX)
+                yield
+            finally:
+                fcntl.flock(fd, fcntl.LOCK_UN)
+                os.close(fd)
 
     def _load(self) -> Dict[str, Any]:
         if not self.path.is_file():
@@ -195,12 +209,21 @@ class SessionStore:
         return {"sessions": sessions}
 
     def _save(self, data: Dict[str, Any]) -> None:
-        write_private(self.path, json.dumps(data, indent=2, sort_keys=True).encode("utf-8"))
+        payload = json.dumps(data, indent=2, sort_keys=True).encode("utf-8")
+        temporary = self.path.with_name(f".{self.path.name}.{os.getpid()}.{secrets.token_hex(8)}")
+        try:
+            write_private(temporary, payload)
+            os.replace(temporary, self.path)
+        finally:
+            try:
+                temporary.unlink()
+            except FileNotFoundError:
+                pass
 
     def create(self) -> str:
         token = secrets.token_urlsafe(32)
         now = int(time.time())
-        with self.lock:
+        with self._locked():
             data = self._load()
             data["sessions"][token] = {
                 "created": now,
@@ -213,7 +236,7 @@ class SessionStore:
         if not token:
             return False
         now = int(time.time())
-        with self.lock:
+        with self._locked():
             data = self._load()
             row = data["sessions"].get(token)
             if not isinstance(row, dict):
@@ -226,14 +249,14 @@ class SessionStore:
             return True
 
     def revoke(self, token: str) -> None:
-        with self.lock:
+        with self._locked():
             data = self._load()
             if token in data["sessions"]:
                 data["sessions"].pop(token, None)
                 self._save(data)
 
     def revoke_all(self) -> None:
-        with self.lock:
+        with self._locked():
             self._save({"sessions": {}})
 
 
@@ -438,10 +461,10 @@ def funnel_is_on() -> Tuple[bool, str]:
         return False, text.strip() or "No serve config"
     if rc == 0 and "tailnet only" in lowered:
         return False, text.strip()
-    if rc == 0 and "https://" in lowered and "funnel" in lowered:
+    if rc == 0 and re.search(r"\bfunnel\s+(?:is\s+)?(?:enabled|on|active)\b|\(funnel\)", lowered):
         return True, text.strip()
     if rc == 0 and "https://" in lowered:
-        return True, text.strip()
+        return False, text.strip()
     detail = text.strip() or json_text.strip() or "status unavailable"
     return True, f"could not verify Funnel is off: {detail}"
 
@@ -513,7 +536,7 @@ def run_snapshot(home: Path, root: Path) -> Dict[str, Any]:
         "FM_ROOT_OVERRIDE": str(root),
     }
     proc = subprocess.Popen(
-        [str(script), "--json", "--passive-view"],
+        [str(script), "--json", "--passive-view", "--all-in-flight"],
         cwd=str(scratch),
         env=env,
         stdout=subprocess.PIPE,

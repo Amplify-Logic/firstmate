@@ -28,7 +28,7 @@ fm_bridge_cleanup() {
 }
 trap fm_bridge_cleanup EXIT
 
-make_fakebin() {  # <dir> [off|on|serve]
+make_fakebin() {  # <dir> [off|on|serve|legacy-serve]
   local fb funnel=${2:-off}
   fb=$(fm_fakebin "$1")
   cat > "$fb/tailscale" <<SH
@@ -42,6 +42,10 @@ if [ "\$*" = "funnel status --json" ]; then
     printf '%s\\n' '{"TCP":{"443":{"HTTPS":true}},"Web":{"bridge.test.example:443":{"Handlers":{"/":{"Proxy":"http://127.0.0.1:8766"}}}}}'
     exit 0
   fi
+  if [ "$funnel" = legacy-serve ]; then
+    printf 'unknown flag: --json\n' >&2
+    exit 1
+  fi
   printf '{}\\n'
   exit 0
 fi
@@ -52,6 +56,10 @@ if [ "\$*" = "funnel status" ]; then
   fi
   if [ "$funnel" = serve ]; then
     printf 'https://bridge.test.example (tailnet only)\\n|-- / proxy http://127.0.0.1:8766\\n'
+    exit 0
+  fi
+  if [ "$funnel" = legacy-serve ]; then
+    printf 'https://bridge.test.example\n|-- / proxy http://127.0.0.1:8766\n'
     exit 0
   fi
   printf 'No serve config\\n'
@@ -193,6 +201,15 @@ test_funnel_off_serve_starts() {
   expect_code 0 "$rc" "Funnel-off Serve should answer on loopback"
   assert_contains "$(head -n 1 "$hdr")" "200" "Funnel-off Serve must serve the login page"
   pass "serve starts when Funnel is off and Serve HTTPS is claimed"
+}
+
+test_funnel_off_legacy_serve_output_starts() {
+  local home fakebin
+  home=$(make_home funnel-off-legacy-serve)
+  fakebin=$(make_fakebin "$home" legacy-serve)
+  PATH="$fakebin:$PATH" FM_HOME="$home" FM_ROOT_OVERRIDE="$ROOT" FM_BRIDGE_VIEW_TEST=1 \
+    "$BRIDGE" check-funnel >/dev/null || fail "legacy Serve HTTPS output must not be classified as Funnel"
+  pass "Serve HTTPS without an explicit Funnel marker remains Funnel off"
 }
 
 test_unverifiable_funnel_refuses_to_serve() {
@@ -395,6 +412,71 @@ PY
   pass "snapshot output is bounded during capture"
 }
 
+test_snapshot_requests_all_in_flight_rows() {
+  local home fixture output
+  home=$(make_home snapshot-all-in-flight)
+  fixture=$home/root
+  mkdir -p "$fixture/bin"
+  cat > "$fixture/bin/fm-bearings-snapshot.sh" <<'SH'
+#!/usr/bin/env bash
+case " $* " in
+  *' --all-in-flight '*) printf '%s\n' '{"schema":"fm-bearings.v1"}' ;;
+  *) exit 9 ;;
+esac
+SH
+  chmod +x "$fixture/bin/fm-bearings-snapshot.sh"
+  output=$(python3 - "$ROOT/bin/fm-bridge-view.py" "$home" "$fixture" <<'PY'
+import importlib.util, pathlib, sys
+spec = importlib.util.spec_from_file_location("fm_bridge_view", sys.argv[1])
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+module.run_snapshot(pathlib.Path(sys.argv[2]), pathlib.Path(sys.argv[3]))
+PY
+  ) || fail "bridge snapshot did not request every in-flight row: $output"
+  pass "snapshot requests all in-flight rows before bucket classification"
+}
+
+test_session_revoke_serializes_with_login_create() {
+  local output
+  output=$(python3 - "$ROOT/bin/fm-bridge-view.py" "$TMP_ROOT/session-race" <<'PY'
+import importlib.util, multiprocessing, pathlib, sys, time
+spec = importlib.util.spec_from_file_location("fm_bridge_view", sys.argv[1])
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+path = pathlib.Path(sys.argv[2]) / "sessions.json"
+path.parent.mkdir(parents=True)
+context = multiprocessing.get_context("fork")
+started = context.Event()
+release = context.Event()
+
+class PausingStore(module.SessionStore):
+    def _load(self):
+        data = super()._load()
+        started.set()
+        release.wait(5)
+        return data
+
+creator = context.Process(target=lambda: PausingStore(path).create())
+revoker = context.Process(target=lambda: module.SessionStore(path).revoke_all())
+creator.start()
+if not started.wait(5):
+    raise SystemExit("creator did not reach the serialized update")
+revoker.start()
+time.sleep(0.2)
+if not revoker.is_alive():
+    raise SystemExit("revoke did not wait for the in-flight session update")
+release.set()
+creator.join(5)
+revoker.join(5)
+if creator.exitcode or revoker.exitcode:
+    raise SystemExit(f"child failure: create={creator.exitcode} revoke={revoker.exitcode}")
+if module.SessionStore(path)._load()["sessions"]:
+    raise SystemExit("revoke left a concurrently created session valid")
+PY
+  ) || fail "session revoke/create serialization failed: $output"
+  pass "session revoke serializes across processes with login creation"
+}
+
 test_away_mode_passive_refresh_works() {
   local home fakebin port pass hdr body cookie rc=0
   home=$(make_home away)
@@ -472,11 +554,14 @@ test_render_plist_keep_alive_pattern() {
 test_bind_is_loopback_constant
 test_funnel_on_refuses_to_serve
 test_funnel_off_serve_starts
+test_funnel_off_legacy_serve_output_starts
 test_unverifiable_funnel_refuses_to_serve
 test_lan_and_unauthorized_hosts_are_rejected
 test_auth_cookie_headers_and_isolation
 test_snapshot_subprocess_does_not_write_fleet_state
 test_snapshot_output_is_bounded_during_capture
+test_snapshot_requests_all_in_flight_rows
+test_session_revoke_serializes_with_login_create
 test_away_mode_passive_refresh_works
 test_mailbox_listener_never_consumes_announcements
 test_render_plist_keep_alive_pattern
