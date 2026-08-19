@@ -356,6 +356,7 @@ test_render_plist_keep_alive_pattern() {
   assert_contains "$out" "<key>KeepAlive</key>" "plist missing KeepAlive"
   assert_contains "$out" "<key>RunAtLoad</key>" "plist missing RunAtLoad"
   assert_contains "$out" "fm-bridge-view.sh" "plist must launch the tracked wrapper"
+  assert_contains "$out" "/opt/homebrew/bin" "plist PATH must include Homebrew python3"
   pass "launchd plist uses the KeepAlive pattern"
 }
 

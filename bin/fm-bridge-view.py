@@ -953,6 +953,8 @@ def command_render_plist(home: Path, root: Path) -> None:
   <dict>
     <key>FM_HOME</key>
     <string>{home}</string>
+    <key>PATH</key>
+    <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
   </dict>
   <key>WorkingDirectory</key>
   <string>{root}</string>
