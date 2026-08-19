@@ -11,6 +11,7 @@ Tapping a GitHub pull-request link is the only outbound jump, and those URLs are
 
 The page is served from the Mac on IPv4 loopback and published on the tailnet with **Tailscale Serve HTTPS**.
 It never uses Tailscale Funnel and never binds `0.0.0.0`.
+The server requires Python 3.12 and uses only the standard library.
 
 Bookmark: `https://larss-macbook-pro-2.taile26864.ts.net/` after Serve is pointed at the loopback port.
 
@@ -36,7 +37,7 @@ That writes the hash and a one-shot plaintext envelope at `data/bridge-view-pass
 Delete the envelope after it has been delivered.
 Never put the passcode in a URL.
 
-Lost phone: run `bin/fm-bridge-view.sh revoke-sessions`, and if needed remove the phone from the tailnet.
+Lost phone: run `FM_HOME=/path/to/home bin/fm-bridge-view.sh revoke-sessions`, and if needed remove the phone from the tailnet.
 
 A VoiceLoop compromise can still read fleet files because both processes run as the same Mac user.
 Separate passcodes only limit token leakage, not a full process break.
@@ -67,12 +68,15 @@ launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.firstmate.bridge-vie
 The page calls `bin/fm-bearings-snapshot.sh --json --passive-view`.
 That named Bearings mode is allowed while away mode is on; ordinary `/bearings` chat still refuses until return catch-up finishes.
 The server caches one observation for about 30 seconds, runs one refresh at a time, and caps subprocess time and output size.
-It never takes the session lock, never drains notifications, and never writes backlog or state.
+It never takes the session lock, never drains wakes, and never writes backlog or state.
+
+The client refreshes every 30 seconds and also refreshes on `pageshow` and when a hidden tab becomes visible.
+The four buckets show at most 5 Needs you, 8 Under way, 6 Just finished, and 5 Waiting in the wings rows, with an honest `N more` count for omitted rows.
 
 The mailbox indicator is a local listen or launchd check.
 It must never call `GET /v1/announcements`, because that call marks announcements delivered.
 
-If refreshes stop, the already-open tab overlays "Cannot reach the desk" from the client clock.
+If refreshes stop for 90 seconds, the already-open tab overlays "Cannot reach the desk" from the client clock.
 Last-good on the server cannot save a tab that never hears back.
 
 ## Writes
