@@ -229,7 +229,7 @@ test_lan_and_unauthorized_hosts_are_rejected() {
 }
 
 test_auth_cookie_headers_and_isolation() {
-  local home fakebin port pass hdr body cookie token sessions jar sink_pid
+  local home fakebin port pass hdr body cookie token sessions jar sink_pid sink_port n
   home=$(make_home auth)
   fakebin=$(make_fakebin "$home")
   pass=$(init_passcode "$home")
@@ -281,7 +281,8 @@ import pathlib, socket, sys
 out = pathlib.Path(sys.argv[1])
 sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-sock.bind(("127.0.0.1", 8765))
+sock.bind(("127.0.0.1", 0))
+(out.parent / "port-8765.port").write_text(str(sock.getsockname()[1]))
 sock.listen(1)
 conn, _ = sock.accept()
 conn.settimeout(2)
@@ -293,8 +294,14 @@ sock.close()
 PY
   sink_pid=$!
   BRIDGE_PIDS+=("$sink_pid")
-  sleep 0.1
-  curl -sS --max-time 8 --resolve "$HOST_NAME:8765:127.0.0.1" \
+  n=0
+  while [ "$n" -lt 30 ] && [ ! -f "$home/port-8765.port" ]; do
+    sleep 0.1
+    n=$((n + 1))
+  done
+  sink_port=$(cat "$home/port-8765.port")
+  curl -sS --max-time 8 --noproxy "$HOST_NAME" \
+    --connect-to "$HOST_NAME:8765:127.0.0.1:$sink_port" \
     --cookie "$jar" -o /dev/null "http://$HOST_NAME:8765/"
   wait "$sink_pid"
   assert_not_contains "$(cat "$home/port-8765.headers")" "Cookie:" \
@@ -357,12 +364,14 @@ SH
 }
 
 test_snapshot_output_is_bounded_during_capture() {
-  local home fixture output rc=0
+  local home fixture output child_pid rc=0
   home=$(make_home snapshot-cap)
   fixture=$home/root
   mkdir -p "$fixture/bin"
   cat > "$fixture/bin/fm-bearings-snapshot.sh" <<'SH'
 #!/usr/bin/env bash
+(sleep 300) &
+printf '%s\n' "$!" > "$FM_HOME/oversized-child.pid"
 head -c 2000000 /dev/zero
 SH
   chmod +x "$fixture/bin/fm-bearings-snapshot.sh"
@@ -381,6 +390,8 @@ raise SystemExit("snapshot unexpectedly completed")
 PY
   ) || rc=$?
   expect_code 0 "$rc" "oversized snapshot must be stopped during capture: $output"
+  child_pid=$(cat "$home/oversized-child.pid")
+  kill -0 "$child_pid" 2>/dev/null && fail "oversized snapshot left descendant $child_pid running"
   pass "snapshot output is bounded during capture"
 }
 

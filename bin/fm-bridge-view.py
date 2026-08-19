@@ -22,6 +22,7 @@ import os
 import re
 import secrets
 import selectors
+import signal
 import socket
 import subprocess
 import sys
@@ -445,9 +446,17 @@ def funnel_is_on() -> Tuple[bool, str]:
     return True, f"could not verify Funnel is off: {detail}"
 
 
+def _kill_process_group(proc: subprocess.Popen[bytes]) -> None:
+    try:
+        os.killpg(proc.pid, signal.SIGKILL)
+    except ProcessLookupError:
+        pass
+
+
 def _bounded_process_output(proc: subprocess.Popen[bytes]) -> Tuple[bytes, bytes]:
     selector = selectors.DefaultSelector()
     streams = {proc.stdout: bytearray(), proc.stderr: bytearray()}
+    terminated = False
     for stream in streams:
         if stream is not None:
             selector.register(stream, selectors.EVENT_READ)
@@ -456,11 +465,13 @@ def _bounded_process_output(proc: subprocess.Popen[bytes]) -> Tuple[bytes, bytes
         while selector.get_map():
             remaining = deadline - time.monotonic()
             if remaining <= 0:
-                proc.kill()
+                _kill_process_group(proc)
+                terminated = True
                 raise RuntimeError("bearings snapshot timed out")
             events = selector.select(remaining)
             if not events:
-                proc.kill()
+                _kill_process_group(proc)
+                terminated = True
                 raise RuntimeError("bearings snapshot timed out")
             for key, _ in events:
                 chunk = os.read(key.fileobj.fileno(), 65536)
@@ -469,17 +480,19 @@ def _bounded_process_output(proc: subprocess.Popen[bytes]) -> Tuple[bytes, bytes
                     continue
                 streams[key.fileobj].extend(chunk)
                 if sum(len(output) for output in streams.values()) > SNAPSHOT_MAX_BYTES:
-                    proc.kill()
+                    _kill_process_group(proc)
+                    terminated = True
                     raise RuntimeError("bearings snapshot exceeded size cap")
         try:
             proc.wait(timeout=max(0.1, deadline - time.monotonic()))
         except subprocess.TimeoutExpired as exc:
-            proc.kill()
+            _kill_process_group(proc)
+            terminated = True
             raise RuntimeError("bearings snapshot timed out") from exc
     finally:
         selector.close()
-        if proc.poll() is None:
-            proc.kill()
+        if not terminated:
+            _kill_process_group(proc)
         proc.wait()
     return bytes(streams.get(proc.stdout, b"")), bytes(streams.get(proc.stderr, b""))
 
@@ -505,6 +518,7 @@ def run_snapshot(home: Path, root: Path) -> Dict[str, Any]:
         env=env,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
+        start_new_session=True,
     )
     stdout, stderr = _bounded_process_output(proc)
     if proc.returncode != 0:
