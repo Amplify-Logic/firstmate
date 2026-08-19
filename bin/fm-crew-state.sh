@@ -143,9 +143,8 @@ LOG_VERB=$(status_line_verb "$LOG_LINE")
 # stays authoritative regardless of pane liveness - judge by the run-step, not the
 # shell - so a finished crew whose endpoint has closed still reports its run-step
 # state (e.g. done) instead of being masked as unknown. Use the shared
-# read-only existence check (fm_backend_target_exists): it never starts a
-# session-provider server. Capture would call herdr's server_ensure and, when
-# herdr was missing from PATH, poll for 10s per task.
+# read-only existence check (fm_backend_target_exists): observation must not
+# start a session-provider server as a side effect.
 TASK_BACKEND=$(fm_backend_of_meta "$META")
 BACKEND_TARGET=$(fm_backend_target_of_meta "$META")
 EXPECTED_LABEL="fm-$ID"
