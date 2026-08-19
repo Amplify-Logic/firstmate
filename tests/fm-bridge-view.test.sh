@@ -455,6 +455,18 @@ sock = socket.create_connection(("127.0.0.1", port), timeout=8)
 try:
     sock.sendall(
         (
+            "GET / HTTP/1.1\r\n"
+            "Host: %s\r\n"
+            "Connection: keep-alive\r\n"
+            "\r\n" % host
+        ).encode("ascii")
+    )
+    header, _ = recv_http(sock)
+    status = header.split(b"\r\n", 1)[0]
+    if b" 200 " not in status:
+        raise SystemExit("expected initial 200, got %r" % (status,))
+    sock.sendall(
+        (
             "POST /login HTTP/1.1\r\n"
             "Host: %s\r\n"
             "Content-Type: application/x-www-form-urlencoded\r\n"
@@ -482,6 +494,28 @@ try:
         raise SystemExit("keep-alive follow-up parsed as garbage: %r" % (status,))
     if b" 200 " not in status:
         raise SystemExit("expected 200 on drained follow-up GET, got %r" % (status,))
+finally:
+    sock.close()
+
+sock = socket.create_connection(("127.0.0.1", port), timeout=4)
+try:
+    sock.sendall(
+        (
+            "POST /login HTTP/1.1\r\n"
+            "Host: %s\r\n"
+            "Content-Type: application/x-www-form-urlencoded\r\n"
+            "Content-Length: 4096\r\n"
+            "Connection: keep-alive\r\n"
+            "\r\n"
+            "passcode=x" % host
+        ).encode("ascii")
+    )
+    header, _ = recv_http(sock)
+    status = header.split(b"\r\n", 1)[0]
+    if b" 403 " not in status:
+        raise SystemExit("expected 403 on incomplete unproven login, got %r" % (status,))
+    if b"connection: close" not in header.lower():
+        raise SystemExit("incomplete body response did not close the connection")
 finally:
     sock.close()
 PY

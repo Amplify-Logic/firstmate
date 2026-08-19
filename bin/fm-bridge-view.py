@@ -60,6 +60,7 @@ REFRESH_CLIENT_SECONDS = 30
 MAILBOX_PORT = 8765
 MAILBOX_LAUNCHD = "com.firstmate.glasses-voice-mailbox"
 UPLOAD_MAX_BYTES = 15 * 1024 * 1024
+BODY_DRAIN_TIMEOUT_SECONDS = 1.0
 UPLOAD_RATE_LIMIT = 30
 UPLOAD_RATE_WINDOW_SECONDS = 3600
 UPLOAD_FIELD = "photo"
@@ -1181,6 +1182,10 @@ STATE: Optional[BridgeState] = None
 class BridgeHandler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
 
+    def handle_one_request(self) -> None:
+        self._body_drained = False
+        super().handle_one_request()
+
     def log_message(self, fmt: str, *args: Any) -> None:
         log_path = bridge_dir(STATE.home) / "bridge.log" if STATE else None
         line = "%s - %s\n" % (self.log_date_time_string(), fmt % args)
@@ -1237,11 +1242,20 @@ class BridgeHandler(BaseHTTPRequestHandler):
         if length > UPLOAD_MAX_BYTES:
             return [("Connection", "close")]
         remaining = length
-        while remaining:
-            chunk = self.rfile.read(min(remaining, 65536))
-            if not chunk:
-                break
-            remaining -= len(chunk)
+        previous_timeout = self.connection.gettimeout()
+        self.connection.settimeout(BODY_DRAIN_TIMEOUT_SECONDS)
+        try:
+            while remaining:
+                chunk = self.rfile.read(min(remaining, 65536))
+                if not chunk:
+                    self.close_connection = True
+                    return [("Connection", "close")]
+                remaining -= len(chunk)
+        except (TimeoutError, socket.timeout):
+            self.close_connection = True
+            return [("Connection", "close")]
+        finally:
+            self.connection.settimeout(previous_timeout)
         return []
 
     def _with_drained_body(
