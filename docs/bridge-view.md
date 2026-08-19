@@ -25,7 +25,7 @@ The salted scrypt hash lives at `bridge/passcode.hash` inside a mode-0700 `bridg
 Sessions live in `bridge/sessions.json`.
 Logs go to `bridge/bridge.log`, not into `state/`.
 
-`config/bridge-view` may contain `host=<magicdns-name>` for Host and login Origin checks.
+`config/bridge-view` may contain `host=<magicdns-name>` for Host and POST CSRF checks.
 `FM_BRIDGE_VIEW_HOST` overrides that file.
 Login and other POST writes require CSRF proof on top of Host.
 When the browser sends `Origin`, it must match `https://<host>` (or that host on port 443) exactly.
