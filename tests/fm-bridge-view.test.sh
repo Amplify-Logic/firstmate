@@ -1055,10 +1055,67 @@ PY
   cookie=$(bridge_cookie "$home" "$port")
   hdr=$home/page.hdr; body=$home/page.body
   curl_bridge "$port" / "$hdr" "$body" --header "Cookie: $cookie"
-  assert_contains "$(cat "$body")" "markBucketsUnreachable" \
-    "glance client must render an honest unreachable bucket state"
-  assert_contains "$(cat "$body")" "let lastSuccess = 0" \
-    "glance client must not treat page load as a successful observation"
+  node - "$body" <<'JS' || fail "initial observation error did not render unreachable state"
+const fs = require('fs');
+const vm = require('vm');
+
+const page = fs.readFileSync(process.argv[2], 'utf8');
+const match = page.match(/<script nonce="[^"]+">([\s\S]*?)<\/script>/);
+if (!match) throw new Error('page script not found');
+
+const elements = {};
+for (const id of ['needs', 'underway', 'finished', 'waiting']) {
+  elements[id] = {textContent: 'Loading…', innerHTML: ''};
+}
+elements.stale = {
+  classList: {
+    active: false,
+    toggle(name, on) {
+      if (name === 'on') this.active = on;
+    }
+  }
+};
+elements['photo-count'] = {textContent: 'Photos received today: 0'};
+
+const context = vm.createContext({
+  AbortController,
+  console,
+  document: {
+    hidden: false,
+    addEventListener() {},
+    getElementById(id) { return elements[id] || null; }
+  },
+  fetch: async () => ({
+    ok: false,
+    status: 503,
+    json: async () => ({error: 'snapshot failed', photos_today: 2})
+  }),
+  setInterval() {},
+  setTimeout,
+  clearTimeout,
+  window: {addEventListener() {}}
+});
+
+vm.runInContext(match[1], context);
+(async () => {
+  await vm.runInContext('refresh()', context);
+  for (const id of ['needs', 'underway', 'finished', 'waiting']) {
+    if (!elements[id].innerHTML.includes('Cannot reach the desk.')) {
+      throw new Error(`${id} remained ${elements[id].textContent}`);
+    }
+    if (elements[id].innerHTML.includes('Loading')) {
+      throw new Error(`${id} remained loading`);
+    }
+  }
+  if (!elements.stale.classList.active) throw new Error('unreachable overlay is not active');
+  if (elements['photo-count'].textContent !== 'Photos received today: 2') {
+    throw new Error('photo count from error response was not rendered');
+  }
+})().catch((error) => {
+  console.error(error.message);
+  process.exitCode = 1;
+});
+JS
   hdr=$home/obs.hdr; body=$home/obs.body
   started=$(python3 -c 'import time; print(time.monotonic())')
   curl_bridge "$port" /api/observation "$hdr" "$body" --header "Cookie: $cookie"
@@ -1068,7 +1125,7 @@ PY
     || fail "503 must keep today's photo count: $(cat "$body")"
   python3 -c "import sys; sys.exit(0 if float(sys.argv[1]) < 8 else 1)" "$elapsed" \
     || fail "observation 503 hung ${elapsed}s: $(cat "$body")"
-  pass "observation errors fail fast, keep photo count, and ship unreachable client JS"
+  pass "observation errors fail fast and render the unreachable client state"
 }
 
 test_scrubbed_snapshot_with_herdr_meta_fails_fast() {
