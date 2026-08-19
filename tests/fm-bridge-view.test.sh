@@ -741,6 +741,42 @@ PY
   pass "inbox writes never overwrite an existing name"
 }
 
+test_inbox_pair_failure_leaves_no_partial_upload() {
+  local home output
+  home=$(make_home inbox-atomic)
+  mkdir -p "$home/data"
+  output=$(python3 - "$ROOT/bin/fm-bridge-view.py" "$home" <<'PY'
+import errno, importlib.util, pathlib, sys
+spec = importlib.util.spec_from_file_location("fm_bridge_view", sys.argv[1])
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+home = pathlib.Path(sys.argv[2])
+real_link = module.os.link
+calls = 0
+
+def fail_image_publication(source, destination):
+    global calls
+    calls += 1
+    if calls == 2:
+        raise OSError(errno.ENOSPC, "simulated full inbox")
+    return real_link(source, destination)
+
+module.os.link = fail_image_publication
+try:
+    module.write_inbox_pair(home, b"\xff\xd8\xff\xd9", "one.jpg", "image/jpeg", "jpeg")
+except OSError as error:
+    if error.errno != errno.ENOSPC:
+        raise
+else:
+    raise SystemExit("pair publication unexpectedly succeeded")
+inbox = home / "data" / "bridge-inbox"
+if list(inbox.iterdir()):
+    raise SystemExit(f"partial upload or staged remnants remain: {list(inbox.iterdir())}")
+PY
+  ) || fail "failed inbox pair cleanup failed: $output"
+  pass "failed inbox pair publication leaves no partial upload"
+}
+
 test_bind_is_loopback_constant
 test_funnel_on_refuses_to_serve
 test_funnel_off_serve_starts
@@ -758,3 +794,4 @@ test_render_plist_keep_alive_pattern
 test_unauthenticated_upload_rejected
 test_upload_rejects_oversize_non_image_and_rates
 test_inbox_unique_names_never_overwrite
+test_inbox_pair_failure_leaves_no_partial_upload

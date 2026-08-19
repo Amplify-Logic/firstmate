@@ -344,33 +344,50 @@ def write_inbox_pair(home: Path, payload: bytes, original_name: str, content_typ
         side = inbox / f"{stem}.json"
         if dest.exists() or side.exists() or dest.is_symlink() or side.is_symlink():
             continue
-        tmp = inbox / f".{stem}.{os.getpid()}.{secrets.token_hex(4)}.part"
-        tmp_json = inbox / f".{stem}.{os.getpid()}.{secrets.token_hex(4)}.json.part"
-        claimed = False
+        stage = inbox / f".{stem}.{os.getpid()}.{secrets.token_hex(4)}.stage"
+        tmp = stage / f"photo.{ext}"
+        tmp_json = stage / "sidecar.json"
+        staged = False
+        published_side = False
+        published_dest = False
         try:
+            stage.mkdir(mode=0o700)
+            staged = True
             write_private(tmp, payload)
             write_private(tmp_json, sidecar_bytes)
-            os.link(tmp, dest)
-            claimed = True
             os.link(tmp_json, side)
+            published_side = True
+            os.link(tmp, dest)
+            published_dest = True
         except FileExistsError:
-            if claimed:
+            continue
+        except OSError:
+            raise
+        finally:
+            if not published_dest and published_side:
+                try:
+                    side.unlink()
+                except FileNotFoundError:
+                    pass
+            if published_dest and not published_side:
                 try:
                     dest.unlink()
                 except FileNotFoundError:
                     pass
-            continue
-        finally:
-            try:
-                tmp.unlink()
-            except FileNotFoundError:
-                pass
-            try:
-                tmp_json.unlink()
-            except FileNotFoundError:
-                pass
-        if dest.is_file() and side.is_file():
-            return stem
+            if staged:
+                try:
+                    tmp.unlink()
+                except FileNotFoundError:
+                    pass
+                try:
+                    tmp_json.unlink()
+                except FileNotFoundError:
+                    pass
+                try:
+                    stage.rmdir()
+                except FileNotFoundError:
+                    pass
+        return stem
     raise RuntimeError("could not allocate a unique inbox name")
 
 
