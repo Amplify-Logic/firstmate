@@ -75,17 +75,20 @@ launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.firstmate.bridge-vie
 The page calls `bin/fm-bearings-snapshot.sh --json --passive-view`.
 That named Bearings mode is allowed while away mode is on; ordinary `/bearings` chat still refuses until return catch-up finishes.
 The server caches one observation for about 30 seconds, runs one refresh at a time, and caps subprocess time and output size.
+The snapshot child keeps a scrubbed environment (no parent secrets) but resolves tool directories at server start from HOME and the parent PATH, including `~/.local/bin` and the current nvm node bin, so CLIs such as herdr and tasks-axi are found without a version-specific hardcoded path.
+A missing session-provider CLI must fail immediately rather than polling; the snapshot either returns glance data or a 503 with a clear error within seconds.
 It never takes the session lock, never drains wakes, and never writes backlog or state.
 Photo drops are the exception write path documented below; observation GETs still only read.
+A 503 still includes today's photo count from inbox sidecars so the counter does not depend on glance data loading.
 
 The client refreshes every 30 seconds and also refreshes on `pageshow` and when a hidden tab becomes visible.
 The four buckets show at most 5 Needs you, 8 Under way, 6 Just finished, and 5 Waiting in the wings rows, with an honest `N more` count for omitted rows.
+If the first observation request fails, the buckets replace "Loading…" with "Cannot reach the desk" immediately and the full-page overlay appears.
+If refreshes stop for 90 seconds after a successful load, the already-open tab overlays "Cannot reach the desk" from the client clock.
+Last-good on the server cannot save a tab that never hears back.
 
 The mailbox indicator is a local listen or launchd check.
 It must never call `GET /v1/announcements`, because that call marks announcements delivered.
-
-If refreshes stop for 90 seconds, the already-open tab overlays "Cannot reach the desk" from the client clock.
-Last-good on the server cannot save a tab that never hears back.
 
 ## Writes
 

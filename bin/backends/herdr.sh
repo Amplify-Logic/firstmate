@@ -143,6 +143,7 @@ fm_backend_herdr_workspace_label() {
 fm_backend_herdr_cli() {  # <session> <herdr-subcommand-and-args...>
   local session=$1
   shift
+  command -v herdr >/dev/null 2>&1 || return 1
   HERDR_SESSION="$session" herdr "$@" --session "$session"
 }
 
@@ -212,6 +213,10 @@ fm_backend_herdr_session() {
 # call. Bounded poll for the server to report running.
 fm_backend_herdr_server_ensure() {  # <session>
   local session=$1 running out i
+  # Missing herdr must fail immediately. Backgrounding `herdr server` when the
+  # binary is not on PATH succeeds as a job launch, then this poll slept 10s
+  # per call (2026-08-19 bridge observation hang).
+  fm_backend_herdr_tool_check || return 1
   running=$(fm_backend_herdr_cli "$session" status --json 2>/dev/null | jq -r '.server.running // false' 2>/dev/null)
   [ "$running" = "true" ] && return 0
   ( fm_backend_herdr_cli "$session" server >/dev/null 2>&1 & ) || return 1
