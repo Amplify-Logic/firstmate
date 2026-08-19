@@ -21,6 +21,7 @@ import json
 import os
 import re
 import secrets
+import selectors
 import socket
 import subprocess
 import sys
@@ -426,30 +427,61 @@ def _allow_funnel_from_json(text: str) -> Optional[bool]:
 
 def funnel_is_on() -> Tuple[bool, str]:
     json_rc, json_text = _tailscale_output(["funnel", "status", "--json"])
-    if json_rc == 124:
-        return True, "tailscale funnel status timed out"
-    json_allow = _allow_funnel_from_json(json_text)
-    if json_allow is True:
-        return True, json_text.strip()
+    if json_rc == 0:
+        json_allow = _allow_funnel_from_json(json_text)
+        if json_allow is not None:
+            return json_allow, json_text.strip() or "No serve config"
     rc, text = _tailscale_output(["funnel", "status"])
-    if rc == 124:
-        return True, "tailscale funnel status timed out"
-    if rc == 127 and "not found" in text:
-        return False, "tailscale not found"
     lowered = text.lower()
-    if "no serve config" in lowered or "funnel is not enabled" in lowered:
+    if rc == 0 and ("no serve config" in lowered or "funnel is not enabled" in lowered):
         return False, text.strip() or "No serve config"
-    if "tailnet only" in lowered:
+    if rc == 0 and "tailnet only" in lowered:
         return False, text.strip()
-    if "https://" in lowered and "funnel" in lowered:
+    if rc == 0 and "https://" in lowered and "funnel" in lowered:
         return True, text.strip()
-    if rc != 0 and "command not found" in lowered:
-        return False, text.strip()
-    if json_allow is False:
-        return False, json_text.strip() or text.strip() or "No serve config"
-    if "https://" in text:
+    if rc == 0 and "https://" in lowered:
         return True, text.strip()
-    return False, text.strip() or "No serve config"
+    detail = text.strip() or json_text.strip() or "status unavailable"
+    return True, f"could not verify Funnel is off: {detail}"
+
+
+def _bounded_process_output(proc: subprocess.Popen[bytes]) -> Tuple[bytes, bytes]:
+    selector = selectors.DefaultSelector()
+    streams = {proc.stdout: bytearray(), proc.stderr: bytearray()}
+    for stream in streams:
+        if stream is not None:
+            selector.register(stream, selectors.EVENT_READ)
+    deadline = time.monotonic() + SNAPSHOT_TIMEOUT_SECONDS
+    try:
+        while selector.get_map():
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                proc.kill()
+                raise RuntimeError("bearings snapshot timed out")
+            events = selector.select(remaining)
+            if not events:
+                proc.kill()
+                raise RuntimeError("bearings snapshot timed out")
+            for key, _ in events:
+                chunk = os.read(key.fileobj.fileno(), 65536)
+                if not chunk:
+                    selector.unregister(key.fileobj)
+                    continue
+                streams[key.fileobj].extend(chunk)
+                if sum(len(output) for output in streams.values()) > SNAPSHOT_MAX_BYTES:
+                    proc.kill()
+                    raise RuntimeError("bearings snapshot exceeded size cap")
+        try:
+            proc.wait(timeout=max(0.1, deadline - time.monotonic()))
+        except subprocess.TimeoutExpired as exc:
+            proc.kill()
+            raise RuntimeError("bearings snapshot timed out") from exc
+    finally:
+        selector.close()
+        if proc.poll() is None:
+            proc.kill()
+        proc.wait()
+    return bytes(streams.get(proc.stdout, b"")), bytes(streams.get(proc.stderr, b""))
 
 
 def run_snapshot(home: Path, root: Path) -> Dict[str, Any]:
@@ -467,21 +499,19 @@ def run_snapshot(home: Path, root: Path) -> Dict[str, Any]:
         "FM_HOME": str(home),
         "FM_ROOT_OVERRIDE": str(root),
     }
-    proc = subprocess.run(
+    proc = subprocess.Popen(
         [str(script), "--json", "--passive-view"],
         cwd=str(scratch),
         env=env,
-        capture_output=True,
-        timeout=SNAPSHOT_TIMEOUT_SECONDS,
-        check=False,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
     )
+    stdout, stderr = _bounded_process_output(proc)
     if proc.returncode != 0:
-        err = (proc.stderr or proc.stdout or b"").decode("utf-8", "replace").strip()
+        err = (stderr or stdout).decode("utf-8", "replace").strip()
         raise RuntimeError(err or f"bearings snapshot exited {proc.returncode}")
-    if len(proc.stdout) > SNAPSHOT_MAX_BYTES:
-        raise RuntimeError("bearings snapshot exceeded size cap")
     try:
-        model = json.loads(proc.stdout.decode("utf-8"))
+        model = json.loads(stdout.decode("utf-8"))
     except json.JSONDecodeError as exc:
         raise RuntimeError(f"bearings snapshot was not JSON: {exc}") from exc
     if not isinstance(model, dict) or model.get("schema") != "fm-bearings.v1":
@@ -666,7 +696,7 @@ async function refresh() {
     if (!res.ok) throw new Error('status ' + res.status);
     apply(await res.json());
   } catch (err) {
-    setStale(true);
+    tickObserved();
   }
 }
 document.addEventListener('DOMContentLoaded', function() {

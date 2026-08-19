@@ -75,6 +75,18 @@ SH
   printf '%s\n' "$fb"
 }
 
+make_broken_fakebin() {  # <dir>
+  local fb
+  fb=$(fm_fakebin "$1")
+  cat > "$fb/tailscale" <<'SH'
+#!/usr/bin/env bash
+printf 'tailscaled unavailable\n' >&2
+exit 1
+SH
+  chmod +x "$fb/tailscale"
+  printf '%s\n' "$fb"
+}
+
 make_home() {  # <name>
   local home=$TMP_ROOT/$1
   mkdir -p "$home/state" "$home/data" "$home/config" "$home/projects"
@@ -183,6 +195,20 @@ test_funnel_off_serve_starts() {
   pass "serve starts when Funnel is off and Serve HTTPS is claimed"
 }
 
+test_unverifiable_funnel_refuses_to_serve() {
+  local home fakebin log rc=0
+  home=$(make_home funnel-unverifiable)
+  fakebin=$(make_broken_fakebin "$home")
+  init_passcode "$home" >/dev/null
+  log=$home/funnel-unverifiable.log
+  PATH="$fakebin:$PATH" FM_HOME="$home" FM_ROOT_OVERRIDE="$ROOT" FM_BRIDGE_VIEW_TEST=1 \
+    "$BRIDGE" serve --host "$HOST_NAME" --port 0 >"$log" 2>&1 || rc=$?
+  [ "$rc" -ne 0 ] || fail "serve must refuse when Funnel state is unverifiable"
+  assert_contains "$(cat "$log")" "could not verify Funnel is off" \
+    "unverifiable Funnel refusal was not explicit"
+  pass "serve fails closed when Funnel status is unavailable"
+}
+
 test_lan_and_unauthorized_hosts_are_rejected() {
   local home fakebin port hdr body rc=0
   home=$(make_home hosts)
@@ -203,7 +229,7 @@ test_lan_and_unauthorized_hosts_are_rejected() {
 }
 
 test_auth_cookie_headers_and_isolation() {
-  local home fakebin port pass hdr body cookie
+  local home fakebin port pass hdr body cookie token sessions jar sink_pid
   home=$(make_home auth)
   fakebin=$(make_fakebin "$home")
   pass=$(init_passcode "$home")
@@ -246,6 +272,50 @@ test_auth_cookie_headers_and_isolation() {
   assert_contains "$(cat "$body")" "Summary only. Do not approve from this page." \
     "glance page missing the summary-only warning"
   assert_not_contains "$(cat "$body")" "http-equiv=\"refresh\"" "page must not use meta-refresh"
+  jar=$home/cookies.txt
+  curl -sS --max-time 8 --resolve "$HOST_NAME:$port:127.0.0.1" \
+    --cookie-jar "$jar" --header "Origin: $ORIGIN" --data "passcode=$pass" \
+    -o /dev/null "http://$HOST_NAME:$port/login"
+  python3 - "$home/port-8765.headers" <<'PY' &
+import pathlib, socket, sys
+out = pathlib.Path(sys.argv[1])
+sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+sock.bind(("127.0.0.1", 8765))
+sock.listen(1)
+conn, _ = sock.accept()
+conn.settimeout(2)
+data = conn.recv(8192)
+out.write_bytes(data)
+conn.sendall(b"HTTP/1.1 204 No Content\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+conn.close()
+sock.close()
+PY
+  sink_pid=$!
+  BRIDGE_PIDS+=("$sink_pid")
+  sleep 0.1
+  curl -sS --max-time 8 --resolve "$HOST_NAME:8765:127.0.0.1" \
+    --cookie "$jar" -o /dev/null "http://$HOST_NAME:8765/"
+  wait "$sink_pid"
+  assert_not_contains "$(cat "$home/port-8765.headers")" "Cookie:" \
+    "Secure bridge cookie was sent to the HTTP service on port 8765"
+  token=${cookie%%;*}
+  token=${token#*=}
+  sessions=$home/bridge/sessions.json
+  python3 - "$sessions" "$token" <<'PY'
+import json, pathlib, sys
+path = pathlib.Path(sys.argv[1])
+data = json.loads(path.read_text())
+data["sessions"][sys.argv[2]]["expires"] = 0
+path.write_text(json.dumps(data))
+PY
+  hdr=$home/expired.hdr; body=$home/expired.body
+  curl_bridge "$port" /api/observation "$hdr" "$body" --header "Cookie: ${cookie%%;*}"
+  assert_contains "$(head -n 1 "$hdr")" "401" "expired session must be rejected"
+  hdr=$home/revoked.hdr; body=$home/revoked.body
+  curl_bridge "$port" /login "$hdr" "$body" \
+    --header "Origin: $ORIGIN" --data "passcode=$pass"
+  cookie=$(awk 'tolower($1)=="set-cookie:" {print substr($0, index($0,$2)); exit}' "$hdr")
   hdr=$home/revoked.hdr; body=$home/revoked.body
   FM_HOME="$home" "$BRIDGE" revoke-sessions >/dev/null
   curl_bridge "$port" /api/observation "$hdr" "$body" --header "Cookie: ${cookie%%;*}"
@@ -284,6 +354,34 @@ SH
   assert_absent "$home/state/spy.log" "snapshot PATH spies were invoked"
   assert_absent "$home/state/.watch.lock" "bridge took a session lock"
   pass "snapshot subprocess does not write fleet state or take the session lock"
+}
+
+test_snapshot_output_is_bounded_during_capture() {
+  local home fixture output rc=0
+  home=$(make_home snapshot-cap)
+  fixture=$home/root
+  mkdir -p "$fixture/bin"
+  cat > "$fixture/bin/fm-bearings-snapshot.sh" <<'SH'
+#!/usr/bin/env bash
+head -c 2000000 /dev/zero
+SH
+  chmod +x "$fixture/bin/fm-bearings-snapshot.sh"
+  output=$(python3 - "$ROOT/bin/fm-bridge-view.py" "$home" "$fixture" 2>&1 <<'PY'
+import importlib.util, pathlib, sys
+spec = importlib.util.spec_from_file_location("fm_bridge_view", sys.argv[1])
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+try:
+    module.run_snapshot(pathlib.Path(sys.argv[2]), pathlib.Path(sys.argv[3]))
+except RuntimeError as exc:
+    if "exceeded size cap" in str(exc):
+        raise SystemExit(0)
+    raise
+raise SystemExit("snapshot unexpectedly completed")
+PY
+  ) || rc=$?
+  expect_code 0 "$rc" "oversized snapshot must be stopped during capture: $output"
+  pass "snapshot output is bounded during capture"
 }
 
 test_away_mode_passive_refresh_works() {
@@ -363,9 +461,11 @@ test_render_plist_keep_alive_pattern() {
 test_bind_is_loopback_constant
 test_funnel_on_refuses_to_serve
 test_funnel_off_serve_starts
+test_unverifiable_funnel_refuses_to_serve
 test_lan_and_unauthorized_hosts_are_rejected
 test_auth_cookie_headers_and_isolation
 test_snapshot_subprocess_does_not_write_fleet_state
+test_snapshot_output_is_bounded_during_capture
 test_away_mode_passive_refresh_works
 test_mailbox_listener_never_consumes_announcements
 test_render_plist_keep_alive_pattern

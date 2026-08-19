@@ -12,7 +12,7 @@ Tapping a GitHub pull-request link is the only outbound jump, and those URLs are
 The page is served from the Mac on IPv4 loopback and published on the tailnet with **Tailscale Serve HTTPS**.
 It never uses Tailscale Funnel and never binds `0.0.0.0`.
 
-Bookmark: `https://<magicdns-name>/` after Serve is pointed at the loopback port.
+Bookmark: `https://larss-macbook-pro-2.taile26864.ts.net/` after Serve is pointed at the loopback port.
 
 ## Auth
 
