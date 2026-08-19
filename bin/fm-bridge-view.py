@@ -1242,11 +1242,16 @@ class BridgeHandler(BaseHTTPRequestHandler):
         if length > UPLOAD_MAX_BYTES:
             return [("Connection", "close")]
         remaining = length
+        deadline = time.monotonic() + BODY_DRAIN_TIMEOUT_SECONDS
         previous_timeout = self.connection.gettimeout()
-        self.connection.settimeout(BODY_DRAIN_TIMEOUT_SECONDS)
         try:
             while remaining:
-                chunk = self.rfile.read(min(remaining, 65536))
+                timeout = deadline - time.monotonic()
+                if timeout <= 0:
+                    self.close_connection = True
+                    return [("Connection", "close")]
+                self.connection.settimeout(timeout)
+                chunk = self.rfile.read1(min(remaining, 65536))
                 if not chunk:
                     self.close_connection = True
                     return [("Connection", "close")]

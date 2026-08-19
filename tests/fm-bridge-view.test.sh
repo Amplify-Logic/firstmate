@@ -424,6 +424,8 @@ test_safari_login_without_origin_and_keepalive_body_drain() {
   output=$(python3 - "$HOST_NAME" "$port" "$pass" <<'PY'
 import socket
 import sys
+import threading
+import time
 
 host, port, password = sys.argv[1], int(sys.argv[2]), sys.argv[3]
 body = ("passcode=" + password).encode("utf-8")
@@ -510,12 +512,26 @@ try:
             "passcode=x" % host
         ).encode("ascii")
     )
+    started = time.monotonic()
+
+    def drip_body():
+        try:
+            for _ in range(12):
+                time.sleep(0.4)
+                sock.sendall(b"x")
+        except OSError:
+            pass
+
+    threading.Thread(target=drip_body, daemon=True).start()
     header, _ = recv_http(sock)
+    elapsed = time.monotonic() - started
     status = header.split(b"\r\n", 1)[0]
     if b" 403 " not in status:
         raise SystemExit("expected 403 on incomplete unproven login, got %r" % (status,))
     if b"connection: close" not in header.lower():
         raise SystemExit("incomplete body response did not close the connection")
+    if elapsed >= 2.5:
+        raise SystemExit("slow-drip body held the handler for %.2f seconds" % elapsed)
 finally:
     sock.close()
 PY
