@@ -1201,11 +1201,61 @@ class BridgeHandler(BaseHTTPRequestHandler):
         return header.lower() in STATE.expected_hosts() or host in STATE.expected_hosts()
 
     def _origin_ok(self) -> bool:
-        origin = (self.headers.get("Origin") or "").strip().rstrip("/")
-        return origin.lower() in STATE.expected_origins()
+        # When Origin is present it must match the expected Serve origin exactly.
+        # iPhone Safari omits Origin on same-origin form POST, so absence is not
+        # a CSRF failure by itself. Accept an absent Origin only when Fetch
+        # Metadata (Sec-Fetch-Site same-origin or none) or an https Referer to
+        # the expected host independently proves same-origin.
+        origin = (self.headers.get("Origin") or "").strip()
+        if origin:
+            return origin.rstrip("/").lower() in STATE.expected_origins()
+        site = (self.headers.get("Sec-Fetch-Site") or "").strip().lower()
+        if site in {"same-origin", "none"}:
+            return True
+        referer = (self.headers.get("Referer") or "").strip()
+        if not referer:
+            return False
+        parsed = urlparse(referer)
+        if parsed.scheme.lower() != "https":
+            return False
+        host = (parsed.netloc or "").strip().rstrip("/").lower()
+        expected = {item.lower() for item in STATE.expected_hosts()}
+        return host in expected
+
+    def _discard_body(self) -> List[Tuple[str, str]]:
+        # Early 403/404/413 returns must drain the unread POST body. Leaving it
+        # on a keep-alive socket makes the next parse treat passcode=... as a
+        # request line (400 / 501). Close instead when the declared length is
+        # missing or larger than any accepted upload.
+        if getattr(self, "_body_drained", False):
+            return []
+        self._body_drained = True
+        raw = (self.headers.get("Content-Length") or "").strip()
+        if not raw.isdigit():
+            return [("Connection", "close")] if self.command == "POST" else []
+        length = int(raw)
+        if length > UPLOAD_MAX_BYTES:
+            return [("Connection", "close")]
+        remaining = length
+        while remaining:
+            chunk = self.rfile.read(min(remaining, 65536))
+            if not chunk:
+                break
+            remaining -= len(chunk)
+        return []
+
+    def _with_drained_body(
+        self, extra: Optional[List[Tuple[str, str]]]
+    ) -> List[Tuple[str, str]]:
+        merged: List[Tuple[str, str]] = list(extra or [])
+        for key, value in self._discard_body():
+            if not any(existing[0].lower() == key.lower() for existing in merged):
+                merged.append((key, value))
+        return merged
 
     def _send(self, code: int, body: bytes, content_type: str, extra: Optional[List[Tuple[str, str]]] = None) -> None:
         nonce = secrets.token_urlsafe(16)
+        extra = self._with_drained_body(extra)
         self.send_response(code)
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(body)))
@@ -1216,20 +1266,21 @@ class BridgeHandler(BaseHTTPRequestHandler):
                 self.send_header(key, csp(nonce))
             else:
                 self.send_header(key, value)
-        for key, value in extra or []:
+        for key, value in extra:
             self.send_header(key, value)
         self.end_headers()
         self.wfile.write(body)
 
     def _html(self, code: int, renderer, extra: Optional[List[Tuple[str, str]]] = None, **kwargs: Any) -> None:
         nonce = secrets.token_urlsafe(16)
+        extra = self._with_drained_body(extra)
         body = renderer(nonce, **kwargs).encode("utf-8")
         self.send_response(code)
         self.send_header("Content-Type", "text/html; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
         for key, value in security_headers(nonce):
             self.send_header(key, value)
-        for key, value in extra or []:
+        for key, value in extra:
             self.send_header(key, value)
         self.end_headers()
         self.wfile.write(body)
@@ -1313,6 +1364,7 @@ class BridgeHandler(BaseHTTPRequestHandler):
             self._json_error(429, "too many uploads")
             return
         raw = self.rfile.read(length) if length else b""
+        self._body_drained = True
         if len(raw) > UPLOAD_MAX_BYTES:
             self._json_error(413, "too large")
             return
@@ -1361,6 +1413,7 @@ class BridgeHandler(BaseHTTPRequestHandler):
             self._send(413, b"too large\n", "text/plain; charset=utf-8")
             return
         raw = self.rfile.read(length) if length else b""
+        self._body_drained = True
         if parsed.path == "/logout":
             STATE.sessions.revoke(self._session())
             self._html(303, login_html, extra=[("Set-Cookie", self._clear_cookie()), ("Location", "/")])
