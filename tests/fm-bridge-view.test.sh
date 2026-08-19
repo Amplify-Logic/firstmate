@@ -28,20 +28,40 @@ fm_bridge_cleanup() {
 }
 trap fm_bridge_cleanup EXIT
 
-make_fakebin() {  # <dir> [funnel-on]
+make_fakebin() {  # <dir> [off|on|serve]
   local fb funnel=${2:-off}
   fb=$(fm_fakebin "$1")
   cat > "$fb/tailscale" <<SH
 #!/usr/bin/env bash
+if [ "\$*" = "funnel status --json" ]; then
+  if [ "$funnel" = on ]; then
+    printf '%s\\n' '{"AllowFunnel":{"funnel.example.ts.net:443":true}}'
+    exit 0
+  fi
+  if [ "$funnel" = serve ]; then
+    printf '%s\\n' '{"TCP":{"443":{"HTTPS":true}},"Web":{"bridge.test.example:443":{"Handlers":{"/":{"Proxy":"http://127.0.0.1:8766"}}}}}'
+    exit 0
+  fi
+  printf '{}\\n'
+  exit 0
+fi
 if [ "\$*" = "funnel status" ]; then
   if [ "$funnel" = on ]; then
     printf 'https://funnel.example.ts.net\\n|-- proxy http://127.0.0.1:8766 (Funnel)\\n'
+    exit 0
+  fi
+  if [ "$funnel" = serve ]; then
+    printf 'https://bridge.test.example (tailnet only)\\n|-- / proxy http://127.0.0.1:8766\\n'
     exit 0
   fi
   printf 'No serve config\\n'
   exit 0
 fi
 if [ "\$*" = "serve status" ]; then
+  if [ "$funnel" = serve ]; then
+    printf 'https://bridge.test.example (tailnet only)\\n|-- / proxy http://127.0.0.1:8766\\n'
+    exit 0
+  fi
   printf 'No serve config\\n'
   exit 0
 fi
@@ -146,6 +166,21 @@ test_funnel_on_refuses_to_serve() {
   [ "$rc" -ne 0 ] || fail "serve must refuse when Funnel is on: $(cat "$log")"
   assert_contains "$(cat "$log")" "Funnel" "funnel refusal did not name Funnel"
   pass "serve refuses to start while Tailscale Funnel is on"
+}
+
+test_funnel_off_serve_starts() {
+  local home fakebin port hdr body rc=0
+  home=$(make_home funnel-off-serve)
+  fakebin=$(make_fakebin "$home" serve)
+  init_passcode "$home" >/dev/null
+  PATH="$fakebin:$PATH" FM_HOME="$home" FM_ROOT_OVERRIDE="$ROOT" FM_BRIDGE_VIEW_TEST=1 \
+    "$BRIDGE" check-funnel >/dev/null || fail "check-funnel must pass for tailnet-only Serve"
+  port=$(start_bridge "$home" "$fakebin")
+  hdr=$home/off.hdr; body=$home/off.body
+  curl_bridge "$port" / "$hdr" "$body" || rc=$?
+  expect_code 0 "$rc" "Funnel-off Serve should answer on loopback"
+  assert_contains "$(head -n 1 "$hdr")" "200" "Funnel-off Serve must serve the login page"
+  pass "serve starts when Funnel is off and Serve HTTPS is claimed"
 }
 
 test_lan_and_unauthorized_hosts_are_rejected() {
@@ -326,6 +361,7 @@ test_render_plist_keep_alive_pattern() {
 
 test_bind_is_loopback_constant
 test_funnel_on_refuses_to_serve
+test_funnel_off_serve_starts
 test_lan_and_unauthorized_hosts_are_rejected
 test_auth_cookie_headers_and_isolation
 test_snapshot_subprocess_does_not_write_fleet_state

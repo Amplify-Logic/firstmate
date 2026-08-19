@@ -391,10 +391,10 @@ def mailbox_listener_available() -> bool:
         sock.close()
 
 
-def funnel_is_on() -> Tuple[bool, str]:
+def _tailscale_output(args: List[str]) -> Tuple[int, str]:
     try:
         proc = subprocess.run(
-            ["tailscale", "funnel", "status"],
+            ["tailscale", *args],
             capture_output=True,
             text=True,
             timeout=5,
@@ -402,17 +402,51 @@ def funnel_is_on() -> Tuple[bool, str]:
             env={"PATH": os.environ.get("PATH", CHILD_PATH)},
         )
     except FileNotFoundError:
-        return False, "tailscale not found"
+        return 127, "tailscale not found"
     except subprocess.TimeoutExpired:
+        return 124, "timed out"
+    return proc.returncode, (proc.stdout or "") + (proc.stderr or "")
+
+
+def _allow_funnel_from_json(text: str) -> Optional[bool]:
+    raw = text.strip()
+    if not raw.startswith("{"):
+        return None
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(parsed, dict):
+        return None
+    allow = parsed.get("AllowFunnel")
+    if isinstance(allow, dict) and any(bool(value) for value in allow.values()):
+        return True
+    return False
+
+
+def funnel_is_on() -> Tuple[bool, str]:
+    json_rc, json_text = _tailscale_output(["funnel", "status", "--json"])
+    if json_rc == 124:
         return True, "tailscale funnel status timed out"
-    text = (proc.stdout or "") + (proc.stderr or "")
+    json_allow = _allow_funnel_from_json(json_text)
+    if json_allow is True:
+        return True, json_text.strip()
+    rc, text = _tailscale_output(["funnel", "status"])
+    if rc == 124:
+        return True, "tailscale funnel status timed out"
+    if rc == 127 and "not found" in text:
+        return False, "tailscale not found"
     lowered = text.lower()
     if "no serve config" in lowered or "funnel is not enabled" in lowered:
         return False, text.strip() or "No serve config"
+    if "tailnet only" in lowered:
+        return False, text.strip()
     if "https://" in lowered and "funnel" in lowered:
         return True, text.strip()
-    if proc.returncode != 0 and "command not found" in lowered:
+    if rc != 0 and "command not found" in lowered:
         return False, text.strip()
+    if json_allow is False:
+        return False, json_text.strip() or text.strip() or "No serve config"
     if "https://" in text:
         return True, text.strip()
     return False, text.strip() or "No serve config"

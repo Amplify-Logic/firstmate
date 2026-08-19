@@ -52,6 +52,7 @@ tailscale serve --bg --https=443 http://127.0.0.1:8766
 
 `bin/fm-bridge-view.sh check-funnel` refuses if Funnel is on.
 The server also refuses to start while Funnel is on.
+A tailnet-only Serve HTTPS proxy is Funnel off and is the supported publish path.
 
 Keep the process alive across reboot with launchd, same KeepAlive pattern as `com.firstmate.glasses-voice-mailbox`.
 Render a local plist and install it by hand; this is a machine-local setup action, not tracked captain state:
