@@ -77,5 +77,5 @@ Last-good on the server cannot save a tab that never hears back.
 
 ## Writes
 
-Slice 1 is log-in POST plus GET.
+Slice 1 permits only read-only GETs and the login and logout POSTs needed for authentication.
 There is no approve, answer, merge, or spawn control on this page.
