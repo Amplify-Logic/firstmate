@@ -73,7 +73,7 @@ launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.firstmate.bridge-vie
 
 ## Observation
 
-The page calls `bin/fm-bearings-snapshot.sh --json --passive-view --all-in-flight --all-decisions` and raises the queued-work bound so the waiting list is complete.
+The page calls `bin/fm-bearings-snapshot.sh --json --passive-view --all-in-flight --all-decisions --all-queued` so the waiting list is complete.
 That named Bearings mode is allowed while away mode is on; ordinary `/bearings` chat still refuses until return catch-up finishes.
 The server caches one observation for about 30 seconds, runs one refresh at a time, and caps subprocess time and output size.
 The snapshot child keeps a scrubbed environment (no parent secrets) but resolves tool directories at server start from HOME and the parent PATH, including `~/.local/bin` and a discovered nvm node bin, so CLIs such as herdr and tasks-axi are found without a version-specific hardcoded path.
@@ -107,7 +107,7 @@ The per-session rolling-hour limit counts authenticated, non-empty attempts with
 Files land under `data/bridge-inbox/` (created mode 0700) with a unique timestamped name such as `20260819T113530Z-<hex>.jpg` and a sibling `.json` sidecar recording `received_at`, `original_name`, `size`, and `content_type`.
 Names never overwrite; the directory is quarantined storage only.
 The server does not execute, decode, or otherwise parse image contents beyond the magic-byte sniff.
-Nothing else in the bridge process writes outside `bridge/` and this inbox.
+The photo path writes only to `bridge/` and this inbox; hold-to-speak sends requests through the loopback mailbox API instead of writing mailbox state directly.
 
 The glance page exposes a phone-first file input (`accept` images, `multiple` so several photos can be chosen in one picker, no `capture` attribute so iOS Safari offers Photo Library as well as Take Photo) and submit control, a success or failure message that reports partial failures, and the count of photos received today (UTC date of `received_at`, falling back to the timestamped sidecar filename when that field is absent or unreadable).
 The client posts selected photos one after another and shows progress such as `3 of 5 sent`.
