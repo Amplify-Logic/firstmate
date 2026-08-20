@@ -1531,6 +1531,9 @@ test_observation_selects_and_groups_live_backlog() {
   local home fakebin port cookie hdr body
   home=$(make_home glance-select)
   fakebin=$(make_fakebin "$home")
+  # resolve_child_path admits each required tool's directory once. Put jq in
+  # the fixture directory so Linux /usr/bin/tmux cannot outrank the fake tmux.
+  ln -s "$(command -v jq)" "$fakebin/jq"
   cat > "$fakebin/tmux" <<'SH'
 #!/usr/bin/env bash
 case "${1:-}" in
