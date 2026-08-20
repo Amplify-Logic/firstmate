@@ -62,7 +62,6 @@ REFRESH_CLIENT_SECONDS = 30
 MAILBOX_PORT = 8765
 MAILBOX_LAUNCHD = "com.firstmate.glasses-voice-mailbox"
 MAILBOX_TIMEOUT_SECONDS = 5
-SNAPSHOT_GATES_BOUND = 1000
 RELAY_TOKEN_RELATIVE = Path("data") / "glasses-voice-runtime" / "relay-token"
 UPLOAD_MAX_BYTES = 15 * 1024 * 1024
 SPEAK_MAX_BYTES = 10 * 1024 * 1024
@@ -1095,10 +1094,16 @@ def run_snapshot(home: Path, root: Path) -> Dict[str, Any]:
         "LC_ALL": "C",
         "FM_HOME": str(home),
         "FM_ROOT_OVERRIDE": str(root),
-        "FM_BEARINGS_GATES": str(SNAPSHOT_GATES_BOUND),
     }
     proc = subprocess.Popen(
-        [str(script), "--json", "--passive-view", "--all-in-flight", "--all-decisions"],
+        [
+            str(script),
+            "--json",
+            "--passive-view",
+            "--all-in-flight",
+            "--all-decisions",
+            "--all-queued",
+        ],
         cwd=str(scratch),
         env=env,
         stdout=subprocess.PIPE,
@@ -1258,6 +1263,9 @@ let speakRecorder = null;
 let speakChunks = [];
 let speakStream = null;
 let speakPollTimer = 0;
+let speakHeld = false;
+let speakStarting = false;
+let speakPress = 0;
 function esc(value) {
   return String(value).replace(/[&<>"']/g, function(ch) {
     return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]);
@@ -1350,14 +1358,22 @@ function pickRecorderType() {
 }
 async function startSpeak(ev) {
   if (ev) ev.preventDefault();
-  if (speakBusy || speakRecorder) return;
+  if (speakBusy || speakRecorder || speakStarting) return;
+  speakHeld = true;
+  const press = ++speakPress;
   const btn = document.getElementById('hold-speak');
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
     setSpeakStatus('warn', 'This phone cannot record audio here.');
     return;
   }
+  speakStarting = true;
   try {
-    speakStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    if (!speakHeld || press !== speakPress) {
+      stream.getTracks().forEach(function(track) { track.stop(); });
+      return;
+    }
+    speakStream = stream;
     speakChunks = [];
     const mime = pickRecorderType();
     speakRecorder = mime ? new MediaRecorder(speakStream, { mimeType: mime }) : new MediaRecorder(speakStream);
@@ -1374,10 +1390,13 @@ async function startSpeak(ev) {
     stopTracks();
     speakRecorder = null;
     setSpeakStatus('warn', 'Microphone was not available.');
+  } finally {
+    speakStarting = false;
   }
 }
 async function finishSpeak(ev) {
   if (ev) ev.preventDefault();
+  speakHeld = false;
   const btn = document.getElementById('hold-speak');
   const recorder = speakRecorder;
   if (!recorder) return;
@@ -1473,9 +1492,10 @@ async function sendPhotos(ev) {
     return;
   }
   const failed = [];
+  let sent = 0;
   for (let i = 0; i < files.length; i++) {
     status.className = 'note';
-    status.textContent = (i + 1) + ' of ' + files.length + ' sent';
+    status.textContent = 'Sending ' + (i + 1) + ' of ' + files.length + '…';
     try {
       const body = new FormData();
       body.append('photo', files[i]);
@@ -1490,6 +1510,8 @@ async function sendPhotos(ev) {
         failed.push('Photo ' + (i + 1) + ': ' + (payload.error || ('failed (' + res.status + ')')));
         continue;
       }
+      sent += 1;
+      status.textContent = sent + ' of ' + files.length + ' sent';
       if (payload.received_today != null) setPhotoCount(payload.received_today);
     } catch (err) {
       failed.push('Photo ' + (i + 1) + ': send failed');
@@ -1501,7 +1523,7 @@ async function sendPhotos(ev) {
     status.textContent = failed.join(' ');
   } else if (failed.length) {
     status.className = 'warn';
-    status.textContent = files.length - failed.length + ' of ' + files.length + ' sent. ' + failed.join(' ');
+    status.textContent = sent + ' of ' + files.length + ' sent. ' + failed.join(' ');
   } else {
     status.className = 'ok';
     status.textContent = files.length === 1 ? 'Photo received.' : (files.length + ' of ' + files.length + ' sent');

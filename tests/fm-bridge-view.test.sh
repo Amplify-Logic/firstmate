@@ -640,7 +640,7 @@ PY
   pass "snapshot output is bounded during capture"
 }
 
-test_snapshot_requests_all_in_flight_rows() {
+test_snapshot_requests_complete_glance_rows() {
   local home fixture output
   home=$(make_home snapshot-all-in-flight)
   fixture=$home/root
@@ -648,7 +648,7 @@ test_snapshot_requests_all_in_flight_rows() {
   cat > "$fixture/bin/fm-bearings-snapshot.sh" <<'SH'
 #!/usr/bin/env bash
 case " $* " in
-  *' --all-in-flight '*) printf '%s\n' '{"schema":"fm-bearings.v1"}' ;;
+  *' --all-in-flight '*--all-queued*) printf '%s\n' '{"schema":"fm-bearings.v1"}' ;;
   *) exit 9 ;;
 esac
 SH
@@ -660,8 +660,85 @@ module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)
 module.run_snapshot(pathlib.Path(sys.argv[2]), pathlib.Path(sys.argv[3]))
 PY
-  ) || fail "bridge snapshot did not request every in-flight row: $output"
-  pass "snapshot requests all in-flight rows before bucket classification"
+  ) || fail "bridge snapshot did not request complete glance rows: $output"
+  pass "snapshot requests complete in-flight and waiting rows"
+}
+
+test_bridge_page_async_progress_and_release() {
+  local output
+  output=$(node - "$ROOT/bin/fm-bridge-view.py" <<'JS'
+const {execFileSync} = require('child_process');
+const vm = require('vm');
+const script = execFileSync('python3', ['-', process.argv[2]], {
+  input: `import importlib.util, sys
+spec = importlib.util.spec_from_file_location("bridge", sys.argv[1])
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+print(module.PAGE_JS)
+`,
+  encoding: 'utf8'
+});
+
+let resolveMedia;
+let resolveUpload;
+let recorderCount = 0;
+let trackStopped = false;
+const elements = {
+  'hold-speak': {classList: {add() {}, remove() {}}, textContent: ''},
+  'speak-result': {className: '', textContent: ''},
+  'photo': {files: [{name: 'one.jpg'}], value: ''},
+  'photo-result': {className: '', textContent: ''}
+};
+const context = vm.createContext({
+  AbortController,
+  console,
+  document: {
+    hidden: false,
+    addEventListener() {},
+    getElementById(id) { return elements[id] || null; }
+  },
+  window: {addEventListener() {}},
+  navigator: {mediaDevices: {getUserMedia() {
+    return new Promise(resolve => { resolveMedia = resolve; });
+  }}},
+  MediaRecorder: class {
+    static isTypeSupported() { return true; }
+    constructor() { recorderCount += 1; }
+  },
+  FormData: class {append() {}},
+  fetch() { return new Promise(resolve => { resolveUpload = resolve; }); },
+  setInterval() {},
+  setTimeout,
+  clearTimeout
+});
+vm.runInContext(script, context);
+
+(async () => {
+  const start = vm.runInContext('startSpeak()', context);
+  await vm.runInContext('finishSpeak()', context);
+  resolveMedia({getTracks() { return [{stop() { trackStopped = true; }}]; }});
+  await start;
+  if (!trackStopped || recorderCount !== 0) {
+    throw new Error('release during microphone permission started recording');
+  }
+
+  const upload = vm.runInContext('sendPhotos({preventDefault() {}})', context);
+  await Promise.resolve();
+  if (elements['photo-result'].textContent !== 'Sending 1 of 1…') {
+    throw new Error('pending upload was reported as sent');
+  }
+  resolveUpload({ok: true, json: async () => ({received_today: 1})});
+  await upload;
+  if (elements['photo-result'].textContent !== 'Photo received.') {
+    throw new Error('successful upload did not finish its progress state');
+  }
+})().catch(error => {
+  console.error(error.message);
+  process.exitCode = 1;
+});
+JS
+  ) || fail "bridge page async state regression failed: $output"
+  pass "bridge page handles early release and honest upload progress"
 }
 
 test_session_revoke_serializes_with_login_create() {
@@ -1427,7 +1504,8 @@ test_auth_cookie_headers_and_isolation
 test_safari_login_without_origin_and_keepalive_body_drain
 test_snapshot_subprocess_does_not_write_fleet_state
 test_snapshot_output_is_bounded_during_capture
-test_snapshot_requests_all_in_flight_rows
+test_snapshot_requests_complete_glance_rows
+test_bridge_page_async_progress_and_release
 test_session_revoke_serializes_with_login_create
 test_away_mode_passive_refresh_works
 test_mailbox_listener_never_consumes_announcements
