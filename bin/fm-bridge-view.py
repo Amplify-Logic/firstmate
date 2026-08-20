@@ -1630,6 +1630,12 @@ def glance_html(nonce: str) -> str:
 <p class="warn">Summary only. Do not approve from this page.</p>
 <h2>Needs you</h2>
 <div id="needs"><p class="empty">Loading…</p></div>
+<h2>Under way</h2>
+<div id="underway"><p class="empty">Loading…</p></div>
+<details class="waiting-fold">
+  <summary id="waiting-summary">Waiting</summary>
+  <div id="waiting"><p class="empty">Loading…</p></div>
+</details>
 <h2>Talk</h2>
 <div id="speak-box">
   <label for="hold-speak">Hold to speak</label>
@@ -1645,12 +1651,6 @@ def glance_html(nonce: str) -> str:
 </form>
 <p class="meta" id="photo-count">Photos received today: 0</p>
 <p id="photo-result" class="note"></p>
-<h2>Under way</h2>
-<div id="underway"><p class="empty">Loading…</p></div>
-<details class="waiting-fold">
-  <summary id="waiting-summary">Waiting</summary>
-  <div id="waiting"><p class="empty">Loading…</p></div>
-</details>
 <h2>Just finished</h2>
 <div id="finished"><p class="empty">Loading…</p></div>
 </main>

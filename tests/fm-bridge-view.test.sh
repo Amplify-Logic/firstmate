@@ -321,6 +321,22 @@ test_auth_cookie_headers_and_isolation() {
   assert_contains "$(cat "$body")" "multiple" "photo input must accept several files"
   assert_contains "$(cat "$body")" "Hold to speak" "glance page missing hold-to-speak"
   assert_contains "$(cat "$body")" 'id="waiting-summary"' "waiting list must be collapsed"
+  python3 - "$body" <<'PY' || fail "captain glance sections are out of order"
+import pathlib
+import sys
+
+page = pathlib.Path(sys.argv[1]).read_text()
+markers = [
+    '<h2>Needs you</h2>',
+    '<h2>Under way</h2>',
+    '<summary id="waiting-summary">Waiting</summary>',
+    '<h2>Talk</h2>',
+    '<h2>Send photos</h2>',
+]
+positions = [page.index(marker) for marker in markers]
+if positions != sorted(positions):
+    raise SystemExit(1)
+PY
   assert_not_contains "$(cat "$body")" "more waiting" "waiting list must not advertise a truncated remainder"
   assert_not_contains "$(cat "$body")" "GLASSES_RELAY_TOKEN" "page must not mention the relay token"
   assert_not_contains "$(cat "$body")" "relay-token" "page must not mention the relay token path"
