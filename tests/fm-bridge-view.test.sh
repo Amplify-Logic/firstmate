@@ -1531,9 +1531,19 @@ test_observation_selects_and_groups_live_backlog() {
   local home fakebin port cookie hdr body
   home=$(make_home glance-select)
   fakebin=$(make_fakebin "$home")
+  cat > "$fakebin/tmux" <<'SH'
+#!/usr/bin/env bash
+case "${1:-}" in
+  display-message) printf '%%1\n' ;;
+  capture-pane) printf 'all quiet\n> \n' ;;
+esac
+exit 0
+SH
+  chmod +x "$fakebin/tmux"
   cat > "$home/data/backlog.md" <<'EOF'
 ## In flight
 - [ ] ship-task - VoiceLoop tap trigger (repo: firstmate) (kind: ship) (since 2026-08-19)
+- [ ] vendor-wait - Waiting on the Artevo vendor (repo: artevo) (kind: ship) (since 2026-08-19)
 
 ## Queued
 - [ ] decide-qwen - Choose the Qwen route (repo: firstmate) (kind: captain) (hold: captain choice pending) (hold-kind: captain)
@@ -1551,6 +1561,14 @@ test_observation_selects_and_groups_live_backlog() {
 ## Done
 - [x] done-a - Spoken updates on the glasses https://github.com/kunchenguid/firstmate/pull/7 (repo: firstmate) (kind: ship) (merged 2026-08-18)
 EOF
+  fm_write_meta "$home/state/vendor-wait.meta" \
+    "window=firstmate:fm-vendor-wait" \
+    "worktree=$home/projects/ship-wt" \
+    "project=artevo" \
+    "harness=codex" \
+    "kind=ship" \
+    "mode=no-mistakes"
+  printf 'paused: waiting at the vendor gate\n' > "$home/state/vendor-wait.status"
   init_passcode "$home" >/dev/null
   port=$(start_bridge "$home" "$fakebin")
   cookie=$(bridge_cookie "$home" "$port")
@@ -1578,7 +1596,7 @@ if obs["needs_you"]["more"] != 1:
 if "Fund worker capacity" not in " ".join(hidden):
     raise SystemExit("capped decision missing from rest: %s" % hidden)
 counts = {group["label"]: group["count"] for group in obs["waiting"]["groups"]}
-if counts.get("Artevo") != 1:
+if counts.get("Artevo") != 2:
     raise SystemExit("Artevo waiting count wrong: %s" % obs["waiting"]["groups"])
 if counts.get("Journey") < 2:
     raise SystemExit("Journey waiting count wrong: %s" % obs["waiting"]["groups"])
@@ -1589,6 +1607,8 @@ if any(group["count"] != len(group["items"]) for group in obs["waiting"]["groups
 for title in deferred:
     if not any(title in row for row in waiting):
         raise SystemExit("deferred hold missing from waiting: %s" % waiting)
+if not any("Waiting on the Artevo vendor" in row for row in waiting):
+    raise SystemExit("paused live work lost its repository group: %s" % waiting)
 PY
   pass "live observation caps needs you and groups waiting by project"
 }

@@ -122,7 +122,7 @@ Default is LOCAL-ONLY (no network); --include-prs is the only path that fetches.
 --passive-view is the named away-mode exception for the phone bridge page;
 ordinary invocations still refuse while away mode is on.
 
-Default fields: schema, home, generated, prs, in_flight{id,kind,state,title,doing},
+Default fields: schema, home, generated, prs, in_flight{id,kind,state,title,doing,owner,repo},
   secondmates{id,state,doing,provenance,freshness,age_seconds,contradiction,reason},
   decisions_open{id,key,verb,summary,owner,hold_kind,hold_reason,repo}, landed{id,what,artifact,owner},
   gates{id,title,blocked_by,reason,owner,hold_kind,repo}, reports{id,path}, recorded_prs{id,url},
@@ -419,13 +419,18 @@ MODEL=$(printf '%s' "$SNAP" | jq \
         state: .current_state.state,
         title: ((.backlog.title // "Untitled work") | trunc(90)),
         doing: ((.current_state.detail // "") as $d
-                | (if $d != "" then $d else (.hints.last_event_text // "") end) | trunc(90))
+                | (if $d != "" then $d else (.hints.last_event_text // "") end) | trunc(90)),
+        owner:"(main)",
+        repo:((.backlog.repo // .project // null) | if . == null then null else trunc(120) end)
       } ]
      + [ $secondmate_views[]
          | select(.bearings_state == "active_child_work")
          | {id,kind:"secondmate",state:.bearings_state,
             title:"Second-mate work",
-            doing:([.active_children[] | .id + ": " + (.doing // .state)] | join("; ") | trunc(90))} ]) as $in_flight_all
+            doing:([.active_children[] | .id + ": " + (.doing // .state)] | join("; ") | trunc(90)),
+            owner:.id,
+            repo:(([.active_children[] | (.backlog.repo // .project // empty)] | unique) as $repos
+                  | if ($repos | length) == 1 then ($repos[0] | trunc(120)) else null end)} ]) as $in_flight_all
   | ([ .backlog.records[]
          | select(.structured and .captain_actionable == true)
          | {id,key:.id,verb:"captain-hold",
