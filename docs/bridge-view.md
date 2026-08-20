@@ -85,9 +85,10 @@ A 503 still includes today's photo count from inbox sidecars so the counter does
 The client refreshes every 30 seconds and also refreshes on `pageshow` and when a hidden tab becomes visible.
 The four buckets are Needs you, Under way, Waiting, and Just finished.
 Needs you shows at most five items that need the captain now.
+Blocked, failed, or gate-parked live work leads the list.
 Parked holds, recorded duplicates, and retire candidates are excluded from that list by their backlog hold kind and hold reason, not by guessing from titles, and they remain reachable under Waiting.
-If more live items remain, a quiet "N more waiting on you - show all" control reveals the rest in one tap.
-Waiting is a set of per-project count chips, such as Artevo 12, not a global wall of items.
+If more Needs-you items remain, a quiet "N more waiting on you - show all" control reveals the rest in one tap.
+Waiting is a set of per-project count chips for Artevo, Journey, Finances, Fleet, Glasses, and any other observed project, not a global wall of items.
 Each chip expands to that project's complete list in one tap.
 Item lines are short captain-facing titles; internal ids, paths, and repro strings are not used as the primary line.
 If the first observation request fails, the buckets replace "Loading…" with "Cannot reach the desk" immediately and the full-page overlay appears.
