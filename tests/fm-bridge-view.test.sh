@@ -5,7 +5,7 @@
 # snapshot subprocess, away-mode passive refresh, auth headers, authenticated
 # photo drops into the quarantined inbox, multi-file Origin-null uploads,
 # hold-to-speak mailbox forwarding with the relay token kept server-side,
-# captain-facing glance titles, and keep-alive body drain after early error
+# captain-facing glance titles, needs-you selection, waiting project chips, and keep-alive body drain after early error
 # returns.
 set -u
 
@@ -320,7 +320,11 @@ test_auth_cookie_headers_and_isolation() {
   assert_contains "$(cat "$body")" "Send photos" "glance page missing the photo drop"
   assert_contains "$(cat "$body")" "multiple" "photo input must accept several files"
   assert_contains "$(cat "$body")" "Hold to speak" "glance page missing hold-to-speak"
-  assert_contains "$(cat "$body")" 'id="waiting-summary"' "waiting list must be collapsed"
+  assert_contains "$(cat "$body")" "<h2>Waiting</h2>" \
+    "glance page missing the waiting heading"
+  assert_contains "$(cat "$body")" 'class="wait-chip"' "waiting chips must be in the page script"
+  assert_contains "$(cat "$body")" "more waiting on you - show all" \
+    "needs you must offer a show-all remainder"
   python3 - "$body" <<'PY' || fail "captain glance sections are out of order"
 import pathlib
 import sys
@@ -329,7 +333,7 @@ page = pathlib.Path(sys.argv[1]).read_text()
 markers = [
     '<h2>Needs you</h2>',
     '<h2>Under way</h2>',
-    '<summary id="waiting-summary">Waiting</summary>',
+    '<h2>Waiting</h2>',
     '<h2>Talk</h2>',
     '<h2>Send photos</h2>',
 ]
@@ -337,7 +341,7 @@ positions = [page.index(marker) for marker in markers]
 if positions != sorted(positions):
     raise SystemExit(1)
 PY
-  assert_not_contains "$(cat "$body")" "more waiting" "waiting list must not advertise a truncated remainder"
+  assert_not_contains "$(cat "$body")" "waiting-summary" "waiting must not hide behind a collapsed fold"
   assert_not_contains "$(cat "$body")" "GLASSES_RELAY_TOKEN" "page must not mention the relay token"
   assert_not_contains "$(cat "$body")" "relay-token" "page must not mention the relay token path"
   assert_not_contains "$(cat "$body")" "Bearer " "page must not ship a bearer token"
@@ -1297,7 +1301,7 @@ model = {
 }
 obs = module.project_observation(model)
 titles = [row["title"] for row in obs["under_way"]["items"]]
-waiting = [row["title"] for row in obs["waiting"]["items"]]
+waiting = [row["title"] for group in obs["waiting"]["groups"] for row in group["items"]]
 if "VoiceLoop tap trigger" not in titles:
     raise SystemExit("kept human in-flight title missing: %s" % titles)
 if any("repro:" in t or "env -i" in t for t in titles):
@@ -1316,6 +1320,277 @@ print("ok")
 PY
   ) || fail "human title projection failed: $output"
   pass "glance titles stay human and drop internal primary lines"
+}
+
+test_needs_you_excludes_deferred_holds_and_caps_at_five() {
+  local output
+  output=$(python3 - "$ROOT/bin/fm-bridge-view.py" <<'PY'
+import importlib.util, sys
+spec = importlib.util.spec_from_file_location("fm_bridge_view", sys.argv[1])
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+model = {
+    "generated": "now",
+    "omitted": [],
+    "decisions_open": [
+        {"summary": "Parked web pricing", "hold_kind": "parked",
+         "hold_reason": "Parked 2026-08-02 on captain order", "repo": "artevo"},
+        {"summary": "Duplicate accounts question", "hold_kind": "parked",
+         "hold_reason": "Parked 2026-08-02 as a duplicate - asked once under the live item",
+         "repo": "your-magical-journey"},
+        {"summary": "Confirm retiring the Miro rebuild", "hold_kind": "captain",
+         "hold_reason": "Confirm retiring or reshaping this task.",
+         "repo": "your-magical-journey"},
+        {"summary": "Choose the Qwen route", "hold_kind": "captain",
+         "hold_reason": "captain choice pending", "repo": "firstmate"},
+        {"summary": "Approve the advisor call", "hold_kind": "captain",
+         "hold_reason": "needs the captain's word", "repo": "lars-derya-finances"},
+        {"summary": "Raise the Claude spend limit", "hold_kind": "captain",
+         "hold_reason": "the captain raises the limit", "repo": "firstmate"},
+        {"summary": "Pick the DeepSeek route", "hold_kind": "captain",
+         "hold_reason": "captain choice pending", "repo": "starship"},
+        {"summary": "Supply the StudyLink facts", "hold_kind": "captain",
+         "hold_reason": "only he can answer", "repo": "starship"},
+        {"summary": "Fund worker capacity", "hold_kind": "captain",
+         "hold_reason": "spend approval", "repo": "firstmate"},
+        {"summary": "Choose house versus debt", "hold_kind": "captain",
+         "hold_reason": "the couple's choice", "repo": "lars-derya-finances"},
+    ],
+    "in_flight": [
+        {"state": "blocked", "title": "Mailbox token missing"},
+        {"state": "working", "title": "VoiceLoop tap trigger"},
+    ],
+    "landed": [],
+    "gates": [],
+}
+obs = module.project_observation(model)
+shown = [row["title"] for row in obs["needs_you"]["items"]]
+hidden = [row["title"] for row in obs["needs_you"].get("rest") or []]
+deferred = [
+    "Parked web pricing",
+    "Duplicate accounts question",
+    "Confirm retiring the Miro rebuild",
+]
+for title in deferred:
+    if title in shown or title in hidden:
+        raise SystemExit("deferred hold leaked into needs you: %s" % title)
+if shown[0] != "Mailbox token missing":
+    raise SystemExit("stuck live work should lead needs you: %s" % shown)
+if len(shown) != 5:
+    raise SystemExit("needs you must cap at 5, got %s" % shown)
+if obs["needs_you"]["more"] != 3:
+    raise SystemExit("needs you remainder should be 3, got %s" % obs["needs_you"])
+if "Fund worker capacity" not in hidden or "Choose house versus debt" not in hidden:
+    raise SystemExit("capped live decisions missing from rest: %s" % hidden)
+waiting = [row["title"] for group in obs["waiting"]["groups"] for row in group["items"]]
+for title in deferred:
+    if title not in waiting:
+        raise SystemExit("deferred hold missing from waiting: %s %s" % (title, waiting))
+print("ok")
+PY
+  ) || fail "needs-you selection failed: $output"
+  pass "needs you drops parked, duplicate, and retire holds and caps at five"
+}
+
+test_waiting_groups_by_project_counts() {
+  local output
+  output=$(python3 - "$ROOT/bin/fm-bridge-view.py" <<'PY'
+import importlib.util, sys
+spec = importlib.util.spec_from_file_location("fm_bridge_view", sys.argv[1])
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+model = {
+    "generated": "now",
+    "omitted": [],
+    "decisions_open": [],
+    "in_flight": [{"state": "paused", "title": "Waiting on a vendor"}],
+    "landed": [],
+    "gates": [
+        {"title": "Artevo pricing", "repo": "artevo", "hold_kind": "parked",
+         "reason": "Parked 2026-08-02 on captain order"},
+        {"title": "Artevo brand", "repo": "artevo-workspace", "hold_kind": "parked",
+         "reason": "Parked 2026-08-02 on captain order"},
+        {"title": "Journey board refresh", "repo": "your-magical-journey",
+         "hold_kind": "parked", "reason": "Parked 2026-08-02 as a duplicate"},
+        {"title": "Rotate finances secrets", "repo": "lars-derya-finances",
+         "hold_kind": "captain", "reason": "captain call on history purge"},
+        {"title": "Cloud slice go", "repo": "firstmate", "hold_kind": "captain",
+         "reason": "awaiting captain go"},
+        {"title": "Always-on cloud, host+budget", "repo": "Amplify-Logic/firstmate",
+         "hold_kind": "captain", "reason": "awaiting captain go"},
+    ],
+}
+obs = module.project_observation(model)
+groups = obs["waiting"]["groups"]
+counts = {group["label"]: group["count"] for group in groups}
+if counts.get("Artevo") != 2:
+    raise SystemExit("Artevo count wrong: %s" % groups)
+if counts.get("Journey") != 1:
+    raise SystemExit("Journey count wrong: %s" % groups)
+if counts.get("Finances") != 1:
+    raise SystemExit("Finances count wrong: %s" % groups)
+if counts.get("Fleet") != 2:
+    raise SystemExit("Fleet count wrong: %s" % groups)
+if any(group["count"] != len(group["items"]) for group in groups):
+    raise SystemExit("group count does not match items: %s" % groups)
+if obs["waiting"]["more"] != 0:
+    raise SystemExit("waiting groups must not truncate")
+labels = [group["label"] for group in groups]
+if "Other" in labels and counts.get("Other") != 1:
+    raise SystemExit("paused live work should be its own reachable group: %s" % groups)
+print("ok")
+PY
+  ) || fail "waiting project grouping failed: $output"
+  pass "waiting collapses to complete per-project counts"
+}
+
+test_glance_page_renders_chips_and_needs_remainder() {
+  local output
+  output=$(node - "$ROOT/bin/fm-bridge-view.py" <<'JS'
+const {execFileSync} = require('child_process');
+const vm = require('vm');
+const script = execFileSync('python3', ['-', process.argv[2]], {
+  input: `import importlib.util, sys
+spec = importlib.util.spec_from_file_location("bridge", sys.argv[1])
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+print(module.PAGE_JS)
+`,
+  encoding: 'utf8'
+});
+
+const elements = {
+  needs: {innerHTML: '', textContent: ''},
+  underway: {innerHTML: '', textContent: ''},
+  finished: {innerHTML: '', textContent: ''},
+  waiting: {innerHTML: '', textContent: ''},
+  observed: {textContent: ''},
+  desk: {textContent: ''},
+  mailbox: {textContent: ''},
+  stale: {classList: {toggle() {}}},
+  'photo-count': {textContent: ''}
+};
+const context = vm.createContext({
+  document: {
+    hidden: false,
+    addEventListener() {},
+    getElementById(id) { return elements[id] || null; }
+  },
+  window: {addEventListener() {}},
+  Date,
+  setInterval() {},
+  setTimeout,
+  clearTimeout
+});
+vm.runInContext(script, context);
+vm.runInContext('apply', context)({
+  mailbox_listener: true,
+  photos_today: 0,
+  needs_you: {
+    items: [
+      {title: 'Choose the Qwen route', dot: 'Needs you'},
+      {title: 'Approve the advisor call', dot: 'Needs you'}
+    ],
+    rest: [{title: 'Fund worker capacity', dot: 'Needs you'}],
+    more: 1
+  },
+  under_way: {items: [{title: 'VoiceLoop tap trigger', dot: 'Under way'}]},
+  just_finished: {items: []},
+  waiting: {
+    groups: [
+      {label: 'Artevo', count: 2, items: [{title: 'Artevo pricing', dot: 'Waiting'}, {title: 'Artevo brand', dot: 'Waiting'}]},
+      {label: 'Journey', count: 1, items: [{title: 'Journey board refresh', dot: 'Waiting'}]}
+    ],
+    more: 0
+  }
+});
+if (!elements.waiting.innerHTML.includes('wait-chip')) {
+  throw new Error('waiting chips were not rendered: ' + elements.waiting.innerHTML);
+}
+if (!elements.waiting.innerHTML.includes('Artevo 2') || !elements.waiting.innerHTML.includes('Journey 1')) {
+  throw new Error('chip labels missing counts: ' + elements.waiting.innerHTML);
+}
+if (!elements.waiting.innerHTML.includes('Artevo pricing')) {
+  throw new Error('expanded chip list dropped items: ' + elements.waiting.innerHTML);
+}
+if (!elements.needs.innerHTML.includes('more waiting on you - show all')) {
+  throw new Error('needs remainder missing: ' + elements.needs.innerHTML);
+}
+if (!elements.needs.innerHTML.includes('Fund worker capacity')) {
+  throw new Error('hidden needs item not reachable: ' + elements.needs.innerHTML);
+}
+if (elements.needs.innerHTML.includes('Nothing needs you')) {
+  throw new Error('empty copy shown beside live needs');
+}
+JS
+  ) || fail "glance page chip rendering failed: $output"
+  pass "glance page renders waiting chips and a needs-you show-all line"
+}
+
+test_observation_selects_and_groups_live_backlog() {
+  local home fakebin port cookie hdr body
+  home=$(make_home glance-select)
+  fakebin=$(make_fakebin "$home")
+  cat > "$home/data/backlog.md" <<'EOF'
+## In flight
+- [ ] ship-task - VoiceLoop tap trigger (repo: firstmate) (kind: ship) (since 2026-08-19)
+
+## Queued
+- [ ] decide-qwen - Choose the Qwen route (repo: firstmate) (kind: captain) (hold: captain choice pending) (hold-kind: captain)
+- [ ] decide-advisor - Approve the advisor call (repo: lars-derya-finances) (kind: captain) (hold: needs the captain's word) (hold-kind: captain)
+- [ ] decide-limit - Raise the Claude spend limit (repo: firstmate) (kind: captain) (hold: the captain raises the limit) (hold-kind: captain)
+- [ ] decide-deepseek - Pick the DeepSeek route (repo: starship) (kind: captain) (hold: captain choice pending) (hold-kind: captain)
+- [ ] decide-studylink - Supply the StudyLink facts (repo: starship) (kind: captain) (hold: only he can answer) (hold-kind: captain)
+- [ ] decide-capacity - Fund worker capacity (repo: firstmate) (kind: captain) (hold: spend approval) (hold-kind: captain)
+- [ ] retire-miro - Confirm retiring the Miro rebuild (repo: your-magical-journey) (kind: captain) (hold: Confirm retiring or reshaping this task.) (hold-kind: captain)
+- [ ] parked-pricing - Align Artevo pricing (repo: artevo) (kind: ship) (hold: Parked 2026-08-02 on captain order) (hold-kind: parked)
+- [ ] dup-accounts - User accounts at launch (repo: your-magical-journey) (kind: ship) (hold: Parked 2026-08-02 as a duplicate - asked once under the live item) (hold-kind: parked)
+- [ ] journey-board - Keep the journey board current (repo: your-magical-journey) (kind: ship) (hold: Parked 2026-08-02 on captain order) (hold-kind: parked)
+- [ ] finances-rotate - Rotate finances secrets (repo: lars-derya-finances) (kind: ship) (hold: captain call on history purge) (hold-kind: captain)
+
+## Done
+- [x] done-a - Spoken updates on the glasses https://github.com/kunchenguid/firstmate/pull/7 (repo: firstmate) (kind: ship) (merged 2026-08-18)
+EOF
+  init_passcode "$home" >/dev/null
+  port=$(start_bridge "$home" "$fakebin")
+  cookie=$(bridge_cookie "$home" "$port")
+  hdr=$home/obs.hdr; body=$home/obs.body
+  curl_bridge "$port" /api/observation "$hdr" "$body" --header "Cookie: $cookie"
+  assert_contains "$(head -n 1 "$hdr")" "200" "selection observation failed: $(cat "$body")"
+  python3 - "$body" <<'PY' || fail "live observation did not apply glance selection: $(cat "$body")"
+import json, pathlib, sys
+obs = json.loads(pathlib.Path(sys.argv[1]).read_text())
+shown = [row["title"] for row in obs["needs_you"]["items"]]
+hidden = [row["title"] for row in obs["needs_you"]["rest"]]
+waiting = [row["title"] for group in obs["waiting"]["groups"] for row in group["items"]]
+deferred = [
+    "Confirm retiring the Miro rebuild",
+    "Align Artevo pricing",
+    "User accounts at launch",
+]
+for title in deferred:
+    if any(title in row for row in shown + hidden):
+        raise SystemExit("deferred hold leaked into needs you: %s" % title)
+if len(shown) != 5:
+    raise SystemExit("needs you must cap at 5, got %s" % shown)
+if obs["needs_you"]["more"] != 1:
+    raise SystemExit("one live decision should remain behind show all, got %s" % obs["needs_you"])
+if "Fund worker capacity" not in " ".join(hidden):
+    raise SystemExit("capped decision missing from rest: %s" % hidden)
+counts = {group["label"]: group["count"] for group in obs["waiting"]["groups"]}
+if counts.get("Artevo") != 1:
+    raise SystemExit("Artevo waiting count wrong: %s" % obs["waiting"]["groups"])
+if counts.get("Journey") < 2:
+    raise SystemExit("Journey waiting count wrong: %s" % obs["waiting"]["groups"])
+if counts.get("Finances") != 1:
+    raise SystemExit("Finances waiting count wrong: %s" % obs["waiting"]["groups"])
+if any(group["count"] != len(group["items"]) for group in obs["waiting"]["groups"]):
+    raise SystemExit("waiting count does not match expanded items")
+for title in deferred:
+    if not any(title in row for row in waiting):
+        raise SystemExit("deferred hold missing from waiting: %s" % waiting)
+PY
+  pass "live observation caps needs you and groups waiting by project"
 }
 
 test_multi_file_origin_null_uploads_are_atomic_and_partial() {
@@ -1535,6 +1810,10 @@ test_child_path_resolves_tool_dirs_without_hardcoded_nvm
 test_observation_error_fails_fast_and_keeps_photo_count
 test_scrubbed_snapshot_with_herdr_meta_fails_fast
 test_human_titles_drop_internal_primary_lines
+test_needs_you_excludes_deferred_holds_and_caps_at_five
+test_waiting_groups_by_project_counts
+test_glance_page_renders_chips_and_needs_remainder
+test_observation_selects_and_groups_live_backlog
 test_multi_file_origin_null_uploads_are_atomic_and_partial
 test_unauthenticated_speak_rejected
 test_speak_origin_null_forwards_m4a_and_polls_text
