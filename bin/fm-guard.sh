@@ -5,11 +5,14 @@
 # First, always warn if the firstmate primary checkout (FM_ROOT) is on a named
 # non-default branch, because that means firstmate-on-itself work landed in the
 # primary instead of an isolated worktree.
-# Then, if any task is in flight (a state/<id>.meta exists) and the watcher's
-# liveness beacon (state/.last-watcher-beat, touched every poll cycle) is
-# missing or older than FM_GUARD_GRACE seconds, prints a loud, clearly delimited
-# banner so the agent cannot skim past it in the tool output of whatever it was
-# doing - the one channel every harness has. The full banner is emitted once per
+# Then, if a task is in flight (a state/<id>.meta exists) and no identity-
+# matched watcher has a liveness beacon (state/.last-watcher-beat, touched every
+# poll cycle) fresh within FM_GUARD_GRACE seconds, prints a loud, clearly
+# delimited banner so the agent cannot skim past it in the tool output of
+# whatever it was doing - the one channel every harness has. Health is the same
+# live-lock, process-identity, home/path-binding, and fresh-beacon predicate the
+# arm wrapper and turn-end guard use, so a fresh leftover beacon never counts as
+# a live watcher. The full banner is emitted once per
 # distinct staleness episode in this FM_HOME (keyed to beacon mtime or absence);
 # later guarded commands in the same episode print a one-line reminder instead.
 # Episode state lives only under state/.guard-watcher-stale-banner (volatile,
@@ -24,6 +27,7 @@ FM_ROOT="${FM_ROOT_OVERRIDE:-$(cd "$SCRIPT_DIR/.." && pwd)}"
 FM_HOME="${FM_HOME:-${FM_ROOT_OVERRIDE:-$FM_ROOT}}"
 STATE="${FM_STATE_OVERRIDE:-$FM_HOME/state}"
 CONFIG="${FM_CONFIG_OVERRIDE:-$FM_HOME/config}"
+WATCH="$SCRIPT_DIR/fm-watch.sh"
 GRACE=${FM_GUARD_GRACE:-300}
 queue_pending=false
 READ_ONLY=${FM_GUARD_READ_ONLY:-0}
@@ -140,15 +144,21 @@ if [ -n "$tangle_branch" ]; then
   } >&2
 fi
 
-# Compute in-flight count and watcher-beacon freshness via the shared
-# grace-based predicate (bin/fm-supervision-lib.sh). Only act with tasks in
-# flight; count them so the banner can say how much is riding on an absent
-# watcher.
+# Compute in-flight count and watcher health via the shared grace-based status
+# helper (bin/fm-supervision-lib.sh), then decide alarm state with the SAME
+# identity-matched live-watcher and fresh-beacon predicate the arm wrapper and
+# turn-end guard use (bin/fm-wake-lib.sh): a fresh leftover beacon with a dead,
+# reused, or foreign lock is unhealthy, never silently healthy. Only act with
+# tasks in flight; count them so the banner can say how much is riding on an
+# absent watcher.
 fm_supervision_status "$STATE" "$GRACE"
 in_flight=$FM_SUP_IN_FLIGHT
-watcher_fresh=$FM_SUP_WATCHER_FRESH
 beacon_desc=$FM_SUP_BEACON_DESC
 outage_summary=$FM_SUP_OUTAGE_SUMMARY
+watcher_healthy=false
+if fm_watcher_healthy "$STATE" "$WATCH" "$GRACE" "$FM_HOME"; then
+  watcher_healthy=true
+fi
 if [ "$in_flight" -eq 0 ]; then
   # Leave the unhealthy state (no work riding on the watcher): clear so a later
   # in-flight + stale combination is a fresh episode even if the beacon is still
@@ -159,10 +169,11 @@ fi
 
 [ -s "$FM_WAKE_QUEUE" ] && queue_pending=true
 
-# No fresh watcher with tasks in flight is the dangerous state: emit a prominent,
-# bordered banner FIRST so it reads as an alarm, not a buried stderr line. Later
-# calls in the same episode get a one-line reminder only.
-if [ "$watcher_fresh" = false ]; then
+# No live identity-matched watcher with a fresh beacon while tasks are in flight
+# is the dangerous state: emit a prominent, bordered banner FIRST so it reads as
+# an alarm, not a buried stderr line. Later calls in the same episode get a
+# one-line reminder only.
+if [ "$watcher_healthy" = false ]; then
   episode_key=$(fm_guard_stale_episode_key "$STATE")
   episode_key=${episode_key%$'\n'}
   print_full_banner=0

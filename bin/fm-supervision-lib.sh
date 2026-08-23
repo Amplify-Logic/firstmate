@@ -4,10 +4,11 @@
 #
 # True exactly when a firstmate home has in-flight work (a state/<id>.meta
 # exists) but no watcher has a fresh liveness beacon (state/.last-watcher-beat,
-# touched every poll cycle, within the grace window). bin/fm-guard.sh uses this
-# grace-based warning predicate directly; bin/fm-turnend-guard.sh uses the status
-# fields here for its banner but performs its end-of-turn block decision with the
-# live watcher lock check in bin/fm-wake-lib.sh.
+# touched every poll cycle, within the grace window). bin/fm-guard.sh keeps the
+# status fields here for its banner text but performs its warning decision with
+# fm_watcher_healthy from bin/fm-wake-lib.sh - the same identity-matched live
+# lock and fresh-beacon check the arm wrapper and turn-end guard use - so a
+# fresh leftover beacon never counts as a live watcher.
 
 # Portable mtime; Linux stat lacks -f, macOS stat lacks -c.
 fm_sup_stat_mtime() {
