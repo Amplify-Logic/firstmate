@@ -28,9 +28,21 @@ run_command() {
   local command=$1 rc=0
   : > "$OUT"
   : > "$ERR"
-  FM_ROOT_OVERRIDE="$PRIMARY" FM_HOME="$PRIMARY" FM_STATE_OVERRIDE="$STATE" \
-    FM_SUPERVISION_SENTINEL_MODE=auto FM_WEDGE_ALARM_CHANNEL=osascript FM_WEDGE_ALARM_EXEC="$NOTIFY" \
-    "$CHECK" --command "$command" > "$OUT" 2> "$ERR" || rc=$?
+  if [ "${RUN_FROM_HARNESS:-0}" = 1 ]; then
+    FM_ROOT_OVERRIDE="$PRIMARY" FM_HOME="$PRIMARY" FM_STATE_OVERRIDE="$STATE" \
+      FM_SUPERVISION_SENTINEL_MODE=auto FM_WEDGE_ALARM_CHANNEL=osascript FM_WEDGE_ALARM_EXEC="$NOTIFY" \
+      node -e '
+        const fs = require("node:fs");
+        const { spawnSync } = require("node:child_process");
+        fs.writeFileSync(`${process.env.FM_STATE_OVERRIDE}/.lock`, `${process.pid}\n`);
+        const result = spawnSync(process.argv[1], ["--command", process.argv[2]], { stdio: "inherit" });
+        process.exit(result.status ?? 1);
+      ' "$CHECK" "$command" codex > "$OUT" 2> "$ERR" || rc=$?
+  else
+    FM_ROOT_OVERRIDE="$PRIMARY" FM_HOME="$PRIMARY" FM_STATE_OVERRIDE="$STATE" \
+      FM_SUPERVISION_SENTINEL_MODE=auto FM_WEDGE_ALARM_CHANNEL=osascript FM_WEDGE_ALARM_EXEC="$NOTIFY" \
+      "$CHECK" --command "$command" > "$OUT" 2> "$ERR" || rc=$?
+  fi
   return "$rc"
 }
 
@@ -106,12 +118,12 @@ test_gate_scope_and_recovery_exceptions() {
 # Every deny above ran with no state/.lock at all, the genuine pre-lock case, so
 # each asserted the guidance that names the once-per-session entry point and the
 # "session start recovery" allow above covered the genuine first run. With this
-# test's own pid recorded as the lock holder, the gate's ancestry walk resolves
-# the holder inside the hook's own process ancestry: the guidance drops that
-# clause, and a session-start re-run itself is denied as a mid-session attempt.
+# a harness-like Node parent recorded as the lock holder, the gate's ancestry
+# walk resolves the holder inside the hook's own process ancestry: the guidance
+# drops that clause, and session-start itself is denied as a mid-session attempt.
 test_lock_holding_session_rerun_refused() {
   local held_reason rerun_reason
-  printf '%s\n' "$$" > "$STATE/.lock"
+  RUN_FROM_HARNESS=1
   held_reason='[watcher-continuity] SUPERVISION OUTAGE: down for unknown duration (unknown since when; watcher beat file missing or unreadable); 1 task(s) in flight: task. No live watcher holds this home lock. Drain wakes with bin/fm-wake-drain.sh, the safe mid-session action; use fail-closed bin/fm-teardown.sh for completed tasks when needed, then re-arm with bin/fm-watch-arm.sh as a tracked Claude background task before running other fleet commands (blocked: fm-crew-state.sh)'
   expect_deny "lock-holding session guidance" 'bin/fm-crew-state.sh task' 'fm-crew-state.sh' "$held_reason"
   rerun_reason='[watcher-continuity] SUPERVISION OUTAGE: down for unknown duration (unknown since when; watcher beat file missing or unreadable); 1 task(s) in flight: task. No live watcher holds this home lock. This session'\''s own ancestry already holds the home session lock, so the once-per-session bin/fm-session-start.sh has already run here and a mid-session re-run is not a recovery action. Drain wakes with bin/fm-wake-drain.sh, the safe mid-session action; use fail-closed bin/fm-teardown.sh for completed tasks when needed, then re-arm with bin/fm-watch-arm.sh as a tracked Claude background task before running other fleet commands (blocked: fm-session-start.sh)'
@@ -122,6 +134,7 @@ test_lock_holding_session_rerun_refused() {
   expect_allow "watch arm while holding the lock" 'bin/fm-watch-arm.sh'
   expect_allow "fail-closed teardown while holding the lock" 'bin/fm-teardown.sh task'
   expect_allow "exact sentinel enable while holding the lock" 'bin/fm-supervision-sentinel.sh enable'
+  unset RUN_FROM_HARNESS
   rm -f "$STATE/.lock"
   pass "continuity gate refuses a mid-session session-start re-run and keeps every other allowance for the lock-holding session"
 }
@@ -131,7 +144,7 @@ test_lock_holding_session_rerun_refused() {
 # the guidance stops naming the once-per-session entry point.
 test_foreign_lock_holder_session_start_refused() {
   local holder foreign_reason foreign_guidance
-  sleep 300 &
+  node -e 'setTimeout(() => {}, 300000)' codex &
   holder=$!
   printf '%s\n' "$holder" > "$STATE/.lock"
   foreign_reason='[watcher-continuity] SUPERVISION OUTAGE: down for unknown duration (unknown since when; watcher beat file missing or unreadable); 1 task(s) in flight: task. No live watcher holds this home lock. Another live session holds the home session lock, so the once-per-session bin/fm-session-start.sh belongs to that session and is not a recovery action here. Drain wakes with bin/fm-wake-drain.sh, the safe mid-session action; use fail-closed bin/fm-teardown.sh for completed tasks when needed, then re-arm with bin/fm-watch-arm.sh as a tracked Claude background task before running other fleet commands (blocked: fm-session-start.sh)'
@@ -142,6 +155,20 @@ test_foreign_lock_holder_session_start_refused() {
   wait "$holder" 2>/dev/null || true
   rm -f "$STATE/.lock"
   pass "continuity gate refuses session start when a live foreign session holds the home lock"
+}
+
+# A live non-harness process can reuse a stale holder PID, but it does not own
+# the session lock and must not block the genuine crash-recovery first run.
+test_reused_non_harness_pid_first_run_allowed() {
+  local holder
+  sleep 300 &
+  holder=$!
+  printf '%s\n' "$holder" > "$STATE/.lock"
+  expect_allow "first session start over a reused non-harness pid" 'bin/fm-session-start.sh'
+  kill "$holder" 2>/dev/null || true
+  wait "$holder" 2>/dev/null || true
+  rm -f "$STATE/.lock"
+  pass "continuity gate treats a live non-harness holder pid as stale"
 }
 
 # A recorded but dead holder is the crash-recovery case: the lock is not live,
@@ -228,6 +255,7 @@ test_claude_hook_registration_preserves_stop_backstop() {
 test_gate_scope_and_recovery_exceptions
 test_lock_holding_session_rerun_refused
 test_foreign_lock_holder_session_start_refused
+test_reused_non_harness_pid_first_run_allowed
 test_dead_lock_holder_first_run_allowed
 test_deny_quantifies_stale_outage_and_names_every_task
 test_live_lock_with_stale_beacon_still_denies_fleet_command

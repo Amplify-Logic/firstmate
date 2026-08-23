@@ -4,6 +4,25 @@
 # whether this hook's own harness session already acquired that home's lock.
 # This file is sourced by hook entrypoints and has no side effects on source.
 
+# Known harness command names; extend when a new adapter is verified.
+FM_HARNESS_RE='claude|codex|opencode|grok|kimi|^pi$'
+
+fm_harness_holder_alive() {
+  local pid=$1 comm args
+  kill -0 "$pid" 2>/dev/null || return 1
+  comm=$(ps -o comm= -p "$pid" 2>/dev/null) || return 1
+  if printf '%s' "$(basename -- "$comm")" | grep -qE "$FM_HARNESS_RE"; then
+    return 0
+  fi
+  case "$comm" in
+    *node*|*python*)
+      args=$(ps -o args= -p "$pid" 2>/dev/null)
+      printf '%s' "$args" | grep -qE "$FM_HARNESS_RE"
+      ;;
+    *) return 1 ;;
+  esac
+}
+
 # Return 0 when $1 carries a genuine secondmate-home marker.
 fm_root_is_secondmate_home() {
   local marker="$1/.fm-secondmate-home" id LC_ALL=C
@@ -35,8 +54,8 @@ fm_primary_scope_matches() {
 
 # Print this process's relation to the session lock in state dir $1:
 #   free      no live holder is recorded - the lock file is missing, unreadable,
-#             non-numeric, pid 1, or its holder is dead - so a session-start run
-#             here would be the genuine first acquisition.
+#             non-numeric, pid 1, or its holder is dead or not a harness - so a
+#             session-start run here would be the genuine first acquisition.
 #   ancestry  a live holder sits inside this process's own ancestry, which means
 #             this harness session already acquired the lock and
 #             bin/fm-session-start.sh has already run here.
@@ -54,7 +73,7 @@ fm_session_lock_relation() {
   case "$lock_pid" in
     ''|*[!0-9]*|1) echo free; return 0 ;;
   esac
-  kill -0 "$lock_pid" 2>/dev/null || { echo free; return 0; }
+  fm_harness_holder_alive "$lock_pid" || { echo free; return 0; }
   for _ in 1 2 3 4 5 6 7 8; do
     [ "$pid" = "$lock_pid" ] && { echo ancestry; return 0; }
     pid=$(ps -o ppid= -p "$pid" 2>/dev/null | tr -d ' ')
