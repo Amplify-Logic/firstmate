@@ -1021,7 +1021,7 @@ race_push_and_file_wait() {  # <backend> <session>
     printf '%s\n' "$rc" > "$file_rc_file"
     if [ "$rc" -eq 0 ]; then
       set -C
-      printf 'file\n' > "$winner_file" 2>/dev/null || true
+      { printf 'file\n' > "$winner_file"; } 2>/dev/null || true
     fi
   ) &
   fpid=$!
@@ -1032,7 +1032,7 @@ race_push_and_file_wait() {  # <backend> <session>
     printf '%s' "$rec" > "$recfile"
     printf '%s\n' "$rc" > "$herdr_rc_file"
     set -C
-    printf 'herdr:%s\n' "$rc" > "$winner_file" 2>/dev/null || true
+    { printf 'herdr:%s\n' "$rc" > "$winner_file"; } 2>/dev/null || true
   ) &
   hpid=$!
 
