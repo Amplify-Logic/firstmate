@@ -11,16 +11,8 @@ fm_harness_holder_alive() {
   local pid=$1 comm args
   kill -0 "$pid" 2>/dev/null || return 1
   comm=$(ps -o comm= -p "$pid" 2>/dev/null) || return 1
-  if printf '%s' "$(basename -- "$comm")" | grep -qE "$FM_HARNESS_RE"; then
-    return 0
-  fi
-  case "$comm" in
-    *node*|*python*)
-      args=$(ps -o args= -p "$pid" 2>/dev/null)
-      printf '%s' "$args" | grep -qE "$FM_HARNESS_RE"
-      ;;
-    *) return 1 ;;
-  esac
+  args=$(ps -o args= -p "$pid" 2>/dev/null)
+  printf '%s' "$(basename -- "$comm") $args" | grep -qE "$FM_HARNESS_RE"
 }
 
 # Return 0 when $1 carries a genuine secondmate-home marker.
@@ -73,13 +65,17 @@ fm_session_lock_relation() {
   case "$lock_pid" in
     ''|*[!0-9]*|1) echo free; return 0 ;;
   esac
-  fm_harness_holder_alive "$lock_pid" || { echo free; return 0; }
+  kill -0 "$lock_pid" 2>/dev/null || { echo free; return 0; }
   for _ in 1 2 3 4 5 6 7 8; do
     [ "$pid" = "$lock_pid" ] && { echo ancestry; return 0; }
     pid=$(ps -o ppid= -p "$pid" 2>/dev/null | tr -d ' ')
-    [ -n "$pid" ] && [ "$pid" -gt 1 ] || { echo foreign; return 0; }
+    [ -n "$pid" ] && [ "$pid" -gt 1 ] || break
   done
-  echo foreign
+  if fm_harness_holder_alive "$lock_pid"; then
+    echo foreign
+  else
+    echo free
+  fi
 }
 
 # Return 0 only when fm_session_lock_relation resolves "ancestry" for state dir
