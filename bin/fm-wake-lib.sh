@@ -205,6 +205,81 @@ fm_watcher_healthy() {
   return 0
 }
 
+# fm_watcher_healthy above is the PID-STRICT primitive: true only when a live,
+# identity-matched watcher PROCESS holds this home's lock with a fresh beacon.
+# The arm layer (bin/fm-watch-arm.sh) needs exactly that - it decides whether to
+# start, attach to, or replace a real watcher process, so a leftover beacon must
+# never satisfy it. bin/fm-turnend-guard.sh also keeps this strict check because
+# it fires at the turn boundary. The pull warning (bin/fm-guard.sh) fires
+# mid-turn, so it asks a model-aware question instead:
+
+# fm_supervision_model
+# Print the supervision model of this home's PRIMARY harness:
+#   autoarm     a between-turns arm owner re-arms at each turn end and the
+#               watcher exits on its wake, so it runs only BETWEEN turns;
+#               mid-turn a fresh beacon with no live watcher is healthy.
+#   persistent  the watcher runs as a tracked live process, so a live
+#               identity-matched pid is the real liveness signal.
+# FM_SUPERVISION_MODEL overrides detection (tests, and callers that already know
+# the harness). Otherwise bin/fm-harness.sh is the single detection owner.
+# This fork currently runs a persistent model for EVERY harness, Claude
+# included: its Claude continuity uses tracked background arms, not a Stop-hook
+# auto-arm, so detection maps claude to persistent here.
+fm_supervision_model() {
+  local harness
+  case "${FM_SUPERVISION_MODEL:-}" in
+    autoarm|persistent) printf '%s\n' "$FM_SUPERVISION_MODEL"; return 0 ;;
+  esac
+  harness=$("$FM_WAKE_LIB_DIR/fm-harness.sh" 2>/dev/null || printf unknown)
+  case "$harness" in
+    claude) printf 'persistent\n' ;;
+    *) printf 'persistent\n' ;;
+  esac
+}
+
+# fm_watcher_supervision_verdict <state> <watch-path> [grace] [home]
+# Model-aware "is supervision healthy right now" verdict for the pull warning
+# guard (bin/fm-guard.sh), NOT the arm layer or the turn-end guard. Sets:
+#   FM_WATCHER_VERDICT_OK      true when supervision is healthy for this model
+#   FM_WATCHER_VERDICT_REASON  when not ok, the true failing condition:
+#                              no-watcher   - a live watcher process is the real
+#                                             signal for this model but none holds
+#                                             the lock (the beacon is still fresh)
+#                              stale-beacon - the beacon is stale beyond grace or
+#                                             absent (a genuine supervision lapse)
+# autoarm: a fresh beacon within grace is healthy even with no live watcher,
+# because the watcher only runs between turns; only a stale beacon is a lapse.
+# persistent: require a live identity-matched watcher with a fresh beacon
+# (fm_watcher_healthy); a fresh leftover beacon with no live watcher is still down.
+# shellcheck disable=SC2034 # Read by callers after the function returns.
+FM_WATCHER_VERDICT_OK=false
+# shellcheck disable=SC2034 # Read by callers after the function returns.
+FM_WATCHER_VERDICT_REASON=stale-beacon
+fm_watcher_supervision_verdict() {
+  local state=$1 watch=$2 grace=${3:-${FM_GUARD_GRACE:-300}} home=${4:-$FM_HOME}
+  local beat age fresh=false
+  FM_WATCHER_VERDICT_OK=false
+  FM_WATCHER_VERDICT_REASON=stale-beacon
+  beat="$state/.last-watcher-beat"
+  age=$(fm_path_age "$beat")
+  case "$age" in
+    ''|*[!0-9]*) ;;
+    *) [ "$age" -lt "$grace" ] && fresh=true ;;
+  esac
+  if [ "$(fm_supervision_model)" = autoarm ]; then
+    [ "$fresh" = true ] && FM_WATCHER_VERDICT_OK=true
+    return 0
+  fi
+  if fm_watcher_healthy "$state" "$watch" "$grace" "$home"; then
+    # shellcheck disable=SC2034 # Read by callers after the function returns.
+    FM_WATCHER_VERDICT_OK=true
+  elif [ "$fresh" = true ]; then
+    # shellcheck disable=SC2034 # Read by callers after the function returns.
+    FM_WATCHER_VERDICT_REASON=no-watcher
+  fi
+  return 0
+}
+
 fm_lock_clean_known_files() {
   local lockdir=$1
   rm -f \
