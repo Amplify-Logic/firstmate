@@ -39,23 +39,17 @@ The turn-end guard and its adapters remain the final in-harness backstop rather 
 On an unhealthy result, both that guard and the Claude continuity gate call `bin/fm-supervision-sentinel.sh note-outage`, which records the shared durable outage marker with local writes alone.
 Neither hook forks a notifier, backgrounds notifier work, or waits on external-channel delivery: they must return their blocking result immediately, and the scheduled host check owns delivery.
 
-## Known limitation
+## Session-start first-run scoping
 
-The session-start allowance is not restricted to a genuinely first invocation, and this gate's allow/deny decision does not try to detect one.
-`bin/fm-lock.sh` treats a recorded holder PID equal to the current harness PID as a successful re-acquire, so a mid-session re-run of `bin/fm-session-start.sh` — not only the fresh case where no lock exists yet — also passes this gate, acquires the lock, and runs bootstrap's five mutating sweeps.
-The gate's own trigger condition is watcher liveness, which is independent of session-lock ownership, so the classification does not distinguish the two cases from where it sits.
-The deny guidance does distinguish them with `fm_session_lock_in_ancestry()`, so a session that already holds the lock is no longer told about session start at all.
-Applying that same ancestry test to the allow/deny classification is beyond this fix's risk budget: it is a deliberate scope deferral rather than a technical limitation, and remains a deferred follow-up.
+The session-start allowance is scoped to a genuinely first invocation, closing the previously documented mid-session re-run gap.
+`bin/fm-lock.sh` treats a recorded holder PID equal to the current harness PID as a successful re-acquire, so before this scoping a mid-session re-run of `bin/fm-session-start.sh` also passed this gate, re-acquired the lock, and ran bootstrap's five mutating sweeps - including the secondmate liveness sweep's `fm_backend_kill` plus respawn recovery action, which `bin/fm-bootstrap.sh` scopes to "session start (reboot/restart) only".
+The gate now passes the shared session-lock relation (`fm_session_lock_relation()` in `bin/fm-primary-scope-lib.sh`, the same ancestry walk `bin/fm-sessionstart-nudge.sh` consumes through `fm_session_lock_in_ancestry()`) into `bin/fm-continuity-command-policy.mjs`.
+A lock-free home - no lock file, an unreadable or non-numeric holder, or a dead holder - keeps `bin/fm-session-start.sh` a recovery command, exactly the genuine first run including crash recovery over a stale lock.
+A live holder inside the hook's own ancestry means this session already ran session start, and a live holder outside it means another session owns the home; either way the attempt is denied with the canonical outage summary, and the deny guidance for other fleet commands stops naming the once-per-session entry point.
+The wake-drain, watcher-arm, ordinary literal teardown, and exact sentinel-enable allowances are independent of session-lock ownership and unchanged.
 
-That is accepted rather than patched now, for two reasons.
-The session lock, not watcher liveness, is the actual mutation authority for those sweeps.
-And "run session-start exactly once per session" is a behavioral contract owned and enforced by AGENTS.md and agent discipline, not by a PreToolUse gate; a half-enforced first-invocation check here would be less trustworthy than this stated limitation.
-
-A re-run does exceed the documented contract, so the blast radius is stated plainly rather than minimized.
-AGENTS.md section 3 scopes session start to once per session, and `bin/fm-bootstrap.sh`'s secondmate liveness sweep scopes itself to "session start (reboot/restart) only" with a mid-session secondmate death explicitly out of scope.
-The practical consequence is that this gate transitively permits mutations it denies when invoked directly.
-The most destructive of them is that sweep's own recovery action: for any secondmate whose liveness probe reads confidently dead, it runs `fm_backend_kill` and then respawns through `bin/fm-spawn.sh <id> --secondmate` (`bin/fm-bootstrap.sh:447-448`).
-It also includes the `bin/fm-visible-status.sh --all` Herdr presentation projection, whose cursor-worker `model_live=` meta write is owned by [`cursor-harness.md`](cursor-harness.md), and the secondmate reread nudges that bootstrap performs inside its own process.
+The scoping is a gate over one harness's Bash tool calls, not the mutation authority itself: the session lock remains what actually gates bootstrap's mutating sweeps, and "run session-start exactly once per session" remains a behavioral contract owned by AGENTS.md section 3.
+The relation inherits the ancestry walk's own bounds - at most eight parents, matching `bin/fm-lock.sh` - and any unproven ownership of a live lock resolves to the foreign relation, which denies rather than allows.
 
 ## Host-level outage sentinel
 
