@@ -109,8 +109,11 @@ The launchd transport itself is covered by an opt-in real-`launchctl` smoke rath
 
 `bin/fm-watch-arm.sh` never returns a clean empty success.
 An actionable child output returns that reason normally.
-A zero/empty child return rechecks the home lock and beacon, attaches to a verified healthy successor when one exists, or emits `watcher: FAILED - cycle ended without an actionable reason` and exits nonzero.
-An attached arm follows verified identity-matched successors and reports the same typed failure if that chain ends without one.
+A zero/empty child return rechecks the home lock and beacon, attaches to a verified healthy successor when one exists, or resolves the close against the watcher's bounded terminal-delivery ledger.
+An attached arm follows verified identity-matched successors and resolves the same way when that chain ends without one, because it holds no handle on the watcher's stdout and cannot read the reason line itself.
+Before releasing its singleton lock after printing an actionable reason, the watcher records that reason with its PID and process identity in `state/.watch-deliveries.log`.
+A matching PID and identity lets an attached arm report the delivered reason and exit zero even after the durable wake queue was drained, while an unrelated queue producer or a recycled PID cannot satisfy the match.
+Only a cycle with no matching delivery record emits `watcher: FAILED - cycle ended without an actionable reason` and exits nonzero.
 
 A freshly started watcher runs the non-executing PR check migration before it can take the lock or beat, so a full sweep sits inside the confirmation window and publishes its own `state/.pr-check-migration.progress.<pid>` record.
 While that sweep is provably running the arm extends the window by `FM_ARM_MIGRATION_GRACE` instead of stopping its own healthy child, and a sweep that outlasts even the extension fails with `watcher: FAILED - PR check migration still running pid=<N>, watcher not confirmed yet` rather than the generic missing-beacon wording.
