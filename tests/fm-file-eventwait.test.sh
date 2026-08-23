@@ -218,6 +218,7 @@ fm_backend_events_capable() { return 0; }
 fm_glasses_watch_paths() { printf '%s\n' "$TMP/watch.txt"; }
 # shellcheck disable=SC2329
 fm_file_event_wait() {
+  [ "$1" = "$POLL" ] || fail "file waiter must receive fractional POLL, got $1"
   command sleep 0.1
   return 0
 }
