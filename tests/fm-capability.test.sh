@@ -73,8 +73,11 @@ test_record_teardown_outcomes() {
     "first-try pass should log green with both counts"
   assert_contains "$body" '|bugfix|cursor|grok|medium|fixed|2' \
     "pass after fix rounds should log fixed with its fix-round count"
-  assert_contains "$body" '|bugfix|cursor|grok|medium|failed|1' \
-    "never-completed validation should log failed with its steer count"
+  assert_contains "$body" '|bugfix|cursor|grok|medium|failed||1' \
+    "a steer-only record should retain the empty fix-rounds slot"
+  case "$body" in
+    *'|fixed|2|'*) fail "a fix-round-only record must omit the absent steer slot: $body" ;;
+  esac
   assert_contains "$body" '|report|claude|sonnet|high|unknown' \
     "underivable validation should log unknown without counts"
   assert_contains "$body" '|bugfix|cursor|grok|medium|discarded' \

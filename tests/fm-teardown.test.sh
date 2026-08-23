@@ -840,6 +840,30 @@ test_teardown_records_unknown_without_run_records() {
   pass "teardown records unknown when validation evidence is absent"
 }
 
+test_teardown_records_unknown_without_branch_name() {
+  local case_dir rc body
+  case_dir=$(make_case unknown-detached-cap)
+  write_meta "$case_dir" no-mistakes ship
+  add_capability_meta "$case_dir"
+  wt_commit "$case_dir" "shippable detached work"
+  git -C "$case_dir/wt" push -q origin fm/task-x1
+  git -C "$case_dir/project" fetch -q origin
+  git -C "$case_dir/wt" checkout -q --detach
+
+  set +e
+  run_teardown "$case_dir" > "$case_dir/stdout" 2> "$case_dir/stderr"
+  rc=$?
+  set -e
+
+  expect_code 0 "$rc" "unknown-detached-cap: teardown should succeed for landed work"
+  body=$(cat "$case_dir/state/capability-outcomes.log")
+  case "$body" in
+    *'|truegreen-e2e|claude|sonnet|high|unknown') : ;;
+    *) fail "an unavailable branch name must record unknown, got: $body" ;;
+  esac
+  pass "teardown records unknown when the branch name is unavailable"
+}
+
 test_no_mistakes_truly_unpushed_refuses() {
   local case_dir rc
   case_dir=$(make_case nm-unpushed)
@@ -1571,6 +1595,7 @@ test_teardown_records_truegreen_capability_line
 test_teardown_records_fixed_after_fix_rounds_not_green
 test_teardown_records_failed_when_validation_never_completed
 test_teardown_records_unknown_without_run_records
+test_teardown_records_unknown_without_branch_name
 test_no_mistakes_truly_unpushed_refuses
 test_local_only_force_overrides_unpushed
 test_herdr_teardown_clears_escalation_marker

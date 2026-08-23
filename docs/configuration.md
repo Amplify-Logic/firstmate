@@ -317,7 +317,7 @@ The log is a captain-inspectable plain-text file under the home's private `data/
 Each append-only line is:
 
 ```text
-<unix-epoch>|<task-type>|<harness>|<model>|<effort>|<outcome>[|<fix-rounds>|<steers>]
+<unix-epoch>|<task-type>|<harness>|<model>|<effort>|<outcome>[|<fix-rounds>[|<steers>]]
 ```
 
 `outcome` is derived from the task's recorded validation result at teardown, never from the teardown mode.
@@ -326,7 +326,7 @@ Each append-only line is:
 `failed` means validation ran but its newest recorded attempt never completed.
 `unknown` means no validation result was derivable (scout reports, direct-PR or local-only delivery, or unavailable run records).
 `discarded` records an approved `--force` teardown.
-The trailing counts are written only when derivable: `steers` counts confirmed supervisor sends recorded per task by `bin/fm-send.sh`.
+The trailing counts are written only when derivable: `steers` counts confirmed supervisor sends recorded per task by `bin/fm-send.sh`, and an empty `fix-rounds` slot is retained when only `steers` is known.
 Older six-field lines without trailing counts stay valid, and readers treat missing counts as absent rather than guessing them.
 `task-type` comes from meta `task_type=` when `fm-spawn.sh --task-type <slug>` recorded it, otherwise from `kind` (`ship` or `scout`).
 Fields never contain `|` or newlines.

@@ -176,6 +176,9 @@ CAP_OUTCOME=
 CAP_FIX_ROUNDS=
 CAP_STEERS=
 if [ "$KIND" != secondmate ] && [ -n "$HARNESS" ]; then
+  if [ "$FORCE" != "--force" ]; then
+    CAP_OUTCOME=unknown
+  fi
   CAP_BRANCH=
   if [ -d "$WT" ]; then
     CAP_BRANCH=$(git -C "$WT" rev-parse --abbrev-ref HEAD 2>/dev/null || true)

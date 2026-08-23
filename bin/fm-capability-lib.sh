@@ -6,14 +6,15 @@
 # This header owns the wire format and selection contracts:
 #   - Log path: $FM_HOME/data/capability-outcomes.log (override: FM_CAPABILITY_LOG).
 #   - One append-only line per finished ship/scout teardown:
-#       <unix-epoch>|<task-type>|<harness>|<model>|<effort>|<outcome>[|<fix-rounds>|<steers>]
+#       <unix-epoch>|<task-type>|<harness>|<model>|<effort>|<outcome>[|<fix-rounds>[|<steers>]]
 #     Fields never contain '|' or newlines; invalid fields refuse the append.
 #     The trailing counts are written only when derivable, each as one
 #     non-negative integer: fix-rounds is the number of earlier recorded
 #     pipeline attempts for the task's branch before its final attempt, and
 #     steers is the confirmed supervisor send count from state/<id>.steers.
-#     Absent counts are omitted from the line, never guessed; older six-field
-#     lines without them stay valid forever.
+#     An absent fix-rounds count retains an empty field when steers is present;
+#     otherwise absent trailing counts are omitted, never guessed. Older
+#     six-field lines without them stay valid forever.
 #   - Outcomes (green means exactly what it claims):
 #       green     validation passed on the first recorded pipeline attempt
 #                 (fix-rounds 0)
@@ -85,8 +86,8 @@ fm_capability_field_ok() {
 
 # Append one outcome line. Args: task-type harness model effort outcome
 #   [fix-rounds] [steers]
-# Each count is optional: a non-empty value must be a non-negative integer and
-# is appended as the next trailing field; empty means absent (field omitted).
+# Each count is optional: a non-empty value must be a non-negative integer.
+# An empty fix-rounds value retains its positional field when steers is present.
 # Best-effort: creates data/ as needed; returns non-zero on invalid fields or
 # write failure but never blocks teardown callers that ignore the status.
 fm_capability_log_append() {
@@ -115,7 +116,7 @@ fm_capability_log_append() {
   ts=$(fm_capability_now)
   fm_capability_field_ok "$ts" || return 1
   line="$ts|$task_type|$harness|$model|$effort|$outcome"
-  case "$fix_rounds" in '') ;; *) line="$line|$fix_rounds" ;; esac
+  case "$fix_rounds:$steers" in :) ;; *) line="$line|$fix_rounds" ;; esac
   case "$steers" in '') ;; *) line="$line|$steers" ;; esac
   printf '%s\n' "$line" >> "$log_path"
 }
