@@ -2,7 +2,7 @@
 # fm-send per-task supervisor steer counter (state/<id>.steers).
 #
 # Teardown's capability outcome log records how many supervisor steers a task
-# received, so every confirmed text submit to a meta-resolved task target must
+# received, so every confirmed text submit to a task-selector target must
 # append exactly one line to that task's volatile counter file. These tests pin
 # that behavior hermetically (stubbed tmux, no real agent):
 #   1. Confirmed sends to an exact-id or stable-label task target count once each.
@@ -89,6 +89,18 @@ test_explicit_target_never_counts() {
   pass "explicit backend targets leave no steer counter"
 }
 
+test_explicit_recorded_target_never_counts() {
+  local dir fb home rc
+  dir="$TMP_ROOT/explicit-recorded"; mkdir -p "$dir"
+  fb=$(make_stubs "$dir")
+  home=$(setup_home explicit-recorded)
+  run_send "$fb" "$home" "sess:fm-build" "hello recorded endpoint"; rc=$?
+  expect_code 0 "$rc" "explicit recorded-target send should succeed"
+  [ ! -e "$home/state/build.steers" ] \
+    || fail "an explicit backend target matching task metadata must not write a counter"
+  pass "explicit recorded backend targets leave no steer counter"
+}
+
 test_key_path_never_counts() {
   local dir fb home rc
   dir="$TMP_ROOT/keypath"; mkdir -p "$dir"
@@ -116,6 +128,7 @@ test_swallowed_enter_never_counts() {
 
 test_confirmed_sends_count_once_each
 test_explicit_target_never_counts
+test_explicit_recorded_target_never_counts
 test_key_path_never_counts
 test_swallowed_enter_never_counts
 
