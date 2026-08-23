@@ -123,9 +123,11 @@ WATCHER_STALE_GRACE=${FM_WATCHER_STALE_GRACE:-${FM_GUARD_GRACE:-300}}
 # token (e.g. the word "File" read as an unset variable), which silently kills the
 # watcher mid-cycle. Detect the platform once and pick the right form.
 if [ "$(uname)" = Darwin ]; then
+  STAT_STYLE=bsd
   stat_mtime() { stat -f %m "$1" 2>/dev/null; }        # epoch seconds of mtime
   stat_sig()   { stat -f '%z:%Fm' "$1" 2>/dev/null; }   # size:mtime signature
 else
+  STAT_STYLE=gnu
   stat_mtime() { stat -c %Y "$1" 2>/dev/null; }
   stat_sig()   { stat -c '%s:%Y' "$1" 2>/dev/null; }
 fi
@@ -918,7 +920,11 @@ event_wait_or_sleep() {
 file_event_sig() {  # <path>...
   local p
   for p in "$@"; do
-    printf '%s:%s\n' "$p" "$(stat_sig "$p" || printf missing)"
+    if [ "$STAT_STYLE" = bsd ]; then
+      printf '%s:%s\n' "$p" "$(stat -f '%z:%Fm:%Fc' "$p" 2>/dev/null || printf missing)"
+    else
+      printf '%s:%s\n' "$p" "$(stat -c '%s:%y:%z' "$p" 2>/dev/null || printf missing)"
+    fi
   done
 }
 
@@ -992,8 +998,8 @@ apply_push_wait_result() {  # <backend> <session> <record> <rc>
 # by SIGCHLD when the other waiter exits, which dropped blocked escalations.
 race_push_and_file_wait() {  # <backend> <session>
   local backend=$1 session=$2
-  local race_dir winner_file recfile herdr_rc_file winner fpid hpid
-  local file_rc=1 before after rec rc="" spins=0
+  local race_dir winner_file recfile herdr_rc_file file_rc_file winner fpid hpid
+  local file_rc=1 before after rec rc="" spins=0 poll_whole max_spins
   local -a race_windows=("${EVENT_WAIT_WINDOWS[@]}")
   local -a race_paths=("${FILE_EVENT_PATHS[@]}")
   [ "${#race_windows[@]}" -gt 0 ] || return
@@ -1007,9 +1013,13 @@ race_push_and_file_wait() {  # <backend> <session>
   winner_file="$race_dir/winner"
   recfile="$race_dir/rec"
   herdr_rc_file="$race_dir/herdr_rc"
+  file_rc_file="$race_dir/file_rc"
 
   (
-    if fm_file_event_wait "$POLL" "${race_paths[@]}"; then
+    fm_file_event_wait "$POLL" "${race_paths[@]}"
+    rc=$?
+    printf '%s\n' "$rc" > "$file_rc_file"
+    if [ "$rc" -eq 0 ]; then
       set -C
       printf 'file\n' > "$winner_file" 2>/dev/null || true
     fi
@@ -1026,18 +1036,27 @@ race_push_and_file_wait() {  # <backend> <session>
   ) &
   hpid=$!
 
+  poll_whole=${POLL%%.*}
+  [[ "$poll_whole" =~ ^[0-9]+$ ]] || poll_whole=0
+  max_spins=$(((poll_whole + 3) * 20))
   while [ ! -s "$winner_file" ]; do
     if ! kill -0 "$fpid" 2>/dev/null && ! kill -0 "$hpid" 2>/dev/null; then
       break
     fi
     command sleep 0.05
     spins=$((spins + 1))
-    [ "$spins" -ge $((POLL * 20 + 40)) ] && break
+    [ "$spins" -ge "$max_spins" ] && break
   done
-  fm_kill_pid_tree "$fpid"
+  winner=$(cat "$winner_file" 2>/dev/null || true)
+  if [ "$winner" = herdr:2 ]; then
+    wait "$fpid" 2>/dev/null || true
+  else
+    fm_kill_pid_tree "$fpid"
+  fi
   fm_kill_pid_tree "$hpid"
-  wait "$fpid" 2>/dev/null && file_rc=0 || file_rc=$?
+  wait "$fpid" 2>/dev/null || true
   wait "$hpid" 2>/dev/null || true
+  [ -f "$file_rc_file" ] && file_rc=$(cat "$file_rc_file")
   winner=$(cat "$winner_file" 2>/dev/null || true)
   rec=$(cat "$recfile" 2>/dev/null || true)
   if [ -z "$winner" ] && [ -f "$herdr_rc_file" ]; then
@@ -1053,9 +1072,14 @@ race_push_and_file_wait() {  # <backend> <session>
     return
   fi
   case "$winner" in
-    herdr:0|herdr:1|herdr:2)
+    herdr:0|herdr:1)
       rc=${winner#herdr:}
       apply_push_wait_result "$backend" "$session" "$rec" "$rc"
+      ;;
+    herdr:2)
+      _event_cap_fails=$((_event_cap_fails + 1))
+      [ "$_event_cap_fails" -ge "$EVENT_CAP_FAIL_MAX" ] && _event_cap_ok=0
+      [ "$file_rc" -eq 2 ] && sleep "$POLL"
       ;;
   esac
 }

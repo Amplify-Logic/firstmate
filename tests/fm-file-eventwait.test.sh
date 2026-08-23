@@ -208,4 +208,25 @@ grep -q 'herdr: agent blocked' "$STATE_DIR/.wake-queue" \
   || fail "herdr win must keep the blocked stale payload"
 pass "event_wait_or_sleep: herdr blocked still escalates when glasses paths are watched"
 
+reset_state
+fm_write_meta "$STATE_DIR/tk5.meta" "window=default:wG:pQ" "backend=herdr" "kind=ship"
+touch "$STATE_DIR/.last-check"
+POLL=0.2
+# shellcheck disable=SC2329
+fm_backend_events_capable() { return 0; }
+# shellcheck disable=SC2329
+fm_glasses_watch_paths() { printf '%s\n' "$TMP/watch.txt"; }
+# shellcheck disable=SC2329
+fm_file_event_wait() {
+  command sleep 0.1
+  return 0
+}
+# shellcheck disable=SC2329
+fm_backend_wait_transition() { return 2; }
+event_wait_or_sleep
+[ ! -e "$STATE_DIR/.last-check" ] || fail "a file event after herdr failure must expire .last-check"
+[ "$_event_cap_fails" = 1 ] || fail "herdr failure before file event must increment fail count"
+grep -q 'SLEEP' "$SLEEP_LOG" && fail "herdr failure must not blind-sleep while the file waiter remains usable"
+pass "event_wait_or_sleep: fractional poll survives herdr failure and file event still interrupts"
+
 echo "# fm-file-eventwait.test.sh: all assertions passed"
