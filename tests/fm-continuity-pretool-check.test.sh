@@ -29,6 +29,8 @@ run_command() {
   : > "$OUT"
   : > "$ERR"
   if [ "${RUN_FROM_HARNESS:-0}" = 1 ]; then
+    # The single quotes deliberately prevent shell expansion inside the JavaScript fixture.
+    # shellcheck disable=SC2016
     FM_ROOT_OVERRIDE="$PRIMARY" FM_HOME="$PRIMARY" FM_STATE_OVERRIDE="$STATE" \
       FM_SUPERVISION_SENTINEL_MODE=auto FM_WEDGE_ALARM_CHANNEL=osascript FM_WEDGE_ALARM_EXEC="$NOTIFY" \
       node -e '
