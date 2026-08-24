@@ -104,6 +104,8 @@ if [ "${#FM_TEST_CLEANUP_DIRS[@]}" -eq 0 ]; then
   trap fm_test_cleanup EXIT
 fi
 FM_TEST_CLEANUP_DIRS+=("$FM_TEST_HERMETIC_HOME")
+FM_TEST_CLEANUP_REGISTRY="$FM_TEST_HERMETIC_HOME/cleanup-dirs"
+: > "$FM_TEST_CLEANUP_REGISTRY"
 export FM_HOME="$FM_TEST_HERMETIC_HOME"
 
 # Watchers, arms, and daemons spawned by a suite are tracked here and reaped by
@@ -147,15 +149,20 @@ fm_test_pid_is_path_scoped() {  # <pid>
   cmd=$(LC_ALL=C ps -o command= -p "$pid" 2>/dev/null) || return 1
   [ -n "$cmd" ] || return 1
   case "$cmd" in
-    "$ROOT"/"*") return 0 ;;
+    *"$ROOT"/*) return 0 ;;
   esac
   for dir in "${FM_TEST_CLEANUP_DIRS[@]:-}"; do
     [ -n "$dir" ] || continue
     case "$cmd" in
-      "$dir"/*) return 0 ;;
-      *"$dir"*) return 0 ;;
+      *"$dir"/*) return 0 ;;
     esac
   done
+  while IFS= read -r dir; do
+    [ -n "$dir" ] || continue
+    case "$cmd" in
+      *"$dir"/*) return 0 ;;
+    esac
+  done < "$FM_TEST_CLEANUP_REGISTRY"
   return 1
 }
 
@@ -214,6 +221,9 @@ EOF
 fm_test_cleanup() {
   local d
   fm_test_reap_children
+  while IFS= read -r d; do
+    [ -n "$d" ] && rm -rf "$d"
+  done < "$FM_TEST_CLEANUP_REGISTRY"
   for d in "${FM_TEST_CLEANUP_DIRS[@]:-}"; do
     [ -n "$d" ] && rm -rf "$d"
   done
@@ -226,6 +236,7 @@ fm_test_tmproot() {
     trap fm_test_cleanup EXIT
   fi
   FM_TEST_CLEANUP_DIRS+=("$root")
+  printf '%s\n' "$root" >> "$FM_TEST_CLEANUP_REGISTRY"
   # shellcheck disable=SC2034 # Read by the caller after the registration.
   FM_TEST_LAST_TMPROOT=$root
   printf '%s\n' "$root"

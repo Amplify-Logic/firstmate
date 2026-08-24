@@ -27,11 +27,7 @@ set -u
 WATCH="$ROOT/bin/fm-watch.sh"
 WATCH_ARM="$ROOT/bin/fm-watch-arm.sh"
 
-# Register in the parent shell (not a command substitution, whose array append
-# would be lost) so the suite root is BOTH cleaned at exit AND counted as a
-# path-scoped kill boundary by the teardown reaper.
-fm_test_tmproot fm-supervision-test-isolation >/dev/null
-TMP_ROOT=$FM_TEST_LAST_TMPROOT
+TMP_ROOT=$(fm_test_tmproot fm-supervision-test-isolation)
 
 # Hermetic fake tmux so a spawned watcher never lists a real terminal session.
 ISOLATION_FAKEBIN=$(fm_fakebin "$TMP_ROOT/bin")
@@ -167,17 +163,20 @@ test_arm_restart_cannot_touch_a_foreign_home() {
 }
 
 test_teardown_reaps_untracked_background_children() {
-  local fixture_pid foreign_pid alive
+  local fixture_pid worktree_pid foreign_pid alive command_sub_root
   # An untracked long-runner INSIDE the fixture tree (its command path lies in a
   # registered temp dir) stands in for a watcher a mid-test fail skipped past:
   # teardown must still reap it.
-  cat > "$TMP_ROOT/long-runner" <<'SH'
+  command_sub_root=$(fm_test_tmproot fm-isolation-command-sub)
+  cat > "$command_sub_root/long-runner" <<'SH'
 #!/usr/bin/env bash
 sleep 300
 SH
-  chmod +x "$TMP_ROOT/long-runner"
-  "$TMP_ROOT/long-runner" &
+  chmod +x "$command_sub_root/long-runner"
+  "$command_sub_root/long-runner" &
   fixture_pid=$!
+  bash -c 'trap "exit 0" TERM; while :; do :; done' "$ROOT/bin/fm-watch.sh" &
+  worktree_pid=$!
   # A live process OUTSIDE every scoped path - plain sleep, the same shape a
   # real firstmate home's own supervision could be running - must survive
   # teardown untouched.
@@ -188,6 +187,10 @@ SH
   kill -0 "$fixture_pid" 2>/dev/null && alive=1
   wait "$fixture_pid" 2>/dev/null || true
   [ "$alive" -eq 0 ] || fail "teardown left a path-scoped untracked child alive"
+  alive=0
+  kill -0 "$worktree_pid" 2>/dev/null && alive=1
+  wait "$worktree_pid" 2>/dev/null || true
+  [ "$alive" -eq 0 ] || fail "teardown left an interpreted worktree child alive"
   alive=0
   kill -0 "$foreign_pid" 2>/dev/null && alive=1
   [ "$alive" -eq 1 ] || fail "teardown killed a process outside every scoped path"
