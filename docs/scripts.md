@@ -95,7 +95,7 @@ The shared no-mistakes gate refusal for fleet lifecycle entrypoints is summarize
 | `fm-upstream-lib.sh`     | Read-only fork upstream-drift detection, ledger-subtracted so the count falls as batches land (`UPSTREAM:`) |
 | `fm-toolchain-lib.sh`    | Read-only runtime version-drift detection against `docs/toolchain-manifest.tsv`, fail-open (`TOOLCHAIN_DRIFT:`) |
 | `fm-timeout-lib.sh`      | Shared portable wall-clock timeout for bounded read-only probes                      |
-| `fm-supervision-lib.sh`  | Shared in-flight-work-without-fresh-watcher-beacon predicate                         |
+| `fm-supervision-lib.sh`  | Shared in-flight supervision status and canonical outage-summary helpers             |
 | `fm-ff-lib.sh`           | Shared guarded fast-forward helper for origin pulls and local secondmate syncs       |
 | `fm-secondmate-registry-lib.sh` | Shared `data/secondmates.md` record parser and strict/scoped binding validator |
 | `fm-path-lib.sh`         | Shared normalization of relative durable directory inputs to absolute paths          |

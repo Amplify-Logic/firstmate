@@ -68,7 +68,7 @@ On macOS, `bin/fm-supervision-sentinel.sh` adds a per-home launchd check outside
 Repeated alerts for one continuous outage back off exponentially while changed outage evidence resets that schedule, and deliberate home-scoped `disarm` remains visible in every session-start digest until an explicit verified `enable`.
 In-harness guards only record the shared outage marker; the scheduled host check is the sole owner of external alert delivery.
 It alarms only and never starts, stops, or signals a supervision process.
-The drain script calls that guard after emptying the queue, which avoids repeating the queued-wakes warning for records it just consumed while still warning on stale watcher liveness.
+The drain script calls that guard after emptying the queue, which avoids repeating the queued-wakes warning for records it just consumed while still warning when identity-matched supervision is unhealthy.
 It leads with a prominent bordered tangle banner, while `bin/fm-guard.sh` owns the stale-watcher banner/reminder policy so repeated guarded commands stay noisy without reprinting the full watcher-down banner in the same episode.
 The pull-based guard, Claude continuity gate, and turn-end guard all render the canonical outage summary owned by `bin/fm-supervision-lib.sh`: elapsed time from `state/.last-watcher-beat`, the in-flight task count, and every task ID, with explicit unknown-duration and unknown-start wording whenever the beacon evidence cannot prove a time.
 On every verified primary harness, tracked hook integration gives the primary session a push-based backstop: when work is in flight and no identity-matched watcher lock with a fresh beacon is live, direct Stop hooks block and passive turn-end hooks force one bounded follow-up.
