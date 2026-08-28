@@ -311,7 +311,10 @@ fm_test_kill_cleanup_dir_exes() {  # <-TERM|-KILL>
 # registered fixture temp dir are ever signalled. TERM first with a bounded
 # grace, then KILL whatever remains.
 fm_test_reap_children() {
-  local pid i alive
+  local pid i alive root_pid
+  # Capture before command substitution: inside $(...), BASHPID is the subshell
+  # so pgrep would miss this shell's background children (Linux bash 4+).
+  root_pid=${BASHPID:-$$}
   for pid in "${FM_TEST_CHILD_PIDS[@]:-}"; do
     [ -n "$pid" ] || continue
     fm_test_kill_scoped -TERM "$pid"
@@ -320,7 +323,7 @@ fm_test_reap_children() {
     [ -n "$pid" ] || continue
     fm_test_kill_scoped -TERM "$pid"
   done <<EOF
-$(fm_test_descendant_pids "${BASHPID:-$$}")
+$(fm_test_descendant_pids "$root_pid")
 EOF
   fm_test_kill_cleanup_dir_exes -TERM
   i=0
@@ -341,7 +344,7 @@ EOF
     [ -n "$pid" ] || continue
     fm_test_kill_scoped -KILL "$pid"
   done <<EOF
-$(fm_test_descendant_pids "${BASHPID:-$$}")
+$(fm_test_descendant_pids "$root_pid")
 EOF
   fm_test_kill_cleanup_dir_exes -KILL
   return 0
