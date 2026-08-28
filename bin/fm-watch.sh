@@ -946,6 +946,25 @@ expire_check_sweep() {
   triage_log "glasses file event; next cycle runs checks immediately"
 }
 
+# glasses_file_event_catch_up: close the durable gap a live event waiter cannot
+# observe. On watcher start and at the top of every later loop (including after
+# a clean wait timeout), compare the current default watch paths with the last
+# completed authenticated-check sweep. A newer path expires that marker so the
+# check block in this same loop runs immediately. A missing marker is already
+# due and needs no mutation. The in-wait signature comparison below separately
+# covers a write that races this catch-up with waiter setup.
+glasses_file_event_catch_up() {
+  local path
+  local paths=()
+  while IFS= read -r path; do
+    [ -n "$path" ] || continue
+    paths+=("$path")
+  done < <(fm_glasses_watch_paths "$FM_HOME")
+  [ "${#paths[@]}" -gt 0 ] || return 1
+  fm_file_event_newer_than "$STATE/.last-check" "${paths[@]}" || return 1
+  expire_check_sweep
+}
+
 # file_event_wait_or_sleep: replace sleep POLL with a bounded file wait when
 # glasses paths exist. A change expires the slow-check timer; an unusable
 # waiter falls back to sleep POLL.
@@ -1242,6 +1261,11 @@ while :; do
   # Liveness beacon for fm-guard.sh: a fresh mtime here means a watcher is
   # alive. Supervision scripts warn when this goes stale with tasks in flight.
   touch "$STATE/.last-watcher-beat"
+
+  # Catch mailbox/inbox writes that landed while no watcher was alive, during
+  # successor setup, or during the just-completed bounded wait. This runs before
+  # the slow-check cadence test, so expiring .last-check takes effect now.
+  glasses_file_event_catch_up || true
 
   # Resolve correlated secondmate reports, send at most one recovery request,
   # and escalate once when the answer still cannot reach the parent.

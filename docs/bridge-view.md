@@ -135,3 +135,25 @@ The bridge log records `speak audio bytes=` for each `/speak` request so a trunc
 Existing `form-action 'self'` and `connect-src 'self'` CSP directives cover the form and `fetch`; scripts and styles stay nonce-based.
 
 There is still no approve, merge, or spawn control on this page.
+
+## Watcher check
+
+The home-local registered watcher check is existence-only.
+It determines whether any mailbox row is unanswered with a read-only local database query, prints only `glasses question waiting` when one exists, and leaves transcription to the firstmate turn that handles the wake.
+It must not invoke `glasses-voice-pending`, OpenAI, or any other external transcription API inside the watcher check.
+This keeps the check compatible with glasses CLI versions both before and after an existence-only CLI flag is available.
+
+The mailbox half of the generated check is:
+
+```bash
+HOME_DIR=/absolute/path/to/firstmate-home
+MAILBOX="$HOME_DIR/data/glasses-voice-runtime/mailbox.db"
+if [ -f "$MAILBOX" ] && command -v sqlite3 >/dev/null 2>&1 \
+  && [ "$(sqlite3 -readonly "$MAILBOX" "SELECT 1 FROM requests WHERE state != 'answered' LIMIT 1;" 2>/dev/null)" = 1 ]; then
+  printf '%s\n' 'glasses question waiting'
+  exit 0
+fi
+```
+
+The same registered check may then apply the existing seen-marker comparison for `data/bridge-inbox/*.json`.
+After creating or changing the private mode-`0700` `state/<id>.check.sh`, bind its exact bytes with `bin/fm-check-register.sh <id>` before the watcher may execute it.

@@ -37,6 +37,10 @@ reset_state() {
   _event_cap_fails=0
 }
 
+set_mtime() {  # <YYYYMMDDhhmm.ss> <path>
+  touch -t "$1" "$2"
+}
+
 WAIT_PY="$ROOT/bin/fm-file-eventwait.py"
 [ -f "$WAIT_PY" ] || fail "bin/fm-file-eventwait.py is missing"
 
@@ -123,6 +127,47 @@ wrc=$?
 [ "$wrc" -eq 0 ] || fail "a new inbox file must exit 0, got $wrc"
 pass "fm-file-eventwait.py: directory create exits 0"
 
+# --- durable catch-up across watcher cycles ---------------------------------
+
+reset_state
+mkdir -p "$HOME_DIR/data/glasses-voice-runtime"
+: > "$HOME_DIR/data/glasses-voice-runtime/mailbox.db"
+: > "$STATE_DIR/.last-check"
+set_mtime 202608280900.00 "$STATE_DIR/.last-check"
+set_mtime 202608280900.00 "$HOME_DIR/data/glasses-voice-runtime"
+set_mtime 202608280901.00 "$HOME_DIR/data/glasses-voice-runtime/mailbox.db"
+glasses_file_event_catch_up || fail "a write while the watcher was dead must be caught on arm"
+[ ! -e "$STATE_DIR/.last-check" ] || fail "dead-watcher catch-up must expire .last-check"
+pass "catch-up: event during a dead watcher is detected on arm"
+
+reset_state
+mkdir -p "$HOME_DIR/data/glasses-voice-runtime"
+: > "$HOME_DIR/data/glasses-voice-runtime/mailbox.db"
+: > "$STATE_DIR/.last-check"
+set_mtime 202608280900.00 "$HOME_DIR/data/glasses-voice-runtime"
+set_mtime 202608280900.00 "$HOME_DIR/data/glasses-voice-runtime/mailbox.db"
+set_mtime 202608280901.00 "$STATE_DIR/.last-check"
+if glasses_file_event_catch_up; then
+  fail "unchanged paths must not catch up before the arm gap"
+fi
+set_mtime 202608280902.00 "$HOME_DIR/data/glasses-voice-runtime/mailbox.db"
+glasses_file_event_catch_up || fail "a write during the arm gap must be caught before waiting"
+[ ! -e "$STATE_DIR/.last-check" ] || fail "arm-gap catch-up must expire .last-check"
+pass "catch-up: event during the arm gap is detected"
+
+reset_state
+mkdir -p "$HOME_DIR/data/glasses-voice-runtime"
+: > "$HOME_DIR/data/glasses-voice-runtime/mailbox.db"
+: > "$STATE_DIR/.last-check"
+set_mtime 202608280900.00 "$HOME_DIR/data/glasses-voice-runtime"
+set_mtime 202608280900.00 "$HOME_DIR/data/glasses-voice-runtime/mailbox.db"
+set_mtime 202608280901.00 "$STATE_DIR/.last-check"
+if glasses_file_event_catch_up; then
+  fail "a completed sweep newer than every watched path must not double-fire"
+fi
+[ -e "$STATE_DIR/.last-check" ] || fail "no-change catch-up must preserve .last-check"
+pass "catch-up: unchanged paths do not spuriously double-fire"
+
 # Neutralize POLL sleeps for the watcher-splice cases below. Real delays in
 # the python helper tests above use `command sleep` so they stay timed.
 sleep() { printf 'SLEEP\n' >> "$SLEEP_LOG"; }
@@ -156,6 +201,33 @@ event_wait_or_sleep
 [ -e "$STATE_DIR/.last-check" ] || fail "a clean file-wait timeout must leave .last-check alone"
 grep -q 'SLEEP' "$SLEEP_LOG" && fail "a clean file-wait timeout has already waited; do not sleep again"
 pass "event_wait_or_sleep: file-wait timeout does not expire checks or extra-sleep"
+
+reset_state
+fm_write_meta "$STATE_DIR/tk4.meta" "window=fmses:fm-tk4" "kind=ship"
+: > "$TMP/watch.txt"
+: > "$STATE_DIR/.last-check"
+set_mtime 202608280900.00 "$TMP/watch.txt"
+set_mtime 202608280901.00 "$STATE_DIR/.last-check"
+# shellcheck disable=SC2329
+fm_glasses_watch_paths() { printf '%s\n' "$TMP/watch.txt"; }
+# Model a clean native timeout after a write landed too close to waiter setup
+# for that waiter to report it. The next loop's durable catch-up must see it.
+# shellcheck disable=SC2329
+fm_file_event_wait() {
+  set_mtime 202608280902.00 "$TMP/watch.txt"
+  return 1
+}
+# Force the in-memory signature guard to model a waiter that snapshots after
+# the write and therefore sees no before/after delta. The persisted mtime
+# boundary must still recover it when the timeout hands control back.
+(
+  file_event_sig() { printf '%s\n' stable; }
+  event_wait_or_sleep
+)
+[ -e "$STATE_DIR/.last-check" ] || fail "a signature-blind timeout fixture expired .last-check before durable catch-up"
+glasses_file_event_catch_up || fail "a write hidden behind a wait timeout must catch up on the next loop"
+[ ! -e "$STATE_DIR/.last-check" ] || fail "wait-timeout catch-up must expire .last-check"
+pass "catch-up: wait-timeout recheck detects a missed event"
 
 reset_state
 fm_write_meta "$STATE_DIR/tk4.meta" "window=fmses:fm-tk4" "kind=ship"
