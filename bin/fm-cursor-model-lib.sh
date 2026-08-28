@@ -52,9 +52,21 @@ EOF
   return 0
 }
 
-# fm_cursor_list_models_text: raw `agent --list-models` (or catalog override).
-# Prints catalog text on stdout. Returns non-zero when the catalog cannot be
-# read so callers can soft-skip rather than treat "empty" as "no models exist".
+# fm_cursor_strip_catalog_ansi: drop CSI from --list-models text.
+# Cursor CLI 2026.08.25 styles ids in cyan and the " - display" separator dim;
+# that dim SGR sits between the space and the dash, so ${line%% - *} never
+# splits until CSI is removed. Character class matches fm_composer_strip_ansi
+# (colon-form SGR included). Reads stdin, prints plain text.
+fm_cursor_strip_catalog_ansi() {
+  local esc
+  esc=$(printf '\033')
+  LC_ALL=C sed "s/${esc}\\[[0-9;:?]*[[:alpha:]]//g"
+}
+
+# fm_cursor_list_models_text: `agent --list-models` (or catalog override) with
+# CSI stripped. Prints catalog text on stdout. Returns non-zero when the
+# catalog cannot be read so callers can soft-skip rather than treat "empty"
+# as "no models exist".
 #
 # FM_CURSOR_MODEL_CATALOG, when set to an existing file path, is the sole
 # source (tests and offline checks). Otherwise runs `agent --list-models`.
@@ -126,6 +138,9 @@ fm_cursor_list_models_text() {
     text=$(cat "$FM_CURSOR_MODEL_CATALOG" 2>/dev/null) && status=0
   elif command -v agent >/dev/null 2>&1; then
     text=$(agent --list-models 2>/dev/null) && status=0
+  fi
+  if [ -n "$text" ]; then
+    text=$(printf '%s\n' "$text" | fm_cursor_strip_catalog_ansi)
   fi
   if [ -n "$cache" ]; then
     rm -f "$cache.key" 2>/dev/null || :
