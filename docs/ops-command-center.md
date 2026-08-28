@@ -8,8 +8,8 @@ The adopted design and grafts are the rationale; this page is only the object mo
 
 - **Standing Order** - one captain-approved markdown file at `data/orders/<slug>.md`.
   It declares what to watch, what a worker may stage, what stays the captain's last click, how urgently it reaches him, and the cleared route.
-  `Status:` is required and is the arming switch.
-  `DRAFT` renders and does nothing; `ARMED` lets the watch run and stage only.
+  `Status:` is required and is the captain's arming declaration: `DRAFT` is not cleared to watch or stage, `ARMED` is cleared to watch and stage only.
+  Slice 1 records that declaration rather than enforcing it: `run` executes a registered check whatever the Status says, and what the watcher sweeps is decided by the `bin/fm-check-register.sh` byte binding, not by the Status token.
   `GRADUATED: <action-kind> (captain <date>)` lines record per-kind autonomy after the captain graduates that kind.
 - **Watch** - a registered `state/order-<slug>.check.sh` that the existing watcher already sweeps.
   A Watch reads a result someone else computed and prints one line when firstmate should wake, otherwise nothing.
@@ -18,6 +18,7 @@ The adopted design and grafts are the rationale; this page is only the object mo
 - **Tray** - the action gateway's durable records rendered by `bin/fm-tray.sh`.
   It is not a second store.
   Pending staged actions are `prepared` ActionRequests.
+  An order's staged actions are the ones whose ActionRequest `domain` equals that order's slug; that is the only key tray depth and per-order filtering use.
   AGE is the headline: oldest first, expired marked.
   The tray never approves, executes, or mutates gateway state.
   Approval stays on `bin/fm-action-gateway.sh` captain-role commands.

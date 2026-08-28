@@ -8,9 +8,10 @@
 # commands. Schema: docs/ops-command-center.md, docs/action-gateway.md.
 #
 # Commands:
-#   (default)              table of pending actions, oldest first, plus counts
-#   counts [--order SLUG]  counts line only: TRAY <n> · OLDEST <age>
-#   show <digest>          full canonical action context (delegates to gateway)
+#   (default) [--order SLUG]  table of pending actions, oldest first, plus counts
+#   counts [--order SLUG]     counts line only: TRAY <n> · OLDEST <age>
+#     --order SLUG keeps only requests whose ActionRequest domain is that slug
+#   show <digest>             full canonical action context (delegates to gateway)
 #   -h|--help
 #
 # Environment:
@@ -32,7 +33,7 @@ DATA="${FM_DATA_OVERRIDE:-$FM_HOME/data}"
 
 usage() {
   cat <<'EOF' >&2
-usage: fm-tray.sh
+usage: fm-tray.sh [--order <slug>]
        fm-tray.sh counts [--order <slug>]
        fm-tray.sh show <digest>
        fm-tray.sh -h|--help

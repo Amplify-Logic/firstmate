@@ -35,7 +35,9 @@
 #
 # Exit:
 #   0 on success
-#   1 on usage, missing Status, missing flag, unregistered check, or non-graduatable kind
+#   1 on usage, missing Status, missing flag, unregistered check, timed-out check,
+#     or non-graduatable kind
+#   run otherwise exits with the registered check's own status
 set -eu
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
