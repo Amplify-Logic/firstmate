@@ -11,8 +11,11 @@
 # File format: header + Status + Watch / Stage / Last click / Reaches me / Route.
 # Parse is lenient on optional sections and fails loudly on a missing Status line.
 # log-fire is the Watch self-logging filter: a check pipes its output through it
-# so a printed wake line also stamps state/order-<slug>.check.log, the only
-# source list reads for the last fire (absent log renders '-').
+# so a printed wake line appends a 'ts=<epoch> fired' line to
+# state/order-<slug>.check.log, the only source list reads for the last fire
+# (no recorded fire renders '-'). run records a fire on the same terms: only
+# when the check printed a wake line, never on a quiet or timed-out run, and
+# always by appending so earlier fire history survives.
 # Object model: docs/ops-command-center.md.
 #
 # Commands:
@@ -65,8 +68,9 @@ Standing Order operations over data/orders/<slug>.md.
 arm/disarm/graduate require --by-captain (the captain's word; firstmate
 must not self-arm). Graduate refuses kinds the action gateway's ceiling
 classifier treats as non-graduatable. log-fire is a stdout filter for an
-order's Watch check: it passes output through unchanged and stamps
-state/order-<slug>.check.log when that output is non-empty.
+order's Watch check: it passes output through unchanged and appends a fire
+line to state/order-<slug>.check.log when that output is non-empty. run
+records a fire on the same terms; a quiet or timed-out run records none.
 See docs/ops-command-center.md.
 EOF
 }
@@ -121,10 +125,6 @@ format_age() {
   fi
 }
 
-file_mtime() {
-  python3 -c 'import os,sys; print(int(os.path.getmtime(sys.argv[1])))' "$1"
-}
-
 now_ts() {
   if [ "${FM_ACTION_GATEWAY_TEST:-}" = "1" ] && [ -n "${FM_ACTION_GATEWAY_NOW:-}" ]; then
     printf '%s\n' "$FM_ACTION_GATEWAY_NOW"
@@ -133,16 +133,41 @@ now_ts() {
   python3 -c 'import time; print(int(time.time()))'
 }
 
+fire_log_path() {
+  printf '%s/%s.check.log\n' "$STATE" "$(check_id "$1")"
+}
+
+record_fire() {
+  local log=$1
+  mkdir -p "$STATE"
+  (
+    umask 077
+    printf 'ts=%s fired\n' "$(now_ts)" >> "$log"
+  )
+  chmod 0600 "$log" 2>/dev/null || true
+}
+
 last_fire_for() {
-  local slug=$1 log now mtime
-  log="$STATE/$(check_id "$slug").check.log"
+  local slug=$1 log now ts
+  log=$(fire_log_path "$slug")
   if [ ! -f "$log" ]; then
     printf '%s\n' '-'
     return 0
   fi
-  mtime=$(file_mtime "$log")
+  ts=$(awk '
+    $0 ~ /(^|[[:space:]])fired([[:space:]]|$)/ {
+      for (i = 1; i <= NF; i++) {
+        if ($i ~ /^ts=[0-9]+$/) { t = substr($i, 4) }
+      }
+    }
+    END { if (t != "") print t }
+  ' "$log")
+  if [ -z "$ts" ]; then
+    printf '%s\n' '-'
+    return 0
+  fi
   now=$(now_ts)
-  format_age $((now - mtime))
+  format_age $((now - ts))
 }
 
 tray_depth_for() {
@@ -230,7 +255,7 @@ cmd_show() {
 }
 
 cmd_run() {
-  local slug=$1 id rc out log
+  local slug=$1 id rc out
   [ -n "$slug" ] || fail "run requires a slug"
   require_order "$slug" >/dev/null
   id=$(check_id "$slug")
@@ -247,35 +272,25 @@ cmd_run() {
   rc=$?
   set -e
   fm_custom_check_snapshot_cleanup
-  log="$STATE/$id.check.log"
-  umask 077
-  {
-    printf 'ts=%s rc=%s\n' "$(now_ts)" "$rc"
-    printf '%s\n' "$out"
-  } > "$log"
-  chmod 0600 "$log" 2>/dev/null || true
   if [ "$rc" -eq 124 ]; then
     fail "order $slug check timed out after ${CHECK_TIMEOUT}s"
   fi
   if [ -n "$out" ]; then
+    record_fire "$(fire_log_path "$slug")"
     printf '%s\n' "$out"
   fi
   return "$rc"
 }
 
 cmd_log_fire() {
-  local slug=$1 line log fired=0
+  local slug=$1 line fired=0
   slug_valid "$slug" || fail "invalid order slug: $slug"
-  log="$STATE/$(check_id "$slug").check.log"
   while IFS= read -r line || [ -n "$line" ]; do
     printf '%s\n' "$line"
     [ -z "$line" ] || fired=1
   done
   [ "$fired" -eq 1 ] || return 0
-  mkdir -p "$STATE"
-  umask 077
-  printf 'ts=%s fired\n' "$(now_ts)" >> "$log"
-  chmod 0600 "$log" 2>/dev/null || true
+  record_fire "$(fire_log_path "$slug")"
 }
 
 cmd_arm() {
