@@ -168,25 +168,24 @@ test_teardown_reaps_untracked_background_children() {
   # registered temp dir) stands in for a watcher a mid-test fail skipped past:
   # teardown must still reap it.
   command_sub_root=$(fm_test_tmproot fm-isolation-command-sub)
-  cat > "$command_sub_root/long-runner" <<'SH'
-#!/usr/bin/env bash
-sleep 15
-SH
+  # Copy a real binary into the fixture dir and exec it by absolute path.
+  # A bash wrapper whose last command is sleep gets exec-optimized on Linux,
+  # so the pid's argv becomes `sleep 15` and path-scoped reap misses it.
+  cp /bin/sleep "$command_sub_root/long-runner"
   chmod +x "$command_sub_root/long-runner"
   # Command substitution dropped the array registration; keep the parent
   # list in sync so path-scoped reap sees this fixture dir.
   FM_TEST_CLEANUP_DIRS+=("$command_sub_root")
-  # Detach from the test-runner pipe. A missed reap otherwise leaves writers
-  # on `bash test | tee`, so serial CI hangs until the job timeout.
-  # Invoke through bash so argv always carries the fixture path.
-  bash "$command_sub_root/long-runner" </dev/null >/dev/null 2>&1 &
+  # Detach stdout/stderr from the test-runner pipe. A missed reap otherwise
+  # leaves writers on `bash test | tee`, so serial CI hangs until timeout.
+  "$command_sub_root/long-runner" 15 >/dev/null 2>&1 &
   fixture_pid=$!
-  bash -c 'trap "exit 0" TERM; while :; do :; done' "$ROOT/bin/fm-watch.sh" </dev/null >/dev/null 2>&1 &
+  bash -c 'trap "exit 0" TERM; while :; do :; done' "$ROOT/bin/fm-watch.sh" >/dev/null 2>&1 &
   worktree_pid=$!
   # A live process OUTSIDE every scoped path - plain sleep, the same shape a
   # real firstmate home's own supervision could be running - must survive
   # teardown untouched.
-  /bin/sleep 15 </dev/null >/dev/null 2>&1 &
+  /bin/sleep 15 >/dev/null 2>&1 &
   foreign_pid=$!
   fm_test_reap_children
   alive=0

@@ -192,7 +192,7 @@ fm_test_pid_is_path_scoped() {  # <pid>
       fm_test_path_is_scoped "$arg" && return 0
       arg=
     done < "/proc/$pid/cmdline"
-    for fd in /proc/$pid/fd/*; do
+    for fd in /proc/"$pid"/fd/*; do
       [ -e "$fd" ] || continue
       target=$(readlink "$fd" 2>/dev/null) || continue
       for dir in "${FM_TEST_CLEANUP_DIRS[@]:-}"; do
