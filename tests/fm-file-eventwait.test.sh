@@ -27,7 +27,8 @@ wake() { printf '%s\n' "$1" >> "$WAKE_LOG"; return 0; }
 reset_state() {
   rm -f "$STATE_DIR"/*.meta "$STATE_DIR"/*.status "$STATE_DIR"/.wake-queue \
     "$STATE_DIR"/.wake-queue.seq "$STATE_DIR"/.watch-triage.log \
-    "$STATE_DIR"/.last-check "$STATE_DIR"/.herdr-escalated-* \
+    "$STATE_DIR"/.last-check "$STATE_DIR"/.last-check.pending.* \
+    "$STATE_DIR"/.herdr-escalated-* \
     "$TMP"/wtcalled "$TMP"/filewait 2>/dev/null || true
   rm -rf "$HOME_DIR/data"
   : > "$WAKE_LOG"
@@ -167,6 +168,21 @@ if glasses_file_event_catch_up; then
 fi
 [ -e "$STATE_DIR/.last-check" ] || fail "no-change catch-up must preserve .last-check"
 pass "catch-up: unchanged paths do not spuriously double-fire"
+
+reset_state
+mkdir -p "$HOME_DIR/data/glasses-voice-runtime"
+: > "$HOME_DIR/data/glasses-voice-runtime/mailbox.db"
+pending="$STATE_DIR/.last-check.pending.test"
+check_sweep_begin "$pending" || fail "check sweep must capture its start boundary"
+[ -e "$pending" ] || fail "check sweep must preserve a private pending marker"
+[ ! -e "$STATE_DIR/.last-check" ] || fail "check sweep must not publish its boundary before completion"
+set_mtime 202608280901.00 "$pending"
+set_mtime 202608280902.00 "$HOME_DIR/data/glasses-voice-runtime/mailbox.db"
+check_sweep_complete "$pending" || fail "completed check sweep must publish its start boundary"
+[ ! -e "$pending" ] || fail "completed check sweep must consume its pending marker"
+glasses_file_event_catch_up || fail "a write during a check sweep must remain newer than its published boundary"
+[ ! -e "$STATE_DIR/.last-check" ] || fail "check-sweep race catch-up must expire .last-check"
+pass "catch-up: event during authenticated check sweep is preserved"
 
 # Neutralize POLL sleeps for the watcher-splice cases below. Real delays in
 # the python helper tests above use `command sleep` so they stay timed.

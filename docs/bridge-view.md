@@ -157,3 +157,4 @@ fi
 
 The same registered check may then apply the existing seen-marker comparison for `data/bridge-inbox/*.json`.
 After creating or changing the private mode-`0700` `state/<id>.check.sh`, bind its exact bytes with `bin/fm-check-register.sh <id>` before the watcher may execute it.
+Documentation-only delivery satisfies this repository task; swapping the live private check is a later operational step outside this repository.
