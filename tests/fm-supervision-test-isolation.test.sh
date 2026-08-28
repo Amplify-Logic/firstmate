@@ -170,20 +170,23 @@ test_teardown_reaps_untracked_background_children() {
   command_sub_root=$(fm_test_tmproot fm-isolation-command-sub)
   cat > "$command_sub_root/long-runner" <<'SH'
 #!/usr/bin/env bash
-sleep 300
+sleep 15
 SH
   chmod +x "$command_sub_root/long-runner"
-  # Invoke through bash so argv always carries the fixture path. A direct
-  # shebang exec can leave Linux `comm` as the basename only, which is what
-  # made path-scoped teardown miss this child on CI.
-  bash "$command_sub_root/long-runner" &
+  # Command substitution dropped the array registration; keep the parent
+  # list in sync so path-scoped reap sees this fixture dir.
+  FM_TEST_CLEANUP_DIRS+=("$command_sub_root")
+  # Detach from the test-runner pipe. A missed reap otherwise leaves writers
+  # on `bash test | tee`, so serial CI hangs until the job timeout.
+  # Invoke through bash so argv always carries the fixture path.
+  bash "$command_sub_root/long-runner" </dev/null >/dev/null 2>&1 &
   fixture_pid=$!
-  bash -c 'trap "exit 0" TERM; while :; do :; done' "$ROOT/bin/fm-watch.sh" &
+  bash -c 'trap "exit 0" TERM; while :; do :; done' "$ROOT/bin/fm-watch.sh" </dev/null >/dev/null 2>&1 &
   worktree_pid=$!
   # A live process OUTSIDE every scoped path - plain sleep, the same shape a
   # real firstmate home's own supervision could be running - must survive
   # teardown untouched.
-  /bin/sleep 300 &
+  /bin/sleep 15 </dev/null >/dev/null 2>&1 &
   foreign_pid=$!
   fm_test_reap_children
   alive=0

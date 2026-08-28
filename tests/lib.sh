@@ -138,6 +138,29 @@ fm_test_descendant_pids() {  # <pid>
   done
 }
 
+# True when path $1 is this repo worktree or a registered fixture temp dir,
+# or a file inside one of those. Used by path-scoped teardown only.
+fm_test_path_is_scoped() {  # <path>
+  local path=$1 dir
+  [ -n "$path" ] || return 1
+  case "$path" in
+    "$ROOT"|"$ROOT"/*) return 0 ;;
+  esac
+  for dir in "${FM_TEST_CLEANUP_DIRS[@]:-}"; do
+    [ -n "$dir" ] || continue
+    case "$path" in
+      "$dir"|"$dir"/*) return 0 ;;
+    esac
+  done
+  while IFS= read -r dir; do
+    [ -n "$dir" ] || continue
+    case "$path" in
+      "$dir"|"$dir"/*) return 0 ;;
+    esac
+  done < "$FM_TEST_CLEANUP_REGISTRY"
+  return 1
+}
+
 # Untruncated argv for pid $1. Linux `ps -o command=` without -ww clips to
 # the window width (often 80), which drops the fixture path and makes
 # path-scoped teardown miss the child; /proc cmdline is the full argv.
@@ -162,8 +185,30 @@ fm_test_pid_command_line() {  # <pid>
 # live supervision among them, which shares every script name we use - is left
 # strictly alone.
 fm_test_pid_is_path_scoped() {  # <pid>
-  local pid=$1 cmd dir
+  local pid=$1 cmd dir arg fd target
   [ -n "$pid" ] || return 1
+  if [ -r "/proc/$pid/cmdline" ]; then
+    while IFS= read -r -d '' arg || [ -n "${arg:-}" ]; do
+      fm_test_path_is_scoped "$arg" && return 0
+      arg=
+    done < "/proc/$pid/cmdline"
+    for fd in /proc/$pid/fd/*; do
+      [ -e "$fd" ] || continue
+      target=$(readlink "$fd" 2>/dev/null) || continue
+      for dir in "${FM_TEST_CLEANUP_DIRS[@]:-}"; do
+        [ -n "$dir" ] || continue
+        case "$target" in
+          "$dir"|"$dir"/*) return 0 ;;
+        esac
+      done
+      while IFS= read -r dir; do
+        [ -n "$dir" ] || continue
+        case "$target" in
+          "$dir"|"$dir"/*) return 0 ;;
+        esac
+      done < "$FM_TEST_CLEANUP_REGISTRY"
+    done
+  fi
   cmd=$(fm_test_pid_command_line "$pid") || return 1
   [ -n "$cmd" ] || return 1
   case "$cmd" in
