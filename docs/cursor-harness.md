@@ -103,7 +103,7 @@ $ FORCE_COLOR=1 agent --list-models | grep -F cursor-grok-4.6-high-fast | cat -v
 
 The dim SGR sits between the space and the dash, so a literal ` - ` split never sees the separator.
 `fm-spawn` then refused a real catalog id as unknown.
-`bin/fm-cursor-model-lib.sh` strips CSI from catalog text before matching.
+`bin/fm-cursor-model-lib.sh` strips CSI from catalog text before matching, via the shared `fm_composer_strip_ansi` (owned by `bin/fm-composer-lib.sh`).
 The `FM_CURSOR_MODEL_CATALOG` override still works: the file is read, then stripped.
 Regression coverage is the ANSI fixture in `tests/fm-cursor-adapter.test.sh`.
 
