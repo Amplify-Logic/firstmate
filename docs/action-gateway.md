@@ -2,7 +2,7 @@
 
 The outward-action gateway is the single choke-point for worker side effects that leave the local machine or touch real people, money, or devices.
 This document owns the ActionRequest schema, the canonical digest, the privilege-separated approval model, the transactional state machine, the deny-by-default operation registry, and the non-graduatable policy floor.
-`bin/fm-action-gateway.sh` is the broker for this slice: prepare / show / approve / execute-stub / status / gate-check / replay, with durable append-only records and **no outward action execution**.
+`bin/fm-action-gateway.sh` is the broker for this slice, with durable append-only records and **no outward action execution**; the Broker commands section below owns the command list.
 
 ## Why this exists
 
