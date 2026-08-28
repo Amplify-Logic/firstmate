@@ -13,6 +13,7 @@ The adopted design and grafts are the rationale; this page is only the object mo
   `GRADUATED: <action-kind> (captain <date>)` lines record per-kind autonomy after the captain graduates that kind.
 - **Watch** - a registered `state/order-<slug>.check.sh` that the existing watcher already sweeps.
   A Watch reads a result someone else computed and prints one line when firstmate should wake, otherwise nothing.
+  A Watch pipes its output through `fm-order.sh log-fire <slug>` so a printed wake line also stamps `state/order-<slug>.check.log` - the only source `list` reads for the last fire; without that log the column shows `-`.
 - **Tray** - the action gateway's durable records rendered by `bin/fm-tray.sh`.
   It is not a second store.
   Pending staged actions are `prepared` ActionRequests.
@@ -27,7 +28,7 @@ The adopted design and grafts are the rationale; this page is only the object mo
 
 Exact flags, Status rewrite rules, and refusal text are owned by each script's header and `--help`.
 
-- `bin/fm-order.sh` - list, show, run, arm, disarm, graduate.
+- `bin/fm-order.sh` - list, show, run, log-fire, arm, disarm, graduate.
   Arm, disarm, and graduate require `--by-captain`.
   Graduate calls `fm-action-gateway.sh classify` and refuses any kind that classifier treats as non-graduatable.
 - `bin/fm-tray.sh` - pending table, `counts` line (`TRAY <n> · OLDEST <age>`), and `show <digest>`.

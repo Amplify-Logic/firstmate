@@ -204,6 +204,139 @@ test_list_shows_status_tray_and_last_fire() {
   pass "list prints slug, Status, tray depth, and last fire"
 }
 
+test_status_token_any_case() {
+  local out rc
+  printf '%s\n%s\n' '# fixture-case' 'STATUS: DRAFT' > "$ORDERS/fixture-case.md"
+  set +e
+  out=$(run_order arm fixture-case --by-captain 2>&1)
+  rc=$?
+  set -e
+  expect_code 0 "$rc" "arm uppercase STATUS exit"
+  assert_contains "$out" 'armed: fixture-case' "uppercase STATUS arms"
+  pass "status token parses any case of Status:"
+}
+
+file_mode_of() {
+  if [ "$(uname)" = Darwin ]; then
+    stat -f %Lp "$1"
+  else
+    stat -c %a "$1"
+  fi
+}
+
+test_arm_preserves_order_file_mode() {
+  local rc mode
+  write_order fixture-mode DRAFT
+  chmod 0644 "$ORDERS/fixture-mode.md"
+  set +e
+  run_order arm fixture-mode --by-captain >/dev/null 2>&1
+  rc=$?
+  set -e
+  expect_code 0 "$rc" "arm mode exit"
+  mode=$(file_mode_of "$ORDERS/fixture-mode.md")
+  [ "$mode" = "644" ] || fail "arm must preserve the order file mode (got $mode)"
+  pass "arm preserves the order file's mode across the rewrite"
+}
+
+test_graduate_unknown_kind_names_deny_by_default() {
+  local out rc
+  write_order fixture-grad-unknown 'ARMED (captain 2026-08-28)'
+  set +e
+  out=$(run_order graduate fixture-grad-unknown no.such.kind --by-captain 2>&1)
+  rc=$?
+  set -e
+  expect_code 1 "$rc" "graduate unknown exit"
+  assert_contains "$out" 'unknown or unregistered action kind' "unknown kind refusal"
+  assert_contains "$out" 'deny-by-default' "gateway refusal reason is surfaced"
+  pass "graduate names deny-by-default for unknown kinds"
+}
+
+test_graduate_infra_failure_not_misreported() {
+  local out rc
+  write_order fixture-grad-infra 'ARMED (captain 2026-08-28)'
+  set +e
+  out=$(FM_HOME="$HOME_DIR" FM_DATA_OVERRIDE="$DATA_DIR" FM_STATE_OVERRIDE="$STATE_DIR" \
+    "$ORDER_SH" graduate fixture-grad-infra crm.update --by-captain 2>&1)
+  rc=$?
+  set -e
+  expect_code 1 "$rc" "graduate infra exit"
+  assert_contains "$out" 'FM_ACTION_GATEWAY_TEST' "gateway stderr is surfaced"
+  assert_not_contains "$out" 'unknown or unregistered' "infra failure is not misreported as an unregistered kind"
+  pass "graduate surfaces gateway infrastructure failures"
+}
+
+test_list_marks_tray_unavailable() {
+  local out rc audit
+  audit="$DATA_DIR/action-gateway/action-audit.log"
+  printf 'not json\n' > "$audit"
+  set +e
+  out=$(run_order list 2>&1)
+  rc=$?
+  set -e
+  rm -f "$audit"
+  expect_code 0 "$rc" "list with corrupt audit exit"
+  assert_contains "$out" 'tray=?' "corrupt tray shows tray=?"
+  assert_contains "$out" 'not JSON' "tray failure reason is surfaced"
+  assert_not_contains "$out" 'tray=0' "corrupt tray must not read as zero"
+  pass "list marks the tray unavailable instead of zero"
+}
+
+test_last_fire_dash_when_no_log() {
+  local out rc check
+  write_order fixture-nolog DRAFT
+  check="$STATE_DIR/order-fixture-nolog.check.sh"
+  cat > "$check" <<'SH'
+#!/usr/bin/env bash
+exit 0
+SH
+  chmod 0700 "$check"
+  FM_HOME="$HOME_DIR" FM_STATE_OVERRIDE="$STATE_DIR" "$REGISTER" order-fixture-nolog >/dev/null \
+    || fail "could not register nolog check"
+  set +e
+  out=$(run_order list 2>&1)
+  rc=$?
+  set -e
+  expect_code 0 "$rc" "list nolog exit"
+  printf '%s\n' "$out" | grep -E $'^fixture-nolog\t.*last_fire=-$' >/dev/null \
+    || fail "absent log must show last_fire=- (never the check script mtime)"
+  pass "last fire is - when no check log exists"
+}
+
+test_log_fire_records_watch_fire() {
+  local out rc check log
+  write_order fixture-fire 'ARMED (captain 2026-08-28)'
+  log="$STATE_DIR/order-fixture-fire.check.log"
+  printf '' | run_order log-fire fixture-fire >/dev/null 2>&1 \
+    || fail "log-fire must pass silent output through"
+  [ ! -f "$log" ] || fail "silent check output must not stamp the fire log"
+  check="$STATE_DIR/order-fixture-fire.check.sh"
+  cat > "$check" <<SH
+#!/usr/bin/env bash
+printf 'fixture-fire: 1 client needs contact\n' | "$ORDER_SH" log-fire fixture-fire
+SH
+  chmod 0700 "$check"
+  FM_HOME="$HOME_DIR" FM_STATE_OVERRIDE="$STATE_DIR" "$REGISTER" order-fixture-fire >/dev/null \
+    || fail "could not register fire check"
+  set +e
+  out=$(FM_HOME="$HOME_DIR" FM_DATA_OVERRIDE="$DATA_DIR" FM_STATE_OVERRIDE="$STATE_DIR" \
+    FM_ACTION_GATEWAY_TEST=1 FM_ACTION_GATEWAY_NOW="$NOW" bash "$check" 2>&1)
+  rc=$?
+  set -e
+  expect_code 0 "$rc" "fire check exit"
+  assert_contains "$out" '1 client needs contact' "log-fire passes the wake line through"
+  [ -f "$log" ] || fail "a printed wake line must stamp the check log"
+  set +e
+  out=$(run_order list 2>&1)
+  rc=$?
+  set -e
+  expect_code 0 "$rc" "list after fire exit"
+  printf '%s\n' "$out" | grep -E $'^fixture-fire\t.*last_fire=-$' >/dev/null \
+    && fail "last fire must update after the check fires" || true
+  printf '%s\n' "$out" | grep -E $'^fixture-fire\t.*last_fire=' >/dev/null \
+    || fail "list must show a last fire for the fired order"
+  pass "a check that prints a wake line updates last fire"
+}
+
 test_help_exits_zero
 test_missing_status_fails_loudly
 test_arm_refuses_without_by_captain
@@ -215,3 +348,10 @@ test_graduate_external_kind_appends
 test_run_refuses_unregistered_check
 test_run_executes_registered_check
 test_list_shows_status_tray_and_last_fire
+test_status_token_any_case
+test_arm_preserves_order_file_mode
+test_graduate_unknown_kind_names_deny_by_default
+test_graduate_infra_failure_not_misreported
+test_list_marks_tray_unavailable
+test_last_fire_dash_when_no_log
+test_log_fire_records_watch_fire

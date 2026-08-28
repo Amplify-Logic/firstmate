@@ -10,12 +10,16 @@
 # not duplicate the spend/messaging/irreversible list).
 # File format: header + Status + Watch / Stage / Last click / Reaches me / Route.
 # Parse is lenient on optional sections and fails loudly on a missing Status line.
+# log-fire is the Watch self-logging filter: a check pipes its output through it
+# so a printed wake line also stamps state/order-<slug>.check.log, the only
+# source list reads for the last fire (absent log renders '-').
 # Object model: docs/ops-command-center.md.
 #
 # Commands:
 #   list
 #   show <slug>
 #   run <slug>
+#   log-fire <slug>
 #   arm <slug> --by-captain
 #   disarm <slug> --by-captain
 #   graduate <slug> <action-kind> --by-captain
@@ -51,6 +55,7 @@ usage() {
 usage: fm-order.sh list
        fm-order.sh show <slug>
        fm-order.sh run <slug>
+       fm-order.sh log-fire <slug>
        fm-order.sh arm <slug> --by-captain
        fm-order.sh disarm <slug> --by-captain
        fm-order.sh graduate <slug> <action-kind> --by-captain
@@ -59,7 +64,10 @@ usage: fm-order.sh list
 Standing Order operations over data/orders/<slug>.md.
 arm/disarm/graduate require --by-captain (the captain's word; firstmate
 must not self-arm). Graduate refuses kinds the action gateway's ceiling
-classifier treats as non-graduatable. See docs/ops-command-center.md.
+classifier treats as non-graduatable. log-fire is a stdout filter for an
+order's Watch check: it passes output through unchanged and stamps
+state/order-<slug>.check.log when that output is non-empty.
+See docs/ops-command-center.md.
 EOF
 }
 
@@ -94,7 +102,7 @@ status_line_of() {
 
 status_token() {
   local line=$1
-  printf '%s\n' "$line" | sed 's/^[[:space:]]*[Ss]tatus:[[:space:]]*//' | awk '{print toupper($1)}'
+  printf '%s\n' "$line" | sed 's/^[[:space:]]*[Ss][Tt][Aa][Tt][Uu][Ss]:[[:space:]]*//' | awk '{print toupper($1)}'
 }
 
 format_age() {
@@ -126,32 +134,27 @@ now_ts() {
 }
 
 last_fire_for() {
-  local slug=$1 id log check now mtime
-  id=$(check_id "$slug")
-  log="$STATE/$id.check.log"
-  check="$STATE/$id.check.sh"
-  if [ -f "$log" ]; then
-    mtime=$(file_mtime "$log")
-  elif [ -f "$check" ]; then
-    mtime=$(file_mtime "$check")
-  else
+  local slug=$1 log now mtime
+  log="$STATE/$(check_id "$slug").check.log"
+  if [ ! -f "$log" ]; then
     printf '%s\n' '-'
     return 0
   fi
+  mtime=$(file_mtime "$log")
   now=$(now_ts)
   format_age $((now - mtime))
 }
 
 tray_depth_for() {
   local slug=$1 line n
-  if ! line=$("$SCRIPT_DIR/fm-tray.sh" counts --order "$slug" 2>/dev/null); then
-    printf '%s\n' '0'
+  if ! line=$("$SCRIPT_DIR/fm-tray.sh" counts --order "$slug"); then
+    printf '%s\n' '?'
     return 0
   fi
   n=${line#TRAY }
   n=${n%% *}
   case "$n" in
-    ''|*[!0-9]*) printf '%s\n' '0' ;;
+    ''|*[!0-9]*) printf '%s\n' '?' ;;
     *) printf '%s\n' "$n" ;;
   esac
 }
@@ -165,7 +168,8 @@ require_order() {
 }
 
 rewrite_status() {
-  local file=$1 new_line=$2 tmp
+  local file=$1 new_line=$2 tmp mode
+  mode=$(fm_pr_file_mode "$file" || true)
   tmp=$(mktemp "${file}.XXXXXX")
   if ! awk -v repl="$new_line" '
     BEGIN { done=0 }
@@ -180,6 +184,7 @@ rewrite_status() {
     rm -f "$tmp"
     fail "order missing Status line: ${file#"$FM_HOME"/}"
   fi
+  [ -z "$mode" ] || chmod "$mode" "$tmp"
   mv "$tmp" "$file"
 }
 
@@ -225,11 +230,10 @@ cmd_show() {
 }
 
 cmd_run() {
-  local slug=$1 id check rc out log
+  local slug=$1 id rc out log
   [ -n "$slug" ] || fail "run requires a slug"
   require_order "$slug" >/dev/null
   id=$(check_id "$slug")
-  check="$STATE/$id.check.sh"
   if ! fm_custom_check_registered "$STATE" "$id"; then
     fail "no registered check for order $slug (need state/${id}.check.sh bound with fm-check-register.sh)"
   fi
@@ -257,6 +261,21 @@ cmd_run() {
     printf '%s\n' "$out"
   fi
   return "$rc"
+}
+
+cmd_log_fire() {
+  local slug=$1 line log fired=0
+  slug_valid "$slug" || fail "invalid order slug: $slug"
+  log="$STATE/$(check_id "$slug").check.log"
+  while IFS= read -r line || [ -n "$line" ]; do
+    printf '%s\n' "$line"
+    [ -z "$line" ] || fired=1
+  done
+  [ "$fired" -eq 1 ] || return 0
+  mkdir -p "$STATE"
+  umask 077
+  printf 'ts=%s fired\n' "$(now_ts)" >> "$log"
+  chmod 0600 "$log" 2>/dev/null || true
 }
 
 cmd_arm() {
@@ -291,13 +310,20 @@ cmd_disarm() {
 }
 
 cmd_graduate() {
-  local slug=$1 kind=$2 path classif graduatable severity ceiling
+  local slug=$1 kind=$2 path classif graduatable severity ceiling rc=0
   require_by_captain graduate
   [ -n "$kind" ] || fail "graduate requires an action kind"
   path=$(require_order "$slug")
   status_line_of "$path" >/dev/null
-  if ! classif=$("$SCRIPT_DIR/fm-action-gateway.sh" classify --action-kind "$kind" 2>/dev/null); then
-    fail "graduate refused: unknown or unregistered action kind $kind (gateway deny-by-default)"
+  classif=$("$SCRIPT_DIR/fm-action-gateway.sh" classify --action-kind "$kind" 2>&1) || rc=$?
+  if [ "$rc" -ne 0 ]; then
+    [ -z "$classif" ] || printf '%s\n' "$classif" >&2
+    case "$classif" in
+      *deny-by-default*)
+        fail "graduate refused: unknown or unregistered action kind $kind (gateway deny-by-default)"
+        ;;
+    esac
+    fail "graduate aborted: gateway classify failed for $kind"
   fi
   graduatable=$(printf '%s\n' "$classif" | awk -F= '$1=="graduatable" {print $2; exit}')
   severity=$(printf '%s\n' "$classif" | awk -F= '$1=="severity" {print $2; exit}')
@@ -365,6 +391,10 @@ main() {
     run)
       [ "$#" -eq 1 ] || fail "run requires a slug"
       cmd_run "$1"
+      ;;
+    log-fire)
+      [ "$#" -eq 1 ] || fail "log-fire requires a slug"
+      cmd_log_fire "$1"
       ;;
     arm)
       [ "$#" -eq 1 ] || fail "arm requires a slug"
