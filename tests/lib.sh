@@ -383,6 +383,40 @@ fm_fakebin() {
   printf '%s\n' "$fakebin"
 }
 
+# fm_install_fake_caffeinate <fakebin>: drop a PATH stub that mimics
+# `caffeinate -dims -w <pid>` without touching the host sleep assertion.
+# It stays alive until the watched pid exits, or until it is killed.
+# When FM_FAKE_CAFFEINATE_LOG is set, each invocation appends
+# "<stub-pid> <args>" so tests can assert spawn and cleanup.
+fm_install_fake_caffeinate() {
+  local fakebin=$1
+  mkdir -p "$fakebin"
+  cat > "$fakebin/caffeinate" <<'SH'
+#!/usr/bin/env bash
+set -u
+if [ -n "${FM_FAKE_CAFFEINATE_LOG:-}" ]; then
+  printf '%s %s\n' "$$" "$*" >> "$FM_FAKE_CAFFEINATE_LOG"
+fi
+watched=
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    -w)
+      shift
+      watched=${1:-}
+      ;;
+  esac
+  [ "$#" -gt 0 ] && shift
+done
+if [ -n "$watched" ]; then
+  while kill -0 "$watched" 2>/dev/null; do
+    sleep 0.05
+  done
+fi
+exit 0
+SH
+  chmod +x "$fakebin/caffeinate"
+}
+
 # fm_install_compatible_tasks_axi <fakebin-dir>: drop a PATH stub that satisfies
 # bin/fm-tasks-axi-lib.sh's fm_tasks_axi_compatible probe AND
 # bin/fm-decision-hold.sh's require_tasks_axi (hold --help exposes --kind captain).
