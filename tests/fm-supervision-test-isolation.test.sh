@@ -173,7 +173,10 @@ test_teardown_reaps_untracked_background_children() {
 sleep 300
 SH
   chmod +x "$command_sub_root/long-runner"
-  "$command_sub_root/long-runner" &
+  # Invoke through bash so argv always carries the fixture path. A direct
+  # shebang exec can leave Linux `comm` as the basename only, which is what
+  # made path-scoped teardown miss this child on CI.
+  bash "$command_sub_root/long-runner" &
   fixture_pid=$!
   bash -c 'trap "exit 0" TERM; while :; do :; done' "$ROOT/bin/fm-watch.sh" &
   worktree_pid=$!
@@ -185,12 +188,12 @@ SH
   fm_test_reap_children
   alive=0
   kill -0 "$fixture_pid" 2>/dev/null && alive=1
-  wait "$fixture_pid" 2>/dev/null || true
   [ "$alive" -eq 0 ] || fail "teardown left a path-scoped untracked child alive"
+  wait "$fixture_pid" 2>/dev/null || true
   alive=0
   kill -0 "$worktree_pid" 2>/dev/null && alive=1
-  wait "$worktree_pid" 2>/dev/null || true
   [ "$alive" -eq 0 ] || fail "teardown left an interpreted worktree child alive"
+  wait "$worktree_pid" 2>/dev/null || true
   alive=0
   kill -0 "$foreign_pid" 2>/dev/null && alive=1
   [ "$alive" -eq 1 ] || fail "teardown killed a process outside every scoped path"

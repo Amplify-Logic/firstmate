@@ -138,6 +138,24 @@ fm_test_descendant_pids() {  # <pid>
   done
 }
 
+# Untruncated argv for pid $1. Linux `ps -o command=` without -ww clips to
+# the window width (often 80), which drops the fixture path and makes
+# path-scoped teardown miss the child; /proc cmdline is the full argv.
+fm_test_pid_command_line() {  # <pid>
+  local pid=$1 cmd
+  [ -n "$pid" ] || return 1
+  if [ -r "/proc/$pid/cmdline" ]; then
+    cmd=$(tr '\0' ' ' < "/proc/$pid/cmdline")
+    cmd=${cmd%"${cmd##*[![:space:]]}"}
+    [ -n "$cmd" ] || return 1
+    printf '%s\n' "$cmd"
+    return 0
+  fi
+  cmd=$(LC_ALL=C ps -ww -o args= -p "$pid" 2>/dev/null) || return 1
+  [ -n "$cmd" ] || return 1
+  printf '%s\n' "$cmd"
+}
+
 # True when pid $1's command line references a path inside THIS repo worktree
 # or one of this suite's registered temp dirs. This is the ONLY kill authority
 # in test teardown: a descendant that fails the check - the primary home's own
@@ -146,7 +164,7 @@ fm_test_descendant_pids() {  # <pid>
 fm_test_pid_is_path_scoped() {  # <pid>
   local pid=$1 cmd dir
   [ -n "$pid" ] || return 1
-  cmd=$(LC_ALL=C ps -o command= -p "$pid" 2>/dev/null) || return 1
+  cmd=$(fm_test_pid_command_line "$pid") || return 1
   [ -n "$cmd" ] || return 1
   case "$cmd" in
     *"$ROOT"/*) return 0 ;;
