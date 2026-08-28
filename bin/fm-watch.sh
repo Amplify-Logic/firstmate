@@ -1275,6 +1275,8 @@ while :; do
   # alive. Supervision scripts warn when this goes stale with tasks in flight.
   touch "$STATE/.last-watcher-beat"
 
+  check_sweep_begin "$CHECK_SWEEP_PENDING" || exit 1
+
   # Catch mailbox/inbox writes that landed while no watcher was alive, during
   # successor setup, or during the just-completed bounded wait. This runs before
   # the slow-check cadence test, so expiring .last-check takes effect now.
@@ -1292,7 +1294,6 @@ while :; do
   # never run until the fleet went quiet. Checks are due only every
   # CHECK_INTERVAL, so most cycles skip this block and fall straight through.
   if [ "$(age_of "$STATE/.last-check")" -ge "$CHECK_INTERVAL" ]; then
-    check_sweep_begin "$CHECK_SWEEP_PENDING" || exit 1
     rejected_checks=
     for c in "$STATE"/*.check.sh; do
       [ -e "$c" ] || continue
@@ -1341,6 +1342,8 @@ while :; do
       wake "$reason"
     fi
     check_sweep_complete "$CHECK_SWEEP_PENDING" || exit 1
+  else
+    rm -f "$CHECK_SWEEP_PENDING"
   fi
 
   # On the first changed signal, linger one grace period and re-scan before

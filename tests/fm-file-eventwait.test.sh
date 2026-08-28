@@ -172,17 +172,22 @@ pass "catch-up: unchanged paths do not spuriously double-fire"
 reset_state
 mkdir -p "$HOME_DIR/data/glasses-voice-runtime"
 : > "$HOME_DIR/data/glasses-voice-runtime/mailbox.db"
+command sleep 1.1
+: > "$STATE_DIR/.last-check"
 pending="$STATE_DIR/.last-check.pending.test"
+command sleep 1.1
 check_sweep_begin "$pending" || fail "check sweep must capture its start boundary"
 [ -e "$pending" ] || fail "check sweep must preserve a private pending marker"
-[ ! -e "$STATE_DIR/.last-check" ] || fail "check sweep must not publish its boundary before completion"
-set_mtime 202608280901.00 "$pending"
-set_mtime 202608280902.00 "$HOME_DIR/data/glasses-voice-runtime/mailbox.db"
+if glasses_file_event_catch_up; then
+  fail "pre-loop catch-up must see no event before the race fixture write"
+fi
+command sleep 1.1
+touch "$HOME_DIR/data/glasses-voice-runtime/mailbox.db"
 check_sweep_complete "$pending" || fail "completed check sweep must publish its start boundary"
 [ ! -e "$pending" ] || fail "completed check sweep must consume its pending marker"
-glasses_file_event_catch_up || fail "a write during a check sweep must remain newer than its published boundary"
+glasses_file_event_catch_up || fail "a write after pre-loop catch-up must remain newer than the published boundary"
 [ ! -e "$STATE_DIR/.last-check" ] || fail "check-sweep race catch-up must expire .last-check"
-pass "catch-up: event during authenticated check sweep is preserved"
+pass "catch-up: event after pre-loop catch-up is preserved"
 
 # Neutralize POLL sleeps for the watcher-splice cases below. Real delays in
 # the python helper tests above use `command sleep` so they stay timed.

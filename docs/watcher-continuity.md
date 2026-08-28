@@ -134,7 +134,7 @@ Glasses mailbox and bridge-inbox wakes survive the intentional one-shot watcher 
 On startup and at the top of every later watcher loop, including the loop after a bounded wait timeout, `bin/fm-watch.sh` asks `bin/fm-file-event-lib.sh` whether any current default watch path is newer than the last completed authenticated-check sweep.
 A newer path removes the marker before the cadence test, so authenticated checks run in that same loop instead of waiting for another filesystem event or the 300-second backstop.
 The live waiter still compares signatures around each bounded wait, which covers a write racing catch-up with waiter setup.
-Each authenticated check sweep captures a private marker before reading checks and publishes that start boundary only after the sweep completes, so unchanged paths do not fire twice while a write during the sweep remains newer for the next loop or successor.
+Each watcher loop captures a private marker before filesystem catch-up and publishes that boundary only when an authenticated check sweep completes, so unchanged paths do not fire twice while a later write remains newer for the next loop or successor.
 This catch-up is part of the existing singleton watcher cycle and does not add another watcher, change lock ownership, or alter the one-actionable-reason exit contract.
 `docs/bridge-view.md` owns the separate glasses existence-only watcher-check guidance.
 
