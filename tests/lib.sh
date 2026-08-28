@@ -251,6 +251,43 @@ fm_test_kill_scoped() {  # <-TERM|-KILL> <pid>...
   done
 }
 
+# Linux: signal every process whose exe lives in a registered fixture temp
+# dir. mktemp paths are unique to this suite, so this does not need a
+# parent-pid walk; pgrep -P misses some CI children (reparented or
+# pipe-job) and left the isolation long-runner alive.
+fm_test_kill_cleanup_dir_exes() {  # <-TERM|-KILL>
+  local signal=$1 proc pid target dir
+  [ -d /proc ] || return 0
+  for proc in /proc/[0-9]*; do
+    pid=${proc#/proc/}
+    case "$pid" in
+      ''|*[!0-9]*) continue ;;
+    esac
+    [ "$pid" = "${BASHPID:-$$}" ] && continue
+    target=$(readlink "$proc/exe" 2>/dev/null) || continue
+    target=${target% (deleted)}
+    [ -n "$target" ] || continue
+    for dir in "${FM_TEST_CLEANUP_DIRS[@]:-}"; do
+      [ -n "$dir" ] || continue
+      case "$target" in
+        "$dir"|"$dir"/*)
+          kill "$signal" "$pid" 2>/dev/null || true
+          break
+          ;;
+      esac
+    done
+    while IFS= read -r dir; do
+      [ -n "$dir" ] || continue
+      case "$target" in
+        "$dir"|"$dir"/*)
+          kill "$signal" "$pid" 2>/dev/null || true
+          break
+          ;;
+      esac
+    done < "$FM_TEST_CLEANUP_REGISTRY"
+  done
+}
+
 # Stop every supervision process this suite spawned so no watcher, arm, or
 # daemon outlives its fixture. Candidates come from tracked pids and the
 # suite's own descendant tree, but EVERY kill is gated on fm_test_pid_is_path_
@@ -269,6 +306,7 @@ fm_test_reap_children() {
   done <<EOF
 $(fm_test_descendant_pids "${BASHPID:-$$}")
 EOF
+  fm_test_kill_cleanup_dir_exes -TERM
   i=0
   while [ "$i" -lt 30 ]; do
     alive=0
@@ -289,6 +327,7 @@ EOF
   done <<EOF
 $(fm_test_descendant_pids "${BASHPID:-$$}")
 EOF
+  fm_test_kill_cleanup_dir_exes -KILL
   return 0
 }
 
