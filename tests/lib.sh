@@ -126,10 +126,18 @@ fm_test_track_pid() {
 # Print this shell's whole live descendant subtree, innermost generation last.
 # Scoped strictly to the calling test process's own tree: no command-name
 # patterns are ever matched, so a sibling firstmate home running the same
-# scripts can never be touched by a suite's teardown.
+# scripts can never be touched by a suite's teardown. Prefer /proc children
+# on Linux; pgrep -P is the portable fallback.
 fm_test_descendant_pids() {  # <pid>
-  local parent=$1 kid
-  for kid in $(pgrep -P "$parent" 2>/dev/null || true); do
+  local parent=$1 kid kids
+  kids=
+  if [ -r "/proc/$parent/task/$parent/children" ]; then
+    kids=$(cat "/proc/$parent/task/$parent/children" 2>/dev/null || true)
+  fi
+  if [ -z "$kids" ]; then
+    kids=$(pgrep -P "$parent" 2>/dev/null || true)
+  fi
+  for kid in $kids; do
     case "$kid" in
       ''|*[!0-9]*) continue ;;
     esac
@@ -192,6 +200,9 @@ fm_test_pid_is_path_scoped() {  # <pid>
       fm_test_path_is_scoped "$arg" && return 0
       arg=
     done < "/proc/$pid/cmdline"
+    target=$(readlink "/proc/$pid/exe" 2>/dev/null || true)
+    target=${target% (deleted)}
+    fm_test_path_is_scoped "$target" && return 0
     for fd in /proc/"$pid"/fd/*; do
       [ -e "$fd" ] || continue
       target=$(readlink "$fd" 2>/dev/null) || continue

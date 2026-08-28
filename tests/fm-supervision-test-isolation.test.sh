@@ -190,7 +190,7 @@ test_teardown_reaps_untracked_background_children() {
   fm_test_reap_children
   alive=0
   kill -0 "$fixture_pid" 2>/dev/null && alive=1
-  [ "$alive" -eq 0 ] || fail "teardown left a path-scoped untracked child alive"
+  [ "$alive" -eq 0 ] || fail "teardown left a path-scoped untracked child alive pid=$fixture_pid cmd=$(fm_test_pid_command_line "$fixture_pid" 2>/dev/null || echo unreadable) exe=$(readlink "/proc/$fixture_pid/exe" 2>/dev/null || echo no-exe)"
   wait "$fixture_pid" 2>/dev/null || true
   alive=0
   kill -0 "$worktree_pid" 2>/dev/null && alive=1
