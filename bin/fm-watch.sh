@@ -53,7 +53,7 @@
 # For normal supervision, resume the session-start primary-harness protocol
 # after each printed reason. Direct duplicate invocations of this script still
 # no-op through the watcher singleton lock.
-# On macOS the lock-owning process holds `caffeinate -dims -w <pid>` for its
+# On macOS the lock-owning process holds `caffeinate -ims -w <pid>` for its
 # whole lifetime so the machine cannot sleep between per-run assertions; a
 # non-owner never starts one, and the child dies with the watcher.
 set -u
@@ -1140,7 +1140,7 @@ handle_push_transition() {  # <backend> <session> <record>
 }
 
 # Hold a macOS sleep assertion for this lock-owning watcher process.
-# Spawns `caffeinate -dims -w <pid>` as a child so the assertion dies with the
+# Spawns `caffeinate -ims -w <pid>` as a child so the assertion dies with the
 # watcher and does not pile up across successor chains. No-op when caffeinate
 # is missing or the host is not Darwin. Idempotent inside one process, and
 # safe to re-call each poll cycle so a dead child is respawned.
@@ -1151,7 +1151,7 @@ watch_hold_sleep_assertion() {  # <watcher-pid>
   if [ -n "${FM_WATCH_CAFFEINATE_PID:-}" ] && kill -0 "$FM_WATCH_CAFFEINATE_PID" 2>/dev/null; then
     return 0
   fi
-  caffeinate -dims -w "$target_pid" >/dev/null 2>&1 &
+  caffeinate -ims -w "$target_pid" >/dev/null 2>&1 &
   FM_WATCH_CAFFEINATE_PID=$!
 }
 

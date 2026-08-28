@@ -122,8 +122,8 @@ test_darwin_stub_spawns_one_child_bound_to_pid() {
   target=$HOLD_TARGET
   hold_with_path "$fakebin:$PATH" "$target"
   wait_until 40 test -s "$log" || fail "darwin stub did not record a caffeinate spawn"
-  grep -F -- "-dims -w $target" "$log" >/dev/null \
-    || fail "stub was not spawned as caffeinate -dims -w <pid>: $(cat "$log")"
+  grep -F -- "-ims -w $target" "$log" >/dev/null \
+    || fail "stub was not spawned as caffeinate -ims -w <pid>: $(cat "$log")"
   [ "$(live_stub_count "$log" "$target")" = 1 ] \
     || fail "expected exactly one live assertion for the watched pid"
   [ -n "${FM_WATCH_CAFFEINATE_PID:-}" ] || fail "caffeinate child pid was not recorded"
@@ -133,7 +133,7 @@ test_darwin_stub_spawns_one_child_bound_to_pid() {
   wait_until 40 zero_live_stubs "$log" \
     || fail "release did not stop the caffeinate child"
   end_sourced_hold
-  pass "darwin stub spawns one caffeinate -dims -w child bound to the watcher pid"
+  pass "darwin stub spawns one caffeinate -ims -w child bound to the watcher pid"
 }
 
 test_spawn_is_idempotent_in_one_process() {
@@ -259,7 +259,7 @@ test_lock_owner_spawns_and_non_owner_does_not() {
 
   if [ "$(uname)" = Darwin ]; then
     wait_until 40 test -s "$log" || fail "lock owner did not spawn stub caffeinate on Darwin"
-    grep -F -- "-dims -w $pid1" "$log" >/dev/null \
+    grep -F -- "-ims -w $pid1" "$log" >/dev/null \
       || fail "lock owner did not bind the assertion to its pid: $(cat "$log")"
     [ "$(live_stub_count "$log")" = 1 ] \
       || fail "expected one live assertion while the owner runs, got $(live_stub_count "$log")"

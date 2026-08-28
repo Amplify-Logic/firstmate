@@ -384,7 +384,7 @@ fm_fakebin() {
 }
 
 # fm_install_fake_caffeinate <fakebin>: drop a PATH stub that mimics
-# `caffeinate -dims -w <pid>` without touching the host sleep assertion.
+# `caffeinate -ims -w <pid>` without touching the host sleep assertion.
 # It stays alive until the watched pid exits, or until it is killed.
 # When FM_FAKE_CAFFEINATE_LOG is set, each invocation appends
 # "<stub-pid> <args>" so tests can assert spawn and cleanup.
