@@ -242,6 +242,8 @@ fm_file_event_wait() {
 # the write and therefore sees no before/after delta. The persisted mtime
 # boundary must still recover it when the timeout hands control back.
 (
+  # Invoked indirectly by event_wait_or_sleep.
+  # shellcheck disable=SC2329
   file_event_sig() { printf '%s\n' stable; }
   event_wait_or_sleep
 )
