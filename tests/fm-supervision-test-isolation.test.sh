@@ -180,7 +180,9 @@ test_teardown_reaps_untracked_background_children() {
   # leaves writers on `bash test | tee`, so serial CI hangs until timeout.
   "$command_sub_root/long-runner" 15 >/dev/null 2>&1 &
   fixture_pid=$!
-  bash -c 'trap "exit 0" TERM; while :; do :; done' "$ROOT/bin/fm-watch.sh" >/dev/null 2>&1 &
+  # Interpreted child: bash -c with $0 inside the fixture dir so a Linux
+  # cmdline scan can see the scoped path even when pgrep misses the pid.
+  bash -c 'trap "exit 0" TERM; while :; do :; done' "$command_sub_root/fm-watch.sh" >/dev/null 2>&1 &
   worktree_pid=$!
   # A live process OUTSIDE every scoped path - plain sleep, the same shape a
   # real firstmate home's own supervision could be running - must survive

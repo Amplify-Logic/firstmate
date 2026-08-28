@@ -251,12 +251,12 @@ fm_test_kill_scoped() {  # <-TERM|-KILL> <pid>...
   done
 }
 
-# Linux: signal every process whose exe lives in a registered fixture temp
-# dir. mktemp paths are unique to this suite, so this does not need a
-# parent-pid walk; pgrep -P misses some CI children (reparented or
-# pipe-job) and left the isolation long-runner alive.
+# Linux: signal every process whose exe or cmdline references a registered
+# fixture temp dir. mktemp paths are unique to this suite, so this does not
+# need a parent-pid walk; pgrep -P misses some CI children and left the
+# isolation long-runner and busy-loop alive.
 fm_test_kill_cleanup_dir_exes() {  # <-TERM|-KILL>
-  local signal=$1 proc pid target dir
+  local signal=$1 proc pid target dir cmd
   [ -d /proc ] || return 0
   for proc in /proc/[0-9]*; do
     pid=${proc#/proc/}
@@ -264,15 +264,25 @@ fm_test_kill_cleanup_dir_exes() {  # <-TERM|-KILL>
       ''|*[!0-9]*) continue ;;
     esac
     [ "$pid" = "${BASHPID:-$$}" ] && continue
-    target=$(readlink "$proc/exe" 2>/dev/null) || continue
-    target=${target% (deleted)}
-    [ -n "$target" ] || continue
+    target=$(readlink "$proc/exe" 2>/dev/null) || target=
+    target=${target%' (deleted)'}
+    cmd=
+    if [ -r "$proc/cmdline" ]; then
+      cmd=$(tr '\0' ' ' < "$proc/cmdline")
+      cmd=${cmd%"${cmd##*[![:space:]]}"}
+    fi
     for dir in "${FM_TEST_CLEANUP_DIRS[@]:-}"; do
       [ -n "$dir" ] || continue
       case "$target" in
         "$dir"|"$dir"/*)
           kill "$signal" "$pid" 2>/dev/null || true
-          break
+          continue 2
+          ;;
+      esac
+      case "$cmd" in
+        *"$dir"/*)
+          kill "$signal" "$pid" 2>/dev/null || true
+          continue 2
           ;;
       esac
     done
@@ -280,6 +290,12 @@ fm_test_kill_cleanup_dir_exes() {  # <-TERM|-KILL>
       [ -n "$dir" ] || continue
       case "$target" in
         "$dir"|"$dir"/*)
+          kill "$signal" "$pid" 2>/dev/null || true
+          break
+          ;;
+      esac
+      case "$cmd" in
+        *"$dir"/*)
           kill "$signal" "$pid" 2>/dev/null || true
           break
           ;;
