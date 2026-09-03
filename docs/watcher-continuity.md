@@ -115,7 +115,7 @@ Before releasing its singleton lock after printing an actionable reason, the wat
 A matching PID and identity lets an attached arm report the delivered reason and exit zero even after the durable wake queue was drained, while an unrelated queue producer or a recycled PID cannot satisfy the match.
 Only a cycle with no matching delivery record emits `watcher: FAILED - cycle ended without an actionable reason` and exits nonzero.
 
-A freshly started watcher runs the non-executing PR check migration before it can take the lock or beat, so a full sweep sits inside the confirmation window and publishes its own `state/.pr-check-migration.progress.<pid>` record.
+A freshly started watcher runs the non-executing PR check migration before it can take the lock or beat, so any required full sweep sits inside the confirmation window and publishes its own `state/.pr-check-migration.progress.<pid>` record.
 That pre-lock call passes `--checks-safe`, which returns as soon as three fixed-cost checks agree: the X shim needs no locked scan, `state/.pr-check-migration-scan-v1` is a valid private one-line record, and neither legacy `_noncanonical` quarantine path is present.
 None of the three grows with the number of checks a home holds, so an ordinary start costs a handful of stats and never approaches the window.
 A home still takes the sweep the extension below covers whenever its scan marker is missing or invalid, its X shim is stale, or that legacy quarantine namespace survives.
