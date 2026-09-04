@@ -149,6 +149,24 @@ FM_PAUSE_CAPTAIN_RESURFACE_SECS_DEFAULT=28800
 FM_CLASSIFY_RESOLVE_VERB_DEFAULT='resolved'
 FM_CLASSIFY_CAPTAIN_HELD_VERB_DEFAULT='captain-held'
 
+# 0 when <line> holds no non-whitespace character.
+#
+# Every status fold below skips blank lines, and each used to do it by stripping
+# all whitespace out of the line and testing the remainder. In bash 3.2 that
+# substitution is quadratic in the number of matches: one 3.2 KB status note
+# costs about 2.2 seconds, so a task whose worker writes long notes made each
+# fold take seconds - paid by the watcher on every stale poll, by the away-mode
+# daemon, and by any point-in-time reader. This glob answers the same question in
+# constant time by stopping at the first non-whitespace character. It is the one
+# owner of the blank-line test; the folds call it rather than re-rolling either
+# form.
+_fm_line_is_blank() {  # <line>
+  case "$1" in
+    *[![:space:]]*) return 1 ;;
+    *) return 0 ;;
+  esac
+}
+
 # Return the last non-blank line of a status file (empty if missing/blank).
 last_status_line() {
   local f=$1
@@ -424,13 +442,12 @@ EOF
 # is the durable open-set the fleet snapshot and any point-in-time consumer must use
 # instead of trusting the last status line.
 status_open_decisions() {  # <status-file>
-  local f=$1 line verb key note resolve held open='' stripped
+  local f=$1 line verb key note resolve held open=''
   [ -f "$f" ] || return 0
   resolve=${FM_CLASSIFY_RESOLVE_VERB:-$FM_CLASSIFY_RESOLVE_VERB_DEFAULT}
   held=${FM_CLASSIFY_CAPTAIN_HELD_VERB:-$FM_CLASSIFY_CAPTAIN_HELD_VERB_DEFAULT}
   while IFS= read -r line || [ -n "$line" ]; do
-    stripped=${line//[[:space:]]/}
-    [ -n "$stripped" ] || continue
+    _fm_line_is_blank "$line" && continue
     verb=$(status_line_verb "$line")
     key=$(_fm_decision_key "$line") || continue
     case "$verb" in
@@ -534,7 +551,7 @@ _fm_last_non_resolve_line() {  # <status-file>
   [ -e "$f" ] || return 0
   resolve=${FM_CLASSIFY_RESOLVE_VERB:-$FM_CLASSIFY_RESOLVE_VERB_DEFAULT}
   while IFS= read -r line || [ -n "$line" ]; do
-    case "${line//[[:space:]]/}" in '') continue ;; esac
+    _fm_line_is_blank "$line" && continue
     [ "$(status_line_verb "$line")" = "$resolve" ] && continue
     out=$line
   done < "$f"
@@ -542,13 +559,12 @@ _fm_last_non_resolve_line() {  # <status-file>
 }
 
 _fm_last_resolve_closed_captain_hold() {  # <status-file>
-  local f=$1 line verb key held resolve open='' stripped closed=1
+  local f=$1 line verb key held resolve open='' closed=1
   [ -f "$f" ] || return 1
   held=${FM_CLASSIFY_CAPTAIN_HELD_VERB:-$FM_CLASSIFY_CAPTAIN_HELD_VERB_DEFAULT}
   resolve=${FM_CLASSIFY_RESOLVE_VERB:-$FM_CLASSIFY_RESOLVE_VERB_DEFAULT}
   while IFS= read -r line || [ -n "$line" ]; do
-    stripped=${line//[[:space:]]/}
-    [ -n "$stripped" ] || continue
+    _fm_line_is_blank "$line" && continue
     closed=1
     verb=$(status_line_verb "$line")
     key=$(_fm_decision_key "$line") || continue
@@ -613,13 +629,12 @@ status_declared_wait() {  # <status-file>
 # It is never authoritative current crew state, and consumers must not let an open
 # phase outrank a structured home snapshot or fm-crew-state result.
 _fm_status_open_activities_stream() {
-  local line verb key note resolve held open='' stripped pause
+  local line verb key note resolve held open='' pause
   resolve=${FM_CLASSIFY_RESOLVE_VERB:-$FM_CLASSIFY_RESOLVE_VERB_DEFAULT}
   held=${FM_CLASSIFY_CAPTAIN_HELD_VERB:-$FM_CLASSIFY_CAPTAIN_HELD_VERB_DEFAULT}
   pause=${FM_CLASSIFY_PAUSED_VERB:-$FM_CLASSIFY_PAUSED_VERB_DEFAULT}
   while IFS= read -r line || [ -n "$line" ]; do
-    stripped=${line//[[:space:]]/}
-    [ -n "$stripped" ] || continue
+    _fm_line_is_blank "$line" && continue
     verb=$(status_line_verb "$line")
     key=$(_fm_decision_key "$line") || continue
     case "$verb" in

@@ -44,6 +44,7 @@
 #   FM_DECK_NOW            override unix epoch for ages and the clock (tests)
 #   FM_DECK_JUST_IN        completions to show in JUST IN (default 5)
 #   FM_DECK_LOOSE_ENDS     urgent/waiting loose ends to show (default 5)
+#   FM_DECK_NEEDS_YOU      rows to show in NEEDS YOU before "+n more" (default 8)
 #
 # Exit:
 #   0 on success, or on any single source being absent or unreadable
@@ -131,7 +132,13 @@ collect_orders() {
 }
 
 collect_backlog() {
-  fm_tasks_axi_backend_available "$CONFIG" || return 0
+  # Deliberately NOT fm_tasks_axi_backend_available: that probe shells out three
+  # more times to confirm the MUTATION features (update --archive-body, atomic
+  # multi-id mv) this pane will never use, and it is the single slowest thing in
+  # a refresh. A view needs only "is this home's backlog readable this way", and
+  # a `list` that fails anyway falls through to an honest empty section.
+  fm_backlog_backend_manual "$CONFIG" && return 0
+  command -v tasks-axi >/dev/null 2>&1 || return 0
   [ -f "$DATA/backlog.md" ] || return 0
   # --file pins the read to THIS home's backlog: without it tasks-axi resolves
   # its markdown path relative to the caller's directory, so the pane would show
@@ -253,7 +260,7 @@ project_label() {  # <meta-file>
 # resolved here so the renderer never re-implements the vocabulary.
 collect_vocabulary() {
   local canonical visible
-  for canonical in parked failed blocked working paused done unknown none; do
+  for canonical in parked failed blocked working paused 'done' unknown none; do
     visible=$(fm_visible_state "$canonical")
     printf '%s\t%s\t%s\n' "$canonical" "$visible" "$(fm_visible_icon "$visible")"
   done
@@ -264,8 +271,8 @@ emit_payload() {
   printf '%s width\n%s\n' "$SECTION_MARK" "$(render_width)"
   printf '%s home\n%s\n' "$SECTION_MARK" "$(home_label)"
   printf '%s interval\n%s\n' "$SECTION_MARK" "$1"
-  printf '%s limits\n%s\t%s\n' "$SECTION_MARK" \
-    "${FM_DECK_JUST_IN:-5}" "${FM_DECK_LOOSE_ENDS:-5}"
+  printf '%s limits\n%s\t%s\t%s\n' "$SECTION_MARK" \
+    "${FM_DECK_JUST_IN:-5}" "${FM_DECK_LOOSE_ENDS:-5}" "${FM_DECK_NEEDS_YOU:-8}"
   printf '%s vocabulary\n' "$SECTION_MARK"
   collect_vocabulary
   printf '%s tray\n' "$SECTION_MARK"

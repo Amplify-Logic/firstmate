@@ -16,6 +16,7 @@ import time
 
 JUST_IN_DEFAULT = 5
 LOOSE_ENDS_DEFAULT = 5
+NEEDS_YOU_DEFAULT = 8
 MIN_WIDTH = 60
 MAX_WIDTH = 160
 
@@ -104,9 +105,13 @@ TRUNCATION = re.compile(r"(?:\\n|\n)\.\.\.\s*\(truncated,.*$", re.DOTALL)
 
 def clean_title(value):
     value = "" if value is None else str(value)
-    value = TRUNCATION.sub("", value)
-    value = value.replace("\\n", " ")
-    return " ".join(value.split())
+    trimmed = TRUNCATION.sub("", value)
+    # Keep a visible mark when tasks-axi cut the sentence, so a title that stops
+    # mid-word reads as shortened rather than as a badly written backlog entry.
+    cut = trimmed != value
+    trimmed = trimmed.replace("\\n", " ")
+    trimmed = " ".join(trimmed.split())
+    return (trimmed + "…") if cut and trimmed else trimmed
 
 
 def parse_backlog(text):
@@ -286,7 +291,11 @@ def parse_loose_ends(text):
     # prose around them (corrections, calendar, context), so numbered entries
     # are the item list when the file has any. A sweep written entirely in
     # bullets still counts, rather than reporting zero open items.
-    pattern = LOOSE_NUMBERED if LOOSE_NUMBERED.search(text) else LOOSE_BULLET
+    pattern = LOOSE_BULLET
+    for line in body_lines:
+        if LOOSE_NUMBERED.match(line):
+            pattern = LOOSE_NUMBERED
+            break
 
     title = ""
     bucket = "other"
@@ -380,30 +389,40 @@ def build_staged(tray, orders, width):
     return lines
 
 
-def build_needs_you(tasks, backlog, width):
-    """Everything that cannot move without him, most immediate first."""
+# What each row is asking of him, in the order he should work through it.
+NEEDS_RANK = {"answer": 0, "unblock": 1, "review": 2, "decide": 3}
+
+
+def build_needs_you(tasks, backlog, limit, width):
+    """Everything that cannot move without him, most immediate first.
+
+    A worker's own status note never reaches this pane. Those notes are written
+    for firstmate and carry pipeline vocabulary; the captain gets the outcome
+    the work was commissioned for plus what is being asked of him. The detail
+    lives one command away, on the decision surface.
+    """
     rows = []
     seen_ids = set()
 
     for task in tasks:
         if task["state"] == "parked":
-            rows.append(("decision", task["note"] or task["outcome"], "", task["project"]))
+            rows.append(("answer", task["outcome"], "", task["project"]))
             seen_ids.add(task["id"])
         elif task["state"] == "blocked":
-            rows.append(("blocked", task["note"] or task["outcome"], "", task["project"]))
+            rows.append(("unblock", task["outcome"], "", task["project"]))
             seen_ids.add(task["id"])
 
     pr_seen = set()
     for task in tasks:
         if task["pr"] and task["state"] != "done":
-            rows.append(("PR ready", task["outcome"], task["pr"], task["project"]))
+            rows.append(("review", task["outcome"], task["pr"], task["project"]))
             pr_seen.add(task["pr"])
     for row in backlog:
         if row.get("state") == "done":
             continue
         url = row["link_map"].get("pr", "")
         if url and url not in pr_seen:
-            rows.append(("PR ready", row.get("title", ""), url, row.get("repo", "")))
+            rows.append(("review", row.get("title", ""), url, row.get("repo", "")))
             pr_seen.add(url)
 
     for row in backlog:
@@ -411,24 +430,27 @@ def build_needs_you(tasks, backlog, width):
             continue
         if row.get("id") in seen_ids:
             continue
-        rows.append(("decision", row.get("title", ""), "", row.get("repo", "")))
+        rows.append(("decide", row.get("title", ""), "", row.get("repo", "")))
 
     if not rows:
-        return ["  nothing is waiting on you"]
+        return ["  nothing is waiting on you"], 0
 
-    priority = {"decision": 0, "blocked": 1, "PR ready": 2}
-    rows.sort(key=lambda r: priority.get(r[0], 9))
+    rows.sort(key=lambda r: NEEDS_RANK.get(r[0], 9))
+    shown = rows[:limit]
 
     lines = []
-    for label, text, url, where in rows:
+    for label, text, url, where in shown:
         where_text = (" · " + where) if where and where != "-" else ""
         lines.append(
-            "  %-9s %s%s"
-            % (label, clip(text, max(20, width - 16 - len(where_text))), where_text)
+            "  %-8s %s%s"
+            % (label, clip(text, max(20, width - 15 - len(where_text))), where_text)
         )
         if url:
-            lines.append("            " + url)
-    return lines
+            lines.append("           " + url)
+    remaining = len(rows) - len(shown)
+    if remaining > 0:
+        lines.append("  %-8s %d more waiting on you" % ("", remaining))
+    return lines, len(rows)
 
 
 def build_loose_ends(loose, limit, width):
@@ -451,23 +473,45 @@ def build_loose_ends(loose, limit, width):
     return lines
 
 
+PROJECT_COL = 18
+HEARD_COL = 14
+
+
 def build_under_way(tasks, vocab, width):
     if not tasks:
         return ["  no work under way"]
     ordered = sorted(
         tasks, key=lambda t: (STATE_RANK.get(t["state"], 9), -t["heard"])
     )
+    # Fixed columns: he scans this section down the state dot, so the outcome
+    # column cannot shift width from row to row.
+    outcome_col = max(20, width - (4 + 11 + PROJECT_COL + HEARD_COL + 2))
     lines = []
     for task in ordered:
         label, icon = vocab.get(task["state"], ("WAITING", "\U0001f7e1"))
         heard = format_age(task["heard"])
-        heard_text = ("heard %s ago" % heard) if heard != "-" else "nothing reported yet"
-        tail = "%s · %s" % (task["project"], heard_text)
+        heard_text = ("heard %s ago" % heard) if heard != "-" else "not reported yet"
         lines.append(
-            "  %s %-10s %s  ·  %s"
-            % (icon, label, clip(task["outcome"], max(20, width - 34 - len(tail))), tail)
+            "  %s %-11s %-*s  %-*s %s"
+            % (
+                icon,
+                label,
+                outcome_col,
+                clip(task["outcome"], outcome_col),
+                PROJECT_COL,
+                clip(task["project"], PROJECT_COL),
+                heard_text,
+            )
         )
     return lines
+
+
+def short_date(value):
+    """2026-09-03 -> '03 Sep'; anything else passes through untouched."""
+    try:
+        return time.strftime("%d %b", time.strptime(value, "%Y-%m-%d"))
+    except (TypeError, ValueError):
+        return value or "-"
 
 
 def build_just_in(backlog, limit, width):
@@ -484,13 +528,16 @@ def build_just_in(backlog, limit, width):
             what, artifact = "findings", links["report"]
         else:
             what, artifact = "settled", ""
-        when = row.get("closed") or "-"
         lines.append(
-            "  %-11s %-9s %s"
-            % (when, what, clip(row.get("title", ""), max(20, width - 26)))
+            "  %-7s %-9s %s"
+            % (
+                short_date(row.get("closed", "")),
+                what,
+                clip(row.get("title", ""), max(20, width - 21)),
+            )
         )
         if artifact:
-            lines.append("              " + artifact)
+            lines.append("          " + artifact)
     return lines
 
 
@@ -518,6 +565,7 @@ def main():
     limits = first_line(sections.get("limits", "")).split("\t")
     just_in_limit = to_int(limits[0] if limits else "", JUST_IN_DEFAULT)
     loose_limit = to_int(limits[1] if len(limits) > 1 else "", LOOSE_ENDS_DEFAULT)
+    needs_limit = to_int(limits[2] if len(limits) > 2 else "", NEEDS_YOU_DEFAULT)
 
     vocab = parse_vocabulary(sections.get("vocabulary", ""))
     tray = parse_tray(sections.get("tray", ""))
@@ -527,13 +575,10 @@ def main():
     loose = parse_loose_ends(sections.get("loose_ends", ""))
 
     staged = build_staged(tray, orders, width)
-    needs_you = build_needs_you(tasks, backlog, width)
+    needs_you, needs_count = build_needs_you(tasks, backlog, needs_limit, width)
     under_way = build_under_way(tasks, vocab, width)
     just_in = build_just_in(backlog, just_in_limit, width)
 
-    needs_count = sum(1 for line in needs_you if re.match(r"^  \S", line)) if tasks or backlog else 0
-    if needs_you == ["  nothing is waiting on you"]:
-        needs_count = 0
     oldest = format_age(max((to_int(r.get("age_secs"), 0) for r in tray), default=-1))
 
     counts = [
@@ -568,12 +613,11 @@ def main():
     out += just_in
     out += ["", rule(width)]
 
-    cadence = ("refreshing every %ss" % interval) if interval else "one snapshot"
+    cadence = ("every %ss" % interval) if interval else "snapshot"
     out.append(
         clip(
-            "%s · read-only · approve: bin/fm-action-gateway.sh · "
-            "answer a decision: bin/fm-decision-surface.sh open · "
-            "live worker state: bin/fm-fleet-view.sh" % cadence,
+            "%s · view only · approve fm-action-gateway.sh · "
+            "decide fm-decision-surface.sh · live fm-fleet-view.sh" % cadence,
             width,
         )
     )
