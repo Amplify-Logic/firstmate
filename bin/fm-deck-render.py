@@ -613,7 +613,7 @@ def main():
     out += just_in
     out += ["", rule(width)]
 
-    cadence = ("every %ss" % interval) if interval else "snapshot"
+    cadence = ("refreshing every %ss" % interval) if interval else "snapshot"
     out.append(
         clip(
             "%s · view only · approve fm-action-gateway.sh · "

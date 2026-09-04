@@ -45,6 +45,9 @@
 #   FM_DECK_JUST_IN        completions to show in JUST IN (default 5)
 #   FM_DECK_LOOSE_ENDS     urgent/waiting loose ends to show (default 5)
 #   FM_DECK_NEEDS_YOU      rows to show in NEEDS YOU before "+n more" (default 8)
+#   FM_DECK_MAX_FRAMES     stop after this many refreshes; test seam so the
+#                          suite can assert the loop's redraw without killing a
+#                          process. Unset means refresh until interrupted.
 #
 # Exit:
 #   0 on success, or on any single source being absent or unreadable
@@ -152,7 +155,9 @@ collect_backlog() {
 collect_loose_ends() {
   local f="$DATA/loose-ends/latest.md"
   [ -f "$f" ] || return 0
-  printf 'path\t%s\n' "$f"
+  # Home-relative, because the pane points him at a file to open, not at a path
+  # to parse; the absolute prefix is the same on every line and just costs width.
+  printf 'path\t%s\n' "${f#"$FM_HOME"/}"
   printf 'age_secs\t%s\n' "$(file_age_secs "$f")"
   printf 'body\n'
   cat "$f" 2>/dev/null || true
@@ -323,9 +328,14 @@ main() {
 
   # Draw into a variable first, then clear and print in one write, so a refresh
   # does not flash a half-built pane at him.
+  local drawn=0 max=${FM_DECK_MAX_FRAMES:-0}
   while :; do
     frame=$(render "$interval")
     printf '\033[H\033[2J\033[3J%s\n' "$frame"
+    drawn=$((drawn + 1))
+    if [ "$max" -gt 0 ] && [ "$drawn" -ge "$max" ]; then
+      return 0
+    fi
     sleep "$interval"
   done
 }

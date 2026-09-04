@@ -1,0 +1,549 @@
+#!/usr/bin/env bash
+# Behavior tests for bin/fm-deck.sh, the captain's private Action Deck pane.
+#
+# The pane is a composition, so these tests drive the real bin/fm-tray.sh and
+# bin/fm-order.sh over a fixture gateway log and fixture order files, and stub
+# only tasks-axi (the backlog reader, which is an external tool). They cover the
+# five sections, honest degradation when a source is missing, the read-only
+# boundary, and the captain-facing wording contract: no internal vocabulary and
+# no verbatim worker status notes reach the pane.
+set -u
+
+# shellcheck source=tests/lib.sh disable=SC1091
+. "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
+
+DECK="$ROOT/bin/fm-deck.sh"
+TMP=$(fm_test_tmproot fm-deck)
+
+command -v python3 >/dev/null 2>&1 || { echo "skip: python3 not found"; exit 0; }
+
+# Frozen gateway "now" so staged ages and expiry countdowns are deterministic.
+NOW=1700003600
+
+make_home() {  # <name> -> home dir
+  local home="$TMP/$1"
+  mkdir -p "$home/data" "$home/state" "$home/config" "$home/data/action-gateway"
+  printf '%s\n' "$home"
+}
+
+# tasks-axi is an external tool; stub its `list` with the exact shape the real
+# one emits, including its "-"/none absent markers and its truncation pointer.
+install_fake_tasks_axi() {  # <fakebin> [empty]
+  local fb=$1 mode=${2:-full}
+  mkdir -p "$fb"
+  cat > "$fb/tasks-axi" <<SH
+#!/usr/bin/env bash
+set -u
+[ "\${1:-}" = list ] || exit 0
+if [ "$mode" = empty ]; then
+  printf 'count: 0\n'
+  printf 'tasks[0]{id,state,kind,repo,title}:\n'
+  exit 0
+fi
+printf 'count: 5\n'
+printf 'tasks[5]{id,state,kind,repo,title,hold_kind,hold_reason,links,closed,blocked_by,held,priority}:\n'
+printf '  ship-task,in_flight,ship,alpha,"Ship the alpha widget","-","-","pr:https://github.com/acme/alpha/pull/7","-",none,no,"-"\n'
+printf '  parked-task,in_flight,ship,alpha,"Rework the beta importer","-","-",none,"-",none,no,"-"\n'
+printf '  hold-one,queued,captain,alpha,"Authorise the Sweden field visit",captain,"needs the captain",none,"-",none,yes,"-"\n'
+printf '  landed-ship,done,ship,alpha,"Land the gamma migration","-","-","pr:https://github.com/acme/alpha/pull/4",2026-09-02,none,no,"-"\n'
+printf '  landed-scout,done,scout,alpha,"Investigate the delta timeouts and report what is actually slow\\\\n... (truncated, 210 chars total - use show landed-scout --full to see complete text)","-","-","report:data/landed-scout/report.md",2026-09-01,none,no,"-"\n'
+SH
+  chmod +x "$fb/tasks-axi"
+}
+
+# Two prepared staged actions under one armed order, plus one under a domain with
+# no order file, plus one expired card.
+write_gateway_log() {  # <home>
+  cat > "$1/data/action-gateway/action-audit.log" <<'JSONL'
+{"ts":1700000000,"event":"prepared","state":"prepared","request_id":"r-1","digest":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","expires_at":1800000000,"requester_id":"worker-1","request":{"task_id":"t-1","domain":"proactive-outbound","action_kind":"crm.update","target":"hubspot://note-1","parameters":{},"idempotency_key":"i-1","expires_at":1800000000,"nonce":"n-1","requester_id":"worker-1"}}
+{"ts":1700003000,"event":"prepared","state":"prepared","request_id":"r-2","digest":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","expires_at":1700000100,"requester_id":"worker-2","request":{"task_id":"t-2","domain":"proactive-outbound","action_kind":"crm.update","target":"hubspot://note-2","parameters":{},"idempotency_key":"i-2","expires_at":1700000100,"nonce":"n-2","requester_id":"worker-2"}}
+{"ts":1700003500,"event":"prepared","state":"prepared","request_id":"r-3","digest":"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc","expires_at":1800000000,"requester_id":"worker-3","request":{"task_id":"t-3","domain":"unclaimed-domain","action_kind":"sheet.write","target":"sheet://q3","parameters":{},"idempotency_key":"i-3","expires_at":1800000000,"nonce":"n-3","requester_id":"worker-3"}}
+JSONL
+}
+
+write_orders() {  # <home>
+  mkdir -p "$1/data/orders"
+  cat > "$1/data/orders/proactive-outbound.md" <<'EOF'
+# Proactive outbound
+
+Status: ARMED (captain 2026-09-01)
+
+Watch: the every-two-days scan snapshot.
+EOF
+  cat > "$1/data/orders/spares.md" <<'EOF'
+# Spares currency
+
+Status: DRAFT
+
+Watch: the Exact Online spares list.
+EOF
+}
+
+write_workers() {  # <home>
+  local home=$1
+  fm_write_meta "$home/state/ship-task.meta" \
+    "window=default:w1:p1" "kind=ship" "project=$home/projects/alpha" \
+    "herdr_project_name=Alpha" "harness=claude" \
+    "outcome=Ship the alpha widget" \
+    "pr=https://github.com/acme/alpha/pull/7"
+  printf 'working: pushed the branch\n' > "$home/state/ship-task.status"
+
+  fm_write_meta "$home/state/parked-task.meta" \
+    "window=default:w1:p2" "kind=ship" "project=$home/projects/alpha" \
+    "herdr_project_name=Alpha" "harness=claude" \
+    "outcome=Rework the beta importer"
+  # A realistic worker note, full of pipeline vocabulary the captain must not see.
+  printf 'working: started\n' > "$home/state/parked-task.status"
+  printf 'needs-decision [key=beta-shape]: no-mistakes run 01ABC parked at the review gate with 4 ask-user findings; worktree HEAD 9f2a1b\n' \
+    >> "$home/state/parked-task.status"
+
+  fm_write_meta "$home/state/stuck-task.meta" \
+    "window=default:w1:p3" "kind=scout" "project=$home/projects/alpha" \
+    "herdr_project_name=Alpha" "harness=claude" \
+    "outcome=Investigate the delta timeouts"
+  printf 'blocked: teardown refused, no credential for the vendor portal\n' \
+    > "$home/state/stuck-task.status"
+}
+
+# The deck pins its backlog read to this home's file, so the file has to exist
+# even though the stub above is what answers the query. Keep it consistent with
+# the stub's rows so the fixture does not describe a backlog it cannot produce.
+write_backlog() {  # <home>
+  cat > "$1/data/backlog.md" <<'EOF'
+# Backlog
+
+## In flight
+- [ ] ship-task - Ship the alpha widget (repo: alpha) (kind: ship)
+- [ ] parked-task - Rework the beta importer (repo: alpha) (kind: ship)
+
+## Queued
+- [ ] hold-one - Authorise the Sweden field visit (repo: alpha) (kind: captain) (hold-kind: captain)
+
+## Done
+- [x] landed-ship - Land the gamma migration (repo: alpha) (kind: ship)
+- [x] landed-scout - Investigate the delta timeouts (repo: alpha) (kind: scout)
+EOF
+}
+
+write_loose_ends() {  # <home>
+  mkdir -p "$1/data/loose-ends"
+  cat > "$1/data/loose-ends/latest.md" <<'EOF'
+# Loose Ends - Tuesday 2026-09-01 (first sweep)
+
+Sources read: mail, chat, meetings.
+
+## Corrections (captain)
+
+- Something the captain already closed in person.
+
+## URGENT - today
+
+1. **Reply to Gijs** about the replaced unit and the warranty claim.
+2. Confirm the firewall ports with the network developers.
+
+## Waiting external
+
+3. Vendor is still confirming what the board order actually covers.
+
+## Commitments made / people waiting
+
+4. Owe Queco the customer's answer on the noise case.
+5. Owe Joost the scale-up update after Thursday's review.
+6. Owe Karolina a direction on who owns the portal route.
+
+## Admin / low
+
+7. Expense receipts are missing.
+EOF
+}
+
+run_deck() {  # <home> <fakebin> [args...]
+  local home=$1 fb=$2
+  shift 2
+  PATH="$fb:$PATH" \
+  FM_ACTION_GATEWAY_TEST=1 \
+  FM_ACTION_GATEWAY_NOW="$NOW" \
+  FM_ACTION_GATEWAY_ROOT="$home/data/action-gateway" \
+  FM_ACTION_AUDIT_LOG="$home/data/action-gateway/action-audit.log" \
+  FM_HOME="$home" \
+  FM_DATA_OVERRIDE="$home/data" \
+  FM_STATE_OVERRIDE="$home/state" \
+  FM_CONFIG_OVERRIDE="$home/config" \
+  FM_DECK_COLUMNS=120 \
+    "$DECK" "$@"
+}
+
+# Prints "<home> <fakebin>" on ONE line, so a caller can `read -r home fb`.
+# Neither path can contain a space: both are built under fm_test_tmproot.
+full_home() {  # <name> -> "<home> <fakebin>"
+  local home fb
+  home=$(make_home "full-$1")
+  fb=$(fm_fakebin "$home")
+  install_fake_tasks_axi "$fb"
+  write_gateway_log "$home"
+  write_orders "$home"
+  write_workers "$home"
+  write_backlog "$home"
+  write_loose_ends "$home"
+  printf '%s %s\n' "$home" "$fb"
+}
+
+test_help_exits_zero() {
+  local out rc
+  set +e
+  out=$("$DECK" --help 2>&1)
+  rc=$?
+  set -e
+  expect_code 0 "$rc" "--help exit"
+  assert_contains "$out" 'fm-deck.sh' "--help names the command"
+  assert_contains "$out" 'Read-only' "--help states the read-only boundary"
+  pass "fm-deck --help exits 0 and states the read-only boundary"
+}
+
+test_empty_home_renders_honest_empty_sections() {
+  local home fb out rc
+  home=$(make_home empty)
+  fb=$(fm_fakebin "$home")
+  install_fake_tasks_axi "$fb" empty
+  set +e
+  out=$(run_deck "$home" "$fb" --once 2>&1)
+  rc=$?
+  set -e
+  expect_code 0 "$rc" "empty home exit"
+  assert_contains "$out" 'nothing staged for you right now' "empty staged section"
+  assert_contains "$out" 'nothing is waiting on you' "empty needs-you section"
+  assert_contains "$out" 'no work under way' "empty under-way section"
+  assert_contains "$out" 'nothing has landed recently' "empty just-in section"
+  assert_not_contains "$out" 'LOOSE ENDS' "loose ends section is absent with no sweep"
+  assert_not_contains "$out" 'No such file' "no error text leaked into the pane"
+  assert_not_contains "$out" 'Traceback' "no traceback leaked into the pane"
+  pass "an empty home renders honest empty sections, never an error wall"
+}
+
+test_no_sources_at_all_still_renders() {
+  local home fb out rc
+  home=$(make_home bare)
+  fb=$(fm_fakebin "$home")
+  # No tasks-axi on PATH at all, no state dir contents, no gateway log.
+  rm -rf "$home/state" "$home/data/action-gateway"
+  set +e
+  out=$(PATH="$fb:/usr/bin:/bin" run_deck "$home" "$fb" --once 2>&1)
+  rc=$?
+  set -e
+  expect_code 0 "$rc" "bare home exit"
+  assert_contains "$out" 'ACTION DECK' "pane still renders its frame"
+  assert_contains "$out" 'nothing staged for you right now' "staged degrades"
+  assert_contains "$out" 'nothing is waiting on you' "needs-you degrades"
+  pass "a home with no readable sources still renders the frame"
+}
+
+test_staged_actions_group_by_order_with_age_and_expiry() {
+  local home fb out staged
+  read -r home fb <<EOF
+$(full_home staged)
+EOF
+  out=$(run_deck "$home" "$fb" --once 2>&1)
+  staged=$(printf '%s\n' "$out" | awk '/STAGED FOR YOUR CLICK/,/NEEDS YOU/')
+
+  assert_contains "$staged" 'proactive-outbound' "staged actions are grouped under their standing order"
+  assert_contains "$staged" 'ARMED' "the group header carries the order's arming state"
+  assert_contains "$staged" '2 waiting, oldest 1h' "the group header carries the age headline"
+  assert_contains "$staged" 'EXPIRED' "an expired card is marked"
+  assert_contains "$staged" 'expires in' "a live card shows its expiry countdown"
+  assert_contains "$staged" 'hubspot://note-1' "the card names its target"
+  # A staged action whose domain has no order file must still be visible.
+  assert_contains "$staged" 'unclaimed-domain' "a card with no standing order still shows"
+  assert_contains "$staged" 'no standing order on file' "and says so plainly"
+  # An armed-or-draft order with nothing staged is coverage context, not a card.
+  assert_contains "$staged" 'watching, nothing staged' "quiet orders are summarized"
+  assert_contains "$staged" 'spares DRAFT' "a quiet order names its state"
+
+  # Oldest first: the 1h card outranks the 10m card.
+  local first second
+  first=$(printf '%s\n' "$staged" | awk '/hubspot:\/\/note-1/ {print NR; exit}')
+  second=$(printf '%s\n' "$staged" | awk '/hubspot:\/\/note-2/ {print NR; exit}')
+  [ -n "$first" ] && [ -n "$second" ] && [ "$first" -lt "$second" ] \
+    || fail "staged cards are not oldest-first (lines $first, $second)"
+  pass "staged actions group by standing order with the age headline and expiry countdown"
+}
+
+test_needs_you_carries_full_pr_urls_and_distinguishes_asks() {
+  local home fb out needs
+  read -r home fb <<EOF
+$(full_home needs)
+EOF
+  out=$(run_deck "$home" "$fb" --once 2>&1)
+  needs=$(printf '%s\n' "$out" | awk '/NEEDS YOU/,/LOOSE ENDS/')
+
+  assert_contains "$needs" 'answer' "a parked worker asks him to answer"
+  assert_contains "$needs" 'Rework the beta importer' "the parked row names the outcome"
+  assert_contains "$needs" 'unblock' "a blocked worker asks him to unblock"
+  assert_contains "$needs" 'Investigate the delta timeouts' "the blocked row names the outcome"
+  assert_contains "$needs" 'review' "a PR asks him to review"
+  assert_contains "$needs" 'https://github.com/acme/alpha/pull/7' "a PR row carries its full URL"
+  assert_contains "$needs" 'decide' "a durable captain decision asks him to decide"
+  assert_contains "$needs" 'Authorise the Sweden field visit' "the decision row names the decision"
+  # A landed PR is history, not something waiting on him.
+  assert_not_contains "$needs" 'pull/4' "a merged PR is not still awaiting review"
+  pass "needs-you distinguishes answer, unblock, review and decide, with full PR URLs"
+}
+
+# AGENTS.md section 9: worker status lines are evidence for firstmate, never
+# captain-facing copy. The pane must lead with the commissioned outcome instead.
+test_worker_status_notes_never_reach_the_pane() {
+  local home fb out
+  read -r home fb <<EOF
+$(full_home notes)
+EOF
+  out=$(run_deck "$home" "$fb" --once 2>&1)
+  assert_not_contains "$out" 'no-mistakes' "a pipeline name leaked from a worker note"
+  assert_not_contains "$out" 'ask-user' "a gate-finding label leaked from a worker note"
+  assert_not_contains "$out" 'review gate' "a pipeline step leaked from a worker note"
+  assert_not_contains "$out" '01ABC' "a run identifier leaked from a worker note"
+  assert_not_contains "$out" '9f2a1b' "a commit hash leaked from a worker note"
+  assert_not_contains "$out" 'teardown refused' "a cleanup refusal leaked from a worker note"
+  assert_not_contains "$out" '[key=' "a decision key token leaked from a worker note"
+  pass "worker status notes never reach the captain's pane"
+}
+
+# Deliverable: outcome language only. This is a wording gate, so it asserts on
+# the whole rendered frame rather than one section.
+test_pane_carries_no_internal_vocabulary() {
+  local home fb out term
+  read -r home fb <<EOF
+$(full_home wording)
+EOF
+  out=$(run_deck "$home" "$fb" --once 2>&1)
+  for term in \
+    'worktree' 'teardown' 'crewmate' 'stale' 'wedge' 'harness' 'backend' \
+    'wake queue' 'heartbeat' 'needs-decision' 'captain-held' 'fail-closed' \
+    'fails closed' 'fail-open' 'secondmate' 'promote' 'brief'; do
+    assert_not_contains "$out" "$term" "internal vocabulary '$term' reached the pane"
+  done
+  pass "the pane carries no internal vocabulary"
+}
+
+test_under_way_gives_one_outcome_line_per_worker() {
+  local home fb out under
+  read -r home fb <<EOF
+$(full_home underway)
+EOF
+  out=$(run_deck "$home" "$fb" --once 2>&1)
+  under=$(printf '%s\n' "$out" | awk '/UNDER WAY/,/JUST IN/')
+  assert_contains "$under" 'Ship the alpha widget' "a live worker shows its outcome"
+  assert_contains "$under" 'Alpha' "a live worker shows its project"
+  assert_contains "$under" 'WORKING' "a reporting worker shows a state"
+  assert_contains "$under" 'NEEDS LARS' "a parked worker is called out"
+  assert_contains "$under" 'BLOCKED' "a blocked worker is called out"
+  printf '%s\n' "$under" | grep -Eq 'heard [0-9]+[smhd] ago' \
+    || fail "under way does not say how long ago each worker was last heard"
+  # Most urgent first: the parked worker outranks the merely working one.
+  local parked working
+  parked=$(printf '%s\n' "$under" | awk '/NEEDS LARS/ {print NR; exit}')
+  working=$(printf '%s\n' "$under" | awk '/WORKING/ {print NR; exit}')
+  [ -n "$parked" ] && [ -n "$working" ] && [ "$parked" -lt "$working" ] \
+    || fail "under way is not most-urgent-first (lines $parked, $working)"
+  pass "under way gives one outcome line per worker, most urgent first"
+}
+
+test_just_in_shows_completions_with_their_artifact() {
+  local home fb out just
+  read -r home fb <<EOF
+$(full_home justin)
+EOF
+  out=$(run_deck "$home" "$fb" --once 2>&1)
+  just=$(printf '%s\n' "$out" | awk '/JUST IN/,0')
+  assert_contains "$just" 'merged' "a landed PR is labelled merged"
+  assert_contains "$just" 'https://github.com/acme/alpha/pull/4' "the landed PR carries its full URL"
+  assert_contains "$just" 'findings' "a completed investigation is labelled findings"
+  assert_contains "$just" 'data/landed-scout/report.md' "the investigation points at its report"
+  assert_contains "$just" 'Land the gamma migration' "the completion names the outcome"
+  # tasks-axi truncates long titles and appends a pointer to `show --full`; that
+  # machine chatter must not reach the pane.
+  assert_not_contains "$just" 'truncated' "the backlog truncation pointer reached the pane"
+  assert_not_contains "$just" '--full' "the backlog truncation pointer reached the pane"
+  # Newest first.
+  local newer older
+  newer=$(printf '%s\n' "$just" | awk '/Land the gamma migration/ {print NR; exit}')
+  older=$(printf '%s\n' "$just" | awk '/delta timeouts/ {print NR; exit}')
+  [ -n "$newer" ] && [ -n "$older" ] && [ "$newer" -lt "$older" ] \
+    || fail "just in is not newest-first (lines $newer, $older)"
+  pass "just in shows recent completions and findings with their artifact"
+}
+
+test_loose_ends_headline_and_top_items() {
+  local home fb out loose
+  read -r home fb <<EOF
+$(full_home loose)
+EOF
+  out=$(run_deck "$home" "$fb" --once 2>&1)
+  loose=$(printf '%s\n' "$out" | awk '/LOOSE ENDS/,/UNDER WAY/')
+
+  # The sweep numbers its six real loose ends; its prose bullets are not items.
+  assert_contains "$loose" '7 open' "the headline counts the sweep's own numbered items"
+  printf '%s\n' "$loose" | grep -Eq 'swept [0-9]+[smhd] ago' \
+    || fail "the headline does not say how fresh the sweep is"
+  assert_contains "$loose" 'Reply to Gijs' "an urgent item is shown"
+  assert_contains "$loose" 'firewall ports' "the second urgent item is shown"
+  assert_contains "$loose" 'board order' "a waiting-external item is shown"
+  assert_contains "$loose" 'urgent' "items are labelled by urgency"
+  assert_contains "$loose" 'waiting' "items are labelled by urgency"
+  assert_not_contains "$loose" 'already closed in person' "a prose correction is not an item"
+  assert_not_contains "$loose" 'Expense receipts' "an admin item is not urgent or waiting"
+  assert_not_contains "$loose" '**' "markdown emphasis reached the pane"
+
+  # Urgent outranks waiting.
+  local first_urgent first_waiting
+  first_urgent=$(printf '%s\n' "$loose" | awk '/Reply to Gijs/ {print NR; exit}')
+  first_waiting=$(printf '%s\n' "$loose" | awk '/board order/ {print NR; exit}')
+  [ -n "$first_urgent" ] && [ -n "$first_waiting" ] && [ "$first_urgent" -lt "$first_waiting" ] \
+    || fail "loose ends are not urgent-before-waiting (lines $first_urgent, $first_waiting)"
+
+  # Six urgent-or-waiting items, five shown, so one spills into the more line.
+  assert_contains "$loose" 'more urgent or waiting' "the overflow pointer is shown"
+  pass "loose ends shows a headline count and the top urgent and waiting items"
+}
+
+test_loose_ends_present_but_quiet() {
+  local home fb out loose
+  read -r home fb <<EOF
+$(full_home quiet-loose)
+EOF
+  cat > "$home/data/loose-ends/latest.md" <<'EOF'
+# Loose Ends - clean sweep
+
+## Admin / low
+
+1. Expense receipts are missing.
+EOF
+  out=$(run_deck "$home" "$fb" --once 2>&1)
+  loose=$(printf '%s\n' "$out" | awk '/LOOSE ENDS/,/UNDER WAY/')
+  assert_contains "$loose" '1 open' "the headline still counts every item"
+  assert_contains "$loose" 'nothing urgent or waiting' "a quiet sweep says so plainly"
+  pass "a sweep with nothing urgent or waiting renders an honest line"
+}
+
+test_counts_strip_summarizes_every_section() {
+  local home fb out strip
+  read -r home fb <<EOF
+$(full_home counts)
+EOF
+  out=$(run_deck "$home" "$fb" --once 2>&1)
+  strip=$(printf '%s\n' "$out" | sed -n 3p)
+  assert_contains "$strip" 'need you' "the counts strip covers what needs him"
+  assert_contains "$strip" '3 staged' "the counts strip covers staged actions"
+  assert_contains "$strip" 'oldest 1h' "the counts strip leads staged with age"
+  assert_contains "$strip" '7 loose ends' "the counts strip covers loose ends"
+  assert_contains "$strip" '3 under way' "the counts strip covers live work"
+  pass "the counts strip summarizes every section above the fold"
+}
+
+test_manual_backlog_backend_degrades_honestly() {
+  local home fb out rc
+  read -r home fb <<EOF
+$(full_home manual)
+EOF
+  printf 'manual\n' > "$home/config/backlog-backend"
+  set +e
+  out=$(run_deck "$home" "$fb" --once 2>&1)
+  rc=$?
+  set -e
+  expect_code 0 "$rc" "manual backend exit"
+  # The backlog-fed rows go quiet; the state-fed sections keep working.
+  assert_contains "$out" 'nothing has landed recently' "just-in degrades honestly"
+  assert_not_contains "$out" 'Authorise the Sweden field visit' "backlog rows are not read"
+  assert_contains "$out" 'Rework the beta importer' "worker-fed rows still render"
+  assert_contains "$out" 'proactive-outbound' "staged actions still render"
+  pass "a hand-edited backlog degrades the backlog-fed rows without breaking the pane"
+}
+
+test_read_only_refuses_acting_verbs() {
+  local home fb out rc verb before after
+  read -r home fb <<EOF
+$(full_home readonly)
+EOF
+  for verb in approve execute merge arm disarm graduate; do
+    set +e
+    out=$(run_deck "$home" "$fb" "$verb" 2>&1)
+    rc=$?
+    set -e
+    expect_code 1 "$rc" "$verb exit"
+    assert_contains "$out" 'read-only view' "the pane refuses $verb by name"
+  done
+  # And a full render must leave every durable record byte-identical.
+  before=$(find "$home/data" "$home/state" -type f -exec cksum {} \; | LC_ALL=C sort)
+  run_deck "$home" "$fb" --once >/dev/null 2>&1
+  after=$(find "$home/data" "$home/state" -type f -exec cksum {} \; | LC_ALL=C sort)
+  [ "$before" = "$after" ] || fail "rendering the pane changed a durable record"
+  pass "the pane refuses acting verbs and writes nothing"
+}
+
+test_interval_validation() {
+  local home fb out rc
+  home=$(make_home interval)
+  fb=$(fm_fakebin "$home")
+  install_fake_tasks_axi "$fb" empty
+  for bad in 0 -5 abc ''; do
+    set +e
+    out=$(run_deck "$home" "$fb" --interval "$bad" 2>&1)
+    rc=$?
+    set -e
+    expect_code 1 "$rc" "--interval '$bad' exit"
+    assert_contains "$out" 'positive whole number' "--interval '$bad' is refused by name"
+  done
+  set +e
+  out=$(run_deck "$home" "$fb" --interval 2>&1)
+  rc=$?
+  set -e
+  expect_code 1 "$rc" "--interval with no value exit"
+  assert_contains "$out" 'requires seconds' "a bare --interval is refused"
+  pass "--interval refuses anything but a positive whole number of seconds"
+}
+
+# The refresh loop is bounded here through FM_DECK_MAX_FRAMES rather than by
+# killing a process: a killed wrapper leaves the real script running, and a pane
+# that keeps drawing into a closed pipe is exactly the hang this suite must not
+# have. Each frame must re-read the records, not replay the first frame.
+test_refresh_loop_redraws_and_reflects_changes() {
+  local home fb out rc frames
+  read -r home fb <<EOF
+$(full_home refresh)
+EOF
+  # Appears only after the first frame has been drawn.
+  ( sleep 1
+    fm_write_meta "$home/state/late-task.meta" \
+      "window=default:w1:p9" "kind=ship" "project=$home/projects/alpha" \
+      "herdr_project_name=Alpha" "outcome=Fix the epsilon report"
+    printf 'working: started\n' > "$home/state/late-task.status"
+  ) &
+  set +e
+  out=$(FM_DECK_MAX_FRAMES=3 run_deck "$home" "$fb" --interval 1 2>&1)
+  rc=$?
+  set -e
+  wait
+  expect_code 0 "$rc" "bounded refresh loop exit"
+  frames=$(printf '%s\n' "$out" | grep -c 'ACTION DECK')
+  [ "$frames" -eq 3 ] || fail "the refresh loop drew $frames frames, expected 3"
+  assert_contains "$out" 'refreshing every 1s' "the frame states its refresh cadence"
+  assert_contains "$out" 'Fix the epsilon report' "a later frame did not re-read the records"
+  printf '%s' "$out" | grep -q "$(printf '\033')" \
+    || fail "the refresh loop did not clear the screen between frames"
+  pass "the refresh loop redraws on its interval and re-reads records each frame"
+}
+
+test_help_exits_zero
+test_empty_home_renders_honest_empty_sections
+test_no_sources_at_all_still_renders
+test_staged_actions_group_by_order_with_age_and_expiry
+test_needs_you_carries_full_pr_urls_and_distinguishes_asks
+test_worker_status_notes_never_reach_the_pane
+test_pane_carries_no_internal_vocabulary
+test_under_way_gives_one_outcome_line_per_worker
+test_just_in_shows_completions_with_their_artifact
+test_loose_ends_headline_and_top_items
+test_loose_ends_present_but_quiet
+test_counts_strip_summarizes_every_section
+test_manual_backlog_backend_degrades_honestly
+test_read_only_refuses_acting_verbs
+test_interval_validation
+test_refresh_loop_redraws_and_reflects_changes
