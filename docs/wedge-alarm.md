@@ -49,6 +49,7 @@ Every invocation is also process-group bounded by `FM_WEDGE_ALARM_TIMEOUT_SECS` 
 On timeout or daemon shutdown, its watchdog terminates the notifier group, logs the timeout when applicable, and continues to the next configured channel.
 The AppleScript passes the summary as an `argv` item rather than interpolating it into the script source, so summary text can never break the notification.
 See `docs/examples/wedge-alarm` for a copyable starting config.
+`bin/fm-shift.sh` is the one tracked writer of this file: while a glasses shift is armed it keeps a sentinel-delimited `command:` block here that speaks the alarm into the captain's glasses, and removes exactly that block on stand-down (`docs/shift-loop.md`).
 
 ## Host fallback and recovery boundary
 

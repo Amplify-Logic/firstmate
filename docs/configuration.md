@@ -162,6 +162,7 @@ The injection alarm fires at most once per max-defer window after a genuine wedg
 A watcher that recovers and is reaped again starts a new outage episode, which resets that backoff and alerts on the next host check.
 Failed watcher-outage delivery remains pending and retries after a short claim lease; only successful delivery advances that backoff.
 A missing or failing channel logs and falls through to the next, never crashing the daemon.
+`bin/fm-shift.sh` appends and removes one sentinel-delimited `command:` block here while a glasses shift is armed, so a watcher outage is spoken into the captain's glasses; see [`shift-loop.md`](shift-loop.md).
 See [`wedge-alarm.md`](wedge-alarm.md) for the channel reference and macOS verification evidence, and [`examples/wedge-alarm`](examples/wedge-alarm) for a copyable config.
 
 ## Gate defaults (.no-mistakes.yaml)
@@ -641,6 +642,7 @@ FM_CAPABILITY_SCOUT_TAX= # 0 disables scout-tax advisories; 1 forces one when mu
 FM_CAPABILITY_SCOUT_TAX_RATE=10  # percent chance (0-100) a dispatch with --task-type emits CAPABILITY_SCOUT_TAX
 FM_CAPABILITY_SCOUT_ROLL= # deterministic 0-99 roll replacing $RANDOM for scout-tax tests
 FM_PROC_ROOT_OVERRIDE=   # alternate /proc root for the Linux process-identity read in fm-wake-lib.sh, mainly for tests
+FM_SHIFT_*=              # glasses shift-loop endpoint and owner overrides; bin/fm-shift.sh's header owns the list (docs/shift-loop.md)
 FM_BACKEND=             # optional runtime backend override for new spawns; tmux/herdr/zellij/orca/cmux support ship/scout spawns, codex-app is not accepted
 HERDR_SESSION=default  # herdr-only: named session for normal backend ops; not enough for destructive cleanup (docs/herdr-backend.md)
 FM_BACKEND_HERDR_COMPOSER_LINES=20  # herdr-only: tail lines scanned by composer-state guard/fallback paths; idle-baseline submit confirmation uses agent-state
