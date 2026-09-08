@@ -86,10 +86,17 @@ SH
 
   # The dry run during preflight and the real spoken line fail independently, so
   # a test can prove the arm-time confirmation is a separate guarantee.
+  # FAKE_ANNOUNCE_KILLS_CALLER=1 models the watcher's check timeout landing
+  # while announce is still running: the calling check is killed and the line
+  # never lands.
   cat > "$home/announce" <<'SH'
 #!/usr/bin/env bash
 if [ "${1:-}" = --dry-run ]; then
   exit "${FAKE_ANNOUNCE_DRYRUN_EXIT:-0}"
+fi
+if [ "${FAKE_ANNOUNCE_KILLS_CALLER:-0}" = 1 ]; then
+  kill -KILL "$PPID"
+  exit 1
 fi
 printf '%s\n' "$*" >> "${ANNOUNCE_LOG:-/dev/null}"
 exit "${FAKE_ANNOUNCE_EXIT:-0}"
@@ -174,6 +181,7 @@ run_registered_check() {  # <tmp>
     ANNOUNCE_LOG="$tmp/announce.log" \
     FAKE_HEALTH_CODE="${FAKE_HEALTH_CODE:-200}" \
     FAKE_HEALTH_FILE="${FAKE_HEALTH_FILE:-}" \
+    FAKE_ANNOUNCE_KILLS_CALLER="${FAKE_ANNOUNCE_KILLS_CALLER:-0}" \
     bash "$tmp/home/state/fm-shift.check.sh"
 }
 
@@ -382,6 +390,29 @@ test_self_check_speaks_once_per_episode_not_once_per_sweep() {
   pass 'self-check: one spoken line per outage episode, never one per sweep'
 }
 
+test_self_check_records_recovery_before_a_slow_announce_can_be_killed() {
+  local tmp out
+  tmp=$(make_shift_home)
+  arm_shift "$tmp" >/dev/null 2>&1
+  : > "$tmp/announce.log"
+  FAKE_HEALTH_CODE=000 run_registered_check "$tmp" >/dev/null
+  assert_present "$tmp/home/state/.shift-mailbox-outage" 'the outage marker is open'
+
+  # The loop comes back, but announce hangs past the watcher's timeout and the
+  # check is killed mid-announce. The record and the wake must already exist.
+  out=$(FAKE_HEALTH_CODE=200 FAKE_ANNOUNCE_KILLS_CALLER=1 run_registered_check "$tmp" 2>/dev/null) || true
+  assert_contains "$out" 'recovered' 'the wake line was printed before announce ran'
+  assert_grep ' up ' "$tmp/home/state/.shift-log" 'the durable up record was written before announce ran'
+  assert_absent "$tmp/home/state/.shift-mailbox-outage" 'the episode was closed'
+  [ ! -s "$tmp/announce.log" ] || fail 'the killed announce should not have landed a line'
+
+  # The next healthy sweep sees a closed episode: no duplicate record, no wake.
+  out=$(FAKE_HEALTH_CODE=200 run_registered_check "$tmp")
+  [ -z "$out" ] || fail "a closed episode was re-reported: $out"
+  [ "$(grep -c ' up ' "$tmp/home/state/.shift-log")" = 1 ] || fail 'the recovery was recorded more than once'
+  pass 'self-check: the recovery record and wake line survive an announce killed by the check timeout'
+}
+
 test_self_check_is_inert_once_the_shift_is_over() {
   local tmp out
   tmp=$(make_shift_home)
@@ -558,6 +589,29 @@ test_stop_says_plainly_when_away_mode_is_still_running() {
   pass 'stop: says away mode is still running when its return owner could not stop it'
 }
 
+test_stop_keeps_the_shift_armed_until_away_mode_really_stopped() {
+  local tmp out rc=0
+  tmp=$(make_shift_home)
+  arm_shift "$tmp" >/dev/null 2>&1
+  out=$(FAKE_AFK_RETURN_KEEPS_AFK=1 run_shift "$tmp" stop 2>&1) || rc=$?
+  expect_code 1 "$rc" 'a failed stand-down exits non-zero'
+  assert_present "$tmp/home/state/.shift" 'the shift record survives a failed return so a retry is possible'
+  assert_present "$tmp/home/state/.afk" 'away mode is genuinely still on'
+  assert_contains "$out" 'stop again to retry' 'stop says a re-run retries the return owner'
+  assert_no_grep 'stood-down' "$tmp/home/state/.shift-log" 'a failed stand-down is not logged as stood down'
+
+  # The second stop retries the return owner instead of walking away.
+  rc=0
+  out=$(run_shift "$tmp" stop 2>&1) || rc=$?
+  expect_code 0 "$rc" 'the retry stands the shift down'
+  assert_not_contains "$out" 'No shift is armed' 'the retry did not take the nothing-armed path'
+  assert_contains "$out" 'away mode: stopped' 'the retry stopped away mode'
+  assert_absent "$tmp/home/state/.afk" 'away mode is off after the retry'
+  assert_absent "$tmp/home/state/.shift" 'the shift record is gone once away mode stopped'
+  [ "$(grep -c ' stood-down ' "$tmp/home/state/.shift-log")" = 1 ] || fail 'the stand-down was logged other than exactly once'
+  pass 'stop: keeps the shift record until away mode really stopped, so a second stop retries'
+}
+
 test_stop_removes_a_stale_task_status_file_from_an_earlier_shift() {
   local tmp
   tmp=$(make_shift_home)
@@ -652,6 +706,7 @@ test_start_refuses_when_away_mode_will_not_start
 test_start_reports_loudly_when_the_confirmation_cannot_be_spoken
 test_self_check_is_silent_while_the_loop_is_healthy
 test_self_check_speaks_once_per_episode_not_once_per_sweep
+test_self_check_records_recovery_before_a_slow_announce_can_be_killed
 test_self_check_is_inert_once_the_shift_is_over
 test_self_check_is_a_plain_registered_check_file
 test_supervision_alarm_speaks_without_relaying_internal_detail
@@ -664,6 +719,7 @@ test_stop_leaves_the_standing_services_alone
 test_stop_reports_what_happened_during_the_shift
 test_stop_clears_an_outage_still_open_at_the_end
 test_stop_says_plainly_when_away_mode_is_still_running
+test_stop_keeps_the_shift_armed_until_away_mode_really_stopped
 test_stop_removes_a_stale_task_status_file_from_an_earlier_shift
 test_stop_clears_arming_that_outlived_its_shift_record
 test_status_is_honest_when_a_component_is_down

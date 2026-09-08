@@ -140,6 +140,14 @@ FM_SUP_SENTINEL_NOOP_EXIT=4
 # shellcheck disable=SC2034 # Read by callers after sourcing.
 FM_SUP_AWAY_GAP_NAME=.supervision-sentinel.away-gap
 
+# Canonical basename of the armed glasses-shift record written by
+# bin/fm-shift.sh start and removed by bin/fm-shift.sh stop. While it exists the
+# host sentinel supervises the home even with no crew task in flight: a shift's
+# questions arrive as mailbox events, never as state/*.meta tasks, so the
+# in-flight count alone would read a dead watcher during a shift as idle.
+# shellcheck disable=SC2034 # Read by callers after sourcing.
+FM_SUP_SHIFT_RECORD_NAME=.shift
+
 # fm_supervision_arm_failure_status <state-dir>
 # Reads the durable host-sentinel registration-failure record and populates:
 #   FM_SUP_ARM_RECORD       resolved path of the record, set whether or not it exists
