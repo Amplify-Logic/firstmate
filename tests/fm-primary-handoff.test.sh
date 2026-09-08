@@ -668,20 +668,26 @@ test_context_axis_absent_is_quota_only() {
   pass "absent context threshold leaves quota-only behavior"
 }
 
-test_check_stays_put_when_chain_exhausted() {
-  local out status=0
-  : > "$LAUNCH_LOG"
-  : > "$SIGNAL_LOG"
+write_exhausted_chain_config() {
   cat > "$HOME_FIX/config/primary-handoff" <<JSON
 {
   "enabled": true,
   "threshold_percent_remaining": 15,
+  "threshold_context_percent_used": 50,
   "poll_seconds": 60,
   "cooldown_seconds": 300,
   "chain": ["claude-fable", "claude-opus"]
 }
 JSON
+}
+
+test_check_stays_put_when_chain_exhausted() {
+  local out status=0
+  : > "$LAUNCH_LOG"
+  : > "$SIGNAL_LOG"
+  write_exhausted_chain_config
   write_quota "$TMP_ROOT/quota.json" 10
+  write_context_sample 80
   write_active claude-opus
   start_fake_holder
   out=$(run_execute "$ROOT/bin/fm-primary-handoff.sh" check 2>&1) || status=$?
@@ -695,6 +701,28 @@ JSON
     assert_not_contains "$(cat "$HOME_FIX/state/.primary-handoff")" 'phase=failed' "must not record a failed phase"
   cleanup_holders
   pass "check stays put quietly when the chain has no distinct successor"
+}
+
+test_check_context_refresh_when_chain_exhausted() {
+  local out status=0
+  : > "$LAUNCH_LOG"
+  : > "$SIGNAL_LOG"
+  write_exhausted_chain_config
+  write_quota "$TMP_ROOT/quota.json" 10
+  write_context_sample 40
+  write_active claude-opus
+  start_fake_holder
+  out=$(run_execute "$ROOT/bin/fm-primary-handoff.sh" check 2>&1) || status=$?
+  expect_code 0 "$status" "exhausted-chain context refresh should succeed: $out"
+  assert_contains "$out" 'handoff: chain exhausted profile=claude-opus' "should report chain exhausted"
+  assert_contains "$out" 'context threshold crossed' "context axis must still fire"
+  assert_contains "$out" 'handed_off: claude-opus -> claude-opus' "should same-runtime refresh claude-opus"
+  assert_contains "$(cat "$LAUNCH_LOG")" 'launch claude-opus' "should relaunch the same profile"
+  assert_contains "$(cat "$HOME_FIX/state/.primary-handoff")" 'trigger=context' "record trigger should be context"
+  assert_not_contains "$out" 'no usable next profile' "must not log a quota failure"
+  assert_never_two
+  cleanup_holders
+  pass "exhausted chain still allows a same-profile context refresh"
 }
 
 test_claude_opus_chain_profile() {
@@ -738,5 +766,6 @@ test_status_bar_persists_context_sample
 test_context_axis_absent_is_quota_only
 test_claude_opus_chain_profile
 test_check_stays_put_when_chain_exhausted
+test_check_context_refresh_when_chain_exhausted
 
 printf 'All primary-handoff tests passed.\n'

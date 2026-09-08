@@ -390,15 +390,14 @@ cmd_check() {
 
   # Quota wins when both fire: same-runtime refresh cannot restore quota.
   if fm_handoff_over_threshold "$active"; then
-    if ! next=$(fm_handoff_next_profile "$active" 2>/dev/null); then
-      printf 'handoff: chain exhausted profile=%s min_remaining=%s threshold=%s\n' \
+    if next=$(fm_handoff_next_profile "$active" 2>/dev/null); then
+      printf 'handoff: threshold crossed profile=%s min_remaining=%s threshold=%s\n' \
         "$active" "$remaining" "$FM_HANDOFF_THRESHOLD"
-      return 0
+      cmd_execute --from "$active" --to "$next" --reason "quota:min_remaining=$remaining"
+      return $?
     fi
-    printf 'handoff: threshold crossed profile=%s min_remaining=%s threshold=%s\n' \
+    printf 'handoff: chain exhausted profile=%s min_remaining=%s threshold=%s\n' \
       "$active" "$remaining" "$FM_HANDOFF_THRESHOLD"
-    cmd_execute --from "$active" --to "$next" --reason "quota:min_remaining=$remaining"
-    return $?
   fi
 
   if fm_handoff_context_over_threshold; then

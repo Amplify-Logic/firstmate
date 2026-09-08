@@ -5,5 +5,5 @@
   "poll_seconds": 60,
   "cooldown_seconds": 300,
   "chain": ["claude-fable", "claude-opus"],
-  "_note": "Claude quota is read from the shared general five_hour/seven_day windows of the single claude provider, not a Fable-specific model window. claude-fable rotates to claude-opus only when a shared window crosses the threshold; after that no further quota rotation is expected because both profiles share one provider, and check reports 'chain exhausted' quietly."
+  "_note": "Claude quota is read from the shared general five_hour/seven_day windows of the single claude provider, not a Fable-specific model window. claude-fable rotates to claude-opus only when a shared window crosses the threshold; after that no further quota rotation is expected because both profiles share one provider, and check reports 'chain exhausted' quietly while the context axis can still refresh the same profile."
 }
