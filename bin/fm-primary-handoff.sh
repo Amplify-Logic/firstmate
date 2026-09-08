@@ -363,7 +363,7 @@ cmd_execute() {
 }
 
 cmd_check() {
-  local active remaining ctx_used
+  local active remaining ctx_used next
   fm_handoff_load_config || return 1
   if [ "$FM_HANDOFF_MODE" != enabled ]; then
     printf 'handoff: disabled\n'
@@ -390,9 +390,14 @@ cmd_check() {
 
   # Quota wins when both fire: same-runtime refresh cannot restore quota.
   if fm_handoff_over_threshold "$active"; then
+    if ! next=$(fm_handoff_next_profile "$active" 2>/dev/null); then
+      printf 'handoff: chain exhausted profile=%s min_remaining=%s threshold=%s\n' \
+        "$active" "$remaining" "$FM_HANDOFF_THRESHOLD"
+      return 0
+    fi
     printf 'handoff: threshold crossed profile=%s min_remaining=%s threshold=%s\n' \
       "$active" "$remaining" "$FM_HANDOFF_THRESHOLD"
-    cmd_execute --from "$active" --reason "quota:min_remaining=$remaining"
+    cmd_execute --from "$active" --to "$next" --reason "quota:min_remaining=$remaining"
     return $?
   fi
 

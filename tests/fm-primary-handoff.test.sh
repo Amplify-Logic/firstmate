@@ -668,13 +668,41 @@ test_context_axis_absent_is_quota_only() {
   pass "absent context threshold leaves quota-only behavior"
 }
 
+test_check_stays_put_when_chain_exhausted() {
+  local out status=0
+  : > "$LAUNCH_LOG"
+  : > "$SIGNAL_LOG"
+  cat > "$HOME_FIX/config/primary-handoff" <<JSON
+{
+  "enabled": true,
+  "threshold_percent_remaining": 15,
+  "poll_seconds": 60,
+  "cooldown_seconds": 300,
+  "chain": ["claude-fable", "claude-opus"]
+}
+JSON
+  write_quota "$TMP_ROOT/quota.json" 10
+  write_active claude-opus
+  start_fake_holder
+  out=$(run_execute "$ROOT/bin/fm-primary-handoff.sh" check 2>&1) || status=$?
+  expect_code 0 "$status" "exhausted-chain check must not fail: $out"
+  assert_contains "$out" 'handoff: chain exhausted profile=claude-opus' "should report chain exhausted"
+  assert_not_contains "$out" 'no usable next profile' "must not log a failure every poll"
+  assert_not_contains "$out" 'threshold crossed' "must not start a rotation without a successor"
+  assert_not_contains "$(cat "$LAUNCH_LOG")" 'launch' "must not launch when chain is exhausted"
+  [ "$(live_holder_count)" = 1 ] || fail "exhausted chain must keep the outgoing holder"
+  [ ! -f "$HOME_FIX/state/.primary-handoff" ] || \
+    assert_not_contains "$(cat "$HOME_FIX/state/.primary-handoff")" 'phase=failed' "must not record a failed phase"
+  cleanup_holders
+  pass "check stays put quietly when the chain has no distinct successor"
+}
+
 test_claude_opus_chain_profile() {
   local next opus_alias
   next=$(
-    FM_HANDOFF_SKIP_CLI_CHECK=1
     # shellcheck source=bin/fm-primary-handoff-lib.sh
     . "$ROOT/bin/fm-primary-handoff-lib.sh"
-    fm_handoff_next_profile claude-fable '["claude-fable","claude-opus"]'
+    FM_HANDOFF_SKIP_CLI_CHECK=1 fm_handoff_next_profile claude-fable '["claude-fable","claude-opus"]'
   )
   [ "$next" = claude-opus ] || fail "handoff chain did not accept claude-opus after claude-fable"
   opus_alias=$(
@@ -709,5 +737,6 @@ test_wakes_survive_flush
 test_status_bar_persists_context_sample
 test_context_axis_absent_is_quota_only
 test_claude_opus_chain_profile
+test_check_stays_put_when_chain_exhausted
 
 printf 'All primary-handoff tests passed.\n'
