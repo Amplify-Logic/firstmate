@@ -33,7 +33,7 @@ Everything here is an existing owner being started, not a new mechanism:
 - Away mode through `bin/fm-afk-launch.sh start`, which is what keeps firstmate answering while he is out.
   The native background path is deliberately not used: on a memory-constrained Mac, memory pressure killed that daemon three times in one night, so the tracked-terminal launch owner is the one that survives a shift.
 - The outage self-check, an ordinary watcher check registered through `bin/fm-check-register.sh`.
-- The supervision alarm route: one sentinel-delimited `command:` directive appended to `config/wedge-alarm`, so a watcher outage is spoken instead of only raising a desktop banner he cannot see.
+- The supervision alarm route: one sentinel-delimited `command:` directive appended to `config/wedge-alarm`, so the host sentinel's watcher-outage alarm is spoken instead of only raising a desktop banner he cannot see.
   `stop` removes exactly that block and leaves any directive the captain wrote himself untouched.
 
 Then it speaks one short confirmation, so he hears that the loop is up rather than having to look at a screen.
@@ -52,7 +52,11 @@ The glasses have exactly one channel to the captain's ear and it is the mailbox,
 The check therefore records the outage and wakes firstmate to repair it, and speaks a single line when the loop returns, naming how long it was gone.
 That recovery line is the only one that can actually reach him, which is why it exists.
 
-A supervision outage is different: the mailbox is still up, so the existing host sentinel's alarm reaches him immediately through the announce path.
+A supervision outage is different: the mailbox is still up, so it can be spoken.
+Detection belongs to the host launchd sentinel described in [`wedge-alarm.md`](wedge-alarm.md), which checks the home once a minute from outside the harness process tree.
+While `state/.shift` exists it treats the home as worth supervising even with no crew task in flight, because shift questions arrive as mailbox events and never as tasks.
+That matters most when the away daemon dies, since the watcher is its child and no registered check runs at all after that; the host sentinel is then the only thing left that can speak.
+Its alarm goes out through the `command:` directive `start` installed, which runs `fm-shift.sh alarm`, so a dead watcher is spoken once the beacon grace has passed plus one check interval, not instantly.
 That alarm is spoken as one plain line; the raw outage summary carries task ids and durations and is read only to tell the two alarm kinds apart, never relayed.
 
 ## What it deliberately does not do

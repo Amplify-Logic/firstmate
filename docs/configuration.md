@@ -151,7 +151,7 @@ The harness-hosted `start-native` path needs no forwarding and is unaffected by 
 ## Supervision active alert channels (config/wedge-alarm)
 
 When away-mode injection wedges past `FM_MAX_DEFER_SECS`, the sub-supervisor raises a loud, rate-limited alarm.
-The host-level macOS sentinel uses the same channels when tasks are in flight without a healthy identity-matched watcher lock and beacon.
+The host-level macOS sentinel uses the same channels when a crew task is in flight or a glasses shift is armed without a healthy identity-matched watcher lock and beacon.
 Beyond the durable alarm markers and the tmux status-line flash available to the injection case, these backend-independent alerts can reach the captain even when every pane and its backend status-line is unreadable.
 In-harness turn-end and continuity guards write only the pending marker and return their own loud banner immediately; the independent scheduled host check exclusively owns external-channel delivery.
 `config/wedge-alarm` (local, gitignored) lists channel directives, one per non-empty, non-comment line; every listed non-`off` channel fires, best-effort.

@@ -51,8 +51,14 @@
 # (`<ISO8601-UTC> <event> <detail>`, events armed/down/up/stood-down), which is
 # what stop's report reads. It is deliberately not a state/*.status file: those
 # carry the crewmate task protocol, and a shift is not a crew task.
-# A supervision (watcher) outage is different: the mailbox is still up, so the
-# host sentinel's alarm reaches him through the announce path immediately.
+# A supervision (watcher) outage is different: the mailbox is still up, so it
+# can be spoken. Detection belongs to the host launchd sentinel
+# (bin/fm-supervision-sentinel.sh), which checks this home once a minute and
+# treats the armed shift record as work worth supervising even with no crew
+# task in flight; its alarm goes out through the config/wedge-alarm command:
+# channel that start installs, and that channel is `fm-shift.sh alarm`, which
+# speaks one plain line. So a dead watcher or a dead away daemon is spoken
+# within the sentinel's beacon grace plus one check interval, not immediately.
 #
 # Environment (all optional; defaults are the captain's live runtime):
 #   FM_SHIFT_MAILBOX_LABEL     mailbox LaunchAgent label
@@ -79,9 +85,11 @@ CONFIG="${FM_CONFIG_OVERRIDE:-$FM_HOME/config}"
 . "$SCRIPT_DIR/fm-pr-lib.sh"
 # shellcheck source=bin/fm-check-lib.sh
 . "$SCRIPT_DIR/fm-check-lib.sh"
+# shellcheck source=bin/fm-supervision-lib.sh
+. "$SCRIPT_DIR/fm-supervision-lib.sh"
 
 SHIFT_ID=fm-shift
-ARMED="$STATE/.shift"
+ARMED="$STATE/$FM_SUP_SHIFT_RECORD_NAME"
 OUTAGE_MARK="$STATE/.shift-mailbox-outage"
 SHIFT_LOG="$STATE/.shift-log"
 LEGACY_STATUS_FILE="$STATE/$SHIFT_ID.status"
@@ -343,7 +351,7 @@ STATE=$(printf '%q' "$STATE")
 ANNOUNCE=$(printf '%q' "$ANNOUNCE")
 HEALTH_URL=$(printf '%q' "$HEALTH_URL")
 CURL_TIMEOUT=$(printf '%q' "$CURL_TIMEOUT")
-ARMED="\$STATE/.shift"
+ARMED="\$STATE/$(printf '%q' "$FM_SUP_SHIFT_RECORD_NAME")"
 MARK="\$STATE/.shift-mailbox-outage"
 LOG="\$STATE/.shift-log"
 
@@ -362,17 +370,20 @@ if [ "\$CODE" = 200 ]; then
     ''|*[!0-9]*) MINUTES=0 ;;
     *) MINUTES=\$(((NOW_S - SINCE + 30) / 60)) ;;
   esac
-  rm -f "\$MARK"
-  # The only line that can actually reach his ear about a mailbox outage: while
-  # it was down, the glasses had no channel at all.
   if [ "\$MINUTES" -gt 0 ]; then
     GONE="about \$MINUTES minutes"
   else
     GONE="less than a minute"
   fi
-  "\$ANNOUNCE" "The voice loop dropped for \$GONE and is back up now." >/dev/null 2>&1
+  # Durable record and wake line first, announce last: the watcher kills this
+  # check at its timeout and keeps only what was printed by then, so a slow
+  # announce must never cost the recovery record or the wake.
+  rm -f "\$MARK"
   printf '%s up voice loop recovered after %s down\n' "\$NOW" "\$GONE" >> "\$LOG"
   printf 'glasses voice loop recovered after %s down\n' "\$GONE"
+  # The only line that can actually reach his ear about a mailbox outage: while
+  # it was down, the glasses had no channel at all.
+  "\$ANNOUNCE" "The voice loop dropped for \$GONE and is back up now." >/dev/null 2>&1
   exit 0
 fi
 
@@ -542,7 +553,7 @@ cmd_start() {
   say '  away mode: ok - firstmate answers while you are out'
   say '  outage self-check: ok - an outage wakes firstmate and is spoken when the loop returns'
   if [ -z "$alarm_note" ]; then
-    say '  supervision alarm: ok - a watcher outage is spoken into the glasses'
+    say '  supervision alarm: ok - the host sentinel speaks a watcher outage into the glasses within minutes'
   else
     say "  $alarm_note"
   fi
@@ -619,13 +630,18 @@ cmd_stop() {
 
   rm -f "$CHECK" "$CHECK_TRUST" "$OUTAGE_MARK" "$LEGACY_STATUS_FILE"
   wedge_block_remove || warn "could not tidy the alarm route in $WEDGE_CONFIG"
-  rm -f "$ARMED"
-  append_log stood-down 'shift stood down'
 
   # Hand away mode back to its own return owner first, so the shift report below
-  # is one block rather than a block wrapped around that owner's output.
+  # is one block rather than a block wrapped around that owner's output. The
+  # armed record is dropped only once away mode has genuinely stopped, so a
+  # failed return leaves a shift for the next stop to retry rather than an
+  # away daemon nothing claims any more.
   local away_out away_rc=0
   away_out=$("$AFK_RETURN" 2>&1) || away_rc=$?
+  if [ ! -e "$STATE/.afk" ]; then
+    rm -f "$ARMED"
+    append_log stood-down 'shift stood down'
+  fi
 
   say 'Shift stood down.'
   say "  ran: $(duration_text "$ran") ($(local_hm "$started_epoch") to $(local_hm "$now"))"
@@ -634,7 +650,7 @@ cmd_stop() {
   local rc=0
   if [ -e "$STATE/.afk" ]; then
     rc=1
-    say "  away mode: STILL RUNNING - its return owner could not stop it; stop it by hand with $AFK_LAUNCH stop, then run $AFK_RETURN"
+    say "  away mode: STILL RUNNING - its return owner could not stop it; run fm-shift.sh stop again to retry, or stop it by hand with $AFK_LAUNCH stop, then run $AFK_RETURN"
     printf '%s\n' "$away_out" | sed 's/^/      /'
   elif [ "$away_rc" -eq 0 ]; then
     say '  away mode: stopped'
