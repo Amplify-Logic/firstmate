@@ -43,7 +43,9 @@ If that line cannot be spoken even though every check passed, the command says s
 
 The registered check runs on the watcher's ordinary check sweep.
 It prints one line only when firstmate should wake - the moment the loop stops answering, and the moment it comes back - and prints nothing on every other sweep.
-One continuing outage produces one status line and one spoken line, never one per sweep, the same way the watcher's own stale handling works.
+One continuing outage produces one log line and one spoken line, never one per sweep, the same way the watcher's own stale handling works.
+Each edge is appended to `state/.shift-log` as one plain timestamped line (`<ISO8601-UTC> <event> <detail>`, with the events `armed`, `down`, `up` and `stood-down`), which is what the `stop` report reads.
+It is deliberately not a `state/*.status` file and carries no crewmate protocol verb, because a shift is not a crew task and must not read as one to the watcher or the session start.
 
 **A mailbox outage cannot be spoken while it lasts.**
 The glasses have exactly one channel to the captain's ear and it is the mailbox, so while the mailbox is down there is nothing to speak through.
