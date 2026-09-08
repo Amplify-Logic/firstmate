@@ -25,6 +25,8 @@ So `start` checks all of the following first, and a failure in any of them refus
   A Serve config reset drops it, so a missing mapping is re-armed and then verified rather than assumed.
 - **A working way to speak.** The announce path is proven end to end with a dry run, which spends no credit, so the confirmation at the end is very unlikely to be the first thing that fails.
 - **Supervision.** This home's session lock must be held and a watcher must be live: a question nobody is awake to hear is the same as no loop at all.
+- **A host sentinel that can fire.** The launchd sentinel described in [`wedge-alarm.md`](wedge-alarm.md) is the only thing that detects a watcher outage during a shift, so it must not be deliberately disarmed, must have no failed registration on record, must have completed a recent scheduled check, and must exist on this host at all.
+  Each of those is read from the sentinel's own durable records, so `status` stays read-only, and each refusal names `bin/fm-supervision-sentinel.sh enable` as the fix where that is the fix.
 
 ## What it arms
 

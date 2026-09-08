@@ -16,7 +16,7 @@ The durable marker and the tmux flash are unchanged; the active alert is added a
 
 The same channel owner now carries host-level watcher-outage alarms from `bin/fm-supervision-sentinel.sh`.
 That sentinel is registered with macOS launchd by the always-on watcher arm and by the away-mode daemon, each only after it has observed a healthy watcher; it then runs outside the harness process tree once a minute and alerts when the home has work to supervise - a crew task in flight or a glasses shift armed by `bin/fm-shift.sh` - without an identity-matched watcher lock and a fresh `state/.last-watcher-beat`.
-Every report says `SUPERVISION DOWN` and carries the beacon age, the grace window, and the in-flight task count.
+Every report says `SUPERVISION DOWN` and carries the beacon age, the grace window, and what is being supervised: the in-flight task count, or the armed glasses shift when no crew task is in flight.
 The outage marker is `state/.supervision-outage-alarm`.
 The turn-end guard and Claude continuity gate write that marker through `note-outage`, a marker-only mode, and never fire a channel: an in-harness hook must return its blocking result immediately, so only the scheduled host check crosses this boundary.
 The operator-facing `check` mode is marker-only for the same reason, so `scheduled-check` really is the single owner of external delivery, and every mode returns early on a deliberately disarmed home.
