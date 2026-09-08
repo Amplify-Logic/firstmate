@@ -668,6 +668,24 @@ test_context_axis_absent_is_quota_only() {
   pass "absent context threshold leaves quota-only behavior"
 }
 
+test_claude_opus_chain_profile() {
+  local next opus_alias
+  next=$(
+    FM_HANDOFF_SKIP_CLI_CHECK=1
+    # shellcheck source=bin/fm-primary-handoff-lib.sh
+    . "$ROOT/bin/fm-primary-handoff-lib.sh"
+    fm_handoff_next_profile claude-fable '["claude-fable","claude-opus"]'
+  )
+  [ "$next" = claude-opus ] || fail "handoff chain did not accept claude-opus after claude-fable"
+  opus_alias=$(
+    # shellcheck source=bin/fm-primary-handoff-lib.sh
+    . "$ROOT/bin/fm-primary-handoff-lib.sh"
+    fm_handoff_normalize_profile opus
+  )
+  [ "$opus_alias" = claude-opus ] || fail "handoff did not normalize the opus launcher alias"
+  pass "handoff accepts claude-opus and the opus alias as launcher profiles"
+}
+
 test_disabled_is_noop
 test_happy_path_atomic_handoff
 test_flush_failure_keeps_outgoing_lock
@@ -690,5 +708,6 @@ test_watcher_rearmed_after_handoff
 test_wakes_survive_flush
 test_status_bar_persists_context_sample
 test_context_axis_absent_is_quota_only
+test_claude_opus_chain_profile
 
 printf 'All primary-handoff tests passed.\n'

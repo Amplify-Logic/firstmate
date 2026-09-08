@@ -19,6 +19,7 @@ Keeping sessions short and rotating before context balloons past roughly half us
 
 Local, gitignored `config/primary-handoff` is a JSON object.
 See [`docs/examples/primary-handoff.json`](examples/primary-handoff.json) and the "Primary orchestrator handoff" section of [`configuration.md`](configuration.md).
+The quota-rotation example uses `"chain": ["claude-fable", "claude-opus"]` so a Fable primary can hand off directly to Opus.
 
 Two independent trigger axes share one rotation protocol:
 
