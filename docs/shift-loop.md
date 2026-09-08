@@ -70,7 +70,7 @@ That alarm is spoken as one plain line; the raw outage summary carries task ids 
 - `status` exits non-zero only when a shift is armed and one of its components is down.
   With no shift armed it still prints an honest line per component, but claims no failure, because nothing is claiming to be armed.
 
-## Verification (macOS, darwin, 2026-09-08)
+## Verification (macOS, darwin, 2026-09-09)
 
 `status` never mutates anything, so it is the one command that can be run against the live loop as evidence.
 Recorded on the captain Mac with the real power state, the real LaunchAgents, the real Tailscale Serve config, and a real announce dry run, which spends no credit and queues nothing:
@@ -94,7 +94,10 @@ $ echo $?
 0
 ```
 
-This establishes that every probe reads the real system correctly: mains power and the live sleep assertion, both LaunchAgent labels, the loopback health endpoint, the announce path end to end, the `:8443` Serve mapping, and this home's session lock and watcher state.
+The output was first recorded on 2026-09-08 and re-captured unchanged on 2026-09-09 against the code that ships on this branch.
+This establishes that these probes read the real system correctly: mains power and the live sleep assertion, both LaunchAgent labels, the loopback health endpoint, the announce path end to end through its dry run, the `:8443` Serve mapping, this home's session lock and watcher state, the away-mode marker, the self-check registration, and the presence of the alarm-route block in `config/wedge-alarm`.
+It does not exercise the host-sentinel precondition: with no shift armed the alarm-route check short-circuits on the missing block before the sentinel probe runs, so this transcript says nothing about whether the sentinel could fire.
+That precondition is covered by `tests/fm-shift.test.sh` and `tests/fm-supervision-sentinel.test.sh` against fakes rather than by this transcript.
 It also shows the documented exit rule: nothing was armed, so an unarmed component is reported honestly and the command still exits 0.
 `start` and `stop` are not exercised here, because arming a real shift would start away mode and speak into the captain's glasses; `tests/fm-shift.test.sh` covers them against fakes.
 
