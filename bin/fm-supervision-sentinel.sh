@@ -118,7 +118,7 @@ FM_SENTINEL_ARM_LOCK="$FM_SENTINEL_STATE/.supervision-sentinel-arm.lock"
 FM_SENTINEL_CHECK_LOCK="$FM_SENTINEL_STATE/.supervision-sentinel-check.lock"
 FM_SENTINEL_PLIST="$FM_SENTINEL_STATE/.supervision-sentinel.plist"
 FM_SENTINEL_LOADED_DIGEST="$FM_SENTINEL_STATE/.supervision-sentinel.loaded-digest"
-FM_SENTINEL_LAST_CHECK="$FM_SENTINEL_STATE/.supervision-sentinel-last-check"
+FM_SENTINEL_LAST_CHECK="$FM_SENTINEL_STATE/$FM_SUP_LAST_CHECK_NAME"
 FM_SENTINEL_DISARMED="$FM_SENTINEL_STATE/$FM_SUP_DISARM_RECORD_NAME"
 FM_SENTINEL_ARM_FAILURE="$FM_SENTINEL_STATE/$FM_SUP_ARM_RECORD_NAME"
 FM_SENTINEL_SHIFT="$FM_SENTINEL_STATE/$FM_SUP_SHIFT_RECORD_NAME"
@@ -227,30 +227,10 @@ fm_sentinel_wait_for_check() {
   done
 }
 
-# Names the one host capability this sentinel needs and does not have, or exits
-# non-zero when the host can run the scheduled check at all. One place decides what
-# "unsupported" means, so the arm's exit status, the operator diagnostic, and the
-# away-mode ledger can never disagree about it.
-#
-# Every branch is POSITIVE evidence of an absent capability, never a failed
-# attempt: an ambiguous error must stay transient, because a caller that stops
-# retrying on ambiguity abandons a backstop that would have recovered on its own.
+# The single owner of what "unsupported" means lives in fm-supervision-lib.sh so
+# the read-only shift preflight reports the same verdict as the arm path.
 fm_sentinel_missing_capability() {
-  local platform=${FM_SENTINEL_PLATFORM:-$(uname)} launchctl
-  if [ "$platform" != Darwin ]; then
-    printf 'this host runs %s and has no verified host scheduler for the sentinel (launchd is macOS-only)\n' "$platform"
-    return 0
-  fi
-  launchctl=$(fm_sentinel_launchctl)
-  if [ ! -x "$launchctl" ]; then
-    printf 'launchctl is missing at %s, so this host cannot register a scheduled check\n' "$launchctl"
-    return 0
-  fi
-  if [ ! -x /usr/bin/shasum ]; then
-    printf '/usr/bin/shasum is missing, so this host cannot derive a stable per-home service identity\n'
-    return 0
-  fi
-  return 1
+  fm_supervision_missing_host_capability
 }
 
 # One stdout line naming a missing host capability, on the diagnostic's verdict
@@ -269,7 +249,7 @@ fm_sentinel_domain() {
 }
 
 fm_sentinel_launchctl() {
-  printf '%s\n' "${FM_SENTINEL_LAUNCHCTL:-/bin/launchctl}"
+  fm_supervision_sentinel_launchctl
 }
 
 fm_sentinel_plist_env() { # <key> <value>
@@ -441,7 +421,7 @@ fm_sentinel_arm_registration() { # <launchctl> <domain> <label> <service> <inter
   # host monitoring works, and it costs no launchd mutation, so a healthy home
   # never consults the failure cooldown below.
   if [ "$loaded_digest" = "$digest" ] \
-    && fm_sentinel_service_verified "$launchctl" "$service" $((interval * 2 + 15)); then
+    && fm_sentinel_service_verified "$launchctl" "$service" "$(fm_supervision_check_max_age "$interval")"; then
     "$launchctl" enable "$service" >/dev/null 2>&1 || true
     fm_sentinel_clear_arm_failure
     return 0
@@ -501,7 +481,7 @@ fm_sentinel_arm() {
   domain=$(fm_sentinel_domain)
   service="$domain/$label"
 
-  max_check_age=$((interval * 2 + 15))
+  max_check_age=$(fm_supervision_check_max_age "$interval")
   if ! fm_lock_try_acquire "$FM_SENTINEL_ARM_LOCK"; then
     # Another home-scoped arm is already converging on the same launchd label.
     # Wait out the holder's OWN legitimate convergence bound - a bootout drain plus

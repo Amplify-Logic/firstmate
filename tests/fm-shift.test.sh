@@ -122,6 +122,8 @@ exit "${FAKE_AFK_RETURN_EXIT:-0}"
 SH
 
   chmod +x "$fakebin"/* "$home/announce" "$home/afk-launch" "$home/afk-return"
+  # A live host sentinel: launchd completed a scheduled check just now.
+  date +%s > "$home/state/.supervision-sentinel-last-check"
   printf '%s\n' "$tmp"
 }
 
@@ -149,6 +151,8 @@ run_shift() {  # <tmp> <args...>
     FM_STATE_OVERRIDE="$tmp/home/state" \
     FM_CONFIG_OVERRIDE="$tmp/home/config" \
     FM_SUPERVISION_MODEL=autoarm \
+    FM_SENTINEL_PLATFORM="${FM_SENTINEL_PLATFORM:-Darwin}" \
+    FM_SENTINEL_LAUNCHCTL="$tmp/fakebin/launchctl" \
     FM_SHIFT_ANNOUNCE="$tmp/home/announce" \
     FM_SHIFT_AFK_LAUNCH="$tmp/home/afk-launch" \
     FM_SHIFT_AFK_RETURN="$tmp/home/afk-return" \
@@ -314,6 +318,76 @@ test_start_is_safe_to_run_twice() {
   lines=$(grep -c ' armed ' "$tmp/home/state/.shift-log")
   [ "$lines" = 1 ] || fail "arming twice recorded the shift twice ($lines times)"
   pass 'start: safe to run twice - it re-verifies and re-converges, duplicating nothing'
+}
+
+# The host sentinel is the only detector of a watcher outage during a shift, so
+# start refuses when it cannot fire, in every state the sentinel records.
+test_start_refuses_when_the_host_sentinel_cannot_fire() {
+  local tmp out rc now
+  # A deliberate disarm.
+  tmp=$(make_shift_home)
+  printf 'state=disarmed\n' > "$tmp/home/state/.supervision-sentinel.disarmed"
+  hold_session_lock "$tmp/home"
+  rc=0; out=$(run_shift "$tmp" start 2>&1) || rc=$?
+  expect_code 1 "$rc" 'a disarmed sentinel refuses the shift'
+  assert_contains "$out" 'REFUSED' 'a disarmed sentinel is a refusal'
+  assert_contains "$out" 'deliberately disarmed' 'the refusal names the disarm'
+  assert_contains "$out" 'fm-supervision-sentinel.sh enable' 'the refusal names the enable command'
+  assert_absent "$tmp/home/state/.shift" 'nothing was armed'
+  assert_absent "$tmp/home/state/.afk" 'away mode was not started'
+
+  # A failed registration under its retry cooldown.
+  tmp=$(make_shift_home)
+  now=$(date +%s)
+  {
+    printf 'state=arm-failed\nfailures=2\nfailed_at=%s\nretry_after_secs=120\nretry_at=%s\n' "$now" "$((now + 120))"
+  } > "$tmp/home/state/.supervision-sentinel.arm-failure"
+  hold_session_lock "$tmp/home"
+  rc=0; out=$(run_shift "$tmp" start 2>&1) || rc=$?
+  expect_code 1 "$rc" 'a suppressed registration refuses the shift'
+  assert_contains "$out" 'registration failed 2 time(s)' 'the refusal names the failed registration'
+  assert_contains "$out" 'fm-supervision-sentinel.sh enable' 'the refusal names the enable command'
+  assert_absent "$tmp/home/state/.shift" 'nothing was armed'
+
+  # No recent launchd-spawned check.
+  tmp=$(make_shift_home)
+  touch -t 202001010000 "$tmp/home/state/.supervision-sentinel-last-check"
+  hold_session_lock "$tmp/home"
+  rc=0; out=$(run_shift "$tmp" start 2>&1) || rc=$?
+  expect_code 1 "$rc" 'a stale sentinel check refuses the shift'
+  assert_contains "$out" 'last host sentinel check' 'the refusal names the stale proof'
+  assert_absent "$tmp/home/state/.shift" 'nothing was armed'
+
+  tmp=$(make_shift_home)
+  rm -f "$tmp/home/state/.supervision-sentinel-last-check"
+  hold_session_lock "$tmp/home"
+  rc=0; out=$(run_shift "$tmp" start 2>&1) || rc=$?
+  expect_code 1 "$rc" 'a sentinel that never checked refuses the shift'
+  assert_contains "$out" 'has ever completed' 'the refusal says no check has completed'
+
+  # A host with no scheduler at all is reported plainly, never as covered.
+  tmp=$(make_shift_home)
+  hold_session_lock "$tmp/home"
+  rc=0; out=$(FM_SENTINEL_PLATFORM=Linux run_shift "$tmp" start 2>&1) || rc=$?
+  expect_code 1 "$rc" 'a host without launchd refuses the shift'
+  assert_contains "$out" 'no verified host scheduler' 'the refusal names the missing capability'
+  assert_absent "$tmp/home/state/.shift" 'nothing was armed'
+  pass 'start: refuses when the host sentinel is disarmed, unregistered, silent, or impossible on this host'
+}
+
+test_status_is_honest_when_the_host_sentinel_cannot_fire() {
+  local tmp out rc=0
+  tmp=$(make_shift_home)
+  arm_shift "$tmp" >/dev/null 2>&1
+  printf 'state=disarmed\n' > "$tmp/home/state/.supervision-sentinel.disarmed"
+  out=$(run_shift "$tmp" status 2>&1) || rc=$?
+  expect_code 1 "$rc" 'status exits non-zero when the alarm cannot fire on an armed shift'
+  assert_contains "$out" 'supervision alarm: DOWN' 'status reports the alarm as down'
+  assert_contains "$out" 'deliberately disarmed' 'status names the cause'
+  assert_contains "$out" 'fm-supervision-sentinel.sh enable' 'status names the fix'
+  assert_present "$tmp/home/state/.supervision-sentinel.disarmed" 'status did not touch the disarm record'
+  assert_absent "$tmp/home/state/.supervision-outage-alarm" 'status wrote no outage marker'
+  pass 'status: reports a sentinel that cannot fire as down, read-only'
 }
 
 test_start_refuses_when_away_mode_will_not_start() {
@@ -599,6 +673,9 @@ test_stop_keeps_the_shift_armed_until_away_mode_really_stopped() {
   assert_present "$tmp/home/state/.afk" 'away mode is genuinely still on'
   assert_contains "$out" 'stop again to retry' 'stop says a re-run retries the return owner'
   assert_no_grep 'stood-down' "$tmp/home/state/.shift-log" 'a failed stand-down is not logged as stood down'
+  assert_present "$tmp/home/state/fm-shift.check.sh" 'the self-check survives a failed stand-down'
+  assert_present "$tmp/home/state/fm-shift.check-trust" 'the self-check trust survives a failed stand-down'
+  assert_grep 'fm-shift.sh alarm' "$tmp/home/config/wedge-alarm" 'the alarm route survives a failed stand-down'
 
   # The second stop retries the return owner instead of walking away.
   rc=0
@@ -608,6 +685,10 @@ test_stop_keeps_the_shift_armed_until_away_mode_really_stopped() {
   assert_contains "$out" 'away mode: stopped' 'the retry stopped away mode'
   assert_absent "$tmp/home/state/.afk" 'away mode is off after the retry'
   assert_absent "$tmp/home/state/.shift" 'the shift record is gone once away mode stopped'
+  assert_absent "$tmp/home/state/fm-shift.check.sh" 'the self-check is gone once away mode stopped'
+  if [ -f "$tmp/home/config/wedge-alarm" ]; then
+    assert_no_grep 'fm-shift.sh alarm' "$tmp/home/config/wedge-alarm" 'the alarm route is gone once away mode stopped'
+  fi
   [ "$(grep -c ' stood-down ' "$tmp/home/state/.shift-log")" = 1 ] || fail 'the stand-down was logged other than exactly once'
   pass 'stop: keeps the shift record until away mode really stopped, so a second stop retries'
 }
@@ -702,6 +783,8 @@ test_missing_serve_mapping_is_rearmed_and_verified
 test_start_arms_and_speaks_one_confirmation
 test_start_uses_the_away_mode_launch_owner_not_a_native_background_path
 test_start_is_safe_to_run_twice
+test_start_refuses_when_the_host_sentinel_cannot_fire
+test_status_is_honest_when_the_host_sentinel_cannot_fire
 test_start_refuses_when_away_mode_will_not_start
 test_start_reports_loudly_when_the_confirmation_cannot_be_spoken
 test_self_check_is_silent_while_the_loop_is_healthy

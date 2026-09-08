@@ -21,10 +21,11 @@
 #
 # Usage:
 #   fm-shift.sh start     Verify mains power and sleep, the mailbox, the phone's
-#                         Tailscale route, and live supervision; refuse naming
-#                         the failure if any is not true; then start away mode,
-#                         register the outage self-check, route supervision
-#                         alarms to the glasses, and speak one confirmation.
+#                         Tailscale route, live supervision, and a live host
+#                         sentinel to detect its loss; refuse naming the failure
+#                         if any is not true; then start away mode, register
+#                         the outage self-check, route supervision alarms to
+#                         the glasses, and speak one confirmation.
 #                         Safe to run twice: it re-verifies and re-converges.
 #   fm-shift.sh stop      Remove the shift-only arming, hand away mode back to
 #                         its return owner, and print what happened during the
@@ -59,6 +60,12 @@
 # channel that start installs, and that channel is `fm-shift.sh alarm`, which
 # speaks one plain line. So a dead watcher or a dead away daemon is spoken
 # within the sentinel's beacon grace plus one check interval, not immediately.
+# Because that sentinel is the only detector of the watcher half, start
+# refuses unless it can actually fire: not deliberately disarmed, no failed
+# launchd registration on record, a recent launchd-spawned check on record,
+# and a host that has a scheduler at all. Those are read from the sentinel's
+# own durable records through bin/fm-supervision-lib.sh; nothing here invokes
+# a sentinel mode, so status stays read-only.
 #
 # Environment (all optional; defaults are the captain's live runtime):
 #   FM_SHIFT_MAILBOX_LABEL     mailbox LaunchAgent label
@@ -119,7 +126,7 @@ GRACE="${FM_GUARD_GRACE:-300}"
 # call at the end speaks exactly what was proven.
 ARM_LINE='Shift loop armed. Ask me anything while you ride.'
 
-usage() { sed -n '22,46p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '22,47p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
 
 have() { command -v "$1" >/dev/null 2>&1; }
 
@@ -329,7 +336,52 @@ probe_alarm_route() {
     PROBE_FIX="remove the 'off' line from $WEDGE_CONFIG; it silences every alarm channel"
     return 1
   fi
-  PROBE_LINE='supervision alarm: ok - a supervision outage is spoken into the glasses'
+  if ! probe_sentinel_live; then
+    return 1
+  fi
+  PROBE_LINE='supervision alarm: ok - the host sentinel is live and speaks a watcher outage into the glasses'
+  return 0
+}
+
+# The host sentinel is the only detector of a watcher outage during a shift, so
+# the alarm route is worthless unless it can fire. Strictly read-only: every
+# verdict comes from the sentinel's own durable records through the shared
+# readers, never from a sentinel mode that could write a marker or claim a lease.
+probe_sentinel_live() {
+  local sentinel="$SCRIPT_DIR/fm-supervision-sentinel.sh" missing interval max_age proof age
+  PROBE_FIX=
+  if missing=$(fm_supervision_missing_host_capability); then
+    PROBE_LINE="supervision alarm: DOWN - $missing"
+    PROBE_FIX='nothing on this host can tell you when firstmate stops watching; the shift loop needs the macOS sentinel'
+    return 1
+  fi
+  if [ -f "$STATE/$FM_SUP_DISARM_RECORD_NAME" ]; then
+    PROBE_LINE='supervision alarm: DOWN - host outage monitoring is deliberately disarmed for this home'
+    PROBE_FIX="$sentinel enable"
+    return 1
+  fi
+  fm_supervision_arm_failure_status "$STATE"
+  if [ "$FM_SUP_ARM_FAILED" = true ]; then
+    PROBE_LINE="supervision alarm: DOWN - the host sentinel's launchd registration failed $FM_SUP_ARM_FAILURES time(s) and is not active"
+    PROBE_FIX="$sentinel enable"
+    return 1
+  fi
+  interval=${FM_SENTINEL_INTERVAL_SECS:-60}
+  case "$interval" in ''|*[!0-9]*) interval=60 ;; esac
+  max_age=$(fm_supervision_check_max_age "$interval")
+  proof="$STATE/$FM_SUP_LAST_CHECK_NAME"
+  if [ ! -f "$proof" ]; then
+    PROBE_LINE='supervision alarm: DOWN - no host sentinel check has ever completed for this home'
+    PROBE_FIX="$sentinel enable"
+    return 1
+  fi
+  age=$(fm_path_age "$proof")
+  if [ "$age" -gt "$max_age" ]; then
+    PROBE_LINE="supervision alarm: DOWN - the last host sentinel check for this home was ${age}s ago, more than ${max_age}s"
+    PROBE_FIX="$sentinel enable"
+    return 1
+  fi
+  PROBE_LINE="host sentinel: ok - launchd completed a scheduled check ${age}s ago"
   return 0
 }
 
@@ -509,6 +561,7 @@ cmd_start() {
   fi
 
   run_probe probe_supervision || true
+  run_probe probe_sentinel_live || true
 
   [ "${#FAILED_LINES[@]}" -eq 0 ] || refuse
 
@@ -628,17 +681,17 @@ cmd_stop() {
   ran=$((now - started_epoch))
   [ "$ran" -ge 0 ] || ran=0
 
-  rm -f "$CHECK" "$CHECK_TRUST" "$OUTAGE_MARK" "$LEGACY_STATUS_FILE"
-  wedge_block_remove || warn "could not tidy the alarm route in $WEDGE_CONFIG"
-
   # Hand away mode back to its own return owner first, so the shift report below
-  # is one block rather than a block wrapped around that owner's output. The
-  # armed record is dropped only once away mode has genuinely stopped, so a
-  # failed return leaves a shift for the next stop to retry rather than an
-  # away daemon nothing claims any more.
+  # is one block rather than a block wrapped around that owner's output. Every
+  # piece of shift arming is torn down only once away mode has genuinely
+  # stopped: a failed return leaves the shift, its self-check and its alarm
+  # route in place for the next stop to retry, rather than an away daemon that
+  # nothing claims and no channel can speak for.
   local away_out away_rc=0
   away_out=$("$AFK_RETURN" 2>&1) || away_rc=$?
   if [ ! -e "$STATE/.afk" ]; then
+    rm -f "$CHECK" "$CHECK_TRUST" "$OUTAGE_MARK" "$LEGACY_STATUS_FILE"
+    wedge_block_remove || warn "could not tidy the alarm route in $WEDGE_CONFIG"
     rm -f "$ARMED"
     append_log stood-down 'shift stood down'
   fi
