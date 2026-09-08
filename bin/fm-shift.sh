@@ -47,6 +47,10 @@
 # be announced while it lasts. The self-check records it, wakes firstmate to
 # repair it, and speaks a single line when the loop comes back naming how long
 # it was gone - that recovery line is the only one that can actually reach him.
+# Every edge is also appended to state/.shift-log as one plain timestamped line
+# (`<ISO8601-UTC> <event> <detail>`, events armed/down/up/stood-down), which is
+# what stop's report reads. It is deliberately not a state/*.status file: those
+# carry the crewmate task protocol, and a shift is not a crew task.
 # A supervision (watcher) outage is different: the mailbox is still up, so the
 # host sentinel's alarm reaches him through the announce path immediately.
 #
@@ -71,11 +75,16 @@ CONFIG="${FM_CONFIG_OVERRIDE:-$FM_HOME/config}"
 
 # shellcheck source=bin/fm-wake-lib.sh
 . "$SCRIPT_DIR/fm-wake-lib.sh"
+# shellcheck source=bin/fm-pr-lib.sh
+. "$SCRIPT_DIR/fm-pr-lib.sh"
+# shellcheck source=bin/fm-check-lib.sh
+. "$SCRIPT_DIR/fm-check-lib.sh"
 
 SHIFT_ID=fm-shift
 ARMED="$STATE/.shift"
 OUTAGE_MARK="$STATE/.shift-mailbox-outage"
-STATUS_FILE="$STATE/$SHIFT_ID.status"
+SHIFT_LOG="$STATE/.shift-log"
+LEGACY_STATUS_FILE="$STATE/$SHIFT_ID.status"
 CHECK="$STATE/$SHIFT_ID.check.sh"
 CHECK_TRUST="$STATE/$SHIFT_ID.check-trust"
 WEDGE_CONFIG="$CONFIG/wedge-alarm"
@@ -125,8 +134,8 @@ duration_text() {
 say() { printf '%s\n' "$*"; }
 warn() { printf 'fm-shift: %s\n' "$*" >&2; }
 
-append_status() {  # <state> <short line>
-  printf '%s: %s %s\n' "$1" "$(now_iso)" "$2" >> "$STATUS_FILE"
+append_log() {  # <event> <detail>
+  printf '%s %s %s\n' "$(now_iso)" "$1" "$2" >> "$SHIFT_LOG"
 }
 
 # ---------------------------------------------------------------------------
@@ -286,13 +295,18 @@ probe_away() {
 
 probe_selfcheck() {
   PROBE_FIX=
-  if [ -f "$CHECK" ] && [ -f "$CHECK_TRUST" ]; then
-    PROBE_LINE='outage self-check: ok - registered, watching the mailbox every sweep'
-    return 0
+  if [ ! -f "$CHECK" ] || [ ! -f "$CHECK_TRUST" ]; then
+    PROBE_LINE='outage self-check: DOWN - not registered'
+    PROBE_FIX='fm-shift.sh start registers it'
+    return 1
   fi
-  PROBE_LINE='outage self-check: DOWN - not registered'
-  PROBE_FIX='fm-shift.sh start registers it'
-  return 1
+  if ! fm_custom_check_registered "$STATE" "$SHIFT_ID"; then
+    PROBE_LINE='outage self-check: DOWN - registered, but the watcher rejects it (the check changed after registration)'
+    PROBE_FIX='fm-shift.sh start rewrites and re-registers it'
+    return 1
+  fi
+  PROBE_LINE='outage self-check: ok - registered, watching the mailbox every sweep'
+  return 0
 }
 
 probe_alarm_route() {
@@ -331,7 +345,7 @@ HEALTH_URL=$(printf '%q' "$HEALTH_URL")
 CURL_TIMEOUT=$(printf '%q' "$CURL_TIMEOUT")
 ARMED="\$STATE/.shift"
 MARK="\$STATE/.shift-mailbox-outage"
-STATUS="\$STATE/$SHIFT_ID.status"
+LOG="\$STATE/.shift-log"
 
 [ -f "\$ARMED" ] || exit 0
 # No way to ask: stay silent rather than report a false outage.
@@ -357,14 +371,14 @@ if [ "\$CODE" = 200 ]; then
     GONE="less than a minute"
   fi
   "\$ANNOUNCE" "The voice loop dropped for \$GONE and is back up now." >/dev/null 2>&1
-  printf 'working: %s voice loop recovered after %s down\n' "\$NOW" "\$GONE" >> "\$STATUS"
+  printf '%s up voice loop recovered after %s down\n' "\$NOW" "\$GONE" >> "\$LOG"
   printf 'glasses voice loop recovered after %s down\n' "\$GONE"
   exit 0
 fi
 
 [ ! -e "\$MARK" ] || exit 0
 date +%s > "\$MARK"
-printf 'blocked: %s voice loop health check answered %s\n' "\$NOW" "\${CODE:-nothing}" >> "\$STATUS"
+printf '%s down voice loop health check answered %s\n' "\$NOW" "\${CODE:-nothing}" >> "\$LOG"
 printf 'glasses voice loop is down: health answered %s\n' "\${CODE:-nothing}"
 exit 0
 CHECK_EOF
@@ -394,10 +408,14 @@ wedge_block_remove() {
 }
 
 wedge_block_install() {
+  local lead=
   wedge_block_remove || return 1
   mkdir -p "$CONFIG" || return 1
+  if [ -s "$WEDGE_CONFIG" ] && [ -n "$(tail -c1 "$WEDGE_CONFIG")" ]; then
+    lead=$'\n'
+  fi
   {
-    printf '%s\n' "$WEDGE_BEGIN"
+    printf '%s%s\n' "$lead" "$WEDGE_BEGIN"
     # shellcheck disable=SC2016  # $1 must stay literal: the channel owner runs this through `sh -c "<cmd>" fm-wedge-alarm "<summary>"`.
     printf 'command:%s alarm "$1"\n' "$(printf '%q' "$SCRIPT_DIR/fm-shift.sh")"
     printf '%s\n' "$WEDGE_END"
@@ -500,7 +518,7 @@ cmd_start() {
       warn 'could not record the armed shift; away mode is running, stand it down with fm-shift.sh stop'
       exit 1
     fi
-    append_status working 'shift armed'
+    append_log armed 'shift armed'
   fi
 
   if ! write_check || ! "$SCRIPT_DIR/fm-check-register.sh" "$SHIFT_ID" >/dev/null; then
@@ -563,12 +581,12 @@ shift_mailbox_line() {  # <started_iso>
   printf 'questions asked: %s (%s answered)\n' "$total" "$answered"
 }
 
-# Outage episodes this shift, from the self-check's own durable status lines.
+# Outage episodes this shift, from the self-check's own durable log lines.
 shift_outage_line() {  # <started_iso>
   local downs ups
-  [ -f "$STATUS_FILE" ] || { printf 'interruptions: none\n'; return 0; }
-  downs=$(awk -v since="$1" '$1 == "blocked:" && $2 >= since' "$STATUS_FILE" | wc -l | tr -d ' ')
-  ups=$(awk -v since="$1" '$1 == "working:" && $2 >= since && /recovered/' "$STATUS_FILE" | wc -l | tr -d ' ')
+  [ -f "$SHIFT_LOG" ] || { printf 'interruptions: none\n'; return 0; }
+  downs=$(awk -v since="$1" '$2 == "down" && $1 >= since' "$SHIFT_LOG" | wc -l | tr -d ' ')
+  ups=$(awk -v since="$1" '$2 == "up" && $1 >= since' "$SHIFT_LOG" | wc -l | tr -d ' ')
   if [ "$downs" -eq 0 ]; then
     printf 'interruptions: none\n'
   elif [ "$ups" -ge "$downs" ]; then
@@ -585,7 +603,7 @@ cmd_stop() {
     # Safe to run with nothing armed: clear any arming that outlived a shift so
     # a stale check can never speak, and leave away mode alone - it may be on
     # for something that has nothing to do with a shift.
-    rm -f "$CHECK" "$CHECK_TRUST" "$OUTAGE_MARK"
+    rm -f "$CHECK" "$CHECK_TRUST" "$OUTAGE_MARK" "$LEGACY_STATUS_FILE"
     wedge_block_remove || warn "could not tidy the alarm route in $WEDGE_CONFIG"
     say 'No shift is armed. Nothing to stand down.'
     return 0
@@ -599,10 +617,10 @@ cmd_stop() {
   ran=$((now - started_epoch))
   [ "$ran" -ge 0 ] || ran=0
 
-  rm -f "$CHECK" "$CHECK_TRUST" "$OUTAGE_MARK"
+  rm -f "$CHECK" "$CHECK_TRUST" "$OUTAGE_MARK" "$LEGACY_STATUS_FILE"
   wedge_block_remove || warn "could not tidy the alarm route in $WEDGE_CONFIG"
   rm -f "$ARMED"
-  append_status 'done' 'shift stood down'
+  append_log stood-down 'shift stood down'
 
   # Hand away mode back to its own return owner first, so the shift report below
   # is one block rather than a block wrapped around that owner's output.
@@ -613,14 +631,19 @@ cmd_stop() {
   say "  ran: $(duration_text "$ran") ($(local_hm "$started_epoch") to $(local_hm "$now"))"
   say "  $(shift_mailbox_line "$started_iso")"
   say "  $(shift_outage_line "$started_iso")"
-  if [ "$away_rc" -eq 0 ]; then
+  local rc=0
+  if [ -e "$STATE/.afk" ]; then
+    rc=1
+    say "  away mode: STILL RUNNING - its return owner could not stop it; stop it by hand with $AFK_LAUNCH stop, then run $AFK_RETURN"
+    printf '%s\n' "$away_out" | sed 's/^/      /'
+  elif [ "$away_rc" -eq 0 ]; then
     say '  away mode: stopped'
   else
     say '  away mode: stopped, and there is catch-up to clear before ordinary work resumes:'
     printf '%s\n' "$away_out" | sed 's/^/      /'
   fi
   say '  left running: the mailbox, the keep-awake agent and the phone route (you use those at your desk too)'
-  return 0
+  return "$rc"
 }
 
 cmd_status() {

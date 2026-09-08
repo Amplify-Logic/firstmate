@@ -101,8 +101,14 @@ SH
 : > "$FM_STATE_OVERRIDE/.afk"
 SH
 
+  # FAKE_AFK_RETURN_KEEPS_AFK=1 models the return owner failing to stop the
+  # daemon: .afk stays and the owner exits 3, exactly as fm-afk-return.sh does.
   cat > "$home/afk-return" <<'SH'
 #!/usr/bin/env bash
+if [ "${FAKE_AFK_RETURN_KEEPS_AFK:-0}" = 1 ]; then
+  printf 'away-mode shutdown failed; lifecycle state preserved for retry\n' >&2
+  exit 3
+fi
 rm -f "$FM_STATE_OVERRIDE/.afk"
 printf 'away mode stopped\n'
 exit "${FAKE_AFK_RETURN_EXIT:-0}"
@@ -152,6 +158,7 @@ run_shift() {  # <tmp> <args...>
     FAKE_KICKSTART_HEALS_TO="${FAKE_KICKSTART_HEALS_TO:-200}" \
     FAKE_AFK_LAUNCH_EXIT="${FAKE_AFK_LAUNCH_EXIT:-0}" \
     FAKE_AFK_RETURN_EXIT="${FAKE_AFK_RETURN_EXIT:-0}" \
+    FAKE_AFK_RETURN_KEEPS_AFK="${FAKE_AFK_RETURN_KEEPS_AFK:-0}" \
     FAKE_ANNOUNCE_EXIT="${FAKE_ANNOUNCE_EXIT:-0}" \
     FAKE_ANNOUNCE_DRYRUN_EXIT="${FAKE_ANNOUNCE_DRYRUN_EXIT:-0}" \
     bash "$SHIFT" "$@"
@@ -296,7 +303,7 @@ test_start_is_safe_to_run_twice() {
   assert_present "$tmp/home/state/fm-shift.check-trust" 'the self-check is still registered'
   lines=$(grep -c 'fm-shift.sh alarm' "$tmp/home/config/wedge-alarm")
   [ "$lines" = 1 ] || fail "arming twice duplicated the alarm route ($lines copies)"
-  lines=$(grep -c 'shift armed' "$tmp/home/state/fm-shift.status")
+  lines=$(grep -c ' armed ' "$tmp/home/state/.shift-log")
   [ "$lines" = 1 ] || fail "arming twice recorded the shift twice ($lines times)"
   pass 'start: safe to run twice - it re-verifies and re-converges, duplicating nothing'
 }
@@ -355,8 +362,8 @@ test_self_check_speaks_once_per_episode_not_once_per_sweep() {
     out=$(FAKE_HEALTH_CODE=000 run_registered_check "$tmp")
     [ -z "$out" ] || fail "sweep $i re-reported the same continuing outage: $out"
   done
-  downs=$(grep -c '^blocked:' "$tmp/home/state/fm-shift.status")
-  [ "$downs" = 1 ] || fail "one continuing outage recorded $downs status lines, not 1"
+  downs=$(grep -c ' down ' "$tmp/home/state/.shift-log")
+  [ "$downs" = 1 ] || fail "one continuing outage recorded $downs log lines, not 1"
 
   # The loop comes back: exactly one spoken line, and it is the recovery.
   out=$(FAKE_HEALTH_CODE=200 run_registered_check "$tmp")
@@ -443,6 +450,39 @@ test_alarm_route_preserves_a_captain_written_channel() {
   pass 'alarm route: the shift adds and removes only its own directive'
 }
 
+test_alarm_route_survives_a_captain_channel_with_no_trailing_newline() {
+  local tmp
+  tmp=$(make_shift_home)
+  printf 'osascript' > "$tmp/home/config/wedge-alarm"
+  arm_shift "$tmp" >/dev/null 2>&1
+  grep -qx 'osascript' "$tmp/home/config/wedge-alarm" || fail 'the captain channel is no longer its own intact line'
+  grep -q '^# >>> fm-shift.sh' "$tmp/home/config/wedge-alarm" || fail 'the begin sentinel does not start its own line'
+  run_shift "$tmp" stop >/dev/null 2>&1
+  grep -qx 'osascript' "$tmp/home/config/wedge-alarm" || fail 'the captain channel did not survive stand-down intact'
+  assert_no_grep 'fm-shift' "$tmp/home/config/wedge-alarm" 'the whole shift block was removed'
+  pass 'alarm route: a captain channel without a trailing newline is never glued to the sentinel'
+}
+
+# ---------------------------------------------------------------------------
+# The shift log is not a crew task: no state/*.status name, no protocol verbs.
+# ---------------------------------------------------------------------------
+test_shift_log_is_plain_and_never_a_task_status_file() {
+  local tmp
+  tmp=$(make_shift_home)
+  arm_shift "$tmp" >/dev/null 2>&1
+  FAKE_HEALTH_CODE=000 run_registered_check "$tmp" >/dev/null
+  FAKE_HEALTH_CODE=200 run_registered_check "$tmp" >/dev/null
+  run_shift "$tmp" stop >/dev/null 2>&1
+  assert_absent "$tmp/home/state/fm-shift.status" 'no state/*.status file was written for the shift'
+  local event
+  for event in armed down up stood-down; do
+    grep -qE "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:]{8}Z $event " "$tmp/home/state/.shift-log" \
+      || fail "the $event edge is not one timestamped log line"
+  done
+  ! grep -qE '^(working|blocked|done):' "$tmp/home/state/.shift-log" || fail 'a crewmate protocol verb appears in the shift log'
+  pass 'shift log: plain timestamped events in state/.shift-log, never a crew task status'
+}
+
 # ---------------------------------------------------------------------------
 # stop.
 # ---------------------------------------------------------------------------
@@ -497,6 +537,36 @@ test_stop_clears_an_outage_still_open_at_the_end() {
   pass 'stop: clears an outage episode left open at the end of the shift'
 }
 
+test_stop_says_plainly_when_away_mode_is_still_running() {
+  local tmp out rc=0
+  tmp=$(make_shift_home)
+  arm_shift "$tmp" >/dev/null 2>&1
+  out=$(FAKE_AFK_RETURN_KEEPS_AFK=1 run_shift "$tmp" stop 2>&1) || rc=$?
+  expect_code 1 "$rc" 'stop exits non-zero when away mode did not stop'
+  assert_present "$tmp/home/state/.afk" 'away mode is genuinely still on'
+  assert_contains "$out" 'away mode: STILL RUNNING' 'stop does not claim away mode stopped'
+  assert_contains "$out" 'afk-launch stop' 'stop names the launch owner stop command'
+  assert_not_contains "$out" 'away mode: stopped' 'no line claims away mode stopped'
+
+  # The benign case stays distinct: the daemon stopped but catch-up is open.
+  tmp=$(make_shift_home)
+  arm_shift "$tmp" >/dev/null 2>&1
+  rc=0
+  out=$(FAKE_AFK_RETURN_EXIT=3 run_shift "$tmp" stop 2>&1) || rc=$?
+  expect_code 0 "$rc" 'open catch-up is not a failed stand-down'
+  assert_contains "$out" 'catch-up to clear' 'open catch-up is reported as such'
+  pass 'stop: says away mode is still running when its return owner could not stop it'
+}
+
+test_stop_removes_a_stale_task_status_file_from_an_earlier_shift() {
+  local tmp
+  tmp=$(make_shift_home)
+  printf 'working: 2026-01-01T00:00:00Z shift armed\n' > "$tmp/home/state/fm-shift.status"
+  run_shift "$tmp" stop >/dev/null 2>&1
+  assert_absent "$tmp/home/state/fm-shift.status" 'a stale fm-shift.status was cleared'
+  pass 'stop: clears a stale state/fm-shift.status left by an earlier shift'
+}
+
 test_stop_clears_arming_that_outlived_its_shift_record() {
   local tmp
   tmp=$(make_shift_home)
@@ -528,6 +598,26 @@ test_status_is_honest_when_a_component_is_down() {
   assert_contains "$out" 'mailbox: DOWN' 'status names the component that is down'
   assert_contains "$out" 'fix:' 'status says what to do about it'
   pass 'status: one line per component, honest and non-zero when an armed one is down'
+}
+
+test_status_reports_a_self_check_the_watcher_would_reject() {
+  local tmp out rc=0
+  tmp=$(make_shift_home)
+  arm_shift "$tmp" >/dev/null 2>&1
+  printf '# drifted after registration\n' >> "$tmp/home/state/fm-shift.check.sh"
+  out=$(run_shift "$tmp" status 2>&1) || rc=$?
+  expect_code 1 "$rc" 'a drifted self-check makes status exit non-zero'
+  assert_contains "$out" 'outage self-check: DOWN' 'status says the self-check is down'
+  assert_contains "$out" 'watcher rejects it' 'status says why the watcher would not run it'
+  assert_not_contains "$out" 'watching the mailbox' 'status no longer claims the check is watching'
+
+  # start rewrites and re-registers it, which restores an honest ok.
+  run_shift "$tmp" start >/dev/null 2>&1
+  rc=0
+  out=$(run_shift "$tmp" status 2>&1) || rc=$?
+  expect_code 0 "$rc" 're-arming restores a valid registration'
+  assert_contains "$out" 'outage self-check: ok' 'status reports the re-registered check as ok'
+  pass 'status: a self-check whose bytes drifted after registration is reported down, not watching'
 }
 
 test_status_with_no_shift_armed_still_reports_every_component() {
@@ -567,11 +657,16 @@ test_self_check_is_a_plain_registered_check_file
 test_supervision_alarm_speaks_without_relaying_internal_detail
 test_supervision_alarm_is_silent_when_no_shift_is_armed
 test_alarm_route_preserves_a_captain_written_channel
+test_alarm_route_survives_a_captain_channel_with_no_trailing_newline
+test_shift_log_is_plain_and_never_a_task_status_file
 test_stop_is_safe_when_nothing_is_armed
 test_stop_leaves_the_standing_services_alone
 test_stop_reports_what_happened_during_the_shift
 test_stop_clears_an_outage_still_open_at_the_end
+test_stop_says_plainly_when_away_mode_is_still_running
+test_stop_removes_a_stale_task_status_file_from_an_earlier_shift
 test_stop_clears_arming_that_outlived_its_shift_record
 test_status_is_honest_when_a_component_is_down
+test_status_reports_a_self_check_the_watcher_would_reject
 test_status_with_no_shift_armed_still_reports_every_component
 test_usage_is_printed_for_an_unknown_command
