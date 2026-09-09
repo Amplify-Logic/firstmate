@@ -53,7 +53,7 @@ The relation inherits the ancestry walk's own bounds - at most eight parents, ma
 
 ## Claude background-shell pressure reap
 
-On macOS, Claude Code 2.1.193 and later can terminate a main-session background shell when the OS reports memory pressure.
+Claude Code 2.1.193 and later can terminate a main-session background shell when the runtime reports memory pressure.
 By default that reap also waits until 30 minutes have passed since the last user interaction, with no turn or subagent running.
 A freshly armed watcher therefore gets no 30-minute grace once the captain has already been away that long.
 The watcher arm, the watcher, caffeinate, and the event-wait helper share one process group, so that signal takes the whole supervision cycle down together.
@@ -62,7 +62,12 @@ Every Claude crewmate that primary spawns inherits the export, so those workers 
 That tradeoff is accepted here: the reap has only been observed killing the primary's watcher arm, and this change does not add a worker-scoping mechanism.
 The launcher header owns the exact export.
 A Claude primary started outside that launcher must export the same variable by hand before launch.
-Dated evidence is the 2026-09-03 herdr-killsweep-scout report and the 2026-09-04 `state/.watch-cycle-exits.log` cluster of 44 `arm-interrupted` TERM exits.
+
+Host status is two separate claims, and only the first rests on this fleet's own evidence.
+Verified on macOS, Claude Code 2.1.193 and later: the dated evidence is the 2026-09-03 herdr-killsweep-scout report and the 2026-09-04 `state/.watch-cycle-exits.log` cluster of 44 `arm-interrupted` TERM exits.
+Unverified on Linux: Linux is a real firstmate target and the launcher export is unconditional, so a Linux primary gets it, but this fleet has never reproduced the watcher-arm reap on a Linux host.
+Unverified is not the same as ignored or harmless there: Claude Code 2.1.266 still registers `process.on("memoryPressure")` for a tracked background shell in any interactive session unless `CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP` is set, with no Darwin-only branch, and [claude-code#78674](https://github.com/anthropics/claude-code/issues/78674) reports the same reaper on Linux.
+On Linux the export is therefore a precaution against a mechanism that is demonstrably present, not a mitigation whose effect on this fleet's watcher arm has been observed.
 The host-level sentinel below still assumes the watcher can disappear for other reasons.
 
 ## Host-level outage sentinel
