@@ -410,7 +410,12 @@ Gate on the `loggedIn` field rather than the exit status, which cannot distingui
 
 Quota monitoring follows a pin rather than reporting the ambient account.
 `quota-axi` 0.1.41 reads the pinned home's own credential for both vendors, and for a pinned Claude seat it finds that home's namespaced keychain item.
-Reading a keychain item needs one keychain approval per item, reported as `keychain_prompt_required` with the remedy `quota-axi --allow-keychain-prompt`; that approval is the captain's to grant, once per seat.
+A newly logged-in seat costs one keychain approval before its first read, reported as `keychain_prompt_required` with the remedy `quota-axi --allow-keychain-prompt`; that approval is the captain's to grant, and reads succeed without a prompt afterwards.
+Each seat then reports its own pools: on 2026-09-09 the two seats showed different session and weekly percentages, different reset times, and an extra-usage pool that only one of them has.
+
+Hosted connectors are per seat, which is the practical reason to pin one.
+Two workers launched at once on 2026-09-09, one pinned to the Team seat and one on the ambient Max seat, reported 38 and 4 connector tools respectively, and only the Team worker had the organization's Asana connector, which it called successfully.
+Account pinning cannot move a connector between seats; it only makes it possible to run on the seat that already has one.
 
 Secondmate homes do NOT inherit this file.
 Account homes are per-machine and per-login: the derived paths live under one home's own `data/`, and the credentials in them are physically tied to the logins performed on that machine.

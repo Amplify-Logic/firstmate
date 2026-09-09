@@ -199,7 +199,8 @@ Operating facts that decide whether a pin can work at all:
 - `claude auth status` prints JSON on stdout either way and exits 0 logged in, 1 logged out. Read the `loggedIn` field; the exit status cannot separate a logged-out home from a CLI that failed to answer.
 - `codex login status` prints `Logged in using ChatGPT` on stdout and `Not logged in` on stderr, and exposes no account identity at all.
 - Because codex reports no identity, an `expect` value is accepted only for claude accounts; on a codex account it is reported as invalid rather than matched against something invented. `quota-axi --provider codex` does report the identity of a pinned home and would be the surface to use if that check is ever wanted.
-- `quota-axi` 0.1.41 follows both pins rather than reporting the ambient account, and for a pinned Claude seat it finds that home's namespaced keychain item. Reading one costs a single keychain approval per item (`keychain_prompt_required`, remedy `quota-axi --allow-keychain-prompt`), which is the captain's to grant.
+- `quota-axi` 0.1.41 follows both pins rather than reporting the ambient account, and for a pinned Claude seat it finds that home's namespaced keychain item. A newly logged-in seat costs one keychain approval before its first read (`keychain_prompt_required`, remedy `quota-axi --allow-keychain-prompt`), which is the captain's to grant; reads are promptless afterwards, and each seat then shows its own session and weekly pools.
+- Hosted connectors are per seat, so a pinned worker gets that seat's connector tools and no others. Proven 2026-09-09 with two concurrent workers: the Team-pinned worker saw 38 connector tools and completed a live Asana read, while the ambient Max worker saw 4 and had no Asana tool at all. Pinning selects the seat that has a connector; it can never move one between seats.
 
 ## no-mistakes skill invocation
 
