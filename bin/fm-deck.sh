@@ -9,8 +9,10 @@
 # Sections, most-actionable first:
 #   STAGED FOR YOUR CLICK  bin/fm-tray.sh json, grouped by standing order using
 #                          bin/fm-order.sh list (age headline, expiry countdown)
-#   NEEDS YOU              parked and blocked work, PRs ready to review with
-#                          their full URL, and durable captain decisions
+#   NEEDS YOU              parked and blocked work, pull requests that are ready
+#                          to review with their full URL, and durable captain
+#                          decisions; one row per worker, and a failed worker's
+#                          pull request is not ready to review
 #   LOOSE ENDS             data/loose-ends/latest.md, the manual inbox sweep
 #   UNDER WAY              one outcome line per recorded worker
 #   JUST IN                recent completions and findings
