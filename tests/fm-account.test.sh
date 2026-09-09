@@ -130,15 +130,6 @@ JSON
     assert_absent "$HOME_FIX/data/accounts/claude/$name" "unsafe name '$name' still created a home"
   done
   assert_absent "$HOME_FIX/data/accounts/claude/escape" "a traversing name escaped the vendor directory"
-
-  # A vendor default naming an unsafe account refuses the same way, with no
-  # --account flag involved at all.
-  printf '%s\n' '{"claude":{"default":"_team","accounts":{"_team":{}}}}' \
-    > "$HOME_FIX/config/accounts.json"
-  status=0
-  out=$(run_account create claude _team) || status=$?
-  [ "$status" -ne 0 ] || fail "an unsafe default account name was accepted"
-  assert_contains "$out" "invalid claude account name '_team'" "default refusal did not name the invalid account"
   pass "fm-account: unsafe account names refuse at creation exactly as bootstrap reports them"
 }
 

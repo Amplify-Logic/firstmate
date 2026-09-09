@@ -1025,6 +1025,16 @@ test_account_selection_and_refusals() {
   assert_contains "$out" "account=team" "the Claude default account was not applied"
   assert_contains "$out" "CLAUDE_CONFIG_DIR=$claude_team" "the Claude default did not export its derived home"
 
+  # The default is the only path that picks a name nobody typed, so it gets the
+  # same name rule: an unsafe default refuses with no --account flag anywhere.
+  printf '%s\n' '{"claude":{"default":"_team","accounts":{"_team":{}}}}' > "$registry"
+  status=0
+  out=$(dry claude-fable 2>&1) || status=$?
+  [ "$status" -ne 0 ] || fail "an unsafe vendor default was accepted"
+  assert_contains "$out" "invalid claude account name '_team'" "default refusal did not name the invalid account"
+  assert_not_contains "$out" 'CLAUDE_CONFIG_DIR' "an unsafe default still pinned a home"
+  write_account_registry
+
   # An unknown name refuses and names the accounts that ARE defined.
   status=0
   out=$(dry claude-fable --account ghost 2>&1) || status=$?
@@ -1111,10 +1121,12 @@ JSON
   pass "fm-primary: a missing, logged-out, or wrong-identity account home refuses before launch"
 }
 
-# The dry-run contract, stated in the fm-primary header and shared with the
-# Codex login gate: a preview shows argv BEFORE any credential is inspected, so
-# a missing or wrong login can never hide what would have been launched. An
-# unresolvable pin is a different thing - a bad request - and still refuses.
+# The account half of the dry-run contract, stated in the fm-primary header: a
+# preview shows argv BEFORE the pinned home's credential is inspected, so a
+# missing, logged-out, or wrong seat can never hide what would have been
+# launched. An unresolvable pin is a different thing - a bad request - and still
+# refuses. Other profiles' own login gates are out of scope here and keep their
+# existing placement.
 test_account_credential_gates_never_hide_dry_run_argv() {
   local out status registry="$HOME_FIX/config/accounts.json"
   local claude_team="$HOME_FIX/data/accounts/claude/team"
@@ -1160,7 +1172,7 @@ JSON
   assert_contains "$out" "no vendor account to pin" "vendorless refusal was lost in dry run"
 
   rm -f "$registry"
-  pass "fm-primary: dry run previews argv before every credential gate, and still refuses an unresolvable pin"
+  pass "fm-primary: dry run previews argv before the account credential gate, and still refuses an unresolvable pin"
 }
 
 # A broken registry is a diagnostic, not an outage: bootstrap reports it, an

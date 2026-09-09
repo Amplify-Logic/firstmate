@@ -150,10 +150,11 @@
 # Test seams:
 #   FM_PRIMARY_DRY_RUN=1 prints selected profile env lines and one
 #   shell-escaped argv line instead of exec.
-#   It exits before every credential gate - the account login/expect gate and
-#   the Codex login gate - so a missing credential can never hide argv. The
-#   preview still resolves and prints the account, because an unresolvable pin
-#   is a bad request rather than a missing credential.
+#   It exits before the ACCOUNT login and identity gates, so a pinned launch's
+#   preview always prints argv. The preview still resolves and prints the
+#   account, because an unresolvable pin is a bad request rather than a missing
+#   credential. This is a statement about account pinning only: the Codex and
+#   Cursor profiles keep their own login gates exactly where they already were.
 #   FM_PRIMARY_VISIBLE_PREFIX=LAB is accepted only inside a named fm-lab-*
 #   Herdr session and visibly prefixes the role so a lab can never masquerade
 #   as the captain's FIRSTMATE.
@@ -826,10 +827,12 @@ if [ "${FM_PRIMARY_DRY_RUN:-0}" = 1 ]; then
   exit 0
 fi
 
-# Credential gates all sit below the dry-run exit, so a missing or wrong login
-# can never hide argv from a preview. Account RESOLUTION stays above it: which
+# The account login and identity gates sit below the dry-run exit, so a pinned
+# launch's preview still prints argv. Account RESOLUTION stays above it: which
 # account a launch would use is part of the preview, and an unresolvable pin is
-# a bad request rather than a missing credential.
+# a bad request rather than a missing credential. That ordering is this feature's
+# own; the Codex gate below and the Cursor gate above keep their pre-existing
+# placement, so this is not a fleet-wide promise about every credential check.
 require_account_usable
 
 if [ "$PROFILE" = codex ] || [ "$PROFILE" = astra ]; then
