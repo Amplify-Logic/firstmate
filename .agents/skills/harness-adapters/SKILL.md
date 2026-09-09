@@ -255,13 +255,15 @@ The checkpoint is deliberately foreground and bounded so Codex regains control r
 `bin/fm-primary.sh astra` launches the Codex CLI with `--model gpt-6-astra` and exports `FM_PRIMARY_HARNESS=codex` so supervision uses the Codex checkpoint protocol unchanged.
 `gpt-6-astra` requires a Codex build whose model catalog carries that id.
 codex-cli 0.153.4 carries it, listed as `gpt-6-astra` and `openai.gpt-6-astra` with display name `GPT-6-Astra`.
-The model answers through `codex exec` at `model_reasoning_effort` high, xhigh, and max.
+The model answers through `codex exec` at `model_reasoning_effort` low, medium, high, xhigh, and max.
+Every one of those levels was probed individually on 0.153.4, with the low probe returning `lowOK` and the medium probe returning `mediumOK`.
 Both launch bypass flags are accepted alongside `--model gpt-6-astra` and the effort override.
 A probe carrying `--dangerously-bypass-approvals-and-sandbox` at effort high returned `FLAGSOK`, and a probe carrying both `--dangerously-bypass-approvals-and-sandbox` and `--dangerously-bypass-hook-trust` together at effort high returned `BOTHOK`.
 The SessionStart hook fires: it ran `bin/fm-session-start.sh` and that digest appeared in the probe output.
 The Stop hook fires: the `BOTHOK` run printed `hook: Stop` and `hook: Stop Completed`.
 The SessionStart injection certified on 0.144.4 and the turn-end guard both survive the bump to 0.153.4.
-`bin/fm-primary.sh astra` still accepts low, medium, high, and xhigh only, and widening that set is the separate follow-up astra-max-effort.
+`bin/fm-primary.sh astra` still accepts low, medium, high, and xhigh only, so every token it resolves is individually proven on the live route.
+max answers too and stays deliberately refused pending the separate follow-up astra-max-effort.
 Every probe used `codex exec`, so the interactive primary launch path that `bin/fm-primary.sh astra` execs has not been exercised.
 Exercising it starts a real orchestrator session rather than a bounded probe.
 The bounded foreground watcher checkpoint that Codex primaries depend on has not been re-verified on 0.153.4.
