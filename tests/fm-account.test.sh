@@ -14,6 +14,13 @@ TMP_ROOT=$(fm_test_tmproot fm-account)
 HOME_FIX="$TMP_ROOT/home"
 mkdir -p "$HOME_FIX/config" "$HOME_FIX/data"
 
+# Portable mode bits. Platform-detected, never the `stat -f || stat -c` fallback:
+# GNU stat reads the FILE SYSTEM under -f, so it dumps that block for the home
+# and fails only on the format operand, mixing both into one substitution.
+dir_mode() {  # <dir>
+  if [ "$(uname)" = Darwin ]; then stat -f %Lp "$1"; else stat -c %a "$1"; fi
+}
+
 run_account() {  # <args...>
   FM_HOME="$HOME_FIX" FM_DATA_OVERRIDE="$HOME_FIX/data" FM_CONFIG_OVERRIDE="$HOME_FIX/config" \
     "$ACCOUNT" "$@" 2>&1
@@ -77,7 +84,7 @@ test_create_makes_one_empty_home_and_prints_the_login_command() {
   assert_contains "$out" "no credential copied" "create did not state the no-copy rule"
   assert_present "$home" "create did not make the account home"
   [ -z "$(ls -A "$home")" ] || fail "create seeded the account home with something"
-  [ "$(stat -f '%Lp' "$home" 2>/dev/null || stat -c '%a' "$home")" = 700 ] \
+  [ "$(dir_mode "$home")" = 700 ] \
     || fail "create did not restrict the account home to 0700"
 
   # Idempotent: an existing home is reported, never re-seeded or replaced.
