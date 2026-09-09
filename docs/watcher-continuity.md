@@ -58,8 +58,14 @@ By default that reap also waits until 30 minutes have passed since the last user
 A freshly armed watcher therefore gets no 30-minute grace once the captain has already been away that long.
 The watcher arm, the watcher, caffeinate, and the event-wait helper share one process group, so that signal takes the whole supervision cycle down together.
 `bin/fm-primary.sh` exports `CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP=1` for both `claude-fable` and `claude-opus` so the tracked arm remains the live wait.
-Every Claude crewmate that primary spawns inherits the export, so those workers also stop being reaped under memory pressure.
-That tradeoff is accepted here: the reap has only been observed killing the primary's watcher arm, and this change does not add a worker-scoping mechanism.
+tmux crewmates do not inherit the primary's `CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP` export (verified 2026-09-09).
+`bin/backends/tmux.sh` creates the worker with `tmux new-window` and then send-keys, so the pane environment comes from the tmux server, not from the primary process.
+This home runs herdr, not tmux, and the herdr spawn path was not live-tested for this variable.
+From spawn code, `bin/fm-spawn.sh` does not put this variable on the herdr launch line and does not unset it.
+The Claude worker launch prefix only sets `CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION=false`.
+A herdr worker pane otherwise inherits the launching environment for `FM_HERDR_PROJECT_*`, which is why spawn pins or clears those two variables, but that is not evidence for this pressure-reap export.
+Whether a herdr crewmate receives the export is therefore untested.
+The disable stays scoped to the primary on the verified tmux path, and this change does not add a worker-scoping mechanism.
 The launcher header owns the exact export.
 A Claude primary started outside that launcher must export the same variable by hand before launch.
 
