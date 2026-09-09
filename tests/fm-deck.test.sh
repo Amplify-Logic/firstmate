@@ -346,6 +346,48 @@ EOF
   pass "under way gives one outcome line per worker, most urgent first"
 }
 
+# A trailing `resolved:` line is an event about a decision, not the crew's word
+# about the work. Reading the state off it renders a finished or failed worker as
+# still working, which is the wrong direction to be wrong on the captain's pane.
+# Also pins that every verb the status vocabulary defines maps deliberately,
+# rather than a common verb landing on the right label only by coincidence.
+test_state_projection_reads_past_a_trailing_resolve() {
+  local home fb out under
+  read -r home fb <<EOF
+$(full_home resolve)
+EOF
+  # Finished, then an unrelated decision was resolved afterwards.
+  {
+    printf 'working: started\n'
+    printf 'needs-decision [key=q1]: which shape\n'
+    printf 'done: ready in branch\n'
+    printf 'resolved [key=q1]: chose two\n'
+  } > "$home/state/ship-task.status"
+  # Failed, then an unrelated decision was resolved afterwards.
+  {
+    printf 'needs-decision [key=q2]: which vendor\n'
+    printf 'failed: the importer cannot parse the feed\n'
+    printf 'resolved [key=q2]: chose the other vendor\n'
+  } > "$home/state/parked-task.status"
+  # A declared pause behind a trailing resolve that closed an ordinary decision.
+  {
+    printf 'needs-decision [key=q3]: which window\n'
+    printf 'paused: waiting on the vendor release\n'
+    printf 'resolved [key=q3]: chose next week\n'
+  } > "$home/state/stuck-task.status"
+
+  out=$(run_deck "$home" "$fb" --once 2>&1)
+  under=$(printf '%s\n' "$out" | awk '/UNDER WAY/,/JUST IN/')
+  printf '%s\n' "$under" | grep -q 'READY .*Ship the alpha widget' \
+    || fail "a finished worker behind a trailing resolve is not shown as ready"
+  printf '%s\n' "$under" | grep -q 'FAILED .*Rework the beta importer' \
+    || fail "a failed worker behind a trailing resolve is not shown as failed"
+  printf '%s\n' "$under" | grep -q 'WAITING .*Investigate the delta timeouts' \
+    || fail "a paused worker behind a trailing resolve is not shown as waiting"
+  assert_not_contains "$under" 'WORKING' "a trailing resolve was read as progress"
+  pass "the state projection reads past a trailing resolve and maps every known verb"
+}
+
 test_just_in_shows_completions_with_their_artifact() {
   local home fb out just
   read -r home fb <<EOF
@@ -539,6 +581,7 @@ test_needs_you_carries_full_pr_urls_and_distinguishes_asks
 test_worker_status_notes_never_reach_the_pane
 test_pane_carries_no_internal_vocabulary
 test_under_way_gives_one_outcome_line_per_worker
+test_state_projection_reads_past_a_trailing_resolve
 test_just_in_shows_completions_with_their_artifact
 test_loose_ends_headline_and_top_items
 test_loose_ends_present_but_quiet

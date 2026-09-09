@@ -178,7 +178,7 @@ file_age_secs() {  # <file> -> seconds since mtime, or -1
 # needs-decision or blocked must never be masked by a later unrelated event -
 # that is exactly what status_open_decisions folds for.
 reported_state() {  # <status-file> -> "<state>\t<note>"
-  local f=$1 decisions row note last verb
+  local f=$1 decisions row note last verb effective resolve
   if [ ! -f "$f" ]; then
     printf 'none\t'
     return 0
@@ -201,16 +201,35 @@ reported_state() {  # <status-file> -> "<state>\t<note>"
     printf 'none\t'
     return 0
   fi
+  # A trailing `resolved:` line is an event about a DECISION, not the crew's own
+  # last word about the work, so read the state from the line before it. Without
+  # this, a worker that finished or failed and then had an unrelated decision
+  # resolved afterwards renders as still working - a failed worker showing up
+  # blue on his pane is the wrong way round to be wrong. This is the same
+  # look-back status_declared_wait performs, taken from the fold's own helper so
+  # the two readings cannot disagree.
+  resolve=${FM_CLASSIFY_RESOLVE_VERB:-$FM_CLASSIFY_RESOLVE_VERB_DEFAULT}
+  if [ "$(status_line_verb "$last")" = "$resolve" ]; then
+    effective=$(_fm_last_non_resolve_line "$f")
+    [ -z "$effective" ] || last=$effective
+  fi
   note=$(status_line_note "$last")
   if status_declared_wait "$f"; then
     printf 'paused\t%s' "$note"
     return 0
   fi
+  # Map every verb the status vocabulary defines, so `unknown` means a verb this
+  # projection genuinely does not know rather than a common one that happens to
+  # land on the same label by luck. A declared wait reaches here whenever the
+  # fold did not already claim it above - for example a pause behind a trailing
+  # resolve line that closed an ordinary decision rather than a captain hold.
   verb=$(status_line_verb "$last")
   case "$verb" in
     done) printf 'done\t%s' "$note" ;;
     failed) printf 'failed\t%s' "$note" ;;
-    working|resolved) printf 'working\t%s' "$note" ;;
+    working) printf 'working\t%s' "$note" ;;
+    "${FM_CLASSIFY_PAUSED_VERB:-$FM_CLASSIFY_PAUSED_VERB_DEFAULT}") printf 'paused\t%s' "$note" ;;
+    "${FM_CLASSIFY_CAPTAIN_HELD_VERB:-$FM_CLASSIFY_CAPTAIN_HELD_VERB_DEFAULT}") printf 'paused\t%s' "$note" ;;
     *) printf 'unknown\t%s' "$note" ;;
   esac
 }
