@@ -173,32 +173,32 @@ file_age_secs() {  # <file> -> seconds since mtime, or -1
   printf '%s\n' "$((now - mtime))"
 }
 
-# Project the durable status stream onto one canonical state name plus the note
-# that goes with it. Open decisions win over the last line, because a keyed
-# needs-decision or blocked must never be masked by a later unrelated event -
-# that is exactly what status_open_decisions folds for.
-reported_state() {  # <status-file> -> "<state>\t<note>"
-  local f=$1 decisions row note last verb effective resolve
+# Project the durable status stream onto one canonical state name. Open
+# decisions win over the last line, because a keyed needs-decision or blocked
+# must never be masked by a later unrelated event - that is exactly what
+# status_open_decisions folds for.
+reported_state() {  # <status-file> -> <state>
+  local f=$1 decisions row last verb effective resolve paused held
   if [ ! -f "$f" ]; then
-    printf 'none\t'
+    printf 'none'
     return 0
   fi
   decisions=$(status_open_decisions "$f")
   if [ -n "$decisions" ]; then
     row=$(printf '%s\n' "$decisions" | awk -F'\t' '$2 == "needs-decision" { print; exit }')
-    [ -n "$row" ] || row=$(printf '%s\n' "$decisions" | awk -F'\t' '$2 == "blocked" { print; exit }')
     if [ -n "$row" ]; then
-      note=$(printf '%s' "$row" | cut -f3-)
-      case "$(printf '%s' "$row" | cut -f2)" in
-        needs-decision) printf 'parked\t%s' "$note" ;;
-        *) printf 'blocked\t%s' "$note" ;;
-      esac
+      printf 'parked'
+      return 0
+    fi
+    row=$(printf '%s\n' "$decisions" | awk -F'\t' '$2 == "blocked" { print; exit }')
+    if [ -n "$row" ]; then
+      printf 'blocked'
       return 0
     fi
   fi
   last=$(last_status_line "$f")
   if [ -z "$last" ]; then
-    printf 'none\t'
+    printf 'none'
     return 0
   fi
   # A trailing `resolved:` line is an event about a DECISION, not the crew's own
@@ -213,31 +213,34 @@ reported_state() {  # <status-file> -> "<state>\t<note>"
     effective=$(_fm_last_non_resolve_line "$f")
     [ -z "$effective" ] || last=$effective
   fi
-  note=$(status_line_note "$last")
   if status_declared_wait "$f"; then
-    printf 'paused\t%s' "$note"
+    printf 'paused'
     return 0
   fi
   # Map every verb the status vocabulary defines, so `unknown` means a verb this
   # projection genuinely does not know rather than a common one that happens to
-  # land on the same label by luck. A declared wait reaches here whenever the
-  # fold did not already claim it above - for example a pause behind a trailing
-  # resolve line that closed an ordinary decision rather than a captain hold.
+  # land on the same label by luck. needs-decision, blocked and resolved reach
+  # here only once the fold has closed the decision they carried, so all the
+  # deck knows is that nobody has spoken since: that is the waiting state, not
+  # observed activity. A declared wait reaches here whenever the fold did not
+  # already claim it above - for example a pause behind a trailing resolve line
+  # that closed an ordinary decision rather than a captain hold.
   verb=$(status_line_verb "$last")
+  paused=${FM_CLASSIFY_PAUSED_VERB:-$FM_CLASSIFY_PAUSED_VERB_DEFAULT}
+  held=${FM_CLASSIFY_CAPTAIN_HELD_VERB:-$FM_CLASSIFY_CAPTAIN_HELD_VERB_DEFAULT}
   case "$verb" in
-    done) printf 'done\t%s' "$note" ;;
-    failed) printf 'failed\t%s' "$note" ;;
-    working) printf 'working\t%s' "$note" ;;
-    "${FM_CLASSIFY_PAUSED_VERB:-$FM_CLASSIFY_PAUSED_VERB_DEFAULT}") printf 'paused\t%s' "$note" ;;
-    "${FM_CLASSIFY_CAPTAIN_HELD_VERB:-$FM_CLASSIFY_CAPTAIN_HELD_VERB_DEFAULT}") printf 'paused\t%s' "$note" ;;
-    *) printf 'unknown\t%s' "$note" ;;
+    done) printf 'done' ;;
+    failed) printf 'failed' ;;
+    working) printf 'working' ;;
+    needs-decision|blocked|"$resolve"|"$paused"|"$held") printf 'paused' ;;
+    *) printf 'unknown' ;;
   esac
 }
 
 # One TSV row per recorded worker:
-#   id, kind, project label, outcome, state, note, seconds since last heard, PR
+#   id, kind, project label, outcome, state, seconds since last heard, PR
 collect_tasks() {
-  local meta id kind project outcome status_log state note heard pr row
+  local meta id kind project outcome status_log state heard pr
   [ -d "$STATE" ] || return 0
   for meta in "$STATE"/*.meta; do
     [ -e "$meta" ] || continue
@@ -247,18 +250,16 @@ collect_tasks() {
     project=$(project_label "$meta")
     outcome=$("$SCRIPT_DIR/fm-task-outcome.sh" "$id" "$(meta_value "$meta" outcome)" 2>/dev/null || printf '%s' "$id")
     status_log="$STATE/$id.status"
-    row=$(reported_state "$status_log")
-    state=$(printf '%s' "$row" | cut -f1)
-    note=$(printf '%s' "$row" | cut -f2-)
+    state=$(reported_state "$status_log")
     if [ -f "$status_log" ]; then
       heard=$(file_age_secs "$status_log")
     else
       heard=-1
     fi
     pr=$(meta_value "$meta" pr)
-    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
       "$id" "$kind" "$project" "$(one_line "$outcome")" \
-      "$state" "$(one_line "$note")" "$heard" "$pr"
+      "$state" "$heard" "$pr"
   done
 }
 

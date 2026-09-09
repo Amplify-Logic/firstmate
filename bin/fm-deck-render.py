@@ -210,7 +210,7 @@ def parse_tasks(text):
         if not line.strip():
             continue
         parts = line.split("\t")
-        if len(parts) < 8:
+        if len(parts) < 7:
             continue
         rows.append(
             {
@@ -219,9 +219,8 @@ def parse_tasks(text):
                 "project": parts[2] or "-",
                 "outcome": parts[3],
                 "state": parts[4] or "none",
-                "note": parts[5],
-                "heard": to_int(parts[6], -1),
-                "pr": parts[7],
+                "heard": to_int(parts[5], -1),
+                "pr": parts[6],
             }
         )
     return rows
@@ -412,11 +411,20 @@ def build_needs_you(tasks, backlog, limit, width):
             rows.append(("unblock", task["outcome"], "", task["project"]))
             seen_ids.add(task["id"])
 
+    # A worker owns its own pull request, so this pass decides the URL outright:
+    # recording it either way keeps the backlog's row for the same URL from
+    # re-raising a review the projection deliberately withheld. A finished or a
+    # dead worker is not a review - the first has already had its say, and the
+    # second must never be presented as work that is ready to look at.
     pr_seen = set()
     for task in tasks:
-        if task["pr"] and task["state"] != "done":
-            rows.append(("review", task["outcome"], task["pr"], task["project"]))
-            pr_seen.add(task["pr"])
+        if not task["pr"]:
+            continue
+        pr_seen.add(task["pr"])
+        if task["state"] in ("done", "failed") or task["id"] in seen_ids:
+            continue
+        rows.append(("review", task["outcome"], task["pr"], task["project"]))
+        seen_ids.add(task["id"])
     for row in backlog:
         if row.get("state") == "done":
             continue
@@ -544,6 +552,21 @@ def build_just_in(backlog, limit, width):
 # --- frame ------------------------------------------------------------------
 
 
+# Worker-authored text - a tray target or action kind, a backlog title, a
+# commissioned outcome, a loose-ends item - reaches an always-on terminal here.
+# An ESC inside any of it could move the cursor, clear regions, or forge a whole
+# frame on the captain's private pane, and str.split() in clip() does not treat
+# C0 or C1 as whitespace, so it survives every other normalization on the way.
+# Every line of the frame passes through scrub() at the single write below; the
+# pane's own text is plain (its rules, dots and labels are literal characters),
+# so refusing the whole range costs nothing legitimate.
+CONTROL_CHARS = re.compile(r"[\x00-\x1f\x7f-\x9f]")
+
+
+def scrub(line):
+    return CONTROL_CHARS.sub("", line)
+
+
 def rule(width):
     return "─" * width
 
@@ -622,7 +645,7 @@ def main():
         )
     )
 
-    sys.stdout.write("\n".join(out) + "\n")
+    sys.stdout.write("\n".join(scrub(line) for line in out) + "\n")
 
 
 if __name__ == "__main__":

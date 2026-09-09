@@ -13,6 +13,11 @@ set -u
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
 DECK="$ROOT/bin/fm-deck.sh"
+# bin/fm-deck.sh collects every source; bin/fm-deck-render.py presents them.
+# The renderer is driven directly below so that seam is a tested contract and
+# not just an implementation detail of the wrapper.
+RENDER="$ROOT/bin/fm-deck-render.py"
+MARK='__FM_DECK_SECTION__'
 TMP=$(fm_test_tmproot fm-deck)
 
 command -v python3 >/dev/null 2>&1 || { echo "skip: python3 not found"; exit 0; }
@@ -186,6 +191,56 @@ full_home() {  # <name> -> "<home> <fakebin>"
   write_backlog "$home"
   write_loose_ends "$home"
   printf '%s %s\n' "$home" "$fb"
+}
+
+# One worker per verb scenario, so the UNDER WAY ordering assertion has real
+# neighbours to sort against.
+write_verb_worker() {  # <home> <id> <outcome>
+  fm_write_meta "$1/state/$2.meta" \
+    "window=default:w1:$2" "kind=ship" "project=$1/projects/alpha" \
+    "herdr_project_name=Alpha" "harness=claude" "outcome=$3"
+}
+
+# The sentinel-delimited payload bin/fm-deck.sh emits, so bin/fm-deck-render.py
+# can be driven on its own. The first argument is spliced into every
+# worker-authored field the pane shows (tray target and action kind, backlog
+# title, commissioned outcome, loose-ends item); the second is its JSON-escaped
+# form, which is how bin/fm-tray.sh's json.dumps hands a control character over.
+render_payload() {  # <inject> <tray-inject>
+  local inject=$1 tray=$2
+  printf '%s now\n%s\n' "$MARK" "$NOW"
+  printf '%s width\n120\n' "$MARK"
+  printf '%s home\nStarship\n' "$MARK"
+  printf '%s interval\n\n' "$MARK"
+  printf '%s limits\n5\t5\t8\n' "$MARK"
+  printf '%s vocabulary\n' "$MARK"
+  printf 'working\tWORKING\t%s\n' '🔵'
+  printf 'parked\tNEEDS LARS\t%s\n' '🟣'
+  printf '%s tray\n' "$MARK"
+  printf '[{"domain":"proactive-outbound","action_kind":"crm.update%s","target":"hubspot://note-1%s","age_secs":3600,"age":"1h","expiry":"2h","expired":false}]\n' \
+    "$tray" "$tray"
+  printf '%s orders\n' "$MARK"
+  printf '%s backlog\n' "$MARK"
+  printf 'count: 1\n'
+  printf 'tasks[1]{id,state,kind,repo,title,hold_kind,hold_reason,links,closed,blocked_by,held,priority}:\n'
+  printf '  hold-one,queued,captain,alpha,"Authorise the Sweden field visit%s",captain,"needs the captain",none,"-",none,yes,"-"\n' "$inject"
+  printf '%s tasks\n' "$MARK"
+  printf 'ship-task\tship\tAlpha\tShip the alpha widget%s\tworking\t120\t\n' "$inject"
+  printf '%s loose_ends\n' "$MARK"
+  printf 'path\tdata/loose-ends/latest.md\n'
+  printf 'age_secs\t120\n'
+  printf 'body\n'
+  printf '# Loose Ends - test sweep\n\n## URGENT - today\n\n1. Reply to Gijs%s about the warranty claim.\n' "$inject"
+}
+
+# No C0 (including DEL) and no C1 anywhere in a rendered frame.
+assert_no_control_characters() {  # <text> <msg>
+  local count
+  count=$(printf '%s' "$1" | tr -d '\n' | LC_ALL=C tr -dc '[:cntrl:]' | wc -c | tr -d ' ')
+  [ "$count" = 0 ] || fail "$2 ($count C0 characters survived)"
+  case "$1" in
+    *"$(printf '\302\233')"*) fail "$2 (a C1 character survived)" ;;
+  esac
 }
 
 test_help_exits_zero() {
@@ -388,6 +443,153 @@ EOF
   pass "the state projection reads past a trailing resolve and maps every known verb"
 }
 
+# A worker whose decision has been resolved but which has not written its next
+# line has said nothing about the work, so the pane says it is waiting. Every
+# verb the status vocabulary defines maps deliberately: landing on the right
+# label through the unrecognised-verb arm would rank the worker below every
+# paused one and below a finished one in UNDER WAY.
+test_resolved_decisions_project_the_waiting_state() {
+  local home fb out under outcome waiting finished
+  home=$(make_home verbs)
+  fb=$(fm_fakebin "$home")
+  install_fake_tasks_axi "$fb" empty
+
+  write_verb_worker "$home" keyed-decision "Choose the alpha shape"
+  {
+    printf 'needs-decision [key=q1]: which shape\n'
+    printf 'resolved [key=q1]: chose two\n'
+  } > "$home/state/keyed-decision.status"
+
+  write_verb_worker "$home" keyed-block "Restore the beta feed"
+  {
+    printf 'blocked [key=q2]: no credential for the vendor portal\n'
+    printf 'resolved [key=q2]: the credential arrived\n'
+  } > "$home/state/keyed-block.status"
+
+  write_verb_worker "$home" only-resolves "Settle the gamma question"
+  printf 'resolved: settled out of band\n' > "$home/state/only-resolves.status"
+
+  # Legacy bare lines, with no key, fold onto the default key the same way.
+  write_verb_worker "$home" legacy-decision "Pick the delta window"
+  {
+    printf 'needs-decision: which window\n'
+    printf 'resolved: next week\n'
+  } > "$home/state/legacy-decision.status"
+
+  write_verb_worker "$home" finished "Land the epsilon migration"
+  printf 'done: ready in branch\n' > "$home/state/finished.status"
+
+  out=$(run_deck "$home" "$fb" --once 2>&1)
+  under=$(printf '%s\n' "$out" | awk '/UNDER WAY/,/JUST IN/')
+  for outcome in 'Choose the alpha shape' 'Restore the beta feed' \
+    'Settle the gamma question' 'Pick the delta window'; do
+    printf '%s\n' "$under" | grep -q "WAITING .*$outcome" \
+      || fail "a resolved decision does not project the waiting state: $outcome"
+  done
+  printf '%s\n' "$under" | grep -q 'READY .*Land the epsilon migration' \
+    || fail "a finished worker is not shown as ready"
+  assert_not_contains "$under" 'WORKING' "a resolved decision was read as progress"
+
+  # The waiting workers outrank the finished one; the unrecognised-verb arm
+  # would sort them below it.
+  waiting=$(printf '%s\n' "$under" | awk '/Pick the delta window/ {print NR; exit}')
+  finished=$(printf '%s\n' "$under" | awk '/Land the epsilon migration/ {print NR; exit}')
+  [ -n "$waiting" ] && [ -n "$finished" ] && [ "$waiting" -lt "$finished" ] \
+    || fail "a resolved decision sorts below a finished worker (lines $waiting, $finished)"
+  pass "a resolved decision projects the waiting state and sorts with the waiting workers"
+}
+
+# A worker that died is not a pull request ready to look at, and one task must
+# ask him for one thing, not two.
+test_needs_you_withholds_failed_reviews_and_dedupes_by_task() {
+  local home fb out needs answers reviews
+  read -r home fb <<EOF
+$(full_home asks)
+EOF
+  # Opened a PR, then died. The backlog still carries the same PR link.
+  printf 'failed: the importer cannot parse the feed\n' > "$home/state/ship-task.status"
+  # Parked on a decision AND carrying a PR: one task, one ask.
+  fm_write_meta "$home/state/parked-task.meta" \
+    "window=default:w1:p2" "kind=ship" "project=$home/projects/alpha" \
+    "herdr_project_name=Alpha" "harness=claude" \
+    "outcome=Rework the beta importer" \
+    "pr=https://github.com/acme/alpha/pull/9"
+
+  out=$(run_deck "$home" "$fb" --once 2>&1)
+  needs=$(printf '%s\n' "$out" | awk '/NEEDS YOU/,/LOOSE ENDS/')
+  assert_not_contains "$needs" 'pull/7' "a dead worker's pull request was offered for review"
+  assert_not_contains "$needs" 'Ship the alpha widget' "a dead worker was presented as a review"
+
+  # The parked worker asks once, for the thing that actually blocks it: its own
+  # pull request is not a second demand while its decision is still open.
+  # grep -c exits 1 on a zero count, and errexit is on by this point in the file.
+  answers=$(printf '%s\n' "$needs" | grep -c 'Rework the beta importer' || true)
+  [ "$answers" -eq 1 ] \
+    || fail "one parked task with a pull request produced $answers rows, expected 1"
+  printf '%s\n' "$needs" | grep -q 'answer .*Rework the beta importer' \
+    || fail "the surviving row does not ask him to answer"
+  assert_not_contains "$needs" 'pull/9' "the parked worker was asked for twice"
+  reviews=$(printf '%s\n' "$needs" | grep -c 'review ' || true)
+  [ "$reviews" -eq 0 ] \
+    || fail "needs you offered $reviews reviews when no work was ready for one"
+  pass "needs you withholds a failed worker's pull request and asks once per task"
+}
+
+# bin/fm-deck-render.py owns the frame: bin/fm-deck.sh hands it the payload and
+# it decides the sections, the counts strip, and what may reach the terminal.
+test_renderer_presents_the_payload_the_deck_collects() {
+  local out
+  out=$(render_payload '' '' | python3 "$RENDER" "$MARK")
+  assert_contains "$out" 'ACTION DECK · Starship' "the renderer draws the title"
+  assert_contains "$out" 'STAGED FOR YOUR CLICK' "the renderer draws the staged section"
+  assert_contains "$out" 'hubspot://note-1' "the renderer draws the staged target"
+  assert_contains "$out" 'NEEDS YOU' "the renderer draws the needs-you section"
+  assert_contains "$out" 'Authorise the Sweden field visit' "the renderer draws a decision"
+  assert_contains "$out" 'LOOSE ENDS' "the renderer draws the loose ends section"
+  assert_contains "$out" 'Reply to Gijs' "the renderer draws a loose end"
+  assert_contains "$out" 'UNDER WAY' "the renderer draws the under-way section"
+  assert_contains "$out" 'Ship the alpha widget' "the renderer draws a worker outcome"
+  assert_contains "$out" 'snapshot' "a payload with no interval renders as a snapshot"
+  pass "bin/fm-deck-render.py turns the deck's payload into the pane"
+}
+
+# The pane is always on and captain-private, so an escape sequence written by a
+# worker could move his cursor, clear regions, or forge a whole frame. One place
+# on the way to the terminal refuses C0 and C1; nothing may route around it.
+test_control_characters_never_reach_the_terminal() {
+  local home fb out esc bel c1
+  esc=$(printf '\033')
+  bel=$(printf '\007')
+  c1=$(printf '\302\233')
+
+  out=$(render_payload "${esc}[2J${bel}${c1}" '\u001b[2J\u009b' | python3 "$RENDER" "$MARK")
+  assert_no_control_characters "$out" "the renderer let a control character through"
+  assert_contains "$out" 'hubspot://note-1' "scrubbing the target dropped the target"
+  assert_contains "$out" 'Ship the alpha widget' "scrubbing the outcome dropped the outcome"
+  assert_contains "$out" 'Authorise the Sweden field visit' "scrubbing a title dropped the title"
+  assert_contains "$out" 'Reply to Gijs' "scrubbing a loose end dropped the loose end"
+
+  # And end to end, through every collector bin/fm-deck.sh runs.
+  read -r home fb <<EOF
+$(full_home control)
+EOF
+  cat > "$home/data/action-gateway/action-audit.log" <<'JSONL'
+{"ts":1700000000,"event":"prepared","state":"prepared","request_id":"r-1","digest":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","expires_at":1800000000,"requester_id":"worker-1","request":{"task_id":"t-1","domain":"proactive-outbound","action_kind":"crm.update","target":"hubspot://note-1\u001b[2Jforged","parameters":{},"idempotency_key":"i-1","expires_at":1800000000,"nonce":"n-1","requester_id":"worker-1"}}
+JSONL
+  fm_write_meta "$home/state/ship-task.meta" \
+    "window=default:w1:p1" "kind=ship" "project=$home/projects/alpha" \
+    "herdr_project_name=Alpha" "harness=claude" \
+    "outcome=Ship the alpha widget${esc}[2Jforged"
+  printf '# Loose Ends - test sweep\n\n## URGENT - today\n\n1. Reply to Gijs%s[2Jforged about the warranty claim.\n' \
+    "$esc" > "$home/data/loose-ends/latest.md"
+
+  out=$(run_deck "$home" "$fb" --once 2>&1)
+  assert_no_control_characters "$out" "the deck let a control character reach the terminal"
+  assert_contains "$out" 'hubspot://note-1' "the staged target went missing"
+  assert_contains "$out" 'Reply to Gijs' "the loose end went missing"
+  pass "no worker-authored control character reaches the captain's terminal"
+}
+
 test_just_in_shows_completions_with_their_artifact() {
   local home fb out just
   read -r home fb <<EOF
@@ -582,6 +784,10 @@ test_worker_status_notes_never_reach_the_pane
 test_pane_carries_no_internal_vocabulary
 test_under_way_gives_one_outcome_line_per_worker
 test_state_projection_reads_past_a_trailing_resolve
+test_resolved_decisions_project_the_waiting_state
+test_needs_you_withholds_failed_reviews_and_dedupes_by_task
+test_renderer_presents_the_payload_the_deck_collects
+test_control_characters_never_reach_the_terminal
 test_just_in_shows_completions_with_their_artifact
 test_loose_ends_headline_and_top_items
 test_loose_ends_present_but_quiet

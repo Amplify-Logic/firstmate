@@ -543,9 +543,10 @@ reconcile_captain_held_surfaced_markers() {  # <fold-state> <window-marker> <tas
 # `resolved [key=<k>]:` line fm-decision-hold.sh appends when it retires a hold
 # is an event ABOUT THE HOLD, not a fresh statement of what the crew is doing,
 # so status_declared_wait looks back past it to find the crew's own last word.
-# Only status_declared_wait's look-back branch calls this, and only when the
-# last line IS such a line and no hold is left open, so the per-line verb parse
-# stays off the hot path.
+# Two callers: status_declared_wait's look-back branch, and the Action Deck's
+# state projection in bin/fm-deck.sh, which reads the crew's own last word for
+# the same reason. Both enter only when the last line IS such a line, so the
+# per-line verb parse stays off the hot path.
 _fm_last_non_resolve_line() {  # <status-file>
   local f=$1 line resolve out=''
   [ -e "$f" ] || return 0
