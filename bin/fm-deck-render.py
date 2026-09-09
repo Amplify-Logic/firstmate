@@ -13,6 +13,7 @@ import json
 import re
 import sys
 import time
+import unicodedata
 
 JUST_IN_DEFAULT = 5
 LOOSE_ENDS_DEFAULT = 5
@@ -51,11 +52,37 @@ def format_age(secs):
     return "%dd" % (secs // 86400)
 
 
+# The state dots and the title's anchor are east-asian wide: each occupies two
+# terminal columns while len() counts it as one, so measuring characters pushed
+# every dotted row and the clock past the frame and wrapped them. Every place
+# this file measures or pads goes through these two helpers, so the rule lives
+# in one spot the way the control-character strip does. Ambiguous-width
+# characters - the rules' ─, the · and … separators - stay one column, which is
+# how the terminals this pane is read in draw them.
+def display_width(text):
+    return sum(2 if unicodedata.east_asian_width(ch) in ("W", "F") else 1 for ch in text)
+
+
+def pad(text, width):
+    """Left-justify to `width` display columns. Never truncates; clip() does."""
+    return text + " " * max(0, width - display_width(text))
+
+
 def clip(text, width):
     text = " ".join(str(text).split())
-    if width <= 1 or len(text) <= width:
+    if width <= 1 or display_width(text) <= width:
         return text
-    return text[: width - 1] + "…"
+    # Cut on display width, so a clipped cell cannot end mid-wide-glyph and the
+    # "…" that replaces the cut still leaves the cell inside its column.
+    kept = []
+    used = 0
+    for ch in text:
+        step = display_width(ch)
+        if used + step > width - 1:
+            break
+        kept.append(ch)
+        used += step
+    return "".join(kept) + "…"
 
 
 def parse_payload(stream, mark):
@@ -382,11 +409,11 @@ def build_staged(tray, orders, width):
                 else:
                     expiry_text = "expires in " + expiry
                 lines.append(
-                    "      %-5s %-14s %-22s %s"
+                    "      %s %s %s %s"
                     % (
-                        clip(row.get("age", "-"), 5),
-                        clip(expiry_text, 14),
-                        clip(row.get("action_kind", "-"), 22),
+                        pad(clip(row.get("age", "-"), 5), 5),
+                        pad(clip(expiry_text, 14), 14),
+                        pad(clip(row.get("action_kind", "-"), 22), 22),
                         clip(row.get("target", "-"), max(10, width - 55)),
                     )
                 )
@@ -465,8 +492,12 @@ def build_needs_you(tasks, backlog, limit, width):
     for label, text, url, where in shown:
         where_text = (" · " + where) if where and where != "-" else ""
         lines.append(
-            "  %-8s %s%s"
-            % (label, clip(text, max(20, width - 15 - len(where_text))), where_text)
+            "  %s %s%s"
+            % (
+                pad(label, 8),
+                clip(text, max(20, width - 15 - display_width(where_text))),
+                where_text,
+            )
         )
         if url:
             lines.append("           " + url)
@@ -497,7 +528,13 @@ def build_loose_ends(loose, limit, width):
 
 
 PROJECT_COL = 18
-HEARD_COL = 14
+# The widest thing the last column carries is "not reported yet", and every
+# state dot is two columns; the outcome column is what the frame has left over
+# once the indent, the dot, the label and the two trailing columns are paid for.
+HEARD_COL = 16
+ICON_COL = 2
+LABEL_COL = 11
+UNDER_WAY_FIXED = 2 + ICON_COL + 1 + LABEL_COL + 1 + 2 + PROJECT_COL + 1 + HEARD_COL
 
 
 def build_under_way(tasks, vocab, width):
@@ -508,22 +545,20 @@ def build_under_way(tasks, vocab, width):
     )
     # Fixed columns: he scans this section down the state dot, so the outcome
     # column cannot shift width from row to row.
-    outcome_col = max(20, width - (4 + 11 + PROJECT_COL + HEARD_COL + 2))
+    outcome_col = max(20, width - UNDER_WAY_FIXED)
     lines = []
     for task in ordered:
         label, icon = vocab.get(task["state"], ("WAITING", "\U0001f7e1"))
         heard = format_age(task["heard"])
         heard_text = ("heard %s ago" % heard) if heard != "-" else "not reported yet"
         lines.append(
-            "  %s %-11s %-*s  %-*s %s"
+            "  %s %s %s  %s %s"
             % (
-                icon,
-                label,
-                outcome_col,
-                clip(task["outcome"], outcome_col),
-                PROJECT_COL,
-                clip(task["project"], PROJECT_COL),
-                heard_text,
+                pad(icon, ICON_COL),
+                pad(clip(label, LABEL_COL), LABEL_COL),
+                pad(clip(task["outcome"], outcome_col), outcome_col),
+                pad(clip(task["project"], PROJECT_COL), PROJECT_COL),
+                clip(heard_text, HEARD_COL),
             )
         )
     return lines
@@ -552,10 +587,10 @@ def build_just_in(backlog, limit, width):
         else:
             what, artifact = "settled", ""
         lines.append(
-            "  %-7s %-9s %s"
+            "  %s %s %s"
             % (
-                short_date(row.get("closed", "")),
-                what,
+                pad(short_date(row.get("closed", "")), 7),
+                pad(what, 9),
                 clip(row.get("title", ""), max(20, width - 21)),
             )
         )
@@ -588,7 +623,7 @@ def rule(width):
 
 def heading(title, width):
     label = " " + title + " "
-    return label + "─" * max(0, width - len(label))
+    return label + "─" * max(0, width - display_width(label))
 
 
 def main():
@@ -629,7 +664,7 @@ def main():
 
     clock = time.strftime("%a %d %b %H:%M:%S", time.localtime(now))
     title = "⚓  ACTION DECK · " + home
-    gap = max(1, width - len(title) - len(clock))
+    gap = max(1, width - display_width(title) - display_width(clock))
 
     out = [
         rule(width),

@@ -174,7 +174,7 @@ run_deck() {  # <home> <fakebin> [args...]
   FM_DATA_OVERRIDE="$home/data" \
   FM_STATE_OVERRIDE="$home/state" \
   FM_CONFIG_OVERRIDE="$home/config" \
-  FM_DECK_COLUMNS=120 \
+  FM_DECK_COLUMNS="${FM_DECK_COLUMNS:-120}" \
     "$DECK" "$@"
 }
 
@@ -231,6 +231,53 @@ render_payload() {  # <inject> <tray-inject>
   printf 'age_secs\t120\n'
   printf 'body\n'
   printf '# Loose Ends - test sweep\n\n## URGENT - today\n\n1. Reply to Gijs%s about the warranty claim.\n' "$inject"
+}
+
+# The pane is drawn into a real terminal, where a state dot occupies TWO columns
+# and not the one len() counts. These two helpers measure what the terminal
+# draws, so the width assertions below can talk about rendered columns without
+# restating the rule: east-asian 'W' and 'F' are two columns, and ambiguous
+# characters (the rules' ─, the · and … separators) are one, which is how the
+# terminals this pane is read in draw them.
+#
+# Emits "<chars><TAB><cols><TAB><line>" for each line of the frame on stdin.
+frame_widths() {
+  python3 -c '
+import sys, unicodedata
+for line in sys.stdin.read().split("\n"):
+    cols = sum(2 if unicodedata.east_asian_width(c) in ("W", "F") else 1 for c in line)
+    sys.stdout.write("%d\t%d\t%s\n" % (len(line), cols, line))
+'
+}
+
+# The display column each UNDER WAY row's trailing "heard" text starts at. The
+# section exists to be scanned straight down the state dot, so every row has to
+# answer with the same number however wide the glyphs in front of it are.
+under_way_offsets() {
+  python3 -c '
+import re, sys, unicodedata
+tail = re.compile(r"(heard \S+ ago|not reported yet)$")
+for line in sys.stdin.read().split("\n"):
+    match = tail.search(line)
+    if not match:
+        continue
+    head = line[: match.start()]
+    sys.stdout.write("%d\n" % sum(
+        2 if unicodedata.east_asian_width(c) in ("W", "F") else 1 for c in head))
+'
+}
+
+# The display width of every line drawn as a bare rule. The rules are the only
+# lines the frame fills edge to edge, so they pin the scale the width
+# assertions measure against.
+rule_widths() {
+  python3 -c '
+import sys, unicodedata
+for line in sys.stdin.read().split("\n"):
+    if line and set(line) == {"\u2500"}:
+        sys.stdout.write("%d\n" % sum(
+            2 if unicodedata.east_asian_width(c) in ("W", "F") else 1 for c in line))
+'
 }
 
 # No C0 (including DEL) and no C1 anywhere in a rendered frame.
@@ -399,6 +446,81 @@ EOF
   [ -n "$parked" ] && [ -n "$working" ] && [ "$parked" -lt "$working" ] \
     || fail "under way is not most-urgent-first (lines $parked, $working)"
   pass "under way gives one outcome line per worker, most urgent first"
+}
+
+# The pane is always on in a real terminal, so a row wider than the width it was
+# drawn for does not get clipped - it WRAPS, spilling its tail onto its own line
+# and breaking the one thing this section is for: scanning straight down the
+# state dot. Every state dot is an east-asian wide glyph and so is the title's
+# anchor, which len() counts as one column and a terminal draws as two, so
+# nothing that measured characters could see the overrun coming. This test
+# measures what the terminal draws, over the whole frame, at two of the widths
+# the wrap was first seen in.
+test_every_rendered_line_fits_the_width_it_was_drawn_for() {
+  local home fb cols out over rules bad wide plain header offsets rows distinct
+  read -r home fb <<EOF
+$(full_home width)
+EOF
+  # A worker that has not reported yet draws the widest row this section can:
+  # "not reported yet" is longer than any "heard <age> ago", and it carries a
+  # state dot in front of a project label and an outcome that both need cutting.
+  # Its wide glyphs also put clip() on the spot, since a cell cut by character
+  # count can stop half way through one.
+  fm_write_meta "$home/state/quiet-task.meta" \
+    "window=default:w1:p4" "kind=ship" "project=$home/projects/alpha" \
+    "herdr_project_name=Zeevaart 🚢 Noord" "harness=claude" \
+    "outcome=Wait on the vendor 🚚 for the spare part list before the quarter closes"
+
+  # 118 and 100 are the widths the wrap was first reproduced at, and both sit
+  # inside the MIN_WIDTH..MAX_WIDTH range bin/fm-deck-render.py clamps to.
+  for cols in 118 100; do
+    out=$(FM_DECK_COLUMNS="$cols" run_deck "$home" "$fb" --once 2>&1)
+
+    # 1. Nothing may overrun the frame. This is the assertion that fails when a
+    #    change goes back to counting characters.
+    over=$(printf '%s\n' "$out" | frame_widths \
+      | awk -F'\t' -v w="$cols" '$2 > w { printf "  %s cols: %s\n", $2, $3 }')
+    [ -z "$over" ] || fail "at width $cols the frame overruns and wraps:"$'\n'"$over"
+
+    # 2. And the frame must still FILL its width, so the fix cannot be "measure
+    #    everything as double and let every line fall short". The rules are the
+    #    only lines drawn to the full width, so they pin the scale.
+    rules=$(printf '%s\n' "$out" | rule_widths)
+    [ -n "$rules" ] || fail "no rule was measured at width $cols, so the scale is unpinned"
+    bad=$(printf '%s\n' "$rules" | awk -v w="$cols" '$1 != w { print; exit }')
+    [ -z "$bad" ] || fail "at width $cols a rule measured $bad columns, expected $cols"
+
+    # 3. A row that really carries a wide state dot, and a row that carries no
+    #    wide glyph at all: both must have been measured above, or this test
+    #    proves nothing about either.
+    wide=$(printf '%s\n' "$out" | awk '/UNDER WAY/,/JUST IN/' | frame_widths \
+      | awk -F'\t' '$2 > $1' | wc -l | tr -d ' ')
+    [ "$wide" -ge 1 ] \
+      || fail "at width $cols no UNDER WAY row carried a wide state dot to measure"
+    plain=$(printf '%s\n' "$out" | frame_widths \
+      | awk -F'\t' '$1 == $2 && $1 > 30 && $3 ~ /^ +[A-Za-z]/' | wc -l | tr -d ' ')
+    [ "$plain" -ge 1 ] \
+      || fail "at width $cols no plain row without a wide glyph was measured"
+
+    # 4. The header carries the clock at the right edge, so an under-measured
+    #    title splits it across two lines. It has to land exactly on the width.
+    header=$(printf '%s\n' "$out" | frame_widths | awk -F'\t' '$3 ~ /ACTION DECK/ { print $2 }')
+    [ "$header" = "$cols" ] \
+      || fail "the header measured $header columns at width $cols, so the clock wraps"
+    printf '%s\n' "$out" | grep -Eq 'ACTION DECK.*[0-9][0-9]:[0-9][0-9]:[0-9][0-9]$' \
+      || fail "at width $cols the header clock is not whole at the right edge"
+
+    # 5. The outcome column cannot shift from row to row, whatever the width of
+    #    the dot in front of it: every row hands its "heard" text to the same
+    #    display column.
+    offsets=$(printf '%s\n' "$out" | awk '/UNDER WAY/,/JUST IN/' | under_way_offsets)
+    rows=$(printf '%s\n' "$offsets" | grep -c . || true)
+    [ "$rows" -ge 4 ] || fail "only $rows UNDER WAY rows were measured at width $cols"
+    distinct=$(printf '%s\n' "$offsets" | sort -u | grep -c . || true)
+    [ "$distinct" -eq 1 ] \
+      || fail "UNDER WAY rows start their last column at $distinct different columns"
+  done
+  pass "every rendered line fits the width it was drawn for, wide state dots and all"
 }
 
 # A trailing `resolved:` line is an event about a decision, not the crew's word
@@ -879,6 +1001,7 @@ test_needs_you_carries_full_pr_urls_and_distinguishes_asks
 test_worker_status_notes_never_reach_the_pane
 test_pane_carries_no_internal_vocabulary
 test_under_way_gives_one_outcome_line_per_worker
+test_every_rendered_line_fits_the_width_it_was_drawn_for
 test_state_projection_reads_past_a_trailing_resolve
 test_resolved_decisions_project_the_waiting_state
 test_needs_you_withholds_failed_reviews_and_dedupes_by_task
