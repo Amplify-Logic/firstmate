@@ -689,22 +689,15 @@ if [ -n "$ACCOUNT_VENDOR" ] && [ -n "$FM_ACCOUNT_HOME" ]; then
   ACCOUNT_HOME=$FM_ACCOUNT_HOME
   ACCOUNT_ENV=$(fm_account_env_var "$ACCOUNT_VENDOR")
   ACCOUNT_CLI=$(launch_binary_from_command "$LAUNCH") || ACCOUNT_CLI=$ACCOUNT_VENDOR
-  ACCOUNT_LOGIN=$(fm_account_login_command "$ACCOUNT_VENDOR" "$ACCOUNT_HOME")
-  [ -d "$ACCOUNT_HOME" ] || {
-    echo "error: $ACCOUNT_VENDOR account '$ACCOUNT_NAME' has no home yet: create it with '$FM_ROOT/bin/fm-account.sh create $ACCOUNT_VENDOR $ACCOUNT_NAME', then log in with: $ACCOUNT_LOGIN" >&2
+  ACCOUNT_EXPECT=$(fm_account_expect "$(fm_account_registry_file "$CONFIG")" "$ACCOUNT_VENDOR" "$ACCOUNT_NAME")
+  # The missing-home / logged-out / wrong-seat gate lives in
+  # bin/fm-account-lib.sh, shared verbatim with bin/fm-primary.sh, so the same
+  # situation can never be refused in two different sets of words.
+  fm_account_require_usable "$ACCOUNT_VENDOR" "$ACCOUNT_HOME" "$ACCOUNT_CLI" "$ACCOUNT_NAME" \
+    "$ACCOUNT_EXPECT" "$FM_ROOT/bin/fm-account.sh create $ACCOUNT_VENDOR $ACCOUNT_NAME" || {
+    echo "error: $FM_ACCOUNT_ERROR" >&2
     exit 1
   }
-  if fm_account_logged_out "$ACCOUNT_VENDOR" "$ACCOUNT_HOME" "$ACCOUNT_CLI"; then
-    echo "error: $ACCOUNT_VENDOR account '$ACCOUNT_NAME' is not logged in at $ACCOUNT_HOME; log in with: $ACCOUNT_LOGIN (no credential is ever copied from another account)" >&2
-    exit 1
-  fi
-  ACCOUNT_EXPECT=$(fm_account_expect "$(fm_account_registry_file "$CONFIG")" "$ACCOUNT_VENDOR" "$ACCOUNT_NAME")
-  if [ -n "$ACCOUNT_EXPECT" ]; then
-    fm_account_verify_expect "$ACCOUNT_VENDOR" "$ACCOUNT_HOME" "$ACCOUNT_CLI" "$ACCOUNT_NAME" "$ACCOUNT_EXPECT" || {
-      echo "error: $FM_ACCOUNT_ERROR" >&2
-      exit 1
-    }
-  fi
 fi
 
 # config/secondmate-harness may carry optional model/effort tokens alongside the

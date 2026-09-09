@@ -365,7 +365,7 @@ That is the compatibility guarantee, and it is covered by tests in `tests/fm-pri
 The only vendors with an account concept are `claude` and `codex`.
 Each account's isolated home is DERIVED as `data/accounts/<vendor>/<name>` and is never stored in the file, so the registry cannot point a launch at an arbitrary directory.
 A claude home is exported as `CLAUDE_CONFIG_DIR` and a codex home as `CODEX_HOME`.
-Account names are one path segment of letters, digits, dot, dash, or underscore.
+Account names are one path segment of letters, digits, dot, dash, or underscore, and must start with a letter or digit.
 `label` is optional prose for the captain.
 `default` is optional and names the account used when no account is selected explicitly; it must be one of that vendor's defined accounts.
 `expect` is optional and is described below.
@@ -373,6 +373,8 @@ Account names are one path segment of letters, digits, dot, dash, or underscore.
 Selection is explicit and manual by design.
 `bin/fm-primary.sh <profile> --account <name>` pins a primary and `bin/fm-spawn.sh <id> <project> --account <name>` pins a worker, which records `account=` in that task's metadata.
 There is no automatic switching, no fallback to another account when one is exhausted, and no quota-driven selection: which account work runs on is a spend and data-boundary decision that belongs to the captain.
+For the same reason the pin survives recovery: when the session-start secondmate liveness sweep respawns a confidently dead secondmate, it reads `account=` back from that secondmate's metadata and passes it as `--account`, so a pinned secondmate can never come back on a different login.
+A secondmate with no recorded `account=` is respawned with no flag, exactly as before.
 
 Homes are created by `bin/fm-account.sh create <vendor> <name>`, which makes one empty directory and prints the login command for it.
 Firstmate never copies, links, or seeds a credential directory, `auth.json`, `.credentials.json`, or keychain entry from one account home to another or from the ambient home, and never runs a login itself.

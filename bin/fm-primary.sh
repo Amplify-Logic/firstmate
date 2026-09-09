@@ -150,6 +150,10 @@
 # Test seams:
 #   FM_PRIMARY_DRY_RUN=1 prints selected profile env lines and one
 #   shell-escaped argv line instead of exec.
+#   It exits before every credential gate - the account login/expect gate and
+#   the Codex login gate - so a missing credential can never hide argv. The
+#   preview still resolves and prints the account, because an unresolvable pin
+#   is a bad request rather than a missing credential.
 #   FM_PRIMARY_VISIBLE_PREFIX=LAB is accepted only inside a named fm-lab-*
 #   Herdr session and visibly prefixes the role so a lab can never masquerade
 #   as the captain's FIRSTMATE.
@@ -365,27 +369,17 @@ resolve_account() {
   ACCOUNT_EXPECT=$(fm_account_expect "$(fm_account_registry_file "$CONFIG")" "$vendor" "$ACCOUNT_NAME")
 }
 
-# Refuse a pinned launch whose account home is missing or logged out, naming the
-# exact command the captain runs to log that home in. No credential is ever
-# copied, linked, or seeded from another home, so a refusal here is the correct
-# outcome rather than a failure to work around.
-require_account_login() {
-  local login
+# Refuse a pinned launch whose account home is missing, logged out, or signed in
+# as a different seat than the registry declares. bin/fm-account-lib.sh owns the
+# three-step gate and its wording so this launcher and bin/fm-spawn.sh cannot
+# drift apart; here it only supplies the profile's CLI and the create command,
+# and raises the refusal through this script's own die prefix. No credential is
+# ever copied, linked, or seeded from another home, so a refusal here is the
+# correct outcome rather than a failure to work around.
+require_account_usable() {
   [ -n "$ACCOUNT_HOME" ] || return 0
-  login=$(fm_account_login_command "$ACCOUNT_VENDOR" "$ACCOUNT_HOME")
-  [ -d "$ACCOUNT_HOME" ] \
-    || die "$ACCOUNT_VENDOR account '$ACCOUNT_NAME' has no home yet: create it with '$FM_ROOT/bin/fm-account.sh create $ACCOUNT_VENDOR $ACCOUNT_NAME', then log in with: $login"
-  ! fm_account_logged_out "$ACCOUNT_VENDOR" "$ACCOUNT_HOME" "$CLI" \
-    || die "$ACCOUNT_VENDOR account '$ACCOUNT_NAME' is not logged in at $ACCOUNT_HOME; log in with: $login"
-}
-
-# Confirm a pinned home really is the seat the registry says it is, before
-# anything runs on it. Only an account that declares expect is checked; without
-# that field the launch proceeds exactly as it did.
-require_account_expect() {
-  [ -n "$ACCOUNT_HOME" ] || return 0
-  [ -n "$ACCOUNT_EXPECT" ] || return 0
-  fm_account_verify_expect "$ACCOUNT_VENDOR" "$ACCOUNT_HOME" "$CLI" "$ACCOUNT_NAME" "$ACCOUNT_EXPECT" \
+  fm_account_require_usable "$ACCOUNT_VENDOR" "$ACCOUNT_HOME" "$CLI" "$ACCOUNT_NAME" \
+    "$ACCOUNT_EXPECT" "$FM_ROOT/bin/fm-account.sh create $ACCOUNT_VENDOR $ACCOUNT_NAME" \
     || die "$FM_ACCOUNT_ERROR"
 }
 
@@ -740,8 +734,6 @@ case "$PROFILE" in
   cursor-grok) CLI=${FM_CURSOR_BIN:-agent} ;;
 esac
 require_command "$CLI"
-require_account_login
-require_account_expect
 # Exported here, before the remaining profile checks, so anything this launcher
 # asks the CLI from now on answers for the PINNED home instead of the ambient
 # one. With no pin resolved this is a no-op and the environment is untouched.
@@ -833,6 +825,12 @@ if [ "${FM_PRIMARY_DRY_RUN:-0}" = 1 ]; then
   print_argv "${argv[@]}"
   exit 0
 fi
+
+# Credential gates all sit below the dry-run exit, so a missing or wrong login
+# can never hide argv from a preview. Account RESOLUTION stays above it: which
+# account a launch would use is part of the preview, and an unresolvable pin is
+# a bad request rather than a missing credential.
+require_account_usable
 
 if [ "$PROFILE" = codex ] || [ "$PROFILE" = astra ]; then
   # Only an EXPLICIT negative blocks: "Not logged in" contains "logged in", and

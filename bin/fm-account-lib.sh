@@ -62,11 +62,17 @@ fm_account_home() {  # <data-dir> <vendor> <name>
 
 # fm_account_name_ok: an account name is one path segment of safe characters, so
 # it can never escape the derived vendor directory.
+#
+# This is the SAME rule accounts_validate applies in bin/fm-bootstrap.sh
+# (^[A-Za-z0-9][A-Za-z0-9._-]*$), deliberately: a name the session-start
+# diagnostic reports as invalid must also be refused at creation and at launch,
+# or the captain gets a permanent ACCOUNTS diagnostic for a pin that keeps
+# working. The leading character carries the same weight as the rest - a name
+# starting with a dot, dash, or underscore is refused here and there.
 fm_account_name_ok() {  # <name>
   case "$1" in
-    ''|.|..) return 1 ;;
+    ''|[!A-Za-z0-9]*) return 1 ;;
     *[!A-Za-z0-9._-]*) return 1 ;;
-    .*) return 1 ;;
     *) return 0 ;;
   esac
 }
@@ -139,7 +145,7 @@ fm_account_resolve() {  # <config-dir> <data-dir> <vendor> [<requested-name>]
     [ -n "$name" ] || return 0
   fi
   if ! fm_account_name_ok "$name"; then
-    FM_ACCOUNT_ERROR="invalid $vendor account name '$name'; use letters, digits, dot, dash, or underscore"
+    FM_ACCOUNT_ERROR="invalid $vendor account name '$name'; use letters, digits, dot, dash, or underscore, starting with a letter or digit"
     return 1
   fi
   case " $names " in
@@ -290,6 +296,37 @@ $identity
 EOF
   FM_ACCOUNT_ERROR="$vendor account '$name' expects '$expect' but $home is signed in as: $(printf '%s' "$identity" | tr '\n' ' ')"
   return 1
+}
+
+# fm_account_require_usable: the whole pre-launch gate for one pinned account, in
+# one place, so a primary and a spawn can never refuse the same situation with
+# different words.
+#
+# Three steps, in the order that makes the refusal actionable:
+#   1. no home yet      -> name the create command AND the login command
+#   2. explicitly out   -> name the login command, and say plainly that no
+#                          credential is ever copied from another account
+#   3. declares expect  -> fm_account_verify_expect proves the seat
+#
+# An empty <home> means no pin applies, which is a silent success. Callers raise
+# FM_ACCOUNT_ERROR through their own die/refusal prefix.
+fm_account_require_usable() {  # <vendor> <home> <cli-binary> <name> <expect> <create-command>
+  local vendor=$1 home=$2 cli=$3 name=$4 expect=$5 create=$6 login
+  FM_ACCOUNT_ERROR=
+  [ -n "$home" ] || return 0
+  if ! login=$(fm_account_login_command "$vendor" "$home"); then
+    FM_ACCOUNT_ERROR="no login command is known for vendor '$vendor'"
+    return 1
+  fi
+  if [ ! -d "$home" ]; then
+    FM_ACCOUNT_ERROR="$vendor account '$name' has no home yet: create it with '$create', then log in with: $login"
+    return 1
+  fi
+  if fm_account_logged_out "$vendor" "$home" "$cli"; then
+    FM_ACCOUNT_ERROR="$vendor account '$name' is not logged in at $home; log in with: $login (no credential is ever copied from another account)"
+    return 1
+  fi
+  fm_account_verify_expect "$vendor" "$home" "$cli" "$name" "$expect"
 }
 
 # fm_account_create_home: create one empty account home, 0700, and nothing else.

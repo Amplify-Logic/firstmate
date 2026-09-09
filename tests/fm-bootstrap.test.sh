@@ -824,6 +824,7 @@ non-object vendor is flagged^{"claude":"team"}^exact^ACCOUNTS: invalid config/ac
 non-object accounts is flagged^{"claude":{"accounts":["team"]}}^exact^ACCOUNTS: invalid config/accounts.json - accounts must be an object
 non-object account is flagged^{"claude":{"accounts":{"team":"Aquablu"}}}^exact^ACCOUNTS: invalid config/accounts.json - each account must be an object
 unsafe account name is flagged^{"claude":{"accounts":{"../escape":{}}}}^exact^ACCOUNTS: invalid config/accounts.json - invalid account name: ../escape
+leading-underscore account name is flagged^{"claude":{"accounts":{"_team":{}}}}^exact^ACCOUNTS: invalid config/accounts.json - invalid account name: _team
 non-string label is flagged^{"claude":{"accounts":{"team":{"label":5}}}}^exact^ACCOUNTS: invalid config/accounts.json - each label must be a string
 empty expect is flagged^{"claude":{"accounts":{"team":{"expect":""}}}}^exact^ACCOUNTS: invalid config/accounts.json - each expect must be a non-empty string
 unverifiable codex expect is flagged^{"codex":{"accounts":{"derya":{"expect":"derya@example.invalid"}}}}^exact^ACCOUNTS: invalid config/accounts.json - expect cannot be verified for this vendor: codex:derya

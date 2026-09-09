@@ -87,6 +87,18 @@ dry() { # <profile> [<args>...]
     "$ROOT/bin/fm-primary.sh" "$@" )
 }
 
+# live: the same launcher with NO dry-run seam, so everything below the dry-run
+# early exit runs - the credential gates included. The fake CLIs exec harmlessly
+# and log to $LOG, so a launch that passes every gate simply ends there.
+live() { # <profile> [<args>...]
+  ( cd "$TMP_ROOT" && \
+    PATH="$FAKEBIN:$PATH" \
+    FM_HOME="$HOME_FIX" \
+    FM_PRIMARY_TEST_LOG="$LOG" \
+    FM_KIMI_SOURCE_HOME="$KIMI_SOURCE" \
+    "$ROOT/bin/fm-primary.sh" "$@" )
+}
+
 test_profiles_and_root() {
   local out help
   help=$("$ROOT/bin/fm-primary.sh" --help)
@@ -1053,7 +1065,7 @@ test_account_login_and_identity_gates() {
 
   # A home that does not exist yet refuses with the exact login command.
   status=0
-  out=$(dry claude-fable --account team 2>&1) || status=$?
+  out=$(live claude-fable --account team 2>&1) || status=$?
   [ "$status" -ne 0 ] || fail "a missing account home was accepted"
   assert_contains "$out" "has no home yet" "refusal did not report the missing home"
   assert_contains "$out" "CLAUDE_CONFIG_DIR=$claude_team claude" "refusal did not name the exact login command"
@@ -1061,10 +1073,12 @@ test_account_login_and_identity_gates() {
   # An explicitly logged-out home refuses the same way, and copies nothing.
   mkdir -p "$claude_team"
   status=0
-  out=$( FM_PRIMARY_TEST_LOGGED_OUT=1 dry claude-fable --account team 2>&1) || status=$?
+  out=$( FM_PRIMARY_TEST_LOGGED_OUT=1 live claude-fable --account team 2>&1) || status=$?
   [ "$status" -ne 0 ] || fail "a logged-out account home was accepted"
   assert_contains "$out" "is not logged in" "refusal did not report the logged-out home"
   assert_contains "$out" "CLAUDE_CONFIG_DIR=$claude_team claude" "logged-out refusal did not name the login command"
+  assert_contains "$out" "no credential is ever copied from another account" \
+    "logged-out refusal dropped the no-credential-copying rule"
   [ -z "$(ls -A "$claude_team")" ] || fail "the account home was seeded with something"
 
   # An expect identity is verified against the pinned home before exec.
@@ -1078,16 +1092,75 @@ test_account_login_and_identity_gates() {
 }
 JSON
   status=0
-  out=$( FM_PRIMARY_TEST_CLAUDE_ORG=org-personal-0002 dry claude-fable --account team 2>&1) || status=$?
+  out=$( FM_PRIMARY_TEST_CLAUDE_ORG=org-personal-0002 live claude-fable --account team 2>&1) || status=$?
   [ "$status" -ne 0 ] || fail "a pinned home signed in as another account was accepted"
   assert_contains "$out" "expects 'org-team-0001'" "refusal did not name the expected identity"
   assert_contains "$out" "org-personal-0002" "refusal did not name the actual identity"
 
+  # A matching identity launches, and the dry-run preview of the same pin still
+  # reports the derived home.
+  : > "$LOG"
+  status=0
+  ( FM_PRIMARY_TEST_CLAUDE_ORG=org-team-0001 live claude-fable --account team >/dev/null 2>&1 ) || status=$?
+  expect_code 0 "$status" "a matching identity refused its own launch"
+  assert_contains "$(cat "$LOG")" "cli=claude" "a matching identity never reached the CLI"
   out=$( FM_PRIMARY_TEST_CLAUDE_ORG=org-team-0001 dry claude-fable --account team 2>/dev/null)
   assert_contains "$out" "CLAUDE_CONFIG_DIR=$claude_team" "a matching identity did not launch pinned"
 
   rm -f "$registry"
   pass "fm-primary: a missing, logged-out, or wrong-identity account home refuses before launch"
+}
+
+# The dry-run contract, stated in the fm-primary header and shared with the
+# Codex login gate: a preview shows argv BEFORE any credential is inspected, so
+# a missing or wrong login can never hide what would have been launched. An
+# unresolvable pin is a different thing - a bad request - and still refuses.
+test_account_credential_gates_never_hide_dry_run_argv() {
+  local out status registry="$HOME_FIX/config/accounts.json"
+  local claude_team="$HOME_FIX/data/accounts/claude/team"
+  write_account_registry
+  rm -rf "$claude_team"
+
+  out=$(dry claude-fable --account team 2>&1)
+  status=$?
+  expect_code 0 "$status" "a missing account home hid the dry-run preview"
+  assert_contains "$out" "account=team" "the preview lost the account it would have used"
+  assert_contains "$out" "CLAUDE_CONFIG_DIR=$claude_team" "the preview lost the derived home"
+  assert_contains "$out" "'claude' '--model' 'claude-fable-5-1'" "the preview lost argv"
+
+  mkdir -p "$claude_team"
+  out=$( FM_PRIMARY_TEST_LOGGED_OUT=1 dry claude-fable --account team 2>&1)
+  status=$?
+  expect_code 0 "$status" "a logged-out account home hid the dry-run preview"
+  assert_contains "$out" "'claude' '--model' 'claude-fable-5-1'" "the logged-out preview lost argv"
+
+  cat > "$registry" <<'JSON'
+{
+  "claude": {
+    "accounts": {
+      "team": {"label": "Aquablu Team", "expect": "org-team-0001"}
+    }
+  }
+}
+JSON
+  out=$( FM_PRIMARY_TEST_CLAUDE_ORG=org-personal-0002 dry claude-fable --account team 2>&1)
+  status=$?
+  expect_code 0 "$status" "a wrong-seat account home hid the dry-run preview"
+  assert_contains "$out" "'claude' '--model' 'claude-fable-5-1'" "the wrong-seat preview lost argv"
+
+  # Resolution refusals are NOT credential gates and still refuse in dry run.
+  write_account_registry
+  status=0
+  out=$(dry claude-fable --account ghost 2>&1) || status=$?
+  [ "$status" -ne 0 ] || fail "an unknown account still previewed argv"
+  assert_contains "$out" "unknown claude account 'ghost'" "unknown-account refusal was lost in dry run"
+  status=0
+  out=$(dry pi --account team 2>&1) || status=$?
+  [ "$status" -ne 0 ] || fail "a vendorless profile still previewed argv"
+  assert_contains "$out" "no vendor account to pin" "vendorless refusal was lost in dry run"
+
+  rm -f "$registry"
+  pass "fm-primary: dry run previews argv before every credential gate, and still refuses an unresolvable pin"
 }
 
 # A broken registry is a diagnostic, not an outage: bootstrap reports it, an
@@ -1166,6 +1239,7 @@ test_claude_disables_bg_shell_pressure_reap
 test_account_absent_registry_changes_nothing
 test_account_selection_and_refusals
 test_account_login_and_identity_gates
+test_account_credential_gates_never_hide_dry_run_argv
 test_account_invalid_registry_warns_without_crashing_a_launch
 test_unknown_dependency_and_integration_refusals
 test_active_lock_refusal

@@ -487,7 +487,8 @@ secondmate_liveness_sweep() {
   # MID-SESSION is a harder follow-on needing a periodic liveness beacon -
   # explicitly out of scope here.
   [ -d "$STATE" ] || return 0
-  local meta id window harness backend target verdict out
+  local meta id window harness backend target verdict out account
+  local -a respawn_args
   SECONDMATE_RESPAWNED_IDS=""
   for meta in "$STATE"/*.meta; do
     [ -f "$meta" ] || continue
@@ -509,7 +510,16 @@ secondmate_liveness_sweep() {
         ;;
       dead)
         fm_backend_kill "$backend" "$target" 2>/dev/null || true
-        if out=$(FM_SPAWN_NO_GUARD=1 "$FM_ROOT/bin/fm-spawn.sh" "$id" --secondmate 2>&1); then
+        # A pinned secondmate comes back on the SAME login it died on. Which
+        # vendor account a worker runs on is a spend and data-boundary decision
+        # the captain makes explicitly, so recovery carries account= forward
+        # rather than re-resolving it and silently landing on the vendor default.
+        # An absent account= (the unpinned case, and every meta written before
+        # account pinning existed) passes no flag at all.
+        account=$(fm_meta_get "$meta" account)
+        respawn_args=(--secondmate)
+        [ -z "$account" ] || respawn_args+=(--account "$account")
+        if out=$(FM_SPAWN_NO_GUARD=1 "$FM_ROOT/bin/fm-spawn.sh" "$id" "${respawn_args[@]}" 2>&1); then
           SECONDMATE_RESPAWNED_IDS="$SECONDMATE_RESPAWNED_IDS $id"
           :
         else

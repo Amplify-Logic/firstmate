@@ -111,6 +111,37 @@ test_unknown_vendor_and_account_refuse() {
   pass "fm-account: unknown vendors, undefined accounts, and unknown subcommands refuse"
 }
 
+# The name rule has exactly one meaning across the whole feature: what
+# bin/fm-bootstrap.sh's accounts_validate reports as an invalid account name at
+# session start is also refused here, at creation, and at launch. A name that
+# only the diagnostic rejects would leave a permanent ACCOUNTS complaint about a
+# pin that keeps working.
+test_unsafe_account_names_refuse_everywhere() {
+  local out status name
+  for name in _team -team .team ../escape 'a b'; do
+    cat > "$HOME_FIX/config/accounts.json" <<JSON
+{"claude": {"accounts": {"$name": {"label": "unsafe"}}}}
+JSON
+    status=0
+    out=$(run_account create claude "$name") || status=$?
+    [ "$status" -ne 0 ] || fail "unsafe account name '$name' was accepted"
+    assert_contains "$out" "invalid claude account name '$name'" \
+      "refusal did not name the invalid account '$name'"
+    assert_absent "$HOME_FIX/data/accounts/claude/$name" "unsafe name '$name' still created a home"
+  done
+  assert_absent "$HOME_FIX/data/accounts/claude/escape" "a traversing name escaped the vendor directory"
+
+  # A vendor default naming an unsafe account refuses the same way, with no
+  # --account flag involved at all.
+  printf '%s\n' '{"claude":{"default":"_team","accounts":{"_team":{}}}}' \
+    > "$HOME_FIX/config/accounts.json"
+  status=0
+  out=$(run_account create claude _team) || status=$?
+  [ "$status" -ne 0 ] || fail "an unsafe default account name was accepted"
+  assert_contains "$out" "invalid claude account name '_team'" "default refusal did not name the invalid account"
+  pass "fm-account: unsafe account names refuse at creation exactly as bootstrap reports them"
+}
+
 test_login_command_prints_only_the_command() {
   local out
   write_registry
@@ -124,4 +155,5 @@ test_absent_registry_refuses_every_subcommand
 test_list_reports_definitions_without_touching_anything
 test_create_makes_one_empty_home_and_prints_the_login_command
 test_unknown_vendor_and_account_refuse
+test_unsafe_account_names_refuse_everywhere
 test_login_command_prints_only_the_command
