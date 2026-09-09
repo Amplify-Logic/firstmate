@@ -535,6 +535,30 @@ EOF
   pass "needs you withholds a failed worker's pull request and asks once per task"
 }
 
+# A worker that reports done is finished, not reviewed. While its backlog row is
+# still in flight - the normal window before the merge and cleanup flow closes
+# that row - its pull request is genuinely ready to look at, and it reaches the
+# pane through that backlog row exactly as it did before a dead worker's pull
+# request was suppressed.
+test_needs_you_keeps_a_finished_workers_ready_pull_request() {
+  local home fb out needs reviews
+  read -r home fb <<EOF
+$(full_home ready)
+EOF
+  printf 'done: ready in branch\n' > "$home/state/ship-task.status"
+
+  out=$(run_deck "$home" "$fb" --once 2>&1)
+  needs=$(printf '%s\n' "$out" | awk '/NEEDS YOU/,/LOOSE ENDS/')
+  assert_contains "$needs" 'https://github.com/acme/alpha/pull/7' \
+    "a finished worker's ready pull request left the pane"
+  printf '%s\n' "$needs" | grep -q 'review .*Ship the alpha widget' \
+    || fail "the review row does not name the work that is ready"
+  reviews=$(printf '%s\n' "$needs" | grep -c 'review ' || true)
+  [ "$reviews" -eq 1 ] \
+    || fail "a finished worker's pull request produced $reviews review rows, expected 1"
+  pass "a finished worker's ready pull request still reaches needs you once"
+}
+
 # bin/fm-deck-render.py owns the frame: bin/fm-deck.sh hands it the payload and
 # it decides the sections, the counts strip, and what may reach the terminal.
 test_renderer_presents_the_payload_the_deck_collects() {
@@ -786,6 +810,7 @@ test_under_way_gives_one_outcome_line_per_worker
 test_state_projection_reads_past_a_trailing_resolve
 test_resolved_decisions_project_the_waiting_state
 test_needs_you_withholds_failed_reviews_and_dedupes_by_task
+test_needs_you_keeps_a_finished_workers_ready_pull_request
 test_renderer_presents_the_payload_the_deck_collects
 test_control_characters_never_reach_the_terminal
 test_just_in_shows_completions_with_their_artifact

@@ -411,17 +411,17 @@ def build_needs_you(tasks, backlog, limit, width):
             rows.append(("unblock", task["outcome"], "", task["project"]))
             seen_ids.add(task["id"])
 
-    # A worker owns its own pull request, so this pass decides the URL outright:
-    # recording it either way keeps the backlog's row for the same URL from
-    # re-raising a review the projection deliberately withheld. A finished or a
-    # dead worker is not a review - the first has already had its say, and the
-    # second must never be presented as work that is ready to look at.
+    # A dead worker still owns its pull request, so its URL is recorded even
+    # though no row is emitted: without that, the backlog's row for the same URL
+    # re-raises the review this pass just withheld. A finished worker is the one
+    # case the pass leaves untouched - its work IS ready to look at, and while
+    # its backlog row is still in flight that row is what carries it here.
     pr_seen = set()
     for task in tasks:
-        if not task["pr"]:
+        if not task["pr"] or task["state"] == "done":
             continue
         pr_seen.add(task["pr"])
-        if task["state"] in ("done", "failed") or task["id"] in seen_ids:
+        if task["state"] == "failed" or task["id"] in seen_ids:
             continue
         rows.append(("review", task["outcome"], task["pr"], task["project"]))
         seen_ids.add(task["id"])
