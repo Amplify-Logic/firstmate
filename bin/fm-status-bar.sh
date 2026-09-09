@@ -79,7 +79,7 @@ while [ "$#" -gt 0 ]; do
 done
 
 case "$ADAPTER" in
-  claude|pi|kimi) ;;
+  claude|pi|kimi|codex|cursor) ;;
   *) exit 0 ;;
 esac
 [ "${FM_PRIMARY_HARNESS:-}" = "$ADAPTER" ] || exit 0
@@ -114,6 +114,29 @@ normalize_cost() {
       ;;
   esac
 }
+
+if [ "$ADAPTER" = cursor ]; then
+  # Cursor CLI 2026.09.08 statusLine command payload. It exposes model and
+  # context use but no provider quota and no session cost, so both stay unknown.
+  input=$(cat 2>/dev/null || printf '')
+  if command -v jq >/dev/null 2>&1; then
+    IFS=$'\t' read -r MODEL EFFORT CONTEXT_USED <<EOF
+$(printf '%s' "$input" | jq -r '
+  [
+    (.model.display_name // .model.id // "--" | tostring),
+    (.model.param_summary // "--" | tostring),
+    (if (.context_window.used_percentage | type) == "number"
+      then (.context_window.used_percentage | floor)
+      elif (.context_window.remaining_percentage | type) == "number"
+      then ((100 - (.context_window.remaining_percentage | floor)) |
+        if . < 0 then 0 elif . > 100 then 100 else . end)
+      else "--"
+      end)
+  ] | @tsv
+' 2>/dev/null)
+EOF
+  fi
+fi
 
 if [ "$ADAPTER" = claude ]; then
   input=$(cat 2>/dev/null || printf '')
