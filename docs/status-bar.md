@@ -83,10 +83,9 @@ The extension is inert unless `bin/fm-primary.sh` supplied `FM_PRIMARY_HARNESS=p
 
 Kimi Code 0.27.0 has a native status bar but no supported plugin or configuration API for third-party status content.
 Its plugin surface provides skills, MCP servers, and lifecycle hooks, while the native footer remains internal.
-`bin/fm-primary.sh kimi-k3` therefore adds a one-row tmux companion pane only when the guarded primary runs inside tmux.
-The companion delegates to `bin/fm-status-bar.sh`, disables terminal autowrap, leaves Kimi's own footer and controls unchanged, and exits when the Kimi pane exits.
+`bin/fm-primary.sh kimi-k3` therefore attaches the shared companion pane described under "Shared companion surface" below, which leaves Kimi's own footer and controls unchanged.
 Kimi's model is known from the guarded K3 profile, while effort, context, quota, and session cost use `--` because Kimi does not expose them to the plugin or launcher.
-Outside tmux there is no non-invasive persistent Kimi surface, so the launcher leaves the native TUI untouched rather than claiming false parity.
+Outside a verified companion provider there is no non-invasive persistent Kimi surface, so the launcher leaves the native TUI untouched rather than claiming false parity.
 
 ### Cursor CLI
 
@@ -315,7 +314,8 @@ Observed output:
 ⚓ kimi-code/k3·-- │ 🧠-- ⚡-- │ 🚢0 ⏸0 ⚠0 │ 👁 NO-WATCH -- │ $-- │ 💤--
 ```
 
-`tests/fm-status-bar.test.sh` passed canonical order, threshold, placeholder, supervision-alert, Claude-payload, control-byte sanitization, exact-pane cleanup, guarded-installation, and Cursor-boundary cases.
-`tests/fm-primary.test.sh` passed the guarded Kimi companion case alongside all existing launcher cases.
+`tests/fm-status-bar.test.sh` passed canonical order, threshold, placeholder, supervision-alert, Claude-payload, Cursor-payload, account-role, control-byte sanitization, exact-pane cleanup on both companion providers, unverified-provider refusal, one-time pane clear, and guarded-installation cases.
+`tests/fm-primary.test.sh` passed the guarded tmux and herdr companion cases - including the separated refused-split and split-named-no-pane outcomes, and cleanup of only the exact pane the split returned - alongside all existing launcher cases.
+`tests/fm-cursor-statusline.test.sh` passed the installer's single-key install, exact uninstall restore, foreign-status-line refusal in both directions, cross-checkout removal, invalid-config refusal, and credentials-untouched cases.
 `tests/fm-pi-primary-types.test.sh` reported an honest skip because the host TypeScript 4.9.5 cannot parse Pi 0.80.10's declarations, while the real Pi TUI loaded and ran the TypeScript extension.
 `bin/fm-lint.sh` passed with the repository-pinned ShellCheck 0.11.0.
