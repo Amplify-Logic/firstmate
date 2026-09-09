@@ -681,6 +681,143 @@ EOF
   pass "a finished worker's ready pull request still reaches needs you once"
 }
 
+# One finished worker with a recorded pull request, and this home's backlog
+# hidden the way <condition> hides it. Prints "<home> <fakebin> <path>" on ONE
+# line, so a caller can `read -r home fb path`; no path built under
+# fm_test_tmproot can contain a space.
+backlogless_home() {  # <name> <condition> -> "<home> <fakebin> <path>"
+  local home fb
+  read -r home fb <<EOF
+$(full_home "$1")
+EOF
+  printf 'done: ready in branch\n' > "$home/state/ship-task.status"
+  case "$2" in
+    no-tool) rm -f "$fb/tasks-axi" ;;
+    no-file) rm -f "$home/data/backlog.md" ;;
+    unreadable)
+      printf '#!/usr/bin/env bash\nexit 3\n' > "$fb/tasks-axi"
+      chmod +x "$fb/tasks-axi"
+      ;;
+    manual) printf 'manual\n' > "$home/config/backlog-backend" ;;
+    *) fail "unknown masking condition $2" ;;
+  esac
+  # A pinned PATH, because the real backlog reader is installed on the machines
+  # this suite runs on: without it the "not installed" condition silently tests
+  # the real tool against the fixture backlog instead.
+  printf '%s %s %s\n' "$home" "$fb" "$fb:/usr/bin:/bin"
+}
+
+# A finished worker's pull request reaches NEEDS YOU through its backlog row, so
+# when the backlog cannot be read at all that row never arrives and the ready
+# work drops off the one pane it was certain to be seen on. Each condition below
+# hides the same backlog a different way; the pull request has to survive all
+# four, and the pane has to say why it is falling back to its own record rather
+# than presenting the work as reviewed and ready.
+test_needs_you_keeps_a_recorded_pull_request_when_the_backlog_is_unreadable() {
+  local cond home fb path out needs rows
+  for cond in no-tool no-file unreadable manual; do
+    read -r home fb path <<EOF
+$(backlogless_home "gap-$cond" "$cond")
+EOF
+    out=$(PATH="$path" run_deck "$home" "$fb" --once 2>&1)
+    needs=$(printf '%s\n' "$out" | awk '/NEEDS YOU/,/LOOSE ENDS/')
+
+    assert_contains "$needs" 'https://github.com/acme/alpha/pull/7' \
+      "$cond: the recorded pull request left the pane"
+    printf '%s\n' "$needs" | grep -q 'check .*Ship the alpha widget' \
+      || fail "$cond: the fallback row does not name the work that is waiting"
+    rows=$(printf '%s\n' "$needs" | grep -c 'https://github.com/acme/alpha/pull/7' || true)
+    [ "$rows" -eq 1 ] \
+      || fail "$cond: the pull request produced $rows rows, expected 1"
+    assert_contains "$needs" 'rows it alone would raise are missing' \
+      "$cond: the section does not say the backlog is unavailable"
+    assert_contains "$needs" 'not confirmed here' \
+      "$cond: the section does not say the fallback row is unconfirmed"
+    # A recorded URL and an old status line say the branch exists, never that
+    # its checks passed or that it is fit to merge.
+    assert_not_contains "$needs" 'green' "$cond: the pane asserted a check result"
+    assert_not_contains "$needs" 'merge' "$cond: the pane asserted merge readiness"
+    assert_not_contains "$needs" 'ready in branch' "$cond: a worker status note reached the pane"
+    # The worker-fed rows the backlog never carried are untouched by all this.
+    assert_contains "$needs" 'Rework the beta importer' "$cond: worker-fed rows stopped rendering"
+  done
+  pass "a recorded pull request survives every way this home's backlog can go unreadable"
+}
+
+# The fallback is a fallback: with the backlog readable the pane must look
+# exactly as it did, one review row carried by the backlog and no commentary
+# about a source it read without trouble.
+test_needs_you_stays_quiet_when_the_backlog_reads_normally() {
+  local home fb out needs rows
+  read -r home fb <<EOF
+$(full_home quiet-source)
+EOF
+  printf 'done: ready in branch\n' > "$home/state/ship-task.status"
+
+  out=$(run_deck "$home" "$fb" --once 2>&1)
+  needs=$(printf '%s\n' "$out" | awk '/NEEDS YOU/,/LOOSE ENDS/')
+  rows=$(printf '%s\n' "$needs" | grep -c 'https://github.com/acme/alpha/pull/7' || true)
+  [ "$rows" -eq 1 ] \
+    || fail "a readable backlog produced $rows rows for one pull request, expected 1"
+  printf '%s\n' "$needs" | grep -q 'review .*Ship the alpha widget' \
+    || fail "the backlog's own review row stopped carrying the finished work"
+  assert_not_contains "$needs" 'check ' "the fallback row fired against a readable backlog"
+  assert_not_contains "$needs" 'rows it alone would raise are missing' \
+    "a readable backlog was reported as unavailable"
+  pass "a readable backlog still carries the review row, with nothing added"
+}
+
+# The same masking condition must not invent an ask. With no pull request on
+# record there is nothing to fall back to, so the section says only what it
+# could not see and offers no row and no unconfirmed-record caveat.
+test_needs_you_invents_no_pull_request_when_none_is_recorded() {
+  local home fb path out needs
+  read -r home fb path <<EOF
+$(backlogless_home no-record no-tool)
+EOF
+  # The finished worker has no pull request at all - only a status line.
+  fm_write_meta "$home/state/ship-task.meta" \
+    "window=default:w1:p1" "kind=ship" "project=$home/projects/alpha" \
+    "herdr_project_name=Alpha" "harness=claude" \
+    "outcome=Ship the alpha widget"
+
+  out=$(PATH="$path" run_deck "$home" "$fb" --once 2>&1)
+  needs=$(printf '%s\n' "$out" | awk '/NEEDS YOU/,/LOOSE ENDS/')
+  assert_not_contains "$needs" 'https://github.com/acme/alpha/pull/7' \
+    "a pull request was shown for a worker that never recorded one"
+  assert_not_contains "$needs" 'check ' "an ask was invented with nothing behind it"
+  assert_contains "$needs" 'rows it alone would raise are missing' \
+    "the section does not say the backlog is unavailable"
+  assert_not_contains "$needs" 'not confirmed here' \
+    "the unconfirmed-record caveat was printed with no row under it"
+  pass "an unreadable backlog with no recorded pull request invents no ask"
+}
+
+# Two records of the same pull request - the worker's own and the backlog's -
+# are one thing to look at, not two. The worker here is still working, so its
+# own row is the one that renders and the backlog's must not repeat it.
+test_needs_you_shows_one_row_when_task_and_backlog_carry_the_same_pull_request() {
+  local home fb out needs rows
+  read -r home fb <<EOF
+$(full_home duplicate)
+EOF
+  printf 'working: pushed the branch\n' > "$home/state/ship-task.status"
+  # A second worker recording the identical URL: still one thing to look at.
+  fm_write_meta "$home/state/twin-task.meta" \
+    "window=default:w1:p9" "kind=ship" "project=$home/projects/alpha" \
+    "herdr_project_name=Alpha" "harness=claude" \
+    "outcome=Ship the alpha widget again" \
+    "pr=https://github.com/acme/alpha/pull/7"
+  printf 'working: pushed the same branch\n' > "$home/state/twin-task.status"
+
+  out=$(run_deck "$home" "$fb" --once 2>&1)
+  needs=$(printf '%s\n' "$out" | awk '/NEEDS YOU/,/LOOSE ENDS/')
+  rows=$(printf '%s\n' "$needs" | grep -c 'https://github.com/acme/alpha/pull/7' || true)
+  [ "$rows" -eq 1 ] \
+    || fail "one pull request with three records produced $rows rows, expected 1"
+  pass "one pull request asks for one look however many records carry it"
+}
+
 # bin/fm-deck-render.py owns the frame: bin/fm-deck.sh hands it the payload and
 # it decides the sections, the counts strip, and what may reach the terminal.
 test_renderer_presents_the_payload_the_deck_collects() {
@@ -1006,6 +1143,10 @@ test_state_projection_reads_past_a_trailing_resolve
 test_resolved_decisions_project_the_waiting_state
 test_needs_you_withholds_failed_reviews_and_dedupes_by_task
 test_needs_you_keeps_a_finished_workers_ready_pull_request
+test_needs_you_keeps_a_recorded_pull_request_when_the_backlog_is_unreadable
+test_needs_you_stays_quiet_when_the_backlog_reads_normally
+test_needs_you_invents_no_pull_request_when_none_is_recorded
+test_needs_you_shows_one_row_when_task_and_backlog_carry_the_same_pull_request
 test_renderer_presents_the_payload_the_deck_collects
 test_control_characters_never_reach_the_terminal
 test_sweep_text_cannot_forge_a_payload_section
