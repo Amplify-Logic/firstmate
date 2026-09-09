@@ -31,7 +31,7 @@ The primary-session watcher wake protocols are rendered from `docs/supervision-p
 The supervision knowledge lives here: busy signature, exit command, interrupt, dialogs, resume behavior, skill invocation, and quirks.
 
 The verified WORKER adapters are `claude`, `codex`, `opencode`, `pi`, `grok`, `cursor`, `kimi`, and `prime-agent`.
-The verified PRIMARY profiles are `pi`, `claude-fable`, `claude-opus`, `codex`, `opencode`, `grok`, `kimi-k3`, and `cursor-grok`; `bin/fm-primary.sh` owns their exact launch mechanics.
+The verified PRIMARY profiles are `pi`, `claude-fable`, `claude-opus`, `codex`, `astra`, `opencode`, `grok`, `kimi-k3`, and `cursor-grok`; `bin/fm-primary.sh` owns their exact launch mechanics.
 `cursor` is also certified as a PRIMARY through `bin/fm-primary.sh cursor-grok` (Cursor CLI `2026.08.11-e8db854`, 2026-08-13 lab); never infer worker facts from primary facts or the reverse.
 Kimi is verified as a PRIMARY through `bin/fm-primary.sh kimi-k3` and, separately, as a WORKER through `fm-spawn --harness kimi` (Kimi Code 0.27.0, 2026-07-23 lab); never infer one role from the other.
 
@@ -250,6 +250,13 @@ Verified on 2026-07-08: Codex runs the Stop hook command with process PWD set to
 The tracked hook anchors to `pwd -P`, verifies that root is firstmate-shaped and hook-bearing, and then invokes `bin/fm-turnend-guard.sh` with the original payload.
 Codex's primary watcher protocol is `bin/fm-watch-checkpoint.sh --seconds "${FM_CODEX_WATCH_CHECKPOINT:-180}"`, not `bin/fm-watch-arm.sh`.
 The checkpoint is deliberately foreground and bounded so Codex regains control regularly to process user messages and queued wakes.
+
+**Primary Astra profile (2026-09-09).**
+`bin/fm-primary.sh astra` launches the Codex CLI with `--model gpt-6-astra` and exports `FM_PRIMARY_HARNESS=codex` so supervision uses the Codex checkpoint protocol unchanged.
+`gpt-6-astra` requires a Codex build whose model catalog carries that id.
+codex-cli 0.144.6 is confirmed not to carry it.
+Its bundled catalog tops out at `gpt-5.6-luna` / `gpt-5.6-sol` / `gpt-5.6-terra`.
+The minimum Codex version that carries Astra is not established.
 
 ## opencode (VERIFIED 2026-06-11, v1.15.7-1.17.6; 1.18.4 busy-queue re-verified 2026-07-20)
 

@@ -21,6 +21,16 @@
 #                 Any other content, including an empty token, refuses.
 #   codex         codex --dangerously-bypass-hook-trust
 #                 --dangerously-bypass-approvals-and-sandbox
+#   astra         codex --model gpt-6-astra
+#                 -c model_reasoning_effort="<value>"
+#                 --dangerously-bypass-hook-trust
+#                 --dangerously-bypass-approvals-and-sandbox
+#                 Uses the first trimmed line of local gitignored
+#                 config/astra-effort when that file exists, otherwise xhigh.
+#                 Accepted tokens: low, medium, high, xhigh. max is omitted
+#                 because Codex's bundled model catalog advertises only those
+#                 four (verified on codex-cli 0.142.1); third-party write-ups
+#                 claim Astra adds max, but that is unverified here.
 #   opencode      OPENCODE_CONFIG_CONTENT={"permission":{"*":"allow"}}
 #                 opencode
 #   grok          grok --permission-mode bypassPermissions
@@ -50,6 +60,8 @@
 # that profile's guarded status-bar surface, marks only the current terminal
 # surface, then execs the CLI so sessions persist normally and the CLI exit
 # status is returned with no launcher process left behind.
+# Codex-backed profiles (codex and astra) refuse an explicitly logged-out
+# Codex CLI, which would otherwise boot the primary to a login screen.
 # When local config/primary-handoff is present and enabled, a real launch also
 # writes state/.primary-active for bin/fm-primary-handoff.sh; disabled or absent
 # config leaves that marker unwritten (docs/primary-handoff.md).
@@ -239,6 +251,32 @@ resolve_claude_effort() {
   esac
 }
 
+# Resolve Astra primary effort from local config/astra-effort.
+# An absent file defaults to xhigh. A present file must have a first line that
+# trims to exactly one accepted token; anything else, including an empty token,
+# refuses rather than falling back. Call this only for the astra profile so a
+# bad file cannot block other primaries.
+# Accepted tokens are low, medium, high, and xhigh only. max is omitted because
+# harness-adapters records that Codex's bundled model catalog advertises only
+# those four and omits max, verified on codex-cli 0.142.1. Third-party write-ups
+# claim Astra adds a max level, but that is unverified on this machine, and the
+# launcher must not pass a value we have never seen the catalog accept.
+resolve_astra_effort() {
+  local file value
+  file="${FM_CONFIG_OVERRIDE:-$FM_HOME/config}/astra-effort"
+  if [ ! -f "$file" ]; then
+    ASTRA_EFFORT=xhigh
+    return 0
+  fi
+  IFS= read -r value < "$file" || true
+  value=${value#"${value%%[![:space:]]*}"}
+  value=${value%"${value##*[![:space:]]}"}
+  case "$value" in
+    low|medium|high|xhigh) ASTRA_EFFORT=$value ;;
+    *) die "invalid effort in $file: '$value' (accepted: low medium high xhigh)" ;;
+  esac
+}
+
 mark_current_surface() {
   local role session pane source title
   role=$(visible_role)
@@ -407,7 +445,7 @@ verify_integrations() {
       ' "$FM_ROOT/.claude/settings.json" >/dev/null 2>&1 \
         || die "Claude primary integrations are incomplete"
       ;;
-    codex)
+    codex|astra)
       require_file .codex/hooks.json
       require_command jq
       jq -e '.hooks.SessionStart and .hooks.PreToolUse and .hooks.Stop' "$FM_ROOT/.codex/hooks.json" >/dev/null 2>&1 \
@@ -461,8 +499,8 @@ case "$PROFILE" in
   cursor) PROFILE=cursor-grok ;;
 esac
 case "$PROFILE" in
-  pi|claude-fable|claude-opus|codex|opencode|grok|kimi-k3|cursor-grok) ;;
-  *) die "unknown or unverified primary profile '$PROFILE' (verified: pi claude-fable claude-opus codex opencode grok kimi-k3 cursor-grok)" ;;
+  pi|claude-fable|claude-opus|codex|astra|opencode|grok|kimi-k3|cursor-grok) ;;
+  *) die "unknown or unverified primary profile '$PROFILE' (verified: pi claude-fable claude-opus codex astra opencode grok kimi-k3 cursor-grok)" ;;
 esac
 
 validate_visible_prefix
@@ -474,6 +512,7 @@ case "$PROFILE" in
   claude-fable) CLI=claude; CLAUDE_MODEL=claude-fable-5-1 ;;
   claude-opus) CLI=claude; CLAUDE_MODEL=claude-opus-5 ;;
   codex) CLI=codex ;;
+  astra) CLI=codex ;;
   opencode) CLI=opencode ;;
   grok) CLI=grok ;;
   kimi-k3) CLI=${FM_KIMI_BIN:-kimi} ;;
@@ -529,6 +568,11 @@ case "$PROFILE" in
   codex)
     argv=(codex --dangerously-bypass-hook-trust --dangerously-bypass-approvals-and-sandbox)
     ;;
+  astra)
+    resolve_astra_effort
+    argv=(codex --model gpt-6-astra -c "model_reasoning_effort=\"$ASTRA_EFFORT\"" --dangerously-bypass-hook-trust --dangerously-bypass-approvals-and-sandbox)
+    printf 'fm-primary: launching model gpt-6-astra at effort %s\n' "$ASTRA_EFFORT" >&2
+    ;;
   opencode)
     argv=(opencode)
     ;;
@@ -550,6 +594,17 @@ if [ "${FM_PRIMARY_DRY_RUN:-0}" = 1 ]; then
   [ "$PROFILE" != kimi-k3 ] || printf 'KIMI_CODE_HOME=%s\n' "$KIMI_PRIMARY_HOME"
   print_argv "${argv[@]}"
   exit 0
+fi
+
+if [ "$PROFILE" = codex ] || [ "$PROFILE" = astra ]; then
+  # Only an EXPLICIT negative blocks: "Not logged in" contains "logged in", and
+  # an unreadable status is not evidence of a logged-out CLI.
+  # Dry-run exits above so a missing credential cannot hide argv.
+  codex_status=$("$CLI" login status 2>/dev/null | head -5)
+  case "$codex_status" in
+    *'Not logged in'*|*'not logged in'*)
+      die "Codex CLI is not logged in ('$CLI login status'); the primary would boot to its login screen instead of a session" ;;
+  esac
 fi
 
 mark_current_surface
@@ -582,6 +637,10 @@ case "$PROFILE" in
     ;;
   cursor-grok)
     export FM_PRIMARY_HARNESS=cursor
+    exec "${argv[@]}"
+    ;;
+  astra)
+    export FM_PRIMARY_HARNESS=codex
     exec "${argv[@]}"
     ;;
   *) exec "${argv[@]}" ;;
