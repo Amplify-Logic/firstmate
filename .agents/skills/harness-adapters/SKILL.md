@@ -251,12 +251,17 @@ The tracked hook anchors to `pwd -P`, verifies that root is firstmate-shaped and
 Codex's primary watcher protocol is `bin/fm-watch-checkpoint.sh --seconds "${FM_CODEX_WATCH_CHECKPOINT:-180}"`, not `bin/fm-watch-arm.sh`.
 The checkpoint is deliberately foreground and bounded so Codex regains control regularly to process user messages and queued wakes.
 
-**Primary Astra profile (2026-09-09).**
+**Primary Astra profile (verified 2026-09-09, codex-cli 0.153.4).**
 `bin/fm-primary.sh astra` launches the Codex CLI with `--model gpt-6-astra` and exports `FM_PRIMARY_HARNESS=codex` so supervision uses the Codex checkpoint protocol unchanged.
 `gpt-6-astra` requires a Codex build whose model catalog carries that id.
+codex-cli 0.153.4 carries it, listed as `gpt-6-astra` and `openai.gpt-6-astra` with display name `GPT-6-Astra`.
+Verified on 2026-09-09 by live probe: `codex exec --model gpt-6-astra -c model_reasoning_effort="xhigh" --sandbox read-only "Reply with exactly: OK"` returned `OK`.
+Both primary hooks fired during that probe: SessionStart ran `bin/fm-session-start.sh` and its digest appeared in the probe output, and Stop fired.
+The SessionStart injection certified on 0.144.4 and the turn-end guard both survive the bump to 0.153.4.
 codex-cli 0.144.6 is confirmed not to carry it.
 Its bundled catalog tops out at `gpt-5.6-luna` / `gpt-5.6-sol` / `gpt-5.6-terra`.
-The minimum Codex version that carries Astra is not established.
+0.153.4 is therefore a verified-good floor and not an established minimum.
+Which build between 0.144.6 and 0.153.4 first carries Astra is not established.
 
 ## opencode (VERIFIED 2026-06-11, v1.15.7-1.17.6; 1.18.4 busy-queue re-verified 2026-07-20)
 

@@ -27,10 +27,9 @@
 #                 --dangerously-bypass-approvals-and-sandbox
 #                 Uses the first trimmed line of local gitignored
 #                 config/astra-effort when that file exists, otherwise xhigh.
-#                 Accepted tokens: low, medium, high, xhigh. max is omitted
-#                 because Codex's bundled model catalog advertises only those
-#                 four (verified on codex-cli 0.142.1); third-party write-ups
-#                 claim Astra adds max, but that is unverified here.
+#                 Accepted tokens: low, medium, high, xhigh. max is refused,
+#                 and that refusal is retained pending the separate follow-up
+#                 astra-max-effort.
 #   opencode      OPENCODE_CONFIG_CONTENT={"permission":{"*":"allow"}}
 #                 opencode
 #   grok          grok --permission-mode bypassPermissions
@@ -258,11 +257,9 @@ resolve_claude_effort() {
 # trims to exactly one accepted token; anything else, including an empty token,
 # refuses rather than falling back. Call this only for the astra profile so a
 # bad file cannot block other primaries.
-# Accepted tokens are low, medium, high, and xhigh only. max is omitted because
-# harness-adapters records that Codex's bundled model catalog advertises only
-# those four and omits max, verified on codex-cli 0.142.1. Third-party write-ups
-# claim Astra adds a max level, but that is unverified on this machine, and the
-# launcher must not pass a value we have never seen the catalog accept.
+# Accepted tokens are low, medium, high, and xhigh only. max is refused, and that
+# refusal is retained pending the separate follow-up astra-max-effort rather than
+# widened here.
 # This deliberately stays a sibling of resolve_claude_effort rather than a shared
 # parameterised helper: the accepted token sets differ on purpose, and folding
 # them together would rewrite the reader the live Fable and Opus primaries
@@ -609,7 +606,7 @@ if [ "$PROFILE" = codex ] || [ "$PROFILE" = astra ]; then
   # Codex reports the logged-out state on stderr and exits non-zero, so the
   # merged stream is the only place the negative can be read; the exit status
   # stays deliberately unread.
-  codex_status=$("$CLI" login status 2>&1 | head -5)
+  codex_status=$("$CLI" login status 2>&1)
   case "$codex_status" in
     *'Not logged in'*|*'not logged in'*)
       die "Codex CLI is not logged in ('$CLI login status'); the primary would boot to its login screen instead of a session" ;;

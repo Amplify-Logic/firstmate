@@ -647,6 +647,19 @@ test_astra_primary_profile() {
   [ "$status" -ne 0 ] || fail "a logged-out Codex CLI was accepted as a codex primary"
   assert_contains "$out" 'not logged in' "Codex logged-out refusal was unclear"
 
+  # A banner-heavy build must not be able to push the negative out of reach.
+  status=0
+  out=$(
+    env -u HERDR_ENV -u HERDR_SESSION -u HERDR_PANE_ID -u TMUX_PANE \
+      PATH="$FAKEBIN:$PATH" \
+      TERM=dumb \
+      FM_HOME="$HOME_FIX" \
+      FM_PRIMARY_TEST_CODEX_LOGIN_STATUS=$'update available: 0.153.4\nrun codex --upgrade\nconfig key deprecated\nsee docs\nreading auth\nNot logged in' \
+      "$ROOT/bin/fm-primary.sh" astra 2>&1
+  ) || status=$?
+  [ "$status" -ne 0 ] || fail "a stderr preamble hid the logged-out Codex state from the astra gate"
+  assert_contains "$out" 'not logged in' "Astra logged-out refusal was unclear behind a preamble"
+
   # A probe that fails for any other reason is not evidence of a logged-out CLI,
   # so only the message may block and never the exit status.
   : > "$LOG"

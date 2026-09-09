@@ -252,7 +252,7 @@ The file is not inherited by secondmate homes.
 `bin/fm-primary.sh` reads it only at launch.
 When the file is absent, the launcher uses `xhigh`.
 When the file is present, its first line must trim to exactly one of `low`, `medium`, `high`, or `xhigh`.
-`max` is not accepted: Codex's bundled model catalog advertises only those four (verified on codex-cli 0.142.1).
+`max` is not accepted, and that refusal is retained pending the separate follow-up astra-max-effort.
 Any other content, including an empty token, refuses rather than falling back.
 The file is not inherited by secondmate homes.
 
