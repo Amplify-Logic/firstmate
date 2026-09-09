@@ -65,6 +65,7 @@ From spawn code, `bin/fm-spawn.sh` does not put this variable on the herdr launc
 The Claude worker launch prefix only sets `CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION=false`.
 A herdr worker pane otherwise inherits the launching environment for `FM_HERDR_PROJECT_*`, which is why spawn pins or clears those two variables, but that is not evidence for this pressure-reap export.
 Whether a herdr crewmate receives the export is therefore untested.
+`bin/fm-spawn.sh` launches a Claude secondmate from that same worker prefix, so a secondmate home running its own supervision cycle is exposed wherever a crewmate is.
 The disable stays scoped to the primary on the verified tmux path, and this change does not add a worker-scoping mechanism.
 The launcher header owns the exact export.
 A Claude primary started outside that launcher must export the same variable by hand before launch.
