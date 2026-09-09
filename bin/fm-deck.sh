@@ -8,7 +8,8 @@
 #
 # Sections, most-actionable first:
 #   STAGED FOR YOUR CLICK  bin/fm-tray.sh json, grouped by standing order using
-#                          bin/fm-order.sh list (age headline, expiry countdown)
+#                          bin/fm-order.sh list --no-tray-depth (age headline,
+#                          expiry countdown)
 #   NEEDS YOU              parked and blocked work, pull requests that are ready
 #                          to review with their full URL, and durable captain
 #                          decisions; one row per worker, and a failed worker's
@@ -42,7 +43,8 @@
 # Environment:
 #   FM_HOME / FM_DATA_OVERRIDE / FM_STATE_OVERRIDE / FM_CONFIG_OVERRIDE
 #                          home and root directories
-#   FM_DECK_COLUMNS        render width; else tput cols, else 100
+#   FM_DECK_COLUMNS        render width; else COLUMNS, else the terminal's own
+#                          window size, else tput cols, else 100
 #   FM_DECK_NOW            override unix epoch for ages and the clock (tests)
 #   FM_DECK_JUST_IN        completions to show in JUST IN (default 5)
 #   FM_DECK_LOOSE_ENDS     urgent/waiting loose ends to show (default 5)
@@ -64,7 +66,22 @@ STATE="${FM_STATE_OVERRIDE:-$FM_HOME/state}"
 CONFIG="${FM_CONFIG_OVERRIDE:-$FM_HOME/config}"
 
 DEFAULT_INTERVAL=15
-SECTION_MARK='__FM_DECK_SECTION__'
+
+# The payload's section boundary carries a per-run nonce, because the payload
+# also carries text this home did not author: an inbox sweep assembled from mail
+# and chat, a worker's own outcome line, a backlog title. With a fixed sentinel
+# any one of those lines could open a section of its own and overwrite a real
+# one - a crafted sweep line could rewrite NEEDS YOU, inventing an ask or hiding
+# one. Every byte a collector prints is DATA; only this process knows what
+# STRUCTURE looks like, so no source can be quoted into a boundary.
+new_section_mark() {
+  local nonce=''
+  nonce=$( (head -c 16 /dev/urandom 2>/dev/null || true) \
+    | od -An -tx1 2>/dev/null | tr -dc 'a-f0-9' || true)
+  [ -n "$nonce" ] || nonce="$$-$(date +%s 2>/dev/null || printf '0')-${RANDOM:-0}"
+  printf '__FM_DECK_SECTION_%s__\n' "$nonce"
+}
+SECTION_MARK=$(new_section_mark)
 
 # fm_visible_state / fm_visible_icon own the captain-facing state wording.
 # shellcheck source=bin/fm-visible-format-lib.sh
@@ -102,17 +119,34 @@ now_ts() {
   date +%s
 }
 
+positive_int() {  # <value>
+  case "${1:-}" in
+    ''|*[!0-9]*) return 1 ;;
+  esac
+  [ "$1" -gt 0 ]
+}
+
+# COLUMNS first, then the terminal's own window size read off stdin, and only
+# then tput. tput answers from terminfo unless it can see a terminal on its
+# stdout, and this runs as the left side of a pipeline, so on a wide tab it
+# would report a static 80 and the width-aware columns would never engage.
+# stdin is still the tab's terminal, which is what `stty size` asks.
 render_width() {
-  local cols
+  local cols size
   if [ -n "${FM_DECK_COLUMNS:-}" ]; then
     printf '%s\n' "$FM_DECK_COLUMNS"
     return 0
   fi
-  if cols=$(tput cols 2>/dev/null) && [ -n "$cols" ] && [ "$cols" -gt 0 ] 2>/dev/null; then
-    printf '%s\n' "$cols"
-    return 0
+  cols=${COLUMNS:-}
+  if ! positive_int "$cols"; then
+    size=$(stty size 2>/dev/null || true)
+    cols=${size##* }
   fi
-  printf '%s\n' 100
+  if ! positive_int "$cols"; then
+    cols=$(tput cols 2>/dev/null || true)
+  fi
+  positive_int "$cols" || cols=100
+  printf '%s\n' "$cols"
 }
 
 meta_value() {  # <meta-file> <key>
@@ -133,7 +167,11 @@ collect_tray() {
 }
 
 collect_orders() {
-  "$SCRIPT_DIR/fm-order.sh" list 2>/dev/null || true
+  # --no-tray-depth: the pane groups staged cards by the tray rows it already
+  # read itself, so the depth fm-order.sh would otherwise compute costs two more
+  # python3 folds of the whole audit log per standing order per frame and is
+  # then thrown away. fm-order.sh stays the only reader of Status and last fire.
+  "$SCRIPT_DIR/fm-order.sh" list --no-tray-depth 2>/dev/null || true
 }
 
 collect_backlog() {

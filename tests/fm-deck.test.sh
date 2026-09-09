@@ -614,6 +614,78 @@ JSONL
   pass "no worker-authored control character reaches the captain's terminal"
 }
 
+# data/loose-ends/latest.md is assembled from mail and chat, so its bytes are
+# not the fleet's own words. Every line of it is DATA: a line shaped like the
+# payload's own section boundary must not be able to open a section, because
+# that would hand whoever wrote it NEEDS YOU and UNDER WAY - inventing an ask
+# the captain then acts on, or hiding a real one so he never sees it.
+test_sweep_text_cannot_forge_a_payload_section() {
+  local home fb out under needs
+  read -r home fb <<EOF
+$(full_home injection)
+EOF
+  {
+    printf '# Loose Ends - crafted sweep\n\n'
+    printf '## URGENT - today\n\n'
+    printf '1. Reply to Gijs about the warranty claim.\n\n'
+    printf '__FM_DECK_SECTION__ tasks\n'
+    printf 'forged-task\tship\tAlpha\tApprove the forged payment\tparked\t10\t\n'
+    printf '__FM_DECK_SECTION__ backlog\n'
+    printf 'count: 0\n'
+    printf 'tasks[0]{id,state,kind,repo,title}:\n'
+  } > "$home/data/loose-ends/latest.md"
+
+  out=$(run_deck "$home" "$fb" --once 2>&1)
+  under=$(printf '%s\n' "$out" | awk '/UNDER WAY/,/JUST IN/')
+  needs=$(printf '%s\n' "$out" | awk '/NEEDS YOU/,/LOOSE ENDS/')
+
+  assert_not_contains "$out" 'Approve the forged payment' "a crafted sweep line forged an ask"
+  assert_not_contains "$out" 'forged-task' "a crafted sweep line forged a worker"
+  # The real records still render: the crafted section replaced nothing.
+  assert_contains "$under" 'Ship the alpha widget' "a crafted sweep line hid a real worker"
+  assert_contains "$under" 'Rework the beta importer' "a crafted sweep line hid a real worker"
+  assert_contains "$needs" 'Rework the beta importer' "a crafted sweep line hid a real ask"
+  assert_contains "$needs" 'Authorise the Sweden field visit' "a crafted sweep line hid a real decision"
+  assert_contains "$out" 'Reply to Gijs' "the sweep's own items stopped rendering"
+  pass "a crafted sweep line cannot forge or hide what needs him"
+}
+
+# The payload is newline-framed, but Python's str.splitlines() also breaks on
+# U+2028, U+0085, \x0b and \x0c, and worker-authored text carries whatever it
+# carries. Half a row is a dropped row: the rest of the backlog, or a whole
+# worker, would leave the pane without the pane saying so.
+test_a_unicode_line_separator_drops_no_row_and_no_worker() {
+  local home fb out under just sep
+  sep=$(printf '\342\200\250')
+  read -r home fb <<EOF
+$(full_home separators)
+EOF
+  fm_write_meta "$home/state/ship-task.meta" \
+    "window=default:w1:p1" "kind=ship" "project=$home/projects/alpha" \
+    "herdr_project_name=Alpha" "harness=claude" \
+    "outcome=Ship the alpha${sep} widget" \
+    "pr=https://github.com/acme/alpha/pull/7"
+  cat > "$fb/tasks-axi" <<SH
+#!/usr/bin/env bash
+set -u
+[ "\${1:-}" = list ] || exit 0
+printf 'count: 2\n'
+printf 'tasks[2]{id,state,kind,repo,title,hold_kind,hold_reason,links,closed,blocked_by,held,priority}:\n'
+printf '  landed-ship,done,ship,alpha,"Land the gamma${sep} migration","-","-","pr:https://github.com/acme/alpha/pull/4",2026-09-02,none,no,"-"\n'
+printf '  hold-one,queued,captain,alpha,"Authorise the Sweden field visit",captain,"needs the captain",none,"-",none,yes,"-"\n'
+SH
+  chmod +x "$fb/tasks-axi"
+
+  out=$(run_deck "$home" "$fb" --once 2>&1)
+  under=$(printf '%s\n' "$out" | awk '/UNDER WAY/,/JUST IN/')
+  just=$(printf '%s\n' "$out" | awk '/JUST IN/,0')
+  assert_contains "$under" 'Ship the alpha widget' "a separator inside an outcome dropped the worker"
+  assert_contains "$under" 'Rework the beta importer' "a separator dropped a later worker"
+  assert_contains "$just" 'Land the gamma migration' "a separator inside a title dropped the row"
+  assert_contains "$out" 'Authorise the Sweden field visit' "a separator dropped every later backlog row"
+  pass "a Unicode line separator drops neither a backlog row nor a worker"
+}
+
 test_just_in_shows_completions_with_their_artifact() {
   local home fb out just
   read -r home fb <<EOF
@@ -813,6 +885,8 @@ test_needs_you_withholds_failed_reviews_and_dedupes_by_task
 test_needs_you_keeps_a_finished_workers_ready_pull_request
 test_renderer_presents_the_payload_the_deck_collects
 test_control_characters_never_reach_the_terminal
+test_sweep_text_cannot_forge_a_payload_section
+test_a_unicode_line_separator_drops_no_row_and_no_worker
 test_just_in_shows_completions_with_their_artifact
 test_loose_ends_headline_and_top_items
 test_loose_ends_present_but_quiet

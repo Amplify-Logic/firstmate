@@ -78,8 +78,20 @@ def parse_payload(stream, mark):
     return sections
 
 
+def payload_lines(text):
+    """Split a section on the one separator the payload is framed with.
+
+    str.splitlines() also breaks on \x0b, \x0c, U+0085, U+2028 and U+2029, and
+    worker-authored text reaches these parsers with those characters intact. One
+    of them inside a backlog title or a worker's outcome would split its row in
+    half, and half a row is dropped - silently taking the rest of the backlog or
+    that whole worker off the pane with it.
+    """
+    return text.split("\n")
+
+
 def first_line(text):
-    for line in text.splitlines():
+    for line in payload_lines(text):
         if line.strip():
             return line.strip()
     return ""
@@ -123,7 +135,7 @@ def parse_backlog(text):
     header = re.compile(r"^tasks\[\d+\]\{(?P<fields>[^}]*)\}:\s*$")
     fields = None
     rows = []
-    for line in text.splitlines():
+    for line in payload_lines(text):
         if fields is None:
             match = header.match(line.strip())
             if match:
@@ -175,9 +187,13 @@ def parse_tray(text):
 
 
 def parse_orders(text):
-    """`<slug>\\t<status line>\\ttray=<n>\\tlast_fire=<age>` into a dict."""
+    """`<slug>\\t<status line>\\t<key>=<value>...` into a dict.
+
+    The deck asks for the depth-free listing, so `tray=` is normally absent; any
+    trailing `<key>=<value>` field is read, and only last_fire is shown.
+    """
     orders = {}
-    for line in text.splitlines():
+    for line in payload_lines(text):
         if not line.strip() or "\t" not in line:
             continue
         parts = line.split("\t")
@@ -198,7 +214,6 @@ def parse_orders(text):
         orders[slug] = {
             "slug": slug,
             "status": token or "UNKNOWN",
-            "depth": fields.get("tray", "?"),
             "last_fire": fields.get("last_fire", "-"),
         }
     return orders
@@ -206,7 +221,7 @@ def parse_orders(text):
 
 def parse_tasks(text):
     rows = []
-    for line in text.splitlines():
+    for line in payload_lines(text):
         if not line.strip():
             continue
         parts = line.split("\t")
@@ -228,7 +243,7 @@ def parse_tasks(text):
 
 def parse_vocabulary(text):
     vocab = {}
-    for line in text.splitlines():
+    for line in payload_lines(text):
         parts = line.split("\t")
         if len(parts) >= 3 and parts[0]:
             vocab[parts[0]] = (parts[1], parts[2])
@@ -273,7 +288,7 @@ def parse_loose_ends(text):
     age = -1
     body_lines = []
     in_body = False
-    for line in text.splitlines():
+    for line in payload_lines(text):
         if in_body:
             body_lines.append(line)
             continue
