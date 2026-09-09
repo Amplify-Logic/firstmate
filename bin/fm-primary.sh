@@ -330,7 +330,7 @@ resolve_astra_effort() {
 profile_account_vendor() {
   case "$PROFILE" in
     claude-fable|claude-opus) printf 'claude' ;;
-    codex) printf 'codex' ;;
+    codex|astra) printf 'codex' ;;
     *) return 1 ;;
   esac
 }
@@ -740,6 +740,10 @@ esac
 require_command "$CLI"
 require_account_login
 require_account_expect
+# Exported here, before the remaining profile checks, so anything this launcher
+# asks the CLI from now on answers for the PINNED home instead of the ambient
+# one. With no pin resolved this is a no-op and the environment is untouched.
+[ -z "$ACCOUNT_HOME" ] || export "$ACCOUNT_ENV=$ACCOUNT_HOME"
 verify_integrations
 
 if [ "$PROFILE" = kimi-k3 ]; then
@@ -860,9 +864,6 @@ if [ -f "${FM_CONFIG_OVERRIDE:-$FM_HOME/config}/primary-handoff" ] \
   } > "$STATE/.primary-active"
 fi
 install_primary_status_bar
-# A pinned account is exported as its vendor's own isolation variable; with no
-# pin the ambient vendor home stays in charge exactly as before.
-[ -z "$ACCOUNT_HOME" ] || export "$ACCOUNT_ENV=$ACCOUNT_HOME"
 case "$PROFILE" in
   opencode)
     export OPENCODE_CONFIG_CONTENT='{"permission":{"*":"allow"}}'
