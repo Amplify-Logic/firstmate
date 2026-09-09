@@ -62,6 +62,8 @@
 # status is returned with no launcher process left behind.
 # Codex-backed profiles (codex and astra) refuse an explicitly logged-out
 # Codex CLI, which would otherwise boot the primary to a login screen.
+# Codex prints that negative on stderr and exits non-zero, so the gate reads the
+# merged stream and still blocks on the message alone, never on the exit status.
 # When local config/primary-handoff is present and enabled, a real launch also
 # writes state/.primary-active for bin/fm-primary-handoff.sh; disabled or absent
 # config leaves that marker unwritten (docs/primary-handoff.md).
@@ -261,6 +263,10 @@ resolve_claude_effort() {
 # those four and omits max, verified on codex-cli 0.142.1. Third-party write-ups
 # claim Astra adds a max level, but that is unverified on this machine, and the
 # launcher must not pass a value we have never seen the catalog accept.
+# This deliberately stays a sibling of resolve_claude_effort rather than a shared
+# parameterised helper: the accepted token sets differ on purpose, and folding
+# them together would rewrite the reader the live Fable and Opus primaries
+# depend on for no real saving. Revisit only if a third caller appears.
 resolve_astra_effort() {
   local file value
   file="${FM_CONFIG_OVERRIDE:-$FM_HOME/config}/astra-effort"
@@ -600,7 +606,10 @@ if [ "$PROFILE" = codex ] || [ "$PROFILE" = astra ]; then
   # Only an EXPLICIT negative blocks: "Not logged in" contains "logged in", and
   # an unreadable status is not evidence of a logged-out CLI.
   # Dry-run exits above so a missing credential cannot hide argv.
-  codex_status=$("$CLI" login status 2>/dev/null | head -5)
+  # Codex reports the logged-out state on stderr and exits non-zero, so the
+  # merged stream is the only place the negative can be read; the exit status
+  # stays deliberately unread.
+  codex_status=$("$CLI" login status 2>&1 | head -5)
   case "$codex_status" in
     *'Not logged in'*|*'not logged in'*)
       die "Codex CLI is not logged in ('$CLI login status'); the primary would boot to its login screen instead of a session" ;;

@@ -33,7 +33,12 @@ if [ "${1:-}" = status ] && [ "$(basename "$0")" = agent ]; then
   exit 0
 fi
 if [ "${1:-}" = login ] && [ "${2:-}" = status ] && [ "$(basename "$0")" = codex ]; then
-  printf '%s\n' "${FM_PRIMARY_TEST_CODEX_LOGIN_STATUS:-}"
+  # Matches codex-cli 0.144.6: the status lands on stderr with empty stdout and
+  # a non-zero exit. An empty fixture stays a quiet, non-blocking probe.
+  if [ -n "${FM_PRIMARY_TEST_CODEX_LOGIN_STATUS:-}" ]; then
+    printf '%s\n' "$FM_PRIMARY_TEST_CODEX_LOGIN_STATUS" >&2
+    exit 1
+  fi
   exit 0
 fi
 if [ "${1:-}" = doctor ] && [ "$(basename "$0")" = kimi ]; then
@@ -517,7 +522,8 @@ test_claude_effort() {
 }
 
 test_astra_primary_profile() {
-  local out status=0 effort_file="$HOME_FIX/config/astra-effort" override="$TMP_ROOT/astra-config"
+  local out status=0 probe_out probe_err
+  local effort_file="$HOME_FIX/config/astra-effort" override="$TMP_ROOT/astra-config"
   mkdir -p "$HOME_FIX/config" "$override"
 
   rm -f "$effort_file"
@@ -597,6 +603,17 @@ test_astra_primary_profile() {
   assert_contains "$out" 'harness=codex' "Astra primary did not export FM_PRIMARY_HARNESS=codex"
   assert_contains "$out" 'argv=<--model><gpt-6-astra>' "Astra primary lost the model pin at exec"
 
+  # The gate can only be trusted if the fixture speaks the stream the real CLI
+  # speaks: stderr, with nothing at all on stdout.
+  probe_out=$(FM_PRIMARY_TEST_CODEX_LOGIN_STATUS='Not logged in' \
+    "$FAKEBIN/codex" login status 2>/dev/null) || true
+  [ -z "$probe_out" ] || \
+    fail "codex login status fixture put the logged-out message on stdout, unlike the real CLI"
+  probe_err=$(FM_PRIMARY_TEST_CODEX_LOGIN_STATUS='Not logged in' \
+    "$FAKEBIN/codex" login status 2>&1 >/dev/null) || true
+  assert_contains "$probe_err" 'Not logged in' \
+    "codex login status fixture did not report the logged-out state on stderr"
+
   status=0
   out=$(PATH="$FAKEBIN:$PATH" \
     FM_HOME="$HOME_FIX" \
@@ -629,6 +646,22 @@ test_astra_primary_profile() {
   ) || status=$?
   [ "$status" -ne 0 ] || fail "a logged-out Codex CLI was accepted as a codex primary"
   assert_contains "$out" 'not logged in' "Codex logged-out refusal was unclear"
+
+  # A probe that fails for any other reason is not evidence of a logged-out CLI,
+  # so only the message may block and never the exit status.
+  : > "$LOG"
+  status=0
+  out=$(
+    env -u HERDR_ENV -u HERDR_SESSION -u HERDR_PANE_ID -u TMUX_PANE \
+      PATH="$FAKEBIN:$PATH" \
+      TERM=dumb \
+      FM_HOME="$HOME_FIX" \
+      FM_PRIMARY_TEST_LOG="$LOG" \
+      FM_PRIMARY_TEST_CODEX_LOGIN_STATUS='error: could not read auth.json' \
+      "$ROOT/bin/fm-primary.sh" astra 2>&1
+  ) || status=$?
+  [ "$status" -eq 0 ] || fail "an unreadable Codex login probe blocked the astra primary: $out"
+  assert_contains "$(cat "$LOG")" 'cli=codex' "an unreadable Codex login probe stopped the astra exec"
 
   rm -f "$effort_file"
   pass "fm-primary: astra pins gpt-6-astra, effort, Codex harness, and the Codex login gate"
