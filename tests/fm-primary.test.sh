@@ -1002,6 +1002,12 @@ test_account_selection_and_refusals() {
   assert_contains "$out" "CODEX_HOME=$codex_derya" "a valid Codex pin did not export the derived home"
   assert_not_contains "$out" 'CLAUDE_CONFIG_DIR' "a Codex pin exported a Claude home"
 
+  # astra is a Codex-vendor profile, so it takes a codex account like codex does.
+  out=$(dry astra --account derya 2>/dev/null)
+  assert_contains "$out" "account=derya" "astra did not report the pinned Codex account"
+  assert_contains "$out" "CODEX_HOME=$codex_derya" "astra did not export the derived Codex home"
+  assert_contains "$out" "'--model' 'gpt-6-astra'" "pinning an account changed the astra model"
+
   # The vendor default applies when the flag is omitted.
   out=$(dry claude-opus 2>/dev/null)
   assert_contains "$out" "account=team" "the Claude default account was not applied"

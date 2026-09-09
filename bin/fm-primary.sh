@@ -56,8 +56,8 @@
 # still refuses, because that refusal exists to keep resume arguments away from
 # the launched CLI.
 # It pins the launch to a NAMED VENDOR ACCOUNT: the Claude profiles take a claude
-# account, exported as CLAUDE_CONFIG_DIR, and codex takes a codex account,
-# exported as CODEX_HOME. A profile whose vendor has no account concept (pi,
+# account, exported as CLAUDE_CONFIG_DIR, and the Codex-backed profiles codex and
+# astra take a codex account, exported as CODEX_HOME. A profile whose vendor has no account concept (pi,
 # opencode, grok, kimi-k3, cursor-grok) refuses --account rather than ignoring it.
 # Accounts are named in local, gitignored config/accounts.json (docs/configuration.md
 # owns that schema) and their homes are DERIVED as data/accounts/<vendor>/<name>,
