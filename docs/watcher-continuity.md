@@ -21,6 +21,7 @@ After the configured retry bound is exhausted, it delivers the original wake wit
 This is deliberate Option B ordering: the fleet is protected before the model handles the wake whenever restoration succeeds, but the model is never left blind when it does not.
 
 Claude retains its native tracked background-task completion path.
+The launcher export that keeps that tracked arm from being reaped after 30 minutes without user interaction is in [Claude background-shell pressure reap](#claude-background-shell-pressure-reap).
 Its new PreToolUse continuity gate allows a first session start while the home session lock has no live holder, wake drain, arm recovery, independently fail-closed teardown, and the literal `bin/fm-supervision-sentinel.sh enable` that the session-start disarm banner names, but refuses other fleet commands while tasks are in flight and no identity-matched live watcher with a fresh beacon holds the home lock.
 Every other host-sentinel invocation - `arm`, `disarm`, `check`, a bare call, extra arguments, or any dynamically built argument - stays denied in that state, so the one command the banner instructs the owner to run is reachable without widening the gate.
 Allowing `bin/fm-session-start.sh` only while the home session lock is free stops the gate self-blocking the one command AGENTS.md section 3 mandates as a session's first without admitting a mid-session re-run or a run owned by another live session.
@@ -50,10 +51,24 @@ The wake-drain, watcher-arm, ordinary literal teardown, and exact sentinel-enabl
 The scoping is a gate over one harness's Bash tool calls, not the mutation authority itself: the session lock remains what actually gates bootstrap's mutating sweeps, and "run session-start exactly once per session" remains a behavioral contract owned by AGENTS.md section 3.
 The relation inherits the ancestry walk's own bounds - at most eight parents, matching `bin/fm-lock.sh` - and recognizes version-named harness executables through exact path components or `argv[0]` while refusing to cross a non-harness gap into an unrelated ancestor session.
 
+## Claude background-shell pressure reap
+
+On macOS, Claude Code 2.1.193 and later can terminate a main-session background shell when the OS reports memory pressure.
+By default that reap also waits until 30 minutes have passed since the last user interaction, with no turn or subagent running.
+A freshly armed watcher therefore gets no 30-minute grace once the captain has already been away that long.
+The watcher arm, the watcher, caffeinate, and the event-wait helper share one process group, so that signal takes the whole supervision cycle down together.
+`bin/fm-primary.sh` exports `CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP=1` for both `claude-fable` and `claude-opus` so the tracked arm remains the live wait.
+Every Claude crewmate that primary spawns inherits the export, so those workers also stop being reaped under memory pressure.
+That tradeoff is accepted here: the reap has only been observed killing the primary's watcher arm, and this change does not add a worker-scoping mechanism.
+The launcher header owns the exact export.
+A Claude primary started outside that launcher must export the same variable by hand before launch.
+Dated evidence is the 2026-09-03 herdr-killsweep-scout report and the 2026-09-04 `state/.watch-cycle-exits.log` cluster of 44 `arm-interrupted` TERM exits.
+The host-level sentinel below still assumes the watcher can disappear for other reasons.
+
 ## Host-level outage sentinel
 
-This mitigation does not identify or prevent the harness-level process reap.
-It assumes the watcher or away daemon can still disappear at any time and bounds detection outside that process tree.
+This mitigation still bounds detection outside the harness process tree.
+The Claude pressure-reap disable above does not cover every way a watcher or away daemon can disappear.
 
 Both supervision entries idempotently register `bin/fm-supervision-sentinel.sh` as a per-home macOS launchd agent, and both register only after observing an identity-matched live watcher with a fresh beacon.
 `bin/fm-watch-arm.sh` registers at most once per arm, once it has observed and reported a healthy watcher.
@@ -152,6 +167,7 @@ It also asserts both guidance branches verbatim, allows a genuine first run over
 `tests/fm-session-start.test.sh` proves both the deliberate disarm and the suppressed-registration cooldown reach every session-start digest with their timing and recovery command.
 `tests/fm-turnend-guard.test.sh` additionally runs the Stop hook with the sentinel enabled and every channel pointed at a recorder, proving the block still renders fast, the marker lands unclaimed, and no channel fires.
 `tests/fm-file-eventwait.test.sh` proves mailbox and inbox writes during a dead watcher or successor-arm gap expire the check marker on catch-up, unchanged paths do not double-fire, and a write hidden behind a clean wait timeout is recovered on the next loop.
+`tests/fm-primary.test.sh` proves both Claude primary launchers, including the `claude` and `opus` aliases, export `CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP=1` into the launched process and that other profiles do not.
 
 ## Sanitized live evidence, 2026-07-17
 
