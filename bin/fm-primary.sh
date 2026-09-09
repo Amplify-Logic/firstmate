@@ -309,16 +309,81 @@ mark_current_surface() {
   fi
 }
 
+# Companion status rows for the profiles whose CLI exposes no third-party
+# status-bar API that can carry Firstmate's fleet fields (Kimi, Codex, Astra).
+# Claude, Pi and Cursor use their own native surfaces instead.
+#
+# The companion is presentation only: if the session provider refuses the
+# split, the guarded launch continues with the native TUI untouched rather
+# than failing the primary.
+companion_status_profile() {  # -> "adapter<TAB>model<TAB>effort", or 1
+  case "$PROFILE" in
+    kimi-k3) printf 'kimi\tkimi-code/k3\t--' ;;
+    codex) printf 'codex\tcodex\t--' ;;
+    astra) printf 'codex\tgpt-6-astra\t%s' "${ASTRA_EFFORT:---}" ;;
+    *) return 1 ;;
+  esac
+}
+
+# install_primary_status_bar: attach the companion row through whichever
+# session provider actually owns this terminal. tmux and herdr are the two
+# verified companion providers; anything else leaves the native TUI alone.
 install_primary_status_bar() {
-  local command
-  [ "$PROFILE" = kimi-k3 ] || return 0
-  [ -n "${TMUX_PANE:-}" ] || return 0
-  require_command tmux
-  command="exec env FM_HOME=$(shell_quote "$FM_HOME") FM_PRIMARY_HARNESS=kimi $(shell_quote "$FM_ROOT/bin/fm-status-bar.sh") --adapter kimi --model kimi-code/k3 --effort -- --follow-pane $(shell_quote "$TMUX_PANE")"
-  tmux split-window -d -v -l 1 -t "$TMUX_PANE" -c "$FM_ROOT" "$command" >/dev/null 2>&1 || {
-    printf 'fm-primary: Kimi status companion unavailable; continuing with the native TUI\n' >&2
+  local spec adapter model effort command role
+
+  spec=$(companion_status_profile) || return 0
+
+  IFS=$'\t' read -r adapter model effort <<EOF
+$spec
+EOF
+
+  # An account role is rendered only when the account owner already resolved a
+  # verified name into the environment. Unknown stays unknown.
+  role=${FM_ACCOUNT_NAME:-}
+
+  # adapter, model, and effort come from the fixed profile table above (effort
+  # via the validated ASTRA_EFFORT), so they are emitted literally; the paths
+  # and the externally-resolved role are quoted.
+  command="exec env FM_HOME=$(shell_quote "$FM_HOME") FM_PRIMARY_HARNESS=$adapter"
+  [ -z "$role" ] || command="$command FM_PRIMARY_ACCOUNT_ROLE=$(shell_quote "$role")"
+  command="$command $(shell_quote "$FM_ROOT/bin/fm-status-bar.sh") --adapter $adapter"
+  command="$command --model $model --effort $effort"
+
+  if [ -n "${TMUX_PANE:-}" ] && command -v tmux >/dev/null 2>&1; then
+    command="$command -- --follow-pane $(shell_quote "$TMUX_PANE") --follow-backend tmux"
+    tmux split-window -d -v -l 1 -t "$TMUX_PANE" -c "$FM_ROOT" "$command" >/dev/null 2>&1 || {
+      printf 'fm-primary: status companion unavailable; continuing with the native TUI\n' >&2
+    }
     return 0
-  }
+  fi
+
+  if [ -n "${HERDR_PANE_ID:-}" ] && command -v herdr >/dev/null 2>&1 && command -v jq >/dev/null 2>&1; then
+    local session
+    session=${HERDR_SESSION:-default}
+    command="$command -- --follow-pane $(shell_quote "$HERDR_PANE_ID") --follow-backend herdr"
+    # Herdr's split ratio is the share the ORIGINAL pane keeps, so the agent
+    # pane needs the large share and the companion takes the remainder. The
+    # ratio floor is 0.1, which makes two rows the smallest companion.
+    herdr --session "$session" pane split "$HERDR_PANE_ID" --direction down \
+      --ratio 0.93 --no-focus --cwd "$FM_ROOT" >/dev/null 2>&1 || {
+      printf 'fm-primary: status companion unavailable; continuing with the native TUI\n' >&2
+      return 0
+    }
+    local companion
+    companion=$(herdr --session "$session" pane layout --pane "$HERDR_PANE_ID" 2>/dev/null \
+      | jq -r --arg self "$HERDR_PANE_ID" \
+        '[.result.layout.panes[]? | select(.pane_id != $self)] | last | .pane_id // empty' 2>/dev/null)
+    [ -n "$companion" ] || {
+      printf 'fm-primary: status companion unavailable; continuing with the native TUI\n' >&2
+      return 0
+    }
+    herdr --session "$session" pane run "$companion" "$command" >/dev/null 2>&1 || {
+      printf 'fm-primary: status companion unavailable; continuing with the native TUI\n' >&2
+    }
+    return 0
+  fi
+
+  return 0
 }
 
 prepare_kimi_home() {
@@ -450,6 +515,7 @@ verify_integrations() {
       ;;
     codex|astra)
       require_file .codex/hooks.json
+      require_file bin/fm-status-bar.sh
       require_command jq
       jq -e '.hooks.SessionStart and .hooks.PreToolUse and .hooks.Stop' "$FM_ROOT/.codex/hooks.json" >/dev/null 2>&1 \
         || die "Codex primary hooks are incomplete"

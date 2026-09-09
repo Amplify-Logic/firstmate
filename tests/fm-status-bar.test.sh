@@ -172,6 +172,118 @@ SH
   pass "status bar: tmux companion exits when its exact primary pane is gone"
 }
 
+test_cursor_payload_adapter_and_primary_guard() {
+  local input out
+  input='{"model":{"id":"cursor-grok-4.6","display_name":"Cursor Grok 4.6","param_summary":"high"},"context_window":{"used_percentage":42.7,"remaining_percentage":57.3}}'
+  out=$(printf '%s' "$input" | \
+    PATH="$FAKEBIN:$PATH" \
+    FM_HOME="$HOME_FIX" \
+    FM_PRIMARY_HARNESS=cursor \
+    FM_STATUS_BAR_NOW=1000 \
+    "$ROOT/bin/fm-status-bar.sh" --adapter cursor | strip_ansi)
+  assert_contains "$out" '⚓ Cursor Grok 4.6·high' "Cursor adapter did not read model and reasoning summary"
+  assert_contains "$out" '🧠42%' "Cursor adapter did not read context used"
+  # Cursor's statusLine payload carries no quota and no cost, so both must stay
+  # visibly unknown rather than being invented or silently zeroed.
+  assert_contains "$out" '⚡--' "Cursor adapter fabricated a provider quota it cannot observe"
+  assert_contains "$out" '$--' "Cursor adapter fabricated a session cost it cannot observe"
+
+  out=$(printf '%s' "$input" | \
+    PATH="$FAKEBIN:$PATH" \
+    FM_HOME="$HOME_FIX" \
+    FM_PRIMARY_HARNESS='' \
+    FM_STATUS_BAR_NOW=1000 \
+    "$ROOT/bin/fm-status-bar.sh" --adapter cursor)
+  [ -z "$out" ] || fail "Cursor status bar rendered outside the guarded primary launcher"
+  pass "status bar: Cursor payload normalization is guarded and keeps unknown metrics unknown"
+}
+
+test_account_role_label_is_verified_and_compact() {
+  local out
+  out=$(PATH="$FAKEBIN:$PATH" FM_HOME="$HOME_FIX" FM_PRIMARY_HARNESS=codex \
+    FM_STATUS_BAR_NOW=1000 \
+    "$ROOT/bin/fm-status-bar.sh" --adapter codex --model gpt-6-astra --effort high \
+      --role Plus | strip_ansi)
+  assert_contains "$out" '⚓ gpt-6-astra·high [Plus]' "role label is not attached to the model identity"
+
+  out=$(PATH="$FAKEBIN:$PATH" FM_HOME="$HOME_FIX" FM_PRIMARY_HARNESS=codex \
+    FM_STATUS_BAR_NOW=1000 FM_PRIMARY_ACCOUNT_ROLE=Team \
+    "$ROOT/bin/fm-status-bar.sh" --adapter codex --model m --effort e | strip_ansi)
+  assert_contains "$out" '[Team]' "role label is not taken from the launcher-resolved account name"
+
+  # An unknown ambient account must stay unknown, and an account IDENTIFIER
+  # must never reach the row even when the environment supplies one.
+  out=$(PATH="$FAKEBIN:$PATH" FM_HOME="$HOME_FIX" FM_PRIMARY_HARNESS=codex \
+    FM_STATUS_BAR_NOW=1000 \
+    "$ROOT/bin/fm-status-bar.sh" --adapter codex --model m --effort e | strip_ansi)
+  assert_not_contains "$out" '[' "unknown account rendered a role label anyway"
+
+  for identifier in 'a@b.com' 'acct:12345' 'team/one' 'Two Words'; do
+    out=$(PATH="$FAKEBIN:$PATH" FM_HOME="$HOME_FIX" FM_PRIMARY_HARNESS=codex \
+      FM_STATUS_BAR_NOW=1000 FM_PRIMARY_ACCOUNT_ROLE="$identifier" \
+      "$ROOT/bin/fm-status-bar.sh" --adapter codex --model m --effort e | strip_ansi)
+    assert_not_contains "$out" '[' "account identifier '$identifier' leaked into the status row"
+  done
+
+  out=$(PATH="$FAKEBIN:$PATH" FM_HOME="$HOME_FIX" FM_PRIMARY_HARNESS=codex \
+    FM_STATUS_BAR_NOW=1000 FM_PRIMARY_ACCOUNT_ROLE=ABCDEFGHIJKLMNOPQRST \
+    "$ROOT/bin/fm-status-bar.sh" --adapter codex --model m --effort e | strip_ansi)
+  assert_contains "$out" '[ABCDEFGHIJKL]' "role label was not capped to a compact width"
+  pass "status bar: account role is compact, verified, and never an identifier"
+}
+
+test_herdr_companion_exits_when_primary_pane_is_gone() {
+  local out count_file="$TMP_ROOT/herdr-count"
+  cat > "$FAKEBIN/herdr" <<'SH'
+#!/usr/bin/env bash
+count=0
+[ ! -f "$FM_STATUS_BAR_HERDR_COUNT" ] || count=$(<"$FM_STATUS_BAR_HERDR_COUNT")
+count=$((count + 1))
+printf '%s\n' "$count" > "$FM_STATUS_BAR_HERDR_COUNT"
+# The session selector must always be present, so an unscoped call can never
+# resolve against another Herdr session's pane.
+case " $* " in
+  *" --session "*) ;;
+  *) exit 1 ;;
+esac
+if [ "$count" -eq 1 ]; then
+  printf '{"result":{"pane":{"pane_id":"w9:p9"}}}\n'
+  exit 0
+fi
+printf '{"result":{"pane":{}}}\n'
+exit 0
+SH
+  chmod +x "$FAKEBIN/herdr"
+  out=$(PATH="$FAKEBIN:$PATH" \
+    FM_HOME="$HOME_FIX" \
+    FM_PRIMARY_HARNESS=codex \
+    FM_STATUS_BAR_INTERVAL=0 \
+    FM_STATUS_BAR_HERDR_COUNT="$count_file" \
+    FM_STATUS_HERDR_SESSION=default \
+    "$ROOT/bin/fm-status-bar.sh" \
+      --adapter codex \
+      --model gpt-6-astra \
+      --effort high \
+      --follow-pane w9:p9 --follow-backend herdr | strip_ansi)
+  assert_contains "$out" '⚓ gpt-6-astra·high' "Herdr companion never rendered while its pane was live"
+  # One render for the live read, then the pane resolves to nothing and the
+  # companion must stop rather than outliving the primary it follows.
+  [ "$(printf '%s' "$out" | grep -c '⚓')" -eq 1 ] \
+    || fail "Herdr companion kept rendering after its exact primary pane was gone"
+  rm -f "$FAKEBIN/herdr"
+  pass "status bar: herdr companion is session-scoped and exits when its pane is gone"
+}
+
+test_companion_backend_is_restricted_to_verified_providers() {
+  local out
+  out=$(PATH="$FAKEBIN:$PATH" FM_HOME="$HOME_FIX" FM_PRIMARY_HARNESS=codex \
+    FM_STATUS_BAR_NOW=1000 \
+    "$ROOT/bin/fm-status-bar.sh" --adapter codex --model m --effort e \
+      --follow-pane p1 --follow-backend zellij)
+  [ -z "$out" ] || fail "companion ran on an unverified session provider"
+  pass "status bar: companion refuses an unverified session provider"
+}
+
 test_tracked_adapter_wiring_and_cursor_boundary() {
   local status_command pi_extension
   status_command=$(jq -r '.statusLine.command // ""' "$ROOT/.claude/settings.json")
@@ -188,12 +300,19 @@ test_tracked_adapter_wiring_and_cursor_boundary() {
   assert_grep 'fm-primary-status-bar.ts' "$ROOT/bin/fm-primary.sh" \
     "the guarded primary launcher does not verify the Pi status-bar integration"
   assert_grep 'split-window' "$ROOT/bin/fm-primary.sh" \
-    "the guarded primary launcher does not provide Kimi's non-native tmux line"
-  assert_grep 'worker-only' "$ROOT/docs/status-bar.md" \
-    "the status-bar owner does not preserve Cursor's worker-only boundary"
-  assert_grep 'not applicable' "$ROOT/docs/status-bar.md" \
-    "the status-bar owner does not state why Cursor has no captain-facing renderer"
-  pass "status bar: tracked adapters preserve guarded installation and Cursor's worker-only boundary"
+    "the guarded primary launcher does not provide the non-native tmux companion"
+  assert_grep 'pane split' "$ROOT/bin/fm-primary.sh" \
+    "the guarded primary launcher does not provide the non-native herdr companion"
+
+  # Cursor's status line is a real native command API, so the installer writes
+  # exactly one key and never touches credentials.
+  assert_grep 'statusLine' "$ROOT/bin/fm-cursor-statusline.sh" \
+    "the Cursor installer does not install the native statusLine key"
+  assert_not_contains "$(cat "$ROOT/bin/fm-cursor-statusline.sh")" 'auth.json' \
+    "the Cursor installer touches credential storage"
+  assert_grep 'fm-cursor-statusline.sh' "$ROOT/docs/status-bar.md" \
+    "the status-bar owner does not document the Cursor activation route"
+  pass "status bar: tracked adapters preserve guarded installation across native and companion surfaces"
 }
 
 test_contract_order_and_fleet_projection
@@ -201,4 +320,8 @@ test_threshold_colors_and_placeholders
 test_no_watch_is_bright_red_when_missing_or_stale
 test_claude_payload_adapter_and_primary_guard
 test_follow_mode_exits_when_primary_pane_is_gone
+test_cursor_payload_adapter_and_primary_guard
+test_account_role_label_is_verified_and_compact
+test_herdr_companion_exits_when_primary_pane_is_gone
+test_companion_backend_is_restricted_to_verified_providers
 test_tracked_adapter_wiring_and_cursor_boundary

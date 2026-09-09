@@ -8,7 +8,7 @@ This file is the single owner of the Firstmate primary status-bar contract.
 After ANSI styling is removed, every renderer uses this field order:
 
 ```text
-⚓ <model>·<effort> │ 🧠<context-used> ⚡<provider-quota-used> │ 🚢<active> ⏸<paused> ⚠<attention> │ 👁 <supervision> │ $<session-cost> │ 💤<afk>
+⚓ <model>·<effort> [<account-role>] │ 🧠<context-used> ⚡<provider-quota-used> │ 🚢<active> ⏸<paused> ⚠<attention> │ 👁 <supervision> │ $<session-cost> │ 💤<afk>
 ```
 
 The separator is one space, a dim `│`, and one space.
@@ -18,6 +18,7 @@ Width-constrained surfaces clip or truncate the canonical line without wrapping 
 | Field | Meaning | Placeholder |
 | --- | --- | --- |
 | `⚓ model·effort` | The active model and reasoning or thinking effort reported by the orchestrator. | `--` for either unavailable value. |
+| `[account-role]` | A compact role word for the vendor account this primary is running on, attached to the model identity rather than forming its own group. | Omitted entirely when the account is unknown. |
 | `🧠 context` | The integer percentage of the model context window already used. | `--` when the orchestrator does not expose current context use. |
 | `⚡ quota` | The integer percentage of the provider's short-window quota already used. | `--` when the provider or orchestrator does not expose quota. |
 | `🚢 active` | Ordinary task records currently owned by this Firstmate home, excluding persistent second mates. | `0` when no ordinary tasks exist. |
@@ -26,6 +27,14 @@ Width-constrained surfaces clip or truncate the canonical line without wrapping 
 | `👁 supervision` | Age in seconds of `state/.last-watcher-beat`. | Bright-red `NO-WATCH --` when the beacon is missing or unreadable. |
 | `$ cost` | Cumulative cost in US dollars for the current orchestrator session, rounded to two decimals. | `$--` when the orchestrator does not expose cost. |
 | `💤 AFK` | Whether the Firstmate home is in away mode. | Dim `💤--` when away mode is off. |
+
+The account role is dim, at most twelve characters, and is a ROLE word such as `Team`, `Max`, or `Plus`.
+It is rendered only from a verified account name supplied by the launcher, which passes the account owner's
+`FM_ACCOUNT_NAME` through `FM_PRIMARY_ACCOUNT_ROLE`, or from an explicit `--role`.
+An unknown ambient account renders no label at all instead of a guess.
+A value that looks like an identifier rather than a role - one containing `@`, `:`, `/`, or a space - is
+dropped, so an account ID or email address can never reach the status row.
+This field consumes whatever account identity the account owner resolves; it never defines its own.
 
 Counts are cheap local projections, not full worker reconciliation.
 An ordinary task remains active while its metadata exists, including the interval between completion and cleanup.
@@ -78,11 +87,79 @@ Outside tmux there is no non-invasive persistent Kimi surface, so the launcher l
 
 ### Cursor CLI
 
-Cursor CLI is worker-only in the status-bar owner: there is no captain-facing Cursor status renderer, and a Cursor primary profile must not gain one as part of status-bar work.
-A captain-facing Cursor renderer is therefore not applicable.
-Cursor CLI exposes no supported third-party status-line, footer, or terminal-UI API, as recorded in [`cursor-harness.md`](cursor-harness.md#8-extension--status-line-surface).
-`bin/fm-primary.sh cursor-grok` certifies primary supervision separately and deliberately installs no companion status bar.
-Adding a wrapper-owned line solely for display would falsely imply a status-line API exists, so the closest safe implementation remains no installation.
+Cursor CLI 2026.09.08 exposes a native custom status line: a single `statusLine` object of
+`{type: "command", command, padding?, updateIntervalMs?, timeoutMs?}` in its user configuration.
+The command receives a JSON payload on stdin and its stdout is rendered as the status row.
+This supersedes the earlier record that Cursor had no third-party status surface.
+`bin/fm-status-bar.sh --adapter cursor` consumes `model.display_name` (falling back to `model.id`),
+`model.param_summary` as effort, and `context_window.used_percentage` with the same
+`remaining_percentage` fallback the Claude adapter uses.
+The payload carries no provider quota and no session cost, so `⚡` and `$` stay `--` rather than being
+derived from anything else.
+
+Scope matters here: Cursor validates `statusLine` only in the user-level `cli-config.json`.
+A tracked per-project `.cursor/cli.json` is rejected with `Unrecognized key(s) in object: 'statusLine'`,
+so Cursor has no tracked in-repo integration equivalent to `.claude/settings.json`.
+Activation is therefore an explicit opt-in through [`bin/fm-cursor-statusline.sh`](../bin/fm-cursor-statusline.sh),
+which writes only that one key into the configuration the captain already uses, after taking a timestamped
+backup, and whose `uninstall` restores the previous state.
+It preserves every other setting, refuses a foreign status line in both directions, refuses an unparseable
+config rather than rewriting it, and never reads, copies, or links credentials.
+Cursor stores authentication outside the config directory, so the existing login is unaffected either way.
+The installed command is inert unless `bin/fm-primary.sh` supplied `FM_PRIMARY_HARNESS=cursor`, so an
+unguarded manual `cursor-agent` run renders nothing.
+
+Cursor remains worker-first in dispatch; this section governs display only, and installing the row neither
+creates a Cursor primary profile nor changes worker routing.
+
+### Codex and Astra
+
+Codex 0.153.4 has a native status line, but it is a fixed-item selector configured by `/statusline` and
+persisted as exactly two keys, `status_line` and `status_line_use_colors`.
+There is no command, script, or plugin variant, and its items cannot express Firstmate's fleet counts,
+supervision freshness, or away state.
+The two surfaces are therefore complementary rather than alternatives.
+
+Codex's own items do expose model, effort, context, and both usage windows, so the recommended native
+selection - set through `/statusline`, or in `$CODEX_HOME/config.toml` - is:
+
+```toml
+[tui]
+status_line = ["model-with-reasoning", "context-used", "five-hour-limit", "weekly-limit"]
+status_line_use_colors = true
+```
+
+`model-with-reasoning` renders model and reasoning effort together; `context-used`, `five-hour-limit`, and
+`weekly-limit` are Codex's own context and usage-window items.
+Codex silently ignores an unrecognized item id, so a mistyped entry disappears rather than erroring.
+
+Alongside that, `bin/fm-primary.sh` attaches the shared Firstmate companion row for the `codex` and `astra`
+profiles, carrying the fields Codex cannot show.
+The companion reports the model from the guarded profile - `gpt-6-astra` for `astra`, with the effort
+`config/astra-effort` resolved - while context, quota, and cost stay `--` because Codex exposes none of them
+to a companion process.
+Codex reports a single `all_models` availability scope, so Astra draws on the ordinary Codex windows: there is
+no separate Astra allowance, and none is displayed.
+
+### Shared companion surface
+
+Kimi, Codex, and Astra share one companion implementation rather than three.
+`bin/fm-status-bar.sh --follow-pane <pane> --follow-backend <tmux|herdr>` runs a one-row loop that disables
+autowrap, clips the canonical line instead of wrapping it, and exits as soon as its exact primary pane is gone.
+Only `tmux` and `herdr` are accepted; any other value renders nothing rather than guessing.
+
+`bin/fm-primary.sh` picks the provider that actually owns the terminal: `TMUX_PANE` selects tmux, and
+`HERDR_PANE_ID` selects Herdr. Herdr calls are always `--session`-scoped so an unscoped call can never
+resolve against another session's pane.
+
+Two Herdr details are load-bearing and were measured rather than assumed.
+`herdr pane split --ratio` is the share the ORIGINAL pane keeps, so the companion is created with a HIGH
+ratio and takes the remainder.
+The ratio is clamped to a 0.1 minimum, which makes two rows the smallest achievable companion, so the Herdr
+row is two rows tall where tmux uses one.
+
+If the session provider refuses the split, the guarded launch continues with the native TUI untouched rather
+than failing the primary.
 
 ## Local activation after merge
 
