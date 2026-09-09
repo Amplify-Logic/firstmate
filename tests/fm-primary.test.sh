@@ -406,6 +406,9 @@ case "${1:-}" in
     printf '{"result":{"type":"ok"}}\n'
     ;;
   layout)
+    # Between these two reads a co-tenant pane (w1:p0) appears alongside the
+    # split's own pane, so a before/after comparison cannot tell them apart and
+    # sorts the co-tenant first. It must never be a candidate for closing.
     count=0
     [ ! -f "$FM_PRIMARY_TEST_PANE_COUNT" ] || count=$(<"$FM_PRIMARY_TEST_PANE_COUNT")
     count=$((count + 1))
@@ -413,14 +416,16 @@ case "${1:-}" in
     if [ "$count" -eq 1 ]; then
       printf '{"result":{"layout":{"panes":[{"pane_id":"w1:p1"}]}}}\n'
     else
-      printf '{"result":{"layout":{"panes":[{"pane_id":"w1:p1"},{"pane_id":"w1:p2"}]}}}\n'
+      printf '{"result":{"layout":{"panes":[{"pane_id":"w1:p0"},{"pane_id":"w1:p1"},{"pane_id":"w1:p2"}]}}}\n'
     fi
     ;;
   close)
     printf 'closed=%s\n' "$2" >> "$FM_PRIMARY_TEST_LOG"
+    [ "${FM_PRIMARY_TEST_CLOSE_FAILS:-0}" = 1 ] && exit 1
     ;;
   run)
     printf 'ran=%s\n' "$2" >> "$FM_PRIMARY_TEST_LOG"
+    [ "${FM_PRIMARY_TEST_RUN_FAILS:-0}" = 1 ] && exit 1
     ;;
 esac
 exit 0
@@ -436,12 +441,14 @@ SH
     HERDR_SESSION=fm-lab-status \
     HERDR_PANE_ID=w1:p1 \
     "$ROOT/bin/fm-primary.sh" codex 2>&1)
-  assert_contains "$out" 'closed the new pane w1:p2' \
+  assert_contains "$out" 'did not name it' \
     "a split that succeeded without naming its pane was not reported as such"
   assert_not_contains "$out" 'continuing with the native TUI' \
     "an already-shrunk primary was reported as an untouched native TUI"
-  assert_contains "$(cat "$log")" 'closed=w1:p2' \
-    "the pane the split created was left orphaned below the primary"
+  # An unnamed pane is left alone: guessing which pane to close can destroy a
+  # co-tenant the captain is using, which is worse than one unused pane.
+  assert_not_contains "$(cat "$log")" 'closed=' \
+    "a pane the split never named was closed on a guess"
   assert_not_contains "$(cat "$log")" 'ran=' \
     "the renderer was started in a pane the split never named"
 
@@ -463,6 +470,53 @@ SH
     "a refused split closed a pane it never created"
   make_cli herdr
   pass "fm-primary: a refused herdr split and an unnamed companion pane are reported apart"
+}
+
+test_herdr_cleanup_only_ever_closes_the_pane_the_split_named() {
+  local out log="$TMP_ROOT/herdr-cleanup-log"
+  : > "$log"
+  cat > "$FAKEBIN/herdr" <<'SH'
+#!/usr/bin/env bash
+[ "${1:-}" = --session ] || exit 1
+shift 2
+[ "${1:-}" = pane ] || exit 1
+shift
+case "${1:-}" in
+  split)
+    printf '{"result":{"type":"pane_info","pane":{"pane_id":"w1:p2"}}}\n'
+    ;;
+  layout)
+    printf '{"result":{"layout":{"panes":[{"pane_id":"w1:p0"},{"pane_id":"w1:p1"},{"pane_id":"w1:p2"}]}}}\n'
+    ;;
+  close)
+    printf 'closed=%s\n' "$2" >> "$FM_PRIMARY_TEST_LOG"
+    ;;
+  run)
+    printf 'ran=%s\n' "$2" >> "$FM_PRIMARY_TEST_LOG"
+    exit 1
+    ;;
+esac
+exit 0
+SH
+  chmod +x "$FAKEBIN/herdr"
+  out=$(env -u HERDR_ENV -u TMUX_PANE \
+    PATH="$FAKEBIN:$PATH" \
+    TERM=dumb \
+    FM_HOME="$HOME_FIX" \
+    FM_PRIMARY_TEST_LOG="$log" \
+    HERDR_SESSION=fm-lab-status \
+    HERDR_PANE_ID=w1:p1 \
+    "$ROOT/bin/fm-primary.sh" codex 2>&1)
+  assert_contains "$(cat "$log")" 'closed=w1:p2' \
+    "a companion that could not start left its own pane below the primary"
+  assert_not_contains "$(cat "$log")" 'closed=w1:p0' \
+    "cleanup closed a co-tenant pane the split never created"
+  assert_not_contains "$(cat "$log")" 'closed=w1:p1' \
+    "cleanup closed the captain's own primary pane"
+  assert_contains "$out" 'closed its pane w1:p2' \
+    "the companion failure did not name the pane it cleaned up"
+  make_cli herdr
+  pass "fm-primary: companion cleanup closes only the exact pane the split returned"
 }
 
 test_kimi_version_doctor_and_symlink_refusals() {
@@ -878,6 +932,7 @@ test_kimi_tmux_companion_status_bar
 test_tmux_companion_command_renders_the_canonical_row
 test_herdr_companion_command_renders_in_the_pane_the_split_created
 test_herdr_split_outcomes_are_reported_separately
+test_herdr_cleanup_only_ever_closes_the_pane_the_split_named
 test_kimi_version_doctor_and_symlink_refusals
 test_kimi_corrupt_source_registry_atomicity
 test_lab_role_guard

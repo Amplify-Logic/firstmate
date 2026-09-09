@@ -325,15 +325,6 @@ companion_status_profile() {  # -> "adapter<TAB>model<TAB>effort", or 1
   esac
 }
 
-# herdr_tab_pane_ids: the sorted pane ids sharing the given pane's tab. Used
-# only to identify a pane that a successful split created but did not name, so
-# it can be closed instead of orphaned; never to choose where a renderer runs.
-herdr_tab_pane_ids() {  # <session> <pane_id>
-  herdr --session "$1" pane layout --pane "$2" 2>/dev/null \
-    | jq -r '.result.layout.panes[]?.pane_id // empty' 2>/dev/null \
-    | LC_ALL=C sort -u
-}
-
 # install_primary_status_bar: attach the companion row through whichever
 # session provider actually owns this terminal. tmux and herdr are the two
 # verified companion providers; anything else leaves the native TUI alone.
@@ -367,7 +358,7 @@ EOF
   fi
 
   if [ -n "${HERDR_PANE_ID:-}" ] && command -v herdr >/dev/null 2>&1 && command -v jq >/dev/null 2>&1; then
-    local session companion split_out before orphan
+    local session companion split_out
     session=${HERDR_SESSION:-default}
     # The companion follows the session it was launched from; a pane's
     # environment does not carry HERDR_SESSION, so re-deriving it inside the new
@@ -378,14 +369,15 @@ EOF
     # pane needs the large share and the companion takes the remainder. The
     # ratio floor is 0.1, which makes two rows the smallest companion.
     #
-    # The renderer only ever runs in the pane the split itself reported. Picking
-    # a pane out of the tab's layout instead would resolve to a pre-existing
-    # co-tenant (an AFK split, the Action Deck) and take over its top row.
+    # The split response is the only authority for the pane this call created.
+    # Both running the renderer and closing an unused companion use that exact
+    # id: a pane inferred from the tab - positionally, or by diffing the tab
+    # before and after - can be a co-tenant created by something else (an AFK
+    # split, the Action Deck), and closing one of those destroys live work.
     #
     # A refused split and a split that succeeded but named no pane are different
     # outcomes: the second has already shrunk the primary, so herdr's own exit
     # status is read separately from the parse that follows it.
-    before=$(herdr_tab_pane_ids "$session" "$HERDR_PANE_ID")
     split_out=$(herdr --session "$session" pane split "$HERDR_PANE_ID" --direction down \
       --ratio 0.93 --no-focus --cwd "$FM_ROOT" 2>/dev/null) || {
       printf 'fm-primary: status companion unavailable; continuing with the native TUI\n' >&2
@@ -394,19 +386,17 @@ EOF
     companion=$(printf '%s' "$split_out" \
       | jq -r '(.result.pane.pane_id // .result.root_pane.pane_id // .result.pane_id) // empty' 2>/dev/null)
     if [ -z "$companion" ] || [ "$companion" = "$HERDR_PANE_ID" ]; then
-      orphan=$(comm -13 <(printf '%s\n' "$before" | grep -v '^$') \
-        <(herdr_tab_pane_ids "$session" "$HERDR_PANE_ID" | grep -v '^$') | head -1)
-      if [ -n "$orphan" ] && [ "$orphan" != "$HERDR_PANE_ID" ] \
-        && herdr --session "$session" pane close "$orphan" >/dev/null 2>&1; then
-        printf 'fm-primary: herdr split the pane but did not name it; closed the new pane %s and continued with the native TUI\n' \
-          "$orphan" >&2
-      else
-        printf 'fm-primary: herdr split the pane but did not name it and it could not be closed; the primary is sharing its tab with an empty pane\n' >&2
-      fi
+      printf 'fm-primary: herdr split the pane but did not name it, so no pane can be safely closed; the primary is sharing its tab with an empty pane\n' >&2
       return 0
     fi
     herdr --session "$session" pane run "$companion" "$command" >/dev/null 2>&1 || {
-      printf 'fm-primary: status companion unavailable; continuing with the native TUI\n' >&2
+      if herdr --session "$session" pane close "$companion" >/dev/null 2>&1; then
+        printf 'fm-primary: the status companion could not start; closed its pane %s and continued with the native TUI\n' \
+          "$companion" >&2
+      else
+        printf 'fm-primary: the status companion could not start and its pane %s could not be closed; the primary is sharing its tab with an empty pane\n' \
+          "$companion" >&2
+      fi
     }
     return 0
   fi

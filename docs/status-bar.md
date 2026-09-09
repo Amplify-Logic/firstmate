@@ -182,9 +182,15 @@ row is two rows tall where tmux uses one.
 If the session provider refuses the split, the guarded launch continues with the native TUI untouched rather
 than failing the primary.
 A split that SUCCEEDS but does not name its new pane is a different outcome and is reported as one: the
-primary has already been shrunk by then, so the launcher identifies the pane that appeared, closes it, and
-says so instead of claiming the TUI is untouched.
-That layout comparison is used only to close an unnamed pane, never to choose where the renderer runs.
+primary has already been shrunk by then, so the launcher says the tab is now sharing an empty pane instead
+of claiming the TUI is untouched.
+The split response is the only authority for which pane that call created, and it governs both where the
+renderer runs and which pane may be closed.
+A pane is never identified positionally from the tab's layout, nor by diffing the tab before and after the
+split: either can resolve to a co-tenant created by something else - an AFK split, the Action Deck - and
+closing one of those would destroy live work.
+So when the response names no pane, nothing is closed at all; an unused pane is strictly better than a
+destroyed one.
 
 ## Local activation after merge
 
