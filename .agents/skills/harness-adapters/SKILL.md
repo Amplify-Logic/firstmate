@@ -178,6 +178,28 @@ The supported launch-profile flags below are verified locally; each row records 
 When a requested effort value is outside the harness-specific accepted set, `fm-spawn` records the requested `effort=` in meta but emits no effort flag for that harness.
 This preserves launch success instead of passing a known-bad value.
 
+## Vendor account pinning (verified 2026-09-09)
+
+Only two harnesses have a vendor account concept, and each has its own isolation variable.
+A claude launch pins with `CLAUDE_CONFIG_DIR` and a codex launch with `CODEX_HOME`, both pointing at a home derived as `data/accounts/<vendor>/<name>`.
+`bin/fm-primary.sh <profile> --account <name>` pins a primary, `bin/fm-spawn.sh ... --account <name>` pins a worker and records `account=` in that task's metadata, and `docs/configuration.md` "Vendor account pinning" owns the registry schema.
+An absent `config/accounts.json` means no pinning at all, so every launch behaves exactly as it did before this existed.
+`--account` on a harness or profile with no vendor account concept refuses rather than being ignored.
+
+Never copy, link, or seed a credential directory, `auth.json`, `.credentials.json`, or keychain entry between account homes or from the ambient home.
+A fresh account home is empty and unauthenticated on purpose; the captain logs it in with the command `bin/fm-account.sh create <vendor> <name>` prints.
+A pinned home that is missing or explicitly logged out refuses the launch, and that refusal is the correct outcome.
+
+Operating facts that decide whether a pin can work at all:
+
+- codex isolates completely. `auth.json` lives inside `CODEX_HOME`, so two codex accounts are two independent logins (codex-cli 0.153.4: ambient home `Logged in using ChatGPT`, override home `Not logged in`).
+- claude on macOS does NOT isolate its credential. Claude Code 2.1.258 reads the keychain credential only when `CLAUDE_CONFIG_DIR` is UNSET; setting it, even to the default `~/.claude`, reports `loggedIn: false` and a real run answers `Not logged in - Please run /login`.
+- The macOS login keychain holds a single `Claude Code-credentials` item keyed by service plus the macOS username, with nothing referencing a config directory. Whether two Claude seats can be logged in at once on one machine is UNPROVEN; do not tell the captain parallel Claude seats work until a login proves it.
+- `claude auth status` prints JSON on stdout and exits 1 even when it succeeds, so read the `loggedIn` field and never the exit status.
+- `codex login status` prints `Logged in using ChatGPT` on stdout and `Not logged in` on stderr, and exposes no account identity at all.
+- Because codex reports no identity, an `expect` value is accepted only for claude accounts; on a codex account it is reported as invalid rather than matched against something invented. `quota-axi --provider codex` does report the identity of a pinned home and would be the surface to use if that check is ever wanted.
+- `quota-axi` 0.1.41 follows both pins rather than reporting the ambient account, and declines to attribute the shared macOS keychain credential to a pinned Claude home. A pinned Claude account's quota may therefore be unreadable until that home holds its own credentials file.
+
 ## no-mistakes skill invocation
 
 Send the validation skill using the target harness's skill invocation form.

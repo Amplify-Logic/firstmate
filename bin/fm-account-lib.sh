@@ -23,12 +23,14 @@
 # Error reporting: a function that refuses sets FM_ACCOUNT_ERROR to the reason
 # and returns 1, so each caller can raise it through its own die/refusal prefix
 # instead of this library guessing which script it is running inside.
-# FM_ACCOUNT_NAME and FM_ACCOUNT_HOME are the matching output globals.
+# FM_ACCOUNT_NAME and FM_ACCOUNT_HOME are the matching output globals, and
+# FM_ACCOUNT_WARNING carries a non-fatal note the caller should print.
 
 # shellcheck source=bin/fm-timeout-lib.sh
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/fm-timeout-lib.sh"
 
 FM_ACCOUNT_ERROR=
+FM_ACCOUNT_WARNING=
 FM_ACCOUNT_NAME=
 FM_ACCOUNT_HOME=
 
@@ -98,6 +100,7 @@ fm_account_resolve() {  # <config-dir> <data-dir> <vendor> [<requested-name>]
   local config_dir=$1 data_dir=$2 vendor=$3 requested=${4:-}
   local file names name
   FM_ACCOUNT_ERROR=
+  FM_ACCOUNT_WARNING=
   FM_ACCOUNT_NAME=
   FM_ACCOUNT_HOME=
   file=$(fm_account_registry_file "$config_dir")
@@ -108,13 +111,26 @@ fm_account_resolve() {  # <config-dir> <data-dir> <vendor> [<requested-name>]
     fi
     return 0
   fi
+  # An unreadable registry refuses an EXPLICIT pin, because that request cannot
+  # be honored - but it must never take down a launch that asked for no pin at
+  # all. Bootstrap reports the broken file as its own ACCOUNTS diagnostic; here
+  # the launch warns and continues on the ambient vendor home, which is exactly
+  # what it would have used with no registry present.
   if ! command -v jq >/dev/null 2>&1; then
-    FM_ACCOUNT_ERROR="$file exists but 'jq' is not on PATH, so the pinned account cannot be resolved"
-    return 1
+    if [ -n "$requested" ]; then
+      FM_ACCOUNT_ERROR="$file exists but 'jq' is not on PATH, so account '$requested' cannot be resolved"
+      return 1
+    fi
+    FM_ACCOUNT_WARNING="$file cannot be read without 'jq'; launching on the ambient account"
+    return 0
   fi
   if ! jq -e . "$file" >/dev/null 2>&1; then
-    FM_ACCOUNT_ERROR="$file is not valid JSON; fix it or remove it (an absent file means no account pinning)"
-    return 1
+    if [ -n "$requested" ]; then
+      FM_ACCOUNT_ERROR="$file is not valid JSON, so account '$requested' cannot be resolved; fix it or remove it (an absent file means no account pinning)"
+      return 1
+    fi
+    FM_ACCOUNT_WARNING="$file is not valid JSON; launching on the ambient account"
+    return 0
   fi
   names=$(fm_account_defined_names "$file" "$vendor")
   name=$requested
@@ -178,6 +194,97 @@ fm_account_logged_out() {  # <vendor> <home> <cli-binary>
       esac
       ;;
   esac
+  return 1
+}
+
+# fm_account_expect: the optional identity a named account must resolve to, or
+# nothing when the account does not declare one.
+fm_account_expect() {  # <registry-file> <vendor> <name>
+  local file=$1 vendor=$2 name=$3
+  [ -f "$file" ] || return 0
+  command -v jq >/dev/null 2>&1 || return 0
+  jq -r --arg v "$vendor" --arg n "$name" '
+    .[$v]?.accounts?[$n]?.expect? // "" | tostring
+  ' "$file" 2>/dev/null || true
+}
+
+# fm_account_expect_supported: whether a vendor exposes an identity this
+# launcher can actually match an expect value against.
+#
+# claude does: `claude auth status` prints email, orgId, orgName, and
+# subscriptionType as JSON on stdout.
+# codex does NOT: `codex login status` prints only "Logged in using ChatGPT"
+# with no identity at all (verified codex-cli 0.153.4, 2026-09-09), so an expect
+# value there would be unverifiable and is refused rather than matched against
+# something invented.
+fm_account_expect_supported() {  # <vendor>
+  case "$1" in
+    claude) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+# fm_account_identity: every identity token the vendor reports for one home, one
+# "field=value" line each, or return 1 when no identity could be read.
+#
+# Two Claude seats can share one email (a Team seat and a personal Max seat on
+# the same address), so the ORG is what separates them and every field is
+# offered for matching rather than the email alone.
+fm_account_identity() {  # <vendor> <home> <cli-binary>
+  local vendor=$1 home=$2 cli=$3 out
+  command -v "$cli" >/dev/null 2>&1 || return 1
+  case "$vendor" in
+    claude)
+      command -v jq >/dev/null 2>&1 || return 1
+      out=$(CLAUDE_CONFIG_DIR="$home" fm_run_timeout 10 "$cli" auth status 2>/dev/null) || true
+      [ -n "$out" ] || return 1
+      printf '%s' "$out" | jq -e -r '
+        select(.loggedIn == true)
+        | to_entries[]
+        | select(.key == "email" or .key == "orgId" or .key == "orgName"
+            or .key == "subscriptionType" or .key == "accountUuid")
+        | select(.value != null and (.value | tostring) != "")
+        | "\(.key)=\(.value)"
+      ' 2>/dev/null || return 1
+      ;;
+    *) return 1 ;;
+  esac
+}
+
+# fm_account_verify_expect: confirm a pinned home really resolves to the identity
+# its account declares, BEFORE anything is launched on it.
+#
+# This closes the hazard the shared macOS keychain exposes: a pinned config
+# directory can be exported and the session still authenticate as some other
+# account, which would silently run the captain on the wrong seat. An expect
+# value is an explicit demand for proof, so an identity that cannot be read at
+# all refuses too - unlike the login gate, where only an explicit negative
+# refuses.
+#
+# Returns 0 when the account declares no expect value, or when the identity
+# matches one of the vendor's reported fields. Returns 1 with FM_ACCOUNT_ERROR
+# otherwise.
+fm_account_verify_expect() {  # <vendor> <home> <cli-binary> <name> <expect>
+  local vendor=$1 home=$2 cli=$3 name=$4 expect=$5 identity line value want
+  FM_ACCOUNT_ERROR=
+  [ -n "$expect" ] || return 0
+  if ! fm_account_expect_supported "$vendor"; then
+    FM_ACCOUNT_ERROR="$vendor account '$name' declares expect '$expect', but $vendor's login status reports no identity to check it against; remove expect from that account or pin it without one"
+    return 1
+  fi
+  if ! identity=$(fm_account_identity "$vendor" "$home" "$cli"); then
+    FM_ACCOUNT_ERROR="$vendor account '$name' declares expect '$expect', but no identity could be read from $home; log that home in, or remove expect to launch without the check"
+    return 1
+  fi
+  want=$(printf '%s' "$expect" | tr '[:upper:]' '[:lower:]')
+  while IFS= read -r line; do
+    value=${line#*=}
+    [ "$(printf '%s' "$value" | tr '[:upper:]' '[:lower:]')" = "$want" ] || continue
+    return 0
+  done <<EOF
+$identity
+EOF
+  FM_ACCOUNT_ERROR="$vendor account '$name' expects '$expect' but $home is signed in as: $(printf '%s' "$identity" | tr '\n' ' ')"
   return 1
 }
 

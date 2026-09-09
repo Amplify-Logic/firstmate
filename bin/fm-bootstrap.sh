@@ -9,6 +9,7 @@
 #                 "MISSING_MANUAL: <tool> (instructions: <url>)", "NEEDS_GH_AUTH",
 #                 "BACKEND_INVALID: <name> (known: <names>)",
 #                 "CREW_DISPATCH: invalid config/crew-dispatch.json - <reason>",
+#                 "ACCOUNTS: invalid config/accounts.json - <reason>",
 #                 "FLEET_SYNC: <repo>: skipped|recovered|STUCK: <detail>",
 #                 "PR_CHECK_MIGRATION: <private remediation>",
 #                 "TANGLE: <remediation>",
@@ -835,6 +836,83 @@ crew_dispatch_validate() {
   fi
 }
 
+# Detect-only validation of the optional local account registry. A bad file must
+# never fail a launch here: it reports and returns, exactly like the dispatch
+# profile validator above. An ABSENT file is silent and means no account pinning
+# at all (bin/fm-account-lib.sh; docs/configuration.md).
+accounts_validate() {
+  local file err
+  file="$CONFIG/accounts.json"
+  [ -f "$file" ] || return 0
+  if ! command -v jq >/dev/null 2>&1; then
+    echo "MISSING: jq (install: $(install_cmd jq))"
+    return 0
+  fi
+  if ! jq -e . "$file" >/dev/null 2>&1; then
+    echo "ACCOUNTS: invalid config/accounts.json - malformed JSON"
+    return 0
+  fi
+  err=$(jq -r '
+    def vendors: ["claude", "codex"];
+    # Only claude reports an identity a pinned home can be checked against;
+    # codex login status prints no identity at all, so an expect value there
+    # could never be verified and is refused rather than silently ignored.
+    def expect_vendors: ["claude"];
+    def name_ok($n): ($n | test("^[A-Za-z0-9][A-Za-z0-9._-]*$"));
+    def bad_vendors: [keys[] | . as $k | select(vendors | index($k) | not)];
+    def accounts_of($v): ($v.value.accounts? // {});
+    def bad_names: [to_entries[] | accounts_of(.) | keys[] | select(name_ok(.) | not)] | unique;
+    def unverifiable_expects:
+      [to_entries[] | . as $v
+        | select(expect_vendors | index($v.key) | not)
+        | accounts_of($v) | to_entries[]
+        | select(.value | has("expect"))
+        | "\($v.key):\(.key)"];
+    def bad_defaults:
+      [to_entries[] | . as $v
+        | select($v.value | has("default"))
+        | select((accounts_of($v) | has($v.value.default)) | not)
+        | "\($v.key):\($v.value.default)"];
+    if type != "object" then "top-level value must be an object"
+    elif (bad_vendors | length) > 0 then "unknown vendor: " + (bad_vendors | join(", "))
+    elif ([to_entries[] | select((.value | type) != "object")] | length) > 0 then
+      "each vendor must be an object"
+    elif ([to_entries[] | select(.value | has("accounts")) | select((.value.accounts | type) != "object")] | length) > 0 then
+      "accounts must be an object"
+    elif ([to_entries[] | accounts_of(.) | to_entries[] | select((.value | type) != "object")] | length) > 0 then
+      "each account must be an object"
+    elif (bad_names | length) > 0 then "invalid account name: " + (bad_names | join(", "))
+    elif ([to_entries[] | accounts_of(.) | to_entries[]
+        | select(.value | has("label")) | select((.value.label | type) != "string")] | length) > 0 then
+      "each label must be a string"
+    elif ([to_entries[] | accounts_of(.) | to_entries[] | select(.value | has("expect"))
+        | select((.value.expect | type) != "string" or (.value.expect | length) == 0)] | length) > 0 then
+      "each expect must be a non-empty string"
+    elif (unverifiable_expects | length) > 0 then
+      "expect cannot be verified for this vendor: " + (unverifiable_expects | join(", "))
+    elif ([to_entries[] | select(.value | has("default"))
+        | select((.value.default | type) != "string" or (.value.default | length) == 0)] | length) > 0 then
+      "each default must be a non-empty account name"
+    elif (bad_defaults | length) > 0 then
+      "default names an account that is not defined: " + (bad_defaults | join(", "))
+    else empty
+    end
+  ' "$file" 2>/dev/null || true)
+  if [ -n "$err" ]; then
+    echo "ACCOUNTS: invalid config/accounts.json - $err"
+    return 0
+  fi
+  if [ "${FM_BOOTSTRAP_VERBOSE_FACTS:-0}" = 1 ]; then
+    jq -r '
+      ["BOOTSTRAP_INFO: account pinning active config/accounts.json"]
+      + [to_entries[] | "BOOTSTRAP_INFO: " + .key + " accounts: "
+          + ((.value.accounts? // {} | keys_unsorted) | join(", "))
+          + (if (.value.default? != null) then " (default " + (.value.default | tostring) + ")" else "" end)]
+      | .[]
+    ' "$file"
+  fi
+}
+
 startup_memory_budget_setup() {
   if [ -e "$FM_HOME/.fm-secondmate-home" ] || [ -L "$FM_HOME/.fm-secondmate-home" ]; then
     return 0
@@ -950,6 +1028,7 @@ if [ "${FM_BOOTSTRAP_VERBOSE_FACTS:-0}" = 1 ] && [ -n "$crew" ] && [ "$crew" != 
   echo "BOOTSTRAP_INFO: crew harness override active: $crew"
 fi
 crew_dispatch_validate
+accounts_validate
 if [ "${FM_BOOTSTRAP_VERBOSE_FACTS:-0}" = 1 ] \
   && ! fm_backlog_backend_manual "$CONFIG" && fm_tasks_axi_compatible; then
   echo "BOOTSTRAP_INFO: tasks-axi available"

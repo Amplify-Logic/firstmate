@@ -2,7 +2,7 @@
 # Launch a verified Firstmate primary profile from this tracked Starship root.
 #
 # Usage:
-#   fm-primary.sh <profile>
+#   fm-primary.sh <profile> [--account <name>]
 #   fm-primary.sh --install-shim
 #   fm-primary.sh --help
 #
@@ -51,6 +51,40 @@
 #                 (Cursor maps SessionStart/PreToolUse/Stop onto its native
 #                 events). There is no third-party status-line API, so no
 #                 companion status bar is installed.
+#
+# --account <name> is the ONLY extra argument a profile accepts; every other one
+# still refuses, because that refusal exists to keep resume arguments away from
+# the launched CLI.
+# It pins the launch to a NAMED VENDOR ACCOUNT: the Claude profiles take a claude
+# account, exported as CLAUDE_CONFIG_DIR, and codex takes a codex account,
+# exported as CODEX_HOME. A profile whose vendor has no account concept (pi,
+# opencode, grok, kimi-k3, cursor-grok) refuses --account rather than ignoring it.
+# Accounts are named in local, gitignored config/accounts.json (docs/configuration.md
+# owns that schema) and their homes are DERIVED as data/accounts/<vendor>/<name>,
+# never read from that file. Omitting the flag uses that vendor's default when the
+# file names one. With NO such file there is no pinning at all: every profile's
+# argv and environment are exactly what they were before account pinning existed.
+# A file that exists but cannot be read warns and launches on the ambient account,
+# and refuses only an explicit --account it cannot resolve.
+#
+# A pinned account home is created and logged in by the CAPTAIN, never by this
+# launcher: bin/fm-account.sh create <vendor> <name> makes the empty home and
+# prints the login command. No credential directory, auth.json, .credentials.json,
+# or keychain entry is ever copied, linked, or seeded between homes. A pinned home
+# that does not exist or is explicitly logged out refuses the launch and names the
+# exact login command to run; that refusal is the correct outcome, not a failure.
+# An account that declares an expect identity is verified against the home before
+# exec, and a mismatch refuses naming both the wanted and the actual identity, so
+# a pinned session can never silently run on another seat.
+#
+# macOS limitation, verified 2026-09-09 on claude 2.1.258: Claude Code reads its
+# keychain credential ONLY when CLAUDE_CONFIG_DIR is unset. Setting it - even to
+# the default ~/.claude - reports loggedIn false and a real run answers "Not
+# logged in". So a Claude pin works only once that home holds its own credentials
+# from its own login, and whether two Claude seats can be logged in at the same
+# time on one machine is UNPROVEN: the login keychain holds a single
+# "Claude Code-credentials" item that is not keyed by config directory. Codex is
+# different and does isolate: its auth.json lives inside CODEX_HOME.
 #
 # Aliases: claude -> claude-fable; opus -> claude-opus; kimi -> kimi-k3;
 # cursor -> cursor-grok.
@@ -296,6 +330,7 @@ resolve_astra_effort() {
 profile_account_vendor() {
   case "$PROFILE" in
     claude-fable|claude-opus) printf 'claude' ;;
+    codex) printf 'codex' ;;
     *) return 1 ;;
   esac
 }
@@ -310,6 +345,7 @@ resolve_account() {
   ACCOUNT_NAME=
   ACCOUNT_HOME=
   ACCOUNT_ENV=
+  ACCOUNT_EXPECT=
   if ! vendor=$(profile_account_vendor); then
     [ "$ACCOUNT_SET" -eq 0 ] \
       || die "profile '$PROFILE' has no vendor account to pin; --account applies to $(fm_account_vendors) profiles only"
@@ -318,11 +354,13 @@ resolve_account() {
   # Called directly, never through command substitution: fm_account_resolve
   # reports both its result and its refusal reason through globals.
   fm_account_resolve "$CONFIG" "$DATA" "$vendor" "$ACCOUNT_ARG" || die "$FM_ACCOUNT_ERROR"
+  [ -z "$FM_ACCOUNT_WARNING" ] || printf 'fm-primary: %s\n' "$FM_ACCOUNT_WARNING" >&2
   [ -n "$FM_ACCOUNT_HOME" ] || return 0
   ACCOUNT_VENDOR=$vendor
   ACCOUNT_NAME=$FM_ACCOUNT_NAME
   ACCOUNT_HOME=$FM_ACCOUNT_HOME
   ACCOUNT_ENV=$(fm_account_env_var "$vendor")
+  ACCOUNT_EXPECT=$(fm_account_expect "$(fm_account_registry_file "$CONFIG")" "$vendor" "$ACCOUNT_NAME")
 }
 
 # Refuse a pinned launch whose account home is missing or logged out, naming the
@@ -337,6 +375,16 @@ require_account_login() {
     || die "$ACCOUNT_VENDOR account '$ACCOUNT_NAME' has no home yet: create it with '$FM_ROOT/bin/fm-account.sh create $ACCOUNT_VENDOR $ACCOUNT_NAME', then log in with: $login"
   ! fm_account_logged_out "$ACCOUNT_VENDOR" "$ACCOUNT_HOME" "$CLI" \
     || die "$ACCOUNT_VENDOR account '$ACCOUNT_NAME' is not logged in at $ACCOUNT_HOME; log in with: $login"
+}
+
+# Confirm a pinned home really is the seat the registry says it is, before
+# anything runs on it. Only an account that declares expect is checked; without
+# that field the launch proceeds exactly as it did.
+require_account_expect() {
+  [ -n "$ACCOUNT_HOME" ] || return 0
+  [ -n "$ACCOUNT_EXPECT" ] || return 0
+  fm_account_verify_expect "$ACCOUNT_VENDOR" "$ACCOUNT_HOME" "$CLI" "$ACCOUNT_NAME" "$ACCOUNT_EXPECT" \
+    || die "$FM_ACCOUNT_ERROR"
 }
 
 mark_current_surface() {
@@ -691,6 +739,7 @@ case "$PROFILE" in
 esac
 require_command "$CLI"
 require_account_login
+require_account_expect
 verify_integrations
 
 if [ "$PROFILE" = kimi-k3 ]; then
