@@ -203,9 +203,22 @@ collect_loose_ends() {
   cat "$f" 2>/dev/null || true
 }
 
+# Portable mtime in epoch seconds, branching on the platform the way every other
+# lib here does. It cannot be a `stat -f %m || stat -c %Y` chain: on GNU stat
+# `-f` selects FILESYSTEM mode, where %m is not mtime, so that call succeeds and
+# prints a non-mtime token instead of failing over. The chain therefore reads -1
+# on Linux and every age on the pane silently degrades to "not reported yet".
+file_mtime_secs() {  # <file> -> epoch seconds, or empty
+  if [ "$(uname)" = Darwin ]; then
+    stat -f %m "$1" 2>/dev/null
+  else
+    stat -c %Y "$1" 2>/dev/null
+  fi
+}
+
 file_age_secs() {  # <file> -> seconds since mtime, or -1
   local f=$1 mtime now
-  mtime=$(stat -f %m "$f" 2>/dev/null || stat -c %Y "$f" 2>/dev/null || true)
+  mtime=$(file_mtime_secs "$f" || true)
   case "$mtime" in
     ''|*[!0-9]*) printf '%s\n' -1; return 0 ;;
   esac
