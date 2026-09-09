@@ -211,6 +211,13 @@ test_account_role_label_is_verified_and_compact() {
     "$ROOT/bin/fm-status-bar.sh" --adapter codex --model m --effort e | strip_ansi)
   assert_contains "$out" '[Team]' "role label is not taken from the launcher-resolved account name"
 
+  # The native Claude, Pi and Cursor surfaces get no companion command, so the
+  # label has to reach them from the account owner's own resolved global.
+  out=$(PATH="$FAKEBIN:$PATH" FM_HOME="$HOME_FIX" FM_PRIMARY_HARNESS=codex \
+    FM_STATUS_BAR_NOW=1000 FM_ACCOUNT_NAME=Max \
+    "$ROOT/bin/fm-status-bar.sh" --adapter codex --model m --effort e | strip_ansi)
+  assert_contains "$out" '[Max]' "role label is not taken from the account owner's FM_ACCOUNT_NAME"
+
   # An unknown ambient account must stay unknown, and an account IDENTIFIER
   # must never reach the row even when the environment supplies one.
   out=$(PATH="$FAKEBIN:$PATH" FM_HOME="$HOME_FIX" FM_PRIMARY_HARNESS=codex \
@@ -218,17 +225,26 @@ test_account_role_label_is_verified_and_compact() {
     "$ROOT/bin/fm-status-bar.sh" --adapter codex --model m --effort e | strip_ansi)
   assert_not_contains "$out" '[' "unknown account rendered a role label anyway"
 
-  for identifier in 'a@b.com' 'acct:12345' 'team/one' 'Two Words'; do
+  # Acceptance is positive - alphabetic and compact - so identifier shapes that
+  # carry no punctuation at all are rejected too, and an over-long value is
+  # dropped whole rather than truncated into an identifier prefix.
+  for identifier in 'a@b.com' 'acct:12345' 'team/one' 'Two Words' '1048576123' \
+    '550e8400-e29b-41d4-a716-446655440000' 'ABCDEFGHIJKLMNOPQRST' 'Team2'; do
     out=$(PATH="$FAKEBIN:$PATH" FM_HOME="$HOME_FIX" FM_PRIMARY_HARNESS=codex \
       FM_STATUS_BAR_NOW=1000 FM_PRIMARY_ACCOUNT_ROLE="$identifier" \
       "$ROOT/bin/fm-status-bar.sh" --adapter codex --model m --effort e | strip_ansi)
     assert_not_contains "$out" '[' "account identifier '$identifier' leaked into the status row"
+
+    out=$(PATH="$FAKEBIN:$PATH" FM_HOME="$HOME_FIX" FM_PRIMARY_HARNESS=codex \
+      FM_STATUS_BAR_NOW=1000 FM_ACCOUNT_NAME="$identifier" \
+      "$ROOT/bin/fm-status-bar.sh" --adapter codex --model m --effort e | strip_ansi)
+    assert_not_contains "$out" '[' "account identifier '$identifier' leaked in through FM_ACCOUNT_NAME"
   done
 
   out=$(PATH="$FAKEBIN:$PATH" FM_HOME="$HOME_FIX" FM_PRIMARY_HARNESS=codex \
-    FM_STATUS_BAR_NOW=1000 FM_PRIMARY_ACCOUNT_ROLE=ABCDEFGHIJKLMNOPQRST \
+    FM_STATUS_BAR_NOW=1000 FM_PRIMARY_ACCOUNT_ROLE=ABCDEFGHIJKL \
     "$ROOT/bin/fm-status-bar.sh" --adapter codex --model m --effort e | strip_ansi)
-  assert_contains "$out" '[ABCDEFGHIJKL]' "role label was not capped to a compact width"
+  assert_contains "$out" '[ABCDEFGHIJKL]' "a role word at the compact width was rejected"
   pass "status bar: account role is compact, verified, and never an identifier"
 }
 

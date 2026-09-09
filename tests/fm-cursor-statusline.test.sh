@@ -68,6 +68,32 @@ test_foreign_status_line_is_never_overwritten_or_removed() {
   pass "cursor installer: a foreign status line is never overwritten or removed"
 }
 
+test_foreign_status_line_without_a_command_key_is_still_foreign() {
+  local dir out shape before
+  # Presence of the key is what makes it somebody else's, not the shape Cursor
+  # happens to document today.
+  for shape in '{"statusLine": {"type": "builtin", "preset": "compact"}}' \
+    '{"statusLine": "compact"}' \
+    '{"statusLine": []}'; do
+    dir="$TMP_ROOT/foreign-shape-$(printf '%s' "$shape" | cksum | cut -d' ' -f1)"
+    seed_config "$dir" "$shape"
+    before=$(jq -S -c . "$dir/cli-config.json")
+
+    out=$(run_installer "$dir" install) && fail "install replaced a foreign statusLine shaped as $shape"
+    assert_contains "$out" 'already has a different statusLine' "install did not explain its refusal"
+
+    out=$(run_installer "$dir" uninstall) && fail "uninstall removed a foreign statusLine shaped as $shape"
+    assert_contains "$out" 'belongs to something else' "uninstall did not explain its refusal"
+
+    out=$(run_installer "$dir" status)
+    assert_contains "$out" 'foreign:' "status did not report a foreign statusLine shaped as $shape"
+
+    [ "$(jq -S -c . "$dir/cli-config.json")" = "$before" ] \
+      || fail "a foreign statusLine shaped as $shape was modified"
+  done
+  pass "cursor installer: a statusLine without a command key is still refused in both directions"
+}
+
 test_invalid_or_absent_config_is_refused_not_rewritten() {
   local dir="$TMP_ROOT/invalid" out
   mkdir -p "$dir"
@@ -95,5 +121,6 @@ test_install_never_touches_credentials() {
 test_install_is_single_key_and_preserves_preferences
 test_uninstall_restores_the_original_config
 test_foreign_status_line_is_never_overwritten_or_removed
+test_foreign_status_line_without_a_command_key_is_still_foreign
 test_invalid_or_absent_config_is_refused_not_rewritten
 test_install_never_touches_credentials

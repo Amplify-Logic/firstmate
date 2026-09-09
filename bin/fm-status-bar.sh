@@ -17,10 +17,12 @@
 # tmux (default) or herdr. Herdr panes are addressed by HERDR_PANE_ID.
 #
 # --role renders a compact account role beside the model. It is only ever a
-# verified label supplied by the launcher (or FM_PRIMARY_ACCOUNT_ROLE, which
-# bin/fm-primary.sh sets from the account owner's FM_ACCOUNT_NAME). An unknown
-# account renders no label at all rather than a guess, and an ID or email is
-# never rendered.
+# verified label supplied by the launcher: --role, else FM_PRIMARY_ACCOUNT_ROLE
+# (which bin/fm-primary.sh sets for its companion panes), else the account
+# owner's own FM_ACCOUNT_NAME, which is what reaches the native Claude, Pi and
+# Cursor surfaces. This renderer only CONSUMES that resolution; bin/fm-account-*
+# owns it. An unknown account renders no label at all rather than a guess, and
+# an ID or email is never rendered.
 #
 # The complete field, threshold, color, placeholder, and adapter contract lives
 # in docs/status-bar.md.
@@ -200,16 +202,16 @@ COST=$(normalize_cost "$COST")
 
 # A role label is optional presentation. It is rendered only when the launcher
 # supplied a verified one; an unknown account stays silent instead of guessing.
-# Anything that looks like an account identifier rather than a role is dropped,
-# so an ID or email can never reach the status row.
-[ -n "$ROLE" ] || ROLE=${FM_PRIMARY_ACCOUNT_ROLE:-}
+# Only a short, entirely alphabetic role word is accepted. Everything else -
+# a bare numeric id, a UUID or any prefix of one, punctuation, spaces, or an
+# over-long value - is dropped rather than shortened, so no ID or email, and no
+# truncated fragment of one, can reach the status row.
+[ -n "$ROLE" ] || ROLE=${FM_PRIMARY_ACCOUNT_ROLE:-${FM_ACCOUNT_NAME:-}}
 if [ -n "$ROLE" ]; then
   ROLE=$(sanitize_label "$ROLE")
   case "$ROLE" in
-    --|*@*|*:*|*/*|*' '*) ROLE= ;;
-    *)
-      [ "${#ROLE}" -le 12 ] || ROLE=${ROLE:0:12}
-      ;;
+    *[!A-Za-z]*) ROLE= ;;
+    *) [ "${#ROLE}" -le 12 ] || ROLE= ;;
   esac
 fi
 

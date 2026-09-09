@@ -60,6 +60,10 @@ SH
 }
 for cli in pi claude codex opencode grok kimi agent herdr tmux; do make_cli "$cli"; done
 
+strip_ansi() {
+  sed $'s/\033\\[[0-9;?]*[a-zA-Z]//g'
+}
+
 dry() { # <profile>
   ( cd "$TMP_ROOT" && \
     PATH="$FAKEBIN:$PATH" \
@@ -278,6 +282,111 @@ test_kimi_tmux_companion_status_bar() {
   assert_contains "$out" '--effort --' "Kimi tmux companion did not preserve unavailable effort"
   assert_contains "$out" "--follow-pane '%42'" "Kimi tmux companion does not follow the primary pane"
   pass "fm-primary: Kimi gets a scoped tmux companion without replacing native controls"
+}
+
+# The argv the launcher EMITS is not evidence that the companion runs: a command
+# string can carry every expected token and still fail to parse. These two cases
+# execute the constructed command exactly as the session provider would and
+# require the canonical row to actually appear.
+test_tmux_companion_command_renders_the_canonical_row() {
+  local out="$TMP_ROOT/tmux-companion-out"
+  : > "$out"
+  cat > "$FAKEBIN/tmux" <<'SH'
+#!/usr/bin/env bash
+case "${1:-}" in
+  split-window)
+    # The command string is the final argument, run exactly as tmux would.
+    FM_STATUS_BAR_INTERVAL=0 bash -c "${!#}" >> "$FM_PRIMARY_TEST_COMPANION_OUT" 2>&1
+    ;;
+  display-message)
+    count=0
+    [ ! -f "$FM_PRIMARY_TEST_PANE_COUNT" ] || count=$(<"$FM_PRIMARY_TEST_PANE_COUNT")
+    count=$((count + 1))
+    printf '%s\n' "$count" > "$FM_PRIMARY_TEST_PANE_COUNT"
+    [ "$count" -eq 1 ] || exit 1
+    printf '%s\n' '%42'
+    ;;
+esac
+exit 0
+SH
+  chmod +x "$FAKEBIN/tmux"
+  env -u HERDR_ENV -u HERDR_SESSION -u HERDR_PANE_ID \
+    PATH="$FAKEBIN:$PATH" \
+    TERM=dumb \
+    FM_HOME="$HOME_FIX" \
+    FM_PRIMARY_TEST_LOG="$LOG" \
+    FM_PRIMARY_TEST_COMPANION_OUT="$out" \
+    FM_PRIMARY_TEST_PANE_COUNT="$TMP_ROOT/tmux-companion-count" \
+    FM_KIMI_SOURCE_HOME="$KIMI_SOURCE" \
+    FM_ACCOUNT_NAME=Team \
+    TMUX_PANE=%42 \
+    "$ROOT/bin/fm-primary.sh" kimi-k3
+  make_cli tmux
+  assert_contains "$(strip_ansi < "$out")" '⚓ kimi-code/k3·-- [Team]' \
+    "the constructed tmux companion command did not render the canonical row"
+  pass "fm-primary: the tmux companion command the launcher builds actually renders"
+}
+
+test_herdr_companion_command_renders_in_the_pane_the_split_created() {
+  local out="$TMP_ROOT/herdr-companion-out"
+  : > "$out"
+  cat > "$FAKEBIN/herdr" <<'SH'
+#!/usr/bin/env bash
+[ "${1:-}" = --session ] || exit 1
+session=$2
+shift 2
+[ "${1:-}" = pane ] || exit 1
+shift
+case "${1:-}" in
+  split)
+    printf '{"result":{"type":"pane_info","pane":{"pane_id":"w1:p2"}}}\n'
+    ;;
+  layout)
+    # A pre-existing co-tenant of the same tab. Selecting a pane from here
+    # instead of from the split response would take over somebody else's row.
+    printf '{"result":{"layout":{"panes":[{"pane_id":"w1:p1"},{"pane_id":"w1:p9"}]}}}\n'
+    ;;
+  run)
+    printf 'run-target=%s\n' "$2" >> "$FM_PRIMARY_TEST_COMPANION_OUT"
+    # A managed pane's environment does not carry HERDR_SESSION, so the
+    # companion must have been handed the session it was launched from.
+    env -u HERDR_SESSION FM_STATUS_BAR_INTERVAL=0 bash -c "$3" \
+      >> "$FM_PRIMARY_TEST_COMPANION_OUT" 2>&1
+    ;;
+  get)
+    # Liveness answers only within the session the primary launched from, so a
+    # companion that re-derived 'default' resolves nothing and never renders.
+    [ "$session" = "$FM_PRIMARY_TEST_HERDR_SESSION" ] || exit 1
+    count=0
+    [ ! -f "$FM_PRIMARY_TEST_PANE_COUNT" ] || count=$(<"$FM_PRIMARY_TEST_PANE_COUNT")
+    count=$((count + 1))
+    printf '%s\n' "$count" > "$FM_PRIMARY_TEST_PANE_COUNT"
+    [ "$count" -eq 1 ] || { printf '{"result":{"pane":{}}}\n'; exit 0; }
+    printf '{"result":{"pane":{"pane_id":"%s"}}}\n' "$2"
+    ;;
+esac
+exit 0
+SH
+  chmod +x "$FAKEBIN/herdr"
+  env -u HERDR_ENV -u TMUX_PANE \
+    PATH="$FAKEBIN:$PATH" \
+    TERM=dumb \
+    FM_HOME="$HOME_FIX" \
+    FM_PRIMARY_TEST_LOG="$LOG" \
+    FM_PRIMARY_TEST_COMPANION_OUT="$out" \
+    FM_PRIMARY_TEST_PANE_COUNT="$TMP_ROOT/herdr-companion-count" \
+    FM_PRIMARY_TEST_HERDR_SESSION=fm-lab-status \
+    HERDR_SESSION=fm-lab-status \
+    HERDR_PANE_ID=w1:p1 \
+    "$ROOT/bin/fm-primary.sh" codex
+  make_cli herdr
+  assert_contains "$(cat "$out")" 'run-target=w1:p2' \
+    "the herdr companion did not run in the pane the split itself reported"
+  assert_not_contains "$(cat "$out")" 'run-target=w1:p9' \
+    "the herdr companion took over a pre-existing pane of the primary's tab"
+  assert_contains "$(strip_ansi < "$out")" '⚓ codex·--' \
+    "the constructed herdr companion command did not render the canonical row"
+  pass "fm-primary: the herdr companion runs in its own new pane and follows the launching session"
 }
 
 test_kimi_version_doctor_and_symlink_refusals() {
@@ -690,6 +799,8 @@ test_visible_role_marks_only_current_surface
 test_shim_install_safety
 test_kimi_primary_only_profile
 test_kimi_tmux_companion_status_bar
+test_tmux_companion_command_renders_the_canonical_row
+test_herdr_companion_command_renders_in_the_pane_the_split_created
 test_kimi_version_doctor_and_symlink_refusals
 test_kimi_corrupt_source_registry_atomicity
 test_lab_role_guard

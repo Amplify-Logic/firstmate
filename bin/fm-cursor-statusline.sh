@@ -46,17 +46,32 @@ command_for() {
   printf '%s --adapter cursor' "$RENDERER"
 }
 
+# Presence, not shape, decides ownership: a statusLine that is a non-object, or
+# an object with no command key, is still somebody else's key and is refused in
+# both directions rather than silently replaced.
+statusline_present() {
+  jq -e '(.statusLine? // null) != null' "$CONFIG" >/dev/null 2>&1
+}
+
+statusline_is_ours() {
+  jq -e --arg cmd "$(command_for)" \
+    '(.statusLine? | objects | .command) == $cmd' "$CONFIG" >/dev/null 2>&1
+}
+
+statusline_describe() {
+  jq -r '(.statusLine? | objects | .command) // (.statusLine | tojson)' "$CONFIG" 2>/dev/null
+}
+
 case "${1:-}" in
   status)
     [ -f "$CONFIG" ] || { echo "absent: no Cursor config at $CONFIG"; exit 0; }
-    installed=$(jq -r '.statusLine.command // empty' "$CONFIG" 2>/dev/null) \
-      || die "could not read $CONFIG"
-    if [ -z "$installed" ]; then
+    jq -e . "$CONFIG" >/dev/null 2>&1 || die "could not read $CONFIG"
+    if ! statusline_present; then
       echo "not-installed: $CONFIG has no statusLine"
-    elif [ "$installed" = "$(command_for)" ]; then
+    elif statusline_is_ours; then
       echo "installed: $CONFIG statusLine is this Firstmate renderer"
     else
-      echo "foreign: $CONFIG statusLine belongs to something else: $installed"
+      echo "foreign: $CONFIG statusLine belongs to something else: $(statusline_describe)"
     fi
     ;;
   install)
@@ -64,9 +79,8 @@ case "${1:-}" in
       || die "no Cursor config at $CONFIG; run cursor-agent once first so it writes its own settings"
     [ -x "$RENDERER" ] || die "missing renderer: $RENDERER"
     jq -e . "$CONFIG" >/dev/null 2>&1 || die "$CONFIG is not valid JSON; refusing to rewrite it"
-    existing=$(jq -r '.statusLine.command // empty' "$CONFIG" 2>/dev/null)
-    if [ -n "$existing" ] && [ "$existing" != "$(command_for)" ]; then
-      die "$CONFIG already has a different statusLine ($existing); remove it by hand first"
+    if statusline_present && ! statusline_is_ours; then
+      die "$CONFIG already has a different statusLine ($(statusline_describe)); remove it by hand first"
     fi
     backup="$CONFIG.fm-backup.$(date +%Y%m%d%H%M%S)"
     cp "$CONFIG" "$backup" || die "could not back up $CONFIG"
@@ -84,10 +98,9 @@ case "${1:-}" in
   uninstall)
     [ -f "$CONFIG" ] || { echo "absent: no Cursor config at $CONFIG"; exit 0; }
     jq -e . "$CONFIG" >/dev/null 2>&1 || die "$CONFIG is not valid JSON; refusing to rewrite it"
-    existing=$(jq -r '.statusLine.command // empty' "$CONFIG" 2>/dev/null)
-    [ -n "$existing" ] || { echo "not-installed: nothing to remove"; exit 0; }
-    [ "$existing" = "$(command_for)" ] \
-      || die "$CONFIG statusLine belongs to something else ($existing); refusing to remove it"
+    statusline_present || { echo "not-installed: nothing to remove"; exit 0; }
+    statusline_is_ours \
+      || die "$CONFIG statusLine belongs to something else ($(statusline_describe)); refusing to remove it"
     tmp=$(mktemp "${TMPDIR:-/tmp}/fm-cursor-statusline.XXXXXX") || die "could not create a temporary file"
     jq 'del(.statusLine)' "$CONFIG" > "$tmp" 2>/dev/null \
       || { rm -f "$tmp"; die "could not build the updated config"; }

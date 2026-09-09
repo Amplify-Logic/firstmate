@@ -28,12 +28,15 @@ Width-constrained surfaces clip or truncate the canonical line without wrapping 
 | `$ cost` | Cumulative cost in US dollars for the current orchestrator session, rounded to two decimals. | `$--` when the orchestrator does not expose cost. |
 | `💤 AFK` | Whether the Firstmate home is in away mode. | Dim `💤--` when away mode is off. |
 
-The account role is dim, at most twelve characters, and is a ROLE word such as `Team`, `Max`, or `Plus`.
-It is rendered only from a verified account name supplied by the launcher, which passes the account owner's
-`FM_ACCOUNT_NAME` through `FM_PRIMARY_ACCOUNT_ROLE`, or from an explicit `--role`.
+The account role is dim and is a ROLE word such as `Team`, `Max`, or `Plus`.
+It is rendered only from a verified account name: an explicit `--role`, else `FM_PRIMARY_ACCOUNT_ROLE`
+(which `bin/fm-primary.sh` sets on its companion panes), else the account owner's own `FM_ACCOUNT_NAME`,
+which is how the label reaches the native Claude, Pi, and Cursor surfaces as well as the companions.
 An unknown ambient account renders no label at all instead of a guess.
-A value that looks like an identifier rather than a role - one containing `@`, `:`, `/`, or a space - is
-dropped, so an account ID or email address can never reach the status row.
+Acceptance is a positive rule, not a denylist: the value must be entirely alphabetic and at most twelve
+characters. Anything else - a bare numeric account id, a UUID or any prefix of one, or a value carrying
+punctuation or spaces - is dropped whole rather than shortened, so neither an account ID or email address
+nor a truncated fragment of one can ever reach the status row.
 This field consumes whatever account identity the account owner resolves; it never defines its own.
 
 Counts are cheap local projections, not full worker reconciliation.
@@ -141,6 +144,18 @@ to a companion process.
 Codex reports a single `all_models` availability scope, so Astra draws on the ordinary Codex windows: there is
 no separate Astra allowance, and none is displayed.
 
+### opencode and grok - unverified
+
+`bin/fm-primary.sh` lists `opencode` and `grok` as verified primary profiles, so they are carried here
+rather than left out, but neither binary is installed on this machine and neither was probed.
+No native status-line, footer, or plugin surface has been examined for either one, and no integration for
+either has been exercised, so nothing is claimed about what they do or do not expose.
+Their prospective surface is the shared companion below, which is provider-driven rather than
+harness-driven and would therefore attach the same way it does for Kimi, Codex, and Astra - but that has
+not been demonstrated for either profile, and `companion_status_profile` deliberately does not yet list
+them, so today a guarded `opencode` or `grok` primary leaves its native TUI untouched.
+These two rows stay unverified until the binaries are present and probed; they are not waived.
+
 ### Shared companion surface
 
 Kimi, Codex, and Astra share one companion implementation rather than three.
@@ -165,15 +180,33 @@ than failing the primary.
 
 Claude's earlier prototype is local to the primary home's `.claude/settings.local.json`.
 After this change lands, remove only that local `statusLine` entry so it no longer overrides tracked `.claude/settings.json`.
-Do not copy a renderer into `state/` and do not edit `~/.claude`, `~/.kimi-code`, `~/.pi`, or `~/.cursor`.
+Do not copy a renderer into `state/` and do not edit `~/.claude`, `~/.kimi-code`, or `~/.pi`.
 The next guarded Claude, Pi, or Kimi primary launch loads the tracked integration automatically.
+
+`~/.cursor` is the one carve-out, and only through `bin/fm-cursor-statusline.sh`.
+Cursor validates `statusLine` only in the user config, so there is no tracked in-repo integration to load;
+the installer is the activation route, it is opt-in, it writes exactly the one `statusLine` key after a
+timestamped backup, and `uninstall` restores the prior state.
+Editing `~/.cursor` by hand is still out of scope, and no other file under it is ever touched.
 
 ## Verification record
 
 The adapter contract was checked on 2026-07-21 with Claude Code's project status-line payload shape, Kimi Code 0.27.0, Pi 0.80.10, Cursor CLI 2026.07.17-3e2a980, and tmux 3.6a.
 The installed Pi documentation and example at `examples/extensions/custom-footer.ts` show `ctx.ui.setFooter()`, `render(width)`, and `truncateToWidth()`.
 The installed Kimi help and public 0.27.0 plugin documentation expose lifecycle hooks but no footer renderer.
-The installed Cursor help exposes plugin directories but no status-line configuration or footer renderer.
+On that date the installed Cursor CLI 2026.07.17-3e2a980 exposed plugin directories but no status-line
+configuration or footer renderer, which is why the contract originally excluded Cursor from display.
+
+That Cursor record is superseded, not deleted.
+Re-probed on 2026-09-08 against the installed Cursor CLI 2026.09.08-6caf4ff, which does expose a native
+custom status line: a `statusLine` command object accepted in the user-level `cli-config.json` and rejected
+in a per-project `.cursor/cli.json`.
+The row was verified live - the renderer's output appeared in a real Cursor TUI - by an offline probe that
+sent no model request and incurred no spend.
+Codex 0.153.4 was probed the same way: its `status_line` selector and the exact `model-with-reasoning` item
+id were read from the shipped binary's schema enum, again with no model request.
+`opencode` and `grok` were not probed at all; neither binary is installed here, so both stay unverified.
+Nothing was run on the project's Linux workstation, so no Linux behavior is claimed anywhere in this file.
 
 ```sh
 pi --version
@@ -185,12 +218,20 @@ bash tests/fm-pi-primary-types.test.sh
 bin/fm-lint.sh
 ```
 
-Observed version output:
+Observed version output on 2026-07-21:
 
 ```text
 0.80.10
 0.27.0
 2026.07.17-3e2a980
+```
+
+Observed on the 2026-09-08 re-probe, on a machine where `pi`, `kimi`, `opencode`, and `grok` are not
+installed:
+
+```text
+agent --version   -> 2026.09.08-6caf4ff
+codex --version   -> codex-cli 0.153.4
 ```
 
 Claude's adapter was exercised directly with the same JSON shape supplied to the native status-line command:
