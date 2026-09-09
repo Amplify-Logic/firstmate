@@ -255,10 +255,17 @@ The checkpoint is deliberately foreground and bounded so Codex regains control r
 `bin/fm-primary.sh astra` launches the Codex CLI with `--model gpt-6-astra` and exports `FM_PRIMARY_HARNESS=codex` so supervision uses the Codex checkpoint protocol unchanged.
 `gpt-6-astra` requires a Codex build whose model catalog carries that id.
 codex-cli 0.153.4 carries it, listed as `gpt-6-astra` and `openai.gpt-6-astra` with display name `GPT-6-Astra`.
-Verified on 2026-09-09 by live probe: `codex exec --model gpt-6-astra -c model_reasoning_effort="xhigh" --sandbox read-only "Reply with exactly: OK"` returned `OK`.
-Both primary hooks fired during that probe: SessionStart ran `bin/fm-session-start.sh` and its digest appeared in the probe output, and Stop fired.
+The model answers through `codex exec` at `model_reasoning_effort` high, xhigh, and max.
+Both launch bypass flags are accepted alongside `--model gpt-6-astra` and the effort override.
+A probe carrying `--dangerously-bypass-approvals-and-sandbox` at effort high returned `FLAGSOK`, and a probe carrying both `--dangerously-bypass-approvals-and-sandbox` and `--dangerously-bypass-hook-trust` together at effort high returned `BOTHOK`.
+The SessionStart hook fires: it ran `bin/fm-session-start.sh` and that digest appeared in the probe output.
+The Stop hook fires: the `BOTHOK` run printed `hook: Stop` and `hook: Stop Completed`.
 The SessionStart injection certified on 0.144.4 and the turn-end guard both survive the bump to 0.153.4.
-codex-cli 0.144.6 is confirmed not to carry it.
+`bin/fm-primary.sh astra` still accepts low, medium, high, and xhigh only, and widening that set is the separate follow-up astra-max-effort.
+Every probe used `codex exec`, so the interactive primary launch path that `bin/fm-primary.sh astra` execs has not been exercised.
+Exercising it starts a real orchestrator session rather than a bounded probe.
+The bounded foreground watcher checkpoint that Codex primaries depend on has not been re-verified on 0.153.4.
+codex-cli 0.144.6 is confirmed not to carry `gpt-6-astra`.
 Its bundled catalog tops out at `gpt-5.6-luna` / `gpt-5.6-sol` / `gpt-5.6-terra`.
 0.153.4 is therefore a verified-good floor and not an established minimum.
 Which build between 0.144.6 and 0.153.4 first carries Astra is not established.
