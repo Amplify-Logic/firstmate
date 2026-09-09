@@ -94,6 +94,32 @@ test_foreign_status_line_without_a_command_key_is_still_foreign() {
   pass "cursor installer: a statusLine without a command key is still refused in both directions"
 }
 
+test_our_key_is_recognised_from_another_checkout() {
+  local dir="$TMP_ROOT/other-checkout" out before
+  # The key an install from the main checkout leaves behind, seen by an
+  # uninstall run from a worktree: same renderer, different absolute path.
+  seed_config "$dir" \
+    '{"statusLine": {"type": "command", "command": "/elsewhere/firstmate/bin/fm-status-bar.sh --adapter cursor", "updateIntervalMs": 1000}}'
+  before=$(jq -S -c 'del(.statusLine)' "$dir/cli-config.json")
+
+  out=$(run_installer "$dir" status)
+  assert_contains "$out" 'installed:' "our own key installed from another checkout read as foreign"
+  assert_contains "$out" '/elsewhere/firstmate' "status hid which renderer is actually installed"
+
+  out=$(run_installer "$dir" install) || fail "install refused to re-point our own key: $out"
+  assert_contains "$(jq -r '.statusLine.command' "$dir/cli-config.json")" "$ROOT/bin/fm-status-bar.sh" \
+    "install did not re-point the key at the running checkout"
+  [ "$(jq -S -c 'del(.statusLine)' "$dir/cli-config.json")" = "$before" ] \
+    || fail "re-pointing the key changed other settings"
+
+  seed_config "$dir" \
+    '{"statusLine": {"type": "command", "command": "/elsewhere/firstmate/bin/fm-status-bar.sh --adapter cursor"}}'
+  out=$(run_installer "$dir" uninstall) || fail "uninstall refused our own key from another checkout: $out"
+  jq -e 'has("statusLine")' "$dir/cli-config.json" >/dev/null 2>&1 \
+    && fail "uninstall left our own key behind"
+  pass "cursor installer: its own key stays removable when install and uninstall run from different checkouts"
+}
+
 test_invalid_or_absent_config_is_refused_not_rewritten() {
   local dir="$TMP_ROOT/invalid" out
   mkdir -p "$dir"
@@ -122,5 +148,6 @@ test_install_is_single_key_and_preserves_preferences
 test_uninstall_restores_the_original_config
 test_foreign_status_line_is_never_overwritten_or_removed
 test_foreign_status_line_without_a_command_key_is_still_foreign
+test_our_key_is_recognised_from_another_checkout
 test_invalid_or_absent_config_is_refused_not_rewritten
 test_install_never_touches_credentials

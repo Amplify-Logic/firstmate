@@ -386,7 +386,11 @@ if [ -n "$FOLLOW_PANE" ]; then
   trap restore_terminal EXIT HUP INT TERM
   # Autowrap off keeps the canonical line clipped to one row on a narrow
   # companion instead of spilling onto the pane's second row.
-  printf '\033[?25l\033[?7l'
+  # The one-time full clear removes whatever the provider left in the pane
+  # before this process took it over - herdr's `pane run` echoes the launch
+  # command into the pane's shell, and that line would otherwise sit below the
+  # status row for the life of the companion.
+  printf '\033[?25l\033[?7l\033[2J'
   while companion_pane_alive; do
     printf '\033[H\033[2K'
     render_once

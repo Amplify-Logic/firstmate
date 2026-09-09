@@ -19,7 +19,9 @@
 #   - credentials are never read, copied, moved, or linked (Cursor stores auth
 #     outside this file, so the existing login is untouched either way);
 #   - install backs the file up first and uninstall restores the key's prior
-#     state, so the change is reversible.
+#     state, so the change is reversible from any checkout: the key is
+#     recognised as ours by the renderer invocation it ends with, not by the
+#     absolute path of the checkout that installed it.
 #
 # The installed command is inert unless bin/fm-primary.sh supplied
 # FM_PRIMARY_HARNESS=cursor, so an unguarded manual `cursor-agent` run renders
@@ -34,6 +36,10 @@ FM_ROOT=$(CDPATH='' cd -P -- "$SCRIPT_DIR/.." && pwd -P)
 CONFIG_DIR=${CURSOR_CONFIG_DIR:-$HOME/.cursor}
 CONFIG="$CONFIG_DIR/cli-config.json"
 RENDERER="$FM_ROOT/bin/fm-status-bar.sh"
+# Ownership is decided by the renderer invocation, not by the absolute path that
+# happens to lead to it: a key installed from the main checkout must still be
+# recognised as ours by an uninstall run from a worktree.
+OWNED_SUFFIX='bin/fm-status-bar.sh --adapter cursor'
 
 die() {
   echo "fm-cursor-statusline: $*" >&2
@@ -54,8 +60,9 @@ statusline_present() {
 }
 
 statusline_is_ours() {
-  jq -e --arg cmd "$(command_for)" \
-    '(.statusLine? | objects | .command) == $cmd' "$CONFIG" >/dev/null 2>&1
+  jq -e --arg suffix "$OWNED_SUFFIX" \
+    '((.statusLine? | objects | .command) // "") | strings | endswith($suffix)' \
+    "$CONFIG" >/dev/null 2>&1
 }
 
 statusline_describe() {
@@ -69,7 +76,11 @@ case "${1:-}" in
     if ! statusline_present; then
       echo "not-installed: $CONFIG has no statusLine"
     elif statusline_is_ours; then
-      echo "installed: $CONFIG statusLine is this Firstmate renderer"
+      if [ "$(statusline_describe)" = "$(command_for)" ]; then
+        echo "installed: $CONFIG statusLine is this Firstmate renderer"
+      else
+        echo "installed: $CONFIG statusLine is a Firstmate renderer from another checkout: $(statusline_describe)"
+      fi
     else
       echo "foreign: $CONFIG statusLine belongs to something else: $(statusline_describe)"
     fi

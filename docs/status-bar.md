@@ -108,6 +108,10 @@ which writes only that one key into the configuration the captain already uses, 
 backup, and whose `uninstall` restores the previous state.
 It preserves every other setting, refuses a foreign status line in both directions, refuses an unparseable
 config rather than rewriting it, and never reads, copies, or links credentials.
+A `statusLine` that is a non-object, or an object with no `command`, counts as foreign on presence alone.
+Its own key is recognised by the renderer invocation the command ends with rather than by the absolute path
+of the checkout that wrote it, so `uninstall` still works when it is run from a worktree instead of the
+checkout that installed the key.
 Cursor stores authentication outside the config directory, so the existing login is unaffected either way.
 The installed command is inert unless `bin/fm-primary.sh` supplied `FM_PRIMARY_HARNESS=cursor`, so an
 unguarded manual `cursor-agent` run renders nothing.
@@ -161,6 +165,8 @@ These two rows stay unverified until the binaries are present and probed; they a
 Kimi, Codex, and Astra share one companion implementation rather than three.
 `bin/fm-status-bar.sh --follow-pane <pane> --follow-backend <tmux|herdr>` runs a one-row loop that disables
 autowrap, clips the canonical line instead of wrapping it, and exits as soon as its exact primary pane is gone.
+It clears the whole pane once at startup, because `herdr pane run` echoes the launch command into the pane's
+shell before `exec` replaces it and that line would otherwise stay visible below the status row.
 Only `tmux` and `herdr` are accepted; any other value renders nothing rather than guessing.
 
 `bin/fm-primary.sh` picks the provider that actually owns the terminal: `TMUX_PANE` selects tmux, and
@@ -175,6 +181,10 @@ row is two rows tall where tmux uses one.
 
 If the session provider refuses the split, the guarded launch continues with the native TUI untouched rather
 than failing the primary.
+A split that SUCCEEDS but does not name its new pane is a different outcome and is reported as one: the
+primary has already been shrunk by then, so the launcher identifies the pane that appeared, closes it, and
+says so instead of claiming the TUI is untouched.
+That layout comparison is used only to close an unnamed pane, never to choose where the renderer runs.
 
 ## Local activation after merge
 

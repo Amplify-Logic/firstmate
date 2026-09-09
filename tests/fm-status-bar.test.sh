@@ -290,6 +290,36 @@ SH
   pass "status bar: herdr companion is session-scoped and exits when its pane is gone"
 }
 
+test_companion_clears_the_whole_pane_once_at_startup() {
+  local out count_file="$TMP_ROOT/clear-count"
+  cat > "$FAKEBIN/tmux" <<'SH'
+#!/usr/bin/env bash
+count=0
+[ ! -f "$FM_STATUS_BAR_TMUX_COUNT" ] || count=$(<"$FM_STATUS_BAR_TMUX_COUNT")
+count=$((count + 1))
+printf '%s\n' "$count" > "$FM_STATUS_BAR_TMUX_COUNT"
+[ "$count" -le 2 ] || exit 1
+printf '%s\n' '%42'
+SH
+  chmod +x "$FAKEBIN/tmux"
+  out=$(PATH="$FAKEBIN:$PATH" \
+    FM_HOME="$HOME_FIX" \
+    FM_PRIMARY_HARNESS=kimi \
+    FM_STATUS_BAR_INTERVAL=0 \
+    FM_STATUS_BAR_TMUX_COUNT="$count_file" \
+    "$ROOT/bin/fm-status-bar.sh" \
+      --adapter kimi --model kimi-code/k3 --effort -- --follow-pane %42)
+  # A herdr companion is two rows tall and `pane run` echoes the launch command
+  # into the pane's shell, so the pane is cleared whole exactly once.
+  assert_contains "$out" $'\033[2J' "the companion never cleared the pane it took over"
+  [ "$(printf '%s' "$out" | grep -c $'\033\\[2J')" -eq 1 ] \
+    || fail "the companion repeated the full-pane clear on every refresh"
+  assert_contains "$out" $'\033[H\033[2K' "the per-refresh single-row erase was dropped"
+  assert_contains "$out" $'\033[?25h\033[?7h' "the companion stopped restoring terminal state on exit"
+  rm -f "$FAKEBIN/tmux"
+  pass "status bar: the companion clears its pane once and keeps the per-refresh erase"
+}
+
 test_companion_backend_is_restricted_to_verified_providers() {
   local out
   out=$(PATH="$FAKEBIN:$PATH" FM_HOME="$HOME_FIX" FM_PRIMARY_HARNESS=codex \
@@ -339,5 +369,6 @@ test_follow_mode_exits_when_primary_pane_is_gone
 test_cursor_payload_adapter_and_primary_guard
 test_account_role_label_is_verified_and_compact
 test_herdr_companion_exits_when_primary_pane_is_gone
+test_companion_clears_the_whole_pane_once_at_startup
 test_companion_backend_is_restricted_to_verified_providers
 test_tracked_adapter_wiring_and_cursor_boundary

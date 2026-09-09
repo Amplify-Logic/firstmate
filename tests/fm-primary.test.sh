@@ -389,6 +389,82 @@ SH
   pass "fm-primary: the herdr companion runs in its own new pane and follows the launching session"
 }
 
+test_herdr_split_outcomes_are_reported_separately() {
+  local out log="$TMP_ROOT/herdr-outcome-log"
+  : > "$log"
+  cat > "$FAKEBIN/herdr" <<'SH'
+#!/usr/bin/env bash
+[ "${1:-}" = --session ] || exit 1
+shift 2
+[ "${1:-}" = pane ] || exit 1
+shift
+case "${1:-}" in
+  split)
+    [ "${FM_PRIMARY_TEST_SPLIT_REFUSED:-0}" = 1 ] && exit 1
+    # A successful split that names no pane: herdr's own status is zero, so a
+    # pipeline that reads jq's status instead cannot tell this from a refusal.
+    printf '{"result":{"type":"ok"}}\n'
+    ;;
+  layout)
+    count=0
+    [ ! -f "$FM_PRIMARY_TEST_PANE_COUNT" ] || count=$(<"$FM_PRIMARY_TEST_PANE_COUNT")
+    count=$((count + 1))
+    printf '%s\n' "$count" > "$FM_PRIMARY_TEST_PANE_COUNT"
+    if [ "$count" -eq 1 ]; then
+      printf '{"result":{"layout":{"panes":[{"pane_id":"w1:p1"}]}}}\n'
+    else
+      printf '{"result":{"layout":{"panes":[{"pane_id":"w1:p1"},{"pane_id":"w1:p2"}]}}}\n'
+    fi
+    ;;
+  close)
+    printf 'closed=%s\n' "$2" >> "$FM_PRIMARY_TEST_LOG"
+    ;;
+  run)
+    printf 'ran=%s\n' "$2" >> "$FM_PRIMARY_TEST_LOG"
+    ;;
+esac
+exit 0
+SH
+  chmod +x "$FAKEBIN/herdr"
+
+  out=$(env -u HERDR_ENV -u TMUX_PANE \
+    PATH="$FAKEBIN:$PATH" \
+    TERM=dumb \
+    FM_HOME="$HOME_FIX" \
+    FM_PRIMARY_TEST_LOG="$log" \
+    FM_PRIMARY_TEST_PANE_COUNT="$TMP_ROOT/herdr-outcome-count" \
+    HERDR_SESSION=fm-lab-status \
+    HERDR_PANE_ID=w1:p1 \
+    "$ROOT/bin/fm-primary.sh" codex 2>&1)
+  assert_contains "$out" 'closed the new pane w1:p2' \
+    "a split that succeeded without naming its pane was not reported as such"
+  assert_not_contains "$out" 'continuing with the native TUI' \
+    "an already-shrunk primary was reported as an untouched native TUI"
+  assert_contains "$(cat "$log")" 'closed=w1:p2' \
+    "the pane the split created was left orphaned below the primary"
+  assert_not_contains "$(cat "$log")" 'ran=' \
+    "the renderer was started in a pane the split never named"
+
+  : > "$log"
+  rm -f "$TMP_ROOT/herdr-outcome-count"
+  out=$(env -u HERDR_ENV -u TMUX_PANE \
+    PATH="$FAKEBIN:$PATH" \
+    TERM=dumb \
+    FM_HOME="$HOME_FIX" \
+    FM_PRIMARY_TEST_LOG="$log" \
+    FM_PRIMARY_TEST_PANE_COUNT="$TMP_ROOT/herdr-outcome-count" \
+    FM_PRIMARY_TEST_SPLIT_REFUSED=1 \
+    HERDR_SESSION=fm-lab-status \
+    HERDR_PANE_ID=w1:p1 \
+    "$ROOT/bin/fm-primary.sh" codex 2>&1)
+  assert_contains "$out" 'continuing with the native TUI' \
+    "a refused split lost its quiet native-TUI fallback"
+  assert_not_contains "$(cat "$log")" 'closed=' \
+    "a refused split closed a pane it never created"
+  make_cli herdr
+  pass "fm-primary: a refused herdr split and an unnamed companion pane are reported apart"
+}
+
 test_kimi_version_doctor_and_symlink_refusals() {
   local out rc=0 unsafe_home="$TMP_ROOT/unsafe-home" sentinel="$TMP_ROOT/sentinel-config"
   out=$(PATH="$FAKEBIN:$PATH" \
@@ -801,6 +877,7 @@ test_kimi_primary_only_profile
 test_kimi_tmux_companion_status_bar
 test_tmux_companion_command_renders_the_canonical_row
 test_herdr_companion_command_renders_in_the_pane_the_split_created
+test_herdr_split_outcomes_are_reported_separately
 test_kimi_version_doctor_and_symlink_refusals
 test_kimi_corrupt_source_registry_atomicity
 test_lab_role_guard
