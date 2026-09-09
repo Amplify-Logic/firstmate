@@ -177,9 +177,10 @@ fm_account_logged_out() {  # <vendor> <home> <cli-binary>
   command -v "$cli" >/dev/null 2>&1 || return 1
   case "$vendor" in
     claude)
-      # `claude auth status` prints its JSON on stdout and exits 1 when that home
-      # is logged out (verified 2.1.258, 2026-09-09), so the exit status is not
-      # the signal - the explicit loggedIn field is.
+      # `claude auth status` prints its JSON on stdout either way, exiting 0 when
+      # that home is logged in and 1 when it is not (verified 2.1.258,
+      # 2026-09-09). The exit status cannot separate a logged-out home from a CLI
+      # that failed to answer, so the explicit loggedIn field is the signal.
       out=$(CLAUDE_CONFIG_DIR="$home" fm_run_timeout 10 "$cli" auth status 2>/dev/null) || true
       case "$out" in
         *'"loggedIn": false'*|*'"loggedIn":false'*) return 0 ;;
@@ -227,9 +228,10 @@ fm_account_expect_supported() {  # <vendor>
 # fm_account_identity: every identity token the vendor reports for one home, one
 # "field=value" line each, or return 1 when no identity could be read.
 #
-# Two Claude seats can share one email (a Team seat and a personal Max seat on
-# the same address), so the ORG is what separates them and every field is
-# offered for matching rather than the email alone.
+# Two Claude seats can share one email - a Team seat and a personal Max seat on
+# the same address do exactly that on the captain's machine - so the ORG is what
+# separates them and every field is offered for matching rather than the email
+# alone.
 fm_account_identity() {  # <vendor> <home> <cli-binary>
   local vendor=$1 home=$2 cli=$3 out
   command -v "$cli" >/dev/null 2>&1 || return 1
@@ -254,12 +256,14 @@ fm_account_identity() {  # <vendor> <home> <cli-binary>
 # fm_account_verify_expect: confirm a pinned home really resolves to the identity
 # its account declares, BEFORE anything is launched on it.
 #
-# This closes the hazard the shared macOS keychain exposes: a pinned config
-# directory can be exported and the session still authenticate as some other
-# account, which would silently run the captain on the wrong seat. An expect
-# value is an explicit demand for proof, so an identity that cannot be read at
-# all refuses too - unlike the login gate, where only an explicit negative
-# refuses.
+# A pin selects a HOME, not an identity: exporting the right directory proves
+# nothing about which account actually answers inside it, and a home logged into
+# the wrong seat would silently run the captain there. Reading the identity back
+# is the only thing that proves the seat. An expect value is an explicit demand
+# for that proof, so an identity that cannot be read at all refuses too - unlike
+# the login gate, where only an explicit negative refuses.
+# Two seats sharing one email make this concrete: on the captain's machine the
+# ambient seat and the pinned Team seat differ only by organization and plan.
 #
 # Returns 0 when the account declares no expect value, or when the identity
 # matches one of the vendor's reported fields. Returns 1 with FM_ACCOUNT_ERROR

@@ -52,8 +52,8 @@ SH
   fm_fake_exit0 "$fakebin" treehouse opencode pi grok agent
   # claude and codex answer their own login-status surfaces, because that is what
   # the account gate reads. FM_FAKE_LOGGED_OUT flips them to the explicit
-  # logged-out answer each CLI really prints: claude writes JSON to stdout and
-  # exits 1, codex writes one line to stderr.
+  # logged-out answer each CLI really prints: claude writes JSON to stdout either
+  # way and exits 1 only when logged out, codex writes one line to stderr.
   cat > "$fakebin/claude" <<'SH'
 #!/usr/bin/env bash
 set -u
@@ -65,7 +65,7 @@ if [ "${1:-}" = auth ] && [ "${2:-}" = status ]; then
   printf '{\n  "loggedIn": true,\n  "email": "%s",\n  "orgId": "%s"\n}\n' \
     "${FM_FAKE_CLAUDE_EMAIL:-seat@example.invalid}" \
     "${FM_FAKE_CLAUDE_ORG:-org-fake-0001}"
-  exit 1
+  exit 0
 fi
 exit 0
 SH

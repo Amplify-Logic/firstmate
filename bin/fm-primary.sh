@@ -77,14 +77,16 @@
 # exec, and a mismatch refuses naming both the wanted and the actual identity, so
 # a pinned session can never silently run on another seat.
 #
-# macOS limitation, verified 2026-09-09 on claude 2.1.258: Claude Code reads its
-# keychain credential ONLY when CLAUDE_CONFIG_DIR is unset. Setting it - even to
-# the default ~/.claude - reports loggedIn false and a real run answers "Not
-# logged in". So a Claude pin works only once that home holds its own credentials
-# from its own login, and whether two Claude seats can be logged in at the same
-# time on one machine is UNPROVEN: the login keychain holds a single
-# "Claude Code-credentials" item that is not keyed by config directory. Codex is
-# different and does isolate: its auth.json lives inside CODEX_HOME.
+# Two Claude seats coexist on one machine, proven 2026-09-09 on claude 2.1.258 by
+# logging a second seat in: Claude Code NAMESPACES its keychain item per config
+# directory, so that login added "Claude Code-credentials-<hash>" beside the
+# original item and left the ambient seat untouched. Both then report logged in at
+# once, and neither home holds a .credentials.json. A pinned home is unauthenticated
+# only until its own login, which is why an unauthenticated pin refuses with the
+# login command instead of launching. Codex isolates a different way, through the
+# auth.json inside CODEX_HOME.
+# Two seats can share one email address, so an email is not enough to tell them
+# apart; the org and plan are. That is what an account's expect value is for.
 #
 # Aliases: claude -> claude-fable; opus -> claude-opus; kimi -> kimi-k3;
 # cursor -> cursor-grok.

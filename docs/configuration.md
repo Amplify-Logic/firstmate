@@ -348,7 +348,7 @@ That is the compatibility guarantee, and it is covered by tests in `tests/fm-pri
   "claude": {
     "default": "team",
     "accounts": {
-      "team": {"label": "Aquablu Team (connectors)", "expect": "6602dc35-6d5e-4f5b-a9f4-19e3bf0d3124"},
+      "team": {"label": "Aquablu Team (connectors)", "expect": "<that seat's organization id>"},
       "max": {"label": "Personal Max"}
     }
   },
@@ -380,8 +380,8 @@ A pinned home that does not exist or is explicitly logged out refuses the launch
 
 `expect` closes the silent-wrong-account hole.
 When an account declares it, the launch confirms the pinned home really resolves to that identity before anything runs on it, and refuses naming both the wanted and the actual identity when it does not.
-It is matched case-insensitively against any identity field the vendor reports, so an organization id, an account id, an email, or a plan name all work.
-Two Claude seats can share one email address, in which case the ORG id is the field that actually distinguishes them.
+It is matched case-insensitively against any identity field the vendor reports, so an organization id, an organization name, an email, or a plan name all work.
+Two Claude seats can share one email address - the two on this machine do - so the organization id is the field that actually distinguishes them.
 An identity that cannot be read at all also refuses, because `expect` is a demand for proof rather than a preference.
 `expect` is only accepted for `claude`: `codex login status` reports no identity at all (verified codex-cli 0.153.4, 2026-09-09), so an `expect` on a codex account is reported as invalid rather than silently ignored.
 
@@ -390,19 +390,27 @@ Valid files stay silent by default; with `FM_BOOTSTRAP_VERBOSE_FACTS=1`, bootstr
 Malformed JSON, an unknown vendor, a malformed account, an unsafe account name, a non-string label, an empty or unverifiable `expect`, or a default naming an undefined account is reported as `ACCOUNTS: invalid config/accounts.json - ...`; missing `jq` is reported through the normal `MISSING: jq` install-consent flow.
 A file that exists but cannot be read never fails a launch that asked for no pin: the launch warns and continues on the ambient account, and only an explicit `--account` it cannot resolve refuses.
 
-### What is verified, and what is not
+### What is verified
 
-Codex genuinely isolates: `auth.json` lives inside `CODEX_HOME`, so two codex accounts are two independent logged-in homes (verified 2026-09-09 on codex-cli 0.153.4, ambient home reporting `Logged in using ChatGPT` while an override home reported `Not logged in`).
+Both vendors isolate a login, by different mechanisms, and both were proven on this machine on 2026-09-09.
 
-Claude on macOS does not isolate its credential the same way, and this is a real limitation rather than a configuration mistake.
-Claude Code reads its keychain credential ONLY when `CLAUDE_CONFIG_DIR` is unset: setting it, even to the default `~/.claude`, reports `loggedIn: false` and a real run answers `Not logged in - Please run /login` (verified 2026-09-09 on claude 2.1.258).
-The login keychain holds a single `Claude Code-credentials` item whose account field is the macOS username, with nothing in the key referencing a config directory.
-So a Claude account pin isolates settings, history, and projects, and it reliably refuses rather than running on the wrong seat, but whether two Claude seats can be authenticated at the same time on one machine is UNPROVEN.
-Do not assume parallel Claude seats work until someone proves it by logging one in.
+Codex keeps its credential in the `auth.json` inside `CODEX_HOME`, so two codex accounts are two independent logged-in homes (codex-cli 0.153.4: the ambient home reported `Logged in using ChatGPT` while an override home reported `Not logged in`).
 
-Quota monitoring follows a pin rather than reporting the ambient account: `quota-axi` 0.1.41 reads the pinned home's credentials file for both vendors and declines to attribute the shared macOS keychain credential to a pinned Claude home (`keychain_unreachable`).
-The practical consequence is that a pinned Claude account's quota may only be readable once that home holds its own credentials file.
-That is documented rather than worked around.
+Claude namespaces its macOS keychain item per config directory.
+Logging a second seat in under `CLAUDE_CONFIG_DIR` added a `Claude Code-credentials-<hash>` item beside the original `Claude Code-credentials` item and left the ambient seat untouched (claude 2.1.258).
+Both seats then reported `loggedIn: true` at the same time, and neither home held a `.credentials.json`, because the credential lives in that namespaced keychain item rather than in the config directory.
+So two Claude seats do coexist on one machine, and a pinned home is unauthenticated only until its own login.
+
+That same proof is why `expect` matters.
+The two seats on this machine share one email address and differ only in organization and plan: the ambient seat reported `subscriptionType: max` in a personal organization, and the pinned seat reported `subscriptionType: team` in the `Aquablu` organization.
+An email would not have told them apart; the organization id does.
+
+`claude auth status` prints its JSON on stdout for both outcomes and exits 0 when logged in and 1 when logged out.
+Gate on the `loggedIn` field rather than the exit status, which cannot distinguish a logged-out home from a CLI that failed to answer.
+
+Quota monitoring follows a pin rather than reporting the ambient account.
+`quota-axi` 0.1.41 reads the pinned home's own credential for both vendors, and for a pinned Claude seat it finds that home's namespaced keychain item.
+Reading a keychain item needs one keychain approval per item, reported as `keychain_prompt_required` with the remedy `quota-axi --allow-keychain-prompt`; that approval is the captain's to grant, once per seat.
 
 Secondmate homes do NOT inherit this file.
 Account homes are per-machine and per-login: the derived paths live under one home's own `data/`, and the credentials in them are physically tied to the logins performed on that machine.

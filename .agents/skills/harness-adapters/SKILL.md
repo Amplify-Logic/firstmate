@@ -192,13 +192,14 @@ A pinned home that is missing or explicitly logged out refuses the launch, and t
 
 Operating facts that decide whether a pin can work at all:
 
-- codex isolates completely. `auth.json` lives inside `CODEX_HOME`, so two codex accounts are two independent logins (codex-cli 0.153.4: ambient home `Logged in using ChatGPT`, override home `Not logged in`).
-- claude on macOS does NOT isolate its credential. Claude Code 2.1.258 reads the keychain credential only when `CLAUDE_CONFIG_DIR` is UNSET; setting it, even to the default `~/.claude`, reports `loggedIn: false` and a real run answers `Not logged in - Please run /login`.
-- The macOS login keychain holds a single `Claude Code-credentials` item keyed by service plus the macOS username, with nothing referencing a config directory. Whether two Claude seats can be logged in at once on one machine is UNPROVEN; do not tell the captain parallel Claude seats work until a login proves it.
-- `claude auth status` prints JSON on stdout and exits 1 even when it succeeds, so read the `loggedIn` field and never the exit status.
+- codex isolates through the `auth.json` inside `CODEX_HOME`, so two codex accounts are two independent logins (codex-cli 0.153.4: ambient home `Logged in using ChatGPT`, override home `Not logged in`).
+- claude isolates through the macOS keychain, which it NAMESPACES per config directory. Logging a second seat in under `CLAUDE_CONFIG_DIR` added a `Claude Code-credentials-<hash>` item beside the original and left the ambient seat untouched (claude 2.1.258, proven 2026-09-09).
+- Two Claude seats therefore coexist: both reported `loggedIn: true` at the same time, and neither home held a `.credentials.json`. A pinned Claude home is unauthenticated only until its own login, which the captain performs.
+- Two seats can share one email. On this machine both seats are `l.tolhurst@aquablu.com` and differ only by organization and plan (ambient `max` in a personal org, pinned `team` in `Aquablu`), so match an `expect` on the organization id, never the email.
+- `claude auth status` prints JSON on stdout either way and exits 0 logged in, 1 logged out. Read the `loggedIn` field; the exit status cannot separate a logged-out home from a CLI that failed to answer.
 - `codex login status` prints `Logged in using ChatGPT` on stdout and `Not logged in` on stderr, and exposes no account identity at all.
 - Because codex reports no identity, an `expect` value is accepted only for claude accounts; on a codex account it is reported as invalid rather than matched against something invented. `quota-axi --provider codex` does report the identity of a pinned home and would be the surface to use if that check is ever wanted.
-- `quota-axi` 0.1.41 follows both pins rather than reporting the ambient account, and declines to attribute the shared macOS keychain credential to a pinned Claude home. A pinned Claude account's quota may therefore be unreadable until that home holds its own credentials file.
+- `quota-axi` 0.1.41 follows both pins rather than reporting the ambient account, and for a pinned Claude seat it finds that home's namespaced keychain item. Reading one costs a single keychain approval per item (`keychain_prompt_required`, remedy `quota-axi --allow-keychain-prompt`), which is the captain's to grant.
 
 ## no-mistakes skill invocation
 

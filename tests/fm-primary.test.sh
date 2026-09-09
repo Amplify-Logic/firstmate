@@ -33,14 +33,15 @@ if [ "${1:-}" = status ] && [ "$(basename "$0")" = agent ]; then
   exit 0
 fi
 if [ "${1:-}" = auth ] && [ "${2:-}" = status ] && [ "$(basename "$0")" = claude ]; then
-  # Shape verified on claude 2.1.258: JSON on stdout, exit 1 even when it works.
+  # Shape verified on claude 2.1.258: JSON on stdout either way, exit 0 logged
+  # in and 1 logged out.
   if [ -n "${FM_PRIMARY_TEST_LOGGED_OUT:-}" ]; then
     printf '{\n  "loggedIn": false,\n  "authMethod": "none"\n}\n'
-  else
-    printf '{\n  "loggedIn": true,\n  "email": "seat@example.invalid",\n  "orgId": "%s"\n}\n' \
-      "${FM_PRIMARY_TEST_CLAUDE_ORG:-org-fake-0001}"
+    exit 1
   fi
-  exit 1
+  printf '{\n  "loggedIn": true,\n  "email": "seat@example.invalid",\n  "orgId": "%s"\n}\n' \
+    "${FM_PRIMARY_TEST_CLAUDE_ORG:-org-fake-0001}"
+  exit 0
 fi
 if [ "${1:-}" = login ] && [ "${2:-}" = status ] && [ "$(basename "$0")" = codex ]; then
   # Matches codex-cli 0.144.6: the status lands on stderr with empty stdout and
