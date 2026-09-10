@@ -26,6 +26,9 @@
 #     tick, a claim and the watcher check all exit clean rather than failing.
 #   - The live watcher check wakes once per state and re-arms when the state
 #     recurs, instead of going permanently silent after its first wake.
+#   - Due sources and held alerts are suppressed independently, so an alert the
+#     gate refuses or holds is reported once instead of re-waking the primary
+#     every time the due set empties and refills under it.
 #   - A re-read never erases why an item is waiting on someone else.
 #   - Quiet hours defer the notifiable classes but preserve real severity: a
 #     service outage still goes out.
@@ -789,6 +792,61 @@ test_check_signals_once_per_state() {
   pass 'the watcher check wakes the primary once per state and re-arms when the state recurs'
 }
 
+# A standing alert the gate refuses or holds is reported once, not turned into
+# a wake loop by the due set emptying and refilling underneath it.
+test_a_held_alert_does_not_become_a_wake_loop() {
+  local h out t i due_wakes=0 quiet_wakes=0
+  h="$TMP_ROOT/check-nag"
+  new_home "$h"
+  sed -i.bak 's/^notify_recipient_verified = true$/notify_recipient_verified = false/' \
+    "$h/config/channel-intake"
+  rm -f "$h/config/channel-intake.bak"
+
+  at "$h" "$T_0900" observe --source C_BRIEF --ref out-1 \
+    --digest 'the dispenser at site 12 is down' --class outage \
+    --title 'service outage at site 12' >/dev/null
+
+  # The first sweep reports both conditions together, once.
+  out=$(at "$h" "$T_0900" check)
+  assert_contains "$out" 'source(s) due to read' 'the first sweep did not report the due sources'
+  assert_contains "$out" 'blocked' 'the first sweep did not report the blocked alert'
+
+  # Four worked poll cycles. The due set empties on every claim and refills one
+  # interval later; the blocked alert never changes, so it must never be the
+  # reason for another wake, and a sweep with nothing due must stay silent.
+  t=$T_0900
+  i=0
+  while [ "$i" -lt 4 ]; do
+    at "$h" "$t" claim >/dev/null
+    at "$h" "$t" complete --source C_BRIEF --checkpoint "c-$i" >/dev/null
+    at "$h" "$t" complete --source M_ACTION --checkpoint "m-$i" >/dev/null
+    out=$(at "$h" $((t + 60)) check)
+    if [ -n "$out" ]; then
+      quiet_wakes=$((quiet_wakes + 1))
+      assert_not_contains "$out" '0 source(s) due to read' \
+        'a sweep with nothing due still claimed sources were due'
+    fi
+    t=$((t + 900))
+    out=$(at "$h" "$t" check)
+    [ -z "$out" ] || due_wakes=$((due_wakes + 1))
+    i=$((i + 1))
+  done
+  [ "$quiet_wakes" -eq 0 ] \
+    || fail "a held alert woke the primary $quiet_wakes time(s) on a settled due set"
+  [ "$due_wakes" -eq 4 ] \
+    || fail "a genuinely recurring due state woke the primary $due_wakes time(s) in 4 cycles"
+
+  # The alert half re-wakes on its own terms: a second blocked item is a real
+  # change and must be surfaced even though the first one already was.
+  at "$h" "$t" observe --source M_ACTION --ref m-99 \
+    --digest 'the permit expires on friday' --class deadline \
+    --title 'permit renewal deadline' >/dev/null
+  out=$(at "$h" "$t" check)
+  assert_contains "$out" '2 item(s) blocked' 'a newly blocked item was suppressed by the earlier one'
+
+  pass 'a blocked or held alert is reported once rather than re-waking the primary every poll'
+}
+
 # A refusal and a suppression are not the same thing as nothing to send, and
 # neither may reach the captain as a quiet home.
 test_blocked_notifications_are_visible_rather_than_silent() {
@@ -931,6 +989,7 @@ test_no_existing_fleet_is_overridden
 test_local_configuration_stays_private
 test_arm_check_leaves_no_unregistered_shim
 test_check_signals_once_per_state
+test_a_held_alert_does_not_become_a_wake_loop
 test_blocked_notifications_are_visible_rather_than_silent
 test_unresolvable_timezone_is_refused
 test_both_schedules_share_one_launchd_writer

@@ -1537,41 +1537,65 @@ todo_cmd() {
 # finishing well inside FM_CHECK_TIMEOUT. Suppression is by signature, so an
 # unchanged state wakes the primary once rather than on every poll.
 #
-# The signature carries the last-attempt watermark and is cleared whenever the
-# condition clears, for the same reason the morning gate folds its monotonic
-# `updated` stamp in: a bare "<due>:<notify>" pair recurs identically on every
-# quiet-then-due cycle, so it would suppress the second cycle forever and the
-# live wake path would fire exactly once in the life of the home.
+# Due sources and notifiable items are two independent conditions and each
+# carries its own signature and its own marker. One combined snapshot would
+# couple them: a claim that empties the due set while an alert is still held
+# reads as a brand-new combined state, so the primary would be woken again
+# about the alert it has already been told about, twice per poll interval, for
+# as long as the alert stays held - and `capped`, `spaced` and an unverified
+# recipient are all standing conditions rather than edge cases.
+#
+# Each signature carries the term that actually moves under it - the
+# last-attempt watermark for due sources, the state token and count for
+# notifications - and a condition that is currently absent clears its own
+# marker. That is what the morning gate gets from folding its monotonic
+# `updated` stamp in: without it a recurring identical state is suppressed
+# forever and the live wake path fires once in the life of the home.
+CHECK_DUE_FILE_NAME=check-surfaced-due
+CHECK_NOTIFY_FILE_NAME=check-surfaced-notify
+
 check_signal() {
-  local epoch due count notify notify_token signature previous line progress
+  local epoch due count notify notify_token line='' progress wake=false
+  local due_file notify_file due_signature='' notify_signature=''
   [ "$#" -eq 0 ] || die 'check takes no arguments'
   enabled || return 0
   epoch=$(now_epoch)
   lock_state "$CHECK_LOCK_WAIT" || return 0
+  due_file="$INTAKE_DIR/$CHECK_DUE_FILE_NAME"
+  notify_file="$INTAKE_DIR/$CHECK_NOTIFY_FILE_NAME"
   due=$(due_source_ids "$epoch")
   count=$(printf '%s' "$due" | grep -c '[^[:space:]]' || true)
   notify=$(notify_state "$epoch")
   notify_token=${notify%% *}
   notify=$(notify_state_count "$notify")
-  if [ "$count" -eq 0 ] && [ "$notify" -eq 0 ]; then
-    # Clearing here is what re-arms the next genuine wake: the condition is
-    # gone, so the state that returns after it is a new one.
-    rm -f "$INTAKE_DIR/check-surfaced"
+
+  if [ "$count" -gt 0 ]; then
+    progress=$(last_attempt_watermark)
+    due_signature="$count:$progress"
+    [ "$(read_line_file "$due_file")" = "$due_signature" ] || wake=true
+    line="$CFG_LABEL: $count source(s) due to read"
+  fi
+  if [ "$notify" -gt 0 ]; then
+    notify_signature="$notify_token:$notify"
+    [ "$(read_line_file "$notify_file")" = "$notify_signature" ] || wake=true
+    line="${line:-$CFG_LABEL:}${line:+,} $notify item(s) $(notify_state_phrase "$notify_token")"
+  fi
+
+  # An absent condition clears its own marker whether or not this sweep wakes,
+  # because that is what re-arms its next genuine wake.
+  [ -n "$due_signature" ] || rm -f "$due_file"
+  [ -n "$notify_signature" ] || rm -f "$notify_file"
+  if [ "$wake" != true ]; then
     unlock_state
     return 0
   fi
-  progress=$(last_attempt_watermark)
-  signature="$count:$notify_token:$notify:$progress"
-  previous=$(read_line_file "$INTAKE_DIR/check-surfaced")
-  if [ "$previous" = "$signature" ]; then
-    unlock_state
-    return 0
+  if [ -n "$due_signature" ]; then
+    write_atomic "$due_file" "$due_signature" || { unlock_state; return 0; }
   fi
-  write_atomic "$INTAKE_DIR/check-surfaced" "$signature" || { unlock_state; return 0; }
+  if [ -n "$notify_signature" ]; then
+    write_atomic "$notify_file" "$notify_signature" || { unlock_state; return 0; }
+  fi
   unlock_state
-  line="$CFG_LABEL: $count source(s) due to read"
-  [ "$notify" -eq 0 ] \
-    || line="$line, $notify item(s) $(notify_state_phrase "$notify_token")"
   printf '%s\n' "$line"
 }
 
