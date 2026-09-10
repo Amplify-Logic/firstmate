@@ -37,6 +37,11 @@
 # Chrome mode never zooms: bin/fm-primary.sh zooms once at launch, and this
 # renderer only ever RELEASES the zoom, when a third pane appears in the tab.
 # A deliberate unzoom by the captain is therefore never fought.
+# --chrome-zoomed is how the launcher says it ACTUALLY applied that zoom. It is
+# the only thing that arms the release watch, so this renderer can never issue
+# `pane zoom --off` against a zoom it does not own - the launcher withholds the
+# zoom on a crowded tab while still passing --chrome-pane, and without this
+# signal the renderer would release a co-tenant's zoom it never applied.
 #
 # --role renders a compact account role beside the model. It is only ever a
 # verified label supplied by the launcher: --role, else FM_PRIMARY_ACCOUNT_ROLE
@@ -72,6 +77,7 @@ FOLLOW_PANE=
 FOLLOW_BACKEND=tmux
 CHROME_PANE=
 CHROME_ROLE=
+CHROME_ZOOMED=0
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
@@ -129,6 +135,10 @@ while [ "$#" -gt 0 ]; do
       [ "$#" -ge 2 ] || exit 0
       CHROME_ROLE=$2
       shift 2
+      ;;
+    --chrome-zoomed)
+      CHROME_ZOOMED=1
+      shift
       ;;
     *)
       exit 0
@@ -467,28 +477,49 @@ render_once() {
 # marker is appended. Clipping on the field separator is deliberate: the row is
 # full of multibyte glyphs, and slicing it by offset could split one, whereas a
 # separator is located by pattern and always falls on a character boundary. Only
-# the final fallback trims characters, and by then everything left is the ASCII
-# model and effort tail.
+# the final fallback trims, and it trims whole codepoints, never bytes.
+#
+# The measurement cannot rely on the ambient locale. `${#var}` counts CODEPOINTS
+# under a UTF-8 LC_CTYPE and BYTES under C/POSIX, and neither the herdr server
+# nor the shell it spawns the companion in is guaranteed to carry a UTF-8
+# locale. The row is emoji-heavy, so a byte count runs roughly half again as
+# long as the codepoint count and would drop whole fields off a row that fits.
+# So the locale is forced to C and the codepoints are counted directly: every
+# UTF-8 byte that is not a continuation byte (0x80-0xBF) begins exactly one
+# codepoint. That is the same answer on every host.
 FM_STATUS_CHROME_LIMIT=${FM_STATUS_CHROME_LIMIT:-80}
 
 chrome_clip() {  # <text> -> text that fits the border-title store
-  local text=$1 limit=$FM_STATUS_CHROME_LIMIT
+  # LC_ALL is local, so bash's byte-wise view lasts only for this call. Every
+  # pattern below is a fixed byte sequence, so matching and stripping them
+  # bytewise is exact.
+  local LC_ALL=C text=$1 limit=$FM_STATUS_CHROME_LIMIT lead
+  lead=${text//[$'\200'-$'\277']/}
   # A row that already fits is published byte-for-byte, with no marker.
-  if [ "${#text}" -le "$limit" ]; then
+  if [ "${#lead}" -le "$limit" ]; then
     printf '%s' "$text"
     return
   fi
-  # Room for the two-character marker has to survive the clip.
-  while [ "$((${#text} + 2))" -gt "$limit" ]; do
+  # Room for the two-codepoint marker has to survive the clip.
+  while [ "$((${#lead} + 2))" -gt "$limit" ]; do
     case "$text" in
       *' │ '*) text=${text% │ *} ;;
       *) break ;;
     esac
+    lead=${text//[$'\200'-$'\277']/}
   done
-  # Nothing separable left and still over: trim the ASCII tail one character at
-  # a time rather than emit a row the server would clip without a marker.
-  while [ -n "$text" ] && [ "$((${#text} + 2))" -gt "$limit" ]; do
-    text=${text%?}
+  # Nothing separable left and still over: trim the tail one CODEPOINT at a
+  # time rather than emit a row the server would clip without a marker. Bytes
+  # are dropped until a non-continuation byte goes with them, so a trim can
+  # never leave half a glyph behind.
+  while [ -n "$text" ] && [ "$((${#lead} + 2))" -gt "$limit" ]; do
+    while [ -n "$text" ]; do
+      case "${text: -1}" in
+        [$'\200'-$'\277']) text=${text%?} ;;
+        *) text=${text%?}; break ;;
+      esac
+    done
+    lead=${text//[$'\200'-$'\277']/}
   done
   printf '%s …' "$text"
 }
@@ -536,11 +567,13 @@ chrome_publish() {  # <row>
 # chrome_release_zoom_if_crowded: give the reclaimed rows back rather than hide
 # a co-tenant pane.
 #
-# bin/fm-primary.sh zooms the primary once, at launch, when exactly the primary
-# and its companion share the tab. If anything later splits that tab, the zoom
-# would hide the new pane, so the zoom is released. This only ever releases:
-# it never zooms, so a captain who deliberately unzooms is not fought once a
-# second, and once released the check stops running.
+# Only ever reached when the launcher reported --chrome-zoomed, so the zoom
+# being released is one bin/fm-primary.sh applied itself, at launch, when
+# exactly the primary and its companion shared the tab. If anything later
+# splits that tab, the zoom would hide the new pane, so the zoom is released.
+# This only ever releases: it never zooms, so a captain who deliberately
+# unzooms is not fought once a second, and once released the check stops
+# running for good.
 chrome_release_zoom_if_crowded() {
   local panes
   panes=$(herdr --session "$FM_STATUS_HERDR_SESSION" pane layout --pane "$CHROME_PANE" 2>/dev/null \
@@ -606,8 +639,10 @@ if [ -n "$FOLLOW_PANE" ]; then
   # status row for the life of the companion.
   printf '\033[?25l\033[?7l\033[2J'
   chrome_tick=0
-  # Armed only while chrome mode is on; the release path clears it permanently.
-  CHROME_ZOOM_WATCH=1
+  # Armed ONLY when the launcher reported that it applied the zoom itself, so
+  # this renderer never releases a zoom it does not own. The release path
+  # clears it permanently.
+  CHROME_ZOOM_WATCH=$CHROME_ZOOMED
   while companion_pane_alive; do
     # Collect the complete frame before any of it reaches the pane, then publish
     # the row erase and the finished frame in a single write. Erasing first left

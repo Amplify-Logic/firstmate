@@ -280,8 +280,10 @@ Chrome mode reclaims those rows without giving up any canonical field.
 The canonical row is published to the PRIMARY pane's own border title, where it costs no rows at all,
 and the companion pane is then hidden by zooming the primary.
 
-Four measured facts define the shape, all captured on herdr 0.7.4 through
-[`bin/fm-herdr-lab.sh`](../bin/fm-herdr-lab.sh) `view` in a disposable `fm-lab-*` session:
+The shape is defined by measurement, not inference. Every fact below was captured on herdr 0.7.4
+through [`bin/fm-herdr-lab.sh`](../bin/fm-herdr-lab.sh) in a disposable `fm-lab-*` session, and
+[`tests/fm-status-chrome-herdr-lab-e2e.test.sh`](../tests/fm-status-chrome-herdr-lab-e2e.test.sh)
+re-runs the zoom, layout, and readback ones against the real binary:
 
 - **A pane with no split has no border whatsoever.** Neither `pane report-metadata --title` nor
   `pane rename` renders anything on an unsplit pane. So the companion pane must keep EXISTING for a
@@ -290,10 +292,20 @@ Four measured facts define the shape, all captured on herdr 0.7.4 through
 - **With the split present, the primary's top border renders the row in full**, every canonical field
   included, and it keeps refreshing while the primary is unfocused.
 - **Zooming the primary hides the companion and keeps that border title.** The primary occupies every
-  row through its own bottom border, Herdr marks the tab zoomed, and the status row still reads from
-  the top border. This is the reclaim.
+  row through its own bottom border, the companion's box stops being rendered entirely, and the status
+  row still reads from the top border. This is the reclaim.
 - **Herdr truncates the border title itself, visibly**, appending its own ellipsis - verified at both
   60 and 40 columns. Width is therefore Herdr's concern and this renderer does not second-guess it.
+- **`pane get` reads the published row back exactly.** `.result.pane.title` returns the string that
+  was published, and the last source to publish is the one it resolves. That readback is what makes
+  the capability gate below evidence rather than a guess.
+- **`pane layout` reports the pane count and the zoom flag independently.** A zoomed two-pane tab
+  still reports two panes with `zoomed: true`: zoom hides the companion without removing it, which is
+  exactly why the border survives.
+- **Herdr releases the zoom itself when a third pane appears.** Splitting a co-tenant into a zoomed
+  tab returns three panes and `zoomed: false` with no request from us, and `pane zoom --off` on an
+  already-unzoomed tab is accepted as a no-op (`reason: "already_unzoomed"`). So the renderer's
+  release is a cheap confirmation, not the thing keeping a co-tenant visible.
 
 The row is prefixed with a compact visible role marker, `FM` for an ordinary primary and `LAB` for a
 lab primary, so the guarded primary identity is not displaced by the status fields.
@@ -309,23 +321,58 @@ Two guarantees are load-bearing:
 - **Herdr stores a border title clipped to 80 codepoints, silently.** The renderer therefore drops
   whole fields from the right until the row fits and appends a visible marker, so the rightmost fields
   can never disappear without a sign. Fields are dropped on the separator rather than by offset,
-  because the row is full of multibyte glyphs and an offset slice could split one.
+  because the row is full of multibyte glyphs and an offset slice could split one; the last-resort
+  trim removes whole codepoints for the same reason.
+  That measurement does not depend on the ambient locale. `${#var}` counts codepoints under a UTF-8
+  `LC_CTYPE` and BYTES under `C`/`POSIX`, and neither the herdr server nor the shell it spawns the
+  companion in is guaranteed to carry a UTF-8 locale - the canonical row is 72 codepoints but 105
+  bytes, so a byte count would throw away three fields from a row that fits. The renderer forces `C`
+  for the measurement and counts codepoints directly, as every UTF-8 byte that is not a continuation
+  byte, which is the same answer on every host.
 
 The row is published with a `--ttl-ms` of two and a half refresh intervals, so a renderer that dies
 lets the border row expire instead of freezing a stale fleet count on the captain's screen.
 
+### The capability gate is positive evidence
+
+Nothing is hidden on the strength of a protocol number. The presentation protocol floor is only a
+cheap PRE-FILTER: protocol 16 attests the managed presentation surfaces the adapter uses, and none of
+the three chrome mode actually depends on - `report-metadata --ttl-ms`, `pane get`'s resolved title,
+and `pane layout` - and the same number also matches older herdr builds.
+
+So after the split exists, and before anything is hidden, `bin/fm-primary.sh` proves the surfaces
+against the real pane: it publishes the role marker to the border under chrome mode's own source with
+a short expiry, reads it back with `pane get` and requires an exact match, and requires `pane layout`
+to answer with a parseable pane count. Only when all three succeed does it pass `--chrome-pane` to the
+companion and consider hiding it. Any failure - a client that answers the pre-filter but does not
+store the row, or one whose layout cannot be read - leaves the companion visible with its in-pane row
+as the only surface, which is exactly the behavior that shipped before chrome mode. The probe row
+carries a short `--ttl-ms`, so a probe that no renderer ever follows expires instead of sitting on the
+border.
+
+This check is local to the launcher's Herdr arm on purpose. It is not a backend capability layer and
+not a general probe framework; it is the one thing that must be true before the captain's only
+pre-existing status surface is hidden.
+
+### The zoom is owned, and releasing it is one-way
+
 Zoom is applied exactly once, by `bin/fm-primary.sh`, and only when the tab holds nothing but the
 primary and the companion just created.
-The renderer never re-applies it: it only RELEASES the zoom, on a slow cadence, if a third pane later
+When it applies that zoom it says so, by passing `--chrome-zoomed` to the companion, and that signal
+is the ONLY thing that arms the renderer's release watch. The launcher still passes `--chrome-pane` on
+a crowded tab - the border row is worth having either way - so without the signal the renderer would
+otherwise be releasing a zoom that belongs to someone else. If `pane run` then fails, the launcher
+releases its own zoom before closing the pane it was taken for.
+The renderer never re-applies the zoom: it only RELEASES, on a slow cadence, if a third pane later
 appears in that tab, and it stops checking once released.
 That keeps two properties at the same time - a co-tenant pane's live work is never hidden, and a
 captain who deliberately unzooms is not fought once a second.
 
 The fallback chain has no gap.
 The companion keeps drawing its own in-pane row exactly as before, so an unzoomed primary, a Herdr
-below the verified presentation protocol, a refused zoom, and a failing metadata call all degrade to
-the surface that shipped before chrome mode - the only consequence is that the empty rows are not
-reclaimed.
+below the verified presentation protocol, a client that fails the capability probe, a refused zoom,
+and a failing metadata call all degrade to the surface that shipped before chrome mode - the only
+consequence is that the empty rows are not reclaimed.
 Chrome mode is also off entirely for tmux, and refuses a chrome pane that is the companion itself.
 
 ## Local activation after merge
