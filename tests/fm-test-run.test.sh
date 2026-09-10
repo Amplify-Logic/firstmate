@@ -94,6 +94,8 @@ init_changed_fixture_repo() {
   local repo=$1 script
   mkdir -p "$repo/bin" "$repo/tests"
   cp "$RUNNER" "$repo/bin/fm-test-run.sh"
+  cp "$ROOT/bin/fm-fork-test-registry-lib.sh" "$repo/bin/fm-fork-test-registry-lib.sh"
+  cp "$ROOT/tests/fork-test-registry.conf" "$repo/tests/fork-test-registry.conf"
   chmod +x "$repo/bin/fm-test-run.sh"
   for script in \
     fm-brief.test.sh \
@@ -111,6 +113,11 @@ init_changed_fixture_repo() {
     fm-bearings-snapshot.test.sh \
     fm-visible-status.test.sh \
     fm-herdr-layout-preview-e2e.test.sh \
+    fm-fork-surface.test.sh \
+    fm-test-run.test.sh \
+    fm-gitignore-config.test.sh \
+    fm-secondmate-sync.test.sh \
+    fm-upstream-watch.test.sh \
     fm-backend-cmux.test.sh \
     fm-backend-zellij.test.sh \
     fm-backend-orca.test.sh; do
@@ -135,6 +142,59 @@ init_changed_fixture_repo() {
   git -C "$repo" init -q
   git -C "$repo" add .
   git -C "$repo" -c user.name=test -c user.email=test@example.invalid commit -qm baseline
+}
+
+test_fork_registry_overlay() {
+  local tmp repo listed out rc
+  tmp=$(mktemp -d "${TMPDIR:-/tmp}/fm-test-run-fork-registry.XXXXXX")
+  repo="$tmp/repo"
+  init_changed_fixture_repo "$repo"
+
+  listed=$(cd "$repo" && bin/fm-test-run.sh --list --family pure-contract-unit) \
+    || { rm -rf "$tmp"; fail "fork registry family row must load"; }
+  assert_contains "$listed" "tests/fm-fork-surface.test.sh" \
+    "fork registry family row participates in family selection"
+
+  printf '# fixture source\n' > "$repo/bin/fm-fork-surface.sh"
+  listed=$(cd "$repo" && bin/fm-test-run.sh --list --changed --base HEAD) \
+    || { rm -rf "$tmp"; fail "fork registry covers row must load"; }
+  [ "$listed" = "tests/fm-fork-surface.test.sh" ] \
+    || { rm -rf "$tmp"; fail "fork registry path expected one direct test, got: $listed"; }
+  git -C "$repo" add bin/fm-fork-surface.sh
+  git -C "$repo" -c user.name=test -c user.email=test@example.invalid commit -qm fork-source
+
+  printf '# fixture ignore\n' > "$repo/.gitignore"
+  listed=$(cd "$repo" && bin/fm-test-run.sh --list --changed --base HEAD) \
+    || { rm -rf "$tmp"; fail "fork registry adds row must load"; }
+  assert_contains "$listed" "tests/fm-fork-surface.test.sh" \
+    "adds row contributes the fork owner"
+  assert_contains "$listed" "tests/fm-gitignore-config.test.sh" \
+    "adds row keeps the upstream config owner"
+  assert_contains "$listed" "tests/fm-secondmate-sync.test.sh" \
+    "adds row keeps the upstream seed-marker owner"
+  assert_contains "$listed" "tests/fm-upstream-watch.test.sh" \
+    "adds row keeps the upstream private-report owner"
+  rm -f "$repo/.gitignore"
+
+  mv "$repo/tests/fork-test-registry.conf" "$repo/tests/fork-test-registry.disabled"
+  listed=$(cd "$repo" && bin/fm-test-run.sh --list --family pure-contract-unit) \
+    || { rm -rf "$tmp"; fail "missing fork registry must preserve the core runner"; }
+  assert_not_contains "$listed" "tests/fm-fork-surface.test.sh" \
+    "missing fork registry leaves fork-only tests unclassified"
+  mv "$repo/tests/fork-test-registry.disabled" "$repo/tests/fork-test-registry.conf"
+
+  printf 'family pure-contract-unit tests/fm-fork-surface.test.sh extra\n' \
+    > "$repo/tests/fork-test-registry.conf"
+  set +e
+  out=$(cd "$repo" && bin/fm-test-run.sh --list --all 2>&1)
+  rc=$?
+  set -e
+  [ "$rc" -eq 2 ] || { rm -rf "$tmp"; fail "malformed fork registry must fail with exit 2, got $rc"; }
+  assert_contains "$out" 'expected exactly three fields' \
+    "malformed fork registry failure is actionable"
+
+  rm -rf "$tmp"
+  pass "fork registry overlays family and path ownership and fails closed when malformed"
 }
 
 test_changed_dependency_selection_and_unmapped_failure() {
@@ -723,6 +783,7 @@ test_family_selection
 test_single_script_selection
 test_changed_file_selection_is_conservative
 test_changed_dependency_selection_and_unmapped_failure
+test_fork_registry_overlay
 test_empty_selection_emits_summary
 test_timing_markers_and_json
 test_aggregate_exit_behavior
