@@ -273,11 +273,17 @@ test_window_identity_is_shared_by_every_reader() {
 
   local out
   out=$(node_check "
-import { declaresCredits, describeDuration, durationSeconds, identifyByDuration } from '$ASSETS/quota-windows.ts';
-const identity = (seconds) => {
-  const i = identifyByDuration(seconds);
-  return i.id + '/' + i.label + '/' + String(i.recognized);
-};
+import {
+  declaresCredits,
+  describeDuration,
+  durationSeconds,
+  identifyByDeclaredUnit,
+  identifyByDuration,
+  identifyUnclaimed,
+} from '$ASSETS/quota-windows.ts';
+const show = (i) => i.id + '/' + i.label + '/' + String(i.recognized);
+const identity = (seconds) => show(identifyByDuration(seconds));
+const declared = (duration, timeUnit) => show(identifyByDeclaredUnit(duration, timeUnit));
 
 // The Kimi five-hour limit as the provider states it: 300 MINUTE. Named from
 // that declared length, never from where the limit sat in the response.
@@ -300,15 +306,37 @@ console.log('not-fixed=' + [
 ].join(','));
 // A declared length that is not a known allowance keeps its own honest name.
 console.log('unfamiliar=' + identity(86400));
-// Credits are money and are refused whichever field the reader states them in,
-// while an ordinary allowance - familiar or not - is never refused.
+// A row that states its length as a count and a unit is named from that. A row
+// that states no usable length is unknown in every response - the Kimi account
+// rollup carries no duration, so it must never read as a week it was not told
+// about, whatever else the response contained.
+console.log('declared=' + [
+  declared(300, 'MINUTE'),
+  declared(7, 'DAYS'),
+  declared(1, 'MONTH'),
+  declared(undefined, undefined),
+  declared(3, undefined),
+].join('|'));
+// A known name is spent once per read: a second window of that length is
+// described by its own length instead of taking the name a second time.
+console.log('contended=' + [
+  show(identifyUnclaimed(identifyByDeclaredUnit(7, 'DAYS'), new Set(['weekly']))),
+  show(identifyUnclaimed(identifyByDeclaredUnit(7, 'DAYS'), new Set())),
+  show(identifyUnclaimed(identifyByDeclaredUnit(undefined, undefined), new Set(['window_unknown']))),
+].join('|'));
+// Credits are money and are refused whichever field the reader states them in.
+// A label is display text, so the word only counts there when it stands alone: a
+// real allowance that merely mentions credits keeps its row rather than vanishing
+// with no row and no error.
 console.log('credits=' + [
-  declaresCredits(['credits', undefined, undefined]),
-  declaresCredits([undefined, 'credit_balance', undefined]),
-  declaresCredits([undefined, undefined, 'Credits remaining']),
-  declaresCredits(['usage', 'five_hour', 'SESSION']),
-  declaresCredits([undefined, 'monthly_allowance', undefined]),
-  declaresCredits([]),
+  declaresCredits({ structural: ['credits'] }),
+  declaresCredits({ structural: [undefined, 'credit_balance'] }),
+  declaresCredits({ display: ['Credits remaining'] }),
+  declaresCredits({ structural: [undefined, 'included_credits'], display: ['INCLUDED'] }),
+  declaresCredits({ structural: [undefined, 'five_hour'], display: ['SESSION (credit-backed)'] }),
+  declaresCredits({ structural: [undefined, 'five_hour'], display: ['SESSION'] }),
+  declaresCredits({ structural: [undefined, 'monthly_allowance'] }),
+  declaresCredits({}),
 ].join(','));
 console.log('describe=' + [describeDuration(18000), describeDuration(604800)].join('|'));
 ")
@@ -321,8 +349,14 @@ console.log('describe=' + [describeDuration(18000), describeDuration(604800)].jo
     "a unit with no fixed length must stay unknown rather than be assumed"
   assert_contains "$out" "unfamiliar=window_86400s/1D WINDOW/false" \
     "an unfamiliar declared length must keep its own label and say it is unknown"
-  assert_contains "$out" "credits=true,true,true,false,false,false" \
-    "credits must be refused from any identity field, and only when actually stated"
+  assert_contains "$out" \
+    "declared=five_hour/SESSION/true|weekly/WEEKLY/true|window_unknown/WINDOW (LENGTH UNKNOWN)/false|window_unknown/WINDOW (LENGTH UNKNOWN)/false|window_unknown/WINDOW (LENGTH UNKNOWN)/false" \
+    "a row states its own length or is unknown, never named by what accompanied it"
+  assert_contains "$out" \
+    "contended=window_604800s/7D WINDOW/false|weekly/WEEKLY/true|window_unknown/WINDOW (LENGTH UNKNOWN)/false" \
+    "a known name must be spent once per read, and an unknown row must not contend"
+  assert_contains "$out" "credits=true,true,true,true,false,false,false,false" \
+    "credits must be refused when stated, and display text must not drop an allowance"
   assert_contains "$out" "describe=5H WINDOW|7D WINDOW" "a duration must describe itself"
   pass "window identity comes from the declared length, and credits are not an allowance"
 }

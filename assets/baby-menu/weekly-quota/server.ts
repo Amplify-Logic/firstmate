@@ -7,10 +7,8 @@ import type { BabyMenuServerContext } from "@babymenu/contracts";
 import {
   classifyCodexWindows,
   declaresCredits,
-  describeDuration,
-  durationSeconds,
-  identifyByDuration,
-  UNKNOWN_LENGTH_LABEL,
+  identifyByDeclaredUnit,
+  identifyUnclaimed,
 } from "./quota-windows";
 import type { RawCodexWindow } from "./quota-windows";
 import { readLocalSettings } from "./local-settings";
@@ -185,10 +183,10 @@ function quotaAxiWindow(raw: QuotaAxiWindow): QuotaWindow | null {
   if (id === null || percentRemaining === null) return null;
   // Credits headroom is money, not an allowance window; showing it beside the
   // percentages would read as extra quota it is not. Which field carries that
-  // fact varies with what the reader was told, so all three of kind, id and
-  // label are consulted - and only an explicit statement of credits drops a
-  // window, never mere unfamiliarity.
-  if (declaresCredits([raw.kind, raw.id, raw.label])) return null;
+  // fact varies with what the reader was told, so kind, id and label are all
+  // consulted - the first two as machine identity, the label as the display text
+  // it is, so an allowance that merely mentions credits keeps its row.
+  if (declaresCredits({ structural: [raw.kind, raw.id], display: [raw.label] })) return null;
   let label: string;
   if (id === "five_hour") label = "SESSION";
   else if (id === "seven_day") label = "WEEKLY";
@@ -693,31 +691,31 @@ function kimiQuotaWindow(
 // Kimi states a limit's length as a count plus a time unit. That declared length
 // is the only thing a row is named from: a row labelled by its position in the
 // response ("LIMIT 2") tells the captain nothing about which allowance it is.
-function kimiWindowSeconds(window: Record<string, unknown>): number | null {
-  const duration = toFiniteNumber(window.duration);
-  if (duration === null) return null;
-  const timeUnit = typeof window.timeUnit === "string" ? window.timeUnit : "";
-  return durationSeconds(duration, timeUnit);
-}
-
+//
 // `claim` is the known-window name this row would take, returned rather than
-// taken so the caller only spends it on a row that actually parsed. A known name
-// is used once per read, so two limits of the same length cannot both render as
-// SESSION - the second keeps its own duration label, as the Codex classifier
-// does. The source index keeps every id distinct whatever the labels say.
+// taken so the caller only spends it on a row that actually parsed. The source
+// index keeps every id distinct whatever the labels say.
 function kimiLimitIdentity(
   window: Record<string, unknown>,
   index: number,
   claimed: ReadonlySet<string>,
 ): { id: string; label: string; claim?: string } {
-  const suffix = String(index + 1);
-  const seconds = kimiWindowSeconds(window);
-  if (seconds === null) return { id: `limit_${suffix}`, label: UNKNOWN_LENGTH_LABEL };
-  const identity = identifyByDuration(seconds);
-  if (identity.recognized && !claimed.has(identity.id)) {
-    return { id: `${identity.id}_${suffix}`, label: identity.label, claim: identity.id };
-  }
-  return { id: `window_${String(seconds)}s_${suffix}`, label: describeDuration(seconds) };
+  const identity = identifyUnclaimed(identifyByDeclaredUnit(window.duration, window.timeUnit), claimed);
+  return {
+    id: `${identity.id}_${String(index + 1)}`,
+    label: identity.label,
+    claim: identity.recognized ? identity.id : undefined,
+  };
+}
+
+// The account usage rollup is named the way a limit is: from a length the
+// provider stated, and from nothing else. Where it states none its window is
+// unknown in every response - naming it after whichever rows happened to
+// accompany it would make one figure read as a different allowance each time.
+function kimiSummaryIdentity(summary: Record<string, unknown>): { id: string; label: string } {
+  const declared = asRecord(summary.window) ?? summary;
+  const identity = identifyByDeclaredUnit(declared.duration, declared.timeUnit);
+  return { id: `usage_${identity.id}`, label: identity.label };
 }
 
 async function getKimiWeeklyQuota(context: BabyMenuServerContext): Promise<QuotaResult> {
@@ -758,12 +756,7 @@ async function getKimiWeeklyQuota(context: BabyMenuServerContext): Promise<Quota
     }
     const summary = asRecord(json.usage);
     if (summary) {
-      // The account usage summary is the weekly rollup - unless a limit already
-      // reported a weekly window of its own, in which case this is a separate
-      // figure and must not take that name, or that id, a second time.
-      const identity = claimed.has("weekly")
-        ? { id: "usage_summary", label: "USAGE" }
-        : { id: "weekly", label: "WEEKLY" };
+      const identity = kimiSummaryIdentity(summary);
       const parsed = kimiQuotaWindow(summary, identity.id, identity.label);
       if (parsed) windows.push(parsed);
     }

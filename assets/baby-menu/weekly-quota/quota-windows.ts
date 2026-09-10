@@ -100,7 +100,10 @@ export function describeDuration(seconds: number): string {
   return `${String(seconds)}S WINDOW`;
 }
 
-export type WindowIdentity = { id: string; label: string; recognized: boolean };
+// `seconds` is the length the provider declared, carried so a caller that has to
+// re-describe the window does not have to re-derive it. Absent means no usable
+// length was declared.
+export type WindowIdentity = { id: string; label: string; recognized: boolean; seconds?: number };
 
 /**
  * The identity a declared window length carries on its own: a known allowance
@@ -113,8 +116,43 @@ export type WindowIdentity = { id: string; label: string; recognized: boolean };
  */
 export function identifyByDuration(seconds: number): WindowIdentity {
   const known = matchByDuration(seconds);
-  if (known) return { id: known.id, label: known.label, recognized: true };
-  return { id: `window_${String(seconds)}s`, label: describeDuration(seconds), recognized: false };
+  if (known) return { id: known.id, label: known.label, recognized: true, seconds };
+  return { id: `window_${String(seconds)}s`, label: describeDuration(seconds), recognized: false, seconds };
+}
+
+/**
+ * The identity of a window whose length the provider states as a count plus a
+ * time unit, as Kimi does.
+ *
+ * A row that states no usable length is unknown - in every response, whatever
+ * else that response happened to contain. A figure named after its company
+ * rather than after what the provider said would read as one allowance in one
+ * response and a different one in the next.
+ */
+export function identifyByDeclaredUnit(duration: unknown, timeUnit: unknown): WindowIdentity {
+  const count = finiteNumber(duration);
+  const seconds = count === null ? null : durationSeconds(count, typeof timeUnit === "string" ? timeUnit : "");
+  if (seconds === null) return { id: "window_unknown", label: UNKNOWN_LENGTH_LABEL, recognized: false };
+  return identifyByDuration(seconds);
+}
+
+/**
+ * The identity a row takes given the known names already spoken for in this
+ * read.
+ *
+ * A known name is used once per read, so two rows of the same length cannot both
+ * render as SESSION - the second is described by its own length instead. A row
+ * that names nothing known, or whose length was never declared, is returned
+ * unchanged: there is nothing for it to contend over.
+ */
+export function identifyUnclaimed(identity: WindowIdentity, claimed: ReadonlySet<string>): WindowIdentity {
+  if (!identity.recognized || !claimed.has(identity.id) || identity.seconds === undefined) return identity;
+  return {
+    id: `window_${String(identity.seconds)}s`,
+    label: describeDuration(identity.seconds),
+    recognized: false,
+    seconds: identity.seconds,
+  };
 }
 
 // Units with a fixed length, shortest first. A month and a year are deliberately
@@ -149,16 +187,35 @@ export function durationSeconds(count: number, unit: string): number | null {
   return null;
 }
 
+// The credits word standing on its own. A hyphen or an underscore counts as part
+// of the word here, so "credit-backed" is one compound word and not a statement
+// that the row is credits.
+const CREDITS_WORD = /(^|[^\p{L}\p{N}_-])credits?($|[^\p{L}\p{N}_-])/u;
+
 /**
  * Whether the provider's own identity fields say a row is credits headroom.
  *
  * Credits are money, not an allowance window: drawn beside the percentages they
- * read as extra quota they are not. A reader states this in whichever field it
- * fills in, so every identity field it has is offered here. Only an explicit
- * statement counts - a window is never rejected for merely being unfamiliar.
+ * read as extra quota they are not.
+ *
+ * `structural` fields are machine identity - a kind, an id - where the word
+ * appears only because the reader classified the row that way, so any occurrence
+ * counts. `display` fields are text written to be read, where the word can
+ * appear in passing: an allowance labelled "SESSION (credit-backed)" is an
+ * allowance, and dropping it would lose a real window with no row and no error.
+ * Display text therefore only counts when the word stands on its own.
+ *
+ * Only an explicit statement drops a row; a window is never rejected for merely
+ * being unfamiliar.
  */
-export function declaresCredits(fields: readonly unknown[]): boolean {
-  return fields.some((field) => typeof field === "string" && field.toLowerCase().includes("credit"));
+export function declaresCredits(fields: {
+  structural?: readonly unknown[];
+  display?: readonly unknown[];
+}): boolean {
+  const says = (field: unknown, test: (text: string) => boolean): boolean =>
+    typeof field === "string" && test(field.toLowerCase());
+  if ((fields.structural ?? []).some((field) => says(field, (text) => text.includes("credit")))) return true;
+  return (fields.display ?? []).some((field) => says(field, (text) => CREDITS_WORD.test(text)));
 }
 
 /**

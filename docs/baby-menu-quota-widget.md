@@ -63,6 +63,7 @@ These rules are load-bearing; changing any of them changes what the captain beli
 - **Cursor's window is its billing cycle**, labelled `INCLUDED` rather than `WEEKLY`, so its countdown is not read as a week.
 - **Credits headroom is money, not allowance**, and is deliberately not shown beside the percentages.
   A row is refused for saying it is credits in any of the identity fields a reader fills in, never for merely being an allowance this panel does not recognise.
+  A label is display text, so the word only counts there when it stands on its own: an allowance labelled something like `SESSION (credit-backed)` keeps its row rather than disappearing with no row and no error.
 - **Colour never carries meaning alone.**
   Every alert also says `low` or `critical` in words, and brand colour and quota colour never share a lane.
 
