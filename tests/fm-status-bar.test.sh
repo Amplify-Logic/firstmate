@@ -20,6 +20,14 @@ strip_ansi() {
   sed $'s/\033\\[[0-9;]*m//g'
 }
 
+# Herdr's border-title store counts CODEPOINTS, and `${#var}` counts bytes
+# wherever LC_CTYPE is C/POSIX - including this suite's own shell. Counting
+# non-continuation UTF-8 bytes is the same answer on every host, which is the
+# unit the assertions below have to be in.
+count_codepoints() {  # <text>
+  printf '%s' "$1" | LC_ALL=C tr -d '\200-\277' | LC_ALL=C wc -c | tr -d ' '
+}
+
 render() {
   PATH="$FAKEBIN:$PATH" \
     FM_HOME="$HOME_FIX" \
@@ -1075,7 +1083,7 @@ SH
     "$ROOT/bin/fm-status-bar.sh" \
       --adapter codex --model gpt-6-astra --effort high \
       --follow-pane w9:p9 --follow-backend herdr \
-      --chrome-pane w9:p1 --chrome-role FM | strip_ansi)
+      --chrome-pane w9:p1 --chrome-role FM --chrome-zoomed | strip_ansi)
 
   assert_contains "$(cat "$log")" 'pane zoom w9:p1 --off' \
     "chrome mode never released the zoom after a third pane appeared"
@@ -1090,8 +1098,123 @@ SH
   pass "status bar: chrome mode only ever releases the zoom, once, and never re-applies it"
 }
 
+test_chrome_mode_never_releases_a_zoom_the_launcher_did_not_apply() {
+  local log="$TMP_ROOT/unowned-zoom-log" count_file="$TMP_ROOT/unowned-zoom-count"
+  : > "$log"
+  cat > "$FAKEBIN/herdr" <<'SH'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >> "$FM_CHROME_LOG"
+case "$*" in
+  *"pane get"*)
+    count=0
+    [ ! -f "$FM_CHROME_COUNT" ] || count=$(<"$FM_CHROME_COUNT")
+    count=$((count + 1))
+    printf '%s\n' "$count" > "$FM_CHROME_COUNT"
+    if [ "$count" -le 6 ]; then
+      printf '{"result":{"pane":{"pane_id":"w9:p9"}}}\n'
+    else
+      printf '{"result":{"pane":{}}}\n'
+    fi
+    ;;
+  # A crowded tab, which is exactly when the launcher WITHHOLDS the zoom: it
+  # still hands over --chrome-pane, but never --chrome-zoomed.
+  *"pane layout"*) printf '{"result":{"layout":{"panes":[{},{},{}]}}}\n' ;;
+  *) printf '{}\n' ;;
+esac
+exit 0
+SH
+  chmod +x "$FAKEBIN/herdr"
+  PATH="$FAKEBIN:$PATH" \
+    FM_HOME="$HOME_FIX" \
+    FM_PRIMARY_HARNESS=codex \
+    FM_STATUS_BAR_INTERVAL=0 \
+    FM_STATUS_CHROME_ZOOM_EVERY=1 \
+    FM_CHROME_LOG="$log" \
+    FM_CHROME_COUNT="$count_file" \
+    FM_STATUS_HERDR_SESSION=default \
+    "$ROOT/bin/fm-status-bar.sh" \
+      --adapter codex --model gpt-6-astra --effort high \
+      --follow-pane w9:p9 --follow-backend herdr \
+      --chrome-pane w9:p1 --chrome-role FM >/dev/null
+
+  # Releasing is OWNED, not assumed: without the launcher's signal this zoom
+  # belongs to someone else, so it must never be turned off here.
+  assert_not_contains "$(cat "$log")" 'pane zoom' \
+    "the renderer released a zoom the launcher never applied"
+  # And the watch is not even armed, so it costs no layout read per refresh.
+  assert_not_contains "$(cat "$log")" 'pane layout' \
+    "the renderer polled the layout for a zoom it does not own"
+  # The border row is still published; only the release watch is withheld.
+  assert_contains "$(cat "$log")" 'pane report-metadata w9:p1' \
+    "the border row must still be published when the launcher withheld the zoom"
+
+  rm -f "$FAKEBIN/herdr"
+  pass "status bar: the renderer only releases a zoom the launcher reported applying"
+}
+
+test_chrome_clip_measures_codepoints_not_bytes() {
+  local log="$TMP_ROOT/locale-clip-log" count_file="$TMP_ROOT/locale-clip-count" title
+  : > "$log"
+  cat > "$FAKEBIN/herdr" <<'SH'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >> "$FM_CHROME_LOG"
+case "$*" in
+  *"pane get"*)
+    count=0
+    [ ! -f "$FM_CHROME_COUNT" ] || count=$(<"$FM_CHROME_COUNT")
+    count=$((count + 1))
+    printf '%s\n' "$count" > "$FM_CHROME_COUNT"
+    if [ "$count" -le 1 ]; then
+      printf '{"result":{"pane":{"pane_id":"w9:p9"}}}\n'
+    else
+      printf '{"result":{"pane":{}}}\n'
+    fi
+    ;;
+  *"pane layout"*) printf '{"result":{"layout":{"panes":[{},{}]}}}\n' ;;
+  *) printf '{}\n' ;;
+esac
+exit 0
+SH
+  chmod +x "$FAKEBIN/herdr"
+  # The store counts CODEPOINTS. This row is emoji-heavy, so its byte length
+  # runs well past 80 while its codepoint length fits comfortably - and neither
+  # the herdr server nor the shell it spawns the companion in is guaranteed to
+  # carry a UTF-8 locale. Measuring bytes here would throw away whole fields
+  # from a row that fits, so the run is deliberately made under LC_ALL=C.
+  LC_ALL=C PATH="$FAKEBIN:$PATH" \
+    FM_HOME="$HOME_FIX" \
+    FM_PRIMARY_HARNESS=codex \
+    FM_STATUS_BAR_INTERVAL=0 \
+    FM_STATUS_BAR_NOW=1000 \
+    FM_CHROME_LOG="$log" \
+    FM_CHROME_COUNT="$count_file" \
+    FM_STATUS_HERDR_SESSION=default \
+    "$ROOT/bin/fm-status-bar.sh" \
+      --adapter codex --model gpt-6-astra --effort high \
+      --follow-pane w9:p9 --follow-backend herdr \
+      --chrome-pane w9:p1 --chrome-role FM >/dev/null
+
+  title=$(sed -n 's/.*--title \(.*\) --ttl-ms.*/\1/p' "$log" | tail -1)
+  [ -n "$title" ] || fail "chrome mode published no border title to inspect"
+  case "$title" in
+    *'…') fail "a row that fits the 80-codepoint store was clipped by byte count: $title" ;;
+  esac
+  # The row this run produces is well inside the store in codepoints and well
+  # past it in bytes, which is exactly the case a byte count gets wrong.
+  [ "$(count_codepoints "$title")" -le 80 ] \
+    || fail "the locale probe row is not actually within the 80-codepoint store"
+  [ "${#title}" -gt 80 ] || [ "$(printf '%s' "$title" | LC_ALL=C wc -c | tr -d ' ')" -gt 80 ] \
+    || fail "the locale probe row is not long enough in BYTES to distinguish the two measurements"
+  # Every canonical field survives, the rightmost one included.
+  assert_contains "$title" '💤' \
+    "byte-length measurement dropped the trailing fields from a row that fits"
+
+  rm -f "$FAKEBIN/herdr"
+  pass "status bar: the border row is measured in codepoints regardless of the ambient locale"
+}
+
 test_chrome_row_is_clipped_visibly_for_the_border_title_store() {
-  local log="$TMP_ROOT/clip-log" count_file="$TMP_ROOT/clip-count" title
+  local log="$TMP_ROOT/clip-log" count_file="$TMP_ROOT/clip-count" title codepoints
   : > "$log"
   cat > "$FAKEBIN/herdr" <<'SH'
 #!/usr/bin/env bash
@@ -1132,8 +1255,9 @@ SH
 
   title=$(sed -n 's/.*--title \(.*\) --ttl-ms.*/\1/p' "$log" | tail -1)
   [ -n "$title" ] || fail "chrome mode published no border title to inspect"
-  [ "${#title}" -le 80 ] \
-    || fail "the published border row exceeds Herdr's 80-codepoint store, which would clip it silently: ${#title}"
+  codepoints=$(count_codepoints "$title")
+  [ "$codepoints" -le 80 ] \
+    || fail "the published border row exceeds Herdr's 80-codepoint store, which would clip it silently: $codepoints"
   case "$title" in
     *'…') ;;
     *) fail "an over-long border row was clipped without a visible marker: $title" ;;
@@ -1173,4 +1297,6 @@ test_codex_provider_miss_renders_a_row_instead_of_waiting
 test_quota_window_renders_only_where_a_window_is_known
 test_chrome_mode_publishes_the_border_row_and_keeps_the_pane_fallback
 test_chrome_mode_only_releases_zoom_and_never_reapplies_it
+test_chrome_mode_never_releases_a_zoom_the_launcher_did_not_apply
 test_chrome_row_is_clipped_visibly_for_the_border_title_store
+test_chrome_clip_measures_codepoints_not_bytes

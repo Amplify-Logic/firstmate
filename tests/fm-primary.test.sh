@@ -361,7 +361,7 @@ SH
 }
 
 test_herdr_chrome_hides_the_companion_only_on_an_uncrowded_tab() {
-  local calls="$TMP_ROOT/chrome-calls" cmd="$TMP_ROOT/chrome-cmd"
+  local calls="$TMP_ROOT/chrome-calls" cmd="$TMP_ROOT/chrome-cmd" title="$TMP_ROOT/chrome-title"
   # make_cli replaces the shared fake, so it is written fresh before each launch.
   write_chrome_herdr_fake() {
     cat > "$FAKEBIN/herdr" <<'SH'
@@ -372,8 +372,7 @@ if [ "${1:-}" = --session ]; then
 fi
 case "${1:-} ${2:-}" in
   "status --json")
-    # At or above the verified presentation protocol, so chrome mode is on.
-    printf '{"client":{"protocol":16}}\n'
+    printf '{"client":{"protocol":%s}}\n' "${FM_PRIMARY_TEST_CHROME_PROTOCOL:-16}"
     exit 0
     ;;
 esac
@@ -382,27 +381,69 @@ shift
 case "${1:-}" in
   split) printf '{"result":{"pane":{"pane_id":"w1:p2"}}}\n' ;;
   run) printf '%s\n' "$3" >> "$FM_PRIMARY_TEST_CHROME_CMD" ;;
-  layout) printf '{"result":{"layout":{"panes":%s}}}\n' "$FM_PRIMARY_TEST_CHROME_PANES" ;;
-  report-metadata) ;;
+  layout)
+    [ "${FM_PRIMARY_TEST_CHROME_LAYOUT:-ok}" = ok ] || exit 1
+    printf '{"result":{"layout":{"panes":%s}}}\n' "$FM_PRIMARY_TEST_CHROME_PANES"
+    ;;
+  report-metadata)
+    # Record what the capability probe published, so `pane get` can answer with
+    # the stored title a real server would resolve for that pane.
+    while [ "$#" -gt 1 ]; do
+      if [ "$1" = --title ]; then
+        printf '%s' "$2" > "$FM_PRIMARY_TEST_CHROME_TITLE"
+        break
+      fi
+      shift
+    done
+    ;;
+  get)
+    stored=
+    [ ! -f "$FM_PRIMARY_TEST_CHROME_TITLE" ] || stored=$(<"$FM_PRIMARY_TEST_CHROME_TITLE")
+    case "${FM_PRIMARY_TEST_CHROME_READBACK:-match}" in
+      mismatch) stored="a-different-title" ;;
+      absent) stored= ;;
+    esac
+    printf '{"result":{"pane":{"pane_id":"w1:p1","title":"%s"}}}\n' "$stored"
+    ;;
   zoom) ;;
 esac
 exit 0
 SH
     chmod +x "$FAKEBIN/herdr"
   }
-  write_chrome_herdr_fake
+
+  launch_chrome_primary() {  # <panes json> [extra env assignments...]
+    write_chrome_herdr_fake
+    : > "$calls"; : > "$cmd"; rm -f "$title"
+    local panes=$1
+    shift
+    env -u HERDR_ENV -u TMUX_PANE \
+      PATH="$FAKEBIN:$PATH" TERM=dumb FM_HOME="$HOME_FIX" \
+      FM_PRIMARY_TEST_LOG="$LOG" \
+      FM_PRIMARY_TEST_CHROME_CALLS="$calls" \
+      FM_PRIMARY_TEST_CHROME_CMD="$cmd" \
+      FM_PRIMARY_TEST_CHROME_TITLE="$title" \
+      FM_PRIMARY_TEST_CHROME_PANES="$panes" \
+      HERDR_SESSION=fm-lab-status HERDR_PANE_ID=w1:p1 \
+      "$@" \
+      "$ROOT/bin/fm-primary.sh" codex
+    make_cli herdr
+  }
 
   # An uncrowded tab: the primary and the companion just created, nothing else.
-  : > "$calls"; : > "$cmd"
-  env -u HERDR_ENV -u TMUX_PANE \
-    PATH="$FAKEBIN:$PATH" TERM=dumb FM_HOME="$HOME_FIX" \
-    FM_PRIMARY_TEST_LOG="$LOG" \
-    FM_PRIMARY_TEST_CHROME_CALLS="$calls" \
-    FM_PRIMARY_TEST_CHROME_CMD="$cmd" \
-    FM_PRIMARY_TEST_CHROME_PANES='[{"pane_id":"w1:p1"},{"pane_id":"w1:p2"}]' \
-    HERDR_SESSION=fm-lab-status HERDR_PANE_ID=w1:p1 \
-    "$ROOT/bin/fm-primary.sh" codex
-  make_cli herdr
+  launch_chrome_primary '[{"pane_id":"w1:p1"},{"pane_id":"w1:p2"}]'
+
+  # Nothing is hidden on a protocol number alone: the launcher publishes the row
+  # to the primary's own border under chrome mode's source, with an expiry, and
+  # reads it back before it trusts any of it.
+  assert_contains "$(cat "$calls")" 'pane report-metadata w1:p1' \
+    "the launcher never published a probe row, so it hid the companion on no evidence"
+  assert_contains "$(cat "$calls")" '--source firstmate-primary-status-v1' \
+    "the probe row must use chrome mode's own source, never the launcher's supervision record"
+  assert_contains "$(cat "$calls")" '--ttl-ms' \
+    "a probe row with no expiry would freeze on the border if no renderer followed it"
+  assert_contains "$(cat "$calls")" 'pane get w1:p1' \
+    "the launcher never read the published row back, so the store was never proven"
 
   assert_contains "$(cat "$cmd")" "--chrome-pane 'w1:p1'" \
     "the launcher did not hand the companion the primary pane to decorate"
@@ -412,28 +453,70 @@ SH
     "the launcher never hid the companion, so its empty rows are not reclaimed"
   [ "$(grep -c 'pane zoom' "$calls")" -eq 1 ] \
     || fail "the launcher must zoom exactly once; repeating it would fight a deliberate unzoom"
+  # The renderer may only release a zoom this launcher actually applied.
+  assert_contains "$(cat "$cmd")" '--chrome-zoomed' \
+    "the launcher hid the companion without telling the renderer it owns that zoom"
 
   # A crowded tab: something else already shares it, and zooming would hide
   # that pane's live work, so the rows stay visible instead.
-  write_chrome_herdr_fake
-  : > "$calls"; : > "$cmd"
-  env -u HERDR_ENV -u TMUX_PANE \
-    PATH="$FAKEBIN:$PATH" TERM=dumb FM_HOME="$HOME_FIX" \
-    FM_PRIMARY_TEST_LOG="$LOG" \
-    FM_PRIMARY_TEST_CHROME_CALLS="$calls" \
-    FM_PRIMARY_TEST_CHROME_CMD="$cmd" \
-    FM_PRIMARY_TEST_CHROME_PANES='[{"pane_id":"w1:p1"},{"pane_id":"w1:p2"},{"pane_id":"w1:p9"}]' \
-    HERDR_SESSION=fm-lab-status HERDR_PANE_ID=w1:p1 \
-    "$ROOT/bin/fm-primary.sh" codex
-  make_cli herdr
+  launch_chrome_primary '[{"pane_id":"w1:p1"},{"pane_id":"w1:p2"},{"pane_id":"w1:p9"}]'
 
   assert_not_contains "$(cat "$calls")" 'pane zoom' \
     "the launcher hid a tab that already had a co-tenant pane, which would hide its live work"
   assert_contains "$(cat "$cmd")" "--chrome-pane 'w1:p1'" \
     "the border row must still be published on a crowded tab; only the zoom is withheld"
+  assert_not_contains "$(cat "$cmd")" '--chrome-zoomed' \
+    "the renderer was armed to release a zoom the launcher never applied"
+
+  # A client that answers the protocol pre-filter but does not actually store
+  # the row: the readback disagrees, so nothing is hidden at all and the
+  # in-pane row stays the only surface, exactly as before chrome mode.
+  launch_chrome_primary '[{"pane_id":"w1:p1"},{"pane_id":"w1:p2"}]' \
+    FM_PRIMARY_TEST_CHROME_READBACK=mismatch
+  assert_not_contains "$(cat "$calls")" 'pane zoom' \
+    "the launcher hid the companion even though the border row did not read back"
+  assert_not_contains "$(cat "$cmd")" '--chrome-pane' \
+    "chrome mode stayed on for a client that never stored the published row"
+
+  # Same for a client whose `pane layout` cannot be read: the pane count is the
+  # other surface chrome mode depends on, so an unparseable answer is a refusal.
+  launch_chrome_primary '[{"pane_id":"w1:p1"},{"pane_id":"w1:p2"}]' \
+    FM_PRIMARY_TEST_CHROME_LAYOUT=broken
+  assert_not_contains "$(cat "$calls")" 'pane zoom' \
+    "the launcher hid the companion without a readable pane count"
+  assert_not_contains "$(cat "$cmd")" '--chrome-pane' \
+    "chrome mode stayed on for a client whose pane layout could not be read"
+
+  # Below the protocol pre-filter nothing is even probed.
+  launch_chrome_primary '[{"pane_id":"w1:p1"},{"pane_id":"w1:p2"}]' \
+    FM_PRIMARY_TEST_CHROME_PROTOCOL=15
+  assert_not_contains "$(cat "$calls")" 'pane report-metadata' \
+    "the launcher probed a client below the presentation protocol floor"
+  assert_not_contains "$(cat "$cmd")" '--chrome-pane' \
+    "chrome mode stayed on below the presentation protocol floor"
+  assert_contains "$(cat "$cmd")" '--follow-pane' \
+    "the companion must still render its in-pane row when chrome mode is off"
 
   rm -f "$FAKEBIN/herdr"
-  pass "fm-primary: the companion is hidden only when nothing else shares the tab, and the zoom is applied once"
+  pass "fm-primary: the companion is hidden only on proven capability and an uncrowded tab, and the zoom is applied once"
+}
+
+test_herdr_launcher_keeps_its_own_fm_root() {
+  # The launcher derives FM_ROOT from its own symlink-resolved script path and
+  # then uses it for the tracked-integration checks, the status-bar path it
+  # execs, the companion split's --cwd, and the cd before launching the agent.
+  # A sourced library that re-derives FM_ROOT from FM_ROOT_OVERRIDE would
+  # silently repoint every one of those at another tree.
+  local out
+  out=$(env -u HERDR_ENV -u TMUX_PANE -u HERDR_PANE_ID \
+    PATH="$FAKEBIN:$PATH" TERM=dumb FM_HOME="$HOME_FIX" \
+    FM_ROOT_OVERRIDE=/tmp/not-the-tracked-root \
+    FM_PRIMARY_TEST_LOG="$LOG" \
+    "$ROOT/bin/fm-primary.sh" codex 2>&1)
+
+  assert_not_contains "$out" '/tmp/not-the-tracked-root' \
+    "an ambient FM_ROOT_OVERRIDE displaced the launcher's own resolved root"
+  pass "fm-primary: the launcher's own FM_ROOT survives an ambient FM_ROOT_OVERRIDE"
 }
 
 test_herdr_companion_command_renders_in_the_pane_the_split_created() {
@@ -1339,6 +1422,7 @@ test_kimi_tmux_companion_status_bar
 test_tmux_companion_command_renders_the_canonical_row
 test_herdr_companion_command_renders_in_the_pane_the_split_created
 test_herdr_chrome_hides_the_companion_only_on_an_uncrowded_tab
+test_herdr_launcher_keeps_its_own_fm_root
 test_herdr_split_outcomes_are_reported_separately
 test_herdr_cleanup_only_ever_closes_the_pane_the_split_named
 test_kimi_version_doctor_and_symlink_refusals

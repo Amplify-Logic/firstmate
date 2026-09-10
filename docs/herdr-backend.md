@@ -582,9 +582,18 @@ Verified on herdr 0.7.4 (2026-09-10). What it established for the primary status
 | `title` / `display_agent` store | silently clipped to **80 codepoints**, no marker |
 | `report-metadata` across sources | each call REPLACES that source's whole record; tokens merge |
 | 20 sequential `report-metadata` calls | 0.23 s total, ~11 ms each |
+| `pane get` after `report-metadata --title` | `.result.pane.title` returns the published string exactly; the LAST source to publish is the one it resolves |
+| `pane layout` on a two-pane tab | `.result.layout.panes` has 2 entries, `.result.layout.zoomed` is `false` |
+| `pane zoom --on` | `.result.zoom.zoomed` is `true`; the pane COUNT is unchanged, so the companion still exists and the border survives |
+| `pane layout` while zoomed | still 2 panes, `zoomed` now `true` - the count and the flag are independent |
+| splitting a THIRD pane into a zoomed tab | Herdr releases the zoom **itself**: 3 panes, `zoomed` back to `false` |
+| `pane zoom --off` on an already-unzoomed tab | accepted and idempotent: `zoom_changed: false`, `reason: "already_unzoomed"` |
 
 The first row is why `bin/fm-status-bar.sh` chrome mode hides the companion pane by zoom instead of closing it: closing it removes the split, and removing the split removes the only border a title can render on.
+The `pane get` row is what makes chrome mode's capability gate evidence rather than inference: the launcher publishes the row, reads it back, and requires an exact match before it hides anything.
+The third-pane row is why the renderer's release is a confirmation rather than a rescue - Herdr already un-zooms when a co-tenant appears - and the idempotence row is why issuing that release costs nothing when it has already happened.
 [`docs/status-bar.md`](status-bar.md) owns the resulting contract.
+The zoom, layout, and readback rows are re-run against the real binary by [`tests/fm-status-chrome-herdr-lab-e2e.test.sh`](../tests/fm-status-chrome-herdr-lab-e2e.test.sh), which drives this same guarded lab and self-skips where `herdr`, `jq`, `python3`, or `pyte` is absent.
 
 Crewmate briefs for tasks that drive Herdr lifecycle get this exact contract embedded by scaffolding with `bin/fm-brief.sh --herdr-lab`; every crewmate brief scaffolded without the flag instead carries a loud not-enabled gate, because the scaffold cannot detect from the caller-supplied repo string whether the task will touch Herdr lifecycle.
 

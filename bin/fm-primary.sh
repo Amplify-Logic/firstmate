@@ -187,10 +187,6 @@ DATA=${FM_DATA_OVERRIDE:-$FM_HOME/data}
 CONFIG=${FM_CONFIG_OVERRIDE:-$FM_HOME/config}
 # shellcheck source=bin/fm-account-lib.sh
 . "$SCRIPT_DIR/fm-account-lib.sh"
-# fm_backend_herdr_presentation_capable owns the protocol verdict for Herdr's
-# managed presentation surfaces, which chrome mode's border title is one of.
-# shellcheck source=bin/backends/herdr.sh
-. "$SCRIPT_DIR/backends/herdr.sh"
 # The two Kimi builds this repo carries primary evidence for; running either one
 # is quiet, anything else warns and still launches. Both are literal constants,
 # never parsed from docs/toolchain-manifest.tsv, because the launcher does not
@@ -297,6 +293,65 @@ chrome_role() {
   else
     printf 'FM'
   fi
+}
+
+# Chrome mode's capability gate, local to this launcher on purpose.
+#
+# The protocol floor is only a CHEAP PRE-FILTER. Protocol 16 attests the
+# managed presentation surfaces the adapter uses - workspace/pane
+# report-metadata, hidden tokens, workspace/tab rename - and nothing more; the
+# three surfaces chrome mode actually depends on (report-metadata --ttl-ms,
+# pane get's resolved title, pane layout) are not covered by it, and the same
+# protocol number also matches older herdr builds. Passing the pre-filter
+# therefore proves nothing on its own.
+#
+# So the verdict is positive evidence, taken against the real pane, and nothing
+# is hidden until every part of it succeeds: the row is published, read back,
+# and required to match byte for byte, and the layout is required to return a
+# parseable pane count. Any failure leaves the companion visible with its
+# in-pane row as the only surface, which is exactly the pre-chrome behavior.
+FM_PRIMARY_HERDR_MIN_PRESENTATION_PROTOCOL=16
+FM_PRIMARY_CHROME_SOURCE=firstmate-primary-status-v1
+
+herdr_chrome_protocol_ok() {  # <session>
+  local protocol
+  protocol=$(herdr --session "$1" status --json 2>/dev/null \
+    | jq -r '.client.protocol // empty' 2>/dev/null)
+  case "$protocol" in ''|*[!0-9]*) return 1 ;; esac
+  [ "$protocol" -ge "$FM_PRIMARY_HERDR_MIN_PRESENTATION_PROTOCOL" ]
+}
+
+# herdr_chrome_pane_count: the tab's pane count, or empty when `pane layout`
+# is missing, fails, or answers in a shape this launcher cannot read. Empty is
+# a capability failure, not a count of zero.
+herdr_chrome_pane_count() {  # <session> <pane>
+  local panes
+  panes=$(herdr --session "$1" pane layout --pane "$2" 2>/dev/null \
+    | jq -r '.result.layout.panes | length' 2>/dev/null)
+  case "$panes" in
+    ''|*[!0-9]*) return 1 ;;
+  esac
+  printf '%s' "$panes"
+}
+
+# herdr_chrome_capable: publish, read back, and require an exact match.
+#
+# The probe row is the role marker the real row leads with, published under
+# chrome mode's own source with a short ttl, so a probe that is never followed
+# by a renderer expires on its own instead of freezing on the border. The
+# renderer replaces it within one refresh. Nothing else publishes a title
+# between these two calls: mark_current_surface has already run, and the
+# companion has not started yet.
+herdr_chrome_capable() {  # <session> <pane> <probe row>
+  local session=$1 pane=$2 probe=$3 stored
+  herdr --session "$session" pane report-metadata "$pane" \
+    --source "$FM_PRIMARY_CHROME_SOURCE" \
+    --title "$probe" \
+    --ttl-ms 5000 >/dev/null 2>&1 || return 1
+  stored=$(herdr --session "$session" pane get "$pane" 2>/dev/null \
+    | jq -r '.result.pane.title // empty' 2>/dev/null)
+  [ "$stored" = "$probe" ] || return 1
+  herdr_chrome_pane_count "$session" "$pane" >/dev/null
 }
 
 # Resolve Claude primary effort from local config/primary-effort.
@@ -479,7 +534,7 @@ EOF
   fi
 
   if [ -n "${HERDR_PANE_ID:-}" ] && command -v herdr >/dev/null 2>&1 && command -v jq >/dev/null 2>&1; then
-    local session companion split_out panes chrome=0
+    local session companion split_out panes chrome=0 zoomed=0
     session=${HERDR_SESSION:-default}
     # The companion follows the session it was launched from; a pane's
     # environment does not carry HERDR_SESSION, so re-deriving it inside the new
@@ -492,12 +547,11 @@ EOF
     # has no border at all, so the companion pane must keep existing for the
     # border to exist - hiding it by zoom is the reclaim, not closing it.
     # The in-pane row keeps being drawn as the fallback, so a home whose Herdr
-    # is below the presentation floor behaves exactly as it did before.
-    if fm_backend_herdr_presentation_capable; then
-      chrome=1
-      command="$command --chrome-pane $(shell_quote "$HERDR_PANE_ID")"
-      command="$command --chrome-role $(shell_quote "$(chrome_role)")"
-    fi
+    # cannot carry the border row behaves exactly as it did before.
+    #
+    # Only the cheap protocol pre-filter can run here: the real evidence needs
+    # a border, and a border needs the split that has not happened yet.
+    herdr_chrome_protocol_ok "$session" && chrome=1
     # Herdr's split ratio is the share the ORIGINAL pane keeps, so the agent
     # pane needs the large share and the companion takes the remainder. Herdr
     # clamps that share to 0.9, so the companion floor is a TENTH OF THE TAB,
@@ -525,7 +579,43 @@ EOF
       printf 'fm-primary: herdr split the pane but did not name it, so no pane can be safely closed; the primary is sharing its tab with an empty pane\n' >&2
       return 0
     fi
+    # The border now exists, so chrome mode's verdict can be EVIDENCE rather
+    # than an inference from a protocol number: the row is published, read
+    # back, and required to match, and the layout is required to answer with a
+    # pane count. Only then is anything hidden. A failure at any step leaves
+    # the companion visible and its in-pane row as the only surface, which is
+    # the behavior that shipped before chrome mode.
+    if [ "$chrome" = 1 ] && herdr_chrome_capable "$session" "$HERDR_PANE_ID" "$(chrome_role)"; then
+      command="$command --chrome-pane $(shell_quote "$HERDR_PANE_ID")"
+      command="$command --chrome-role $(shell_quote "$(chrome_role)")"
+
+      # Zoom is applied exactly once, here, and only when this tab holds
+      # nothing but the primary and the companion just created - zooming a
+      # crowded tab would hide a co-tenant pane's live work. The renderer never
+      # re-applies it: it only releases this zoom if a third pane shows up
+      # later, so a captain who deliberately unzooms is not fought once a
+      # second.
+      #
+      # A refused zoom is not a failure. The companion keeps rendering its own
+      # row, which is the surface that shipped before chrome mode, so the only
+      # consequence is that the empty rows are not reclaimed.
+      panes=$(herdr_chrome_pane_count "$session" "$HERDR_PANE_ID") || panes=
+      if [ "$panes" = 2 ]; then
+        if herdr --session "$session" pane zoom "$HERDR_PANE_ID" --on >/dev/null 2>&1; then
+          zoomed=1
+          # The renderer releases only a zoom it is told this launcher applied,
+          # so it can never turn off a zoom that belongs to someone else.
+          command="$command --chrome-zoomed"
+        else
+          printf 'fm-primary: could not hide the status companion, so its rows stay visible; the status row itself is unaffected\n' >&2
+        fi
+      fi
+    fi
+
     herdr --session "$session" pane run "$companion" "$command" >/dev/null 2>&1 || {
+      # The zoom belongs to this launcher, so this launcher gives it back
+      # before the pane it was taken for goes away.
+      [ "$zoomed" = 0 ] || herdr --session "$session" pane zoom "$HERDR_PANE_ID" --off >/dev/null 2>&1
       if herdr --session "$session" pane close "$companion" >/dev/null 2>&1; then
         printf 'fm-primary: the status companion could not start; closed its pane %s and continued with the native TUI\n' \
           "$companion" >&2
@@ -535,27 +625,6 @@ EOF
       fi
       return 0
     }
-
-    # Zoom is applied exactly once, here, and only when this tab holds nothing
-    # but the primary and the companion just created - zooming a crowded tab
-    # would hide a co-tenant pane's live work. The renderer never re-applies it:
-    # it only releases the zoom if a third pane shows up later, so a captain who
-    # deliberately unzooms is not fought once a second.
-    #
-    # A refused zoom is not a failure. The companion keeps rendering its own
-    # row, which is the surface that shipped before chrome mode, so the only
-    # consequence is that the empty rows are not reclaimed.
-    if [ "$chrome" = 1 ]; then
-      panes=$(herdr --session "$session" pane layout --pane "$HERDR_PANE_ID" 2>/dev/null \
-        | jq -r '.result.layout.panes | length' 2>/dev/null)
-      case "$panes" in
-        2)
-          herdr --session "$session" pane zoom "$HERDR_PANE_ID" --on >/dev/null 2>&1 || {
-            printf 'fm-primary: could not hide the status companion, so its rows stay visible; the status row itself is unaffected\n' >&2
-          }
-          ;;
-      esac
-    fi
     return 0
   fi
 
