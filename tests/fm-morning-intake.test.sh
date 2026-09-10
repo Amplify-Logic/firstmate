@@ -78,6 +78,13 @@ state_field() {
   awk -F= -v k="$2" '$1 == k { print $2 }' "$1/data/morning-intake/state"
 }
 
+# Portable permission bits. Platform-detected, never the `stat -f || stat -c`
+# fallback: GNU stat's -f succeeds with a filesystem dump, so the GNU branch
+# would never run on Linux (see fm-watch-triage.test.sh).
+file_mode() {
+  if [ "$(uname)" = Darwin ]; then stat -f %Lp "$1" 2>/dev/null; else stat -c %a "$1" 2>/dev/null; fi
+}
+
 # A live process holding the gate's own state mutex, so contention is real
 # rather than simulated. Nothing is slept for: every command under contention is
 # given a one-second bound through FM_MORNING_INTAKE_LOCK_WAIT and returns
@@ -181,8 +188,7 @@ test_wake_drives_intake_to_acknowledged_report() {
   at "$h" "$T_0700" arm-check >/dev/null
   assert_present "$h/state/morning-intake.check.sh" 'arm-check did not write the watcher shim'
   assert_present "$h/state/morning-intake.check-trust" 'arm-check did not bind the shim bytes'
-  [ "$(stat -f '%Lp' "$h/state/morning-intake.check.sh" 2>/dev/null \
-    || stat -c '%a' "$h/state/morning-intake.check.sh")" = 700 ] \
+  [ "$(file_mode "$h/state/morning-intake.check.sh")" = 700 ] \
     || fail 'the watcher shim is not a private mode-0700 file'
   armed=$(at "$h" "$T_0700" status | awk '$1 == "check_armed:" { print $2 }')
   [ "$armed" = armed ] || fail "check state after arming is '$armed', not armed"
