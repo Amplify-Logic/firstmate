@@ -45,8 +45,11 @@ These rules are load-bearing; changing any of them changes what the captain beli
 
 - **Windows are identified by what they are, never by where they appear.**
   The Codex payload carries `primary_window` and `secondary_window`, and which of those is the five-hour window varies by account and by plan; some plans publish only one window.
-  Each window is matched against its own declared length, or a name it gives itself, and an unrecognised length is labelled by that length rather than forced into a known one.
+  Each window is matched against its own declared length first, and only against a name it gives itself when no length was declared, so a name substring can never relabel a window as one whose length it does not have; an unrecognised length is labelled by that length rather than forced into a known one.
   `assets/baby-menu/weekly-quota/quota-windows.ts` owns the rule, and `tests/fm-baby-menu-quota.test.sh` holds it against recorded response shapes including the single-weekly-window one that first exposed it.
+- **Every allowance the reader parsed is shown.**
+  Each provider block renders every window its reader returned, in the order the reader set, rather than picking out the window ids the panel expects.
+  Selecting by expected id drops an allowance a provider does publish and turns a read that in fact succeeded into a `no usable windows` error.
 - **Two seats of one brand stay separate.**
   Their windows, resets, and account lines are never summed or averaged, both carry the same brand mark, and the seat is named in words.
 - **A plan name is passed through as the provider reports it.**
@@ -55,6 +58,7 @@ These rules are load-bearing; changing any of them changes what the captain beli
   Codex model routes draw down the Codex windows already shown, so they render as a badged note with no meter and no percentage - never as a provider or an allowance of their own.
 - **Sign-in failures and stale data say so.**
   An authentication error is shown as that error, and a cached reading is marked stale rather than presented as current.
+  A reset moment already in the past reads as passed, never as an imminent reset: a cached reading can be old enough that its window has already rolled over.
 - **Cursor's window is its billing cycle**, labelled `INCLUDED` rather than `WEEKLY`, so its countdown is not read as a week.
 - **Credits headroom is money, not allowance**, and is deliberately not shown beside the percentages.
 - **Colour never carries meaning alone.**

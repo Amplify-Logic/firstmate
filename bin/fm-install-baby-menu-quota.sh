@@ -16,7 +16,9 @@
 #
 # Re-running is safe. When an installed widget already differs from the tracked
 # sources, the previous copy is kept as
-# <home>/extensions/.weekly-quota-backup-<UTC timestamp>/ before it is replaced.
+# <home>/extensions/.weekly-quota-backup-<UTC timestamp>.<unique>/ before it is
+# replaced. Each replacing install gets its own backup directory, so one never
+# lands inside another.
 #
 # Usage:
 #   fm-install-baby-menu-quota.sh [--home <baby-menu-home>] [--dry-run] [--force]
@@ -129,10 +131,17 @@ else
   else
     mkdir -p "$EXTENSIONS_DIR"
     if [ -d "$TARGET_DIR" ]; then
-      backup="$EXTENSIONS_DIR/.weekly-quota-backup-$(date -u +%Y%m%dT%H%M%SZ)"
       # A directory name starting with a dot is not itself a widget, so the
-      # backup cannot be loaded as a second copy of this extension.
-      cp -R "$TARGET_DIR" "$backup" || die "could not back up the installed widget to $backup"
+      # backup cannot be loaded as a second copy of this extension. mktemp, not
+      # the timestamp alone, decides the name: a timestamp has one-second
+      # resolution, and two replacing installs within the same second would
+      # otherwise resolve to one path and nest the second backup inside the
+      # first while this script reported the top level.
+      backup=$(mktemp -d "$EXTENSIONS_DIR/.weekly-quota-backup-$(date -u +%Y%m%dT%H%M%SZ).XXXXXX") \
+        || die "could not create a backup directory in $EXTENSIONS_DIR"
+      # The directory already exists, so the contents are copied into it rather
+      # than the directory into itself.
+      cp -R "$TARGET_DIR/." "$backup/" || die "could not back up the installed widget to $backup"
       note "kept the previous copy at $backup"
       rm -rf "$TARGET_DIR"
     fi

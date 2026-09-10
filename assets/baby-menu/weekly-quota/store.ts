@@ -140,7 +140,11 @@ function formatCountdown(resetAt?: string): string | undefined {
   const target = new Date(resetAt).getTime();
   if (Number.isNaN(target)) return undefined;
   const diffMs = target - Date.now();
-  if (diffMs <= 0) return "resets shortly";
+  // A reset moment already behind us is not an imminent reset: a cached reading
+  // can be days old, and its window has in fact already rolled over. Saying the
+  // reset time has passed keeps the row from asserting a countdown it cannot
+  // know, since the next reset is only reported by a fresh read.
+  if (diffMs <= 0) return "reset time passed";
   const totalMinutes = Math.round(diffMs / 60_000);
   const days = Math.floor(totalMinutes / 1440);
   const hours = Math.floor((totalMinutes % 1440) / 60);
@@ -199,23 +203,31 @@ function modelRows(key: string, data: ProviderSnapshot): QuotaRow[] {
   }));
 }
 
+// Every allowance the reader parsed is rendered, under the label the server
+// classified it with and in the order the server set. Selecting windows by an
+// expected id is what this must never go back to: it silently drops a window the
+// provider does publish - a lone weekly bucket, a model-scoped limit, a window of
+// a length this panel does not recognise - and turns a read that in fact
+// succeeded into the "no usable windows" error whenever the ids published are
+// not the ids the panel happened to expect.
+function allowanceRows(key: string, data: ProviderSnapshot): QuotaRow[] {
+  return data.windows.map((window) =>
+    windowRow(`${key}-${window.id}`, window.label, window, data.stale),
+  );
+}
+
 function claudeRows(result: QuotaResult, key: string): QuotaRow[] {
   if (!result.ok) {
     return [{ key, label: "STATUS", status: "error", error: result.error }];
   }
-  const { windows, stale, label } = result.data;
-  const session = windows.find((w) => w.id === "five_hour");
-  const weekly = windows.find((w) => w.id === "seven_day");
-  const rows: QuotaRow[] = [];
-  if (session) rows.push(windowRow(`${key}-session`, "SESSION", session, stale));
-  if (weekly) rows.push(windowRow(`${key}-weekly`, "WEEKLY", weekly, stale));
-  // Model-scoped weekly limits are real, separately reported allowances with
-  // their own reset - not a re-cut of the weekly window above.
-  for (const window of windows.filter((w) => w.id.startsWith("model:"))) {
-    rows.push(windowRow(`${key}-${window.id}`, window.label, window, stale));
-  }
+  // The reader emits the account-wide windows first and then the model-scoped
+  // weekly limits, which are real, separately reported allowances with their own
+  // reset - not a re-cut of the weekly window - so each keeps its own row.
+  const rows = allowanceRows(key, result.data);
   if (rows.length === 0) {
-    return [{ key, label: label || "STATUS", status: "error", error: "no usable windows" }];
+    return [
+      { key, label: result.data.label || "STATUS", status: "error", error: "no usable windows" },
+    ];
   }
   const account = accountRow(`${key}-account`, result.data);
   if (account) rows.push(account);
@@ -226,14 +238,7 @@ function codexRows(result: QuotaResult): QuotaRow[] {
   if (!result.ok) {
     return [{ key: "codex", label: "STATUS", status: "error", error: result.error }];
   }
-  const { windows, stale } = result.data;
-  // Every window the provider published is shown under the label the server
-  // classified it with, in the order it set. Filtering to two expected ids would
-  // silently drop an account that publishes only one window, or a window whose
-  // length this widget does not recognise.
-  const rows: QuotaRow[] = windows.map((window) =>
-    windowRow(`codex-${window.id}`, window.label, window, stale),
-  );
+  const rows = allowanceRows("codex", result.data);
   if (rows.length === 0) {
     return [{ key: "codex", label: "STATUS", status: "error", error: "no usable windows" }];
   }
@@ -243,16 +248,15 @@ function codexRows(result: QuotaResult): QuotaRow[] {
   return rows;
 }
 
-function singleWindowRows(result: QuotaResult, key: string): QuotaRow[] {
+function cursorRows(result: QuotaResult): QuotaRow[] {
   if (!result.ok) {
-    return [{ key, label: "STATUS", status: "error", error: result.error }];
+    return [{ key: "cursor", label: "STATUS", status: "error", error: result.error }];
   }
-  const window = result.data.windows[0];
-  if (!window) {
-    return [{ key, label: "STATUS", status: "error", error: "no usable windows" }];
+  const rows = allowanceRows("cursor", result.data);
+  if (rows.length === 0) {
+    return [{ key: "cursor", label: "STATUS", status: "error", error: "no usable windows" }];
   }
-  const rows = [windowRow(key, window.label, window, result.data.stale)];
-  const account = accountRow(`${key}-account`, result.data);
+  const account = accountRow("cursor-account", result.data);
   if (account) rows.push(account);
   return rows;
 }
@@ -261,12 +265,7 @@ function kimiRows(result: QuotaResult): QuotaRow[] {
   if (!result.ok) {
     return [{ key: "kimi", label: "STATUS", status: "error", error: result.error }];
   }
-  const { windows, stale } = result.data;
-  const session = windows.find((window) => window.id === "five_hour");
-  const weekly = windows.find((window) => window.id === "weekly");
-  const rows: QuotaRow[] = [];
-  if (session) rows.push(windowRow("kimi-session", "SESSION", session, stale));
-  if (weekly) rows.push(windowRow("kimi-weekly", "WEEKLY", weekly, stale));
+  const rows = allowanceRows("kimi", result.data);
   if (rows.length === 0) {
     return [{ key: "kimi", label: "STATUS", status: "error", error: "no usable windows" }];
   }
@@ -307,12 +306,7 @@ function toGroups(response: QuotasResponse): QuotaGroup[] {
   }
   groups.push(
     { key: "codex", brand: "openai", provider: "CODEX", rows: codexRows(response.codex) },
-    {
-      key: "cursor",
-      brand: "cursor",
-      provider: "CURSOR",
-      rows: singleWindowRows(response.cursor, "cursor-included"),
-    },
+    { key: "cursor", brand: "cursor", provider: "CURSOR", rows: cursorRows(response.cursor) },
     { key: "kimi", brand: "moonshot", provider: "KIMI", rows: kimiRows(response.kimi) },
   );
   return groups;

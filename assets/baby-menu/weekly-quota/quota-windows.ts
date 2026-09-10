@@ -115,8 +115,12 @@ export function classifyCodexWindows(rawWindows: readonly RawCodexWindow[]): Cla
 
     const seconds = finiteNumber(raw.limit_window_seconds);
     const name = semanticName(raw);
+    // A declared length is the provider's own statement of what this window is,
+    // so the name is only consulted when no usable length was declared. Letting
+    // a name substring override a declared-but-unfamiliar length would print a
+    // label that contradicts the length the provider actually published.
     const known =
-      (seconds !== null && seconds > 0 ? matchByDuration(seconds) : null) ?? (name ? matchByName(name) : null);
+      seconds !== null && seconds > 0 ? matchByDuration(seconds) : name ? matchByName(name) : null;
 
     const resetAtSeconds = finiteNumber(raw.reset_at);
     const resetAt =
@@ -137,7 +141,10 @@ export function classifyCodexWindows(rawWindows: readonly RawCodexWindow[]): Cla
 
     if (seconds !== null && seconds > 0) {
       classified.push({
-        id: `window_${String(seconds)}s`,
+        // The source position is part of the id only to keep it unique: two
+        // windows of the same unfamiliar length are two separate allowances and
+        // must not collapse onto one id, and so onto one row key.
+        id: `window_${String(seconds)}s_${String(index + 1)}`,
         label: describeDuration(seconds),
         percentUsed: clampPercent(percentUsed),
         resetAt,

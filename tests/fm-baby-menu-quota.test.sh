@@ -99,6 +99,32 @@ test_replacing_a_modified_widget_keeps_the_previous_copy() {
   pass "replacing a modified widget keeps the previous copy beside it"
 }
 
+test_repeated_replacements_keep_separate_backups() {
+  local root home count nested
+  root=$(fm_test_tmproot fm-bm-backups)
+  home=$(make_home "$root")
+
+  # Two replacements in quick succession: a backup name with one-second
+  # resolution would put the second copy inside the first while the script
+  # reported the top level, so the earlier edit would not be where it says.
+  "$INSTALL" --home "$home" >/dev/null 2>&1 || fail "first install failed"
+  printf '// first local edit\n' >>"$home/extensions/weekly-quota/store.ts"
+  "$INSTALL" --home "$home" >/dev/null 2>&1 || fail "first reinstall failed"
+  printf '// second local edit\n' >>"$home/extensions/weekly-quota/store.ts"
+  "$INSTALL" --home "$home" >/dev/null 2>&1 || fail "second reinstall failed"
+
+  count=$(find "$home/extensions" -maxdepth 1 -type d -name '.weekly-quota-backup-*' | wc -l | tr -d ' ')
+  [ "$count" = "2" ] || fail "two replacing installs must keep two separate backups, found $count"
+  nested=$(find "$home/extensions" -maxdepth 1 -type d -name '.weekly-quota-backup-*' \
+    -exec test -e '{}/weekly-quota' \; -print)
+  [ -z "$nested" ] || fail "a backup must never be nested inside another backup: $nested"
+  grep -rq -e '// first local edit' "$home/extensions"/.weekly-quota-backup-* \
+    || fail "the first replaced copy must be recoverable from its own backup"
+  grep -rq -e '// second local edit' "$home/extensions"/.weekly-quota-backup-* \
+    || fail "the second replaced copy must be recoverable from its own backup"
+  pass "each replacing install keeps its own backup beside the widget"
+}
+
 test_example_settings_written_only_when_the_real_file_is_absent() {
   local root home
   root=$(fm_test_tmproot fm-bm-example)
@@ -157,10 +183,26 @@ node_check() {
   printf '%s\n' "$out"
 }
 
+# These checks import the tracked .ts modules directly, which relies on Node
+# stripping the type annotations at load time; older builds refuse the .ts
+# extension outright. The capability is probed by importing a throwaway module
+# rather than by comparing versions, and a runtime without it skips these checks
+# instead of failing them - no CI image pins the Node version here. Nothing is
+# compiled or installed either way.
+node_imports_typescript() {
+  local root
+  command -v node >/dev/null 2>&1 || return 1
+  root=$(fm_test_tmproot fm-bm-node-probe)
+  printf 'export const probe: string = "type-stripping-ok";\n' >"$root/probe.ts"
+  printf 'import { probe } from "./probe.ts";\nconsole.log(probe);\n' >"$root/probe.mjs"
+  [ "$(cd "$root" && node "$root/probe.mjs" 2>/dev/null)" = "type-stripping-ok" ]
+}
+
 test_codex_windows_are_classified_by_identity_not_position() {
-  command -v node >/dev/null 2>&1 || { echo "skip: node not found for widget module checks"; return 0; }
-  # Node strips the type annotations itself; nothing is compiled or installed.
-  node --input-type=module -e 'void 0' >/dev/null 2>&1 || { echo "skip: node cannot run module input"; return 0; }
+  node_imports_typescript || {
+    echo "skip: node cannot import TypeScript modules on this build"
+    return 0
+  }
 
   local out
   out=$(node_check "
@@ -193,6 +235,18 @@ console.log('duplicate=' + labels([
 ]).join(','));
 // A window that declares no length but names itself is still identified.
 console.log('named=' + labels([{ used_percent: 7, name: 'weekly' }]).join(','));
+// A declared length the widget does not recognise keeps its own honest label: a
+// name substring must not relabel a window as one whose length it does not have.
+console.log('declared-wins=' + labels([
+  { used_percent: 11, limit_window_seconds: 86400, name: 'weekly_rollover' },
+]).join(','));
+// Two windows of the same unrecognised length are two allowances, so they must
+// not collapse onto one id and one row key.
+const unknownIds = classifyCodexWindows([
+  { used_percent: 4, limit_window_seconds: 86400 },
+  { used_percent: 8, limit_window_seconds: 86400 },
+]).map((w) => w.id);
+console.log('unique-ids=' + String(new Set(unknownIds).size) + '/' + String(unknownIds.length));
 ")
 
   assert_contains "$out" "lone-weekly=WEEKLY:3" "a lone weekly window must not be labelled SESSION"
@@ -204,11 +258,18 @@ console.log('named=' + labels([{ used_percent: 7, name: 'weekly' }]).join(','));
   assert_contains "$out" "duplicate=WEEKLY:5,7D WINDOW:6" \
     "two windows of the same length must not both claim that window"
   assert_contains "$out" "named=WEEKLY:7" "a window naming itself must be identified by that name"
+  assert_contains "$out" "declared-wins=1D WINDOW:11" \
+    "a declared length must outrank a name substring that claims another window"
+  assert_contains "$out" "unique-ids=2/2" \
+    "two windows of the same unrecognised length must not share one id"
   pass "Codex windows are classified by declared length or name, never by position"
 }
 
 test_second_seat_is_machine_local_and_optional() {
-  command -v node >/dev/null 2>&1 || { echo "skip: node not found for widget module checks"; return 0; }
+  node_imports_typescript || {
+    echo "skip: node cannot import TypeScript modules on this build"
+    return 0
+  }
 
   local out
   out=$(node_check "
@@ -288,6 +349,7 @@ test_install_places_every_widget_file
 test_install_preserves_unrelated_extensions_and_app_files
 test_second_run_is_safe_and_keeps_local_settings
 test_replacing_a_modified_widget_keeps_the_previous_copy
+test_repeated_replacements_keep_separate_backups
 test_example_settings_written_only_when_the_real_file_is_absent
 test_missing_home_is_refused_rather_than_created
 test_dry_run_writes_nothing
