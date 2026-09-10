@@ -20,13 +20,20 @@ Width-constrained surfaces clip or truncate the canonical line without wrapping 
 | `⚓ model·effort` | The active model and reasoning or thinking effort reported by the orchestrator. | `--` for either unavailable value. |
 | `[account-role]` | A compact role word for the vendor account this primary is running on, attached to the model identity rather than forming its own group. | Omitted entirely when the account is unknown. |
 | `🧠 context` | The integer percentage of the model context window already used. | `--` when the orchestrator does not expose current context use. |
-| `⚡ quota` | The integer percentage of the provider's short-window quota already used. | `--` when the provider or orchestrator does not expose quota. |
+| `⚡ quota` | The integer percentage of the provider's binding quota window already used, immediately followed by a dim token naming that window when the adapter knows it. | `--` when the provider or orchestrator does not expose quota, or exposes a figure whose window cannot be named. |
 | `🚢 active` | Ordinary task records currently owned by this Firstmate home, excluding persistent second mates. | `0` when no ordinary tasks exist. |
 | `⏸ paused` | Active tasks whose latest non-empty event declares a bounded external wait. | `0` when none are paused. |
 | `⚠ attention` | Active tasks whose latest non-empty event requires action because it is a decision, blocker, or failure. | `0` when none need attention. |
 | `👁 supervision` | Age in seconds of `state/.last-watcher-beat`. | Bright-red `NO-WATCH --` when the beacon is missing or unreadable. |
 | `$ cost` | Cumulative cost in US dollars for the current orchestrator session, rounded to two decimals. | `$--` when the orchestrator does not expose cost. |
 | `💤 AFK` | Whether the Firstmate home is in away mode. | Dim `💤--` when away mode is off. |
+
+The window token is dim and is a short length word such as `5h`, `wk`, or `24h`.
+It is part of the metric rather than decoration: the same percentage means something different
+against a five-hour allowance than against a weekly one, so an adapter that knows its window always
+names it, and a figure whose window cannot be named is withheld rather than shown bare.
+Adapters whose payload carries no window - Claude, Pi, and Cursor - render the bare percentage their
+own contracts already specify, unchanged.
 
 The account role is dim and is a ROLE word such as `Team`, `Max`, or `Plus`.
 It is rendered only from a verified account name: an explicit `--role`, else `FM_PRIMARY_ACCOUNT_ROLE`
@@ -138,14 +145,59 @@ status_line_use_colors = true
 `model-with-reasoning` renders model and reasoning effort together; `context-used`, `five-hour-limit`, and
 `weekly-limit` are Codex's own context and usage-window items.
 Codex silently ignores an unrecognized item id, so a mistyped entry disappears rather than erroring.
+Each of Codex's own limit items is REMAINING-oriented and omits itself when the provider has not supplied
+that window, which is the opposite orientation from this row's USED percentages.
 
 Alongside that, `bin/fm-primary.sh` attaches the shared Firstmate companion row for the `codex` and `astra`
 profiles, carrying the fields Codex cannot show.
 The companion reports the model from the guarded profile - `gpt-6-astra` for `astra`, with the effort
-`config/astra-effort` resolved - while context, quota, and cost stay `--` because Codex exposes none of them
-to a companion process.
-Codex reports a single `all_models` availability scope, so Astra draws on the ordinary Codex windows: there is
-no separate Astra allowance, and none is displayed.
+`config/astra-effort` resolved - and supplies real context and quota figures of its own through
+[`bin/fm-codex-session-metrics-lib.sh`](../bin/fm-codex-session-metrics-lib.sh), which owns the mechanics.
+Session cost stays `--`: Codex's `estimated-thread-cost` item is Enterprise-workspace only and is not
+exposed to a companion process.
+
+Three different quantities are involved here, and the integration's correctness rests on not confusing
+them.
+
+**Context is per-session, so it is read from that exact session.** The followed pane resolves to its
+foreground Codex process, that process is asked which rollout file it currently holds OPEN, and only that
+file is read. Codex holds exactly one rollout open per thread, so the open descriptor is the process's own
+statement of which thread it is running. Nothing picks the newest file in the sessions tree, so a sibling
+Codex session - another primary, a worker, the desktop app - owns a different descriptor and can never be
+borrowed. No Codex process behind the pane, no rollout, or more than one rollout is a refusal.
+The figure is the last turn's prompt size against the context window that session itself reported, which
+are the same two numbers Codex's own `context-used` item is built from. The window is read from the session
+rather than from a model catalog, so no capacity is ever assumed. Compaction needs no special handling: a
+compacted thread's next event reports the smaller post-compaction prompt.
+
+**Provider quota is per-account, so it comes from the account owner.** `quota-axi` already resolves
+provider and account identity, and it is read strictly read-only with `--no-credential-refresh`, which
+keeps the read from delegating an expired session's renewal to the vendor CLI and surfacing a login prompt
+behind a status bar. The row consumes that owner's `all_models` effective availability and the window it
+reports as binding, converting its REMAINING percentage into this row's USED one. Codex reports a single
+account-wide availability scope, so an Astra primary draws on the ordinary Codex windows rather than an
+allowance of its own, and none is displayed as though it had one.
+
+**The rollout's own `rate_limits` block is a third thing, and it is the trap this integration exists to
+avoid.** It is stamped with a limit identity - `limit_id` and `limit_name` - which is frequently not the
+running model's. A live `gpt-6-astra` primary was measured reporting `limit_id=codex_bengalfox`
+(GPT-5.3-Codex-Spark) at 0% used while the account's actual binding weekly window sat at 54% used.
+Reporting that 0% would tell the captain there is full headroom when there is not. So that block is used
+only when its stamped identity provably matches the running model, by a positive match rule rather than a
+denylist, and is otherwise discarded rather than reinterpreted. An identity that cannot be matched is not a
+fallback: quota then comes from the account owner or stays unavailable.
+
+Freshness and cost are bounded on every path. The session read is a local file read cached for 15 seconds;
+the provider read is a subprocess, so it has its own 120-second cache and a bounded wait, and it never runs
+on a per-refresh path. A one-second companion refresh therefore performs no subprocess work on most ticks,
+and no credential is read, no credential refresh is delegated, and no token value is ever printed. Only
+metric metadata is parsed - token totals, context window, rate-limit identity and windows - and never
+conversation content.
+
+Every reading must be positively known or it is unavailable. A missing, malformed, expired, stale, or
+unattributable figure renders as the dim `--` placeholder and is never converted to `0`, because a
+confident zero on either metric is exactly the reading that would mislead. A genuine zero still renders as
+`0%`.
 
 ### opencode and grok - unverified
 
@@ -207,6 +259,13 @@ After this change lands, remove only that local `statusLine` entry so it no long
 Do not copy a renderer into `state/` and do not edit `~/.claude`, `~/.kimi-code`, or `~/.pi`.
 The next guarded Claude, Pi, or Kimi primary launch loads the tracked integration automatically.
 
+Codex's native half needs no repeat edit once the `[tui]` block above is in `$CODEX_HOME/config.toml`,
+but a session must have LOADED it: `/statusline` inside a running TUI applies the selection to that
+session, while a session started before the block was written may not be showing it.
+Whether Codex reloads that file without a restart has not been established here, so neither behavior
+should be assumed; `/statusline` is the route that applies it either way, and it needs no relaunch.
+The companion's own fields need no activation at all - they follow the guarded launch.
+
 `~/.cursor` is the one carve-out, and only through `bin/fm-cursor-statusline.sh`.
 Cursor validates `statusLine` only in the user config, so there is no tracked in-repo integration to load;
 the installer is the activation route, it is opt-in, it writes exactly the one `statusLine` key after a
@@ -241,6 +300,39 @@ bash tests/fm-primary.test.sh
 bash tests/fm-pi-primary-types.test.sh
 bin/fm-lint.sh
 ```
+
+The Codex metric supply was added on 2026-09-10 against codex-cli 0.153.4, quota-axi 0.1.41, and herdr's
+`pane process-info`.
+The full `[tui].status_line` item enum was read from the shipped `codex-darwin-arm64` binary's string
+table, with no model request and no network call, confirming `model-with-reasoning`, `context-used`,
+`five-hour-limit`, and `weekly-limit` as real ids alongside `context-remaining`, `used-tokens`,
+`total-input-tokens`, `total-output-tokens`, `thread-credits`, `estimated-thread-cost`,
+`context-window-size`, `usage-limit`, `secondary-usage-limit`, `daily-limit`, `monthly-limit`, and
+`annual-limit`.
+
+The session binding and the misattribution were both measured on the live `gpt-6-astra` primary by
+read-only inspection: `herdr pane process-info` resolved the followed pane to the Codex process, `lsof`
+showed that process holding exactly one rollout open, and that rollout's newest token-count event reported
+`model_context_window=258400` with `rate_limits.limit_id=codex_bengalfox`
+(`limit_name=GPT-5.3-Codex-Spark`) at `primary.used_percent=0`.
+The independently read account state at the same time was 46% remaining on the binding weekly window, so
+the rollout's 0% was another model's allowance and not this primary's.
+The corrected reading for that primary was context 58% used and quota 55% used on the `wk` window, which
+agrees with the account owner rather than with the mismatched block.
+The reported context window also agrees with the cached `gpt-6-astra` catalog entry - `context_window`
+272000 at `effective_context_window_percent` 95 - so the figure rests on the session's own report and no
+larger capacity is claimed anywhere.
+
+`tests/fm-status-bar.test.sh` covers this supply with fixture rollouts and fixture provider reports only.
+It spawns no renderer against a live pane and signals no process, because the suite's isolation rule is
+that teardown matches exact child pids and never command-name patterns: a name pattern matching
+`fm-status-bar.sh` would also match a live captain's companion, whose command line is byte-identical to a
+fixture's.
+The registered cases are the measured misattribution, the positive identity match, the unstamped-identity
+refusal, current-session context across compaction, malformed and absent and expired and stale readings
+staying unavailable rather than zero, a genuine zero surviving those guards, a weekly-only provider limit,
+an unlabelled and an ambiguous window both being withheld, single-versus-multiple open rollout resolution,
+and the window token reaching the Codex row without leaking into the Claude, Pi, or Cursor contracts.
 
 Observed version output on 2026-07-21:
 
