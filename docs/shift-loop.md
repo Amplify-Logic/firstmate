@@ -76,7 +76,7 @@ That alarm is spoken as one plain line; the raw outage summary carries task ids 
 Recorded on the captain Mac with the real power state, the real LaunchAgents, the real Tailscale Serve config, and a real announce dry run, which spends no credit and queues nothing:
 
 ```
-$ FM_HOME=/Users/larsmusic/starship bin/fm-shift.sh status
+$ FM_HOME=~/starship bin/fm-shift.sh status
 shift: not armed
   power: ok - on mains power, system sleep held off (keep the lid open)
   keep-awake: ok - com.firstmate.glasses-keepawake is running
