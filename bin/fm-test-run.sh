@@ -944,11 +944,11 @@ families_for_changed_path() {
       ;;
     .gitignore)
       # Not prose: the tracked ignore file has behaviour owners that assert on
-      # its contents, so an ignore-only change still selects them. The complete
-      # owner set is the two direct readers (config/ category coverage and the
-      # secondmate seed-marker line), the upstream-watch private-report
-      # assertion, and the fork-surface check whose config/secret knob pass
-      # requires every declared knob path to be ignored.
+      # its contents, so an ignore-only change still selects them. The owners
+      # here are the two direct readers (config/ category coverage and the
+      # secondmate seed-marker line) plus the upstream-watch private-report
+      # assertion; a fork may declare further owners for this path in its test
+      # registry.
       printf '%s\n' "__script__:fm-gitignore-config.test.sh"
       printf '%s\n' "__script__:fm-secondmate-sync.test.sh"
       printf '%s\n' "__script__:fm-upstream-watch.test.sh"
