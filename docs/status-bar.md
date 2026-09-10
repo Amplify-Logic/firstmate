@@ -168,7 +168,7 @@ It clears the whole pane once at startup, because `herdr pane run` echoes the la
 shell before `exec` replaces it and that line would otherwise stay visible below the status row.
 Each refresh collects the whole row before any of it reaches the pane, then writes the single-row erase and
 the finished row together, so the row is never left blank while the next one is being collected.
-A refresh whose row is byte-identical to the one already on screen is not written at all.
+Every refresh publishes its row, so a resized or repainted companion recovers on the next tick.
 Only `tmux` and `herdr` are accepted; any other value renders nothing rather than guessing.
 
 `bin/fm-primary.sh` picks the provider that actually owns the terminal: `TMUX_PANE` selects tmux, and
@@ -323,7 +323,7 @@ Observed output:
 ⚓ kimi-code/k3·-- │ 🧠-- ⚡-- │ 🚢0 ⏸0 ⚠0 │ 👁 NO-WATCH -- │ $-- │ 💤--
 ```
 
-`tests/fm-status-bar.test.sh` passed canonical order, threshold, placeholder, supervision-alert, Claude-payload, Cursor-payload, account-role, control-byte sanitization, exact-pane cleanup on both companion providers, unverified-provider refusal, one-time pane clear, blank-free refresh, unchanged-row suppression, and guarded-installation cases.
+`tests/fm-status-bar.test.sh` passed canonical order, threshold, placeholder, supervision-alert, Claude-payload, Cursor-payload, account-role, control-byte sanitization, exact-pane cleanup on both companion providers, unverified-provider refusal, one-time pane clear, blank-free refresh, per-refresh row publication, and guarded-installation cases.
 `tests/fm-primary.test.sh` passed the guarded tmux and herdr companion cases - including the separated refused-split and split-named-no-pane outcomes, and cleanup of only the exact pane the split returned - alongside all existing launcher cases.
 `tests/fm-cursor-statusline.test.sh` passed the installer's single-key install, exact uninstall restore, foreign-status-line refusal in both directions, cross-checkout removal, invalid-config refusal, and credentials-untouched cases.
 `tests/fm-pi-primary-types.test.sh` reported an honest skip because the host TypeScript 4.9.5 cannot parse Pi 0.80.10's declarations, while the real Pi TUI loaded and ran the TypeScript extension.

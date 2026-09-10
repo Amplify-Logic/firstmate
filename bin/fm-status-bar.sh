@@ -391,7 +391,6 @@ if [ -n "$FOLLOW_PANE" ]; then
   # command into the pane's shell, and that line would otherwise sit below the
   # status row for the life of the companion.
   printf '\033[?25l\033[?7l\033[2J'
-  last_frame=
   while companion_pane_alive; do
     # Collect the complete frame before any of it reaches the pane, then publish
     # the row erase and the finished frame in a single write. Erasing first left
@@ -400,10 +399,7 @@ if [ -n "$FOLLOW_PANE" ]; then
     # for the per-task collection to take a noticeable fraction of the interval.
     # The erase still leads the frame, so a shorter row's stale tail is clipped.
     frame=$(render_once)
-    if [ "$frame" != "$last_frame" ]; then
-      printf '\033[H\033[2K%s' "$frame"
-      last_frame=$frame
-    fi
+    printf '\033[H\033[2K%s' "$frame"
     sleep "${FM_STATUS_BAR_INTERVAL:-1}"
   done
   exit 0
