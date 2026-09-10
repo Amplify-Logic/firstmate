@@ -20,9 +20,9 @@
 # leaving them blank: bin/fm-codex-session-metrics-lib.sh binds to the exact
 # primary session behind the followed pane and resolves the account's binding
 # quota window. Kimi keeps "--" for both, because no equivalent source has been
-# verified for it. That library owns the mechanics, the identity filtering that
-# keeps another model's allowance out of this row, and the caching that keeps a
-# one-second refresh off the provider.
+# verified for it. That library owns the mechanics, the separation that keeps an
+# account-level allowance and a per-session reading from standing in for each
+# other, and the caching that keeps a one-second refresh off the provider.
 #
 # --role renders a compact account role beside the model. It is only ever a
 # verified label supplied by the launcher: --role, else FM_PRIMARY_ACCOUNT_ROLE
@@ -143,14 +143,18 @@ normalize_percent() {
 
 # A window label is presentation for a metric whose scope must stay exact, so
 # it is accepted by a positive rule rather than filtered by a denylist: a short
-# alphanumeric token only. Anything else is dropped whole, which withholds the
-# quota figure rather than labelling it with something unrecognized.
+# alphanumeric token, or several of them joined by "/" when the provider
+# reports more than one window binding at the same percentage. Anything else is
+# dropped whole, which withholds the quota figure rather than labelling it with
+# something unrecognized. The eight-character bound is shared with
+# _FM_CODEX_WINDOW_LABEL_MAX in bin/fm-codex-session-metrics-lib.sh, which
+# collapses a wider tie to its shortest window rather than overflowing the row.
 sanitize_window_label() {
   local value=${1:-}
   case "$value" in
-    ''|*[!A-Za-z0-9]*) printf '' ;;
+    ''|/*|*/|*//*|*[!A-Za-z0-9/]*) printf '' ;;
     *)
-      if [ "${#value}" -le 4 ]; then
+      if [ "${#value}" -le 8 ]; then
         printf '%s' "$value"
       else
         printf ''
@@ -282,7 +286,7 @@ refresh_codex_metrics() {
   [ "$CODEX_METRICS_READY" = 1 ] || return 0
   reading=$(fm_codex_session_metrics \
     "$FOLLOW_PANE" "$FOLLOW_BACKEND" "${FM_STATUS_HERDR_SESSION:-}" \
-    "$STATE" "$MODEL" 2>/dev/null) || return 0
+    "$STATE" 2>/dev/null) || return 0
   IFS=$'\t' read -r ctx quota window <<EOF
 $reading
 EOF
@@ -363,8 +367,6 @@ render_once() {
   local anchor separator context_part quota_part paused_color attention_color
   local fleet_part watch_part cost_part afk_part age context_color quota_color
 
-  refresh_codex_metrics
-  publish_context_sample "$CONTEXT_USED"
   fleet_counts
   age=$(supervision_age)
   separator=" ${D}│${X} "
@@ -479,6 +481,13 @@ if [ -n "$FOLLOW_PANE" ]; then
     # made the companion appear to flicker once a second on a fleet large enough
     # for the per-task collection to take a noticeable fraction of the interval.
     # The erase still leads the frame, so a shorter row's stale tail is clipped.
+    # The refresh runs HERE rather than inside render_once, because the frame
+    # is collected in a command substitution: a subshell's assignments are
+    # discarded, so a refresh that remembers anything between ticks - the last
+    # published context sample, this tick's reading - has to run in the loop's
+    # own shell. It still runs before any of the frame reaches the pane.
+    refresh_codex_metrics
+    publish_context_sample "$CONTEXT_USED"
     frame=$(render_once)
     printf '\033[H\033[2K%s' "$frame"
     sleep "${FM_STATUS_BAR_INTERVAL:-1}"

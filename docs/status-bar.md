@@ -20,7 +20,7 @@ Width-constrained surfaces clip or truncate the canonical line without wrapping 
 | `⚓ model·effort` | The active model and reasoning or thinking effort reported by the orchestrator. | `--` for either unavailable value. |
 | `[account-role]` | A compact role word for the vendor account this primary is running on, attached to the model identity rather than forming its own group. | Omitted entirely when the account is unknown. |
 | `🧠 context` | The integer percentage of the model context window already used. | `--` when the orchestrator does not expose current context use. |
-| `⚡ quota` | The integer percentage of the provider's binding quota window already used, immediately followed by a dim token naming that window when the adapter knows it. | `--` when the provider or orchestrator does not expose quota, or exposes a figure whose window cannot be named. |
+| `⚡ quota` | The integer percentage of the provider's binding quota window already used, immediately followed by a dim token naming the window or windows that bind it when the adapter knows them. | `--` when the provider or orchestrator does not expose quota, or exposes a figure whose windows cannot all be named. |
 | `🚢 active` | Ordinary task records currently owned by this Firstmate home, excluding persistent second mates. | `0` when no ordinary tasks exist. |
 | `⏸ paused` | Active tasks whose latest non-empty event declares a bounded external wait. | `0` when none are paused. |
 | `⚠ attention` | Active tasks whose latest non-empty event requires action because it is a decision, blocker, or failure. | `0` when none need attention. |
@@ -32,6 +32,11 @@ The window token is dim and is a short length word such as `5h`, `wk`, or `24h`.
 It is part of the metric rather than decoration: the same percentage means something different
 against a five-hour allowance than against a weekly one, so an adapter that knows its window always
 names it, and a figure whose window cannot be named is withheld rather than shown bare.
+A provider can report more than one window binding at the same percentage, and then the token names
+them shortest-first, joined by `/` - `5h/wk`.
+A tie too wide for the token's eight-character bound collapses to its shortest binding window; the
+percentage stays the tied one, and the windows the token no longer spells out remain just as binding,
+so the shortest window's reset does not restore the whole allowance.
 Adapters whose payload carries no window - Claude, Pi, and Cursor - render the bare percentage their
 own contracts already specify, unchanged.
 
@@ -174,25 +179,39 @@ compacted thread's next event reports the smaller post-compaction prompt.
 provider and account identity, and it is read strictly read-only with `--no-credential-refresh`, which
 keeps the read from delegating an expired session's renewal to the vendor CLI and surfacing a login prompt
 behind a status bar. The row consumes that owner's `all_models` effective availability and the window it
-reports as binding, converting its REMAINING percentage into this row's USED one. Codex reports a single
-account-wide availability scope, so an Astra primary draws on the ordinary Codex windows rather than an
-allowance of its own, and none is displayed as though it had one.
+reports as binding, converting its REMAINING percentage into this row's USED one. `quota-axi` names every
+window tied at the minimum remaining, so a tie is an ordinary state - an untouched account ties at 100%
+remaining, an exhausted one at 0% - and the tied figure is reported with every tied window named. All the
+tied window ids are retained in the reading and its cache even when the row's token has to be compact.
+Codex reports a single account-wide availability scope, so an Astra primary draws on the ordinary Codex
+windows rather than an allowance of its own, and none is displayed as though it had one.
 
 **The rollout's own `rate_limits` block is a third thing, and it is the trap this integration exists to
 avoid.** It is stamped with a limit identity - `limit_id` and `limit_name` - which is frequently not the
 running model's. A live `gpt-6-astra` primary was measured reporting `limit_id=codex_bengalfox`
 (GPT-5.3-Codex-Spark) at 0% used while the account's actual binding weekly window sat at 54% used.
-Reporting that 0% would tell the captain there is full headroom when there is not. So that block is used
-only when its stamped identity provably matches the running model, by a positive match rule rather than a
-denylist, and is otherwise discarded rather than reinterpreted. An identity that cannot be matched is not a
-fallback: quota then comes from the account owner or stays unavailable.
+Reporting that 0% would tell the captain there is full headroom when there is not. The block is therefore
+not a quota source here at all, under any name. Filtering it by identity was tried and does not work: the
+block never states which account or which model allowance it describes, so nothing in it can establish the
+scope the row would be claiming, and a name-shaped rule mismatches exactly where it matters - the plain
+`codex` profile's own model string is a substring of `codex_bengalfox`, so it matches that very block.
+Quota comes from the account owner or it is unavailable. The rollout supplies context, and nothing else.
 
-Freshness and cost are bounded on every path. The session read is a local file read cached for 15 seconds;
-the provider read is a subprocess, so it has its own 120-second cache and a bounded wait, and it never runs
-on a per-refresh path. A one-second companion refresh therefore performs no subprocess work on most ticks,
-and no credential is read, no credential refresh is delegated, and no token value is ever printed. Only
-metric metadata is parsed - token totals, context window, rate-limit identity and windows - and never
-conversation content.
+Freshness and cost are bounded on every path. The session read is a local file read cached for 15 seconds,
+and it reads a bounded tail of the rollout that escalates from 256 KB while nothing is found and stops at
+32 MB or the file's own size, because a live rollout reaches hundreds of megabytes and the newest
+token-count event can sit far behind the end of it. A reading that cannot be refreshed inside that bound
+keeps its last known value for up to 15 minutes and then goes back to `--`, because a live session's
+occupancy does not become unknown the moment its newest event scrolls past the window - and never becomes
+zero. Candidate lines are selected on `payload.type` exactly, so conversation content that merely mentions
+the event name cannot stand in for a reading.
+
+The provider read is a subprocess, so a refresh never waits on it. On a cache miss the refresh starts one
+detached read, renders the `--` placeholder for that frame, and a later frame picks the answer up once it
+lands; its own 120-second cache and a 30-second in-flight lock bound how often that happens. A one-second
+companion refresh therefore performs no blocking subprocess work on any tick, and no credential is read, no
+credential refresh is delegated, and no token value is ever printed. Only metric metadata is parsed - token
+totals and the context window - and never conversation content.
 
 Every reading must be positively known or it is unavailable. A missing, malformed, expired, stale, or
 unattributable figure renders as the dim `--` placeholder and is never converted to `0`, because a
@@ -328,11 +347,18 @@ It spawns no renderer against a live pane and signals no process, because the su
 that teardown matches exact child pids and never command-name patterns: a name pattern matching
 `fm-status-bar.sh` would also match a live captain's companion, whose command line is byte-identical to a
 fixture's.
-The registered cases are the measured misattribution, the positive identity match, the unstamped-identity
-refusal, current-session context across compaction, malformed and absent and expired and stale readings
-staying unavailable rather than zero, a genuine zero surviving those guards, a weekly-only provider limit,
-an unlabelled and an ambiguous window both being withheld, single-versus-multiple open rollout resolution,
-and the window token reaching the Codex row without leaking into the Claude, Pi, or Cursor contracts.
+The registered cases are the measured misattribution and every other shape of rollout rate-limit block
+being refused as a quota source, current-session context across compaction, a token event buried beyond the
+first tail step still being found while a line that merely mentions the event name is not, an unrefreshable
+reading being kept only while it is young enough and then going back to unavailable rather than zero,
+malformed and absent and stale readings staying unavailable rather than zero, a genuine zero surviving
+those guards, a weekly-only provider limit, tied windows reported with every tied window named including a
+genuine tied 0% and a tied exhausted account, a wide tie collapsing to its shortest binding window, an
+unnameable window withheld on its own and inside a tie, single-versus-multiple open rollout resolution, a
+process-info answer about another pane resolving to nothing, a tmux pane resolving its Codex primary
+through a launcher shim and nothing else, a provider cache miss rendering a complete row instead of
+waiting on the read, and the window token reaching the Codex row without leaking into the Claude, Pi, or
+Cursor contracts.
 
 Observed version output on 2026-07-21:
 
