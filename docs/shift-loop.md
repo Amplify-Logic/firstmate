@@ -75,6 +75,8 @@ The alarm owner counts a zero exit as delivered and advances the sentinel's back
 - It reimplements neither away mode, nor the watcher, nor the mailbox; it orchestrates their existing owners and adds only the preflight and the self-check.
 - `stop` leaves the mailbox, the keep-awake agent, and the Tailscale mapping running.
   Those are standing services the captain also uses at his desk; tearing them down would break that too.
+- It does not hook the ordinary away-mode return, so ending away mode by any other route does not stand a shift down.
+  `state/.shift` stays, and the self-check and the alarm-route block stay with it, so `status` keeps reporting the shift armed with away mode DOWN until `stop` runs.
 - `status` exits non-zero only when a shift is armed and one of its components is down.
   With no shift armed it still prints an honest line per component, but claims no failure, because nothing is claiming to be armed.
 
