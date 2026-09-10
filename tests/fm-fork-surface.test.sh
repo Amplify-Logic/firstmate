@@ -12,16 +12,31 @@ assert_present "$SURFACE" "bin/fm-fork-surface.sh is missing"
 [ -x "$SURFACE" ] || fail "bin/fm-fork-surface.sh must be executable"
 
 clone_current_tree() {
-  local repo=$1
+  local repo=$1 patch untracked
   git clone -q "$ROOT" "$repo" || fail "could not clone fork-surface fixture"
+  patch="$repo.patch"
   if ! git -C "$ROOT" diff --cached --quiet HEAD; then
-    git -C "$ROOT" diff --cached --binary HEAD | git -C "$repo" apply --index \
+    git -C "$ROOT" diff --cached --binary HEAD >"$patch" \
+      || fail "could not capture staged changes for fork-surface fixture"
+    git -C "$repo" apply --index <"$patch" \
       || fail "could not apply staged changes to fork-surface fixture"
   fi
   if ! git -C "$ROOT" diff --quiet; then
-    git -C "$ROOT" diff --binary | git -C "$repo" apply \
+    git -C "$ROOT" diff --binary >"$patch" \
+      || fail "could not capture unstaged changes for fork-surface fixture"
+    git -C "$repo" apply <"$patch" \
       || fail "could not apply unstaged changes to fork-surface fixture"
   fi
+  rm -f "$patch"
+  # Untracked, non-ignored files are invisible to the index checks but visible
+  # to the anchor and workflow reads, so the fixture needs them to mirror ROOT.
+  while IFS= read -r untracked; do
+    [ -n "$untracked" ] || continue
+    mkdir -p "$repo/$(dirname "$untracked")" \
+      || fail "could not create fork-surface fixture directory for: $untracked"
+    cp -p "$ROOT/$untracked" "$repo/$untracked" \
+      || fail "could not copy untracked file into fork-surface fixture: $untracked"
+  done < <(git -C "$ROOT" ls-files --others --exclude-standard)
 }
 
 check_current_manifest() {

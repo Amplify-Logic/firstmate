@@ -4,6 +4,11 @@
 # Registry rows are whitespace-separated and have one of these exact forms:
 #   family <family-name> tests/<script>.test.sh
 #   covers <repository-path-glob> tests/<script>.test.sh
+#   adds   <repository-path-glob> tests/<script>.test.sh
+# A covers row claims a fork-only path the upstream map does not own, so the
+# registry answer is the complete answer for that path. An adds row contributes
+# an extra owner for a path the upstream map already owns, so the upstream map
+# still runs and its owners are kept alongside the fork owner.
 # Blank lines and lines whose first non-whitespace character is # are ignored.
 # A present malformed registry fails closed with an actionable line number.
 # A missing library or registry is handled by the guarded hooks in the runner
@@ -18,6 +23,7 @@ FORK_REGISTRY_FAMILY_NAMES=()
 FORK_REGISTRY_FAMILY_SCRIPTS=()
 FORK_REGISTRY_COVER_GLOBS=()
 FORK_REGISTRY_COVER_SCRIPTS=()
+FORK_REGISTRY_COVER_EXCLUSIVE=()
 
 fork_registry_error() {
   printf 'fm-fork-test-registry: %s\n' "$*" >&2
@@ -51,6 +57,7 @@ fork_registry_apply() { # <registry-file>
   FORK_REGISTRY_FAMILY_SCRIPTS=()
   FORK_REGISTRY_COVER_GLOBS=()
   FORK_REGISTRY_COVER_SCRIPTS=()
+  FORK_REGISTRY_COVER_EXCLUSIVE=()
 
   while IFS= read -r line || [ -n "$line" ]; do
     line_no=$((line_no + 1))
@@ -89,13 +96,18 @@ fork_registry_apply() { # <registry-file>
         FORK_REGISTRY_FAMILY_NAMES+=("$value")
         FORK_REGISTRY_FAMILY_SCRIPTS+=("$script")
         ;;
-      covers)
+      covers|adds)
         fork_registry_glob_valid "$value" || {
           fork_registry_error "$file:$line_no: unsafe repository path glob: $value"
           return 2
         }
         FORK_REGISTRY_COVER_GLOBS+=("$value")
         FORK_REGISTRY_COVER_SCRIPTS+=("$script")
+        if [ "$kind" = covers ]; then
+          FORK_REGISTRY_COVER_EXCLUSIVE+=(1)
+        else
+          FORK_REGISTRY_COVER_EXCLUSIVE+=(0)
+        fi
         ;;
       *)
         fork_registry_error "$file:$line_no: unknown row type: $kind"
@@ -117,8 +129,12 @@ fork_registry_family_for_basename() { # <test-basename>
   return 1
 }
 
+# Prints every registry owner of <path>. Returns 0 only when a covers row
+# matched, which tells the runner the registry answer is complete; an adds-only
+# match returns 1 so the caller still consults the upstream map and keeps the
+# owners declared there.
 fork_registry_scripts_for_path() { # <repository-relative-path>
-  local path=${1:-} index=0 pattern matched=1 script
+  local path=${1:-} index=0 pattern exclusive=1 script
   for pattern in "${FORK_REGISTRY_COVER_GLOBS[@]+"${FORK_REGISTRY_COVER_GLOBS[@]}"}"; do
     # Registry cover values are intentionally expanded as shell globs.
     # shellcheck disable=SC2254
@@ -126,10 +142,12 @@ fork_registry_scripts_for_path() { # <repository-relative-path>
       $pattern)
         script=${FORK_REGISTRY_COVER_SCRIPTS[$index]}
         printf '__script__:%s\n' "${script##*/}"
-        matched=0
+        if [ "${FORK_REGISTRY_COVER_EXCLUSIVE[$index]}" = 1 ]; then
+          exclusive=0
+        fi
         ;;
     esac
     index=$((index + 1))
   done
-  return "$matched"
+  return "$exclusive"
 }
