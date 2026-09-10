@@ -30,7 +30,6 @@ import argparse
 import errno
 import fcntl
 import os
-import pty
 import re
 import select
 import signal
@@ -92,21 +91,47 @@ def child_env(cols: int, rows: int) -> "dict[str, str]":
     return env
 
 
+def spawn(argv: "list[str]", env: "dict[str, str]", cols: int, rows: int) -> "tuple[int, int]":
+    """Fork a child on a pty that is ALREADY exactly cols x rows.
+
+    `pty.fork()` cannot do this: it returns only the master, so the size can be
+    applied no earlier than after the exec, and the client is free to emit a
+    full paint at the pty's default 80x24 before the SIGWINCH lands. The
+    emulator replays both paints into one fixed screen, so leftovers from the
+    first can survive wherever the repaint does not overwrite. Exact geometry
+    is the whole point of this instrument, so the size is set on the SLAVE
+    before the child ever execs and the client's first paint is already right.
+    """
+    master, slave = os.openpty()
+    set_winsize(slave, cols, rows)
+
+    pid = os.fork()
+    if pid == 0:  # child
+        try:
+            os.close(master)
+            os.setsid()
+            try:
+                fcntl.ioctl(slave, termios.TIOCSCTTY, 0)
+            except OSError:
+                pass
+            for target in (0, 1, 2):
+                os.dup2(slave, target)
+            if slave > 2:
+                os.close(slave)
+            os.execvpe(argv[0], argv, env)
+        except Exception:  # pragma: no cover - child cannot report usefully
+            os._exit(127)
+
+    os.close(slave)
+    return pid, master
+
+
 def capture(session: str, cols: int, rows: int, seconds: float) -> bytes:
     """Attach a bounded read-only client on a pty of exactly cols x rows."""
     # Built literally from the validated name: no caller argv reaches Herdr.
     argv = ["herdr", "session", "attach", session]
 
-    env = child_env(cols, rows)
-
-    pid, master = pty.fork()
-    if pid == 0:  # child
-        try:
-            os.execvpe(argv[0], argv, env)
-        except Exception:  # pragma: no cover - child cannot report usefully
-            os._exit(127)
-
-    set_winsize(master, cols, rows)
+    pid, master = spawn(argv, child_env(cols, rows), cols, rows)
     chunks: "list[bytes]" = []
     deadline = time.monotonic() + seconds
     try:
@@ -165,7 +190,13 @@ def reap(pid: int) -> None:
         pass
 
 
-def render(data: bytes, cols: int, rows: int) -> "list[str]":
+def require_pyte():
+    """Resolve the emulator BEFORE a client is attached.
+
+    Rendering is the last step, but a home without pyte should not pay a full
+    attach-run-kill cycle against the lab session only to fail afterwards. The
+    caller already pre-checks python3 and this engine file for the same reason.
+    """
     try:
         import pyte
     except ImportError:
@@ -173,6 +204,10 @@ def render(data: bytes, cols: int, rows: int) -> "list[str]":
             "python3 module 'pyte' is required to render the lab screen; "
             "install it with 'python3 -m pip install pyte'"
         )
+    return pyte
+
+
+def render(pyte, data: bytes, cols: int, rows: int) -> "list[str]":
     screen = pyte.Screen(cols, rows)
     stream = pyte.ByteStream(screen)
     stream.feed(data)
@@ -193,6 +228,10 @@ def main(argv: "list[str] | None" = None) -> int:
     rows = int(bounded(args.rows, ROWS_MIN, ROWS_MAX, "--rows"))
     seconds = bounded(args.seconds, SECONDS_MIN, SECONDS_MAX, "--seconds")
 
+    # Only the text format needs the emulator, and it is resolved before any
+    # client is attached so a missing dependency costs nothing.
+    pyte = require_pyte() if args.format == "text" else None
+
     data = capture(session, cols, rows, seconds)
     if not data:
         sys.stderr.write(
@@ -205,7 +244,7 @@ def main(argv: "list[str] | None" = None) -> int:
         sys.stdout.buffer.write(data)
         return 0
 
-    for index, line in enumerate(render(data, cols, rows)):
+    for index, line in enumerate(render(pyte, data, cols, rows)):
         sys.stdout.write("%02d|%s\n" % (index, line.rstrip()))
     return 0
 
