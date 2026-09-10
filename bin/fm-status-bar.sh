@@ -16,6 +16,14 @@
 # --follow-backend selects the session provider that owns the companion pane:
 # tmux (default) or herdr. Herdr panes are addressed by HERDR_PANE_ID.
 #
+# The Codex companion supplies its own context and quota figures rather than
+# leaving them blank: bin/fm-codex-session-metrics-lib.sh binds to the exact
+# primary session behind the followed pane and resolves the account's binding
+# quota window. Kimi keeps "--" for both, because no equivalent source has been
+# verified for it. That library owns the mechanics, the identity filtering that
+# keeps another model's allowance out of this row, and the caching that keeps a
+# one-second refresh off the provider.
+#
 # --role renders a compact account role beside the model. It is only ever a
 # verified label supplied by the launcher: --role, else FM_PRIMARY_ACCOUNT_ROLE
 # (which bin/fm-primary.sh sets for its companion panes), else the account
@@ -43,6 +51,7 @@ MODEL=--
 EFFORT=--
 CONTEXT_USED=--
 QUOTA_USED=--
+QUOTA_WINDOW=
 COST=--
 ROLE=
 FOLLOW_PANE=
@@ -128,6 +137,24 @@ normalize_percent() {
     *)
       [ "$value" -le 100 ] 2>/dev/null || value=100
       printf '%s' "$value"
+      ;;
+  esac
+}
+
+# A window label is presentation for a metric whose scope must stay exact, so
+# it is accepted by a positive rule rather than filtered by a denylist: a short
+# alphanumeric token only. Anything else is dropped whole, which withholds the
+# quota figure rather than labelling it with something unrecognized.
+sanitize_window_label() {
+  local value=${1:-}
+  case "$value" in
+    ''|*[!A-Za-z0-9]*) printf '' ;;
+    *)
+      if [ "${#value}" -le 4 ]; then
+        printf '%s' "$value"
+      else
+        printf ''
+      fi
       ;;
   esac
 }
@@ -218,13 +245,60 @@ fi
 # Persist a context sample for the primary-handoff supervisor (context axis).
 # Display shows used %; the sample API still takes remaining and derives used.
 # Best-effort: never fail the status-bar render.
-if [ "$CONTEXT_USED" != -- ]; then
-  context_remaining=$((100 - CONTEXT_USED))
+#
+# CONTEXT_SAMPLED remembers the last published value so the companion, which
+# re-reads context on every refresh, only writes when the figure actually
+# changes instead of rewriting the sample once a second all day.
+CONTEXT_SAMPLED=
+publish_context_sample() {
+  local used=$1
+  [ "$used" != -- ] || return 0
+  [ "$used" != "$CONTEXT_SAMPLED" ] || return 0
+  CONTEXT_SAMPLED=$used
   # shellcheck source=bin/fm-primary-handoff-lib.sh
   . "$FM_ROOT/bin/fm-primary-handoff-lib.sh" 2>/dev/null \
-    && fm_handoff_write_context_sample "$context_remaining" 2>/dev/null \
+    && fm_handoff_write_context_sample "$((100 - used))" 2>/dev/null \
     || true
+  return 0
+}
+
+publish_context_sample "$CONTEXT_USED"
+
+# The Codex companion resolves its own metrics per refresh, so it loads the
+# supplier once here rather than on every tick.
+CODEX_METRICS_READY=
+if [ "$ADAPTER" = codex ] && [ -n "$FOLLOW_PANE" ]; then
+  # shellcheck source=bin/fm-codex-session-metrics-lib.sh
+  if . "$FM_ROOT/bin/fm-codex-session-metrics-lib.sh" 2>/dev/null; then
+    CODEX_METRICS_READY=1
+  fi
 fi
+
+# refresh_codex_metrics: re-read the followed session's context and the
+# account's binding quota. Both stay "--" unless the supplier could establish
+# them, so a failed read renders as unavailable rather than as zero.
+refresh_codex_metrics() {
+  local reading ctx quota window
+  [ "$CODEX_METRICS_READY" = 1 ] || return 0
+  reading=$(fm_codex_session_metrics \
+    "$FOLLOW_PANE" "$FOLLOW_BACKEND" "${FM_STATUS_HERDR_SESSION:-}" \
+    "$STATE" "$MODEL" 2>/dev/null) || return 0
+  IFS=$'\t' read -r ctx quota window <<EOF
+$reading
+EOF
+  CONTEXT_USED=$(normalize_percent "$ctx")
+  QUOTA_USED=$(normalize_percent "$quota")
+  QUOTA_WINDOW=
+  if [ "$QUOTA_USED" != -- ]; then
+    QUOTA_WINDOW=$(sanitize_window_label "$window")
+    # A quota figure whose window cannot be named would imply a scope the row
+    # does not know, so it is withheld rather than shown bare.
+    if [ -z "$QUOTA_WINDOW" ]; then
+      QUOTA_USED=--
+    fi
+  fi
+  return 0
+}
 
 G=$'\033[92m'
 Y=$'\033[93m'
@@ -289,6 +363,8 @@ render_once() {
   local anchor separator context_part quota_part paused_color attention_color
   local fleet_part watch_part cost_part afk_part age context_color quota_color
 
+  refresh_codex_metrics
+  publish_context_sample "$CONTEXT_USED"
   fleet_counts
   age=$(supervision_age)
   separator=" ${D}│${X} "
@@ -313,7 +389,12 @@ render_once() {
     quota_color=$G
     [ "$QUOTA_USED" -lt 70 ] || quota_color=$Y
     [ "$QUOTA_USED" -lt 90 ] || quota_color=$R
+    # The window is part of the metric, not decoration: the same percentage
+    # means something different against a five-hour allowance than against a
+    # weekly one, so an adapter that knows its window always names it.
     quota_part="${quota_color}⚡${QUOTA_USED}%${X}"
+    [ -z "$QUOTA_WINDOW" ] \
+      || quota_part="${quota_color}⚡${QUOTA_USED}%${X}${D}${QUOTA_WINDOW}${X}"
   fi
 
   paused_color=$D
