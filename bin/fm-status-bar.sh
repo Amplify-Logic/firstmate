@@ -24,6 +24,20 @@
 # account-level allowance and a per-session reading from standing in for each
 # other, and the caching that keeps a one-second refresh off the provider.
 #
+# --chrome-pane turns on Herdr chrome mode, which is what reclaims the
+# companion's empty rows. The canonical row is ALSO published to the primary
+# pane's own border title, where it costs no rows at all, so the companion pane
+# can be hidden by zoom while the status stays visible. The in-pane row keeps
+# being drawn either way: it is the fallback the captain sees the moment the
+# primary is unzoomed, and it means a chrome failure degrades to exactly the
+# behavior that shipped before chrome mode existed.
+# --chrome-role prefixes that border row with the launcher's compact visible
+# role marker (FM, or LAB for a lab primary), so the guarded primary identity
+# survives on the border rather than being displaced by the status fields.
+# Chrome mode never zooms: bin/fm-primary.sh zooms once at launch, and this
+# renderer only ever RELEASES the zoom, when a third pane appears in the tab.
+# A deliberate unzoom by the captain is therefore never fought.
+#
 # --role renders a compact account role beside the model. It is only ever a
 # verified label supplied by the launcher: --role, else FM_PRIMARY_ACCOUNT_ROLE
 # (which bin/fm-primary.sh sets for its companion panes), else the account
@@ -56,6 +70,8 @@ COST=--
 ROLE=
 FOLLOW_PANE=
 FOLLOW_BACKEND=tmux
+CHROME_PANE=
+CHROME_ROLE=
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
@@ -102,6 +118,16 @@ while [ "$#" -gt 0 ]; do
     --follow-backend)
       [ "$#" -ge 2 ] || exit 0
       FOLLOW_BACKEND=$2
+      shift 2
+      ;;
+    --chrome-pane)
+      [ "$#" -ge 2 ] || exit 0
+      CHROME_PANE=$2
+      shift 2
+      ;;
+    --chrome-role)
+      [ "$#" -ge 2 ] || exit 0
+      CHROME_ROLE=$2
       shift 2
       ;;
     *)
@@ -431,6 +457,102 @@ render_once() {
     "$separator" "$cost_part" "$separator$afk_part"
 }
 
+# Herdr's border title is stored, and silently clipped, at 80 CODEPOINTS, with
+# no marker of its own (measured on herdr 0.7.4). Herdr's renderer does truncate
+# visibly for a narrow pane - it appends its own ellipsis - so width is Herdr's
+# problem, but the 80-codepoint store is ours: a row that arrives longer than
+# that loses its rightmost fields with nothing to show it happened.
+#
+# So whole fields are dropped from the right until the row fits, and a visible
+# marker is appended. Clipping on the field separator is deliberate: the row is
+# full of multibyte glyphs, and slicing it by offset could split one, whereas a
+# separator is located by pattern and always falls on a character boundary. Only
+# the final fallback trims characters, and by then everything left is the ASCII
+# model and effort tail.
+FM_STATUS_CHROME_LIMIT=${FM_STATUS_CHROME_LIMIT:-80}
+
+chrome_clip() {  # <text> -> text that fits the border-title store
+  local text=$1 limit=$FM_STATUS_CHROME_LIMIT
+  # A row that already fits is published byte-for-byte, with no marker.
+  if [ "${#text}" -le "$limit" ]; then
+    printf '%s' "$text"
+    return
+  fi
+  # Room for the two-character marker has to survive the clip.
+  while [ "$((${#text} + 2))" -gt "$limit" ]; do
+    case "$text" in
+      *' │ '*) text=${text% │ *} ;;
+      *) break ;;
+    esac
+  done
+  # Nothing separable left and still over: trim the ASCII tail one character at
+  # a time rather than emit a row the server would clip without a marker.
+  while [ -n "$text" ] && [ "$((${#text} + 2))" -gt "$limit" ]; do
+    text=${text%?}
+  done
+  printf '%s …' "$text"
+}
+
+# chrome_row_from_frame: the canonical row as PLAIN text for the border title,
+# with the launcher's visible role marker leading it.
+#
+# It reuses the frame already collected for the pane instead of rendering a
+# second time. That halves the per-refresh work, and more importantly it
+# guarantees the border and the in-pane fallback show the same sample rather
+# than two reads taken a few milliseconds apart.
+#
+# Stripping runs under LC_ALL=C on purpose: an ANSI sequence is pure ASCII, so
+# removing it bytewise can never touch the row's multibyte glyphs.
+chrome_row_from_frame() {  # <styled frame>
+  local row
+  row=$(printf '%s' "$1" | LC_ALL=C sed 's/'$'\033''\[[0-9;]*m//g')
+  [ -z "$CHROME_ROLE" ] || row="$CHROME_ROLE │ $row"
+  chrome_clip "$row"
+}
+
+# chrome_publish: push the row onto the primary pane's own border title.
+#
+# The source is deliberately NOT bin/fm-primary.sh's firstmate-primary-visible-v1.
+# Herdr REPLACES a source's whole metadata record on every report-metadata call
+# (measured), so publishing under that source would wipe the primary's own
+# display-agent and supervision state labels on the very first refresh. A
+# separate source only ever contributes this title, and the launcher's record
+# keeps resolving untouched.
+#
+# --ttl-ms is what keeps the border honest: if this renderer dies, the row
+# expires instead of freezing a stale fleet count on the captain's border.
+FM_STATUS_CHROME_SOURCE=firstmate-primary-status-v1
+
+chrome_publish() {  # <row>
+  local ttl
+  ttl=$(( ${FM_STATUS_BAR_INTERVAL:-1} * 2500 ))
+  [ "$ttl" -ge 1000 ] || ttl=1000
+  herdr --session "$FM_STATUS_HERDR_SESSION" pane report-metadata "$CHROME_PANE" \
+    --source "$FM_STATUS_CHROME_SOURCE" \
+    --title "$1" \
+    --ttl-ms "$ttl" >/dev/null 2>&1
+}
+
+# chrome_release_zoom_if_crowded: give the reclaimed rows back rather than hide
+# a co-tenant pane.
+#
+# bin/fm-primary.sh zooms the primary once, at launch, when exactly the primary
+# and its companion share the tab. If anything later splits that tab, the zoom
+# would hide the new pane, so the zoom is released. This only ever releases:
+# it never zooms, so a captain who deliberately unzooms is not fought once a
+# second, and once released the check stops running.
+chrome_release_zoom_if_crowded() {
+  local panes
+  panes=$(herdr --session "$FM_STATUS_HERDR_SESSION" pane layout --pane "$CHROME_PANE" 2>/dev/null \
+    | jq -r '.result.layout.panes | length' 2>/dev/null)
+  case "$panes" in
+    ''|*[!0-9]*) return 0 ;;
+  esac
+  [ "$panes" -gt 2 ] || return 0
+  herdr --session "$FM_STATUS_HERDR_SESSION" pane zoom "$CHROME_PANE" --off >/dev/null 2>&1
+  CHROME_ZOOM_WATCH=0
+}
+
 # companion_pane_alive: one cheap liveness read of the pane this companion is
 # attached to, for whichever session provider owns it. Both arms compare the
 # resolved id against the requested one so a provider that answers about a
@@ -462,6 +584,15 @@ if [ -n "$FOLLOW_PANE" ]; then
       [ -n "$FM_STATUS_HERDR_SESSION" ] || exit 0
       ;;
   esac
+  # Chrome mode is herdr-only, and it decorates a pane that must not be the
+  # companion this renderer is drawing into. Anything else turns it off and
+  # leaves the in-pane row as the only surface, which is the pre-chrome
+  # behavior rather than a failure.
+  if [ -n "$CHROME_PANE" ]; then
+    if [ "$FOLLOW_BACKEND" != herdr ] || [ "$CHROME_PANE" = "$FOLLOW_PANE" ]; then
+      CHROME_PANE=
+    fi
+  fi
   # shellcheck disable=SC2329 # Invoked indirectly by the signal and exit traps.
   restore_terminal() {
     printf '\033[?25h\033[?7h'
@@ -474,6 +605,9 @@ if [ -n "$FOLLOW_PANE" ]; then
   # command into the pane's shell, and that line would otherwise sit below the
   # status row for the life of the companion.
   printf '\033[?25l\033[?7l\033[2J'
+  chrome_tick=0
+  # Armed only while chrome mode is on; the release path clears it permanently.
+  CHROME_ZOOM_WATCH=1
   while companion_pane_alive; do
     # Collect the complete frame before any of it reaches the pane, then publish
     # the row erase and the finished frame in a single write. Erasing first left
@@ -490,6 +624,18 @@ if [ -n "$FOLLOW_PANE" ]; then
     publish_context_sample "$CONTEXT_USED"
     frame=$(render_once)
     printf '\033[H\033[2K%s' "$frame"
+    if [ -n "$CHROME_PANE" ]; then
+      # The border row is published after the pane row, so a slow or failing
+      # herdr call can never delay the fallback surface.
+      chrome_publish "$(chrome_row_from_frame "$frame")"
+      # The co-tenant check is a layout read, not a per-refresh need, so it runs
+      # on a slow cadence and stops for good once the zoom has been released.
+      chrome_tick=$((chrome_tick + 1))
+      if [ "$CHROME_ZOOM_WATCH" = 1 ] \
+        && [ "$((chrome_tick % ${FM_STATUS_CHROME_ZOOM_EVERY:-5}))" -eq 0 ]; then
+        chrome_release_zoom_if_crowded
+      fi
+    fi
     sleep "${FM_STATUS_BAR_INTERVAL:-1}"
   done
   exit 0

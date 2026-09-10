@@ -187,6 +187,10 @@ DATA=${FM_DATA_OVERRIDE:-$FM_HOME/data}
 CONFIG=${FM_CONFIG_OVERRIDE:-$FM_HOME/config}
 # shellcheck source=bin/fm-account-lib.sh
 . "$SCRIPT_DIR/fm-account-lib.sh"
+# fm_backend_herdr_presentation_capable owns the protocol verdict for Herdr's
+# managed presentation surfaces, which chrome mode's border title is one of.
+# shellcheck source=bin/backends/herdr.sh
+. "$SCRIPT_DIR/backends/herdr.sh"
 # The two Kimi builds this repo carries primary evidence for; running either one
 # is quiet, anything else warns and still launches. Both are literal constants,
 # never parsed from docs/toolchain-manifest.tsv, because the launcher does not
@@ -279,6 +283,19 @@ visible_role() {
     printf '%s · PRIMARY' "$VISIBLE_PREFIX"
   else
     printf 'FIRSTMATE'
+  fi
+}
+
+# chrome_role: the same identity as visible_role, compressed to a marker that
+# fits a border title alongside every canonical status field. The role is never
+# dropped - it leads the row, so it is the one part a clip cannot reach - and a
+# lab primary stays visibly a lab, which is a safety property rather than
+# decoration.
+chrome_role() {
+  if [ -n "${VISIBLE_PREFIX:-}" ]; then
+    printf '%s' "$VISIBLE_PREFIX"
+  else
+    printf 'FM'
   fi
 }
 
@@ -462,13 +479,25 @@ EOF
   fi
 
   if [ -n "${HERDR_PANE_ID:-}" ] && command -v herdr >/dev/null 2>&1 && command -v jq >/dev/null 2>&1; then
-    local session companion split_out
+    local session companion split_out panes chrome=0
     session=${HERDR_SESSION:-default}
     # The companion follows the session it was launched from; a pane's
     # environment does not carry HERDR_SESSION, so re-deriving it inside the new
     # pane would silently fall back to 'default' and never resolve the primary.
     envs="$envs FM_STATUS_HERDR_SESSION=$(shell_quote "$session")"
     command="exec env $envs $command --follow-pane $(shell_quote "$HERDR_PANE_ID") --follow-backend herdr"
+    # Chrome mode: publish the canonical row onto the PRIMARY pane's own border
+    # title, which costs no rows, so the companion can be hidden by zoom and the
+    # captain gets its rows back. Measured on herdr 0.7.4: a pane with no split
+    # has no border at all, so the companion pane must keep existing for the
+    # border to exist - hiding it by zoom is the reclaim, not closing it.
+    # The in-pane row keeps being drawn as the fallback, so a home whose Herdr
+    # is below the presentation floor behaves exactly as it did before.
+    if fm_backend_herdr_presentation_capable; then
+      chrome=1
+      command="$command --chrome-pane $(shell_quote "$HERDR_PANE_ID")"
+      command="$command --chrome-role $(shell_quote "$(chrome_role)")"
+    fi
     # Herdr's split ratio is the share the ORIGINAL pane keeps, so the agent
     # pane needs the large share and the companion takes the remainder. Herdr
     # clamps that share to 0.9, so the companion floor is a TENTH OF THE TAB,
@@ -504,7 +533,29 @@ EOF
         printf 'fm-primary: the status companion could not start and its pane %s could not be closed; the primary is sharing its tab with an empty pane\n' \
           "$companion" >&2
       fi
+      return 0
     }
+
+    # Zoom is applied exactly once, here, and only when this tab holds nothing
+    # but the primary and the companion just created - zooming a crowded tab
+    # would hide a co-tenant pane's live work. The renderer never re-applies it:
+    # it only releases the zoom if a third pane shows up later, so a captain who
+    # deliberately unzooms is not fought once a second.
+    #
+    # A refused zoom is not a failure. The companion keeps rendering its own
+    # row, which is the surface that shipped before chrome mode, so the only
+    # consequence is that the empty rows are not reclaimed.
+    if [ "$chrome" = 1 ]; then
+      panes=$(herdr --session "$session" pane layout --pane "$HERDR_PANE_ID" 2>/dev/null \
+        | jq -r '.result.layout.panes | length' 2>/dev/null)
+      case "$panes" in
+        2)
+          herdr --session "$session" pane zoom "$HERDR_PANE_ID" --on >/dev/null 2>&1 || {
+            printf 'fm-primary: could not hide the status companion, so its rows stay visible; the status row itself is unaffected\n' >&2
+          }
+          ;;
+      esac
+    fi
     return 0
   fi
 

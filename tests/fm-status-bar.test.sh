@@ -970,6 +970,184 @@ test_quota_window_renders_only_where_a_window_is_known() {
   pass "status bar: the quota window is rendered only by adapters that actually know one"
 }
 
+test_chrome_mode_publishes_the_border_row_and_keeps_the_pane_fallback() {
+  local out log="$TMP_ROOT/chrome-log" count_file="$TMP_ROOT/chrome-count"
+  : > "$log"
+  cat > "$FAKEBIN/herdr" <<'SH'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >> "$FM_CHROME_LOG"
+case " $* " in
+  *" --session "*) ;;
+  *) exit 1 ;;
+esac
+for arg in "$@"; do
+  case "$arg" in
+    pane) ;;
+  esac
+done
+case "$*" in
+  *"pane get"*)
+    count=0
+    [ ! -f "$FM_CHROME_COUNT" ] || count=$(<"$FM_CHROME_COUNT")
+    count=$((count + 1))
+    printf '%s\n' "$count" > "$FM_CHROME_COUNT"
+    # Live for two refreshes, then the primary is gone and the loop must end.
+    if [ "$count" -le 2 ]; then
+      printf '{"result":{"pane":{"pane_id":"w9:p9"}}}\n'
+    else
+      printf '{"result":{"pane":{}}}\n'
+    fi
+    ;;
+  *"pane layout"*) printf '{"result":{"layout":{"panes":[{},{}]}}}\n' ;;
+  *) printf '{}\n' ;;
+esac
+exit 0
+SH
+  chmod +x "$FAKEBIN/herdr"
+  out=$(PATH="$FAKEBIN:$PATH" \
+    FM_HOME="$HOME_FIX" \
+    FM_PRIMARY_HARNESS=codex \
+    FM_STATUS_BAR_INTERVAL=0 \
+    FM_CHROME_LOG="$log" \
+    FM_CHROME_COUNT="$count_file" \
+    FM_STATUS_HERDR_SESSION=default \
+    "$ROOT/bin/fm-status-bar.sh" \
+      --adapter codex --model gpt-6-astra --effort high \
+      --follow-pane w9:p9 --follow-backend herdr \
+      --chrome-pane w9:p1 --chrome-role FM | strip_ansi)
+
+  # The in-pane row is the fallback and must keep being drawn, unchanged.
+  assert_contains "$out" '⚓ gpt-6-astra·high' "chrome mode stopped drawing the in-pane fallback row"
+
+  # The border row is published to the PRIMARY pane, under its own source, with
+  # a ttl so a dead renderer stops asserting a stale row.
+  assert_contains "$(cat "$log")" 'pane report-metadata w9:p1' \
+    "chrome mode never published the row to the primary pane's border"
+  assert_contains "$(cat "$log")" '--source firstmate-primary-status-v1' \
+    "chrome mode must not publish under the launcher's own metadata source, which would wipe its supervision labels"
+  assert_contains "$(cat "$log")" '--ttl-ms' \
+    "chrome mode published a border row with no expiry"
+  # The role marker leads the row, so the guarded primary identity survives.
+  assert_contains "$(cat "$log")" 'FM │ ⚓ gpt-6-astra·high' \
+    "chrome mode dropped the visible role marker from the border row"
+  # A border title cannot carry styling, so the published row is plain.
+  grep -q -- $'--title FM \033' "$log" \
+    && fail "chrome mode published ANSI escapes into the border title"
+
+  rm -f "$FAKEBIN/herdr"
+  pass "status bar: chrome mode publishes the border row and keeps the in-pane fallback"
+}
+
+test_chrome_mode_only_releases_zoom_and_never_reapplies_it() {
+  local out log="$TMP_ROOT/zoom-log" count_file="$TMP_ROOT/zoom-count"
+  : > "$log"
+  cat > "$FAKEBIN/herdr" <<'SH'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >> "$FM_CHROME_LOG"
+case "$*" in
+  *"pane get"*)
+    count=0
+    [ ! -f "$FM_CHROME_COUNT" ] || count=$(<"$FM_CHROME_COUNT")
+    count=$((count + 1))
+    printf '%s\n' "$count" > "$FM_CHROME_COUNT"
+    if [ "$count" -le 12 ]; then
+      printf '{"result":{"pane":{"pane_id":"w9:p9"}}}\n'
+    else
+      printf '{"result":{"pane":{}}}\n'
+    fi
+    ;;
+  # A third pane has appeared in the tab, so the reclaimed rows must be given
+  # back rather than hide a co-tenant pane's live work.
+  *"pane layout"*) printf '{"result":{"layout":{"panes":[{},{},{}]}}}\n' ;;
+  *) printf '{}\n' ;;
+esac
+exit 0
+SH
+  chmod +x "$FAKEBIN/herdr"
+  out=$(PATH="$FAKEBIN:$PATH" \
+    FM_HOME="$HOME_FIX" \
+    FM_PRIMARY_HARNESS=codex \
+    FM_STATUS_BAR_INTERVAL=0 \
+    FM_STATUS_CHROME_ZOOM_EVERY=1 \
+    FM_CHROME_LOG="$log" \
+    FM_CHROME_COUNT="$count_file" \
+    FM_STATUS_HERDR_SESSION=default \
+    "$ROOT/bin/fm-status-bar.sh" \
+      --adapter codex --model gpt-6-astra --effort high \
+      --follow-pane w9:p9 --follow-backend herdr \
+      --chrome-pane w9:p1 --chrome-role FM | strip_ansi)
+
+  assert_contains "$(cat "$log")" 'pane zoom w9:p1 --off' \
+    "chrome mode never released the zoom after a third pane appeared"
+  # Releasing is one-way: the renderer must never zoom, or a deliberate unzoom
+  # by the captain would be fought on every refresh.
+  grep -q -- '--on' "$log" && fail "chrome mode re-applied the zoom; only bin/fm-primary.sh may zoom, and only once"
+  # And once released it stops asking, rather than reading the layout forever.
+  [ "$(grep -c 'pane zoom' "$log")" -eq 1 ] \
+    || fail "chrome mode released the zoom more than once instead of standing down"
+
+  rm -f "$FAKEBIN/herdr"
+  pass "status bar: chrome mode only ever releases the zoom, once, and never re-applies it"
+}
+
+test_chrome_row_is_clipped_visibly_for_the_border_title_store() {
+  local log="$TMP_ROOT/clip-log" count_file="$TMP_ROOT/clip-count" title
+  : > "$log"
+  cat > "$FAKEBIN/herdr" <<'SH'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >> "$FM_CHROME_LOG"
+case "$*" in
+  *"pane get"*)
+    count=0
+    [ ! -f "$FM_CHROME_COUNT" ] || count=$(<"$FM_CHROME_COUNT")
+    count=$((count + 1))
+    printf '%s\n' "$count" > "$FM_CHROME_COUNT"
+    if [ "$count" -le 1 ]; then
+      printf '{"result":{"pane":{"pane_id":"w9:p9"}}}\n'
+    else
+      printf '{"result":{"pane":{}}}\n'
+    fi
+    ;;
+  *"pane layout"*) printf '{"result":{"layout":{"panes":[{},{}]}}}\n' ;;
+  *) printf '{}\n' ;;
+esac
+exit 0
+SH
+  chmod +x "$FAKEBIN/herdr"
+  # Herdr stores a border title clipped to 80 codepoints with no marker of its
+  # own, so a row that would overflow has to lose whole fields visibly first.
+  PATH="$FAKEBIN:$PATH" \
+    FM_HOME="$HOME_FIX" \
+    FM_PRIMARY_HARNESS=codex \
+    FM_STATUS_BAR_INTERVAL=0 \
+    FM_CHROME_LOG="$log" \
+    FM_CHROME_COUNT="$count_file" \
+    FM_STATUS_HERDR_SESSION=default \
+    "$ROOT/bin/fm-status-bar.sh" \
+      --adapter codex \
+      --model a-deliberately-very-long-model-identifier-for-clipping \
+      --effort xhigh \
+      --follow-pane w9:p9 --follow-backend herdr \
+      --chrome-pane w9:p1 --chrome-role FM >/dev/null
+
+  title=$(sed -n 's/.*--title \(.*\) --ttl-ms.*/\1/p' "$log" | tail -1)
+  [ -n "$title" ] || fail "chrome mode published no border title to inspect"
+  [ "${#title}" -le 80 ] \
+    || fail "the published border row exceeds Herdr's 80-codepoint store, which would clip it silently: ${#title}"
+  case "$title" in
+    *'…') ;;
+    *) fail "an over-long border row was clipped without a visible marker: $title" ;;
+  esac
+  # The role marker leads the row precisely so a clip can never reach it.
+  case "$title" in
+    'FM │ ⚓ '*) ;;
+    *) fail "clipping reached the role marker or the anchor, which must always survive: $title" ;;
+  esac
+
+  rm -f "$FAKEBIN/herdr"
+  pass "status bar: an over-long border row loses whole fields visibly and keeps its role marker"
+}
+
 test_contract_order_and_fleet_projection
 test_threshold_colors_and_placeholders
 test_no_watch_is_bright_red_when_missing_or_stale
@@ -993,3 +1171,6 @@ test_codex_never_borrows_a_sibling_session
 test_codex_tmux_pane_resolves_a_shimmed_primary
 test_codex_provider_miss_renders_a_row_instead_of_waiting
 test_quota_window_renders_only_where_a_window_is_known
+test_chrome_mode_publishes_the_border_row_and_keeps_the_pane_fallback
+test_chrome_mode_only_releases_zoom_and_never_reapplies_it
+test_chrome_row_is_clipped_visibly_for_the_border_title_store

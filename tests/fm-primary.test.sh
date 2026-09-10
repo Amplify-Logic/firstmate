@@ -360,6 +360,82 @@ SH
   pass "fm-primary: the tmux companion command the launcher builds actually renders"
 }
 
+test_herdr_chrome_hides_the_companion_only_on_an_uncrowded_tab() {
+  local calls="$TMP_ROOT/chrome-calls" cmd="$TMP_ROOT/chrome-cmd"
+  # make_cli replaces the shared fake, so it is written fresh before each launch.
+  write_chrome_herdr_fake() {
+    cat > "$FAKEBIN/herdr" <<'SH'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >> "$FM_PRIMARY_TEST_CHROME_CALLS"
+if [ "${1:-}" = --session ]; then
+  shift 2
+fi
+case "${1:-} ${2:-}" in
+  "status --json")
+    # At or above the verified presentation protocol, so chrome mode is on.
+    printf '{"client":{"protocol":16}}\n'
+    exit 0
+    ;;
+esac
+[ "${1:-}" = pane ] || exit 0
+shift
+case "${1:-}" in
+  split) printf '{"result":{"pane":{"pane_id":"w1:p2"}}}\n' ;;
+  run) printf '%s\n' "$3" >> "$FM_PRIMARY_TEST_CHROME_CMD" ;;
+  layout) printf '{"result":{"layout":{"panes":%s}}}\n' "$FM_PRIMARY_TEST_CHROME_PANES" ;;
+  report-metadata) ;;
+  zoom) ;;
+esac
+exit 0
+SH
+    chmod +x "$FAKEBIN/herdr"
+  }
+  write_chrome_herdr_fake
+
+  # An uncrowded tab: the primary and the companion just created, nothing else.
+  : > "$calls"; : > "$cmd"
+  env -u HERDR_ENV -u TMUX_PANE \
+    PATH="$FAKEBIN:$PATH" TERM=dumb FM_HOME="$HOME_FIX" \
+    FM_PRIMARY_TEST_LOG="$LOG" \
+    FM_PRIMARY_TEST_CHROME_CALLS="$calls" \
+    FM_PRIMARY_TEST_CHROME_CMD="$cmd" \
+    FM_PRIMARY_TEST_CHROME_PANES='[{"pane_id":"w1:p1"},{"pane_id":"w1:p2"}]' \
+    HERDR_SESSION=fm-lab-status HERDR_PANE_ID=w1:p1 \
+    "$ROOT/bin/fm-primary.sh" codex
+  make_cli herdr
+
+  assert_contains "$(cat "$cmd")" "--chrome-pane 'w1:p1'" \
+    "the launcher did not hand the companion the primary pane to decorate"
+  assert_contains "$(cat "$cmd")" "--chrome-role 'FM'" \
+    "the launcher did not hand the companion a visible role marker"
+  assert_contains "$(cat "$calls")" 'pane zoom w1:p1 --on' \
+    "the launcher never hid the companion, so its empty rows are not reclaimed"
+  [ "$(grep -c 'pane zoom' "$calls")" -eq 1 ] \
+    || fail "the launcher must zoom exactly once; repeating it would fight a deliberate unzoom"
+
+  # A crowded tab: something else already shares it, and zooming would hide
+  # that pane's live work, so the rows stay visible instead.
+  write_chrome_herdr_fake
+  : > "$calls"; : > "$cmd"
+  env -u HERDR_ENV -u TMUX_PANE \
+    PATH="$FAKEBIN:$PATH" TERM=dumb FM_HOME="$HOME_FIX" \
+    FM_PRIMARY_TEST_LOG="$LOG" \
+    FM_PRIMARY_TEST_CHROME_CALLS="$calls" \
+    FM_PRIMARY_TEST_CHROME_CMD="$cmd" \
+    FM_PRIMARY_TEST_CHROME_PANES='[{"pane_id":"w1:p1"},{"pane_id":"w1:p2"},{"pane_id":"w1:p9"}]' \
+    HERDR_SESSION=fm-lab-status HERDR_PANE_ID=w1:p1 \
+    "$ROOT/bin/fm-primary.sh" codex
+  make_cli herdr
+
+  assert_not_contains "$(cat "$calls")" 'pane zoom' \
+    "the launcher hid a tab that already had a co-tenant pane, which would hide its live work"
+  assert_contains "$(cat "$cmd")" "--chrome-pane 'w1:p1'" \
+    "the border row must still be published on a crowded tab; only the zoom is withheld"
+
+  rm -f "$FAKEBIN/herdr"
+  pass "fm-primary: the companion is hidden only when nothing else shares the tab, and the zoom is applied once"
+}
+
 test_herdr_companion_command_renders_in_the_pane_the_split_created() {
   local out="$TMP_ROOT/herdr-companion-out"
   : > "$out"
@@ -1262,6 +1338,7 @@ test_kimi_primary_only_profile
 test_kimi_tmux_companion_status_bar
 test_tmux_companion_command_renders_the_canonical_row
 test_herdr_companion_command_renders_in_the_pane_the_split_created
+test_herdr_chrome_hides_the_companion_only_on_an_uncrowded_tab
 test_herdr_split_outcomes_are_reported_separately
 test_herdr_cleanup_only_ever_closes_the_pane_the_split_named
 test_kimi_version_doctor_and_symlink_refusals

@@ -7,6 +7,7 @@
 #   fm-herdr-lab.sh prepare <session>
 #   fm-herdr-lab.sh provision <session>
 #   fm-herdr-lab.sh run <session> <herdr arguments...>
+#   fm-herdr-lab.sh view <session> [--cols N] [--rows N] [--seconds N]
 #   fm-herdr-lab.sh stop <session>
 #   fm-herdr-lab.sh teardown <session>
 #
@@ -30,6 +31,15 @@
 # delete is available only through teardown.
 # Both paths perform a fresh refuse-default check immediately before each
 # destructive call.
+# The view command renders a bounded screenshot of the lab session's own TUI
+# through bin/fm-herdr-lab-view.py, because Herdr draws pane borders, border
+# titles, and the agent sidebar in its client rather than its server, so
+# `pane read` cannot observe them. It is not a session lifecycle pass-through:
+# view accepts only the three bounded geometry options, validates the lab name,
+# requires this helper's own fleet-state tripwire, re-checks that the session
+# exists and is not default, and then hands the engine one validated name from
+# which the engine builds the Herdr argv literally. The caller's stdin is never
+# wired to the attached client, so the client only ever draws.
 # Provision records the running default session as a fleet-state tripwire and
 # teardown requires that record to be identical afterward.
 set -u
@@ -203,6 +213,55 @@ fm_herdr_lab_cli() { # <session> <herdr arguments...>
   fm_herdr_lab_raw "$name" "$@"
 }
 
+fm_herdr_lab_view() { # <session> [--cols N] [--rows N] [--seconds N]
+  local name=${1:-} cols=182 rows=64 seconds=3 engine tripwire
+  [ "$#" -ge 1 ] || { fm_herdr_lab_error "view requires a session"; return 1; }
+  shift
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --cols|--rows|--seconds)
+        [ "$#" -ge 2 ] || { fm_herdr_lab_error "view option $1 requires a value"; return 1; }
+        case "$2" in
+          ''|*[!0-9]*)
+            fm_herdr_lab_error "view option $1 requires a whole number: $2"
+            return 1
+            ;;
+        esac
+        case "$1" in
+          --cols) cols=$2 ;;
+          --rows) rows=$2 ;;
+          --seconds) seconds=$2 ;;
+        esac
+        shift 2
+        ;;
+      *)
+        # Closed on purpose: view never forwards caller arguments to Herdr, so
+        # an unrecognized argument is refused rather than passed along.
+        fm_herdr_lab_error "view accepts only --cols, --rows and --seconds: $1"
+        return 1
+        ;;
+    esac
+  done
+
+  fm_herdr_lab_validate_name "$name" || return 1
+  command -v herdr >/dev/null 2>&1 || { fm_herdr_lab_error "herdr is required"; return 1; }
+  command -v python3 >/dev/null 2>&1 || { fm_herdr_lab_error "python3 is required for view"; return 1; }
+
+  engine="$(CDPATH='' cd -P -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)/fm-herdr-lab-view.py"
+  [ -f "$engine" ] || { fm_herdr_lab_error "missing view engine: $engine"; return 1; }
+
+  tripwire=$(fm_herdr_lab_tripwire_path "$name")
+  [ -f "$tripwire" ] || {
+    fm_herdr_lab_error "missing fleet-state tripwire for '$name'; refusing to view a session this helper does not own"
+    return 1
+  }
+  # The same read-only hard guard the destructive paths use: the session must
+  # exist and report default=false immediately before the client attaches.
+  fm_herdr_lab_refuse_if_default "$name" || return 1
+
+  python3 "$engine" --session "$name" --cols "$cols" --rows "$rows" --seconds "$seconds"
+}
+
 fm_herdr_lab_cancel_provision() { # <pid>
   local pid=$1 attempt=0
   if kill -0 "$pid" 2>/dev/null; then
@@ -349,7 +408,7 @@ fm_herdr_lab_name() { # <label>
 }
 
 fm_herdr_lab_usage() {
-  sed -n '2,13p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+  sed -n '2,14p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
 }
 
 fm_herdr_lab_main() {
@@ -371,6 +430,11 @@ fm_herdr_lab_main() {
       [ "$#" -ge 3 ] || { fm_herdr_lab_usage >&2; return 2; }
       shift
       fm_herdr_lab_cli "$@"
+      ;;
+    view)
+      [ "$#" -ge 2 ] || { fm_herdr_lab_usage >&2; return 2; }
+      shift
+      fm_herdr_lab_view "$@"
       ;;
     stop)
       [ "$#" -eq 2 ] || { fm_herdr_lab_usage >&2; return 2; }
