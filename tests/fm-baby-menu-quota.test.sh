@@ -265,6 +265,68 @@ console.log('unique-ids=' + String(new Set(unknownIds).size) + '/' + String(unkn
   pass "Codex windows are classified by declared length or name, never by position"
 }
 
+test_window_identity_is_shared_by_every_reader() {
+  node_imports_typescript || {
+    echo "skip: node cannot import TypeScript modules on this build"
+    return 0
+  }
+
+  local out
+  out=$(node_check "
+import { declaresCredits, describeDuration, durationSeconds, identifyByDuration } from '$ASSETS/quota-windows.ts';
+const identity = (seconds) => {
+  const i = identifyByDuration(seconds);
+  return i.id + '/' + i.label + '/' + String(i.recognized);
+};
+
+// The Kimi five-hour limit as the provider states it: 300 MINUTE. Named from
+// that declared length, never from where the limit sat in the response.
+console.log('kimi-session=' + String(durationSeconds(300, 'MINUTE')) + '|' + identity(durationSeconds(300, 'MINUTE')));
+// The same length however the unit is spelled, and a weekly limit stated in days.
+console.log('units=' + [
+  durationSeconds(300, 'MINUTES'),
+  durationSeconds(300, 'TIME_UNIT_MINUTE'),
+  durationSeconds(5, 'HOUR'),
+  durationSeconds(7, 'DAYS'),
+  durationSeconds(1, 'WEEK'),
+].join(','));
+// A unit with no fixed length, and one this module does not model, stay unknown
+// rather than being mistaken for a unit it does model.
+console.log('not-fixed=' + [
+  String(durationSeconds(1, 'MONTH')),
+  String(durationSeconds(1, 'YEAR')),
+  String(durationSeconds(500, 'MILLISECONDS')),
+  String(durationSeconds(0, 'MINUTE')),
+].join(','));
+// A declared length that is not a known allowance keeps its own honest name.
+console.log('unfamiliar=' + identity(86400));
+// Credits are money and are refused whichever field the reader states them in,
+// while an ordinary allowance - familiar or not - is never refused.
+console.log('credits=' + [
+  declaresCredits(['credits', undefined, undefined]),
+  declaresCredits([undefined, 'credit_balance', undefined]),
+  declaresCredits([undefined, undefined, 'Credits remaining']),
+  declaresCredits(['usage', 'five_hour', 'SESSION']),
+  declaresCredits([undefined, 'monthly_allowance', undefined]),
+  declaresCredits([]),
+].join(','));
+console.log('describe=' + [describeDuration(18000), describeDuration(604800)].join('|'));
+")
+
+  assert_contains "$out" "kimi-session=18000|five_hour/SESSION/true" \
+    "a 300 MINUTE limit must be named from its declared length"
+  assert_contains "$out" "units=18000,18000,18000,604800,604800" \
+    "a declared length must convert the same however its unit is spelled"
+  assert_contains "$out" "not-fixed=null,null,null,null" \
+    "a unit with no fixed length must stay unknown rather than be assumed"
+  assert_contains "$out" "unfamiliar=window_86400s/1D WINDOW/false" \
+    "an unfamiliar declared length must keep its own label and say it is unknown"
+  assert_contains "$out" "credits=true,true,true,false,false,false" \
+    "credits must be refused from any identity field, and only when actually stated"
+  assert_contains "$out" "describe=5H WINDOW|7D WINDOW" "a duration must describe itself"
+  pass "window identity comes from the declared length, and credits are not an allowance"
+}
+
 test_second_seat_is_machine_local_and_optional() {
   node_imports_typescript || {
     echo "skip: node cannot import TypeScript modules on this build"
@@ -356,4 +418,5 @@ test_dry_run_writes_nothing
 test_tracked_sources_carry_no_machine_identity
 test_typescript_modules_parse
 test_codex_windows_are_classified_by_identity_not_position
+test_window_identity_is_shared_by_every_reader
 test_second_seat_is_machine_local_and_optional

@@ -4,7 +4,14 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import type { BabyMenuServerContext } from "@babymenu/contracts";
-import { classifyCodexWindows } from "./quota-windows";
+import {
+  classifyCodexWindows,
+  declaresCredits,
+  describeDuration,
+  durationSeconds,
+  identifyByDuration,
+  UNKNOWN_LENGTH_LABEL,
+} from "./quota-windows";
 import type { RawCodexWindow } from "./quota-windows";
 import { readLocalSettings } from "./local-settings";
 
@@ -177,8 +184,11 @@ function quotaAxiWindow(raw: QuotaAxiWindow): QuotaWindow | null {
   const percentRemaining = typeof raw.percentRemaining === "number" ? raw.percentRemaining : null;
   if (id === null || percentRemaining === null) return null;
   // Credits headroom is money, not an allowance window; showing it beside the
-  // percentages would read as extra quota it is not.
-  if (raw.kind === "credits") return null;
+  // percentages would read as extra quota it is not. Which field carries that
+  // fact varies with what the reader was told, so all three of kind, id and
+  // label are consulted - and only an explicit statement of credits drops a
+  // window, never mere unfamiliarity.
+  if (declaresCredits([raw.kind, raw.id, raw.label])) return null;
   let label: string;
   if (id === "five_hour") label = "SESSION";
   else if (id === "seven_day") label = "WEEKLY";
@@ -680,11 +690,34 @@ function kimiQuotaWindow(
   };
 }
 
-function kimiLimitIdentity(window: Record<string, unknown>, index: number): { id: string; label: string } {
+// Kimi states a limit's length as a count plus a time unit. That declared length
+// is the only thing a row is named from: a row labelled by its position in the
+// response ("LIMIT 2") tells the captain nothing about which allowance it is.
+function kimiWindowSeconds(window: Record<string, unknown>): number | null {
   const duration = toFiniteNumber(window.duration);
+  if (duration === null) return null;
   const timeUnit = typeof window.timeUnit === "string" ? window.timeUnit : "";
-  if (duration === 300 && timeUnit.includes("MINUTE")) return { id: "five_hour", label: "SESSION" };
-  return { id: `limit_${String(index + 1)}`, label: `LIMIT ${String(index + 1)}` };
+  return durationSeconds(duration, timeUnit);
+}
+
+// `claim` is the known-window name this row would take, returned rather than
+// taken so the caller only spends it on a row that actually parsed. A known name
+// is used once per read, so two limits of the same length cannot both render as
+// SESSION - the second keeps its own duration label, as the Codex classifier
+// does. The source index keeps every id distinct whatever the labels say.
+function kimiLimitIdentity(
+  window: Record<string, unknown>,
+  index: number,
+  claimed: ReadonlySet<string>,
+): { id: string; label: string; claim?: string } {
+  const suffix = String(index + 1);
+  const seconds = kimiWindowSeconds(window);
+  if (seconds === null) return { id: `limit_${suffix}`, label: UNKNOWN_LENGTH_LABEL };
+  const identity = identifyByDuration(seconds);
+  if (identity.recognized && !claimed.has(identity.id)) {
+    return { id: `${identity.id}_${suffix}`, label: identity.label, claim: identity.id };
+  }
+  return { id: `window_${String(seconds)}s_${suffix}`, label: describeDuration(seconds) };
 }
 
 async function getKimiWeeklyQuota(context: BabyMenuServerContext): Promise<QuotaResult> {
@@ -708,6 +741,7 @@ async function getKimiWeeklyQuota(context: BabyMenuServerContext): Promise<Quota
 
     const json = (await res.json()) as Record<string, unknown>;
     const windows: QuotaWindow[] = [];
+    const claimed = new Set<string>();
     const limits = json.limits;
     if (Array.isArray(limits)) {
       for (let index = 0; index < limits.length; index += 1) {
@@ -715,14 +749,22 @@ async function getKimiWeeklyQuota(context: BabyMenuServerContext): Promise<Quota
         if (!item) continue;
         const detail = asRecord(item.detail) ?? item;
         const apiWindow = asRecord(item.window) ?? {};
-        const identity = kimiLimitIdentity(apiWindow, index);
+        const identity = kimiLimitIdentity(apiWindow, index, claimed);
         const parsed = kimiQuotaWindow(detail, identity.id, identity.label);
-        if (parsed) windows.push(parsed);
+        if (!parsed) continue;
+        windows.push(parsed);
+        if (identity.claim) claimed.add(identity.claim);
       }
     }
     const summary = asRecord(json.usage);
     if (summary) {
-      const parsed = kimiQuotaWindow(summary, "weekly", "WEEKLY");
+      // The account usage summary is the weekly rollup - unless a limit already
+      // reported a weekly window of its own, in which case this is a separate
+      // figure and must not take that name, or that id, a second time.
+      const identity = claimed.has("weekly")
+        ? { id: "usage_summary", label: "USAGE" }
+        : { id: "weekly", label: "WEEKLY" };
+      const parsed = kimiQuotaWindow(summary, identity.id, identity.label);
       if (parsed) windows.push(parsed);
     }
     if (windows.length === 0) throw new Error("unparseable");

@@ -1,5 +1,7 @@
-// Codex allowance-window classification, kept in its own dependency-free module
-// so it can be exercised against recorded provider payloads without the app.
+// Allowance-window identity, kept in its own dependency-free module so it can be
+// exercised against recorded provider payloads without the app. Every provider
+// reader names a window through here, so a window of a given length reads the
+// same in every block of the panel and no reader invents a name of its own.
 //
 // The rule this module exists to enforce: a window is identified by what the
 // provider says it IS - its own declared length, or a semantic name - never by
@@ -84,6 +86,10 @@ function matchByName(name: string): KnownWindow | null {
   return null;
 }
 
+// The label for a window whose length the provider did not usably declare. One
+// spelling for every reader, so "unknown" reads the same wherever it appears.
+export const UNKNOWN_LENGTH_LABEL = "WINDOW (LENGTH UNKNOWN)";
+
 // A window whose length is declared but unfamiliar is described by that length,
 // so the panel never implies it is one of the windows above.
 export function describeDuration(seconds: number): string {
@@ -92,6 +98,67 @@ export function describeDuration(seconds: number): string {
   if (seconds % 3600 === 0) return `${String(seconds / 3600)}H WINDOW`;
   if (seconds % 60 === 0) return `${String(seconds / 60)}M WINDOW`;
   return `${String(seconds)}S WINDOW`;
+}
+
+export type WindowIdentity = { id: string; label: string; recognized: boolean };
+
+/**
+ * The identity a declared window length carries on its own: a known allowance
+ * when the length matches one, and an honest description of the length when it
+ * does not.
+ *
+ * This is what a reader calls when the provider states a window's length but
+ * nothing else about it. It never guesses from position, and it never promotes
+ * an unfamiliar length into a known window.
+ */
+export function identifyByDuration(seconds: number): WindowIdentity {
+  const known = matchByDuration(seconds);
+  if (known) return { id: known.id, label: known.label, recognized: true };
+  return { id: `window_${String(seconds)}s`, label: describeDuration(seconds), recognized: false };
+}
+
+// Units with a fixed length, shortest first. A month and a year are deliberately
+// absent: neither has one, so a window stated in them is reported as a length
+// this panel does not know rather than asserted as some number of days it may
+// not be.
+const TIME_UNIT_SECONDS: ReadonlyArray<readonly [string, number]> = [
+  ["SECOND", 1],
+  ["MINUTE", 60],
+  ["HOUR", 3600],
+  ["DAY", 86400],
+  ["WEEK", 604800],
+];
+
+/**
+ * A window length stated as a count plus a unit ("300", "MINUTE"), in seconds,
+ * or null when the pair does not describe a fixed length.
+ *
+ * The unit is matched whole, so a unit this module does not model (MILLISECOND,
+ * MONTH) reads as unknown instead of being mistaken for one it does.
+ */
+export function durationSeconds(count: number, unit: string): number | null {
+  if (!Number.isFinite(count) || count <= 0) return null;
+  const words = unit
+    .toUpperCase()
+    .split(/[^A-Z]+/)
+    .filter((word) => word.length > 0)
+    .map((word) => word.replace(/S$/, ""));
+  for (const [name, seconds] of TIME_UNIT_SECONDS) {
+    if (words.includes(name)) return count * seconds;
+  }
+  return null;
+}
+
+/**
+ * Whether the provider's own identity fields say a row is credits headroom.
+ *
+ * Credits are money, not an allowance window: drawn beside the percentages they
+ * read as extra quota they are not. A reader states this in whichever field it
+ * fills in, so every identity field it has is offered here. Only an explicit
+ * statement counts - a window is never rejected for merely being unfamiliar.
+ */
+export function declaresCredits(fields: readonly unknown[]): boolean {
+  return fields.some((field) => typeof field === "string" && field.toLowerCase().includes("credit"));
 }
 
 /**
@@ -158,7 +225,7 @@ export function classifyCodexWindows(rawWindows: readonly RawCodexWindow[]): Cla
     // rather than guessing which allowance this is.
     classified.push({
       id: `window_unknown_${String(index + 1)}`,
-      label: "WINDOW (LENGTH UNKNOWN)",
+      label: UNKNOWN_LENGTH_LABEL,
       percentUsed: clampPercent(percentUsed),
       resetAt,
       recognized: false,
