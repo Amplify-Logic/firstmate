@@ -33,7 +33,11 @@
 #   bin/fm-check-register.sh, so the running watcher executes it on its own slow
 #   cadence and wakes the live primary through the established check path. The
 #   shim runs `check`, which prints one line only while an intake is actually
-#   owed and stays silent once that state has been surfaced.
+#   owed and stays silent once that state has been surfaced. `arm-check` is
+#   idempotent: re-running it converges on the same registered state, and it
+#   rebinds a shim whose bytes drifted away from the recorded binding. Nothing
+#   re-creates that shim by itself, so `pending` reports it as lost while an
+#   intake is armed or owed and names `arm-check` as the repair.
 #
 #   No session running - nothing is delivered at the time the job fires. The
 #   armed state and the pending marker are durable, and the next session's
@@ -43,7 +47,10 @@
 #
 # `run` is the scheduled entry point (bin/fm-morning-intake-schedule.sh installs
 # it on macOS launchd) and is also the manual command: run it by hand at any
-# time, with --force to arm an intake outside the configured window.
+# time, with --force to arm an intake outside the configured window. --force
+# does not clear the day's retry budget: on a spent budget it refuses and names
+# `reset`, which is the single owner of that budget, rather than arming work
+# `claim` would then refuse.
 #
 # Opening is defined as the FIRST AVAILABLE MORNING, not a lid-open event: there
 # is no hardware event here. A laptop asleep or offline past the threshold arms
@@ -401,16 +408,34 @@ check_path() {
   printf '%s/%s.check.sh\n' "$STATE_DIR" "$CFG_LABEL"
 }
 
+CHECK_LIB_LOADED=false
+
+load_check_lib() {
+  if [ "$CHECK_LIB_LOADED" != true ]; then
+    # shellcheck source=bin/fm-pr-lib.sh disable=SC1091
+    . "$SCRIPT_DIR/fm-pr-lib.sh"
+    # shellcheck source=bin/fm-check-lib.sh disable=SC1091
+    . "$SCRIPT_DIR/fm-check-lib.sh"
+    CHECK_LIB_LOADED=true
+  fi
+}
+
+# `armed` means exactly what the watcher means by it, asked of the registration
+# owner rather than re-derived here: the shim exists and its current bytes are
+# the bytes the trust record binds. A shim whose bytes drifted away from that
+# binding reports as unregistered, because that is how a sweep treats it.
 check_armed_state() {
-  local check trust
+  local check
   check=$(check_path)
-  trust="$STATE_DIR/$CFG_LABEL.check-trust"
-  if [ -f "$check" ] && [ -f "$trust" ]; then
-    printf 'armed\n'
-  elif [ -f "$check" ]; then
-    printf 'unregistered\n'
-  else
+  if [ ! -e "$check" ] && [ ! -L "$check" ]; then
     printf 'absent\n'
+    return 0
+  fi
+  load_check_lib
+  if fm_custom_check_registered "$STATE_DIR" "$CFG_LABEL" 2>/dev/null; then
+    printf 'armed\n'
+  else
+    printf 'unregistered\n'
   fi
 }
 
@@ -436,7 +461,11 @@ arm_check() {
   tmp=$(mktemp "$STATE_DIR/.morning-intake-check.XXXXXX") || die 'cannot stage the check shim'
   render_check_shim >"$tmp" || { rm -f "$tmp"; die 'cannot write the check shim'; }
   chmod 0700 "$tmp" || { rm -f "$tmp"; die 'cannot set check shim mode'; }
-  mv -f "$tmp" "$check"
+  # Re-arming is idempotent by rewriting the byte-stable shim and rebinding it,
+  # so a second run converges on the same registered state and a shim whose
+  # bytes drifted is re-registered rather than left for the sweep to reject.
+  # The staged file is never left behind on a failed install.
+  mv -f "$tmp" "$check" || { rm -f "$tmp"; die "cannot install the check shim: $check"; }
   # The watcher refuses to execute an unregistered custom check, so binding the
   # bytes through the registration owner is what makes this path live. An
   # unregistered shim left in state/ is worse than no shim at all: the watcher
@@ -550,6 +579,13 @@ run_intake() {
     fi
   else
     reason='manual --force arm'
+    # --force buys a manual arm outside the configured window. It does NOT buy
+    # a fresh budget: bounded retry is a hard requirement and `reset` is the
+    # single owner of the budget. Arming past an exhausted budget would set the
+    # day due and wake the primary for work `claim` then refuses, so refuse
+    # here instead, before any state is written or any wake is appended.
+    [ "$ST_ATTEMPTS" -lt "$CFG_MAX_ATTEMPTS" ] \
+      || die "attempt budget exhausted for $day ($ST_ATTEMPTS/$CFG_MAX_ATTEMPTS); give it back with '$0 reset' before forcing an arm"
   fi
 
   ST_PHASE=due
@@ -728,10 +764,24 @@ safe_pending_report() {
   printf '%s\n' "$report"
 }
 
+# True when this local day still has intake work: an armed, claimed or failed
+# record for today, or a day past its threshold whose completion watermark has
+# not been written yet. Callers must have loaded state.
+intake_armed_or_owed() {
+  local epoch=$1 day=$2
+  if [ "$ST_DATE" = "$day" ]; then
+    case "$ST_PHASE" in
+      due|claimed|failed) return 0 ;;
+    esac
+  fi
+  [ "$(last_complete_date)" != "$day" ] || return 1
+  past_threshold "$epoch"
+}
+
 # Read-only. Prints at most one diagnostic-convention line per condition, and
 # nothing at all on a home that is not opted in or has nothing owed.
 pending() {
-  local report day epoch
+  local report day epoch armed
   [ "$#" -eq 0 ] || die 'pending takes no arguments'
   enabled || return 0
   load_state
@@ -741,22 +791,34 @@ pending() {
   if [ -n "$report" ]; then
     printf 'MORNING_INTAKE: new %s report at %s\n' "$CFG_LABEL" "$report"
   fi
-  [ "$ST_DATE" = "$day" ] || return 0
-  case "$ST_PHASE" in
-    due)
-      printf 'MORNING_INTAKE: %s due for %s - claim it with %s claim\n' \
-        "$CFG_LABEL" "$day" "$0"
-      ;;
-    claimed)
-      [ $((epoch - ST_UPDATED)) -lt "$CFG_RETRY_AFTER" ] || \
-        printf 'MORNING_INTAKE: %s claim for %s stalled after %ss - rerun %s run\n' \
-          "$CFG_LABEL" "$day" "$((epoch - ST_UPDATED))" "$0"
-      ;;
-    failed)
-      printf 'MORNING_INTAKE: %s failed for %s (attempt %s of %s) - %s\n' \
-        "$CFG_LABEL" "$day" "$ST_ATTEMPTS" "$CFG_MAX_ATTEMPTS" "${ST_ERROR:-unspecified failure}"
-      ;;
-  esac
+  if [ "$ST_DATE" = "$day" ]; then
+    case "$ST_PHASE" in
+      due)
+        printf 'MORNING_INTAKE: %s due for %s - claim it with %s claim\n' \
+          "$CFG_LABEL" "$day" "$0"
+        ;;
+      claimed)
+        [ $((epoch - ST_UPDATED)) -lt "$CFG_RETRY_AFTER" ] || \
+          printf 'MORNING_INTAKE: %s claim for %s stalled after %ss - rerun %s run\n' \
+            "$CFG_LABEL" "$day" "$((epoch - ST_UPDATED))" "$0"
+        ;;
+      failed)
+        printf 'MORNING_INTAKE: %s failed for %s (attempt %s of %s) - %s\n' \
+          "$CFG_LABEL" "$day" "$ST_ATTEMPTS" "$CFG_MAX_ATTEMPTS" "${ST_ERROR:-unspecified failure}"
+        ;;
+    esac
+  fi
+  # Nothing re-creates the live-session shim once it is gone, so a cleaned or
+  # half-registered state directory silently drops that delivery path and
+  # leaves this session-start surface as the only one. Report the loss where an
+  # operator already looks, and name the one command that repairs it. This
+  # stays read-only on purpose: re-arming writes into state/, and session start
+  # must not pay a mutation on every home just to keep a per-device opt-in.
+  intake_armed_or_owed "$epoch" "$day" || return 0
+  armed=$(check_armed_state)
+  [ "$armed" != armed ] || return 0
+  printf 'MORNING_INTAKE: %s live check is %s for %s - re-arm it with %s arm-check\n' \
+    "$CFG_LABEL" "$armed" "$day" "$0"
 }
 
 acknowledge() {

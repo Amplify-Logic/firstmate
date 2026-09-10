@@ -19,6 +19,12 @@
 #     overwrite a claim that a live orchestrator is holding.
 #   - Arming the watcher check is all-or-nothing: a registration failure leaves
 #     no shim behind for the watcher to reject on every sweep.
+#   - Losing that shim is detectable: while an intake is armed or owed, the
+#     read-only session-start surface reports an absent or unregistered live
+#     check and names `arm-check`, and re-arming is idempotent and rebinds a
+#     shim whose bytes drifted.
+#   - `run --force` arms outside the configured window but never overrides the
+#     bounded retry budget; only `reset` gives that budget back.
 #   - A timezone that does not resolve is refused instead of silently becoming
 #     UTC, and `rearm` on a new local day starts from a fresh budget.
 #   - No existing fleet is overridden: no session lock is taken, no watcher is
@@ -657,6 +663,114 @@ FAKE
   pass 'install, status and remove work against a temporary home and refuse a home without an opt-in'
 }
 
+# Nothing re-creates state/<label>.check.sh once it is gone, so losing it
+# silently drops the live-session delivery path. The loss has to be detectable
+# through the read-only surface bootstrap already calls, and re-arming has to
+# be safe to repeat.
+test_lost_live_check_is_reported_and_rearming_is_idempotent() {
+  local h out first second armed
+  h="$TMP_ROOT/checkloss"
+  new_home "$h"
+
+  at "$h" "$T_0700" run >/dev/null
+  at "$h" "$T_0700" arm-check >/dev/null
+
+  # A healthy registered check has nothing to repair.
+  out=$(at "$h" "$T_0715" pending)
+  assert_contains "$out" 'morning-intake due for 2026-09-10' 'the armed intake was not surfaced'
+  assert_not_contains "$out" 'arm-check' 'a healthy live check was reported as lost'
+
+  # The shim is deleted with the intake still armed: the watcher path is gone
+  # and only this surface can say so.
+  rm -f "$h/state/morning-intake.check.sh" "$h/state/morning-intake.check-trust"
+  out=$(at "$h" "$T_0715" pending)
+  assert_contains "$out" 'morning-intake due for 2026-09-10' 'the owed intake stopped being surfaced'
+  assert_contains "$out" 'live check is absent' 'a deleted watcher shim was not reported'
+  assert_contains "$out" 'arm-check' 'the repair line did not name the command that fixes it'
+  # Detection is read-only: it reports the loss, it does not re-arm.
+  assert_absent "$h/state/morning-intake.check.sh" 'the read-only pending surface wrote a shim'
+
+  # A shim left without its binding is the worse case, because the watcher
+  # rejects it on every sweep. It is reported as unregistered, not as armed.
+  at "$h" "$T_0715" arm-check >/dev/null
+  rm -f "$h/state/morning-intake.check-trust"
+  out=$(at "$h" "$T_0715" pending)
+  assert_contains "$out" 'live check is unregistered' 'a half-registered shim was reported as healthy'
+
+  # Re-arming an already-armed home converges: same shim, same binding, no
+  # duplicated or orphaned file left in state/.
+  at "$h" "$T_0715" arm-check >/dev/null
+  first=$(ls -A "$h/state"; cat "$h/state/morning-intake.check.sh"; cat "$h/state/morning-intake.check-trust")
+  at "$h" "$T_0715" arm-check >/dev/null
+  second=$(ls -A "$h/state"; cat "$h/state/morning-intake.check.sh"; cat "$h/state/morning-intake.check-trust")
+  [ "$first" = "$second" ] || fail 'a second arm-check did not converge on the same registered state'
+  out=$(at "$h" "$T_0715" pending)
+  assert_not_contains "$out" 'arm-check' 'a re-armed check was still reported as lost'
+
+  # A shim whose bytes drifted away from the recorded binding is re-registered
+  # rather than left for the watcher to reject.
+  printf '#!/usr/bin/env bash\necho drifted\n' >"$h/state/morning-intake.check.sh"
+  chmod 0700 "$h/state/morning-intake.check.sh"
+  armed=$(at "$h" "$T_0715" status | awk '$1 == "check_armed:" { print $2 }')
+  [ "$armed" = unregistered ] || fail "a drifted shim reported as '$armed', not unregistered"
+  at "$h" "$T_0715" arm-check >/dev/null
+  second=$(ls -A "$h/state"; cat "$h/state/morning-intake.check.sh"; cat "$h/state/morning-intake.check-trust")
+  [ "$first" = "$second" ] || fail 'arm-check did not rebind a shim whose bytes had drifted'
+  ( . "$ROOT/bin/fm-pr-lib.sh"; . "$ROOT/bin/fm-check-lib.sh"
+    fm_custom_check_registered "$h/state" morning-intake ) \
+    || fail 'the re-armed shim is not registered by the registration owner'
+
+  # And a home that never opted in stays silent about all of it, even with an
+  # owed-looking record and no shim at all.
+  printf 'enabled = false\n' >"$h/config/morning-intake"
+  rm -f "$h/state/morning-intake.check.sh" "$h/state/morning-intake.check-trust"
+  out=$(at "$h" "$T_0715" pending)
+  [ -z "$out" ] || fail "a home that never opted in surfaced a repair line: $out"
+
+  pass 'a lost or unregistered live check is reported at session start, and re-arming is idempotent'
+}
+
+# --force is the retained manual arm, not a budget override: bounded retry is a
+# requirement and `reset` is the single owner of the budget.
+test_force_never_overrides_the_bounded_retry_budget() {
+  local h out code
+  h="$TMP_ROOT/force"
+  new_home "$h"   # max_attempts = 2
+
+  # The manual behavior the intent keeps: arming outside the configured window
+  # on a day that still has budget.
+  out=$(at "$h" "$T_0530" run --force)
+  assert_contains "$out" 'due for 2026-09-10' 'force did not arm outside the configured window'
+  [ "$(queue_lines "$h")" = 1 ] || fail 'a forced arm did not enqueue exactly one wake'
+
+  # Spend the day's whole budget.
+  at "$h" "$T_0700" claim >/dev/null
+  at "$h" "$T_0700" fail --reason 'attempt one failed' >/dev/null
+  at "$h" "$T_0715" claim >/dev/null
+  at "$h" "$T_0715" fail --reason 'attempt two failed' >/dev/null
+
+  # Forcing now would set the day due and wake the primary for work `claim`
+  # refuses. It must refuse instead, and change nothing.
+  out=$(at "$h" "$T_1100" run --force 2>&1) && code=0 || code=$?
+  expect_code 2 "$code" 'force armed a day whose retry budget was spent'
+  assert_contains "$out" 'attempt budget exhausted' 'the refusal did not name the spent budget'
+  assert_contains "$out" 'reset' 'the refusal did not name reset as the recovery'
+  [ "$(state_field "$h" phase)" = failed ] || fail 'a refused force still set the day due'
+  [ "$(state_field "$h" attempts)" = 2 ] || fail 'a refused force moved the attempt count'
+  [ "$(queue_lines "$h")" = 1 ] || fail 'a refused force still enqueued a wake for the primary'
+  assert_absent "$h/data/morning-intake/last-complete" 'a refused force advanced the watermark'
+
+  # reset owns the budget, and force arms normally once it has been given back.
+  at "$h" "$T_1100" reset >/dev/null
+  out=$(at "$h" "$T_1100" run --force)
+  assert_contains "$out" 'due for 2026-09-10' 'force did not arm after reset gave the budget back'
+  [ "$(queue_lines "$h")" = 2 ] || fail 'the forced arm after reset enqueued no wake'
+  out=$(at "$h" "$T_1100" claim)
+  assert_contains "$out" 'attempt: 1 of 2' 'the forced arm handed out no claim after reset'
+
+  pass 'run --force arms outside the window but never overrides the bounded retry budget'
+}
+
 test_bootstrap_surfaces_the_intake() {
   # Session start composes bootstrap verbatim, so pin the actual owner
   # invocation rather than adding another report channel to session start.
@@ -683,4 +797,6 @@ test_rearm_starts_a_new_day_with_a_fresh_budget
 test_both_schedules_share_one_launchd_writer
 test_local_configuration_stays_private
 test_install_and_uninstall_on_a_temp_home
+test_lost_live_check_is_reported_and_rearming_is_idempotent
+test_force_never_overrides_the_bounded_retry_budget
 test_bootstrap_surfaces_the_intake

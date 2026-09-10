@@ -50,6 +50,7 @@ Its header and `--help` own the exact commands, config keys and mechanics.
 A `timezone` that does not resolve on this host is refused rather than silently treated as UTC, which would move both the local day and the threshold.
 Every failure counts against the day's `max_attempts`, whether or not it was claimed first, and only `reset` gives a spent budget back.
 `run` is both the scheduled entry point and the retained manual command; `run --force` arms an intake outside the configured window.
+`--force` does not override the bounded budget: on a day whose attempts are spent it refuses and names `reset`, rather than arming a day `claim` would then refuse and waking the primary for it.
 It never reads a source system, spawns an agent, starts a session, or takes the per-home session lock, so it cannot compete with a live fleet.
 
 The completion watermark under private gitignored `data/morning-intake/` advances only in `complete`, and only after the named report is verified as a non-empty regular file inside the configured `report_dir`.
@@ -58,6 +59,8 @@ Reports and durable records survive both acknowledgement and schedule removal.
 
 Two delivery paths reach the orchestrator, and neither one starts a session.
 `arm-check` writes `state/<label>.check.sh` and binds it through `bin/fm-check-register.sh`, so a running watcher executes it on its slow cadence and wakes the live primary through the established check path.
+`arm-check` is idempotent: re-running it converges on the same registered state, and it rebinds a shim whose bytes no longer match the recorded binding.
+Nothing re-creates that shim on its own, so while an intake is armed or owed `pending` reports an absent or unregistered live check and names `arm-check` as the repair; detection stays read-only, so session start never writes into `state/` on a home it has not enrolled.
 With no session running, nothing is delivered when the job fires: the armed state is durable and the next session's bootstrap section surfaces it as `MORNING_INTAKE: ...`, so the intake is queued until firstmate next starts rather than running on its own.
 
 `bin/fm-morning-intake-schedule.sh` owns the inspectable macOS launchd schedule and refuses to install on a home that has not opted in.
