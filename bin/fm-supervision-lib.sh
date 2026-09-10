@@ -140,6 +140,62 @@ FM_SUP_SENTINEL_NOOP_EXIT=4
 # shellcheck disable=SC2034 # Read by callers after sourcing.
 FM_SUP_AWAY_GAP_NAME=.supervision-sentinel.away-gap
 
+# Canonical basename of the armed glasses-shift record written by
+# bin/fm-shift.sh start and removed by bin/fm-shift.sh stop. While it exists the
+# host sentinel supervises the home even with no crew task in flight: a shift's
+# questions arrive as mailbox events, never as state/*.meta tasks, so the
+# in-flight count alone would read a dead watcher during a shift as idle.
+# shellcheck disable=SC2034 # Read by callers after sourcing.
+FM_SUP_SHIFT_RECORD_NAME=.shift
+
+# Canonical basename of the host sentinel's launchd-liveness proof: the epoch of
+# the last scheduled check that resolved this home. Only launchd's private entry
+# point writes it. A registration is verified, and a shift may rely on the host
+# alarm, only while this proof is recent.
+# shellcheck disable=SC2034 # Read by callers after sourcing.
+FM_SUP_LAST_CHECK_NAME=.supervision-sentinel-last-check
+
+# The launchctl the host sentinel registers and verifies through. Tests point it
+# at a fake so no sentinel path ever touches real launchd.
+fm_supervision_sentinel_launchctl() {
+  printf '%s\n' "${FM_SENTINEL_LAUNCHCTL:-/bin/launchctl}"
+}
+
+# fm_supervision_check_max_age <interval-seconds>
+# The oldest a launchd-liveness proof may be and still prove the host service can
+# observe this home: two scheduled intervals plus slack. The arm path and every
+# read-only surface that reports the sentinel as live use this one bound.
+fm_supervision_check_max_age() {
+  printf '%s\n' "$(( $1 * 2 + 15 ))"
+}
+
+# fm_supervision_missing_host_capability
+# Names the one host capability the sentinel needs and does not have, or exits
+# non-zero when the host can run the scheduled check at all. One place decides
+# what "unsupported" means, so the arm's exit status, the operator diagnostic,
+# the away-mode ledger, and the shift preflight can never disagree about it.
+#
+# Every branch is POSITIVE evidence of an absent capability, never a failed
+# attempt: an ambiguous error must stay transient, because a caller that stops
+# retrying on ambiguity abandons a backstop that would have recovered on its own.
+fm_supervision_missing_host_capability() {
+  local platform=${FM_SENTINEL_PLATFORM:-$(uname)} launchctl
+  if [ "$platform" != Darwin ]; then
+    printf 'this host runs %s and has no verified host scheduler for the sentinel (launchd is macOS-only)\n' "$platform"
+    return 0
+  fi
+  launchctl=$(fm_supervision_sentinel_launchctl)
+  if [ ! -x "$launchctl" ]; then
+    printf 'launchctl is missing at %s, so this host cannot register a scheduled check\n' "$launchctl"
+    return 0
+  fi
+  if [ ! -x /usr/bin/shasum ]; then
+    printf '/usr/bin/shasum is missing, so this host cannot derive a stable per-home service identity\n'
+    return 0
+  fi
+  return 1
+}
+
 # fm_supervision_arm_failure_status <state-dir>
 # Reads the durable host-sentinel registration-failure record and populates:
 #   FM_SUP_ARM_RECORD       resolved path of the record, set whether or not it exists
