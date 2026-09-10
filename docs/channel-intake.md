@@ -112,6 +112,15 @@ Nothing is lost in either case - the items stay notifiable and re-render once th
 A correction, a resolution and a completed obligation reconcile across both by construction rather than needing a second pass over two stores.
 Both accept `--out FILE` inside the configured `report_dir` and overwrite the same path, so a background render updates the existing page instead of leaving a trail of dated files.
 
+Opening a rendered page is opt-in and never automatic.
+A report the captain asked for is rendered with `--open`, which opens the written page as soon as it is ready; that flag is the only thing in this gate that opens anything.
+A scheduled or background render omits it, writes the same path, and never takes focus - the launchd job only ever runs `tick`, so the flag cannot reach it.
+`--open` without `--out` is refused, because there is no page to open.
+
+The opener is `open_command`, defaulting to `open` on macOS and `xdg-open` elsewhere; `status` prints the one that would be used.
+It fails soft on purpose: an opener that is not installed, or one that exits non-zero, is reported as `could not open <path>` and the command still succeeds with the page written.
+The render is the deliverable and the open is a convenience, so a missing viewer must never turn a written report into a failed command.
+
 ## Resolution
 
 An obligation is discharged by content, not by the fact that somebody replied.

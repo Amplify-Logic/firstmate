@@ -29,6 +29,11 @@
 #   - Due sources and held alerts are suppressed independently, so an alert the
 #     gate refuses or holds is reported once instead of re-waking the primary
 #     every time the due set empties and refills under it.
+#   - The alert half is identified by which items are notifiable, so a cleared
+#     ask replaced by a different one still wakes the primary.
+#   - Only a captain-requested `--open` render opens the written page; a
+#     background or scheduled render never takes focus, and an opener that is
+#     missing or fails is reported without failing the render.
 #   - A re-read never erases why an item is waiting on someone else.
 #   - Quiet hours defer the notifiable classes but preserve real severity: a
 #     service outage still goes out.
@@ -847,6 +852,48 @@ test_a_held_alert_does_not_become_a_wake_loop() {
   pass 'a blocked or held alert is reported once rather than re-waking the primary every poll'
 }
 
+# The alert half must be identified by WHICH items are notifiable, not by how
+# many. One urgent ask cleared and replaced by a different one is the most
+# ordinary sequence there is, and it collides on every count-only signature.
+test_a_replaced_alert_still_wakes_the_primary() {
+  local h out key
+  h="$TMP_ROOT/check-identity"
+  new_home "$h"
+  # Settle the due half so nothing but the alert can be the reason for a wake.
+  at "$h" "$T_0900" claim >/dev/null
+  at "$h" "$T_0900" complete --source C_BRIEF --checkpoint c-0 >/dev/null
+  at "$h" "$T_0900" complete --source M_ACTION --checkpoint m-0 >/dev/null
+
+  out=$(at "$h" $((T_0900 + 60)) observe --source C_BRIEF --ref ask-a \
+    --digest 'approve invoice A' --class urgent --title 'ask A')
+  key=$(key_of "$out")
+  out=$(at "$h" $((T_0900 + 60)) check)
+  assert_contains "$out" '1 item(s) ready to send' 'the first alert did not wake the primary'
+  out=$(at "$h" $((T_0900 + 120)) check)
+  [ -z "$out" ] || fail "the same standing alert woke the primary again: $out"
+
+  # The captain clears A, and a genuinely different urgent ask arrives. Same
+  # state token, same count, different obligation.
+  at "$h" $((T_0900 + 180)) resolve --item "$key" --reason 'captain approved A' >/dev/null
+  at "$h" $((T_0900 + 180)) observe --source C_BRIEF --ref ask-b \
+    --digest 'approve invoice B' --class urgent --title 'ask B' >/dev/null
+  out=$(at "$h" $((T_0900 + 180)) check)
+  assert_contains "$out" '1 item(s) ready to send' \
+    'a replacement urgent ask was suppressed by the cleared one it happened to match'
+  out=$(at "$h" $((T_0900 + 240)) check)
+  [ -z "$out" ] || fail "the replacement alert woke the primary twice: $out"
+
+  # A correction to an alert already reported is a change too: the content the
+  # captain would be pinged about is not the content already surfaced.
+  at "$h" $((T_0900 + 300)) observe --source C_BRIEF --ref ask-b \
+    --digest 'approve invoice B, revised upward' --class urgent --title 'ask B' >/dev/null
+  out=$(at "$h" $((T_0900 + 300)) check)
+  assert_contains "$out" '1 item(s) ready to send' \
+    'a corrected alert never reached the live wake path'
+
+  pass 'a cleared alert replaced by a different one still wakes the primary, and an unchanged one still does not'
+}
+
 # A refusal and a suppression are not the same thing as nothing to send, and
 # neither may reach the captain as a quiet home.
 test_blocked_notifications_are_visible_rather_than_silent() {
@@ -890,6 +937,75 @@ test_blocked_notifications_are_visible_rather_than_silent() {
     'status did not report the cap'
 
   pass 'a refused or capped notification is reported as itself instead of looking like a quiet home'
+}
+
+# A report the captain asked for opens when it is ready. A scheduled or
+# background render writes the same page and never takes focus.
+test_only_a_requested_render_opens_the_page() {
+  local h out code fake log
+  h="$TMP_ROOT/open"
+  new_home "$h"
+  fake=$(fm_fakebin "$h")
+  log="$h/opened.log"
+  printf '#!/usr/bin/env bash\nprintf "%%s\\n" "$1" >>"%s"\n' "$log" >"$fake/fm-fake-open"
+  chmod +x "$fake/fm-fake-open"
+  printf 'open_command = %s/fm-fake-open\n' "$fake" >>"$h/config/channel-intake"
+
+  at "$h" "$T_0900" observe --source M_ACTION --ref msg-1 \
+    --digest 'sign the lease' --class obligation --title 'sign the lease' >/dev/null
+
+  # A captain-requested render opens exactly the page it wrote, once.
+  out=$(at "$h" "$T_0900" brief --out "$h/reports/intake.md" --open)
+  assert_contains "$out" 'brief written to' 'the requested render did not report the written page'
+  assert_contains "$out" "opened $h/reports/intake.md" 'the requested render did not report opening the page'
+  [ "$(grep -c . "$log")" = 1 ] || fail "a requested brief did not open exactly once: $(cat "$log")"
+  [ "$(head -1 "$log")" = "$h/reports/intake.md" ] \
+    || fail "the opener was handed something other than the written page: $(head -1 "$log")"
+
+  out=$(at "$h" "$T_0900" todo --out "$h/reports/todo.md" --open)
+  assert_contains "$out" "opened $h/reports/todo.md" 'a requested to-do render did not open its page'
+  [ "$(grep -c . "$log")" = 2 ] || fail "a requested to-do list did not open exactly once: $(cat "$log")"
+
+  # Every unflagged render - including the scheduled path - opens nothing.
+  rm -f "$log"
+  at "$h" "$T_0915" brief --out "$h/reports/intake.md" >/dev/null
+  at "$h" "$T_0915" todo --out "$h/reports/todo.md" >/dev/null
+  at "$h" "$T_0915" brief >/dev/null
+  at "$h" "$T_0915" tick >/dev/null
+  at "$h" "$T_0915" claim >/dev/null
+  at "$h" "$T_0915" check >/dev/null || true
+  at "$h" "$T_0915" pending >/dev/null
+  assert_absent "$log" 'a background render or a scheduled tick stole focus by opening a page'
+  assert_present "$h/reports/intake.md" 'the background render did not write the page'
+  [ "$(find "$h/reports" -name 'intake*.md' | wc -l | tr -d ' ')" = 1 ] \
+    || fail 'the open flag changed the same-path overwrite into a trail of pages'
+
+  # There is no page to open without --out, and that is refused up front
+  # rather than silently opening nothing.
+  out=$(at "$h" "$T_0915" brief --open 2>&1) && code=0 || code=$?
+  expect_code 2 "$code" '--open without --out was accepted'
+  assert_contains "$out" 'requires --out' 'the refusal did not explain what is missing'
+
+  # Fail-soft: the render is the deliverable and the open is a convenience.
+  printf '#!/usr/bin/env bash\nexit 3\n' >"$fake/fm-fake-open"
+  chmod +x "$fake/fm-fake-open"
+  out=$(at "$h" "$T_0915" brief --out "$h/reports/intake.md" --open) && code=0 || code=$?
+  expect_code 0 "$code" 'a failing opener turned a written page into a failed command'
+  assert_contains "$out" 'brief written to' 'the fail-soft path lost the written page'
+  assert_contains "$out" 'could not open' 'a failing opener was not reported'
+
+  # An opener that is not installed at all is the same fail-soft path.
+  printf 'enabled = true
+timezone = Europe/Amsterdam
+report_dir = %s/reports
+open_command = fm-opener-that-does-not-exist
+' "$h" >"$h/config/channel-intake"
+  out=$(at "$h" "$T_0915" todo --out "$h/reports/todo.md" --open) && code=0 || code=$?
+  expect_code 0 "$code" 'a missing opener turned a written page into a failed command'
+  assert_contains "$out" 'to-do list written to' 'the fail-soft path lost the written page'
+  assert_contains "$out" 'no opener named' 'a missing opener was not reported'
+
+  pass 'a requested render opens its page once, a background render never does, and a bad opener never fails the render'
 }
 
 test_unresolvable_timezone_is_refused() {
@@ -990,7 +1106,9 @@ test_local_configuration_stays_private
 test_arm_check_leaves_no_unregistered_shim
 test_check_signals_once_per_state
 test_a_held_alert_does_not_become_a_wake_loop
+test_a_replaced_alert_still_wakes_the_primary
 test_blocked_notifications_are_visible_rather_than_silent
+test_only_a_requested_render_opens_the_page
 test_unresolvable_timezone_is_refused
 test_both_schedules_share_one_launchd_writer
 test_install_and_uninstall_on_a_temp_home

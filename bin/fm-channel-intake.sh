@@ -15,8 +15,8 @@
 #   fm-channel-intake.sh sources
 #   fm-channel-intake.sh notify-due
 #   fm-channel-intake.sh notify-sent --keys "KEY [KEY ...]"
-#   fm-channel-intake.sh brief [--out FILE]
-#   fm-channel-intake.sh todo [--out FILE]
+#   fm-channel-intake.sh brief [--out FILE] [--open]
+#   fm-channel-intake.sh todo [--out FILE] [--open]
 #   fm-channel-intake.sh check
 #   fm-channel-intake.sh arm-check
 #   fm-channel-intake.sh disarm-check
@@ -56,6 +56,12 @@
 #   `brief` and `todo` render from the ledger every time, so a correction, a
 #   resolution and a completed obligation reconcile across both by construction
 #   instead of needing a second reconciliation pass.
+#   Opening a rendered page is OPT-IN and never automatic. `--open` is what a
+#   captain-requested render passes, and it is the only thing that opens
+#   anything; a scheduled or background render always omits it, always
+#   overwrites the same `--out` path, and never takes focus. The open is a
+#   convenience on top of a render that already succeeded, so a missing or
+#   failing opener is reported and the command still exits 0.
 #
 # COVERAGE IS STATED, NEVER IMPLIED. The enrolled sources are exactly the rows
 # of the private inventory file, each with its own coverage sentence and its own
@@ -110,6 +116,10 @@
 #                            against the known captain account; notifications
 #                            are refused until it is
 #   report_dir               directory brief/todo output must be written into
+#   open_command             opener for a captain-requested `--open` render
+#                            (default `open` on macOS, else `xdg-open`); a
+#                            missing or failing opener is reported and the
+#                            render still succeeds
 #   label                    slug for the wake key and diagnostic line
 #                            (default channel-intake)
 set -eu
@@ -165,6 +175,7 @@ CFG_NOTIFY_MAX_PER_DAY=$DEFAULT_NOTIFY_MAX_PER_DAY
 CFG_NOTIFY_RECIPIENT=
 CFG_NOTIFY_VERIFIED=false
 CFG_REPORT_DIR=
+CFG_OPEN_COMMAND=
 CFG_LABEL=$DEFAULT_LABEL
 
 usage() {
@@ -294,6 +305,13 @@ load_config() {
             *) die "report_dir must be an absolute path: $value" ;;
           esac
           CFG_REPORT_DIR=${value%/}
+          ;;
+        open_command)
+          [ -n "$value" ] || die 'open_command must not be empty'
+          case "$value" in
+            *[[:space:]]*) die "open_command must be a single command with no arguments: $value" ;;
+          esac
+          CFG_OPEN_COMMAND=$value
           ;;
         label)
           # Matches bin/fm-pr-lib.sh fm_task_id_path_safe, which the check
@@ -1249,6 +1267,22 @@ notify_state_count() {
   printf '%s\n' "$count"
 }
 
+# WHICH items are notifiable and what they currently say, not merely how many
+# there are. A bare count collides on the most ordinary sequence this gate
+# sees - one urgent ask surfaced, cleared by the captain, and replaced by a
+# different one - and a colliding signature reads as already surfaced, so the
+# new ask never reaches the live wake path. Folding each item's digest in
+# means a correction to an alert already reported is a change too.
+notify_identity() {
+  local epoch=$1 quiet=false f pairs
+  ! in_quiet_hours "$epoch" || quiet=true
+  pairs=$(for f in $(notifiable_items "$quiet"); do
+    printf '%s:%s\n' "$(record_field "$f" key)" "$(record_field "$f" digest)"
+  done | LC_ALL=C sort | tr '\n' ' ')
+  [ -n "$pairs" ] || { printf 'none\n'; return 0; }
+  digest_hex "$pairs"
+}
+
 # How a state that is neither `ready` nor empty reads on a captain-facing
 # surface, so a cap or a refusal is visible instead of looking like quiet.
 notify_state_phrase() {
@@ -1347,6 +1381,37 @@ resolve_out() {
       *) die "--out is outside the configured report_dir: $out" ;;
     esac
   fi
+}
+
+# Only a captain-requested render reaches this, and only after the page is
+# already on disk. It is deliberately fail-soft: the render is the deliverable
+# and the open is a convenience, so a host with no opener, an opener that is
+# not installed, or one that exits non-zero all report the miss and leave the
+# command successful rather than turning a written page into a failed command.
+default_open_command() {
+  if [ -n "$CFG_OPEN_COMMAND" ]; then
+    printf '%s\n' "$CFG_OPEN_COMMAND"
+  elif [ "$(uname 2>/dev/null)" = Darwin ]; then
+    printf 'open\n'
+  else
+    printf 'xdg-open\n'
+  fi
+}
+
+open_report() {
+  local path=$1 opener
+  opener=$(default_open_command)
+  if ! command -v "$opener" >/dev/null 2>&1; then
+    printf 'CHANNEL_INTAKE: could not open %s - no opener named %s on this host; the page is written\n' \
+      "$path" "$opener"
+    return 0
+  fi
+  if ! "$opener" "$path" >/dev/null 2>&1; then
+    printf 'CHANNEL_INTAKE: could not open %s - %s failed; the page is written\n' \
+      "$path" "$opener"
+    return 0
+  fi
+  printf 'CHANNEL_INTAKE: opened %s\n' "$path"
 }
 
 section_items() {
@@ -1468,15 +1533,17 @@ latency_summary() {
 }
 
 brief_cmd() {
-  local out='' epoch body
+  local out='' epoch body open=false
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --out) [ "$#" -ge 2 ] || die '--out requires a value'; out=$2; shift 2 ;;
+      --open) open=true; shift ;;
       *) die "unknown brief argument: $1" ;;
     esac
   done
   require_enabled
   resolve_out "$out"
+  [ "$open" != true ] || [ -n "$out" ] || die '--open requires --out; there is no page to open'
   epoch=$(now_epoch)
   body=$(render_brief "$epoch")
   if [ -n "$out" ]; then
@@ -1484,6 +1551,7 @@ brief_cmd() {
     # existing page instead of leaving a trail of dated files to reopen.
     write_atomic "$out" "$body" || die "cannot write the brief: $out"
     printf 'CHANNEL_INTAKE: brief written to %s\n' "$out"
+    [ "$open" != true ] || open_report "$out"
   else
     printf '%s\n' "$body"
   fi
@@ -1512,20 +1580,23 @@ render_todo() {
 }
 
 todo_cmd() {
-  local out='' epoch body
+  local out='' epoch body open=false
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --out) [ "$#" -ge 2 ] || die '--out requires a value'; out=$2; shift 2 ;;
+      --open) open=true; shift ;;
       *) die "unknown todo argument: $1" ;;
     esac
   done
   require_enabled
   resolve_out "$out"
+  [ "$open" != true ] || [ -n "$out" ] || die '--open requires --out; there is no page to open'
   epoch=$(now_epoch)
   body=$(render_todo "$epoch")
   if [ -n "$out" ]; then
     write_atomic "$out" "$body" || die "cannot write the to-do list: $out"
     printf 'CHANNEL_INTAKE: to-do list written to %s\n' "$out"
+    [ "$open" != true ] || open_report "$out"
   else
     printf '%s\n' "$body"
   fi
@@ -1546,8 +1617,8 @@ todo_cmd() {
 # recipient are all standing conditions rather than edge cases.
 #
 # Each signature carries the term that actually moves under it - the
-# last-attempt watermark for due sources, the state token and count for
-# notifications - and a condition that is currently absent clears its own
+# last-attempt watermark for due sources, the identity of the notifiable set
+# for notifications - and a condition that is currently absent clears its own
 # marker. That is what the morning gate gets from folding its monotonic
 # `updated` stamp in: without it a recurring identical state is suppressed
 # forever and the live wake path fires once in the life of the home.
@@ -1576,7 +1647,7 @@ check_signal() {
     line="$CFG_LABEL: $count source(s) due to read"
   fi
   if [ "$notify" -gt 0 ]; then
-    notify_signature="$notify_token:$notify"
+    notify_signature="$notify_token:$notify:$(notify_identity "$epoch")"
     [ "$(read_line_file "$notify_file")" = "$notify_signature" ] || wake=true
     line="${line:-$CFG_LABEL:}${line:+,} $notify item(s) $(notify_state_phrase "$notify_token")"
   fi
@@ -1666,6 +1737,7 @@ status_cmd() {
   printf 'notify_recipient_verified: %s\n' "$CFG_NOTIFY_VERIFIED"
   printf 'sources_file: %s\n' "$CFG_SOURCES_FILE"
   printf 'report_dir: %s\n' "${CFG_REPORT_DIR:-<unset>}"
+  printf 'open_command: %s\n' "$(default_open_command)"
   printf 'label: %s\n' "$CFG_LABEL"
   printf 'local_date_now: %s\n' "$(local_date "$epoch")"
   printf 'sources_enrolled: %s\n' "$(load_inventory; printf '%s' "$INVENTORY_IDS" | grep -c '[^[:space:]]' || true)"
