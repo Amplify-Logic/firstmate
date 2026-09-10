@@ -486,6 +486,252 @@ test_tracked_adapter_wiring_and_cursor_boundary() {
   pass "status bar: tracked adapters preserve guarded installation across native and companion surfaces"
 }
 
+# --- Codex/Astra session metric supply -------------------------------------
+#
+# These cases drive bin/fm-codex-session-metrics-lib.sh directly with fixture
+# rollouts and fixture provider reports. Nothing here spawns a renderer, points
+# at a live pane, or signals a process: the library's pane resolution is
+# replaced by its documented rollout seam, so the suite can never reach the
+# captain's own primary or its companion.
+
+CODEX_FIX="$TMP_ROOT/codex"
+mkdir -p "$CODEX_FIX"
+
+# codex_token_event <input-tokens> <context-window> <limit-id> <limit-name>
+#   <primary-used> <primary-minutes> <primary-resets>
+# One rollout token-count line. "-" omits the rate-limit window entirely.
+codex_token_event() {
+  local tok=$1 win=$2 lid=$3 lname=$4 pu=$5 pm=$6 pr=$7 primary
+  primary=null
+  [ "$pu" = - ] || primary="{\"used_percent\":$pu,\"window_minutes\":$pm,\"resets_at\":$pr}"
+  printf '{"type":"event_msg","payload":{"type":"token_count","info":{"last_token_usage":{"input_tokens":%s},"model_context_window":%s},"rate_limits":{"limit_id":"%s","limit_name":"%s","primary":%s,"secondary":null}}}\n' \
+    "$tok" "$win" "$lid" "$lname" "$primary"
+}
+
+# codex_metrics <rollout-file> <model> [quota-json]
+# The reading as "context|quota|window", with caching off so each case is read
+# fresh and no case can observe another's cached answer.
+codex_metrics() {
+  local rollout=$1 model=$2 quota=${3:-} state="$CODEX_FIX/state"
+  mkdir -p "$state"
+  (
+    # shellcheck source=bin/fm-codex-session-metrics-lib.sh
+    . "$ROOT/bin/fm-codex-session-metrics-lib.sh"
+    if [ -n "$quota" ]; then
+      export FM_CODEX_QUOTA_JSON="$quota"
+    else
+      export FM_CODEX_QUOTA_DISABLE=1
+    fi
+    FM_CODEX_METRICS_NO_CACHE=1 \
+      FM_CODEX_METRICS_NOW=1000 \
+      FM_CODEX_METRICS_ROLLOUT="$rollout" \
+      fm_codex_session_metrics fixture-pane herdr default "$state" "$model"
+  ) | tr '\t' '|'
+}
+
+# codex_quota_report <scope-status> <remaining> <limiting-window-ids-json>
+#   [stale] [semantics-status]
+codex_quota_report() {
+  local sstatus=$1 remaining=$2 windows=$3 stale=${4:-false} qs=${5:-known}
+  printf '{"providers":[{"provider":"codex","state":{"stale":%s},"quotaSemantics":{"status":"%s","effectiveAvailability":[{"scope":"all_models","status":"%s","effectivePercentRemaining":%s,"limitingWindowIds":%s}]}}]}' \
+    "$stale" "$qs" "$sstatus" "$remaining" "$windows"
+}
+
+# The measured misattribution this whole filter exists for. A gpt-6-astra
+# primary's rollout carried limit_id=codex_bengalfox (GPT-5.3-Codex-Spark) at
+# 0% used, while the account's real binding weekly window sat at 54% used.
+# Reporting that 0% would tell the captain there is full headroom when there is
+# not, so the mismatched block must be discarded and the account owner asked.
+test_codex_rejects_another_models_rate_limit_identity() {
+  local rollout="$CODEX_FIX/misattributed.jsonl" quota="$CODEX_FIX/weekly.json" out
+  codex_token_event 129200 258400 codex_bengalfox GPT-5.3-Codex-Spark 0 300 99999 > "$rollout"
+  codex_quota_report known 46 '["weekly"]' > "$quota"
+
+  out=$(codex_metrics "$rollout" gpt-6-astra "$quota")
+  assert_contains "$out" '|54|wk' \
+    "a mismatched limit identity was not replaced by the account's binding window"
+  assert_not_contains "$out" '|0|' \
+    "another model's 0% allowance was reported as this primary's quota"
+
+  # With no account owner to fall back to, the mismatch must read unavailable
+  # rather than borrowing the foreign figure anyway.
+  out=$(codex_metrics "$rollout" gpt-6-astra)
+  assert_contains "$out" '|--|' \
+    "a mismatched limit identity fell through to the foreign rate-limit block"
+  pass "status bar: a rate-limit identity from another model is never reported as this primary's quota"
+}
+
+# The positive half of the same rule: an identity that provably belongs to the
+# running model is the better source, because it is the window that model
+# actually consumes.
+test_codex_accepts_a_matching_rate_limit_identity() {
+  local rollout="$CODEX_FIX/matched.jsonl" out
+  codex_token_event 129200 258400 'model:gpt_6_astra:5h' GPT-6-Astra 37 300 99999 > "$rollout"
+  out=$(codex_metrics "$rollout" gpt-6-astra)
+  assert_contains "$out" '|37|5h' "a matching limit identity was discarded instead of used"
+
+  # An empty identity proves nothing and is therefore not a match.
+  codex_token_event 129200 258400 '' '' 37 300 99999 > "$rollout"
+  out=$(codex_metrics "$rollout" gpt-6-astra)
+  assert_contains "$out" '|--|' "an unstamped rate-limit block was trusted"
+  pass "status bar: a rate-limit identity is used only when it provably matches the running model"
+}
+
+# Context is read from the newest token event, so a compacted thread reports its
+# smaller post-compaction prompt rather than its pre-compaction peak. The
+# context window comes from the session's own report, so no capacity is assumed.
+test_codex_context_follows_the_current_session_and_compaction() {
+  local rollout="$CODEX_FIX/compaction.jsonl" out
+  codex_token_event 232560 258400 codex_bengalfox Spark - - - > "$rollout"
+  out=$(codex_metrics "$rollout" gpt-6-astra)
+  assert_contains "$out" '90|' "context did not track the session's own prompt size"
+
+  # A later, smaller event is the current truth after compaction.
+  codex_token_event 51680 258400 codex_bengalfox Spark - - - >> "$rollout"
+  out=$(codex_metrics "$rollout" gpt-6-astra)
+  assert_contains "$out" '20|' "context kept a pre-compaction figure after compaction"
+  pass "status bar: Codex context tracks the current session across compaction"
+}
+
+# Unavailable must never be rendered as zero, on any of the ways a reading can
+# fail. Each case here would be a silently wrong "0%" if the guards were missing.
+test_codex_unavailable_readings_never_become_zero() {
+  local rollout="$CODEX_FIX/broken.jsonl" quota="$CODEX_FIX/broken.json" out
+
+  # Malformed: not JSON at all, but carrying the token_count marker.
+  printf '%s\n' '{"type":"event_msg","payload":{"type":"token_count"' > "$rollout"
+  out=$(codex_metrics "$rollout" gpt-6-astra)
+  [ "$out" = '--|--|' ] || fail "a malformed token event produced '$out' instead of unavailable"
+
+  # Absent: no token event in the rollout at all.
+  printf '%s\n' '{"type":"response_item","payload":{"type":"message"}}' > "$rollout"
+  out=$(codex_metrics "$rollout" gpt-6-astra)
+  [ "$out" = '--|--|' ] || fail "a rollout with no token event produced '$out'"
+
+  # Absent context window: a percentage of an unknown window is meaningless.
+  printf '%s\n' '{"type":"event_msg","payload":{"type":"token_count","info":{"last_token_usage":{"input_tokens":1000}}}}' > "$rollout"
+  out=$(codex_metrics "$rollout" gpt-6-astra)
+  assert_contains "$out" '--|' "an unknown context window was still turned into a percentage"
+
+  # Expired: a window whose reset time has already passed describes a spent
+  # allowance, so its used share is no longer true of the current window.
+  codex_token_event 51680 258400 'model:gpt_6_astra:5h' GPT-6-Astra 80 300 999 > "$rollout"
+  out=$(codex_metrics "$rollout" gpt-6-astra)
+  assert_contains "$out" '|--|' "an expired rate-limit window was reported as current"
+
+  # A stale provider report is refused rather than shown.
+  codex_quota_report known 46 '["weekly"]' true > "$quota"
+  out=$(codex_metrics "$rollout" gpt-6-astra "$quota")
+  assert_contains "$out" '|--|' "a stale provider report was reported as current quota"
+
+  # So is an unknown one, at either level.
+  codex_quota_report unknown null '["weekly"]' false known > "$quota"
+  out=$(codex_metrics "$rollout" gpt-6-astra "$quota")
+  assert_contains "$out" '|--|' "an unknown scope status was reported as quota"
+  codex_quota_report known 46 '["weekly"]' false unknown > "$quota"
+  out=$(codex_metrics "$rollout" gpt-6-astra "$quota")
+  assert_contains "$out" '|--|' "an unknown semantics status was reported as quota"
+
+  # A real zero is still a real reading and must survive all of the above.
+  codex_quota_report known 100 '["weekly"]' > "$quota"
+  out=$(codex_metrics "$rollout" gpt-6-astra "$quota")
+  assert_contains "$out" '|0|wk' "a genuine 0% quota was suppressed as unavailable"
+  pass "status bar: missing, malformed, expired, and stale Codex readings stay unavailable rather than zero"
+}
+
+# A percentage means something different against five hours than against a week,
+# so the window is part of the metric. A plan exposing only a weekly limit still
+# reports a labelled figure; a figure bound by two windows at once cannot be
+# labelled with either and is withheld.
+test_codex_quota_window_is_always_named() {
+  local rollout="$CODEX_FIX/window.jsonl" quota="$CODEX_FIX/window.json" out
+  codex_token_event 51680 258400 codex_bengalfox Spark - - - > "$rollout"
+
+  codex_quota_report known 46 '["weekly"]' > "$quota"
+  out=$(codex_metrics "$rollout" gpt-6-astra "$quota")
+  assert_contains "$out" '|54|wk' "a weekly-only provider limit was not reported"
+
+  codex_quota_report known 70 '["model:codex_bengalfox:5h"]' > "$quota"
+  out=$(codex_metrics "$rollout" gpt-6-astra "$quota")
+  assert_contains "$out" '|30|5h' "a five-hour window was not labelled as one"
+
+  codex_quota_report known 46 '["weekly","daily"]' > "$quota"
+  out=$(codex_metrics "$rollout" gpt-6-astra "$quota")
+  assert_contains "$out" '|--|' "a figure bound by two windows at once was labelled with one of them"
+
+  codex_quota_report known 46 '["something-new"]' > "$quota"
+  out=$(codex_metrics "$rollout" gpt-6-astra "$quota")
+  assert_contains "$out" '|--|' "an unrecognized window was reported without a usable label"
+  pass "status bar: a Codex quota figure is reported only with its actual window named"
+}
+
+# The session binding is an open file descriptor, not a newest-file guess. When
+# the followed pane resolves to no Codex process, or to processes holding more
+# than one rollout, there is no safe choice and the row must say so rather than
+# borrow a sibling session's context.
+test_codex_never_borrows_a_sibling_session() {
+  local state="$CODEX_FIX/sibling-state" out lsof_bin="$CODEX_FIX/lsofbin"
+  mkdir -p "$state" "$lsof_bin"
+
+  # No Codex process behind the pane: nothing to bind to.
+  out=$(
+    # shellcheck source=bin/fm-codex-session-metrics-lib.sh
+    . "$ROOT/bin/fm-codex-session-metrics-lib.sh"
+    FM_CODEX_METRICS_NO_CACHE=1 FM_CODEX_METRICS_NOW=1000 \
+      FM_CODEX_QUOTA_DISABLE=1 PATH="$lsof_bin:$PATH" \
+      fm_codex_session_metrics fixture-pane herdr default "$state" gpt-6-astra
+  )
+  [ "$out" = "$(printf '%s\t%s\t' -- --)" ] \
+    || fail "an unresolvable pane produced a reading anyway: '$out'"
+
+  # Two rollouts held open at once is ambiguous, so it is refused outright
+  # rather than resolved by picking one.
+  cat > "$lsof_bin/lsof" <<'SH'
+#!/usr/bin/env bash
+printf 'n/tmp/sessions/2026/09/09/rollout-a.jsonl\n'
+printf 'n/tmp/sessions/2026/09/10/rollout-b.jsonl\n'
+SH
+  chmod +x "$lsof_bin/lsof"
+  out=$(
+    # shellcheck source=bin/fm-codex-session-metrics-lib.sh
+    . "$ROOT/bin/fm-codex-session-metrics-lib.sh"
+    PATH="$lsof_bin:$PATH" _fm_codex_rollout_for_pids 4242 && printf 'RESOLVED'
+  )
+  [ -z "$out" ] || fail "two open rollouts resolved to '$out' instead of refusing"
+
+  # Exactly one is the only resolvable case.
+  cat > "$lsof_bin/lsof" <<'SH'
+#!/usr/bin/env bash
+printf 'n/tmp/sessions/2026/09/09/rollout-a.jsonl\n'
+SH
+  chmod +x "$lsof_bin/lsof"
+  out=$(
+    # shellcheck source=bin/fm-codex-session-metrics-lib.sh
+    . "$ROOT/bin/fm-codex-session-metrics-lib.sh"
+    PATH="$lsof_bin:$PATH" _fm_codex_rollout_for_pids 4242
+  )
+  [ "$out" = /tmp/sessions/2026/09/09/rollout-a.jsonl ] \
+    || fail "a single open rollout did not resolve, got '$out'"
+  pass "status bar: Codex context binds to one open session and never borrows a sibling"
+}
+
+# The window token has to reach the rendered row, and it must not leak into the
+# adapters whose payloads carry no window - Claude, Pi and Cursor keep the bare
+# percentage their contracts already specify.
+test_quota_window_renders_only_where_a_window_is_known() {
+  local out
+  out=$(render Opus high 40 55 | strip_ansi)
+  assert_contains "$out" '⚡55%' "the Pi row lost its quota percentage"
+  assert_not_contains "$out" '⚡55%wk' "a window label was invented for an adapter with no window"
+
+  out=$(printf '%s' '{"model":{"display_name":"Claude"},"context_window":{"used_percentage":10},"rate_limits":{"five_hour":{"used_percentage":22}}}' |
+    PATH="$FAKEBIN:$PATH" FM_HOME="$HOME_FIX" FM_PRIMARY_HARNESS=claude \
+      FM_STATUS_BAR_NOW=1000 "$ROOT/bin/fm-status-bar.sh" --adapter claude | strip_ansi)
+  assert_contains "$out" '⚡22%' "the Claude quota field changed shape"
+  assert_not_contains "$out" '⚡22%5h' "a window label was appended to the Claude contract"
+  pass "status bar: the quota window is rendered only by adapters that actually know one"
+}
+
 test_contract_order_and_fleet_projection
 test_threshold_colors_and_placeholders
 test_no_watch_is_bright_red_when_missing_or_stale
@@ -499,3 +745,10 @@ test_companion_never_leaves_the_row_blank_while_collecting
 test_companion_publishes_every_refresh_to_the_pane
 test_companion_backend_is_restricted_to_verified_providers
 test_tracked_adapter_wiring_and_cursor_boundary
+test_codex_rejects_another_models_rate_limit_identity
+test_codex_accepts_a_matching_rate_limit_identity
+test_codex_context_follows_the_current_session_and_compaction
+test_codex_unavailable_readings_never_become_zero
+test_codex_quota_window_is_always_named
+test_codex_never_borrows_a_sibling_session
+test_quota_window_renders_only_where_a_window_is_known
