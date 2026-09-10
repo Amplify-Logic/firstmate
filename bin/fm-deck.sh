@@ -12,11 +12,12 @@
 #                          expiry countdown)
 #   NEEDS YOU              parked and blocked work, pull requests that are ready
 #                          to review with their full URL, and durable captain
-#                          decisions; one row per worker, and a failed worker's
-#                          pull request is not ready to review. When the backlog
-#                          cannot be read at all, the section says so and falls
-#                          back to this home's own record of a finished worker's
-#                          pull request rather than dropping it
+#                          decisions; one row per worker, one row per pull
+#                          request however many records carry it, and a failed
+#                          worker's pull request is not ready to review. When
+#                          the backlog cannot be read at all, the section says
+#                          so and falls back to this home's own record of a
+#                          finished worker's pull request rather than dropping it
 #   LOOSE ENDS             data/loose-ends/latest.md, the manual inbox sweep
 #   UNDER WAY              one outcome line per recorded worker
 #   JUST IN                recent completions and findings
