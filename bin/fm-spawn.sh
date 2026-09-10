@@ -684,9 +684,9 @@ elif [ "$RAW_LAUNCH" -eq 0 ] && [ "$ACCOUNT_SET" -eq 1 ]; then
   echo "error: harness '$HARNESS' has no vendor account to pin; --account applies to $(fm_account_vendors) harnesses only" >&2
   exit 1
 fi
-if [ -n "$ACCOUNT_VENDOR" ] && [ -n "$FM_ACCOUNT_HOME" ]; then
-  ACCOUNT_NAME=$FM_ACCOUNT_NAME
-  ACCOUNT_HOME=$FM_ACCOUNT_HOME
+if [ -n "$ACCOUNT_VENDOR" ] && [ -n "$FM_ACCOUNT_PIN_HOME" ]; then
+  ACCOUNT_NAME=$FM_ACCOUNT_PIN_NAME
+  ACCOUNT_HOME=$FM_ACCOUNT_PIN_HOME
   ACCOUNT_ENV=$(fm_account_env_var "$ACCOUNT_VENDOR")
   ACCOUNT_CLI=$(launch_binary_from_command "$LAUNCH") || ACCOUNT_CLI=$ACCOUNT_VENDOR
   ACCOUNT_EXPECT=$(fm_account_expect "$(fm_account_registry_file "$CONFIG")" "$ACCOUNT_VENDOR" "$ACCOUNT_NAME")

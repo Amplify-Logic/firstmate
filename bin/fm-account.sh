@@ -67,7 +67,7 @@ resolve_or_die() {  # <vendor> <name>
   require_vendor "$1"
   require_registry
   fm_account_resolve "$CONFIG" "$DATA" "$1" "$2" || die "$FM_ACCOUNT_ERROR"
-  [ -n "$FM_ACCOUNT_HOME" ] || die "no $1 account named '$2' is defined in $(registry)"
+  [ -n "$FM_ACCOUNT_PIN_HOME" ] || die "no $1 account named '$2' is defined in $(registry)"
 }
 
 cmd_list() {  # [<vendor>]
@@ -97,7 +97,7 @@ cmd_list() {  # [<vendor>]
 cmd_create() {  # <vendor> <name>
   local vendor=$1 name=$2 home login
   resolve_or_die "$vendor" "$name"
-  home=$FM_ACCOUNT_HOME
+  home=$FM_ACCOUNT_PIN_HOME
   login=$(fm_account_login_command "$vendor" "$home")
   if [ -d "$home" ]; then
     printf 'account home already exists: %s\n' "$home"
@@ -110,7 +110,7 @@ cmd_create() {  # <vendor> <name>
 
 cmd_login_command() {  # <vendor> <name>
   resolve_or_die "$1" "$2"
-  fm_account_login_command "$1" "$FM_ACCOUNT_HOME" || die "no login command for vendor '$1'"
+  fm_account_login_command "$1" "$FM_ACCOUNT_PIN_HOME" || die "no login command for vendor '$1'"
   printf '\n'
 }
 

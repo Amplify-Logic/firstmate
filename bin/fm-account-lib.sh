@@ -23,16 +23,19 @@
 # Error reporting: a function that refuses sets FM_ACCOUNT_ERROR to the reason
 # and returns 1, so each caller can raise it through its own die/refusal prefix
 # instead of this library guessing which script it is running inside.
-# FM_ACCOUNT_NAME and FM_ACCOUNT_HOME are the matching output globals, and
-# FM_ACCOUNT_WARNING carries a non-fatal note the caller should print.
+# FM_ACCOUNT_PIN_NAME and FM_ACCOUNT_PIN_HOME are the matching output globals,
+# and FM_ACCOUNT_WARNING carries a non-fatal note the caller should print. The
+# PIN_ infix is deliberate: FM_ACCOUNT_NAME is already an INBOUND status-bar
+# variable naming the account owner (docs/status-bar.md), so a pinned launch
+# must not overwrite it.
 
 # shellcheck source=bin/fm-timeout-lib.sh
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/fm-timeout-lib.sh"
 
 FM_ACCOUNT_ERROR=
 FM_ACCOUNT_WARNING=
-FM_ACCOUNT_NAME=
-FM_ACCOUNT_HOME=
+FM_ACCOUNT_PIN_NAME=
+FM_ACCOUNT_PIN_HOME=
 
 # fm_account_vendors: every vendor with an account concept, in help order.
 fm_account_vendors() {
@@ -91,10 +94,10 @@ fm_account_defined_names() {  # <registry-file> <vendor>
 
 # fm_account_resolve: decide which account a launch runs on.
 #
-# Sets FM_ACCOUNT_NAME and FM_ACCOUNT_HOME as output globals, both empty when no
-# pin applies. No pin applies when the registry is absent, when the vendor has no
-# entry, or when the vendor has no default and no account was requested - all of
-# which leave the ambient vendor home in charge.
+# Sets FM_ACCOUNT_PIN_NAME and FM_ACCOUNT_PIN_HOME as output globals, both empty
+# when no pin applies. No pin applies when the registry is absent, when the
+# vendor has no entry, or when the vendor has no default and no account was
+# requested - all of which leave the ambient vendor home in charge.
 #
 # Returns 1 with FM_ACCOUNT_ERROR set when a requested or default account is not
 # defined, when a name is unsafe, or when the registry exists but cannot be read.
@@ -107,8 +110,8 @@ fm_account_resolve() {  # <config-dir> <data-dir> <vendor> [<requested-name>]
   local file names name
   FM_ACCOUNT_ERROR=
   FM_ACCOUNT_WARNING=
-  FM_ACCOUNT_NAME=
-  FM_ACCOUNT_HOME=
+  FM_ACCOUNT_PIN_NAME=
+  FM_ACCOUNT_PIN_HOME=
   file=$(fm_account_registry_file "$config_dir")
   if [ ! -f "$file" ]; then
     if [ -n "$requested" ]; then
@@ -159,8 +162,8 @@ fm_account_resolve() {  # <config-dir> <data-dir> <vendor> [<requested-name>]
       return 1
       ;;
   esac
-  FM_ACCOUNT_NAME=$name
-  FM_ACCOUNT_HOME=$(fm_account_home "$data_dir" "$vendor" "$name")
+  FM_ACCOUNT_PIN_NAME=$name
+  FM_ACCOUNT_PIN_HOME=$(fm_account_home "$data_dir" "$vendor" "$name")
 }
 
 # fm_account_login_command: the exact command the captain runs to log one account

@@ -362,10 +362,10 @@ resolve_account() {
   # reports both its result and its refusal reason through globals.
   fm_account_resolve "$CONFIG" "$DATA" "$vendor" "$ACCOUNT_ARG" || die "$FM_ACCOUNT_ERROR"
   [ -z "$FM_ACCOUNT_WARNING" ] || printf 'fm-primary: %s\n' "$FM_ACCOUNT_WARNING" >&2
-  [ -n "$FM_ACCOUNT_HOME" ] || return 0
+  [ -n "$FM_ACCOUNT_PIN_HOME" ] || return 0
   ACCOUNT_VENDOR=$vendor
-  ACCOUNT_NAME=$FM_ACCOUNT_NAME
-  ACCOUNT_HOME=$FM_ACCOUNT_HOME
+  ACCOUNT_NAME=$FM_ACCOUNT_PIN_NAME
+  ACCOUNT_HOME=$FM_ACCOUNT_PIN_HOME
   ACCOUNT_ENV=$(fm_account_env_var "$vendor")
   ACCOUNT_EXPECT=$(fm_account_expect "$(fm_account_registry_file "$CONFIG")" "$vendor" "$ACCOUNT_NAME")
 }
