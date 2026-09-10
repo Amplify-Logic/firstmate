@@ -26,7 +26,8 @@
 #                 "MORNING_INTAKE: <label> due|failed|complete ..." or
 #                 "MORNING_INTAKE: new <label> report at <path>",
 #                 "CHANNEL_INTAKE: <N> source(s) due ...", "<N> item(s) ready
-#                  to send ...", "source(s) reading unknown ...", or
+#                  to send|blocked, ...|held, ...", "source(s) reading
+#                  unknown ...", or
 #                  "<label> live check is absent|unregistered ...",
 #                 "FMX: X mode on ..." or "FMX: X mode off ...".
 #          TOOLCHAIN_DRIFT compares docs/toolchain-manifest.tsv against PATH and
@@ -52,7 +53,9 @@
 #          CHANNEL_INTAKE is the read-only due/ready/unknown check owned by
 #          bin/fm-channel-intake.sh, silent unless this home opted in. A source
 #          reading `unknown` did not complete its last read, which is not the
-#          same as nothing new; docs/channel-intake.md owns the response.
+#          same as nothing new, and a notification the gate refused or held is
+#          named as such rather than counted as quiet;
+#          docs/channel-intake.md owns the response.
 #          UPSTREAM_REPORT is the read-only pending-report check owned by
 #          bin/fm-upstream-watch.sh. The weekly job writes only private data/;
 #          acknowledge the report after reading it so later sessions stay quiet.

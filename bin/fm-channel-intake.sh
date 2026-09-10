@@ -711,8 +711,26 @@ due_source_ids() {
   local epoch=$1 id
   load_inventory
   for id in $INVENTORY_IDS; do
-    source_due "$id" "$epoch" && printf '%s\n' "$id"
+    if source_due "$id" "$epoch"; then
+      printf '%s\n' "$id"
+    fi
   done
+  return 0
+}
+
+# The most recent read attempt across every enrolled source. It only ever moves
+# forward, because `claim`, `complete` and `fail` all stamp the current epoch,
+# so it is the monotonic term a suppression signature needs to tell a genuinely
+# recurring condition apart from one already surfaced.
+last_attempt_watermark() {
+  local id watermark=0 value
+  load_inventory
+  for id in $INVENTORY_IDS; do
+    value=$(record_field "$(source_record "$id")" last_attempt)
+    case "$value" in ''|*[!0-9]*) continue ;; esac
+    [ "$value" -le "$watermark" ] || watermark=$value
+  done
+  printf '%s\n' "$watermark"
 }
 
 # The scheduled entry point. It decides only WHETHER a read is worth doing and
@@ -959,8 +977,11 @@ observe() {
     notified=$(record_field "$path" notified)
     notified_digest=$(record_field "$path" notified_digest)
     case "$revisions" in ''|*[!0-9]*) revisions=0 ;; esac
-    case "$provenance" in
-      *"$prov_tag"*) ;;
+    # Whole-token membership: provenance is space-separated `id:ref`, and an
+    # unanchored match would drop a new tag whose ref is a prefix of a
+    # recorded one on the same source.
+    case " $provenance " in
+      *" $prov_tag "*) ;;
       # A cross-source duplicate keeps every source's provenance and stays ONE
       # item: it never becomes a second task.
       *) provenance="$provenance $prov_tag"; outcome=merged ;;
@@ -972,7 +993,8 @@ observe() {
         "$(record_field "$path" link)" "$(record_field "$path" class)" \
         "$(record_field "$path" title)" "$digest" "$existing_state" "$created" \
         "$(record_field "$path" updated)" "$(record_field "$path" source_epoch)" \
-        "$notified" "$notified_digest" "$revisions" "$provenance" '' '')"
+        "$notified" "$notified_digest" "$revisions" "$provenance" \
+        "$(record_field "$path" resolution)" "$(record_field "$path" resolved_at)")"
       printf '%s %s\n' "${outcome:-unchanged}" "$key"
       return 0
     fi
@@ -982,7 +1004,8 @@ observe() {
       "${link:-$(record_field "$path" link)}" "$class" \
       "${title:-$(record_field "$path" title)}" "$digest" "$existing_state" \
       "$created" "$epoch" "${source_epoch:-$(record_field "$path" source_epoch)}" \
-      "$notified" "$notified_digest" "$revisions" "$provenance" '' '')"
+      "$notified" "$notified_digest" "$revisions" "$provenance" \
+      "$(record_field "$path" resolution)" "$(record_field "$path" resolved_at)")"
     log_event "item $key updated (revision $revisions)"
     printf 'updated %s\n' "$key"
     return 0
@@ -1063,6 +1086,15 @@ for_each_item() {
     [ -f "$f" ] || continue
     printf '%s\n' "$f"
   done
+}
+
+count_items_in_state() {
+  local dir=$1 want=$2 f n=0
+  for f in $(for_each_item "$dir"); do
+    [ "$(record_field "$f" state)" = "$want" ] || continue
+    n=$((n + 1))
+  done
+  printf '%s\n' "$n"
 }
 
 items_cmd() {
@@ -1156,26 +1188,39 @@ notifiable_items() {
   done
 }
 
-# Renders. Does NOT send: sending is the orchestrator's authenticated path, and
-# the items are only stamped once it confirms with `notify-sent`, so an
-# interrupted send re-renders instead of vanishing.
-notify_due() {
-  local epoch day quiet=false files count last lastday sent f bypass=false
-  [ "$#" -eq 0 ] || die 'notify-due takes no arguments'
-  enabled || return 0
-  epoch=$(now_epoch)
+# The ONE decision for "can a payload go out right now, and if not, why not".
+# It prints `<state> <count>` and nothing else: `notify-due` renders from it,
+# and `pending`, `check` and `status` report it. Scraping the rendered payload
+# instead collapsed every refusal and every suppression into the same silence
+# as "nothing to send", which is precisely what a blocked alert must not do.
+#   none          nothing is notifiable right now
+#   unconfigured  no recipient is configured
+#   unverified    the recipient was never checked against the captain account
+#   capped        the bounded payloads for this local day are spent
+#   spaced        the minimum gap since the last payload has not elapsed
+#   ready         a payload can be rendered and sent
+notify_state() {
+  local epoch=$1 day quiet=false files count last lastday sent f bypass=false
+  enabled || { printf 'none 0\n'; return 0; }
   day=$(local_date "$epoch")
   ! in_quiet_hours "$epoch" || quiet=true
   files=$(notifiable_items "$quiet")
   count=$(printf '%s' "$files" | grep -c '[^[:space:]]' || true)
-  [ "$count" -gt 0 ] || return 0
-  [ -n "$CFG_NOTIFY_RECIPIENT" ] \
-    || die "notify_recipient is not configured in $CONFIG_FILE"
+  if [ "$count" -eq 0 ]; then
+    printf 'none 0\n'
+    return 0
+  fi
   # The recipient is checked against the known captain account BEFORE any
   # payload can be rendered for it. Standing scope covers private alerts to the
   # captain and nobody else, so an unverified recipient is a refusal.
-  [ "$CFG_NOTIFY_VERIFIED" = true ] \
-    || die "notify_recipient_verified is not true in $CONFIG_FILE; verify the recipient against the known captain account before enabling notifications"
+  if [ -z "$CFG_NOTIFY_RECIPIENT" ]; then
+    printf 'unconfigured %s\n' "$count"
+    return 0
+  fi
+  if [ "$CFG_NOTIFY_VERIFIED" != true ]; then
+    printf 'unverified %s\n' "$count"
+    return 0
+  fi
   for f in $files; do
     if is_quiet_bypass_class "$(record_field "$f" class)"; then
       bypass=true
@@ -1188,13 +1233,55 @@ notify_due() {
   case "$sent" in ''|*[!0-9]*) sent=0 ;; esac
   [ "$lastday" = "$day" ] || sent=0
   if [ "$sent" -ge "$CFG_NOTIFY_MAX_PER_DAY" ]; then
-    # Nothing is lost: the items stay notifiable and `pending`/`status` report
-    # the suppression, so a cap is visible rather than silent.
+    printf 'capped %s\n' "$count"
     return 0
   fi
   if [ "$bypass" != true ] && [ $((epoch - last)) -lt "$CFG_NOTIFY_MIN_INTERVAL" ]; then
+    printf 'spaced %s\n' "$count"
     return 0
   fi
+  printf 'ready %s\n' "$count"
+}
+
+notify_state_count() {
+  local count=${1##* }
+  case "$count" in ''|*[!0-9]*) count=0 ;; esac
+  printf '%s\n' "$count"
+}
+
+# How a state that is neither `ready` nor empty reads on a captain-facing
+# surface, so a cap or a refusal is visible instead of looking like quiet.
+notify_state_phrase() {
+  case "$1" in
+    unconfigured) printf 'blocked, notify_recipient is not configured\n' ;;
+    unverified) printf 'blocked, notify_recipient_verified is not true\n' ;;
+    capped) printf 'held, the daily notification cap is spent\n' ;;
+    spaced) printf 'held, the minimum gap since the last payload has not elapsed\n' ;;
+    *) printf 'ready to send\n' ;;
+  esac
+}
+
+# Renders. Does NOT send: sending is the orchestrator's authenticated path, and
+# the items are only stamped once it confirms with `notify-sent`, so an
+# interrupted send re-renders instead of vanishing.
+notify_due() {
+  local epoch quiet=false files count state f
+  [ "$#" -eq 0 ] || die 'notify-due takes no arguments'
+  enabled || return 0
+  epoch=$(now_epoch)
+  state=$(notify_state "$epoch")
+  case "${state%% *}" in
+    none) return 0 ;;
+    unconfigured) die "notify_recipient is not configured in $CONFIG_FILE" ;;
+    unverified)
+      die "notify_recipient_verified is not true in $CONFIG_FILE; verify the recipient against the known captain account before enabling notifications" ;;
+    # Nothing is lost: the items stay notifiable and `pending`/`status` report
+    # the suppression, so a cap is visible rather than silent.
+    capped|spaced) return 0 ;;
+  esac
+  ! in_quiet_hours "$epoch" || quiet=true
+  files=$(notifiable_items "$quiet")
+  count=$(notify_state_count "$state")
   printf 'recipient: %s\n' "$CFG_NOTIFY_RECIPIENT"
   printf 'items: %s\n' "$count"
   printf 'keys: %s\n' "$(for f in $files; do printf '%s ' "$(record_field "$f" key)"; done)"
@@ -1232,7 +1319,8 @@ notify_sent() {
       "$(record_field "$path" state)" "$(record_field "$path" created)" \
       "$(record_field "$path" updated)" "$(record_field "$path" source_epoch)" \
       "$epoch" "$(record_field "$path" digest)" "$(record_field "$path" revisions)" \
-      "$(record_field "$path" provenance)" '' '')"
+      "$(record_field "$path" provenance)" "$(record_field "$path" resolution)" \
+      "$(record_field "$path" resolved_at)")"
   done
   lastday=$(notify_field day)
   sent=$(notify_field count)
@@ -1334,11 +1422,16 @@ freshness_phrase() {
 BRIEF_WINDOW=86400
 
 changed_section() {
-  local epoch=$1 f found=false revisions resolved_at created
+  local epoch=$1 f found=false revisions resolved_at created updated
   for f in $(for_each_item "$ITEM_DIR"); do
     revisions=$(record_field "$f" revisions)
     case "$revisions" in ''|*[!0-9]*) revisions=0 ;; esac
     if [ "$revisions" -gt 0 ]; then
+      # Bounded like every other row here: a correction is news on the day it
+      # lands, not a permanent fixture of every later brief.
+      updated=$(record_field "$f" updated)
+      case "$updated" in ''|*[!0-9]*) continue ;; esac
+      [ $((epoch - updated)) -le "$BRIEF_WINDOW" ] || continue
       found=true
       printf -- '- %s was corrected %s time(s) (%s)\n' "$(record_field "$f" title)" \
         "$revisions" "$(record_field "$f" source)"
@@ -1443,21 +1536,32 @@ todo_cmd() {
 # The watcher contract: one line when firstmate should wake, nothing otherwise,
 # finishing well inside FM_CHECK_TIMEOUT. Suppression is by signature, so an
 # unchanged state wakes the primary once rather than on every poll.
+#
+# The signature carries the last-attempt watermark and is cleared whenever the
+# condition clears, for the same reason the morning gate folds its monotonic
+# `updated` stamp in: a bare "<due>:<notify>" pair recurs identically on every
+# quiet-then-due cycle, so it would suppress the second cycle forever and the
+# live wake path would fire exactly once in the life of the home.
 check_signal() {
-  local epoch due count notify signature previous line
+  local epoch due count notify notify_token signature previous line progress
   [ "$#" -eq 0 ] || die 'check takes no arguments'
   enabled || return 0
   epoch=$(now_epoch)
   lock_state "$CHECK_LOCK_WAIT" || return 0
   due=$(due_source_ids "$epoch")
   count=$(printf '%s' "$due" | grep -c '[^[:space:]]' || true)
-  notify=$(notify_due 2>/dev/null | awk '$1 == "items:" { print $2 }')
-  case "$notify" in ''|*[!0-9]*) notify=0 ;; esac
+  notify=$(notify_state "$epoch")
+  notify_token=${notify%% *}
+  notify=$(notify_state_count "$notify")
   if [ "$count" -eq 0 ] && [ "$notify" -eq 0 ]; then
+    # Clearing here is what re-arms the next genuine wake: the condition is
+    # gone, so the state that returns after it is a new one.
+    rm -f "$INTAKE_DIR/check-surfaced"
     unlock_state
     return 0
   fi
-  signature="$count:$notify"
+  progress=$(last_attempt_watermark)
+  signature="$count:$notify_token:$notify:$progress"
   previous=$(read_line_file "$INTAKE_DIR/check-surfaced")
   if [ "$previous" = "$signature" ]; then
     unlock_state
@@ -1466,14 +1570,15 @@ check_signal() {
   write_atomic "$INTAKE_DIR/check-surfaced" "$signature" || { unlock_state; return 0; }
   unlock_state
   line="$CFG_LABEL: $count source(s) due to read"
-  [ "$notify" -eq 0 ] || line="$line, $notify item(s) ready to send"
+  [ "$notify" -eq 0 ] \
+    || line="$line, $notify item(s) $(notify_state_phrase "$notify_token")"
   printf '%s\n' "$line"
 }
 
 # Read-only. Prints at most one diagnostic-convention line per condition, and
 # nothing at all on a home that is not opted in or has nothing owed.
 pending() {
-  local epoch count notify armed unknown
+  local epoch count notify notify_token armed unknown
   [ "$#" -eq 0 ] || die 'pending takes no arguments'
   enabled || return 0
   epoch=$(now_epoch)
@@ -1481,10 +1586,15 @@ pending() {
   [ "$count" -eq 0 ] \
     || printf 'CHANNEL_INTAKE: %s source(s) due for %s - take them with %s claim\n' \
       "$count" "$CFG_LABEL" "$0"
-  notify=$(notify_due 2>/dev/null | awk '$1 == "items:" { print $2 }')
-  case "$notify" in ''|*[!0-9]*) notify=0 ;; esac
+  # A refused or suppressed alert reads as itself here. Reporting only the
+  # sendable count would make "the recipient was never verified" and "the day's
+  # cap is spent" indistinguishable from a quiet home.
+  notify=$(notify_state "$epoch")
+  notify_token=${notify%% *}
+  notify=$(notify_state_count "$notify")
   [ "$notify" -eq 0 ] \
-    || printf 'CHANNEL_INTAKE: %s item(s) ready to send for %s\n' "$notify" "$CFG_LABEL"
+    || printf 'CHANNEL_INTAKE: %s item(s) %s for %s\n' \
+      "$notify" "$(notify_state_phrase "$notify_token")" "$CFG_LABEL"
   unknown=$(unknown_sources "$epoch")
   [ -z "$unknown" ] \
     || printf 'CHANNEL_INTAKE: source(s) reading unknown for %s: %s\n' "$CFG_LABEL" "$unknown"
@@ -1537,9 +1647,13 @@ status_cmd() {
   printf 'sources_enrolled: %s\n' "$(load_inventory; printf '%s' "$INVENTORY_IDS" | grep -c '[^[:space:]]' || true)"
   printf 'sources_due: %s\n' "$(due_source_ids "$epoch" | grep -c '[^[:space:]]' || true)"
   printf 'sources_unknown: %s\n' "$(unknown_sources "$epoch")"
-  printf 'items_open: %s\n' "$(for_each_item "$ITEM_DIR" | wc -l | tr -d ' ')"
+  # Open and waiting both live in the active directory, so counting the
+  # directory would report work handed to someone else as still owed.
+  printf 'items_open: %s\n' "$(count_items_in_state "$ITEM_DIR" open)"
+  printf 'items_waiting: %s\n' "$(count_items_in_state "$ITEM_DIR" waiting)"
   printf 'items_archived: %s\n' "$(for_each_item "$ARCHIVE_DIR" | wc -l | tr -d ' ')"
   printf 'notifications_today: %s\n' "$(notify_today_count "$epoch")"
+  printf 'notifications_state: %s\n' "$(notify_state "$epoch")"
   printf 'measured_latency: %s\n' "$(latency_summary)"
   printf 'check_armed: %s\n' "$(check_armed_state)"
 }

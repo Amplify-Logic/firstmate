@@ -104,6 +104,10 @@ Detecting that a device or account needs an action grants no permission to perfo
 The orchestrator sends the payload and then calls `notify-sent --keys "..."`, which is what stamps the items.
 An interrupted send therefore re-renders on the next pass rather than being silently swallowed.
 
+A payload that cannot go out says why.
+`status` prints `notifications_state`, and `pending` and the live check name the condition in words: `blocked` when the recipient is unset or unverified, `held` when the daily cap is spent or the minimum gap has not elapsed.
+Nothing is lost in either case - the items stay notifiable and re-render once the condition clears - but neither is ever reported as nothing to send, because "no alert went out" and "nothing needed an alert" are not the same fact.
+
 `brief` and `todo` render from the same ledger every time.
 A correction, a resolution and a completed obligation reconcile across both by construction rather than needing a second pass over two stores.
 Both accept `--out FILE` inside the configured `report_dir` and overwrite the same path, so a background render updates the existing page instead of leaving a trail of dated files.
@@ -160,7 +164,8 @@ Measure it on the real inventory rather than projecting it from one channel.
 ## Session-start surface
 
 `bin/fm-bootstrap.sh` calls `pending`, which is read-only and silent on a home that has not opted in or has nothing owed.
-It reports due sources, items ready to send, sources reading `unknown`, and a live check that has gone absent or unregistered, naming `arm-check` as the repair.
+It reports due sources, items ready to send or blocked or held, sources reading `unknown`, and a live check that has gone absent or unregistered, naming `arm-check` as the repair.
+`.agents/skills/bootstrap-diagnostics/SKILL.md` owns the response to each of those lines.
 A source reading `unknown` did not complete its last read.
 That is not the same as nothing new, and it must not be reported to the captain as quiet.
 

@@ -20,7 +20,13 @@
 #   - A cross-source duplicate keeps every source's provenance and stays ONE
 #     item instead of becoming a second task.
 #   - Notifications are grouped, rate-limited, capped per local day, and refused
-#     outright until the recipient is verified against the known captain.
+#     outright until the recipient is verified against the known captain, and a
+#     refusal or a cap reads as itself instead of looking like a quiet home.
+#   - A quiet cycle succeeds: once every source has been read, the scheduled
+#     tick, a claim and the watcher check all exit clean rather than failing.
+#   - The live watcher check wakes once per state and re-arms when the state
+#     recurs, instead of going permanently silent after its first wake.
+#   - A re-read never erases why an item is waiting on someone else.
 #   - Quiet hours defer the notifiable classes but preserve real severity: a
 #     service outage still goes out.
 #   - The gate writes nothing the Action Deck renders, so detection can never
@@ -263,6 +269,20 @@ test_captain_response_clears_and_never_reopens() {
   assert_contains "$out" 'supplier confirmation' 'a handed-off obligation vanished from the brief'
   [ "$(item_field "$h" "$key" state)" = waiting ] \
     || fail 'a handed-off obligation was cleared rather than moved to waiting'
+  # The source keeps being re-read every interval, so a re-observation must not
+  # erase why the item is waiting: without the reason the ledger says only that
+  # something is stuck, not who it is stuck on.
+  at "$h" $((T_0915 + 900)) observe --source M_ACTION --ref msg-77 \
+    --digest 'supplier must confirm' --class obligation --title 'supplier confirmation' >/dev/null
+  [ "$(item_field "$h" "$key" resolution)" = 'handed to the supplier' ] \
+    || fail 'an unchanged re-read erased the reason a handed-off item is waiting'
+  at "$h" $((T_0915 + 1800)) observe --source M_ACTION --ref msg-77 \
+    --digest 'supplier must confirm by friday' --class obligation \
+    --title 'supplier confirmation' >/dev/null
+  [ "$(item_field "$h" "$key" resolution)" = 'handed to the supplier' ] \
+    || fail 'a corrected re-read erased the reason a handed-off item is waiting'
+  assert_contains "$(at "$h" $((T_0915 + 1800)) brief)" 'supplier confirmation' \
+    'a corrected handed-off obligation left waiting-on-others'
 
   pass 'a captain response clears the item with its evidence preserved, and no re-read reopens it'
 }
@@ -370,7 +390,24 @@ test_no_poll_loop_can_run_away() {
   out=$(at "$h" $((T_0900 + 900060)) claim)
   assert_not_contains "$out" 'source: C_BRIEF' 'a backed-off source was still claimed'
 
-  pass 'the interval has a floor, one armed cycle wakes once, and a failing source backs off to a ceiling'
+  # The quiet cycle is the steady state, and it must succeed. A scheduled tick
+  # that exits non-zero once every source has been read records a launchd
+  # failure on nearly every run and leaves the armed marker behind.
+  new_home "$h"
+  at "$h" "$T_0900" claim >/dev/null
+  at "$h" "$T_0900" complete --source C_BRIEF --checkpoint c-1 >/dev/null
+  at "$h" "$T_0900" complete --source M_ACTION --checkpoint m-1 >/dev/null
+  out=$(at "$h" $((T_0900 + 60)) tick) && code=0 || code=$?
+  expect_code 0 "$code" 'a tick with nothing due reported a failure'
+  [ -z "$out" ] || fail "a tick with nothing due was not silent: $out"
+  out=$(at "$h" $((T_0900 + 60)) claim) && code=0 || code=$?
+  expect_code 0 "$code" 'a claim with nothing due reported a failure'
+  assert_contains "$out" '<none due>' 'a claim with nothing due did not say so'
+  out=$(at "$h" $((T_0900 + 60)) check) && code=0 || code=$?
+  expect_code 0 "$code" 'a watcher check with nothing due reported a failure'
+  assert_absent "$h/data/channel-intake/armed" 'a quiet cycle left the armed marker set'
+
+  pass 'the interval has a floor, one armed cycle wakes once, a failing source backs off to a ceiling, and a quiet cycle succeeds'
 }
 
 test_cross_source_duplicate_stays_one_item() {
@@ -671,7 +708,7 @@ test_local_configuration_stays_private() {
 }
 
 test_arm_check_leaves_no_unregistered_shim() {
-  local h out code fake
+  local h out code
   h="$TMP_ROOT/armcheck"
   new_home "$h"
 
@@ -693,14 +730,20 @@ test_arm_check_leaves_no_unregistered_shim() {
   assert_contains "$(at "$h" "$T_0900" status)" 'check_armed: armed' 'a drifted shim was not rebound'
 
   # A registration failure must leave nothing behind for the watcher to reject.
+  # The failure is driven through the real registrar the way the morning gate's
+  # is - an unwritable trust destination - because arm-check calls it by its
+  # absolute path, so a shim on PATH would never be reached and the case would
+  # assert nothing.
   rm -f "$h/state/channel-intake.check.sh" "$h/state/channel-intake.check-trust"
-  fake=$(fm_fakebin "$h")
-  printf '#!/usr/bin/env bash\nexit 1\n' >"$fake/fm-check-register.sh"
-  chmod +x "$fake/fm-check-register.sh"
-  out=$(FM_HOME="$h" FM_ROOT_OVERRIDE="$fake/.." FM_CHANNEL_INTAKE_NOW="$T_0900" \
-    PATH="$fake:$PATH" "$INTAKE" arm-check 2>&1) && code=0 || code=$?
-  [ "$code" = 0 ] || assert_contains "$out" 'registration failed' \
-    'a failed registration did not name itself'
+  mkdir -p "$h/state/channel-intake.check-trust"
+  out=$(at "$h" "$T_0900" arm-check 2>&1) && code=0 || code=$?
+  expect_code 2 "$code" 'a failed registration was reported as success'
+  assert_contains "$out" 'registration failed' 'a failed registration did not name itself'
+  assert_absent "$h/state/channel-intake.check.sh" \
+    'a failed registration left an unregistered shim for the watcher to reject'
+  [ "$(at "$h" "$T_0900" status | awk '$1 == "check_armed:" { print $2 }')" = absent ] \
+    || fail 'status reported a check that is not armed'
+  rm -rf "$h/state/channel-intake.check-trust"
 
   # Losing the shim is reported where an operator already looks.
   new_home "$h"
@@ -730,7 +773,65 @@ test_check_signals_once_per_state() {
   out=$(at "$h" $((T_0900 + 60)) check)
   [ -z "$out" ] || fail "an unchanged state woke the primary again: $out"
 
-  pass 'the watcher check wakes the primary once per state rather than on every poll'
+  # Suppression must not outlive the condition. Once every source is read the
+  # check goes quiet, and the next interval is a genuinely new due state that
+  # has to wake the primary again - otherwise the live path fires once in the
+  # life of the home and every later cycle waits for a session start.
+  at "$h" "$T_0900" claim >/dev/null
+  at "$h" "$T_0900" complete --source C_BRIEF --checkpoint 1789023000.1 >/dev/null
+  at "$h" "$T_0900" complete --source M_ACTION --checkpoint m-1 >/dev/null
+  out=$(at "$h" "$T_0900" check)
+  [ -z "$out" ] || fail "a settled home still woke the primary: $out"
+  out=$(at "$h" "$T_0915" check)
+  assert_contains "$out" '2 source(s) due to read' \
+    'a recurring due state was suppressed forever by the first wake'
+
+  pass 'the watcher check wakes the primary once per state and re-arms when the state recurs'
+}
+
+# A refusal and a suppression are not the same thing as nothing to send, and
+# neither may reach the captain as a quiet home.
+test_blocked_notifications_are_visible_rather_than_silent() {
+  local h out
+  h="$TMP_ROOT/notify-blocked"
+  new_home "$h"
+  sed -i.bak 's/^notify_recipient_verified = true$/notify_recipient_verified = false/' \
+    "$h/config/channel-intake"
+  rm -f "$h/config/channel-intake.bak"
+
+  at "$h" "$T_0900" observe --source C_BRIEF --ref 1789023000.9 \
+    --digest 'the dispenser at site 12 is down' --class outage \
+    --title 'service outage at site 12' >/dev/null
+
+  out=$(at "$h" "$T_0900" pending)
+  assert_contains "$out" 'notify_recipient_verified is not true' \
+    'an unverified recipient blocked the alert without saying so at session start'
+  assert_contains "$(at "$h" "$T_0900" status)" 'notifications_state: unverified' \
+    'status did not report the refusal'
+  assert_contains "$(at "$h" "$T_0900" check)" 'blocked' \
+    'the watcher check reported a blocked alert as quiet'
+
+  # The refusal itself still stands: nothing is rendered for an unverified
+  # recipient, whatever the reporting surfaces say about it.
+  out=$(at "$h" "$T_0900" notify-due 2>&1) && fail 'an unverified recipient rendered a payload'
+  assert_contains "$out" 'verify the recipient' 'the refusal did not name its repair'
+
+  # The daily cap is held rather than lost, and reads as held.
+  sed -i.bak 's/^notify_recipient_verified = false$/notify_recipient_verified = true/; s/^notify_max_per_day = 8$/notify_max_per_day = 1/' \
+    "$h/config/channel-intake"
+  rm -f "$h/config/channel-intake.bak"
+  out=$(at "$h" "$T_0900" notify-due)
+  at "$h" "$T_0900" notify-sent --keys "$(printf '%s' "$out" | awk '$1 == "keys:" { $1 = ""; print }')" >/dev/null
+  at "$h" "$T_0915" observe --source M_ACTION --ref m-2 \
+    --digest 'the permit expires on friday' --class deadline \
+    --title 'permit renewal deadline' >/dev/null
+  out=$(at "$h" "$T_0915" pending)
+  assert_contains "$out" 'daily notification cap is spent' \
+    'a capped payload was reported as nothing to send'
+  assert_contains "$(at "$h" "$T_0915" status)" 'notifications_state: capped' \
+    'status did not report the cap'
+
+  pass 'a refused or capped notification is reported as itself instead of looking like a quiet home'
 }
 
 test_unresolvable_timezone_is_refused() {
@@ -830,6 +931,7 @@ test_no_existing_fleet_is_overridden
 test_local_configuration_stays_private
 test_arm_check_leaves_no_unregistered_shim
 test_check_signals_once_per_state
+test_blocked_notifications_are_visible_rather_than_silent
 test_unresolvable_timezone_is_refused
 test_both_schedules_share_one_launchd_writer
 test_install_and_uninstall_on_a_temp_home
