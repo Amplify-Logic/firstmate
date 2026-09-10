@@ -67,6 +67,8 @@ SH
   chmod +x "$FAKEBIN/stat"
   : > "$HOME_FIX/state/.last-watcher-beat"
 
+  # shellcheck disable=SC2094 # The probe reads the pane bytes written so far
+  # from the very file this run is writing; that is the measurement, not a bug.
   PATH="$FAKEBIN:$PATH" \
     FM_HOME="$HOME_FIX" \
     FM_PRIMARY_HARNESS=kimi \
