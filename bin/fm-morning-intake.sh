@@ -14,11 +14,15 @@
 #   fm-morning-intake.sh acknowledge [REPORT]
 #   fm-morning-intake.sh status
 #   fm-morning-intake.sh reset
+#   fm-morning-intake.sh interval
 #   fm-morning-intake.sh --help
 #
 # This is a LOCAL GATE ONLY. It never reads a source system, never spawns an
-# agent, never starts a session, and never takes the per-home session lock, so
-# it cannot compete with a live fleet. `run` decides whether today's intake is
+# agent, never starts a session, and never takes the per-home session lock or
+# the watcher lock, so it cannot compete with a live fleet. The one lock it does
+# take is a private mutex over its own record (data/morning-intake/state.lock),
+# so the scheduled run, the watcher check and a live claim cannot clobber each
+# other's read-modify-write. `run` decides whether today's intake is
 # owed and, when it is, records the durable armed state and appends one wake.
 # The orchestrator does the actual ingestion and report writing, then calls
 # `complete`; the intake is not finished until that call verifies a report.
@@ -60,7 +64,8 @@
 # secret, channel id, or account path can be parked in this file; those belong
 # in the orchestrator's own private records.
 #   enabled            true to arm this home (default false)
-#   timezone           IANA zone for the local day (default: host local time)
+#   timezone           IANA zone for the local day, refused unless it actually
+#                      resolves here (default: host local time)
 #   start_time         HH:MM start-of-morning threshold (default 06:00)
 #   interval_seconds   scheduled poll cadence (default 900)
 #   max_attempts       bounded retries per local day (default 3)
@@ -82,6 +87,7 @@ COMPLETE_FILE="$INTAKE_DIR/last-complete"
 SOURCE_FILE="$INTAKE_DIR/source-watermark"
 PENDING_FILE="$INTAKE_DIR/pending-report"
 LOG_FILE="$INTAKE_DIR/log"
+STATE_LOCK="$INTAKE_DIR/state.lock"
 
 DEFAULT_START_TIME=06:00
 DEFAULT_INTERVAL=900
@@ -120,6 +126,27 @@ require_positive_int() {
   esac
 }
 
+# date(1) treats a zone it cannot resolve as UTC and still exits 0, which would
+# silently move both the local day and the start-of-morning threshold. The zone
+# is therefore proven to resolve before anything is timed by it.
+timezone_resolves() {
+  local zone=$1 zonedir=${TZDIR:-/usr/share/zoneinfo} abbrev
+  case "$zone" in
+    UTC|Etc/UTC|GMT|Etc/GMT|Universal|Zulu) return 0 ;;
+  esac
+  if [ -d "$zonedir" ]; then
+    [ -f "$zonedir/$zone" ]
+    return
+  fi
+  # No zone database to read: fall back to the observable effect, since only an
+  # unresolved zone reports UTC where a named non-UTC zone was configured.
+  abbrev=$(TZ="$zone" date +%Z 2>/dev/null) || return 1
+  case "$abbrev" in
+    ''|UTC|GMT|-00|+00) return 1 ;;
+  esac
+  return 0
+}
+
 load_config() {
   local line key value
   [ -f "$CONFIG_FILE" ] || return 0
@@ -141,9 +168,12 @@ load_config() {
         esac
         ;;
       timezone)
+        [ -n "$value" ] || die 'timezone must name an IANA zone'
         case "$value" in
           *[!A-Za-z0-9/_+-]*) die "timezone contains unsupported characters" ;;
         esac
+        timezone_resolves "$value" \
+          || die "timezone does not resolve on this host: $value"
         CFG_TIMEZONE=$value
         ;;
       start_time)
@@ -162,8 +192,11 @@ load_config() {
         CFG_REPORT_DIR=${value%/}
         ;;
       label)
+        # Matches bin/fm-pr-lib.sh fm_task_id_path_safe, which the check
+        # registration owner enforces: a label this file accepts but that owner
+        # refuses would arm a shim the watcher then rejects on every sweep.
         case "$value" in
-          ''|*[!A-Za-z0-9._-]*) die "label must be a slug of [A-Za-z0-9._-]: $value" ;;
+          ''|.*|*[!A-Za-z0-9._-]*) die "label must be a leading-dot-free slug of [A-Za-z0-9._-]: $value" ;;
         esac
         CFG_LABEL=$value
         ;;
@@ -289,6 +322,54 @@ sanitize() {
   printf '%s' "${1:-}" | LC_ALL=C tr '\t\r\n' '   '
 }
 
+WAKE_LIB_LOADED=false
+
+load_wake_lib() {
+  if [ "$WAKE_LIB_LOADED" != true ]; then
+    # shellcheck source=bin/fm-wake-lib.sh disable=SC1091
+    . "$SCRIPT_DIR/fm-wake-lib.sh"
+    WAKE_LIB_LOADED=true
+  fi
+}
+
+# The state file is read-modified-written by the scheduled `run`, by the
+# watcher's `check`, and by a live `claim`/`complete`/`fail`, all in separate
+# processes. They are serialized here on a mutex private to this gate's own
+# data directory: not the per-home session lock, not the watcher lock, so a
+# live fleet is never competed with.
+#
+# The watcher's sweep gets the shorter of the two bounds, so a wedged holder can
+# never eat into FM_CHECK_TIMEOUT (30s by default); it simply stays silent and
+# re-evaluates on the next sweep.
+STATE_LOCK_WAIT=${FM_MORNING_INTAKE_LOCK_WAIT:-20}
+case "$STATE_LOCK_WAIT" in
+  ''|*[!0-9]*|0) die "FM_MORNING_INTAKE_LOCK_WAIT must be a positive integer: $STATE_LOCK_WAIT" ;;
+esac
+CHECK_LOCK_WAIT=$STATE_LOCK_WAIT
+[ "$CHECK_LOCK_WAIT" -le 5 ] || CHECK_LOCK_WAIT=5
+STATE_LOCK_HELD=false
+
+lock_state() {
+  local timeout=$1
+  [ "$STATE_LOCK_HELD" != true ] || return 0
+  load_wake_lib
+  mkdir -p "$INTAKE_DIR"
+  fm_lock_acquire_wait "$STATE_LOCK" "$timeout" || return 1
+  STATE_LOCK_HELD=true
+  trap 'unlock_state' EXIT
+}
+
+unlock_state() {
+  [ "$STATE_LOCK_HELD" = true ] || return 0
+  STATE_LOCK_HELD=false
+  fm_lock_release "$STATE_LOCK"
+}
+
+require_state_lock() {
+  lock_state "$STATE_LOCK_WAIT" \
+    || die "another morning-intake command still holds $STATE_LOCK"
+}
+
 log_event() {
   mkdir -p "$INTAKE_DIR"
   umask 077
@@ -308,8 +389,7 @@ last_complete_date() {
 enqueue_wake() {
   local day=$1 payload
   payload="$CFG_LABEL due for $day; run '$0 claim' to take it"
-  # shellcheck source=bin/fm-wake-lib.sh disable=SC1091
-  . "$SCRIPT_DIR/fm-wake-lib.sh"
+  load_wake_lib
   fm_wake_append check "$CFG_LABEL" "$payload"
 }
 
@@ -358,9 +438,18 @@ arm_check() {
   chmod 0700 "$tmp" || { rm -f "$tmp"; die 'cannot set check shim mode'; }
   mv -f "$tmp" "$check"
   # The watcher refuses to execute an unregistered custom check, so binding the
-  # bytes through the registration owner is what makes this path live.
-  "$SCRIPT_DIR/fm-check-register.sh" "$CFG_LABEL" \
-    || die "check registration failed for $CFG_LABEL"
+  # bytes through the registration owner is what makes this path live. An
+  # unregistered shim left in state/ is worse than no shim at all: the watcher
+  # rejects it and wakes the primary about it on every sweep, and the PR-check
+  # migration owner starts reporting the home as unmigrated. So arming is
+  # all-or-nothing, the way bin/fm-bootstrap.sh x_mode_setup already is.
+  if ! "$SCRIPT_DIR/fm-check-register.sh" "$CFG_LABEL"; then
+    rm -f -- "$check" 2>/dev/null || true
+    rm -f -- "$STATE_DIR/$CFG_LABEL.check-trust" 2>/dev/null || true
+    [ ! -e "$check" ] \
+      || die "check registration failed and the shim could not be removed: $check"
+    die "check registration failed for $CFG_LABEL"
+  fi
 }
 
 disarm_check() {
@@ -381,25 +470,29 @@ check_signal() {
   enabled || return 0
   epoch=$(now_epoch)
   day=$(local_date "$epoch")
+  # A sweep that cannot get the lock quickly stays silent rather than blocking
+  # the watcher or overwriting a claim in flight; the next sweep re-evaluates.
+  lock_state "$CHECK_LOCK_WAIT" || return 0
   load_state
-  [ "$ST_DATE" = "$day" ] || return 0
+  [ "$ST_DATE" = "$day" ] || { unlock_state; return 0; }
   case "$ST_PHASE" in
     due)
       line="$CFG_LABEL due for $day; take it with '$SCRIPT_DIR/fm-morning-intake.sh claim'"
       ;;
     claimed)
-      [ $((epoch - ST_UPDATED)) -ge "$CFG_RETRY_AFTER" ] || return 0
+      [ $((epoch - ST_UPDATED)) -ge "$CFG_RETRY_AFTER" ] || { unlock_state; return 0; }
       line="$CFG_LABEL claim for $day stalled after $((epoch - ST_UPDATED))s"
       ;;
     failed)
       line="$CFG_LABEL failed for $day (attempt $ST_ATTEMPTS of $CFG_MAX_ATTEMPTS): ${ST_ERROR:-unspecified failure}"
       ;;
-    *) return 0 ;;
+    *) unlock_state; return 0 ;;
   esac
   signature="$ST_PHASE:$ST_ATTEMPTS:$ST_REARMS:$ST_UPDATED"
-  [ "$ST_SURFACED" != "$signature" ] || return 0
+  [ "$ST_SURFACED" != "$signature" ] || { unlock_state; return 0; }
   ST_SURFACED=$signature
   save_state
+  unlock_state
   printf '%s\n' "$line"
 }
 
@@ -420,6 +513,7 @@ run_intake() {
   fi
   epoch=$(now_epoch)
   day=$(local_date "$epoch")
+  require_state_lock
   load_state
   complete=$(last_complete_date)
 
@@ -473,6 +567,7 @@ claim_intake() {
   require_enabled
   epoch=$(now_epoch)
   day=$(local_date "$epoch")
+  require_state_lock
   load_state
   [ "$ST_DATE" = "$day" ] || die "no intake is armed for $day; run '$0 run --force' first"
   case "$ST_PHASE" in
@@ -525,6 +620,7 @@ complete_intake() {
   fi
   epoch=$(now_epoch)
   day=$(local_date "$epoch")
+  require_state_lock
   load_state
   [ "$ST_DATE" = "$day" ] || die "no intake is armed for $day"
   [ "$ST_PHASE" = claimed ] || die "complete requires a claimed intake (phase: $ST_PHASE)"
@@ -555,8 +651,18 @@ fail_intake() {
   [ -n "$reason" ] || die '--reason is required'
   epoch=$(now_epoch)
   day=$(local_date "$epoch")
+  require_state_lock
   load_state
   [ "$ST_DATE" = "$day" ] || die "no intake is armed for $day"
+  # An attempt that was never claimed is still an attempt. Counting it here is
+  # what keeps the retry budget honest: without it a failure recorded before a
+  # claim would leave attempts at zero and let `run` re-arm on every poll, all
+  # day, and the exhausted terminal state would never be reached. `reset`
+  # remains the only way to give a spent budget back.
+  case "$ST_PHASE" in
+    claimed|failed) ;;
+    *) ST_ATTEMPTS=$((ST_ATTEMPTS + 1)) ;;
+  esac
   ST_PHASE=failed
   ST_UPDATED=$epoch
   ST_ERROR=$reason
@@ -583,13 +689,19 @@ rearm_intake() {
   [ -n "$reason" ] || die '--reason is required'
   epoch=$(now_epoch)
   day=$(local_date "$epoch")
+  require_state_lock
   load_state
+  if [ "$ST_DATE" != "$day" ]; then
+    # Same new-local-day reset `run` performs: yesterday's spent budget and
+    # yesterday's report path never carry into today's first re-arm.
+    ST_DATE=$day; ST_PHASE=idle; ST_ATTEMPTS=0; ST_REARMS=0; ST_REPORT=; ST_ERROR=; ST_SURFACED=
+  fi
   [ "$ST_ATTEMPTS" -lt "$CFG_MAX_ATTEMPTS" ] \
     || die "attempt budget exhausted for $day ($ST_ATTEMPTS/$CFG_MAX_ATTEMPTS)"
-  ST_DATE=$day
   ST_PHASE=due
   ST_UPDATED=$epoch
   ST_REARMS=$((ST_REARMS + 1))
+  ST_REPORT=
   ST_ERROR=
   ST_SURFACED=
   save_state
@@ -689,6 +801,7 @@ status_intake() {
 reset_intake() {
   [ "$#" -eq 0 ] || die 'reset takes no arguments'
   require_enabled
+  require_state_lock
   load_state
   ST_PHASE=idle
   ST_ATTEMPTS=0

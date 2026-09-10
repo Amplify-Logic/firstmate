@@ -13,7 +13,14 @@
 #     -> acknowledge, through the same commands a live orchestrator runs.
 #   - A failed or partial intake cannot advance the completion watermark, and a
 #     corrected source message after a same-day failure is still ingested.
-#   - Retries are bounded and the exhausted state stays visible.
+#   - Retries are bounded and the exhausted state stays visible, including for a
+#     failure recorded before any claim, and only `reset` gives the budget back.
+#   - Writes to the durable record are serialized, so a watcher sweep cannot
+#     overwrite a claim that a live orchestrator is holding.
+#   - Arming the watcher check is all-or-nothing: a registration failure leaves
+#     no shim behind for the watcher to reject on every sweep.
+#   - A timezone that does not resolve is refused instead of silently becoming
+#     UTC, and `rearm` on a new local day starts from a fresh budget.
 #   - No existing fleet is overridden: no session lock is taken, no watcher is
 #     started, and a foreign home's records are untouched.
 #   - Local configuration stays private: unknown keys are refused rather than
@@ -59,6 +66,34 @@ at() {
 
 queue_lines() {
   grep -c '[^[:space:]]' "$1/state/.wake-queue" 2>/dev/null || printf '0\n'
+}
+
+state_field() {
+  awk -F= -v k="$2" '$1 == k { print $2 }' "$1/data/morning-intake/state"
+}
+
+# A live process holding the gate's own state mutex, so contention is real
+# rather than simulated. Nothing is slept for: every command under contention is
+# given a one-second bound through FM_MORNING_INTAKE_LOCK_WAIT and returns
+# inside it. HOLDER_PID is killed by release_state_lock.
+HOLDER_PID=
+hold_state_lock() {
+  local h=$1 lock
+  lock="$h/data/morning-intake/state.lock"
+  mkdir -p "$lock"
+  sleep 10 &
+  HOLDER_PID=$!
+  # Detached so terminating it later is not reported as a job status line.
+  disown "$HOLDER_PID" 2>/dev/null || true
+  printf '%s\n' "$HOLDER_PID" >"$lock/pid"
+  ( . "$ROOT/bin/fm-wake-lib.sh"; fm_pid_identity "$HOLDER_PID" >"$lock/pid-identity" 2>/dev/null ) || true
+}
+
+release_state_lock() {
+  local h=$1
+  [ -z "$HOLDER_PID" ] || kill "$HOLDER_PID" 2>/dev/null || true
+  HOLDER_PID=
+  rm -rf "$h/data/morning-intake/state.lock"
 }
 
 test_inert_without_opt_in() {
@@ -292,13 +327,15 @@ test_no_existing_fleet_is_overridden() {
   [ "$(cat "$other/state/.wake-queue")" = 'other queue row' ] \
     || fail "the intake appended to another home's wake queue"
 
-  # It takes no lock of its own either, so it cannot compete with a live
-  # session that holds this home's lock.
+  # It takes no fleet lock either, so it cannot compete with a live session that
+  # holds this home's lock. The only mutex it does take is private to its own
+  # data directory, and it is released rather than leaked.
   assert_absent "$h/state/.session.lock" 'the intake created a session lock'
   assert_absent "$h/state/.watch.lock" 'the intake created a watcher lock'
   for out in "$h/state"/*lock*; do
     [ ! -e "$out" ] || fail "the intake created a lock file in state: $out"
   done
+  assert_absent "$h/data/morning-intake/state.lock" 'the intake leaked its own state mutex'
 
   # A live session already holding this home's lock is not displaced.
   printf 'live session\n' >"$h/state/.session.lock"
@@ -306,12 +343,206 @@ test_no_existing_fleet_is_overridden() {
   [ "$(cat "$h/state/.session.lock")" = 'live session' ] \
     || fail "the intake overwrote this home's live session lock"
 
-  # And it never starts an agent or a watcher itself.
+  # And it never starts an agent or a watcher itself, nor names a fleet lock.
   assert_no_grep 'fm-spawn' "$INTAKE" 'the intake gate spawns an agent'
   assert_no_grep 'fm-watch' "$INTAKE" 'the intake gate starts a watcher'
-  assert_no_grep 'fm-lock' "$INTAKE" 'the intake gate takes a lock'
+  assert_no_grep '.session.lock' "$INTAKE" 'the intake gate names the per-home session lock'
+  assert_no_grep '.watch.lock' "$INTAKE" 'the intake gate names the watcher lock'
 
-  pass 'the intake never takes a lock, starts an agent, or touches another home'
+  pass 'the intake never takes a fleet lock, starts an agent, or touches another home'
+}
+
+# The finding this covers: the watcher check, the launchd run and a live claim
+# all read-modify-write one file from separate processes, so an unserialized
+# sweep could write back a stale snapshot over a claim in flight and make the
+# finished report unacceptable.
+test_state_writes_are_serialized() {
+  local h out code
+  h="$TMP_ROOT/serialized"
+  new_home "$h"
+
+  at "$h" "$T_0700" run >/dev/null
+  at "$h" "$T_0700" claim >/dev/null
+  [ "$(state_field "$h" phase)" = claimed ] || fail 'the claim did not take the day'
+
+  hold_state_lock "$h"
+
+  # The watcher sweep must stay silent and leave the claim exactly as it found
+  # it, rather than blocking the watcher or writing back its own snapshot.
+  out=$(FM_MORNING_INTAKE_LOCK_WAIT=1 at "$h" "$T_0715" check) && code=0 || code=$?
+  expect_code 0 "$code" 'a contended watcher check did not exit cleanly'
+  [ -z "$out" ] || fail "a contended watcher check still signalled: $out"
+  [ "$(state_field "$h" phase)" = claimed ] || fail 'a contended watcher check overwrote the claim'
+  [ "$(state_field "$h" attempts)" = 1 ] || fail 'a contended watcher check reset the attempt count'
+
+  # Every other writer refuses with a named error instead of proceeding from a
+  # snapshot it cannot safely write back.
+  out=$(FM_MORNING_INTAKE_LOCK_WAIT=1 at "$h" "$T_0715" run 2>&1) && code=0 || code=$?
+  expect_code 2 "$code" 'a contended scheduled run proceeded anyway'
+  assert_contains "$out" 'still holds' 'the contended run did not name the held mutex'
+
+  release_state_lock "$h"
+
+  # Contention is not a wedge: with the holder gone the day completes normally.
+  printf '# intake 2026-09-10
+findings
+' >"$h/reports/2026-09-10.md"
+  out=$(at "$h" "$T_0715" complete --report "$h/reports/2026-09-10.md")
+  assert_contains "$out" 'complete for 2026-09-10' 'the day could not complete after contention cleared'
+  assert_absent "$h/data/morning-intake/state.lock" 'the state mutex was left behind'
+
+  pass 'durable-state writes are serialized, so a watcher sweep never clobbers a claim in flight'
+}
+
+# A failure recorded before any claim is still an attempt. Without that the
+# scheduled job re-arms and wakes the primary on every poll, all morning, and
+# the visible exhausted state is never reached.
+test_pre_claim_failure_spends_an_attempt() {
+  local h out
+  h="$TMP_ROOT/preclaim"
+  new_home "$h"   # max_attempts = 2
+
+  at "$h" "$T_0700" run >/dev/null
+  out=$(at "$h" "$T_0700" fail --reason 'connector auth expired')
+  assert_contains "$out" 'attempt 1 of 2' 'a failure before any claim did not spend an attempt'
+  [ "$(state_field "$h" attempts)" = 1 ] || fail 'the pre-claim failure left the budget untouched'
+
+  out=$(at "$h" "$T_0715" run)
+  assert_contains "$out" 'due for 2026-09-10' 'the second attempt was not armed'
+  out=$(at "$h" "$T_0715" fail --reason 'connector auth still expired')
+  assert_contains "$out" 'attempt 2 of 2' 'the second pre-claim failure did not spend an attempt'
+
+  # Budget spent without a single claim: the scheduler must stop re-arming and
+  # say so, rather than looping every interval for the rest of the day.
+  out=$(at "$h" "$T_1100" run)
+  assert_contains "$out" 'failed for 2026-09-10 after 2 attempts'     'pre-claim failures never reached the visible exhausted state'
+  [ "$(queue_lines "$h")" = 2 ] || fail 'the exhausted state kept enqueueing wakes'
+  assert_absent "$h/data/morning-intake/last-complete" 'a pre-claim failure advanced the watermark'
+
+  # Claiming is refused too, so nothing is woken for work it cannot take.
+  out=$(at "$h" "$T_1100" claim 2>&1) && : || true
+  assert_contains "$out" 'attempt budget exhausted' 'an exhausted budget still handed out a claim'
+
+  # reset is the only way back, and it is deliberate.
+  at "$h" "$T_1100" reset >/dev/null
+  out=$(at "$h" "$T_1100" run)
+  assert_contains "$out" 'due for 2026-09-10' 'reset did not give the budget back'
+
+  pass 'a failure recorded before any claim spends an attempt, so pre-claim failures cannot re-arm forever'
+}
+
+# An unregistered shim is worse than no shim: bin/fm-watch.sh rejects it and
+# wakes the primary about it on every sweep.
+test_arm_check_leaves_no_unregistered_shim() {
+  local h out code
+  h="$TMP_ROOT/armfail"
+  new_home "$h"
+
+  # Registration fails when the trust destination cannot be written.
+  mkdir -p "$h/state/morning-intake.check-trust"
+  out=$(at "$h" "$T_0700" arm-check 2>&1) && code=0 || code=$?
+  expect_code 2 "$code" 'a failed registration was reported as success'
+  assert_contains "$out" 'check registration failed' 'the refusal did not name the failed registration'
+  assert_absent "$h/state/morning-intake.check.sh"     'a failed registration left an unregistered shim for the watcher to reject'
+  [ "$(at "$h" "$T_0700" status | awk '$1 == "check_armed:" { print $2 }')" = absent ]     || fail 'status reported a check that is not armed'
+
+  # A label the registration owner would refuse is refused up front instead.
+  rm -rf "$h/state/morning-intake.check-trust"
+  printf 'enabled = true
+timezone = Europe/Amsterdam
+label = .intake
+' >"$h/config/morning-intake"
+  out=$(at "$h" "$T_0700" arm-check 2>&1) && code=0 || code=$?
+  expect_code 2 "$code" 'a label the check registrar refuses was accepted'
+  assert_contains "$out" 'leading-dot-free slug' 'the refusal did not explain the label rule'
+  assert_absent "$h/state/.intake.check.sh" 'a refused label still staged a shim'
+
+  pass 'arming the watcher check is all-or-nothing, so no unregistered shim is ever left in state'
+}
+
+test_unresolvable_timezone_is_refused() {
+  local h out code
+  h="$TMP_ROOT/timezone"
+  new_home "$h"
+
+  # date(1) answers in UTC for a zone it cannot resolve and still exits 0, which
+  # would move both the local day and the 06:00 threshold by the zone's offset.
+  printf 'enabled = true
+timezone = Europe/Amsterdm
+' >"$h/config/morning-intake"
+  out=$(at "$h" "$T_0700" run 2>&1) && code=0 || code=$?
+  expect_code 2 "$code" 'an unresolvable timezone was accepted'
+  assert_contains "$out" 'timezone does not resolve' 'the refusal did not name the unresolved zone'
+  assert_absent "$h/data/morning-intake/state" 'an unresolvable timezone still armed a day'
+
+  # status must not echo the typo back as if it were a working configuration.
+  out=$(at "$h" "$T_0700" status 2>&1) && code=0 || code=$?
+  expect_code 2 "$code" 'status reported an unresolvable timezone as valid'
+
+  # The configured zone still resolves, and it is the zone the day is read in.
+  new_home "$h"
+  out=$(at "$h" "$T_0530" status)
+  assert_contains "$out" 'local_date_now: 2026-09-10' 'the resolvable zone did not drive the local day'
+
+  pass 'a timezone that does not resolve fails closed instead of silently becoming UTC'
+}
+
+test_rearm_starts_a_new_day_with_a_fresh_budget() {
+  local h out
+  h="$TMP_ROOT/rearm"
+  new_home "$h"   # max_attempts = 2
+
+  # Yesterday spent its whole budget and left a report path behind.
+  mkdir -p "$h/data/morning-intake"
+  cat >"$h/data/morning-intake/state" <<EOF
+date=2026-09-09
+phase=complete
+attempts=2
+updated=1788930000
+rearms=1
+surfaced=
+report=$h/reports/2026-09-09.md
+error=
+EOF
+
+  out=$(at "$h" "$T_0700" rearm --reason 'source published a correction')
+  assert_contains "$out" 're-armed for 2026-09-10' "yesterday's spent budget blocked today's re-arm"
+  [ "$(state_field "$h" attempts)" = 0 ] || fail "the re-arm carried yesterday's attempt count into today"
+  [ -z "$(state_field "$h" report)" ] || fail "the re-arm carried yesterday's report path into today"
+
+  # Today's budget is genuinely fresh: both attempts are available.
+  at "$h" "$T_0700" claim >/dev/null
+  at "$h" "$T_0700" fail --reason 'first attempt of the re-armed day' >/dev/null
+  out=$(at "$h" "$T_0715" run)
+  assert_contains "$out" 'due for 2026-09-10' 'the re-armed day had only a partial budget'
+
+  # Within one day the budget is still bounded, so a revision storm cannot loop.
+  at "$h" "$T_0715" claim >/dev/null
+  out=$(at "$h" "$T_0715" rearm --reason 'another correction' 2>&1) && : || true
+  assert_contains "$out" 'attempt budget exhausted' 'a same-day re-arm ignored the bounded budget'
+
+  pass 're-arming on a new local day starts from a fresh budget and drops the stale report path'
+}
+
+test_both_schedules_share_one_launchd_writer() {
+  local out home
+  home="$TMP_ROOT/upstream-home"
+  mkdir -p "$home/config"
+
+  assert_grep 'fm-launchd-schedule-lib.sh' "$SCHEDULE"     'the intake schedule no longer uses the shared launchd writer'
+  assert_grep 'fm-launchd-schedule-lib.sh' "$ROOT/bin/fm-upstream-watch-schedule.sh"     'the upstream-watch schedule does not use the shared launchd writer'
+
+  # Sharing the writer must not have moved the other owner's contract.
+  out=$(FM_HOME="$home" FM_ROOT_OVERRIDE="$ROOT" "$ROOT/bin/fm-upstream-watch-schedule.sh" render)
+  assert_contains "$out" '<integer>604800</integer>' 'the shared writer changed the weekly upstream default'
+  assert_contains "$out" 'dev.firstmate.upstream-watch.' 'the shared writer changed the per-home upstream label'
+  assert_contains "$out" 'fm-upstream-watch.sh' 'the shared writer changed the upstream program'
+  assert_contains "$out" '<key>RunAtLoad</key>' 'the shared writer dropped RunAtLoad from the upstream schedule'
+
+  # Each home still gets its own label, so one home never disturbs another.
+  [ "$(FM_HOME="$TMP_ROOT/home-a" FM_ROOT_OVERRIDE="$ROOT" "$SCHEDULE" render | awk '/<string>dev.firstmate/ { print; exit }')"     != "$(FM_HOME="$TMP_ROOT/home-b" FM_ROOT_OVERRIDE="$ROOT" "$SCHEDULE" render | awk '/<string>dev.firstmate/ { print; exit }')" ]     || fail 'two different homes render the same launchd label'
+
+  pass 'both schedule owners render through one launchd writer, per home, with no change to the upstream contract'
 }
 
 test_local_configuration_stays_private() {
@@ -369,6 +600,12 @@ FAKE
     FAKE_LAUNCHCTL_LOG="$TMP_ROOT/launchctl.log" \
       "$SCHEDULE" "$@"
   }
+
+  # The schedule reads the cadence back through `interval`, so that contract has
+  # to be discoverable from the gate's own --help rather than only from source.
+  out=$(at "$h" "$T_0700" --help 2>&1)
+  assert_contains "$out" 'fm-morning-intake.sh interval' \
+    'the interval contract the schedule depends on is missing from --help'
 
   out=$(schedule render)
   assert_contains "$out" '<key>StartInterval</key>' 'the rendered schedule omitted StartInterval'
@@ -438,6 +675,12 @@ test_wake_drives_intake_to_acknowledged_report
 test_failure_cannot_advance_watermark_and_correction_still_lands
 test_retries_are_bounded_and_exhaustion_is_visible
 test_no_existing_fleet_is_overridden
+test_state_writes_are_serialized
+test_pre_claim_failure_spends_an_attempt
+test_arm_check_leaves_no_unregistered_shim
+test_unresolvable_timezone_is_refused
+test_rearm_starts_a_new_day_with_a_fresh_budget
+test_both_schedules_share_one_launchd_writer
 test_local_configuration_stays_private
 test_install_and_uninstall_on_a_temp_home
 test_bootstrap_surfaces_the_intake

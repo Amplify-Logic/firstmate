@@ -33,7 +33,7 @@ The cache shares neither objects nor refs with the live checkout, and every netw
 Reports contain only public upstream commit data and tracked fork-surface information, never captain preferences, backlog contents, project records, or other private operational context.
 The session-start bootstrap section prints `UPSTREAM_REPORT: new private report at <path>` until the report is read and acknowledged with `bin/fm-upstream-watch.sh acknowledge <path>`.
 
-`bin/fm-upstream-watch-schedule.sh` owns the inspectable macOS launchd schedule.
+`bin/fm-upstream-watch-schedule.sh` owns the inspectable macOS launchd schedule, written through the shared `bin/fm-launchd-schedule-lib.sh`.
 Run `render` to inspect the complete definition, `install` to write and load it, `status` to print the installed file and live status, or `remove` to unload it.
 The default cadence is 604800 seconds (weekly).
 Set `interval_seconds = N` in private `config/upstream-watch`, or export `FM_UPSTREAM_WATCH_INTERVAL_SECONDS=N`, to override it.
@@ -47,6 +47,8 @@ Each home and each device opts in separately.
 
 `bin/fm-morning-intake.sh` owns the local day, the start-of-morning threshold, deduplication, bounded retries, the visible failure state, and the completion watermark.
 Its header and `--help` own the exact commands, config keys and mechanics.
+A `timezone` that does not resolve on this host is refused rather than silently treated as UTC, which would move both the local day and the threshold.
+Every failure counts against the day's `max_attempts`, whether or not it was claimed first, and only `reset` gives a spent budget back.
 `run` is both the scheduled entry point and the retained manual command; `run --force` arms an intake outside the configured window.
 It never reads a source system, spawns an agent, starts a session, or takes the per-home session lock, so it cannot compete with a live fleet.
 
@@ -59,6 +61,7 @@ Two delivery paths reach the orchestrator, and neither one starts a session.
 With no session running, nothing is delivered when the job fires: the armed state is durable and the next session's bootstrap section surfaces it as `MORNING_INTAKE: ...`, so the intake is queued until firstmate next starts rather than running on its own.
 
 `bin/fm-morning-intake-schedule.sh` owns the inspectable macOS launchd schedule and refuses to install on a home that has not opted in.
+It shares the LaunchAgent writer in `bin/fm-launchd-schedule-lib.sh` with `bin/fm-upstream-watch-schedule.sh`, so both schedules render, validate and load the same way.
 Run `render` to inspect the complete definition, `install` to write it, load it and arm the live check, `status` to print the resolved knobs and installed file, or `remove` to unload it and disarm the check.
 `StartInterval` plus `RunAtLoad` is the whole trigger: launchd runs the job at login and then on the interval, and an interval that elapsed during sleep runs shortly after the machine wakes.
 That is why the intake is defined as the first available morning rather than a lid-open event; launchd exposes no such event here and none is claimed.

@@ -22,7 +22,8 @@
 # The gate itself lives in bin/fm-morning-intake.sh, which owns the local day,
 # the threshold, deduplication, retries and the completion watermark. This
 # script only decides WHEN that gate is consulted, and reads the cadence back
-# from the gate owner rather than parsing config a second time.
+# from the gate owner rather than parsing config a second time. The LaunchAgent
+# itself is written by the shared owner in bin/fm-launchd-schedule-lib.sh.
 #
 # The label is derived from FM_HOME, so each operational home installs its own
 # agent and installing here never disturbs another home's schedule.
@@ -53,117 +54,53 @@ intake() {
   FM_HOME="$FM_HOME" FM_ROOT_OVERRIDE="$ROOT" "$INTAKE" "$@"
 }
 
-xml_escape() {
-  printf '%s' "$1" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g; s/"/\&quot;/g; s/'"'"'/\&apos;/g'
-}
-
-home_key=$(printf '%s' "$FM_HOME" | cksum | awk '{print $1}')
-LABEL="dev.firstmate.morning-intake.$home_key"
-AGENTS_DIR=${FM_MORNING_INTAKE_LAUNCH_AGENTS_DIR:-$HOME/Library/LaunchAgents}
-PLIST="$AGENTS_DIR/$LABEL.plist"
+FM_LAUNCHD_STEM=morning-intake
+FM_LAUNCHD_PROGRAM="$INTAKE"
+FM_LAUNCHD_PROGRAM_ARG=run
+FM_LAUNCHD_ROOT="$ROOT"
+FM_LAUNCHD_FM_HOME="$FM_HOME"
+FM_LAUNCHD_LOG_DIR="$DATA/morning-intake"
+FM_LAUNCHD_AGENTS_DIR=${FM_MORNING_INTAKE_LAUNCH_AGENTS_DIR:-$HOME/Library/LaunchAgents}
 # Overridable so the behavior suite can install and remove against a temporary
 # home without loading anything into the operator's real launchd session.
-LAUNCHCTL=${FM_MORNING_INTAKE_LAUNCHCTL:-launchctl}
+FM_LAUNCHD_LAUNCHCTL=${FM_MORNING_INTAKE_LAUNCHCTL:-launchctl}
+FM_LAUNCHD_REMOVE_NEEDS_DARWIN=false
 
-render() {
-  local interval root home program stdout stderr
-  interval=$(intake interval)
-  root=$(xml_escape "$ROOT")
-  home=$(xml_escape "$FM_HOME")
-  program=$(xml_escape "$INTAKE")
-  stdout=$(xml_escape "$DATA/morning-intake/launchd.stdout.log")
-  stderr=$(xml_escape "$DATA/morning-intake/launchd.stderr.log")
-  cat <<EOF
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-  <key>Label</key>
-  <string>$LABEL</string>
-  <key>ProgramArguments</key>
-  <array>
-    <string>$program</string>
-    <string>run</string>
-  </array>
-  <key>WorkingDirectory</key>
-  <string>$root</string>
-  <key>EnvironmentVariables</key>
-  <dict>
-    <key>FM_HOME</key>
-    <string>$home</string>
-    <key>FM_ROOT_OVERRIDE</key>
-    <string>$root</string>
-  </dict>
-  <key>StartInterval</key>
-  <integer>$interval</integer>
-  <key>RunAtLoad</key>
-  <true/>
-  <key>StandardOutPath</key>
-  <string>$stdout</string>
-  <key>StandardErrorPath</key>
-  <string>$stderr</string>
-</dict>
-</plist>
-EOF
+# shellcheck source=bin/fm-launchd-schedule-lib.sh disable=SC1091
+. "$SCRIPT_DIR/fm-launchd-schedule-lib.sh"
+
+fm_launchd_interval() {
+  intake interval
 }
 
-install_schedule() {
-  local tmp domain
-  [ "$#" -eq 0 ] || die 'install takes no arguments'
-  [ "$(uname)" = Darwin ] || die 'install requires macOS launchd; use render for an inspectable scheduler definition'
-  # Refuse rather than enrolling a home that never opted in: this is what keeps
-  # a fresh clone or a seeded secondmate from acquiring a schedule by accident.
+# Refuse rather than enrolling a home that never opted in: this is what keeps a
+# fresh clone or a seeded secondmate from acquiring a schedule by accident.
+fm_launchd_preinstall() {
   [ "$(intake status | awk '$1 == "enabled:" { print $2 }')" = true ] \
     || die "this home is not opted in; add 'enabled = true' to config/morning-intake first"
-  mkdir -p "$AGENTS_DIR" "$DATA/morning-intake"
-  tmp=$(mktemp "$AGENTS_DIR/.morning-intake.XXXXXX")
-  render >"$tmp"
-  chmod 600 "$tmp"
-  if command -v plutil >/dev/null 2>&1; then
-    plutil -lint "$tmp" >/dev/null || { rm -f "$tmp"; die 'rendered plist failed plutil validation'; }
-  fi
-  mv -f "$tmp" "$PLIST"
-  domain="gui/$(id -u)"
-  "$LAUNCHCTL" bootout "$domain/$LABEL" >/dev/null 2>&1 || true
-  "$LAUNCHCTL" bootstrap "$domain" "$PLIST"
-  # Arm the live-session delivery path too, so a running fleet is actually woken
-  # instead of only discovering the intake at the next session start.
+}
+
+# Arm the live-session delivery path too, so a running fleet is actually woken
+# instead of only discovering the intake at the next session start.
+fm_launchd_postinstall() {
   intake arm-check
-  printf 'installed: %s\n' "$PLIST"
-  printf 'interval_seconds: %s\n' "$(intake interval)"
 }
 
-status_schedule() {
-  [ "$#" -eq 0 ] || die 'status takes no arguments'
-  printf 'plist: %s\n' "$PLIST"
-  intake status
-  if [ -f "$PLIST" ]; then
-    printf '%s\n' '--- installed definition ---'
-    cat "$PLIST"
-    if [ "$(uname)" = Darwin ]; then
-      printf '%s\n' '--- launchd status ---'
-      "$LAUNCHCTL" print "gui/$(id -u)/$LABEL" 2>&1 || true
-    fi
-  else
-    printf 'not installed; inspect the proposed definition with: %s render\n' "$0"
-  fi
-}
-
-remove_schedule() {
-  [ "$#" -eq 0 ] || die 'remove takes no arguments'
-  "$LAUNCHCTL" bootout "gui/$(id -u)/$LABEL" >/dev/null 2>&1 || true
-  rm -f "$PLIST"
+fm_launchd_postremove() {
   # Durable records under data/morning-intake are deliberately left in place:
   # removing the schedule is not the same as discarding the intake history.
   intake disarm-check >/dev/null 2>&1 || true
-  printf 'removed: %s\n' "$PLIST"
+}
+
+fm_launchd_status_detail() {
+  intake status
 }
 
 case "${1:-}" in
-  render) shift; [ "$#" -eq 0 ] || die 'render takes no arguments'; render ;;
-  install) shift; install_schedule "$@" ;;
-  status) shift; status_schedule "$@" ;;
-  remove) shift; remove_schedule "$@" ;;
+  render) shift; [ "$#" -eq 0 ] || die 'render takes no arguments'; fm_launchd_render ;;
+  install) shift; [ "$#" -eq 0 ] || die 'install takes no arguments'; fm_launchd_install ;;
+  status) shift; [ "$#" -eq 0 ] || die 'status takes no arguments'; fm_launchd_status ;;
+  remove) shift; [ "$#" -eq 0 ] || die 'remove takes no arguments'; fm_launchd_remove ;;
   -h|--help) usage ;;
   '') usage; exit 2 ;;
   *) die "unknown command: $1" ;;
