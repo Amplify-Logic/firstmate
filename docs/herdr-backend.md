@@ -555,6 +555,37 @@ The same guard is now a first-class production helper, `bin/fm-herdr-lab.sh`, no
 It provisions an isolated never-`default` lab session (names must start with `fm-lab-`), runs every task command through `run <session> ...` with a mandatory `--session` the helper places on every call (before any child-argv `--` delimiter for `agent start`, appended otherwise), and refuses caller-supplied `--session`, any leading option before the subcommand, every server or session-lifecycle subcommand, and any ambiguous child-argv delimiter shape, before invoking Herdr (the exact accepted/refused shapes are enumerated in the `bin/fm-herdr-lab.sh` header comment and pinned by `tests/fm-herdr-lab.test.sh`).
 Destructive teardown goes only through `teardown <session>` (or a deliberate mid-run `stop <session>`), each re-running the refuse-default check immediately before every stop and delete.
 It also adds a before/after fleet-state tripwire: `provision` records the live `default` session before creating the lab session, and `teardown` verifies that recorded state is byte-identical afterward before clearing it, treating any missing, stopped, or changed default session as a hard failure rather than a warning.
+### Rendered-screen inspection: `view`
+
+Herdr draws pane borders, border titles, and the agent sidebar in its TUI **client**, not in its server, so `pane read` - which returns terminal content - cannot observe any of them.
+`fm-herdr-lab.sh view <session> [--cols N] [--rows N] [--seconds N]` closes that gap: it attaches a throwaway client to one lab session on a synthetic pty of an exact size, feeds the client's own output through a terminal emulator, and prints the rendered screen with row numbers.
+`bin/fm-herdr-lab-view.py` is the engine; `python3` and the `pyte` module are required, and the command refuses with a clear message rather than half-running when either is absent.
+
+It is a lab instrument, not a fleet operation, and it is deliberately not a session-lifecycle pass-through:
+
+- `view` accepts only `--cols`, `--rows` and `--seconds`, each a whole number inside a bounded range. Any other argument is refused, so no Herdr subcommand can be smuggled through it.
+- The lab name is validated, this helper's own fleet-state tripwire must exist (so the session is one this helper provisioned), and `fm_herdr_lab_refuse_if_default` runs immediately before the client attaches - the same read-only hard guard the destructive paths use.
+- The engine re-validates the `fm-lab-` pattern and the literal `default` refusal independently of the caller, so it cannot be pointed at the live session even when invoked directly, and it builds the Herdr argv literally from that one validated name.
+- The engine strips **every** ambient `HERDR_*` variable from the client's environment. This is not cosmetic: `HERDR_SOCKET_PATH` points at the server owning the caller's own pane - the captain's live `default` server in normal use - so inheriting it would let an ambient value rather than the validated name decide which session gets attached. Stripping the prefix leaves the positional session name as the only selector, and it is also what lets the viewer run from inside a Herdr pane at all, since Herdr refuses a nested client when it sees the outer `HERDR_ENV`.
+- The caller's stdin is never wired to the pty, so no keystroke can reach the attached client; it only ever draws. The run is bounded by a capped duration, after which the client is signalled and reaped.
+
+Verified on herdr 0.7.4 (2026-09-10). What it established for the primary status surface, in a disposable session at 182x64, with the fleet-state tripwire clean before and after:
+
+| observation | result |
+|---|---|
+| unsplit pane, `report-metadata --title` | **no border and no title rendered at all** |
+| unsplit pane, `pane rename` label | no border and no label rendered |
+| split present, `report-metadata --title` | primary's top border renders the full canonical row |
+| split present, primary zoomed | companion hidden, all its rows reclaimed, border title still rendered |
+| refresh while the primary is unfocused | border row replaced live |
+| border title at 60 and 40 columns | Herdr truncates it itself, visibly, with its own ellipsis |
+| `title` / `display_agent` store | silently clipped to **80 codepoints**, no marker |
+| `report-metadata` across sources | each call REPLACES that source's whole record; tokens merge |
+| 20 sequential `report-metadata` calls | 0.23 s total, ~11 ms each |
+
+The first row is why `bin/fm-status-bar.sh` chrome mode hides the companion pane by zoom instead of closing it: closing it removes the split, and removing the split removes the only border a title can render on.
+[`docs/status-bar.md`](status-bar.md) owns the resulting contract.
+
 Crewmate briefs for tasks that drive Herdr lifecycle get this exact contract embedded by scaffolding with `bin/fm-brief.sh --herdr-lab`; every crewmate brief scaffolded without the flag instead carries a loud not-enabled gate, because the scaffold cannot detect from the caller-supplied repo string whether the task will touch Herdr lifecycle.
 
 ## ID stability across a server restart
