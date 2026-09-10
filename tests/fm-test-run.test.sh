@@ -115,6 +115,9 @@ init_changed_fixture_repo() {
     fm-herdr-layout-preview-e2e.test.sh \
     fm-fork-surface.test.sh \
     fm-test-run.test.sh \
+    fm-gitignore-config.test.sh \
+    fm-secondmate-sync.test.sh \
+    fm-upstream-watch.test.sh \
     fm-backend-cmux.test.sh \
     fm-backend-zellij.test.sh \
     fm-backend-orca.test.sh; do
@@ -157,6 +160,21 @@ test_fork_registry_overlay() {
     || { rm -rf "$tmp"; fail "fork registry covers row must load"; }
   [ "$listed" = "tests/fm-fork-surface.test.sh" ] \
     || { rm -rf "$tmp"; fail "fork registry path expected one direct test, got: $listed"; }
+  git -C "$repo" add bin/fm-fork-surface.sh
+  git -C "$repo" -c user.name=test -c user.email=test@example.invalid commit -qm fork-source
+
+  printf '# fixture ignore\n' > "$repo/.gitignore"
+  listed=$(cd "$repo" && bin/fm-test-run.sh --list --changed --base HEAD) \
+    || { rm -rf "$tmp"; fail "fork registry adds row must load"; }
+  assert_contains "$listed" "tests/fm-fork-surface.test.sh" \
+    "adds row contributes the fork owner"
+  assert_contains "$listed" "tests/fm-gitignore-config.test.sh" \
+    "adds row keeps the upstream config owner"
+  assert_contains "$listed" "tests/fm-secondmate-sync.test.sh" \
+    "adds row keeps the upstream seed-marker owner"
+  assert_contains "$listed" "tests/fm-upstream-watch.test.sh" \
+    "adds row keeps the upstream private-report owner"
+  rm -f "$repo/.gitignore"
 
   mv "$repo/tests/fork-test-registry.conf" "$repo/tests/fork-test-registry.disabled"
   listed=$(cd "$repo" && bin/fm-test-run.sh --list --family pure-contract-unit) \
