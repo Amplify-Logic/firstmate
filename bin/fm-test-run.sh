@@ -56,8 +56,10 @@
 # --fail-on-gate-skip token appears. Other gate skips (first meaningful line
 # matching ^skip:) remain successful and are counted as skipped_gate.
 #
-# Family labels, the changed-file map, and production portable-shard composition
-# live in this script only (one owner). The proven-isolated candidate set remains
+# Upstream family labels, the changed-file map, and production portable-shard
+# composition live in this script, while fork-only family and path ownership
+# lives in tests/fork-test-registry.conf behind a missing-safe hook.
+# The proven-isolated candidate set remains
 # owned by bin/fm-test-isolation-proof.sh; portable parallel shards are a
 # duration-balanced partition of that exact set, and portable serial shards are a
 # duration-balanced partition of the remainder (see docs/fm-test-portable-shards.md).
@@ -67,6 +69,11 @@ set -eu
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT" || exit 1
+
+# shellcheck source=bin/fm-fork-test-registry-lib.sh disable=SC1091
+[ ! -r "$ROOT/bin/fm-fork-test-registry-lib.sh" ] || . "$ROOT/bin/fm-fork-test-registry-lib.sh"
+FORK_REGISTRY=$ROOT/tests/fork-test-registry.conf
+command -v fork_registry_apply >/dev/null 2>&1 && [ -r "$FORK_REGISTRY" ] && fork_registry_apply "$FORK_REGISTRY"
 
 MODE=
 LIST_ONLY=0
@@ -117,6 +124,8 @@ now_ms() {
 # Primary family for one tests/*.test.sh basename. Unmapped scripts are
 # unclassified so new tests are still runnable and visible in summaries.
 family_for_basename() {
+  command -v fork_registry_family_for_basename >/dev/null 2>&1 \
+    && fork_registry_family_for_basename "$1" && return 0
   case "$1" in
     fm-action-gateway-v2.test.sh|fm-arm-pretool-check.test.sh|fm-ask-user-authority.test.sh|\
     fm-brief.test.sh|fm-captain-translation-contract.test.sh|\
@@ -125,7 +134,7 @@ family_for_basename() {
     fm-decision-surface.test.sh|fm-dispatch-select.test.sh|fm-ensure-agents-md.test.sh|fm-grok-harness.test.sh|\
     fm-read.test.sh|fm-chart-room.test.sh|fm-overlay.test.sh|fm-bridge-view.test.sh|\
     fm-order.test.sh|fm-tray.test.sh|\
-    fm-herdr-lab.test.sh|fm-instruction-owners.test.sh|fm-lint.test.sh|fm-fork-surface.test.sh|\
+    fm-herdr-lab.test.sh|fm-instruction-owners.test.sh|fm-lint.test.sh|\
     fm-baby-menu-quota.test.sh|\
     fm-install-herdr.test.sh|fm-nm-test-contract.test.sh|fm-no-mistakes-ownership.test.sh|\
     fm-pi-primary-types.test.sh|fm-operational-input.test.sh|\
@@ -777,6 +786,8 @@ families_for_test_reference() {
 # Never expands to the complete suite.
 families_for_changed_path() {
   local path=$1
+  command -v fork_registry_scripts_for_path >/dev/null 2>&1 \
+    && fork_registry_scripts_for_path "$path" && return 0
   case "$path" in
     tests/fm-test-run.test.sh)
       printf '%s\n' pure-contract-unit
@@ -790,8 +801,7 @@ families_for_changed_path() {
       # resolution in the caller; emit a marker family of __script__
       printf '%s\n' "__script__:$(basename "$path")"
       ;;
-    bin/fm-test-run.sh|bin/fm-test-isolation-proof.sh|bin/fm-fork-surface.sh|\
-    fork-surface.conf|fork-surface.upstream-base|docs/fork-surface.md)
+    bin/fm-test-run.sh|bin/fm-test-isolation-proof.sh)
       printf '%s\n' pure-contract-unit
       ;;
     bin/backends/herdr*|bin/fm-herdr-lab.sh|tests/herdr-test-safety.sh)
@@ -942,7 +952,6 @@ families_for_changed_path() {
       printf '%s\n' "__script__:fm-gitignore-config.test.sh"
       printf '%s\n' "__script__:fm-secondmate-sync.test.sh"
       printf '%s\n' "__script__:fm-upstream-watch.test.sh"
-      printf '%s\n' "__script__:fm-fork-surface.test.sh"
       ;;
     README.md|ONBOARDING.md|LICENSE|assets/*|docs/*)
       # Documentation-only prose with no behavior test owner (see the
