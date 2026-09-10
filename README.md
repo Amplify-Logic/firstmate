@@ -245,3 +245,5 @@ Contributions are welcome - see [CONTRIBUTING.md](CONTRIBUTING.md) for the workf
 ## License
 
 MIT - see [LICENSE](LICENSE).
+
+The vendor logos inlined in the tracked quota widget under `assets/baby-menu/` are third-party marks used to identify each vendor's own service, not code this project can relicense; [docs/baby-menu-quota-widget.md](docs/baby-menu-quota-widget.md) owns their provenance record and the obligations that come with carrying them.
