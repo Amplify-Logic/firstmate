@@ -271,6 +271,63 @@ closing one of those would destroy live work.
 So when the response names no pane, nothing is closed at all; an unused pane is strictly better than a
 destroyed one.
 
+### Herdr chrome mode: reclaiming the companion's empty rows
+
+On a large tab the Herdr companion's proportional floor leaves the one-row status strip sitting in a
+six-row pane: a border, the status row, three empty rows, and a border.
+Chrome mode reclaims those rows without giving up any canonical field.
+
+The canonical row is published to the PRIMARY pane's own border title, where it costs no rows at all,
+and the companion pane is then hidden by zooming the primary.
+
+Four measured facts define the shape, all captured on herdr 0.7.4 through
+[`bin/fm-herdr-lab.sh`](../bin/fm-herdr-lab.sh) `view` in a disposable `fm-lab-*` session:
+
+- **A pane with no split has no border whatsoever.** Neither `pane report-metadata --title` nor
+  `pane rename` renders anything on an unsplit pane. So the companion pane must keep EXISTING for a
+  border to exist; the reclaim is hiding it, never closing it. An earlier record that the companion
+  could be closed outright was measured with the split still present and is superseded here.
+- **With the split present, the primary's top border renders the row in full**, every canonical field
+  included, and it keeps refreshing while the primary is unfocused.
+- **Zooming the primary hides the companion and keeps that border title.** The primary occupies every
+  row through its own bottom border, Herdr marks the tab zoomed, and the status row still reads from
+  the top border. This is the reclaim.
+- **Herdr truncates the border title itself, visibly**, appending its own ellipsis - verified at both
+  60 and 40 columns. Width is therefore Herdr's concern and this renderer does not second-guess it.
+
+The row is prefixed with a compact visible role marker, `FM` for an ordinary primary and `LAB` for a
+lab primary, so the guarded primary identity is not displaced by the status fields.
+The marker leads the row, which is also the one position a clip can never reach.
+
+Two guarantees are load-bearing:
+
+- **The border title is published under its own source**, `firstmate-primary-status-v1`, never the
+  launcher's `firstmate-primary-visible-v1`. Herdr REPLACES a source's entire metadata record on every
+  `report-metadata` call, so publishing under the launcher's source would wipe the primary's own
+  display-agent and supervision state labels on the first refresh. A separate source contributes only
+  this title and leaves the launcher's record resolving untouched.
+- **Herdr stores a border title clipped to 80 codepoints, silently.** The renderer therefore drops
+  whole fields from the right until the row fits and appends a visible marker, so the rightmost fields
+  can never disappear without a sign. Fields are dropped on the separator rather than by offset,
+  because the row is full of multibyte glyphs and an offset slice could split one.
+
+The row is published with a `--ttl-ms` of two and a half refresh intervals, so a renderer that dies
+lets the border row expire instead of freezing a stale fleet count on the captain's screen.
+
+Zoom is applied exactly once, by `bin/fm-primary.sh`, and only when the tab holds nothing but the
+primary and the companion just created.
+The renderer never re-applies it: it only RELEASES the zoom, on a slow cadence, if a third pane later
+appears in that tab, and it stops checking once released.
+That keeps two properties at the same time - a co-tenant pane's live work is never hidden, and a
+captain who deliberately unzooms is not fought once a second.
+
+The fallback chain has no gap.
+The companion keeps drawing its own in-pane row exactly as before, so an unzoomed primary, a Herdr
+below the verified presentation protocol, a refused zoom, and a failing metadata call all degrade to
+the surface that shipped before chrome mode - the only consequence is that the empty rows are not
+reclaimed.
+Chrome mode is also off entirely for tmux, and refuses a chrome pane that is the companion itself.
+
 ## Local activation after merge
 
 Claude's earlier prototype is local to the primary home's `.claude/settings.local.json`.
