@@ -155,6 +155,34 @@ FM_SUP_SHIFT_RECORD_NAME=.shift
 # shellcheck disable=SC2034 # Read by callers after sourcing.
 FM_SUP_LAST_CHECK_NAME=.supervision-sentinel-last-check
 
+# Canonical basename of the host sentinel's launchd job manifest. The interval
+# the loaded job actually runs on is recorded there and nowhere else, so every
+# reader derives the path from this name rather than spelling it again.
+# shellcheck disable=SC2034 # Read by callers after sourcing.
+FM_SUP_PLIST_NAME=.supervision-sentinel.plist
+
+# fm_supervision_loaded_interval <state-dir>
+# Print the check interval the registered launchd job runs on, read back from the
+# job manifest that registration wrote. The ambient FM_SENTINEL_INTERVAL_SECS of
+# whoever happens to be asking says nothing about the loaded job, so a read-only
+# surface that judged a liveness proof against it would refuse a home armed with a
+# non-default interval and offer a fix that changes nothing. Fails closed: a
+# manifest that is missing or carries no usable interval returns non-zero rather
+# than a guess, because the caller cannot then prove the job's schedule at all.
+fm_supervision_loaded_interval() {
+  local plist="$1/$FM_SUP_PLIST_NAME" interval
+  [ -f "$plist" ] || return 1
+  interval=$(awk '
+    /<key>StartInterval<\/key>/ { want = 1; next }
+    want && match($0, /<integer>[0-9]+<\/integer>/) {
+      print substr($0, RSTART + 9, RLENGTH - 19); exit
+    }
+    want { exit }' "$plist" 2>/dev/null) || return 1
+  case "$interval" in ''|*[!0-9]*) return 1 ;; esac
+  [ "$interval" -gt 0 ] || return 1
+  printf '%s\n' "$interval"
+}
+
 # The launchctl the host sentinel registers and verifies through. Tests point it
 # at a fake so no sentinel path ever touches real launchd.
 fm_supervision_sentinel_launchctl() {

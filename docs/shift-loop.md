@@ -27,6 +27,8 @@ So `start` checks all of the following first, and a failure in any of them refus
 - **Supervision.** This home's session lock must be held and a watcher must be live: a question nobody is awake to hear is the same as no loop at all.
 - **A host sentinel that can fire.** The launchd sentinel described in [`wedge-alarm.md`](wedge-alarm.md) is the only thing that detects a watcher outage during a shift, so it must not be deliberately disarmed, must have no failed registration on record, must have completed a recent scheduled check, and must exist on this host at all.
   Each of those is read from the sentinel's own durable records, so `status` stays read-only, and each refusal names `bin/fm-supervision-sentinel.sh enable` as the fix where that is the fix.
+  What counts as recent is measured against the interval recorded in the loaded job's own manifest, never against the `FM_SENTINEL_INTERVAL_SECS` of whoever happens to be asking, so a home armed on a slower interval is not refused by a bound it never agreed to.
+  A manifest that is missing or carries no usable interval fails closed: the schedule cannot be confirmed, so the shift is refused rather than assumed to be covered.
 
 ## What it arms
 
@@ -35,8 +37,12 @@ Everything here is an existing owner being started, not a new mechanism:
 - Away mode through `bin/fm-afk-launch.sh start`, which is what keeps firstmate answering while he is out.
   The native background path is deliberately not used: on a memory-constrained Mac, memory pressure killed that daemon three times in one night, so the tracked-terminal launch owner is the one that survives a shift.
 - The outage self-check, an ordinary watcher check registered through `bin/fm-check-register.sh`.
-- The supervision alarm route: one sentinel-delimited `command:` directive appended to `config/wedge-alarm`, so the host sentinel's watcher-outage alarm is spoken instead of only raising a desktop banner he cannot see.
+- The supervision alarm route: one sentinel-delimited block appended to `config/wedge-alarm`, so the host sentinel's watcher-outage alarm is spoken instead of only raising a desktop banner he cannot see.
+  The block carries two directives: the `command:` one that speaks into the glasses, and an `auto` one beside it.
+  `auto` is there because an absent `config/wedge-alarm` already means auto, so installing a lone directive into a home that had no file would switch this home's platform default channel off for every alarm, shift or not.
+  It is also what keeps a block that outlives its shift record from leaving the home with no reachable channel at all, which matters because `bin/fm-home-port.sh` ports `config/` while `state/` never ports.
   `stop` removes exactly that block and leaves any directive the captain wrote himself untouched.
+  A block whose directives were removed by hand reads as DOWN rather than as armed: the begin sentinel alone is not a route to his ear.
 
 Then it speaks one short confirmation, so he hears that the loop is up rather than having to look at a screen.
 If that line cannot be spoken even though every check passed, the command says so loudly and exits non-zero: he must never leave believing he heard a confirmation he did not.
@@ -60,6 +66,8 @@ While `state/.shift` exists it treats the home as worth supervising even with no
 That matters most when the away daemon dies, since the watcher is its child and no registered check runs at all after that; the host sentinel is then the only thing left that can speak.
 Its alarm goes out through the `command:` directive `start` installed, which runs `fm-shift.sh alarm`, so a dead watcher is spoken once the beacon grace has passed plus one check interval, not instantly.
 That alarm is spoken as one plain line; the raw outage summary carries task ids and durations and is read only to tell the two alarm kinds apart, never relayed.
+`fm-shift.sh alarm` is quiet on stdout and answers with its exit status alone, which is non-zero whenever the line was not spoken - no shift armed, no announce command, or an announce path that refused.
+The alarm owner counts a zero exit as delivered and advances the sentinel's backoff on it, so a channel that consumed an alarm without speaking would be worse than no channel at all; a failed one stays pending for that owner's own retry and falls through to the other configured channels.
 
 ## What it deliberately does not do
 

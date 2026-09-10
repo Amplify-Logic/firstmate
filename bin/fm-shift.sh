@@ -41,7 +41,14 @@
 #                         Internal. The spoken end of the config/wedge-alarm
 #                         `command:` channel installed by start: it turns a
 #                         supervision-outage or injection-wedge summary into one
-#                         short spoken line. Silent unless a shift is armed.
+#                         short spoken line. Quiet on stdout either way; it is
+#                         the exit status that matters, and it is non-zero
+#                         whenever the line was not spoken, including when no
+#                         shift is armed. The alarm owner counts a zero exit as
+#                         delivered and advances its backoff on it, so a channel
+#                         that consumed an alarm without speaking would be worse
+#                         than no channel at all.
+# End usage.
 #
 # WHAT CANNOT BE SPOKEN WHILE IT IS BROKEN: the glasses have exactly one channel
 # to the captain's ear, and it is the mailbox. A mailbox outage therefore cannot
@@ -60,6 +67,11 @@
 # channel that start installs, and that channel is `fm-shift.sh alarm`, which
 # speaks one plain line. So a dead watcher or a dead away daemon is spoken
 # within the sentinel's beacon grace plus one check interval, not immediately.
+# That block also carries an `auto` directive beside the `command:` one, because
+# an absent config/wedge-alarm means auto: installing a lone directive into a
+# home that had no file would switch this home's platform default channel off,
+# and a block that outlives its shift record would then leave the home with no
+# reachable channel at all.
 # Because that sentinel is the only detector of the watcher half, start
 # refuses unless it can actually fire: not deliberately disarmed, no failed
 # launchd registration on record, a recent launchd-spawned check on record,
@@ -105,6 +117,10 @@ CHECK_TRUST="$STATE/$SHIFT_ID.check-trust"
 WEDGE_CONFIG="$CONFIG/wedge-alarm"
 WEDGE_BEGIN="# >>> fm-shift.sh - removed by: fm-shift.sh stop"
 WEDGE_END="# <<< fm-shift.sh"
+WEDGE_NOTE='# auto keeps this home reachable if this block ever outlives its shift.'
+# An absent config/wedge-alarm means auto, so a lone directive here would switch
+# this home's platform default channel off. The block carries both.
+WEDGE_AUTO=auto
 
 MAILBOX_LABEL="${FM_SHIFT_MAILBOX_LABEL:-com.firstmate.glasses-voice-mailbox}"
 KEEPAWAKE_LABEL="${FM_SHIFT_KEEPAWAKE_LABEL:-com.firstmate.glasses-keepawake}"
@@ -126,7 +142,15 @@ GRACE="${FM_GUARD_GRACE:-300}"
 # call at the end speaks exactly what was proven.
 ARM_LINE='Shift loop armed. Ask me anything while you ride.'
 
-usage() { sed -n '22,47p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
+# Marker-delimited rather than line-numbered: an edit to the header above must
+# never silently truncate --help mid-sentence.
+usage() {
+  awk '
+    /^# Usage:/ { printing = 1 }
+    /^# End usage\./ { exit }
+    printing { sub(/^# ?/, ""); print }
+  ' "${BASH_SOURCE[0]}"
+}
 
 have() { command -v "$1" >/dev/null 2>&1; }
 
@@ -150,7 +174,8 @@ say() { printf '%s\n' "$*"; }
 warn() { printf 'fm-shift: %s\n' "$*" >&2; }
 
 append_log() {  # <event> <detail>
-  printf '%s %s %s\n' "$(now_iso)" "$1" "$2" >> "$SHIFT_LOG"
+  printf '%s %s %s\n' "$(now_iso)" "$1" "$2" >> "$SHIFT_LOG" \
+    || warn "could not record the '$1' event in $SHIFT_LOG; the stop report will be missing it"
 }
 
 # ---------------------------------------------------------------------------
@@ -326,7 +351,7 @@ probe_selfcheck() {
 
 probe_alarm_route() {
   PROBE_FIX=
-  if [ ! -f "$WEDGE_CONFIG" ] || ! grep -Fqx "$WEDGE_BEGIN" "$WEDGE_CONFIG"; then
+  if ! wedge_block_intact; then
     PROBE_LINE='supervision alarm: DOWN - a supervision outage would not reach your ear'
     PROBE_FIX='fm-shift.sh start routes it through the announce path'
     return 1
@@ -366,8 +391,14 @@ probe_sentinel_live() {
     PROBE_FIX="$sentinel enable"
     return 1
   fi
-  interval=${FM_SENTINEL_INTERVAL_SECS:-60}
-  case "$interval" in ''|*[!0-9]*) interval=60 ;; esac
+  # The freshness bound has to be the loaded job's own schedule. Judging the
+  # proof against this shell's FM_SENTINEL_INTERVAL_SECS would refuse a home
+  # armed with a slower interval and offer a fix that changes nothing.
+  if ! interval=$(fm_supervision_loaded_interval "$STATE"); then
+    PROBE_LINE="supervision alarm: DOWN - the host sentinel's launchd job record for this home is missing or unreadable, so its check schedule cannot be confirmed"
+    PROBE_FIX="$sentinel enable"
+    return 1
+  fi
   max_age=$(fm_supervision_check_max_age "$interval")
   proof="$STATE/$FM_SUP_LAST_CHECK_NAME"
   if [ ! -f "$proof" ]; then
@@ -390,10 +421,8 @@ probe_sentinel_live() {
 # by stop. It stays inside the watcher's per-check timeout: one health request,
 # no repair, no second copy of anything.
 # ---------------------------------------------------------------------------
-write_check() {
-  local tmp
-  tmp=$(mktemp "$STATE/.fm-shift-check.XXXXXX") || return 1
-  cat > "$tmp" <<CHECK_EOF
+render_check() {
+  cat <<CHECK_EOF
 #!/bin/bash
 # Generated by bin/fm-shift.sh start; removed by bin/fm-shift.sh stop.
 # Prints one line only when firstmate should wake: the moment the voice loop
@@ -404,8 +433,8 @@ ANNOUNCE=$(printf '%q' "$ANNOUNCE")
 HEALTH_URL=$(printf '%q' "$HEALTH_URL")
 CURL_TIMEOUT=$(printf '%q' "$CURL_TIMEOUT")
 ARMED="\$STATE/$(printf '%q' "$FM_SUP_SHIFT_RECORD_NAME")"
-MARK="\$STATE/.shift-mailbox-outage"
-LOG="\$STATE/.shift-log"
+MARK="\$STATE/$(printf '%q' "${OUTAGE_MARK##*/}")"
+LOG="\$STATE/$(printf '%q' "${SHIFT_LOG##*/}")"
 
 [ -f "\$ARMED" ] || exit 0
 # No way to ask: stay silent rather than report a false outage.
@@ -445,6 +474,17 @@ printf '%s down voice loop health check answered %s\n' "\$NOW" "\${CODE:-nothing
 printf 'glasses voice loop is down: health answered %s\n' "\${CODE:-nothing}"
 exit 0
 CHECK_EOF
+}
+
+# A short write (ENOSPC, quota) still leaves a runnable file that exits at its
+# first guard, and fm-check-register.sh binds bytes without ever reading them, so
+# the truncation would register clean and report ok while watching nothing. The
+# render's status and the rendered file's syntax are both checked before install.
+write_check() {
+  local tmp
+  tmp=$(mktemp "$STATE/.fm-shift-check.XXXXXX") || return 1
+  render_check > "$tmp" || { rm -f "$tmp"; return 1; }
+  bash -n "$tmp" 2>/dev/null || { rm -f "$tmp"; return 1; }
   chmod 0700 "$tmp" || { rm -f "$tmp"; return 1; }
   mv -f "$tmp" "$CHECK" || { rm -f "$tmp"; return 1; }
 }
@@ -470,6 +510,27 @@ wedge_block_remove() {
   fi
 }
 
+# The exact command: directive this shift installs, generated in one place so
+# the installer and the predicate that verifies the block can never disagree.
+wedge_command_directive() {
+  # shellcheck disable=SC2016  # $1 must stay literal: the channel owner runs this through `sh -c "<cmd>" fm-wedge-alarm "<summary>"`.
+  printf 'command:%s alarm "$1"\n' "$(printf '%q' "$SCRIPT_DIR/fm-shift.sh")"
+}
+
+# True only when the block is present AND carries both directives it is supposed
+# to. A begin sentinel over a block a hand edit emptied delivers nothing, so
+# presence alone must never read as a route to the captain's ear.
+wedge_block_intact() {
+  local block
+  [ -f "$WEDGE_CONFIG" ] || return 1
+  block=$(awk -v begin="$WEDGE_BEGIN" -v end="$WEDGE_END" '
+    $0 == begin { inside = 1; next }
+    $0 == end { inside = 0; next }
+    inside { print }' "$WEDGE_CONFIG") || return 1
+  printf '%s\n' "$block" | grep -Fqx "$WEDGE_AUTO" || return 1
+  printf '%s\n' "$block" | grep -Fqx "$(wedge_command_directive)"
+}
+
 wedge_block_install() {
   local lead=
   wedge_block_remove || return 1
@@ -479,10 +540,10 @@ wedge_block_install() {
   fi
   {
     printf '%s%s\n' "$lead" "$WEDGE_BEGIN"
-    # shellcheck disable=SC2016  # $1 must stay literal: the channel owner runs this through `sh -c "<cmd>" fm-wedge-alarm "<summary>"`.
-    printf 'command:%s alarm "$1"\n' "$(printf '%q' "$SCRIPT_DIR/fm-shift.sh")"
-    printf '%s\n' "$WEDGE_END"
+    wedge_command_directive
+    printf '%s\n' "$WEDGE_NOTE" "$WEDGE_AUTO" "$WEDGE_END"
   } >> "$WEDGE_CONFIG" || return 1
+  wedge_block_intact
 }
 
 # ---------------------------------------------------------------------------
@@ -491,6 +552,10 @@ wedge_block_install() {
 FAILED_LINES=()
 FAILED_FIXES=()
 OK_LINES=()
+# True once away mode is genuinely running because of this run. Every refusal
+# after that point has left something standing, so it may not print the
+# nothing-was-armed reassurance that the preflight refusals earn.
+AWAY_STANDING=false
 
 run_probe() {  # <probe function>
   if "$1"; then
@@ -533,7 +598,11 @@ refuse() {
     printf '  %s\n' "${FAILED_LINES[$i]}" >&2
     [ -z "${FAILED_FIXES[$i]}" ] || printf '      fix: %s\n' "${FAILED_FIXES[$i]}" >&2
   done
-  printf '\nNothing was armed, on purpose: a half-armed shift is worse than a refused one.\n' >&2
+  if [ "$AWAY_STANDING" = true ]; then
+    printf '\nThe shift loop is not armed, but away mode is still running: the fix above names the command that stands it down.\n' >&2
+  else
+    printf '\nNothing was armed, on purpose: a half-armed shift is worse than a refused one.\n' >&2
+  fi
   exit 1
 }
 
@@ -567,9 +636,15 @@ cmd_start() {
 
   if ! "$AFK_LAUNCH" start; then
     FAILED_LINES+=('away mode: DOWN - it would not start')
-    FAILED_FIXES+=("run $AFK_LAUNCH start by hand and read its error; without away mode firstmate stops answering the moment you leave")
+    if [ -e "$STATE/.afk" ]; then
+      AWAY_STANDING=true
+      FAILED_FIXES+=("run $AFK_LAUNCH start by hand and read its error; it failed with away mode left running, so stand that down with $AFK_RETURN")
+    else
+      FAILED_FIXES+=("run $AFK_LAUNCH start by hand and read its error; without away mode firstmate stops answering the moment you leave")
+    fi
     refuse
   fi
+  AWAY_STANDING=true
 
   started_epoch=$(now_epoch)
   if [ "$rearm" = false ]; then
@@ -579,7 +654,9 @@ cmd_start() {
              printf 'started_epoch=%s\n' "$started_epoch"
              printf 'started_iso=%s\n' "$(now_iso)"
            } > "$ARMED" ); then
-      warn 'could not record the armed shift; away mode is running, stand it down with fm-shift.sh stop'
+      # No state/.shift exists, so fm-shift.sh stop would take its nothing-armed
+      # branch and deliberately leave away mode alone. Name its real owner.
+      warn "could not record the armed shift; away mode is running and no shift is recorded, so stand it down with $AFK_RETURN rather than fm-shift.sh stop"
       exit 1
     fi
     append_log armed 'shift armed'
@@ -589,7 +666,13 @@ cmd_start() {
     rm -f "$CHECK" "$CHECK_TRUST"
     [ "$rearm" = true ] || rm -f "$ARMED"
     FAILED_LINES+=('outage self-check: DOWN - it could not be registered')
-    FAILED_FIXES+=('without it an outage while you are out would reach you as silence; away mode is still running, stand it down with fm-shift.sh stop')
+    if [ "$rearm" = true ]; then
+      FAILED_FIXES+=('without it an outage while you are out would reach you as silence; away mode is still running, stand it down with fm-shift.sh stop')
+    else
+      # The armed record was just removed above, so stop would take its
+      # nothing-armed branch and leave away mode running.
+      FAILED_FIXES+=("without it an outage while you are out would reach you as silence; away mode is still running and no shift is recorded, so stand it down with $AFK_RETURN rather than fm-shift.sh stop")
+    fi
     refuse
   fi
 
@@ -638,9 +721,17 @@ shift_mailbox_line() {  # <started_iso>
     printf 'questions asked: unknown (the mailbox database could not be read)\n'
     return 0
   }
+  # An empty result is not zero questions; a read that produced nothing must
+  # report unknown rather than a count the mailbox never gave.
+  case "$counts" in
+    *'|'*) ;;
+    *) printf 'questions asked: unknown (the mailbox database returned no count)\n'; return 0 ;;
+  esac
   total=${counts%%|*}
   answered=${counts##*|}
-  [ -n "$total" ] || total=0
+  case "$total" in
+    ''|*[!0-9]*) printf 'questions asked: unknown (the mailbox count could not be read)\n'; return 0 ;;
+  esac
   case "$answered" in ''|*[!0-9]*) answered=0 ;; esac
   printf 'questions asked: %s (%s answered)\n' "$total" "$answered"
 }
@@ -648,7 +739,7 @@ shift_mailbox_line() {  # <started_iso>
 # Outage episodes this shift, from the self-check's own durable log lines.
 shift_outage_line() {  # <started_iso>
   local downs ups
-  [ -f "$SHIFT_LOG" ] || { printf 'interruptions: none\n'; return 0; }
+  [ -f "$SHIFT_LOG" ] || { printf 'interruptions: unknown (no shift log was written)\n'; return 0; }
   downs=$(awk -v since="$1" '$2 == "down" && $1 >= since' "$SHIFT_LOG" | wc -l | tr -d ' ')
   ups=$(awk -v since="$1" '$2 == "up" && $1 >= since' "$SHIFT_LOG" | wc -l | tr -d ' ')
   if [ "$downs" -eq 0 ]; then
@@ -696,7 +787,15 @@ cmd_stop() {
     append_log stood-down 'shift stood down'
   fi
 
-  say 'Shift stood down.'
+  # Away mode still up means the teardown above did not run: the shift is still
+  # armed, its self-check is still registered and its alarm route is still
+  # installed. Saying it stood down would be the same lie about supervision
+  # state this command exists to remove.
+  if [ -e "$STATE/.afk" ]; then
+    say 'Shift NOT stood down: away mode is still running, so the shift stays armed.'
+  else
+    say 'Shift stood down.'
+  fi
   say "  ran: $(duration_text "$ran") ($(local_hm "$started_epoch") to $(local_hm "$now"))"
   say "  $(shift_mailbox_line "$started_iso")"
   say "  $(shift_outage_line "$started_iso")"
@@ -744,9 +843,14 @@ cmd_status() {
 # The spoken end of the config/wedge-alarm command: channel. The raw summary
 # carries task ids and durations that must never be spoken, so it is read only
 # to tell the two alarm kinds apart, never relayed.
+# Exit status is the whole contract: the alarm owner counts a zero exit as
+# delivered and advances the sentinel's backoff on it, so anything short of a
+# spoken line must exit non-zero and leave the alarm pending for its own retry
+# and fallthrough. A block that outlives state/.shift, or a home ported without
+# it, then reads as a failed channel rather than as a black hole.
 cmd_alarm() {
   local summary=${1:-} line
-  [ -f "$ARMED" ] || return 0
+  [ -f "$ARMED" ] || return 1
   case "$summary" in
     *'SUPERVISION DOWN'*)
       line='Firstmate stopped watching. Your questions are not being picked up until that is fixed.' ;;

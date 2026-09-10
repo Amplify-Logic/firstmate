@@ -122,9 +122,47 @@ exit "${FAKE_AFK_RETURN_EXIT:-0}"
 SH
 
   chmod +x "$fakebin"/* "$home/announce" "$home/afk-launch" "$home/afk-return"
-  # A live host sentinel: launchd completed a scheduled check just now.
+  # A live host sentinel: a registered launchd job on the default interval, and a
+  # scheduled check it completed just now. The job record is what the freshness
+  # bound is read from, exactly as on the captain Mac.
+  write_sentinel_job "$home" 60
   date +%s > "$home/state/.supervision-sentinel-last-check"
   printf '%s\n' "$tmp"
+}
+
+# The launchd job manifest bin/fm-supervision-sentinel.sh writes at arm time,
+# reduced to the one key any reader here cares about.
+write_sentinel_job() {  # <home> <interval-seconds>
+  cat > "$1/state/.supervision-sentinel.plist" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>works.earendil.firstmate.supervision-sentinel-v1.test</string>
+  <key>StartInterval</key>
+  <integer>$2</integer>
+</dict>
+</plist>
+PLIST
+}
+
+# Portable relative backdating; GNU touch has no -A and BSD date has no -d.
+backdate_secs() {  # <path> <seconds>
+  local target stamp
+  target=$(( $(date +%s) - $2 ))
+  stamp=$(date -r "$target" +%Y%m%d%H%M.%S 2>/dev/null) \
+    || stamp=$(date -d "@$target" +%Y%m%d%H%M.%S 2>/dev/null) \
+    || fail 'this host can format neither BSD nor GNU relative timestamps'
+  touch -t "$stamp" "$1"
+}
+
+# The directives the alarm owner would actually read from a wedge-alarm config:
+# every non-empty, non-comment line, which is exactly its own rule.
+wedge_directives() {  # <config>
+  awk '{ sub(/^[[:space:]]+/, ""); sub(/[[:space:]]+$/, "") }
+       $0 == "" { next }
+       /^#/ { next }
+       { print }' "$1"
 }
 
 # A live process the session-lock reader accepts as this home's holder, paired
@@ -365,6 +403,17 @@ test_start_refuses_when_the_host_sentinel_cannot_fire() {
   expect_code 1 "$rc" 'a sentinel that never checked refuses the shift'
   assert_contains "$out" 'has ever completed' 'the refusal says no check has completed'
 
+  # A registered job whose manifest is gone: the schedule cannot be confirmed,
+  # so the shift fails closed rather than assuming the default interval.
+  tmp=$(make_shift_home)
+  rm -f "$tmp/home/state/.supervision-sentinel.plist"
+  hold_session_lock "$tmp/home"
+  rc=0; out=$(run_shift "$tmp" start 2>&1) || rc=$?
+  expect_code 1 "$rc" 'a sentinel with no job record refuses the shift'
+  assert_contains "$out" 'launchd job record' 'the refusal names the missing job record'
+  assert_contains "$out" 'fm-supervision-sentinel.sh enable' 'the refusal names the enable command'
+  assert_absent "$tmp/home/state/.shift" 'nothing was armed'
+
   # A host with no scheduler at all is reported plainly, never as covered.
   tmp=$(make_shift_home)
   hold_session_lock "$tmp/home"
@@ -373,6 +422,35 @@ test_start_refuses_when_the_host_sentinel_cannot_fire() {
   assert_contains "$out" 'no verified host scheduler' 'the refusal names the missing capability'
   assert_absent "$tmp/home/state/.shift" 'nothing was armed'
   pass 'start: refuses when the host sentinel is disarmed, unregistered, silent, or impossible on this host'
+}
+
+# The freshness bound has to come from the job launchd actually loaded. Reading
+# it from this shell's FM_SENTINEL_INTERVAL_SECS instead would refuse a home
+# armed on a slower interval and hand the captain a fix that changes nothing.
+test_sentinel_freshness_uses_the_loaded_jobs_own_interval() {
+  local tmp out rc=0
+  # A job registered at 300s with a 200s-old proof is live: 200 is well inside
+  # two intervals plus slack, and it would be stale against the 60s default.
+  tmp=$(make_shift_home)
+  write_sentinel_job "$tmp/home" 300
+  backdate_secs "$tmp/home/state/.supervision-sentinel-last-check" 200
+  out=$(FM_SENTINEL_INTERVAL_SECS=60 arm_shift "$tmp" 2>&1) || rc=$?
+  expect_code 0 "$rc" 'a slower registered interval still arms'
+  assert_contains "$out" 'Shift loop armed.' 'the shift armed against the job own interval'
+  assert_present "$tmp/home/state/.shift" 'the shift was recorded'
+
+  # The same proof against a job registered at the 60s default is stale, and the
+  # caller asking with a generous FM_SENTINEL_INTERVAL_SECS cannot make it fresh.
+  tmp=$(make_shift_home)
+  write_sentinel_job "$tmp/home" 60
+  backdate_secs "$tmp/home/state/.supervision-sentinel-last-check" 200
+  hold_session_lock "$tmp/home"
+  rc=0
+  out=$(FM_SENTINEL_INTERVAL_SECS=3600 run_shift "$tmp" start 2>&1) || rc=$?
+  expect_code 1 "$rc" 'a stale proof refuses whatever the caller environment says'
+  assert_contains "$out" 'last host sentinel check' 'the refusal names the stale proof'
+  assert_absent "$tmp/home/state/.shift" 'nothing was armed'
+  pass 'sentinel: the freshness bound is read from the loaded job, not the calling shell'
 }
 
 test_status_is_honest_when_the_host_sentinel_cannot_fire() {
@@ -535,12 +613,68 @@ test_supervision_alarm_speaks_without_relaying_internal_detail() {
   pass 'alarm: a supervision outage is spoken as one plain line, with no ids relayed'
 }
 
-test_supervision_alarm_is_silent_when_no_shift_is_armed() {
-  local tmp
+# The alarm owner counts a zero exit as delivered and advances the sentinel's
+# backoff on it, so an alarm that did not speak must never exit 0: a block that
+# outlived its shift, or a home ported without state/.shift, would otherwise
+# swallow every supervision alarm this home raises.
+test_supervision_alarm_fails_rather_than_consuming_an_alarm_it_cannot_speak() {
+  local tmp out rc
+
+  # No shift armed: the state a ported home or a stale block leaves behind.
   tmp=$(make_shift_home)
-  run_shift "$tmp" alarm 'SUPERVISION DOWN: down for 1m.'
+  rc=0; out=$(run_shift "$tmp" alarm 'SUPERVISION DOWN: down for 1m.' 2>&1) || rc=$?
+  [ "$rc" -ne 0 ] || fail 'the alarm reported delivered with no shift armed'
+  [ -z "$out" ] || fail "the alarm should stay quiet on stdout: $out"
   [ ! -s "$tmp/announce.log" ] || fail 'the alarm spoke with no shift armed'
-  pass 'alarm: silent when no shift is armed'
+
+  # Armed, but the announce path refuses the line.
+  tmp=$(make_shift_home)
+  arm_shift "$tmp" >/dev/null 2>&1
+  : > "$tmp/announce.log"
+  rc=0
+  FAKE_ANNOUNCE_EXIT=3 run_shift "$tmp" alarm 'SUPERVISION DOWN: down for 1m.' >/dev/null 2>&1 || rc=$?
+  [ "$rc" -ne 0 ] || fail 'the alarm reported delivered while the announce path refused it'
+
+  # Armed, but there is no announce command at all.
+  rm -f "$tmp/home/announce"
+  rc=0
+  run_shift "$tmp" alarm 'SUPERVISION DOWN: down for 1m.' >/dev/null 2>&1 || rc=$?
+  [ "$rc" -ne 0 ] || fail 'the alarm reported delivered with no announce command'
+  pass 'alarm: exits non-zero whenever it did not speak, so delivery stays pending'
+}
+
+# An absent config/wedge-alarm means auto, so a lone directive would switch this
+# home's platform default channel off for every alarm, shift or not.
+test_alarm_route_keeps_the_platform_default_channel() {
+  local tmp directives
+  tmp=$(make_shift_home)
+  assert_absent "$tmp/home/config/wedge-alarm" 'the home starts with no wedge-alarm config'
+  arm_shift "$tmp" >/dev/null 2>&1
+  directives=$(wedge_directives "$tmp/home/config/wedge-alarm")
+  printf '%s\n' "$directives" | grep -Fqx 'auto' \
+    || fail "the installed block dropped the platform default: $directives"
+  printf '%s\n' "$directives" | grep -q 'fm-shift.sh alarm' \
+    || fail "the installed block carries no command directive: $directives"
+  run_shift "$tmp" stop >/dev/null 2>&1
+  if [ -f "$tmp/home/config/wedge-alarm" ]; then
+    directives=$(wedge_directives "$tmp/home/config/wedge-alarm")
+    [ -z "$directives" ] || fail "stand-down left directives behind: $directives"
+  fi
+  pass 'alarm route: the shift block carries the platform default beside its own channel'
+}
+
+# A begin sentinel over a block a hand edit emptied delivers nothing, so
+# presence alone must never read as a route to the captain's ear.
+test_alarm_route_reports_a_gutted_block_as_down() {
+  local tmp out rc=0
+  tmp=$(make_shift_home)
+  arm_shift "$tmp" >/dev/null 2>&1
+  grep -v 'fm-shift.sh alarm' "$tmp/home/config/wedge-alarm" > "$tmp/gutted"
+  mv "$tmp/gutted" "$tmp/home/config/wedge-alarm"
+  out=$(run_shift "$tmp" status 2>&1) || rc=$?
+  expect_code 1 "$rc" 'a gutted alarm block makes an armed status non-zero'
+  assert_contains "$out" 'supervision alarm: DOWN' 'a block with no command directive reads as down'
+  pass 'alarm route: a block whose directive was removed reports down, not armed'
 }
 
 test_alarm_route_preserves_a_captain_written_channel() {
@@ -652,6 +786,8 @@ test_stop_says_plainly_when_away_mode_is_still_running() {
   assert_contains "$out" 'away mode: STILL RUNNING' 'stop does not claim away mode stopped'
   assert_contains "$out" 'afk-launch stop' 'stop names the launch owner stop command'
   assert_not_contains "$out" 'away mode: stopped' 'no line claims away mode stopped'
+  assert_not_contains "$out" 'Shift stood down.' 'the report does not headline a stand-down that did not happen'
+  assert_contains "$out" 'stays armed' 'the report says the shift is still armed'
 
   # The benign case stays distinct: the daemon stopped but catch-up is open.
   tmp=$(make_shift_home)
@@ -784,6 +920,7 @@ test_start_arms_and_speaks_one_confirmation
 test_start_uses_the_away_mode_launch_owner_not_a_native_background_path
 test_start_is_safe_to_run_twice
 test_start_refuses_when_the_host_sentinel_cannot_fire
+test_sentinel_freshness_uses_the_loaded_jobs_own_interval
 test_status_is_honest_when_the_host_sentinel_cannot_fire
 test_start_refuses_when_away_mode_will_not_start
 test_start_reports_loudly_when_the_confirmation_cannot_be_spoken
@@ -793,7 +930,9 @@ test_self_check_records_recovery_before_a_slow_announce_can_be_killed
 test_self_check_is_inert_once_the_shift_is_over
 test_self_check_is_a_plain_registered_check_file
 test_supervision_alarm_speaks_without_relaying_internal_detail
-test_supervision_alarm_is_silent_when_no_shift_is_armed
+test_supervision_alarm_fails_rather_than_consuming_an_alarm_it_cannot_speak
+test_alarm_route_keeps_the_platform_default_channel
+test_alarm_route_reports_a_gutted_block_as_down
 test_alarm_route_preserves_a_captain_written_channel
 test_alarm_route_survives_a_captain_channel_with_no_trailing_newline
 test_shift_log_is_plain_and_never_a_task_status_file
