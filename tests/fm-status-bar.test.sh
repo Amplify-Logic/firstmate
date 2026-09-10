@@ -34,6 +34,136 @@ render() {
       --cost "${5:---}"
 }
 
+# The companion must never publish a frame the collector has not filled in yet.
+# The probe is a fake `stat`, which the renderer calls while it is collecting:
+# it snapshots the bytes already written to the pane at that exact moment, so a
+# snapshot that ends with a bare row erase proves the row was blank on screen
+# for the whole length of the collection.
+test_companion_never_leaves_the_row_blank_while_collecting() {
+  local out_file="$TMP_ROOT/blank-out.raw" snap_dir="$TMP_ROOT/blank-snaps"
+  local count_file="$TMP_ROOT/blank-count" snap blanked=
+
+  rm -rf "$snap_dir"
+  mkdir -p "$snap_dir"
+  : > "$out_file"
+  rm -f "$count_file"
+  cat > "$FAKEBIN/tmux" <<'SH'
+#!/usr/bin/env bash
+count=0
+[ ! -f "$FM_STATUS_BAR_TMUX_COUNT" ] || count=$(<"$FM_STATUS_BAR_TMUX_COUNT")
+count=$((count + 1))
+printf '%s\n' "$count" > "$FM_STATUS_BAR_TMUX_COUNT"
+[ "$count" -le 3 ] || exit 1
+printf '%s\n' '%42'
+SH
+  chmod +x "$FAKEBIN/tmux"
+  cat > "$FAKEBIN/stat" <<'SH'
+#!/usr/bin/env bash
+if [ -n "${FM_STATUS_BAR_TEST_SNAPDIR:-}" ]; then
+  cp "$FM_STATUS_BAR_TEST_OUT" "$FM_STATUS_BAR_TEST_SNAPDIR/$(date +%s%N 2>/dev/null || printf '%s' $$).snap" 2>/dev/null
+fi
+printf '%s\n' "${FM_STATUS_BAR_TEST_BEAT_EPOCH:-900}"
+SH
+  chmod +x "$FAKEBIN/stat"
+  : > "$HOME_FIX/state/.last-watcher-beat"
+
+  PATH="$FAKEBIN:$PATH" \
+    FM_HOME="$HOME_FIX" \
+    FM_PRIMARY_HARNESS=kimi \
+    FM_STATUS_BAR_INTERVAL=0 \
+    FM_STATUS_BAR_TMUX_COUNT="$count_file" \
+    FM_STATUS_BAR_TEST_SNAPDIR="$snap_dir" \
+    FM_STATUS_BAR_TEST_OUT="$out_file" \
+    "$ROOT/bin/fm-status-bar.sh" \
+      --adapter kimi --model kimi-code/k3 --effort -- --follow-pane %42 \
+    > "$out_file"
+
+  [ -n "$(ls -A "$snap_dir" 2>/dev/null)" ] \
+    || fail "the collection probe never ran, so the blank-frame check proved nothing"
+  for snap in "$snap_dir"/*.snap; do
+    case "$(cat "$snap")" in
+      *$'\033[2K') blanked=1 ;;
+    esac
+  done
+  [ -z "$blanked" ] \
+    || fail "the companion erased the row and left it blank while it collected the next frame"
+  assert_contains "$(cat "$out_file")" '⚓' "the companion stopped rendering the status row"
+  # The erase is what clips a shorter frame's stale tail, so it must survive -
+  # it just has to reach the pane in the same write as the frame it precedes.
+  assert_contains "$(cat "$out_file")" $'\033[H\033[2K\033[1m⚓' \
+    "the row erase no longer arrives together with the frame it introduces"
+  rm -f "$FAKEBIN/tmux"
+  pass "status bar: the companion never blanks its row while collecting a frame"
+}
+
+test_companion_redraws_only_when_the_frame_changed() {
+  local out count_file="$TMP_ROOT/repeat-count" frames
+
+  rm -f "$count_file"
+  cat > "$FAKEBIN/tmux" <<'SH'
+#!/usr/bin/env bash
+count=0
+[ ! -f "$FM_STATUS_BAR_TMUX_COUNT" ] || count=$(<"$FM_STATUS_BAR_TMUX_COUNT")
+count=$((count + 1))
+printf '%s\n' "$count" > "$FM_STATUS_BAR_TMUX_COUNT"
+[ "$count" -le 3 ] || exit 1
+printf '%s\n' '%42'
+SH
+  chmod +x "$FAKEBIN/tmux"
+  cat > "$FAKEBIN/stat" <<'SH'
+#!/usr/bin/env bash
+printf '%s\n' "${FM_STATUS_BAR_TEST_BEAT_EPOCH:-900}"
+SH
+  chmod +x "$FAKEBIN/stat"
+  : > "$HOME_FIX/state/.last-watcher-beat"
+
+  # A frozen clock and a frozen fleet make all three passes identical, so an
+  # unchanged row must be written exactly once.
+  out=$(PATH="$FAKEBIN:$PATH" \
+    FM_HOME="$HOME_FIX" \
+    FM_PRIMARY_HARNESS=kimi \
+    FM_STATUS_BAR_NOW=1000 \
+    FM_STATUS_BAR_INTERVAL=0 \
+    FM_STATUS_BAR_TMUX_COUNT="$count_file" \
+    "$ROOT/bin/fm-status-bar.sh" \
+      --adapter kimi --model kimi-code/k3 --effort -- --follow-pane %42)
+  frames=$(printf '%s' "$out" | grep -o '⚓' | wc -l | tr -d ' ')
+  [ "$frames" -eq 1 ] \
+    || fail "an unchanged status row was redrawn $frames times instead of once"
+
+  # A moving clock changes the supervision age, and that must still reach the
+  # pane on every refresh.
+  rm -f "$count_file"
+  cat > "$FAKEBIN/stat" <<'SH'
+#!/usr/bin/env bash
+epoch=900
+[ ! -f "$FM_STATUS_BAR_TEST_BEAT_FILE" ] || epoch=$(<"$FM_STATUS_BAR_TEST_BEAT_FILE")
+printf '%s\n' "$((epoch - 1))" > "$FM_STATUS_BAR_TEST_BEAT_FILE"
+printf '%s\n' "$epoch"
+SH
+  chmod +x "$FAKEBIN/stat"
+  rm -f "$TMP_ROOT/beat-epoch"
+  out=$(PATH="$FAKEBIN:$PATH" \
+    FM_HOME="$HOME_FIX" \
+    FM_PRIMARY_HARNESS=kimi \
+    FM_STATUS_BAR_NOW=1000 \
+    FM_STATUS_BAR_INTERVAL=0 \
+    FM_STATUS_BAR_TMUX_COUNT="$count_file" \
+    FM_STATUS_BAR_TEST_BEAT_FILE="$TMP_ROOT/beat-epoch" \
+    "$ROOT/bin/fm-status-bar.sh" \
+      --adapter kimi --model kimi-code/k3 --effort -- --follow-pane %42 | strip_ansi)
+  assert_contains "$out" '👁 100s' "the first supervision age never reached the pane"
+  assert_contains "$out" '👁 101s' "a changed supervision age was suppressed as an unchanged frame"
+  assert_contains "$out" '👁 102s' "a changed supervision age was suppressed as an unchanged frame"
+  rm -f "$FAKEBIN/tmux"
+  cat > "$FAKEBIN/stat" <<'SH'
+#!/usr/bin/env bash
+printf '%s\n' "${FM_STATUS_BAR_TEST_BEAT_EPOCH:-900}"
+SH
+  chmod +x "$FAKEBIN/stat"
+  pass "status bar: the companion skips an unchanged row and still publishes every change"
+}
+
 test_contract_order_and_fleet_projection() {
   local out
   fm_write_meta "$HOME_FIX/state/working.meta" "kind=crew"
@@ -370,5 +500,7 @@ test_cursor_payload_adapter_and_primary_guard
 test_account_role_label_is_verified_and_compact
 test_herdr_companion_exits_when_primary_pane_is_gone
 test_companion_clears_the_whole_pane_once_at_startup
+test_companion_never_leaves_the_row_blank_while_collecting
+test_companion_redraws_only_when_the_frame_changed
 test_companion_backend_is_restricted_to_verified_providers
 test_tracked_adapter_wiring_and_cursor_boundary
