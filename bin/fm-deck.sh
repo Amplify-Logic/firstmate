@@ -187,6 +187,10 @@ collect_orders() {
 BACKLOG_STATUS=ok
 
 collect_backlog() {
+  # Every frame answers for itself: a read that failed last time says nothing
+  # about this one, and a stale "unreadable" would keep the fallback rows and
+  # the source-availability wording on the pane long after the reader came back.
+  BACKLOG_STATUS=ok
   # Deliberately NOT fm_tasks_axi_backend_available: that probe shells out three
   # more times to confirm the MUTATION features (update --archive-body, atomic
   # multi-id mv) this pane will never use, and it is the single slowest thing in

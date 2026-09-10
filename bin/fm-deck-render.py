@@ -454,7 +454,8 @@ def backlog_note(status, width, fallback):
     an empty one, and "nothing is waiting on you" becomes a claim the captain
     has no way to doubt. Two lines rather than one because both halves have to
     survive the clip: what is missing, and - only when a fallback row is
-    actually standing below it - how much that row is worth.
+    actually standing below it - how much that row is worth. Both lead with the
+    part that carries the doubt, because the clip eats the tail first.
     """
     reason = BACKLOG_UNAVAILABLE.get(status)
     if not reason:
@@ -465,8 +466,8 @@ def backlog_note(status, width, fallback):
         lines.append(
             "  "
             + clip(
-                "the pull requests below come from this home's own record; their "
-                "current state is not confirmed here",
+                "not confirmed here: the pull requests below come from this "
+                "home's own record",
                 limit,
             )
         )
@@ -506,24 +507,35 @@ def build_needs_you(tasks, backlog, limit, width, backlog_status="ok"):
     # check it rather than presenting it as reviewed-and-ready: a recorded URL
     # and a status line the worker wrote some time ago say the branch exists,
     # not that its checks are green or that it is fit to merge.
+    #
+    # Recording a URL only claims it against the backlog; it never silences
+    # another worker. Where several records carry one pull request - the retry
+    # that is still running alongside the attempt that died on it - they collapse
+    # into a single row carrying the strongest ask any of them makes, so one pull
+    # request asks for one look without a dead or finished record speaking over a
+    # live one.
     pr_seen = set()
+    pr_rows = {}
     for task in tasks:
         if not task["pr"]:
             continue
-        if task["state"] == "done":
-            if backlog_readable or task["pr"] in pr_seen or task["id"] in seen_ids:
-                continue
-            pr_seen.add(task["pr"])
-            rows.append(("check", task["outcome"], task["pr"], task["project"]))
-            seen_ids.add(task["id"])
-            continue
-        if task["pr"] in pr_seen:
+        if task["state"] == "done" and backlog_readable:
             continue
         pr_seen.add(task["pr"])
         if task["state"] == "failed" or task["id"] in seen_ids:
             continue
-        rows.append(("review", task["outcome"], task["pr"], task["project"]))
-        seen_ids.add(task["id"])
+        label = "check" if task["state"] == "done" else "review"
+        strongest = pr_rows.get(task["pr"])
+        if strongest is None or NEEDS_RANK[label] < NEEDS_RANK[strongest[0][0]]:
+            pr_rows[task["pr"]] = (
+                (label, task["outcome"], task["pr"], task["project"]),
+                task["id"],
+            )
+    for row, task_id in pr_rows.values():
+        if task_id in seen_ids:
+            continue
+        rows.append(row)
+        seen_ids.add(task_id)
     for row in backlog:
         if row.get("state") == "done":
             continue
@@ -539,17 +551,17 @@ def build_needs_you(tasks, backlog, limit, width, backlog_status="ok"):
             continue
         rows.append(("decide", row.get("title", ""), "", row.get("repo", "")))
 
-    note = backlog_note(
-        backlog_status, width, any(r[0] == "check" for r in rows)
-    )
-
     if not rows:
-        return ["  nothing is waiting on you"] + note, 0
+        note = backlog_note(backlog_status, width, False)
+        return note + ["  nothing is waiting on you"], 0
 
     rows.sort(key=lambda r: NEEDS_RANK.get(r[0], 9))
     shown = rows[:limit]
 
-    lines = []
+    # After the slice, and over the slice: "check" is the lowest-ranked ask, so
+    # it is the first row the limit drops, and a caveat about rows that are no
+    # longer on the pane points at nothing.
+    lines = backlog_note(backlog_status, width, any(r[0] == "check" for r in shown))
     for label, text, url, where in shown:
         where_text = (" · " + where) if where and where != "-" else ""
         lines.append(
@@ -565,7 +577,6 @@ def build_needs_you(tasks, backlog, limit, width, backlog_status="ok"):
     remaining = len(rows) - len(shown)
     if remaining > 0:
         lines.append("  %-8s %d more waiting on you" % ("", remaining))
-    lines += note
     return lines, len(rows)
 
 

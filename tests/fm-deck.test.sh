@@ -714,7 +714,7 @@ EOF
 # four, and the pane has to say why it is falling back to its own record rather
 # than presenting the work as reviewed and ready.
 test_needs_you_keeps_a_recorded_pull_request_when_the_backlog_is_unreadable() {
-  local cond home fb path out needs rows
+  local cond home fb path out needs rows caveat row
   for cond in no-tool no-file unreadable manual; do
     read -r home fb path <<EOF
 $(backlogless_home "gap-$cond" "$cond")
@@ -733,6 +733,12 @@ EOF
       "$cond: the section does not say the backlog is unavailable"
     assert_contains "$needs" 'not confirmed here' \
       "$cond: the section does not say the fallback row is unconfirmed"
+    # A caveat standing under the rows it describes is captioning whatever
+    # section comes next, so it has to head them.
+    caveat=$(printf '%s\n' "$needs" | awk '/not confirmed here/ {print NR; exit}')
+    row=$(printf '%s\n' "$needs" | awk '/check .*Ship the alpha widget/ {print NR; exit}')
+    [ -n "$caveat" ] && [ -n "$row" ] && [ "$caveat" -lt "$row" ] \
+      || fail "$cond: the caveat does not head the rows it describes (lines $caveat, $row)"
     # A recorded URL and an old status line say the branch exists, never that
     # its checks passed or that it is fit to merge.
     assert_not_contains "$needs" 'green' "$cond: the pane asserted a check result"
@@ -816,6 +822,132 @@ EOF
   [ "$rows" -eq 1 ] \
     || fail "one pull request with three records produced $rows rows, expected 1"
   pass "one pull request asks for one look however many records carry it"
+}
+
+# The renderer driven on its own with only the sections NEEDS YOU reads, so the
+# rules below can pin an order between task records without depending on the
+# order this machine's state directory happens to glob in. Task lines arrive on
+# stdin in the order collect_tasks would have emitted them; the optional fourth
+# argument is the whole backlog listing, exactly as the reader prints it.
+render_needs() {  # <backlog-status> <needs-limit> <width> [backlog-listing]
+  local backlog_state=$1 limit=$2 cols=$3 listing=${4:-}
+  {
+    printf '%s now\n%s\n' "$MARK" "$NOW"
+    printf '%s width\n%s\n' "$MARK" "$cols"
+    printf '%s home\nStarship\n' "$MARK"
+    printf '%s interval\n\n' "$MARK"
+    printf '%s limits\n5\t5\t%s\n' "$MARK" "$limit"
+    printf '%s vocabulary\n' "$MARK"
+    printf '%s tray\n[]\n' "$MARK"
+    printf '%s orders\n' "$MARK"
+    printf '%s backlog\n' "$MARK"
+    if [ -n "$listing" ]; then printf '%s\n' "$listing"; fi
+    printf '%s backlog_status\n%s\n' "$MARK" "$backlog_state"
+    printf '%s tasks\n' "$MARK"
+    cat
+    printf '%s loose_ends\n' "$MARK"
+  } | python3 "$RENDER" "$MARK" | awk '/NEEDS YOU/,/UNDER WAY/'
+}
+
+# The one pull request the rules below share, and the backlog listing that
+# carries it too, so "one look per pull request" is tested with a real second
+# source standing behind the task records rather than an empty one.
+SHARED_PR='https://github.com/acme/alpha/pull/7'
+shared_pr_backlog() {
+  printf 'count: 1\n'
+  printf 'tasks[1]{id,state,kind,repo,title,hold_kind,hold_reason,links,closed,blocked_by,held,priority}:\n'
+  printf '  ship-task,in_flight,ship,alpha,"Ship the alpha widget","-","-","pr:%s","-",none,no,"-"\n' \
+    "$SHARED_PR"
+}
+
+# A record that died on a pull request still claims its URL, so the backlog
+# cannot re-raise the review this pane withheld - but claiming it is not the
+# same as speaking for it. A retry running on the same branch is a live ask, and
+# whichever of the two the state directory happens to list first must not decide
+# whether the captain hears about it.
+test_needs_you_keeps_a_live_review_a_dead_record_shares_a_url_with() {
+  local order tasks needs rows
+  for order in dead-first live-first; do
+    case "$order" in
+      dead-first)
+        tasks=$(
+          printf 'a-ship-task\tship\tAlpha\tShip the alpha widget\tfailed\t120\t%s\n' "$SHARED_PR"
+          printf 'b-ship-retry\tship\tAlpha\tShip the alpha widget again\tworking\t120\t%s\n' "$SHARED_PR"
+        )
+        ;;
+      *)
+        tasks=$(
+          printf 'a-ship-retry\tship\tAlpha\tShip the alpha widget again\tworking\t120\t%s\n' "$SHARED_PR"
+          printf 'b-ship-task\tship\tAlpha\tShip the alpha widget\tfailed\t120\t%s\n' "$SHARED_PR"
+        )
+        ;;
+    esac
+    needs=$(printf '%s\n' "$tasks" | render_needs ok 5 120 "$(shared_pr_backlog)")
+    printf '%s\n' "$needs" | grep -q 'review .*Ship the alpha widget again' \
+      || fail "$order: a dead record spoke over the live retry sharing its pull request"
+    assert_not_contains "$needs" 'Ship the alpha widget ·' \
+      "$order: the dead record was offered for review"
+    rows=$(printf '%s\n' "$needs" | grep -c "$SHARED_PR" || true)
+    [ "$rows" -eq 1 ] \
+      || fail "$order: one pull request with three records produced $rows rows, expected 1"
+  done
+  pass "a dead record claims a pull request without silencing the live one"
+}
+
+# The same rule with the backlog hidden: the finished record's fallback is the
+# weakest ask this pane makes, so a worker still running on that branch outranks
+# it and the captain is asked to review rather than to check.
+test_needs_you_prefers_the_strongest_ask_a_shared_pull_request_carries() {
+  local needs rows
+  needs=$(
+    {
+      printf 'a-ship-task\tship\tAlpha\tShip the alpha widget\tdone\t120\t%s\n' "$SHARED_PR"
+      printf 'b-ship-retry\tship\tAlpha\tShip the alpha widget again\tworking\t120\t%s\n' "$SHARED_PR"
+    } | render_needs no-tool 5 120
+  )
+  rows=$(printf '%s\n' "$needs" | grep -c "$SHARED_PR" || true)
+  [ "$rows" -eq 1 ] \
+    || fail "one pull request with two records produced $rows rows, expected 1"
+  printf '%s\n' "$needs" | grep -q 'review .*Ship the alpha widget again' \
+    || fail "a finished record's fallback outranked a worker still on the branch"
+  assert_not_contains "$needs" 'check ' "the weaker ask survived alongside the stronger one"
+  pass "several records of one pull request collapse into its strongest ask"
+}
+
+# The needs limit drops the lowest-ranked rows first, and the fallback "check"
+# is the lowest rank there is. Once it has been cut, the caveat describing it is
+# a caption over rows that came from somewhere else entirely.
+test_needs_you_drops_the_caveat_with_the_row_it_describes() {
+  local needs
+  needs=$(
+    {
+      printf 'parked-task\tship\tAlpha\tRework the beta importer\tparked\t120\t\n'
+      printf 'stuck-task\tship\tAlpha\tInvestigate the delta timeouts\tblocked\t120\t\n'
+      printf 'ship-task\tship\tAlpha\tShip the alpha widget\tdone\t120\t%s\n' "$SHARED_PR"
+    } | render_needs no-tool 2 120
+  )
+  assert_not_contains "$needs" "$SHARED_PR" "the fixture did not truncate its fallback row"
+  assert_contains "$needs" 'rows it alone would raise are missing' \
+    "the section stopped saying the backlog is unavailable"
+  assert_not_contains "$needs" 'not confirmed here' \
+    "the caveat outlived the fallback row it describes"
+  pass "the unconfirmed-record caveat is cut with the row it describes"
+}
+
+# Narrow terminals are where this pane is actually read, and clip() takes the
+# end of a line. The uncertainty is the half that must not be what gets taken.
+test_needs_you_keeps_its_caveat_readable_at_the_minimum_width() {
+  local needs
+  needs=$(
+    printf 'ship-task\tship\tAlpha\tShip the alpha widget\tdone\t120\t%s\n' "$SHARED_PR" \
+      | render_needs unreadable 5 40
+  )
+  assert_contains "$needs" 'not confirmed here' \
+    "the caveat lost its uncertainty to the clip at the minimum width"
+  assert_contains "$needs" 'the backlog could not be read' \
+    "the section lost what it could not read to the clip at the minimum width"
+  assert_contains "$needs" "$SHARED_PR" "the fallback row left the pane at the minimum width"
+  pass "both source-availability lines survive the clip at the minimum width"
 }
 
 # bin/fm-deck-render.py owns the frame: bin/fm-deck.sh hands it the payload and
@@ -1147,6 +1279,10 @@ test_needs_you_keeps_a_recorded_pull_request_when_the_backlog_is_unreadable
 test_needs_you_stays_quiet_when_the_backlog_reads_normally
 test_needs_you_invents_no_pull_request_when_none_is_recorded
 test_needs_you_shows_one_row_when_task_and_backlog_carry_the_same_pull_request
+test_needs_you_keeps_a_live_review_a_dead_record_shares_a_url_with
+test_needs_you_prefers_the_strongest_ask_a_shared_pull_request_carries
+test_needs_you_drops_the_caveat_with_the_row_it_describes
+test_needs_you_keeps_its_caveat_readable_at_the_minimum_width
 test_renderer_presents_the_payload_the_deck_collects
 test_control_characters_never_reach_the_terminal
 test_sweep_text_cannot_forge_a_payload_section
