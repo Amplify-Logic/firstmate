@@ -155,7 +155,7 @@ family_for_basename() {
       printf '%s\n' secondmate
       ;;
     fm-bootstrap.test.sh|fm-fleet-sync.test.sh|fm-gate-refuse.test.sh|fm-gotmp.test.sh|\
-    fm-morning-intake.test.sh|\
+    fm-channel-intake.test.sh|fm-morning-intake.test.sh|\
     fm-session-start.test.sh|fm-sessionstart-nudge.test.sh|fm-tangle-guard.test.sh|\
     fm-toolchain-drift.test.sh|fm-update.test.sh|fm-upstream.test.sh|\
     fm-upstream-ledger.test.sh|fm-upstream-watch.test.sh)
