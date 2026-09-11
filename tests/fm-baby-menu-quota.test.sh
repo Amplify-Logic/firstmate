@@ -159,6 +159,33 @@ test_legacy_backup_inside_extensions_is_moved_out_on_rerun() {
   pass "a legacy backup inside extensions/ is moved out on re-run and the home converges"
 }
 
+test_unmovable_legacy_backup_is_reported_on_stderr_and_fails_the_run() {
+  local root home legacy taken out err status
+  root=$(fm_test_tmproot fm-bm-legacy-taken)
+  home=$(make_home "$root")
+  "$INSTALL" --home "$home" >/dev/null 2>&1 || fail "first install failed"
+  legacy="$home/extensions/.weekly-quota-backup-20260911T072105Z.DHGudf"
+  taken="$home/backups/weekly-quota-backup-20260911T072105Z.DHGudf"
+  mkdir -p "$legacy" "$taken"
+  printf 'export const previous = 1;\n' >"$legacy/widget.tsx"
+  printf 'export const earlier = 1;\n' >"$taken/widget.tsx"
+
+  # The destination name is already taken, so the installer must neither merge
+  # nor overwrite. But the duplicate panel remains, and a zero exit with the
+  # warning on stdout would let an unattended re-run pass as converged.
+  out=$("$INSTALL" --home "$home" 2>"$root/stderr") && status=0 || status=$?
+  err=$(cat "$root/stderr")
+  expect_code 1 "$status" "re-run with an unmovable legacy backup"
+  assert_contains "$err" "WARNING" "the unmovable backup must be reported on stderr"
+  assert_contains "$err" "could not be moved" "the failing completion must say what was left behind"
+  assert_not_contains "$out" "WARNING" "the warning must not be buried in stdout"
+  assert_present "$legacy/widget.tsx" "the legacy backup must be left in place, never deleted"
+  assert_grep 'export const earlier = 1;' "$taken/widget.tsx" "the existing backup must not be overwritten"
+  assert_present "$home/extensions/weekly-quota/widget.tsx" "the widget itself must still be installed"
+  assert_contains "$out" "already matches" "the rest of the install must still run before the failing exit"
+  pass "an unmovable legacy backup is reported on stderr and the run exits non-zero"
+}
+
 test_dry_run_reports_a_legacy_backup_without_moving_it() {
   local root home legacy out
   root=$(fm_test_tmproot fm-bm-legacy-dry)
@@ -523,6 +550,7 @@ test_install_preserves_unrelated_extensions_and_app_files
 test_second_run_is_safe_and_keeps_local_settings
 test_replacing_a_modified_widget_keeps_the_previous_copy
 test_legacy_backup_inside_extensions_is_moved_out_on_rerun
+test_unmovable_legacy_backup_is_reported_on_stderr_and_fails_the_run
 test_dry_run_reports_a_legacy_backup_without_moving_it
 test_repeated_replacements_keep_separate_backups
 test_example_settings_written_only_when_the_real_file_is_absent

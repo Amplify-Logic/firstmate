@@ -42,7 +42,9 @@
 #   --dry-run     Report what would change and write nothing.
 #   --force       Reinstall even when the installed files already match.
 #
-# Exit status is non-zero when the home is missing or a copy fails.
+# Exit status is non-zero when the home is missing, a copy fails, or a legacy
+# backup inside extensions/ could not be moved out (the install itself still
+# completes; the warning names the directory to move by hand).
 set -eu
 
 SELF=$(basename "$0")
@@ -121,8 +123,12 @@ LEGACY_BACKUP_GLOB="$EXTENSIONS_DIR/.$BACKUP_PREFIX"
 # Relocate every legacy backup out of the discovery root. A move, never a
 # delete: the content is the operator's previous copy. The leading dot is the
 # only name change, so the timestamp and uniqueness suffix survive; if that
-# exact name is already taken under backups/ the directory is left where it is
-# and reported, rather than merged into or written over an existing backup.
+# exact name is already taken under backups/ the directory is left where it is,
+# rather than merged into or written over an existing backup. That leftover
+# still renders as a second quota panel, so it is reported on stderr and the
+# script exits non-zero once the rest of the install has completed: a scripted
+# re-run must not look converged while the duplicate remains.
+LEGACY_BACKUPS_LEFT=0
 relocate_legacy_backups() {
   local legacy name dest
   for legacy in "$LEGACY_BACKUP_GLOB"*; do
@@ -134,7 +140,9 @@ relocate_legacy_backups() {
       continue
     fi
     if [ -e "$dest" ]; then
-      note "WARNING: $legacy still sits inside the extensions directory, where Baby Menu shows it as a second quota panel; $dest already exists, so move it out by hand"
+      printf '%s: WARNING: %s still sits inside the extensions directory, where Baby Menu shows it as a second quota panel; %s already exists, so move it out by hand\n' \
+        "$SELF" "$legacy" "$dest" >&2
+      LEGACY_BACKUPS_LEFT=$((LEGACY_BACKUPS_LEFT + 1))
       continue
     fi
     mkdir -p "$BACKUPS_DIR" || die "could not create $BACKUPS_DIR"
@@ -219,4 +227,10 @@ fi
 
 if [ "$DRY_RUN" -eq 0 ]; then
   note "Baby Menu rebuilds a changed widget on its own; no restart is needed"
+fi
+
+if [ "$LEGACY_BACKUPS_LEFT" -gt 0 ]; then
+  printf '%s: %s old backup(s) could not be moved out of the extensions directory; the quota panel will still show twice until they are\n' \
+    "$SELF" "$LEGACY_BACKUPS_LEFT" >&2
+  exit 1
 fi
