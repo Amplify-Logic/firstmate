@@ -19,8 +19,8 @@
 # Detaching stdin removes the terminal from the child entirely and keeps the
 # group-kill semantics that bound runaway children.
 # Every caller here is a read-only probe, so none of them has stdin to pass
-# through; bin/fm-toolchain-lib.sh already added this redirect at its own call
-# site before the helper owned it.
+# through; bin/fm-toolchain-lib.sh carried this same redirect at its own call
+# site until the helper took ownership of it here.
 #
 # Portability: prefers timeout(1), then gtimeout(1), then a perl fallback that
 # runs the child in its own process group and kills the group on alarm, so a

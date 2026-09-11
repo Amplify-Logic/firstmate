@@ -37,21 +37,35 @@ if pid == 0:
     os.execvp("/bin/bash", ["/bin/bash", "-c", sys.argv[1]])
 
 chunks = []
+
+def read_ready(wait):
+    ready, _, _ = select.select([fd], [], [], wait)
+    if not ready:
+        return True
+    try:
+        data = os.read(fd, 65536)
+    except OSError:
+        return False
+    if not data:
+        return False
+    chunks.append(data)
+    return True
+
+exited = False
 while time.time() < deadline:
-    ready, _, _ = select.select([fd], [], [], 0.5)
-    if ready:
-        try:
-            data = os.read(fd, 65536)
-        except OSError:
-            break
-        if not data:
-            break
-        chunks.append(data)
-        continue
-    if os.waitpid(pid, os.WNOHANG)[0]:
+    if not read_ready(0.5):
         break
+    if os.waitpid(pid, os.WNOHANG)[0]:
+        exited = True
+        break
+
+if exited:
+    while time.time() < deadline and read_ready(0.2):
+        pass
 sys.stdout.write(b"".join(chunks).decode("utf-8", "replace"))
 PTY_EOF
+
+command -v python3 >/dev/null 2>&1 || fail 'test prerequisite missing: python3'
 
 run_under_pty() {  # <shell-command>
   python3 "$PTY" "$1"
@@ -79,9 +93,10 @@ for tool in perl bash stty sleep; do
   resolved=$(command -v "$tool") || fail "test prerequisite missing: $tool"
   ln -s "$resolved" "$MINBIN/$tool"
 done
-command -v timeout >/dev/null 2>&1 && [ -e "$MINBIN/timeout" ] && fail 'minimal PATH must not expose timeout'
 
-fallback_out=$(run_under_pty "PATH=$MINBIN; export PATH; $(probe_command)")
+fallback_out=$(run_under_pty "PATH=$MINBIN; export PATH; if command -v timeout >/dev/null 2>&1 || command -v gtimeout >/dev/null 2>&1; then printf 'LEAKED-TIMEOUT\\n'; exit 99; fi; $(probe_command)")
+assert_not_contains "$fallback_out" 'LEAKED-TIMEOUT' \
+  'the minimal PATH must resolve neither timeout nor gtimeout, or case 2 is not testing the perl fallback'
 assert_contains "$fallback_out" 'OUT=[PROBE-OK] RC=0' \
   'the perl fallback must also return the command output under a terminal'
 
