@@ -2174,10 +2174,15 @@ const ids = ['ready', 'staged', 'asks', 'decisions', 'underway', 'landed', 'loos
   'deck-observed', 'deck-counts', 'deck-error', 'decisions-section', 'loose-section'];
 const elements = {};
 for (const id of ids) elements[id] = {innerHTML: '', textContent: 'Loading…', hidden: false};
-elements.stale = {classList: {toggle() {}}};
+let overlayOn = false;
+elements.stale = {classList: {toggle(name, on) { overlayOn = !!on; }}};
 const context = vm.createContext({
   document: {hidden: false, addEventListener() {}, getElementById(id) { return elements[id] || null; }},
-  window: {addEventListener() {}}, Date, setInterval() {}, setTimeout, clearTimeout
+  window: {addEventListener() {}}, Date, setInterval() {}, setTimeout, clearTimeout,
+  AbortController: class { constructor() { this.signal = {}; } abort() {} },
+  fetch: async function() {
+    return {ok: false, status: 503, json: async function() { return {error: 'desk unreachable', detail: 'deck collector exploded: tray log unreadable'}; }};
+  }
 });
 vm.runInContext(script, context);
 const apply = vm.runInContext('apply', context);
@@ -2247,6 +2252,17 @@ for (const id of ['ready', 'staged', 'asks', 'underway', 'landed']) { elements[i
 vm.runInContext('markUnreachable', context)('deck collector exploded');
 must(elements.staged.innerHTML.indexOf('Cannot reach the desk.') !== -1, 'unreachable state not rendered');
 must(elements['deck-error'].textContent === 'deck collector exploded', 'error detail not shown');
+
+// A 503 on first load must leave the reason visible: no full-page overlay over it.
+vm.runInContext('lastSuccess = 0', context);
+for (const id of ['ready', 'staged', 'asks', 'underway', 'landed']) { elements[id].textContent = 'Loading…'; elements[id].innerHTML = ''; }
+elements['deck-error'].textContent = '';
+vm.runInContext('refresh', context)().then(function() {
+  must(overlayOn === false, 'first-load 503 raised the full-page overlay, hiding the reason');
+  must(elements['deck-observed'].textContent === 'Cannot reach the desk.', 'header did not report the unreachable desk: ' + elements['deck-observed'].textContent);
+  must(elements.ready.innerHTML.indexOf('Cannot reach the desk.') !== -1, 'regions did not report the unreachable desk');
+  must(elements['deck-error'].textContent === 'deck collector exploded: tray log unreadable', '503 reason not shown: ' + elements['deck-error'].textContent);
+}).catch(function(err) { console.error(err.message); process.exit(1); });
 JS
   ) || fail "deck page rendering failed: $output"
   pass "deck page renders staged, asks, held decisions, under way, landed and loose ends with no run control"

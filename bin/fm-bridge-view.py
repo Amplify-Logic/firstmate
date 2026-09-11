@@ -2323,7 +2323,10 @@ async function refresh() {
     apply(payload);
   } catch (err) {
     if (!lastSuccess) {
-      setStale(true);
+      // No full-page overlay on a first-load failure: it would cover the
+      // collector's reason. The header and every region say the desk is
+      // unreachable and #deck-error carries the reason. The overlay is
+      // reserved for a tab whose refreshes stop after a successful load.
       markUnreachable(detail);
     } else {
       tickObserved();

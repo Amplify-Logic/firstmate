@@ -143,7 +143,7 @@ The glance and the deck link to each other through a small page nav under each h
 An unauthenticated `/deck` shows Log in; `/api/deck` answers 401.
 
 The page renders the `fm-deck.v1` model that `bin/fm-deck.sh --json` emits, so the web deck and the terminal pane read the same records through the same selection rules and can never answer "what needs you" differently.
-The server runs that read as a scrubbed, bounded child exactly like the bearings snapshot, caches one model for about 30 seconds, and returns 503 with the collector's own reason when the read fails; the page then shows "Cannot reach the desk" and that reason instead of an empty deck.
+The server runs that read as a scrubbed, bounded child exactly like the bearings snapshot, caches one model for about 30 seconds, and returns 503 with the collector's own reason when the read fails; the page then shows "Cannot reach the desk" in the header and every region with that reason beneath, and does not raise the full-page overlay over it (the overlay is only for a tab whose refreshes stop after a successful load).
 `bin/fm-deck.sh`'s header owns what each section reads; `bin/fm-deck-render.py` owns the model's fields.
 
 What the page shows, and in this order: ready to run, staged actions that need approval, live asks that need the captain, held backlog decisions, work under way, recent completions, and the loose-ends sweep.
