@@ -11,6 +11,9 @@ home's 0700 bridge/ directory. Logs also go there, not into state/.
 Authenticated photo drops land in data/bridge-inbox/ (mode 0700
 quarantined storage). Authenticated hold-to-speak audio is forwarded
 into the local glasses mailbox; the relay token stays in this process.
+/deck and /api/deck serve the captain's Action Deck from one bounded
+`bin/fm-deck.sh --json` read behind the same session, Host and CSP
+boundary; they render records and act on nothing (docs/bridge-view.md).
 """
 
 from __future__ import annotations
