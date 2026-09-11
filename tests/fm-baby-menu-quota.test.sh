@@ -202,6 +202,31 @@ test_dry_run_reports_a_legacy_backup_without_moving_it() {
   pass "dry run reports a legacy backup and moves nothing"
 }
 
+test_dry_run_reports_an_unmovable_legacy_backup_and_fails_like_the_real_run() {
+  local root home legacy taken out err status
+  root=$(fm_test_tmproot fm-bm-legacy-dry-taken)
+  home=$(make_home "$root")
+  "$INSTALL" --home "$home" >/dev/null 2>&1 || fail "first install failed"
+  legacy="$home/extensions/.weekly-quota-backup-20260911T072105Z.DHGudf"
+  taken="$home/backups/weekly-quota-backup-20260911T072105Z.DHGudf"
+  mkdir -p "$legacy" "$taken"
+  printf 'export const previous = 1;\n' >"$legacy/widget.tsx"
+  printf 'export const earlier = 1;\n' >"$taken/widget.tsx"
+
+  # The preview must not promise a move the real run would refuse: the taken
+  # destination is already a fact, so dry run warns and fails the same way.
+  out=$("$INSTALL" --home "$home" --dry-run 2>"$root/stderr") && status=0 || status=$?
+  err=$(cat "$root/stderr")
+  expect_code 1 "$status" "dry run with an unmovable legacy backup"
+  assert_contains "$err" "WARNING" "dry run must report the unmovable backup on stderr"
+  assert_contains "$err" "could not be moved" "dry run must fail its completion like the real run"
+  assert_not_contains "$out" "would move the old backup" "dry run must not promise a move the real run refuses"
+  assert_present "$legacy/widget.tsx" "dry run must leave the legacy backup in place"
+  assert_grep 'export const earlier = 1;' "$taken/widget.tsx" "dry run must leave the existing backup untouched"
+  assert_absent "$home/backups/.weekly-quota-backup-20260911T072105Z.DHGudf" "dry run must move nothing"
+  pass "dry run reports an unmovable legacy backup and exits non-zero like the real run"
+}
+
 test_repeated_replacements_keep_separate_backups() {
   local root home count nested
   root=$(fm_test_tmproot fm-bm-backups)
@@ -552,6 +577,7 @@ test_replacing_a_modified_widget_keeps_the_previous_copy
 test_legacy_backup_inside_extensions_is_moved_out_on_rerun
 test_unmovable_legacy_backup_is_reported_on_stderr_and_fails_the_run
 test_dry_run_reports_a_legacy_backup_without_moving_it
+test_dry_run_reports_an_unmovable_legacy_backup_and_fails_like_the_real_run
 test_repeated_replacements_keep_separate_backups
 test_example_settings_written_only_when_the_real_file_is_absent
 test_missing_home_is_refused_rather_than_created
