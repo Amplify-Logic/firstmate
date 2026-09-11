@@ -331,6 +331,8 @@ load_config() {
   if [ -n "$CFG_QUIET_START" ] || [ -n "$CFG_QUIET_END" ]; then
     [ -n "$CFG_QUIET_START" ] && [ -n "$CFG_QUIET_END" ] \
       || die 'quiet_start and quiet_end must be set together'
+    [ "$CFG_QUIET_START" != "$CFG_QUIET_END" ] \
+      || die 'quiet_start and quiet_end must differ; equal bounds would silence every hour of the day'
   fi
 }
 
@@ -831,7 +833,7 @@ claim() {
       "$(record_field "$rec" failures)" "$(record_field "$rec" backoff_until)" \
       "$(record_field "$rec" error)"
   done
-  rm -f "$ARMED_FILE"
+  clear_armed
   [ "$any" = true ] || printf 'source: <none due>\n'
 }
 
@@ -855,7 +857,7 @@ complete_source() {
   # already captured. An interrupted read leaves the old checkpoint, so the
   # next tick re-reads that window instead of skipping it.
   save_source "$id" "$checkpoint" "$epoch" "$epoch" 0 0 ''
-  clear_armed_if_settled
+  clear_armed
   log_event "source $id complete at checkpoint $checkpoint"
   printf 'CHANNEL_INTAKE: %s read complete, checkpoint %s\n' "$id" "$checkpoint"
 }
@@ -894,7 +896,7 @@ fail_source() {
   # reading both stay where the last captured read left them.
   save_source "$id" "$(record_field "$rec" checkpoint)" \
     "$(record_field "$rec" last_ok)" "$epoch" "$failures" "$((epoch + backoff))" "$reason"
-  clear_armed_if_settled
+  clear_armed
   log_event "source $id failed ($failures): $reason"
   printf 'CHANNEL_INTAKE: %s read failed (%s consecutive), backing off %ss - %s\n' \
     "$id" "$failures" "$backoff" "$reason"
@@ -902,7 +904,7 @@ fail_source() {
 
 # A reported read settles the cycle, whether it succeeded or failed. Leaving
 # the marker in place would suppress the next genuine wake.
-clear_armed_if_settled() {
+clear_armed() {
   rm -f "$ARMED_FILE"
 }
 
@@ -1330,7 +1332,7 @@ notify_due() {
 }
 
 notify_sent() {
-  local keys='' epoch day key path sent lastday
+  local keys='' epoch day key path sent lastday skipped='' stamped=0
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --keys) [ "$#" -ge 2 ] || die '--keys requires a value'; keys=$2; shift 2 ;;
@@ -1345,7 +1347,11 @@ notify_sent() {
   for key in $keys; do
     require_id 'item key' "$key"
     path=$(item_path "$key")
-    [ -f "$path" ] || die "no open item with that key: $key"
+    if ! [ -f "$path" ]; then
+      skipped="$skipped $key"
+      continue
+    fi
+    stamped=$((stamped + 1))
     save_item "$path" "$(item_body "$key" "$(record_field "$path" source)" \
       "$(record_field "$path" kind)" "$(record_field "$path" ref)" \
       "$(record_field "$path" link)" "$(record_field "$path" class)" \
@@ -1362,8 +1368,8 @@ notify_sent() {
   [ "$lastday" = "$day" ] || sent=0
   save_notify "$epoch" "$day" "$((sent + 1))"
   log_event "notification delivered for: $keys"
-  printf 'CHANNEL_INTAKE: notification recorded for %s item(s)\n' \
-    "$(printf '%s' "$keys" | wc -w | tr -d ' ')"
+  printf 'CHANNEL_INTAKE: notification recorded for %s item(s)\n' "$stamped"
+  [ -z "$skipped" ] || printf 'skipped (already resolved):%s\n' "$skipped"
 }
 
 # --- rendered surfaces --------------------------------------------------------
@@ -1374,6 +1380,9 @@ resolve_out() {
   case "$out" in
     /*) ;;
     *) die "--out must be an absolute path: $out" ;;
+  esac
+  case "/$out/" in
+    */../*) die "--out must not contain a .. path component: $out" ;;
   esac
   if [ -n "$CFG_REPORT_DIR" ]; then
     case "$out" in
@@ -1442,12 +1451,14 @@ render_brief() {
   printf '# Channel intake brief - %s\n\n' "$(local_fmt "$epoch" '%Y-%m-%d %H:%M %Z')"
   printf '## Coverage\n\n'
   printf 'Enrolled sources only. Enrolling these does not enrol every channel, mailbox or board in the workspace.\n'
+  # shellcheck disable=SC2016
   printf 'A source reading `unknown` did not complete its last read; that is not the same as nothing new.\n\n'
   load_inventory
   if [ -z "$INVENTORY_IDS" ]; then
     printf -- '- no sources enrolled\n'
   else
     for id in $INVENTORY_IDS; do
+      # shellcheck disable=SC2016
       printf -- '- `%s` (%s): %s - last read %s, %s\n' "$id" \
         "$(inventory_field "$id" 2)" "$(source_status "$id" "$epoch")" \
         "$(freshness_phrase "$id" "$epoch")" "$(inventory_field "$id" 3)"
@@ -1622,8 +1633,8 @@ todo_cmd() {
 # marker. That is what the morning gate gets from folding its monotonic
 # `updated` stamp in: without it a recurring identical state is suppressed
 # forever and the live wake path fires once in the life of the home.
-CHECK_DUE_FILE_NAME=check-surfaced-due
-CHECK_NOTIFY_FILE_NAME=check-surfaced-notify
+CHECK_DUE_FILE_NAME='check-surfaced-due'
+CHECK_NOTIFY_FILE_NAME='check-surfaced-notify'
 
 check_signal() {
   local epoch due count notify notify_token line='' progress wake=false

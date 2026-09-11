@@ -476,7 +476,20 @@ test_notifications_are_private_verified_grouped_and_capped() {
   # silently swallowing the alert.
   out=$(at "$h" "$T_0900" notify-due)
   assert_contains "$out" 'items: 2' 'an unconfirmed payload was treated as delivered'
-  at "$h" "$T_0900" notify-sent --keys "$k1 $k2" >/dev/null
+
+  # The captain can resolve a rendered item before the send is confirmed. The
+  # DM already went out, so the surviving item is still stamped, the resolved
+  # one is skipped and named, and the payload still counts against the cap.
+  at "$h" "$T_0900" resolve --item "$k2" --reason 'handled in the thread' >/dev/null
+  out=$(at "$h" "$T_0900" notify-sent --keys "$k1 $k2") \
+    || fail 'notify-sent failed because one rendered item had been resolved'
+  assert_contains "$out" 'recorded for 1 item' 'the surviving item was not stamped'
+  assert_contains "$out" "skipped (already resolved): $k2" 'the resolved key was not reported'
+  [ -n "$(item_field "$h" "$k1" notified)" ] || fail 'the surviving item carries no notified stamp'
+  out=$(at "$h" "$T_0900" notify-due)
+  [ -z "$out" ] || fail "a delivered payload re-rendered after a partial stamp: $out"
+  assert_grep 'count=1' "$h/data/channel-intake/notify-state" \
+    'a partially stamped payload was not counted against the daily cap'
 
   # Rate limited: a third urgent item inside the minimum gap waits.
   at "$h" $((T_0900 + 60)) observe --source C_BRIEF --ref 1789023000.3 \
@@ -597,6 +610,12 @@ test_brief_and_todo_reconcile_from_one_ledger() {
   # Output outside the configured report directory is refused.
   out=$(at "$h" "$T_0915" brief --out "$TMP_ROOT/escape.md" 2>&1) && code=0 || code=$?
   expect_code 2 "$code" 'the brief was written outside the configured report directory'
+  out=$(at "$h" "$T_0915" brief --out "$h/reports/../escape.md" 2>&1) && code=0 || code=$?
+  expect_code 2 "$code" 'a .. component walked --out out of the report directory'
+  assert_contains "$out" '.. path component' 'the refusal did not name the .. component'
+  assert_absent "$h/escape.md" 'the traversal wrote a page outside the report directory'
+  out=$(at "$h" "$T_0915" todo --out "$h/reports/sub/../todo.md" 2>&1) && code=0 || code=$?
+  expect_code 2 "$code" 'a .. component inside the report directory was accepted for todo'
 
   pass 'the brief and to-do list render from one ledger, so corrections and completions reconcile across both'
 }
@@ -1021,6 +1040,21 @@ test_unresolvable_timezone_is_refused() {
   pass 'a timezone that does not resolve is refused instead of silently becoming UTC'
 }
 
+test_equal_quiet_bounds_are_refused() {
+  local h out code
+  h="$TMP_ROOT/quiet-equal"
+  new_home "$h"
+  sed 's/^quiet_end = 07:00$/quiet_end = 22:00/' \
+    "$h/config/channel-intake" >"$h/config/channel-intake.tmp"
+  mv "$h/config/channel-intake.tmp" "$h/config/channel-intake"
+
+  out=$(at "$h" "$T_0900" status 2>&1) && code=0 || code=$?
+  expect_code 2 "$code" 'equal quiet bounds were accepted and would silence every hour'
+  assert_contains "$out" 'must differ' 'the refusal did not explain the equal bounds'
+
+  pass 'quiet hours with equal bounds are refused instead of silencing every alert forever'
+}
+
 test_both_schedules_share_one_launchd_writer() {
   assert_grep 'fm-launchd-schedule-lib.sh' "$SCHEDULE" \
     'the channel-intake schedule no longer reuses the shared launchd writer'
@@ -1110,6 +1144,7 @@ test_a_replaced_alert_still_wakes_the_primary
 test_blocked_notifications_are_visible_rather_than_silent
 test_only_a_requested_render_opens_the_page
 test_unresolvable_timezone_is_refused
+test_equal_quiet_bounds_are_refused
 test_both_schedules_share_one_launchd_writer
 test_install_and_uninstall_on_a_temp_home
 test_bootstrap_surfaces_the_intake

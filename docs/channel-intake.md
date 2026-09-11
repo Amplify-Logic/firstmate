@@ -103,6 +103,7 @@ Detecting that a device or account needs an action grants no permission to perfo
 `notify-due` renders and does not send.
 The orchestrator sends the payload and then calls `notify-sent --keys "..."`, which is what stamps the items.
 An interrupted send therefore re-renders on the next pass rather than being silently swallowed.
+An item the captain resolves between the render and the confirmation is skipped and named on stdout; the rest are stamped and the payload still counts against the daily cap, so a delivered alert never re-renders.
 
 A payload that cannot go out says why.
 `status` prints `notifications_state`, and `pending` and the live check name the condition in words: `blocked` when the recipient is unset or unverified, `held` when the daily cap is spent or the minimum gap has not elapsed.
@@ -110,7 +111,7 @@ Nothing is lost in either case - the items stay notifiable and re-render once th
 
 `brief` and `todo` render from the same ledger every time.
 A correction, a resolution and a completed obligation reconcile across both by construction rather than needing a second pass over two stores.
-Both accept `--out FILE` inside the configured `report_dir` and overwrite the same path, so a background render updates the existing page instead of leaving a trail of dated files.
+Both accept `--out FILE` inside the configured `report_dir` and overwrite the same path, so a background render updates the existing page instead of leaving a trail of dated files; a path with a `..` component is refused before the directory check.
 
 Opening a rendered page is opt-in and never automatic.
 A report the captain asked for is rendered with `--open`, which opens the written page as soon as it is ready; that flag is the only thing in this gate that opens anything.
