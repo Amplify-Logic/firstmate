@@ -139,9 +139,14 @@ HOST_LABEL_RE = re.compile(r"^[A-Za-z0-9.-]+(?::\d+)?$")
 ISO_DAY_RE = re.compile(r"^(\d{4}-\d{2}-\d{2})")
 FILENAME_DAY_RE = re.compile(r"^(\d{4})(\d{2})(\d{2})T")
 BASE_CHILD_PATH = "/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin:/opt/homebrew/bin"
+# jq stays first: resolve_child_path admits each tool's directory once, in this
+# order, so the directory that supplies jq leads the child PATH. A fixture (or
+# a Homebrew install) that puts jq beside its own tmux keeps that tmux ahead of
+# the system one; python3 usually lives in /usr/bin and must not pull that
+# directory to the front.
 CHILD_PATH_TOOLS = (
-    "python3",
     "jq",
+    "python3",
     "git",
     "tmux",
     "herdr",
