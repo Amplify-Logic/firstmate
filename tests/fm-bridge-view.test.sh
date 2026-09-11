@@ -2228,6 +2228,12 @@ must(uw.indexOf('Land the gamma migration') > uw.indexOf('<details'), 'finished 
 must(elements.landed.innerHTML.indexOf('data/done-scout/report.md') !== -1 && elements.landed.innerHTML.indexOf('href="data/') === -1, 'report path rendered as a link');
 must(elements['loose-section'].hidden === false && elements.loose.innerHTML.indexOf('Reply to Gijs') !== -1, 'loose ends missing');
 must(elements['deck-counts'].textContent === '3 need you · 1 staged · 2 held decisions · 1 under way', 'counts line: ' + elements['deck-counts'].textContent);
+must(elements['deck-observed'].textContent.indexOf('Read at an unknown time') === 0, 'missing sample time not reported as unknown: ' + elements['deck-observed'].textContent);
+
+apply({home: 'Starship', read_at: Math.floor(Date.now() / 1000) - 42, server_unix: Math.floor(Date.now() / 1000), ready: [], staged: {groups: [], quiet_orders: []}, asks: [], decisions: [], under_way: [], finished: [], landed: [], loose_ends: null, counts: {}});
+must(/^Read 4[123] seconds ago · from the records Starship keeps$/.test(elements['deck-observed'].textContent), 'header age not taken from the collector sample: ' + elements['deck-observed'].textContent);
+vm.runInContext('tickObserved', context)();
+must(/^Read 4[123] seconds ago · from the records Starship keeps$/.test(elements['deck-observed'].textContent), 'tick did not keep the sampled age: ' + elements['deck-observed'].textContent);
 
 apply({home: 'Starship', ready: [], staged: {groups: [], quiet_orders: []}, asks: [], decisions: [], under_way: [], finished: [], landed: [], loose_ends: null, counts: {}});
 must(elements.staged.innerHTML.indexOf('Nothing is staged for you right now.') !== -1, 'empty staged copy');

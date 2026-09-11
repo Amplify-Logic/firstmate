@@ -2118,6 +2118,8 @@ DECK_JS = """
 const STALE_MS = %d * 1000;
 const REFRESH_MS = %d * 1000;
 let lastSuccess = 0;
+let sampledAt = 0;
+let readSource = '';
 const REGIONS = ['ready', 'staged', 'asks', 'decisions', 'underway', 'landed', 'loose'];
 function esc(value) {
   return String(value).replace(/[&<>"']/g, function(ch) {
@@ -2135,10 +2137,6 @@ function setText(id, text) {
 function setHtml(id, html) {
   const el = document.getElementById(id);
   if (el) el.innerHTML = html;
-}
-function setCount(id, text) {
-  const el = document.getElementById(id);
-  if (el) el.textContent = text;
 }
 function show(id, on) {
   const el = document.getElementById(id);
@@ -2184,7 +2182,7 @@ function renderReady(data) {
     : '<p class="empty">Nothing is ready to run from here.</p>';
   if (data.ready_note) html += '<p class="note">' + esc(data.ready_note) + '</p>';
   setHtml('ready', html);
-  setCount('ready-count', items.length ? String(items.length) : '0');
+  setText('ready-count', items.length ? String(items.length) : '0');
 }
 function card(c) {
   const badges = '<span class="badge approval">needs approval</span>' + (c.expired ? '<span class="badge expired">expired</span>' : '');
@@ -2213,7 +2211,7 @@ function renderStaged(data) {
   }
   setHtml('staged', html);
   const n = (data.counts && data.counts.staged) || 0;
-  setCount('staged-count', n ? n + (data.counts.staged_oldest ? ', oldest ' + data.counts.staged_oldest : '') : '0');
+  setText('staged-count', n ? n + (data.counts.staged_oldest ? ', oldest ' + data.counts.staged_oldest : '') : '0');
 }
 function askLine(row) {
   const where = row.project && row.project !== '-' ? ' <span class="where">· ' + esc(row.project) + '</span>' : '';
@@ -2226,7 +2224,7 @@ function renderAsks(data) {
   if (data.unconfirmed) html += '<p class="incomplete">Not confirmed here: the pull requests marked check come from the record this home keeps, not from the backlog.</p>';
   html += rows.length ? '<ul>' + rows.map(askLine).join('') + '</ul>' : '<p class="empty">Nothing is waiting on you.</p>';
   setHtml('asks', html);
-  setCount('asks-count', String(rows.length));
+  setText('asks-count', String(rows.length));
 }
 function renderDecisions(data) {
   const rows = data.decisions || [];
@@ -2249,7 +2247,7 @@ function renderUnderWay(data) {
     html += '<details class="more-fold"><summary>' + finished.length + ' finished, awaiting cleanup</summary><ul>' + finished.map(workerLine).join('') + '</ul></details>';
   }
   setHtml('underway', html);
-  setCount('underway-count', String(rows.length));
+  setText('underway-count', String(rows.length));
 }
 function landedLine(r) {
   return '<li><span class="when">' + esc(r.closed || '-') + '</span><span class="what">' + esc(r.what) + '</span>' + esc(r.title || '') + ref(r) + '</li>';
@@ -2257,7 +2255,7 @@ function landedLine(r) {
 function renderLanded(data) {
   const rows = data.landed || [];
   setHtml('landed', rows.length ? '<ul>' + rows.map(landedLine).join('') + '</ul>' : '<p class="empty">Nothing has landed recently.</p>');
-  setCount('landed-count', String(rows.length));
+  setText('landed-count', String(rows.length));
 }
 function renderLoose(data) {
   const loose = data.loose_ends;
@@ -2277,7 +2275,10 @@ function apply(data) {
   lastSuccess = Date.now();
   setStale(false);
   setText('deck-error', '');
-  setText('deck-observed', 'Read just now · from the records ' + (data.home || 'this home') + ' keeps');
+  const sample = Number(data.read_at) || Number(data.server_unix) || 0;
+  sampledAt = sample > 0 ? sample * 1000 : 0;
+  readSource = ' · from the records ' + (data.home || 'this home') + ' keeps';
+  setText('deck-observed', readLabel() + readSource);
   const c = data.counts || {};
   setText('deck-counts', [
     (c.asks || 0) + ' need you',
@@ -2293,11 +2294,15 @@ function apply(data) {
   renderLanded(data);
   renderLoose(data);
 }
+function readLabel() {
+  if (!sampledAt) return 'Read at an unknown time';
+  const seconds = Math.max(0, Math.round((Date.now() - sampledAt) / 1000));
+  return seconds < 5 ? 'Read just now' : 'Read ' + seconds + ' seconds ago';
+}
 function tickObserved() {
   if (!lastSuccess) return;
-  const seconds = Math.max(0, Math.round((Date.now() - lastSuccess) / 1000));
   const el = document.getElementById('deck-observed');
-  if (el && seconds >= 5) el.textContent = 'Read ' + seconds + ' seconds ago';
+  if (el && sampledAt) el.textContent = readLabel() + readSource;
   if (Date.now() - lastSuccess > STALE_MS) setStale(true);
 }
 async function refresh() {
