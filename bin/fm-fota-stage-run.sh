@@ -28,7 +28,7 @@
 #   settle <run-id>                            read the result, decide the state
 #   status <run-id>                            print the current state
 #   show <run-id>                              print the full run record
-#   list                                       print all runs, newest first
+#   list [--json]                              print all runs, newest first
 #   -h|--help
 #
 # Environment:
@@ -56,7 +56,7 @@ usage: fm-fota-stage-run.sh start <plan.json> [--deadline <seconds>]
        fm-fota-stage-run.sh settle <run-id>
        fm-fota-stage-run.sh status <run-id>
        fm-fota-stage-run.sh show <run-id>
-       fm-fota-stage-run.sh list
+       fm-fota-stage-run.sh list [--json]
 
 Background staging runs over a staged plan. Stages and verifies only:
 never sends a device command, never approves, never retries a send.
@@ -304,8 +304,13 @@ cmd_show() {
 }
 
 cmd_list() {
-  [ -d "$RUNS" ] || { echo "no staging runs"; return 0; }
-  RUNS_DIR="$RUNS" py -c '
+  local as_json=0
+  [ "${1:-}" = "--json" ] && as_json=1
+  if [ ! -d "$RUNS" ]; then
+    [ "$as_json" = 1 ] && printf '%s\n' '[]' || echo "no staging runs"
+    return 0
+  fi
+  RUNS_DIR="$RUNS" AS_JSON="$as_json" py -c '
 import json, os
 runs = os.environ["RUNS_DIR"]
 rows = []
@@ -314,9 +319,27 @@ for name in os.listdir(runs):
         try:
             rows.append(json.load(open(os.path.join(runs, name), encoding="utf-8")))
         except (OSError, json.JSONDecodeError):
+            # A record this parser cannot read is skipped, never guessed at:
+            # the deck would rather show one run fewer than invent its state.
             continue
-for r in sorted(rows, key=lambda x: x.get("started_at", 0), reverse=True):
-    print("%s\t%s\t%s\tattempt %s" % (r["run_id"], r["state"], r["device_id"], r.get("attempt")))
+rows.sort(key=lambda x: x.get("started_at", 0), reverse=True)
+if os.environ["AS_JSON"] == "1":
+    print(json.dumps([
+        {
+            "run_id": r.get("run_id"),
+            "state": r.get("state"),
+            "device_id": r.get("device_id"),
+            "attempt": r.get("attempt"),
+            "eligibility": r.get("eligibility"),
+            "started_at": r.get("started_at"),
+            "reason": r.get("reason"),
+            "sent": bool(r.get("sent")),
+        }
+        for r in rows
+    ]))
+else:
+    for r in rows:
+        print("%s\t%s\t%s\tattempt %s" % (r["run_id"], r["state"], r["device_id"], r.get("attempt")))
 '
 }
 

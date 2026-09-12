@@ -1356,6 +1356,75 @@ test_json_mode_degrades_honestly_and_scrubs() {
 }
 
 
+# A payload carrying device staging runs, so the pane can be driven through the
+# sections that already own each state. bin/fm-deck.sh emits this section from
+# bin/fm-fota-stage-run.sh list --json.
+staging_payload() {  # <staging-json>
+  render_payload "" ""
+  printf '%s staging\n' "$MARK"
+  printf '%s\n' "$1"
+}
+
+test_staging_runs_route_to_the_sections_that_own_each_state() {
+  local out
+  out=$(staging_payload '[
+    {"run_id":"r-ready","state":"ready","device_id":"dev-ready","attempt":1,"eligibility":"verified"},
+    {"run_id":"r-pending","state":"pending","device_id":"dev-pending","attempt":1,"eligibility":"verified"},
+    {"run_id":"r-unknown","state":"unknown","device_id":"dev-unknown","attempt":1,"eligibility":"verified",
+     "reason":"no result inside the deadline"},
+    {"run_id":"r-error","state":"error","device_id":"dev-error","attempt":1,"eligibility":"verified",
+     "reason":"readback payload does not match the staged plan"}
+  ]' | python3 "$RENDER" "$MARK" 2>&1)
+
+  # A run awaiting the captain is staged; the pane must not still claim nothing is.
+  assert_contains "$out" 'dev-ready' "a ready run appears on the pane"
+  assert_contains "$out" 'awaiting your approval' "a ready run says what it wants"
+  assert_not_contains "$out" 'nothing staged for you right now' \
+    "a ready run replaces the empty staged line"
+
+  # A run still working belongs beside the workers, not in the captain's asks.
+  assert_contains "$out" 'dev-pending' "a pending run appears under way"
+  assert_contains "$out" 'PREPARING' "a pending run is labelled as preparing"
+
+  # unknown is a need, not a failure: someone has to go and look.
+  assert_contains "$out" 'dev-unknown' "an unknown run appears"
+  assert_contains "$out" 'verify at the portal' "unknown tells the captain what to do"
+  assert_contains "$out" 'dev-error' "an error run appears"
+  pass "each staging state renders in the section that already owns it"
+}
+
+test_staging_never_claims_unverified_eligibility_is_settled() {
+  local out
+  out=$(staging_payload '[
+    {"run_id":"r1","state":"ready","device_id":"dev-a","attempt":1,"eligibility":"unverified"}
+  ]' | python3 "$RENDER" "$MARK" 2>&1)
+  # A staged run on a target whose eligibility was never established must say so
+  # on the pane, not only in the plan file the captain is not reading.
+  assert_contains "$out" 'eligibility unverified' "unverified eligibility is shown"
+  pass "a staged run shows unverified eligibility on the pane"
+}
+
+test_absent_staging_section_changes_nothing() {
+  local out
+  out=$(render_payload "" "" | python3 "$RENDER" "$MARK" 2>&1)
+  # Every home without a staging run emits no such section; the pane must read
+  # exactly as it did before rather than erroring or inventing an empty group.
+  assert_contains "$out" 'hubspot://note-1' "the existing staged card is untouched"
+  assert_not_contains "$out" 'PREPARING' "no staging rows appear"
+  assert_not_contains "$out" 'awaiting your approval' "no staging wording appears"
+  pass "a payload with no staging section renders unchanged"
+}
+
+test_malformed_staging_section_is_skipped_not_guessed() {
+  local out
+  out=$(staging_payload 'not json at all' | python3 "$RENDER" "$MARK" 2>&1)
+  # An unreadable section must cost only itself: the rest of the pane still
+  # draws, and no staging row is invented from text that could not be parsed.
+  assert_contains "$out" 'hubspot://note-1' "the rest of the pane still draws"
+  assert_not_contains "$out" 'PREPARING' "nothing is invented from unreadable input"
+  pass "an unreadable staging section is skipped rather than guessed at"
+}
+
 test_help_exits_zero
 test_empty_home_renders_honest_empty_sections
 test_no_sources_at_all_still_renders
@@ -1391,3 +1460,7 @@ test_json_mode_emits_the_pane_as_one_model
 test_json_mode_degrades_honestly_and_scrubs
 test_interval_validation
 test_refresh_loop_redraws_and_reflects_changes
+test_staging_runs_route_to_the_sections_that_own_each_state
+test_staging_never_claims_unverified_eligibility_is_settled
+test_absent_staging_section_changes_nothing
+test_malformed_staging_section_is_skipped_not_guessed
