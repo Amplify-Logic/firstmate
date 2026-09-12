@@ -37,10 +37,13 @@
 #      same-branch runs rejected). Nothing displaces a run that finished
 #      passed/checks-passed - that is a result, not a corpse - on either route.
 #      That unverifiable live row is an INFERENCE bounded by the only evidence
-#      tied to it, its own ledger date: past FM_CREW_STATE_LIVE_ROW_MAX_AGE, or
-#      with no usable date, it reports unknown rather than claiming the crew
-#      works or that the replaced run died. Runs this copy CAN resolve are never
-#      aged out.
+#      tied to it, the ledger's record of when that run STARTED: past
+#      FM_CREW_STATE_LIVE_ROW_MAX_AGE, with no usable date, or with no readable
+#      local clock, it reports unknown rather than claiming the crew works or
+#      that the replaced run died. The bound is a backstop against a row nobody
+#      reaped, not a verdict on how long a run may take - a run monitoring a
+#      green PR overnight keeps reading working. Runs this copy CAN resolve are
+#      never aged out.
 #      The run-step is AUTHORITATIVE: running/fixing -> working, ci -> working,
 #      awaiting_approval/fix_review -> parked (with gate findings), terminal
 #      passed/checks-passed -> done, failed/cancelled -> failed. EXCEPT: while
@@ -98,14 +101,21 @@ FM_CREW_STATE_RUNS_LIMIT=${FM_CREW_STATE_RUNS_LIMIT:-200}
 case "$FM_CREW_STATE_RUNS_LIMIT" in ''|*[!0-9]*) FM_CREW_STATE_RUNS_LIMIT=200 ;; esac
 # How old the ledger date of an UNVERIFIABLE live row may be before the anchored
 # pipeline-continuation inference stops claiming this crew is working
-# (nm_live_row_freshness, below; docs/configuration.md owns the setting). Six
-# hours by default: long enough that a slow pipeline round or a green run still
-# monitoring its PR stays working, short enough that a row the gate never reaped
-# stops pinning a crew as working for the rest of the day. ONLY that inference is
-# bounded - a run whose head this copy can resolve, and the `axi status` answer
-# itself, are never aged out.
-FM_CREW_STATE_LIVE_ROW_MAX_AGE=${FM_CREW_STATE_LIVE_ROW_MAX_AGE:-21600}
-case "$FM_CREW_STATE_LIVE_ROW_MAX_AGE" in ''|*[!0-9]*) FM_CREW_STATE_LIVE_ROW_MAX_AGE=21600 ;; esac
+# (nm_live_row_freshness, below; docs/configuration.md owns the setting).
+# The date is when the run STARTED, not when it ended (nm_parse_runs_date_epoch
+# states the evidence), and a healthy run stays `running` for its whole ci
+# monitor phase - until a captain merges the PR, which is routinely overnight and
+# can be a weekend. So this is a BACKSTOP against a row nobody ever reaps, NOT a
+# judgement about how long a run may legitimately take: three days is past any
+# plausible live run, which is exactly the point. Stated honestly, that makes the
+# rule weak for its purpose - it cannot tell a dead run from a slow one, and an
+# unreaped row still reads working for days before it expires - but a tighter
+# window would manufacture a false unknown for a crew that is genuinely working,
+# which is the same wrong reading this reader exists to prevent. ONLY this
+# inference is bounded - a run whose head this copy can resolve, and the `axi
+# status` answer itself, are never aged out.
+FM_CREW_STATE_LIVE_ROW_MAX_AGE=${FM_CREW_STATE_LIVE_ROW_MAX_AGE:-259200}
+case "$FM_CREW_STATE_LIVE_ROW_MAX_AGE" in ''|*[!0-9]*) FM_CREW_STATE_LIVE_ROW_MAX_AGE=259200 ;; esac
 SEP=' · '
 
 # Emit the one canonical line and exit 0. Detail is optional.
@@ -390,33 +400,38 @@ nm_resolve_commit() {  # <sha-ish>
 # unknown. ONE owner of that vocabulary for every reader: the ledger's status
 # column (which emits running/completed/failed/cancelled), the `axi status`
 # outcome/status fields that share those words (nm_run_is_terminal_failure), and
-# the two synthetic words the anchored inference below emits when it cannot
-# stand behind its own answer. failure and result are split because only a
+# the unverified-* synthetic words the anchored inference below emits when it
+# cannot stand behind its own answer - one per reason, all one class, since no
+# ledger word can collide with that prefix. failure and result are split because only a
 # FAILURE is ever displaced - a passed/checks-passed result is a verdict, not a
 # corpse - so no caller needs a second copy of the failed/cancelled list.
 nm_run_status_class() {  # <status-word>
   case "${1:-}" in
-    running)                                 printf 'live' ;;
-    failed|cancelled)                        printf 'failure' ;;
-    completed)                               printf 'result' ;;
-    unverified-stale|unverified-undated)     printf 'unverified' ;;
-    *)                                       printf 'unknown' ;;
+    running)                    printf 'live' ;;
+    failed|cancelled)           printf 'failure' ;;
+    completed)                  printf 'result' ;;
+    unverified-*)               printf 'unverified' ;;
+    *)                          printf 'unknown' ;;
   esac
 }
 
 # Freshness verdict for the ledger date of a HELD live row (see the anchored
-# pipeline-continuation rule below): fresh, stale, or undated.
-# HONEST SEMANTICS: the date column carries the run record's own timestamp, so
-# this bounds the age of the RECORD, and nothing here observes the process. A
-# stale or undated verdict therefore means "this copy cannot stand behind the
-# inference", never "that run died" - callers represent both as unknown rather
-# than converting them into a failure. Clock skew that dates a row in the future
-# reads fresh rather than inventing an expiry.
+# pipeline-continuation rule below): fresh, stale, undated, or local-clock.
+# HONEST SEMANTICS: the date column records when the run STARTED, so this bounds
+# how long ago that record was created, and nothing here observes the process.
+# A stale or undated verdict therefore means "this copy cannot stand behind the
+# inference", never "that run died" - callers represent every non-fresh verdict
+# as unknown rather than converting it into a failure. Clock skew that dates a
+# row in the future reads fresh rather than inventing an expiry.
+# The LOCAL clock is read first, and its failure gets its own verdict, because
+# the same `date` binary parses the row's date: a machine whose clock cannot be
+# read would otherwise report every row as a defective RECORD and send an
+# operator to the ledger for a fault that is entirely local.
 nm_live_row_freshness() {  # <epoch>
   local epoch=${1:-} now
-  case "$epoch" in ''|*[!0-9]*) printf 'undated'; return ;; esac
   now=$(date +%s 2>/dev/null) || now=""
-  case "$now" in ''|*[!0-9]*) printf 'undated'; return ;; esac
+  case "$now" in ''|*[!0-9]*) printf 'local-clock'; return ;; esac
+  case "$epoch" in ''|*[!0-9]*) printf 'undated'; return ;; esac
   if [ "$((now - epoch))" -gt "$FM_CREW_STATE_LIVE_ROW_MAX_AGE" ]; then
     printf 'stale'
   else
@@ -467,11 +482,17 @@ nm_read_runs_pair() {  # <pair>
 # is exact) - but branch + coarse status is exactly what this predicate needs:
 # is a run for THIS branch active right now. Echoes the first (most recent)
 # binding row's status word (running/completed/cancelled/failed) plus a TAB and
-# optional end-time epoch from the date column, subject to the anchored
+# the optional start-time epoch from the date column, subject to the anchored
 # pipeline-continuation exception stated with the function below, or empty when
 # the branch has no run within FM_CREW_STATE_RUNS_LIMIT rows.
 # Parse a `no-mistakes runs` date column ("YYYY-MM-DD HH:MM") to epoch seconds.
 # Empty on failure so callers can fall back without treating parse errors as "old".
+# WHAT THAT DATE IS, established from recorded runs rather than assumed: run
+# 01M2AB3H8Y2AW1AVJDK0SH19G7 (fm/fm-cursor-lock-identity) is listed with date
+# 2026-09-12 10:17 while still `running` at about 10:19, its head later advanced
+# and its status later became failed, and its review step alone recorded
+# duration_ms 1767690 (~29.5 min), so 10:17 cannot be an end time. The column is
+# the run's START/creation time and does not move when the run later ends.
 nm_parse_runs_date_epoch() {  # <YYYY-MM-DD> <HH:MM>
   local day=$1 clock=$2
   [ -n "$day" ] && [ -n "$clock" ] || return 0
@@ -511,15 +532,19 @@ nm_parse_runs_date_epoch() {  # <YYYY-MM-DD> <HH:MM>
 # The held row is an INFERENCE, not an observation: its head is an object this
 # copy does not have, so nothing here can see whether that run still breathes.
 # The ledger date of the held row is the only evidence tied to that exact run,
-# so the inference is bounded by it (nm_live_row_freshness): a fresh row is
-# attributed as live, while a row older than FM_CREW_STATE_LIVE_ROW_MAX_AGE, or
-# one this copy cannot date at all, yields the synthetic word unverified-stale
-# or unverified-undated. Those say "insufficient evidence" and are reported as
-# unknown - a gate process that died without reaping its row must not pin a crew
-# as working forever, and equally an unreaped row is no proof the run died, so
-# the older failure is not resurrected as the current state either. Only this
-# inference is bounded; a run whose head resolves here, and the `axi status`
-# answer itself, are never aged out.
+# so the inference is bounded by it (nm_live_row_freshness). That date is the
+# run's START time, so the bound is only a backstop against a row nobody reaped -
+# deliberately set past any plausible live run, because a run legitimately stays
+# `running` through an overnight ci-monitor wait for a captain merge and must
+# keep reading working. A row past FM_CREW_STATE_LIVE_ROW_MAX_AGE, one this copy
+# cannot date, or a local clock this copy cannot read yields the matching
+# synthetic word (unverified-stale, unverified-undated, unverified-local-clock).
+# All three say "insufficient evidence" and are reported as unknown - a gate
+# process that died without reaping its row must not pin a crew as working
+# forever, and equally an unreaped row is no proof the run died, so the older
+# failure is not resurrected as the current state either. Only this inference is
+# bounded; a run whose head resolves here, and the `axi status` answer itself,
+# are never aged out.
 nm_runs_status_and_epoch_for_branch() {  # <branch>
   local branch=$1 out row st rest br sha day clock epoch
   local held_st="" held_epoch="" local_full
@@ -551,9 +576,10 @@ nm_runs_status_and_epoch_for_branch() {  # <branch>
       if [ -n "$local_full" ] && [ "$(nm_run_status_class "$st")" = failure ] \
         && [ "$(nm_resolve_commit "$sha")" = "$local_full" ]; then
         case "$(nm_live_row_freshness "$held_epoch")" in
-          fresh)   printf '%s\t%s' "$held_st" "$held_epoch" ;;
-          stale)   printf 'unverified-stale\t%s' "$held_epoch" ;;
-          *)       printf 'unverified-undated\t' ;;
+          fresh)       printf '%s\t%s' "$held_st" "$held_epoch" ;;
+          stale)       printf 'unverified-stale\t%s' "$held_epoch" ;;
+          local-clock) printf 'unverified-local-clock\t' ;;
+          *)           printf 'unverified-undated\t' ;;
         esac
         return 0
       fi
@@ -591,6 +617,13 @@ status_log_mtime_epoch() {
 # wins and the hold is reported alongside it - see the failed-run emit below).
 # When the run's end time cannot be determined, a trailing paused:/blocked: is
 # treated as newer (the worker's last append after observing the failure).
+# Accuracy note, no behaviour change: when no axi-status timestamp field exists
+# the runs-ledger fallback below supplies the run's START time, not its end
+# (nm_parse_runs_date_epoch), so this comparison can read a pause appended while
+# the run was still going as "newer" than the run. That is knowingly left exactly
+# as it was - the comparison predates the live-row rule, it is the 2026-07-21
+# declared-pause-lost fix's own behaviour, and swapping which timestamp it trusts
+# is a separate decision with its own incident history.
 status_log_newer_than_terminal_run() {
   local log_epoch run_epoch pair field
   if [ "$LOG_VERB" = blocked ]; then :
@@ -778,8 +811,10 @@ if [ "$HAVE_RUN" = 1 ]; then
       completed)          RUN_STATE="done";  RUN_DETAIL="run completed" ;;
       failed)             RUN_STATE=failed;  RUN_DETAIL="run failed" ;;
       cancelled)          RUN_STATE=failed;  RUN_DETAIL="run cancelled" ;;
-      unverified-stale)   RUN_STATE=unknown; RUN_DETAIL="live run unverifiable: record older than the freshness bound" ;;
+      unverified-stale)   RUN_STATE=unknown; RUN_DETAIL="live run unverifiable: record started before the freshness bound" ;;
       unverified-undated) RUN_STATE=unknown; RUN_DETAIL="live run unverifiable: record carries no usable date" ;;
+      unverified-local-clock)
+                          RUN_STATE=unknown; RUN_DETAIL="live run unverifiable: local clock unreadable here" ;;
       *)                  RUN_STATE=unknown; RUN_DETAIL="runs list status: $COARSE_STATUS" ;;
     esac
   else

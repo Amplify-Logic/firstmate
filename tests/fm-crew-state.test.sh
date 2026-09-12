@@ -30,9 +30,11 @@
 #       fetched outranks an older failed run at the worktree's own head, on
 #       both selection routes, while unanchored, rewritten, and finished runs
 #       stay exactly as they were, and that unverifiable inference is bounded by
-#       the run record's own date - stale or undated reads unknown, never a
-#       claim that the crew works or that the replaced run died, while a run
-#       whose head resolves here is never aged out
+#       the ledger's record of when the run STARTED - a backstop against a row
+#       nobody reaped, never a verdict on duration, so an overnight ci-monitor
+#       row still reads working while an abandoned one, an undatable one, and an
+#       unreadable local clock each read unknown with their own honest detail,
+#       and a run whose head resolves here is never aged out
 set -u
 
 # shellcheck source=tests/lib.sh
@@ -1574,9 +1576,9 @@ EOF
 
 # The held row is an inference, not an observation: its head is not in this copy,
 # so nothing here sees whether that run still breathes. A gate process that dies
-# without reaping its row must not pin the crew as working for the rest of the
-# day - past the freshness bound the answer becomes unknown, which surfaces the
-# crew (absorb class none) so recovery can fire.
+# without reaping its row must not pin the crew as working forever - days past
+# the backstop the answer becomes unknown, which surfaces the crew (absorb class
+# none) so recovery can fire.
 test_stale_live_row_no_longer_pins_working() {
   reset_fakes
   local d short fix out absorb
@@ -1589,8 +1591,8 @@ test_stale_live_row_no_longer_pins_working() {
   printf 'working: implementation committed, validating\n' > "$d/state/abandoned.status"
   FM_FAKE_AXI_STATUS="$(run_running fm/other-crew)"
   FM_FAKE_RUNS_LIST="$(cat <<EOF
-  running    fm/feat-abandoned ${fix}  $(runs_date_ago 108000)
-  failed     fm/feat-abandoned ${short}  $(runs_date_ago 111600)
+  running    fm/feat-abandoned ${fix}  $(runs_date_ago 432000)
+  failed     fm/feat-abandoned ${short}  $(runs_date_ago 435600)
 EOF
 )"
   FM_FAKE_BUSY=0
@@ -1650,7 +1652,7 @@ test_long_running_resolvable_row_is_not_aged_out() {
   fm_write_meta "$d/state/longrun.meta" "window=fm:fm-longrun" "worktree=$d/wt" "kind=ship"
   FM_FAKE_AXI_STATUS="$(run_running fm/other-crew)"
   FM_FAKE_RUNS_LIST="$(cat <<EOF
-  running    fm/feat-longrun ${short}  $(runs_date_ago 259200)
+  running    fm/feat-longrun ${short}  $(runs_date_ago 604800)
 EOF
 )"
   FM_FAKE_BUSY=0
@@ -1658,6 +1660,72 @@ EOF
   assert_contains "$out" "state: working" "a resolvable live run stays working regardless of age"
   assert_contains "$out" "source: run-step" "the resolvable run is still run-step sourced"
   pass "a long-running run whose head resolves here is never aged out"
+}
+
+# The disconfirming case for the bound itself. The ledger date is when the run
+# STARTED, and the no-mistakes ci step stays `running` for the whole monitor
+# phase - until a captain merges the PR, routinely overnight. A bound that fired
+# on ordinary duration would report a crew whose PR is green as unknown, which is
+# the same wrong reading, only in the other direction: an overnight held row is
+# well inside the backstop and must still read working.
+test_overnight_ci_monitor_live_row_still_reads_working() {
+  reset_fakes
+  local d short fix out
+  d=$(new_case overnight-ci-monitor)
+  make_repo_on_branch "$d/wt" fm/feat-overnight
+  short=$(git -C "$d/wt" rev-parse --short=7 HEAD)
+  fix=$(make_pipeline_fix_head "$d/wt" fm/feat-overnight)
+  make_fakebin "$d" >/dev/null
+  fm_write_meta "$d/state/overnight.meta" "window=fm:fm-overnight" "worktree=$d/wt" "kind=ship"
+  printf 'working: implementation committed, validating\n' > "$d/state/overnight.status"
+  FM_FAKE_AXI_STATUS="$(run_running fm/other-crew)"
+  # Started 20 hours ago and still monitoring: a normal overnight merge wait.
+  FM_FAKE_RUNS_LIST="$(cat <<EOF
+  running    fm/feat-overnight ${fix}  $(runs_date_ago 72000)
+  failed     fm/feat-overnight ${short}  $(runs_date_ago 75600)
+EOF
+)"
+  FM_FAKE_BUSY=0
+  out=$(run_crew_state "$d" overnight)
+  assert_contains "$out" "state: working" "an overnight ci-monitor run must still read working"
+  assert_contains "$out" "source: run-step" "the overnight run is still run-step sourced"
+  assert_not_contains "$out" "unverifiable" "ordinary run duration must not trip the backstop"
+  pass "an overnight ci-monitor live row is not aged out by the freshness backstop"
+}
+
+# The same `date` binary parses the row's date and reads the local clock, so a
+# machine whose clock cannot be read must not be reported as a defective ledger
+# RECORD - that sends an operator to the wrong place. The local fault gets its
+# own verdict and its own detail.
+test_local_clock_failure_is_reported_as_a_local_fault() {
+  reset_fakes
+  local d short fix out
+  d=$(new_case local-clock-failure)
+  make_repo_on_branch "$d/wt" fm/feat-noclock
+  short=$(git -C "$d/wt" rev-parse --short=7 HEAD)
+  fix=$(make_pipeline_fix_head "$d/wt" fm/feat-noclock)
+  make_fakebin "$d" >/dev/null
+  # A `date` that cannot answer at all, ahead of the real one on PATH.
+  cat > "$d/fakebin/date" <<'SH'
+#!/usr/bin/env bash
+exit 1
+SH
+  chmod +x "$d/fakebin/date"
+  fm_write_meta "$d/state/noclock.meta" "window=fm:fm-noclock" "worktree=$d/wt" "kind=ship"
+  printf 'working: implementation committed, validating\n' > "$d/state/noclock.status"
+  FM_FAKE_AXI_STATUS="$(run_running fm/other-crew)"
+  FM_FAKE_RUNS_LIST="$(cat <<EOF
+  running    fm/feat-noclock ${fix}  $(runs_date_ago 300)
+  failed     fm/feat-noclock ${short}  $(runs_date_ago 480)
+EOF
+)"
+  FM_FAKE_BUSY=0
+  out=$(run_crew_state "$d" noclock)
+  assert_contains "$out" "state: unknown" "an unreadable local clock cannot support the inference"
+  assert_contains "$out" "local clock unreadable" "the detail names the LOCAL fault"
+  assert_not_contains "$out" "no usable date" "a local fault must not be blamed on the record"
+  assert_not_contains "$out" "state: failed" "a local fault must not be reported as a death"
+  pass "an unreadable local clock is reported as a local fault, not a defective record"
 }
 
 test_active_run_is_authoritative
@@ -1720,5 +1788,7 @@ test_completed_anchor_is_not_displaced_by_a_live_ledger_row
 test_stale_live_row_no_longer_pins_working
 test_undated_live_row_reports_insufficient_evidence
 test_long_running_resolvable_row_is_not_aged_out
+test_overnight_ci_monitor_live_row_still_reads_working
+test_local_clock_failure_is_reported_as_a_local_fault
 
 echo "all fm-crew-state tests passed"
