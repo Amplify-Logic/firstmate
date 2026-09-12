@@ -194,7 +194,8 @@
 #   5  retired       the topic already completed, or was cancelled
 #   6  already-performed  that step is done; doing it again is the stale-step bug
 #   7  binding-replaced   the request belongs to a binding that no longer exists
-#   8  duplicate-suppressed  that exact sentence was already presented
+#   8  duplicate-suppressed | filler-suppressed  that exact sentence was already
+#                    released for presentation, or it carries no outcome at all
 #   9  conflict      an id, hash, or revision disagreed; nothing was written,
 #                    a record already exists, and repeating the call will not help
 #  10  write-failed  the record could not be written at all; nothing was stored,
@@ -377,12 +378,46 @@ topic_terminal() {  # <topic>
   printf '%s %s\n' "$(record_field "$file" state)" "$(record_field "$file" revision)"
 }
 
-record_event() {  # <topic> <revision> <phase> <detail>
-  local dir line
+# The evidence class is its OWN tab-separated field, never a word inside the
+# detail: the detail is operator free text, and a note reading "evidence=verified"
+# must not be readable back as verification. The writer decides the value and
+# reduces it to one of two tokens, clean_text strips the tab out of every free
+# text field so none can forge the separator, and the reader takes the field by
+# position. A record written before this field existed has no sixth field and is
+# therefore read as a claim, which is the safe direction.
+record_event() {  # <topic> <revision> <phase> <detail> [verified|claim]
+  local dir line class
   dir=$(topic_dir "$1")
   mkdir -p "$dir" || return 1
-  line=$(printf '%s\t%s\t%s\t%s\t%s' "$(utc_now)" "$(epoch_now)" "$2" "$3" "$(clean_text "$4")")
+  case "${5:-}" in
+    verified) class=verified ;;
+    *) class=claim ;;
+  esac
+  line=$(printf '%s\t%s\t%s\t%s\t%s\t%s' "$(utc_now)" "$(epoch_now)" "$2" "$3" "$(clean_text "$4")" "$class")
   printf '%s\n' "$line" >> "$dir/events.log"
+}
+
+# Split one event record by position. `read` with IFS set to tab collapses a run
+# of tabs into one separator, so an empty detail would silently shift the
+# evidence class into the detail slot; this splits on exactly one tab at a time
+# instead, which is the whole point of keeping the class in its own field.
+EV_UTC=''
+EV_EPOCH=''
+EV_REV=''
+EV_PHASE=''
+EV_DETAIL=''
+EV_CLASS=''
+parse_event() {  # <record line>
+  local rest=$1 tab
+  tab=$(printf '\t')
+  EV_UTC=${rest%%"$tab"*}; rest=${rest#*"$tab"}
+  EV_EPOCH=${rest%%"$tab"*}; rest=${rest#*"$tab"}
+  EV_REV=${rest%%"$tab"*}; rest=${rest#*"$tab"}
+  EV_PHASE=${rest%%"$tab"*}; rest=${rest#*"$tab"}
+  case "$rest" in
+    *"$tab"*) EV_DETAIL=${rest%%"$tab"*}; EV_CLASS=${rest#*"$tab"} ;;
+    *) EV_DETAIL=$rest; EV_CLASS='' ;;
+  esac
 }
 
 require_topic() {  # <topic>
@@ -686,7 +721,7 @@ cmd_cancel() {
 }
 
 cmd_complete() {
-  local topic=${1:-} rev='' outcome='' dir retired=0 f base status=0
+  local topic=${1:-} rev='' outcome='' dir retired=0 unretired='' f base status=0
   shift || true
   while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -715,17 +750,28 @@ cmd_complete() {
       [ -f "$f" ] || continue
       base=$(basename "$f" .declared)
       [ -f "$dir/steps/$base.performed" ] && continue
+      status=0
       printf 'step=%s\nretired_by_revision=%s\nutc=%s\n' "$base" "$rev" "$(utc_now)" \
-        | publish_once "$dir/steps/$base.retired" >/dev/null 2>&1 || true
-      retired=$((retired + 1))
+        | publish_once "$dir/steps/$base.retired" >/dev/null 2>&1 || status=$?
+      case "$status" in
+        0|1) retired=$((retired + 1)) ;;
+        *) unretired="${unretired:+$unretired }$base" ;;
+      esac
     done
   fi
   record_event "$topic" "$rev" completed "$(clean_text "$outcome")"
+  # The completion itself is recorded and the terminal state already refuses
+  # every later action on this topic, so nothing stale can run. But a retirement
+  # that was never written must not be counted as one: the operator is told
+  # which substeps still carry a declared record to clear by hand.
+  if [ -n "$unretired" ]; then
+    refuse 10 write-failed "completed $topic at revision $rev, but these pending step(s) could not be retired: $unretired; their declarations are still on disk and must be cleared or escalated"
+  fi
   printf 'ok: completed %s at revision %s; retired %s pending step(s) of this topic only\n' "$topic" "$rev" "$retired"
 }
 
 cmd_step() {
-  local topic=${1:-} dir added=0 slug
+  local topic=${1:-} dir added=0 slug status
   shift || true
   require_topic "$topic"
   dir="$(topic_dir "$topic")/steps"
@@ -735,9 +781,18 @@ cmd_step() {
       --step)
         slug=${2:-}
         slug_valid "$slug" || die "step: invalid step slug: $slug"
+        status=0
         printf 'step=%s\ndeclared_utc=%s\n' "$slug" "$(utc_now)" \
-          | publish_once "$dir/$slug.declared" >/dev/null 2>&1 || true
-        added=$((added + 1))
+          | publish_once "$dir/$slug.declared" >/dev/null 2>&1 || status=$?
+        # 1 is a step that is already declared, which is exactly what declaring
+        # it again should mean: it is tracked either way, so it counts. 2 is a
+        # write that never happened - counting it would report a substep as
+        # tracked while nothing retires it and nothing refuses it later, which
+        # is the stale-substep failure this ledger exists to prevent.
+        case "$status" in
+          0|1) added=$((added + 1)) ;;
+          *) refuse 10 write-failed "step $slug of $topic could not be declared; nothing was recorded, so this substep is not tracked" ;;
+        esac
         shift 2
         ;;
       *) die "step: unexpected argument: $1" ;;
@@ -813,6 +868,13 @@ cmd_performed() {
   revision_valid "$rev" || die "performed requires --revision <n>"
   slug_valid "${step:-}" || die "performed requires --step <slug>"
   require_topic "$topic"
+  # Recording what a revision actually did stays possible after it is superseded
+  # or the topic is finished - that history is real, and it is what stops the
+  # step being done twice. A revision that was never opened, or one belonging to
+  # a replaced enrollment, is refused: it would otherwise write a performed
+  # record for a phantom step, which both fabricates an action in the evidence
+  # and blocks the real step at the next gate with already-performed.
+  gate_or_refuse "$topic" "$rev" "0 3 5"
   dir="$(topic_dir "$topic")/steps"
   printf 'step=%s\nrevision=%s\nperformed_utc=%s\nnote=%s\n' "$step" "$rev" "$(utc_now)" "$(clean_text "$note")" \
     | publish_once "$dir/$step.performed" || status=$?
@@ -829,7 +891,7 @@ cmd_performed() {
 # evidence for that phase - a queue message id for an enqueue, a turn id for a
 # pickup. Only a verified record may later be reported as confirmed.
 cmd_phase() {
-  local topic=${1:-} rev='' phase='' note='' msgid='' qexit='' turnid='' detail evidence verdict code
+  local topic=${1:-} rev='' phase='' note='' msgid='' qexit='' turnid='' detail evidence
   shift || true
   while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -856,12 +918,7 @@ cmd_phase() {
   # An event about a revision that was never opened, or one belonging to a
   # replaced enrollment, is not history - it is noise that later reads as fact.
   # Superseded and finished revisions DO keep recording: their history is real.
-  verdict=$(freshness_verdict "$topic" "$rev")
-  code=${verdict%% *}
-  case "$code" in
-    0|3|5) : ;;
-    *) refuse "$code" "$(echo "${verdict#* }" | cut -d' ' -f1)" "$(echo "${verdict#* }" | cut -d' ' -f2-)" ;;
-  esac
+  gate_or_refuse "$topic" "$rev" "0 3 5"
 
   # A non-zero queue exit means the queue did NOT accept the message. Recording
   # that as an enqueue, and saying it proves acceptance, is exactly the false
@@ -870,7 +927,7 @@ cmd_phase() {
     detail="handoff rejected by the queue, queue_exit=$qexit"
     [ -n "$note" ] && detail="$detail $(clean_text "$note")"
     [ -n "$msgid" ] && detail="$detail message=$(clean_text "$msgid")"
-    record_event "$topic" "$rev" failed "$detail evidence=verified"
+    record_event "$topic" "$rev" failed "$detail" verified
     printf 'failed: the queue did not accept the message for %s revision %s (exit %s); nothing was handed off\n' \
       "$topic" "$rev" "$qexit"
     return 0
@@ -890,7 +947,7 @@ cmd_phase() {
   [ -n "$msgid" ] && detail="$detail message=$(clean_text "$msgid")"
   [ -n "$turnid" ] && detail="$detail turn=$(clean_text "$turnid")"
   [ -n "$qexit" ] && detail="$detail queue_exit=$(clean_text "$qexit")"
-  record_event "$topic" "$rev" "$phase" "$detail evidence=$evidence"
+  record_event "$topic" "$rev" "$phase" "$detail" "$evidence"
 
   case "$phase:$evidence" in
     enqueued:verified)
@@ -944,7 +1001,7 @@ cmd_handoff() {
 # never re-queues, and never advises a retry: an accepted-but-unconfirmed send
 # is reported as exactly that.
 cmd_sent_status() {
-  local topic=${1:-} rev='' all=0 log f_rev phase detail cur
+  local topic=${1:-} rev='' all=0 log line f_rev phase detail cur
   local last_enq='' last_pick='' last_work='' last_done='' last_fail='' last_pres=''
   local enq_ev='' pick_ev=''
   shift || true
@@ -968,15 +1025,19 @@ cmd_sent_status() {
     printf 'unknown: no transport evidence recorded for %s\n' "$topic"
     return 0
   fi
-  while IFS='	' read -r _utc _epoch f_rev phase detail; do
+  while IFS= read -r line; do
+    parse_event "$line"
+    f_rev=$EV_REV
+    phase=$EV_PHASE
+    detail=$EV_DETAIL
     [ -n "$rev" ] && [ "$f_rev" != "$rev" ] && continue
     case "$phase" in
-      enqueued) last_enq="$_utc${detail:+ - $detail}"; enq_ev=$(evidence_class "$detail") ;;
-      picked-up) last_pick="$_utc${detail:+ - $detail}"; pick_ev=$(evidence_class "$detail") ;;
-      working) last_work="$_utc${detail:+ - $detail}" ;;
-      completed) last_done="$_utc${detail:+ - $detail}" ;;
-      failed) last_fail="$_utc${detail:+ - $detail}" ;;
-      presented) last_pres="$_utc${detail:+ - $detail}" ;;
+      enqueued) last_enq="$EV_UTC${detail:+ - $detail}"; enq_ev=$(evidence_class "$EV_CLASS") ;;
+      picked-up) last_pick="$EV_UTC${detail:+ - $detail}"; pick_ev=$(evidence_class "$EV_CLASS") ;;
+      working) last_work="$EV_UTC${detail:+ - $detail}" ;;
+      completed) last_done="$EV_UTC${detail:+ - $detail}" ;;
+      failed) last_fail="$EV_UTC${detail:+ - $detail}" ;;
+      presented) last_pres="$EV_UTC${detail:+ - $detail}" ;;
     esac
   done < "$log"
   if [ "$all" = 1 ]; then
@@ -1007,10 +1068,12 @@ cmd_sent_status() {
   fi
 }
 
-# "verified" only when the record itself says so; anything unmarked is a claim.
-evidence_class() {  # <detail>
+# "verified" only when the record's own evidence field says exactly that. The
+# field is written by this script and read by position, so no operator text -
+# a note, a message id, a turn id - can reach or imitate it.
+evidence_class() {  # <recorded evidence field>
   case "$1" in
-    *evidence=verified*) printf 'verified\n' ;;
+    verified) printf 'verified\n' ;;
     *) printf 'claim\n' ;;
   esac
 }
@@ -1345,7 +1408,7 @@ cmd_steer_command() {
 }
 
 cmd_evidence() {
-  local topic=${1:-} log prev=0 gap handoffs=0 turns=0 presented=0
+  local topic=${1:-} log line prev=0 gap handoffs=0 turns=0 presented=0
   require_topic "$topic"
   log="$(topic_dir "$topic")/events.log"
   printf 'topic: %s request=%s current-revision=%s\n' "$topic" "$(request_id "$topic")" "$(current_revision "$topic")"
@@ -1356,20 +1419,22 @@ cmd_evidence() {
     printf 'no events recorded\n'
     return 0
   fi
-  printf '%-22s %-4s %-12s %-9s %s\n' UTC REV PHASE GAP DETAIL
-  while IFS='	' read -r utc epoch rev phase detail; do
+  printf '%-22s %-4s %-12s %-9s %-8s %s\n' UTC REV PHASE GAP EVIDENCE DETAIL
+  while IFS= read -r line; do
+    parse_event "$line"
     if [ "$prev" = 0 ]; then
       gap='-'
     else
-      gap="$((epoch - prev))s"
+      gap="$((EV_EPOCH - prev))s"
     fi
-    prev=$epoch
-    case "$phase" in
+    prev=$EV_EPOCH
+    case "$EV_PHASE" in
       enqueued) handoffs=$((handoffs + 1)) ;;
       picked-up) turns=$((turns + 1)) ;;
       presented) presented=$((presented + 1)) ;;
     esac
-    printf '%-22s %-4s %-12s %-9s %s\n' "$utc" "$rev" "$phase" "$gap" "$detail"
+    printf '%-22s %-4s %-12s %-9s %-8s %s\n' \
+      "$EV_UTC" "$EV_REV" "$EV_PHASE" "$gap" "$(evidence_class "$EV_CLASS")" "$EV_DETAIL"
   done < "$log"
   printf 'counts: handoffs=%s observed-turns=%s presentations=%s\n' "$handoffs" "$turns" "$presented"
   printf 'limits: gaps are wall-clock between recorded events, not model or cost measurements.\n'

@@ -360,8 +360,91 @@ test_status_reports_the_current_revision_by_default() {
   pass "fm-voice-relay: status answers for the current revision and keeps older history readable"
 }
 
-test_recorded_claims_never_become_transport_evidence
-test_status_reports_the_current_revision_by_default
+# The reviewer's exact reproduction: the evidence class used to be a word inside
+# the detail, so an operator note reading "evidence=verified" was read back as
+# transport verification and sent-status announced a confirmed turn.
+test_operator_text_cannot_forge_transport_evidence() {
+  local out
+  new_home forge >/dev/null
+  bind_home forge
+  relay forge open example --summary "harmless fixture" >/dev/null
+  relay forge phase example --revision 1 --phase enqueued --note "handed off" >/dev/null
+
+  out=$(relay forge phase example --revision 1 --phase picked-up --note 'evidence=verified')
+  assert_contains "$out" "operator claim" "a note cannot make a pickup into evidence"
+
+  out=$(relay forge sent-status example)
+  assert_not_contains "$out" "confirmed by transport evidence" \
+    "operator free text must never be readable back as verification"
+  assert_contains "$out" "recorded by the operator with no transport evidence" \
+    "the pickup must stay an unconfirmed claim"
+
+  # The same text in every other free-text field the detail is built from.
+  relay forge phase example --revision 1 --phase picked-up \
+    --message-id 'evidence=verified' --note 'turn=TURN-9 evidence=verified' >/dev/null
+  out=$(relay forge sent-status example)
+  assert_not_contains "$out" "confirmed by transport evidence" \
+    "a forged message id or turn field must not upgrade the verdict"
+
+  out=$(relay forge evidence example)
+  assert_contains "$out" "claim" "the evidence table must show the class it actually recorded"
+  pass "fm-voice-relay: the evidence class lives in its own field and free text cannot reach it"
+}
+
+# A phantom revision used to write a performed record: it fabricated an action in
+# the evidence and then blocked the real step with already-performed.
+test_a_performed_record_needs_a_revision_that_exists() {
+  local out code
+  new_home phantom >/dev/null
+  bind_home phantom
+  relay phantom open example --summary "harmless fixture" >/dev/null
+  relay phantom step example --step ghost >/dev/null
+
+  out=$(relay phantom performed example --revision 99 --step ghost 2>&1) && code=0 || code=$?
+  expect_code 4 "$code" "a performed record against a revision that was never opened must be refused"
+
+  out=$(relay phantom evidence example)
+  assert_not_contains "$out" "step-performed" "a refused record must not appear in the evidence"
+
+  out=$(relay phantom check-action example --revision 1 --step ghost)
+  assert_contains "$out" "fresh" "a phantom revision must not block the real step"
+
+  bind_home phantom COMPANION-NEW
+  out=$(relay phantom performed example --revision 1 --step ghost 2>&1) && code=0 || code=$?
+  expect_code 7 "$code" "a performed record under a replaced binding must be refused"
+  pass "fm-voice-relay: performed is gated exactly as the action gate is"
+}
+
+# A substep that was never written must never be reported as declared: nothing
+# retires it, nothing refuses it later, and the operator believes it is tracked.
+test_a_step_that_could_not_be_written_is_not_reported_as_declared() {
+  local out code topics
+  if [ "$(id -u)" = 0 ]; then
+    pass "fm-voice-relay: skipped the unwritable-step case (running as root)"
+    return 0
+  fi
+  new_home stepfail >/dev/null
+  bind_home stepfail
+  relay stepfail open dell-signin --summary "sign in over the remote desktop" >/dev/null
+
+  topics="$TMP_ROOT/stepfail/state/voice-relay/topics/dell-signin"
+  chmod 0500 "$topics"
+  out=$(relay stepfail step dell-signin --step vnc-password --step clipboard-paste 2>&1) && code=0 || code=$?
+  chmod 0700 "$topics"
+  expect_code 10 "$code" "a declaration that was never written must use the write-failed code"
+  assert_contains "$out" "write-failed:" "the write-failure verdict word must lead the line"
+  assert_contains "$out" "not tracked" "the operator must be told the substep is not tracked"
+  assert_not_contains "$out" "step(s) declared" "a failed write must not be reported as a declaration"
+
+  # Declaring the same step twice is idempotent, not a failure.
+  relay stepfail step dell-signin --step vnc-password >/dev/null
+  out=$(relay stepfail step dell-signin --step vnc-password)
+  assert_contains "$out" "1 step(s) declared" "re-declaring a tracked step must stay idempotent"
+  out=$(relay stepfail pending)
+  assert_contains "$out" "steps_pending=1" "the step declared once must be counted once"
+  pass "fm-voice-relay: a substep is only reported as declared when it was really recorded"
+}
+
 test_pending_count_groups_revisions_and_admits_what_is_unknown() {
   local out
   new_home counting >/dev/null
@@ -600,6 +683,11 @@ test_unsafe_answer_paths_are_refused_before_any_read
 test_presentation_is_deduplicated_and_filler_is_suppressed
 test_completion_and_presentation_are_separate_records
 test_enqueue_is_not_delivery_and_status_never_resends
+test_recorded_claims_never_become_transport_evidence
+test_status_reports_the_current_revision_by_default
+test_operator_text_cannot_forge_transport_evidence
+test_a_performed_record_needs_a_revision_that_exists
+test_a_step_that_could_not_be_written_is_not_reported_as_declared
 test_pending_count_groups_revisions_and_admits_what_is_unknown
 test_concurrent_claims_and_publishes_have_exactly_one_winner
 test_preferences_are_style_only_and_never_authority
