@@ -72,6 +72,14 @@
 #   FM_CODEX_METRICS_NOW         override the current epoch
 #   FM_CODEX_METRICS_NO_CACHE    set to 1 to bypass both caches
 
+# The cache, freshness, and single-refresh mechanics are shared with the other
+# status supply in bin/fm-status-cache-lib.sh, so both agree on what "still true
+# enough to show" means. The POLICY - the TTLs above and the no-cache seam -
+# stays here, with the library that owns these readings.
+_FM_CODEX_LIB_DIR=$(CDPATH='' cd -P -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)
+# shellcheck source=bin/fm-status-cache-lib.sh
+. "$_FM_CODEX_LIB_DIR/fm-status-cache-lib.sh"
+
 # _fm_codex_now: current epoch, or failure when it cannot be read.
 _fm_codex_now() {
   local now=${FM_CODEX_METRICS_NOW:-}
@@ -84,77 +92,49 @@ _fm_codex_now() {
 
 # _fm_codex_ttl: a non-negative integer TTL, or the supplied default.
 _fm_codex_ttl() {  # <value> <default>
-  local value=$1 fallback=$2
-  case "$value" in
-    ''|*[!0-9]*) printf '%s' "$fallback" ;;
-    *) printf '%s' "$value" ;;
-  esac
+  fm_status_ttl "$1" "$2"
 }
 
 # _fm_codex_age_within: 0 iff <stamp> is a readable epoch no more than <window>
 # seconds before <now>. An unreadable, absent, or future stamp is never within,
 # so every freshness decision in this file fails toward "unavailable".
 _fm_codex_age_within() {  # <now> <stamp> <window>
-  local now=$1 stamp=$2 window=$3 age
-  case "$stamp" in
-    ''|*[!0-9]*) return 1 ;;
-  esac
-  age=$((now - stamp))
-  [ "$age" -ge 0 ] && [ "$age" -lt "$window" ]
+  fm_status_age_within "$1" "$2" "$3"
 }
 
 # _fm_codex_file_mtime: a file's modification epoch, BSD or GNU stat.
 _fm_codex_file_mtime() {  # <path>
-  local modified
-  modified=$(stat -f %m "$1" 2>/dev/null || stat -c %Y "$1" 2>/dev/null)
-  case "$modified" in
-    ''|*[!0-9]*) return 1 ;;
-  esac
-  printf '%s' "$modified"
+  fm_status_file_mtime "$1"
 }
 
 # _fm_codex_file_size: a file's size in bytes, BSD or GNU stat.
 _fm_codex_file_size() {  # <path>
-  local size
-  size=$(stat -f %z "$1" 2>/dev/null || stat -c %s "$1" 2>/dev/null)
-  case "$size" in
-    ''|*[!0-9]*) return 1 ;;
-  esac
-  printf '%s' "$size"
+  fm_status_file_size "$1"
 }
 
 # _fm_codex_cache_key: a filesystem-safe token for a cache file name.
 _fm_codex_cache_key() {  # <value>
-  printf '%s' "$1" | LC_ALL=C tr -c 'A-Za-z0-9._-' '_'
+  fm_status_cache_key "$1"
 }
 
 # _fm_codex_cache_read: a cached payload that is still inside its TTL.
 _fm_codex_cache_read() {  # <cache-file> <now> <ttl>
-  local cache=$1 now=$2 ttl=$3 modified raw
   [ "${FM_CODEX_METRICS_NO_CACHE:-}" != 1 ] || return 1
-  [ -f "$cache" ] || return 1
-  modified=$(_fm_codex_file_mtime "$cache") || return 1
-  _fm_codex_age_within "$now" "$modified" "$ttl" || return 1
-  raw=$(cat "$cache" 2>/dev/null) || return 1
-  printf '%s' "$raw"
+  fm_status_cache_read "$1" "$2" "$3"
 }
 
 # _fm_codex_cache_load: a cached payload whatever its age, so a reading can
 # carry its own recorded timestamps rather than inferring them from the file.
 _fm_codex_cache_load() {  # <cache-file>
   [ "${FM_CODEX_METRICS_NO_CACHE:-}" != 1 ] || return 1
-  [ -f "$1" ] || return 1
-  cat "$1" 2>/dev/null
+  fm_status_cache_load "$1"
 }
 
 # _fm_codex_cache_write: best effort. A state directory that cannot be written
 # costs freshness, never a render.
 _fm_codex_cache_write() {  # <cache-file> <payload>
   [ "${FM_CODEX_METRICS_NO_CACHE:-}" != 1 ] || return 0
-  printf '%s' "$2" > "$1.$$" 2>/dev/null \
-    && mv -f "$1.$$" "$1" 2>/dev/null \
-    || rm -f "$1.$$" 2>/dev/null || true
-  return 0
+  fm_status_cache_write "$1" "$2"
 }
 
 # _fm_codex_is_codex_pid: 0 iff <pid>'s own executable is the Codex CLI. The
