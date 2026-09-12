@@ -29,7 +29,10 @@
 #   (l) live-over-terminal: a pipeline fix round whose head this copy never
 #       fetched outranks an older failed run at the worktree's own head, on
 #       both selection routes, while unanchored, rewritten, and finished runs
-#       stay exactly as they were
+#       stay exactly as they were, and that unverifiable inference is bounded by
+#       the run record's own date - stale or undated reads unknown, never a
+#       claim that the crew works or that the replaced run died, while a run
+#       whose head resolves here is never aged out
 set -u
 
 # shellcheck source=tests/lib.sh
@@ -1399,6 +1402,15 @@ make_pipeline_fix_head() {  # <worktree> <branch> -> echoes an unresolvable shor
   printf '%s\n' "$fix"
 }
 
+# A `no-mistakes runs` date column <seconds> in the past, so the freshness cases
+# below pin the rule rather than the calendar: a fixture with a hardcoded clock
+# time silently ages into a different case as the day goes on.
+runs_date_ago() {  # <seconds-ago>
+  local at
+  at=$(( $(date +%s) - $1 ))
+  date -r "$at" '+%Y-%m-%d %H:%M' 2>/dev/null || date -d "@$at" '+%Y-%m-%d %H:%M'
+}
+
 # The reported reproduction, ledger route: the repo-wide `axi status` answer
 # belongs to another crew, so attribution falls to the runs ledger, where the
 # live fix-round row sits above the failed row at this worktree's own head.
@@ -1414,8 +1426,8 @@ test_live_pipeline_fix_row_outranks_older_failed_at_worktree_head() {
   printf 'working: implementation committed, validating\n' > "$d/state/live.status"
   FM_FAKE_AXI_STATUS="$(run_running fm/other-crew)"
   FM_FAKE_RUNS_LIST="$(cat <<EOF
-  running    fm/feat-live ${fix}  2026-09-12 10:17
-  failed     fm/feat-live ${short}  2026-09-12 10:14
+  running    fm/feat-live ${fix}  $(runs_date_ago 300)
+  failed     fm/feat-live ${short}  $(runs_date_ago 480)
 EOF
 )"
   FM_FAKE_BUSY=0
@@ -1442,8 +1454,8 @@ test_axi_status_failed_corpse_yields_to_live_ledger_run() {
   # The failed run reports THIS worktree's head, so head-binding accepts it.
   FM_FAKE_AXI_STATUS="$(run_failed fm/feat-corpse)"
   FM_FAKE_RUNS_LIST="$(cat <<EOF
-  running    fm/feat-corpse ${fix}  2026-09-12 10:17
-  failed     fm/feat-corpse ${short}  2026-09-12 10:14
+  running    fm/feat-corpse ${fix}  $(runs_date_ago 300)
+  failed     fm/feat-corpse ${short}  $(runs_date_ago 480)
 EOF
 )"
   FM_FAKE_BUSY=0
@@ -1532,6 +1544,122 @@ EOF
   pass "a checks-passed run is not displaced by a live ledger row"
 }
 
+# No-widening half, ledger route: the same narrowing the `axi status` route
+# applies. The anchor row is the record the live row is judged against, so a
+# finished run at this worktree's head is a RESULT and keeps its own verdict -
+# only a terminal failure is ever displaced by the row above it.
+test_completed_anchor_is_not_displaced_by_a_live_ledger_row() {
+  reset_fakes
+  local d short fix out
+  d=$(new_case completed-anchor-not-displaced)
+  make_repo_on_branch "$d/wt" fm/feat-anchor-done
+  short=$(git -C "$d/wt" rev-parse --short=7 HEAD)
+  fix=$(make_pipeline_fix_head "$d/wt" fm/feat-anchor-done)
+  make_fakebin "$d" >/dev/null
+  fm_write_meta "$d/state/anchor-done.meta" "window=fm:fm-anchor-done" "worktree=$d/wt" "kind=ship"
+  # The repo-wide answer is another crew's, so attribution falls to the ledger.
+  FM_FAKE_AXI_STATUS="$(run_running fm/other-crew)"
+  FM_FAKE_RUNS_LIST="$(cat <<EOF
+  running    fm/feat-anchor-done ${fix}  $(runs_date_ago 300)
+  completed  fm/feat-anchor-done ${short}  $(runs_date_ago 480)  https://github.com/o/r/pull/9
+EOF
+)"
+  FM_FAKE_BUSY=0
+  out=$(run_crew_state "$d" anchor-done)
+  assert_contains "$out" "state: done" "a completed anchor keeps its own finished verdict"
+  assert_contains "$out" "run completed" "the completed row is what is reported"
+  assert_not_contains "$out" "state: working" "a finished result must not be downgraded to validating"
+  pass "a completed anchor row is not displaced by a live ledger row"
+}
+
+# The held row is an inference, not an observation: its head is not in this copy,
+# so nothing here sees whether that run still breathes. A gate process that dies
+# without reaping its row must not pin the crew as working for the rest of the
+# day - past the freshness bound the answer becomes unknown, which surfaces the
+# crew (absorb class none) so recovery can fire.
+test_stale_live_row_no_longer_pins_working() {
+  reset_fakes
+  local d short fix out absorb
+  d=$(new_case stale-live-row)
+  make_repo_on_branch "$d/wt" fm/feat-abandoned
+  short=$(git -C "$d/wt" rev-parse --short=7 HEAD)
+  fix=$(make_pipeline_fix_head "$d/wt" fm/feat-abandoned)
+  make_fakebin "$d" >/dev/null
+  fm_write_meta "$d/state/abandoned.meta" "window=fm:fm-abandoned" "worktree=$d/wt" "kind=ship"
+  printf 'working: implementation committed, validating\n' > "$d/state/abandoned.status"
+  FM_FAKE_AXI_STATUS="$(run_running fm/other-crew)"
+  FM_FAKE_RUNS_LIST="$(cat <<EOF
+  running    fm/feat-abandoned ${fix}  $(runs_date_ago 108000)
+  failed     fm/feat-abandoned ${short}  $(runs_date_ago 111600)
+EOF
+)"
+  FM_FAKE_BUSY=0
+  out=$(run_crew_state "$d" abandoned)
+  assert_contains "$out" "state: unknown" "an expired live-row inference reports unknown"
+  assert_contains "$out" "live run unverifiable" "the detail names the missing evidence"
+  assert_not_contains "$out" "state: working" "a stale unreaped row must not pin the crew as working"
+  assert_not_contains "$out" "state: failed" "an old record is not proof the run died"
+  absorb=$(
+    PATH="$d/fakebin:$PATH" FM_STATE_OVERRIDE="$d/state" FM_CREW_STATE_BIN="$CREW_STATE" \
+      bash -c '. "'"$ROOT"'/bin/fm-classify-lib.sh"; crew_absorb_class abandoned'
+  )
+  [ "$absorb" = none ] || fail "crew_absorb_class expected none for an expired live row, got '$absorb'"
+  pass "a stale unverifiable live row reports unknown instead of pinning working"
+}
+
+# Insufficient evidence is reported as insufficient. With no usable date on the
+# live row there is nothing to bound the inference with, so neither working nor
+# the older failure is honest - and the failed corpse the `axi status` route
+# answered with must not be re-asserted as a death this copy cannot see.
+test_undated_live_row_reports_insufficient_evidence() {
+  reset_fakes
+  local d short fix out
+  d=$(new_case undated-live-row)
+  make_repo_on_branch "$d/wt" fm/feat-undated
+  short=$(git -C "$d/wt" rev-parse --short=7 HEAD)
+  fix=$(make_pipeline_fix_head "$d/wt" fm/feat-undated)
+  make_fakebin "$d" >/dev/null
+  fm_write_meta "$d/state/undated.meta" "window=fm:fm-undated" "worktree=$d/wt" "kind=ship"
+  printf 'working: implementation committed, validating\n' > "$d/state/undated.status"
+  FM_FAKE_AXI_STATUS="$(run_failed fm/feat-undated)"
+  FM_FAKE_RUNS_LIST="$(cat <<EOF
+  running    fm/feat-undated ${fix}
+  failed     fm/feat-undated ${short}  $(runs_date_ago 480)
+EOF
+)"
+  FM_FAKE_BUSY=0
+  out=$(run_crew_state "$d" undated)
+  assert_contains "$out" "state: unknown" "an undatable live row reports unknown"
+  assert_contains "$out" "no usable date" "the detail names why the inference is unsupported"
+  assert_not_contains "$out" "state: working" "an undatable row must not be claimed as working"
+  assert_not_contains "$out" "state: failed" "insufficient evidence must not be reported as a death"
+  pass "an undatable live row is reported as insufficient evidence, not as a death"
+}
+
+# The freshness bound applies ONLY to the unverifiable inference. A run whose
+# head this copy can resolve is attributed by the ordinary head rule however
+# long it has been running - a green run monitors its PR until merge, and
+# ageing that out would report an authoritative live run as something else.
+test_long_running_resolvable_row_is_not_aged_out() {
+  reset_fakes
+  local d short out
+  d=$(new_case long-running-resolvable)
+  make_repo_on_branch "$d/wt" fm/feat-longrun
+  short=$(git -C "$d/wt" rev-parse --short=7 HEAD)
+  make_fakebin "$d" >/dev/null
+  fm_write_meta "$d/state/longrun.meta" "window=fm:fm-longrun" "worktree=$d/wt" "kind=ship"
+  FM_FAKE_AXI_STATUS="$(run_running fm/other-crew)"
+  FM_FAKE_RUNS_LIST="$(cat <<EOF
+  running    fm/feat-longrun ${short}  $(runs_date_ago 259200)
+EOF
+)"
+  FM_FAKE_BUSY=0
+  out=$(run_crew_state "$d" longrun)
+  assert_contains "$out" "state: working" "a resolvable live run stays working regardless of age"
+  assert_contains "$out" "source: run-step" "the resolvable run is still run-step sourced"
+  pass "a long-running run whose head resolves here is never aged out"
+}
+
 test_active_run_is_authoritative
 test_stale_needs_decision_superseded
 test_stale_blocked_superseded
@@ -1588,5 +1716,9 @@ test_axi_status_failed_corpse_yields_to_live_ledger_run
 test_unresolvable_live_row_without_anchor_is_not_attributed
 test_unresolvable_live_row_with_diverged_anchor_is_not_attributed
 test_checks_passed_run_is_not_displaced_by_a_live_ledger_row
+test_completed_anchor_is_not_displaced_by_a_live_ledger_row
+test_stale_live_row_no_longer_pins_working
+test_undated_live_row_reports_insufficient_evidence
+test_long_running_resolvable_row_is_not_aged_out
 
 echo "all fm-crew-state tests passed"
