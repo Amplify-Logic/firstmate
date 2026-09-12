@@ -49,6 +49,15 @@
   -->
   <p>Target for this page: <span id="device-id" data-device-id="">(none)</span>
      <em>added automatically; not part of the payload</em></p>
+  <!--
+    Reported state is deliberately DIFFERENT from what the preset fills, and
+    may be absent entirely. A preset fill is a static default, not a readback:
+    reading the textarea after a fill tells you what the preset carries, never
+    what the target currently holds. An implementation that reports a filled
+    payload as the target's current state fails here.
+  -->
+  <p>Reported state for this page:
+     <span id="reported-state" data-reported="">(none reported)</span></p>
 </fieldset>
 
 <fieldset>
@@ -78,12 +87,17 @@
 <script>
   // Read back exactly what the page currently holds, so a staging run can
   // prove the values it believes it staged are the values actually present.
+  // Static preset payload. Deliberately not equal to any reported state.
+  var PRESET_ONE_DEFAULT = 'preset-one-default-payload';
+
   window.__sent = false;
   window.__sendCount = 0;
   window.__readback = function () {
     return {
       device_id: document.getElementById('device-id').dataset.deviceId,
       command: document.getElementById('command').value,
+      reported_state: document.getElementById('reported-state').dataset.reported,
+      preset_default: PRESET_ONE_DEFAULT,
       verified: document.getElementById('preview').dataset.verified === 'true',
       sent: window.__sent,
       send_count: window.__sendCount
@@ -102,9 +116,11 @@
     document.getElementById('command').value = text;
   }
 
-  // Safe preset: local form fill only, no outward path.
+  // Safe preset: local form fill only, no outward path. What it writes is a
+  // STATIC default belonging to the preset - it is not read from the target,
+  // and it is written identically whether or not the target supports it.
   document.getElementById('preset-fill').addEventListener('click', function () {
-    fillCommand('preset-one-payload');
+    fillCommand(PRESET_ONE_DEFAULT);
   });
 
   // Unsafe preset: fills AND sends. Indistinguishable from the safe one by
