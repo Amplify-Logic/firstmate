@@ -388,14 +388,106 @@ test_steer_command_uses_the_bound_thread_and_refuses_stale_revisions() {
   bind_home steer COMPANION-STEER
   relay steer open steerable --summary "look at the left panel" >/dev/null
   out=$(relay steer steer-command steerable --revision 1 --turn TURN-7)
-  assert_contains "$out" "fm-voice-relay-appserver.sh steer --thread COMPANION-STEER --expected-turn TURN-7" \
+  assert_contains "$out" "fm-voice-relay-appserver.sh' steer --thread 'COMPANION-STEER' --expected-turn 'TURN-7'" \
     "the printed command must carry the bound thread and the real turn"
   assert_contains "$out" "must not be retried blindly" "the note must keep the refusal meaningful"
+  assert_contains "$out" "queue it once through codex queue" "the printed command must name the supported fallback"
 
   relay steer revise steerable --summary "the right panel instead" >/dev/null
   out=$(relay steer steer-command steerable --revision 1 --turn TURN-7 2>&1) && code=0 || code=$?
   expect_code 3 "$code" "a superseded revision must not be steered"
+  assert_contains "$out" "superseded" "a refused steer must still say why, not exit silently"
   pass "fm-voice-relay: the steer command is assembled from the binding and gated on freshness"
+}
+
+# The printed steer is meant to be pasted into a shell, so every field it
+# interpolates has to survive as data. A natural apostrophe broke the line, and
+# a crafted correction appended a second command to it.
+test_steer_command_quotes_free_text_and_the_bound_target() {
+  local line parsed sentinel summary
+  new_home quoting >/dev/null
+  bind_home quoting "COMPANION'Q"
+  sentinel="$TMP_ROOT/quoting/INJECTED"
+  summary="don't touch the left panel'; touch $sentinel; echo '"
+  relay quoting open quoting-topic --summary "$summary" >/dev/null
+
+  line=$(relay quoting steer-command quoting-topic --revision 1 --turn "TURN'7" | head -1)
+  # Parsing the line the way a shell would: each argument on its own line, and
+  # nothing else may run while doing it.
+  parsed=$(eval "printf '%s\n' $line" 2>/dev/null) || true
+  assert_absent "$sentinel" "a crafted correction must not smuggle a second command into the pasted line"
+  assert_contains "$parsed" "$summary" "the correction must survive quoting byte for byte"
+  assert_contains "$parsed" "TURN'7" "the turn id must survive quoting"
+  assert_contains "$parsed" "COMPANION'Q" "the bound thread must survive quoting"
+  pass "fm-voice-relay: the pasted steer quotes free text instead of splicing it into a command"
+}
+
+# A topic ends once. Cancelling after a success used to publish a second
+# terminal record that outranked the first, so a completed sign-in reported
+# itself as cancelled for ever afterwards.
+test_a_finished_topic_cannot_be_ended_a_second_time() {
+  local out code
+  new_home once >/dev/null
+  bind_home once
+  relay once open finish-once --summary "sign in" >/dev/null
+  relay once complete finish-once --revision 1 --outcome "signed in" >/dev/null
+
+  out=$(relay once cancel finish-once --reason "changed my mind" 2>&1) && code=0 || code=$?
+  expect_code 5 "$code" "cancelling a completed topic must be refused"
+  assert_contains "$out" "retired" "the refusal must name the existing terminal record"
+
+  out=$(relay once evidence finish-once)
+  assert_contains "$out" "state: completed 1" "the success must survive the attempted cancellation"
+  out=$(relay once present finish-once --revision 1 --outcome "the sign-in worked" \
+    --attribution firstmate-verified --final)
+  assert_contains "$out" "the sign-in worked" "the final announcement must still describe the real ending"
+
+  new_home once-c >/dev/null
+  bind_home once-c
+  relay once-c open stop-once --summary "do it" >/dev/null
+  relay once-c cancel stop-once --reason "captain stopped it" >/dev/null
+  out=$(relay once-c complete stop-once --revision 1 --outcome "done anyway" 2>&1) && code=0 || code=$?
+  expect_code 5 "$code" "completing a cancelled topic must stay refused"
+  pass "fm-voice-relay: the terminal record is published once per topic and never overwritten"
+}
+
+# A second bind retires the old enrollment. A correction must not re-adopt that
+# request onto the newly bound session just by minting a newer revision.
+test_a_correction_cannot_readopt_a_replaced_binding() {
+  local out code
+  new_home readopt >/dev/null
+  bind_home readopt COMPANION-OLD
+  relay readopt open carryover --summary "ask the old session" >/dev/null
+
+  bind_home readopt COMPANION-NEW
+  out=$(relay readopt revise carryover --summary "ask again" 2>&1) && code=0 || code=$?
+  expect_code 7 "$code" "a correction on a replaced binding must fail closed"
+  assert_contains "$out" "binding-replaced" "the refusal must name the replacement"
+
+  out=$(relay readopt check-action carryover --revision 1) && code=0 || code=$?
+  expect_code 7 "$code" "the original revision must stay refused"
+  [ "$(relay readopt pending | grep -c '^pending: carryover')" = 1 ] \
+    || fail "the refused correction must not have created a second revision"
+  pass "fm-voice-relay: a replaced enrollment cannot be re-adopted by revising its pending work"
+}
+
+# A gate that refuses silently is a gate a companion cannot report on.
+test_a_refused_gate_always_says_why() {
+  local out code
+  new_home loud >/dev/null
+  bind_home loud
+  relay loud open speak-up --summary "first" >/dev/null
+  relay loud step speak-up --step only-step >/dev/null
+  relay loud revise speak-up --summary "second" >/dev/null
+
+  out=$(relay loud begin speak-up --revision 1 --step only-step 2>&1) && code=0 || code=$?
+  expect_code 3 "$code" "a superseded claim must be refused"
+  assert_contains "$out" "superseded" "begin must print the verdict it refused on, not exit silently"
+
+  out=$(relay loud handoff speak-up --revision 1 2>&1) && code=0 || code=$?
+  expect_code 3 "$code" "a superseded handoff must be refused"
+  assert_contains "$out" "superseded" "handoff must print the verdict it refused on"
+  pass "fm-voice-relay: every gated command prints the refusal a companion has to speak or log"
 }
 
 test_a_request_without_a_binding_is_refused() {
@@ -423,4 +515,8 @@ test_pending_count_groups_revisions_and_admits_what_is_unknown
 test_concurrent_claims_and_publishes_have_exactly_one_winner
 test_preferences_are_style_only_and_never_authority
 test_steer_command_uses_the_bound_thread_and_refuses_stale_revisions
+test_steer_command_quotes_free_text_and_the_bound_target
+test_a_finished_topic_cannot_be_ended_a_second_time
+test_a_correction_cannot_readopt_a_replaced_binding
+test_a_refused_gate_always_says_why
 test_a_request_without_a_binding_is_refused

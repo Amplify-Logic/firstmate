@@ -146,6 +146,22 @@ A steer only moves the captain's conversation if it reaches the server that owns
 Run `thread-status --thread <id> --live` before relying on steering; a `steerable: no` answer means history only.
 Until a steer is measured end to end on a real pair of sessions, treat queue lag as unimproved: a protocol that defines steering is not a demonstration that a correction arrived sooner.
 
+### The supported fallback when steering is unavailable
+
+When `thread-status` answers `steerable: no`, or the steer is refused because the turn already ended, this is the sequence to use instead. It is the only supported one; there is no daemon, wrapper, or control automation behind it.
+
+1. Revise the shared request record first: `fm-voice-relay.sh revise <topic> --summary '<the correction>'`. The correction now *is* the current revision of that request, so everything older is superseded from that moment.
+2. Queue that correction once through `codex queue`. Once - a second copy is a second job, not a faster one.
+3. Freshness is enforced at the next cooperative boundary: `fm-voice-relay.sh check-action` before the companion performs anything, and `fm-voice-relay.sh present` before it speaks. That is where the superseded step is refused.
+
+What this does *not* do, stated plainly because the difference matters:
+
+- Queueing alone kills nothing. The stale step is refused by the pre-action and pre-presentation gates, not by the queue - an item sitting in the queue is still sitting there.
+- It cannot interrupt an external action that is already in flight. A command already run, a key already sent, a sign-in already completed stays done.
+- It cannot guarantee prompt pickup. The correction is enforced *when the companion next asks a gate*, which may be after the obsolete messages ahead of it.
+
+When the correction cannot wait for the companion to reach a gate, the fallback is a person, not a mechanism: say it directly in the terminal session, or through Herdr.
+
 ## Known app-access limit
 
 Selecting Baby Menu through Computer Use timed out (`getApp`, server error `-10005`), on a run where the tool's own inventory reported the app as not running and on a later retry - so the quota panel was never observed by the tool.

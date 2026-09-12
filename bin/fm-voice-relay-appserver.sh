@@ -79,7 +79,9 @@
 #
 # FM_VOICE_RELAY_PROXY_CMD overrides the proxy command (tests use a fake
 # app-server; production leaves it unset and gets `codex app-server proxy`).
-# FM_VOICE_RELAY_RPC_TIMEOUT (default 20) bounds a live call in seconds.
+# FM_VOICE_RELAY_RPC_TIMEOUT (default 20) bounds a live call in seconds. A proxy
+# that accepts the frames and never answers ends as a transport failure at that
+# bound instead of hanging the caller for ever.
 #
 # Exit codes: 0 ok, 2 usage, 3 the server refused (including a stale
 # expectedTurnId), 4 required protocol support missing, 5 transport failure.
@@ -96,6 +98,54 @@ json_escape() {  # <text>
 
 SOCK=''
 
+rpc_timeout_secs() {
+  local secs=${FM_VOICE_RELAY_RPC_TIMEOUT:-20}
+  case "$secs" in
+    ''|*[!0-9]*|0) die "FM_VOICE_RELAY_RPC_TIMEOUT must be a positive whole number of seconds: $secs" ;;
+  esac
+  printf '%s\n' "$secs"
+}
+
+# A wall-clock bound that KEEPS stdin, which is why bin/fm-timeout-lib.sh cannot
+# be used here: that helper detaches stdin from the child on purpose, and the
+# request frames this transport writes are exactly what the child must read.
+# Prefers timeout(1), then gtimeout(1), then a perl fallback that runs the child
+# in its own process group and kills the group on alarm, so a stock macOS box
+# with neither coreutils binary is still bounded. Exits 124 on timeout.
+run_bounded() {  # <secs> <cmd-string> ; request frames on stdin
+  local secs=$1 cmd=$2
+  if command -v timeout >/dev/null 2>&1; then
+    # shellcheck disable=SC2086
+    timeout "$secs" $cmd
+    return $?
+  fi
+  if command -v gtimeout >/dev/null 2>&1; then
+    # shellcheck disable=SC2086
+    gtimeout "$secs" $cmd
+    return $?
+  fi
+  # shellcheck disable=SC2086
+  perl -e '
+    my $seconds = shift;
+    my $pid = fork;
+    die "fork failed\n" unless defined $pid;
+    if (!$pid) {
+      setpgrp(0, 0);
+      exec @ARGV;
+      die "exec failed: $!\n";
+    }
+    local $SIG{ALRM} = sub {
+      kill "TERM", -$pid;
+      select undef, undef, undef, 0.2;
+      kill "KILL", -$pid;
+      exit 124;
+    };
+    alarm $seconds;
+    waitpid $pid, 0;
+    exit($? >> 8);
+  ' "$secs" $cmd
+}
+
 proxy_cmd() {
   if [ -n "${FM_VOICE_RELAY_PROXY_CMD:-}" ]; then
     printf '%s\n' "$FM_VOICE_RELAY_PROXY_CMD"
@@ -110,15 +160,19 @@ proxy_cmd() {
 # newline-delimited JSON-RPC 2.0 objects; the response is the first object whose
 # id matches the request, so a notification stream in between is ignored rather
 # than mistaken for an answer.
-rpc_call() {  # <method> <params-json>
-  local method=$1 params=$2 cmd out
+rpc_call() {  # <method> <params-json> <timeout-secs>
+  local method=$1 params=$2 secs=$3 cmd out status=0
   cmd=$(proxy_cmd)
   out=$(
     {
       printf '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"clientInfo":{"name":"fm-voice-relay","title":"Firstmate voice relay","version":"1"}}}\n'
       printf '{"jsonrpc":"2.0","id":2,"method":%s,"params":%s}\n' "$(json_escape "$method")" "$params"
-    } | $cmd 2>/dev/null
-  ) || return 5
+    } | run_bounded "$secs" "$cmd" 2>/dev/null
+  ) || status=$?
+  if [ "$status" != 0 ]; then
+    [ "$status" = 124 ] && echo "transport failure: no answer within ${secs}s (FM_VOICE_RELAY_RPC_TIMEOUT); the call was abandoned, and whether the server acted on it is unknown" >&2
+    return 5
+  fi
   printf '%s\n' "$out"
 }
 
@@ -147,14 +201,18 @@ PY
 }
 
 emit_or_send() {  # <live> <method> <params-json>
-  local live=$1 method=$2 params=$3 raw status
+  local live=$1 method=$2 params=$3 raw status secs
   if [ "$live" != 1 ]; then
     printf 'dry-run: would send over "%s"\n' "$(proxy_cmd)"
     printf '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"clientInfo":{"name":"fm-voice-relay","title":"Firstmate voice relay","version":"1"}}}\n'
     printf '{"jsonrpc":"2.0","id":2,"method":%s,"params":%s}\n' "$(json_escape "$method")" "$params"
     return 0
   fi
-  raw=$(rpc_call "$method" "$params") || {
+  # Resolved here rather than inside rpc_call: that call is captured in a
+  # command substitution, and a usage error raised inside it would come back as
+  # a transport failure instead of the usage error it is.
+  secs=$(rpc_timeout_secs) || exit 2
+  raw=$(rpc_call "$method" "$params" "$secs") || {
     echo "transport failure: the app-server proxy could not be reached" >&2
     return 5
   }
@@ -259,6 +317,11 @@ count=len(turns) if isinstance(turns, list) else "unknown"
 print("thread %s status %s turns %s" % (thread.get("id", "unknown"), status or "unknown", count))
 if status in (None, "notLoaded"):
     print("steerable: no - this server can read history but does not own the live turn, so turn/steer would not reach the companion")
+    print("fallback 1: revise the shared request record first - fm-voice-relay.sh revise <topic> --summary '<the correction>' - so the correction IS the current revision")
+    print("fallback 2: then queue that correction once through codex queue; do not send a second copy")
+    print("fallback 3: freshness is enforced at the next cooperative boundary - fm-voice-relay.sh check-action before acting, present before speaking - and that is where the superseded step is refused")
+    print("fallback limits: queueing alone kills nothing. The refusal comes from those two gates, not from the queue. This cannot interrupt an external action already in flight, and it cannot make the companion pick the correction up promptly")
+    print("fallback, human: when the correction cannot wait for pickup, say it directly in the terminal session or through Herdr")
 else:
     print("steerable: this server reports the thread loaded; a steer may reach it, which still has to be confirmed on a real turn")
 PY

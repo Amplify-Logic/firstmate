@@ -115,6 +115,12 @@
 #         cancelled   the topic was stopped.
 #         presented   text was released to the speaking frontend (not audio).
 #
+#   fm-voice-relay.sh handoff <topic> --revision <n>
+#       Authorize the handoff ONCE. The first call says send it now; every
+#       later call reports the authorization that already exists instead of
+#       asking again, which is what ends the "shall I send it?" loop. This
+#       command never sends anything itself.
+#
 #   fm-voice-relay.sh accept <topic> --revision <n> --answer <path>
 #         --sha256 <hex> --receipt <path>
 #       Completion acceptance, separate from execution and from presentation.
@@ -142,6 +148,23 @@
 #       never infers: an accepted-but-unconfirmed send is reported as exactly
 #       that, which is the whole point of keeping enqueued separate.
 #
+#   fm-voice-relay.sh pending
+#       The logical pending count, evidence-backed: one line per open topic
+#       with its current revision, its declared-but-unperformed steps, and its
+#       last recorded phase. Revisions are grouped, so a request corrected
+#       twice counts once rather than three times. Native queue depth and
+#       audible playback are printed as unknown, because they are unknown.
+#
+#   fm-voice-relay.sh pref set <key> --value <text>
+#         --source <captain-confirmed|companion-proposal> [--scope <text>]
+#   fm-voice-relay.sh pref show <key> | forget <key> | list | render
+#       Inspect, edit and forget the companion-scoped style record. Keys are
+#       confined to speech., style., detail. and format., and no gate in this
+#       script ever reads one, which is the structural reason a preference can
+#       never widen execution authority. Each record carries its value, source,
+#       scope, revision and supersession; a record written under a replaced
+#       binding is reported as invalidated rather than silently inherited.
+#
 #   fm-voice-relay.sh steer-command <topic> --revision <n> --turn <turn-id>
 #       Print the exact bin/fm-voice-relay-appserver.sh command that delivers
 #       this revision's correction into the turn running now, with the bound
@@ -163,6 +186,7 @@
 #   7  binding-replaced   the request belongs to a binding that no longer exists
 #   8  duplicate-suppressed  that exact sentence was already presented
 #   9  conflict      an id, hash, or revision disagreed; nothing was written
+#   9  write-failed  the record could not be written at all; nothing was stored
 #
 # FM_VOICE_RELAY_DIR overrides the state directory (tests only).
 set -u
@@ -241,6 +265,27 @@ publish_once() {  # <target> ; content on stdin
   return "$status"
 }
 
+# publish_once fails for two different reasons and the operator has to be able
+# to tell them apart: 1 means a racing caller's record stands and this caller's
+# bytes were discarded, 2 means the write never happened at all (a full disk, a
+# read-only state directory, EPERM). Both fail closed; only the second is a
+# reason to go and look at the disk.
+publish_status_or_refuse() {  # <status> <what> <conflict-detail>
+  case "$1" in
+    0) return 0 ;;
+    2) refuse 9 write-failed "the $2 record could not be written; nothing was recorded" ;;
+    *) refuse 9 conflict "$3" ;;
+  esac
+}
+
+# POSIX single-quoting for text that is printed as part of a command a human is
+# meant to paste. Free text reaches this - an apostrophe in "don't touch the
+# left panel" would otherwise end the quote, and a crafted summary would append
+# a second command to the line the captain runs.
+shell_quote() {  # <text>
+  printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"
+}
+
 slug_valid() {  # <slug>
   case "$1" in
     ''|*[!A-Za-z0-9._-]*) return 1 ;;
@@ -305,24 +350,17 @@ current_revision() {  # <topic>
 }
 
 # "" when open; otherwise "<state> <revision>".
+#
+# The terminal record is ONE publish-once file per topic, not one per state: a
+# per-state file lets a cancellation land on top of a success and makes every
+# later gate, evidence line and --final announcement report a completed topic
+# as cancelled. Publishing once per topic means the first terminal state wins
+# and racing callers cannot both be right.
 topic_terminal() {  # <topic>
-  local dir f base
-  dir="$(topic_dir "$1")/terminal"
-  [ -d "$dir" ] || return 0
-  for f in "$dir"/*; do
-    [ -f "$f" ] || continue
-    base=$(basename "$f")
-    case "$base" in
-      *.cancelled) printf 'cancelled %s\n' "${base%.cancelled}"; return 0 ;;
-    esac
-  done
-  for f in "$dir"/*.completed; do
-    [ -f "$f" ] || continue
-    base=$(basename "$f")
-    printf 'completed %s\n' "${base%.completed}"
-    return 0
-  done
-  return 0
+  local file
+  file="$(topic_dir "$1")/terminal/state"
+  [ -f "$file" ] || return 0
+  printf '%s %s\n' "$(record_field "$file" state)" "$(record_field "$file" revision)"
 }
 
 record_event() {  # <topic> <revision> <phase> <detail>
@@ -412,6 +450,40 @@ freshness_verdict() {  # <topic> <revision> ; echoes "<code> <verdict> <detail>"
   printf '0 fresh revision %s is current for %s\n' "$rev" "$topic"
 }
 
+# Every gate destructured that verdict by hand, four times, with four slightly
+# different sets of accepted codes. It lives here once instead, so "fresh" and
+# the code each refusal exits with cannot drift apart between commands.
+GATE_CODE=''
+GATE_WORD=''
+GATE_DETAIL=''
+
+# Must be called directly, never inside a command substitution: refuse() exits,
+# and a subshell would swallow both the verdict text and the exit code.
+gate_or_refuse() {  # <topic> <revision> <accepted codes, space separated>
+  local verdict rest accepted=$3 code
+  verdict=$(freshness_verdict "$1" "$2")
+  GATE_CODE=${verdict%% *}
+  rest=${verdict#* }
+  GATE_WORD=${rest%% *}
+  GATE_DETAIL=${rest#* }
+  for code in $accepted; do
+    [ "$code" = "$GATE_CODE" ] && return 0
+  done
+  refuse "$GATE_CODE" "$GATE_WORD" "$GATE_DETAIL"
+}
+
+# The same gate, for callers that only want the refusal. check-action prints
+# "fresh: ..." on success, which these callers suppress - but redirecting the
+# whole call to /dev/null threw the REFUSAL away too, leaving a companion with
+# a bare exit code and nothing to say or log.
+gate_quietly() {  # <topic> --revision <n> [--step <slug>]
+  local out status=0
+  out=$(cmd_check_action "$@") || status=$?
+  [ "$status" = 0 ] && return 0
+  [ -n "$out" ] && printf '%s\n' "$out"
+  exit "$status"
+}
+
 usage() {
   sed -n '/^# Usage:/,/^# FM_VOICE_RELAY_DIR/p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
 }
@@ -479,7 +551,7 @@ cmd_binding() {
 }
 
 cmd_open() {
-  local topic=${1:-} summary='' dir fingerprint rid
+  local topic=${1:-} summary='' dir fingerprint rid status=0
   shift || true
   while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -505,13 +577,14 @@ cmd_open() {
     printf 'summary=%s\n' "$(clean_text "$summary")"
     printf 'binding=%s\n' "$fingerprint"
     printf 'supersedes=\n'
-  } | publish_once "$dir/revisions/1.rec" || refuse 9 conflict "revision 1 of $topic was created concurrently"
+  } | publish_once "$dir/revisions/1.rec" || status=$?
+  publish_status_or_refuse "$status" "revision 1 of $topic" "revision 1 of $topic was created concurrently"
   record_event "$topic" 1 opened "$(clean_text "$summary")"
   printf '%s 1\n' "$rid"
 }
 
 cmd_revise() {
-  local topic=${1:-} summary='' expect='' dir cur next fingerprint rid terminal
+  local topic=${1:-} summary='' expect='' dir cur next fingerprint rid status=0
   shift || true
   while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -526,8 +599,11 @@ cmd_revise() {
   fingerprint=$(binding_fingerprint) || die "revise: bind a session first"
   dir=$(topic_dir "$topic")
   cur=$(current_revision "$topic")
-  terminal=$(topic_terminal "$topic")
-  [ -z "$terminal" ] || refuse 5 retired "$topic is ${terminal%% *} at revision ${terminal##* }; open a new topic for new work"
+  # A correction inherits the freshness of what it corrects. Without this the
+  # revision it mints would carry the CURRENT binding fingerprint, and a single
+  # revise would quietly re-adopt the pending work of a retired enrollment onto
+  # the newly bound session - the exact routing the second bind invalidated.
+  gate_or_refuse "$topic" "$cur" 0
   if [ -n "$expect" ]; then
     revision_valid "$expect" || die "revise: --expect-revision must be a positive integer"
     [ "$expect" = "$cur" ] || refuse 9 conflict "expected revision $expect but $topic is at revision $cur"
@@ -543,7 +619,8 @@ cmd_revise() {
     printf 'summary=%s\n' "$(clean_text "$summary")"
     printf 'binding=%s\n' "$fingerprint"
     printf 'supersedes=%s\n' "$cur"
-  } | publish_once "$dir/revisions/$next.rec" || refuse 9 conflict "revision $next of $topic was created concurrently"
+  } | publish_once "$dir/revisions/$next.rec" || status=$?
+  publish_status_or_refuse "$status" "revision $next of $topic" "revision $next of $topic was created concurrently"
   record_event "$topic" "$cur" superseded "corrected by revision $next"
   record_event "$topic" "$next" opened "$(clean_text "$summary")"
   printf '%s %s\n' "$rid" "$next"
@@ -564,7 +641,7 @@ inflight_report() {  # <topic>
 }
 
 cmd_cancel() {
-  local topic=${1:-} reason='' cur
+  local topic=${1:-} reason='' cur terminal status=0
   shift || true
   while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -576,20 +653,26 @@ cmd_cancel() {
   [ -n "$reason" ] || die "cancel requires --reason <text>"
   require_topic "$topic"
   cur=$(current_revision "$topic")
+  # A topic ends once. Cancelling a topic that already succeeded would rewrite
+  # a success as a cancellation everywhere it is read from then on, which is the
+  # queued/picked-up/completed confusion this ledger exists to remove.
+  terminal=$(topic_terminal "$topic")
+  [ -z "$terminal" ] || refuse 5 retired "$topic already ended as ${terminal%% *} at revision ${terminal##* }; a terminal record is published once and is never replaced"
   {
     printf 'topic=%s\n' "$topic"
     printf 'revision=%s\n' "$cur"
     printf 'state=cancelled\n'
     printf 'reason=%s\n' "$(clean_text "$reason")"
     printf 'utc=%s\n' "$(utc_now)"
-  } | publish_once "$(topic_dir "$topic")/terminal/$cur.cancelled" || refuse 9 conflict "$topic already has a terminal record at revision $cur"
+  } | publish_once "$(topic_dir "$topic")/terminal/state" || status=$?
+  publish_status_or_refuse "$status" "terminal state of $topic" "$topic already has a terminal record at revision $cur"
   record_event "$topic" "$cur" cancelled "$(clean_text "$reason")"
   printf 'ok: cancelled %s at revision %s; performed steps are kept, not rolled back\n' "$topic" "$cur"
   inflight_report "$topic"
 }
 
 cmd_complete() {
-  local topic=${1:-} rev='' outcome='' dir retired=0 f base verdict code
+  local topic=${1:-} rev='' outcome='' dir retired=0 f base status=0
   shift || true
   while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -601,9 +684,7 @@ cmd_complete() {
   slug_valid "$topic" || die "complete requires a topic slug"
   revision_valid "$rev" || die "complete requires --revision <n>"
   require_topic "$topic"
-  verdict=$(freshness_verdict "$topic" "$rev")
-  code=${verdict%% *}
-  [ "$code" = 0 ] || refuse "$code" "$(echo "${verdict#* }" | cut -d' ' -f1)" "$(echo "${verdict#* }" | cut -d' ' -f2-)"
+  gate_or_refuse "$topic" "$rev" 0
   dir=$(topic_dir "$topic")
   {
     printf 'topic=%s\n' "$topic"
@@ -611,7 +692,8 @@ cmd_complete() {
     printf 'state=completed\n'
     printf 'outcome=%s\n' "$(clean_text "$outcome")"
     printf 'utc=%s\n' "$(utc_now)"
-  } | publish_once "$dir/terminal/$rev.completed" || refuse 9 conflict "$topic already has a terminal record at revision $rev"
+  } | publish_once "$dir/terminal/state" || status=$?
+  publish_status_or_refuse "$status" "terminal state of $topic" "$topic already has a terminal record at revision $rev"
   # Success retires this topic's pending substeps and NOTHING else: another
   # topic's work is untouched, which is the whole point of topic scoping.
   if [ -d "$dir/steps" ]; then
@@ -654,7 +736,7 @@ cmd_step() {
 # likes - which is exactly what "check before every not-yet-performed step"
 # needs to be cheap enough to actually do.
 cmd_check_action() {
-  local topic=${1:-} rev='' step='' verdict code word detail dir
+  local topic=${1:-} rev='' step='' dir
   shift || true
   while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -665,13 +747,7 @@ cmd_check_action() {
   done
   slug_valid "$topic" || die "check-action requires a topic slug"
   revision_valid "$rev" || die "check-action requires --revision <n>"
-  verdict=$(freshness_verdict "$topic" "$rev")
-  code=${verdict%% *}
-  word=$(echo "${verdict#* }" | cut -d' ' -f1)
-  detail=$(echo "${verdict#* }" | cut -d' ' -f2-)
-  if [ "$code" != 0 ]; then
-    refuse "$code" "$word" "$detail"
-  fi
+  gate_or_refuse "$topic" "$rev" 0
   if [ -n "$step" ]; then
     slug_valid "$step" || die "check-action: invalid step slug: $step"
     dir="$(topic_dir "$topic")/steps"
@@ -685,11 +761,11 @@ cmd_check_action() {
       refuse 9 conflict "step $step of $topic is already claimed and running"
     fi
   fi
-  printf 'fresh: %s\n' "$detail"
+  printf 'fresh: %s\n' "$GATE_DETAIL"
 }
 
 cmd_begin() {
-  local topic=${1:-} rev='' step='' dir
+  local topic=${1:-} rev='' step='' dir status=0
   shift || true
   while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -700,16 +776,17 @@ cmd_begin() {
   done
   revision_valid "$rev" || die "begin requires --revision <n>"
   slug_valid "${step:-}" || die "begin requires --step <slug>"
-  cmd_check_action "$topic" --revision "$rev" --step "$step" >/dev/null
+  gate_quietly "$topic" --revision "$rev" --step "$step"
   dir="$(topic_dir "$topic")/steps"
   printf 'step=%s\nrevision=%s\nstarted_utc=%s\npid=%s\n' "$step" "$rev" "$(utc_now)" "$$" \
-    | publish_once "$dir/$step.inflight" || refuse 9 conflict "step $step of $topic is already claimed"
+    | publish_once "$dir/$step.inflight" || status=$?
+  publish_status_or_refuse "$status" "in-flight claim for step $step" "step $step of $topic is already claimed"
   record_event "$topic" "$rev" step-begin "$step"
   printf 'ok: claimed %s for revision %s; this claim cannot be revoked once the action leaves the gate\n' "$step" "$rev"
 }
 
 cmd_performed() {
-  local topic=${1:-} rev='' step='' note='' dir
+  local topic=${1:-} rev='' step='' note='' dir status=0
   shift || true
   while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -724,7 +801,8 @@ cmd_performed() {
   require_topic "$topic"
   dir="$(topic_dir "$topic")/steps"
   printf 'step=%s\nrevision=%s\nperformed_utc=%s\nnote=%s\n' "$step" "$rev" "$(utc_now)" "$(clean_text "$note")" \
-    | publish_once "$dir/$step.performed" || refuse 9 conflict "step $step of $topic was already recorded as performed"
+    | publish_once "$dir/$step.performed" || status=$?
+  publish_status_or_refuse "$status" "performed record for step $step" "step $step of $topic was already recorded as performed"
   rm -f "$dir/$step.inflight"
   record_event "$topic" "$rev" step-performed "$step"
   printf 'ok: recorded %s as performed at revision %s\n' "$step" "$rev"
@@ -764,7 +842,7 @@ cmd_phase() {
 # and not a second send: it reports that the authorization already exists, which
 # is what kills the "shall I send it?" loop.
 cmd_handoff() {
-  local topic=${1:-} rev='' file when
+  local topic=${1:-} rev='' file when status=0
   shift || true
   while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -773,13 +851,18 @@ cmd_handoff() {
     esac
   done
   revision_valid "$rev" || die "handoff requires --revision <n>"
-  cmd_check_action "$topic" --revision "$rev" >/dev/null
+  gate_quietly "$topic" --revision "$rev"
   file="$(topic_dir "$topic")/handoff/$rev.authorized"
-  if printf 'topic=%s\nrevision=%s\nauthorized_utc=%s\n' "$topic" "$rev" "$(utc_now)" | publish_once "$file"; then
+  printf 'topic=%s\nrevision=%s\nauthorized_utc=%s\n' "$topic" "$rev" "$(utc_now)" | publish_once "$file" || status=$?
+  if [ "$status" = 0 ]; then
     record_event "$topic" "$rev" handoff-authorized ''
     printf 'send-now: %s revision %s is authorized; hand it off immediately and record the queue receipt with phase enqueued\n' "$topic" "$rev"
     return 0
   fi
+  # Only a lost race means the authorization already exists. A failed write means
+  # no authorization was recorded at all, and reporting that as "already
+  # authorized" would suppress the send that still has to happen.
+  [ "$status" = 2 ] && refuse 9 write-failed "the handoff authorization for $topic revision $rev could not be written; nothing was authorized"
   when=$(record_field "$file" authorized_utc)
   printf 'already-authorized: %s revision %s was authorized at %s; do not ask again and do not send a second copy\n' "$topic" "$rev" "$when"
 }
@@ -866,7 +949,7 @@ cmd_pending() {
 }
 
 cmd_accept() {
-  local topic=${1:-} rev='' answer='' claimed='' receipt='' parent actual rid existing_id existing_sha verdict code
+  local topic=${1:-} rev='' answer='' claimed='' receipt='' parent actual rid existing_id existing_sha status=0
   shift || true
   while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -882,12 +965,7 @@ cmd_accept() {
   [ -n "$receipt" ] || die "accept requires --receipt <path>"
   sha_valid "$claimed" || die "accept requires --sha256 <64 hex characters>"
   require_topic "$topic"
-  verdict=$(freshness_verdict "$topic" "$rev")
-  code=${verdict%% *}
-  case "$code" in
-    0|5) : ;;
-    *) refuse "$code" "$(echo "${verdict#* }" | cut -d' ' -f1)" "$(echo "${verdict#* }" | cut -d' ' -f2-)" ;;
-  esac
+  gate_or_refuse "$topic" "$rev" "0 5"
   parent=$(path_under_authorized "$answer") || refuse 9 conflict "answer path is not an unambiguous file inside the bound authorized directory: $answer"
   path_under_authorized "$receipt" >/dev/null || refuse 9 conflict "receipt path is not inside the bound authorized directory: $receipt"
   [ -L "$answer" ] && refuse 9 conflict "answer path is a symlink: $answer"
@@ -917,10 +995,12 @@ cmd_accept() {
     printf 'Answer SHA-256: %s\n' "$actual"
     printf 'Received UTC: %s\n' "$(utc_now)"
     printf 'Delivery state: received-by-primary\n'
-  } | publish_once "$receipt" || {
+  } | publish_once "$receipt" || status=$?
+  if [ "$status" != 0 ]; then
+    [ "$status" = 2 ] && refuse 9 write-failed "the receipt could not be written at $receipt; nothing was recorded"
     record_event "$topic" "$rev" conflict "receipt published concurrently"
     refuse 9 conflict "the receipt was published concurrently; the first one stands"
-  }
+  fi
   record_event "$topic" "$rev" accepted "$actual"
   printf 'ok: accepted %s revision %s; receipt published once at %s\n' "$rid" "$rev" "$receipt"
 }
@@ -929,7 +1009,7 @@ cmd_accept() {
 # one material limitation, one question, and everything else on screen.
 cmd_present() {
   local topic=${1:-} rev='' outcome='' limitation='' question='' attribution='' allow_repeat=0 questions=0 final=0
-  local verdict code text hash prefix low
+  local text hash prefix low status=0
   shift || true
   while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -953,25 +1033,20 @@ cmd_present() {
     mixed) prefix='Companion saw and Firstmate confirmed' ;;
     *) die "present requires --attribution <companion-observed|firstmate-verified|mixed>" ;;
   esac
-  verdict=$(freshness_verdict "$topic" "$rev")
-  code=${verdict%% *}
-  case "$code" in
-    0) : ;;
-    5)
-      # A finished topic may announce its own ending - that is what --final is
-      # for. Everything else it might have said is stale by definition: the
-      # queued "type the password now" belongs to work that already succeeded,
-      # and speaking it is the exact failure this gate exists to stop.
-      if [ "$final" != 1 ]; then
-        refuse 5 retired "$(echo "${verdict#* }" | cut -d' ' -f2-); only --final may announce a finished topic"
-      fi
-      case "$(topic_terminal "$topic")" in
-        "completed $rev"|"cancelled $rev") : ;;
-        *) refuse 5 retired "revision $rev is not the revision that ended $topic" ;;
-      esac
-      ;;
-    *) refuse "$code" "$(echo "${verdict#* }" | cut -d' ' -f1)" "$(echo "${verdict#* }" | cut -d' ' -f2-)" ;;
-  esac
+  gate_or_refuse "$topic" "$rev" "0 5"
+  if [ "$GATE_CODE" = 5 ]; then
+    # A finished topic may announce its own ending - that is what --final is
+    # for. Everything else it might have said is stale by definition: the
+    # queued "type the password now" belongs to work that already succeeded,
+    # and speaking it is the exact failure this gate exists to stop.
+    if [ "$final" != 1 ]; then
+      refuse 5 retired "$GATE_DETAIL; only --final may announce a finished topic"
+    fi
+    case "$(topic_terminal "$topic")" in
+      "completed $rev"|"cancelled $rev") : ;;
+      *) refuse 5 retired "revision $rev is not the revision that ended $topic" ;;
+    esac
+  fi
   low=$(printf '%s' "$outcome" | LC_ALL=C tr '[:upper:]' '[:lower:]' | sed 's/[[:punct:]]*$//;s/^[[:space:]]*//;s/[[:space:]]*$//')
   # Filler is the spoken equivalent of a progress bar: it costs a turn, says
   # nothing, and invites an acknowledgement in reply. Anything that is only a
@@ -989,10 +1064,12 @@ cmd_present() {
   [ -n "$question" ] && text="$text Next: $(clean_text "$question")"
   hash=$(printf '%s' "$text" | sha256_text)
   if [ "$allow_repeat" = 0 ]; then
-    if ! printf 'revision=%s\nutc=%s\ntext=%s\n' "$rev" "$(utc_now)" "$text" \
-        | publish_once "$(topic_dir "$topic")/claims/present/$hash"; then
-      refuse 8 duplicate-suppressed "that exact sentence was already spoken for $topic"
-    fi
+    printf 'revision=%s\nutc=%s\ntext=%s\n' "$rev" "$(utc_now)" "$text" \
+      | publish_once "$(topic_dir "$topic")/claims/present/$hash" || status=$?
+    # A failed write is not a duplicate: reporting it as one would silently
+    # withhold a sentence that was never actually claimed.
+    [ "$status" = 2 ] && refuse 9 write-failed "the presentation claim for $topic could not be written; nothing was released to the speaker"
+    [ "$status" = 0 ] || refuse 8 duplicate-suppressed "that exact sentence was already spoken for $topic"
   fi
   record_event "$topic" "$rev" presented "$hash"
   printf '%s\n' "$text"
@@ -1028,7 +1105,7 @@ pref_current() {  # <key> ; prints the latest record path
 # preference cannot widen what may be executed, and a preference recorded under
 # a replaced binding is reported as invalidated rather than silently inherited.
 cmd_pref() {
-  local action=${1:-} key value='' source='' scope='companion' file next want have state
+  local action=${1:-} key value='' source='' scope='companion' file next want have state status=0
   shift || true
   case "$action" in
     set)
@@ -1061,7 +1138,8 @@ cmd_pref() {
         printf 'utc=%s\n' "$(utc_now)"
         printf 'state=active\n'
         printf 'supersedes=%s\n' "$((next - 1))"
-      } | publish_once "$(pref_root)/$key/$next.rec" || refuse 9 conflict "preference $key revision $next was written concurrently"
+      } | publish_once "$(pref_root)/$key/$next.rec" || status=$?
+      publish_status_or_refuse "$status" "preference $key revision $next" "preference $key revision $next was written concurrently"
       printf 'ok: %s revision %s recorded as %s\n' "$key" "$next" "$source"
       ;;
     show)
@@ -1110,7 +1188,8 @@ cmd_pref() {
         printf 'utc=%s\n' "$(utc_now)"
         printf 'state=forgotten\n'
         printf 'supersedes=%s\n' "$((next - 1))"
-      } | publish_once "$(pref_root)/$key/$next.rec" || refuse 9 conflict "preference $key revision $next was written concurrently"
+      } | publish_once "$(pref_root)/$key/$next.rec" || status=$?
+      publish_status_or_refuse "$status" "preference $key revision $next" "preference $key revision $next was written concurrently"
       printf 'ok: %s forgotten at revision %s\n' "$key" "$next"
       ;;
     render)
@@ -1149,12 +1228,17 @@ cmd_steer_command() {
   done
   revision_valid "$rev" || die "steer-command requires --revision <n>"
   [ -n "$turn" ] || die "steer-command requires --turn <id> from fm-voice-relay-appserver.sh active-turn"
-  cmd_check_action "$topic" --revision "$rev" >/dev/null
+  gate_quietly "$topic" --revision "$rev"
   thread=$(record_field "$(binding_file)" companion)
   summary=$(record_field "$(topic_dir "$topic")/revisions/$rev.rec" summary)
-  printf '%s/fm-voice-relay-appserver.sh steer --thread %s --expected-turn %s --text %s --live\n' \
-    "$SCRIPT_DIR" "$thread" "$turn" "'$summary'"
+  # Every field is shell-quoted, including the free-text summary: this line is
+  # printed to be pasted, and an apostrophe or a crafted correction would
+  # otherwise break the command or append a second one to it.
+  printf '%s steer --thread %s --expected-turn %s --text %s --live\n' \
+    "$(shell_quote "$SCRIPT_DIR/fm-voice-relay-appserver.sh")" \
+    "$(shell_quote "$thread")" "$(shell_quote "$turn")" "$(shell_quote "$summary")"
   printf 'note: the steer fails if that turn already ended; that refusal is correct and must not be retried blindly.\n'
+  printf 'fallback: if steering is unavailable or the turn already ended, the correction above is already the current revision of this request; queue it once through codex queue and let check-action and present refuse the superseded step at the next gate.\n'
 }
 
 cmd_evidence() {

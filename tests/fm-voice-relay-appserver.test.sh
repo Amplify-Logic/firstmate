@@ -175,6 +175,48 @@ test_interrupt_is_sent_as_the_protocol_defines_it() {
   pass "fm-voice-relay-appserver: interrupting names the exact turn or refuses"
 }
 
+# A proxy that accepts the frames and then says nothing used to hang the caller
+# for ever, while the header promised a bound. The documented bound has to be a
+# real one, and a timeout has to be reported as the transport failure it is.
+test_a_silent_server_fails_at_the_documented_bound() {
+  local silent out code started elapsed
+  silent="$TMP_ROOT/silent-app-server"
+  cat > "$silent" <<'SH'
+#!/usr/bin/env bash
+cat > /dev/null
+sleep 60
+SH
+  chmod +x "$silent"
+
+  started=$(date -u +%s)
+  out=$(FM_VOICE_RELAY_PROXY_CMD="$silent" FM_VOICE_RELAY_RPC_TIMEOUT=2 \
+    "$APPSERVER" active-turn --thread THREAD-1 --live 2>&1) && code=0 || code=$?
+  elapsed=$(( $(date -u +%s) - started ))
+  expect_code 5 "$code" "a server that never answers must end as a transport failure"
+  assert_contains "$out" "no answer within 2s" "the failure must name the bound it hit"
+  [ "$elapsed" -lt 30 ] || fail "the call must be bounded, took ${elapsed}s"
+
+  out=$(FM_VOICE_RELAY_RPC_TIMEOUT=nonsense appserver active-turn --thread THREAD-1 --live 2>&1) && code=0 || code=$?
+  expect_code 2 "$code" "an unusable bound must be refused rather than ignored"
+  assert_contains "$out" "positive whole number of seconds" "the refusal must say what the value has to be"
+  pass "fm-voice-relay-appserver: a live call is bounded and a silent proxy fails instead of hanging"
+}
+
+# The limitation is only useful next to the thing to do instead.
+test_an_unsteerable_thread_names_the_supported_fallback() {
+  local out
+  out=$(FAKE_THREAD_STATUS=notLoaded appserver thread-status --thread THREAD-1 --live)
+  assert_contains "$out" "fm-voice-relay.sh revise" "the fallback must start by revising the shared request record"
+  assert_contains "$out" "queue that correction once through codex queue" "the fallback must name the supported queue path"
+  assert_contains "$out" "check-action before acting, present before speaking" \
+    "the fallback must name the gates that actually refuse the stale step"
+  assert_contains "$out" "queueing alone kills nothing" "the fallback must not imply the queue cancels anything"
+  assert_contains "$out" "cannot interrupt an external action already in flight" "the fallback must keep its limits"
+  assert_contains "$out" "cannot make the companion pick the correction up promptly" "prompt pickup must not be promised"
+  assert_contains "$out" "terminal session or through Herdr" "the human fallback must be named"
+  pass "fm-voice-relay-appserver: an unsteerable thread is reported with the fallback to use instead"
+}
+
 test_probe_reports_the_installed_steering_contract
 test_probe_fails_when_the_build_cannot_steer
 test_dry_run_prints_the_frames_and_contacts_nothing
@@ -184,3 +226,5 @@ test_stale_steer_is_refused_by_the_server
 test_thread_status_tells_the_truth_about_reachability
 test_active_turn_reads_the_current_turn
 test_interrupt_is_sent_as_the_protocol_defines_it
+test_a_silent_server_fails_at_the_documented_bound
+test_an_unsteerable_thread_names_the_supported_fallback
