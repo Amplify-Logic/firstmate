@@ -1,0 +1,46 @@
+{
+  "schema": "fm.fota-adapter.v1",
+  "adapter_version": 1,
+  "name": "fixture-device-settings",
+  "_comment": [
+    "Neutral fixture adapter. Setting names, origin and device ids here are",
+    "invented for tests. A real adapter is local, captain-approved data kept",
+    "outside this repository; if anything site-specific were compiled into the",
+    "tool, this fixture could not exercise it."
+  ],
+  "portal": {
+    "origin": "https://portal.example.invalid",
+    "device_path_template": "/devices/{device_id}"
+  },
+  "command_format": {
+    "wire": "senml-array",
+    "name_key": "n",
+    "numeric_value_key": "v",
+    "boolean_value_key": "vb"
+  },
+  "settings": {
+    "band_lower": {
+      "encoding": "offset100_tenths_c",
+      "confirmed": true
+    },
+    "band_upper": {
+      "encoding": "offset100_tenths_c",
+      "confirmed": true
+    },
+    "feature_flag": {
+      "encoding": "boolean",
+      "confirmed": true
+    },
+    "unconfirmed_setting": {
+      "encoding": "offset100_tenths_c",
+      "confirmed": false
+    }
+  },
+  "constraints": [
+    { "type": "ordered_pair", "lower": "band_lower", "upper": "band_upper" }
+  ],
+  "eligibility": {
+    "imei_prefixes_necessary": ["1234567"],
+    "resolved_by": "An observed row for each setting on this specific target."
+  }
+}
