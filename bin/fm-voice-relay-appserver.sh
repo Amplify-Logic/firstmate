@@ -454,7 +454,10 @@ cmd_interrupt() {
 }
 
 usage() {
-  sed -n '/^# Usage:/,/^# Exit codes:/p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+  # The exit-code list is the LAST header paragraph, so the range has to run to
+  # the first non-comment line and then drop it. Ending the range on
+  # `/^# Exit codes:/` would stop on that line and cut the list off mid-sentence.
+  sed -n '/^# Usage:/,/^[^#]/p' "${BASH_SOURCE[0]}" | sed '$d; s/^# \{0,1\}//'
 }
 
 main() {

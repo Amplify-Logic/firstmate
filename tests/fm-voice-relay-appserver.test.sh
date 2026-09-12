@@ -312,6 +312,17 @@ test_an_unsteerable_thread_names_the_supported_fallback() {
   pass "fm-voice-relay-appserver: an unsteerable thread is reported with the fallback to use instead"
 }
 
+# Help that stops mid-sentence teaches the caller the wrong exit contract.
+test_help_prints_the_whole_exit_code_list() {
+  local out last
+  out=$(appserver --help)
+  assert_contains "$out" "5 transport failure" "--help must reach the end of the exit-code list"
+  last=$(printf '%s\n' "$out" | tail -1)
+  assert_contains "$last" "transport failure" "--help must not stop part-way through the exit codes"
+  pass "fm-voice-relay-appserver: --help prints the complete exit-code list"
+}
+
+test_help_prints_the_whole_exit_code_list
 test_probe_reports_the_installed_steering_contract
 test_probe_fails_when_the_build_cannot_steer
 test_dry_run_prints_the_frames_and_contacts_nothing
