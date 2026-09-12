@@ -41,6 +41,10 @@ echo "queued to thread ${3:-?}"
 echo "message_id: stub-msg-$$"
 STUBEOF
 chmod +x "$STUB"
+# A path that exists and cannot be executed: not the same as an absent one to
+# the operating system, the same to the captain - nothing was enqueued.
+: > "$TMP/bin/not-executable"
+chmod 000 "$TMP/bin/not-executable"
 export FM_TEST_QUEUE_LOG="$QUEUE_LOG"
 export FM_FOTA_QUEUE_CMD="$STUB"
 export FM_FOTA_COMPANION_THREAD="isolated-stub-thread"
@@ -331,12 +335,17 @@ test_a_settled_record_is_never_overwritten() {
   first=$(start_run "$plan" --deadline 0)
   "$RUNNER" settle "$first" >/dev/null
   assert_contains "$("$RUNNER" status "$first")" 'state=unknown' "first run settled unknown"
-  # Same operation, same wall-clock second on a fast machine. The settled record
-  # and its evidence are exactly what `unknown` exists to preserve.
-  second=$(start_run "$(make_plan 2)")
+  # The SAME plan, so the same idempotency key and the same id stem. The run has
+  # settled, so the duplicate guard lets it through - and on a fast machine the
+  # second start lands in the same wall-clock second, which is exactly the case
+  # that used to overwrite the settled record and its evidence.
+  second=$(start_run "$plan")
   [ "$first" != "$second" ] || fail "a second run reused the first run's id"
+  assert_contains "$second" "$first" "the second id is built from the same stem"
   assert_contains "$("$RUNNER" status "$first")" 'state=unknown' \
     "the settled outcome survived a later run"
+  assert_contains "$("$RUNNER" status "$second")" 'state=pending' \
+    "the second run is its own live run"
   pass "a settled record is never written over by a later run"
 }
 
@@ -399,18 +408,132 @@ test_acknowledgement_clears_the_ask_without_losing_the_outcome() {
   pass "an acknowledgement clears the ask and preserves every piece of evidence"
 }
 
-test_a_live_run_cannot_be_acknowledged() {
-  reset_runs
-  local run_id out rc
-  run_id=$(start_run "$(make_plan 1)" --deadline 600)
+refuse_ack() {  # refuse_ack <run-id> <label>
+  local out rc
   set +e
-  out=$("$RUNNER" ack "$run_id" 2>&1)
+  out=$("$RUNNER" ack "$1" 2>&1)
   rc=$?
   set -e
-  [ "$rc" -ne 0 ] || fail "acknowledging a live run should refuse"
-  assert_contains "$out" 'only a settled preparation alert' "the refusal says why"
-  assert_contains "$("$RUNNER" status "$run_id")" 'state=pending' "the run is untouched"
-  pass "a live run cannot be acknowledged away"
+  [ "$rc" -ne 0 ] || fail "acknowledging a $2 run should refuse"
+  assert_contains "$out" 'only a settled preparation alert' "the $2 refusal says why"
+}
+
+test_a_live_run_cannot_be_acknowledged() {
+  reset_runs
+  local run_id
+  # Every live state, which is the same set the duplicate guard blocks on: a run
+  # that has not settled has no outcome the captain could be finished with.
+  run_id=$(start_run "$(make_plan 1)" --deadline 600)
+  refuse_ack "$run_id" pending
+  assert_contains "$("$RUNNER" status "$run_id")" 'state=pending' "the pending run is untouched"
+
+  write_result "$run_id" "{\"request_id\":\"$run_id\",
+    \"observed_device_heading\":\"1234567000111\",
+    \"exact_draft_payload\":\"$(printf '%s' "$PAYLOAD" | sed 's/"/\\"/g')\",
+    \"command_sent\":false}"
+  "$RUNNER" settle "$run_id" >/dev/null
+  assert_contains "$("$RUNNER" status "$run_id")" 'state=ready' "the run is ready"
+  refuse_ack "$run_id" ready
+
+  reset_runs
+  unset FM_FOTA_COMPANION_THREAD
+  run_id=$(start_run "$(make_plan 1)")
+  assert_contains "$("$RUNNER" status "$run_id")" 'state=prepared' "the run is prepared"
+  refuse_ack "$run_id" prepared
+  pass "no live run - prepared, pending or ready - can be acknowledged away"
+}
+
+test_acknowledgement_is_idempotent_and_keeps_the_full_history() {
+  reset_runs
+  local run_id out
+  run_id=$(start_run "$(make_plan 1)" --deadline 0)
+  "$RUNNER" settle "$run_id" >/dev/null
+  "$RUNNER" ack "$run_id" --note "checked at the portal" >/dev/null
+  out=$("$RUNNER" ack "$run_id")
+  assert_contains "$out" 'already acknowledged' "a repeat acknowledgement is a no-op"
+  assert_contains "$out" 'state=unknown' "the repeat does not touch the outcome"
+
+  # The active ask list is the ONLY thing acknowledgement changes: list and show
+  # still carry the run, its outcome, its reason and its evidence paths.
+  assert_contains "$("$RUNNER" list)" "$run_id" "list still carries the run"
+  out=$("$RUNNER" show "$run_id")
+  assert_contains "$out" '"state": "unknown"' "show still carries the outcome"
+  assert_contains "$out" 'verify at the portal' "show still carries the reason"
+  assert_contains "$out" '"result_path"' "show still carries the evidence path"
+  assert_contains "$out" '"queue"' "show still carries the queue receipt record"
+  pass "acknowledgement is idempotent and removes nothing but the open ask"
+}
+
+test_a_changed_outcome_is_not_covered_by_an_earlier_acknowledgement() {
+  reset_runs
+  local run_id record
+  run_id=$(start_run "$(make_plan 1)" --deadline 0)
+  "$RUNNER" settle "$run_id" >/dev/null
+  "$RUNNER" ack "$run_id" >/dev/null
+  assert_contains "$("$RUNNER" list --json)" '"acknowledged": true' "the alert is acknowledged"
+
+  # The acknowledgement covered one exact outcome. However a later outcome
+  # arrives - here by a hand edit, the documented way a record is corrected - it
+  # is a different thing to be told about, so the run is an open ask again.
+  record="$FM_STATE_OVERRIDE/fota-staging/$run_id.json"
+  RECORD="$record" python3 -c '
+import json, os
+path = os.environ["RECORD"]
+record = json.load(open(path, encoding="utf-8"))
+record["state"] = "error"
+record["reason"] = "readback payload does not match the staged plan"
+json.dump(record, open(path, "w", encoding="utf-8"), indent=2, sort_keys=True)
+'
+  assert_contains "$("$RUNNER" list --json)" '"acknowledged": false' \
+    "a changed outcome is not covered by the earlier acknowledgement"
+  assert_contains "$("$RUNNER" status "$run_id")" 'acknowledged=superseded' \
+    "status names why the acknowledgement no longer stands"
+  pass "an acknowledgement never covers an outcome it was not given for"
+}
+
+test_the_deck_is_told_exactly_why_a_run_was_never_queued() {
+  reset_runs
+  local run_id out
+  unset FM_FOTA_COMPANION_THREAD
+  run_id=$(start_run "$(make_plan 1)")
+  out=$("$RUNNER" list --json)
+  # not-configured, not-installed and a transport that refused are three
+  # different things, and the surface that shows them must be able to say which.
+  assert_contains "$out" 'no companion thread is configured' \
+    "an unconfigured transport reaches the surface with its own reason"
+
+  reset_runs
+  out=$(FM_TEST_QUEUE_FAIL="no such thread" "$RUNNER" start "$(make_plan 1)" 2>&1)
+  assert_contains "$("$RUNNER" list --json)" 'no such thread' \
+    "a refused transport reaches the surface quoting the transport"
+
+  reset_runs
+  out=$(FM_FOTA_QUEUE_CMD="$TMP/bin/not-executable" "$RUNNER" start "$(make_plan 1)" 2>&1)
+  assert_not_contains "$out" 'Traceback' "an unusable transport path is not a traceback"
+  assert_contains "$out" 'state=prepared' "an unusable transport path is prepared"
+  assert_contains "$("$RUNNER" list --json)" 'not-installed' \
+    "an unusable transport path is reported as not installed"
+  pass "the surface can tell every never-queued reason apart"
+}
+
+test_a_failed_start_leaves_no_orphaned_record() {
+  reset_runs
+  local before after
+  before=$(ls "$FM_STATE_OVERRIDE/fota-staging" 2>/dev/null | wc -l | tr -d ' ')
+  # The transport path exists but cannot be executed. The run id was already
+  # claimed on disk by then, so a failure here must release it rather than leave
+  # a record the deck skips over without saying anything.
+  FM_FOTA_QUEUE_CMD="$TMP/bin/not-executable" "$RUNNER" start "$(make_plan 1)" >/dev/null 2>&1
+  after=$(ls "$FM_STATE_OVERRIDE/fota-staging" 2>/dev/null | wc -l | tr -d ' ')
+  [ "$after" -ge "$before" ] || fail "records went missing"
+  # Whatever happened, every record on disk is readable - never a zero-byte claim.
+  local file
+  for file in "$FM_STATE_OVERRIDE/fota-staging"/*.json; do
+    [ -e "$file" ] || continue
+    python3 -c 'import json,sys; json.load(open(sys.argv[1]))' "$file" \
+      || fail "unreadable record left behind: $file"
+  done
+  pass "a start that cannot complete leaves no unreadable record behind"
 }
 
 test_runner_never_sends() {
@@ -447,3 +570,7 @@ test_a_stale_result_is_never_read_as_a_new_runs_readback
 test_deadline_argument_is_validated
 test_acknowledgement_clears_the_ask_without_losing_the_outcome
 test_a_live_run_cannot_be_acknowledged
+test_acknowledgement_is_idempotent_and_keeps_the_full_history
+test_a_changed_outcome_is_not_covered_by_an_earlier_acknowledgement
+test_the_deck_is_told_exactly_why_a_run_was_never_queued
+test_a_failed_start_leaves_no_orphaned_record

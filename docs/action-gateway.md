@@ -32,9 +32,13 @@ JSON object with exactly these top-level fields:
 
 `requester_id` may be omitted from JSON when `FM_ACTION_REQUESTER_ID` is set in the environment; the broker injects it before validation.
 
-Example:
+Example.
+`expires_at` is computed rather than hardcoded: a fixed epoch is refused as soon as it goes stale, and `email.send` is `irreversible`, so the broker caps its window at 15 minutes (see [Broker-capped approval freshness](#broker-capped-approval-freshness)).
 
-```json
+```sh
+expires_at=$(( $(date +%s) + 600 ))   # inside the irreversible ceiling
+
+cat <<JSON | bin/fm-action-gateway.sh prepare
 {
   "task_id": "pitch-agent-42",
   "domain": "music-outreach",
@@ -45,13 +49,12 @@ Example:
   "environment": "prod",
   "policy_version": "1",
   "idempotency_key": "pitch-agent-42-v1",
-  "expires_at": 1757680200,
+  "expires_at": $expires_at,
   "nonce": "n-7f3a9c2e",
   "requester_id": "worker-task-42"
 }
+JSON
 ```
-
-`expires_at` is a real timestamp shortly ahead of the request, not a far-future constant: `email.send` is `irreversible`, so the broker caps its window at 15 minutes (see [Broker-capped approval freshness](#broker-capped-approval-freshness)).
 
 ## Operation registry and severity
 

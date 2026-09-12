@@ -1446,6 +1446,7 @@ test_a_never_queued_run_says_so_rather_than_claiming_delivery() {
 
 test_the_model_count_describes_only_the_rows_its_consumer_renders() {
   local model staged staged_runs
+  command -v jq >/dev/null 2>&1 || { pass "skip: jq not found for the staged-count test"; return 0; }
   model=$(staging_payload '[
     {"run_id":"r-ready","state":"ready","device_id":"dev-ready","attempt":1,
      "eligibility":"verified"}

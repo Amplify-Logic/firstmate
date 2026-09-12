@@ -49,9 +49,11 @@
 #   -h|--help
 #
 # `ack` records that the captain has seen a settled preparation alert, so the
-# deck can drop it from the active ask list. It never deletes a record, never
-# changes an outcome, never marks a command applied, and never expires anything
-# on a timer: an `unknown` stays `unknown` forever because that IS the evidence.
+# deck can drop it from the active ask list. It is refused on every live state,
+# never deletes a record, never changes an outcome, never marks a command
+# applied, and never expires anything on a timer: an `unknown` stays `unknown`
+# forever because that IS the evidence. The acknowledgement is bound to the
+# outcome it was given for, so a later, different outcome is never covered by it.
 #
 # Environment:
 #   FM_HOME / FM_STATE_OVERRIDE  - home and state roots
@@ -80,6 +82,10 @@ RETURN_DIR="${FM_FOTA_RETURN_DIR:-$FM_HOME/data/desktop-companion}"
 DEADLINE="${FM_FOTA_DEADLINE:-300}"
 QUEUE_CMD="${FM_FOTA_QUEUE_CMD:-codex}"
 QUEUE_TIMEOUT="${FM_FOTA_QUEUE_TIMEOUT:-30}"
+# A live run is one the duplicate guard blocks and the captain cannot yet be
+# finished with. Defined once so the start guard and the acknowledgement refusal
+# can never drift apart.
+LIVE_STATES="prepared pending ready"
 
 usage() {
   cat <<'EOF' >&2
@@ -127,7 +133,8 @@ cmd_start() {
   # identity the record does, so it gets the same treatment.
   chmod 700 "$RUNS" "$RETURN_DIR" 2>/dev/null || true
   RUNS="$RUNS" RETURN_DIR="$RETURN_DIR" DEADLINE="$deadline" PLAN="$plan" \
-    QUEUE_CMD="$QUEUE_CMD" QUEUE_TIMEOUT="$QUEUE_TIMEOUT" py - <<'PYSTART'
+    QUEUE_CMD="$QUEUE_CMD" QUEUE_TIMEOUT="$QUEUE_TIMEOUT" \
+    LIVE_STATES="$LIVE_STATES" py - <<'PYSTART'
 import json, os, re, subprocess, sys, time
 
 runs, return_dir = os.environ["RUNS"], os.environ["RETURN_DIR"]
@@ -140,7 +147,7 @@ key = plan["operation"]["idempotency_key"]
 # The duplicate guard covers the queue step too. `prepared` counts as live: its
 # request exists and may already have reached the companion, so re-running it
 # would risk a second delivery of one intent.
-LIVE_STATES = {"prepared", "pending", "ready"}
+LIVE_STATES = set(os.environ["LIVE_STATES"].split())
 
 # Duplicate protection by operation identity. A second start for an operation
 # that already has a live or ready run would produce a second request for the
@@ -186,195 +193,222 @@ for ordinal in range(1, 1000):
 if run_id is None:
     sys.exit("fm-fota-stage-run: could not claim a free run id for %s" % key)
 
-result_path = os.path.join(return_dir, run_id + "-result.json")
-request_path = os.path.join(return_dir, run_id + "-request.md")
+# Everything below runs against a run id already claimed on disk. If any of
+# it fails, the claim is released rather than left as an empty record the
+# deck silently skips over - and the id stays unusable by nobody.
+record_written = False
+try:
+    result_path = os.path.join(return_dir, run_id + "-result.json")
+    request_path = os.path.join(return_dir, run_id + "-request.md")
 
-# The request is GENERATED from the approved plan, never hand-written prose.
-# It carries the operation identity, the exact target, an origin allowlist the
-# browser side is told to stay inside, and the readback this run will verify.
-origin = (plan.get("adapter") or {}).get("origin") or plan.get("origin") or ""
-request = """# Generated staging request - form preparation only
+    # The request is GENERATED from the approved plan, never hand-written prose.
+    # It carries the operation identity, the exact target, an origin allowlist the
+    # browser side is told to stay inside, and the readback this run will verify.
+    origin = (plan.get("adapter") or {}).get("origin") or plan.get("origin") or ""
+    request = """# Generated staging request - form preparation only
 
-Run id: {run_id}
-Operation: {key}
-Target device: {device}
-Allowed origin: {origin}
+    Run id: {run_id}
+    Operation: {key}
+    Target device: {device}
+    Allowed origin: {origin}
 
-Prepare ONLY. Do not press the send control. Do not press any other preset,
-apply, or refresh control. Do not navigate outside the allowed origin.
+    Prepare ONLY. Do not press the send control. Do not press any other preset,
+    apply, or refresh control. Do not navigate outside the allowed origin.
 
-1. Open the target device page and read back its identifier from the page.
-   The page supplies the target, so a page that is not this device is the
-   wrong target: stop and report the mismatch rather than staging into it.
-2. Stage this exact payload into the command field:
+    1. Open the target device page and read back its identifier from the page.
+       The page supplies the target, so a page that is not this device is the
+       wrong target: stop and report the mismatch rather than staging into it.
+    2. Stage this exact payload into the command field:
 
-{payload}
+    {payload}
 
-3. Read the field back once, authoritatively, and report exactly what it holds.
-   Do not add a second redundant check: a redundant check that times out turns
-   a completed preparation into a misleading failure.
-4. Clear the draft and close only your own tab.
+    3. Read the field back once, authoritatively, and report exactly what it holds.
+       Do not add a second redundant check: a redundant check that times out turns
+       a completed preparation into a misleading failure.
+    4. Clear the draft and close only your own tab.
 
-Write {result_name} containing: request_id set to the run id above, the
-observed device identifier, the exact staged payload you read back, whether the
-send control was pressed (it must be false), and any exact error.
-""".format(
-    run_id=run_id, key=key, device=plan["target"]["device_id"],
-    origin=origin or "(declared by the local adapter)",
-    payload=plan["payload"], result_name=os.path.basename(result_path),
-)
-fd = os.open(request_path, os.O_CREAT | os.O_TRUNC | os.O_WRONLY, 0o600)
-with os.fdopen(fd, "w", encoding="utf-8") as handle:
-    handle.write(request)
-os.chmod(request_path, 0o600)
-
-
-def companion_thread():
-    """The explicitly configured companion, or nothing.
-
-    Nothing is an honest answer: with no configured thread this worker queues
-    into no session at all, which is what keeps it away from a shared companion
-    it was never pointed at.
-    """
-    explicit = (os.environ.get("FM_FOTA_COMPANION_THREAD") or "").strip()
-    if explicit:
-        return explicit, "FM_FOTA_COMPANION_THREAD"
-    path = os.path.join(return_dir, "connection.json")
-    try:
-        with open(path, encoding="utf-8") as handle:
-            connection = json.load(handle)
-    except (OSError, json.JSONDecodeError):
-        return "", ""
-    if not isinstance(connection, dict):
-        return "", ""
-    if connection.get("schema") != "fm.desktop-companion-connection.v1":
-        return "", ""
-    thread = str(connection.get("thread") or "").strip()
-    return (thread, path) if thread else ("", "")
-
-
-def queue_receipt(text):
-    """The receipt the transport printed, correlated to this run by its id."""
-    output = (text or "").strip()
-    if not output:
-        return None
-    match = re.search(
-        r"(?:message[_-]?id|msg[_-]?id|\bid)\s*[=:]\s*([A-Za-z0-9._:-]+)", output
+    Write {result_name} containing: request_id set to the run id above, the
+    observed device identifier, the exact staged payload you read back, whether the
+    send control was pressed (it must be false), and any exact error.
+    """.format(
+        run_id=run_id, key=key, device=plan["target"]["device_id"],
+        origin=origin or "(declared by the local adapter)",
+        payload=plan["payload"], result_name=os.path.basename(result_path),
     )
-    if match:
-        return match.group(1)
-    return output.splitlines()[-1].strip()[:200]
+    fd = os.open(request_path, os.O_CREAT | os.O_TRUNC | os.O_WRONLY, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as handle:
+        handle.write(request)
+    os.chmod(request_path, 0o600)
 
 
-# The documented supported transport, and only it: `codex queue --thread` per
-# docs/desktop-companion.md. A receipt proves the message was ENQUEUED. It does
-# not prove pickup and it certainly does not prove the work happened, so it is
-# recorded as its own fact rather than folded into the run's state.
-thread, thread_source = companion_thread()
-message = (
-    "Request {run_id}: read {request} and follow it. Prepare only - do not press "
-    "the send control. When done, write {result} including request_id {run_id}, "
-    "the real timestamp, the observed device identifier, the exact payload you "
-    "read back, and whether the send control was pressed (it must be false). "
-    "Then read that file back."
-).format(run_id=run_id, request=request_path, result=result_path)
+    def companion_thread():
+        """The explicitly configured companion, or nothing.
 
-queue = {
-    "transport": "codex queue --thread",
-    "command": os.environ["QUEUE_CMD"],
-    "thread": thread,
-    "thread_source": thread_source,
-    "correlation_id": run_id,
-    "attempted": False,
-    "accepted": False,
-    "receipt": None,
-    "queued_at": None,
-    "outcome": "not-configured",
-    "reason": (
-        "no companion thread is configured; set FM_FOTA_COMPANION_THREAD or write "
-        "%s. The request was generated but nothing was enqueued."
-        % os.path.join(return_dir, "connection.json")
-    ),
-}
+        Nothing is an honest answer: with no configured thread this worker queues
+        into no session at all, which is what keeps it away from a shared companion
+        it was never pointed at.
+        """
+        explicit = (os.environ.get("FM_FOTA_COMPANION_THREAD") or "").strip()
+        if explicit:
+            return explicit, "FM_FOTA_COMPANION_THREAD"
+        path = os.path.join(return_dir, "connection.json")
+        try:
+            with open(path, encoding="utf-8") as handle:
+                connection = json.load(handle)
+        except (OSError, json.JSONDecodeError):
+            return "", ""
+        if not isinstance(connection, dict):
+            return "", ""
+        if connection.get("schema") != "fm.desktop-companion-connection.v1":
+            return "", ""
+        thread = str(connection.get("thread") or "").strip()
+        return (thread, path) if thread else ("", "")
 
-if thread:
-    queue["attempted"] = True
-    try:
-        completed = subprocess.run(
-            [queue["command"], "queue", "--thread", thread, "--message", message],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            timeout=float(os.environ["QUEUE_TIMEOUT"]),
+
+    def queue_receipt(text):
+        """The receipt the transport printed, correlated to this run by its id."""
+        output = (text or "").strip()
+        if not output:
+            return None
+        match = re.search(
+            r"(?:message[_-]?id|msg[_-]?id|\bid)\s*[=:]\s*([A-Za-z0-9._:-]+)", output
         )
-    except FileNotFoundError:
-        queue["outcome"] = "not-installed"
-        queue["reason"] = "transport %r is not installed" % queue["command"]
-    except subprocess.TimeoutExpired:
-        # The one genuinely ambiguous case: the message may or may not have been
-        # enqueued. It is never sent again on that doubt.
-        queue["outcome"] = "timeout"
-        queue["reason"] = (
-            "queue timed out after %ss; whether it was enqueued is unobserved, so "
-            "this run is never queued again" % os.environ["QUEUE_TIMEOUT"]
-        )
-    else:
-        stdout = completed.stdout.decode("utf-8", "replace")
-        stderr = completed.stderr.decode("utf-8", "replace")
-        if completed.returncode != 0:
-            queue["outcome"] = "refused"
-            queue["reason"] = "queue exited %d: %s" % (
-                completed.returncode,
-                (stderr.strip() or stdout.strip() or "no output")[:400],
+        if match:
+            return match.group(1)
+        return output.splitlines()[-1].strip()[:200]
+
+
+    # The documented supported transport, and only it: `codex queue --thread` per
+    # docs/desktop-companion.md. A receipt proves the message was ENQUEUED. It does
+    # not prove pickup and it certainly does not prove the work happened, so it is
+    # recorded as its own fact rather than folded into the run's state.
+    thread, thread_source = companion_thread()
+    message = (
+        "Request {run_id}: read {request} and follow it. Prepare only - do not press "
+        "the send control. When done, write {result} including request_id {run_id}, "
+        "the real timestamp, the observed device identifier, the exact payload you "
+        "read back, and whether the send control was pressed (it must be false). "
+        "Then read that file back."
+    ).format(run_id=run_id, request=request_path, result=result_path)
+
+    queue = {
+        "transport": "codex queue --thread",
+        "command": os.environ["QUEUE_CMD"],
+        "thread": thread,
+        "thread_source": thread_source,
+        "correlation_id": run_id,
+        "attempted": False,
+        "accepted": False,
+        "receipt": None,
+        "queued_at": None,
+        "outcome": "not-configured",
+        "reason": (
+            "no companion thread is configured; set FM_FOTA_COMPANION_THREAD or write "
+            "%s. The request was generated but nothing was enqueued."
+            % os.path.join(return_dir, "connection.json")
+        ),
+    }
+
+    if thread:
+        queue["attempted"] = True
+        try:
+            completed = subprocess.run(
+                [queue["command"], "queue", "--thread", thread, "--message", message],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                timeout=float(os.environ["QUEUE_TIMEOUT"]),
+            )
+        except FileNotFoundError:
+            queue["outcome"] = "not-installed"
+            queue["reason"] = "transport %r is not installed" % queue["command"]
+        except OSError as exc:
+            # A path that exists but cannot be executed delivers exactly as much as
+            # one that is absent: nothing. It is the same honest state, named.
+            queue["outcome"] = "not-installed"
+            queue["reason"] = "transport %r could not be invoked: %s" % (
+                queue["command"], exc,
+            )
+        except subprocess.TimeoutExpired:
+            # The one genuinely ambiguous case: the message may or may not have been
+            # enqueued. It is never sent again on that doubt.
+            queue["outcome"] = "timeout"
+            queue["reason"] = (
+                "queue timed out after %ss; whether it was enqueued is unobserved, so "
+                "this run is never queued again" % os.environ["QUEUE_TIMEOUT"]
             )
         else:
-            queue["accepted"] = True
-            queue["outcome"] = "accepted"
-            queue["receipt"] = queue_receipt(stdout)
-            queue["queued_at"] = int(time.time())
-            queue["reason"] = (
-                "enqueued; a receipt is not pickup and pickup is not completion"
-            )
+            stdout = completed.stdout.decode("utf-8", "replace")
+            stderr = completed.stderr.decode("utf-8", "replace")
+            if completed.returncode != 0:
+                queue["outcome"] = "refused"
+                queue["reason"] = "queue exited %d: %s" % (
+                    completed.returncode,
+                    (stderr.strip() or stdout.strip() or "no output")[:400],
+                )
+            else:
+                queue["accepted"] = True
+                queue["outcome"] = "accepted"
+                queue["receipt"] = queue_receipt(stdout)
+                queue["queued_at"] = int(time.time())
+                queue["reason"] = (
+                    "enqueued; a receipt is not pickup and pickup is not completion"
+                )
 
-# `pending` means the transport has it, or timed out holding it. `prepared`
-# means it plainly does not: the request exists and a person has to carry it.
-state = "pending" if queue["outcome"] in {"accepted", "timeout"} else "prepared"
+    # `pending` means the transport has it, or timed out holding it. `prepared`
+    # means it plainly does not: the request exists and a person has to carry it.
+    state = "pending" if queue["outcome"] in {"accepted", "timeout"} else "prepared"
 
-record = {
-    "schema": "fm.fota-staging-run.v1",
-    "run_id": run_id,
-    "idempotency_key": key,
-    "operation_fingerprint": plan["operation"]["operation_fingerprint"],
-    "attempt": plan["operation"]["attempt"],
-    "action_kind": plan["operation"]["action_kind"],
-    "device_id": plan["target"]["device_id"],
-    "expected_payload": plan["payload"],
-    "preview_hash": plan["preview_hash"],
-    "eligibility": plan["eligibility"]["state"],
-    "state": state,
-    "started_at": int(time.time()),
-    "deadline_seconds": int(os.environ["DEADLINE"]),
-    "request_path": request_path,
-    "result_path": result_path,
-    "queue": queue,
-    # Pickup is never inferred from a receipt. Only a result file appearing is
-    # evidence the companion actually began a turn on this request.
-    "pickup_observed": False,
-    "sent": False,
-    "approval": "not-granted; staging does not approve or send",
-}
-with os.fdopen(record_fd, "w", encoding="utf-8") as handle:
-    json.dump(record, handle, indent=2, sort_keys=True)
-    handle.write("\n")
-os.chmod(record_path, 0o600)
-print("run_id=%s" % run_id)
-print("state=%s" % state)
-print("queue=%s" % queue["outcome"])
-if queue["receipt"]:
-    print("receipt=%s" % queue["receipt"])
-else:
-    print("queue_reason=%s" % queue["reason"])
-print("request=%s" % request_path)
-print("awaiting=%s" % result_path)
+    record = {
+        "schema": "fm.fota-staging-run.v1",
+        "run_id": run_id,
+        "idempotency_key": key,
+        "operation_fingerprint": plan["operation"]["operation_fingerprint"],
+        "attempt": plan["operation"]["attempt"],
+        "action_kind": plan["operation"]["action_kind"],
+        "device_id": plan["target"]["device_id"],
+        "expected_payload": plan["payload"],
+        "preview_hash": plan["preview_hash"],
+        "eligibility": plan["eligibility"]["state"],
+        "state": state,
+        # The specific queue outcome, on the record's own reason field, so a surface
+        # reading `list` can tell `not-configured` from `not-installed` from a
+        # transport that refused - the whole point of the five-state model.
+        "reason": queue["reason"],
+        "started_at": int(time.time()),
+        "deadline_seconds": int(os.environ["DEADLINE"]),
+        "request_path": request_path,
+        "result_path": result_path,
+        "queue": queue,
+        # Pickup is never inferred from a receipt. Only a result file appearing is
+        # evidence the companion actually began a turn on this request.
+        "pickup_observed": False,
+        "sent": False,
+        "approval": "not-granted; staging does not approve or send",
+    }
+    with os.fdopen(record_fd, "w", encoding="utf-8") as handle:
+        json.dump(record, handle, indent=2, sort_keys=True)
+        handle.write("\n")
+    record_written = True
+    os.chmod(record_path, 0o600)
+    print("run_id=%s" % run_id)
+    print("state=%s" % state)
+    print("queue=%s" % queue["outcome"])
+    if queue["receipt"]:
+        print("receipt=%s" % queue["receipt"])
+    else:
+        print("queue_reason=%s" % queue["reason"])
+    print("request=%s" % request_path)
+    print("awaiting=%s" % result_path)
+finally:
+    if not record_written:
+        try:
+            os.close(record_fd)
+        except OSError:
+            pass
+        try:
+            os.unlink(record_path)
+        except OSError:
+            pass
 PYSTART
 }
 
@@ -525,22 +559,27 @@ cmd_ack() {
   [ -n "$run_id" ] || usage
   local path="$RUNS/$run_id.json"
   [ -f "$path" ] || die "unknown run: $run_id"
-  RECORD="$path" NOTE="$note" py - <<'PYACK'
+  RECORD="$path" NOTE="$note" LIVE_STATES="$LIVE_STATES" py - <<'PYACK'
 import json, os, tempfile, time
 
 path = os.environ["RECORD"]
 record = json.load(open(path, encoding="utf-8"))
 
 # Acknowledgement is the captain saying "I have seen this", nothing more. It is
-# refused on a run that is still live or still awaiting his approval, because
-# those are not alerts he can be finished with.
-if record["state"] in {"pending", "ready"}:
+# refused on every live run - the same set the duplicate guard blocks on - because
+# a run that has not settled has no outcome he could be finished with.
+if record["state"] in set(os.environ["LIVE_STATES"].split()):
     raise SystemExit(
         "fm-fota-stage-run: run %s is %s; only a settled preparation alert can "
         "be acknowledged" % (record["run_id"], record["state"])
     )
 
-if record.get("acknowledged_at"):
+# The acknowledgement is bound to the exact outcome it was given for. If that
+# outcome ever changes, the old acknowledgement does not carry over to the new
+# one and the run comes back to the active ask list.
+outcome = {"state": record["state"], "reason": record.get("reason")}
+
+if record.get("acknowledged_at") and record.get("acknowledged_outcome") == outcome:
     print("run_id=%s" % record["run_id"])
     print("state=%s" % record["state"])
     print("note=already acknowledged")
@@ -551,6 +590,7 @@ if record.get("acknowledged_at"):
 # `unknown` stays `unknown` - it exists to preserve that nothing was observed.
 record["acknowledged_at"] = int(time.time())
 record["acknowledged_note"] = os.environ.get("NOTE") or ""
+record["acknowledged_outcome"] = outcome
 
 directory = os.path.dirname(path) or "."
 handle = tempfile.NamedTemporaryFile(
@@ -595,8 +635,12 @@ print("queue=%s" % queue.get("outcome", "unrecorded"))
 if queue.get("receipt"):
     print("receipt=%s" % queue["receipt"])
 print("pickup_observed=%s" % ("true" if r.get("pickup_observed") else "false"))
+covered = r.get("acknowledged_outcome") or {}
 if r.get("acknowledged_at"):
-    print("acknowledged=true")
+    if covered.get("state") == r.get("state") and covered.get("reason") == r.get("reason"):
+        print("acknowledged=true")
+    else:
+        print("acknowledged=superseded; the outcome changed after it was acknowledged")
 if r.get("reason"):
     print("reason=%s" % r["reason"])
 '
@@ -619,6 +663,18 @@ cmd_list() {
   fi
   RUNS_DIR="$RUNS" AS_JSON="$as_json" py -c '
 import json, os
+
+
+def acknowledged(record):
+    if not record.get("acknowledged_at"):
+        return False
+    covered = record.get("acknowledged_outcome") or {}
+    return (
+        covered.get("state") == record.get("state")
+        and covered.get("reason") == record.get("reason")
+    )
+
+
 runs = os.environ["RUNS_DIR"]
 rows = []
 for name in os.listdir(runs):
@@ -644,8 +700,9 @@ if os.environ["AS_JSON"] == "1":
             "queue": (r.get("queue") or {}).get("outcome"),
             "pickup_observed": bool(r.get("pickup_observed")),
             # An acknowledged alert is still a record and still evidence; this
-            # only tells a surface it is no longer an open ask.
-            "acknowledged": bool(r.get("acknowledged_at")),
+            # only tells a surface it is no longer an open ask, and only while
+            # the outcome it was acknowledged for is still the outcome it has.
+            "acknowledged": acknowledged(r),
         }
         for r in rows
     ]))

@@ -159,7 +159,11 @@ Activation is opt-in and consists entirely of supplying a local adapter definiti
 5. `bin/fm-fota-stage-run.sh ack <run-id>` - records that the captain has seen a settled preparation alert, so the deck stops listing it as an open ask.
 
 Acknowledgement is the only way a settled run leaves the active ask list.
-It never deletes a record, never changes an outcome, never marks a command applied, and expires nothing on a timer: an `unknown` stays `unknown` forever, because that is the evidence.
+It is refused on every live state (`prepared`, `pending`, `ready`), never deletes a record, never changes an outcome, never marks a command applied, and expires nothing on a timer: an `unknown` stays `unknown` forever, because that is the evidence.
+The acknowledgement is bound to the exact outcome it was given for, so if that outcome ever changes the old acknowledgement does not carry over and the run returns to the ask list.
+`list` and `show` keep the full history either way; only the active ask list is affected.
+
+Acknowledgement lives on the run record rather than through `bin/fm-decision-hold.sh`, because that owner holds backlog decisions with dependent tasks routed to them, which is a different thing from an operational result someone has now looked at.
 Records and requests are written `0600` under `0700` directories, and settle rewrites a record whole and moves it into place, so a crash cannot leave a half-written record that quietly drops a run off the pane.
 
 **Rollback** is deleting the adapter definition: with no adapter, nothing can be staged.
