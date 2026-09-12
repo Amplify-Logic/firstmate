@@ -85,6 +85,9 @@ When any diagnostic needs captain attention, report the plain consequence and re
   Read it, relay its findings rather than only that it finished, then run `bin/fm-morning-intake.sh acknowledge <path>` so the same report does not surface at later session starts.
 - `CHANNEL_INTAKE: <N> source(s) due for <label> - take them with <path> claim` - the opt-in continuous channel intake has enrolled sources whose poll interval has elapsed.
   Run `bin/fm-channel-intake.sh claim`, read only the sources it hands back through the authenticated connector path, report each message with `observe`, and close each source with `complete --source ID --checkpoint VALUE`.
+  Before classifying a message as `obligation`, `urgent` or `deadline`, read the rest of its thread for a reply the captain already sent and read the source-side item's own completion state; something already answered with content that discharges it, or already completed at the source, is reported as `routine` rather than opened as a new owed item.
+  The gate cannot check either of those - only the connector read sees the thread and the source-side state - so this is the orchestrator's precondition, not a validation it will be stopped by.
+  Silence is never completion: an unanswered message and an unclosed source-side item both stay owed, and an acknowledgement or a promise to act is not a reply that discharges anything.
   A read that could not be finished is recorded with `fail --source ID --reason TEXT`, never left unclaimed: the checkpoint advances only behind captured output, so a silent abandon re-reads the same window forever while reporting nothing.
   The gate itself reads no source and sends no message; it decides only when a read is worth doing.
 - `CHANNEL_INTAKE: <N> item(s) ready to send|blocked, ...|held, ... for <label>` - notifiable items are waiting on the private direct-message path.

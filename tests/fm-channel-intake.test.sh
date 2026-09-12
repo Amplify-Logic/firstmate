@@ -37,6 +37,12 @@
 #   - A re-read never erases why an item is waiting on someone else.
 #   - Quiet hours defer the notifiable classes but preserve real severity: a
 #     service outage still goes out.
+#   - A post-resolution edit is news exactly once: the same edited message
+#     re-read on every later poll re-announces nothing and re-logs nothing,
+#     while a genuinely later edit is reported once more and never reopens.
+#   - Per-poll work stays bounded: the tracked thread set retires dormant
+#     parents, and routine traffic past the brief horizon leaves the polled set
+#     by moving aside with its record intact rather than being deleted.
 #   - The gate writes nothing the Action Deck renders, so detection can never
 #     manufacture an executable card.
 #   - The brief and the to-do list render from one ledger, so a correction and a
@@ -234,7 +240,7 @@ test_edit_updates_the_same_item() {
 }
 
 test_captain_response_clears_and_never_reopens() {
-  local h out key
+  local h out key log
   h="$TMP_ROOT/resolve"
   new_home "$h"
 
@@ -280,17 +286,50 @@ test_captain_response_clears_and_never_reopens() {
   assert_contains "$out" 'was edited after it was closed; it stays closed' \
     'the brief never mentioned the post-resolution edit'
 
-  # Re-reading the same edit is not new news: it annotates once, not per poll.
-  at "$h" $((T_0915 + 2700)) observe --source C_BRIEF --ref 1789023000.1000 \
-    --digest 'approve the invoice, revised' >/dev/null
+  # A post-resolution edit is news exactly ONCE. The poll that first sees it
+  # reports it and logs it; every later poll of that same unchanged edited
+  # message must report no change and append no second log line, or the
+  # orchestrator re-reports "the source moved" on every tick forever and the
+  # log grows without bound behind it.
+  log="$h/data/channel-intake/log"
+  [ "$(grep -c "archived item $key changed after resolution" "$log")" = 1 ] \
+    || fail 'the first post-resolution edit was not reported exactly once in the log'
+  out=$(at "$h" $((T_0915 + 2700)) observe --source C_BRIEF --ref 1789023000.1000 \
+    --digest 'approve the invoice, revised')
+  assert_contains "$out" "archived-unchanged $key" \
+    're-reading the same post-resolution edit re-announced it as a change'
+  assert_not_contains "$out" 'archived-changed' \
+    're-reading the same post-resolution edit alerted the orchestrator again'
+  [ "$(grep -c "archived item $key changed after resolution" "$log")" = 1 ] \
+    || fail 'a re-read of the same post-resolution edit appended another log line'
   [ "$(item_field "$h" "$key" edited_after_resolution)" = "$((T_0915 + 1800))" ] \
     || fail 'an unchanged re-read of an edited archive re-annotated it'
   [ "$(grep -c '^edited_after_resolution=' "$h/data/channel-intake/archive/$key")" = 1 ] \
     || fail 'an unchanged re-read grew the archived record'
 
-  # A genuinely later edit supersedes the annotation and still never reopens.
-  at "$h" $((T_0915 + 3600)) observe --source C_BRIEF --ref 1789023000.1000 \
-    --digest 'approve the invoice, revised again' >/dev/null
+  # Suppressing the repeat loses none of the evidence the brief renders from.
+  [ "$(item_field "$h" "$key" state)" = archived ] \
+    || fail 'suppressing a repeat edit changed the archived state'
+  [ "$(item_field "$h" "$key" resolution)" = 'captain approved the amount in thread' ] \
+    || fail 'suppressing a repeat edit lost the reason the item was closed'
+  [ "$(item_field "$h" "$key" link)" = 'https://example.invalid/m/1' ] \
+    || fail 'suppressing a repeat edit lost the source link'
+  [ "$(item_field "$h" "$key" provenance)" = 'C_BRIEF:1789023000.1000' ] \
+    || fail 'suppressing a repeat edit lost the provenance'
+  [ "$(item_field "$h" "$key" revisions)" = 0 ] \
+    || fail 'suppressing a repeat edit disturbed the revision count'
+  out=$(at "$h" $((T_0915 + 2700)) brief)
+  assert_contains "$out" 'was edited after it was closed; it stays closed' \
+    'suppressing the repeat also dropped the edit from the brief'
+
+  # A genuinely later, DIFFERENT edit is news again - exactly once more - and
+  # still never reopens the item.
+  out=$(at "$h" $((T_0915 + 3600)) observe --source C_BRIEF --ref 1789023000.1000 \
+    --digest 'approve the invoice, revised again')
+  assert_contains "$out" "archived-changed $key" \
+    'a second, different post-resolution edit was not reported'
+  [ "$(grep -c "archived item $key changed after resolution" "$log")" = 2 ] \
+    || fail 'a second, different post-resolution edit was not logged once more'
   [ "$(item_field "$h" "$key" edited_after_resolution)" = "$((T_0915 + 3600))" ] \
     || fail 'a second edit did not supersede the archive annotation'
   [ "$(at "$h" $((T_0915 + 3600)) items --state open | grep -c '[^[:space:]]')" = 0 ] \
@@ -581,10 +620,11 @@ test_nothing_reaches_the_action_deck() {
     --class automation-candidate --title 'firmware push looks automatable')
   case "$out" in new\ *) ;; *) fail "the candidate was not recorded: $out" ;; esac
 
-  # The deck renders from the tray, the standing-order record and loose ends.
-  # Detection must touch none of them: an intake can propose an automation, and
-  # can never manufacture a button that fires one.
-  assert_absent "$h/data/tray" 'intake wrote a staged action the deck would render'
+  # The deck renders its staged cards from the action gateway's own store,
+  # which is also what the tray reads, plus the standing-order record and loose
+  # ends. Detection must touch none of them: an intake can propose an
+  # automation, and can never manufacture a button that fires one.
+  assert_absent "$h/data/action-gateway" 'intake wrote a staged action the deck would render'
   assert_absent "$h/data/orders" 'intake wrote a standing order'
   assert_absent "$h/data/loose-ends" 'intake wrote into the loose-ends inbox'
 
@@ -673,13 +713,92 @@ test_thread_replies_are_tracked_and_the_limit_is_disclosed() {
   # The revision window is handed over explicitly, and both detection limits are
   # stated on the captain-facing surface rather than left implicit.
   assert_contains "$out" 'revision_window_from:' 'the bounded revision window was not handed over'
+  assert_contains "$out" 'thread_tracking_window_seconds:' \
+    'claim did not state how far the tracked set actually reaches'
   out=$(at "$h" "$T_0915" brief)
   assert_contains "$out" 'revision window is not detected' \
     'the brief did not disclose the edit horizon'
   assert_contains "$out" 'can appear in no cursor read' \
     'the brief did not disclose the thread-reply gap'
 
-  pass 'thread parents are tracked for re-read, and both detection limits are disclosed on the brief'
+  # The tracked set is BOUNDED, which is what makes the "tracked set" claim
+  # literally true: a parent whose reply marker has not advanced within the
+  # revision window leaves it, so neither the claim output nor the connector
+  # work an orchestrator does per tick grows with all thread history.
+  out=$(at "$h" $((T_0900 + 86401)) claim --source C_BRIEF)
+  assert_not_contains "$out" 'thread: C_BRIEF' \
+    'a dormant thread parent stayed in the tracked set forever'
+  assert_contains "$(at "$h" $((T_0900 + 86401)) brief)" 'The tracked set is bounded' \
+    'the brief claimed forever-complete thread tracking'
+
+  # Retiring a marker retires a re-read hint and nothing else. The captured
+  # item, its evidence and its key are untouched, so a later reply still lands
+  # on the same item instead of becoming a second one.
+  out=$(at "$h" $((T_0900 + 86401)) observe --source C_BRIEF --ref 1789023000.6 \
+    --digest 'parent message')
+  case "$out" in unchanged\ *) ;; *) fail "retiring a thread marker cost the captured item: $out" ;; esac
+
+  # An advancing marker keeps its parent in the set; only dormancy retires one.
+  at "$h" $((T_0900 + 86401)) observe --source C_BRIEF --ref 1789023000.7 \
+    --digest 'a reply landed' --class routine --title 'a reply landed' \
+    --thread 1789023000.6 --reply-marker 1789023900.2 >/dev/null
+  out=$(at "$h" $((T_0900 + 87000)) claim --source C_BRIEF)
+  assert_contains "$out" '1789023900.2' 'an advancing thread marker was retired anyway'
+
+  pass 'thread parents are tracked for re-read inside a bounded set, and both detection limits are disclosed on the brief'
+}
+
+test_per_poll_work_is_bounded_without_losing_anything() {
+  local h out key routine_key late
+  h="$TMP_ROOT/bounded"
+  new_home "$h"
+  late=$((T_0900 + 86401 + 900))
+
+  out=$(at "$h" "$T_0900" observe --source C_BRIEF --ref 1789023000.20 \
+    --digest 'standup notes' --class routine --title 'standup notes')
+  routine_key=$(key_of "$out")
+  out=$(at "$h" "$T_0900" observe --source M_ACTION --ref msg-owed \
+    --digest 'sign the lease' --class obligation --title 'sign the lease')
+  key=$(key_of "$out")
+
+  # Inside the brief horizon nothing moves: routine traffic is still exactly
+  # what the "what changed" section is for.
+  at "$h" $((T_0900 + 3600)) tick >/dev/null
+  assert_present "$h/data/channel-intake/items/$routine_key" \
+    'routine traffic left the polled set while it was still on the brief'
+
+  # Past that same existing horizon it leaves the polled set by MOVING, record
+  # intact - never by deletion, and never by being resolved on the captain's
+  # behalf.
+  at "$h" "$late" tick >/dev/null
+  assert_absent "$h/data/channel-intake/items/$routine_key" \
+    'routine traffic never left the polled set, so every later poll keeps paying for it'
+  assert_present "$h/data/channel-intake/inactive/$routine_key" \
+    'a retired routine record was deleted rather than moved'
+  assert_contains "$(at "$h" "$late" items --state inactive)" "$routine_key" \
+    'a retired routine record became invisible to items'
+  assert_contains "$(at "$h" "$late" items)" "$routine_key" \
+    'a bare items listing hid a retired record'
+  assert_contains "$(at "$h" "$late" status)" 'items_inactive: 1' \
+    'status did not report the retired record'
+
+  # Nothing owed leaves, whatever its age.
+  assert_present "$h/data/channel-intake/items/$key" 'an aged obligation was retired'
+  assert_contains "$(at "$h" "$late" todo)" 'sign the lease' \
+    'an aged obligation fell off the to-do list'
+
+  # Dedup identity survives the move: re-observing the same message restores
+  # the one item rather than opening a second one.
+  out=$(at "$h" $((late + 900)) observe --source C_BRIEF --ref 1789023000.20 \
+    --digest 'standup notes' --class routine --title 'standup notes')
+  case "$out" in
+    unchanged\ "$routine_key") ;;
+    *) fail "re-observing a retired routine message did not restore the same item: $out" ;;
+  esac
+  assert_present "$h/data/channel-intake/items/$routine_key" \
+    're-observing a retired routine message did not bring it back'
+
+  pass 'the polled set stays bounded by moving aged routine traffic aside, without deleting evidence or forgetting an obligation'
 }
 
 test_ledger_writes_are_serialized() {
@@ -1169,6 +1288,7 @@ test_quiet_hours_defer_but_preserve_real_severity
 test_nothing_reaches_the_action_deck
 test_brief_and_todo_reconcile_from_one_ledger
 test_thread_replies_are_tracked_and_the_limit_is_disclosed
+test_per_poll_work_is_bounded_without_losing_anything
 test_ledger_writes_are_serialized
 test_no_existing_fleet_is_overridden
 test_local_configuration_stays_private

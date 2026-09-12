@@ -29,6 +29,10 @@ A tick therefore looks like this.
 3. The orchestrator runs `claim`, which hands back each due source's checkpoint, its coverage sentence, the bounded revision window, and the tracked thread parents with their reply markers.
 4. The orchestrator reads those sources through its own authenticated connector path.
 5. Each observed message becomes one `observe` call carrying a stable source id and a content digest.
+   Before classifying anything as `obligation`, `urgent` or `deadline`, the orchestrator reads the rest of the thread for a reply the captain already sent, and reads the source-side item's own completion state.
+   A message the captain has already answered with content that discharges it, or whose source-side task is already completed, is reported as `routine` rather than opened as a new owed item.
+   The gate deliberately does not enforce this: it opens an item for whatever class it is handed, because only the connector read can see the thread and the source-side state.
+   Silence is not completion. A message nobody replied to and a source-side item nobody closed both stay owed, and an acknowledgement or a promise to act is not a reply that discharges anything.
 6. `complete --source ID --checkpoint VALUE` advances that source's checkpoint, or `fail --source ID --reason TEXT` records the failure and backs off.
 
 ## Install
@@ -134,8 +138,12 @@ A resolved ask is never reopened by a poll.
 A reaction or an unchanged re-read reports `archived-unchanged` and does nothing.
 Even a genuine later edit only reports `archived-changed` and annotates the archived record; reopening is a captain decision.
 The brief then says the item was edited after it was closed and that it stays closed, bounded like every other row there.
-The annotation is carried alongside the archived evidence rather than rewritten into it, so the source, ref, link, provenance and reason it was closed stay verbatim.
-A later edit supersedes an earlier annotation, and an unchanged re-read of the same edit changes nothing.
+The annotation is carried alongside the archived evidence rather than rewritten into it, so the source, ref, link, provenance, revision count and reason it was closed stay verbatim.
+
+A post-resolution edit is news exactly once.
+The poll that first sees it reports `archived-changed` and writes one log line; every later poll of that same unchanged edited message reports `archived-unchanged` and writes nothing at all.
+The archived record keeps its pre-resolution digest as evidence, so "has this edit already been reported" is answered by the annotation rather than by that digest - without which a single edited archived message would re-announce itself to the orchestrator on every tick for as long as the record lives, and grow the log behind it.
+A genuinely later, different edit supersedes the annotation and is news once more, and neither case ever reopens the item.
 
 ## Disclosed detection limits
 
@@ -151,8 +159,12 @@ Widening `revision_window_seconds` costs a proportional re-read on every tick.
 A cursor read of a channel returns messages whose own id is newer than the cursor.
 A reply added to a thread whose parent predates the cursor can therefore appear in no such read at all.
 `observe --thread PARENT --reply-marker VALUE` records a per-parent reply marker, and `claim` prints the tracked parents back so the orchestrator re-reads only the threads whose marker advanced.
-That covers parents still inside the tracked set and nothing older.
-No completeness is claimed for new replies on old threads.
+
+The tracked set is bounded, and that bound is part of the limit rather than a footnote to it.
+A parent whose reply marker has not advanced within `revision_window_seconds` leaves the set, so neither the `claim` output nor the per-tick connector work behind it grows with all thread history.
+`claim` states the bound as `thread_tracking_window_seconds` and the brief states it in words, because a tracked set that silently meant "every parent ever seen" would be both unbounded and a coverage claim nobody could honour.
+Coverage is therefore parents still inside that bounded set and nothing older, and no completeness is claimed for new replies on old threads.
+Retiring a marker retires a re-read hint and nothing else: every captured item, its evidence and its checkpoint are untouched, and a reply that does arrive later on a retired parent still resolves to the same item key - which for a closed obligation is the archived record, never a reopening.
 
 To reproduce the gap before relying on any coverage claim: note a parent message older than the current checkpoint, locate a reply on it, then run the same cursor read and confirm the reply does not appear.
 
@@ -173,6 +185,20 @@ Honour whatever `retry-after` or error backoff the connector reports.
 
 Per-tick cost is a function of the enrolled source count and thread activity.
 Measure it on the real inventory rather than projecting it from one channel.
+
+## Ledger horizons
+
+Per-poll work is bounded by the horizons that already exist, not by a new retention policy, and nothing is ever deleted.
+
+Every surface that walks the ledger reads a whole record directory in one process rather than one per field per record, so the registered watcher check finishes well inside its timeout however long the home has been running.
+
+Routine traffic is rendered in exactly one place: the brief's "what changed", bounded by the same 24-hour window as every other row there.
+Past that horizon it leaves the polled set by *moving* into `data/channel-intake/inactive/` with its record byte for byte intact.
+It is not deleted, not resolved and not closed on the captain's behalf: `items --state inactive` lists it, a bare `items` lists it, `status` counts it as `items_inactive`, and re-observing the same message restores it to the active set rather than opening a second item.
+`tick` does that pass, capped per run so a first sweep over a long-running ledger is itself bounded, with the remainder draining on later ticks.
+
+Nothing owed, waiting, corrected or already notified ever leaves the polled set, whatever its age.
+An open obligation is a durable record with no expiry, and the only thing that takes one off the active list is an explicit `resolve`.
 
 ## Session-start surface
 

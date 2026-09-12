@@ -11,7 +11,7 @@
 #   fm-channel-intake.sh complete --source ID --checkpoint VALUE
 #   fm-channel-intake.sh fail --source ID --reason TEXT
 #   fm-channel-intake.sh resolve --item KEY --reason TEXT [--waiting]
-#   fm-channel-intake.sh items [--state open|waiting|archived]
+#   fm-channel-intake.sh items [--state open|waiting|archived|inactive]
 #   fm-channel-intake.sh sources
 #   fm-channel-intake.sh notify-due
 #   fm-channel-intake.sh notify-sent --keys "KEY [KEY ...]"
@@ -79,9 +79,21 @@
 #   newer than the cursor, so a reply added to a thread whose parent predates
 #   the cursor can appear in no such read. `observe --thread` records a per
 #   parent reply marker and `claim` prints the tracked parents back, so the
-#   orchestrator can re-read only the threads whose marker advanced. That covers
-#   parents still inside the tracked set and NOTHING OLDER. No completeness is
-#   claimed. docs/channel-intake.md owns the full statement of both limits.
+#   orchestrator can re-read only the threads whose marker advanced. The tracked
+#   set is BOUNDED by revision_window_seconds: a parent whose marker has not
+#   advanced within that window leaves it, which is what keeps the claim output
+#   and the connector work per tick from growing with all thread history. So
+#   coverage is parents still inside that bounded set and NOTHING OLDER. No
+#   completeness is claimed. docs/channel-intake.md owns both limits in full.
+#
+# PER-POLL WORK IS BOUNDED, HISTORY IS NOT DISCARDED. Every ledger surface
+# reads a whole record directory in one process rather than one per field per
+# record, and routine traffic older than the brief horizon that is the only
+# place it is rendered MOVES out of the polled set into `inactive/` with its
+# record intact. Nothing is deleted, nothing is auto-resolved: `items` still
+# lists it, `status` still counts it, and re-observing the same key restores
+# it rather than opening a second item. Anything owed, waiting, corrected or
+# already notified stays in the polled set whatever its age.
 #
 # NO POLL LOOP CAN RUN AWAY. interval_seconds has a hard floor, a failing
 # source backs off geometrically to a bounded ceiling instead of retrying
@@ -136,6 +148,7 @@ SOURCE_DIR="$INTAKE_DIR/sources"
 THREAD_DIR="$INTAKE_DIR/threads"
 ITEM_DIR="$INTAKE_DIR/items"
 ARCHIVE_DIR="$INTAKE_DIR/archive"
+INACTIVE_DIR="$INTAKE_DIR/inactive"
 NOTIFY_FILE="$INTAKE_DIR/notify-state"
 ARMED_FILE="$INTAKE_DIR/armed"
 LATENCY_LOG="$INTAKE_DIR/latency.log"
@@ -191,9 +204,16 @@ die() {
   exit 2
 }
 
+# Tabs and newlines would break the one-line `key=value` record format; the
+# unit separator would break the column format `scan_records` hands back.
 sanitize() {
-  printf '%s' "${1:-}" | LC_ALL=C tr '\t\r\n' '   '
+  printf '%s' "${1:-}" | LC_ALL=C tr '\t\r\n\037' '    '
 }
+
+# A NON-whitespace column separator on purpose: tab is an IFS whitespace
+# character, so `read` would merge two adjacent empty columns into one and
+# shift every later field of the row.
+FIELD_SEP=$'\037'
 
 # --- configuration ----------------------------------------------------------
 
@@ -417,6 +437,39 @@ record_field() {
   ' "$file" | tail -n 1
 }
 
+# The same reader for a whole directory of records, in ONE process for the
+# directory rather than one per field per record. Every surface that walks the
+# ledger - the watcher check twice per sweep, the brief, the to-do list,
+# `items`, `status` - needs several fields from every record, and a fork per
+# field is what turns a growing ledger into a check that cannot finish inside
+# FM_CHECK_TIMEOUT. Emits `path<SEP>field...` per record, in the same order
+# `for_each_item` yields; every stored value is sanitized of the separator on
+# write, so the columns cannot run together.
+scan_records() {
+  local dir=$1 files
+  shift
+  files=$(for_each_item "$dir")
+  [ -n "$files" ] || return 0
+  # shellcheck disable=SC2016
+  printf '%s\n' "$files" | tr '\n' '\0' | xargs -0 awk -v keylist="$*" '
+    function flush(   i, out) {
+      if (path == "") return
+      out = path
+      for (i = 1; i <= nk; i++) { out = out "\037" val[i]; val[i] = "" }
+      print out
+      path = ""
+    }
+    BEGIN { nk = split(keylist, keys, " ") }
+    FNR == 1 { flush(); path = FILENAME }
+    {
+      for (i = 1; i <= nk; i++) {
+        if (index($0, keys[i] "=") == 1) val[i] = substr($0, length(keys[i]) + 2)
+      }
+    }
+    END { flush() }
+  '
+}
+
 digest_hex() {
   local input=$1 out
   if command -v shasum >/dev/null 2>&1; then
@@ -636,18 +689,103 @@ save_item() {
   write_atomic "$path" "$*" || die "cannot write the item record: $path"
 }
 
+# THE HOT SET IS BOUNDED, THE HISTORY IS NOT DISCARDED. Routine traffic is
+# rendered in exactly one place - the brief's "what changed", bounded by
+# BRIEF_WINDOW - and is never owed, never notifiable and never a to-do. Past
+# that same existing horizon it is dead weight on every poll, so it MOVES to
+# `inactive/` with its record byte-for-byte intact. Nothing is deleted, nothing
+# is resolved, nothing is auto-closed: `items` still lists it, `status` still
+# counts it, and re-observing the same key restores it to the active set rather
+# than opening a second item. Anything owed, waiting, corrected or already
+# notified stays where it is, forever, whatever its age.
+RETIRE_MAX_PER_PASS=200
+
+restore_inactive_item() {
+  local key=$1 path=$2
+  [ ! -f "$path" ] || return 0
+  [ -f "$INACTIVE_DIR/$key" ] || return 0
+  mkdir -p "$ITEM_DIR"
+  mv -f "$INACTIVE_DIR/$key" "$path" \
+    || die "cannot restore the inactive item record: $key"
+}
+
+retire_inactive_items() {
+  local epoch=$1 rows path class state revisions created updated notified retired=0
+  rows=$(scan_records "$ITEM_DIR" class state revisions created updated notified)
+  [ -n "$rows" ] || return 0
+  while IFS="$FIELD_SEP" read -r path class state revisions created updated notified; do
+    [ -n "$path" ] || continue
+    # Bounded per pass so a first sweep over a long-running ledger cannot
+    # itself become the unbounded step; the remainder drains on later ticks.
+    [ "$retired" -lt "$RETIRE_MAX_PER_PASS" ] || break
+    [ "$state" = open ] || continue
+    [ "$class" = routine ] || continue
+    case "$revisions" in ''|0) ;; *) continue ;; esac
+    [ -z "$notified" ] || continue
+    case "$created" in ''|*[!0-9]*) continue ;; esac
+    case "$updated" in ''|*[!0-9]*) updated=$created ;; esac
+    [ $((epoch - created)) -gt "$BRIEF_WINDOW" ] || continue
+    [ $((epoch - updated)) -gt "$BRIEF_WINDOW" ] || continue
+    mkdir -p "$INACTIVE_DIR" || continue
+    mv -f "$path" "$INACTIVE_DIR/${path##*/}" || continue
+    retired=$((retired + 1))
+  done <<EOF
+$rows
+EOF
+  [ "$retired" -eq 0 ] \
+    || log_event "moved $retired routine item(s) past the brief horizon to the inactive set"
+}
+
+# The tracked thread set is bounded by the SAME revision window that bounds
+# edit re-detection, so `claim` hands back a bounded list and the connector
+# work an orchestrator does per tick cannot grow with all thread history.
+# A retired marker retires only a re-read hint: every captured item, its
+# evidence and its watermark are untouched, and a reply that arrives later on a
+# retired parent still lands on the same item key - which for a closed
+# obligation means the archived record, never a reopening.
+retire_tracked_threads() {
+  local epoch=$1 dir parent updated legacy retired=0
+  [ -d "$THREAD_DIR" ] || return 0
+  for dir in "$THREAD_DIR"/*; do
+    [ -d "$dir" ] || continue
+    for parent in "$dir"/*; do
+      [ -f "$parent" ] || continue
+      updated=$(record_field "$parent" updated)
+      case "$updated" in
+        ''|*[!0-9]*)
+          # A marker written before the set was bounded has no recorded age.
+          # Adopt it at this sweep rather than retiring a parent whose activity
+          # is merely unknown; a genuinely dormant one ages out normally.
+          legacy=$(read_line_file "$parent")
+          case "$legacy" in marker=*) legacy=${legacy#marker=} ;; esac
+          write_atomic "$parent" \
+            "$(printf 'marker=%s\nupdated=%s' "$(sanitize "$legacy")" "$epoch")" || true
+          continue
+          ;;
+      esac
+      [ $((epoch - updated)) -gt "$CFG_REVISION_WINDOW" ] || continue
+      rm -f "$parent" || continue
+      retired=$((retired + 1))
+    done
+  done
+  [ "$retired" -eq 0 ] \
+    || log_event "retired $retired tracked thread parent(s) with no reply past the revision window"
+}
+
 # An edit that lands after an item was resolved annotates the archive record and
 # never reopens it: reopening a cleared obligation is a captain decision, not a
 # poll's. The annotation is carried outside `item_body` so the archived
 # evidence - source, ref, link, provenance, resolution - stays verbatim, and it
 # is rewritten rather than appended so each key keeps exactly one line and a
 # later edit supersedes an earlier one. An unchanged re-read of the same edit
-# is not news and rewrites nothing.
+# is not news: it rewrites nothing AND returns non-zero, so the caller stays
+# silent on stdout and in the log instead of re-announcing the same edit on
+# every poll for as long as the archived record lives.
 annotate_archived_edit() {
   local path=$1 digest=$2 epoch=$3 seen body
   seen=$(record_field "$path" edited_digest)
   if [ "$seen" = "$digest" ]; then
-    return 0
+    return 1
   fi
   body=$(grep -v '^edited_after_resolution=' "$path" | grep -v '^edited_digest=') \
     || die "cannot read the archived item record: $path"
@@ -783,6 +921,11 @@ tick() {
   enabled || return 0
   epoch=$(now_epoch)
   require_state_lock
+  # The scheduled entry point owns the housekeeping that keeps every later poll
+  # bounded, and it runs whether or not anything is due: both passes are cheap,
+  # capped, and move records rather than deleting them.
+  retire_inactive_items "$epoch"
+  retire_tracked_threads "$epoch"
   due=$(due_source_ids "$epoch")
   count=$(printf '%s' "$due" | grep -c '[^[:space:]]' || true)
   if [ "$count" -eq 0 ]; then
@@ -819,6 +962,10 @@ claim() {
   require_enabled
   epoch=$(now_epoch)
   require_state_lock
+  # The set this hands back is bounded before it is printed, so the list is
+  # what the orchestrator should actually re-read rather than every parent ever
+  # seen.
+  retire_tracked_threads "$epoch"
   load_inventory
   if [ -n "$want" ]; then
     require_id 'source id' "$want"
@@ -830,6 +977,9 @@ claim() {
   printf 'now: %s\n' "$epoch"
   printf 'revision_window_seconds: %s\n' "$CFG_REVISION_WINDOW"
   printf 'revision_window_from: %s\n' "$((epoch - CFG_REVISION_WINDOW))"
+  # The tracked set is bounded by the same window, so an orchestrator can state
+  # its coverage honestly instead of implying every thread is still watched.
+  printf 'thread_tracking_window_seconds: %s\n' "$CFG_REVISION_WINDOW"
   for id in $due; do
     any=true
     printf 'source: %s\tkind: %s\tcheckpoint: %s\tcoverage: %s\n' \
@@ -841,7 +991,7 @@ claim() {
     if [ -d "$THREAD_DIR/$id" ]; then
       for parent in "$THREAD_DIR/$id"/*; do
         [ -f "$parent" ] || continue
-        marker=$(read_line_file "$parent")
+        marker=$(record_field "$parent" marker)
         printf 'thread: %s\t%s\t%s\n' "$id" "${parent##*/}" "$marker"
       done
     fi
@@ -935,7 +1085,7 @@ clear_armed() {
 # no second notification, which is what makes an unchanged poll silent.
 observe() {
   local id='' ref='' digest_in='' digest_file='' class=routine title='' link=''
-  local dedup='' thread='' marker='' source_epoch='' epoch key path digest
+  local dedup='' thread='' marker='' source_epoch='' epoch key path digest thread_marker
   local existing_digest existing_state created revisions provenance notified
   local notified_digest kind outcome prov_tag
   while [ "$#" -gt 0 ]; do
@@ -988,27 +1138,40 @@ observe() {
   if [ -n "$thread" ]; then
     require_id 'thread parent' "$thread"
     mkdir -p "$THREAD_DIR/$id"
-    write_atomic "$THREAD_DIR/$id/$thread" "${marker:-$ref}" \
-      || die 'cannot record the thread reply marker'
+    # `updated` records when the marker last ADVANCED, which is what bounds the
+    # tracked set. An unchanged re-read of the same reply rewrites nothing, so
+    # a dormant parent cannot keep itself in the set by being re-polled.
+    thread_marker=$(sanitize "${marker:-$ref}")
+    if [ "$(record_field "$THREAD_DIR/$id/$thread" marker)" != "$thread_marker" ]; then
+      write_atomic "$THREAD_DIR/$id/$thread" \
+        "$(printf 'marker=%s\nupdated=%s' "$thread_marker" "$epoch")" \
+        || die 'cannot record the thread reply marker'
+    fi
   fi
 
   # A resolved ask is never reopened from here. A reaction or an unchanged
   # re-read is silent, and even a genuine later edit only annotates the archive
   # so the brief can mention it; reopening is a captain decision, not a poll's.
+  # An edit is news exactly once. The archived record keeps its pre-resolution
+  # digest verbatim as evidence, so "has this edit already been reported" is
+  # answered by the annotation rather than by that digest - otherwise every
+  # later poll of the same edited message would re-announce it forever.
   if [ -f "$(archive_path "$key")" ]; then
     path=$(archive_path "$key")
     existing_digest=$(record_field "$path" digest)
     if [ "$existing_digest" = "$digest" ]; then
       printf 'archived-unchanged %s\n' "$key"
-    else
-      annotate_archived_edit "$path" "$digest" "$epoch"
+    elif annotate_archived_edit "$path" "$digest" "$epoch"; then
       printf 'archived-changed %s\n' "$key"
       log_event "archived item $key changed after resolution"
+    else
+      printf 'archived-unchanged %s\n' "$key"
     fi
     return 0
   fi
 
   path=$(item_path "$key")
+  restore_inactive_item "$key" "$path"
   if [ -f "$path" ]; then
     existing_digest=$(record_field "$path" digest)
     existing_state=$(record_field "$path" state)
@@ -1087,6 +1250,9 @@ resolve_item() {
   epoch=$(now_epoch)
   require_state_lock
   path=$(item_path "$key")
+  # A record that left the hot set is still reachable by key: leaving the
+  # polling set is a location, never a loss of the item.
+  restore_inactive_item "$key" "$path"
   [ -f "$path" ] || die "no open item with that key: $key"
   if [ "$waiting" = true ]; then
     save_item "$path" "$(item_body "$key" "$(record_field "$path" source)" \
@@ -1130,16 +1296,26 @@ for_each_item() {
 }
 
 count_items_in_state() {
-  local dir=$1 want=$2 f n=0
-  for f in $(for_each_item "$dir"); do
-    [ "$(record_field "$f" state)" = "$want" ] || continue
+  local dir=$1 want=$2 path state n=0
+  while IFS="$FIELD_SEP" read -r path state; do
+    [ -n "$path" ] || continue
+    [ "$state" = "$want" ] || continue
     n=$((n + 1))
-  done
+  done <<EOF
+$(scan_records "$dir" state)
+EOF
   printf '%s\n' "$n"
 }
 
+count_records() {
+  for_each_item "$1" | grep -c '[^[:space:]]' || true
+}
+
+# `--state inactive` is a LOCATION, not a state field: those records still read
+# `open`, they have simply left the polled set under the brief horizon. A bare
+# `items` lists every location, so nothing this gate keeps is invisible.
 items_cmd() {
-  local want='' f state
+  local want='' dirs dir path key state class source title
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --state) [ "$#" -ge 2 ] || die '--state requires a value'; want=$2; shift 2 ;;
@@ -1147,21 +1323,23 @@ items_cmd() {
     esac
   done
   case "$want" in
-    ''|open|waiting|archived) ;;
+    open|waiting) dirs=$ITEM_DIR ;;
+    archived) dirs=$ARCHIVE_DIR ;;
+    inactive) dirs=$INACTIVE_DIR ;;
+    '') dirs="$ITEM_DIR $INACTIVE_DIR $ARCHIVE_DIR" ;;
     *) die "unknown state: $want" ;;
   esac
-  {
-    for_each_item "$ITEM_DIR"
-    case "$want" in
-      open|waiting) ;;
-      *) for_each_item "$ARCHIVE_DIR" ;;
-    esac
-  } | while IFS= read -r f; do
-    state=$(record_field "$f" state)
-    [ -z "$want" ] || [ "$want" = "$state" ] || continue
-    printf '%s\t%s\t%s\t%s\t%s\n' "$(record_field "$f" key)" "$state" \
-      "$(record_field "$f" class)" "$(record_field "$f" source)" \
-      "$(record_field "$f" title)"
+  for dir in $dirs; do
+    while IFS="$FIELD_SEP" read -r path key state class source title; do
+      [ -n "$path" ] || continue
+      case "$want" in
+        ''|inactive) ;;
+        *) [ "$want" = "$state" ] || continue ;;
+      esac
+      printf '%s\t%s\t%s\t%s\t%s\n' "$key" "$state" "$class" "$source" "$title"
+    done <<EOF
+$(scan_records "$dir" key state class source title)
+EOF
   done
 }
 
@@ -1210,23 +1388,30 @@ save_notify() {
 # never been notified or its content changed since the notification that went
 # out. That last clause is what makes an edit re-notify exactly once and an
 # unchanged poll never re-notify at all.
-notifiable_items() {
-  local quiet=$1 f class notified notified_digest digest
-  for f in $(for_each_item "$ITEM_DIR"); do
-    [ "$(record_field "$f" state)" = open ] || continue
-    class=$(record_field "$f" class)
+#
+# One pass over the item directory hands back every column the three callers
+# need - the count, the quiet-hours bypass check, the wake signature and the
+# rendered payload - so the live wake path costs a bounded couple of processes
+# instead of five per item twice per sweep.
+# Columns: key, digest, class, title, link.
+notifiable_rows() {
+  local quiet=$1 path key digest class title link state notified notified_digest
+  while IFS="$FIELD_SEP" read -r path key digest class title link state notified notified_digest; do
+    [ -n "$path" ] || continue
+    [ "$state" = open ] || continue
     is_notify_class "$class" || continue
     if [ "$quiet" = true ]; then
       is_quiet_bypass_class "$class" || continue
     fi
-    notified=$(record_field "$f" notified)
-    notified_digest=$(record_field "$f" notified_digest)
-    digest=$(record_field "$f" digest)
     if [ -n "$notified" ] && [ "$notified_digest" = "$digest" ]; then
       continue
     fi
-    printf '%s\n' "$f"
-  done
+    printf '%s%s%s%s%s%s%s%s%s\n' \
+      "$key" "$FIELD_SEP" "$digest" "$FIELD_SEP" "$class" "$FIELD_SEP" \
+      "$title" "$FIELD_SEP" "$link"
+  done <<EOF
+$(scan_records "$ITEM_DIR" key digest class title link state notified notified_digest)
+EOF
 }
 
 # The ONE decision for "can a payload go out right now, and if not, why not".
@@ -1241,12 +1426,12 @@ notifiable_items() {
 #   spaced        the minimum gap since the last payload has not elapsed
 #   ready         a payload can be rendered and sent
 notify_state() {
-  local epoch=$1 day quiet=false files count last lastday sent f bypass=false
+  local epoch=$1 day quiet=false rows count last lastday sent class bypass=false
   enabled || { printf 'none 0\n'; return 0; }
   day=$(local_date "$epoch")
   ! in_quiet_hours "$epoch" || quiet=true
-  files=$(notifiable_items "$quiet")
-  count=$(printf '%s' "$files" | grep -c '[^[:space:]]' || true)
+  rows=$(notifiable_rows "$quiet")
+  count=$(printf '%s' "$rows" | grep -c '[^[:space:]]' || true)
   if [ "$count" -eq 0 ]; then
     printf 'none 0\n'
     return 0
@@ -1262,10 +1447,8 @@ notify_state() {
     printf 'unverified %s\n' "$count"
     return 0
   fi
-  for f in $files; do
-    if is_quiet_bypass_class "$(record_field "$f" class)"; then
-      bypass=true
-    fi
+  for class in $(printf '%s\n' "$rows" | cut -d"$FIELD_SEP" -f3); do
+    ! is_quiet_bypass_class "$class" || bypass=true
   done
   last=$(notify_field last)
   lastday=$(notify_field day)
@@ -1297,11 +1480,11 @@ notify_state_count() {
 # new ask never reaches the live wake path. Folding each item's digest in
 # means a correction to an alert already reported is a change too.
 notify_identity() {
-  local epoch=$1 quiet=false f pairs
+  local epoch=$1 quiet=false pairs
   ! in_quiet_hours "$epoch" || quiet=true
-  pairs=$(for f in $(notifiable_items "$quiet"); do
-    printf '%s:%s\n' "$(record_field "$f" key)" "$(record_field "$f" digest)"
-  done | LC_ALL=C sort | tr '\n' ' ')
+  pairs=$(notifiable_rows "$quiet" \
+    | awk -F"$FIELD_SEP" 'NF { printf "%s:%s\n", $1, $2 }' \
+    | LC_ALL=C sort | tr '\n' ' ')
   [ -n "$pairs" ] || { printf 'none\n'; return 0; }
   digest_hex "$pairs"
 }
@@ -1322,7 +1505,7 @@ notify_state_phrase() {
 # the items are only stamped once it confirms with `notify-sent`, so an
 # interrupted send re-renders instead of vanishing.
 notify_due() {
-  local epoch quiet=false files count state f
+  local epoch quiet=false rows count state key class title link
   [ "$#" -eq 0 ] || die 'notify-due takes no arguments'
   enabled || return 0
   epoch=$(now_epoch)
@@ -1337,18 +1520,19 @@ notify_due() {
     capped|spaced) return 0 ;;
   esac
   ! in_quiet_hours "$epoch" || quiet=true
-  files=$(notifiable_items "$quiet")
+  rows=$(notifiable_rows "$quiet")
   count=$(notify_state_count "$state")
   printf 'recipient: %s\n' "$CFG_NOTIFY_RECIPIENT"
   printf 'items: %s\n' "$count"
-  printf 'keys: %s\n' "$(for f in $files; do printf '%s ' "$(record_field "$f" key)"; done)"
+  printf 'keys: %s\n' "$(printf '%s\n' "$rows" | cut -d"$FIELD_SEP" -f1 | tr '\n' ' ')"
   printf -- '---\n'
   printf 'Intake needs you (%s):\n' "$count"
-  for f in $files; do
-    printf -- '- [%s] %s%s\n' "$(record_field "$f" class)" \
-      "$(record_field "$f" title)" \
-      "$([ -z "$(record_field "$f" link)" ] || printf ' %s' "$(record_field "$f" link)")"
-  done
+  while IFS="$FIELD_SEP" read -r key _ class title link; do
+    [ -n "$key" ] || continue
+    printf -- '- [%s] %s%s\n' "$class" "$title" "${link:+ $link}"
+  done <<EOF
+$rows
+EOF
   printf 'Full brief: %s brief\n' "$0"
 }
 
@@ -1445,11 +1629,10 @@ open_report() {
 }
 
 section_items() {
-  local want_state=$1 epoch=$2 f class state found=false
+  local want_state=$1 epoch=$2 path state class title link source created found=false
   shift 2
-  for f in $(for_each_item "$ITEM_DIR"); do
-    state=$(record_field "$f" state)
-    class=$(record_field "$f" class)
+  while IFS="$FIELD_SEP" read -r path state class title link source created; do
+    [ -n "$path" ] || continue
     [ "$state" = "$want_state" ] || continue
     if [ "$#" -gt 0 ]; then
       case " $* " in
@@ -1459,11 +1642,10 @@ section_items() {
     fi
     found=true
     printf -- '- [%s] %s%s (%s, first seen %s)\n' "$class" \
-      "$(record_field "$f" title)" \
-      "$([ -z "$(record_field "$f" link)" ] || printf ' %s' "$(record_field "$f" link)")" \
-      "$(record_field "$f" source)" \
-      "$(local_date "$(record_field "$f" created)")"
-  done
+      "$title" "${link:+ $link}" "$source" "$(local_date "$created")"
+  done <<EOF
+$(scan_records "$ITEM_DIR" state class title link source created)
+EOF
   [ "$found" = true ] || printf -- '- nothing\n'
 }
 
@@ -1499,6 +1681,11 @@ render_brief() {
   printf '\n## Detection limits\n\n'
   printf -- '- An in-place edit older than the %ss revision window is not detected.\n' "$CFG_REVISION_WINDOW"
   printf -- '- A reply on a thread whose parent is not in the tracked set can appear in no cursor read.\n'
+  printf -- '- The tracked set is bounded, not forever: a parent whose reply marker has not advanced within %ss leaves it, and replies on a parent that has left are not re-read.\n' \
+    "$CFG_REVISION_WINDOW"
+  # shellcheck disable=SC2016
+  printf -- '- Routine traffic older than %ss leaves the polled set and is listed by `items --state inactive`. Nothing is deleted, and nothing owed, waiting or corrected ever leaves.\n' \
+    "$BRIEF_WINDOW"
   printf -- '- The %ss poll interval is a target detection latency, not a guaranteed upper bound: sleep, offline stretches, backoff and queue delay all add to it.\n' "$CFG_INTERVAL"
   printf -- '- Measured detection latency so far: %s\n' "$(latency_summary)"
 }
@@ -1519,32 +1706,31 @@ freshness_phrase() {
 BRIEF_WINDOW=86400
 
 changed_section() {
-  local epoch=$1 f found=false revisions resolved_at created updated edited
-  for f in $(for_each_item "$ITEM_DIR"); do
-    revisions=$(record_field "$f" revisions)
+  local epoch=$1 path found=false revisions resolved_at created updated edited
+  local class title source resolution
+  while IFS="$FIELD_SEP" read -r path revisions updated created class title source; do
+    [ -n "$path" ] || continue
     case "$revisions" in ''|*[!0-9]*) revisions=0 ;; esac
     if [ "$revisions" -gt 0 ]; then
       # Bounded like every other row here: a correction is news on the day it
       # lands, not a permanent fixture of every later brief.
-      updated=$(record_field "$f" updated)
       case "$updated" in ''|*[!0-9]*) continue ;; esac
       [ $((epoch - updated)) -le "$BRIEF_WINDOW" ] || continue
       found=true
-      printf -- '- %s was corrected %s time(s) (%s)\n' "$(record_field "$f" title)" \
-        "$revisions" "$(record_field "$f" source)"
+      printf -- '- %s was corrected %s time(s) (%s)\n' "$title" "$revisions" "$source"
       continue
     fi
     # Routine traffic is never a ping; this is where it accumulates.
-    [ "$(record_field "$f" class)" = routine ] || continue
-    created=$(record_field "$f" created)
+    [ "$class" = routine ] || continue
     case "$created" in ''|*[!0-9]*) continue ;; esac
     [ $((epoch - created)) -le "$BRIEF_WINDOW" ] || continue
     found=true
-    printf -- '- %s (%s)\n' "$(record_field "$f" title)" "$(record_field "$f" source)"
-  done
-  for f in $(for_each_item "$ARCHIVE_DIR"); do
-    resolved_at=$(record_field "$f" resolved_at)
-    edited=$(record_field "$f" edited_after_resolution)
+    printf -- '- %s (%s)\n' "$title" "$source"
+  done <<EOF
+$(scan_records "$ITEM_DIR" revisions updated created class title source)
+EOF
+  while IFS="$FIELD_SEP" read -r path resolved_at edited title resolution; do
+    [ -n "$path" ] || continue
     case "$edited" in
       ''|*[!0-9]*) ;;
       *)
@@ -1553,17 +1739,17 @@ changed_section() {
         # obligation back.
         if [ $((epoch - edited)) -le "$BRIEF_WINDOW" ]; then
           found=true
-          printf -- '- %s was edited after it was closed; it stays closed\n' \
-            "$(record_field "$f" title)"
+          printf -- '- %s was edited after it was closed; it stays closed\n' "$title"
         fi
         ;;
     esac
     case "$resolved_at" in ''|*[!0-9]*) continue ;; esac
     [ $((epoch - resolved_at)) -le "$BRIEF_WINDOW" ] || continue
     found=true
-    printf -- '- %s was closed: %s\n' "$(record_field "$f" title)" \
-      "$(record_field "$f" resolution)"
-  done
+    printf -- '- %s was closed: %s\n' "$title" "$resolution"
+  done <<EOF
+$(scan_records "$ARCHIVE_DIR" resolved_at edited_after_resolution title resolution)
+EOF
   [ "$found" = true ] || printf -- '- nothing\n'
 }
 
@@ -1607,19 +1793,20 @@ brief_cmd() {
 # correction, a resolution and a completed obligation reconcile across both by
 # construction rather than needing a second pass over two stores.
 render_todo() {
-  local epoch=$1 f found=false
+  local epoch=$1 path state class title link source found=false
   printf '# Daily to-do - %s\n\n' "$(local_date "$epoch")"
   printf 'Human obligations only. Executable automations live in the Action Deck behind their own approval.\n\n'
-  for f in $(for_each_item "$ITEM_DIR"); do
-    [ "$(record_field "$f" state)" = open ] || continue
-    case "$(record_field "$f" class)" in
+  while IFS="$FIELD_SEP" read -r path state class title link source; do
+    [ -n "$path" ] || continue
+    [ "$state" = open ] || continue
+    case "$class" in
       automation-candidate|routine) continue ;;
     esac
     found=true
-    printf -- '- [ ] %s%s (%s)\n' "$(record_field "$f" title)" \
-      "$([ -z "$(record_field "$f" link)" ] || printf ' %s' "$(record_field "$f" link)")" \
-      "$(record_field "$f" source)"
-  done
+    printf -- '- [ ] %s%s (%s)\n' "$title" "${link:+ $link}" "$source"
+  done <<EOF
+$(scan_records "$ITEM_DIR" state class title link source)
+EOF
   [ "$found" = true ] || printf -- '- [ ] nothing outstanding\n'
   printf '\n## Waiting on others\n\n'
   section_items waiting "$epoch"
@@ -1793,7 +1980,12 @@ status_cmd() {
   # directory would report work handed to someone else as still owed.
   printf 'items_open: %s\n' "$(count_items_in_state "$ITEM_DIR" open)"
   printf 'items_waiting: %s\n' "$(count_items_in_state "$ITEM_DIR" waiting)"
-  printf 'items_archived: %s\n' "$(for_each_item "$ARCHIVE_DIR" | wc -l | tr -d ' ')"
+  # Retired routine records are reported, never silently gone: they left the
+  # polled set under the brief horizon and `items --state inactive` lists them.
+  printf 'items_inactive: %s\n' "$(count_records "$INACTIVE_DIR")"
+  printf 'items_archived: %s\n' "$(count_records "$ARCHIVE_DIR")"
+  printf 'tracked_threads: %s\n' \
+    "$(find "$THREAD_DIR" -type f 2>/dev/null | grep -c '[^[:space:]]' || true)"
   printf 'notifications_today: %s\n' "$(notify_today_count "$epoch")"
   printf 'notifications_state: %s\n' "$(notify_state "$epoch")"
   printf 'measured_latency: %s\n' "$(latency_summary)"
