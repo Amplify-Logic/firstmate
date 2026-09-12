@@ -952,6 +952,108 @@ test_claude_effort() {
   pass "fm-primary: Claude effort applies to Fable and Opus and refuses invalid tokens"
 }
 
+# The extended Astra context window. The captain's installation grants Astra far
+# more context than its catalog default, but only if the launch asks; this is
+# that ask, made persistent and checked against what the installation actually
+# offers rather than against a remembered number or an API model page.
+test_astra_context_window_is_selectable_and_bounded_by_the_catalog() {
+  local out status=0 codex_home="$TMP_ROOT/astra-codex-home"
+  local ctx_file="$HOME_FIX/config/astra-context"
+  local compact_file="$HOME_FIX/config/astra-compact-at"
+  mkdir -p "$HOME_FIX/config" "$codex_home"
+  printf 'high\n' > "$HOME_FIX/config/astra-effort"
+  cat > "$codex_home/models_cache.json" <<'JSON'
+{"models":[{"slug":"gpt-6-astra","context_window":272000,"max_context_window":872000,
+"effective_context_window_percent":95},{"slug":"gpt-5.5","max_context_window":400000}]}
+JSON
+
+  astra_dry() {
+    ( cd "$TMP_ROOT" && \
+      env -u CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP \
+      PATH="$FAKEBIN:$PATH" \
+      FM_HOME="$HOME_FIX" \
+      FM_PRIMARY_DRY_RUN=1 \
+      FM_PRIMARY_TEST_LOG="$LOG" \
+      CODEX_HOME="$codex_home" \
+      "$ROOT/bin/fm-primary.sh" astra )
+  }
+
+  # Absent is a complete no-op: exactly the launch that shipped before.
+  rm -f "$ctx_file" "$compact_file"
+  out=$(astra_dry 2>&1)
+  assert_not_contains "$out" 'model_context_window' \
+    "an absent config/astra-context still changed the launch"
+  assert_contains "$out" 'model_reasoning_effort="high"' \
+    "an absent config/astra-context disturbed the resolved effort"
+
+  # max resolves to the installation's own ceiling, never to a remembered number.
+  printf 'max\n' > "$ctx_file"
+  out=$(astra_dry 2>&1)
+  assert_contains "$out" "'-c' 'model_context_window=872000'" \
+    "config/astra-context max did not resolve to the catalog ceiling"
+  assert_contains "$out" 'requesting context window 872000' \
+    "the resolved window was not reported for verification after launch"
+  assert_not_contains "$out" 'model_auto_compact_token_limit' \
+    "a compaction point was invented without config/astra-compact-at"
+
+  # An explicit window at or below the ceiling is honoured verbatim.
+  printf '  400000  \n' > "$ctx_file"
+  out=$(astra_dry 2>&1)
+  assert_contains "$out" "'-c' 'model_context_window=400000'" \
+    "a padded explicit window was not trimmed and honoured"
+
+  # Above the ceiling REFUSES. Passing it through, or silently clamping it, would
+  # both leave the launcher asserting a window the provider never granted.
+  printf '1050000\n' > "$ctx_file"
+  status=0
+  out=$(astra_dry 2>&1) || status=$?
+  [ "$status" -ne 0 ] || fail "a context window above the installed ceiling was accepted"
+  assert_contains "$out" '872000' "the over-ceiling refusal did not name the real ceiling"
+  assert_not_contains "$out" "'-c' 'model_context_window=872000'" \
+    "an over-ceiling window was silently clamped instead of refused"
+
+  # An unreadable catalog refuses rather than guessing a ceiling.
+  printf 'max\n' > "$ctx_file"
+  status=0
+  out=$( ( cd "$TMP_ROOT" && env -u CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP \
+    PATH="$FAKEBIN:$PATH" FM_HOME="$HOME_FIX" FM_PRIMARY_DRY_RUN=1 \
+    FM_PRIMARY_TEST_LOG="$LOG" CODEX_HOME="$TMP_ROOT/no-such-codex-home" \
+    "$ROOT/bin/fm-primary.sh" astra ) 2>&1 ) || status=$?
+  [ "$status" -ne 0 ] || fail "an unreadable model catalog still resolved a context window"
+  assert_not_contains "$out" 'model_context_window=' \
+    "an unreadable catalog produced a context window anyway"
+
+  # A malformed value refuses instead of falling back to the default window.
+  printf 'wide\n' > "$ctx_file"
+  status=0
+  out=$(astra_dry 2>&1) || status=$?
+  [ "$status" -ne 0 ] || fail "a malformed config/astra-context was accepted"
+  assert_contains "$out" "$ctx_file" "the malformed-window refusal did not name the file"
+
+  # The compaction point is the captain's operational choice, never derived.
+  printf 'max\n' > "$ctx_file"
+  printf '750000\n' > "$compact_file"
+  out=$(astra_dry 2>&1)
+  assert_contains "$out" "'-c' 'model_auto_compact_token_limit=750000'" \
+    "an explicit compaction point did not reach the launch"
+
+  printf '900000\n' > "$compact_file"
+  status=0
+  out=$(astra_dry 2>&1) || status=$?
+  [ "$status" -ne 0 ] || fail "a compaction point at or above the window was accepted"
+
+  # A compaction point with no window selected is a misconfiguration, not a hint.
+  rm -f "$ctx_file"
+  printf '750000\n' > "$compact_file"
+  status=0
+  out=$(astra_dry 2>&1) || status=$?
+  [ "$status" -ne 0 ] || fail "a compaction point without a selected window was accepted"
+
+  rm -f "$ctx_file" "$compact_file" "$HOME_FIX/config/astra-effort"
+  unset -f astra_dry
+  pass "fm-primary: the Astra context window is selectable, bounded by the installed catalog, and never invented"
+}
+
 test_astra_primary_profile() {
   local out status=0 probe_out probe_err
   local effort_file="$HOME_FIX/config/astra-effort" override="$TMP_ROOT/astra-config"
@@ -1406,6 +1508,7 @@ test_claude_disables_bg_shell_pressure_reap() {
 test_profiles_and_root
 test_claude_effort
 test_astra_primary_profile
+test_astra_context_window_is_selectable_and_bounded_by_the_catalog
 test_claude_disables_bg_shell_pressure_reap
 test_account_absent_registry_changes_nothing
 test_account_selection_and_refusals

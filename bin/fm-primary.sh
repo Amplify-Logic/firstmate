@@ -36,6 +36,12 @@
 #                 Accepted tokens: low, medium, high, xhigh. max is refused,
 #                 and that refusal is retained pending the separate follow-up
 #                 astra-max-effort.
+#                 Adds -c model_context_window=<N> when local gitignored
+#                 config/astra-context selects a window, and
+#                 -c model_auto_compact_token_limit=<N> when
+#                 config/astra-compact-at sets a compaction point. Both are
+#                 absent by default and change nothing when absent.
+#                 docs/configuration.md owns both schemas.
 #   opencode      OPENCODE_CONFIG_CONTENT={"permission":{"*":"allow"}}
 #                 opencode
 #   grok          grok --permission-mode bypassPermissions
@@ -401,6 +407,98 @@ resolve_astra_effort() {
     low|medium|high|xhigh) ASTRA_EFFORT=$value ;;
     *) die "invalid effort in $file: '$value' (accepted: low medium high xhigh)" ;;
   esac
+}
+
+# Resolve the Astra launch context window from local config/astra-context.
+#
+# Astra ships with a default window well below what this Codex installation can
+# actually grant it, and the larger window is only ever reached by asking for it
+# at launch. This resolver is how that ask becomes persistent and repeatable
+# instead of a private profile that only exists on one machine.
+#
+# An absent file changes nothing: no override is passed and Codex uses its own
+# catalog default, exactly as before this setting existed.
+# A present file's first line must trim to either `max` or a positive integer.
+#   max        -> the installed catalog's own max_context_window for the model
+#   <integer>  -> that exact window
+# Either way the value is checked against the installed catalog's ceiling and a
+# request above it REFUSES. The point of the setting is to reach the window this
+# installation actually supports; silently clamping a too-large number, or
+# passing one through, would both end in a launcher that claims a window the
+# provider never granted.
+# An unreadable or malformed catalog refuses `max` rather than inventing a
+# number, and refuses to validate an explicit one it cannot check.
+resolve_astra_context() {
+  local file value ceiling
+  ASTRA_CONTEXT_WINDOW=
+  file="${FM_CONFIG_OVERRIDE:-$FM_HOME/config}/astra-context"
+  [ -f "$file" ] || return 0
+  IFS= read -r value < "$file" || true
+  value=${value#"${value%%[![:space:]]*}"}
+  value=${value%"${value##*[![:space:]]}"}
+  case "$value" in
+    ''|0|*[!0-9]*)
+      [ "$value" = max ] \
+        || die "invalid context window in $file: '$value' (accepted: max, or a positive integer)"
+      ;;
+  esac
+  ceiling=$(astra_catalog_max_context_window) \
+    || die "cannot read max_context_window for gpt-6-astra from the installed Codex model catalog, so $file cannot be honoured safely"
+  if [ "$value" = max ]; then
+    ASTRA_CONTEXT_WINDOW=$ceiling
+  else
+    [ "$value" -le "$ceiling" ] \
+      || die "context window $value in $file exceeds what this Codex installation grants gpt-6-astra ($ceiling); lower it or use 'max'"
+    ASTRA_CONTEXT_WINDOW=$value
+  fi
+}
+
+# The installed catalog's max_context_window for gpt-6-astra, or failure.
+# models_cache.json is Codex's own cache of what the provider currently grants
+# this installation, so it - not a remembered number and not the API model
+# page - is what decides the ceiling. The API maximum for a model and the window
+# a subscription CLI will actually open are different quantities.
+astra_catalog_max_context_window() {
+  local catalog value
+  catalog="${CODEX_HOME:-$HOME/.codex}/models_cache.json"
+  [ -f "$catalog" ] || return 1
+  command -v jq >/dev/null 2>&1 || return 1
+  value=$(jq -r '
+    [.models[]? | select(.slug == "gpt-6-astra") | .max_context_window]
+    | map(select(type == "number")) | first // empty
+  ' "$catalog" 2>/dev/null) || return 1
+  case "$value" in
+    ''|0|*[!0-9]*) return 1 ;;
+  esac
+  printf '%s' "$value"
+}
+
+# Resolve the Astra auto-compaction point from local config/astra-compact-at.
+#
+# Raising the window without moving this leaves Codex compacting where it always
+# did, so the extra room goes unused. The right value is an operational headroom
+# choice - how much of the window to spend before summarising - and nothing in
+# the catalog or the provider documentation prescribes one. So the launcher
+# never derives it: absent means no override at all, and the captain writes the
+# number they want.
+# A present value must be a positive integer strictly below the resolved window,
+# and it is only meaningful alongside one.
+resolve_astra_compact_at() {
+  local file value
+  ASTRA_COMPACT_AT=
+  file="${FM_CONFIG_OVERRIDE:-$FM_HOME/config}/astra-compact-at"
+  [ -f "$file" ] || return 0
+  IFS= read -r value < "$file" || true
+  value=${value#"${value%%[![:space:]]*}"}
+  value=${value%"${value##*[![:space:]]}"}
+  case "$value" in
+    ''|0|*[!0-9]*) die "invalid compaction point in $file: '$value' (accepted: a positive integer)" ;;
+  esac
+  [ -n "$ASTRA_CONTEXT_WINDOW" ] \
+    || die "$file sets a compaction point but config/astra-context selects no window; set the window first"
+  [ "$value" -lt "$ASTRA_CONTEXT_WINDOW" ] \
+    || die "compaction point $value in $file is not below the selected context window $ASTRA_CONTEXT_WINDOW"
+  ASTRA_COMPACT_AT=$value
 }
 
 # Map a profile onto the vendor whose named accounts it can be pinned to.
@@ -918,8 +1016,20 @@ case "$PROFILE" in
     ;;
   astra)
     resolve_astra_effort
+    resolve_astra_context
+    resolve_astra_compact_at
     argv=(codex --model gpt-6-astra -c "model_reasoning_effort=\"$ASTRA_EFFORT\"" --dangerously-bypass-hook-trust --dangerously-bypass-approvals-and-sandbox)
+    if [ -n "$ASTRA_CONTEXT_WINDOW" ]; then
+      argv+=(-c "model_context_window=$ASTRA_CONTEXT_WINDOW")
+      [ -z "$ASTRA_COMPACT_AT" ] \
+        || argv+=(-c "model_auto_compact_token_limit=$ASTRA_COMPACT_AT")
+    fi
     printf 'fm-primary: launching model gpt-6-astra at effort %s\n' "$ASTRA_EFFORT" >&2
+    if [ -n "$ASTRA_CONTEXT_WINDOW" ]; then
+      printf 'fm-primary: requesting context window %s%s (verify the first token_count model_context_window in the new session)\n' \
+        "$ASTRA_CONTEXT_WINDOW" \
+        "${ASTRA_COMPACT_AT:+, compacting at $ASTRA_COMPACT_AT}" >&2
+    fi
     ;;
   opencode)
     argv=(opencode)
