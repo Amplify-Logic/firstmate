@@ -39,6 +39,18 @@
 <h1>Stand-in device configuration portal</h1>
 <p>Fixture for browser staging tests. Not a real portal.</p>
 
+<!--
+  Navigation readiness is published separately from the payload, because a
+  navigation command's acknowledgement timing out does NOT mean the page
+  failed to load. The correct recovery is to INSPECT for this marker, never
+  to navigate a second time - a duplicate navigation is how one intent
+  becomes two tabs, and the same reflex one phase later is how one command
+  becomes two commands.
+
+  ?slow=<ms> delays the marker so an ambiguous load can be exercised.
+-->
+<p hidden id="target-ready" data-target-ready="false" data-target-id="">ready marker</p>
+
 <fieldset>
   <legend>Target</legend>
   <!--
@@ -106,6 +118,17 @@
     return reported().dataset.reportedAvailable === 'true';
   }
 
+  // Published once the page is genuinely usable, whatever the navigation
+  // command reported. Inspection resolves navigation ambiguity; retrying does not.
+  (function () {
+    var marker = document.getElementById('target-ready');
+    var slow = Number(new URLSearchParams(location.search).get('slow') || 0);
+    setTimeout(function () {
+      marker.dataset.targetReady = 'true';
+      marker.dataset.targetId = document.getElementById('device-id').dataset.deviceId || '';
+    }, slow);
+  })();
+
   window.__sent = false;
   window.__sendCount = 0;
   window.__readback = function () {
@@ -115,6 +138,7 @@
       reported_state: reportedAvailable() ? reported().dataset.reported : null,
       reported_at: reportedAvailable() ? reported().dataset.reportedAt : null,
       reported_available: reportedAvailable(),
+      target_ready: document.getElementById('target-ready').dataset.targetReady === 'true',
       preset_default: PRESET_ONE_DEFAULT,
       verified: document.getElementById('preview').dataset.verified === 'true',
       sent: window.__sent,
