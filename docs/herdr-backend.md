@@ -558,12 +558,13 @@ It also adds a before/after fleet-state tripwire: `provision` records the live `
 ### Rendered-screen inspection: `view`
 
 Herdr draws pane borders, border titles, and the agent sidebar in its TUI **client**, not in its server, so `pane read` - which returns terminal content - cannot observe any of them.
-`fm-herdr-lab.sh view <session> [--cols N] [--rows N] [--seconds N]` closes that gap: it attaches a throwaway client to one lab session on a synthetic pty of an exact size, feeds the client's own output through a terminal emulator, and prints the rendered screen with row numbers.
+`fm-herdr-lab.sh view <session> [--cols N] [--rows N] [--seconds N] [--format text|raw-bytes]` closes that gap: it attaches a throwaway client to one lab session on a synthetic pty of an exact size and feeds the client's own output through a terminal emulator.
+The default `text` format prints the rendered screen with row numbers; `raw-bytes` prints the client's own byte stream instead, because colour and erase behaviour live in the escape sequences and the rendered characters cannot show them.
 `bin/fm-herdr-lab-view.py` is the engine; `python3` and the `pyte` module are required, and the command refuses with a clear message rather than half-running when either is absent.
 
 It is a lab instrument, not a fleet operation, and it is deliberately not a session-lifecycle pass-through:
 
-- `view` accepts only `--cols`, `--rows` and `--seconds`, each a whole number inside a bounded range. Any other argument is refused, so no Herdr subcommand can be smuggled through it.
+- `view` accepts only `--cols`, `--rows` and `--seconds` - each a whole number inside a bounded range - and `--format`, which accepts only the two literal values. Any other argument is refused, so no Herdr subcommand can be smuggled through it.
 - The lab name is validated, this helper's own fleet-state tripwire must exist (so the session is one this helper provisioned), and `fm_herdr_lab_refuse_if_default` runs immediately before the client attaches - the same read-only hard guard the destructive paths use.
 - The engine re-validates the `fm-lab-` pattern and the literal `default` refusal independently of the caller, so it cannot be pointed at the live session even when invoked directly, and it builds the Herdr argv literally from that one validated name.
 - The engine strips **every** ambient `HERDR_*` variable from the client's environment. This is not cosmetic: `HERDR_SOCKET_PATH` points at the server owning the caller's own pane - the captain's live `default` server in normal use - so inheriting it would let an ambient value rather than the validated name decide which session gets attached. Stripping the prefix leaves the positional session name as the only selector, and it is also what lets the viewer run from inside a Herdr pane at all, since Herdr refuses a nested client when it sees the outer `HERDR_ENV`.
@@ -1097,8 +1098,7 @@ What is still open, stated plainly so it is not read as settled:
 
 No terminal workaround, forced style reset around foreign output, or blanket terminal setting is warranted by any of this, and none has been applied.
 
-`view --format raw-bytes` exists for exactly this class of question: colour and erase live in the byte stream, and the viewer's rendered text cannot show them.
-It runs under the same bounds as the text format - one attached client that only ever draws, for the same bounded seconds, in a validated non-default lab.
+`view --format raw-bytes` (see [Rendered-screen inspection: `view`](#rendered-screen-inspection-view)) exists for exactly this class of question, and runs under the same bounds as the text format.
 
 ## Known gaps and follow-up notes
 

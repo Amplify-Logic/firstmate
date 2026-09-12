@@ -116,6 +116,7 @@ state/               volatile runtime signals; gitignored
   .afk               durable away-mode flag; present = sub-supervisor may inject escalations (set by /afk, cleared on user return)
   .watch.lock .wake-queue.lock watcher singleton and queue serialization locks
   .primary-active .primary-context .primary-handoff*   optional primary-handoff supervisor state (active profile, durable context sample, phase record); present only when config/primary-handoff enables it (docs/primary-handoff.md)
+  .status-fleet-state* .status-codex-*   status-bar renderer caches and single-refresh claims for the canonical fleet fold and the Codex context/quota supply; never touch (docs/status-bar.md)
   .hash-* .count-* .stale-* .stale-since-* .paused-* .captain-held-surfaced-* .wedge-escalations-* .seen-* .hb-surfaced-* .last-* .heartbeat-streak   watcher internals; never touch
   .watch-triage.log  watcher's absorbed-wake debug log (size-capped); never relied on, safe to delete
   .last-watcher-beat watcher liveness beacon, touched every poll (including while absorbing benign wakes); guard scripts read it

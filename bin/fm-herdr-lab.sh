@@ -35,11 +35,11 @@
 # through bin/fm-herdr-lab-view.py, because Herdr draws pane borders, border
 # titles, and the agent sidebar in its client rather than its server, so
 # `pane read` cannot observe them. It is not a session lifecycle pass-through:
-# view accepts only the three bounded geometry options, validates the lab name,
-# requires this helper's own fleet-state tripwire, re-checks that the session
-# exists and is not default, and then hands the engine one validated name from
-# which the engine builds the Herdr argv literally. The caller's stdin is never
-# wired to the attached client, so the client only ever draws.
+# view accepts only the three bounded geometry options and --format, validates
+# the lab name, requires this helper's own fleet-state tripwire, re-checks that
+# the session exists and is not default, and then hands the engine one validated
+# name from which the engine builds the Herdr argv literally. The caller's stdin
+# is never wired to the attached client, so the client only ever draws.
 # Provision records the running default session as a fleet-state tripwire and
 # teardown requires that record to be identical afterward.
 set -u
