@@ -364,6 +364,7 @@ tests/fm-file-eventwait.test.sh
 tests/fm-read.test.sh
 tests/fm-test-isolation-proof.test.sh
 tests/fm-upstream-watch.test.sh
+tests/fm-channel-intake.test.sh
 tests/fm-morning-intake.test.sh
 tests/fm-gotmp.test.sh
 tests/fm-toolchain-drift.test.sh

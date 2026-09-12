@@ -268,6 +268,41 @@ test_captain_response_clears_and_never_reopens() {
   [ "$(at "$h" $((T_0915 + 1800)) items --state open | grep -c '[^[:space:]]')" = 0 ] \
     || fail 'a late edit reopened a resolved ask'
 
+  # The annotation is on the archive record itself, so the brief can say the
+  # source moved without the obligation coming back.
+  [ "$(item_field "$h" "$key" edited_after_resolution)" = "$((T_0915 + 1800))" ] \
+    || fail 'a late edit did not annotate the archived record'
+  [ "$(item_field "$h" "$key" state)" = archived ] \
+    || fail 'annotating a late edit changed the archived state'
+  [ "$(item_field "$h" "$key" resolution)" = 'captain approved the amount in thread' ] \
+    || fail 'annotating a late edit overwrote the archived evidence'
+  out=$(at "$h" $((T_0915 + 1800)) brief)
+  assert_contains "$out" 'was edited after it was closed; it stays closed' \
+    'the brief never mentioned the post-resolution edit'
+
+  # Re-reading the same edit is not new news: it annotates once, not per poll.
+  at "$h" $((T_0915 + 2700)) observe --source C_BRIEF --ref 1789023000.1000 \
+    --digest 'approve the invoice, revised' >/dev/null
+  [ "$(item_field "$h" "$key" edited_after_resolution)" = "$((T_0915 + 1800))" ] \
+    || fail 'an unchanged re-read of an edited archive re-annotated it'
+  [ "$(grep -c '^edited_after_resolution=' "$h/data/channel-intake/archive/$key")" = 1 ] \
+    || fail 'an unchanged re-read grew the archived record'
+
+  # A genuinely later edit supersedes the annotation and still never reopens.
+  at "$h" $((T_0915 + 3600)) observe --source C_BRIEF --ref 1789023000.1000 \
+    --digest 'approve the invoice, revised again' >/dev/null
+  [ "$(item_field "$h" "$key" edited_after_resolution)" = "$((T_0915 + 3600))" ] \
+    || fail 'a second edit did not supersede the archive annotation'
+  [ "$(at "$h" $((T_0915 + 3600)) items --state open | grep -c '[^[:space:]]')" = 0 ] \
+    || fail 'a second late edit reopened a resolved ask'
+
+  # The edit note is bounded like every other brief row.
+  out=$(at "$h" $((T_0915 + 3600 + 86401)) brief)
+  case "$out" in
+    *'was edited after it was closed'*)
+      fail 'a stale post-resolution edit stayed on the brief forever' ;;
+  esac
+
   # Waiting-on-others is the honest middle state, and it is not a clearance.
   out=$(at "$h" "$T_0900" observe --source M_ACTION --ref msg-77 \
     --digest 'supplier must confirm' --class obligation --title 'supplier confirmation')

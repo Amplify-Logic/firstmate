@@ -132,7 +132,10 @@ An acknowledgement or a promise to act is not a completion.
 
 A resolved ask is never reopened by a poll.
 A reaction or an unchanged re-read reports `archived-unchanged` and does nothing.
-Even a genuine later edit only reports `archived-changed` so the brief can mention it; reopening is a captain decision.
+Even a genuine later edit only reports `archived-changed` and annotates the archived record; reopening is a captain decision.
+The brief then says the item was edited after it was closed and that it stays closed, bounded like every other row there.
+The annotation is carried alongside the archived evidence rather than rewritten into it, so the source, ref, link, provenance and reason it was closed stay verbatim.
+A later edit supersedes an earlier annotation, and an unchanged re-read of the same edit changes nothing.
 
 ## Disclosed detection limits
 

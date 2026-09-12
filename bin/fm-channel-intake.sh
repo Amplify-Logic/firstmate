@@ -636,6 +636,26 @@ save_item() {
   write_atomic "$path" "$*" || die "cannot write the item record: $path"
 }
 
+# An edit that lands after an item was resolved annotates the archive record and
+# never reopens it: reopening a cleared obligation is a captain decision, not a
+# poll's. The annotation is carried outside `item_body` so the archived
+# evidence - source, ref, link, provenance, resolution - stays verbatim, and it
+# is rewritten rather than appended so each key keeps exactly one line and a
+# later edit supersedes an earlier one. An unchanged re-read of the same edit
+# is not news and rewrites nothing.
+annotate_archived_edit() {
+  local path=$1 digest=$2 epoch=$3 seen body
+  seen=$(record_field "$path" edited_digest)
+  if [ "$seen" = "$digest" ]; then
+    return 0
+  fi
+  body=$(grep -v '^edited_after_resolution=' "$path" | grep -v '^edited_digest=') \
+    || die "cannot read the archived item record: $path"
+  write_atomic "$path" "$(printf '%s\nedited_after_resolution=%s\nedited_digest=%s' \
+    "$body" "$epoch" "$digest")" \
+    || die "cannot annotate the archived item record: $path"
+}
+
 item_body() {
   printf 'key=%s\nsource=%s\nkind=%s\nref=%s\nlink=%s\nclass=%s\ntitle=%s\ndigest=%s\nstate=%s\ncreated=%s\nupdated=%s\nsource_epoch=%s\nnotified=%s\nnotified_digest=%s\nrevisions=%s\nprovenance=%s\nresolution=%s\nresolved_at=%s' \
     "$1" "$2" "$3" "$4" "$(sanitize "$5")" "$6" "$(sanitize "$7")" "$8" "$9" \
@@ -981,6 +1001,7 @@ observe() {
     if [ "$existing_digest" = "$digest" ]; then
       printf 'archived-unchanged %s\n' "$key"
     else
+      annotate_archived_edit "$path" "$digest" "$epoch"
       printf 'archived-changed %s\n' "$key"
       log_event "archived item $key changed after resolution"
     fi
@@ -1498,7 +1519,7 @@ freshness_phrase() {
 BRIEF_WINDOW=86400
 
 changed_section() {
-  local epoch=$1 f found=false revisions resolved_at created updated
+  local epoch=$1 f found=false revisions resolved_at created updated edited
   for f in $(for_each_item "$ITEM_DIR"); do
     revisions=$(record_field "$f" revisions)
     case "$revisions" in ''|*[!0-9]*) revisions=0 ;; esac
@@ -1523,6 +1544,20 @@ changed_section() {
   done
   for f in $(for_each_item "$ARCHIVE_DIR"); do
     resolved_at=$(record_field "$f" resolved_at)
+    edited=$(record_field "$f" edited_after_resolution)
+    case "$edited" in
+      ''|*[!0-9]*) ;;
+      *)
+        # An edit that arrived after the item was closed is news, but the item
+        # stays closed: the reader is told the source moved, not handed the
+        # obligation back.
+        if [ $((epoch - edited)) -le "$BRIEF_WINDOW" ]; then
+          found=true
+          printf -- '- %s was edited after it was closed; it stays closed\n' \
+            "$(record_field "$f" title)"
+        fi
+        ;;
+    esac
     case "$resolved_at" in ''|*[!0-9]*) continue ;; esac
     [ $((epoch - resolved_at)) -le "$BRIEF_WINDOW" ] || continue
     found=true
