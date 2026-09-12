@@ -105,8 +105,8 @@
 #          x_mode_setup, fleet_sync) while still printing every read-only detect line
 #          above; the TANGLE line switches to advisory-only wording with no
 #          checkout command. Used by
-#          fm-session-start.sh's read-only path when another live session holds
-#          the fleet lock, so a second concurrent session never race-mutates
+#          fm-session-start.sh's read-only path whenever this session does not
+#          hold the fleet lock, so a second concurrent session never race-mutates
 #          PR-check artifacts, secondmate homes, X-mode artifacts, project
 #          clones, or repair instructions.
 #          Unset/0 (the default) runs every sweep exactly as before - this flag

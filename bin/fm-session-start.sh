@@ -347,15 +347,15 @@ fi
 # Drained records are this turn's first work queue (AGENTS.md section 8); the
 # drain also runs fm-guard.sh internally on the locked path, so the
 # tangle/watcher-liveness alarms land right here too, ahead of the bulk digest
-# below. The read-only path never touches the queue (another session
-# may be actively draining it) but still runs fm-guard.sh directly with
+# below. The read-only path never touches the queue (draining it requires
+# holding the lock) but still runs fm-guard.sh directly with
 # non-mutating advisory text, so the same alarms surface without repair
 # commands.
 subsection "WAKE QUEUE"
 if [ "$READ_ONLY" -eq 1 ]; then
   QLEN=0
   [ -s "$STATE/.wake-queue" ] && QLEN=$(grep -c . "$STATE/.wake-queue" 2>/dev/null || printf '0')
-  printf 'skipped (read-only session) - %s record(s) stay queued for whichever session holds the fleet lock.\n' "$QLEN"
+  printf 'skipped (read-only session) - %s record(s) stay queued; draining them requires holding the fleet lock.\n' "$QLEN"
   GUARD_OUT=$(FM_GUARD_READ_ONLY=1 "$SCRIPT_DIR/fm-guard.sh" 2>&1)
   [ -n "$GUARD_OUT" ] && printf '%s\n' "$GUARD_OUT"
 else
@@ -460,8 +460,8 @@ fi
 
 # A promise to reply in a public thread must survive compaction and restart.
 # Both predicates stop at inert presence checks when this home has not opted in.
-# Reconciliation prunes registrations and clears legacy X links, so it belongs to
-# the session that holds the fleet lock and never to a read-only one.
+# Reconciliation prunes registrations and clears legacy X links, so it requires
+# holding the fleet lock and never runs in a read-only session.
 if [ "$READ_ONLY" -eq 0 ] && fm_pf_relay_active "$FM_HOME" \
   && { fm_pf_has_registrations "$STATE" || fm_pf_has_events "$STATE"; }; then
   PUBLIC_FOLLOWUP=$("$SCRIPT_DIR/fm-public-followup.sh" pending 2>/dev/null) || PUBLIC_FOLLOWUP=

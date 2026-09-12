@@ -559,6 +559,10 @@ EOF
   [ ! -f "$home/state/.lock" ] || fail "an unidentifiable session recorded itself as the fleet lock holder"
   assert_contains "$out" "Skipping every mutating step" "the unidentified-runtime banner did not explain what was skipped"
   assert_contains "$out" "skipped (read-only session)" "wake-queue section did not report itself skipped"
+  assert_contains "$out" "stay queued; draining them requires holding the fleet lock" \
+    "the wake-queue skip line did not state the rule without asserting a holder"
+  assert_not_contains "$out" "whichever session holds the fleet lock" \
+    "the wake-queue skip line still presupposed that some session holds the lock"
   assert_contains "$out" "MISSING: tasks-axi (install:" "detect-only bootstrap diagnostics did not run"
   assert_not_contains "$out" "SECONDMATE_SYNC" "a mutating sweep ran while the session could not identify itself"
   assert_contains "$out" "FLEET STATE" "fleet-state digest section missing"
