@@ -16,6 +16,37 @@ printf '%s\n' "${FM_STATUS_BAR_TEST_BEAT_EPOCH:-900}"
 SH
 chmod +x "$FAKEBIN/stat"
 
+# The fleet fields fold bin/fm-crew-state.sh, which consults the validation
+# pipeline and costs about a second per task. These cases stand a fixture in for
+# it: one file per task id holding the exact canonical line that reader would
+# print. Nothing here reaches a real crew, a real pane, or the pipeline.
+FLEET_FIX="$TMP_ROOT/fleet"
+mkdir -p "$FLEET_FIX"
+# Suite-wide, so a case that launches the companion loop cannot reach the real
+# reader - or the validation pipeline behind it - through the cached path.
+export FM_FLEET_FIXTURE="$FLEET_FIX"
+export FM_FLEET_STATE_READER="$FAKEBIN/fake-crew-state"
+export FM_FLEET_STATE_NO_CACHE=1
+cat > "$FAKEBIN/fake-crew-state" <<'SH'
+#!/usr/bin/env bash
+[ -f "$FM_FLEET_FIXTURE/$1" ] || exit 1
+cat "$FM_FLEET_FIXTURE/$1"
+SH
+chmod +x "$FAKEBIN/fake-crew-state"
+
+# fleet_task <id> <kind> <canonical state line>: one task record plus the state
+# the canonical reader reports for it.
+fleet_task() {
+  fm_write_meta "$HOME_FIX/state/$1.meta" "kind=$2"
+  printf '%s\n' "$3" > "$FLEET_FIX/$1"
+}
+
+reset_fleet() {
+  rm -f "$HOME_FIX"/state/*.meta "$HOME_FIX"/state/*.status 2>/dev/null || true
+  rm -f "$HOME_FIX"/state/.status-fleet-state* 2>/dev/null || true
+  rm -f "$FLEET_FIX"/* 2>/dev/null || true
+}
+
 strip_ansi() {
   sed $'s/\033\\[[0-9;]*m//g'
 }
@@ -33,6 +64,9 @@ render() {
     FM_HOME="$HOME_FIX" \
     FM_PRIMARY_HARNESS=pi \
     FM_STATUS_BAR_NOW=1000 \
+    FM_FLEET_FIXTURE="$FLEET_FIX" \
+    FM_FLEET_STATE_READER="${FM_FLEET_STATE_READER:-$FAKEBIN/fake-crew-state}" \
+    FM_FLEET_STATE_NO_CACHE="${FM_FLEET_STATE_NO_CACHE:-1}" \
     "$ROOT/bin/fm-status-bar.sh" \
       --adapter pi \
       --model "${1:-Opus}" \
@@ -60,9 +94,14 @@ test_companion_never_leaves_the_row_blank_while_collecting() {
   # Snapshots are numbered from a counter file rather than a timestamp: BSD
   # `date` has no %N, so every probe call inside one second would otherwise
   # write the same name and leave a single collection to stand for all of them.
-  cat > "$FAKEBIN/stat" <<'SH'
+    # The probe fires on the supervision-beacon stat only. Every frame reads that
+  # beacon exactly once, mid-collection, which is the moment this case needs to
+  # observe; snapshotting on EVERY stat would instead count whatever else the
+  # frame happens to stat and make the one-snapshot-per-refresh guard below a
+  # statement about the renderer's internals rather than about its refreshes.
+cat > "$FAKEBIN/stat" <<'SH'
 #!/usr/bin/env bash
-if [ -n "${FM_STATUS_BAR_TEST_SNAPDIR:-}" ]; then
+if [ -n "${FM_STATUS_BAR_TEST_SNAPDIR:-}" ] && case "$*" in *.last-watcher-beat) true ;; *) false ;; esac; then
   seq=0
   [ ! -f "$FM_STATUS_BAR_TEST_SNAPCOUNT" ] || seq=$(<"$FM_STATUS_BAR_TEST_SNAPCOUNT")
   seq=$((seq + 1))
@@ -176,21 +215,84 @@ SH
 
 test_contract_order_and_fleet_projection() {
   local out
-  fm_write_meta "$HOME_FIX/state/working.meta" "kind=crew"
-  printf 'working: implementation\n' > "$HOME_FIX/state/working.status"
-  fm_write_meta "$HOME_FIX/state/paused.meta" "kind=crew"
-  printf 'working: setup\n\npaused: upstream release\n' > "$HOME_FIX/state/paused.status"
-  fm_write_meta "$HOME_FIX/state/attention.meta" "kind=scout"
-  printf 'working: diagnosis\nblocked: missing fixture\n' > "$HOME_FIX/state/attention.status"
+  reset_fleet
+  fleet_task working crew 'state: working · source: pane · harness busy'
+  fleet_task validating crew 'state: working · source: run-step · run running'
+  fleet_task paused crew 'state: paused · source: status-log · upstream release'
+  fleet_task attention scout 'state: blocked · source: status-log · missing fixture'
+  fleet_task finished crew 'state: done · source: run-step · checks passed'
+  fleet_task torndown crew 'state: unknown · source: none · backend target gone'
   fm_write_meta "$HOME_FIX/state/domain.meta" "kind=secondmate"
-  printf 'blocked: must not count\n' > "$HOME_FIX/state/domain.status"
+  printf 'blocked: must not count\n' > "$FLEET_FIX/domain"
   : > "$HOME_FIX/state/.last-watcher-beat"
   : > "$HOME_FIX/state/.afk"
 
   out=$(render Opus high 42 73 1.235 | strip_ansi)
-  [ "$out" = "⚓ Opus·high │ 🧠42% ⚡73% │ 🚢3 ⏸1 ⚠1 │ 👁 100s │ \$1.24 │ 💤AFK" ] \
+  [ "$out" = "⚓ Opus·high │ 🧠42% ⚡73% │ 🚢1 🧪1 ⏸1 ⚠1 📋6 │ 👁 100s │ \$1.24 │ 💤AFK" ] \
     || fail "canonical fields, order, fleet counts, or formatting drifted: $out"
   pass "status bar: canonical field order and fleet projection are stable"
+}
+
+# The defect the captain photographed: twelve task records rendered as twelve
+# running ships. A record whose worker is gone is still a record, and the row
+# has to say so with a number that is not the ship count.
+test_task_records_are_never_counted_as_running_workers() {
+  local out
+  reset_fleet
+  fleet_task live crew 'state: working · source: pane · harness busy'
+  fleet_task gone1 crew 'state: unknown · source: none · backend target gone: w8:pV'
+  fleet_task gone2 crew 'state: unknown · source: none · no current-state source available'
+  fleet_task gone3 scout 'state: done · source: run-step · checks passed'
+  : > "$HOME_FIX/state/.last-watcher-beat"
+
+  out=$(render Opus high -- -- -- | strip_ansi)
+  assert_contains "$out" '🚢1 ' "a fleet of one live worker and three records did not report one ship"
+  assert_contains "$out" '📋4' "the record count does not cover every ordinary task"
+  assert_not_contains "$out" '🚢4' "task records were counted as running workers"
+  pass "status bar: a task record is never counted as a running worker"
+}
+
+# A pipeline run carrying a task and a worker typing at one are both "working"
+# to the canonical reader; only its SOURCE separates them, and the captain asked
+# to see that difference.
+test_validating_work_is_distinguished_from_a_busy_worker() {
+  local out
+  reset_fleet
+  fleet_task typing crew 'state: working · source: pane · harness busy'
+  fleet_task inpipeline crew 'state: working · source: run-step · run ci'
+  fleet_task fixing crew 'state: working · source: run-step · run fixing'
+  fleet_task gate crew 'state: parked · source: run-step · awaiting approval'
+  : > "$HOME_FIX/state/.last-watcher-beat"
+
+  out=$(render Opus high -- -- -- | strip_ansi)
+  assert_contains "$out" '🚢1 🧪2' "validating work was folded into the busy-worker count"
+  assert_contains "$out" '⚠1' "a parked validation gate is not reported as needing attention"
+  pass "status bar: validating work is a separate field from a busy worker"
+}
+
+# Zero live workers is a real fleet state. It must never be what the row shows
+# because the reading has not been taken yet.
+test_unknown_fleet_state_shows_placeholders_and_never_zero() {
+  local out
+  reset_fleet
+  fleet_task one crew 'state: working · source: pane · harness busy'
+  fleet_task two crew 'state: working · source: pane · harness busy'
+  : > "$HOME_FIX/state/.last-watcher-beat"
+
+  # No cached reading and no reader that can answer: every live field is unknown.
+  out=$(FM_FLEET_STATE_NO_CACHE=0 FM_FLEET_STATE_READER="$FAKEBIN/absent-reader" \
+    render Opus high -- -- -- | strip_ansi)
+  assert_contains "$out" '🚢-- 🧪-- ⏸-- ⚠--' \
+    "an unread fleet does not show placeholders for every live field"
+  assert_contains "$out" '📋2' "the record count is not shown while the live fields are unknown"
+  assert_not_contains "$out" '🚢0' "an unread fleet was reported as zero live workers"
+
+  # A genuine zero still renders as zero.
+  reset_fleet
+  fleet_task done1 crew 'state: done · source: run-step · checks passed'
+  out=$(render Opus high -- -- -- | strip_ansi)
+  assert_contains "$out" '🚢0 🧪0 ⏸0 ⚠0 📋1' "a genuinely idle fleet is not reported as zero"
+  pass "status bar: an unread fleet shows placeholders and a genuine zero still shows zero"
 }
 
 test_threshold_colors_and_placeholders() {
@@ -1273,6 +1375,9 @@ SH
 }
 
 test_contract_order_and_fleet_projection
+test_task_records_are_never_counted_as_running_workers
+test_validating_work_is_distinguished_from_a_busy_worker
+test_unknown_fleet_state_shows_placeholders_and_never_zero
 test_threshold_colors_and_placeholders
 test_no_watch_is_bright_red_when_missing_or_stale
 test_claude_payload_adapter_and_primary_guard

@@ -126,7 +126,7 @@ family_for_basename() {
     fm-read.test.sh|fm-chart-room.test.sh|fm-overlay.test.sh|fm-bridge-view.test.sh|\
     fm-order.test.sh|fm-tray.test.sh|\
     fm-herdr-lab.test.sh|fm-instruction-owners.test.sh|fm-lint.test.sh|fm-fork-surface.test.sh|\
-    fm-baby-menu-quota.test.sh|\
+    fm-baby-menu-quota.test.sh|fm-fleet-status-lib.test.sh|\
     fm-install-herdr.test.sh|fm-nm-test-contract.test.sh|fm-no-mistakes-ownership.test.sh|\
     fm-pi-primary-types.test.sh|fm-operational-input.test.sh|\
     fm-send-popup-settle.test.sh|fm-send-settle.test.sh|fm-stow-contract.test.sh|\
@@ -433,6 +433,7 @@ tests/fm-subagent-pretool-check.test.sh
 tests/fm-cursor-adapter.test.sh
 tests/fm-upstream.test.sh
 tests/fm-status-bar.test.sh
+tests/fm-fleet-status-lib.test.sh
 tests/fm-cursor-statusline.test.sh
 tests/fm-capability.test.sh
 tests/fm-overlay.test.sh
