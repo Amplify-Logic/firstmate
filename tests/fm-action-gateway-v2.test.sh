@@ -33,7 +33,13 @@ kv_get() {
 }
 
 reset_gateway() {
-  rm -rf "$TMPDIR/fm-gateway-v2-state"
+  # Two roots, because the broker owns one and the executor owns the other.
+  chmod -R u+rwX "$TMPDIR/fm-gateway-v2-sink" 2>/dev/null || true
+  rm -rf "$TMPDIR/fm-gateway-v2-state" "$TMPDIR/fm-gateway-v2-sink"
+}
+
+sink_root() {
+  $GW inspect-test-paths | python3 -c 'import json,sys; print(json.load(sys.stdin)["sink_root"])'
 }
 
 run_prepare() {
@@ -792,7 +798,7 @@ test_execution_is_leased_and_settled_from_the_sink() {
 }
 
 test_runner_drives_one_effect_and_repeats_do_not_duplicate() {
-  local out digest request_id secret result rc state_root receipts
+  local out digest request_id secret result rc store receipts
   reset_gateway
   out=$(device_request run-job run-idem run-nonce | run_prepare)
   digest=$(kv_get "$out" digest)
@@ -824,8 +830,9 @@ test_runner_drives_one_effect_and_repeats_do_not_duplicate() {
   assert_contains "$result" 'requires a signed approved immutable plan' "a terminal request cannot be executed again"
   stop_server
 
-  state_root=$(dirname "$(gateway_database)")
-  receipts=$(python3 - "$state_root/safe-sink-v2.sqlite3" <<'PY'
+  store=$(sink_root)
+  [ "$store" != "$(dirname "$(gateway_database)")" ] || fail "the receipt store must not live under the broker root"
+  receipts=$(python3 - "$store/safe-sink-v2.sqlite3" <<'PY'
 import sqlite3
 import sys
 
@@ -834,7 +841,7 @@ print(db.execute("SELECT COUNT(*) FROM receipts").fetchone()[0])
 PY
 )
   [ "$receipts" = 1 ] || fail "exactly one receipt must exist after a repeat, got $receipts"
-  [ "$(wc -l < "$state_root/safe-sink-v2.jsonl" | tr -d ' ')" = 1 ] || fail "exactly one record must be appended"
+  [ "$(wc -l < "$store/safe-sink-v2.jsonl" | tr -d ' ')" = 1 ] || fail "exactly one record must be appended"
 
   pass "the runner drives exactly one effect and a repeat produces no second one"
 }
@@ -885,6 +892,226 @@ PY
   pass "an expired execution lease becomes unknown, and neither a late settle nor a retry can leave that state"
 }
 
+test_a_plan_too_large_to_deliver_is_refused_before_it_is_executable() {
+  local out rc body digest request_id secret response database stored
+  reset_gateway
+  # The claim reply carries the stored plan as base64, which expands 4/3, so a
+  # plan past the ceiling could never be delivered inside one bounded protocol
+  # string. It is refused while it is still a request and nothing is approved.
+  body=$(python3 -c 'print("x" * 20000)')
+  set +e
+  out=$(request size-job size-idem size-nonce "\"recipient\":\"a@example.test\",\"subject\":\"s\",\"body\":\"$body\"" | run_prepare 2>&1)
+  rc=$?
+  set -e
+  expect_code 1 "$rc" "oversize plan"
+  assert_contains "$out" 'executable plan ceiling' "the refusal states the limit"
+  database=$(gateway_database)
+  if ! python3 - "$database" <<'NOROW'
+import sqlite3
+import sys
+
+db = sqlite3.connect(sys.argv[1])
+assert db.execute("SELECT COUNT(*) FROM requests").fetchone()[0] == 0, "a refused prepare must store nothing"
+assert db.execute("SELECT COUNT(*) FROM idempotency_tombstones").fetchone()[0] == 0, "a refused prepare must burn no key"
+NOROW
+  then
+    fail "a plan refused at prepare must leave no state behind"
+  fi
+
+  # The claim path checks the same ceiling before it moves any state, so a
+  # stored plan that somehow grew past it leaves the request approved and still
+  # claimable rather than stranded under a lease nobody holds.
+  out=$(device_request size2-job size2-idem size2-nonce | run_prepare)
+  digest=$(kv_get "$out" digest)
+  request_id=$(kv_get "$out" request_id)
+  secret=$(new_secret)
+  $GW enroll-approver --approver-id test-ui --algorithm hmac-sha256-test --key-material "$secret" >/dev/null
+  start_server size
+  approve_request size2-job "$request_id" "$secret"
+  stored="$TMP/stored-plan.jcs"
+  python3 - "$database" "$digest" "$stored" <<'BLOAT'
+import sqlite3
+import sys
+
+database, digest, stored = sys.argv[1:]
+db = sqlite3.connect(database, isolation_level=None)
+row = db.execute("SELECT plan_jcs FROM requests WHERE digest=?", (digest,)).fetchone()
+open(stored, "wb").write(bytes(row[0]))
+db.execute("UPDATE requests SET plan_jcs=? WHERE digest=?", (b'{"pad":"' + b"x" * 30000 + b'"}', digest))
+BLOAT
+  response=$(rpc "$SOCKET_ROOT/execution.sock" "{\"schema\":\"fm.execution.v2\",\"op\":\"claim\",\"capability\":\"$(issue_cap execution size2-job)\",\"request_id\":\"$request_id\",\"idempotency_key\":\"size2-idem\"}")
+  assert_contains "$response" 'exceeds the executable plan ceiling' "an undeliverable plan is refused at claim"
+  out=$($GW status --digest "$digest")
+  assert_contains "$out" 'state=approved' "a refused claim leaves the request approved, not executing"
+
+  python3 - "$database" "$digest" "$stored" <<'RESTORE'
+import sqlite3
+import sys
+
+database, digest, stored = sys.argv[1:]
+db = sqlite3.connect(database, isolation_level=None)
+db.execute("UPDATE requests SET plan_jcs=? WHERE digest=?", (open(stored, "rb").read(), digest))
+RESTORE
+  response=$(rpc "$SOCKET_ROOT/execution.sock" "{\"schema\":\"fm.execution.v2\",\"op\":\"claim\",\"capability\":\"$(issue_cap execution size2-job)\",\"request_id\":\"$request_id\",\"idempotency_key\":\"size2-idem\"}")
+  assert_contains "$response" '"state":"executing"' "the request was left claimable"
+  stop_server
+  pass "a plan too large to hand an executor is refused at prepare and again before any state moves"
+}
+
+test_an_unbound_executor_is_refused_before_it_runs() {
+  local out digest request_id secret result rc marker unbound store
+  reset_gateway
+  out=$(device_request bound-job bound-idem bound-nonce | run_prepare)
+  digest=$(kv_get "$out" digest)
+  request_id=$(kv_get "$out" request_id)
+  secret=$(new_secret)
+  $GW enroll-approver --approver-id test-ui --algorithm hmac-sha256-test --key-material "$secret" >/dev/null
+  start_server bound
+  approve_request bound-job "$request_id" "$secret"
+
+  # A program that would announce itself if it ever ran. The plan binds the
+  # safe sink's exact bytes, so this one must never receive the approved plan.
+  marker="$TMP/unbound-executor-ran"
+  unbound="$TMP/unbound-executor.py"
+  cat > "$unbound" <<UNBOUND
+#!/usr/bin/env python3
+import sys
+open("$marker", "w").write("ran")
+sys.stdin.buffer.read()
+print("{}")
+UNBOUND
+
+  set +e
+  result=$($RUNNER run --socket-root "$SOCKET_ROOT" --capability "$(issue_cap execution bound-job)" --request-id "$request_id" --idempotency-key bound-idem --executor "$unbound" 2>&1)
+  rc=$?
+  set -e
+  expect_code 2 "$rc" "unbound executor refused"
+  assert_contains "$result" 'refused to run an unbound executor' "the executor entry point does not choose the executor"
+  assert_contains "$result" 'not the ones this approved plan binds' "the refusal names the bound-hash mismatch"
+  assert_absent "$marker" "the unbound program must never receive the approved plan"
+  assert_contains "$result" '"broker_state":"failed"' "the broker settles from its own read, which holds nothing"
+  stop_server
+
+  store=$(sink_root)
+  assert_absent "$store/safe-sink-v2.jsonl" "nothing was applied, so the receipt store stays empty"
+  out=$($GW status --digest "$digest")
+  assert_contains "$out" 'state=failed' "a refused executor leaves nothing applied"
+  pass "an executor whose bytes the plan does not bind is refused before it runs anything"
+}
+
+test_an_unreadable_sink_store_settles_unknown() {
+  local out digest request_id secret response lease store
+  [ "$(id -u)" != 0 ] || fail "this suite must not run as root: root can read a mode-0000 file"
+  reset_gateway
+  # First request: a real application, so the store exists and holds a record.
+  out=$(device_request read-job read-idem read-nonce | run_prepare)
+  request_id=$(kv_get "$out" request_id)
+  secret=$(new_secret)
+  $GW enroll-approver --approver-id test-ui --algorithm hmac-sha256-test --key-material "$secret" >/dev/null
+  start_server unreadable
+  approve_request read-job "$request_id" "$secret"
+  $RUNNER run --socket-root "$SOCKET_ROOT" --capability "$(issue_cap execution read-job)" --request-id "$request_id" --idempotency-key read-idem >/dev/null
+
+  # Second request, settled while the store cannot be read at all. An outcome
+  # the broker cannot observe is unknown; it is never guessed from the
+  # executor's own report.
+  out=$(device_request read2-job read2-idem read2-nonce | run_prepare)
+  digest=$(kv_get "$out" digest)
+  request_id=$(kv_get "$out" request_id)
+  approve_request read2-job "$request_id" "$secret"
+  response=$(rpc "$SOCKET_ROOT/execution.sock" "{\"schema\":\"fm.execution.v2\",\"op\":\"claim\",\"capability\":\"$(issue_cap execution read2-job)\",\"request_id\":\"$request_id\",\"idempotency_key\":\"read2-idem\"}")
+  lease=$(json_field "$response" 'value["result"]["lease"]')
+  store=$(sink_root)
+  chmod 0000 "$store/safe-sink-v2.sqlite3"
+  response=$(rpc "$SOCKET_ROOT/execution.sock" "{\"schema\":\"fm.execution.v2\",\"op\":\"settle\",\"capability\":\"$(issue_cap execution read2-job)\",\"request_id\":\"$request_id\",\"lease\":\"$lease\",\"outcome\":\"succeeded\"}")
+  chmod 0640 "$store/safe-sink-v2.sqlite3"
+  assert_contains "$response" '"state":"unknown"' "a store the broker cannot read settles unknown"
+  assert_contains "$response" 'could not be read' "the reason names what the broker could not observe"
+  assert_contains "$response" '"reconciliation_required":true' "unknown requires reconciliation"
+  stop_server
+
+  out=$($GW status --digest "$digest")
+  assert_contains "$out" 'state=unknown' "unknown is durable"
+  assert_contains "$out" 'settlement=unobserved-requires-reconciliation' "unknown is never rendered as failed"
+  pass "a receipt store the broker cannot read settles unknown rather than inventing an outcome"
+}
+
+# The durable record is what a reconciler reads, and the JSONL evidence append
+# is not transactional: an unknown that rolled back with its refusal would leave
+# the evidence file claiming a reconciliation the database never recorded. This
+# reads the database immediately after each refusal, before any later command
+# can run a recovery pass and repair what the socket path failed to write.
+assert_recorded_unknown() {  # <request-id> <path-label>
+  if ! python3 - "$(gateway_database)" "$1" "$2" <<'DURABLE'
+import sqlite3
+import sys
+
+database, request_id, label = sys.argv[1:]
+db = sqlite3.connect(database)
+db.row_factory = sqlite3.Row
+row = db.execute(
+    "SELECT state,reconciliation_required,lease_hash,lease_expires_at FROM requests WHERE request_id=?",
+    (request_id,),
+).fetchone()
+assert row["state"] == "unknown", (label, dict(row))
+assert row["reconciliation_required"] == 1, (label, dict(row))
+assert row["lease_hash"] is None and row["lease_expires_at"] is None, (label, dict(row))
+outcomes = [r["outcome"] for r in db.execute("SELECT outcome FROM executions WHERE request_id=?", (request_id,))]
+assert outcomes == ["unknown"], (label, outcomes)
+events = db.execute(
+    "SELECT COUNT(*) FROM audit_events WHERE event_type='execution-uncertain' AND request_id=?",
+    (request_id,),
+).fetchone()[0]
+assert events == 1, (label, events)
+DURABLE
+  then
+    fail "the $2 path must record unknown durably before it refuses"
+  fi
+}
+
+test_an_expired_lease_is_recorded_before_the_refusal_is_raised() {
+  local out digest request_id second_digest second_id secret response lease second_lease
+  reset_gateway
+  secret=$(new_secret)
+  $GW enroll-approver --approver-id test-ui --algorithm hmac-sha256-test --key-material "$secret" >/dev/null
+  out=$(device_request durable-job durable-idem durable-nonce | run_prepare)
+  digest=$(kv_get "$out" digest)
+  request_id=$(kv_get "$out" request_id)
+  out=$(device_request durable2-job durable2-idem durable2-nonce | run_prepare)
+  second_digest=$(kv_get "$out" digest)
+  second_id=$(kv_get "$out" request_id)
+  start_server durable
+  approve_request durable-job "$request_id" "$secret"
+  approve_request durable2-job "$second_id" "$secret"
+
+  # Each request is claimed, expired the way a dead executor would expire it,
+  # and then driven through one socket path. Nothing that runs a recovery pass
+  # is allowed to intervene before the assertion, so what is asserted is what
+  # the socket path itself wrote.
+  response=$(rpc "$SOCKET_ROOT/execution.sock" "{\"schema\":\"fm.execution.v2\",\"op\":\"claim\",\"capability\":\"$(issue_cap execution durable-job)\",\"request_id\":\"$request_id\",\"idempotency_key\":\"durable-idem\"}")
+  lease=$(json_field "$response" 'value["result"]["lease"]')
+  [ -n "$lease" ] || fail "the first claim must succeed"
+  $GW test-mark-executing --digest "$digest" --lease-seconds 0
+  response=$(rpc "$SOCKET_ROOT/execution.sock" "{\"schema\":\"fm.execution.v2\",\"op\":\"settle\",\"capability\":\"$(issue_cap execution durable-job)\",\"request_id\":\"$request_id\",\"lease\":\"$lease\",\"outcome\":\"succeeded\"}")
+  assert_contains "$response" 'the execution lease expired' "a settle after the lease expired is refused"
+  assert_recorded_unknown "$request_id" settle
+
+  response=$(rpc "$SOCKET_ROOT/execution.sock" "{\"schema\":\"fm.execution.v2\",\"op\":\"claim\",\"capability\":\"$(issue_cap execution durable2-job)\",\"request_id\":\"$second_id\",\"idempotency_key\":\"durable2-idem\"}")
+  second_lease=$(json_field "$response" 'value["result"]["lease"]')
+  [ -n "$second_lease" ] || fail "the second claim must succeed"
+  $GW test-mark-executing --digest "$second_digest" --lease-seconds 0
+  response=$(rpc "$SOCKET_ROOT/execution.sock" "{\"schema\":\"fm.execution.v2\",\"op\":\"claim\",\"capability\":\"$(issue_cap execution durable2-job)\",\"request_id\":\"$second_id\",\"idempotency_key\":\"durable2-idem\"}")
+  assert_contains "$response" 'the previous execution lease expired' "a claim against an expired lease is refused"
+  assert_recorded_unknown "$second_id" claim
+  stop_server
+
+  out=$($GW status --digest "$digest")
+  assert_contains "$out" 'state=unknown' "the settle path's unknown is durable"
+  out=$($GW status --digest "$second_digest")
+  assert_contains "$out" 'state=unknown' "the claim path's unknown is durable"
+  pass "an expired lease is committed as unknown before the refusal is raised, on both the claim and settle paths"
+}
+
 test_executor_swap_after_approval_is_refused() {
   local out digest request_id secret response copied
   reset_gateway
@@ -923,4 +1150,8 @@ test_approval_requires_a_verified_signature
 test_execution_is_leased_and_settled_from_the_sink
 test_runner_drives_one_effect_and_repeats_do_not_duplicate
 test_expired_lease_becomes_unknown_and_never_resurrects
+test_a_plan_too_large_to_deliver_is_refused_before_it_is_executable
+test_an_unbound_executor_is_refused_before_it_runs
+test_an_unreadable_sink_store_settles_unknown
+test_an_expired_lease_is_recorded_before_the_refusal_is_raised
 test_executor_swap_after_approval_is_refused

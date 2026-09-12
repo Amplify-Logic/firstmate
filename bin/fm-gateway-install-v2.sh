@@ -57,6 +57,7 @@ readonly ROOT
 # the script instead of being interpolated into a command.
 readonly STATE_PARENT=/var/db/firstmate
 readonly STATE_ROOT=/var/db/firstmate/gateway
+readonly SINK_ROOT=/var/db/firstmate/sink
 readonly SOCKET_PARENT=/var/run/firstmate
 readonly SOCKET_ROOT=/var/run/firstmate/gateway
 readonly INSTALL_PARENT=/usr/local/libexec
@@ -65,14 +66,15 @@ readonly QUARANTINE_PARENT=/var/db/firstmate
 readonly LAUNCH_DAEMONS=/Library/LaunchDaemons
 readonly BROKER_LABEL=ai.firstmate.gateway-v2
 readonly BROKER_PLIST=/Library/LaunchDaemons/ai.firstmate.gateway-v2.plist
-readonly RUNNER_PLIST=/Library/LaunchDaemons/ai.firstmate.gateway-v2-runner.plist
+readonly EXECUTOR_PLIST=/Library/LaunchDaemons/ai.firstmate.gateway-v2-executor.plist
 readonly BROKER_USER=_firstmate_gateway
-readonly RUNNER_USER=_firstmate_runner
+readonly BROKER_GROUP=_firstmate_gateway
+readonly EXECUTOR_USER=_firstmate_executor
 readonly ROLE_ACCOUNT_HOME=/var/empty
 
 readonly BROKER_PROGRAM=fm-action-gateway-v2.py
 readonly SINK_PROGRAM=fm-action-safe-sink-v2.py
-readonly RUNNER_PROGRAM=fm-action-runner-v2.py
+readonly EXECUTOR_PROGRAM=fm-action-runner-v2.py
 readonly IMPORTER_PROGRAM=fm-action-artifact-import-v2.py
 
 readonly CONFIRM_FLAG=--i-have-read-every-line
@@ -108,6 +110,7 @@ assert_fixed_path() {
 assert_constants() {
   assert_fixed_path STATE_PARENT "$STATE_PARENT" 3
   assert_fixed_path STATE_ROOT "$STATE_ROOT" 4
+  assert_fixed_path SINK_ROOT "$SINK_ROOT" 4
   assert_fixed_path SOCKET_PARENT "$SOCKET_PARENT" 3
   assert_fixed_path SOCKET_ROOT "$SOCKET_ROOT" 4
   assert_fixed_path INSTALL_PARENT "$INSTALL_PARENT" 3
@@ -115,12 +118,14 @@ assert_constants() {
   assert_fixed_path QUARANTINE_PARENT "$QUARANTINE_PARENT" 3
   assert_fixed_path LAUNCH_DAEMONS "$LAUNCH_DAEMONS" 2
   assert_fixed_path BROKER_PLIST "$BROKER_PLIST" 3
-  assert_fixed_path RUNNER_PLIST "$RUNNER_PLIST" 3
+  assert_fixed_path EXECUTOR_PLIST "$EXECUTOR_PLIST" 3
   case "$STATE_ROOT" in "$STATE_PARENT"/?*) ;; *) die "STATE_ROOT is not contained in STATE_PARENT" ;; esac
+  case "$SINK_ROOT" in "$STATE_PARENT"/?*) ;; *) die "SINK_ROOT is not contained in STATE_PARENT" ;; esac
+  [ "$SINK_ROOT" != "$STATE_ROOT" ] || die "SINK_ROOT must not be the broker state root"
   case "$SOCKET_ROOT" in "$SOCKET_PARENT"/?*) ;; *) die "SOCKET_ROOT is not contained in SOCKET_PARENT" ;; esac
   case "$INSTALL_ROOT" in "$INSTALL_PARENT"/?*) ;; *) die "INSTALL_ROOT is not contained in INSTALL_PARENT" ;; esac
   case "$BROKER_PLIST" in "$LAUNCH_DAEMONS"/?*) ;; *) die "BROKER_PLIST is not contained in LAUNCH_DAEMONS" ;; esac
-  case "$RUNNER_PLIST" in "$LAUNCH_DAEMONS"/?*) ;; *) die "RUNNER_PLIST is not contained in LAUNCH_DAEMONS" ;; esac
+  case "$EXECUTOR_PLIST" in "$LAUNCH_DAEMONS"/?*) ;; *) die "EXECUTOR_PLIST is not contained in LAUNCH_DAEMONS" ;; esac
 }
 
 program_digest() {  # <program>
@@ -222,41 +227,53 @@ emit_install_script() {
 
 assert_fixed_path INSTALL_ROOT "$INSTALL_ROOT" 4
 assert_fixed_path STATE_ROOT "$STATE_ROOT" 4
+assert_fixed_path SINK_ROOT "$SINK_ROOT" 4
 assert_fixed_path SOCKET_ROOT "$SOCKET_ROOT" 4
 assert_contained "$INSTALL_ROOT" "$INSTALL_PARENT"
 assert_contained "$STATE_ROOT" "$STATE_PARENT"
+assert_contained "$SINK_ROOT" "$STATE_PARENT"
 assert_contained "$SOCKET_ROOT" "$SOCKET_PARENT"
 
 # 1. Create the two service principals. They are distinct accounts, not one
-#    account with two names: the whole privilege separation rests on the runner
-#    being unable to read the broker's state directory.
-sudo sysadminctl -addUser $BROKER_USER -home $ROLE_ACCOUNT_HOME -shell /usr/bin/false -roleAccount
-sudo sysadminctl -addUser $RUNNER_USER -home $ROLE_ACCOUNT_HOME -shell /usr/bin/false -roleAccount
+#    account with two names: the whole privilege separation rests on the
+#    executor being unable to read the broker's state directory, and on the
+#    broker being unable to write the executor's receipt store. An ordinary
+#    worker is neither account and gets neither.
+sudo sysadminctl -addUser "$BROKER_USER" -home "$ROLE_ACCOUNT_HOME" -shell /usr/bin/false -roleAccount
+sudo sysadminctl -addUser "$EXECUTOR_USER" -home "$ROLE_ACCOUNT_HOME" -shell /usr/bin/false -roleAccount
 
-# 2. Install the programs root-owned and not writable by either service account.
-sudo /usr/bin/install -d -o root -g wheel -m 0755 $INSTALL_ROOT
-sudo /usr/bin/install -o root -g wheel -m 0755 $ROOT/bin/$BROKER_PROGRAM $INSTALL_ROOT/$BROKER_PROGRAM
-sudo /usr/bin/install -o root -g wheel -m 0755 $ROOT/bin/$SINK_PROGRAM $INSTALL_ROOT/$SINK_PROGRAM
-sudo /usr/bin/install -o root -g wheel -m 0755 $ROOT/bin/$RUNNER_PROGRAM $INSTALL_ROOT/$RUNNER_PROGRAM
-sudo /usr/bin/install -o root -g wheel -m 0755 $ROOT/bin/$IMPORTER_PROGRAM $INSTALL_ROOT/$IMPORTER_PROGRAM
+# 2. Create the broker's group. Membership in it is the broker's entire access
+#    to the executor's receipt store: group read, and no write anywhere.
+sudo dseditgroup -o create -r "Firstmate gateway broker" "$BROKER_GROUP"
+sudo dseditgroup -o edit -a "$BROKER_USER" -t user "$BROKER_GROUP"
 
-# 3. Create the state and socket roots. Every ancestor is root-owned; only the
-#    broker account may read the state root, and the runner account may not.
-sudo /usr/bin/install -d -o root -g wheel -m 0755 $STATE_PARENT
-sudo /usr/bin/install -d -o $BROKER_USER -g wheel -m 0700 $STATE_ROOT
-sudo /usr/bin/install -d -o root -g wheel -m 0755 $SOCKET_PARENT
-sudo /usr/bin/install -d -o $BROKER_USER -g wheel -m 0755 $SOCKET_ROOT
+# 3. Install the programs root-owned and not writable by either service account.
+sudo /usr/bin/install -d -o root -g wheel -m 0755 "$INSTALL_ROOT"
+sudo /usr/bin/install -o root -g wheel -m 0755 "$ROOT/bin/$BROKER_PROGRAM" "$INSTALL_ROOT/$BROKER_PROGRAM"
+sudo /usr/bin/install -o root -g wheel -m 0755 "$ROOT/bin/$SINK_PROGRAM" "$INSTALL_ROOT/$SINK_PROGRAM"
+sudo /usr/bin/install -o root -g wheel -m 0755 "$ROOT/bin/$EXECUTOR_PROGRAM" "$INSTALL_ROOT/$EXECUTOR_PROGRAM"
+sudo /usr/bin/install -o root -g wheel -m 0755 "$ROOT/bin/$IMPORTER_PROGRAM" "$INSTALL_ROOT/$IMPORTER_PROGRAM"
 
-# 4. Install the launch definition and start the broker.
-sudo /usr/bin/install -o root -g wheel -m 0644 ./$BROKER_LABEL.plist $BROKER_PLIST
-sudo launchctl bootstrap system $BROKER_PLIST
+# 4. Create the state, receipt, and socket roots. Every ancestor is root-owned.
+#    The broker root is the broker's alone and the executor has no access to it
+#    at all. The receipt store is the executor's; the broker reads it through
+#    group membership and can write nothing in it.
+sudo /usr/bin/install -d -o root -g wheel -m 0755 "$STATE_PARENT"
+sudo /usr/bin/install -d -o "$BROKER_USER" -g wheel -m 0700 "$STATE_ROOT"
+sudo /usr/bin/install -d -o "$EXECUTOR_USER" -g "$BROKER_GROUP" -m 0750 "$SINK_ROOT"
+sudo /usr/bin/install -d -o root -g wheel -m 0755 "$SOCKET_PARENT"
+sudo /usr/bin/install -d -o "$BROKER_USER" -g wheel -m 0755 "$SOCKET_ROOT"
 
-# 5. Enroll the approval signer. This is the step that decides how much an
+# 5. Install the launch definition and start the broker.
+sudo /usr/bin/install -o root -g wheel -m 0644 "./$BROKER_LABEL.plist" "$BROKER_PLIST"
+sudo launchctl bootstrap system "$BROKER_PLIST"
+
+# 6. Enroll the approval signer. This is the step that decides how much an
 #    approval proves, and it is the captain's alone: the key is generated in the
 #    Secure Enclave by the signing UI and never leaves it, so only its public
 #    half is enrolled here. There is no fallback - if this step is skipped, the
 #    gateway refuses every approval rather than accepting a weaker one.
-sudo -u $BROKER_USER $INSTALL_ROOT/$BROKER_PROGRAM enroll-approver \\
+sudo -u "$BROKER_USER" "$INSTALL_ROOT/$BROKER_PROGRAM" enroll-approver \\
   --approver-id captain-ui --algorithm ecdsa-p256-sha256 \\
   --key-material "<base64 DER public key exported by the signing UI>" \\
   --attestation-ref "<path to the Secure Enclave attestation the UI produced>"
@@ -278,16 +295,18 @@ QUARANTINE=$QUARANTINE_PARENT/uninstalled-\$STAMP
 
 assert_fixed_path INSTALL_ROOT "$INSTALL_ROOT" 4
 assert_fixed_path STATE_ROOT "$STATE_ROOT" 4
+assert_fixed_path SINK_ROOT "$SINK_ROOT" 4
 assert_fixed_path SOCKET_ROOT "$SOCKET_ROOT" 4
 assert_fixed_path BROKER_PLIST "$BROKER_PLIST" 3
-assert_fixed_path RUNNER_PLIST "$RUNNER_PLIST" 3
+assert_fixed_path EXECUTOR_PLIST "$EXECUTOR_PLIST" 3
 assert_fixed_path QUARANTINE "\$QUARANTINE" 4
 assert_contained "$INSTALL_ROOT" "$INSTALL_PARENT"
 assert_contained "$STATE_ROOT" "$STATE_PARENT"
+assert_contained "$SINK_ROOT" "$STATE_PARENT"
 assert_contained "$SOCKET_ROOT" "$SOCKET_PARENT"
 assert_contained "\$QUARANTINE" "$QUARANTINE_PARENT"
 assert_contained "$BROKER_PLIST" "$LAUNCH_DAEMONS"
-assert_contained "$RUNNER_PLIST" "$LAUNCH_DAEMONS"
+assert_contained "$EXECUTOR_PLIST" "$LAUNCH_DAEMONS"
 
 # 1. Stop the service before touching anything it holds open.
 sudo launchctl bootout system/$BROKER_LABEL || true
@@ -295,7 +314,7 @@ sudo launchctl bootout system/$BROKER_LABEL || true
 # 2. Remove the two launch definitions. Exact literal file paths, checked for
 #    being real files rather than symlinks, removed one at a time with rm -f.
 #    No wildcard and no recursion appear anywhere in this step.
-for plist in "$BROKER_PLIST" "$RUNNER_PLIST"; do
+for plist in "$BROKER_PLIST" "$EXECUTOR_PLIST"; do
   [ -e "\$plist" ] || continue
   assert_not_symlink "\$plist"
   [ -f "\$plist" ] || { printf 'refusing: %s is not a regular file\\n' "\$plist" >&2; exit 1; }
@@ -303,22 +322,28 @@ for plist in "$BROKER_PLIST" "$RUNNER_PLIST"; do
   sudo rm -f -- "\$plist"
 done
 
-# 3. Quarantine the three directories. mv, never a recursive delete: the state
-#    root holds the audit record and every tombstone, and an uninstall that
-#    destroys the evidence of what the gateway did is worse than one that leaves
-#    a directory behind.
+# 3. Quarantine the four directories. mv, never a recursive delete: the state
+#    root holds the audit record and every tombstone, the receipt store holds
+#    the evidence every settlement was read from, and an uninstall that destroys
+#    either is worse than one that leaves a directory behind. Each target is
+#    checked to be a real directory owned by the account this install gave it
+#    to, so a directory some other owner put there under a name this install
+#    expects is refused rather than moved.
 sudo /usr/bin/install -d -o root -g wheel -m 0700 "\$QUARANTINE"
-for target in "$SOCKET_ROOT" "$INSTALL_ROOT" "$STATE_ROOT"; do
+for entry in "$SOCKET_ROOT|$BROKER_USER" "$INSTALL_ROOT|root" "$STATE_ROOT|$BROKER_USER" "$SINK_ROOT|$EXECUTOR_USER"; do
+  target=\${entry%|*}
+  expected=\${entry##*|}
   [ -e "\$target" ] || continue
   assert_not_symlink "\$target"
   [ -d "\$target" ] || { printf 'refusing: %s is not a directory\\n' "\$target" >&2; exit 1; }
+  assert_owner "\$target" "\$expected"
   sudo mv -- "\$target" "\$QUARANTINE/\$(basename "\$target")"
 done
 
 # 4. Remove the service principals last, so the quarantined state is never
 #    briefly ownerless. Each account is checked to be the role account this
 #    install created before it is deleted.
-for account in $RUNNER_USER $BROKER_USER; do
+for account in "$EXECUTOR_USER" "$BROKER_USER"; do
   home=\$(dscl . -read /Users/"\$account" NFSHomeDirectory 2>/dev/null | awk '{print \$2}') || home=
   [ -n "\$home" ] || continue
   [ "\$home" = "$ROLE_ACCOUNT_HOME" ] || {
@@ -342,16 +367,31 @@ NOTHING BELOW HAS BEEN DONE. This is what installation would do, printed so it
 can be reviewed before anyone runs it.
 
 Principals
-  broker  $BROKER_USER   owns $STATE_ROOT, serves the three sockets
-  runner  $RUNNER_USER   holds one execution capability, cannot read the state root
+  broker    $BROKER_USER   owns $STATE_ROOT, serves the three sockets
+  executor  $EXECUTOR_USER  the execution socket's peer: it holds one per-job
+            execution capability, runs the bound immutable executor code, owns
+            $SINK_ROOT, and cannot read the broker root at all
   The separation is the security property. One account for both would make the
-  runner able to read every capability hash and every approval in the database,
+  executor able to read every capability hash and every approval in the database,
   which is exactly what the execution socket exists to avoid.
+  An ordinary worker is neither of these accounts. Anything that calls prepare
+  never receives the executor identity and never receives write access to the
+  receipt store, so a worker cannot author the evidence its own action is
+  settled from.
+
+Receipt store, and why the broker only reads it
+  $SINK_ROOT is $EXECUTOR_USER:$BROKER_GROUP 0750, and the files in it are 0640.
+  The broker's entire access is group read; it has no write path to that store
+  anywhere in its code, which is what makes a receipt evidence rather than
+  something the broker could have authored. The store is journal_mode=TRUNCATE
+  for the same reason: a WAL reader has to create the -shm wal-index beside the
+  database, and a reader with no write access to that directory is refused
+  outright.
 
 Programs, with the bytes that would be installed
-  $BROKER_PROGRAM    $(program_digest "$BROKER_PROGRAM")
-  $SINK_PROGRAM      $(program_digest "$SINK_PROGRAM")
-  $RUNNER_PROGRAM    $(program_digest "$RUNNER_PROGRAM")
+  $BROKER_PROGRAM          $(program_digest "$BROKER_PROGRAM")
+  $SINK_PROGRAM        $(program_digest "$SINK_PROGRAM")
+  $EXECUTOR_PROGRAM           $(program_digest "$EXECUTOR_PROGRAM")
   $IMPORTER_PROGRAM  $(program_digest "$IMPORTER_PROGRAM")
   The safe sink's digest is bound into every resolved plan. Replacing that file
   after an approval invalidates the approval instead of silently running the new
@@ -359,8 +399,9 @@ Programs, with the bytes that would be installed
 
 Paths, owners, modes
   $INSTALL_ROOT   root:wheel 0755
-  $STATE_ROOT     $BROKER_USER:wheel 0700
-  $SOCKET_ROOT    $BROKER_USER:wheel 0755, each socket 0600
+  $STATE_ROOT      $BROKER_USER:wheel 0700
+  $SINK_ROOT         $EXECUTOR_USER:$BROKER_GROUP 0750, each file 0640
+  $SOCKET_ROOT     $BROKER_USER:wheel 0755, each socket 0600
   $BROKER_PLIST   root:wheel 0644
 
 Install commands, in order
@@ -405,9 +446,10 @@ emit_check() {
     "$INSTALL_ROOT|directory" \
     "$INSTALL_ROOT/$BROKER_PROGRAM|file" \
     "$INSTALL_ROOT/$SINK_PROGRAM|file" \
-    "$INSTALL_ROOT/$RUNNER_PROGRAM|file" \
+    "$INSTALL_ROOT/$EXECUTOR_PROGRAM|file" \
     "$INSTALL_ROOT/$IMPORTER_PROGRAM|file" \
     "$STATE_ROOT|directory" \
+    "$SINK_ROOT|directory" \
     "$SOCKET_ROOT|directory" \
     "$BROKER_PLIST|file"; do
     path=${entry%|*}
@@ -450,7 +492,7 @@ write_artifacts() {  # <dir>
     printf '#!/bin/sh\n'
     printf '# Read-only. Reports what is installed; changes nothing.\n'
     printf 'set -eu\n'
-    printf 'exec %s check\n' "$ROOT/bin/fm-gateway-install-v2.sh"
+    printf 'exec "%s" check\n' "$ROOT/bin/fm-gateway-install-v2.sh"
   } > "$dir/check.sh"
   {
     printf '#!/bin/sh\n'

@@ -17,9 +17,10 @@ TMP=$(fm_test_tmproot fm-gateway-install-v2)
 PRIVILEGED_PATHS=(
   /usr/local/libexec/firstmate
   /var/db/firstmate/gateway
+  /var/db/firstmate/sink
   /var/run/firstmate/gateway
   /Library/LaunchDaemons/ai.firstmate.gateway-v2.plist
-  /Library/LaunchDaemons/ai.firstmate.gateway-v2-runner.plist
+  /Library/LaunchDaemons/ai.firstmate.gateway-v2-executor.plist
 )
 
 assert_nothing_installed() {  # <label>
@@ -34,8 +35,17 @@ test_preview_prints_the_plan_and_installs_nothing() {
   out=$("$INSTALL" preview)
   assert_contains "$out" 'NOTHING BELOW HAS BEEN DONE' "the preview says plainly that it did not act"
   assert_contains "$out" '_firstmate_gateway' "the broker principal is named"
-  assert_contains "$out" '_firstmate_runner' "the runner principal is named"
-  assert_contains "$out" '/var/db/firstmate/gateway' "the state root is named"
+  assert_contains "$out" '_firstmate_executor' "the executor principal is named"
+  assert_contains "$out" '/var/db/firstmate/gateway' "the broker state root is named"
+  # The trust boundary the preview has to state plainly: the broker root is the
+  # broker's alone, the receipt store is the executor's, and the broker's only
+  # access to the evidence it settles from is group read.
+  assert_contains "$out" '-o "_firstmate_executor" -g "_firstmate_gateway" -m 0750 "/var/db/firstmate/sink"' \
+    "the receipt store is executor-owned and broker-group-readable"
+  assert_contains "$out" '-o "_firstmate_gateway" -g wheel -m 0700 "/var/db/firstmate/gateway"' \
+    "the broker root stays broker-only 0700"
+  assert_contains "$out" 'never receives the executor identity' "an ordinary worker is neither principal"
+  assert_not_contains "$out" 'cannot read the state root' "the executor cannot read the broker root, which is the true claim"
   assert_contains "$out" 'ecdsa-p256-sha256' "the production approver algorithm is named"
   assert_contains "$out" 'fm-action-safe-sink-v2.py' "the bound executor is named"
   # The preview has to be honest about what installation does not prove, or it
@@ -108,7 +118,14 @@ test_emitted_artifacts_are_guarded_and_inert() {
     assert_no_grep 'rm -rf' "$dir/$line" "$line must never recursively delete"
     sh -n "$dir/$line" || fail "$line must be valid shell"
   done
-  assert_grep 'assert_owner()' "$dir/uninstall.sh" "uninstall must check ownership before removing anything"
+  # The ownership check has to be applied, not merely defined: every quarantined
+  # directory is checked against the account the installation gave it to.
+  assert_grep 'assert_owner()' "$dir/uninstall.sh" "uninstall must define its own ownership guard"
+  # shellcheck disable=SC2016 # single quotes are deliberate: literal needle strings, not expansions
+  assert_grep 'assert_owner "$plist" root' "$dir/uninstall.sh" "the plists are ownership-checked"
+  # shellcheck disable=SC2016
+  assert_grep 'assert_owner "$target" "$expected"' "$dir/uninstall.sh" "each quarantined directory is ownership-checked"
+  assert_grep '/var/db/firstmate/sink|_firstmate_executor' "$dir/uninstall.sh" "the receipt store is quarantined under its own owner"
 
   # Every path the emitted scripts hand to a command is a literal, so an emptied
   # constant cannot silently become a shared ancestor.
@@ -126,6 +143,31 @@ test_emitted_artifacts_are_guarded_and_inert() {
   done
   assert_nothing_installed artifacts
   pass "the emitted install and uninstall artifacts are inert, self-guarding, and refuse to run unconfirmed"
+}
+
+test_emitted_paths_survive_a_checkout_path_with_a_space() {
+  local home resolved dir program
+  # The emitted install.sh is run with sudo. An unquoted source path under a
+  # directory with a space would expand into extra arguments and /usr/bin/install
+  # would write to a path nobody reviewed.
+  home="$TMP/check out/firstmate"
+  mkdir -p "$home/bin"
+  for program in fm-gateway-install-v2.sh fm-action-gateway-v2.py fm-action-safe-sink-v2.py \
+    fm-action-runner-v2.py fm-action-artifact-import-v2.py; do
+    cp "$ROOT/bin/$program" "$home/bin/$program"
+  done
+  dir="$TMP/spaced-artifacts"
+  # The script resolves its own root with pwd, which on this platform resolves
+  # the temp root's symlink, so the emitted text is checked against that form.
+  resolved=$(cd "$home" && pwd)
+  "$home/bin/fm-gateway-install-v2.sh" artifacts "$dir" >/dev/null
+  sh -n "$dir/install.sh" || fail "install.sh must be valid shell when the checkout path has a space"
+  sh -n "$dir/check.sh" || fail "check.sh must be valid shell when the checkout path has a space"
+  assert_grep "\"$resolved/bin/fm-action-gateway-v2.py\"" "$dir/install.sh" "the install source path is quoted"
+  assert_grep "\"$resolved/bin/fm-action-safe-sink-v2.py\"" "$dir/install.sh" "every install source path is quoted"
+  assert_grep "exec \"$resolved/bin/fm-gateway-install-v2.sh\" check" "$dir/check.sh" "the check path is quoted"
+  assert_nothing_installed spaced-artifacts
+  pass "the emitted artifacts quote every interpolated path, so a checkout under a path with a space stays reviewable"
 }
 
 test_artifacts_refuse_an_occupied_or_unsafe_directory() {
@@ -156,4 +198,5 @@ test_check_reports_absence_honestly
 test_apply_always_refuses
 test_uninstall_preview_never_deletes_a_tree
 test_emitted_artifacts_are_guarded_and_inert
+test_emitted_paths_survive_a_checkout_path_with_a_space
 test_artifacts_refuse_an_occupied_or_unsafe_directory

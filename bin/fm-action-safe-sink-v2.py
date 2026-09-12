@@ -4,8 +4,8 @@
 This is the Step 2.6 executor: the only program bin/fm-action-gateway-v2.py will
 ever claim an execution for, and the only component in the v2 boundary that holds
 an effect. Its effect is deliberately local and inert - one append-only record in
-its own store under the gateway state root - so the whole execution path can be
-proved end to end before any outward capability exists.
+its own store under its own root - so the whole execution path can be proved end
+to end before any outward capability exists.
 
 Three properties matter, and each is enforced here rather than asserted:
 
@@ -22,6 +22,16 @@ Three properties matter, and each is enforced here rather than asserted:
 
 It refuses any plan that claims an outward executor, and any plan whose bound
 executor hash is not this file's exact bytes.
+
+The receipt store belongs to the executor principal, not to the broker. The
+broker's own root stays broker-only and this program never touches it; this
+store lives under its own root, group-readable so the broker can read the
+evidence it settles from and write-protected so the broker can never author it.
+That read is also why the store is deliberately not WAL: a read-only opener
+needs to create the -shm wal-index beside the database, and a reader with no
+write access to this directory is refused outright. TRUNCATE journaling with
+full synchronous writes keeps the same durability and stays readable through
+group read alone.
 
 Usage:
   fm-action-safe-sink-v2.py apply < plan.jcs
@@ -49,7 +59,9 @@ import urllib.parse
 from pathlib import Path
 from typing import Any, Dict, NoReturn, Optional, Sequence, Tuple
 
-PRODUCTION_ROOT = Path("/var/db/firstmate/gateway")
+PRODUCTION_SINK_ROOT = Path("/var/db/firstmate/sink")
+STORE_DIRECTORY_MODE = 0o750
+STORE_FILE_MODE = 0o640
 MAX_PLAN_BYTES = 96 * 1024
 PLAN_SCHEMA = "fm.execution-plan.v2"
 RECORD_SCHEMA = "fm.safe-sink-record.v2"
@@ -72,45 +84,84 @@ def test_mode() -> bool:
     return os.environ.get("FM_ACTION_GATEWAY_TEST") == "1"
 
 
-def state_root() -> Path:
-    """Resolve the same state root the broker resolves.
+def sink_root() -> Path:
+    """Resolve the executor's own receipt store root.
 
-    Deliberately the broker's rule, not a caller-selected path: a sink whose
-    store the caller could move is a sink whose receipts the broker cannot
-    trust. tests/fm-action-safe-sink-v2.test.sh asserts both programs report the
-    same root rather than asserting that the two sources look alike.
+    Derived, never caller-selected: a sink whose store the caller could move is
+    a sink whose receipts the broker cannot trust. It is also deliberately not
+    the broker's state root, which stays broker-only. This root is the
+    executor's, and the broker reaches it through group read and nothing else.
+    tests/fm-action-safe-sink-v2.test.sh asserts the two roots differ by running
+    both programs rather than by reading either one's source.
     """
     if test_mode():
-        return Path(os.environ.get("TMPDIR", "/tmp")) / "fm-gateway-v2-state"
-    return PRODUCTION_ROOT
+        return Path(os.environ.get("TMPDIR", "/tmp")) / "fm-gateway-v2-sink"
+    return PRODUCTION_SINK_ROOT
 
 
 def database_path() -> Path:
-    return state_root() / "safe-sink-v2.sqlite3"
+    return sink_root() / "safe-sink-v2.sqlite3"
 
 
 def journal_path() -> Path:
-    return state_root() / "safe-sink-v2.jsonl"
+    return sink_root() / "safe-sink-v2.jsonl"
+
+
+def store_files() -> Tuple[Path, ...]:
+    """Every file this store can create, including the SQLite sidecars."""
+    database = database_path()
+    return (
+        database,
+        journal_path(),
+        Path(f"{database}-journal"),
+        Path(f"{database}-wal"),
+        Path(f"{database}-shm"),
+    )
+
+
+def harden_store_files() -> None:
+    """Hold every store file at owner write, group read, and nothing wider.
+
+    The group bit is the broker's entire access to this evidence. The absent
+    group-write and other bits are why that access is read authority only.
+    """
+    for path in store_files():
+        with contextlib.suppress(OSError):
+            path.chmod(STORE_FILE_MODE)
 
 
 def own_identity() -> str:
     return sha256_bytes(Path(__file__).resolve().read_bytes())
 
 
-def ensure_private_directory(path: Path) -> None:
+def ensure_store_directory(path: Path) -> None:
+    """Create the store root owner-owned and group-readable, never wider.
+
+    0750 is exactly what lets the broker read this store through group
+    membership while holding no authority to write anything in it.
+    """
     path.mkdir(parents=True, exist_ok=True)
-    path.chmod(0o700)
+    path.chmod(STORE_DIRECTORY_MODE)
     mode = stat.S_IMODE(path.stat().st_mode)
-    if mode != 0o700:
-        fail(f"state directory mode must be 0700, got {mode:04o}")
+    if mode & 0o027:
+        fail(f"store directory must not be group-writable or open to others, got {mode:04o}")
+    if mode & 0o700 != 0o700:
+        fail(f"store directory must be owner-accessible, got {mode:04o}")
 
 
 def connect_database() -> sqlite3.Connection:
-    ensure_private_directory(state_root())
+    ensure_store_directory(sink_root())
     connection = sqlite3.connect(database_path(), timeout=10, isolation_level=None)
     connection.row_factory = sqlite3.Row
-    connection.execute("PRAGMA journal_mode=WAL")
+    # Not WAL. A reader without write access to this directory cannot create the
+    # -shm wal-index, so a WAL store would refuse the broker's read-only open
+    # outright. TRUNCATE keeps full durability with synchronous=FULL and stays
+    # readable through group read alone.
+    connection.execute("PRAGMA journal_mode=TRUNCATE")
     connection.execute("PRAGMA synchronous=FULL")
+    # Before the first journal exists: SQLite gives a rollback journal the
+    # database file's own permissions, so the database has to be correct first.
+    harden_store_files()
     connection.executescript(
         """
         CREATE TABLE IF NOT EXISTS receipts (
@@ -119,12 +170,15 @@ def connect_database() -> sqlite3.Connection:
           request_id TEXT NOT NULL UNIQUE,
           plan_digest TEXT NOT NULL UNIQUE,
           record_digest TEXT NOT NULL UNIQUE,
+          journal_offset INTEGER,
           applied_at INTEGER NOT NULL
         );
         """
     )
-    with contextlib.suppress(OSError):
-        database_path().chmod(0o600)
+    columns = {str(row["name"]) for row in connection.execute("PRAGMA table_info(receipts)")}
+    if "journal_offset" not in columns:
+        connection.execute("ALTER TABLE receipts ADD COLUMN journal_offset INTEGER")
+    harden_store_files()
     return connection
 
 
@@ -176,7 +230,29 @@ def parse_plan(raw: bytes) -> Tuple[Dict[str, Any], str]:
     return plan, sha256_bytes(raw)
 
 
-def readback(idempotency_key: str, record_digest: str) -> Dict[str, Optional[str]]:
+def journal_record_digest(offset: Optional[int]) -> Optional[str]:
+    """Hash the one journal line the receipt points at.
+
+    The offset is recorded with the receipt, so this is a single seek and one
+    line no matter how many records the journal already holds. It reports the
+    digest of the bytes that are actually there rather than re-asserting the
+    digest it was looking for.
+    """
+    if offset is None or offset < 0:
+        return None
+    try:
+        with journal_path().open("rb") as handle:
+            handle.seek(offset)
+            line = handle.readline()
+    except OSError:
+        return None
+    stripped = line.rstrip(b"\n")
+    if not stripped:
+        return None
+    return sha256_bytes(stripped)
+
+
+def readback(idempotency_key: str, record_digest: str, journal_offset: Optional[int]) -> Dict[str, Optional[str]]:
     """Re-read the committed effect instead of reporting the intended one."""
     observed_receipt: Optional[str] = None
     try:
@@ -192,14 +268,7 @@ def readback(idempotency_key: str, record_digest: str) -> Dict[str, Optional[str
             observed_receipt = None
         finally:
             connection.close()
-    observed_journal: Optional[str] = None
-    with contextlib.suppress(OSError):
-        with journal_path().open("rb") as handle:
-            for line in handle:
-                stripped = line.rstrip(b"\n")
-                if stripped and sha256_bytes(stripped) == record_digest:
-                    observed_journal = sha256_bytes(stripped)
-                    break
+    observed_journal = journal_record_digest(journal_offset)
     verified = observed_receipt == record_digest and observed_journal == record_digest
     return {
         "readback_receipt_digest": observed_receipt,
@@ -220,7 +289,7 @@ def apply_plan(raw: bytes) -> Dict[str, Any]:
     try:
         connection.execute("BEGIN IMMEDIATE")
         existing = connection.execute(
-            "SELECT receipt_id,record_digest FROM receipts WHERE idempotency_key=?",
+            "SELECT receipt_id,record_digest,journal_offset FROM receipts WHERE idempotency_key=?",
             (idempotency_key,),
         ).fetchone()
         if existing is not None:
@@ -228,21 +297,24 @@ def apply_plan(raw: bytes) -> Dict[str, Any]:
             outcome = "already-applied"
             receipt_id = str(existing["receipt_id"])
             stored_digest = str(existing["record_digest"])
+            stored_offset = existing["journal_offset"]
         else:
             receipt_id = secrets.token_hex(16)
-            try:
-                connection.execute(
-                    "INSERT INTO receipts(idempotency_key,receipt_id,request_id,plan_digest,record_digest,applied_at) VALUES(?,?,?,?,?,?)",
-                    (idempotency_key, receipt_id, request_id, plan_digest, digest, int(time.time())),
-                )
-            except sqlite3.IntegrityError as exc:
-                connection.execute("ROLLBACK")
-                fail(f"safe sink refused a conflicting identity: {exc}")
             # The journal is written inside the transaction so a crash between
             # the two leaves the receipt uncommitted rather than leaving a
-            # record nothing accounts for.
-            descriptor = os.open(journal_path(), os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
+            # record nothing accounts for. The append offset is recorded with
+            # the receipt so verification never has to rescan the journal.
+            descriptor = os.open(journal_path(), os.O_WRONLY | os.O_APPEND | os.O_CREAT, STORE_FILE_MODE)
             try:
+                stored_offset = os.lseek(descriptor, 0, os.SEEK_END)
+                try:
+                    connection.execute(
+                        "INSERT INTO receipts(idempotency_key,receipt_id,request_id,plan_digest,record_digest,journal_offset,applied_at) VALUES(?,?,?,?,?,?,?)",
+                        (idempotency_key, receipt_id, request_id, plan_digest, digest, stored_offset, int(time.time())),
+                    )
+                except sqlite3.IntegrityError as exc:
+                    connection.execute("ROLLBACK")
+                    fail(f"safe sink refused a conflicting identity: {exc}")
                 os.write(descriptor, encoded + b"\n")
                 os.fsync(descriptor)
             finally:
@@ -258,6 +330,7 @@ def apply_plan(raw: bytes) -> Dict[str, Any]:
         raise
     finally:
         connection.close()
+    harden_store_files()
     result = {
         "schema": RESULT_SCHEMA,
         "outcome": outcome,
@@ -268,7 +341,7 @@ def apply_plan(raw: bytes) -> Dict[str, Any]:
         "record_digest": stored_digest,
         "outward_execution": False,
     }
-    result.update(readback(idempotency_key, stored_digest))
+    result.update(readback(idempotency_key, stored_digest, stored_offset))
     return result
 
 
@@ -312,7 +385,7 @@ def main(argv: Sequence[str]) -> int:
     if args.command == "inspect-paths":
         paths = {
             "schema": "fm.safe-sink-paths.v2",
-            "state_root": str(state_root()),
+            "sink_root": str(sink_root()),
             "database": str(database_path()),
             "journal": str(journal_path()),
             "executor_sha256": own_identity(),

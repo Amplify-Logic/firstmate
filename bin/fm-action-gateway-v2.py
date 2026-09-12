@@ -42,6 +42,7 @@ import binascii
 import contextlib
 import ctypes
 import errno
+import functools
 import hashlib
 import hmac
 import json
@@ -68,12 +69,19 @@ PURPOSE_PREPARE = "prepare"
 PURPOSE_APPROVAL = "approval"
 PURPOSE_EXECUTION = "execution"
 PRODUCTION_ROOT = Path("/var/db/firstmate/gateway")
+PRODUCTION_SINK_ROOT = Path("/var/db/firstmate/sink")
 PRODUCTION_SOCKET_ROOT = Path("/var/run/firstmate/gateway")
 MAX_REQUEST_BYTES = 64 * 1024
 MAX_FRAME_BYTES = 96 * 1024
 MAX_DEPTH = 12
 MAX_ITEMS = 256
 MAX_STRING_BYTES = 32 * 1024
+# The claim reply hands the executor the exact stored plan bytes as base64, and
+# base64 expands by 4/3. A plan past this ceiling could never be delivered
+# inside one bounded string, so it is refused while it is still a request and
+# nothing has been approved, rather than after a claim has already moved it to
+# executing.
+MAX_PLAN_JCS_BYTES = (MAX_STRING_BYTES // 4) * 3
 MAX_ATTACHMENTS = 8
 MAX_ATTACHMENT_BYTES = 256 * 1024
 MAX_MESSAGE_BYTES = 32 * 1024
@@ -697,6 +705,8 @@ def resolve_plan(request: Any, requester: Dict[str, Any], now: int) -> Tuple[Dic
         },
     }
     encoded = canonical_bytes(plan)
+    if len(encoded) > MAX_PLAN_JCS_BYTES:
+        fail(f"resolved plan exceeds the {MAX_PLAN_JCS_BYTES}-byte executable plan ceiling")
     return plan, sha256_bytes(encoded), sha256_bytes(canonical_bytes(req))
 
 
@@ -709,6 +719,21 @@ def state_root() -> Path:
         tmp = Path(os.environ.get("TMPDIR", "/tmp"))
         return tmp / "fm-gateway-v2-state"
     return PRODUCTION_ROOT
+
+
+def sink_root() -> Path:
+    """Where the executor's receipt store lives, which is not the broker's root.
+
+    The broker root is broker-owned and broker-only. The receipt store is the
+    executor's, and this process reaches it through group read alone: it opens
+    that store read-only and has no write path to it anywhere, which is what
+    makes a receipt evidence rather than something the broker could author.
+    bin/fm-action-safe-sink-v2.py resolves the same root by the same rule.
+    """
+    if test_mode():
+        tmp = Path(os.environ.get("TMPDIR", "/tmp"))
+        return tmp / "fm-gateway-v2-sink"
+    return PRODUCTION_SINK_ROOT
 
 
 def socket_root() -> Path:
@@ -938,11 +963,17 @@ def mark_unknown(db: sqlite3.Connection, request_id: str, digest: str, reason: s
     approval or execution through any implemented protocol, because a request
     whose outcome nobody observed is exactly the one that must not be retried
     automatically.
+
+    A request another caller already moved records nothing further: the state is
+    already what this would write, and a second event would claim a transition
+    that did not happen here.
     """
-    db.execute(
+    moved = db.execute(
         "UPDATE requests SET state='unknown', reconciliation_required=1, lease_hash=NULL, lease_expires_at=NULL WHERE request_id=? AND state='executing'",
         (request_id,),
-    )
+    ).rowcount
+    if moved == 0:
+        return
     db.execute(
         "UPDATE executions SET settled_at=?, outcome='unknown' WHERE request_id=? AND settled_at IS NULL",
         (now, request_id),
@@ -963,6 +994,41 @@ def mark_unknown(db: sqlite3.Connection, request_id: str, digest: str, reason: s
         },
         now,
     )
+
+
+class DeferredUnknown(Exception):
+    """An interrupted execution whose `unknown` must outlive the refusal.
+
+    mark_unknown() writes state, clears the lease, settles the attempt, and
+    records an audit row. Raising the refusal from inside the same transaction
+    would roll every one of those back while the JSONL evidence append survived,
+    leaving a file that claims a reconciliation the database never recorded.
+    Raising this instead leaves the reading transaction to roll back untouched,
+    commits the unknown in its own transaction, and only then refuses.
+    """
+
+    def __init__(self, request_id: str, digest: str, reason: str, refusal: str, now: int) -> None:
+        super().__init__(refusal)
+        self.request_id = request_id
+        self.digest = digest
+        self.reason = reason
+        self.refusal = refusal
+        self.now = now
+
+
+def unknown_recorded_before_refusal(handler: Callable[..., Dict[str, Any]]) -> Callable[..., Dict[str, Any]]:
+    """Commit a DeferredUnknown durably, then raise the refusal it carries."""
+
+    @functools.wraps(handler)
+    def wrapper(db: sqlite3.Connection, *args: Any, **kwargs: Any) -> Dict[str, Any]:
+        try:
+            return handler(db, *args, **kwargs)
+        except DeferredUnknown as deferred:
+            with transaction(db):
+                mark_unknown(db, deferred.request_id, deferred.digest, deferred.reason, deferred.now)
+            fail(deferred.refusal)
+
+    return wrapper
 
 
 def recover_interrupted(db: sqlite3.Connection) -> None:
@@ -1455,7 +1521,7 @@ def issue_challenge(db: sqlite3.Connection, request_id: str, ui_id: str, capabil
 
 
 def sink_database_path() -> Path:
-    return state_root() / "safe-sink-v2.sqlite3"
+    return sink_root() / "safe-sink-v2.sqlite3"
 
 
 def observed_sink_record(idempotency_key: str) -> Tuple[str, Optional[str]]:
@@ -1463,20 +1529,23 @@ def observed_sink_record(idempotency_key: str) -> Tuple[str, Optional[str]]:
 
     This is the whole point of the settle path: the broker never learns whether
     an action was applied from the executor's own report. It opens the sink's
-    store read-only and looks, so a runner that claims success it did not
+    store read-only and looks, so an executor that claims success it did not
     achieve settles unknown rather than succeeded.
     """
     path = sink_database_path()
-    if not state_root().is_dir():
-        # No state root at all is an anomaly, not evidence. Everything below it
-        # is unreadable rather than empty.
-        return "sink-unreadable", None
-    if not path.exists():
-        # The sink creates its store on first use, so no store means the sink
-        # has never applied anything - including this request. Reporting that as
-        # unreadable would make the very first execution need reconciliation it
-        # does not need.
+    try:
+        os.stat(path)
+    except FileNotFoundError:
+        # The sink creates its root and its store on first use, so no store
+        # means the sink has never applied anything - including this request.
+        # Reporting that as unreadable would make the very first execution need
+        # reconciliation it does not need.
         return "absent", None
+    except OSError:
+        # A store this process is not permitted to look at is a different fact
+        # from a store that is not there, and settles unknown rather than
+        # failed.
+        return "sink-unreadable", None
     try:
         connection = sqlite3.connect(f"file:{urllib.parse.quote(str(path))}?mode=ro", uri=True, timeout=10)
     except sqlite3.Error:
@@ -1493,6 +1562,7 @@ def observed_sink_record(idempotency_key: str) -> Tuple[str, Optional[str]]:
     return "present", str(row["record_digest"])
 
 
+@unknown_recorded_before_refusal
 def claim_execution(db: sqlite3.Connection, request_id: str, idempotency_key: Any, capability_job_id: str, now: int) -> Dict[str, Any]:
     with transaction(db):
         row = db.execute("SELECT * FROM requests WHERE request_id=?", (request_id,)).fetchone()
@@ -1505,13 +1575,23 @@ def claim_execution(db: sqlite3.Connection, request_id: str, idempotency_key: An
         if row["state"] == "executing":
             if row["lease_expires_at"] is not None and row["lease_expires_at"] > now:
                 fail("execution is already claimed by a live lease")
-            mark_unknown(db, row["request_id"], row["digest"], "execution lease expired without a verified settlement", now)
-            fail("the previous execution lease expired; this request now requires provider reconciliation")
+            raise DeferredUnknown(
+                str(row["request_id"]),
+                str(row["digest"]),
+                "execution lease expired without a verified settlement",
+                "the previous execution lease expired; this request now requires provider reconciliation",
+                now,
+            )
         if row["state"] != "approved":
             fail("execution requires a signed approved immutable plan")
         if row["expires_at"] <= now:
             fail("the approved plan expired before execution was claimed")
-        plan = strict_json(bytes(row["plan_jcs"]), MAX_FRAME_BYTES)
+        stored_plan = bytes(row["plan_jcs"])
+        if len(stored_plan) > MAX_PLAN_JCS_BYTES:
+            # Refused before the state moves, so the request stays approved and
+            # claimable instead of stranding under a lease nobody holds.
+            fail("the approved plan exceeds the executable plan ceiling and cannot be delivered to an executor")
+        plan = strict_json(stored_plan, MAX_FRAME_BYTES)
         current_executor = file_identity(safe_sink_path())
         if current_executor != plan["executor"]["sha256"]:
             fail("the executor program changed after approval; this plan authorizes different bytes")
@@ -1557,13 +1637,14 @@ def claim_execution(db: sqlite3.Connection, request_id: str, idempotency_key: An
         # The exact stored canonical bytes, not a re-serialized copy. The
         # executor hashes the bytes it is handed, so no second canonicalizer has
         # to agree with this one for the settlement check to mean anything.
-        "plan_b64": base64.b64encode(bytes(row["plan_jcs"])).decode("ascii"),
+        "plan_b64": base64.b64encode(stored_plan).decode("ascii"),
         "plan_digest": row["digest"],
         "expected_record_digest": expected,
         "outward_execution": False,
     }
 
 
+@unknown_recorded_before_refusal
 def settle_execution(db: sqlite3.Connection, request_id: str, lease: Any, claimed: Any, capability_job_id: str, now: int) -> Dict[str, Any]:
     if not isinstance(lease, str) or not lease or len(lease) > 256:
         fail("missing execution lease")
@@ -1582,8 +1663,13 @@ def settle_execution(db: sqlite3.Connection, request_id: str, lease: Any, claime
         if row["lease_hash"] != capability_hash(lease):
             fail("settle refused: lease does not match the live execution claim")
         if row["lease_expires_at"] is None or row["lease_expires_at"] <= now:
-            mark_unknown(db, row["request_id"], row["digest"], "settlement arrived after the execution lease expired", now)
-            fail("settle refused: the execution lease expired; this request now requires provider reconciliation")
+            raise DeferredUnknown(
+                str(row["request_id"]),
+                str(row["digest"]),
+                "settlement arrived after the execution lease expired",
+                "settle refused: the execution lease expired; this request now requires provider reconciliation",
+                now,
+            )
         execution = db.execute(
             "SELECT * FROM executions WHERE request_id=? AND attempt=?",
             (request_id, row["attempt"]),
@@ -1949,7 +2035,19 @@ def main(argv: Sequence[str]) -> int:
             emit_key_values(status_action(db, args.digest))
         return 0
     if args.command == "inspect-test-paths":
-        print(jcs({"schema": "fm.gateway-test-paths.v2", "database": str(database_path()), "approval_state": str(database_path()), "audit": str(audit_path())}))
+        print(
+            jcs(
+                {
+                    "schema": "fm.gateway-test-paths.v2",
+                    "database": str(database_path()),
+                    "approval_state": str(database_path()),
+                    "audit": str(audit_path()),
+                    "state_root": str(state_root()),
+                    "sink_root": str(sink_root()),
+                    "sink_database": str(sink_database_path()),
+                }
+            )
+        )
         return 0
     if args.command == "issue-capability":
         with open_database() as db:

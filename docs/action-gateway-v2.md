@@ -1,7 +1,7 @@
 # Action gateway v2
 
 `bin/fm-action-gateway-v2.py` owns the gateway v2 parser, resolved-plan schema, SQLite state model, and the prepare, approval, and execution channel schemas.
-`bin/fm-action-safe-sink-v2.py` is the executor, `bin/fm-action-runner-v2.py` the relay that drives it, `bin/fm-action-artifact-import-v2.py` the quarantine importer, and `bin/fm-gateway-install-v2.sh` the installation lifecycle.
+`bin/fm-action-safe-sink-v2.py` is the executor, `bin/fm-action-runner-v2.py` the execution entry point that runs it, `bin/fm-action-artifact-import-v2.py` the quarantine importer, and `bin/fm-gateway-install-v2.sh` the installation lifecycle.
 The landed `bin/fm-action-gateway.sh` broker is a separate program that stays stubbed: neither script references the other, so v2 adds no delegation path in either direction.
 The landed broker still evolves on its own for reasons unrelated to v2, and `tests/fm-action-gateway.test.sh` owns its behaviour.
 
@@ -33,6 +33,7 @@ The broker resolves and stores one canonical immutable `fm.execution-plan.v2` ob
 The plan contains the exact provider account identity, normalized endpoint and method, integer minor-unit money and currency, expanded recipient list and count, exact message and attachment bytes and hashes, the device payload, redirect policy, resource limits, policy-manifest hash, executor hash and version, request ID, nonce, and broker-selected short expiry.
 Unicode recipient and host forms are retained next to their normalized punycode forms for the later trusted renderer.
 The executor block names `bin/fm-action-safe-sink-v2.py` and binds its exact bytes, so an executor replaced after approval is refused at claim time rather than run under the old consent.
+A resolved plan is also bounded so it can always be delivered: the claim reply carries the exact stored plan bytes as base64, base64 expands by 4/3, and a plan whose canonical form would not fit inside one bounded protocol string is refused at prepare, while it is still a request and nothing has been approved.
 
 ### Device actions
 
@@ -103,7 +104,7 @@ Execution has two operations on the execution socket.
 
 `claim` requires an approved, unexpired request, a matching immutable idempotency key, and a safe sink whose current bytes still match the plan.
 It mints a one-shot lease, records the attempt ordinal, and moves the request to `executing`.
-A second claim against a live lease is refused; a claim against an expired one durably records `unknown` and refuses.
+A second claim against a live lease is refused; a claim against an expired one commits `unknown` in its own transaction and then refuses, so the durable record always outlives the refusal that reports it.
 
 `settle` is where the executor's report stops mattering.
 The broker opens the safe sink's own receipt store read-only and looks for the record that this approved plan deterministically resolves to, and settles from what it finds:
@@ -116,7 +117,7 @@ The broker opens the safe sink's own receipt store read-only and looks for the r
 | The store cannot be read | `unknown`, reconciliation required |
 
 The executor's claimed outcome is recorded in the audit event as `executor_claimed_outcome` and never decides the state.
-A relay that reports success it did not achieve settles `failed` or `unknown`, whichever the store actually supports.
+An executor that reports success it did not achieve settles `failed` or `unknown`, whichever the store actually supports.
 A settle arriving after the lease expired is refused and leaves the recorded `unknown` in place, so a late return can never resurrect a terminal state.
 
 Status reports a `settlement` word alongside the state, because "approved", "queued", "sent" and "applied" are different facts:
@@ -135,20 +136,36 @@ Status reports a `settlement` word alongside the state, because "approved", "que
 
 ## The deterministic safe sink
 
-The safe sink is the only executor the broker will claim for, and its effect is deliberately local and inert: one append-only record in its own store under the gateway state root.
+The safe sink is the only executor the broker will claim for, and its effect is deliberately local and inert: one append-only record in its own store.
 It refuses any plan that claims an outward executor, and any plan whose bound executor hash is not its own exact bytes.
 
 One approved plan resolves to exactly one record, built only from the plan's identity fields, so the broker recomputes the same bytes without asking the sink anything.
 The idempotency key is the receipt store's primary key, so a repeated click, a retry, or a restart reports `already-applied` and changes nothing.
 After committing, the sink re-opens its own store read-only and re-reads the appended line, and reports what it found rather than what it intended.
 
-The sink derives its state root with the broker's rule rather than accepting one from the caller: a sink whose store the caller could relocate is a sink whose receipts the broker cannot use as evidence.
+The sink derives its store root by its own rule rather than accepting one from the caller: a sink whose store the caller could relocate is a sink whose receipts the broker cannot use as evidence.
 
-## The relay
+That store is not under the broker's root. `/var/db/firstmate/gateway` stays broker-owned, `0700`, and broker-only, and the executor has no access to it at all; the receipt store is `/var/db/firstmate/sink`, owned by the executor principal with the broker's group, `0750`, and every file in it `0640`.
+The broker's entire access to the evidence it settles from is group read: it opens that store `?mode=ro` and has no write path to it anywhere, which is what makes a receipt evidence rather than something the broker could have authored.
+A worker never holds either identity - anything that calls prepare is not the executor principal and gets no write access to the receipt store.
+
+The store is deliberately not WAL for the same reason.
+A read-only opener of a WAL database has to create the `-shm` wal-index beside the database file, so a reader with no write access to that directory is refused outright and the broker could never read the evidence at all.
+`journal_mode=TRUNCATE` with `synchronous=FULL` keeps the same durability and stays readable through group read on the files alone.
+
+Verification is bounded rather than a rescan: the journal offset of each appended record is stored with its receipt, so reading an effect back is one seek and one line no matter how many records the journal already holds.
+
+## The execution entry point
 
 `bin/fm-action-runner-v2.py` claims, runs the bound executor, and reports back.
+It is the execution socket's peer, which is the executor principal the capability is already scoped to - not a relay standing between the capability holder and the executor, and not an ordinary worker.
 It holds one per-job execution capability and one short-lived lease, and nothing else - never the approval capability, never an approver key, never the captain secret.
-A relay that dies between running the executor and settling loses its lease, and the request becomes `unknown`.
+
+It does not choose the executor either.
+Before it runs anything it hashes the program it was asked to run and refuses when those bytes are not the executor hash the approved plan binds, so an operator-supplied `--executor` cannot receive approved plan bytes; the broker refuses the claim for the same reason on its own side.
+Nothing ran in that case, and the broker still reads the receipt store before it believes the refusal.
+
+An executor that dies between running the sink and settling loses its lease, and the request becomes `unknown`.
 That is the correct result rather than a gap: nobody observed the outcome, so nobody may assume it.
 
 ## Quarantine artifact importer
@@ -167,7 +184,7 @@ It never installs and never uninstalls: `apply` is present and always refuses, b
 
 Two rules govern every path it names or emits.
 Every privileged path is a literal constant, checked at startup for being absolute, normalized, and deep enough that a truncated or emptied constant cannot resolve to a shared ancestor.
-Uninstall never deletes a directory tree: it moves each directory to a timestamped quarantine after checking the target is not a symlink, is contained in its expected parent, and is owned by the account that installed it.
+Uninstall never deletes a directory tree: it moves each directory to a timestamped quarantine after checking the target is not a symlink, is contained in its expected parent, is a real directory, and is owned by the account the installation gave it to - the broker for its own roots, root for the program directory, and the executor for the receipt store.
 The state root holds the audit record and every tombstone, and an uninstall that destroys the evidence of what the gateway did is worse than one that leaves a directory behind.
 
 The emitted `install.sh` and `uninstall.sh` carry their own copies of those guards, because a person runs them standalone with sudo and cannot rely on the authoring script's checks.
@@ -203,10 +220,11 @@ Neither command is installed as production administration.
 
 ## Evidence boundary
 
-The tests prove parser, plan, transaction, replay, crash recovery, concurrency, protocol separation, peer credential lookup, per-job capability behavior, device-plan resolution, approval signature verification, lease-bounded execution, sink-derived settlement, exactly-once application, and importer refusals, all under an ordinary temporary-root UID.
+The tests prove parser, plan, transaction, replay, crash recovery, concurrency, protocol separation, peer credential lookup, per-job capability behavior, device-plan resolution, approval signature verification, lease-bounded execution, sink-derived settlement, exactly-once application, bound-executor refusal, and importer refusals, all under an ordinary temporary-root UID.
+They also prove the receipt store's generated modes on the directory and on every file it creates, that the broker's read-only connection succeeds against a store whose directory it cannot write and that a write through that connection is refused, and that a store the broker cannot read settles `unknown` with reconciliation required rather than inventing an outcome.
 
 They do not claim distinct installed macOS principals, root-owned ancestors, Secure Enclave enrollment, signed UI identity, root launch definitions, network isolation, or privileged uninstall behavior.
-Every test here runs as one UID, so nothing in this suite is evidence about separated principals.
+Every test here runs as one UID, so nothing in this suite is evidence about separated principals: the permission and journal-mode tests prove those requirements hold on the generated files, and prove nothing about two accounts.
 Those cases remain explicitly assigned to the captain-at-Mac Step 5 proof, and `bin/fm-worker-boundary-regression.sh` is what measures them once an installation exists.
 
 Exactly-once is proved against the safe sink's own store, which is a local SQLite primary key.
