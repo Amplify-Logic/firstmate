@@ -11,6 +11,7 @@
 #   turn/steer        {threadId, expectedTurnId, input}  -> {turnId}
 #   turn/interrupt    {threadId, turnId}                 -> {}
 #   thread/turns/list {threadId, limit, sortDirection}   -> {data[...]}
+#   thread/read       {threadId, includeTurns}           -> {thread{...}}
 #
 # `expectedTurnId` is the part that matters: the protocol itself makes steering a
 # compare-and-swap against the turn the caller believes is running, so a steer
