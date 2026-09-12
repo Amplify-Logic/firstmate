@@ -56,8 +56,17 @@
     what the target currently holds. An implementation that reports a filled
     payload as the target's current state fails here.
   -->
-  <p>Reported state for this page:
-     <span id="reported-state" data-reported="">(none reported)</span></p>
+  <!--
+    Reported telemetry is a MEASUREMENT with an age, and it may be genuinely
+    unavailable - which is a third state, distinct from present-and-empty.
+    It is also encoded differently from the configured settings it describes,
+    so the two must never be decoded by the same rule. A preview that shows a
+    measurement without its timestamp, or that silently renders "unavailable"
+    as a value, fails here.
+  -->
+  <p>Reported measurement for this page:
+     <span id="reported-state" data-reported="" data-reported-at=""
+           data-reported-available="false">(unavailable)</span></p>
 </fieldset>
 
 <fieldset>
@@ -90,13 +99,22 @@
   // Static preset payload. Deliberately not equal to any reported state.
   var PRESET_ONE_DEFAULT = 'preset-one-default-payload';
 
+  function reported() { return document.getElementById('reported-state'); }
+  // Unavailable is a third state, not an empty value. A measurement that is
+  // absent must never be rendered as though it were a reading.
+  function reportedAvailable() {
+    return reported().dataset.reportedAvailable === 'true';
+  }
+
   window.__sent = false;
   window.__sendCount = 0;
   window.__readback = function () {
     return {
       device_id: document.getElementById('device-id').dataset.deviceId,
       command: document.getElementById('command').value,
-      reported_state: document.getElementById('reported-state').dataset.reported,
+      reported_state: reportedAvailable() ? reported().dataset.reported : null,
+      reported_at: reportedAvailable() ? reported().dataset.reportedAt : null,
+      reported_available: reportedAvailable(),
       preset_default: PRESET_ONE_DEFAULT,
       verified: document.getElementById('preview').dataset.verified === 'true',
       sent: window.__sent,
@@ -136,7 +154,10 @@
     preview.dataset.verified = 'true';
     preview.textContent =
       'target: ' + (r.device_id || '(none)') + '\n' +
-      'command: ' + (r.command || '(empty)');
+      'command: ' + (r.command || '(empty)') + '\n' +
+      'measurement: ' + (r.reported_available
+        ? r.reported_state + ' (as of ' + r.reported_at + ')'
+        : 'UNAVAILABLE - not a reading');
   });
 
   document.getElementById('send').addEventListener('click', send);
