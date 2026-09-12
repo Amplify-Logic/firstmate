@@ -1244,6 +1244,13 @@ test_install_and_uninstall_on_a_temp_home() {
   assert_contains "$out" 'fm-channel-intake.sh' 'the rendered agent does not run the gate'
   assert_contains "$out" 'tick' 'the rendered agent does not run the repeat-poll entry point'
 
+  # `install` is the shared launchd writer's macOS-only path, so everywhere else
+  # the inspectable definition above is the whole of this schedule's contract.
+  if [ "$(uname)" != Darwin ]; then
+    pass 'the schedule renders an inspectable per-home launchd definition (install skipped: not macOS)'
+    return 0
+  fi
+
   sched install >/dev/null
   [ "$(find "$agents" -name '*.plist' | wc -l | tr -d ' ')" = 1 ] \
     || fail 'install did not write exactly one agent'
