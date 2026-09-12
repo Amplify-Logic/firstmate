@@ -185,8 +185,10 @@
 #   6  already-performed  that step is done; doing it again is the stale-step bug
 #   7  binding-replaced   the request belongs to a binding that no longer exists
 #   8  duplicate-suppressed  that exact sentence was already presented
-#   9  conflict      an id, hash, or revision disagreed; nothing was written
-#   9  write-failed  the record could not be written at all; nothing was stored
+#   9  conflict      an id, hash, or revision disagreed; nothing was written,
+#                    a record already exists, and repeating the call will not help
+#  10  write-failed  the record could not be written at all; nothing was stored,
+#                    so the work still has to happen or be escalated
 #
 # FM_VOICE_RELAY_DIR overrides the state directory (tests only).
 set -u
@@ -265,15 +267,17 @@ publish_once() {  # <target> ; content on stdin
   return "$status"
 }
 
-# publish_once fails for two different reasons and the operator has to be able
-# to tell them apart: 1 means a racing caller's record stands and this caller's
-# bytes were discarded, 2 means the write never happened at all (a full disk, a
-# read-only state directory, EPERM). Both fail closed; only the second is a
-# reason to go and look at the disk.
+# publish_once fails for two different reasons that demand opposite responses,
+# so they carry different exit codes rather than one shared "something went
+# wrong": 1 means a racing caller's record stands and repeating the call cannot
+# help (9, conflict), 2 means the write never happened at all - a full disk, a
+# read-only state directory, EPERM - so the work still has to happen or be
+# escalated (10, write-failed). Both fail closed; only the second is a reason to
+# go and look at the disk.
 publish_status_or_refuse() {  # <status> <what> <conflict-detail>
   case "$1" in
     0) return 0 ;;
-    2) refuse 9 write-failed "the $2 record could not be written; nothing was recorded" ;;
+    2) refuse 10 write-failed "the $2 record could not be written; nothing was recorded" ;;
     *) refuse 9 conflict "$3" ;;
   esac
 }
@@ -862,7 +866,7 @@ cmd_handoff() {
   # Only a lost race means the authorization already exists. A failed write means
   # no authorization was recorded at all, and reporting that as "already
   # authorized" would suppress the send that still has to happen.
-  [ "$status" = 2 ] && refuse 9 write-failed "the handoff authorization for $topic revision $rev could not be written; nothing was authorized"
+  [ "$status" = 2 ] && refuse 10 write-failed "the handoff authorization for $topic revision $rev could not be written; nothing was authorized"
   when=$(record_field "$file" authorized_utc)
   printf 'already-authorized: %s revision %s was authorized at %s; do not ask again and do not send a second copy\n' "$topic" "$rev" "$when"
 }
@@ -997,7 +1001,7 @@ cmd_accept() {
     printf 'Delivery state: received-by-primary\n'
   } | publish_once "$receipt" || status=$?
   if [ "$status" != 0 ]; then
-    [ "$status" = 2 ] && refuse 9 write-failed "the receipt could not be written at $receipt; nothing was recorded"
+    [ "$status" = 2 ] && refuse 10 write-failed "the receipt could not be written at $receipt; nothing was recorded"
     record_event "$topic" "$rev" conflict "receipt published concurrently"
     refuse 9 conflict "the receipt was published concurrently; the first one stands"
   fi
@@ -1068,7 +1072,7 @@ cmd_present() {
       | publish_once "$(topic_dir "$topic")/claims/present/$hash" || status=$?
     # A failed write is not a duplicate: reporting it as one would silently
     # withhold a sentence that was never actually claimed.
-    [ "$status" = 2 ] && refuse 9 write-failed "the presentation claim for $topic could not be written; nothing was released to the speaker"
+    [ "$status" = 2 ] && refuse 10 write-failed "the presentation claim for $topic could not be written; nothing was released to the speaker"
     [ "$status" = 0 ] || refuse 8 duplicate-suppressed "that exact sentence was already spoken for $topic"
   fi
   record_event "$topic" "$rev" presented "$hash"

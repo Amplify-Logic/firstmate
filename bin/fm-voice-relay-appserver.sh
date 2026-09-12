@@ -79,9 +79,11 @@
 #
 # FM_VOICE_RELAY_PROXY_CMD overrides the proxy command (tests use a fake
 # app-server; production leaves it unset and gets `codex app-server proxy`).
-# FM_VOICE_RELAY_RPC_TIMEOUT (default 20) bounds a live call in seconds. A proxy
-# that accepts the frames and never answers ends as a transport failure at that
-# bound instead of hanging the caller for ever.
+# FM_VOICE_RELAY_RPC_TIMEOUT (default 20) bounds the wait for a live answer in
+# seconds. A proxy that accepts the frames and never answers ends as a transport
+# failure at that bound instead of hanging the caller for ever; one that answers
+# and then stays open is not penalised for staying open, because the bound is on
+# the answer arriving rather than on the proxy exiting.
 #
 # Exit codes: 0 ok, 2 usage, 3 the server refused (including a stale
 # expectedTurnId), 4 required protocol support missing, 5 transport failure.
@@ -106,46 +108,6 @@ rpc_timeout_secs() {
   printf '%s\n' "$secs"
 }
 
-# A wall-clock bound that KEEPS stdin, which is why bin/fm-timeout-lib.sh cannot
-# be used here: that helper detaches stdin from the child on purpose, and the
-# request frames this transport writes are exactly what the child must read.
-# Prefers timeout(1), then gtimeout(1), then a perl fallback that runs the child
-# in its own process group and kills the group on alarm, so a stock macOS box
-# with neither coreutils binary is still bounded. Exits 124 on timeout.
-run_bounded() {  # <secs> <cmd-string> ; request frames on stdin
-  local secs=$1 cmd=$2
-  if command -v timeout >/dev/null 2>&1; then
-    # shellcheck disable=SC2086
-    timeout "$secs" $cmd
-    return $?
-  fi
-  if command -v gtimeout >/dev/null 2>&1; then
-    # shellcheck disable=SC2086
-    gtimeout "$secs" $cmd
-    return $?
-  fi
-  # shellcheck disable=SC2086
-  perl -e '
-    my $seconds = shift;
-    my $pid = fork;
-    die "fork failed\n" unless defined $pid;
-    if (!$pid) {
-      setpgrp(0, 0);
-      exec @ARGV;
-      die "exec failed: $!\n";
-    }
-    local $SIG{ALRM} = sub {
-      kill "TERM", -$pid;
-      select undef, undef, undef, 0.2;
-      kill "KILL", -$pid;
-      exit 124;
-    };
-    alarm $seconds;
-    waitpid $pid, 0;
-    exit($? >> 8);
-  ' "$secs" $cmd
-}
-
 proxy_cmd() {
   if [ -n "${FM_VOICE_RELAY_PROXY_CMD:-}" ]; then
     printf '%s\n' "$FM_VOICE_RELAY_PROXY_CMD"
@@ -157,66 +119,147 @@ proxy_cmd() {
 }
 
 # One request/response exchange over the proxy's stdio. The frames are
-# newline-delimited JSON-RPC 2.0 objects; the response is the first object whose
-# id matches the request, so a notification stream in between is ignored rather
-# than mistaken for an answer.
-rpc_call() {  # <method> <params-json> <timeout-secs>
-  local method=$1 params=$2 secs=$3 cmd out status=0
+# newline-delimited JSON-RPC 2.0 objects, and the answer is the first object
+# whose id matches the request, so a notification stream in between is ignored
+# rather than mistaken for an answer.
+#
+# The read is INCREMENTAL and owns its own bound. Reading to EOF and parsing
+# afterwards looked simpler, but it makes the exchange hostage to when the proxy
+# decides to exit: a server that answers correctly and then keeps running past
+# stdin EOF - which a long-lived app-server is entitled to do - was reported as
+# "no answer" at the bound, with the answer it had already sent discarded.
+# Recognising the matching id as it arrives removes that failure and removes the
+# need for a second copy of the fleet timeout helper: the bound lives here, on
+# the read, rather than around the whole process.
+#
+# Exit: 0 with the result object on stdout, 3 when the server refused (a stale
+# expectedTurnId lands here), 5 for any transport failure. The child is always
+# signalled before returning, so no proxy is left running behind the caller.
+rpc_exchange() {  # <method> <params-json> <timeout-secs> ; prints the id-2 result
+  local method=$1 params=$2 secs=$3 cmd
   cmd=$(proxy_cmd)
-  out=$(
-    {
-      printf '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"clientInfo":{"name":"fm-voice-relay","title":"Firstmate voice relay","version":"1"}}}\n'
-      printf '{"jsonrpc":"2.0","id":2,"method":%s,"params":%s}\n' "$(json_escape "$method")" "$params"
-    } | run_bounded "$secs" "$cmd" 2>/dev/null
-  ) || status=$?
-  if [ "$status" != 0 ]; then
-    [ "$status" = 124 ] && echo "transport failure: no answer within ${secs}s (FM_VOICE_RELAY_RPC_TIMEOUT); the call was abandoned, and whether the server acted on it is unknown" >&2
-    return 5
-  fi
-  printf '%s\n' "$out"
-}
+  FM_RPC_CMD="$cmd" FM_RPC_SECS="$secs" FM_RPC_METHOD="$method" FM_RPC_PARAMS="$params" \
+    python3 - <<'PY'
+import json, os, select, shlex, signal, subprocess, sys, time
 
-rpc_result() {  # <raw-output> ; prints the result object of id 2
-  python3 - "$1" <<'PY'
-import json,sys
-for line in sys.argv[1].splitlines():
-    line=line.strip()
-    if not line:
+cmd = shlex.split(os.environ["FM_RPC_CMD"])
+secs = float(os.environ["FM_RPC_SECS"])
+method = os.environ["FM_RPC_METHOD"]
+params = os.environ["FM_RPC_PARAMS"]
+
+frames = (
+    '{"jsonrpc":"2.0","id":1,"method":"initialize","params":'
+    '{"clientInfo":{"name":"fm-voice-relay","title":"Firstmate voice relay","version":"1"}}}\n'
+    + '{"jsonrpc":"2.0","id":2,"method":%s,"params":%s}\n' % (json.dumps(method), params)
+)
+
+try:
+    proc = subprocess.Popen(
+        cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL, start_new_session=True)
+except OSError as exc:
+    sys.stderr.write("transport failure: could not start the app-server proxy: %s\n" % exc)
+    raise SystemExit(5)
+
+
+def stop():
+    for sig in (signal.SIGTERM, signal.SIGKILL):
+        if proc.poll() is not None:
+            return
+        try:
+            os.killpg(os.getpgid(proc.pid), sig)
+        except OSError:
+            return
+        try:
+            proc.wait(timeout=2)
+            return
+        except subprocess.TimeoutExpired:
+            continue
+
+
+def answer_in(line):
+    try:
+        msg = json.loads(line)
+    except ValueError:
+        return None
+    if not isinstance(msg, dict) or msg.get("id") != 2:
+        return None
+    return msg
+
+
+try:
+    proc.stdin.write(frames.encode())
+    proc.stdin.flush()
+except (BrokenPipeError, OSError):
+    pass
+try:
+    proc.stdin.close()
+except OSError:
+    pass
+
+deadline = time.monotonic() + secs
+fd = proc.stdout.fileno()
+buf = b""
+answer = None
+timed_out = False
+
+while answer is None:
+    remaining = deadline - time.monotonic()
+    if remaining <= 0:
+        timed_out = True
+        break
+    ready = select.select([fd], [], [], remaining)[0]
+    if not ready:
         continue
     try:
-        msg=json.loads(line)
-    except ValueError:
-        continue
-    if msg.get("id") != 2:
-        continue
-    if "error" in msg:
-        err=msg["error"]
-        sys.stderr.write("server refused: %s\n" % json.dumps(err))
-        sys.exit(3)
-    sys.stdout.write(json.dumps(msg.get("result", {})))
-    sys.exit(0)
-sys.stderr.write("no response for the request\n")
-sys.exit(5)
+        chunk = os.read(fd, 65536)
+    except OSError:
+        chunk = b""
+    if not chunk:
+        for line in buf.splitlines():
+            answer = answer_in(line)
+            if answer is not None:
+                break
+        break
+    buf += chunk
+    while b"\n" in buf:
+        line, buf = buf.split(b"\n", 1)
+        answer = answer_in(line)
+        if answer is not None:
+            break
+
+stop()
+
+if answer is None:
+    if timed_out:
+        sys.stderr.write(
+            "transport failure: no answer within %ss (FM_VOICE_RELAY_RPC_TIMEOUT); "
+            "the call was abandoned, and whether the server acted on it is unknown\n"
+            % os.environ["FM_RPC_SECS"])
+    else:
+        sys.stderr.write("transport failure: the proxy closed without answering the request\n")
+    raise SystemExit(5)
+if "error" in answer:
+    sys.stderr.write("server refused: %s\n" % json.dumps(answer["error"]))
+    raise SystemExit(3)
+sys.stdout.write(json.dumps(answer.get("result", {})))
+raise SystemExit(0)
 PY
 }
 
 emit_or_send() {  # <live> <method> <params-json>
-  local live=$1 method=$2 params=$3 raw status secs
+  local live=$1 method=$2 params=$3 status secs
   if [ "$live" != 1 ]; then
     printf 'dry-run: would send over "%s"\n' "$(proxy_cmd)"
     printf '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"clientInfo":{"name":"fm-voice-relay","title":"Firstmate voice relay","version":"1"}}}\n'
     printf '{"jsonrpc":"2.0","id":2,"method":%s,"params":%s}\n' "$(json_escape "$method")" "$params"
     return 0
   fi
-  # Resolved here rather than inside rpc_call: that call is captured in a
+  # Resolved here rather than inside rpc_exchange: that call is captured in a
   # command substitution, and a usage error raised inside it would come back as
   # a transport failure instead of the usage error it is.
   secs=$(rpc_timeout_secs) || exit 2
-  raw=$(rpc_call "$method" "$params" "$secs") || {
-    echo "transport failure: the app-server proxy could not be reached" >&2
-    return 5
-  }
-  rpc_result "$raw"
+  rpc_exchange "$method" "$params" "$secs"
   status=$?
   [ "$status" = 0 ] && printf '\n'
   return "$status"

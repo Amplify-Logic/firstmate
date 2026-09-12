@@ -490,6 +490,36 @@ test_a_refused_gate_always_says_why() {
   pass "fm-voice-relay: every gated command prints the refusal a companion has to speak or log"
 }
 
+# "A record already exists, do not retry" and "nothing was stored, the work
+# still has to happen" fail closed in the same direction but demand opposite
+# responses from the caller, so they must never share an exit code.
+test_a_failed_write_is_not_reported_as_a_settled_conflict() {
+  local out code topics
+  if [ "$(id -u)" = 0 ]; then
+    pass "fm-voice-relay: write-failure coverage skipped for a root test run"
+    return 0
+  fi
+  new_home diskfull >/dev/null
+  bind_home diskfull
+  relay diskfull open write-me --summary "record something" >/dev/null
+
+  out=$(relay diskfull open write-me --summary "again" 2>&1) && code=0 || code=$?
+  expect_code 9 "$code" "a record that already exists must refuse as a conflict"
+  assert_contains "$out" "conflict:" "the conflict verdict word must lead the line"
+
+  topics="$TMP_ROOT/diskfull/state/voice-relay/topics/write-me"
+  chmod 0500 "$topics"
+  out=$(relay diskfull cancel write-me --reason "stop it" 2>&1) && code=0 || code=$?
+  chmod 0700 "$topics"
+  expect_code 10 "$code" "a write that never happened must not share the conflict code"
+  assert_contains "$out" "write-failed:" "the write-failure verdict word must lead the line"
+  assert_contains "$out" "nothing was recorded" "the refusal must say the work still has to happen"
+
+  out=$(relay diskfull evidence write-me)
+  assert_contains "$out" "state: open" "a failed write must leave the topic exactly as it was"
+  pass "fm-voice-relay: a failed write and a settled conflict carry different exit codes"
+}
+
 test_a_request_without_a_binding_is_refused() {
   local out code
   new_home unbound >/dev/null
@@ -519,4 +549,5 @@ test_steer_command_quotes_free_text_and_the_bound_target
 test_a_finished_topic_cannot_be_ended_a_second_time
 test_a_correction_cannot_readopt_a_replaced_binding
 test_a_refused_gate_always_says_why
+test_a_failed_write_is_not_reported_as_a_settled_conflict
 test_a_request_without_a_binding_is_refused

@@ -89,6 +89,43 @@ make_schema() {  # <dir> <methods-json-fragment>
     > "$dir/v2/TurnInterruptParams.json"
 }
 
+# A long-lived app-server is entitled to answer and keep running. Waiting for it
+# to exit before parsing turned a correct answer into a bogus timeout.
+test_a_proxy_that_answers_and_stays_open_is_not_a_timeout() {
+  local lingering out code started elapsed
+  lingering="$TMP_ROOT/lingering-app-server"
+  cat > "$TMP_ROOT/lingering-app-server.py" <<'LINGER'
+import json,sys,time
+for line in sys.stdin:
+    line=line.strip()
+    if not line:
+        continue
+    msg=json.loads(line)
+    if msg.get("method")=="initialize":
+        sys.stdout.write(json.dumps({"jsonrpc":"2.0","id":msg["id"],"result":{"userAgent":"fake"}})+"\n")
+    elif msg.get("method")=="thread/turns/list":
+        sys.stdout.write(json.dumps({"jsonrpc":"2.0","id":msg["id"],
+            "result":{"data":[{"id":"turn-lingering","status":"inProgress"}]}})+"\n")
+    sys.stdout.flush()
+# Answered, and still running: stdin EOF is not a reason for this server to exit.
+time.sleep(120)
+LINGER
+  cat > "$lingering" <<SH
+#!/usr/bin/env bash
+exec python3 "$TMP_ROOT/lingering-app-server.py"
+SH
+  chmod +x "$lingering"
+
+  started=$(date -u +%s)
+  out=$(FM_VOICE_RELAY_PROXY_CMD="$lingering" FM_VOICE_RELAY_RPC_TIMEOUT=20 \
+    "$APPSERVER" active-turn --thread THREAD-1 --live 2>&1) && code=0 || code=$?
+  elapsed=$(( $(date -u +%s) - started ))
+  expect_code 0 "$code" "an answer that arrived must not be discarded because the proxy stayed open"
+  assert_contains "$out" "turn turn-lingering status inProgress" "the answer the server did send must be reported"
+  [ "$elapsed" -lt 15 ] || fail "the answer must be recognised as it arrives, took ${elapsed}s"
+  pass "fm-voice-relay-appserver: an answer is recognised as it arrives, not when the proxy exits"
+}
+
 test_probe_reports_the_installed_steering_contract() {
   local out code
   make_schema "$TMP_ROOT/schema-ok" '"turn/steer","turn/interrupt","thread/turns/list","thread/read"'
@@ -184,7 +221,7 @@ test_a_silent_server_fails_at_the_documented_bound() {
   cat > "$silent" <<'SH'
 #!/usr/bin/env bash
 cat > /dev/null
-sleep 60
+sleep 120
 SH
   chmod +x "$silent"
 
@@ -227,4 +264,5 @@ test_thread_status_tells_the_truth_about_reachability
 test_active_turn_reads_the_current_turn
 test_interrupt_is_sent_as_the_protocol_defines_it
 test_a_silent_server_fails_at_the_documented_bound
+test_a_proxy_that_answers_and_stays_open_is_not_a_timeout
 test_an_unsteerable_thread_names_the_supported_fallback
