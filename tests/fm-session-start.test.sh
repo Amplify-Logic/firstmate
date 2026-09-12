@@ -278,19 +278,22 @@ SH
   chmod +x "$fakebin/herdr"
 }
 
-# run_session_start <home> <root> <path>
+# run_session_start <home> <root> <path> [VAR=VALUE ...]
 # Drop every harness env marker from bin/fm-harness.sh detect_own so the
 # surrounding interactive shell cannot leak past the suite's fake ps harness.
 # Markers today: CLAUDECODE (claude), PI_CODING_AGENT (pi), GROK_AGENT (grok),
-# CURSOR_AGENT (cursor). codex and opencode have no env markers (ancestry only).
-# Without this, a local claude/pi/grok/cursor session fails cases that pin a
-# different fake harness while CI (no ambient markers) still passes.
-# FM_PRIMARY_HARNESS is deliberately NOT dropped: it is the marker a launched
-# primary exports, and the banner cases below pass it to pin a named runtime.
+# CURSOR_AGENT (cursor), and FM_PRIMARY_HARNESS, which bin/fm-primary.sh exports
+# for every primary it launches and which detect_own reads ahead of any ancestry
+# walk. codex and opencode have no env markers (ancestry only).
+# Without this, running the suite from inside a real primary fails every case
+# that pins a different fake harness while CI (no ambient markers) still passes.
+# A case that needs a pinned runtime passes it as a trailing VAR=VALUE argument,
+# which lands after the -u flags and therefore survives the drop.
 run_session_start() {
   local home=$1 root=$2 path=$3
-  env -u CLAUDECODE -u PI_CODING_AGENT -u GROK_AGENT -u CURSOR_AGENT \
-    FM_HOME="$home" FM_ROOT_OVERRIDE="$root" PATH="$path" \
+  shift 3
+  env -u CLAUDECODE -u PI_CODING_AGENT -u GROK_AGENT -u CURSOR_AGENT -u FM_PRIMARY_HARNESS \
+    FM_HOME="$home" FM_ROOT_OVERRIDE="$root" PATH="$path" "$@" \
     "$SESSION_START"
 }
 
@@ -495,9 +498,9 @@ EOF
     "read-only session-start banner hid the unknown outage duration"
   assert_contains "$out" '1 task(s) in flight: sm-x' \
     "read-only session-start banner omitted the in-flight count or task identity"
-  assert_contains "$out" "queued wakes pending - left untouched for the session holding the fleet lock" "read-only guard did not leave queued wakes to the lock holder"
+  assert_contains "$out" "queued wakes pending - this read-only session must leave them untouched; draining requires holding the fleet lock" "read-only guard did not leave queued wakes untouched without inventing a holder"
   assert_contains "$out" "TANGLE: primary checkout on feature branch 'fm/read-only-tangle'" "read-only bootstrap did not surface the tangle diagnostic"
-  assert_contains "$out" "read-only session must leave restore work" "read-only tangle diagnostic did not explain restore ownership"
+  assert_contains "$out" "this read-only session must not restore it; restoring requires holding the fleet lock" "read-only tangle diagnostic did not explain restore ownership"
   assert_contains "$out" "Stay read-only: do not arm" "read-only next step did not block direct watcher repair"
   assert_not_contains "$out" "drain them with bin/fm-wake-drain.sh" "read-only guard printed a mutating drain instruction"
   assert_not_contains "$out" "After draining queued wakes" "read-only guard printed a drain-then-rearm instruction"
@@ -539,7 +542,7 @@ EOF
 
   # No state/.lock at all: nothing holds this home, and nothing may claim one.
   status=0
-  out=$(FM_PRIMARY_HARNESS=cursor run_session_start "$home" "$root" "$fakebin:$BASE_PATH") || status=$?
+  out=$(run_session_start "$home" "$root" "$fakebin:$BASE_PATH" FM_PRIMARY_HARNESS=cursor) || status=$?
 
   expect_code 0 "$status" "fm-session-start.sh must exit 0 when the session cannot identify itself"
   assert_contains "$out" "READ-ONLY SESSION - THIS SESSION COULD NOT IDENTIFY ITS OWN RUNTIME" \
@@ -603,7 +606,7 @@ EOF
   entry=$(make_stubbed_lock_tree "$TMP_ROOT/other-lock-failure-tree" 9)
 
   status=0
-  out=$(env -u CLAUDECODE -u PI_CODING_AGENT -u GROK_AGENT -u CURSOR_AGENT \
+  out=$(env -u CLAUDECODE -u PI_CODING_AGENT -u GROK_AGENT -u CURSOR_AGENT -u FM_PRIMARY_HARNESS \
     FM_HOME="$home" FM_ROOT_OVERRIDE="$root" PATH="$fakebin:$BASE_PATH" "$entry") || status=$?
 
   expect_code 0 "$status" "fm-session-start.sh must exit 0 on any lock failure"
