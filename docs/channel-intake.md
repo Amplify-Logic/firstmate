@@ -94,10 +94,13 @@ Three destinations, and they are not interchangeable.
 
 | Class | Destination | Constraint |
 |---|---|---|
-| `urgent`, `outage`, `deadline` | one grouped private direct message, plus the daily to-do list | rate-limited, capped per local day, quiet hours respected |
+| `urgent`, `outage`, `deadline` | one grouped private direct message, plus the daily to-do list | rate-limited, capped per local day, deferred by quiet hours except `outage` |
 | `routine` | the brief only | never a ping |
 | `obligation` | the daily to-do list | not the Action Deck |
 | `automation-candidate` | a proposal in the brief | never an executable card |
+
+Quiet hours defer, they do not drop: a deferred alert renders as soon as the window ends.
+`outage` is the single class that still goes out inside quiet hours, because silencing a live service outage until morning would not preserve real severity.
 
 The Action Deck is for automations the captain fires directly, with preview, exact target, the existing per-action approval, and post-execution evidence.
 It is not a task inbox.
