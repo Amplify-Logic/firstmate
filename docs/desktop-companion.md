@@ -143,12 +143,13 @@ Run `probe` first: it generates the schema from the installed binary and reports
 
 Schema support is not reachability, and the difference decides whether any of this is real on a given machine.
 A steer only moves the captain's conversation if it reaches the server that owns that thread: `codex app-server proxy` attaches to an existing control socket and fails when there is none, while a freshly started stdio server can read thread history but reports the desktop thread as not loaded and therefore does not own its live turn.
-Run `thread-status --thread <id> --live` before relying on steering; a `steerable: no` answer means history only.
+Run `thread-status --thread <id> --live` before relying on steering: it reads the thread status as the tagged union the protocol actually defines, and only `active` - a turn running right now - answers `steerable`.
+`idle` means this server holds the thread but has no running turn to steer, `notLoaded` means history only, `systemError` means the server reports the thread broken, and a shape this build does not recognise answers `steerable: unknown`; every one of those is treated as not steerable.
 Until a steer is measured end to end on a real pair of sessions, treat queue lag as unimproved: a protocol that defines steering is not a demonstration that a correction arrived sooner.
 
 ### The supported fallback when steering is unavailable
 
-When `thread-status` answers `steerable: no`, or the steer is refused because the turn already ended, this is the sequence to use instead. It is the only supported one; there is no daemon, wrapper, or control automation behind it.
+When `thread-status` answers anything other than `steerable` - `no` for any reason, or `unknown` - or the steer is refused because the turn already ended, this is the sequence to use instead. It is the only supported one; there is no daemon, wrapper, or control automation behind it.
 
 1. Revise the shared request record first: `fm-voice-relay.sh revise <topic> --summary '<the correction>'`. The correction now *is* the current revision of that request, so everything older is superseded from that moment.
 2. Queue that correction once through `codex queue`. Once - a second copy is a second job, not a faster one.

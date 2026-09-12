@@ -35,9 +35,11 @@
 #     not own the live turn, so a steer aimed through it proves nothing about
 #     reaching the companion.
 # `thread-status` exists to make that distinction visible BEFORE anyone relies
-# on it: it reports whether the server answering us actually has the thread
-# loaded. "The schema supports turn/steer" and "this server can steer that
-# conversation" are two different claims, and only the second one helps.
+# on it: it reports whether the server answering us has a turn running on that
+# thread, and treats a thread it merely holds idle, cannot load, or reports in a
+# status this build does not recognise as not steerable. "The schema supports
+# turn/steer" and "this server can steer that conversation" are two different
+# claims, and only the second one helps.
 #
 # SAFETY: every command is a DRY RUN unless --live is passed. A dry run prints
 # the exact JSON-RPC frames it would write and touches no daemon, no thread, and
@@ -57,9 +59,13 @@
 #
 #   fm-voice-relay-appserver.sh thread-status --thread <id> [--live]
 #         [--sock <path>]
-#       Read the thread and report whether the answering server has it loaded,
-#       plus how many turns it can see. A not-loaded answer means this server
-#       can read history but cannot steer that live conversation. Read-only.
+#       Read the thread and report whether the answering server has a turn to
+#       steer, plus how many turns it can see. Status is a tagged union and only
+#       "active" answers steerable: "idle" means the server holds the thread but
+#       no turn is running, "notLoaded" means it can read history but does not
+#       own the live conversation, "systemError" means it reports the thread
+#       broken, and an unrecognised shape answers "steerable: unknown". Every
+#       answer but active is treated as not steerable. Read-only.
 #
 #   fm-voice-relay-appserver.sh active-turn --thread <id> [--live]
 #       Ask for the most recent turn of that thread and print
