@@ -77,6 +77,7 @@ config/wedge-alarm  optional supervision active-alert directives for away-mode i
 config/primary-handoff  optional quota- and context-aware primary orchestrator rotation; LOCAL, gitignored; absent or enabled:false leaves primary launch unchanged; see docs/primary-handoff.md
 config/primary-effort  optional Claude primary launch effort for claude-fable and claude-opus; LOCAL, gitignored; one of low, medium, high, xhigh, max; absent = xhigh; read only by bin/fm-primary.sh at launch; not inherited by secondmate homes; see docs/configuration.md
 config/astra-effort  optional Astra primary launch effort; LOCAL, gitignored; one of low, medium, high, xhigh; absent = xhigh; read only by bin/fm-primary.sh at launch; not inherited by secondmate homes; see docs/configuration.md
+config/astra-context config/astra-compact-at  optional Astra primary context window and compaction point; LOCAL, gitignored; absent = Codex's own catalog default; a window above the installed catalog's max_context_window refuses; read only by bin/fm-primary.sh at launch; not inherited by secondmate homes; see docs/configuration.md
 config/bridge-links  optional LOCAL, gitignored bridge-page pinned links; see docs/configuration.md
 config/x-mode.env    generated X-mode watcher cadence; LOCAL, gitignored; source before arming watcher when present
 data/                personal fleet records; LOCAL, gitignored as a whole

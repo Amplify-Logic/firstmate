@@ -8,7 +8,7 @@ This file is the single owner of the Firstmate primary status-bar contract.
 After ANSI styling is removed, every renderer uses this field order:
 
 ```text
-⚓ <model>·<effort> [<account-role>] │ 🧠<context-used> ⚡<provider-quota-used> │ 🚢<active> ⏸<paused> ⚠<attention> │ 👁 <supervision> │ $<session-cost> │ 💤<afk>
+⚓ <model>·<effort> [<account-role>] │ 🧠<context-used> ⚡<provider-quota-used> │ 🚢<working> 🧪<validating> ⏸<paused> ⚠<attention> 📋<records> │ 👁 <supervision> │ $<session-cost> │ 💤<afk>
 ```
 
 The separator is one space, a dim `│`, and one space.
@@ -21,12 +21,41 @@ Width-constrained surfaces clip or truncate the canonical line without wrapping 
 | `[account-role]` | A compact role word for the vendor account this primary is running on, attached to the model identity rather than forming its own group. | Omitted entirely when the account is unknown. |
 | `🧠 context` | The integer percentage of the model context window already used. | `--` when the orchestrator does not expose current context use. |
 | `⚡ quota` | The integer percentage of the provider's binding quota window already used, immediately followed by a dim token naming the window or windows that bind it when the adapter knows them. | `--` when the provider or orchestrator does not expose quota, or exposes a figure whose windows cannot all be named. |
-| `🚢 active` | Ordinary task records currently owned by this Firstmate home, excluding persistent second mates. | `0` when no ordinary tasks exist. |
-| `⏸ paused` | Active tasks whose latest non-empty event declares a bounded external wait. | `0` when none are paused. |
-| `⚠ attention` | Active tasks whose latest non-empty event requires action because it is a decision, blocker, or failure. | `0` when none need attention. |
+| `🚢 working` | Tasks a live worker is busy on right now. | `--` while the fleet reading is unknown. |
+| `🧪 validating` | Tasks the validation pipeline is carrying. They are progressing, but no worker is typing at them. | `--` while the fleet reading is unknown. |
+| `⏸ paused` | Tasks in a declared bounded external wait. | `--` while the fleet reading is unknown. |
+| `⚠ attention` | Tasks that need Firstmate to act: a decision, a blocker, or a failure. | `--` while the fleet reading is unknown. |
+| `📋 records` | Ordinary task records in this home, excluding persistent second mates. Always exact, and deliberately not a claim about running workers. | `0` when no ordinary tasks exist. |
 | `👁 supervision` | Age in seconds of `state/.last-watcher-beat`. | Bright-red `NO-WATCH --` when the beacon is missing or unreadable. |
 | `$ cost` | Cumulative cost in US dollars for the current orchestrator session, rounded to two decimals. | `$--` when the orchestrator does not expose cost. |
 | `💤 AFK` | Whether the Firstmate home is in away mode. | Dim `💤--` when away mode is off. |
+
+## Fleet fields
+
+A task record outlives its worker, and `AGENTS.md` section 8 defines a status line as a wake EVENT rather than current state.
+Counting `state/*.meta` files as running workers, and folding each status log's last line into paused and attention, therefore reported records as live work in both directions at once: it overstated how much was running and understated how much needed attention.
+
+The four live fields come from `bin/fm-crew-state.sh`, the canonical current-state reader, folded by `bin/fm-fleet-status-lib.sh`.
+That library selects no run and re-implements no attribution; run selection stays with the canonical reader.
+The distinction between `🚢` and `🧪` is the reader's SOURCE, not its state word: `working · run-step` is the pipeline carrying a task, and `working · pane` is a worker busy on one.
+`⚠` covers `parked`, `blocked`, and `failed`, which are the states that need Firstmate rather than time.
+
+The four live fields are a single reading and share a single fate.
+A reading that is missing, incomplete, past its maximum age, malformed, or taken for a different set of tasks renders `--` in all four rather than a number in any.
+They are never reported as zero to stand in for "not read yet", because an idle fleet is a real state the captain has to be able to act on.
+`📋` is independent of all that: it counts records directly, so it stays exact even while the live fields are unknown.
+
+A canonical read consults the validation pipeline and costs about a second per task, which is three orders of magnitude more than the renderer's one-second frame.
+So the fold runs out of band: a frame reads the cache and starts at most one detached refresh, under a claim that a second frame cannot take and that a refresher which died without writing releases on its own.
+A frame never calls the canonical reader itself.
+`bin/fm-fleet-status-lib.sh`'s header owns the exact cache lifetimes and their environment seams, and `bin/fm-status-cache-lib.sh` owns the cache and freshness mechanics it shares with the Codex metrics supply.
+
+### The context sample and the handoff axis are separate decisions
+
+`state/.primary-context` is the primary-handoff supervisor's CONTEXT axis: a home with that axis enabled rotates its live primary once the sample crosses its threshold.
+The native Claude adapter has always fed it.
+The Codex companion deliberately does NOT, even though it now reads real context.
+Displaying a figure and using it to rotate a live primary are separate decisions, and only the first one is in this renderer's scope; a home that wants Codex-driven rotation needs a task that owns the handoff reader and its freshness semantics.
 
 The window token is dim and is a short length word such as `5h`, `wk`, or `24h`.
 It is part of the metric rather than decoration: the same percentage means something different
@@ -397,6 +426,9 @@ Editing `~/.cursor` by hand is still out of scope, and no other file under it is
 
 ## Verification record
 
+Rows captured before 2026-09-12 show the fleet group as `🚢<active> ⏸<paused> ⚠<attention>`.
+That was the field shape on the day each of those runs was observed; the current shape is the one in the canonical line above, and those older captures are kept as the evidence they were rather than rewritten.
+
 The adapter contract was checked on 2026-07-21 with Claude Code's project status-line payload shape, Kimi Code 0.27.0, Pi 0.80.10, Cursor CLI 2026.07.17-3e2a980, and tmux 3.6a.
 The installed Pi documentation and example at `examples/extensions/custom-footer.ts` show `ctx.ui.setFooter()`, `render(width)`, and `truncateToWidth()`.
 The installed Kimi help and public 0.27.0 plugin documentation expose lifecycle hooks but no footer renderer.
@@ -550,3 +582,32 @@ Observed output:
 `tests/fm-cursor-statusline.test.sh` passed the installer's single-key install, exact uninstall restore, foreign-status-line refusal in both directions, cross-checkout removal, invalid-config refusal, and credentials-untouched cases.
 `tests/fm-pi-primary-types.test.sh` reported an honest skip because the host TypeScript 4.9.5 cannot parse Pi 0.80.10's declarations, while the real Pi TUI loaded and ran the TypeScript extension.
 `bin/fm-lint.sh` passed with the repository-pinned ShellCheck 0.11.0.
+
+### Truthful fleet fields, 2026-09-12
+
+Measured against the captain's own fleet on herdr 0.7.4, reading copies of `state/*.meta` and `state/*.status` so the live home was never written to.
+Thirteen ordinary task records; `bin/fm-crew-state.sh` read individually for each one.
+
+The old rule and the new one, folded over the identical data:
+
+```text
+old:  🚢13 ⏸3 ⚠0
+new:  🚢2 🧪1 ⏸2 ⚠5 📋13
+```
+
+Two workers were genuinely busy, one task was in the pipeline, two were in a declared wait, four runs had failed and one was parked at a review gate awaiting a decision.
+The old rule was wrong in both directions at once: it reported thirteen running workers where there were two, and reported that nothing needed attention while five tasks did.
+
+The complete row, rendered by `bin/fm-status-bar.sh` from that live data with the Codex supply bound to the captain's actual primary pane:
+
+```text
+⚓ gpt-6-astra·high │ 🧠82% ⚡9%wk │ 🚢2 🧪1 ⏸2 ⚠5 📋13 │ 👁 NO-WATCH 355s │ $-- │ 💤--
+```
+
+The `NO-WATCH` reading is an artifact of the copied beacon file, which does not advance; the live beacon was current throughout.
+
+Pointed at the companion pane instead of the primary, the Codex supply returned `--` for context rather than a number from another session, which is the no-borrowed-sibling rule doing its job on live data.
+
+`bin/fm-status-bar.sh` traps `TERM` with a handler that restores the terminal and does not exit, so its refresh loop survives a `timeout(1)` bound and every scoped signal short of `KILL`.
+Cleaning up a probe renderer therefore means enumerating the probe's own process tree by pid and asserting the live companion's pid is not in it.
+It must never mean matching on the command line: the captain's live companion runs a byte-identical one, which is how an earlier probe killed the captain's own status row.
