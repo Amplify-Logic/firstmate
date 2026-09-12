@@ -313,6 +313,25 @@ When the file is present, its first line must trim to exactly one of `low`, `med
 Any other content, including an empty token, refuses rather than falling back.
 The file is not inherited by secondmate homes.
 
+## Primary Astra context window (config/astra-context, config/astra-compact-at)
+
+`config/astra-context` is an optional local, gitignored one-token file that selects the context window for the `astra` primary profile.
+`bin/fm-primary.sh` reads it only at launch.
+When the file is absent nothing changes: no override is passed and Codex uses its own catalog default.
+When the file is present, its first line must trim to either `max` or a positive integer.
+`max` resolves to the installed Codex model catalog's own `max_context_window` for `gpt-6-astra`, read from `$CODEX_HOME/models_cache.json` at launch.
+An explicit integer is honoured only up to that same ceiling; a larger request refuses rather than being clamped or passed through, because both would leave the launcher asserting a window the provider never granted.
+An unreadable or malformed catalog refuses rather than supplying a remembered number.
+
+The provider's published API maximum for a model and the window this subscription CLI will actually open are different quantities, and only the second one is ever used here.
+
+`config/astra-compact-at` is an optional local, gitignored one-token file holding a positive integer, the token count at which Codex compacts the thread.
+It is never derived: how much of a window to spend before summarising is an operational choice, and the catalog prescribes none.
+It must be strictly below the selected window, and it refuses if `config/astra-context` selects no window.
+
+Neither file is inherited by secondmate homes.
+A raised window takes effect on the next launch, and the first `token_count` event in the new session reports the `model_context_window` that was actually granted, which is where to verify it.
+
 ## Bridge pinned links (config/bridge-links)
 
 `config/bridge-links` is an optional LOCAL, gitignored file containing one pinned bridge-page link per line as `<label><TAB><https-url>`.
