@@ -94,14 +94,31 @@ fm_status_cache_write() {  # <cache-file> <payload>
 # for <lock>, which it claims for <warm-ttl> seconds. Concurrent renderers, and
 # the ticks that follow a refresh that died without writing, are refused, so a
 # one-second loop can never pile up detached readers.
+#
+# The claim records the epoch its holder claimed AT, rather than reading the
+# lock's mtime: the caller's clock is its own (a renderer may be rendering a
+# stamped frame), so a claim taken a moment ago can carry an mtime slightly
+# ahead of the next caller's <now>. Under the reading rule - which fails toward
+# "not fresh", and so calls a future stamp stale - that freshly taken claim
+# looked expired and a second refresher started over the same fleet. A claim is
+# the opposite case from a reading: only a stamp that is readably OLDER than the
+# window releases it, and a stamp ahead of <now> is a claim someone just took.
 fm_status_claim_refresh() {  # <lock-file> <now> <warm-ttl>
-  local lock=$1 now=$2 warm=$3 modified
+  local lock=$1 now=$2 warm=$3 stamp
+  case "$now" in
+    ''|*[!0-9]*) return 1 ;;
+  esac
   if [ -f "$lock" ]; then
-    modified=$(fm_status_file_mtime "$lock") || modified=
-    if [ -n "$modified" ] && fm_status_age_within "$now" "$modified" "$warm"; then
+    stamp=$(head -n 1 "$lock" 2>/dev/null | tr -d '[:space:]')
+    case "$stamp" in
+      ''|*[!0-9]*) stamp=$(fm_status_file_mtime "$lock") || stamp= ;;
+    esac
+    # No readable age at all leaves the claim reclaimable, so an unreadable lock
+    # can never wedge the field it paces at unknown.
+    if [ -n "$stamp" ] && [ "$((now - stamp))" -lt "$warm" ]; then
       return 1
     fi
   fi
-  : > "$lock" 2>/dev/null || return 1
+  printf '%s\n' "$now" > "$lock" 2>/dev/null || return 1
   return 0
 }
