@@ -79,6 +79,10 @@
 _FM_CODEX_LIB_DIR=$(CDPATH='' cd -P -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)
 # shellcheck source=bin/fm-status-cache-lib.sh
 . "$_FM_CODEX_LIB_DIR/fm-status-cache-lib.sh"
+# The wall-clock bound on the provider read comes from the one owner of that
+# helper rather than a second open-coded background wait; see bin/fm-timeout-lib.sh.
+# shellcheck source=bin/fm-timeout-lib.sh
+. "$_FM_CODEX_LIB_DIR/fm-timeout-lib.sh"
 
 # _fm_codex_now: current epoch, or failure when it cannot be read.
 _fm_codex_now() {
@@ -400,27 +404,28 @@ _fm_codex_quota_seam_reading() {
 # an expired session's renewal to the vendor CLI, which is what would otherwise
 # surface a login prompt behind a status bar. Only the detached warmer below
 # calls this; a render never does.
+#
+# The bound is fm_run_timeout, the declared single owner of that mechanism: it
+# runs the probe in its own process group so a forking quota-axi leaves no
+# orphans behind, and it detaches stdin, which is load-bearing rather than tidy -
+# a vendor CLI that touches the terminal on stdin otherwise stops on SIGTTIN and
+# the caller reads an empty answer from a healthy tool. An empty or non-zero
+# read is a refusal here, which the warmer renders as the "--" placeholder.
 _fm_codex_quota_axi_reading() {
-  local out pid waited limit json
+  local out limit json status
   command -v quota-axi >/dev/null 2>&1 || return 1
   out=$(mktemp "${TMPDIR:-/tmp}/fm-codex-quota.XXXXXX") || return 1
-  quota-axi --provider codex --json --no-credential-refresh > "$out" 2>/dev/null &
-  pid=$!
-  waited=0
   limit=$(_fm_codex_ttl "${FM_CODEX_QUOTA_WAIT:-}" 10)
-  while kill -0 "$pid" 2>/dev/null; do
-    if [ "$waited" -ge "$limit" ]; then
-      kill -TERM "$pid" 2>/dev/null || true
-      wait "$pid" 2>/dev/null || true
-      rm -f "$out"
-      return 1
-    fi
-    sleep 1
-    waited=$((waited + 1))
-  done
-  wait "$pid" 2>/dev/null || true
+  fm_run_timeout "$limit" quota-axi --provider codex --json --no-credential-refresh \
+    > "$out" 2>/dev/null
+  status=$?
   json=
-  [ ! -s "$out" ] || json=$(cat "$out" 2>/dev/null)
+  # A read that hit the bound is refused outright, exactly as the wait it
+  # replaces did: whatever it managed to write is a truncated report, and half a
+  # provider answer must never become a figure. Any other exit is judged on its
+  # output, so a tool that reports a complete quota and exits non-zero still
+  # reads, and an empty answer is still a refusal.
+  [ "$status" -eq 124 ] || [ ! -s "$out" ] || json=$(cat "$out" 2>/dev/null)
   rm -f "$out"
   [ -n "$json" ] || return 1
   _fm_codex_quota_reading "$json"

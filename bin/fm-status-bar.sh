@@ -286,15 +286,14 @@ fi
 # Display shows used %; the sample API still takes remaining and derives used.
 # Best-effort: never fail the status-bar render.
 #
-# CONTEXT_SAMPLED remembers the last published value so the companion, which
-# re-reads context on every refresh, only writes when the figure actually
-# changes instead of rewriting the sample once a second all day.
-CONTEXT_SAMPLED=
+# This is published ONCE, from the value the launcher passed in, before the
+# refresh loop starts. The Codex companion re-reads context every tick for the
+# row it draws, and deliberately does not feed those readings here: the context
+# axis drives primary rotation, and arming that from a display refresh is a
+# separate decision with a live primary on the other end of it.
 publish_context_sample() {
   local used=$1
   [ "$used" != -- ] || return 0
-  [ "$used" != "$CONTEXT_SAMPLED" ] || return 0
-  CONTEXT_SAMPLED=$used
   # shellcheck source=bin/fm-primary-handoff-lib.sh
   . "$FM_ROOT/bin/fm-primary-handoff-lib.sh" 2>/dev/null \
     && fm_handoff_write_context_sample "$((100 - used))" 2>/dev/null \

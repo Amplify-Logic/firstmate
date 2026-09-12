@@ -1072,25 +1072,41 @@ Every other backend, tmux included, still delivers the brief inline and is byte-
 Confirmed to reproduce the original shape against the pre-fix script (force `BRIEF_DELIVERY=inline` and rerun: `not ok - the launch line typed into the herdr pane still contains a newline, so it is a multi-line paste through the pane`, printing the two-line launch payload).
 `tests/fm-backend-herdr.test.sh`, `tests/fm-spawn-herdr-presentation.test.sh`, `tests/fm-spawn-dispatch-profile.test.sh`, `tests/fm-spawn-batch.test.sh`, `tests/fm-spawn-launch-preflight.test.sh`, `tests/fm-spawn-worktree-settle.test.sh`, `tests/fm-operational-input.test.sh`, `tests/fm-secondmate-lifecycle-e2e.test.sh`, and `tests/fm-cursor-adapter.test.sh` stay green, and `bin/fm-lint.sh` is clean on the changed files.
 
-## Pane rendering: Herdr's client re-emits, and background-colour-erase is stored server-side (2026-09-12, herdr 0.7.4)
+## Pane rendering: what the isolated lab measured about this client's compositing and erase storage (2026-09-12, herdr 0.7.4)
 
 Measured in an isolated `fm-lab-*` session, with `bin/fm-herdr-lab.sh view --format raw-bytes` capturing exactly what Herdr's own client writes to a terminal.
 A probe pane emitted four sequences: a background colour set and then `ESC[2K` with no reset; the same with a reset first; a 256-colour background followed by `ESC[J`; and plain rows.
 
-Two properties, both load-bearing for any question about how a pane LOOKS:
+Two measurements about this backend, recorded as observations and nothing more:
 
-- **Herdr's client is a compositor, not a pass-through.** Across 63 KB of capture it emitted exactly one erase, the initial clear, and re-rendered every cell run as a fully specified `ESC[0;39;48;5;<n>m` sequence. The pane's own escape sequences never reach the terminal; the client reads the cell grid and paints it.
-- **Background-colour erase is honoured where the cells are STORED.** The probe's un-reset `ESC[2K` rows came back as 212 runs carrying background colour 3, and the un-reset `ESC[J` came back as 593 runs carrying background colour 100. The erased cells hold the background that was current when they were erased, so a producer that sets a background and then erases leaves a filled coloured region in the pane buffer, which the client then faithfully paints as a solid rectangle.
+- **This client re-emits rather than forwards.** Across 63 KB of capture it emitted exactly one erase, the initial clear, and re-rendered every cell run as a fully specified `ESC[0;39;48;5;<n>m` sequence. The pane's own escape sequences never reach the terminal; the client reads the cell grid and paints it.
+- **Cells erased while a background is set retain that background, and retain no glyphs.** The probe's un-reset `ESC[2K` rows came back as 212 runs carrying background colour 3, and the un-reset `ESC[J` came back as 593 runs carrying background colour 100. Those runs are empty: the erase removed the glyphs, and what survives in the buffer is the colour alone.
 
-The practical consequence: a solid block of colour in a pane is a statement about what the PRODUCER in that pane emitted, not about Herdr.
-Herdr neither invents the fill nor can suppress it, and the fill survives in the buffer until the producer overwrites those cells.
-This is standard background-colour-erase behaviour, the same as xterm's; it is recorded here because the compositor makes it easy to misattribute.
+**This probe does NOT reproduce the reported solid-rectangle symptom, and must not be cited as if it did.**
+In the report, selecting the affected region reveals its text and deselecting conceals it again, so the cells still hold their glyphs.
+Erased cells hold none, so there would be nothing for a selection to reveal.
+Background-colour erase is therefore disconfirmed as the mechanism behind that report, whatever else it explains.
+
+What is still open, stated plainly so it is not read as settled:
+
+- The **trigger** - what put the affected surface into that state - is unidentified.
+- The **masking condition** - whatever renders the glyphs invisible while they remain present and selectable - is separate from the trigger and is also unidentified.
+- The **visible symptom** - a solid block of colour over text that selection still exposes - is the only part directly observed, and only by the captain, at the time.
+- The **incident-time evidence is MISSING**: no capture of the affected surface exists from while the symptom was present, so nothing here is measured against the actual failure.
+- The **responsible component is UNRESOLVED.** No component is named. In particular, nothing above excludes this client: a small sample of well-formed probe input repainted faithfully is a statement about that sample, not a proof that the client cannot be causal under inputs nobody has captured.
+
+No terminal workaround, forced style reset around foreign output, or blanket terminal setting is warranted by any of this, and none has been applied.
 
 `view --format raw-bytes` exists for exactly this class of question: colour and erase live in the byte stream, and the viewer's rendered text cannot show them.
 It runs under the same bounds as the text format - one attached client that only ever draws, for the same bounded seconds, in a validated non-default lab.
 
 ## Known gaps and follow-up notes
 
+- **A primary pane's published `display_agent` is a launch-time label, not current state.** `bin/fm-primary.sh`'s `mark_current_surface` reports the primary pane's `display_agent` once, at launch, as a fixed role-plus-`WAITING` string, and nothing updates it afterwards.
+  A sidebar reading that field therefore shows `WAITING` for the whole life of the pane, including while the harness running in it is actively working.
+  Separately, Herdr's own `agent_status` for such a pane has been observed disagreeing with the harness's own reported state, so the sidebar and the harness can differ for two independent reasons.
+  `bin/fm-crew-state.sh` is the canonical authority for a task's current state and is what any consumer should ask.
+  Resolving the PRIMARY's own live state is not decided here: it belongs to the run-state owner, and nothing in this document restates or re-implements state selection, mapping, or precedence.
 - **RESOLVED: worktree-discovery isolation guard's symlinked-project-prefix false refusal.** Originally discovered while building the runtime-backend-auto-detection real smoke test (`tests/fm-backend-autodetect-smoke.test.sh`), which needed a scratch project.
   `fm-spawn.sh`'s `PROJ_ABS` was a LOGICAL `cd && pwd` (symlink components kept), while herdr's `foreground_cwd` (and real tmux's `pane_current_path`, on the same OS-level cwd primitive) report the PHYSICALLY resolved path.
   When the project itself lived under a symlinked directory (e.g. macOS's `/tmp` -> `/private/tmp`), the very first worktree-discovery poll saw two different strings for the identical starting directory and the isolation guard false-refused the spawn as "not isolated" before `treehouse get` ever moved the pane - backend-agnostic, not specific to herdr.

@@ -46,7 +46,8 @@
 #   FM_FLEET_STATE_TTL       seconds before a reading is refreshed (default 120)
 #   FM_FLEET_STATE_MAX_AGE   seconds before a reading is unusable (default 420)
 #   FM_FLEET_STATE_WAIT      wall-clock bound on one refresh (default 90)
-#   FM_FLEET_STATE_WARM_TTL  how long one refresh is considered in flight (60)
+#   FM_FLEET_STATE_WARM_TTL  how long one refresh is considered in flight (90,
+#                            and never less than FM_FLEET_STATE_WAIT)
 #   FM_FLEET_STATE_NOW       override the current epoch
 #   FM_FLEET_STATE_READER    canonical reader to fold (default fm-crew-state.sh)
 #   FM_FLEET_STATE_NO_CACHE  1 to read inline and bypass the cache entirely
@@ -84,11 +85,27 @@ _fm_fleet_ids() {  # <state-dir>
 
 # _fm_fleet_signature: a compact, order-stable token for a set of task ids, so a
 # reading taken for one fleet is never applied to a different one.
+#
+# It digests the id STREAM, so every caller must feed it the bytes _fm_fleet_ids
+# emits and nothing else. Re-emitting a captured list with `printf '%s\n'` is not
+# the same stream: command substitution strips the trailing newline, which that
+# printf restores for a non-empty list but ADDS for an empty one, so an empty
+# fleet would sign one newline here and zero bytes there and never match itself.
+# _fm_fleet_id_stream exists so a captured list can be replayed exactly.
 _fm_fleet_signature() {  # <ids on stdin>
   local digest
   digest=$(cksum 2>/dev/null) || return 1
   [ -n "$digest" ] || return 1
   printf '%s' "${digest// /-}"
+}
+
+# _fm_fleet_id_stream: re-emit a captured id list byte-for-byte as _fm_fleet_ids
+# wrote it, including the empty stream for a fleet of zero records.
+_fm_fleet_id_stream() {  # <id>...
+  local id
+  for id in "$@"; do
+    printf '%s\n' "$id"
+  done
 }
 
 # _fm_fleet_bucket: the field a canonical state line belongs in, or nothing when
@@ -125,15 +142,25 @@ _fm_fleet_bucket() {  # <canonical line>
 # the fold - the whole collection is refused rather than published short. A
 # partial fold's counts are indistinguishable from a quieter fleet, and the one
 # thing this library exists to prevent is a confident number that is not true.
+#
+# Completeness is measured against the id list captured BEFORE the fold, and the
+# fold walks that list rather than a pipe. Counting only the iterations that ran
+# cannot detect a fold that ended early, and the canonical reader shells out to
+# other tools: given the id stream as its own stdin, one of them draining stdin
+# would swallow the remaining ids and end the loop with asked == answered on a
+# fraction of the fleet. The reader's stdin is detached for the same reason.
 _fm_fleet_collect() {  # <state-dir> <now> <reader>
-  local state=$1 now=$2 reader=$3 ids id line bucket signature
+  local state=$1 now=$2 reader=$3 id line bucket signature
   local working=0 validating=0 paused=0 attention=0 asked=0 answered=0
-  ids=$(_fm_fleet_ids "$state")
-  signature=$(printf '%s\n' "$ids" | _fm_fleet_signature) || return 1
+  local ids=()
   while IFS= read -r id; do
     [ -n "$id" ] || continue
-    asked=$((asked + 1))
-    line=$("$reader" "$id" 2>/dev/null) || continue
+    ids+=("$id")
+  done < <(_fm_fleet_ids "$state")
+  asked=${#ids[@]}
+  signature=$(_fm_fleet_id_stream ${ids[@]+"${ids[@]}"} | _fm_fleet_signature) || return 1
+  for id in ${ids[@]+"${ids[@]}"}; do
+    line=$("$reader" "$id" </dev/null 2>/dev/null) || continue
     [ -n "$line" ] || continue
     answered=$((answered + 1))
     bucket=$(_fm_fleet_bucket "$line")
@@ -143,9 +170,7 @@ _fm_fleet_collect() {  # <state-dir> <now> <reader>
       paused) paused=$((paused + 1)) ;;
       attention) attention=$((attention + 1)) ;;
     esac
-  done <<IDS
-$ids
-IDS
+  done
   [ "$answered" -eq "$asked" ] || return 1
   printf '%s\t%s\t%s\t%s\t%s\t%s' \
     "$now" "$working" "$validating" "$paused" "$attention" "$signature"
@@ -155,10 +180,22 @@ IDS
 # once. The claim is what keeps a one-second loop from stacking readers: a tick
 # during an in-flight refresh, or right after one died without writing, is
 # refused until the claim ages out.
+#
+# Two things keep "at most one" true rather than merely intended. The claim is
+# never shorter than the refresh's own bound, because a claim that expired under
+# a still-running fold would let the next frame start a second refresher over the
+# same fleet - and the header budgets about a second per task, so a large fleet
+# reaches the old 60s claim while the 90s bound still has room. And a fold that
+# PUBLISHED releases its claim immediately rather than holding the window it did
+# not need. A fold that produced nothing deliberately does not release: that is
+# the died-without-writing case, and leaving it to age out is what paces the
+# retry instead of re-forking a reader every tick. Either way the claim expires
+# on its own, so the field can never wedge at unknown.
 _fm_fleet_refresh_detached() {  # <cache> <state-dir> <now> <reader>
   local cache=$1 state=$2 now=$3 reader=$4 bound warm
   bound=$(fm_status_ttl "${FM_FLEET_STATE_WAIT:-}" 90)
-  warm=$(fm_status_ttl "${FM_FLEET_STATE_WARM_TTL:-}" 60)
+  warm=$(fm_status_ttl "${FM_FLEET_STATE_WARM_TTL:-}" 90)
+  [ "$warm" -ge "$bound" ] || warm=$bound
   fm_status_claim_refresh "$cache.refreshing" "$now" "$warm" || return 0
   (
     # shellcheck disable=SC2016 # $0..$3 are the INNER shell's positional
@@ -169,7 +206,10 @@ _fm_fleet_refresh_detached() {  # <cache> <state-dir> <now> <reader>
       _fm_fleet_collect "$1" "$2" "$3"
     ' "$_FM_FLEET_LIB_DIR/fm-fleet-status-lib.sh" "$state" "$now" "$reader" 2>/dev/null) \
       || reading=
-    [ -z "$reading" ] || fm_status_cache_write "$cache" "$reading"
+    [ -z "$reading" ] || {
+      fm_status_cache_write "$cache" "$reading"
+      rm -f "$cache.refreshing" 2>/dev/null || true
+    }
   ) >/dev/null 2>&1 &
   return 0
 }
