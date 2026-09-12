@@ -241,6 +241,11 @@ test_only_one_refresh_is_claimed_at_a_time() {
     . "$1/bin/fm-status-cache-lib.sh"
     fm_status_claim_refresh "$2" "$3" 600 || exit 1
     fm_status_claim_refresh "$2" "$3" 600 && exit 1
+    # A frame carries the clock it was stamped with, so the next caller can
+    # reach a claim that was taken a shade LATER than its own now. That is a
+    # claim someone just took, never an expired one; reading it as expired put
+    # a second refresher on the same fleet.
+    fm_status_claim_refresh "$2" "$(($3 - 1))" 600 && exit 1
     # A claim older than its window is reclaimable, so a refresher that died
     # without writing cannot wedge the field at unknown forever.
     fm_status_claim_refresh "$2" "$(($3 + 601))" 600 || exit 1
