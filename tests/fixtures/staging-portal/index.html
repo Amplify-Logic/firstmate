@@ -1,0 +1,78 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Stand-in device configuration portal</title>
+<!--
+  A STAND-IN, not a replica of any real portal.
+
+  Purpose: prove the browser staging mechanics end to end - open, read, fill,
+  verify, read back, and stop - without touching a real portal or a real device.
+  Field names here are deliberately generic. Nothing in this file describes any
+  vendor's actual form, wire format, units, or device rules, and nothing in it
+  may be treated as a source for those.
+
+  The property this fixture exists to prove is the negative one: a staging run
+  fills and verifies but NEVER submits. window.__submitted stays false, and
+  #submit-state keeps reading "not-submitted", for the whole of a correct run.
+-->
+<style>
+  body { font: 14px/1.5 system-ui, sans-serif; margin: 2rem; max-width: 40rem; }
+  fieldset { border: 1px solid #ccc; margin-bottom: 1rem; }
+  label { display: block; margin: .5rem 0; }
+  input { font: inherit; padding: .25rem; }
+  #preview { background: #f4f4f4; padding: .75rem; white-space: pre-wrap; }
+  #submit-state { font-weight: 600; }
+</style>
+
+<h1>Stand-in device configuration portal</h1>
+<p>Fixture for browser staging tests. Not a real portal.</p>
+
+<fieldset>
+  <legend>Target</legend>
+  <label>Device id <input id="device-id" name="device-id" value=""></label>
+</fieldset>
+
+<fieldset>
+  <legend>Settings</legend>
+  <label>Setting A <input id="setting-a" name="setting-a" value=""></label>
+  <label>Setting B <input id="setting-b" name="setting-b" value=""></label>
+</fieldset>
+
+<button id="verify" type="button">Verify</button>
+<button id="submit" type="button">Submit</button>
+
+<h2>Preview</h2>
+<div id="preview">nothing verified yet</div>
+
+<h2>Submit state</h2>
+<div id="submit-state">not-submitted</div>
+
+<script>
+  // Read back exactly what the form currently holds, so a staging run can prove
+  // the values it believes it set are the values the page actually carries.
+  window.__submitted = false;
+  window.__readback = function () {
+    return {
+      device_id: document.getElementById('device-id').value,
+      setting_a: document.getElementById('setting-a').value,
+      setting_b: document.getElementById('setting-b').value,
+      verified: document.getElementById('preview').dataset.verified === 'true',
+      submitted: window.__submitted
+    };
+  };
+
+  document.getElementById('verify').addEventListener('click', function () {
+    var r = window.__readback();
+    var preview = document.getElementById('preview');
+    preview.dataset.verified = 'true';
+    preview.textContent =
+      'device: ' + (r.device_id || '(empty)') + '\n' +
+      'setting A: ' + (r.setting_a || '(empty)') + '\n' +
+      'setting B: ' + (r.setting_b || '(empty)');
+  });
+
+  // Present so the fixture can prove a staging run never reaches it.
+  document.getElementById('submit').addEventListener('click', function () {
+    window.__submitted = true;
+    document.getElementById('submit-state').textContent = 'SUBMITTED';
+  });
+</script>
