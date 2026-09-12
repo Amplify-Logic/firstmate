@@ -26,7 +26,9 @@
 # isolation contract - a generated named non-default `fm-lab-` session, the
 # refuse-default hard guard before each destructive call, and the fleet-state
 # tripwire that teardown verifies byte-identical afterward. The default session
-# is never touched.
+# is never touched. The live renderer this test drives is isolated separately,
+# against a scratch home and fixture metrics sources rather than the captain's
+# private state/ directory and real vendor account; see SCRATCH below.
 set -u
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -48,6 +50,27 @@ python3 -c 'import pyte' >/dev/null 2>&1 \
 SESSION=$(fm_herdr_lab_name statuschrome)
 RENDERER_PID=
 
+# The lab contract isolates the SESSION. The renderer this test drives is the
+# real one, so its HOME and its vendor account have to be isolated separately or
+# a run from a firstmate checkout would read the captain's private state/
+# directory, fold the canonical reader over every real task, write cache and
+# claim files into it, and spawn a real provider read against the live account.
+#
+# SCRATCH_STATE is an empty state directory: no *.meta, so the fleet supply has
+# a zero-record fleet to read and never reaches bin/fm-crew-state.sh at all, and
+# every cache or claim file it writes lands here. SCRATCH_ROLLOUT pins the Codex
+# context source to a fixture, so the metrics supply never resolves a pane to a
+# process or asks lsof which rollout any real session holds open. And the
+# provider source is disabled outright, so no quota-axi subprocess can start.
+SCRATCH=$(mktemp -d "${TMPDIR:-/tmp}/fm-status-chrome-e2e.XXXXXX") \
+  || fail "could not create the scratch home for the isolated renderer"
+SCRATCH_STATE="$SCRATCH/state"
+SCRATCH_ROLLOUT="$SCRATCH/sessions/lab/rollout-fixture.jsonl"
+mkdir -p "$SCRATCH_STATE" "$(dirname "$SCRATCH_ROLLOUT")"
+printf '%s\n' \
+  '{"payload":{"type":"token_count","info":{"model_context_window":272000,"last_token_usage":{"input_tokens":54400,"cached_input_tokens":0,"output_tokens":0}}}}' \
+  > "$SCRATCH_ROLLOUT"
+
 # The renderer traps TERM to restore the terminal and then RESUMES its loop, so
 # a plain TERM never ends it. It is meant to exit when the pane it follows dies,
 # which is not how this test drives it, so stop it outright.
@@ -68,6 +91,7 @@ cleanup_all() {
   stop_renderer
   fm_herdr_lab_teardown "$SESSION" >/dev/null 2>&1 \
     || printf 'not ok - lab teardown or its fleet-state tripwire failed for %s\n' "$SESSION" >&2
+  [ -z "${SCRATCH:-}" ] || rm -rf "$SCRATCH"
 }
 trap cleanup_all EXIT
 
@@ -183,7 +207,9 @@ pass "herdr chrome: a third pane is reported by pane layout and never left hidde
 
 FM_STATUS_HERDR_SESSION="$SESSION" HERDR_SESSION="$SESSION" \
   FM_STATUS_BAR_INTERVAL=1 FM_STATUS_CHROME_ZOOM_EVERY=1 \
-  FM_HOME="$ROOT" FM_PRIMARY_HARNESS=codex \
+  FM_HOME="$SCRATCH" FM_STATE_OVERRIDE="$SCRATCH_STATE" \
+  FM_CODEX_METRICS_ROLLOUT="$SCRATCH_ROLLOUT" FM_CODEX_QUOTA_DISABLE=1 \
+  FM_PRIMARY_HARNESS=codex \
   "$ROOT/bin/fm-status-bar.sh" \
     --adapter codex --model gpt-6-astra --effort high \
     --follow-pane "$COMPANION" --follow-backend herdr \

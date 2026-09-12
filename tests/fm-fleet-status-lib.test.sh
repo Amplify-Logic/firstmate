@@ -35,6 +35,30 @@ cat "$FM_FLEET_FIXTURE/$1"
 SH
 chmod +x "$BINDIR/counting-crew-state"
 
+# A reader that DRAINS its stdin before answering, which is what a canonical
+# reader shelling out to git, herdr or the pipeline can do. It answers its own id
+# correctly, so a fold that still comes up short lost ids to this drain rather
+# than to a reader that refused.
+cat > "$BINDIR/stdin-draining-crew-state" <<'SH'
+#!/usr/bin/env bash
+cat >/dev/null 2>&1 || true
+printf '%s\n' "$1" >> "$FM_FLEET_TEST_CALLS"
+[ -f "$FM_FLEET_FIXTURE/$1" ] || exit 1
+cat "$FM_FLEET_FIXTURE/$1"
+SH
+chmod +x "$BINDIR/stdin-draining-crew-state"
+
+# A reader slow enough that a refresh started with it is still in flight when the
+# next case looks, which is what makes the claim window observable.
+cat > "$BINDIR/slow-crew-state" <<'SH'
+#!/usr/bin/env bash
+printf '%s\n' "$1" >> "$FM_FLEET_TEST_CALLS"
+sleep 3
+[ -f "$FM_FLEET_FIXTURE/$1" ] || exit 1
+cat "$FM_FLEET_FIXTURE/$1"
+SH
+chmod +x "$BINDIR/slow-crew-state"
+
 export FM_FLEET_FIXTURE="$FLEET_FIX"
 
 task() {  # <id> <kind> <canonical line>
@@ -226,6 +250,140 @@ test_only_one_refresh_is_claimed_at_a_time() {
   pass "fleet status: exactly one refresh is claimed at a time, and a dead claim is reclaimable"
 }
 
+# An empty fleet is a real fleet state, and zero live workers is exactly the
+# number the captain has to be able to trust. It was reported unknown forever
+# because the two sides of the fleet signature hashed different bytes at zero
+# records only, so the reading could never be recognized as covering this fleet -
+# which also meant every frame re-forked a fold that could never be accepted.
+test_a_zero_record_fleet_reports_a_trusted_zero() {
+  local out waited
+  reset_state
+
+  out=$(FM_FLEET_STATE_NO_CACHE=1 FM_FLEET_STATE_READER="$BINDIR/fake-crew-state" counts)
+  [ "$out" = $'0\t0\t0\t0\t0\t1' ] \
+    || fail "an empty fleet was not read as a trusted zero: $(printf '%s' "$out" | tr '\t' ' ')"
+
+  # And end to end through the cache, the way a frame actually reaches it: the
+  # first frame starts the fold, and a later frame accepts its reading.
+  export FM_FLEET_TEST_CALLS="$TMP_ROOT/calls"
+  : > "$FM_FLEET_TEST_CALLS"
+  FM_FLEET_STATE_READER="$BINDIR/counting-crew-state" counts >/dev/null
+  waited=0
+  while [ ! -f "$STATE/.status-fleet-state" ] && [ "$waited" -lt 50 ]; do
+    sleep 0.1
+    waited=$((waited + 1))
+  done
+  out=$(FM_FLEET_STATE_READER="$BINDIR/counting-crew-state" counts)
+  [ "$out" = $'0\t0\t0\t0\t0\t1' ] \
+    || fail "a cached empty-fleet reading was not accepted for the fleet it covered: $(printf '%s' "$out" | tr '\t' ' ')"
+  unset FM_FLEET_TEST_CALLS
+  pass "fleet status: a fleet of zero records reports a real zero rather than permanent placeholders"
+}
+
+# The canonical reader shells out to other tools, and one of them draining stdin
+# must not be able to eat the ids the fold has not reached yet. A fold that ends
+# early is refused (see the incomplete-fold case above), so the failure this
+# guards against is the silent one: a short fold published as authoritative.
+test_a_reader_that_drains_stdin_cannot_truncate_the_fold() {
+  local out asked
+  reset_state
+  task one crew 'state: working · source: pane · harness busy'
+  task two crew 'state: working · source: pane · harness busy'
+  task three crew 'state: paused · source: status-log · upstream release'
+  task four crew 'state: blocked · source: status-log · needs a credential'
+  export FM_FLEET_TEST_CALLS="$TMP_ROOT/calls"
+  : > "$FM_FLEET_TEST_CALLS"
+
+  out=$(FM_FLEET_STATE_NO_CACHE=1 \
+    FM_FLEET_STATE_READER="$BINDIR/stdin-draining-crew-state" counts)
+  asked=$(wc -l < "$FM_FLEET_TEST_CALLS" | tr -d ' ')
+  [ "$asked" = 4 ] \
+    || fail "a reader that drained stdin swallowed the remaining ids; only $asked of 4 tasks were folded"
+  [ "$out" = $'4\t2\t0\t1\t1\t1' ] \
+    || fail "a stdin-draining reader produced a short fold reported as complete: $(printf '%s' "$out" | tr '\t' ' ')"
+  unset FM_FLEET_TEST_CALLS
+  pass "fleet status: a canonical reader that drains stdin cannot truncate the fold or publish it short"
+}
+
+# The claim exists to make "at most one refresh in flight" true. A claim shorter
+# than the refresh's own bound expires under a still-running fold and lets the
+# next frame start a second reader over the same fleet - worst exactly when the
+# fleet is already slow enough to need the bound.
+test_the_refresh_claim_covers_the_whole_refresh_bound() {
+  local now started
+  reset_state
+  task one crew 'state: working · source: pane · harness busy'
+  export FM_FLEET_TEST_CALLS="$TMP_ROOT/calls"
+  : > "$FM_FLEET_TEST_CALLS"
+  now=$(date +%s)
+
+  bash -c '
+    . "$1/bin/fm-fleet-status-lib.sh"
+    FM_FLEET_STATE_WAIT=90 FM_FLEET_STATE_WARM_TTL=10 \
+      _fm_fleet_refresh_detached "$2/.status-fleet-state" "$2" "$3" "$4"
+    # 40 seconds on, past the requested warm window but still well inside the
+    # bound the in-flight fold is running under.
+    FM_FLEET_STATE_WAIT=90 FM_FLEET_STATE_WARM_TTL=10 \
+      _fm_fleet_refresh_detached "$2/.status-fleet-state" "$2" "$(($3 + 40))" "$4"
+  ' _ "$ROOT" "$STATE" "$now" "$BINDIR/slow-crew-state"
+  # Long enough for a second refresher to have entered the reader if one had
+  # been started, and for the first to finish rather than outlive this case.
+  sleep 4
+
+  started=$(wc -l < "$FM_FLEET_TEST_CALLS" | tr -d ' ')
+  [ "$started" = 1 ] \
+    || fail "a second refresher was started underneath a still-running fold; the canonical reader was entered $started times"
+  unset FM_FLEET_TEST_CALLS
+  pass "fleet status: the refresh claim covers the whole refresh bound, so a slow fold is never doubled"
+}
+
+# The other direction: a claim must not outlive the work it protects. A fold that
+# published is done, and holding the rest of its window would block the next
+# refresh for no reason. A fold that published nothing keeps its claim, which is
+# what paces the retry - and that claim still ages out on its own, so the field
+# can never wedge at unknown.
+test_a_published_refresh_releases_its_claim_and_a_silent_one_ages_out() {
+  local waited
+  reset_state
+  task one crew 'state: working · source: pane · harness busy'
+
+  bash -c '
+    . "$1/bin/fm-fleet-status-lib.sh"
+    _fm_fleet_refresh_detached "$2/.status-fleet-state" "$2" "$3" "$4"
+  ' _ "$ROOT" "$STATE" "$(date +%s)" "$BINDIR/fake-crew-state"
+  waited=0
+  while [ ! -f "$STATE/.status-fleet-state" ] && [ "$waited" -lt 50 ]; do
+    sleep 0.1
+    waited=$((waited + 1))
+  done
+  [ -f "$STATE/.status-fleet-state" ] || fail "the detached refresh never published a reading"
+  waited=0
+  while [ -f "$STATE/.status-fleet-state.refreshing" ] && [ "$waited" -lt 50 ]; do
+    sleep 0.1
+    waited=$((waited + 1))
+  done
+  [ ! -f "$STATE/.status-fleet-state.refreshing" ] \
+    || fail "a refresh that published its reading still held its claim afterwards"
+
+  # A fold that published nothing keeps the claim, so the retry is paced rather
+  # than re-forked every tick, and the claim is reclaimable once it ages out.
+  rm -f "$STATE/.status-fleet-state"
+  bash -c '
+    . "$1/bin/fm-fleet-status-lib.sh"
+    FM_FLEET_TEST_READER_FAIL=1 \
+      _fm_fleet_refresh_detached "$2/.status-fleet-state" "$2" "$3" "$4"
+    wait
+  ' _ "$ROOT" "$STATE" "$(date +%s)" "$BINDIR/fake-crew-state"
+  [ -f "$STATE/.status-fleet-state.refreshing" ] \
+    || fail "a refresh that published nothing released its claim, so every tick would re-fork a reader"
+  bash -c '
+    . "$1/bin/fm-status-cache-lib.sh"
+    fm_status_claim_refresh "$2" "$(($(date +%s) + 200))" 90 || exit 1
+  ' _ "$ROOT" "$STATE/.status-fleet-state.refreshing" \
+    || fail "a claim left behind by a refresher that wrote nothing was not reclaimable once aged out"
+  pass "fleet status: a published refresh releases its claim, and a silent one is reclaimed by ageing out"
+}
+
 test_canonical_states_fold_into_the_five_fields
 test_records_are_counted_apart_from_live_workers
 test_an_incomplete_fold_is_refused_rather_than_published_short
@@ -235,3 +393,7 @@ test_a_reading_that_has_aged_out_is_discarded
 test_a_malformed_cached_reading_is_refused
 test_a_frame_never_calls_the_canonical_reader
 test_only_one_refresh_is_claimed_at_a_time
+test_a_zero_record_fleet_reports_a_trusted_zero
+test_a_reader_that_drains_stdin_cannot_truncate_the_fold
+test_the_refresh_claim_covers_the_whole_refresh_bound
+test_a_published_refresh_releases_its_claim_and_a_silent_one_ages_out
