@@ -113,8 +113,38 @@ Do not read the receipt as delivery, and do not infer a result from the absence 
 ### What this transport is and is not
 
 Sending into an existing session and getting a file back are the verified parts.
-Reading a session's live transcript or state, stopping or interrupting a turn, surviving an app restart, and having the companion report into Firstmate's own status records are all unverified, so there is no supervised desktop worker, no managed second mate, and no `codex-app` backend.
-Building any of those on undocumented local databases is not an option: those files are private, versioned, and carry no stability contract.
+Surviving an app restart and having the companion report into Firstmate's own status records are unverified, so there is no supervised desktop worker, no managed second mate, and no `codex-app` backend.
+Reading a thread and steering or interrupting a turn are defined operations of the app-server protocol rather than of `codex queue` - see "Correcting a conversation that is already running" below for what that does and does not give you.
+Building any of this on undocumented local databases is not an option: those files are private, versioned, and carry no stability contract.
+
+## Speaking to the companion without repeating yourself
+
+A spoken relay fails in a particular way, and it is worth naming because the fix is not "be more careful".
+The captain corrects an instruction; the correction goes to the back of a queue; the companion reads out the version it already had; the captain hears a password step for a sign-in that already succeeded.
+Nothing in that chain is a bug in any one component - it is the absence of a shared answer to "is this still the current instruction?".
+
+`bin/fm-voice-relay.sh` is that answer, kept on disk so it survives a compacted conversation and a restarted session.
+It holds one record per topic, corrections advance that record's revision instead of creating a second request, and two gates read it: one before an action is performed, one before a sentence is spoken.
+A step that was pending when the work succeeded is retired by that success, in that topic only; an exact sentence is never spoken twice; a queue receipt is never reported as delivery; and "did you send it?" is answered from the record rather than by sending again.
+Its `--help` is the contract: subcommands, the verdict words, and the exit code each verdict uses.
+
+What it cannot do is worth stating with equal force.
+It is a cooperative gate, so it binds callers that ask it and nothing else, and no ledger can recall an action that already happened.
+It records that a sentence was released to the speaking frontend, which is not evidence that anything was heard.
+Its pending count is a count of tracked requests, not of the native queue, which stays unknown because the transport does not expose it.
+
+## Correcting a conversation that is already running
+
+`codex queue` has no interrupt, cancel, dequeue, or priority option: a correction sent that way waits behind whatever is already queued.
+The app-server protocol the same build speaks does define the operations that matter here - `turn/steer`, `turn/interrupt`, `thread/turns/list`, `thread/read` - and `turn/steer` takes an `expectedTurnId`, which makes a correction a compare-and-swap against the turn the caller believes is running rather than a message that lands wherever it arrives.
+
+`bin/fm-voice-relay-appserver.sh` speaks that protocol, and every command is a dry run until `--live`, so the exact frames can be read before anything reaches a live conversation.
+Run `probe` first: it generates the schema from the installed binary and reports which of those methods this build actually has.
+
+Schema support is not reachability, and the difference decides whether any of this is real on a given machine.
+A steer only moves the captain's conversation if it reaches the server that owns that thread: `codex app-server proxy` attaches to an existing control socket and fails when there is none, while a freshly started stdio server can read thread history but reports the desktop thread as not loaded and therefore does not own its live turn.
+Run `thread-status --thread <id> --live` before relying on steering; a `steerable: no` answer means history only.
+Until a steer is measured end to end on a real pair of sessions, treat queue lag as unimproved: a protocol that defines steering is not a demonstration that a correction arrived sooner.
 
 ## Known app-access limit
 

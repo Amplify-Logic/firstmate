@@ -1,0 +1,1220 @@
+#!/usr/bin/env bash
+# fm-voice-relay.sh - the deterministic freshness, evidence, and presentation
+# ledger for the spoken desktop-companion relay.
+#
+# THE PROBLEM THIS SOLVES: a spoken relay turn is a pipeline of queued messages
+# with no shared clock. The companion is still reading a message the captain has
+# already corrected, a queue item arrives after the thing it asks for succeeded,
+# and the only record of "what is current" lives in a conversation that compacts.
+# The observed failures were all one bug: an instruction was acted on, or spoken,
+# long after it stopped being true - a stale sign-in password step re-read after
+# the sign-in already succeeded, a prior answer repeated as if new, and a queue
+# receipt reported as though the work had happened.
+#
+# So every decision here is a DISK decision. A step is performed only after this
+# ledger says its revision is still current; a sentence is spoken only after this
+# ledger says that exact sentence has not already been spoken for that topic.
+#
+# WHAT THIS IS NOT:
+#   - Not a backend, not a second fleet manager, not a command gateway: it runs
+#     no command for anyone, sends no message, and speaks nothing. It answers
+#     "is this still current?" and records what happened.
+#   - Not the steering transport. Delivering a correction into a turn that is
+#     already running is a real, supported operation, but it belongs to the
+#     app-server protocol and lives in bin/fm-voice-relay-appserver.sh
+#     (turn/steer, turn/interrupt). This ledger decides WHETHER something is
+#     still current; that adapter delivers the correction.
+#   - Not a hard cancellation, even with that adapter. A turn can be steered or
+#     interrupted; a tool call already executing, a command already run, and any
+#     effect already produced outside these gates cannot be recalled. The
+#     guarantee here is cooperative and bounded: a caller that asks before each
+#     not-yet-performed step and before each presentation cannot act on or speak
+#     a superseded revision. `begin` records an in-flight step exactly so a
+#     correction reports honestly what is past the point of recall, instead of
+#     implying it was killed.
+#   - Not proof of speech. `present` records that text was released to the
+#     speaking frontend. No receipt here means audio was produced or heard.
+#
+# OWNERSHIP BOUNDARIES (do not re-implement them here):
+#   docs/desktop-companion.md   what the companion is, its setup, its transport,
+#                               and the accepted/picked-up/completed distinction.
+#   docs/codex-app-backend.md   why `codex-app` is still not a backend.
+#   bin/fm-path-lib.sh          durable-directory resolution.
+#
+# STATE: private, per-home, under $FM_HOME/state/voice-relay (0700). Nothing here
+# is tracked, and no session identifier, path, or account value reaches a tracked
+# file. A home that never runs this script has no directory and pays nothing.
+#
+# CONCURRENCY: every state-changing write is a publish-once same-directory hard
+# link of a completed temporary file, so two racing callers cannot both win and
+# the loser fails closed with a conflict. Revisions advance by link-once too, so
+# the current revision is derived from what exists rather than from a mutable
+# pointer that a crash could leave half-written. Receipts, once published, are
+# never rewritten: a duplicate reads the existing bytes and a mismatch is
+# refused with the original untouched.
+#
+# Usage:
+#   fm-voice-relay.sh bind --companion <id> --primary <id> --home <codex-home>
+#         --dir <authorized shared directory>
+#       Record the exact enrolled session pair this home may talk to. A second
+#       bind archives the previous one and invalidates it: every request created
+#       under the old binding is refused from then on, so a replaced session can
+#       never be answered on its old target. This script never discovers,
+#       lists, or guesses a session; the caller supplies verified identifiers.
+#
+#   fm-voice-relay.sh binding
+#       Print the current binding. Exit 1 when none is bound.
+#
+#   fm-voice-relay.sh open <topic> --summary <text>
+#       Start topic <topic> at revision 1 and print "<request-id> <revision>".
+#       The request id is topic-scoped and stable across revisions; corrections
+#       advance the revision of the SAME request rather than opening a new one.
+#
+#   fm-voice-relay.sh revise <topic> --summary <text> [--expect-revision <n>]
+#       Record a correction: the next revision of the same request. Every older
+#       revision is superseded from this moment. --expect-revision makes the
+#       advance a compare-and-swap, so a caller working from a stale read is
+#       refused instead of overwriting someone else's correction.
+#
+#   fm-voice-relay.sh cancel <topic> --reason <text>
+#       Stop the topic. Not a rollback: steps already performed stay performed
+#       and stay in the evidence. Only not-yet-performed steps are refused.
+#       An in-flight step is reported as uninterruptible, not as stopped.
+#
+#   fm-voice-relay.sh complete <topic> --revision <n> [--outcome <text>]
+#       Record the topic's success at that revision and retire every declared
+#       step that has not been performed. This is the sign-in case: success
+#       retires the pending password and clipboard substeps of THIS topic, and
+#       touches no other topic.
+#
+#   fm-voice-relay.sh step <topic> --step <slug> [--step <slug>]...
+#       Declare substeps of the current revision so success can retire them.
+#
+#   fm-voice-relay.sh check-action <topic> --revision <n> [--step <slug>]
+#       THE GATE TO CALL BEFORE PERFORMING ANYTHING. Prints one verdict line and
+#       exits with its code (see EXIT CODES). Nothing is recorded.
+#
+#   fm-voice-relay.sh begin <topic> --revision <n> --step <slug>
+#       Claim a step for execution after check-action cleared it. The claim is
+#       publish-once, so a step cannot be executed twice by racing callers, and
+#       it marks the step in-flight for honest correction reporting.
+#
+#   fm-voice-relay.sh performed <topic> --revision <n> --step <slug> [--note <text>]
+#       Record that the step actually happened. Permanent: a later cancellation
+#       or correction never deletes it.
+#
+#   fm-voice-relay.sh phase <topic> --revision <n> --phase <phase> [--note <text>]
+#         [--message-id <id>] [--queue-exit <n>]
+#       Append one evidence line. Phases are kept distinct on purpose:
+#         enqueued    the queue command accepted the message. NOTHING ELSE.
+#         picked-up   the companion actually began a turn on it.
+#         working     the companion reported progress inside that turn.
+#         completed   the companion persisted and read back its result.
+#         failed      the turn ended without the result.
+#         superseded  a correction overtook this revision.
+#         cancelled   the topic was stopped.
+#         presented   text was released to the speaking frontend (not audio).
+#
+#   fm-voice-relay.sh accept <topic> --revision <n> --answer <path>
+#         --sha256 <hex> --receipt <path>
+#       Completion acceptance, separate from execution and from presentation.
+#       Validates the answer is a regular non-symlink file inside the bound
+#       authorized directory, recomputes its SHA-256, and publishes the
+#       immutable receipt once. An identical repeat is "duplicate" and changes
+#       nothing; any disagreement in id, hash, or revision is "conflict",
+#       refused, with the existing receipt left byte-identical.
+#
+#   fm-voice-relay.sh present <topic> --revision <n> --outcome <text>
+#         [--limitation <text>] [--question <text>] [--allow-repeat] [--final]
+#         --attribution <companion-observed|firstmate-verified|mixed>
+#       THE GATE TO CALL BEFORE SPEAKING. Refuses a superseded, cancelled, or
+#       unknown revision; suppresses an exact repeat and pure filler; otherwise
+#       prints the sentence to speak and records the presentation once. The
+#       template is deliberately short - outcome, one material limitation, one
+#       question - because everything else belongs in the text artifact.
+#       A finished topic speaks only through --final, which announces how it
+#       ended: any other sentence about finished work is stale by construction.
+#       --attribution is required so a companion observation is never reported
+#       as a Firstmate finding, or the other way round.
+#
+#   fm-voice-relay.sh sent-status <topic> [--revision <n>]
+#       Answer "did you send it?" from what is recorded. It never re-sends and
+#       never infers: an accepted-but-unconfirmed send is reported as exactly
+#       that, which is the whole point of keeping enqueued separate.
+#
+#   fm-voice-relay.sh steer-command <topic> --revision <n> --turn <turn-id>
+#       Print the exact bin/fm-voice-relay-appserver.sh command that delivers
+#       this revision's correction into the turn running now, with the bound
+#       thread and the turn id filled in, so no caller hand-assembles a target.
+#       Refuses for a superseded, retired, or unbound revision.
+#
+#   fm-voice-relay.sh evidence <topic>
+#       The per-phase table with UTC timestamps, the gap between phases, and the
+#       observable handoff and turn counts. Latencies are wall-clock between
+#       recorded events; no cost, saving, or audio claim is derived from them.
+#
+# EXIT CODES (stable; the verdict word is always the first token of stdout):
+#   0  ok / fresh / duplicate acceptance that changed nothing
+#   2  usage error
+#   3  superseded    a newer revision of this request exists
+#   4  unknown-revision  that revision was never opened
+#   5  retired       the topic already completed, or was cancelled
+#   6  already-performed  that step is done; doing it again is the stale-step bug
+#   7  binding-replaced   the request belongs to a binding that no longer exists
+#   8  duplicate-suppressed  that exact sentence was already presented
+#   9  conflict      an id, hash, or revision disagreed; nothing was written
+#
+# FM_VOICE_RELAY_DIR overrides the state directory (tests only).
+set -u
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+FM_ROOT="${FM_ROOT_OVERRIDE:-$(cd "$SCRIPT_DIR/.." && pwd)}"
+FM_HOME="${FM_HOME:-${FM_ROOT_OVERRIDE:-$FM_ROOT}}"
+STATE="${FM_STATE_OVERRIDE:-$FM_HOME/state}"
+RELAY_DIR="${FM_VOICE_RELAY_DIR:-$STATE/voice-relay}"
+
+# shellcheck source=bin/fm-path-lib.sh
+. "$SCRIPT_DIR/fm-path-lib.sh"
+
+umask 077
+
+die() {
+  echo "error: $*" >&2
+  exit 2
+}
+
+refuse() {  # <code> <verdict> <detail>
+  local code=$1 verdict=$2
+  shift 2
+  printf '%s: %s\n' "$verdict" "$*"
+  exit "$code"
+}
+
+utc_now() {
+  date -u +%Y-%m-%dT%H:%M:%SZ
+}
+
+epoch_now() {
+  date -u +%s
+}
+
+sha256_file() {  # <path>
+  if command -v shasum >/dev/null 2>&1; then
+    shasum -a 256 -- "$1" 2>/dev/null | awk '{print $1}'
+  else
+    sha256sum -- "$1" 2>/dev/null | awk '{print $1}'
+  fi
+}
+
+sha256_text() {  # reads stdin
+  if command -v shasum >/dev/null 2>&1; then
+    shasum -a 256 | awk '{print $1}'
+  else
+    sha256sum | awk '{print $1}'
+  fi
+}
+
+# One-line-per-field records, the same shape as state/<id>.meta, so a human
+# reading private state never needs a parser.
+record_field() {  # <file> <key>
+  [ -f "$1" ] || return 1
+  sed -n "s/^$2=//p" "$1" | head -1
+}
+
+# Publish-once: write the completed content to a temporary file in the SAME
+# directory, then hard link it into place. The link is the atomic step, so a
+# racing caller either created it first (return 1, nothing overwritten) or lost
+# and sees the winner's bytes.
+publish_once() {  # <target> ; content on stdin
+  local target=$1 dir tmp status
+  dir=$(dirname "$target")
+  mkdir -p "$dir" || return 2
+  tmp=$(mktemp "$dir/.fm-voice-relay.XXXXXX") || return 2
+  cat > "$tmp" || { rm -f "$tmp"; return 2; }
+  chmod 0600 "$tmp" 2>/dev/null || true
+  if ln "$tmp" "$target" 2>/dev/null; then
+    status=0
+  else
+    status=1
+  fi
+  rm -f "$tmp"
+  return "$status"
+}
+
+slug_valid() {  # <slug>
+  case "$1" in
+    ''|*[!A-Za-z0-9._-]*) return 1 ;;
+    .|..) return 1 ;;
+  esac
+  return 0
+}
+
+revision_valid() {  # <n>
+  case "$1" in
+    ''|*[!0-9]*) return 1 ;;
+    0) return 1 ;;
+  esac
+  return 0
+}
+
+sha_valid() {  # <hex>
+  case "$1" in
+    ''|*[!0-9a-f]*) return 1 ;;
+  esac
+  [ "${#1}" -eq 64 ]
+}
+
+# Collapse a free-text field to one safe line: the record format is one field
+# per line, so an embedded newline would forge a second field.
+clean_text() {
+  printf '%s' "$1" | LC_ALL=C tr '\t\r\n' '   ' | LC_ALL=C tr -d '\000'
+}
+
+topic_dir() {  # <topic>
+  printf '%s/topics/%s\n' "$RELAY_DIR" "$1"
+}
+
+request_id() {  # <topic>
+  printf 'voice-%s\n' "$1"
+}
+
+binding_file() {
+  printf '%s/bindings/current\n' "$RELAY_DIR"
+}
+
+binding_fingerprint() {
+  local file
+  file=$(binding_file)
+  [ -f "$file" ] || return 1
+  record_field "$file" fingerprint
+}
+
+# The current revision is DERIVED from the immutable revision records, never
+# read from a mutable pointer: a crash between two writes cannot invent one.
+current_revision() {  # <topic>
+  local dir n best=0
+  dir="$(topic_dir "$1")/revisions"
+  [ -d "$dir" ] || { printf '0\n'; return 0; }
+  for f in "$dir"/*.rec; do
+    [ -f "$f" ] || continue
+    n=$(basename "$f" .rec)
+    case "$n" in ''|*[!0-9]*) continue ;; esac
+    [ "$n" -gt "$best" ] && best=$n
+  done
+  printf '%s\n' "$best"
+}
+
+# "" when open; otherwise "<state> <revision>".
+topic_terminal() {  # <topic>
+  local dir f base
+  dir="$(topic_dir "$1")/terminal"
+  [ -d "$dir" ] || return 0
+  for f in "$dir"/*; do
+    [ -f "$f" ] || continue
+    base=$(basename "$f")
+    case "$base" in
+      *.cancelled) printf 'cancelled %s\n' "${base%.cancelled}"; return 0 ;;
+    esac
+  done
+  for f in "$dir"/*.completed; do
+    [ -f "$f" ] || continue
+    base=$(basename "$f")
+    printf 'completed %s\n' "${base%.completed}"
+    return 0
+  done
+  return 0
+}
+
+record_event() {  # <topic> <revision> <phase> <detail>
+  local dir line
+  dir=$(topic_dir "$1")
+  mkdir -p "$dir" || return 1
+  line=$(printf '%s\t%s\t%s\t%s\t%s' "$(utc_now)" "$(epoch_now)" "$2" "$3" "$(clean_text "$4")")
+  printf '%s\n' "$line" >> "$dir/events.log"
+}
+
+require_topic() {  # <topic>
+  slug_valid "$1" || die "invalid topic: $1"
+  [ -d "$(topic_dir "$1")/revisions" ] || die "unknown topic: $1"
+}
+
+# A path this script will read or write must be unambiguous and inside the
+# bound authorized directory. Everything else - a relative path, a traversal, a
+# symlink, a directory, a path whose parent resolves elsewhere - is refused
+# before any read, because the relay's whole job is to decide from real bytes.
+authorized_dir() {
+  local file dir
+  file=$(binding_file)
+  [ -f "$file" ] || return 1
+  dir=$(record_field "$file" dir)
+  [ -n "$dir" ] || return 1
+  printf '%s\n' "$dir"
+}
+
+path_under_authorized() {  # <path> ; prints resolved parent
+  local path=$1 auth parent resolved
+  auth=$(authorized_dir) || return 1
+  case "$path" in
+    /*) : ;;
+    *) return 1 ;;
+  esac
+  case "$path" in
+    *../*|*/..|*..) return 1 ;;
+  esac
+  parent=$(dirname "$path")
+  resolved=$(CDPATH='' cd -P -- "$parent" 2>/dev/null && pwd -P) || return 1
+  case "$resolved" in
+    "$auth"|"$auth"/*) : ;;
+    *) return 1 ;;
+  esac
+  printf '%s\n' "$resolved"
+}
+
+# The shared freshness decision. Every gate calls exactly this, so "fresh" can
+# never mean two different things in two places.
+freshness_verdict() {  # <topic> <revision> ; echoes "<code> <verdict> <detail>"
+  local topic=$1 rev=$2 dir cur terminal tstate trev bound want
+  dir=$(topic_dir "$topic")
+  cur=$(current_revision "$topic")
+  if [ "$cur" = 0 ]; then
+    printf '4 unknown-revision topic %s was never opened\n' "$topic"
+    return 0
+  fi
+  if [ ! -f "$dir/revisions/$rev.rec" ]; then
+    printf '4 unknown-revision revision %s of %s was never opened\n' "$rev" "$topic"
+    return 0
+  fi
+  bound=$(record_field "$dir/revisions/$rev.rec" binding)
+  want=$(binding_fingerprint || true)
+  if [ -z "$want" ]; then
+    printf '7 binding-replaced no session binding is recorded; rebind before acting\n'
+    return 0
+  fi
+  if [ "$bound" != "$want" ]; then
+    printf '7 binding-replaced revision %s belongs to a replaced session binding\n' "$rev"
+    return 0
+  fi
+  terminal=$(topic_terminal "$topic")
+  if [ -n "$terminal" ]; then
+    tstate=${terminal%% *}
+    trev=${terminal##* }
+    if [ "$tstate" = cancelled ]; then
+      printf '5 retired %s was cancelled at revision %s\n' "$topic" "$trev"
+    else
+      printf '5 retired %s already completed at revision %s\n' "$topic" "$trev"
+    fi
+    return 0
+  fi
+  if [ "$rev" -lt "$cur" ]; then
+    printf '3 superseded revision %s of %s was corrected by revision %s\n' "$rev" "$topic" "$cur"
+    return 0
+  fi
+  printf '0 fresh revision %s is current for %s\n' "$rev" "$topic"
+}
+
+usage() {
+  sed -n '/^# Usage:/,/^# FM_VOICE_RELAY_DIR/p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+}
+
+cmd_bind() {
+  local companion='' primary='' home='' dir='' file prev fingerprint stamp
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --companion) companion=${2:-}; shift 2 ;;
+      --primary) primary=${2:-}; shift 2 ;;
+      --home) home=${2:-}; shift 2 ;;
+      --dir) dir=${2:-}; shift 2 ;;
+      *) die "bind: unexpected argument: $1" ;;
+    esac
+  done
+  [ -n "$companion" ] || die "bind requires --companion <id>"
+  [ -n "$primary" ] || die "bind requires --primary <id>"
+  [ -n "$home" ] || die "bind requires --home <codex-home>"
+  [ -n "$dir" ] || die "bind requires --dir <authorized directory>"
+  dir=$(fm_path_require_directory "authorized" "$dir") || exit 2
+  [ -d "$dir" ] || die "bind: authorized directory does not exist: $dir"
+  # Store the fully resolved spelling: /tmp and /private/tmp are the same
+  # directory, and a containment test that compares two different spellings of
+  # one path refuses real files for no reason.
+  dir=$(CDPATH='' cd -P -- "$dir" && pwd -P) || die "bind: cannot resolve the authorized directory: $dir"
+  companion=$(clean_text "$companion")
+  primary=$(clean_text "$primary")
+  home=$(clean_text "$home")
+  fingerprint=$(printf '%s\n%s\n%s\n%s\n' "$companion" "$primary" "$home" "$dir" | sha256_text)
+  file=$(binding_file)
+  mkdir -p "$(dirname "$file")/history" || die "bind: cannot create state directory"
+  if [ -f "$file" ]; then
+    prev=$(record_field "$file" fingerprint)
+    if [ "$prev" = "$fingerprint" ]; then
+      printf 'ok: binding unchanged %s\n' "$fingerprint"
+      return 0
+    fi
+    stamp=$(date -u +%Y%m%dT%H%M%SZ)
+    {
+      cat "$file"
+      printf 'invalidated_utc=%s\n' "$(utc_now)"
+      printf 'replaced_by=%s\n' "$fingerprint"
+    } | publish_once "$(dirname "$file")/history/$stamp-$prev" >/dev/null 2>&1 || true
+    rm -f "$file"
+  fi
+  {
+    printf 'companion=%s\n' "$companion"
+    printf 'primary=%s\n' "$primary"
+    printf 'home=%s\n' "$home"
+    printf 'dir=%s\n' "$dir"
+    printf 'fingerprint=%s\n' "$fingerprint"
+    printf 'bound_utc=%s\n' "$(utc_now)"
+  } | publish_once "$file" || die "bind: could not publish binding"
+  printf 'ok: bound %s\n' "$fingerprint"
+}
+
+cmd_binding() {
+  local file
+  file=$(binding_file)
+  if [ ! -f "$file" ]; then
+    printf 'none: no session binding is recorded\n'
+    return 1
+  fi
+  cat "$file"
+}
+
+cmd_open() {
+  local topic=${1:-} summary='' dir fingerprint rid
+  shift || true
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --summary) summary=${2:-}; shift 2 ;;
+      *) die "open: unexpected argument: $1" ;;
+    esac
+  done
+  slug_valid "$topic" || die "open requires a topic slug"
+  [ -n "$summary" ] || die "open requires --summary <text>"
+  fingerprint=$(binding_fingerprint) || die "open: bind a session first"
+  dir=$(topic_dir "$topic")
+  if [ "$(current_revision "$topic")" != 0 ]; then
+    refuse 9 conflict "topic $topic already exists at revision $(current_revision "$topic"); correct it with revise instead of opening a duplicate"
+  fi
+  rid=$(request_id "$topic")
+  mkdir -p "$dir/revisions" || die "open: cannot create topic state"
+  {
+    printf 'request_id=%s\n' "$rid"
+    printf 'topic=%s\n' "$topic"
+    printf 'revision=1\n'
+    printf 'created_utc=%s\n' "$(utc_now)"
+    printf 'created_epoch=%s\n' "$(epoch_now)"
+    printf 'summary=%s\n' "$(clean_text "$summary")"
+    printf 'binding=%s\n' "$fingerprint"
+    printf 'supersedes=\n'
+  } | publish_once "$dir/revisions/1.rec" || refuse 9 conflict "revision 1 of $topic was created concurrently"
+  record_event "$topic" 1 opened "$(clean_text "$summary")"
+  printf '%s 1\n' "$rid"
+}
+
+cmd_revise() {
+  local topic=${1:-} summary='' expect='' dir cur next fingerprint rid terminal
+  shift || true
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --summary) summary=${2:-}; shift 2 ;;
+      --expect-revision) expect=${2:-}; shift 2 ;;
+      *) die "revise: unexpected argument: $1" ;;
+    esac
+  done
+  slug_valid "$topic" || die "revise requires a topic slug"
+  [ -n "$summary" ] || die "revise requires --summary <text>"
+  require_topic "$topic"
+  fingerprint=$(binding_fingerprint) || die "revise: bind a session first"
+  dir=$(topic_dir "$topic")
+  cur=$(current_revision "$topic")
+  terminal=$(topic_terminal "$topic")
+  [ -z "$terminal" ] || refuse 5 retired "$topic is ${terminal%% *} at revision ${terminal##* }; open a new topic for new work"
+  if [ -n "$expect" ]; then
+    revision_valid "$expect" || die "revise: --expect-revision must be a positive integer"
+    [ "$expect" = "$cur" ] || refuse 9 conflict "expected revision $expect but $topic is at revision $cur"
+  fi
+  next=$((cur + 1))
+  rid=$(request_id "$topic")
+  {
+    printf 'request_id=%s\n' "$rid"
+    printf 'topic=%s\n' "$topic"
+    printf 'revision=%s\n' "$next"
+    printf 'created_utc=%s\n' "$(utc_now)"
+    printf 'created_epoch=%s\n' "$(epoch_now)"
+    printf 'summary=%s\n' "$(clean_text "$summary")"
+    printf 'binding=%s\n' "$fingerprint"
+    printf 'supersedes=%s\n' "$cur"
+  } | publish_once "$dir/revisions/$next.rec" || refuse 9 conflict "revision $next of $topic was created concurrently"
+  record_event "$topic" "$cur" superseded "corrected by revision $next"
+  record_event "$topic" "$next" opened "$(clean_text "$summary")"
+  printf '%s %s\n' "$rid" "$next"
+  # Honesty about the boundary: a step already running cannot be recalled by
+  # anything in this ledger or in the installed transport.
+  inflight_report "$topic"
+}
+
+inflight_report() {  # <topic>
+  local dir f base
+  dir="$(topic_dir "$1")/steps"
+  [ -d "$dir" ] || return 0
+  for f in "$dir"/*.inflight; do
+    [ -f "$f" ] || continue
+    base=$(basename "$f" .inflight)
+    printf 'in-flight: step %s is already running and cannot be interrupted; the correction applies at the next gate\n' "$base"
+  done
+}
+
+cmd_cancel() {
+  local topic=${1:-} reason='' cur
+  shift || true
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --reason) reason=${2:-}; shift 2 ;;
+      *) die "cancel: unexpected argument: $1" ;;
+    esac
+  done
+  slug_valid "$topic" || die "cancel requires a topic slug"
+  [ -n "$reason" ] || die "cancel requires --reason <text>"
+  require_topic "$topic"
+  cur=$(current_revision "$topic")
+  {
+    printf 'topic=%s\n' "$topic"
+    printf 'revision=%s\n' "$cur"
+    printf 'state=cancelled\n'
+    printf 'reason=%s\n' "$(clean_text "$reason")"
+    printf 'utc=%s\n' "$(utc_now)"
+  } | publish_once "$(topic_dir "$topic")/terminal/$cur.cancelled" || refuse 9 conflict "$topic already has a terminal record at revision $cur"
+  record_event "$topic" "$cur" cancelled "$(clean_text "$reason")"
+  printf 'ok: cancelled %s at revision %s; performed steps are kept, not rolled back\n' "$topic" "$cur"
+  inflight_report "$topic"
+}
+
+cmd_complete() {
+  local topic=${1:-} rev='' outcome='' dir retired=0 f base verdict code
+  shift || true
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --revision) rev=${2:-}; shift 2 ;;
+      --outcome) outcome=${2:-}; shift 2 ;;
+      *) die "complete: unexpected argument: $1" ;;
+    esac
+  done
+  slug_valid "$topic" || die "complete requires a topic slug"
+  revision_valid "$rev" || die "complete requires --revision <n>"
+  require_topic "$topic"
+  verdict=$(freshness_verdict "$topic" "$rev")
+  code=${verdict%% *}
+  [ "$code" = 0 ] || refuse "$code" "$(echo "${verdict#* }" | cut -d' ' -f1)" "$(echo "${verdict#* }" | cut -d' ' -f2-)"
+  dir=$(topic_dir "$topic")
+  {
+    printf 'topic=%s\n' "$topic"
+    printf 'revision=%s\n' "$rev"
+    printf 'state=completed\n'
+    printf 'outcome=%s\n' "$(clean_text "$outcome")"
+    printf 'utc=%s\n' "$(utc_now)"
+  } | publish_once "$dir/terminal/$rev.completed" || refuse 9 conflict "$topic already has a terminal record at revision $rev"
+  # Success retires this topic's pending substeps and NOTHING else: another
+  # topic's work is untouched, which is the whole point of topic scoping.
+  if [ -d "$dir/steps" ]; then
+    for f in "$dir/steps"/*.declared; do
+      [ -f "$f" ] || continue
+      base=$(basename "$f" .declared)
+      [ -f "$dir/steps/$base.performed" ] && continue
+      printf 'step=%s\nretired_by_revision=%s\nutc=%s\n' "$base" "$rev" "$(utc_now)" \
+        | publish_once "$dir/steps/$base.retired" >/dev/null 2>&1 || true
+      retired=$((retired + 1))
+    done
+  fi
+  record_event "$topic" "$rev" completed "$(clean_text "$outcome")"
+  printf 'ok: completed %s at revision %s; retired %s pending step(s) of this topic only\n' "$topic" "$rev" "$retired"
+}
+
+cmd_step() {
+  local topic=${1:-} dir added=0 slug
+  shift || true
+  require_topic "$topic"
+  dir="$(topic_dir "$topic")/steps"
+  [ "$#" -gt 0 ] || die "step requires at least one --step <slug>"
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --step)
+        slug=${2:-}
+        slug_valid "$slug" || die "step: invalid step slug: $slug"
+        printf 'step=%s\ndeclared_utc=%s\n' "$slug" "$(utc_now)" \
+          | publish_once "$dir/$slug.declared" >/dev/null 2>&1 || true
+        added=$((added + 1))
+        shift 2
+        ;;
+      *) die "step: unexpected argument: $1" ;;
+    esac
+  done
+  printf 'ok: %s step(s) declared for %s\n' "$added" "$topic"
+}
+
+# The gate. Reports and records nothing, so a caller may ask as often as it
+# likes - which is exactly what "check before every not-yet-performed step"
+# needs to be cheap enough to actually do.
+cmd_check_action() {
+  local topic=${1:-} rev='' step='' verdict code word detail dir
+  shift || true
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --revision) rev=${2:-}; shift 2 ;;
+      --step) step=${2:-}; shift 2 ;;
+      *) die "check-action: unexpected argument: $1" ;;
+    esac
+  done
+  slug_valid "$topic" || die "check-action requires a topic slug"
+  revision_valid "$rev" || die "check-action requires --revision <n>"
+  verdict=$(freshness_verdict "$topic" "$rev")
+  code=${verdict%% *}
+  word=$(echo "${verdict#* }" | cut -d' ' -f1)
+  detail=$(echo "${verdict#* }" | cut -d' ' -f2-)
+  if [ "$code" != 0 ]; then
+    refuse "$code" "$word" "$detail"
+  fi
+  if [ -n "$step" ]; then
+    slug_valid "$step" || die "check-action: invalid step slug: $step"
+    dir="$(topic_dir "$topic")/steps"
+    if [ -f "$dir/$step.performed" ]; then
+      refuse 6 already-performed "step $step of $topic was already performed"
+    fi
+    if [ -f "$dir/$step.retired" ]; then
+      refuse 5 retired "step $step of $topic was retired by a later success"
+    fi
+    if [ -f "$dir/$step.inflight" ]; then
+      refuse 9 conflict "step $step of $topic is already claimed and running"
+    fi
+  fi
+  printf 'fresh: %s\n' "$detail"
+}
+
+cmd_begin() {
+  local topic=${1:-} rev='' step='' dir
+  shift || true
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --revision) rev=${2:-}; shift 2 ;;
+      --step) step=${2:-}; shift 2 ;;
+      *) die "begin: unexpected argument: $1" ;;
+    esac
+  done
+  revision_valid "$rev" || die "begin requires --revision <n>"
+  slug_valid "${step:-}" || die "begin requires --step <slug>"
+  cmd_check_action "$topic" --revision "$rev" --step "$step" >/dev/null
+  dir="$(topic_dir "$topic")/steps"
+  printf 'step=%s\nrevision=%s\nstarted_utc=%s\npid=%s\n' "$step" "$rev" "$(utc_now)" "$$" \
+    | publish_once "$dir/$step.inflight" || refuse 9 conflict "step $step of $topic is already claimed"
+  record_event "$topic" "$rev" step-begin "$step"
+  printf 'ok: claimed %s for revision %s; this claim cannot be revoked once the action leaves the gate\n' "$step" "$rev"
+}
+
+cmd_performed() {
+  local topic=${1:-} rev='' step='' note='' dir
+  shift || true
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --revision) rev=${2:-}; shift 2 ;;
+      --step) step=${2:-}; shift 2 ;;
+      --note) note=${2:-}; shift 2 ;;
+      *) die "performed: unexpected argument: $1" ;;
+    esac
+  done
+  revision_valid "$rev" || die "performed requires --revision <n>"
+  slug_valid "${step:-}" || die "performed requires --step <slug>"
+  require_topic "$topic"
+  dir="$(topic_dir "$topic")/steps"
+  printf 'step=%s\nrevision=%s\nperformed_utc=%s\nnote=%s\n' "$step" "$rev" "$(utc_now)" "$(clean_text "$note")" \
+    | publish_once "$dir/$step.performed" || refuse 9 conflict "step $step of $topic was already recorded as performed"
+  rm -f "$dir/$step.inflight"
+  record_event "$topic" "$rev" step-performed "$step"
+  printf 'ok: recorded %s as performed at revision %s\n' "$step" "$rev"
+}
+
+cmd_phase() {
+  local topic=${1:-} rev='' phase='' note='' msgid='' qexit='' detail
+  shift || true
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --revision) rev=${2:-}; shift 2 ;;
+      --phase) phase=${2:-}; shift 2 ;;
+      --note) note=${2:-}; shift 2 ;;
+      --message-id) msgid=${2:-}; shift 2 ;;
+      --queue-exit) qexit=${2:-}; shift 2 ;;
+      *) die "phase: unexpected argument: $1" ;;
+    esac
+  done
+  revision_valid "$rev" || die "phase requires --revision <n>"
+  require_topic "$topic"
+  case "$phase" in
+    enqueued|picked-up|working|completed|failed|superseded|cancelled|presented) : ;;
+    *) die "phase: unknown phase: ${phase:-<missing>}" ;;
+  esac
+  detail=$(clean_text "$note")
+  [ -n "$msgid" ] && detail="$detail message=$(clean_text "$msgid")"
+  [ -n "$qexit" ] && detail="$detail queue_exit=$(clean_text "$qexit")"
+  record_event "$topic" "$rev" "$phase" "$detail"
+  if [ "$phase" = enqueued ]; then
+    printf 'ok: recorded enqueued for %s revision %s. This proves the queue accepted the message and nothing else.\n' "$topic" "$rev"
+  else
+    printf 'ok: recorded %s for %s revision %s\n' "$phase" "$topic" "$rev"
+  fi
+}
+
+# Handoff authorization is recorded ONCE. The second call is not a new prompt
+# and not a second send: it reports that the authorization already exists, which
+# is what kills the "shall I send it?" loop.
+cmd_handoff() {
+  local topic=${1:-} rev='' file when
+  shift || true
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --revision) rev=${2:-}; shift 2 ;;
+      *) die "handoff: unexpected argument: $1" ;;
+    esac
+  done
+  revision_valid "$rev" || die "handoff requires --revision <n>"
+  cmd_check_action "$topic" --revision "$rev" >/dev/null
+  file="$(topic_dir "$topic")/handoff/$rev.authorized"
+  if printf 'topic=%s\nrevision=%s\nauthorized_utc=%s\n' "$topic" "$rev" "$(utc_now)" | publish_once "$file"; then
+    record_event "$topic" "$rev" handoff-authorized ''
+    printf 'send-now: %s revision %s is authorized; hand it off immediately and record the queue receipt with phase enqueued\n' "$topic" "$rev"
+    return 0
+  fi
+  when=$(record_field "$file" authorized_utc)
+  printf 'already-authorized: %s revision %s was authorized at %s; do not ask again and do not send a second copy\n' "$topic" "$rev" "$when"
+}
+
+# "Did you send it?" is answered from the ledger. This command never sends,
+# never re-queues, and never advises a retry: an accepted-but-unconfirmed send
+# is reported as exactly that.
+cmd_sent_status() {
+  local topic=${1:-} rev='' log line f_rev phase detail last_enq='' last_pick='' last_work='' last_done='' last_fail='' last_pres=''
+  shift || true
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --revision) rev=${2:-}; shift 2 ;;
+      *) die "sent-status: unexpected argument: $1" ;;
+    esac
+  done
+  require_topic "$topic"
+  log="$(topic_dir "$topic")/events.log"
+  if [ ! -f "$log" ]; then
+    printf 'unknown: no transport evidence recorded for %s\n' "$topic"
+    return 0
+  fi
+  while IFS='	' read -r _utc _epoch f_rev phase detail; do
+    [ -n "$rev" ] && [ "$f_rev" != "$rev" ] && continue
+    case "$phase" in
+      enqueued) last_enq="$_utc${detail:+ - $detail}" ;;
+      picked-up) last_pick="$_utc${detail:+ - $detail}" ;;
+      working) last_work="$_utc${detail:+ - $detail}" ;;
+      completed) last_done="$_utc${detail:+ - $detail}" ;;
+      failed) last_fail="$_utc${detail:+ - $detail}" ;;
+      presented) last_pres="$_utc${detail:+ - $detail}" ;;
+    esac
+  done < "$log"
+  printf 'status: %s%s\n' "$topic" "${rev:+ revision $rev}"
+  printf '  enqueued: %s\n' "${last_enq:-no record}"
+  printf '  picked-up: %s\n' "${last_pick:-no record - the companion is not known to have started a turn}"
+  printf '  working: %s\n' "${last_work:-no record}"
+  printf '  completed: %s\n' "${last_done:-no record}"
+  [ -n "$last_fail" ] && printf '  failed: %s\n' "$last_fail"
+  printf '  presented: %s\n' "${last_pres:-no record}"
+  if [ -n "$last_enq" ] && [ -z "$last_pick" ]; then
+    printf '  verdict: accepted by the queue, delivery unconfirmed. Not resent: a second copy would duplicate the work.\n'
+  elif [ -z "$last_enq" ]; then
+    printf '  verdict: nothing was handed off yet.\n'
+  else
+    printf '  verdict: delivery confirmed by a real turn, per the evidence above.\n'
+  fi
+}
+
+# Logical pending count: one open request per topic, revisions grouped, so a
+# corrected request is one pending item and not three. The native queue depth is
+# printed as unknown because the installed transport exposes no way to read it.
+cmd_pending() {
+  local root topic cur terminal open=0 steps log last_phase
+  root="$RELAY_DIR/topics"
+  if [ -d "$root" ]; then
+    for d in "$root"/*; do
+      [ -d "$d" ] || continue
+      topic=$(basename "$d")
+      terminal=$(topic_terminal "$topic")
+      [ -n "$terminal" ] && continue
+      cur=$(current_revision "$topic")
+      [ "$cur" = 0 ] && continue
+      open=$((open + 1))
+      steps=0
+      if [ -d "$d/steps" ]; then
+        for f in "$d/steps"/*.declared; do
+          [ -f "$f" ] || continue
+          base=$(basename "$f" .declared)
+          [ -f "$d/steps/$base.performed" ] && continue
+          [ -f "$d/steps/$base.retired" ] && continue
+          steps=$((steps + 1))
+        done
+      fi
+      last_phase=unknown
+      log="$d/events.log"
+      [ -f "$log" ] && last_phase=$(awk -F'\t' 'END{print $4}' "$log")
+      printf 'pending: %s revision=%s steps_pending=%s last_phase=%s\n' "$topic" "$cur" "$steps" "${last_phase:-unknown}"
+    done
+  fi
+  printf 'logical-pending: %s\n' "$open"
+  printf 'native-queue-depth: unknown - the installed transport exposes no queue inspection\n'
+  printf 'audio-playback: unknown - no record here proves anything was heard\n'
+}
+
+cmd_accept() {
+  local topic=${1:-} rev='' answer='' claimed='' receipt='' parent actual rid existing_id existing_sha verdict code
+  shift || true
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --revision) rev=${2:-}; shift 2 ;;
+      --answer) answer=${2:-}; shift 2 ;;
+      --sha256) claimed=${2:-}; shift 2 ;;
+      --receipt) receipt=${2:-}; shift 2 ;;
+      *) die "accept: unexpected argument: $1" ;;
+    esac
+  done
+  revision_valid "$rev" || die "accept requires --revision <n>"
+  [ -n "$answer" ] || die "accept requires --answer <path>"
+  [ -n "$receipt" ] || die "accept requires --receipt <path>"
+  sha_valid "$claimed" || die "accept requires --sha256 <64 hex characters>"
+  require_topic "$topic"
+  verdict=$(freshness_verdict "$topic" "$rev")
+  code=${verdict%% *}
+  case "$code" in
+    0|5) : ;;
+    *) refuse "$code" "$(echo "${verdict#* }" | cut -d' ' -f1)" "$(echo "${verdict#* }" | cut -d' ' -f2-)" ;;
+  esac
+  parent=$(path_under_authorized "$answer") || refuse 9 conflict "answer path is not an unambiguous file inside the bound authorized directory: $answer"
+  path_under_authorized "$receipt" >/dev/null || refuse 9 conflict "receipt path is not inside the bound authorized directory: $receipt"
+  [ -L "$answer" ] && refuse 9 conflict "answer path is a symlink: $answer"
+  [ -f "$answer" ] || refuse 9 conflict "answer is not a regular file: $answer"
+  [ -L "$receipt" ] && refuse 9 conflict "receipt path is a symlink: $receipt"
+  actual=$(sha256_file "$answer")
+  [ -n "$actual" ] || refuse 9 conflict "could not hash the answer file: $answer"
+  rid=$(request_id "$topic")
+  if [ "$actual" != "$claimed" ]; then
+    record_event "$topic" "$rev" conflict "answer hash disagreed"
+    refuse 9 conflict "answer hash disagrees with the queued value; nothing was written"
+  fi
+  if [ -e "$receipt" ]; then
+    existing_id=$(sed -n 's/^Request id: //p' "$receipt" | head -1)
+    existing_sha=$(sed -n 's/^Answer SHA-256: //p' "$receipt" | head -1)
+    if [ "$existing_id" = "$rid@r$rev" ] && [ "$existing_sha" = "$actual" ]; then
+      record_event "$topic" "$rev" duplicate "acceptance repeated; receipt untouched"
+      printf 'duplicate: %s revision %s was already accepted; the receipt is unchanged\n' "$rid" "$rev"
+      return 0
+    fi
+    record_event "$topic" "$rev" conflict "receipt exists with different identity"
+    refuse 9 conflict "a different receipt already exists at that path; it was left untouched"
+  fi
+  {
+    printf 'Request id: %s@r%s\n' "$rid" "$rev"
+    printf 'Answer path: %s/%s\n' "$parent" "$(basename "$answer")"
+    printf 'Answer SHA-256: %s\n' "$actual"
+    printf 'Received UTC: %s\n' "$(utc_now)"
+    printf 'Delivery state: received-by-primary\n'
+  } | publish_once "$receipt" || {
+    record_event "$topic" "$rev" conflict "receipt published concurrently"
+    refuse 9 conflict "the receipt was published concurrently; the first one stands"
+  }
+  record_event "$topic" "$rev" accepted "$actual"
+  printf 'ok: accepted %s revision %s; receipt published once at %s\n' "$rid" "$rev" "$receipt"
+}
+
+# The speech gate. Short by construction: the captain asked for outcome first,
+# one material limitation, one question, and everything else on screen.
+cmd_present() {
+  local topic=${1:-} rev='' outcome='' limitation='' question='' attribution='' allow_repeat=0 questions=0 final=0
+  local verdict code text hash prefix low
+  shift || true
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --revision) rev=${2:-}; shift 2 ;;
+      --outcome) outcome=${2:-}; shift 2 ;;
+      --limitation) limitation=${2:-}; shift 2 ;;
+      --question) question=${2:-}; questions=$((questions + 1)); shift 2 ;;
+      --attribution) attribution=${2:-}; shift 2 ;;
+      --allow-repeat) allow_repeat=1; shift ;;
+      --final) final=1; shift ;;
+      *) die "present: unexpected argument: $1" ;;
+    esac
+  done
+  revision_valid "$rev" || die "present requires --revision <n>"
+  [ -n "$outcome" ] || die "present requires --outcome <text>"
+  [ "$questions" -le 1 ] || die "present takes at most one --question; extra questions belong in the text artifact"
+  require_topic "$topic"
+  case "$attribution" in
+    companion-observed) prefix='Companion saw' ;;
+    firstmate-verified) prefix='Firstmate confirmed' ;;
+    mixed) prefix='Companion saw and Firstmate confirmed' ;;
+    *) die "present requires --attribution <companion-observed|firstmate-verified|mixed>" ;;
+  esac
+  verdict=$(freshness_verdict "$topic" "$rev")
+  code=${verdict%% *}
+  case "$code" in
+    0) : ;;
+    5)
+      # A finished topic may announce its own ending - that is what --final is
+      # for. Everything else it might have said is stale by definition: the
+      # queued "type the password now" belongs to work that already succeeded,
+      # and speaking it is the exact failure this gate exists to stop.
+      if [ "$final" != 1 ]; then
+        refuse 5 retired "$(echo "${verdict#* }" | cut -d' ' -f2-); only --final may announce a finished topic"
+      fi
+      case "$(topic_terminal "$topic")" in
+        "completed $rev"|"cancelled $rev") : ;;
+        *) refuse 5 retired "revision $rev is not the revision that ended $topic" ;;
+      esac
+      ;;
+    *) refuse "$code" "$(echo "${verdict#* }" | cut -d' ' -f1)" "$(echo "${verdict#* }" | cut -d' ' -f2-)" ;;
+  esac
+  low=$(printf '%s' "$outcome" | LC_ALL=C tr '[:upper:]' '[:lower:]' | sed 's/[[:punct:]]*$//;s/^[[:space:]]*//;s/[[:space:]]*$//')
+  # Filler is the spoken equivalent of a progress bar: it costs a turn, says
+  # nothing, and invites an acknowledgement in reply. Anything that is only a
+  # promise to continue is refused; say something when there is something.
+  case "$low" in
+    ok|okay|sure|"got it"|"will do"|understood|"on it"|thanks|noted|"no problem"|"of course")
+      refuse 8 filler-suppressed "\"$outcome\" carries no outcome; say nothing instead"
+      ;;
+    "one moment"*|"just a moment"*|"just a sec"*|"still working"*|"working on it"*|"let me check"*|"looking into"*)
+      refuse 8 filler-suppressed "\"$outcome\" is a progress noise, not a result; speak when there is one"
+      ;;
+  esac
+  text="$prefix: $(clean_text "$outcome")"
+  [ -n "$limitation" ] && text="$text Limitation: $(clean_text "$limitation")"
+  [ -n "$question" ] && text="$text Next: $(clean_text "$question")"
+  hash=$(printf '%s' "$text" | sha256_text)
+  if [ "$allow_repeat" = 0 ]; then
+    if ! printf 'revision=%s\nutc=%s\ntext=%s\n' "$rev" "$(utc_now)" "$text" \
+        | publish_once "$(topic_dir "$topic")/claims/present/$hash"; then
+      refuse 8 duplicate-suppressed "that exact sentence was already spoken for $topic"
+    fi
+  fi
+  record_event "$topic" "$rev" presented "$hash"
+  printf '%s\n' "$text"
+}
+
+pref_root() {
+  printf '%s/prefs\n' "$RELAY_DIR"
+}
+
+pref_key_valid() {  # <key>
+  case "$1" in
+    speech.*|style.*|detail.*|format.*) : ;;
+    *) return 1 ;;
+  esac
+  slug_valid "$1"
+}
+
+pref_current() {  # <key> ; prints the latest record path
+  local dir n best=0 f
+  dir="$(pref_root)/$1"
+  [ -d "$dir" ] || return 1
+  for f in "$dir"/*.rec; do
+    [ -f "$f" ] || continue
+    n=$(basename "$f" .rec)
+    case "$n" in ''|*[!0-9]*) continue ;; esac
+    [ "$n" -gt "$best" ] && best=$n
+  done
+  [ "$best" != 0 ] || return 1
+  printf '%s/%s.rec\n' "$dir" "$best"
+}
+
+# Preferences are style only. No gate in this script ever reads one, so a
+# preference cannot widen what may be executed, and a preference recorded under
+# a replaced binding is reported as invalidated rather than silently inherited.
+cmd_pref() {
+  local action=${1:-} key value='' source='' scope='companion' file next want have state
+  shift || true
+  case "$action" in
+    set)
+      key=${1:-}; shift || true
+      while [ "$#" -gt 0 ]; do
+        case "$1" in
+          --value) value=${2:-}; shift 2 ;;
+          --source) source=${2:-}; shift 2 ;;
+          --scope) scope=${2:-}; shift 2 ;;
+          *) die "pref set: unexpected argument: $1" ;;
+        esac
+      done
+      pref_key_valid "${key:-}" || die "pref keys are style only and must start with speech., style., detail., or format.; a preference can never grant execution authority"
+      [ -n "$value" ] || die "pref set requires --value <text>"
+      case "$source" in
+        captain-confirmed|companion-proposal) : ;;
+        *) die "pref set requires --source <captain-confirmed|companion-proposal>" ;;
+      esac
+      want=$(binding_fingerprint) || die "pref set: bind a session first"
+      file=$(pref_current "$key" || true)
+      next=1
+      [ -n "$file" ] && next=$(( $(basename "$file" .rec) + 1 ))
+      {
+        printf 'key=%s\n' "$key"
+        printf 'value=%s\n' "$(clean_text "$value")"
+        printf 'source=%s\n' "$source"
+        printf 'scope=%s\n' "$(clean_text "$scope")"
+        printf 'revision=%s\n' "$next"
+        printf 'binding=%s\n' "$want"
+        printf 'utc=%s\n' "$(utc_now)"
+        printf 'state=active\n'
+        printf 'supersedes=%s\n' "$((next - 1))"
+      } | publish_once "$(pref_root)/$key/$next.rec" || refuse 9 conflict "preference $key revision $next was written concurrently"
+      printf 'ok: %s revision %s recorded as %s\n' "$key" "$next" "$source"
+      ;;
+    show)
+      key=${1:-}
+      pref_key_valid "${key:-}" || die "pref show requires a style preference key"
+      file=$(pref_current "$key") || { printf 'none: %s has no record\n' "$key"; return 1; }
+      cat "$file"
+      have=$(record_field "$file" binding)
+      want=$(binding_fingerprint || true)
+      if [ "$have" != "$want" ]; then
+        printf 'status=invalidated-by-binding-replacement\n'
+        return 7
+      fi
+      printf 'status=active\n'
+      ;;
+    list)
+      [ -d "$(pref_root)" ] || { printf 'none: no preferences recorded\n'; return 0; }
+      want=$(binding_fingerprint || true)
+      for d in "$(pref_root)"/*; do
+        [ -d "$d" ] || continue
+        key=$(basename "$d")
+        file=$(pref_current "$key") || continue
+        have=$(record_field "$file" binding)
+        state=$(record_field "$file" state)
+        if [ "$have" != "$want" ]; then
+          state='invalidated-by-binding-replacement'
+        fi
+        printf '%s = %s [source=%s scope=%s revision=%s state=%s]\n' \
+          "$key" "$(record_field "$file" value)" "$(record_field "$file" source)" \
+          "$(record_field "$file" scope)" "$(record_field "$file" revision)" "$state"
+      done
+      ;;
+    forget)
+      key=${1:-}
+      pref_key_valid "${key:-}" || die "pref forget requires a style preference key"
+      file=$(pref_current "$key") || { printf 'none: %s has no record\n' "$key"; return 1; }
+      next=$(( $(basename "$file" .rec) + 1 ))
+      want=$(binding_fingerprint || true)
+      {
+        printf 'key=%s\n' "$key"
+        printf 'value=\n'
+        printf 'source=captain-confirmed\n'
+        printf 'scope=%s\n' "$(record_field "$file" scope)"
+        printf 'revision=%s\n' "$next"
+        printf 'binding=%s\n' "$want"
+        printf 'utc=%s\n' "$(utc_now)"
+        printf 'state=forgotten\n'
+        printf 'supersedes=%s\n' "$((next - 1))"
+      } | publish_once "$(pref_root)/$key/$next.rec" || refuse 9 conflict "preference $key revision $next was written concurrently"
+      printf 'ok: %s forgotten at revision %s\n' "$key" "$next"
+      ;;
+    render)
+      [ -d "$(pref_root)" ] || { printf 'none: no preferences recorded\n'; return 0; }
+      want=$(binding_fingerprint || true)
+      printf 'Companion style preferences (scoped to this enrollment, never global model settings):\n'
+      for d in "$(pref_root)"/*; do
+        [ -d "$d" ] || continue
+        key=$(basename "$d")
+        file=$(pref_current "$key") || continue
+        [ "$(record_field "$file" state)" = active ] || continue
+        [ "$(record_field "$file" binding)" = "$want" ] || continue
+        if [ "$(record_field "$file" source)" = captain-confirmed ]; then
+          printf -- '- %s: %s (captain-confirmed)\n' "$key" "$(record_field "$file" value)"
+        else
+          printf -- '- %s: %s (PROPOSAL - not a captain rule until confirmed)\n' "$key" "$(record_field "$file" value)"
+        fi
+      done
+      ;;
+    *) die "pref: use set, show, list, forget, or render" ;;
+  esac
+}
+
+# The correction path for work already in flight: print the exact supported
+# steer, with the bound thread filled in. A superseded or retired revision has
+# no business steering anything, so the same gate applies here.
+cmd_steer_command() {
+  local topic=${1:-} rev='' turn='' summary thread
+  shift || true
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --revision) rev=${2:-}; shift 2 ;;
+      --turn) turn=${2:-}; shift 2 ;;
+      *) die "steer-command: unexpected argument: $1" ;;
+    esac
+  done
+  revision_valid "$rev" || die "steer-command requires --revision <n>"
+  [ -n "$turn" ] || die "steer-command requires --turn <id> from fm-voice-relay-appserver.sh active-turn"
+  cmd_check_action "$topic" --revision "$rev" >/dev/null
+  thread=$(record_field "$(binding_file)" companion)
+  summary=$(record_field "$(topic_dir "$topic")/revisions/$rev.rec" summary)
+  printf '%s/fm-voice-relay-appserver.sh steer --thread %s --expected-turn %s --text %s --live\n' \
+    "$SCRIPT_DIR" "$thread" "$turn" "'$summary'"
+  printf 'note: the steer fails if that turn already ended; that refusal is correct and must not be retried blindly.\n'
+}
+
+cmd_evidence() {
+  local topic=${1:-} log prev=0 gap handoffs=0 turns=0 presented=0
+  require_topic "$topic"
+  log="$(topic_dir "$topic")/events.log"
+  printf 'topic: %s request=%s current-revision=%s\n' "$topic" "$(request_id "$topic")" "$(current_revision "$topic")"
+  local terminal
+  terminal=$(topic_terminal "$topic")
+  printf 'state: %s\n' "${terminal:-open}"
+  if [ ! -f "$log" ]; then
+    printf 'no events recorded\n'
+    return 0
+  fi
+  printf '%-22s %-4s %-12s %-9s %s\n' UTC REV PHASE GAP DETAIL
+  while IFS='	' read -r utc epoch rev phase detail; do
+    if [ "$prev" = 0 ]; then
+      gap='-'
+    else
+      gap="$((epoch - prev))s"
+    fi
+    prev=$epoch
+    case "$phase" in
+      enqueued) handoffs=$((handoffs + 1)) ;;
+      picked-up) turns=$((turns + 1)) ;;
+      presented) presented=$((presented + 1)) ;;
+    esac
+    printf '%-22s %-4s %-12s %-9s %s\n' "$utc" "$rev" "$phase" "$gap" "$detail"
+  done < "$log"
+  printf 'counts: handoffs=%s observed-turns=%s presentations=%s\n' "$handoffs" "$turns" "$presented"
+  printf 'limits: gaps are wall-clock between recorded events, not model or cost measurements.\n'
+  printf 'limits: native queue depth and audible playback are unknown to this ledger.\n'
+}
+
+main() {
+  local cmd=${1:-}
+  shift || true
+  case "$cmd" in
+    bind) cmd_bind "$@" ;;
+    binding) cmd_binding "$@" ;;
+    open) cmd_open "$@" ;;
+    revise) cmd_revise "$@" ;;
+    cancel) cmd_cancel "$@" ;;
+    complete) cmd_complete "$@" ;;
+    step) cmd_step "$@" ;;
+    check-action) cmd_check_action "$@" ;;
+    begin) cmd_begin "$@" ;;
+    performed) cmd_performed "$@" ;;
+    phase) cmd_phase "$@" ;;
+    handoff) cmd_handoff "$@" ;;
+    sent-status) cmd_sent_status "$@" ;;
+    pending) cmd_pending "$@" ;;
+    accept) cmd_accept "$@" ;;
+    present) cmd_present "$@" ;;
+    pref) cmd_pref "$@" ;;
+    steer-command) cmd_steer_command "$@" ;;
+    evidence) cmd_evidence "$@" ;;
+    -h|--help|help|'') usage ;;
+    *) die "unknown command: $cmd (try --help)" ;;
+  esac
+}
+
+main "$@"
