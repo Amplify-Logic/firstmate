@@ -126,6 +126,64 @@ SH
   pass "fm-voice-relay-appserver: an answer is recognised as it arrives, not when the proxy exits"
 }
 
+# The proxy is started in its own session so it never sees the terminal's SIGINT.
+# That makes the driver's own cleanup the only thing standing between an
+# interrupted --live call and a proxy left running unattached.
+test_an_interrupted_live_call_leaves_no_proxy_running() {
+  local server pidfile job kid i alive=1
+  pidfile="$TMP_ROOT/interrupt-proxy.pid"
+  server="$TMP_ROOT/interrupt-app-server"
+  rm -f "$pidfile"
+  cat > "$server" <<SH
+#!/usr/bin/env bash
+echo \$\$ > "$pidfile"
+cat > /dev/null
+sleep 120
+SH
+  chmod +x "$server"
+
+  # Job control puts the call in its own process group, so the interrupt below
+  # reaches the whole call the way a terminal Ctrl-C would.
+  set -m
+  FM_VOICE_RELAY_PROXY_CMD="$server" FM_VOICE_RELAY_RPC_TIMEOUT=60 \
+    "$APPSERVER" active-turn --thread THREAD-1 --live >/dev/null 2>&1 &
+  job=$!
+  set +m
+  for i in $(seq 1 100); do [ -s "$pidfile" ] && break; sleep 0.1; done
+  if [ ! -s "$pidfile" ]; then
+    kill -KILL -"$job" 2>/dev/null
+    fail "the fake proxy never started"
+  fi
+  kid=$(cat "$pidfile")
+
+  kill -INT -"$job" 2>/dev/null
+  # Bounded well inside the RPC timeout, so a proxy that only dies when the bound
+  # expires still fails this test.
+  for i in $(seq 1 50); do
+    if ! kill -0 "$kid" 2>/dev/null; then alive=0; break; fi
+    sleep 0.1
+  done
+  kill -KILL -"$job" 2>/dev/null
+  wait "$job" 2>/dev/null || true
+  if [ "$alive" = 1 ]; then
+    kill -KILL "$kid" 2>/dev/null
+    fail "an interrupted live call left the proxy running"
+  fi
+  pass "fm-voice-relay-appserver: an interrupted live call still terminates its proxy"
+}
+
+# A command string the shell cannot parse is a usage error, not a traceback and
+# not an exit status outside the documented set.
+test_an_unparseable_proxy_command_is_a_usage_error() {
+  local out code
+  out=$(FM_VOICE_RELAY_PROXY_CMD="/bin/echo 'unbalanced" \
+    "$APPSERVER" active-turn --thread THREAD-1 --live 2>&1) && code=0 || code=$?
+  expect_code 2 "$code" "an unparseable proxy command must exit with the documented usage code"
+  assert_contains "$out" "not a parseable command line" "the refusal must name what is wrong"
+  assert_not_contains "$out" "Traceback" "a malformed command string must never surface a traceback"
+  pass "fm-voice-relay-appserver: an unparseable proxy command is refused inside the exit contract"
+}
+
 test_probe_reports_the_installed_steering_contract() {
   local out code
   make_schema "$TMP_ROOT/schema-ok" '"turn/steer","turn/interrupt","thread/turns/list","thread/read"'
@@ -265,4 +323,6 @@ test_active_turn_reads_the_current_turn
 test_interrupt_is_sent_as_the_protocol_defines_it
 test_a_silent_server_fails_at_the_documented_bound
 test_a_proxy_that_answers_and_stays_open_is_not_a_timeout
+test_an_interrupted_live_call_leaves_no_proxy_running
+test_an_unparseable_proxy_command_is_a_usage_error
 test_an_unsteerable_thread_names_the_supported_fallback

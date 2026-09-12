@@ -132,9 +132,12 @@ proxy_cmd() {
 # need for a second copy of the fleet timeout helper: the bound lives here, on
 # the read, rather than around the whole process.
 #
-# Exit: 0 with the result object on stdout, 3 when the server refused (a stale
-# expectedTurnId lands here), 5 for any transport failure. The child is always
-# signalled before returning, so no proxy is left running behind the caller.
+# Exit: 0 with the result object on stdout, 2 when the proxy command string is
+# not a parseable command line, 3 when the server refused (a stale
+# expectedTurnId lands here), 5 for any transport failure. The child is signalled
+# on EVERY exit path, interrupt included: the proxy runs in its own session so it
+# never sees the terminal's SIGINT, and only this cleanup stands between a
+# cancelled --live call and a proxy left running unattached.
 rpc_exchange() {  # <method> <params-json> <timeout-secs> ; prints the id-2 result
   local method=$1 params=$2 secs=$3 cmd
   cmd=$(proxy_cmd)
@@ -142,7 +145,14 @@ rpc_exchange() {  # <method> <params-json> <timeout-secs> ; prints the id-2 resu
     python3 - <<'PY'
 import json, os, select, shlex, signal, subprocess, sys, time
 
-cmd = shlex.split(os.environ["FM_RPC_CMD"])
+try:
+    cmd = shlex.split(os.environ["FM_RPC_CMD"])
+except ValueError as exc:
+    sys.stderr.write("error: the app-server proxy command is not a parseable command line: %s\n" % exc)
+    raise SystemExit(2)
+if not cmd:
+    sys.stderr.write("error: the app-server proxy command is empty\n")
+    raise SystemExit(2)
 secs = float(os.environ["FM_RPC_SECS"])
 method = os.environ["FM_RPC_METHOD"]
 params = os.environ["FM_RPC_PARAMS"]
@@ -187,48 +197,50 @@ def answer_in(line):
     return msg
 
 
-try:
-    proc.stdin.write(frames.encode())
-    proc.stdin.flush()
-except (BrokenPipeError, OSError):
-    pass
-try:
-    proc.stdin.close()
-except OSError:
-    pass
-
-deadline = time.monotonic() + secs
-fd = proc.stdout.fileno()
-buf = b""
 answer = None
 timed_out = False
 
-while answer is None:
-    remaining = deadline - time.monotonic()
-    if remaining <= 0:
-        timed_out = True
-        break
-    ready = select.select([fd], [], [], remaining)[0]
-    if not ready:
-        continue
+try:
     try:
-        chunk = os.read(fd, 65536)
+        proc.stdin.write(frames.encode())
+        proc.stdin.flush()
+    except (BrokenPipeError, OSError):
+        pass
+    try:
+        proc.stdin.close()
     except OSError:
-        chunk = b""
-    if not chunk:
-        for line in buf.splitlines():
+        pass
+
+    deadline = time.monotonic() + secs
+    fd = proc.stdout.fileno()
+    buf = b""
+
+    while answer is None:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            timed_out = True
+            break
+        ready = select.select([fd], [], [], remaining)[0]
+        if not ready:
+            continue
+        try:
+            chunk = os.read(fd, 65536)
+        except OSError:
+            chunk = b""
+        if not chunk:
+            for line in buf.splitlines():
+                answer = answer_in(line)
+                if answer is not None:
+                    break
+            break
+        buf += chunk
+        while b"\n" in buf:
+            line, buf = buf.split(b"\n", 1)
             answer = answer_in(line)
             if answer is not None:
                 break
-        break
-    buf += chunk
-    while b"\n" in buf:
-        line, buf = buf.split(b"\n", 1)
-        answer = answer_in(line)
-        if answer is not None:
-            break
-
-stop()
+finally:
+    stop()
 
 if answer is None:
     if timed_out:
