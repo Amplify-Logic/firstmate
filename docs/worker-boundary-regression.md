@@ -55,8 +55,9 @@ Use `--target nested-container --launcher-adapter PATH` for the hardened contain
 A launcher adapter must implement the exact argv contract in the script header and must return the payload result across its own staging boundary.
 The adapter must not grant host-path access merely because the hostile fixture names a path.
 
-Use `--artifact-adapter PATH` when the quarantine importer exists.
+Use `--artifact-adapter PATH` for the quarantine importer.
 The importer passes only when it rejects each hostile archive, imports nothing, and leaves the synthetic outside canary unchanged.
+`bin/fm-action-artifact-import-v2.py` implements that contract; without an adapter both artifact probes record `NO_IMPORTER` and fail.
 Use `--gateway PATH` for a command-compatible gateway test adapter; without it the pack measures the landed `bin/fm-action-gateway.sh` broker.
 `bin/fm-action-gateway-v2.py` is the current such adapter and is scored by this pack under a temporary root ([`docs/action-gateway-v2.md`](action-gateway-v2.md)).
 Use `--source-manifest PATH` for the reviewed installation manifest and `--attestation PATH` for trusted launcher output.
