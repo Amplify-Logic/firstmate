@@ -28,15 +28,31 @@ reset_state() {
   done
 }
 
-# Every mode assertion below reads a file the sink actually created. This suite
-# runs as one UID, so it proves the generated modes and the journal mode the
-# broker's read-only path depends on, and proves nothing about two separated
-# principals: that remains the captain-at-Mac measurement made by
-# bin/fm-worker-boundary-regression.sh against a real installation.
+# Every group and mode assertion below reads a file the sink actually created.
+# This suite runs as one UID, so it proves the generated group, the generated
+# modes and the journal mode the broker's read-only path depends on, and proves
+# nothing about two separated principals: that remains the captain-at-Mac
+# measurement made by bin/fm-worker-boundary-regression.sh against a real
+# installation.
 assert_mode() {  # <path> <expected>
   local observed
-  observed=$(/usr/bin/stat -f '%Lp' "$1")
+  observed=$(/usr/bin/stat -f '%Mp%Lp' "$1")
   [ "$observed" = "$2" ] || fail "$1 must be mode $2, got $observed"
+}
+
+assert_group() {  # <path> <expected-gid>
+  local observed
+  observed=$(/usr/bin/stat -f '%g' "$1")
+  [ "$observed" = "$2" ] || fail "$1 must carry the store group $2, got $observed"
+}
+
+store_files() {
+  printf '%s\n' \
+    "$SINK_ROOT/safe-sink-v2.sqlite3" \
+    "$SINK_ROOT/safe-sink-v2.jsonl" \
+    "$SINK_ROOT/safe-sink-v2.sqlite3-journal" \
+    "$SINK_ROOT/safe-sink-v2.sqlite3-wal" \
+    "$SINK_ROOT/safe-sink-v2.sqlite3-shm"
 }
 
 # One canonical plan, built the way the broker builds it: prepare a real request
@@ -192,22 +208,30 @@ PY
 }
 
 test_sink_store_is_group_readable_and_writable_by_nobody_else() {
-  local plan entries sidecar loose
+  local plan entries file store_gid loose
   reset_state
   plan="$TMP/plan-private.json"
   canonical_plan private-idem "$plan" >/dev/null
   $SINK apply < "$plan" >/dev/null
 
-  # 0750 on the directory and 0640 on every file is exactly what gives the
+  # 2750 on the directory and 0640 on every file is exactly what gives the
   # broker read authority over the evidence it settles from and no authority to
-  # author any of it.
-  assert_mode "$SINK_ROOT" 750
-  assert_mode "$SINK_ROOT/safe-sink-v2.sqlite3" 640
-  assert_mode "$SINK_ROOT/safe-sink-v2.jsonl" 640
-  for sidecar in safe-sink-v2.sqlite3-journal safe-sink-v2.sqlite3-wal safe-sink-v2.sqlite3-shm; do
-    [ -e "$SINK_ROOT/$sidecar" ] || continue
-    assert_mode "$SINK_ROOT/$sidecar" 640
+  # author any of it. The setgid bit is what makes the group inheritance the
+  # operating system's job rather than a platform convention.
+  assert_mode "$SINK_ROOT" 2750
+  store_gid=$(/usr/bin/stat -f '%g' "$SINK_ROOT")
+  for file in $(store_files); do
+    [ -e "$file" ] || continue
+    assert_mode "$file" 0640
+    assert_group "$file" "$store_gid"
   done
+  assert_present "$SINK_ROOT/safe-sink-v2.sqlite3" "the store database"
+  assert_present "$SINK_ROOT/safe-sink-v2.jsonl" "the store journal"
+  # A WAL store cannot be opened read-only by a reader that cannot write the
+  # directory, so a sidecar appearing here would break the broker's whole
+  # settlement path at install time.
+  assert_absent "$SINK_ROOT/safe-sink-v2.sqlite3-wal" "the store must never journal in WAL"
+  assert_absent "$SINK_ROOT/safe-sink-v2.sqlite3-shm" "the store must never carry a WAL index"
   loose=$(find "$SINK_ROOT" -perm +022 | wc -l | tr -d ' ')
   [ "$loose" = 0 ] || fail "nothing in the receipt store may be group-writable or other-writable"
   loose=$(find "$SINK_ROOT" -perm +007 | wc -l | tr -d ' ')
@@ -219,7 +243,71 @@ test_sink_store_is_group_readable_and_writable_by_nobody_else() {
   [ "$entries" = 2 ] || fail "expected the sink store and journal, found $entries"
   assert_absent "$STATE_ROOT/safe-sink-v2.sqlite3" "the sink writes nothing into the broker root"
   assert_contains "$($SINK apply < "$plan")" '"outward_execution":false' "the sink never reports an outward effect"
-  pass "the receipt store is the executor's own, group-readable, and writable by nobody else"
+  pass "the receipt store is the executor's own, setgid, group-readable, and writable by nobody else"
+}
+
+test_a_store_whose_group_or_mode_drifted_is_refused() {
+  local plan out rc other_gid store_gid candidate
+  reset_state
+  plan="$TMP/plan-drift.json"
+  canonical_plan drift-idem "$plan" >/dev/null
+  $SINK apply < "$plan" >/dev/null
+
+  # A receipt store whose modes drifted is one the broker may already have been
+  # unable to read, so the sink refuses the whole store rather than quietly
+  # rewriting it and carrying on.
+  chmod 0644 "$SINK_ROOT/safe-sink-v2.jsonl"
+  set +e
+  out=$(printf '' | $SINK verify --idempotency-key drift-idem 2>&1)
+  rc=$?
+  set -e
+  expect_code 1 "$rc" "a store file with a wider mode"
+  assert_contains "$out" 'safe-sink-v2.jsonl has mode 0644' "the refusal names the file and what is wrong with it"
+  chmod 0640 "$SINK_ROOT/safe-sink-v2.jsonl"
+  $SINK verify --idempotency-key drift-idem >/dev/null || fail "the store must work again once the mode is corrected"
+
+  # The group is the broker's entire access, so a file carrying a different one
+  # is refused for the same reason. This needs a second group this UID is
+  # already in; without one there is nothing honest to assert here.
+  store_gid=$(/usr/bin/stat -f '%g' "$SINK_ROOT")
+  other_gid=
+  for candidate in $(id -G); do
+    [ "$candidate" != "$store_gid" ] || continue
+    other_gid=$candidate
+    break
+  done
+  if [ -z "$other_gid" ]; then
+    pass "a store file whose mode drifted is refused fail-closed (this UID has one group, so the group half is unprovable here)"
+    return 0
+  fi
+  chgrp "$other_gid" "$SINK_ROOT/safe-sink-v2.sqlite3"
+  set +e
+  out=$($SINK apply < "$plan" 2>&1)
+  rc=$?
+  set -e
+  expect_code 1 "$rc" "a store file with the wrong group"
+  assert_contains "$out" "safe-sink-v2.sqlite3 has group $other_gid" "the refusal names the group the broker cannot read through"
+  chgrp "$store_gid" "$SINK_ROOT/safe-sink-v2.sqlite3"
+  pass "a store file whose group or mode drifted is refused fail-closed rather than tolerated"
+}
+
+test_the_store_root_is_held_setgid() {
+  local plan out rc
+  reset_state
+  plan="$TMP/plan-setgid.json"
+  canonical_plan setgid-idem "$plan" >/dev/null
+  $SINK apply < "$plan" >/dev/null
+
+  # The sink corrects its own root when it can, because that is what it created;
+  # what it must never do is write receipts into a root whose group inheritance
+  # is not guaranteed.
+  chmod 0750 "$SINK_ROOT"
+  $SINK apply < "$plan" >/dev/null
+  assert_mode "$SINK_ROOT" 2750
+  out=$($SINK inspect-paths)
+  assert_contains "$out" '"directory_mode":"2750"' "the sink states the store root mode it requires"
+  assert_contains "$out" '"file_mode":"0640"' "the sink states the store file mode it requires"
+  pass "the store root is held setgid so every receipt inherits the group the broker reads through"
 }
 
 test_broker_reads_the_store_without_being_able_to_write_it() {
@@ -235,6 +323,7 @@ test_broker_reads_the_store_without_being_able_to_write_it() {
   # prove the broker's read works through group read on the files alone.
   assert_absent "$SINK_ROOT/safe-sink-v2.sqlite3-wal" "the store must not be in WAL mode"
   assert_absent "$SINK_ROOT/safe-sink-v2.sqlite3-shm" "the store must not carry a WAL index"
+  assert_contains "$($SINK inspect-paths)" '"sink_root"' "the sink reports the store it wrote"
   chmod 0500 "$SINK_ROOT"
   out=$(python3 - "$ROOT/bin/fm-action-gateway-v2.py" readonly-idem <<'BROKER_READ'
 import importlib.util
@@ -263,7 +352,7 @@ print("journal_mode=" + str(readonly.execute("PRAGMA journal_mode").fetchone()[0
 readonly.close()
 BROKER_READ
 )
-  chmod 0750 "$SINK_ROOT"
+  chmod 2750 "$SINK_ROOT"
   assert_contains "$out" 'presence=present' "the broker reads the sink's own store through group read"
   assert_contains "$out" 'digest_len=64' "the broker reads back the record digest it settles from"
   assert_contains "$out" 'write=refused' "the broker's connection to the receipt store cannot write it"
@@ -276,4 +365,6 @@ test_sink_refuses_a_plan_it_is_not_the_executor_for
 test_sink_is_deterministic_and_matches_the_broker_record
 test_sink_applies_exactly_once
 test_sink_store_is_group_readable_and_writable_by_nobody_else
+test_a_store_whose_group_or_mode_drifted_is_refused
+test_the_store_root_is_held_setgid
 test_broker_reads_the_store_without_being_able_to_write_it

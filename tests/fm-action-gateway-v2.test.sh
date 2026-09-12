@@ -905,6 +905,27 @@ test_a_plan_too_large_to_deliver_is_refused_before_it_is_executable() {
   set -e
   expect_code 1 "$rc" "oversize plan"
   assert_contains "$out" 'executable plan ceiling' "the refusal states the limit"
+  # The manifest is hashed into every plan and is what a caller sizes its
+  # payloads against, so the published ceiling has to be the enforced one.
+  if ! python3 - "$ROOT/bin/fm-action-gateway-v2.py" "$out" <<'MANIFEST'
+import importlib.util
+import sys
+
+module_path, refusal = sys.argv[1:]
+spec = importlib.util.spec_from_file_location("fm_gateway_v2", module_path)
+gateway = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(gateway)
+manifest = gateway.POLICY_MANIFEST
+published = manifest["max_plan_jcs_bytes"]
+assert published == gateway.MAX_PLAN_JCS_BYTES, published
+assert str(published) in refusal, (published, refusal)
+assert manifest["policy_revision"] >= 4, manifest["policy_revision"]
+assert published < manifest["max_message_bytes"], manifest
+assert "binding" in manifest["size_limit_model"], manifest["size_limit_model"]
+MANIFEST
+  then
+    fail "the policy manifest must publish the ceiling the gateway actually enforces"
+  fi
   database=$(gateway_database)
   if ! python3 - "$database" <<'NOROW'
 import sqlite3

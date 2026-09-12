@@ -41,7 +41,12 @@
 #                      or must be empty. Nothing written there is executable and
 #                      nothing written there is run.
 #   rollback-preview   Print the guarded uninstall script, in the order its steps
-#                      must run to leave no privileged remnant.
+#                      must run. It stops the service, removes the launch
+#                      definitions, quarantines the directories, removes the two
+#                      role accounts, and removes the dedicated group only when
+#                      it can prove nothing else is using it. A group it cannot
+#                      prove is its own is left in place and reported as a
+#                      remaining privileged remnant rather than removed.
 #   apply              Always refuses. See above.
 #
 # This script writes only into a DIR the caller names, and runs none of the
@@ -74,6 +79,8 @@ readonly ROLE_ACCOUNT_HOME=/var/empty
 
 readonly BROKER_PROGRAM=fm-action-gateway-v2.py
 readonly SINK_PROGRAM=fm-action-safe-sink-v2.py
+readonly SINK_DATABASE=safe-sink-v2.sqlite3
+readonly SINK_JOURNAL=safe-sink-v2.jsonl
 readonly EXECUTOR_PROGRAM=fm-action-runner-v2.py
 readonly IMPORTER_PROGRAM=fm-action-artifact-import-v2.py
 
@@ -243,9 +250,15 @@ sudo sysadminctl -addUser "$BROKER_USER" -home "$ROLE_ACCOUNT_HOME" -shell /usr/
 sudo sysadminctl -addUser "$EXECUTOR_USER" -home "$ROLE_ACCOUNT_HOME" -shell /usr/bin/false -roleAccount
 
 # 2. Create the broker's group. Membership in it is the broker's entire access
-#    to the executor's receipt store: group read, and no write anywhere.
-sudo dseditgroup -o create -r "Firstmate gateway broker" "$BROKER_GROUP"
-sudo dseditgroup -o edit -a "$BROKER_USER" -t user "$BROKER_GROUP"
+#    to the executor's receipt store: group read, and no write anywhere. Both
+#    steps check first, so re-running this install after a partial one does not
+#    abort on a group or a membership that is already there.
+if ! dseditgroup -o read "$BROKER_GROUP" >/dev/null 2>&1; then
+  sudo dseditgroup -o create -r "Firstmate gateway broker" "$BROKER_GROUP"
+fi
+if ! dseditgroup -o checkmember -m "$BROKER_USER" "$BROKER_GROUP" >/dev/null 2>&1; then
+  sudo dseditgroup -o edit -a "$BROKER_USER" -t user "$BROKER_GROUP"
+fi
 
 # 3. Install the programs root-owned and not writable by either service account.
 sudo /usr/bin/install -d -o root -g wheel -m 0755 "$INSTALL_ROOT"
@@ -260,7 +273,11 @@ sudo /usr/bin/install -o root -g wheel -m 0755 "$ROOT/bin/$IMPORTER_PROGRAM" "$I
 #    group membership and can write nothing in it.
 sudo /usr/bin/install -d -o root -g wheel -m 0755 "$STATE_PARENT"
 sudo /usr/bin/install -d -o "$BROKER_USER" -g wheel -m 0700 "$STATE_ROOT"
-sudo /usr/bin/install -d -o "$EXECUTOR_USER" -g "$BROKER_GROUP" -m 0750 "$SINK_ROOT"
+#    2750, not 0750: the setgid bit is what makes every receipt file inherit
+#    the broker's group instead of whichever group the executor happens to
+#    have, so the broker's read access is guaranteed by the operating system
+#    rather than by a platform convention.
+sudo /usr/bin/install -d -o "$EXECUTOR_USER" -g "$BROKER_GROUP" -m 2750 "$SINK_ROOT"
 sudo /usr/bin/install -d -o root -g wheel -m 0755 "$SOCKET_PARENT"
 sudo /usr/bin/install -d -o "$BROKER_USER" -g wheel -m 0755 "$SOCKET_ROOT"
 
@@ -352,9 +369,38 @@ for account in "$EXECUTOR_USER" "$BROKER_USER"; do
   sudo sysadminctl -deleteUser "\$account"
 done
 
+# 5. Remove the dedicated group, but only when it can be proved to be the one
+#    this installation created: the exact literal name, and no member other than
+#    the two role accounts step 4 just removed. A group with any other member is
+#    a group something else is using, so it is left exactly as it is and
+#    reported rather than deleted. This is the directory rule again: prove it is
+#    ours, or refuse and say so.
+GROUP_REMNANT=no
+if dseditgroup -o read "$BROKER_GROUP" >/dev/null 2>&1; then
+  MEMBERS=\$(dseditgroup -o read "$BROKER_GROUP" | awk '/^GroupMembership:/ { for (i = 2; i <= NF; i++) print \$i }')
+  UNEXPECTED=
+  for member in \$MEMBERS; do
+    case "\$member" in
+      "$BROKER_USER"|"$EXECUTOR_USER") ;;
+      *) UNEXPECTED="\$UNEXPECTED \$member" ;;
+    esac
+  done
+  if [ -n "\$UNEXPECTED" ]; then
+    printf 'REFUSING to remove the group %s: it still has members:%s\\n' "$BROKER_GROUP" "\$UNEXPECTED" >&2
+    printf 'Nothing about that group was changed. Find out what uses it first.\\n' >&2
+    GROUP_REMNANT=yes
+  else
+    sudo dseditgroup -o delete "$BROKER_GROUP"
+  fi
+fi
+
 printf 'Uninstalled. The previous state is quarantined at %s.\\n' "\$QUARANTINE"
 printf 'Nothing was deleted recursively. Review that directory, then remove it\\n'
 printf 'yourself once you are satisfied the audit record is no longer needed.\\n'
+if [ "\$GROUP_REMNANT" = yes ]; then
+  printf 'One privileged remnant is left on purpose: the group %s, which could not\\n' "$BROKER_GROUP"
+  printf 'be proved to be this installation'"'"'s own. It is still there.\\n'
+fi
 CMD
 }
 
@@ -380,7 +426,12 @@ Principals
   settled from.
 
 Receipt store, and why the broker only reads it
-  $SINK_ROOT is $EXECUTOR_USER:$BROKER_GROUP 0750, and the files in it are 0640.
+  $SINK_ROOT is $EXECUTOR_USER:$BROKER_GROUP 2750, and the files in it are 0640.
+  The setgid bit is deliberate: the operating system then gives every receipt
+  file the broker's group, so the broker's read access does not rest on which
+  group the executor happens to create files with. The sink refuses to write a
+  store whose directory is not setgid, and refuses any file in it whose group or
+  mode is not what that read-only path needs.
   The broker's entire access is group read; it has no write path to that store
   anywhere in its code, which is what makes a receipt evidence rather than
   something the broker could have authored. The store is journal_mode=TRUNCATE
@@ -400,7 +451,7 @@ Programs, with the bytes that would be installed
 Paths, owners, modes
   $INSTALL_ROOT   root:wheel 0755
   $STATE_ROOT      $BROKER_USER:wheel 0700
-  $SINK_ROOT         $EXECUTOR_USER:$BROKER_GROUP 0750, each file 0640
+  $SINK_ROOT         $EXECUTOR_USER:$BROKER_GROUP 2750 setgid, each file 0640
   $SOCKET_ROOT     $BROKER_USER:wheel 0755, each socket 0600
   $BROKER_PLIST   root:wheel 0644
 
@@ -430,7 +481,9 @@ report_path() {  # <path> <kind>
   local path=$1 kind=$2 owner mode
   if { [ "$kind" = directory ] && [ -d "$path" ]; } || { [ "$kind" = file ] && [ -f "$path" ]; }; then
     owner=$(/usr/bin/stat -f '%Su:%Sg' "$path" 2>/dev/null || printf 'unknown')
-    mode=$(/usr/bin/stat -f '%Lp' "$path" 2>/dev/null || printf '????')
+    # %Mp%Lp, not %Lp: the setgid bit on the receipt store is the whole reason
+    # the broker can read it, and a report that hides it hides the failure.
+    mode=$(/usr/bin/stat -f '%Mp%Lp' "$path" 2>/dev/null || printf '????')
     printf 'present  %s  owner=%s mode=%s\n' "$path" "$owner" "$mode"
     return 0
   fi
@@ -455,6 +508,25 @@ emit_check() {
     path=${entry%|*}
     kind=${entry##*|}
     report_path "$path" "$kind" || complete=1
+  done
+  printf '\n'
+  # The receipt store's own files, reported separately because the sink creates
+  # them on its first apply rather than at installation. Their owner, group and
+  # mode are what the broker's read-only settlement path actually depends on, so
+  # reporting only the directory above would hide the thing that matters.
+  printf 'Receipt store files, created by the first execution rather than by installation\n'
+  printf '  each must be %s:%s mode 640, and no -wal or -shm file may exist at all\n' \
+    "$EXECUTOR_USER" "$BROKER_GROUP"
+  for entry in \
+    "$SINK_ROOT/$SINK_DATABASE|file" \
+    "$SINK_ROOT/$SINK_JOURNAL|file" \
+    "$SINK_ROOT/$SINK_DATABASE-journal|file" \
+    "$SINK_ROOT/$SINK_DATABASE-wal|file" \
+    "$SINK_ROOT/$SINK_DATABASE-shm|file"; do
+    path=${entry%|*}
+    kind=${entry##*|}
+    [ -e "$path" ] || continue
+    report_path "$path" "$kind" || true
   done
   printf '\n'
   if [ "$complete" -eq 0 ]; then

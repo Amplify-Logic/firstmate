@@ -31,7 +31,16 @@ That read is also why the store is deliberately not WAL: a read-only opener
 needs to create the -shm wal-index beside the database, and a reader with no
 write access to this directory is refused outright. TRUNCATE journaling with
 full synchronous writes keeps the same durability and stays readable through
-group read alone.
+group read alone, and a store that ever reports WAL back is refused rather than
+used.
+
+The group is guaranteed rather than assumed. The store root is setgid, so the
+operating system gives every file in it the reader's group instead of leaving
+that to whichever group the executor happens to have first. Every file the store
+already holds is checked - regular file, exact mode, exact group - before
+anything is written, and a file that does not match is refused rather than
+quietly rewritten, because a receipt store whose modes drifted is one the broker
+may already have been unable to read.
 
 Usage:
   fm-action-safe-sink-v2.py apply < plan.jcs
@@ -60,7 +69,9 @@ from pathlib import Path
 from typing import Any, Dict, NoReturn, Optional, Sequence, Tuple
 
 PRODUCTION_SINK_ROOT = Path("/var/db/firstmate/sink")
-STORE_DIRECTORY_MODE = 0o750
+# Setgid, so the group the broker reads through is inherited by every file the
+# store creates rather than left to the platform's default-group behaviour.
+STORE_DIRECTORY_MODE = 0o2750
 STORE_FILE_MODE = 0o640
 MAX_PLAN_BYTES = 96 * 1024
 PLAN_SCHEMA = "fm.execution-plan.v2"
@@ -119,49 +130,117 @@ def store_files() -> Tuple[Path, ...]:
     )
 
 
-def harden_store_files() -> None:
-    """Hold every store file at owner write, group read, and nothing wider.
+def describe_store_file(path: Path, expected_gid: int) -> Optional[str]:
+    """Say what is wrong with one store file, or None when nothing is.
 
-    The group bit is the broker's entire access to this evidence. The absent
-    group-write and other bits are why that access is read authority only.
+    The broker's entire access to this evidence is group read on these exact
+    files. A wrong group costs it that access; group-write or any other-access
+    gives away authority nobody outside the store may hold.
+    """
+    try:
+        info = path.lstat()
+    except FileNotFoundError:
+        return None
+    except OSError as exc:
+        return f"cannot be examined: {exc}"
+    if not stat.S_ISREG(info.st_mode):
+        return "is not a regular file"
+    mode = stat.S_IMODE(info.st_mode)
+    if mode != STORE_FILE_MODE:
+        return f"has mode {mode:04o}, not {STORE_FILE_MODE:04o}"
+    if info.st_gid != expected_gid:
+        return f"has group {info.st_gid}, not the store group {expected_gid}"
+    return None
+
+
+def harden_store_files(expected_gid: int) -> None:
+    """Put every file this run created at owner write, group read, and no wider.
+
+    The group is set explicitly as well as the mode: the setgid store root
+    should already have supplied it, and doing it here too means the broker's
+    read authority never rests on that having worked.
     """
     for path in store_files():
-        with contextlib.suppress(OSError):
-            path.chmod(STORE_FILE_MODE)
+        try:
+            info = path.lstat()
+        except OSError:
+            continue
+        if not stat.S_ISREG(info.st_mode):
+            # Refused by the audit below rather than followed: a chmod through a
+            # symlink would write a mode onto a file outside this store.
+            continue
+        try:
+            if stat.S_IMODE(info.st_mode) != STORE_FILE_MODE:
+                path.chmod(STORE_FILE_MODE)
+            if info.st_gid != expected_gid:
+                os.chown(path, -1, expected_gid)
+        except OSError as exc:
+            fail(f"cannot hold {path.name} at the store's own group and mode: {exc}")
+    audit_store_files(expected_gid)
+
+
+def audit_store_files(expected_gid: int) -> None:
+    """Refuse the whole store when any file in it is not what the broker needs."""
+    for path in store_files():
+        problem = describe_store_file(path, expected_gid)
+        if problem is not None:
+            fail(f"receipt store file {path.name} {problem}")
 
 
 def own_identity() -> str:
     return sha256_bytes(Path(__file__).resolve().read_bytes())
 
 
-def ensure_store_directory(path: Path) -> None:
-    """Create the store root owner-owned and group-readable, never wider.
+def ensure_store_directory(path: Path) -> int:
+    """Create the store root setgid, group-readable, and never wider.
 
-    0750 is exactly what lets the broker read this store through group
-    membership while holding no authority to write anything in it.
+    2750 is exactly what lets the broker read this store through group
+    membership while holding no authority to write anything in it, and the
+    setgid bit is what makes every file in it carry that same group. Returns the
+    group every file in the store must have, read from the directory rather than
+    named here: this program is not the one that decides who reads its receipts.
     """
     path.mkdir(parents=True, exist_ok=True)
-    path.chmod(STORE_DIRECTORY_MODE)
-    mode = stat.S_IMODE(path.stat().st_mode)
+    info = path.stat()
+    if stat.S_IMODE(info.st_mode) != STORE_DIRECTORY_MODE:
+        # Only when it is actually wrong. An installed store root is created
+        # correctly by the installation, and the executor is not necessarily a
+        # member of the group it is shared with, so a needless chmod here would
+        # be refused by the operating system.
+        try:
+            path.chmod(STORE_DIRECTORY_MODE)
+        except OSError as exc:
+            fail(f"store directory is not {STORE_DIRECTORY_MODE:04o} and cannot be corrected: {exc}")
+        info = path.stat()
+    mode = stat.S_IMODE(info.st_mode)
     if mode & 0o027:
         fail(f"store directory must not be group-writable or open to others, got {mode:04o}")
     if mode & 0o700 != 0o700:
         fail(f"store directory must be owner-accessible, got {mode:04o}")
+    if not mode & stat.S_ISGID:
+        fail(f"store directory must be setgid so its files inherit the reader's group, got {mode:04o}")
+    return info.st_gid
 
 
-def connect_database() -> sqlite3.Connection:
-    ensure_store_directory(sink_root())
+def connect_database() -> Tuple[sqlite3.Connection, int]:
+    expected_gid = ensure_store_directory(sink_root())
+    # What the store already holds is checked before this run adds to it, so a
+    # file whose group or mode drifted is refused rather than written through.
+    audit_store_files(expected_gid)
     connection = sqlite3.connect(database_path(), timeout=10, isolation_level=None)
     connection.row_factory = sqlite3.Row
     # Not WAL. A reader without write access to this directory cannot create the
     # -shm wal-index, so a WAL store would refuse the broker's read-only open
     # outright. TRUNCATE keeps full durability with synchronous=FULL and stays
     # readable through group read alone.
-    connection.execute("PRAGMA journal_mode=TRUNCATE")
+    journal_mode = str(connection.execute("PRAGMA journal_mode=TRUNCATE").fetchone()[0]).lower()
+    if journal_mode == "wal":
+        connection.close()
+        fail("the receipt store must not journal in WAL: the broker reads it with no write access to its directory")
     connection.execute("PRAGMA synchronous=FULL")
     # Before the first journal exists: SQLite gives a rollback journal the
     # database file's own permissions, so the database has to be correct first.
-    harden_store_files()
+    harden_store_files(expected_gid)
     connection.executescript(
         """
         CREATE TABLE IF NOT EXISTS receipts (
@@ -178,8 +257,8 @@ def connect_database() -> sqlite3.Connection:
     columns = {str(row["name"]) for row in connection.execute("PRAGMA table_info(receipts)")}
     if "journal_offset" not in columns:
         connection.execute("ALTER TABLE receipts ADD COLUMN journal_offset INTEGER")
-    harden_store_files()
-    return connection
+    harden_store_files(expected_gid)
+    return connection, expected_gid
 
 
 def record_for(plan_digest: str, request_id: str, idempotency_key: str, operation: str) -> Dict[str, str]:
@@ -285,7 +364,7 @@ def apply_plan(raw: bytes) -> Dict[str, Any]:
     record = record_for(plan_digest, request_id, idempotency_key, operation)
     encoded = record_bytes(record)
     digest = sha256_bytes(encoded)
-    connection = connect_database()
+    connection, expected_gid = connect_database()
     try:
         connection.execute("BEGIN IMMEDIATE")
         existing = connection.execute(
@@ -306,6 +385,14 @@ def apply_plan(raw: bytes) -> Dict[str, Any]:
             # the receipt so verification never has to rescan the journal.
             descriptor = os.open(journal_path(), os.O_WRONLY | os.O_APPEND | os.O_CREAT, STORE_FILE_MODE)
             try:
+                # Set on the open descriptor rather than left to the umask, so
+                # the journal carries the broker's read authority from the first
+                # byte instead of from the hardening pass after the commit.
+                journal_info = os.fstat(descriptor)
+                if stat.S_IMODE(journal_info.st_mode) != STORE_FILE_MODE:
+                    os.fchmod(descriptor, STORE_FILE_MODE)
+                if journal_info.st_gid != expected_gid:
+                    os.fchown(descriptor, -1, expected_gid)
                 stored_offset = os.lseek(descriptor, 0, os.SEEK_END)
                 try:
                     connection.execute(
@@ -330,7 +417,7 @@ def apply_plan(raw: bytes) -> Dict[str, Any]:
         raise
     finally:
         connection.close()
-    harden_store_files()
+    harden_store_files(expected_gid)
     result = {
         "schema": RESULT_SCHEMA,
         "outcome": outcome,
@@ -349,7 +436,7 @@ def verify(idempotency_key: str) -> Dict[str, Any]:
     presence = "absent"
     digest: Optional[str] = None
     if database_path().exists():
-        connection = connect_database()
+        connection, _expected_gid = connect_database()
         try:
             row = connection.execute(
                 "SELECT record_digest FROM receipts WHERE idempotency_key=?",
@@ -388,6 +475,8 @@ def main(argv: Sequence[str]) -> int:
             "sink_root": str(sink_root()),
             "database": str(database_path()),
             "journal": str(journal_path()),
+            "directory_mode": f"{STORE_DIRECTORY_MODE:04o}",
+            "file_mode": f"{STORE_FILE_MODE:04o}",
             "executor_sha256": own_identity(),
         }
         print(json.dumps(paths, sort_keys=True, separators=(",", ":")))

@@ -34,6 +34,10 @@ The plan contains the exact provider account identity, normalized endpoint and m
 Unicode recipient and host forms are retained next to their normalized punycode forms for the later trusted renderer.
 The executor block names `bin/fm-action-safe-sink-v2.py` and binds its exact bytes, so an executor replaced after approval is refused at claim time rather than run under the old consent.
 A resolved plan is also bounded so it can always be delivered: the claim reply carries the exact stored plan bytes as base64, base64 expands by 4/3, and a plan whose canonical form would not fit inside one bounded protocol string is refused at prepare, while it is still a request and nothing has been approved.
+That ceiling is published as `max_plan_jcs_bytes` in the policy manifest, which is hashed into every plan, so a caller can size a request against the limit that actually binds rather than discovering it at prepare.
+The per-field `max_*` values in the manifest are upper bounds on one field in isolation; `max_plan_jcs_bytes` bounds the whole resolved canonical plan and is the binding constraint, so the usable size of any single field is the plan ceiling minus the rest of the resolved plan and is always smaller than that field's own maximum.
+A request past it is refused with `resolved plan exceeds the 24576-byte executable plan ceiling` and nothing is stored; the same ceiling is re-checked at claim before any state moves, so a plan that could not be delivered leaves the request approved and still claimable rather than stranded.
+Publishing it advanced `policy_revision` to 4, which changes `policy_manifest_hash` in every plan resolved from here on - a deliberate versioned policy change, not a silent one.
 
 ### Device actions
 
@@ -145,13 +149,19 @@ After committing, the sink re-opens its own store read-only and re-reads the app
 
 The sink derives its store root by its own rule rather than accepting one from the caller: a sink whose store the caller could relocate is a sink whose receipts the broker cannot use as evidence.
 
-That store is not under the broker's root. `/var/db/firstmate/gateway` stays broker-owned, `0700`, and broker-only, and the executor has no access to it at all; the receipt store is `/var/db/firstmate/sink`, owned by the executor principal with the broker's group, `0750`, and every file in it `0640`.
+That store is not under the broker's root. `/var/db/firstmate/gateway` stays broker-owned, `0700`, and broker-only, and the executor has no access to it at all; the receipt store is `/var/db/firstmate/sink`, owned by the executor principal with the broker's group, `2750`, and every file in it `0640`.
 The broker's entire access to the evidence it settles from is group read: it opens that store `?mode=ro` and has no write path to it anywhere, which is what makes a receipt evidence rather than something the broker could have authored.
 A worker never holds either identity - anything that calls prepare is not the executor principal and gets no write access to the receipt store.
 
+The group is guaranteed rather than assumed.
+The store root is setgid, so the operating system gives every file created in it the broker's group instead of leaving that to whichever group the executor happens to create files with, and the sink refuses to write a store whose root is not setgid.
+It also checks rather than trusts: before it writes anything it examines every file the store already holds - the database, the JSONL journal, and any SQLite sidecar - and refuses the whole store when one is not a regular file, is not `0640`, or does not carry the store's own group.
+A receipt store whose modes drifted is one the broker may already have been unable to read, so it is refused rather than quietly rewritten.
+`check` reports the owner, group and mode of those files, not only of the directory, because those are the files the broker actually opens.
+
 The store is deliberately not WAL for the same reason.
 A read-only opener of a WAL database has to create the `-shm` wal-index beside the database file, so a reader with no write access to that directory is refused outright and the broker could never read the evidence at all.
-`journal_mode=TRUNCATE` with `synchronous=FULL` keeps the same durability and stays readable through group read on the files alone.
+`journal_mode=TRUNCATE` with `synchronous=FULL` keeps the same durability and stays readable through group read on the files alone, and a store that reports WAL back is refused rather than used, so a regression to WAL fails loudly instead of silently breaking the broker's read path at install time.
 
 Verification is bounded rather than a rescan: the journal offset of each appended record is stored with its receipt, so reading an effect back is one seek and one line no matter how many records the journal already holds.
 
@@ -187,6 +197,12 @@ Every privileged path is a literal constant, checked at startup for being absolu
 Uninstall never deletes a directory tree: it moves each directory to a timestamped quarantine after checking the target is not a symlink, is contained in its expected parent, is a real directory, and is owned by the account the installation gave it to - the broker for its own roots, root for the program directory, and the executor for the receipt store.
 The state root holds the audit record and every tombstone, and an uninstall that destroys the evidence of what the gateway did is worse than one that leaves a directory behind.
 
+The installation also creates one dedicated group, which is how the broker reads the receipt store and the only authority it has over it.
+Creating it is idempotent, so re-running the emitted install after a partial one does not abort on a group or a membership that is already there.
+Uninstall removes that group only when it can prove the group is its own: the exact literal name, and no member other than the two role accounts the same uninstall just removed.
+A group with any other member is a group something else is using, so it is left exactly as it is, reported as a remaining privileged remnant, and never deleted.
+Rollback therefore does not promise to leave nothing behind - it promises to say what it left and why.
+
 The emitted `install.sh` and `uninstall.sh` carry their own copies of those guards, because a person runs them standalone with sudo and cannot rely on the authoring script's checks.
 Neither is executable and both refuse to run without an explicit confirmation flag.
 
@@ -221,10 +237,10 @@ Neither command is installed as production administration.
 ## Evidence boundary
 
 The tests prove parser, plan, transaction, replay, crash recovery, concurrency, protocol separation, peer credential lookup, per-job capability behavior, device-plan resolution, approval signature verification, lease-bounded execution, sink-derived settlement, exactly-once application, bound-executor refusal, and importer refusals, all under an ordinary temporary-root UID.
-They also prove the receipt store's generated modes on the directory and on every file it creates, that the broker's read-only connection succeeds against a store whose directory it cannot write and that a write through that connection is refused, and that a store the broker cannot read settles `unknown` with reconciliation required rather than inventing an outcome.
+They also prove the receipt store's generated group and modes on the directory and on every file it creates, that no WAL or shared-memory sidecar is ever produced, that a file whose group or mode does not match is refused fail-closed rather than tolerated, that the broker's read-only connection succeeds against a store whose directory it cannot write and that a write through that connection is refused, and that a store the broker cannot read settles `unknown` with reconciliation required rather than inventing an outcome.
 
 They do not claim distinct installed macOS principals, root-owned ancestors, Secure Enclave enrollment, signed UI identity, root launch definitions, network isolation, or privileged uninstall behavior.
-Every test here runs as one UID, so nothing in this suite is evidence about separated principals: the permission and journal-mode tests prove those requirements hold on the generated files, and prove nothing about two accounts.
+Every test here runs as one UID, so nothing in this suite is evidence about separated principals: the group, permission and journal-mode tests prove those requirements hold on the generated files, and prove nothing about two accounts.
 Those cases remain explicitly assigned to the captain-at-Mac Step 5 proof, and `bin/fm-worker-boundary-regression.sh` is what measures them once an installation exists.
 
 Exactly-once is proved against the safe sink's own store, which is a local SQLite primary key.

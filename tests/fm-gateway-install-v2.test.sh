@@ -40,8 +40,9 @@ test_preview_prints_the_plan_and_installs_nothing() {
   # The trust boundary the preview has to state plainly: the broker root is the
   # broker's alone, the receipt store is the executor's, and the broker's only
   # access to the evidence it settles from is group read.
-  assert_contains "$out" '-o "_firstmate_executor" -g "_firstmate_gateway" -m 0750 "/var/db/firstmate/sink"' \
-    "the receipt store is executor-owned and broker-group-readable"
+  assert_contains "$out" '-o "_firstmate_executor" -g "_firstmate_gateway" -m 2750 "/var/db/firstmate/sink"' \
+    "the receipt store is executor-owned, broker-group-readable, and setgid"
+  assert_contains "$out" 'setgid bit is deliberate' "the preview says why the store root is setgid"
   assert_contains "$out" '-o "_firstmate_gateway" -g wheel -m 0700 "/var/db/firstmate/gateway"' \
     "the broker root stays broker-only 0700"
   assert_contains "$out" 'never receives the executor identity' "an ordinary worker is neither principal"
@@ -53,6 +54,11 @@ test_preview_prints_the_plan_and_installs_nothing() {
   assert_contains "$out" 'planned and unverified' "the preview refuses to claim the boundary is proved"
   assert_contains "$out" 'Secure Enclave' "the unproven Secure Enclave step is named"
   assert_not_contains "$out" 'rm -rf' "no recursive delete appears anywhere in the plan"
+  # A re-run after a partial install must not abort on a group that is already
+  # there, so the emitted install checks before it creates.
+  assert_contains "$out" 'if ! dseditgroup -o read "_firstmate_gateway"' "group creation is idempotent"
+  assert_contains "$out" 'if ! dseditgroup -o checkmember -m "_firstmate_gateway" "_firstmate_gateway"' \
+    "group membership is idempotent"
   assert_nothing_installed preview
   pass "preview prints the complete activation plan, claims nothing it has not proved, and installs nothing"
 }
@@ -83,6 +89,17 @@ test_apply_always_refuses() {
   pass "apply always refuses and never performs a privileged installation"
 }
 
+test_rollback_preview_promises_only_what_it_does() {
+  local usage
+  usage=$("$INSTALL" --help)
+  # The header is the usage text, so an overclaim there is an overclaim to
+  # whoever runs this script.
+  assert_not_contains "$usage" 'leave no privileged remnant' "rollback must not claim it always leaves nothing behind"
+  assert_contains "$usage" 'remaining privileged remnant rather than removed' \
+    "the header says what rollback actually leaves"
+  pass "rollback-preview describes what the uninstall really leaves behind"
+}
+
 test_uninstall_preview_never_deletes_a_tree() {
   local out
   out=$("$INSTALL" rollback-preview)
@@ -95,6 +112,14 @@ test_uninstall_preview_never_deletes_a_tree() {
   assert_not_contains "$out" 'rm -r ' "uninstall must never recursively delete"
   assert_contains "$out" 'sudo mv --' "directories are quarantined by moving them"
   assert_contains "$out" 'uninstalled-' "the quarantine is timestamped"
+  # The dedicated group is removed only when it can be proved to be this
+  # installation's own. A group anything else is using is left alone and said
+  # so, exactly like a directory whose owner does not match.
+  assert_contains "$out" 'REFUSING to remove the group' "an unproven group is refused, not deleted"
+  assert_contains "$out" 'Nothing about that group was changed' "a refused group is left exactly as it is"
+  assert_contains "$out" 'One privileged remnant is left on purpose' "a remnant left behind is reported"
+  assert_contains "$out" 'sudo dseditgroup -o delete "_firstmate_gateway"' \
+    "a group proved to be this installation's own is removed"
   assert_nothing_installed rollback-preview
   pass "the uninstall preview quarantines by moving and never deletes a directory tree"
 }
@@ -197,6 +222,7 @@ test_preview_prints_the_plan_and_installs_nothing
 test_check_reports_absence_honestly
 test_apply_always_refuses
 test_uninstall_preview_never_deletes_a_tree
+test_rollback_preview_promises_only_what_it_does
 test_emitted_artifacts_are_guarded_and_inert
 test_emitted_paths_survive_a_checkout_path_with_a_space
 test_artifacts_refuse_an_occupied_or_unsafe_directory

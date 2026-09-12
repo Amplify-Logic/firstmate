@@ -81,6 +81,8 @@ MAX_STRING_BYTES = 32 * 1024
 # inside one bounded string, so it is refused while it is still a request and
 # nothing has been approved, rather than after a claim has already moved it to
 # executing.
+# Published as max_plan_jcs_bytes in POLICY_MANIFEST, because a caller sizing a
+# request against the per-field maxima alone would build plans this refuses.
 MAX_PLAN_JCS_BYTES = (MAX_STRING_BYTES // 4) * 3
 MAX_ATTACHMENTS = 8
 MAX_ATTACHMENT_BYTES = 256 * 1024
@@ -179,7 +181,7 @@ CEILING_DEVICE = "device"
 
 POLICY_MANIFEST = {
     "schema": "fm.gateway-policy.v2",
-    "policy_revision": 3,
+    "policy_revision": 4,
     "outward_execution": False,
     "executor": "deterministic-safe-sink",
     "redirect_policy": "deny",
@@ -197,6 +199,13 @@ POLICY_MANIFEST = {
     "max_attachments": MAX_ATTACHMENTS,
     "max_recipients": MAX_RECIPIENTS,
     "max_device_settings": MAX_DEVICE_SETTINGS,
+    "max_plan_jcs_bytes": MAX_PLAN_JCS_BYTES,
+    "size_limit_model": (
+        "the max_* per-field values are upper bounds on one field in isolation; "
+        "max_plan_jcs_bytes bounds the whole resolved canonical plan and is the binding "
+        "constraint, so the usable size of any one field is max_plan_jcs_bytes minus the "
+        "rest of the resolved plan and is always smaller than that field's own maximum"
+    ),
     "plan_ttl_seconds": PLAN_TTL_SECONDS,
 }
 
