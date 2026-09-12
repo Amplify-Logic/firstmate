@@ -7,7 +7,7 @@
 #   fm-herdr-lab.sh prepare <session>
 #   fm-herdr-lab.sh provision <session>
 #   fm-herdr-lab.sh run <session> <herdr arguments...>
-#   fm-herdr-lab.sh view <session> [--cols N] [--rows N] [--seconds N]
+#   fm-herdr-lab.sh view <session> [--cols N] [--rows N] [--seconds N] [--format text|raw-bytes]
 #   fm-herdr-lab.sh stop <session>
 #   fm-herdr-lab.sh teardown <session>
 #
@@ -213,12 +213,24 @@ fm_herdr_lab_cli() { # <session> <herdr arguments...>
   fm_herdr_lab_raw "$name" "$@"
 }
 
-fm_herdr_lab_view() { # <session> [--cols N] [--rows N] [--seconds N]
-  local name=${1:-} cols=182 rows=64 seconds=3 engine tripwire
+fm_herdr_lab_view() { # <session> [--cols N] [--rows N] [--seconds N] [--format text|raw-bytes]
+  local name=${1:-} cols=182 rows=64 seconds=3 format=text engine tripwire
   [ "$#" -ge 1 ] || { fm_herdr_lab_error "view requires a session"; return 1; }
   shift
   while [ "$#" -gt 0 ]; do
     case "$1" in
+      --format)
+        # Colour lives in the byte stream, not in the rendered characters, so a
+        # question about background or erase behaviour can only be answered from
+        # raw-bytes. It is the same bounded capture either way: one attached
+        # client that only ever draws, for the same bounded seconds.
+        [ "$#" -ge 2 ] || { fm_herdr_lab_error "view option $1 requires a value"; return 1; }
+        case "$2" in
+          text|raw-bytes) format=$2 ;;
+          *) fm_herdr_lab_error "view --format accepts text or raw-bytes: $2"; return 1 ;;
+        esac
+        shift 2
+        ;;
       --cols|--rows|--seconds)
         [ "$#" -ge 2 ] || { fm_herdr_lab_error "view option $1 requires a value"; return 1; }
         case "$2" in
@@ -237,7 +249,7 @@ fm_herdr_lab_view() { # <session> [--cols N] [--rows N] [--seconds N]
       *)
         # Closed on purpose: view never forwards caller arguments to Herdr, so
         # an unrecognized argument is refused rather than passed along.
-        fm_herdr_lab_error "view accepts only --cols, --rows and --seconds: $1"
+        fm_herdr_lab_error "view accepts only --cols, --rows, --seconds and --format: $1"
         return 1
         ;;
     esac
@@ -259,7 +271,8 @@ fm_herdr_lab_view() { # <session> [--cols N] [--rows N] [--seconds N]
   # exist and report default=false immediately before the client attaches.
   fm_herdr_lab_refuse_if_default "$name" || return 1
 
-  python3 "$engine" --session "$name" --cols "$cols" --rows "$rows" --seconds "$seconds"
+  python3 "$engine" --session "$name" --cols "$cols" --rows "$rows" \
+    --seconds "$seconds" --format "$format"
 }
 
 fm_herdr_lab_cancel_provision() { # <pid>
