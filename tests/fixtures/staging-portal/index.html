@@ -34,7 +34,6 @@
   textarea { min-height: 5rem; font-family: ui-monospace, monospace; }
   #preview { background: #f4f4f4; padding: .75rem; white-space: pre-wrap; }
   #send-state { font-weight: 600; }
-  .danger { color: #a00; }
 </style>
 
 <h1>Stand-in device configuration portal</h1>
@@ -42,14 +41,24 @@
 
 <fieldset>
   <legend>Target</legend>
-  <label>Device id <input id="device-id" name="device-id" value=""></label>
+  <!--
+    The target is taken from page context, not typed into the payload. That
+    makes "wrong target" a NAVIGATION error rather than a payload error, which
+    is a different failure mode and needs its own check: a staging run must
+    confirm which target the page is on before it stages anything into it.
+  -->
+  <p>Target for this page: <span id="device-id" data-device-id="">(none)</span>
+     <em>added automatically; not part of the payload</em></p>
 </fieldset>
 
 <fieldset>
   <legend>Presets</legend>
   <button id="preset-fill" type="button">Preset one</button>
-  <button id="preset-send" type="button" class="danger">Preset two</button>
-  <p>One of these only fills the command box. The other also sends.</p>
+  <button id="preset-send" type="button">Preset two</button>
+  <p>One of these only fills the command box. The other also sends.
+     Both are type="button" with no title, aria-label, aria-description or
+     aria-describedby - matching a real surface where the rendered attributes
+     do not reveal which is which.</p>
 </fieldset>
 
 <fieldset>
@@ -73,7 +82,7 @@
   window.__sendCount = 0;
   window.__readback = function () {
     return {
-      device_id: document.getElementById('device-id').value,
+      device_id: document.getElementById('device-id').dataset.deviceId,
       command: document.getElementById('command').value,
       verified: document.getElementById('preview').dataset.verified === 'true',
       sent: window.__sent,
@@ -110,7 +119,7 @@
     var preview = document.getElementById('preview');
     preview.dataset.verified = 'true';
     preview.textContent =
-      'device: ' + (r.device_id || '(empty)') + '\n' +
+      'target: ' + (r.device_id || '(none)') + '\n' +
       'command: ' + (r.command || '(empty)');
   });
 
