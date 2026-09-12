@@ -453,9 +453,11 @@ nm_read_runs_pair() {  # <pair>
   case "$NM_PAIR_EPOCH" in ''|*[!0-9]*) NM_PAIR_EPOCH="" ;; esac
 }
 
-# Coarse fallback for cross-branch attribution. `no-mistakes axi status` (bare)
-# reports the active-or-most-recent run for the CURRENT branch when one
-# exists, else falls back to some other branch's run purely as informational
+# Coarse ledger read, used for cross-branch attribution (this comment) and, since
+# the live-over-terminal rule, as the probe behind a terminal `axi status`
+# failure. `no-mistakes axi status` (bare) reports the active-or-most-recent run
+# for the CURRENT branch when one exists,
+# else falls back to some other branch's run purely as informational
 # display (verified empirically: querying a worktree with its own active run
 # reliably returns that run, even under concurrent load from several other
 # validating crews on the same underlying repo). A crew whose branch genuinely
@@ -715,9 +717,11 @@ nm_coarse_head_matches_worktree() {  # <short-sha>
 
 HAVE_RUN=0
 # RUN_SOURCE distinguishes the two ways HAVE_RUN=1 can happen: "full" means
-# $RUN_OUT is real `axi status` TOON with step/gate detail; "coarse" means only
-# a bare status word came back from the runs-list fallback above, so the
-# run-step block below skips the TOON field parsing entirely for this crew.
+# $RUN_OUT is real `axi status` TOON with step/gate detail; "coarse" means the
+# state comes from a bare runs-list word instead, either because `axi status`
+# could not be attributed to this worktree at all or because a live ledger row
+# displaced its terminal failure (the live-over-terminal rule below). Either
+# way the run-step block skips the TOON field parsing entirely for this crew.
 RUN_SOURCE=full
 COARSE_STATUS=""
 COARSE_RUN_EPOCH=""
