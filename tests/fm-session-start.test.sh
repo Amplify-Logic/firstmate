@@ -278,7 +278,7 @@ SH
   chmod +x "$fakebin/herdr"
 }
 
-# run_session_start <home> <root> <path> [VAR=VALUE ...]
+# run_session_start [--entry <script>] <home> <root> <path> [VAR=VALUE ...]
 # Drop every harness env marker from bin/fm-harness.sh detect_own so the
 # surrounding interactive shell cannot leak past the suite's fake ps harness.
 # Markers today: CLAUDECODE (claude), PI_CODING_AGENT (pi), GROK_AGENT (grok),
@@ -289,12 +289,19 @@ SH
 # that pins a different fake harness while CI (no ambient markers) still passes.
 # A case that needs a pinned runtime passes it as a trailing VAR=VALUE argument,
 # which lands after the -u flags and therefore survives the drop.
+# --entry runs a stand-in entrypoint, such as a stubbed bin/ tree, through this
+# one marker list so a case needing a different script never restates it.
 run_session_start() {
+  local entry=$SESSION_START
+  if [ "$1" = --entry ]; then
+    entry=$2
+    shift 2
+  fi
   local home=$1 root=$2 path=$3
   shift 3
   env -u CLAUDECODE -u PI_CODING_AGENT -u GROK_AGENT -u CURSOR_AGENT -u FM_PRIMARY_HARNESS \
     FM_HOME="$home" FM_ROOT_OVERRIDE="$root" PATH="$path" "$@" \
-    "$SESSION_START"
+    "$entry"
 }
 
 hash_file_for_test() {
@@ -567,8 +574,12 @@ EOF
   assert_not_contains "$out" "SECONDMATE_SYNC" "a mutating sweep ran while the session could not identify itself"
   assert_contains "$out" "FLEET STATE" "fleet-state digest section missing"
   assert_contains "$out" "NEXT STEP" "closing reminder missing"
-  assert_contains "$out" "the 'cursor' runtime is not recognized by firstmate's session-lock" \
-    "the next step did not name the real blocker and the runtime it applies to"
+  assert_contains "$out" "runtime process in its own ancestry." \
+    "the next step did not state what the refusal actually establishes"
+  assert_contains "$out" "For context, the detected runtime is 'cursor'." \
+    "the next step did not carry the detected runtime as context"
+  assert_not_contains "$out" "not recognized by firstmate's session-lock" \
+    "the next step asserted an identity gap the refusal does not establish"
   assert_not_contains "$out" "The session holding the lock owns mutable follow-up" \
     "the next step handed follow-up to a session that does not exist"
 
@@ -590,7 +601,7 @@ EOF
     "an unidentifiable runtime did not get its own headline"
   assert_contains "$out" "The runtime could not be determined either." \
     "the banner invented a runtime name it could not determine"
-  assert_contains "$out" "which could not be determined either" \
+  assert_contains "$out" "For context, the runtime could not be determined either." \
     "the next step invented a runtime name it could not determine"
   assert_not_contains "$out" "ANOTHER LIVE FIRSTMATE SESSION HOLDS THE FLEET LOCK" \
     "a self-identification failure was reported as a competing session"
@@ -610,8 +621,7 @@ EOF
   entry=$(make_stubbed_lock_tree "$TMP_ROOT/other-lock-failure-tree" 9)
 
   status=0
-  out=$(env -u CLAUDECODE -u PI_CODING_AGENT -u GROK_AGENT -u CURSOR_AGENT -u FM_PRIMARY_HARNESS \
-    FM_HOME="$home" FM_ROOT_OVERRIDE="$root" PATH="$fakebin:$BASE_PATH" "$entry") || status=$?
+  out=$(run_session_start --entry "$entry" "$home" "$root" "$fakebin:$BASE_PATH") || status=$?
 
   expect_code 0 "$status" "fm-session-start.sh must exit 0 on any lock failure"
   assert_contains "$out" "READ-ONLY SESSION - THE FLEET LOCK WAS NOT ACQUIRED" \

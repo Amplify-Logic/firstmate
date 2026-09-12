@@ -490,14 +490,16 @@ EOF
       ;;
     unidentified)
       if [ "$PRIMARY_HARNESS" = unknown ]; then
-        LOCK_RUNTIME_PHRASE="this session's runtime, which could not be determined either,"
+        LOCK_RUNTIME_PHRASE="the runtime could not be determined either"
       else
-        LOCK_RUNTIME_PHRASE="the '$PRIMARY_HARNESS' runtime"
+        LOCK_RUNTIME_PHRASE="the detected runtime is '$PRIMARY_HARNESS'"
       fi
       cat <<EOF
-Mutable follow-up waits until a session can identify itself here. Report to the
-captain that $LOCK_RUNTIME_PHRASE is not recognized by firstmate's session-lock
-identity - that is the blocker - and never that another session holds the fleet.
+Mutable follow-up waits until a session can identify itself here.
+Report what the banner states and no more: this session did not find its own
+runtime process in its own ancestry. What prevented that is not established
+here, and never report to the captain that another session holds the fleet.
+For context, $LOCK_RUNTIME_PHRASE.
 
 EOF
       ;;
