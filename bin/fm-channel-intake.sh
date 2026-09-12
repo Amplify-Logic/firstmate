@@ -744,19 +744,19 @@ EOF
 # retired parent still lands on the same item key - which for a closed
 # obligation means the archived record, never a reopening.
 retire_tracked_threads() {
-  local epoch=$1 dir parent updated legacy retired=0
+  local epoch=$1 dir parent marker updated legacy retired=0
   [ -d "$THREAD_DIR" ] || return 0
   for dir in "$THREAD_DIR"/*; do
     [ -d "$dir" ] || continue
-    for parent in "$dir"/*; do
-      [ -f "$parent" ] || continue
-      updated=$(record_field "$parent" updated)
+    while IFS="$FIELD_SEP" read -r parent marker updated; do
+      [ -n "$parent" ] || continue
       case "$updated" in
         ''|*[!0-9]*)
           # A marker written before the set was bounded has no recorded age.
           # Adopt it at this sweep rather than retiring a parent whose activity
           # is merely unknown; a genuinely dormant one ages out normally.
-          legacy=$(read_line_file "$parent")
+          legacy=$marker
+          [ -n "$legacy" ] || legacy=$(read_line_file "$parent")
           case "$legacy" in marker=*) legacy=${legacy#marker=} ;; esac
           write_atomic "$parent" \
             "$(printf 'marker=%s\nupdated=%s' "$(sanitize "$legacy")" "$epoch")" || true
@@ -766,7 +766,9 @@ retire_tracked_threads() {
       [ $((epoch - updated)) -gt "$CFG_REVISION_WINDOW" ] || continue
       rm -f "$parent" || continue
       retired=$((retired + 1))
-    done
+    done <<EOF
+$(scan_records "$dir" marker updated)
+EOF
   done
   [ "$retired" -eq 0 ] \
     || log_event "retired $retired tracked thread parent(s) with no reply past the revision window"
@@ -989,11 +991,12 @@ claim() {
     # Tracked thread parents, so the orchestrator can re-read only the threads
     # whose reply marker advanced instead of re-reading every thread.
     if [ -d "$THREAD_DIR/$id" ]; then
-      for parent in "$THREAD_DIR/$id"/*; do
-        [ -f "$parent" ] || continue
-        marker=$(record_field "$parent" marker)
+      while IFS="$FIELD_SEP" read -r parent marker; do
+        [ -n "$parent" ] || continue
         printf 'thread: %s\t%s\t%s\n' "$id" "${parent##*/}" "$marker"
-      done
+      done <<EOF
+$(scan_records "$THREAD_DIR/$id" marker)
+EOF
     fi
     # An attempt is recorded before the read, so a read that never reports back
     # still spends its slot and cannot be retried in a tight loop.

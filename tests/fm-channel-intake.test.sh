@@ -750,7 +750,7 @@ test_thread_replies_are_tracked_and_the_limit_is_disclosed() {
 
 test_per_poll_work_is_bounded_without_losing_anything() {
   local h out key routine_key late
-  h="$TMP_ROOT/bounded"
+  h="$TMP_ROOT/bounded-work"
   new_home "$h"
   late=$((T_0900 + 86401 + 900))
 
