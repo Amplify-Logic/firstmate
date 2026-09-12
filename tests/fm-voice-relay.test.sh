@@ -445,6 +445,65 @@ test_a_step_that_could_not_be_written_is_not_reported_as_declared() {
   pass "fm-voice-relay: a substep is only reported as declared when it was really recorded"
 }
 
+# A completion that published its terminal record really did complete. Reporting
+# that as write-failed (10, "nothing was stored") would send a caller into a
+# retry that answers 5 retired, or into escalating work that actually landed.
+test_a_completion_that_could_not_retire_a_step_says_so_without_claiming_nothing_landed() {
+  local out code steps
+  if [ "$(id -u)" = 0 ]; then
+    pass "fm-voice-relay: skipped the unretirable-step case (running as root)"
+    return 0
+  fi
+  new_home partial >/dev/null
+  bind_home partial
+  relay partial open dell-signin --summary "sign in over the remote desktop" >/dev/null
+  relay partial step dell-signin --step vnc-password >/dev/null
+
+  steps="$TMP_ROOT/partial/state/voice-relay/topics/dell-signin/steps"
+  chmod 0500 "$steps"
+  out=$(relay partial complete dell-signin --revision 1 --outcome "signed in" 2>&1) && code=0 || code=$?
+  chmod 0700 "$steps"
+  expect_code 11 "$code" "a completion that stands must not reuse the write-failed code"
+  assert_contains "$out" "steps-not-retired:" "the partial verdict word must lead the line"
+  assert_contains "$out" "that completion stands" "the completion that landed must be reported as landed"
+  assert_contains "$out" "vnc-password" "the refusal must name the step that must be retired by hand"
+  assert_not_contains "$out" "write-failed" "a stored completion must not claim nothing was stored"
+
+  out=$(relay partial evidence dell-signin)
+  assert_contains "$out" "state: completed 1" "the terminal record must stay exactly as it was"
+
+  out=$(relay partial complete dell-signin --revision 1 --outcome "signed in" 2>&1) && code=0 || code=$?
+  expect_code 5 "$code" "completing again must still answer retired"
+  pass "fm-voice-relay: a completion that could not retire a step reports the partial truth, not a failed write"
+}
+
+# The transport column describes handoffs. A record this ledger established
+# itself - an acceptance whose hash it recomputed - must never render as an
+# unbacked operator claim.
+test_the_transport_column_only_describes_transport_records() {
+  local shared out sha
+  shared=$(new_home column)
+  bind_home column
+  relay column open result-return --summary "return the result" >/dev/null
+  printf 'Request id: voice-result-return@r1\nresult: done\n' > "$shared/answer.md"
+  sha=$(shasum -a 256 "$shared/answer.md" | awk '{print $1}')
+  relay column accept result-return --revision 1 --answer "$shared/answer.md" \
+    --sha256 "$sha" --receipt "$shared/answer-received.md" >/dev/null
+  relay column phase result-return --revision 1 --phase enqueued --message-id MSG-1 --queue-exit 0 >/dev/null
+  relay column phase result-return --revision 1 --phase picked-up --note "operator says so" >/dev/null
+
+  out=$(relay column evidence result-return)
+  assert_contains "$out" "TRANSPORT" "the column must be named for what it actually describes"
+  # UTC, revision, phase, gap and the transport label are all whitespace-free,
+  # so the label for a phase is field 5 of its row.
+  transport_of() { printf '%s\n' "$out" | awk -v p="$1" '$3 == p { print $5 }'; }
+  [ "$(transport_of accepted)" = "-" ] || fail "a hash-checked acceptance must not be labelled a claim"
+  [ "$(transport_of opened)" = "-" ] || fail "a record the ledger established itself is not a transport claim"
+  [ "$(transport_of enqueued)" = "verified" ] || fail "a receipted handoff must still read as verified"
+  [ "$(transport_of picked-up)" = "claim" ] || fail "an operator pickup must still read as a claim"
+  pass "fm-voice-relay: the transport column labels handoff records and nothing else"
+}
+
 test_pending_count_groups_revisions_and_admits_what_is_unknown() {
   local out
   new_home counting >/dev/null
@@ -688,6 +747,8 @@ test_status_reports_the_current_revision_by_default
 test_operator_text_cannot_forge_transport_evidence
 test_a_performed_record_needs_a_revision_that_exists
 test_a_step_that_could_not_be_written_is_not_reported_as_declared
+test_a_completion_that_could_not_retire_a_step_says_so_without_claiming_nothing_landed
+test_the_transport_column_only_describes_transport_records
 test_pending_count_groups_revisions_and_admits_what_is_unknown
 test_concurrent_claims_and_publishes_have_exactly_one_winner
 test_preferences_are_style_only_and_never_authority

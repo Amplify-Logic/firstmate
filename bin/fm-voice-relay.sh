@@ -200,6 +200,9 @@
 #                    a record already exists, and repeating the call will not help
 #  10  write-failed  the record could not be written at all; nothing was stored,
 #                    so the work still has to happen or be escalated
+#  11  steps-not-retired  the completion itself was stored and stands, but the
+#                    named pending substeps could not be retired; they must be
+#                    retired or re-declared by hand. Completing again answers 5
 #
 # FM_VOICE_RELAY_DIR overrides the state directory (tests only).
 set -u
@@ -385,13 +388,19 @@ topic_terminal() {  # <topic>
 # text field so none can forge the separator, and the reader takes the field by
 # position. A record written before this field existed has no sixth field and is
 # therefore read as a claim, which is the safe direction.
+#
+# Only a transport observation carries this notion at all. Everything else the
+# ledger writes - an opened request, a hash-checked acceptance, a released
+# sentence - is a fact this code established itself, so it is recorded as n/a
+# rather than being labelled an unbacked claim about a transport.
 record_event() {  # <topic> <revision> <phase> <detail> [verified|claim]
   local dir line class
   dir=$(topic_dir "$1")
   mkdir -p "$dir" || return 1
   case "${5:-}" in
     verified) class=verified ;;
-    *) class=claim ;;
+    claim) class=claim ;;
+    *) class=n/a ;;
   esac
   line=$(printf '%s\t%s\t%s\t%s\t%s\t%s' "$(utc_now)" "$(epoch_now)" "$2" "$3" "$(clean_text "$4")" "$class")
   printf '%s\n' "$line" >> "$dir/events.log"
@@ -764,8 +773,14 @@ cmd_complete() {
   # every later action on this topic, so nothing stale can run. But a retirement
   # that was never written must not be counted as one: the operator is told
   # which substeps still carry a declared record to clear by hand.
+  #
+  # This is NOT write-failed. Exit 10 promises that nothing was stored and the
+  # work still has to happen; here the terminal record and the completed event
+  # both published and are true, so a caller that retried on 10 would be told
+  # the topic is retired and would have no idea which substeps were left behind.
+  # The partial outcome gets its own code and says exactly what is missing.
   if [ -n "$unretired" ]; then
-    refuse 10 write-failed "completed $topic at revision $rev, but these pending step(s) could not be retired: $unretired; their declarations are still on disk and must be cleared or escalated"
+    refuse 11 steps-not-retired "completed $topic at revision $rev and that completion stands; retired $retired pending step(s), but these could not be retired: $unretired; their declarations are still on disk and must be retired or re-declared by hand"
   fi
   printf 'ok: completed %s at revision %s; retired %s pending step(s) of this topic only\n' "$topic" "$rev" "$retired"
 }
@@ -1075,6 +1090,18 @@ evidence_class() {  # <recorded evidence field>
   case "$1" in
     verified) printf 'verified\n' ;;
     *) printf 'claim\n' ;;
+  esac
+}
+
+# What the transport column shows. A record with no transport notion prints "-"
+# rather than "claim": the ledger established it itself, and rendering a
+# hash-checked acceptance as an unbacked claim invites an operator to discount
+# the strongest record in the file. A transport record still classifies
+# conservatively - anything but the exact verified token reads as a claim.
+transport_label() {  # <recorded evidence field>
+  case "$1" in
+    verified|claim) evidence_class "$1" ;;
+    *) printf -- '-\n' ;;
   esac
 }
 
@@ -1419,7 +1446,7 @@ cmd_evidence() {
     printf 'no events recorded\n'
     return 0
   fi
-  printf '%-22s %-4s %-12s %-9s %-8s %s\n' UTC REV PHASE GAP EVIDENCE DETAIL
+  printf '%-22s %-4s %-12s %-9s %-9s %s\n' UTC REV PHASE GAP TRANSPORT DETAIL
   while IFS= read -r line; do
     parse_event "$line"
     if [ "$prev" = 0 ]; then
@@ -1433,10 +1460,11 @@ cmd_evidence() {
       picked-up) turns=$((turns + 1)) ;;
       presented) presented=$((presented + 1)) ;;
     esac
-    printf '%-22s %-4s %-12s %-9s %-8s %s\n' \
-      "$EV_UTC" "$EV_REV" "$EV_PHASE" "$gap" "$(evidence_class "$EV_CLASS")" "$EV_DETAIL"
+    printf '%-22s %-4s %-12s %-9s %-9s %s\n' \
+      "$EV_UTC" "$EV_REV" "$EV_PHASE" "$gap" "$(transport_label "$EV_CLASS")" "$EV_DETAIL"
   done < "$log"
   printf 'counts: handoffs=%s observed-turns=%s presentations=%s\n' "$handoffs" "$turns" "$presented"
+  printf 'transport: verified = the record carries the transport'"'"'s own proof; claim = the operator said so; - = not a transport record, established by this ledger.\n'
   printf 'limits: gaps are wall-clock between recorded events, not model or cost measurements.\n'
   printf 'limits: native queue depth and audible playback are unknown to this ledger.\n'
 }
