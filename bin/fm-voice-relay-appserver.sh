@@ -158,11 +158,17 @@ secs = float(os.environ["FM_RPC_SECS"])
 method = os.environ["FM_RPC_METHOD"]
 params = os.environ["FM_RPC_PARAMS"]
 
-frames = (
+# The handshake is SEQUENTIAL. Writing initialize and the request together and
+# closing stdin lets a server that refuses work before initialization completes
+# drop the request, and the failure would surface as an unexplained transport
+# error. So: send initialize, wait for its answer, then send the request. The
+# installed v2 protocol carries no "initialized" notification, so none is sent -
+# the fix is to await the response, not to invent a frame.
+init_frame = (
     '{"jsonrpc":"2.0","id":1,"method":"initialize","params":'
     '{"clientInfo":{"name":"fm-voice-relay","title":"Firstmate voice relay","version":"1"}}}\n'
-    + '{"jsonrpc":"2.0","id":2,"method":%s,"params":%s}\n' % (json.dumps(method), params)
 )
+request_frame = '{"jsonrpc":"2.0","id":2,"method":%s,"params":%s}\n' % (json.dumps(method), params)
 
 try:
     proc = subprocess.Popen(
@@ -188,41 +194,48 @@ def stop():
             continue
 
 
-def answer_in(line):
+def answer_in(line, want):
     try:
         msg = json.loads(line)
     except ValueError:
         return None
-    if not isinstance(msg, dict) or msg.get("id") != 2:
+    if not isinstance(msg, dict) or msg.get("id") != want:
         return None
     return msg
 
 
 answer = None
 timed_out = False
+buf = b""
 
-try:
+
+def write_frame(frame):
     try:
-        proc.stdin.write(frames.encode())
+        proc.stdin.write(frame.encode())
         proc.stdin.flush()
     except (BrokenPipeError, OSError):
         pass
-    try:
-        proc.stdin.close()
-    except OSError:
-        pass
 
-    deadline = time.monotonic() + secs
+
+def read_answer(want, deadline):
+    """Read until the response with this id arrives, EOF, or the deadline.
+
+    Returns (answer, timed_out). Notification traffic in between is skipped
+    rather than mistaken for the answer, and the buffer is shared across both
+    reads so a response that arrived early is never lost.
+    """
+    global buf
     fd = proc.stdout.fileno()
-    buf = b""
-
-    while answer is None:
+    while True:
+        while b"\n" in buf:
+            line, buf = buf.split(b"\n", 1)
+            found = answer_in(line, want)
+            if found is not None:
+                return found, False
         remaining = deadline - time.monotonic()
         if remaining <= 0:
-            timed_out = True
-            break
-        ready = select.select([fd], [], [], remaining)[0]
-        if not ready:
+            return None, True
+        if not select.select([fd], [], [], remaining)[0]:
             continue
         try:
             chunk = os.read(fd, 65536)
@@ -230,16 +243,37 @@ try:
             chunk = b""
         if not chunk:
             for line in buf.splitlines():
-                answer = answer_in(line)
-                if answer is not None:
-                    break
-            break
+                found = answer_in(line, want)
+                if found is not None:
+                    return found, False
+            return None, False
         buf += chunk
-        while b"\n" in buf:
-            line, buf = buf.split(b"\n", 1)
-            answer = answer_in(line)
-            if answer is not None:
-                break
+
+try:
+    write_frame(init_frame)
+    deadline = time.monotonic() + secs
+    handshake, timed_out = read_answer(1, deadline)
+    if handshake is not None and "error" in handshake:
+        sys.stderr.write("server refused initialization: %s\n" % json.dumps(handshake["error"]))
+        stop()
+        raise SystemExit(3)
+    if handshake is None:
+        # No usable handshake answer: the request is not sent, because a server
+        # that never initialized cannot be trusted to have understood it.
+        if timed_out:
+            sys.stderr.write(
+                "transport failure: no initialization answer within %ss (FM_VOICE_RELAY_RPC_TIMEOUT); "
+                "the request was never sent\n" % os.environ["FM_RPC_SECS"])
+        else:
+            sys.stderr.write("transport failure: the proxy closed before answering initialization\n")
+        stop()
+        raise SystemExit(5)
+    write_frame(request_frame)
+    try:
+        proc.stdin.close()
+    except OSError:
+        pass
+    answer, timed_out = read_answer(2, deadline)
 finally:
     stop()
 
@@ -366,20 +400,39 @@ try:
     d=json.loads(raw) if raw else {}
 except ValueError:
     print("unknown: the server response was not readable"); raise SystemExit(5)
-thread=d.get("thread") or {}
+thread=d.get("thread") if isinstance(d.get("thread"), dict) else {}
+# ThreadStatus is a TAGGED UNION in the installed protocol - {"type":"notLoaded"},
+# {"type":"idle"}, {"type":"systemError"}, {"type":"active","activeFlags":[...]}.
+# Reading it as a bare string reports a not-loaded thread as steerable, which is
+# the one answer the whole steering claim rests on, so anything that is not a
+# recognised tagged variant is treated as unknown and NOT steerable.
 status=thread.get("status")
+kind=status.get("type") if isinstance(status, dict) else None
+if not isinstance(kind, str) or kind not in ("notLoaded", "idle", "systemError", "active"):
+    kind = None
 turns=thread.get("turns")
 count=len(turns) if isinstance(turns, list) else "unknown"
-print("thread %s status %s turns %s" % (thread.get("id", "unknown"), status or "unknown", count))
-if status in (None, "notLoaded"):
-    print("steerable: no - this server can read history but does not own the live turn, so turn/steer would not reach the companion")
+print("thread %s status %s turns %s" % (thread.get("id", "unknown"), kind or "unknown", count))
+
+def fallback():
     print("fallback 1: revise the shared request record first - fm-voice-relay.sh revise <topic> --summary '<the correction>' - so the correction IS the current revision")
     print("fallback 2: then queue that correction once through codex queue; do not send a second copy")
     print("fallback 3: freshness is enforced at the next cooperative boundary - fm-voice-relay.sh check-action before acting, present before speaking - and that is where the superseded step is refused")
     print("fallback limits: queueing alone kills nothing. The refusal comes from those two gates, not from the queue. This cannot interrupt an external action already in flight, and it cannot make the companion pick the correction up promptly")
     print("fallback, human: when the correction cannot wait for pickup, say it directly in the terminal session or through Herdr")
+
+if kind == "active":
+    print("steerable: this server reports a turn running on the thread; a steer may reach it, which still has to be confirmed against the turn id")
+    raise SystemExit(0)
+if kind == "idle":
+    print("steerable: no - this server holds the thread but no turn is running, so there is nothing to steer right now")
+elif kind == "notLoaded":
+    print("steerable: no - this server can read history but does not own the live turn, so turn/steer would not reach the companion")
+elif kind == "systemError":
+    print("steerable: no - this server reports the thread in a system error state")
 else:
-    print("steerable: this server reports the thread loaded; a steer may reach it, which still has to be confirmed on a real turn")
+    print("steerable: unknown - the server did not report a status this build recognises, so treat the thread as not steerable")
+fallback()
 PY
 }
 

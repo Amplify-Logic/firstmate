@@ -25,6 +25,22 @@ turn=os.environ.get("FAKE_TURN_ID","turn-current")
 turn_status=os.environ.get("FAKE_TURN_STATUS","inProgress")
 thread_status=os.environ.get("FAKE_THREAD_STATUS","notLoaded")
 log=os.environ.get("FAKE_SERVER_LOG")
+# The real protocol sends ThreadStatus as a tagged union, never a bare string.
+# FAKE_THREAD_STATUS names the variant; "malformed" and "missing" stand in for a
+# shape this build does not recognise.
+if thread_status=="active":
+    status_value={"type":"active","activeFlags":["turn"]}
+elif thread_status=="malformed":
+    status_value="notLoaded"
+elif thread_status=="missing":
+    status_value=None
+else:
+    status_value={"type":thread_status}
+# A server that answers and then stays open past stdin EOF, and one that refuses
+# any request arriving before initialize was answered.
+stay_open=os.environ.get("FAKE_STAY_OPEN")=="1"
+strict_handshake=os.environ.get("FAKE_STRICT_HANDSHAKE")=="1"
+initialized=False
 
 def send(obj):
     sys.stdout.write(json.dumps(obj)+"\n")
@@ -44,14 +60,23 @@ for line in sys.stdin:
     method=msg.get("method")
     params=msg.get("params") or {}
     if method=="initialize":
+        initialized=True
         send({"jsonrpc":"2.0","id":msg.get("id"),"result":{"userAgent":"fake"}})
+        continue
+    if strict_handshake and not initialized:
+        send({"jsonrpc":"2.0","id":msg.get("id"),
+              "error":{"code":-32002,"message":"request arrived before initialization"}})
+        continue
+    if False:
+        pass
     elif method=="thread/turns/list":
         send({"jsonrpc":"2.0","id":msg.get("id"),
               "result":{"data":[{"id":turn,"status":turn_status}]}})
     elif method=="thread/read":
-        send({"jsonrpc":"2.0","id":msg.get("id"),
-              "result":{"thread":{"id":params.get("threadId"),"status":thread_status,
-                                  "turns":[{"id":turn}]}}})
+        thread={"id":params.get("threadId"),"turns":[{"id":turn}]}
+        if status_value is not None:
+            thread["status"]=status_value
+        send({"jsonrpc":"2.0","id":msg.get("id"),"result":{"thread":thread}})
     elif method=="turn/steer":
         if params.get("expectedTurnId")==turn:
             send({"jsonrpc":"2.0","id":msg.get("id"),"result":{"turnId":turn}})
@@ -63,6 +88,10 @@ for line in sys.stdin:
     else:
         send({"jsonrpc":"2.0","id":msg.get("id"),
               "error":{"code":-32601,"message":"method not found"}})
+
+if stay_open:
+    import time
+    time.sleep(30)
 PY
   cat > "$1" <<SH
 #!/usr/bin/env bash
@@ -244,14 +273,59 @@ test_stale_steer_is_refused_by_the_server() {
 
 test_thread_status_tells_the_truth_about_reachability() {
   local out
+  # The status arrives as a tagged object. Reading it as a bare string reported a
+  # not-loaded thread as steerable, which inverted the one answer the steering
+  # claim rests on, so every variant is pinned here.
   out=$(FAKE_THREAD_STATUS=notLoaded appserver thread-status --thread THREAD-1 --live)
+  assert_contains "$out" "status notLoaded" "the tagged status must be read from its type field"
   assert_contains "$out" "steerable: no" "a server without the thread loaded must not look steerable"
   assert_contains "$out" "can read history but does not own the live turn" "the reason must be explicit"
 
+  out=$(FAKE_THREAD_STATUS=idle appserver thread-status --thread THREAD-1 --live)
+  assert_contains "$out" "steerable: no" "a loaded thread with no running turn has nothing to steer"
+  assert_contains "$out" "no turn is running" "the idle reason must be explicit"
+
+  out=$(FAKE_THREAD_STATUS=systemError appserver thread-status --thread THREAD-1 --live)
+  assert_contains "$out" "steerable: no" "a thread in a system error state must not look steerable"
+
   out=$(FAKE_THREAD_STATUS=active appserver thread-status --thread THREAD-1 --live)
-  assert_contains "$out" "reports the thread loaded" "a loaded thread must be reported as possibly steerable"
-  assert_contains "$out" "still has to be confirmed on a real turn" "even a loaded thread is not a guarantee"
-  pass "fm-voice-relay-appserver: reachability is reported separately from schema support"
+  assert_contains "$out" "steerable: this server reports a turn running" "a running turn is the only steerable case"
+  assert_contains "$out" "confirmed against the turn id" "even a running turn is not a guarantee"
+
+  for bad in malformed missing; do
+    out=$(FAKE_THREAD_STATUS=$bad appserver thread-status --thread THREAD-1 --live)
+    assert_contains "$out" "steerable: unknown" "an unrecognised status must fail closed: $bad"
+    assert_contains "$out" "treat the thread as not steerable" "a fail-closed answer must say what to do: $bad"
+  done
+  pass "fm-voice-relay-appserver: every tagged thread status is read correctly and unknown fails closed"
+}
+
+# The reader must return on the answer, not on the pipe closing: a proxy that
+# replies and keeps running would otherwise be reported as never having answered.
+test_an_answer_is_taken_before_the_proxy_closes() {
+  local out code start elapsed
+  start=$(date +%s)
+  out=$(FAKE_STAY_OPEN=1 FAKE_TURN_ID=turn-11 appserver active-turn --thread THREAD-1 --live) && code=0 || code=$?
+  elapsed=$(( $(date +%s) - start ))
+  expect_code 0 "$code" "an answer from a proxy that stays open must be accepted"
+  assert_contains "$out" "turn turn-11" "the answer must be the one the server sent"
+  [ "$elapsed" -lt 20 ] || fail "the answer must be taken when it arrives, not after the proxy exits ($elapsed s)"
+  pass "fm-voice-relay-appserver: an answer is read as it arrives, even if the proxy keeps running"
+}
+
+# Initialization is awaited before the request is sent, so a server that refuses
+# work before the handshake never sees the request at all.
+test_the_handshake_is_awaited_before_the_request() {
+  local out code log
+  log="$TMP_ROOT/handshake.log"
+  out=$(FAKE_SERVER_LOG="$log" FAKE_TURN_ID=turn-3 appserver active-turn --thread THREAD-1 --live) && code=0 || code=$?
+  expect_code 0 "$code" "a normal call must still succeed"
+  [ "$(head -1 "$log")" = initialize ] || fail "initialize must be the first method the server sees"
+
+  out=$(FAKE_STRICT_HANDSHAKE=1 FAKE_TURN_ID=turn-3 appserver active-turn --thread THREAD-1 --live) && code=0 || code=$?
+  expect_code 0 "$code" "a server that refuses pre-handshake requests must still be satisfied"
+  assert_contains "$out" "turn turn-3" "the request must be answered after initialization"
+  pass "fm-voice-relay-appserver: the request waits for the initialization answer"
 }
 
 test_active_turn_reads_the_current_turn() {
@@ -288,13 +362,36 @@ SH
     "$APPSERVER" active-turn --thread THREAD-1 --live 2>&1) && code=0 || code=$?
   elapsed=$(( $(date -u +%s) - started ))
   expect_code 5 "$code" "a server that never answers must end as a transport failure"
-  assert_contains "$out" "no answer within 2s" "the failure must name the bound it hit"
+  assert_contains "$out" "within 2s" "the failure must name the bound it hit"
+  assert_contains "$out" "the request was never sent" \
+    "a server silent at the handshake must say the request never went out"
   [ "$elapsed" -lt 30 ] || fail "the call must be bounded, took ${elapsed}s"
 
   out=$(FM_VOICE_RELAY_RPC_TIMEOUT=nonsense appserver active-turn --thread THREAD-1 --live 2>&1) && code=0 || code=$?
   expect_code 2 "$code" "an unusable bound must be refused rather than ignored"
   assert_contains "$out" "positive whole number of seconds" "the refusal must say what the value has to be"
   pass "fm-voice-relay-appserver: a live call is bounded and a silent proxy fails instead of hanging"
+}
+
+# The other half of the bound: initialization succeeds, then the server goes
+# quiet. Here the request DID go out, so the outcome is unknown rather than
+# "never sent" - the distinction decides whether a retry is safe.
+test_a_server_silent_after_the_handshake_reports_an_unknown_outcome() {
+  local half out code
+  half="$TMP_ROOT/half-silent-app-server"
+  cat > "$half" <<'SH'
+#!/usr/bin/env bash
+read -r _line
+printf '{"jsonrpc":"2.0","id":1,"result":{"userAgent":"half"}}\n'
+sleep 120
+SH
+  chmod +x "$half"
+  out=$(FM_VOICE_RELAY_PROXY_CMD="$half" FM_VOICE_RELAY_RPC_TIMEOUT=2 \
+    "$APPSERVER" active-turn --thread THREAD-1 --live 2>&1) && code=0 || code=$?
+  expect_code 5 "$code" "a server that answers the handshake and then stops must fail as transport"
+  assert_contains "$out" "whether the server acted on it is unknown" \
+    "a request that was sent and unanswered must be reported as unknown, not as unsent"
+  pass "fm-voice-relay-appserver: a bound hit after the request is reported as an unknown outcome"
 }
 
 # The limitation is only useful next to the thing to do instead.
@@ -330,9 +427,12 @@ test_steering_requires_the_expected_turn
 test_live_steer_lands_on_the_running_turn
 test_stale_steer_is_refused_by_the_server
 test_thread_status_tells_the_truth_about_reachability
+test_an_answer_is_taken_before_the_proxy_closes
+test_the_handshake_is_awaited_before_the_request
 test_active_turn_reads_the_current_turn
 test_interrupt_is_sent_as_the_protocol_defines_it
 test_a_silent_server_fails_at_the_documented_bound
+test_a_server_silent_after_the_handshake_reports_an_unknown_outcome
 test_a_proxy_that_answers_and_stays_open_is_not_a_timeout
 test_an_interrupted_live_call_leaves_no_proxy_running
 test_an_unparseable_proxy_command_is_a_usage_error

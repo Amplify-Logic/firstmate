@@ -104,7 +104,7 @@
 #       or correction never deletes it.
 #
 #   fm-voice-relay.sh phase <topic> --revision <n> --phase <phase> [--note <text>]
-#         [--message-id <id>] [--queue-exit <n>]
+#         [--message-id <id>] [--turn-id <id>] [--queue-exit <n>]
 #       Append one evidence line. Phases are kept distinct on purpose:
 #         enqueued    the queue command accepted the message. NOTHING ELSE.
 #         picked-up   the companion actually began a turn on it.
@@ -114,6 +114,12 @@
 #         superseded  a correction overtook this revision.
 #         cancelled   the topic was stopped.
 #         presented   text was released to the speaking frontend (not audio).
+#       The revision and binding are checked as the action gate checks them, so
+#       nothing can be recorded against a request that was never opened. A
+#       non-zero --queue-exit records a FAILED handoff rather than an enqueue.
+#       A record counts as transport evidence only when it carries the proof for
+#       its phase - a queue message id for an enqueue, a turn id for a pickup;
+#       everything else is stored as an operator claim and reported as one.
 #
 #   fm-voice-relay.sh handoff <topic> --revision <n>
 #       Authorize the handoff ONCE. The first call says send it now; every
@@ -143,10 +149,14 @@
 #       --attribution is required so a companion observation is never reported
 #       as a Firstmate finding, or the other way round.
 #
-#   fm-voice-relay.sh sent-status <topic> [--revision <n>]
+#   fm-voice-relay.sh sent-status <topic> [--revision <n>] [--all]
 #       Answer "did you send it?" from what is recorded. It never re-sends and
 #       never infers: an accepted-but-unconfirmed send is reported as exactly
-#       that, which is the whole point of keeping enqueued separate.
+#       that, which is the whole point of keeping enqueued separate. It answers
+#       for the CURRENT revision unless one is named, so a corrected request
+#       never reports the fate of the instruction it replaced, and it reports a
+#       turn as confirmed only when the record carries the transport's own turn
+#       id - an operator's typed pickup stays an unconfirmed claim.
 #
 #   fm-voice-relay.sh pending
 #       The logical pending count, evidence-backed: one line per open topic
@@ -812,8 +822,14 @@ cmd_performed() {
   printf 'ok: recorded %s as performed at revision %s\n' "$step" "$rev"
 }
 
+# Record one phase event. Two rules keep this from manufacturing evidence:
+# the revision and binding are checked exactly as the action gate checks them,
+# so a phase cannot be recorded against a request that was never opened; and a
+# record is marked as an operator CLAIM unless it carries the concrete transport
+# evidence for that phase - a queue message id for an enqueue, a turn id for a
+# pickup. Only a verified record may later be reported as confirmed.
 cmd_phase() {
-  local topic=${1:-} rev='' phase='' note='' msgid='' qexit='' detail
+  local topic=${1:-} rev='' phase='' note='' msgid='' qexit='' turnid='' detail evidence verdict code
   shift || true
   while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -821,6 +837,7 @@ cmd_phase() {
       --phase) phase=${2:-}; shift 2 ;;
       --note) note=${2:-}; shift 2 ;;
       --message-id) msgid=${2:-}; shift 2 ;;
+      --turn-id) turnid=${2:-}; shift 2 ;;
       --queue-exit) qexit=${2:-}; shift 2 ;;
       *) die "phase: unexpected argument: $1" ;;
     esac
@@ -831,15 +848,67 @@ cmd_phase() {
     enqueued|picked-up|working|completed|failed|superseded|cancelled|presented) : ;;
     *) die "phase: unknown phase: ${phase:-<missing>}" ;;
   esac
+  if [ -n "$qexit" ]; then
+    case "$qexit" in
+      ''|*[!0-9]*) die "phase: --queue-exit must be the command's exit status as a whole number" ;;
+    esac
+  fi
+  # An event about a revision that was never opened, or one belonging to a
+  # replaced enrollment, is not history - it is noise that later reads as fact.
+  # Superseded and finished revisions DO keep recording: their history is real.
+  verdict=$(freshness_verdict "$topic" "$rev")
+  code=${verdict%% *}
+  case "$code" in
+    0|3|5) : ;;
+    *) refuse "$code" "$(echo "${verdict#* }" | cut -d' ' -f1)" "$(echo "${verdict#* }" | cut -d' ' -f2-)" ;;
+  esac
+
+  # A non-zero queue exit means the queue did NOT accept the message. Recording
+  # that as an enqueue, and saying it proves acceptance, is exactly the false
+  # evidence this ledger exists to prevent.
+  if [ "$phase" = enqueued ] && [ -n "$qexit" ] && [ "$qexit" != 0 ]; then
+    detail="handoff rejected by the queue, queue_exit=$qexit"
+    [ -n "$note" ] && detail="$detail $(clean_text "$note")"
+    [ -n "$msgid" ] && detail="$detail message=$(clean_text "$msgid")"
+    record_event "$topic" "$rev" failed "$detail evidence=verified"
+    printf 'failed: the queue did not accept the message for %s revision %s (exit %s); nothing was handed off\n' \
+      "$topic" "$rev" "$qexit"
+    return 0
+  fi
+
+  evidence=claim
+  case "$phase" in
+    enqueued)
+      [ -n "$msgid" ] && [ "${qexit:-0}" = 0 ] && evidence=verified
+      ;;
+    picked-up)
+      [ -n "$turnid" ] && evidence=verified
+      ;;
+  esac
+
   detail=$(clean_text "$note")
   [ -n "$msgid" ] && detail="$detail message=$(clean_text "$msgid")"
+  [ -n "$turnid" ] && detail="$detail turn=$(clean_text "$turnid")"
   [ -n "$qexit" ] && detail="$detail queue_exit=$(clean_text "$qexit")"
-  record_event "$topic" "$rev" "$phase" "$detail"
-  if [ "$phase" = enqueued ]; then
-    printf 'ok: recorded enqueued for %s revision %s. This proves the queue accepted the message and nothing else.\n' "$topic" "$rev"
-  else
-    printf 'ok: recorded %s for %s revision %s\n' "$phase" "$topic" "$rev"
-  fi
+  record_event "$topic" "$rev" "$phase" "$detail evidence=$evidence"
+
+  case "$phase:$evidence" in
+    enqueued:verified)
+      printf 'ok: recorded enqueued for %s revision %s with its queue receipt. This proves the queue accepted the message and nothing else.\n' "$topic" "$rev"
+      ;;
+    enqueued:claim)
+      printf 'ok: recorded enqueued for %s revision %s as an operator claim - no queue receipt was supplied, so even acceptance is unconfirmed.\n' "$topic" "$rev"
+      ;;
+    picked-up:verified)
+      printf 'ok: recorded picked-up for %s revision %s against turn %s.\n' "$topic" "$rev" "$turnid"
+      ;;
+    picked-up:claim)
+      printf 'ok: recorded picked-up for %s revision %s as an operator claim - without a turn id this is not evidence the companion started a turn.\n' "$topic" "$rev"
+      ;;
+    *)
+      printf 'ok: recorded %s for %s revision %s\n' "$phase" "$topic" "$rev"
+      ;;
+  esac
 }
 
 # Handoff authorization is recorded ONCE. The second call is not a new prompt
@@ -875,15 +944,25 @@ cmd_handoff() {
 # never re-queues, and never advises a retry: an accepted-but-unconfirmed send
 # is reported as exactly that.
 cmd_sent_status() {
-  local topic=${1:-} rev='' log line f_rev phase detail last_enq='' last_pick='' last_work='' last_done='' last_fail='' last_pres=''
+  local topic=${1:-} rev='' all=0 log f_rev phase detail cur
+  local last_enq='' last_pick='' last_work='' last_done='' last_fail='' last_pres=''
+  local enq_ev='' pick_ev=''
   shift || true
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --revision) rev=${2:-}; shift 2 ;;
+      --all) all=1; shift ;;
       *) die "sent-status: unexpected argument: $1" ;;
     esac
   done
   require_topic "$topic"
+  cur=$(current_revision "$topic")
+  # Default to the revision that is current. An older revision's transport
+  # history is still readable, but it must be asked for, or a corrected request
+  # would report the fate of the instruction it replaced.
+  if [ "$all" = 0 ] && [ -z "$rev" ]; then
+    rev=$cur
+  fi
   log="$(topic_dir "$topic")/events.log"
   if [ ! -f "$log" ]; then
     printf 'unknown: no transport evidence recorded for %s\n' "$topic"
@@ -892,28 +971,48 @@ cmd_sent_status() {
   while IFS='	' read -r _utc _epoch f_rev phase detail; do
     [ -n "$rev" ] && [ "$f_rev" != "$rev" ] && continue
     case "$phase" in
-      enqueued) last_enq="$_utc${detail:+ - $detail}" ;;
-      picked-up) last_pick="$_utc${detail:+ - $detail}" ;;
+      enqueued) last_enq="$_utc${detail:+ - $detail}"; enq_ev=$(evidence_class "$detail") ;;
+      picked-up) last_pick="$_utc${detail:+ - $detail}"; pick_ev=$(evidence_class "$detail") ;;
       working) last_work="$_utc${detail:+ - $detail}" ;;
       completed) last_done="$_utc${detail:+ - $detail}" ;;
       failed) last_fail="$_utc${detail:+ - $detail}" ;;
       presented) last_pres="$_utc${detail:+ - $detail}" ;;
     esac
   done < "$log"
-  printf 'status: %s%s\n' "$topic" "${rev:+ revision $rev}"
+  if [ "$all" = 1 ]; then
+    printf 'status: %s all revisions (current is %s)\n' "$topic" "$cur"
+  else
+    printf 'status: %s revision %s%s\n' "$topic" "$rev" "$([ "$rev" = "$cur" ] && printf ' (current)' || printf ' (superseded)')"
+  fi
   printf '  enqueued: %s\n' "${last_enq:-no record}"
   printf '  picked-up: %s\n' "${last_pick:-no record - the companion is not known to have started a turn}"
   printf '  working: %s\n' "${last_work:-no record}"
   printf '  completed: %s\n' "${last_done:-no record}"
   [ -n "$last_fail" ] && printf '  failed: %s\n' "$last_fail"
-  printf '  presented: %s\n' "${last_pres:-no record}"
-  if [ -n "$last_enq" ] && [ -z "$last_pick" ]; then
-    printf '  verdict: accepted by the queue, delivery unconfirmed. Not resent: a second copy would duplicate the work.\n'
+  printf '  released for presentation: %s\n' "${last_pres:-no record}"
+  if [ -z "$last_enq" ] && [ -n "$last_fail" ]; then
+    printf '  verdict: the handoff failed; nothing was accepted, so there is nothing to wait for. Not resent automatically.\n'
   elif [ -z "$last_enq" ]; then
     printf '  verdict: nothing was handed off yet.\n'
+  elif [ -z "$last_pick" ]; then
+    if [ "$enq_ev" = verified ]; then
+      printf '  verdict: accepted by the queue, delivery unconfirmed. Not resent: a second copy would duplicate the work.\n'
+    else
+      printf '  verdict: a handoff was recorded without a queue receipt, so even acceptance is unconfirmed. Not resent: read the receipt rather than sending again.\n'
+    fi
+  elif [ "$pick_ev" = verified ]; then
+    printf '  verdict: a turn was confirmed by transport evidence, per the record above.\n'
   else
-    printf '  verdict: delivery confirmed by a real turn, per the evidence above.\n'
+    printf '  verdict: a pickup was recorded by the operator with no transport evidence behind it, so delivery stays unconfirmed. Not resent.\n'
   fi
+}
+
+# "verified" only when the record itself says so; anything unmarked is a claim.
+evidence_class() {  # <detail>
+  case "$1" in
+    *evidence=verified*) printf 'verified\n' ;;
+    *) printf 'claim\n' ;;
+  esac
 }
 
 # Logical pending count: one open request per topic, revisions grouped, so a
@@ -1073,7 +1172,7 @@ cmd_present() {
     # A failed write is not a duplicate: reporting it as one would silently
     # withhold a sentence that was never actually claimed.
     [ "$status" = 2 ] && refuse 10 write-failed "the presentation claim for $topic could not be written; nothing was released to the speaker"
-    [ "$status" = 0 ] || refuse 8 duplicate-suppressed "that exact sentence was already spoken for $topic"
+    [ "$status" = 0 ] || refuse 8 duplicate-suppressed "that exact sentence was already released for presentation for $topic"
   fi
   record_event "$topic" "$rev" presented "$hash"
   printf '%s\n' "$text"

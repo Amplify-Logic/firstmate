@@ -297,12 +297,71 @@ test_enqueue_is_not_delivery_and_status_never_resends() {
   assert_contains "$out" "Not resent" "the status answer must refuse a blind retry"
   assert_contains "$out" "MSG-1" "the status answer must cite the real transport evidence"
 
+  # A pickup someone typed is not evidence a turn happened. Only a record
+  # carrying the transport's own turn id may be reported as confirmed.
   relay transport phase handoff-topic --revision 1 --phase picked-up --note "turn started" >/dev/null
   out=$(relay transport sent-status handoff-topic)
-  assert_contains "$out" "delivery confirmed by a real turn" "a real turn must upgrade the verdict"
+  assert_contains "$out" "recorded by the operator with no transport evidence" \
+    "an operator claim must not be reported as a confirmed turn"
+  assert_not_contains "$out" "confirmed by transport evidence" "a claim must not read as verification"
+
+  relay transport phase handoff-topic --revision 1 --phase picked-up --turn-id TURN-5 >/dev/null
+  out=$(relay transport sent-status handoff-topic)
+  assert_contains "$out" "a turn was confirmed by transport evidence" "a real turn id must upgrade the verdict"
   pass "fm-voice-relay: enqueue, pickup and delivery stay distinct and a status query never resends"
 }
 
+# Every one of these was reproduced against the shipped build by independent
+# review: a rejected handoff reported as accepted, a phase recorded against a
+# revision that never existed, and a verdict of confirmed delivery built on top
+# of them. They are the ledger committing the exact confusion it exists to stop.
+test_recorded_claims_never_become_transport_evidence() {
+  local out code
+  new_home evidence >/dev/null
+  bind_home evidence
+  relay evidence open example --summary "harmless fixture" >/dev/null
+
+  out=$(relay evidence phase example --revision 1 --phase enqueued --queue-exit 1)
+  assert_contains "$out" "the queue did not accept" "a non-zero queue exit must not be recorded as an acceptance"
+  assert_not_contains "$out" "proves the queue accepted" "a failed handoff must never claim acceptance"
+
+  out=$(relay evidence phase example --revision 99 --phase picked-up 2>&1) && code=0 || code=$?
+  expect_code 4 "$code" "a phase against a revision that was never opened must be refused"
+
+  out=$(relay evidence sent-status example)
+  assert_contains "$out" "the handoff failed" "a failed handoff must be reported as failed"
+  assert_not_contains "$out" "confirmed" "nothing may be reported as confirmed here"
+
+  out=$(relay evidence phase example --revision 1 --phase enqueued)
+  assert_contains "$out" "operator claim" "an enqueue without a receipt is a claim, not proof"
+  out=$(relay evidence sent-status example)
+  assert_contains "$out" "even acceptance is unconfirmed" "a receiptless handoff must not read as accepted"
+  assert_contains "$out" "Not resent" "the answer must still refuse a blind retry"
+  pass "fm-voice-relay: a rejected handoff, a phantom revision and an unbacked pickup are all refused their claims"
+}
+
+# sent-status answers about the instruction that is current, not the one it replaced.
+test_status_reports_the_current_revision_by_default() {
+  local out
+  new_home scoped >/dev/null
+  bind_home scoped
+  relay scoped open scope-topic --summary "first" >/dev/null
+  relay scoped phase scope-topic --revision 1 --phase enqueued --message-id OLD-1 --queue-exit 0 >/dev/null
+  relay scoped revise scope-topic --summary "corrected" >/dev/null
+
+  out=$(relay scoped sent-status scope-topic)
+  assert_contains "$out" "revision 2 (current)" "the default answer must be about the current revision"
+  assert_contains "$out" "nothing was handed off yet" "the correction has not been handed off"
+  assert_not_contains "$out" "OLD-1" "the replaced instruction's transport must not answer for the current one"
+
+  out=$(relay scoped sent-status scope-topic --revision 1)
+  assert_contains "$out" "OLD-1" "an older revision's history must still be readable on request"
+  assert_contains "$out" "(superseded)" "an older revision must be labelled as superseded"
+  pass "fm-voice-relay: status answers for the current revision and keeps older history readable"
+}
+
+test_recorded_claims_never_become_transport_evidence
+test_status_reports_the_current_revision_by_default
 test_pending_count_groups_revisions_and_admits_what_is_unknown() {
   local out
   new_home counting >/dev/null

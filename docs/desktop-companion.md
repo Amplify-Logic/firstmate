@@ -125,7 +125,7 @@ Nothing in that chain is a bug in any one component - it is the absence of a sha
 
 `bin/fm-voice-relay.sh` is that answer, kept on disk so it survives a compacted conversation and a restarted session.
 It holds one record per topic, corrections advance that record's revision instead of creating a second request, and two gates read it: one before an action is performed, one before a sentence is spoken.
-A step that was pending when the work succeeded is retired by that success, in that topic only; an exact sentence is never spoken twice; a queue receipt is never reported as delivery; and "did you send it?" is answered from the record rather than by sending again.
+A step that was pending when the work succeeded is retired by that success, in that topic only; an exact sentence is never released for presentation twice; a queue receipt is never reported as delivery; and "did you send it?" is answered from the record rather than by sending again.
 Its `--help` is the contract: subcommands, the verdict words, and the exit code each verdict uses.
 
 What it cannot do is worth stating with equal force.
