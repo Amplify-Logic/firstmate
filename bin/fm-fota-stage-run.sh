@@ -65,6 +65,8 @@
 #                                  test can inject an isolated stub and this
 #                                  worker never reaches a shared companion
 #   FM_FOTA_QUEUE_TIMEOUT        - queue call timeout seconds (default 30)
+#   FM_FOTA_RUN_ID_CLOCK         - pins the second a run id stem is built from,
+#                                  so a test can force the collision branch
 #
 # Exit:
 #   0 on success; 1 on usage, a missing plan, a duplicate operation, or an
@@ -135,7 +137,7 @@ cmd_start() {
   RUNS="$RUNS" RETURN_DIR="$RETURN_DIR" DEADLINE="$deadline" PLAN="$plan" \
     QUEUE_CMD="$QUEUE_CMD" QUEUE_TIMEOUT="$QUEUE_TIMEOUT" \
     LIVE_STATES="$LIVE_STATES" py - <<'PYSTART'
-import json, os, re, subprocess, sys, time
+import json, os, re, subprocess, sys, textwrap, time
 
 runs, return_dir = os.environ["RUNS"], os.environ["RETURN_DIR"]
 plan = json.load(open(os.environ["PLAN"], encoding="utf-8"))
@@ -143,6 +145,35 @@ if plan.get("schema") != "fm.fota-staging-plan.v1":
     sys.exit("fm-fota-stage-run: not a fm.fota-staging-plan.v1 plan")
 
 key = plan["operation"]["idempotency_key"]
+
+
+def id_clock():
+    """The second the run id stem is built from.
+
+    Overridable so a test can pin two starts to one second and actually take the
+    collision branch below rather than racing the wall clock. Pinning it is safe
+    in any case: the branch is what guarantees uniqueness, not the clock.
+    """
+    pinned = (os.environ.get("FM_FOTA_RUN_ID_CLOCK") or "").strip()
+    if pinned.isdigit():
+        return int(pinned)
+    return int(time.time())
+
+
+# A plan that cannot produce a request is refused BEFORE a run id is claimed, so
+# an incomplete plan costs nothing and fails with this script's own message
+# rather than a traceback out of the middle of a half-started run.
+for field, holder in (("target", "device_id"), ("operation", "attempt")):
+    if not isinstance(plan.get(field), dict) or holder not in plan[field]:
+        sys.exit(
+            "fm-fota-stage-run: plan is missing %s.%s; it cannot be staged"
+            % (field, holder)
+        )
+for field in ("payload", "preview_hash"):
+    if plan.get(field) is None:
+        sys.exit("fm-fota-stage-run: plan is missing %s; it cannot be staged" % field)
+if not isinstance(plan.get("eligibility"), dict) or "state" not in plan["eligibility"]:
+    sys.exit("fm-fota-stage-run: plan is missing eligibility.state; it cannot be staged")
 
 # The duplicate guard covers the queue step too. `prepared` counts as live: its
 # request exists and may already have reached the companion, so re-running it
@@ -172,7 +203,7 @@ for name in sorted(os.listdir(runs)):
 # request_id check cannot catch, because the id would be byte-identical. The
 # record file is claimed with O_EXCL, so the id a run holds is the id no other
 # run can hold, and a settled record is never written over.
-base = "%s-%d" % (key, int(time.time()))
+base = "%s-%d" % (key, id_clock())
 run_id = record_fd = record_path = None
 for ordinal in range(1, 1000):
     candidate = base if ordinal == 1 else "%s-%d" % (base, ordinal)
@@ -193,44 +224,52 @@ for ordinal in range(1, 1000):
 if run_id is None:
     sys.exit("fm-fota-stage-run: could not claim a free run id for %s" % key)
 
-# Everything below runs against a run id already claimed on disk. If any of
-# it fails, the claim is released rather than left as an empty record the
-# deck silently skips over - and the id stays unusable by nobody.
+result_path = os.path.join(return_dir, run_id + "-result.json")
+request_path = os.path.join(return_dir, run_id + "-request.md")
+
+# Everything below runs against a run id already claimed on disk. If any of it
+# fails, the claim and the request it mirrors are both released rather than left
+# behind - an empty record the deck silently skips over, and a request file
+# carrying the target and the payload for a run that never existed.
 record_written = False
 try:
-    result_path = os.path.join(return_dir, run_id + "-result.json")
-    request_path = os.path.join(return_dir, run_id + "-request.md")
-
     # The request is GENERATED from the approved plan, never hand-written prose.
     # It carries the operation identity, the exact target, an origin allowlist the
     # browser side is told to stay inside, and the readback this run will verify.
     origin = (plan.get("adapter") or {}).get("origin") or plan.get("origin") or ""
-    request = """# Generated staging request - form preparation only
+    # Dedented, so the artifact's content is what it reads as here and does not
+    # move with the Python block around it. The payload line especially: the
+    # browser side is told to stage it verbatim, so it must not differ from the
+    # plan's payload by so much as a leading space.
+    request = textwrap.dedent(
+        """\
+        # Generated staging request - form preparation only
 
-    Run id: {run_id}
-    Operation: {key}
-    Target device: {device}
-    Allowed origin: {origin}
+        Run id: {run_id}
+        Operation: {key}
+        Target device: {device}
+        Allowed origin: {origin}
 
-    Prepare ONLY. Do not press the send control. Do not press any other preset,
-    apply, or refresh control. Do not navigate outside the allowed origin.
+        Prepare ONLY. Do not press the send control. Do not press any other preset,
+        apply, or refresh control. Do not navigate outside the allowed origin.
 
-    1. Open the target device page and read back its identifier from the page.
-       The page supplies the target, so a page that is not this device is the
-       wrong target: stop and report the mismatch rather than staging into it.
-    2. Stage this exact payload into the command field:
+        1. Open the target device page and read back its identifier from the page.
+           The page supplies the target, so a page that is not this device is the
+           wrong target: stop and report the mismatch rather than staging into it.
+        2. Stage this exact payload into the command field:
 
-    {payload}
+        {payload}
 
-    3. Read the field back once, authoritatively, and report exactly what it holds.
-       Do not add a second redundant check: a redundant check that times out turns
-       a completed preparation into a misleading failure.
-    4. Clear the draft and close only your own tab.
+        3. Read the field back once, authoritatively, and report exactly what it holds.
+           Do not add a second redundant check: a redundant check that times out turns
+           a completed preparation into a misleading failure.
+        4. Clear the draft and close only your own tab.
 
-    Write {result_name} containing: request_id set to the run id above, the
-    observed device identifier, the exact staged payload you read back, whether the
-    send control was pressed (it must be false), and any exact error.
-    """.format(
+        Write {result_name} containing: request_id set to the run id above, the
+        observed device identifier, the exact staged payload you read back, whether the
+        send control was pressed (it must be false), and any exact error.
+        """
+    ).format(
         run_id=run_id, key=key, device=plan["target"]["device_id"],
         origin=origin or "(declared by the local adapter)",
         payload=plan["payload"], result_name=os.path.basename(result_path),
@@ -405,10 +444,11 @@ finally:
             os.close(record_fd)
         except OSError:
             pass
-        try:
-            os.unlink(record_path)
-        except OSError:
-            pass
+        for orphan in (record_path, request_path):
+            try:
+                os.unlink(orphan)
+            except OSError:
+                pass
 PYSTART
 }
 

@@ -73,6 +73,13 @@ JSON
   printf '%s\n' "$plan"
 }
 
+plan_key() {  # plan_key <plan> -> the plan's idempotency key
+  PLAN="$1" python3 -c '
+import json, os
+print(json.load(open(os.environ["PLAN"], encoding="utf-8"))["operation"]["idempotency_key"])
+'
+}
+
 start_run() {  # start_run <plan> -> run id
   "$RUNNER" start "$@" 2>&1 | sed -n 's/^run_id=//p'
 }
@@ -330,18 +337,29 @@ test_generated_request_is_not_world_readable() {
 
 test_a_settled_record_is_never_overwritten() {
   reset_runs
-  local plan first second
+  local plan key clock first second
   plan=$(make_plan 1)
+  key=$(plan_key "$plan")
+  # The id stem is pinned, so both starts are GUARANTEED to want the same id
+  # rather than racing the wall clock for it. That is the whole point: the
+  # collision branch has to run, not merely be likely to.
+  clock=$(date +%s)
+  export FM_FOTA_RUN_ID_CLOCK="$clock"
+
   first=$(start_run "$plan" --deadline 0)
+  [ "$first" = "$key-$clock" ] || fail "the first run did not take the pinned stem: $first"
   "$RUNNER" settle "$first" >/dev/null
   assert_contains "$("$RUNNER" status "$first")" 'state=unknown' "first run settled unknown"
-  # The SAME plan, so the same idempotency key and the same id stem. The run has
-  # settled, so the duplicate guard lets it through - and on a fast machine the
-  # second start lands in the same wall-clock second, which is exactly the case
-  # that used to overwrite the settled record and its evidence.
+
+  # The SAME plan, so the same idempotency key and the same pinned stem. The run
+  # has settled, so the duplicate guard lets it through - and the id it wants is
+  # already taken, which is exactly the case that used to overwrite the settled
+  # record and read its result file back as this run's own evidence.
   second=$(start_run "$plan")
-  [ "$first" != "$second" ] || fail "a second run reused the first run's id"
-  assert_contains "$second" "$first" "the second id is built from the same stem"
+  [ "$second" = "$key-$clock-2" ] \
+    || fail "the second run did not take the collision branch: $second"
+  unset FM_FOTA_RUN_ID_CLOCK
+
   assert_contains "$("$RUNNER" status "$first")" 'state=unknown' \
     "the settled outcome survived a later run"
   assert_contains "$("$RUNNER" status "$second")" 'state=pending' \
@@ -516,24 +534,73 @@ test_the_deck_is_told_exactly_why_a_run_was_never_queued() {
   pass "the surface can tell every never-queued reason apart"
 }
 
-test_a_failed_start_leaves_no_orphaned_record() {
+test_a_failed_start_releases_the_run_id_it_claimed() {
   reset_runs
-  local before after
-  before=$(ls "$FM_STATE_OVERRIDE/fota-staging" 2>/dev/null | wc -l | tr -d ' ')
-  # The transport path exists but cannot be executed. The run id was already
-  # claimed on disk by then, so a failure here must release it rather than leave
-  # a record the deck skips over without saying anything.
-  FM_FOTA_QUEUE_CMD="$TMP/bin/not-executable" "$RUNNER" start "$(make_plan 1)" >/dev/null 2>&1
-  after=$(ls "$FM_STATE_OVERRIDE/fota-staging" 2>/dev/null | wc -l | tr -d ' ')
-  [ "$after" -ge "$before" ] || fail "records went missing"
-  # Whatever happened, every record on disk is readable - never a zero-byte claim.
-  local file
-  for file in "$FM_STATE_OVERRIDE/fota-staging"/*.json; do
-    [ -e "$file" ] || continue
-    python3 -c 'import json,sys; json.load(open(sys.argv[1]))' "$file" \
-      || fail "unreadable record left behind: $file"
-  done
-  pass "a start that cannot complete leaves no unreadable record behind"
+  local plan key clock rc out
+  plan=$(make_plan 1)
+  key=$(plan_key "$plan")
+  clock=$(date +%s)
+  # With the stem pinned the request path is predictable, so it can be made
+  # impossible to write - a failure AFTER the id is claimed, which is the only
+  # window in which a claim can be left behind.
+  mkdir -p "$FM_FOTA_RETURN_DIR/$key-$clock-request.md"
+  set +e
+  out=$(FM_FOTA_RUN_ID_CLOCK="$clock" "$RUNNER" start "$plan" 2>&1)
+  rc=$?
+  set -e
+  [ "$rc" -ne 0 ] || fail "a start that cannot write its request should fail: $out"
+  [ ! -e "$FM_STATE_OVERRIDE/fota-staging/$key-$clock.json" ] \
+    || fail "the claimed run id was left behind as a record nothing can read"
+  # And the id is free again for a start that can complete.
+  rmdir "$FM_FOTA_RETURN_DIR/$key-$clock-request.md"
+  [ "$(FM_FOTA_RUN_ID_CLOCK="$clock" start_run "$plan")" = "$key-$clock" ] \
+    || fail "the released run id was not reusable"
+  pass "a start that cannot complete releases the run id it claimed"
+}
+
+test_an_incomplete_plan_is_refused_before_anything_is_claimed() {
+  reset_runs
+  local plan broken rc out
+  plan=$(make_plan 1)
+  broken="$TMP/plan-no-target.json"
+  PLAN="$plan" BROKEN="$broken" python3 -c '
+import json, os
+plan = json.load(open(os.environ["PLAN"], encoding="utf-8"))
+plan["target"].pop("device_id")
+json.dump(plan, open(os.environ["BROKEN"], "w", encoding="utf-8"))
+'
+  set +e
+  out=$("$RUNNER" start "$broken" 2>&1)
+  rc=$?
+  set -e
+  expect_code 1 "$rc" "incomplete plan exit"
+  assert_contains "$out" 'fm-fota-stage-run:' "the script owns the message"
+  assert_not_contains "$out" 'Traceback' "an incomplete plan is refused, not crashed into"
+  # Nothing was claimed, so nothing has to be released.
+  [ -z "$(ls -A "$FM_STATE_OVERRIDE/fota-staging" 2>/dev/null)" ] \
+    || fail "an incomplete plan claimed a run id"
+  [ -z "$(ls -A "$FM_FOTA_RETURN_DIR" 2>/dev/null)" ] \
+    || fail "an incomplete plan wrote into the return directory"
+  pass "an incomplete plan is refused before a run id is claimed"
+}
+
+test_the_generated_request_carries_the_payload_unindented() {
+  reset_runs
+  local run_id request
+  run_id=$(start_run "$(make_plan 1)")
+  request="$FM_FOTA_RETURN_DIR/$run_id-request.md"
+  # The browser side is told to stage this verbatim, so the payload line must be
+  # the plan's payload and nothing else - no leading whitespace that would also
+  # turn the whole instruction body into a Markdown code block.
+  grep -qxF "$PAYLOAD" "$request" \
+    || fail "the payload line is not byte-identical to the plan's payload"
+  grep -qxF "# Generated staging request - form preparation only" "$request" \
+    || fail "the heading is indented"
+  grep -qxF "2. Stage this exact payload into the command field:" "$request" \
+    || fail "the instruction body is indented"
+  grep -n "^    " "$request" \
+    && fail "the generated request carries accidental indentation"
+  pass "the generated request carries the payload exactly as the plan holds it"
 }
 
 test_runner_never_sends() {
@@ -573,4 +640,6 @@ test_a_live_run_cannot_be_acknowledged
 test_acknowledgement_is_idempotent_and_keeps_the_full_history
 test_a_changed_outcome_is_not_covered_by_an_earlier_acknowledgement
 test_the_deck_is_told_exactly_why_a_run_was_never_queued
-test_a_failed_start_leaves_no_orphaned_record
+test_a_failed_start_releases_the_run_id_it_claimed
+test_an_incomplete_plan_is_refused_before_anything_is_claimed
+test_the_generated_request_carries_the_payload_unindented
