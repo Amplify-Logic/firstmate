@@ -65,13 +65,37 @@ Operation identity is therefore computed separately, over what makes two request
 No timestamp, no uuid.
 A deliberate retry raises an explicit **attempt ordinal**, which is part of the key, so an intended retry is a new identity by construction while an accidental repeat is not.
 
-`fm-fota-stage-run.sh start` refuses a second run for an operation that already has a live or ready one, naming the existing run.
+`fm-fota-stage-run.sh start` refuses a second run for an operation that already has a prepared, live, or ready one, naming the existing run.
+The guard covers the queue step, so a first attempt that did not land is never quietly enqueued again; a deliberate retry raises the attempt ordinal.
 
-## The four run states
+Run ids are claimed with `O_EXCL`, so two starts in one wall-clock second cannot share an id.
+A settled record is never written over, and a run never adopts an id whose result file already exists - a stale result read as a new run's readback is exactly the evidence loss `unknown` exists to prevent.
+
+## Delivery: four facts, never collapsed
+
+Generating a request file is not delivering it, and delivering it is not doing it.
+`start` invokes the documented supported transport - `codex queue --thread <thread> --message <text>`, per [`desktop-companion.md`](desktop-companion.md) - against the explicitly configured companion, and stores the queue receipt on the run record.
+
+| Fact | What proves it | What it does **not** prove |
+| --- | --- | --- |
+| Prepared | The generated request file exists | That anything received it |
+| Queue accepted | The transport exited 0 and returned a receipt, stored as `queue.receipt` | That the companion dequeued it |
+| Pickup | A result file carrying this run's id appeared (`pickup_observed`) | That the preparation succeeded |
+| Verified result | The readback matched this plan's target and payload | Nothing further - this is the end of staging |
+
+The companion thread comes from `FM_FOTA_COMPANION_THREAD` or from a `fm.desktop-companion-connection.v1` record at `<return dir>/connection.json`.
+With neither, nothing is enqueued at all - which is what keeps this worker away from a companion it was never pointed at.
+The transport command itself is `FM_FOTA_QUEUE_CMD` (default `codex`), so tests inject an isolated stub rather than reaching a real session.
+
+A missing transport, a non-zero queue exit, and a queue timeout are each an honest state, and **none of them ever re-queues**.
+A timeout is the one genuinely ambiguous case - the message may or may not have been enqueued - so the run stays live and the duplicate guard keeps it from being sent a second time on that doubt.
+
+## The five run states
 
 | State | Meaning |
 | --- | --- |
-| `pending` | Request generated and dispatched; no result yet |
+| `prepared` | Request generated, but no transport took it: none configured, none installed, or a non-zero queue exit. Nothing was enqueued |
+| `pending` | The transport took it, or timed out without saying whether it did; no result yet |
 | `ready` | A result arrived **and** its readback matched this plan's target and payload |
 | `error` | The result reported a definite failure, or its readback definitely contradicted the plan |
 | `unknown` | No result inside the deadline, an unreadable result, or a result asserting success without the readback to support it |
@@ -129,8 +153,14 @@ Activation is opt-in and consists entirely of supplying a local adapter definiti
 
 1. Write an adapter definition matching `fm.fota-adapter.v1` (see the fixture for shape). Keep it outside this repository.
 2. `bin/fm-fota-stage.py --adapter <path> --request <path> --out <plan>` - produces a plan and prints its preview hash, operation identity, and eligibility state.
-3. `bin/fm-fota-stage-run.sh start <plan>` - records a run and generates the request.
+3. `bin/fm-fota-stage-run.sh start <plan>` - generates the request, queues it to the configured companion, and records the run with its queue receipt.
 4. `bin/fm-fota-stage-run.sh settle <run-id>` - reads the result and decides one state.
+
+5. `bin/fm-fota-stage-run.sh ack <run-id>` - records that the captain has seen a settled preparation alert, so the deck stops listing it as an open ask.
+
+Acknowledgement is the only way a settled run leaves the active ask list.
+It never deletes a record, never changes an outcome, never marks a command applied, and expires nothing on a timer: an `unknown` stays `unknown` forever, because that is the evidence.
+Records and requests are written `0600` under `0700` directories, and settle rewrites a record whole and moves it into place, so a crash cannot leave a half-written record that quietly drops a run off the pane.
 
 **Rollback** is deleting the adapter definition: with no adapter, nothing can be staged.
 Run records live under `state/fota-staging/` and may be removed freely - they are evidence, not state anything depends on.

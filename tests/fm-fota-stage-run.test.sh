@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
-# Behavior tests for bin/fm-fota-stage-run.sh: the four run states, duplicate
-# protection by operation identity, and the rule that ready needs a readback.
+# Behavior tests for bin/fm-fota-stage-run.sh: the run states, the queue
+# transport and its receipt, duplicate protection by operation identity, the
+# rule that ready needs a readback, and explicit captain acknowledgement.
+#
+# The transport is an injected stub in a temp directory. Nothing here calls the
+# real `codex` binary or reaches a shared companion: the thread identity and the
+# transport command are both overridden, so an unconfigured environment queues
+# into nothing at all rather than into somebody else's session.
 set -u
 
 # shellcheck source=tests/lib.sh disable=SC1091
@@ -13,7 +19,31 @@ TMP=$(fm_test_tmproot fm-fota-stage-run)
 export FM_HOME="$TMP/home"
 export FM_STATE_OVERRIDE="$TMP/home/state"
 export FM_FOTA_RETURN_DIR="$TMP/return"
-mkdir -p "$FM_HOME" "$FM_FOTA_RETURN_DIR"
+mkdir -p "$FM_HOME" "$FM_FOTA_RETURN_DIR" "$TMP/bin"
+
+# An isolated transport stub. It records exactly what it was asked to queue and
+# prints a receipt in the shape the real CLI does, so the tests can assert the
+# transport was invoked and the receipt was correlated - without any session,
+# any network, or any shared companion existing.
+QUEUE_LOG="$TMP/queue-calls.log"
+STUB="$TMP/bin/codex-stub"
+cat > "$STUB" <<'STUBEOF'
+#!/usr/bin/env bash
+echo "$*" >> "$FM_TEST_QUEUE_LOG"
+if [ -n "${FM_TEST_QUEUE_FAIL:-}" ]; then
+  echo "stub refused: $FM_TEST_QUEUE_FAIL" >&2
+  exit 3
+fi
+if [ -n "${FM_TEST_QUEUE_HANG:-}" ]; then
+  sleep "$FM_TEST_QUEUE_HANG"
+fi
+echo "queued to thread ${3:-?}"
+echo "message_id: stub-msg-$$"
+STUBEOF
+chmod +x "$STUB"
+export FM_TEST_QUEUE_LOG="$QUEUE_LOG"
+export FM_FOTA_QUEUE_CMD="$STUB"
+export FM_FOTA_COMPANION_THREAD="isolated-stub-thread"
 
 PAYLOAD='[{"n": "band_lower", "v": 135},{"n": "band_upper", "v": 140}]'
 
@@ -22,6 +52,9 @@ PAYLOAD='[{"n": "band_lower", "v": 135},{"n": "band_upper", "v": 140}]'
 reset_runs() {
   rm -rf "$FM_STATE_OVERRIDE/fota-staging" "$FM_FOTA_RETURN_DIR"
   mkdir -p "$FM_FOTA_RETURN_DIR"
+  : > "$QUEUE_LOG"
+  unset FM_TEST_QUEUE_FAIL FM_TEST_QUEUE_HANG
+  export FM_FOTA_COMPANION_THREAD="isolated-stub-thread"
 }
 
 make_plan() {  # make_plan <attempt> -> plan path
@@ -200,6 +233,186 @@ test_settled_run_is_not_resettled() {
   pass "a settled run is never re-decided"
 }
 
+test_start_queues_through_the_documented_transport() {
+  reset_runs
+  local plan run_id out record
+  plan=$(make_plan 1)
+  out=$("$RUNNER" start "$plan" 2>&1)
+  run_id=$(printf '%s\n' "$out" | sed -n 's/^run_id=//p')
+  assert_contains "$out" 'state=pending' "an accepted queue leaves the run pending"
+  assert_contains "$out" 'queue=accepted' "start reports the queue outcome"
+  assert_contains "$out" 'receipt=stub-msg-' "start reports the queue receipt"
+
+  # The transport was invoked with the documented flags, against the explicitly
+  # configured thread, carrying this run's id so the receipt is correlated.
+  assert_grep 'queue --thread isolated-stub-thread --message' "$QUEUE_LOG" \
+    "the documented transport was invoked"
+  assert_grep "$run_id" "$QUEUE_LOG" "the queued message carries the run id"
+
+  record="$FM_STATE_OVERRIDE/fota-staging/$run_id.json"
+  assert_grep '"accepted": true' "$record" "the record stores that the queue accepted"
+  assert_grep '"receipt": "stub-msg-' "$record" "the record stores the receipt"
+  # Accepted is not pickup, and the record must never let the two be confused.
+  assert_grep '"pickup_observed": false' "$record" "a receipt is not pickup"
+  pass "start queues through the documented transport and stores the receipt"
+}
+
+test_unconfigured_transport_is_prepared_not_pending() {
+  reset_runs
+  local out run_id
+  unset FM_FOTA_COMPANION_THREAD
+  out=$("$RUNNER" start "$(make_plan 1)" 2>&1)
+  run_id=$(printf '%s\n' "$out" | sed -n 's/^run_id=//p')
+  # A generated file alone is only `prepared`. Claiming `pending` here would
+  # assert a delivery that never happened.
+  assert_contains "$out" 'state=prepared' "an unconfigured transport is prepared"
+  assert_contains "$out" 'queue=not-configured' "the outcome names why"
+  [ ! -s "$QUEUE_LOG" ] || fail "nothing may be enqueued without a configured thread"
+  assert_contains "$("$RUNNER" settle "$run_id")" 'state=prepared' \
+    "a prepared run with no result is not re-decided as unknown"
+  pass "an unconfigured transport records prepared and enqueues nothing"
+}
+
+test_refused_queue_is_honest_and_never_requeued() {
+  reset_runs
+  local plan out rc first
+  plan=$(make_plan 1)
+  out=$(FM_TEST_QUEUE_FAIL="no such thread" "$RUNNER" start "$plan" 2>&1)
+  first=$(printf '%s\n' "$out" | sed -n 's/^run_id=//p')
+  assert_contains "$out" 'state=prepared' "a refused queue is prepared, not pending"
+  assert_contains "$out" 'queue=refused' "the outcome names the refusal"
+  assert_contains "$out" 'no such thread' "the reason quotes the transport"
+
+  # The duplicate guard covers the queue step: the same operation is never
+  # queued a second time just because the first attempt did not land.
+  set +e
+  out=$("$RUNNER" start "$plan" 2>&1)
+  rc=$?
+  set -e
+  expect_code 1 "$rc" "repeat after a refused queue exits non-zero"
+  assert_contains "$out" "already has a prepared run" "the guard names the prepared run"
+  assert_contains "$out" "$first" "the guard names the run id"
+  pass "a refused queue is an honest state that is never silently re-queued"
+}
+
+test_queue_timeout_is_pending_and_never_requeued() {
+  reset_runs
+  local plan out rc
+  plan=$(make_plan 1)
+  out=$(FM_TEST_QUEUE_HANG=3 FM_FOTA_QUEUE_TIMEOUT=1 "$RUNNER" start "$plan" 2>&1)
+  # A timeout is the one genuinely ambiguous case: the message may or may not
+  # have been enqueued. It is never accepted, and never sent again on that doubt.
+  assert_contains "$out" 'queue=timeout' "a timed-out queue says so"
+  assert_contains "$out" 'state=pending' "an ambiguous delivery stays live"
+  set +e
+  out=$("$RUNNER" start "$plan" 2>&1)
+  rc=$?
+  set -e
+  expect_code 1 "$rc" "repeat after a timeout exits non-zero"
+  pass "a queue timeout is ambiguous, live, and never re-queued"
+}
+
+test_generated_request_is_not_world_readable() {
+  reset_runs
+  local run_id mode
+  run_id=$(start_run "$(make_plan 1)")
+  # The request carries the same device identifier, payload and operation
+  # identity the 0600 record is protected for.
+  mode=$(stat -f '%Lp' "$FM_FOTA_RETURN_DIR/$run_id-request.md" 2>/dev/null \
+    || stat -c '%a' "$FM_FOTA_RETURN_DIR/$run_id-request.md")
+  [ "$mode" = "600" ] || fail "generated request is mode $mode, expected 600"
+  pass "the generated request gets the same protection as the record"
+}
+
+test_a_settled_record_is_never_overwritten() {
+  reset_runs
+  local plan first second
+  plan=$(make_plan 1)
+  first=$(start_run "$plan" --deadline 0)
+  "$RUNNER" settle "$first" >/dev/null
+  assert_contains "$("$RUNNER" status "$first")" 'state=unknown' "first run settled unknown"
+  # Same operation, same wall-clock second on a fast machine. The settled record
+  # and its evidence are exactly what `unknown` exists to preserve.
+  second=$(start_run "$(make_plan 2)")
+  [ "$first" != "$second" ] || fail "a second run reused the first run's id"
+  assert_contains "$("$RUNNER" status "$first")" 'state=unknown' \
+    "the settled outcome survived a later run"
+  pass "a settled record is never written over by a later run"
+}
+
+test_a_stale_result_is_never_read_as_a_new_runs_readback() {
+  reset_runs
+  local plan first second
+  plan=$(make_plan 1)
+  first=$(start_run "$plan" --deadline 0)
+  # A result arrives for the first run, which then settles and is archived by
+  # hand - the documented way records are cleared - leaving its result behind.
+  write_result "$first" "{\"request_id\":\"$first\",
+    \"observed_device_heading\":\"1234567000111\",
+    \"exact_draft_payload\":\"$(printf '%s' "$PAYLOAD" | sed 's/"/\\"/g')\",
+    \"command_sent\":false}"
+  "$RUNNER" settle "$first" >/dev/null
+  rm -f "$FM_STATE_OVERRIDE/fota-staging/$first.json"
+  second=$(start_run "$plan")
+  [ "$first" != "$second" ] || fail "a new run claimed an id whose result already exists"
+  assert_contains "$("$RUNNER" settle "$second")" 'state=pending' \
+    "the new run has no readback of its own yet"
+  pass "a leftover result file is never accepted as a new run's readback"
+}
+
+test_deadline_argument_is_validated() {
+  reset_runs
+  local plan out rc
+  plan=$(make_plan 1)
+  set +e
+  out=$("$RUNNER" start "$plan" --deadline abc 2>&1)
+  rc=$?
+  set -e
+  expect_code 1 "$rc" "non-numeric deadline exit"
+  assert_contains "$out" 'fm-fota-stage-run:' "the script owns the message"
+  assert_not_contains "$out" 'Traceback' "no uncaught traceback reaches the operator"
+  set +e
+  out=$("$RUNNER" start "$plan" --deadline 2>&1)
+  rc=$?
+  set -e
+  expect_code 1 "$rc" "missing deadline value exit"
+  assert_not_contains "$out" 'Traceback' "a missing value is refused, not interpreted"
+  pass "--deadline is validated with this script's own refusal"
+}
+
+test_acknowledgement_clears_the_ask_without_losing_the_outcome() {
+  reset_runs
+  local run_id record out
+  run_id=$(start_run "$(make_plan 1)" --deadline 0)
+  "$RUNNER" settle "$run_id" >/dev/null
+  out=$("$RUNNER" ack "$run_id" --note "checked at the portal")
+  assert_contains "$out" 'acknowledged=true' "ack reports the acknowledgement"
+  assert_contains "$out" 'state=unknown' "ack does not change the outcome"
+
+  record="$FM_STATE_OVERRIDE/fota-staging/$run_id.json"
+  assert_present "$record" "the record still exists"
+  assert_grep '"state": "unknown"' "$record" "the unobserved outcome is preserved"
+  assert_grep 'verify at the portal' "$record" "the original reason is preserved"
+  assert_grep '"sent": false' "$record" "nothing is marked applied"
+  assert_contains "$("$RUNNER" list --json)" '"acknowledged": true' \
+    "the surface is told it is no longer an open ask"
+  pass "an acknowledgement clears the ask and preserves every piece of evidence"
+}
+
+test_a_live_run_cannot_be_acknowledged() {
+  reset_runs
+  local run_id out rc
+  run_id=$(start_run "$(make_plan 1)" --deadline 600)
+  set +e
+  out=$("$RUNNER" ack "$run_id" 2>&1)
+  rc=$?
+  set -e
+  [ "$rc" -ne 0 ] || fail "acknowledging a live run should refuse"
+  assert_contains "$out" 'only a settled preparation alert' "the refusal says why"
+  assert_contains "$("$RUNNER" status "$run_id")" 'state=pending' "the run is untouched"
+  pass "a live run cannot be acknowledged away"
+}
+
 test_runner_never_sends() {
   reset_runs
   local hits
@@ -224,3 +437,13 @@ test_deadline_without_result_settles_unknown_not_error
 test_pending_before_deadline_stays_pending
 test_settled_run_is_not_resettled
 test_runner_never_sends
+test_start_queues_through_the_documented_transport
+test_unconfigured_transport_is_prepared_not_pending
+test_refused_queue_is_honest_and_never_requeued
+test_queue_timeout_is_pending_and_never_requeued
+test_generated_request_is_not_world_readable
+test_a_settled_record_is_never_overwritten
+test_a_stale_result_is_never_read_as_a_new_runs_readback
+test_deadline_argument_is_validated
+test_acknowledgement_clears_the_ask_without_losing_the_outcome
+test_a_live_run_cannot_be_acknowledged

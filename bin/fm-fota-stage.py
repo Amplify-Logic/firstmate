@@ -42,6 +42,45 @@ import sys
 PLAN_SCHEMA = "fm.fota-staging-plan.v1"
 ADAPTER_SCHEMA = "fm.fota-adapter.v1"
 
+class EncodingError(ValueError):
+    """A value that does not fit its declared encoding.
+
+    Encodings validate; they never coerce. Coercion is how a flag becomes a
+    temperature: float(True) is 1.0, which under a tenths rule reads back as a
+    perfectly plausible band bound that no one ever asked for.
+    """
+
+
+def numeric_in(value):
+    """A number, and never a bool - bool is an int in Python, not a reading."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise EncodingError(
+            "a numeric encoding takes a number, got %s: %r"
+            % (type(value).__name__, value)
+        )
+    return float(value)
+
+
+def boolean_in(value):
+    """true or false only. A truthy string or an empty list is not a boolean."""
+    if not isinstance(value, bool):
+        raise EncodingError(
+            "the boolean encoding takes true or false, got %s: %r"
+            % (type(value).__name__, value)
+        )
+    return value
+
+
+def wire_number_in(raw):
+    """A wire number read back off the portal, held to the same rule."""
+    if isinstance(raw, bool) or not isinstance(raw, (int, float)):
+        raise EncodingError(
+            "a numeric encoding reads back a number, got %s: %r"
+            % (type(raw).__name__, raw)
+        )
+    return int(raw)
+
+
 # Value encodings. Declared per setting key by the adapter, never inferred from
 # a device series: the same device can carry a setting in one encoding and a
 # reported measurement in another.
@@ -52,20 +91,20 @@ ADAPTER_SCHEMA = "fm.fota-adapter.v1"
 ENCODINGS = {
     "offset100_tenths_c": {
         "kind": "numeric",
-        "to_wire": lambda c: 100 + int(round(float(c) * 10)),
-        "from_wire": lambda raw: (int(raw) - 100) / 10.0,
+        "to_wire": lambda c: 100 + int(round(numeric_in(c) * 10)),
+        "from_wire": lambda raw: (wire_number_in(raw) - 100) / 10.0,
         "unit": "C",
     },
     "plain_tenths_c": {
         "kind": "numeric",
-        "to_wire": lambda c: int(round(float(c) * 10)),
-        "from_wire": lambda raw: int(raw) / 10.0,
+        "to_wire": lambda c: int(round(numeric_in(c) * 10)),
+        "from_wire": lambda raw: wire_number_in(raw) / 10.0,
         "unit": "C",
     },
     "boolean": {
         "kind": "boolean",
-        "to_wire": lambda b: bool(b),
-        "from_wire": lambda raw: bool(raw),
+        "to_wire": lambda b: boolean_in(b),
+        "from_wire": lambda raw: boolean_in(raw),
         "unit": None,
     },
 }
@@ -146,22 +185,25 @@ def build_payload(adapter: dict, staged: list) -> str:
                     "adapter declares no numeric_value_key; a numeric setting "
                     "cannot be staged until the portal's key is confirmed"
                 )
-            items.append(
-                '{"%s": "%s", "%s": %d}'
-                % (name_key, entry["name"], numeric_key, entry["wire_value"])
-            )
+            value_key = numeric_key
         else:
             if not boolean_key:
                 fail("adapter declares no boolean_value_key")
-            items.append(
-                '{"%s": "%s", "%s": %s}'
-                % (
-                    name_key,
-                    entry["name"],
-                    boolean_key,
-                    "true" if entry["wire_value"] else "false",
-                )
+            value_key = boolean_key
+        if value_key == name_key:
+            fail(
+                "adapter declares the same key for the name and the value "
+                f"({name_key!r}); one would silently overwrite the other"
             )
+        # Serialised, never interpolated: a key or a setting name carrying a
+        # quote or a backslash would otherwise emit a payload the browser side
+        # stages happily and the readback comparison can no longer parse.
+        items.append(
+            json.dumps(
+                {name_key: entry["name"], value_key: entry["wire_value"]},
+                separators=(", ", ": "),
+            )
+        )
     return "[" + ",".join(items) + "]"
 
 
@@ -280,7 +322,11 @@ def build_plan(adapter: dict, request: dict) -> dict:
         spec = resolve_setting(adapter, name)
         encoding = spec["encoding"]
         rule = ENCODINGS[encoding]
-        wire = rule["to_wire"](value)
+        try:
+            wire = rule["to_wire"](value)
+            decoded = rule["from_wire"](wire)
+        except EncodingError as exc:
+            fail(f"setting {name!r} declares encoding {encoding!r}: {exc}")
         staged.append(
             {
                 "name": name,
@@ -291,7 +337,7 @@ def build_plan(adapter: dict, request: dict) -> dict:
                 # rule and a setting rule can never be silently interchanged.
                 "encoding": encoding,
                 "value_kind": rule["kind"],
-                "decoded_check": rule["from_wire"](wire),
+                "decoded_check": decoded,
             }
         )
 
@@ -305,18 +351,30 @@ def build_plan(adapter: dict, request: dict) -> dict:
     for row in request.get("telemetry", []) or []:
         # A measurement without its age is not evidence, and "unavailable" is a
         # third state that must never be rendered as a reading.
+        available = bool(row.get("available"))
+        encoding = row.get("encoding")
+        raw = row.get("raw") if available else None
+        decoded = None
+        unusable = None
+        if available and raw is None:
+            available, unusable = False, "row claims availability with no raw value"
+        if available and encoding in ENCODINGS:
+            try:
+                decoded = ENCODINGS[encoding]["from_wire"](raw)
+            except EncodingError as exc:
+                # A row claiming availability without a usable value has told us
+                # nothing, so it becomes the third state rather than a reading -
+                # and an incidental telemetry defect never kills the whole plan.
+                available, raw, unusable = False, None, str(exc)
         telemetry.append(
             {
                 "name": row.get("name"),
-                "available": row.get("available", False),
-                "raw": row.get("raw") if row.get("available") else None,
-                "encoding": row.get("encoding"),
-                "decoded": (
-                    ENCODINGS[row["encoding"]]["from_wire"](row["raw"])
-                    if row.get("available") and row.get("encoding") in ENCODINGS
-                    else None
-                ),
-                "observed_at": row.get("observed_at") if row.get("available") else None,
+                "available": available,
+                "raw": raw,
+                "encoding": encoding,
+                "decoded": decoded,
+                "observed_at": row.get("observed_at") if available else None,
+                "unusable_raw": unusable,
             }
         )
 

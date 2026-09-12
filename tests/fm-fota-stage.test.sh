@@ -79,6 +79,107 @@ test_measurement_and_setting_rules_do_not_mix() {
   pass "a measurement and a setting use separate rules on one device"
 }
 
+test_encodings_validate_rather_than_coerce() {
+  local out rc
+  # float(True) is 1.0, which under a tenths rule reads back as a perfectly
+  # plausible 1.0 C band bound synthesised out of a flag. A number is required.
+  set +e
+  out=$(stage '{"action_kind":"device.config.stage","device_id":"1234567000111",
+    "environment":"prod","attempt":1,
+    "settings":[{"name":"band_lower","value":true}]}')
+  rc=$?
+  set -e
+  expect_code 1 "$rc" "boolean into a numeric encoding exit"
+  assert_contains "$out" "takes a number" "the refusal names the contract"
+  assert_not_contains "$out" '"wire_value": 110' "no number is synthesised from a flag"
+
+  set +e
+  out=$(stage '{"action_kind":"device.config.stage","device_id":"1234567000111",
+    "environment":"prod","attempt":1,
+    "settings":[{"name":"band_lower","value":"3.5"}]}')
+  rc=$?
+  set -e
+  expect_code 1 "$rc" "string into a numeric encoding exit"
+  assert_contains "$out" "takes a number" "a numeric-looking string is still not a number"
+
+  # The same discipline in the other direction: the string "false" is truthy.
+  set +e
+  out=$(stage '{"action_kind":"device.config.stage","device_id":"1234567000111",
+    "environment":"prod","attempt":1,
+    "settings":[{"name":"feature_flag","value":"false"}]}')
+  rc=$?
+  set -e
+  expect_code 1 "$rc" "string into a boolean encoding exit"
+  assert_contains "$out" "takes true or false" "the boolean refusal names the contract"
+  pass "encodings validate in both directions rather than coercing"
+}
+
+test_a_telemetry_row_without_a_usable_value_is_unavailable_not_a_crash() {
+  local plan
+  # A row claiming availability with no raw value at all.
+  plan=$(stage "$(request 1 3.5 4.0 1234567000111 ',
+  "telemetry": [ { "name": "band_lower", "available": true,
+                   "encoding": "plain_tenths_c" } ]')")
+  assert_not_contains "$plan" 'Traceback' "an incidental telemetry defect is not a traceback"
+  assert_contains "$plan" '"available": false' "it becomes the third state"
+  assert_contains "$plan" '"decoded": null' "nothing is decoded from nothing"
+  assert_contains "$plan" 'no raw value' "the plan says why it is unusable"
+
+  # A row whose raw value is not a number.
+  plan=$(stage "$(request 1 3.5 4.0 1234567000111 ',
+  "telemetry": [ { "name": "band_lower", "available": true, "raw": "n/a",
+                   "encoding": "plain_tenths_c" } ]')")
+  assert_not_contains "$plan" 'Traceback' "a non-numeric raw is not a traceback"
+  assert_contains "$plan" '"available": false' "a non-numeric raw is unavailable"
+  # And the staged setting is still correctly reported as not read.
+  assert_contains "$plan" "Current values were not read for: band_lower, band_upper" \
+    "an unusable row never counts as coverage"
+  pass "a telemetry row without a usable value is unavailable, never a traceback"
+}
+
+test_the_payload_is_serialised_not_interpolated() {
+  local out
+  # An adapter whose declared name key carries a quote and a backslash. Rendered
+  # by interpolation this emits broken JSON that the run's readback comparison
+  # can no longer parse - a good preparation settling unknown for no reason.
+  out=$(STAGE="$STAGE" ADAPTER="$ADAPTER" TMP="$TMP" python3 - <<'PY'
+import json, os, subprocess, sys
+
+tmp = os.environ["TMP"]
+adapter = json.load(open(os.environ["ADAPTER"], encoding="utf-8"))
+adapter["command_format"]["name_key"] = 'n"\\x'
+adapter_path = os.path.join(tmp, "quoting-adapter.json")
+with open(adapter_path, "w", encoding="utf-8") as handle:
+    json.dump(adapter, handle)
+
+request_path = os.path.join(tmp, "quoting-request.json")
+with open(request_path, "w", encoding="utf-8") as handle:
+    json.dump(
+        {
+            "action_kind": "device.config.stage",
+            "device_id": "1234567000111",
+            "environment": "prod",
+            "attempt": 1,
+            "settings": [{"name": "band_lower", "value": 3.5}],
+        },
+        handle,
+    )
+
+done = subprocess.run(
+    [os.environ["STAGE"], "--adapter", adapter_path, "--request", request_path],
+    capture_output=True, text=True,
+)
+if done.returncode != 0:
+    sys.exit("stage failed: %s" % (done.stderr or done.stdout))
+payload = json.loads(done.stdout)["payload"]
+rows = json.loads(payload)
+assert rows == [{'n"\\x': "band_lower", "v": 135}], rows
+print("payload parses: %s" % payload)
+PY
+) || fail "the payload did not survive a quoted adapter key: $out"
+  pass "the payload escapes correctly by construction, whatever the adapter names"
+}
+
 test_unconfirmed_encoding_is_refused() {
   local out rc
   set +e
@@ -225,6 +326,9 @@ test_attempt_ordinal_is_required() {
 
 test_encodes_through_the_declared_rule
 test_payload_matches_the_declared_wire_format
+test_encodings_validate_rather_than_coerce
+test_a_telemetry_row_without_a_usable_value_is_unavailable_not_a_crash
+test_the_payload_is_serialised_not_interpolated
 test_measurement_and_setting_rules_do_not_mix
 test_unconfirmed_encoding_is_refused
 test_undeclared_setting_is_refused

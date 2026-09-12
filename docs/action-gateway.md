@@ -45,11 +45,13 @@ Example:
   "environment": "prod",
   "policy_version": "1",
   "idempotency_key": "pitch-agent-42-v1",
-  "expires_at": 1893456000,
+  "expires_at": 1757680200,
   "nonce": "n-7f3a9c2e",
   "requester_id": "worker-task-42"
 }
 ```
+
+`expires_at` is a real timestamp shortly ahead of the request, not a far-future constant: `email.send` is `irreversible`, so the broker caps its window at 15 minutes (see [Broker-capped approval freshness](#broker-capped-approval-freshness)).
 
 ## Operation registry and severity
 

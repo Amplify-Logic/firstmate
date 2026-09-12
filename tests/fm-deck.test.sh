@@ -1393,6 +1393,74 @@ test_staging_runs_route_to_the_sections_that_own_each_state() {
   pass "each staging state renders in the section that already owns it"
 }
 
+test_a_pending_staging_run_reports_its_real_age() {
+  local out
+  # Started two hours before the pane's clock. The heard column is the one thing
+  # he scans to spot a stalled worker, so a hardcoded zero would guarantee it
+  # says a six-hour-old run is fresh.
+  out=$(staging_payload '[
+    {"run_id":"r-old","state":"pending","device_id":"dev-old","attempt":1,
+     "eligibility":"verified","started_at":'"$((NOW - 7200))"'}
+  ]' | python3 "$RENDER" "$MARK" 2>&1)
+  assert_contains "$out" 'heard 2h ago' "the run reports the age its record carries"
+  assert_not_contains "$out" 'heard 0s ago' "no run is reported as freshly heard"
+
+  # A record with no usable start says so rather than inventing a fresh one.
+  out=$(staging_payload '[
+    {"run_id":"r-nostart","state":"pending","device_id":"dev-nostart","attempt":1,
+     "eligibility":"verified"}
+  ]' | python3 "$RENDER" "$MARK" 2>&1)
+  assert_contains "$out" 'not reported yet' "a missing start is not reported as now"
+  pass "a pending staging run reports the age its record actually carries"
+}
+
+test_an_acknowledged_run_leaves_the_ask_list_with_its_evidence_intact() {
+  local out
+  out=$(staging_payload '[
+    {"run_id":"r-unknown","state":"unknown","device_id":"dev-seen","attempt":1,
+     "eligibility":"verified","reason":"no result inside the deadline",
+     "acknowledged":true},
+    {"run_id":"r-open","state":"error","device_id":"dev-open","attempt":1,
+     "eligibility":"verified","reason":"readback payload does not match"}
+  ]' | python3 "$RENDER" "$MARK" 2>&1)
+  # Acknowledgement is the captain saying he has seen it. The record and its
+  # outcome are untouched; only the active ask list stops repeating it.
+  assert_not_contains "$out" 'dev-seen' "an acknowledged run is no longer an open ask"
+  assert_contains "$out" 'dev-open' "an unacknowledged run still asks"
+  pass "an explicit acknowledgement removes a settled alert from the ask list"
+}
+
+test_a_never_queued_run_says_so_rather_than_claiming_delivery() {
+  local out
+  out=$(staging_payload '[
+    {"run_id":"r-prepared","state":"prepared","device_id":"dev-prepared","attempt":1,
+     "eligibility":"verified","reason":"no companion thread is configured"}
+  ]' | python3 "$RENDER" "$MARK" 2>&1)
+  # A generated file alone is only prepared. It needs a person, and it must not
+  # be drawn beside the workers as though something were carrying it.
+  assert_contains "$out" 'dev-prepared' "a prepared run is surfaced"
+  assert_contains "$out" 'no companion thread is configured' "it says why nothing moved"
+  assert_not_contains "$out" 'PREPARING' "a prepared run is not shown as under way"
+  pass "a run nothing ever queued is an ask, not work under way"
+}
+
+test_the_model_count_describes_only_the_rows_its_consumer_renders() {
+  local model staged staged_runs
+  model=$(staging_payload '[
+    {"run_id":"r-ready","state":"ready","device_id":"dev-ready","attempt":1,
+     "eligibility":"verified"}
+  ]' | python3 "$RENDER" --json "$MARK" 2>&1)
+  staged=$(printf '%s' "$model" | jq -r '.counts.staged')
+  staged_runs=$(printf '%s' "$model" | jq -r '.counts.staged_runs')
+  # `staged.groups` is what a model consumer renders, so `counts.staged` counts
+  # exactly that. A surface that also draws the staging runs adds staged_runs;
+  # one that does not is never handed a headline larger than its own rows.
+  [ "$staged" = "$(printf '%s' "$model" | jq -r '[.staged.groups[].cards[]] | length')" ] \
+    || fail "staged count does not match the grouped cards: $staged"
+  [ "$staged_runs" = 1 ] || fail "staging runs are not counted separately: $staged_runs"
+  pass "the model's staged count describes only the rows its consumer renders"
+}
+
 test_staging_never_claims_unverified_eligibility_is_settled() {
   local out
   out=$(staging_payload '[
@@ -1461,6 +1529,10 @@ test_json_mode_degrades_honestly_and_scrubs
 test_interval_validation
 test_refresh_loop_redraws_and_reflects_changes
 test_staging_runs_route_to_the_sections_that_own_each_state
+test_a_pending_staging_run_reports_its_real_age
+test_an_acknowledged_run_leaves_the_ask_list_with_its_evidence_intact
+test_a_never_queued_run_says_so_rather_than_claiming_delivery
+test_the_model_count_describes_only_the_rows_its_consumer_renders
 test_staging_never_claims_unverified_eligibility_is_settled
 test_absent_staging_section_changes_nothing
 test_malformed_staging_section_is_skipped_not_guessed
