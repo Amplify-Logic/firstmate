@@ -26,6 +26,10 @@
 #       This is the direct regression pair for the 2026-07-02 herdr incident,
 #       proving the watcher's own absorb-only-when-provably-working predicate
 #       benefits from the fix in both directions.
+#   (l) live-over-terminal: a pipeline fix round whose head this copy never
+#       fetched outranks an older failed run at the worktree's own head, on
+#       both selection routes, while unanchored, rewritten, and finished runs
+#       stay exactly as they were
 set -u
 
 # shellcheck source=tests/lib.sh
@@ -268,6 +272,19 @@ run:
   pr: "https://github.com/o/r/pull/1"
   findings: none
 outcome: passed
+EOF
+}
+
+run_checks_passed() {  # <branch>
+  cat <<EOF
+run:
+  id: "01RUN"
+  branch: $1
+  status: completed
+  head: "${FM_FAKE_RUN_HEAD:-abc1234}"
+  pr: "https://github.com/o/r/pull/9"
+  findings: none
+outcome: checks-passed
 EOF
 }
 
@@ -1359,6 +1376,162 @@ test_missing_run_head_falls_back_to_current_state() {
   pass "missing run head falls back instead of matching by branch"
 }
 
+# --- live-over-terminal selection (fm-crew-state-stale-run, 2026-09-12) ------
+#
+# The pipeline applies its fix rounds in its OWN gate repo, not in the task
+# worktree, so a healthy run's head is routinely a commit the task copy has
+# never fetched while the worktree still sits at the head it submitted. When an
+# older TERMINAL run for the same branch ended at exactly that submitted head,
+# head-binding rejected the live run (its head resolves to no object here) and
+# accepted the corpse, so an actively validating crew read `failed`.
+#
+# The fixture reproduces that shape faithfully rather than fabricating a sha:
+# the fix commit is made in a separate clone (the gate repo) and never fetched,
+# exactly as the operator path produces it.
+make_pipeline_fix_head() {  # <worktree> <branch> -> echoes an unresolvable short sha
+  local wt=$1 branch=$2 mirror="$1.gate" fix
+  git clone -q "$wt" "$mirror"
+  git -C "$mirror" checkout -q -B "$branch"
+  git -C "$mirror" commit -q --allow-empty -m 'pipeline fix round 2'
+  fix=$(git -C "$mirror" rev-parse --short=7 HEAD)
+  git -C "$wt" rev-parse --verify --quiet "${fix}^{commit}" >/dev/null 2>&1 \
+    && fail "fixture broken: the gate-repo fix head must not resolve in the task worktree"
+  printf '%s\n' "$fix"
+}
+
+# The reported reproduction, ledger route: the repo-wide `axi status` answer
+# belongs to another crew, so attribution falls to the runs ledger, where the
+# live fix-round row sits above the failed row at this worktree's own head.
+test_live_pipeline_fix_row_outranks_older_failed_at_worktree_head() {
+  reset_fakes
+  local d short fix out
+  d=$(new_case live-over-failed-ledger)
+  make_repo_on_branch "$d/wt" fm/feat-live
+  short=$(git -C "$d/wt" rev-parse --short=7 HEAD)
+  fix=$(make_pipeline_fix_head "$d/wt" fm/feat-live)
+  make_fakebin "$d" >/dev/null
+  fm_write_meta "$d/state/live.meta" "window=fm:fm-live" "worktree=$d/wt" "kind=ship"
+  printf 'working: implementation committed, validating\n' > "$d/state/live.status"
+  FM_FAKE_AXI_STATUS="$(run_running fm/other-crew)"
+  FM_FAKE_RUNS_LIST="$(cat <<EOF
+  running    fm/feat-live ${fix}  2026-09-12 10:17
+  failed     fm/feat-live ${short}  2026-09-12 10:14
+EOF
+)"
+  FM_FAKE_BUSY=0
+  out=$(run_crew_state "$d" live)
+  assert_contains "$out" "state: working" "live fix round outranks the older failed run at the stale head"
+  assert_contains "$out" "source: run-step" "live fix round is run-step sourced"
+  assert_not_contains "$out" "state: failed" "the older failed run must not be reported as current"
+  pass "live pipeline fix round outranks an older failed run at the worktree head (ledger route)"
+}
+
+# Same reproduction, `axi status` route: the corpse is the run the CLI answers
+# with, and it binds by exact head equality, so a terminal failure is only
+# provisional until the ledger has been asked for a live run on this branch.
+test_axi_status_failed_corpse_yields_to_live_ledger_run() {
+  reset_fakes
+  local d short fix out
+  d=$(new_case live-over-failed-axi)
+  make_repo_on_branch "$d/wt" fm/feat-corpse
+  short=$(git -C "$d/wt" rev-parse --short=7 HEAD)
+  fix=$(make_pipeline_fix_head "$d/wt" fm/feat-corpse)
+  make_fakebin "$d" >/dev/null
+  fm_write_meta "$d/state/corpse.meta" "window=fm:fm-corpse" "worktree=$d/wt" "kind=ship"
+  printf 'working: implementation committed, validating\n' > "$d/state/corpse.status"
+  # The failed run reports THIS worktree's head, so head-binding accepts it.
+  FM_FAKE_AXI_STATUS="$(run_failed fm/feat-corpse)"
+  FM_FAKE_RUNS_LIST="$(cat <<EOF
+  running    fm/feat-corpse ${fix}  2026-09-12 10:17
+  failed     fm/feat-corpse ${short}  2026-09-12 10:14
+EOF
+)"
+  FM_FAKE_BUSY=0
+  out=$(run_crew_state "$d" corpse)
+  assert_contains "$out" "state: working" "a live run on this branch outranks the failed axi-status answer"
+  assert_not_contains "$out" "state: failed" "the failed corpse must not be reported while its successor runs"
+  pass "a failed axi-status answer yields to this worktree's live ledger run"
+}
+
+# No-widening half: a live row whose head this copy cannot resolve proves
+# nothing on its own. With no row immediately older anchoring it to EXACTLY
+# this worktree's head, the branch name alone must not attribute the run.
+test_unresolvable_live_row_without_anchor_is_not_attributed() {
+  reset_fakes
+  local d fix out
+  d=$(new_case unanchored-live-row)
+  make_repo_on_branch "$d/wt" fm/feat-unanchored
+  fix=$(make_pipeline_fix_head "$d/wt" fm/feat-unanchored)
+  make_fakebin "$d" >/dev/null
+  fm_write_meta "$d/state/unanchored.meta" "window=fm:fm-unanchored" "worktree=$d/wt" "kind=ship"
+  printf 'done: implemented, ready to validate\n' > "$d/state/unanchored.status"
+  FM_FAKE_AXI_STATUS="$(run_running fm/other-crew)"
+  FM_FAKE_RUNS_LIST="$(cat <<EOF
+  running    fm/other-crew aaaaaaa  2026-09-12 10:17
+  running    fm/feat-unanchored ${fix}  2026-09-12 10:16
+EOF
+)"
+  FM_FAKE_BUSY=0
+  out=$(run_crew_state "$d" unanchored)
+  assert_not_contains "$out" "source: run-step" "an unanchored unresolvable run must not be attributed"
+  assert_contains "$out" "source: status-log" "no attributable run falls back to current-state sources"
+  pass "an unresolvable live row with no exact-head anchor is not attributed"
+}
+
+# No-widening half: a reused branch whose tip was rewritten must stay rejected.
+# The live row is unresolvable here too, but the row anchoring it sits on
+# history this worktree no longer has, so neither row may be attributed.
+test_unresolvable_live_row_with_diverged_anchor_is_not_attributed() {
+  reset_fakes
+  local d old_short fix out
+  d=$(new_case diverged-anchor)
+  make_repo_on_branch "$d/wt" fm/feat-diverged
+  old_short=$(git -C "$d/wt" rev-parse --short=7 HEAD)
+  fix=$(make_pipeline_fix_head "$d/wt" fm/feat-diverged)
+  # Rebase rewrite: the branch name is reused on unrelated history.
+  git -C "$d/wt" checkout -q --orphan tmp-rewrite
+  git -C "$d/wt" commit -q --allow-empty -m 'rewritten tip'
+  git -C "$d/wt" branch -q -M fm/feat-diverged
+  make_fakebin "$d" >/dev/null
+  fm_write_meta "$d/state/diverged.meta" "window=fm:fm-diverged" "worktree=$d/wt" "kind=ship"
+  printf 'working: restarted on rebased history\n' > "$d/state/diverged.status"
+  FM_FAKE_AXI_STATUS="$(run_running fm/other-crew)"
+  FM_FAKE_RUNS_LIST="$(cat <<EOF
+  running    fm/feat-diverged ${fix}  2026-09-12 10:17
+  failed     fm/feat-diverged ${old_short}  2026-09-12 10:14
+EOF
+)"
+  FM_FAKE_BUSY=0
+  out=$(run_crew_state "$d" diverged)
+  assert_not_contains "$out" "source: run-step" "a rewritten-branch run must stay rejected"
+  assert_contains "$out" "source: status-log" "rewritten branch falls back to current-state sources"
+  pass "an unresolvable live row anchored on rewritten history is not attributed"
+}
+
+# No-widening half: a genuinely finished run is not a corpse, so a still-live
+# ledger row must never downgrade a PR-ready verdict back to validating.
+test_checks_passed_run_is_not_displaced_by_a_live_ledger_row() {
+  reset_fakes
+  local d short fix out
+  d=$(new_case checks-passed-not-displaced)
+  make_repo_on_branch "$d/wt" fm/feat-green
+  short=$(git -C "$d/wt" rev-parse --short=7 HEAD)
+  fix=$(make_pipeline_fix_head "$d/wt" fm/feat-green)
+  make_fakebin "$d" >/dev/null
+  fm_write_meta "$d/state/green.meta" "window=fm:fm-green" "worktree=$d/wt" "kind=ship"
+  FM_FAKE_AXI_STATUS="$(run_checks_passed fm/feat-green)"
+  FM_FAKE_RUNS_LIST="$(cat <<EOF
+  running    fm/feat-green ${fix}  2026-09-12 10:17
+  completed  fm/feat-green ${short}  2026-09-12 10:14  https://github.com/o/r/pull/9
+EOF
+)"
+  FM_FAKE_BUSY=0
+  out=$(run_crew_state "$d" green)
+  assert_contains "$out" "state: done" "a checks-passed run keeps its PR-ready verdict"
+  assert_contains "$out" "PR ready for review" "the PR-ready detail survives"
+  pass "a checks-passed run is not displaced by a live ledger row"
+}
+
 test_active_run_is_authoritative
 test_stale_needs_decision_superseded
 test_stale_blocked_superseded
@@ -1410,5 +1583,10 @@ test_historical_same_branch_rewritten_head_not_current
 test_active_run_descendant_fix_head_remains_current
 test_local_advanced_past_run_head_invalidates
 test_missing_run_head_falls_back_to_current_state
+test_live_pipeline_fix_row_outranks_older_failed_at_worktree_head
+test_axi_status_failed_corpse_yields_to_live_ledger_run
+test_unresolvable_live_row_without_anchor_is_not_attributed
+test_unresolvable_live_row_with_diverged_anchor_is_not_attributed
+test_checks_passed_run_is_not_displaced_by_a_live_ledger_row
 
 echo "all fm-crew-state tests passed"
