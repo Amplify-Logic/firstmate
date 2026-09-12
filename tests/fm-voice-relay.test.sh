@@ -504,6 +504,25 @@ test_the_transport_column_only_describes_transport_records() {
   pass "fm-voice-relay: the transport column labels handoff records and nothing else"
 }
 
+# The counts line summarises the same records the table labels. A pickup the
+# operator typed was never observed by anything, so it must not be added to the
+# turns a transport reference backs.
+test_the_counts_line_separates_claimed_turns_from_referenced_ones() {
+  local out counts
+  new_home counts >/dev/null
+  bind_home counts
+  relay counts open tally --summary "count me" >/dev/null
+  relay counts phase tally --revision 1 --phase picked-up --turn-id TURN-7 >/dev/null
+  relay counts phase tally --revision 1 --phase picked-up --note "companion said it started" >/dev/null
+
+  out=$(relay counts evidence tally)
+  counts=$(printf '%s\n' "$out" | grep '^counts:')
+  assert_not_contains "$counts" "observed" "nothing here observed a turn, so the count must not say so"
+  assert_contains "$counts" "turns-verified=1" "only the pickup carrying a turn id is backed by a reference"
+  assert_contains "$counts" "turns-claimed=1" "the operator-typed pickup must be counted apart, as a claim"
+  pass "fm-voice-relay: the counts line keeps claimed turns apart from referenced ones"
+}
+
 test_pending_count_groups_revisions_and_admits_what_is_unknown() {
   local out
   new_home counting >/dev/null
@@ -749,6 +768,7 @@ test_a_performed_record_needs_a_revision_that_exists
 test_a_step_that_could_not_be_written_is_not_reported_as_declared
 test_a_completion_that_could_not_retire_a_step_says_so_without_claiming_nothing_landed
 test_the_transport_column_only_describes_transport_records
+test_the_counts_line_separates_claimed_turns_from_referenced_ones
 test_pending_count_groups_revisions_and_admits_what_is_unknown
 test_concurrent_claims_and_publishes_have_exactly_one_winner
 test_preferences_are_style_only_and_never_authority

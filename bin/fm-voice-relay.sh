@@ -1435,7 +1435,7 @@ cmd_steer_command() {
 }
 
 cmd_evidence() {
-  local topic=${1:-} log line prev=0 gap handoffs=0 turns=0 presented=0
+  local topic=${1:-} log line prev=0 gap handoffs=0 turns_verified=0 turns_claimed=0 presented=0
   require_topic "$topic"
   log="$(topic_dir "$topic")/events.log"
   printf 'topic: %s request=%s current-revision=%s\n' "$topic" "$(request_id "$topic")" "$(current_revision "$topic")"
@@ -1457,13 +1457,23 @@ cmd_evidence() {
     prev=$EV_EPOCH
     case "$EV_PHASE" in
       enqueued) handoffs=$((handoffs + 1)) ;;
-      picked-up) turns=$((turns + 1)) ;;
+      picked-up)
+        # A pickup counts as a referenced turn only when the record carries the
+        # transport's own turn id. An operator saying a turn started is counted
+        # apart, under the same word the TRANSPORT column uses for it.
+        if [ "$(evidence_class "$EV_CLASS")" = verified ]; then
+          turns_verified=$((turns_verified + 1))
+        else
+          turns_claimed=$((turns_claimed + 1))
+        fi
+        ;;
       presented) presented=$((presented + 1)) ;;
     esac
     printf '%-22s %-4s %-12s %-9s %-9s %s\n' \
       "$EV_UTC" "$EV_REV" "$EV_PHASE" "$gap" "$(transport_label "$EV_CLASS")" "$EV_DETAIL"
   done < "$log"
-  printf 'counts: handoffs=%s observed-turns=%s presentations=%s\n' "$handoffs" "$turns" "$presented"
+  printf 'counts: handoffs=%s turns-verified=%s turns-claimed=%s presentations=%s\n' \
+    "$handoffs" "$turns_verified" "$turns_claimed" "$presented"
   printf 'transport: verified = the record carries the transport'"'"'s own proof; claim = the operator said so; - = not a transport record, established by this ledger.\n'
   printf 'limits: gaps are wall-clock between recorded events, not model or cost measurements.\n'
   printf 'limits: native queue depth and audible playback are unknown to this ledger.\n'
