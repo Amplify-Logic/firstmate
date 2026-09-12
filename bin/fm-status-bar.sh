@@ -349,29 +349,29 @@ BOLD=$'\033[1m'
 BR=$'\033[91;1m'
 X=$'\033[0m'
 
-last_status_line() {
-  local file=$1
-  [ -f "$file" ] || return 0
-  awk 'NF { line=$0 } END { print line }' "$file" 2>/dev/null
-}
+# shellcheck source=bin/fm-fleet-status-lib.sh
+. "$FM_ROOT/bin/fm-fleet-status-lib.sh"
 
+# Fleet fields, from bin/fm-fleet-status-lib.sh. This used to count every meta
+# file as a running ship and fold each status log's last line into paused and
+# attention; both readings turned task RECORDS into apparent live workers. The
+# library now folds the canonical current-state reader instead, and reports
+# whether it has a usable reading at all.
 fleet_counts() {
-  local meta id kind last
-  ACTIVE_COUNT=0
+  local reading
+  RECORD_COUNT=0
+  WORKING_COUNT=0
+  VALIDATING_COUNT=0
   PAUSED_COUNT=0
   ATTENTION_COUNT=0
-  for meta in "$STATE"/*.meta; do
-    [ -e "$meta" ] || continue
-    kind=$(awk -F= '$1 == "kind" { print substr($0, index($0, "=") + 1); exit }' "$meta" 2>/dev/null)
-    [ "$kind" = secondmate ] && continue
-    ACTIVE_COUNT=$((ACTIVE_COUNT + 1))
-    id=$(basename "$meta" .meta)
-    last=$(last_status_line "$STATE/$id.status")
-    case "$last" in
-      paused:*) PAUSED_COUNT=$((PAUSED_COUNT + 1)) ;;
-      needs-decision:*|blocked:*|failed:*) ATTENTION_COUNT=$((ATTENTION_COUNT + 1)) ;;
-    esac
-  done
+  FLEET_KNOWN=0
+  reading=$(fm_fleet_status_counts "$STATE" 2>/dev/null) || return 0
+  IFS=$'\t' read -r RECORD_COUNT WORKING_COUNT VALIDATING_COUNT \
+    PAUSED_COUNT ATTENTION_COUNT FLEET_KNOWN <<EOF
+$reading
+EOF
+  case "$RECORD_COUNT" in ''|*[!0-9]*) RECORD_COUNT=0 ;; esac
+  case "$FLEET_KNOWN" in 1) ;; *) FLEET_KNOWN=0 ;; esac
 }
 
 supervision_age() {
@@ -402,6 +402,7 @@ supervision_age() {
 render_once() {
   local anchor separator context_part quota_part paused_color attention_color
   local fleet_part watch_part cost_part afk_part age context_color quota_color
+  local working_color validating_color
 
   fleet_counts
   age=$(supervision_age)
@@ -435,11 +436,26 @@ render_once() {
       || quota_part="${quota_color}⚡${QUOTA_USED}%${X}${D}${QUOTA_WINDOW}${X}"
   fi
 
-  paused_color=$D
-  [ "$PAUSED_COUNT" -eq 0 ] || paused_color=$Y
-  attention_color=$D
-  [ "$ATTENTION_COUNT" -eq 0 ] || attention_color=$R
-  fleet_part="${G}🚢${ACTIVE_COUNT}${X} ${paused_color}⏸${PAUSED_COUNT}${X} ${attention_color}⚠${ATTENTION_COUNT}${X}"
+  # The record count is always exact and always shown, because it is the one
+  # fleet number that makes no claim about running workers. The four live fields
+  # are a single reading: without one they ALL show the placeholder, because a
+  # zero here would assert an idle fleet, which is a real state the captain has
+  # to be able to believe.
+  if [ "$FLEET_KNOWN" != 1 ]; then
+    fleet_part="${D}🚢-- 🧪-- ⏸-- ⚠--${X} ${D}📋${RECORD_COUNT}${X}"
+  else
+    working_color=$D
+    [ "$WORKING_COUNT" -eq 0 ] || working_color=$G
+    validating_color=$D
+    [ "$VALIDATING_COUNT" -eq 0 ] || validating_color=$C
+    paused_color=$D
+    [ "$PAUSED_COUNT" -eq 0 ] || paused_color=$Y
+    attention_color=$D
+    [ "$ATTENTION_COUNT" -eq 0 ] || attention_color=$R
+    fleet_part="${working_color}🚢${WORKING_COUNT}${X} ${validating_color}🧪${VALIDATING_COUNT}${X}"
+    fleet_part="${fleet_part} ${paused_color}⏸${PAUSED_COUNT}${X} ${attention_color}⚠${ATTENTION_COUNT}${X}"
+    fleet_part="${fleet_part} ${D}📋${RECORD_COUNT}${X}"
+  fi
 
   if [ "$age" = -- ]; then
     watch_part="${BR}👁 NO-WATCH --${X}"
@@ -656,7 +672,14 @@ if [ -n "$FOLLOW_PANE" ]; then
     # published context sample, this tick's reading - has to run in the loop's
     # own shell. It still runs before any of the frame reaches the pane.
     refresh_codex_metrics
-    publish_context_sample "$CONTEXT_USED"
+    # Deliberately NOT published to the primary-handoff context sample. That
+    # file is the handoff supervisor's CONTEXT axis: a home that enables the
+    # axis rotates its live primary once the sample crosses the threshold. The
+    # Codex adapter's context was always unavailable before this work, so it
+    # never fed that axis, and starting to feed it here would arm a live-primary
+    # rotation path as a side effect of a display change. Showing the figure and
+    # driving a lifecycle decision with it are separate decisions, and only the
+    # first one was asked for. docs/status-bar.md records the boundary.
     frame=$(render_once)
     printf '\033[H\033[2K%s' "$frame"
     if [ -n "$CHROME_PANE" ]; then
