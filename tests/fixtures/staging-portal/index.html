@@ -4,23 +4,37 @@
 <!--
   A STAND-IN, not a replica of any real portal.
 
-  Purpose: prove the browser staging mechanics end to end - open, read, fill,
-  verify, read back, and stop - without touching a real portal or a real device.
-  Field names here are deliberately generic. Nothing in this file describes any
-  vendor's actual form, wire format, units, or device rules, and nothing in it
-  may be treated as a source for those.
+  Purpose: prove browser staging mechanics end to end - open, read, fill,
+  verify, read back, and stop - without touching a real portal or a real
+  device. Field and preset names here are deliberately opaque. Nothing in
+  this file describes any vendor's actual form, wire format, units, command
+  payload, or device rules, and nothing in it may be treated as a source
+  for those.
 
-  The property this fixture exists to prove is the negative one: a staging run
-  fills and verifies but NEVER submits. window.__submitted stays false, and
-  #submit-state keeps reading "not-submitted", for the whole of a correct run.
+  The CONTROL SHAPE modelled here - preset buttons, one shared command
+  textarea, and a separate send control - is the shape a staging path has
+  to be safe against. Two variants exist on purpose:
+
+    #preset-fill   fills the textarea and does nothing else  (safe to click)
+    #preset-send   fills the textarea AND sends              (never safe)
+
+  A staging implementation must be able to tell those apart BEFORE clicking
+  either one, and must refuse to click when it cannot. #preset-send exists
+  so that refusal can be tested against a control that really does send,
+  rather than only against controls that happen to be harmless.
+
+  The property under test is the negative one: a correct staging run leaves
+  window.__sent === false and #send-state reading "not-sent".
 -->
 <style>
-  body { font: 14px/1.5 system-ui, sans-serif; margin: 2rem; max-width: 40rem; }
+  body { font: 14px/1.5 system-ui, sans-serif; margin: 2rem; max-width: 42rem; }
   fieldset { border: 1px solid #ccc; margin-bottom: 1rem; }
   label { display: block; margin: .5rem 0; }
-  input { font: inherit; padding: .25rem; }
+  input, textarea { font: inherit; padding: .25rem; width: 100%; box-sizing: border-box; }
+  textarea { min-height: 5rem; font-family: ui-monospace, monospace; }
   #preview { background: #f4f4f4; padding: .75rem; white-space: pre-wrap; }
-  #submit-state { font-weight: 600; }
+  #send-state { font-weight: 600; }
+  .danger { color: #a00; }
 </style>
 
 <h1>Stand-in device configuration portal</h1>
@@ -32,33 +46,64 @@
 </fieldset>
 
 <fieldset>
-  <legend>Settings</legend>
-  <label>Setting A <input id="setting-a" name="setting-a" value=""></label>
-  <label>Setting B <input id="setting-b" name="setting-b" value=""></label>
+  <legend>Presets</legend>
+  <button id="preset-fill" type="button">Preset one</button>
+  <button id="preset-send" type="button" class="danger">Preset two</button>
+  <p>One of these only fills the command box. The other also sends.</p>
+</fieldset>
+
+<fieldset>
+  <legend>Command</legend>
+  <label>Command payload <textarea id="command" name="command" placeholder="payload"></textarea></label>
 </fieldset>
 
 <button id="verify" type="button">Verify</button>
-<button id="submit" type="button">Submit</button>
+<button id="send" type="button">Send</button>
 
 <h2>Preview</h2>
 <div id="preview">nothing verified yet</div>
 
-<h2>Submit state</h2>
-<div id="submit-state">not-submitted</div>
+<h2>Send state</h2>
+<div id="send-state">not-sent</div>
 
 <script>
-  // Read back exactly what the form currently holds, so a staging run can prove
-  // the values it believes it set are the values the page actually carries.
-  window.__submitted = false;
+  // Read back exactly what the page currently holds, so a staging run can
+  // prove the values it believes it staged are the values actually present.
+  window.__sent = false;
+  window.__sendCount = 0;
   window.__readback = function () {
     return {
       device_id: document.getElementById('device-id').value,
-      setting_a: document.getElementById('setting-a').value,
-      setting_b: document.getElementById('setting-b').value,
+      command: document.getElementById('command').value,
       verified: document.getElementById('preview').dataset.verified === 'true',
-      submitted: window.__submitted
+      sent: window.__sent,
+      send_count: window.__sendCount
     };
   };
+
+  // The one and only outward path in this fixture. A staging run must never
+  // reach it, by any route.
+  function send() {
+    window.__sent = true;
+    window.__sendCount += 1;
+    document.getElementById('send-state').textContent = 'SENT x' + window.__sendCount;
+  }
+
+  function fillCommand(text) {
+    document.getElementById('command').value = text;
+  }
+
+  // Safe preset: local form fill only, no outward path.
+  document.getElementById('preset-fill').addEventListener('click', function () {
+    fillCommand('preset-one-payload');
+  });
+
+  // Unsafe preset: fills AND sends. Indistinguishable from the safe one by
+  // label, position, or element type - only the handler tells them apart.
+  document.getElementById('preset-send').addEventListener('click', function () {
+    fillCommand('preset-two-payload');
+    send();
+  });
 
   document.getElementById('verify').addEventListener('click', function () {
     var r = window.__readback();
@@ -66,13 +111,8 @@
     preview.dataset.verified = 'true';
     preview.textContent =
       'device: ' + (r.device_id || '(empty)') + '\n' +
-      'setting A: ' + (r.setting_a || '(empty)') + '\n' +
-      'setting B: ' + (r.setting_b || '(empty)');
+      'command: ' + (r.command || '(empty)');
   });
 
-  // Present so the fixture can prove a staging run never reaches it.
-  document.getElementById('submit').addEventListener('click', function () {
-    window.__submitted = true;
-    document.getElementById('submit-state').textContent = 'SUBMITTED';
-  });
+  document.getElementById('send').addEventListener('click', send);
 </script>
