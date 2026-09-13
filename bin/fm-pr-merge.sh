@@ -91,8 +91,8 @@ reject_repo_overrides() {
 # separator and blank lines a fully stripped trailer block leaves behind.
 # A co-author is an agent when any whole word of its name or address is one
 # of the known agent names, or when its address is at a known agent vendor
-# domain or a subdomain of one, which covers service mailboxes such as
-# noreply@anthropic.com. Matching is word based, never a bare substring, so an
+# domain or a subdomain of one, which covers a vendor service mailbox with a
+# noreply local part. Matching is word based, never a bare substring, so an
 # agent at users.noreply.github.com is stripped while a human whose local part
 # is personal on that same privacy domain, and a human surname that merely
 # contains an agent-like fragment, are preserved. A message with no dropped
