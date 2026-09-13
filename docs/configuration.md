@@ -64,7 +64,7 @@ Nothing re-creates that shim on its own, so while an intake is armed or owed `pe
 With no session running, nothing is delivered when the job fires: the armed state is durable and the next session's bootstrap section surfaces it as `MORNING_INTAKE: ...`, so the intake is queued until firstmate next starts rather than running on its own.
 
 `bin/fm-morning-intake-schedule.sh` owns the inspectable macOS launchd schedule and refuses to install on a home that has not opted in.
-It shares the LaunchAgent writer in `bin/fm-launchd-schedule-lib.sh` with `bin/fm-upstream-watch-schedule.sh`, so both schedules render, validate and load the same way.
+It shares the LaunchAgent writer in `bin/fm-launchd-schedule-lib.sh` with `bin/fm-upstream-watch-schedule.sh` and `bin/fm-channel-intake-schedule.sh`, so all three schedules render, validate and load the same way.
 Run `render` to inspect the complete definition, `install` to write it, load it and arm the live check, `status` to print the resolved knobs and installed file, or `remove` to unload it and disarm the check.
 `StartInterval` plus `RunAtLoad` is the whole trigger: launchd runs the job at login and then on the interval, and an interval that elapsed during sleep runs shortly after the machine wakes.
 That is why the intake is defined as the first available morning rather than a lid-open event; launchd exposes no such event here and none is claimed.
@@ -318,6 +318,21 @@ The inherited-local-material contract is owned by `secondmate-provisioning`; for
 For grok, `fm-spawn.sh` installs one firstmate-owned global turn-end hook under `$GROK_HOME/hooks/`, or `~/.grok/hooks/` when `GROK_HOME` is unset, and drops a per-task `.fm-grok-turnend` pointer in the worktree, with teardown removing the task token and pointer.
 For Pi secondmate launches, `fm-spawn.sh` starts Pi with `-e` pointed at the secondmate home's own tracked `.pi/extensions/fm-primary-pi-watch.ts` and `.pi/extensions/fm-primary-turnend-guard.ts`, both already present from the secondmate home's git worktree.
 
+## Context window
+
+Every future Firstmate session is launched with its auto-compaction window capped at 500,000 tokens, so an orchestrator compacts itself instead of being managed by hand (captain's order, 2026-09-13).
+The cap is applied per launch by [`bin/fm-primary.sh`](../bin/fm-primary.sh) and [`bin/fm-spawn.sh`](../bin/fm-spawn.sh), whose headers are the single owners of the exact mechanism; it is never written into the captain's global config for any harness.
+Existing sessions are not affected, because both launchers only shape new launches.
+
+Claude Code reads `CLAUDE_CODE_AUTO_COMPACT_WINDOW` as a token count and says so itself: claude 2.1.270 renders the window as "<n> tokens (from CLAUDE_CODE_AUTO_COMPACT_WINDOW)" and tells `/config` that "CLAUDE_CODE_AUTO_COMPACT_WINDOW is set and takes precedence", and its resolver returns `min(model maximum window, the parsed value)`, so a model smaller than 500k stays capped by its own window.
+Codex accepts `model_auto_compact_token_limit` as a launch-line config override: `codex debug models -c model_auto_compact_token_limit=500000` exits 0 on codex-cli 0.154.0 while the same key with a string value exits 1 with `invalid type: string "nope", expected i64`, which proves the key is real, typed, and settable without touching `config.toml`.
+Pi has no context-window or auto-compaction launch knob: pi 0.80.10's `shouldCompact` is `contextTokens > contextWindow - settings.reserveTokens`, where `contextWindow` comes from the model catalog and `reserveTokens` exists only in `~/.pi/agent/settings.json` or a project's `.pi/settings.json`, so nothing is passed at launch and pi's threshold remains whatever its model allows.
+As of 2026-09-13 that leaves Pi already inside the cap rather than over it: its pinned primary model `openai-codex/gpt-5.6-sol` declares a 272,000-token window, so Pi compacts well below 500k without anything being set.
+That is an observation about today's pinned model, not a guarantee: a future Pi model with a window above 500k would compact later than the cap, and there is still no launch knob to prevent it.
+The Cursor CLI exposes no context or compaction setting: `agent --help` on 2026.09.02-c22c1a3 lists no such flag, the binary carries no `CURSOR_*` context or compaction environment variable, `contextWindowSize` appears only in its token-usage display code, and the `--model` bracket parameters offered for `grok-4.6` are `effort` and `fast` only.
+
+opencode, grok, kimi, and prime-agent are outside that order and their launches are unchanged.
+
 ## Primary effort (config/primary-effort)
 
 `config/primary-effort` is an optional local, gitignored one-token file that sets the launch effort for the `claude-fable` and `claude-opus` primary profiles.
@@ -336,6 +351,15 @@ When the file is present, its first line must trim to exactly one of `low`, `med
 `max` is not accepted, and that refusal is retained pending the separate follow-up astra-max-effort.
 Any other content, including an empty token, refuses rather than falling back.
 The file is not inherited by secondmate homes.
+
+## Calm presentation (config/calm)
+
+`config/calm` is an optional LOCAL, gitignored one-token file recording whether the Pi primary's Calm presentation is on for this home.
+`.pi/extensions/fm-calm.ts` writes it whenever the captain runs `/calm`, and reads it when a Pi session starts.
+`on` restores Calm; `off` and an absent file both leave it off.
+A home upgraded from the removed third presentation level still holds `max`, which restores as `on`.
+Any other content restores as off rather than refusing, because a corrupt preference must never stop a primary from starting.
+[calm.md](calm.md) owns what the presentation actually does.
 
 ## Bridge pinned links (config/bridge-links)
 
