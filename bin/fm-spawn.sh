@@ -661,7 +661,6 @@ fi
 # pin costs nothing. bin/fm-account-lib.sh owns the registry contract and every
 # refusal. With that library absent nothing is pinned, and the launch, its env,
 # and its meta are byte-identical to a spawn from before account pinning.
-ACCOUNT_VENDOR=
 ACCOUNT_NAME=
 ACCOUNT_HOME=
 ACCOUNT_ENV=
@@ -669,7 +668,6 @@ if command -v fm_account_spawn_pin >/dev/null 2>&1; then
   ACCOUNT_CLI=$(launch_binary_from_command "$LAUNCH") || ACCOUNT_CLI=
   fm_account_spawn_pin "$CONFIG" "$DATA" "$HARNESS" "$RAW_LAUNCH" "$ACCOUNT_SET" \
     "$ACCOUNT" "$ACCOUNT_CLI" "$FM_ROOT" || exit 1
-  ACCOUNT_VENDOR=$FM_ACCOUNT_SPAWN_VENDOR
   ACCOUNT_NAME=$FM_ACCOUNT_SPAWN_NAME
   ACCOUNT_HOME=$FM_ACCOUNT_SPAWN_HOME
   ACCOUNT_ENV=$FM_ACCOUNT_SPAWN_ENV
