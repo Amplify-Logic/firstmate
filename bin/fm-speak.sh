@@ -36,22 +36,28 @@
 #   voice     optional `say` voice name (default: the system voice)
 #
 # NEVER BLOCKS THE CALLER'S TURN. The register call is bounded and waited on
-# because its output is needed; the speaker call is bounded and detached,
-# with its standard streams closed, so a caller that captures this script's
-# output is never held open by audio that is still playing. A speech error
-# downstream of that handoff is unobservable here by design.
+# because its output is needed, so its bound is the worst case a captain-facing
+# turn can be held: 15 seconds by default against an owner measured at about
+# one. The speaker call is bounded and detached, with its standard streams
+# closed, so a caller that captures this script's output is never held open by
+# audio that is still playing; its bound only stops a runaway from holding the
+# audio device. A speech error downstream of that handoff is unobservable here
+# by design.
 #
 # Environment overrides, for tests and unusual layouts:
 #   FM_SPEAK_SHAPER    register owner exposing the `--dry-run <text>` contract
 #                      (default: $FM_HOME/projects/glasses-voice/bin/announce)
 #   FM_SPEAK_SAY       speech binary (default: /usr/bin/say)
-#   FM_SPEAK_TIMEOUT   bounded seconds for each call (default 60)
+#   FM_SPEAK_SHAPER_TIMEOUT
+#                      bounded seconds for the waited-on register call
+#                      (default 15)
+#   FM_SPEAK_TIMEOUT   bounded seconds for the detached speaker (default 60)
 #
 # EXIT CODES (mirroring the register owner's own contract):
 #   0  handed to the speaker, printed under --dry-run, or this home is not
 #      opted in
-#   1  cannot speak: the register owner is unreachable or failed, the speech
-#      binary is missing, or the config is invalid
+#   1  cannot speak: the register owner is unreachable, failed or exceeded its
+#      bound, the speech binary is missing, or the config is invalid
 #   2  refused by the register; nothing was spoken and the reason is reported
 set -eu
 
@@ -61,11 +67,13 @@ FM_HOME="${FM_HOME:-${FM_ROOT_OVERRIDE:-$ROOT}}"
 CONFIG="${FM_CONFIG_OVERRIDE:-$FM_HOME/config}"
 CONFIG_FILE="$CONFIG/speak"
 
-DEFAULT_TIMEOUT=60
+DEFAULT_SHAPER_TIMEOUT=15
+DEFAULT_SPEAKER_TIMEOUT=60
 
 SHAPER="${FM_SPEAK_SHAPER:-$FM_HOME/projects/glasses-voice/bin/announce}"
 SAY_BIN="${FM_SPEAK_SAY:-/usr/bin/say}"
-TIMEOUT="${FM_SPEAK_TIMEOUT:-$DEFAULT_TIMEOUT}"
+SHAPER_TIMEOUT="${FM_SPEAK_SHAPER_TIMEOUT:-$DEFAULT_SHAPER_TIMEOUT}"
+SPEAKER_TIMEOUT="${FM_SPEAK_TIMEOUT:-$DEFAULT_SPEAKER_TIMEOUT}"
 
 CFG_ENABLED=false
 CFG_VOICE=
@@ -126,26 +134,55 @@ require_positive_int() {
 
 # --- bounded execution ------------------------------------------------------
 
-# Run a command with its output captured, bounded by a watchdog that kills it
-# rather than letting it hold the caller's turn open. The watchdog is a separate
-# child so the wait below costs nothing when the command returns promptly: a
-# poll loop would add its own sleep granularity to every spoken line.
-run_bounded() {  # <outfile> <errfile> <cmd...>
-  local out=$1 err=$2 pid guard status
-  shift 2
-  "$@" >"$out" 2>"$err" &
+# Start a watchdog that kills <pid> after <seconds>, recording in <firedfile>
+# (when given) that it did so. The watchdog is a separate child so the wait on
+# the guarded command costs nothing when it returns promptly: a poll loop would
+# add its own sleep granularity to every spoken line. The timer runs as the
+# watchdog's own background child and is reaped on the way out, so cancelling a
+# watchdog never leaves a sleep behind for the rest of the bound.
+WATCHDOG_PID=
+start_watchdog() {  # <seconds> <pid> [firedfile]
+  local seconds=$1 pid=$2 fired=${3:-}
+  (
+    timer=
+    trap 'kill "$timer" 2>/dev/null; exit 0' TERM
+    sleep "$seconds" &
+    timer=$!
+    wait "$timer" 2>/dev/null || true
+    if kill "$pid" 2>/dev/null && [ -n "$fired" ]; then
+      : > "$fired"
+    fi
+  ) </dev/null >/dev/null 2>&1 &
+  WATCHDOG_PID=$!
+  # Drop the watchdog from the job table: killing it is the normal path, and
+  # the shell would otherwise print a Terminated notice on every call.
+  disown "$WATCHDOG_PID" 2>/dev/null || true
+}
+
+# Run a command with its output captured and its stdin closed, bounded by a
+# watchdog that kills it rather than letting it hold the caller's turn open.
+# Sets RUN_BOUNDED_TIMED_OUT so the caller can tell a bound from a failure.
+RUN_BOUNDED_TIMED_OUT=false
+run_bounded() {  # <seconds> <outfile> <errfile> <cmd...>
+  local seconds=$1 out=$2 err=$3 fired pid guard status
+  shift 3
+  fired="$err.fired"
+  rm -f "$fired"
+  RUN_BOUNDED_TIMED_OUT=false
+  "$@" </dev/null >"$out" 2>"$err" &
   pid=$!
-  ( sleep "$TIMEOUT"; kill "$pid" 2>/dev/null || true ) >/dev/null 2>&1 &
-  guard=$!
-  # Drop the watchdog from the job table: killing it below is the normal path,
-  # and the shell would otherwise print a Terminated notice on every call.
-  disown "$guard" 2>/dev/null || true
+  start_watchdog "$seconds" "$pid" "$fired"
+  guard=$WATCHDOG_PID
   status=0
   # The braces confine the shell's own job-termination notice: when the watchdog
   # fires, bash reports the reaped job on stderr, and that notice would reach
   # the caller on every bounded kill.
   { wait "$pid"; } 2>/dev/null || status=$?
   kill "$guard" 2>/dev/null || true
+  if [ "$status" -ne 0 ] && [ -e "$fired" ]; then
+    RUN_BOUNDED_TIMED_OUT=true
+  fi
+  rm -f "$fired"
   return "$status"
 }
 
@@ -156,17 +193,16 @@ run_bounded() {  # <outfile> <errfile> <cmd...>
 speak_detached() {  # <textfile>
   local textfile=$1
   (
-    local say_pid guard_pid
+    local say_pid
     if [ -n "$CFG_VOICE" ]; then
       "$SAY_BIN" -v "$CFG_VOICE" -f "$textfile" &
     else
       "$SAY_BIN" -f "$textfile" &
     fi
     say_pid=$!
-    ( sleep "$TIMEOUT"; kill "$say_pid" 2>/dev/null || true ) >/dev/null 2>&1 &
-    guard_pid=$!
+    start_watchdog "$SPEAKER_TIMEOUT" "$say_pid"
     wait "$say_pid" 2>/dev/null || true
-    kill "$guard_pid" 2>/dev/null || true
+    kill "$WATCHDOG_PID" 2>/dev/null || true
     rm -f "$textfile"
   ) </dev/null >/dev/null 2>&1 &
 }
@@ -193,7 +229,8 @@ main() {
     *) die "nothing to speak" ;;
   esac
 
-  require_positive_int FM_SPEAK_TIMEOUT "$TIMEOUT"
+  require_positive_int FM_SPEAK_SHAPER_TIMEOUT "$SHAPER_TIMEOUT"
+  require_positive_int FM_SPEAK_TIMEOUT "$SPEAKER_TIMEOUT"
   load_config
 
   if [ "$CFG_ENABLED" != true ]; then
@@ -214,7 +251,7 @@ main() {
   }
 
   status=0
-  run_bounded "$outfile" "$errfile" "$SHAPER" --dry-run "$text" || status=$?
+  run_bounded "$SHAPER_TIMEOUT" "$outfile" "$errfile" "$SHAPER" --dry-run "$text" || status=$?
 
   # The register owner's own notes explain what it stripped or truncated, so
   # they are passed through rather than swallowed.
@@ -229,7 +266,11 @@ main() {
       exit 2
       ;;
     *)
-      note "the spoken register owner failed (exit $status); nothing was spoken"
+      if [ "$RUN_BOUNDED_TIMED_OUT" = true ]; then
+        note "the spoken register owner exceeded its ${SHAPER_TIMEOUT}s bound (FM_SPEAK_SHAPER_TIMEOUT); nothing was spoken"
+      else
+        note "the spoken register owner failed (exit $status); nothing was spoken"
+      fi
       exit 1
       ;;
   esac

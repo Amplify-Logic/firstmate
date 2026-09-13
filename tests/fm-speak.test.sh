@@ -81,11 +81,46 @@ EOF
   printf '%s\n' "$home/speaker"
 }
 
+# The two bounds are driven separately on purpose: SHAPER_TIMEOUT bounds the
+# waited-on register call and SPEAKER_TIMEOUT the detached speaker. A case that
+# bounds one half must never be able to pass because of the other.
 speak() {  # <home> <args...>
   local home=$1
   shift
   FM_HOME="$home" FM_SPEAK_SHAPER="$home/shaper" FM_SPEAK_SAY="$home/speaker" \
-    FM_SPEAK_TIMEOUT="${SPEAK_TIMEOUT:-60}" "$SPEAK" "$@"
+    FM_SPEAK_SHAPER_TIMEOUT="${SHAPER_TIMEOUT:-15}" \
+    FM_SPEAK_TIMEOUT="${SPEAKER_TIMEOUT:-60}" "$SPEAK" "$@"
+}
+
+# A register owner that never answers, for the bound cases.
+install_hung_shaper() {  # <home>
+  printf '#!/usr/bin/env bash\nexec sleep 120\n' > "$1/shaper"
+  chmod +x "$1/shaper"
+}
+
+# A speaker that would hold the audio device for far longer than any line. It
+# records its own pid so a case watches exactly that process: matching a command
+# line would pick up any unrelated sleep on the host and pass or fail for
+# reasons that have nothing to do with the bound.
+install_runaway_speaker() {  # <home>
+  local home=$1
+  cat > "$home/speaker" <<EOF
+#!/usr/bin/env bash
+printf '%s\n' "\$\$" > "$home/speaker.pid"
+printf 'started\n' >> "$home/spoken.log"
+exec sleep 120
+EOF
+  chmod +x "$home/speaker"
+}
+
+wait_until_gone() {  # <pid> <max-tenths>
+  local pid=$1 waited=0
+  while [ "$waited" -lt "$2" ]; do
+    kill -0 "$pid" 2>/dev/null || return 0
+    sleep 0.2
+    waited=$((waited + 1))
+  done
+  return 1
 }
 
 # The speaker is handed the line and detached on purpose, so the call returns
@@ -228,37 +263,62 @@ test_the_caller_is_never_held_open_by_audio_still_playing() {
 }
 
 test_a_runaway_speaker_is_killed_at_the_bound() {
-  local home speaker_pid waited
+  local home speaker_pid
   home=$(new_home bounded "enabled = true")
   install_shaper "$home" >/dev/null
-  # A speaker that would hold the audio device for far longer than any line.
-  # It records its own pid so this case watches exactly that process: matching a
-  # command line would pick up any unrelated sleep on the host and pass or fail
-  # for reasons that have nothing to do with the bound.
-  cat > "$home/speaker" <<EOF
-#!/usr/bin/env bash
-printf '%s\n' "\$\$" > "$home/speaker.pid"
-printf 'started\n' >> "$home/spoken.log"
-exec sleep 120
-EOF
-  chmod +x "$home/speaker"
+  install_runaway_speaker "$home"
 
-  SPEAK_TIMEOUT=1 speak "$home" "The fix is green." >/dev/null 2>&1
+  SPEAKER_TIMEOUT=1 speak "$home" "The fix is green." >/dev/null 2>&1
   wait_for_spoken "$home/spoken.log" "the speaker was never started"
   speaker_pid=$(cat "$home/speaker.pid")
   kill -0 "$speaker_pid" 2>/dev/null || fail "fm-speak: the speaker was never running to bound"
 
-  waited=0
-  while [ "$waited" -lt 50 ]; do
-    kill -0 "$speaker_pid" 2>/dev/null || break
-    sleep 0.2
-    waited=$((waited + 1))
-  done
-  if kill -0 "$speaker_pid" 2>/dev/null; then
+  if ! wait_until_gone "$speaker_pid" 50; then
     kill "$speaker_pid" 2>/dev/null || true
     fail "fm-speak: a runaway speaker outlived its bound"
   fi
   pass "fm-speak: a runaway speaker is killed at its bound"
+}
+
+# The two bounds protect different things and must not collapse into one value:
+# a short speaker bound must not cut the register call short, and a short
+# register bound must not cut the speaker short.
+test_the_speaker_bound_does_not_bound_the_register_call() {
+  local home started elapsed code
+  home=$(new_home speaker-bound-only "enabled = true")
+  install_speaker "$home" >/dev/null
+  install_hung_shaper "$home"
+
+  started=$(date +%s)
+  SHAPER_TIMEOUT=3 SPEAKER_TIMEOUT=1 speak "$home" "The fix is green." >/dev/null 2>&1 && code=0 || code=$?
+  elapsed=$(( $(date +%s) - started ))
+
+  expect_code 1 "$code" "a bounded owner that never answered is an error"
+  [ "$elapsed" -ge 2 ] \
+    || fail "fm-speak: the register call was cut at ${elapsed}s by the speaker bound of 1s"
+  [ "$elapsed" -lt 30 ] || fail "fm-speak: a hung owner held the turn for ${elapsed}s"
+  pass "fm-speak: the speaker bound does not bound the register call"
+}
+
+test_the_register_bound_does_not_bound_the_speaker() {
+  local home speaker_pid
+  home=$(new_home register-bound-only "enabled = true")
+  install_shaper "$home" >/dev/null
+  install_runaway_speaker "$home"
+
+  SHAPER_TIMEOUT=1 SPEAKER_TIMEOUT=3 speak "$home" "The fix is green." >/dev/null 2>&1
+  wait_for_spoken "$home/spoken.log" "the speaker was never started"
+  speaker_pid=$(cat "$home/speaker.pid")
+
+  sleep 2
+  if ! kill -0 "$speaker_pid" 2>/dev/null; then
+    fail "fm-speak: the speaker was cut before its 3s bound by the register bound of 1s"
+  fi
+  if ! wait_until_gone "$speaker_pid" 50; then
+    kill "$speaker_pid" 2>/dev/null || true
+    fail "fm-speak: a runaway speaker outlived its own bound"
+  fi
+  pass "fm-speak: the register bound does not bound the speaker"
 }
 
 # Speaking unshaped text would read a URL aloud, so an unreachable owner must
@@ -291,20 +351,75 @@ test_a_failing_register_owner_ends_in_silence() {
 }
 
 test_a_hung_register_owner_does_not_hold_the_turn_open() {
-  local home started elapsed code
+  local home started elapsed out code
   home=$(new_home hung-shaper "enabled = true")
   install_speaker "$home" >/dev/null
-  printf '#!/usr/bin/env bash\nexec sleep 120\n' > "$home/shaper"
-  chmod +x "$home/shaper"
+  install_hung_shaper "$home"
 
   started=$(date +%s)
-  SPEAK_TIMEOUT=1 speak "$home" "The fix is green." >/dev/null 2>&1 && code=0 || code=$?
+  out=$(SHAPER_TIMEOUT=1 speak "$home" "The fix is green." 2>&1) && code=0 || code=$?
   elapsed=$(( $(date +%s) - started ))
 
   expect_code 1 "$code" "a bounded owner that never answered is an error"
   [ "$elapsed" -lt 30 ] || fail "fm-speak: a hung owner held the turn for ${elapsed}s"
+  assert_contains "$out" "exceeded its 1s bound" \
+    "a bounded-out owner must be reported as exceeding its bound, not as a generic failure"
+  assert_contains "$out" "FM_SPEAK_SHAPER_TIMEOUT" "the diagnostic must name the bound's override"
+  assert_contains "$out" "nothing was spoken" "the caller must learn nothing was spoken"
   assert_stayed_silent "$home/spoken.log" "a bounded-out shaping must never reach the speaker"
   pass "fm-speak: a hung register owner does not hold the caller's turn open"
+}
+
+# The register owner must never see the caller's stdin: an owner that reads it
+# while this script is driven through a pipe or a terminal would hang until its
+# bound and turn every spoken line into an owner failure.
+test_the_register_owner_never_inherits_the_callers_stdin() {
+  local home started elapsed out code holder
+  home=$(new_home stdin-closed "enabled = true")
+  install_speaker "$home" >/dev/null
+  cat > "$home/shaper" <<'EOF'
+#!/usr/bin/env bash
+shift
+while IFS= read -r _; do :; done
+printf '%s\n' "$*"
+EOF
+  chmod +x "$home/shaper"
+
+  # A stdin that stays open without ever closing, the way a terminal or a live
+  # pipe would, held by a writer outside the command substitution so the
+  # substitution itself is not what waits for it.
+  mkfifo "$home/stdin"
+  sleep 20 > "$home/stdin" &
+  holder=$!
+
+  started=$(date +%s)
+  out=$(SHAPER_TIMEOUT=5 speak "$home" "The fix is green." 2>&1 < "$home/stdin") && code=0 || code=$?
+  elapsed=$(( $(date +%s) - started ))
+  { kill "$holder" && wait "$holder"; } 2>/dev/null || true
+
+  expect_code 0 "$code" "an owner that reads stdin must still answer promptly"
+  [ "$elapsed" -lt 4 ] || fail "fm-speak: the owner hung on inherited stdin for ${elapsed}s"
+  assert_contains "$out" "The fix is green." "the shaped line must still come back"
+  pass "fm-speak: the register owner never inherits the caller's stdin"
+}
+
+test_a_non_integer_bound_is_refused() {
+  local home out code
+  home=$(new_home bad-bound "enabled = true")
+  install_shaper "$home" >/dev/null
+  install_speaker "$home" >/dev/null
+
+  out=$(SHAPER_TIMEOUT=soon speak "$home" "The fix is green." 2>&1) && code=0 || code=$?
+  expect_code 1 "$code" "a non-integer register bound must be refused"
+  assert_contains "$out" "FM_SPEAK_SHAPER_TIMEOUT must be a positive integer" \
+    "the refusal must name the register bound"
+
+  out=$(SPEAKER_TIMEOUT=0 speak "$home" "The fix is green." 2>&1) && code=0 || code=$?
+  expect_code 1 "$code" "a zero speaker bound must be refused"
+  assert_contains "$out" "FM_SPEAK_TIMEOUT must be a positive integer" \
+    "the refusal must name the speaker bound"
+  assert_stayed_silent "$home/spoken.log" "an invalid bound must never reach the speaker"
+  pass "fm-speak: a non-integer bound is refused for either half"
 }
 
 test_a_missing_speech_binary_is_reported_not_guessed() {
@@ -432,9 +547,13 @@ test_the_speaker_receives_the_stripped_line_not_the_raw_one
 test_dry_run_never_reaches_the_speaker
 test_the_caller_is_never_held_open_by_audio_still_playing
 test_a_runaway_speaker_is_killed_at_the_bound
+test_the_speaker_bound_does_not_bound_the_register_call
+test_the_register_bound_does_not_bound_the_speaker
 test_an_unreachable_register_owner_ends_in_silence
 test_a_failing_register_owner_ends_in_silence
 test_a_hung_register_owner_does_not_hold_the_turn_open
+test_the_register_owner_never_inherits_the_callers_stdin
+test_a_non_integer_bound_is_refused
 test_a_missing_speech_binary_is_reported_not_guessed
 test_the_configured_voice_reaches_the_speaker
 test_a_sentence_is_never_passed_as_a_speaker_argument

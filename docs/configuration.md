@@ -194,6 +194,10 @@ The script's header and `--help` own the exact invocation, the environment overr
 `AGENTS.md` section 9 owns when the orchestrator speaks.
 
 Each call is bounded on both halves so a captain-facing turn is never held open: the register call is waited on under a watchdog because its output is needed, and the speaker call is detached with its standard streams closed, so a caller capturing this script's output is never blocked by audio that is still playing.
+The two bounds are deliberately separate because they protect different things.
+`FM_SPEAK_SHAPER_TIMEOUT` (default 15 seconds) bounds the waited-on register call and is therefore the worst case a turn can be held; the owner is offline and answers in about a second, so a hang fails fast with a diagnostic naming the bound rather than holding the turn.
+`FM_SPEAK_TIMEOUT` (default 60 seconds) bounds only the detached speaker, stopping a runaway from holding the audio device without ever holding the caller.
+Both must be positive integers.
 
 ## Supervision active alert channels (config/wedge-alarm)
 
