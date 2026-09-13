@@ -42,6 +42,19 @@
 #      window_backend, window_kind, handle_push_transition, triage_log and the
 #      fm_backend_* accessors. Sourcing this file anywhere but the watcher gets
 #      contracts 1 to 3 only.
+#      Known drift point of the either/or design: fm_fork_event_wait_or_sleep
+#      carries its own copy of upstream's push-window selection rules (the
+#      secondmate exclusion and the first backend/session pinning) and of the
+#      memoized capability probe, and for a home with glasses paths that copy,
+#      not upstream's event_wait_or_sleep, decides which windows get the fast
+#      path. A later upstream change to those rules, such as a new excluded
+#      kind or multi-session support, does not reach those homes until the
+#      copy here is updated to match.
+#      The splice guards itself at load time: fm_fork_assert_watcher_hook_shape
+#      walks the watcher beside this file once per source and, if any fm_fork_
+#      call there has escaped its command -v guard or the terminal wait has
+#      lost its else branch, prints the offending line and unsets every
+#      fm_fork_ entry point so the watcher falls through to its own code.
 #
 # Usage (source):
 #   . bin/fm-file-event-lib.sh
@@ -381,3 +394,60 @@ fm_fork_event_wait_or_sleep() {
   FM_FORK_FILE_EVENT_PATHS=("${paths[@]}")
   fm_fork_race_push_and_file_wait "$first_backend" "$first_session"
 }
+
+# fm_fork_assert_watcher_hook_shape: the parse-time check for hook W1, in the
+# style of fork_registry_assert_no_shadow. Given the watcher's path it proves,
+# skipping comment lines, that every fm_fork_ call sits inside a matching
+# `if command -v <same function> >/dev/null 2>&1; then` guard and that the
+# terminal-wait either/or keeps an explicit else branch calling the watcher's
+# own event_wait_or_sleep. Quiet on success; on failure it names the offending
+# line on stderr and returns 1. An absent or unreadable watcher is not an
+# error: there is nothing to assert, so it returns 0 without output.
+fm_fork_assert_watcher_hook_shape() {  # <watcher-path>
+  local watcher=${1:-} offending
+  [ -n "$watcher" ] && [ -r "$watcher" ] || return 0
+  offending=$(awk '
+    { line = $0 }
+    line ~ /^[[:space:]]*#/ { next }
+    match(line, /if command -v fm_fork_[A-Za-z0-9_]+ >\/dev\/null 2>&1; then$/) {
+      guard = line
+      sub(/^.*command -v /, "", guard)
+      sub(/ .*$/, "", guard)
+      guard_line = FNR
+      seen_else = 0
+      seen_upstream = 0
+      next
+    }
+    line ~ /^[[:space:]]*else$/ && guard != "" { seen_else = 1; next }
+    line ~ /^[[:space:]]*event_wait_or_sleep$/ && seen_else { seen_upstream = 1; next }
+    line ~ /^[[:space:]]*fi$/ {
+      if (guard == "fm_fork_event_wait_or_sleep" && !(seen_else && seen_upstream)) {
+        print FILENAME ":" guard_line ": terminal wait lost its else branch calling event_wait_or_sleep"
+      }
+      guard = ""
+      next
+    }
+    line ~ /fm_fork_[A-Za-z0-9_]+/ {
+      call = line
+      sub(/^.*(fm_fork_)/, "fm_fork_", call)
+      sub(/[^A-Za-z0-9_].*$/, "", call)
+      if (call != guard) { print FILENAME ":" FNR ": unguarded fork call: " line }
+    }
+  ' "$watcher")
+  [ -z "$offending" ] || {
+    printf 'fm-file-event-lib: hook W1 shape is unsafe, override disabled: %s\n' "$offending" >&2
+    return 1
+  }
+  return 0
+}
+
+# Fail closed in the direction that keeps supervision alive: an unsafe hook
+# shape disables the fork override, never the watcher. This runs once per
+# source of this file, which for the watcher is once per start, and it never
+# exits or returns non-zero out of the sourced file.
+if ! fm_fork_assert_watcher_hook_shape "$_FM_FILE_EVENT_LIB_DIR/fm-watch.sh"; then
+  unset -f fm_fork_event_wait_or_sleep fm_fork_glasses_file_event_catch_up \
+    fm_fork_file_event_wait_or_sleep fm_fork_race_push_and_file_wait \
+    fm_fork_apply_push_wait_result fm_fork_expire_check_sweep \
+    fm_fork_file_event_sig fm_fork_kill_pid_tree
+fi

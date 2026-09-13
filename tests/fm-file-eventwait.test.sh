@@ -490,6 +490,99 @@ grep -Fq 'fm-file-event-lib.sh' "$TMP/unguarded.err" \
   || fail "the degraded assertions above cannot fail, so they prove nothing"
 pass "hook W1: the degrade assertions fail when the source guard is deleted"
 
+# --- the real call sites, executed --------------------------------------------
+# The driver above re-implements W1 parts two and three, so deleting either
+# call-site guard in bin/fm-watch.sh would change nothing there. Both call sites
+# sit inside the watcher's main loop, and the watcher returns early when sourced,
+# so the only way to reach them is to EXECUTE the watcher as a script from a
+# degraded root, the way tests/fm-watch-triage.test.sh runs it: fake bin on
+# PATH, private state and home, a tight poll and a quiet cadence, bounded wait,
+# then reap. The untouched watcher must run with clean stderr; a copy with a
+# call-site guard removed must report that function's own command not found.
+
+# shellcheck source=tests/wake-helpers.sh
+. "$(dirname "${BASH_SOURCE[0]}")/wake-helpers.sh"
+
+# wait_file_nonempty <file> [<ticks>]: 0 once <file> has content, 1 on timeout.
+wait_file_nonempty() {
+  local file=$1 limit=${2:-30} i=0
+  while [ "$i" -lt "$limit" ]; do
+    [ -s "$file" ] && return 0
+    command sleep 0.1
+    i=$((i + 1))
+  done
+  return 1
+}
+
+# run_degraded_watcher <tag> [<replacement-watcher>]: execute the watcher from a
+# degraded root for a bounded window; stderr lands in $TMP/<tag>-exec.err.
+run_degraded_watcher() {
+  local tag=$1 watcher=${2:-} dir fakebin root pid
+  dir="$TMP/$tag-exec"
+  rm -rf "$dir"
+  mkdir -p "$dir/state" "$dir/home/data/glasses-voice-runtime"
+  fakebin="$dir/fakebin"
+  fm_install_fake_caffeinate "$fakebin"
+  make_fake_crew_state "$fakebin" >/dev/null
+  root="$dir/root"
+  build_degraded_root "$root" "$watcher"
+  : > "$dir/home/data/glasses-voice-runtime/mailbox.db"
+  touch "$dir/state/.last-check"
+  PATH="$fakebin:$PATH" FM_STATE_OVERRIDE="$dir/state" FM_HOME="$dir/home" \
+    FM_CREW_STATE_BIN="$fakebin/fm-crew-state.sh" FM_POLL=1 FM_SIGNAL_GRACE=1 \
+    FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 \
+    "$root/bin/fm-watch.sh" > "$TMP/$tag-exec.out" 2> "$TMP/$tag-exec.err" &
+  pid=$!
+  # Two full poll cycles is enough for both call sites to have run; a copy with
+  # a broken guard reports sooner and is reaped as soon as it does.
+  wait_file_nonempty "$TMP/$tag-exec.err" 40 || true
+  kill "$pid" 2>/dev/null || true
+  wait "$pid" 2>/dev/null || true
+}
+
+run_degraded_watcher intact
+[ ! -s "$TMP/intact-exec.err" ] \
+  || fail "the executed degraded watcher must keep clean stderr through its real call sites: $(cat "$TMP/intact-exec.err")"
+[ ! -s "$TMP/intact-exec.out" ] \
+  || fail "the executed degraded watcher printed a wake reason: $(cat "$TMP/intact-exec.out")"
+pass "hook W1: the executed watcher runs both real call sites silently with the library absent"
+
+# Part two: strip the catch-up guard so the bare call remains.
+sed '/^  if command -v fm_fork_glasses_file_event_catch_up >\/dev\/null 2>&1; then$/,/^  fi$/{
+  /^  if command -v fm_fork_glasses_file_event_catch_up/d
+  /^  fi$/d
+}' "$ROOT/bin/fm-watch.sh" > "$TMP/nocatchguard-watch.sh"
+grep -q '^    fm_fork_glasses_file_event_catch_up || true$' "$TMP/nocatchguard-watch.sh" \
+  || fail "the catch-up counterfactual must keep the bare call"
+grep -q 'if command -v fm_fork_glasses_file_event_catch_up' "$TMP/nocatchguard-watch.sh" \
+  && fail "the catch-up counterfactual must remove the guard"
+bash -n "$TMP/nocatchguard-watch.sh" \
+  || fail "the catch-up counterfactual edit left a syntactically broken watcher"
+run_degraded_watcher nocatchguard "$TMP/nocatchguard-watch.sh"
+grep -q 'fm_fork_glasses_file_event_catch_up: command not found' "$TMP/nocatchguard-exec.err" \
+  || fail "deleting the catch-up guard must surface its own command not found: $(head -3 "$TMP/nocatchguard-exec.err")"
+pass "hook W1: the executed watcher fails by name when the catch-up call-site guard is deleted"
+
+# Part three: strip the terminal-wait either/or so the bare call remains.
+sed '/^  if command -v fm_fork_event_wait_or_sleep >\/dev\/null 2>&1; then$/,/^  fi$/{
+  /^  if command -v fm_fork_event_wait_or_sleep/d
+  /^  else$/d
+  /^    event_wait_or_sleep$/d
+  /^  fi$/d
+}' "$ROOT/bin/fm-watch.sh" > "$TMP/nowaitguard-watch.sh"
+grep -q '^    fm_fork_event_wait_or_sleep$' "$TMP/nowaitguard-watch.sh" \
+  || fail "the terminal-wait counterfactual must keep the bare call"
+grep -q 'if command -v fm_fork_event_wait_or_sleep' "$TMP/nowaitguard-watch.sh" \
+  && fail "the terminal-wait counterfactual must remove the either/or"
+bash -n "$TMP/nowaitguard-watch.sh" \
+  || fail "the terminal-wait counterfactual edit left a syntactically broken watcher"
+run_degraded_watcher nowaitguard "$TMP/nowaitguard-watch.sh"
+grep -q 'fm_fork_event_wait_or_sleep: command not found' "$TMP/nowaitguard-exec.err" \
+  || fail "deleting the terminal-wait either/or must surface its own command not found: $(head -3 "$TMP/nowaitguard-exec.err")"
+grep -q 'fm_fork_glasses_file_event_catch_up: command not found' "$TMP/nowaitguard-exec.err" \
+  && fail "the terminal-wait counterfactual must not be satisfied by the catch-up guard's failure"
+pass "hook W1: the executed watcher fails by name when the terminal-wait either/or is deleted"
+
 # --- hook W1 stays visible in the watcher's own control flow -----------------
 # Clause (b) of the standing hook rule: reading bin/fm-watch.sh alone must show
 # that a branch can be taken over. There is no executable boundary that can
@@ -531,4 +624,94 @@ grep -A 4 'if command -v fm_fork_event_wait_or_sleep >/dev/null 2>&1; then' "$WA
   | grep -q '^    event_wait_or_sleep$' \
   || fail "the else branch must call the watcher's own event_wait_or_sleep"
 pass "hook W1: the override is guarded and visible at every call site in the watcher"
+
+# --- the parse-time check the library runs on itself --------------------------
+# fm_fork_assert_watcher_hook_shape proves the same property when the library
+# loads, once per watcher start. It must pass the real watcher quietly, refuse a
+# guard-removed copy at its own exit code naming the line, skip an absent path,
+# and when sourced beside an unsafe watcher it must disable the override rather
+# than the watcher.
+
+assert_err=$(fm_fork_assert_watcher_hook_shape "$WATCHER_SRC" 2>&1)
+assert_rc=$?
+[ "$assert_rc" -eq 0 ] \
+  || fail "the hook-shape assertion must pass the real watcher, got $assert_rc: $assert_err"
+[ -z "$assert_err" ] || fail "the hook-shape assertion must be quiet on success: $assert_err"
+
+assert_err=$(fm_fork_assert_watcher_hook_shape "$TMP/does-not-exist.sh" 2>&1)
+assert_rc=$?
+[ "$assert_rc" -eq 0 ] && [ -z "$assert_err" ] \
+  || fail "an absent watcher path must be skipped silently, got $assert_rc: $assert_err"
+
+assert_err=$(fm_fork_assert_watcher_hook_shape "$TMP/nocatchguard-watch.sh" 2>&1)
+assert_rc=$?
+[ "$assert_rc" -eq 1 ] \
+  || fail "the hook-shape assertion must refuse an unguarded catch-up call at exit 1, got $assert_rc"
+grep -q 'nocatchguard-watch.sh:[0-9]*: unguarded fork call: .*fm_fork_glasses_file_event_catch_up' <<<"$assert_err" \
+  || fail "the refusal must name the offending line: $assert_err"
+
+assert_err=$(fm_fork_assert_watcher_hook_shape "$TMP/nowaitguard-watch.sh" 2>&1)
+assert_rc=$?
+[ "$assert_rc" -eq 1 ] \
+  || fail "the hook-shape assertion must refuse an unguarded terminal wait at exit 1, got $assert_rc"
+grep -q 'nowaitguard-watch.sh:[0-9]*: unguarded fork call: .*fm_fork_event_wait_or_sleep' <<<"$assert_err" \
+  || fail "the refusal must name the unguarded terminal-wait line: $assert_err"
+
+# A guard that keeps its if line but drops the else branch is the other shape
+# the walk must catch.
+sed '/^  if command -v fm_fork_event_wait_or_sleep >\/dev\/null 2>&1; then$/,/^  fi$/{
+  /^  else$/d
+  /^    event_wait_or_sleep$/d
+}' "$ROOT/bin/fm-watch.sh" > "$TMP/noelse-watch.sh"
+grep -q '^    event_wait_or_sleep$' "$TMP/noelse-watch.sh" \
+  && fail "the no-else counterfactual must remove the upstream call from the either/or"
+bash -n "$TMP/noelse-watch.sh" || fail "the no-else counterfactual edit left a syntactically broken watcher"
+assert_err=$(fm_fork_assert_watcher_hook_shape "$TMP/noelse-watch.sh" 2>&1)
+assert_rc=$?
+[ "$assert_rc" -eq 1 ] \
+  || fail "the hook-shape assertion must refuse a terminal wait without an else branch at exit 1, got $assert_rc"
+grep -q 'noelse-watch.sh:[0-9]*: terminal wait lost its else branch' <<<"$assert_err" \
+  || fail "the refusal must name the either/or that lost its else branch: $assert_err"
+pass "hook W1: the load-time hook-shape assertion passes the real watcher and refuses each broken shape by line"
+
+# Fail closed toward supervision: source the library from a root whose watcher
+# has lost a guard, and require the override entry points to be gone while the
+# source itself still returns 0 and the first three contracts stay usable.
+UNSAFE_ROOT="$TMP/unsafe-root"
+rm -rf "$UNSAFE_ROOT"
+mkdir -p "$UNSAFE_ROOT/bin"
+ln -s "$ROOT/bin/fm-file-event-lib.sh" "$UNSAFE_ROOT/bin/fm-file-event-lib.sh"
+ln -s "$ROOT/bin/fm-file-eventwait.py" "$UNSAFE_ROOT/bin/fm-file-eventwait.py"
+cp "$TMP/nowaitguard-watch.sh" "$UNSAFE_ROOT/bin/fm-watch.sh"
+unsafe_out=$(bash -c '
+  set -u
+  # shellcheck disable=SC1090,SC1091
+  . "$1/bin/fm-file-event-lib.sh"
+  echo "SOURCE-RC=$?"
+  command -v fm_fork_event_wait_or_sleep >/dev/null 2>&1 && echo "FORK-WAIT-DEFINED"
+  command -v fm_fork_glasses_file_event_catch_up >/dev/null 2>&1 && echo "FORK-CATCHUP-DEFINED"
+  command -v fm_glasses_watch_paths >/dev/null 2>&1 && echo "LIB-LOADED"
+  echo "SURVIVED"
+' _ "$UNSAFE_ROOT" 2> "$TMP/unsafe-source.err")
+grep -Fqx 'SOURCE-RC=0' <<<"$unsafe_out" \
+  || fail "sourcing beside an unsafe watcher must not return non-zero: $unsafe_out"
+grep -Fqx SURVIVED <<<"$unsafe_out" \
+  || fail "sourcing beside an unsafe watcher must not abort the caller: $unsafe_out"
+grep -Fqx LIB-LOADED <<<"$unsafe_out" \
+  || fail "contracts 1 to 3 must stay usable beside an unsafe watcher: $unsafe_out"
+for marker in FORK-WAIT-DEFINED FORK-CATCHUP-DEFINED; do
+  grep -Fqx "$marker" <<<"$unsafe_out" \
+    && fail "an unsafe hook shape must disable the fork override, but $marker: $unsafe_out"
+done
+grep -q 'hook W1 shape is unsafe, override disabled: .*fm-watch.sh:[0-9]*: unguarded fork call' "$TMP/unsafe-source.err" \
+  || fail "the disabled override must say why on stderr: $(cat "$TMP/unsafe-source.err")"
+safe_out=$(bash -c '
+  set -u
+  # shellcheck disable=SC1090,SC1091
+  . "$1/bin/fm-file-event-lib.sh"
+  command -v fm_fork_event_wait_or_sleep >/dev/null 2>&1 && echo "FORK-WAIT-DEFINED"
+' _ "$ROOT" 2>&1)
+grep -Fqx FORK-WAIT-DEFINED <<<"$safe_out" \
+  || fail "beside the real watcher the override must stay installed: $safe_out"
+pass "hook W1: an unsafe hook shape disables the fork override at load time and never the watcher"
 echo "# fm-file-eventwait.test.sh: all assertions passed"

@@ -168,7 +168,8 @@ The live waiter still compares signatures around each bounded wait, which covers
 Each watcher loop captures a private marker before filesystem catch-up and publishes that boundary only when an authenticated check sweep completes, so unchanged paths do not fire twice while a later write remains newer for the next loop or successor.
 This catch-up is part of the existing singleton watcher cycle and does not add another watcher, change lock ownership, or alter the one-actionable-reason exit contract.
 Both the catch-up and the forked terminal wait are reached through guarded calls, so a checkout without `bin/fm-file-event-lib.sh` runs the watcher's own `event_wait_or_sleep` and its ordinary check cadence instead.
-The check that the override stays visible in the watcher's own control flow lives in `tests/fm-file-eventwait.test.sh` rather than in a fork-owned assertion helper like the test registry's, because the registry assertions run when the test runner calls them at selection time, and the watcher has no equivalent load-time moment: it is a long-running daemon, and re-walking its own source on every start would cost work every cycle for a property that only changes when the file changes.
+`bin/fm-file-event-lib.sh` also checks that shape once each time it loads, which for the watcher is once per start and never per cycle: `fm_fork_assert_watcher_hook_shape` walks the watcher beside it, and if any fork call has escaped its guard or the terminal wait has lost its else branch it names the line on stderr and unsets the fork's entry points, so the guarded call sites fall through to the watcher's own `event_wait_or_sleep` rather than the watcher being stopped.
+`tests/fm-file-eventwait.test.sh` keeps the same walk as an executable proof and feeds the assertion guard-removed watcher copies to show it refuses them.
 `docs/bridge-view.md` owns the separate glasses existence-only watcher-check guidance.
 
 ## Regression coverage
