@@ -315,15 +315,17 @@ test_release_stale_refuses_live_holder() {
 # still hold and put two primaries on one home. Pinned here so the exception
 # cannot be quietly turned into a fallthrough later.
 test_release_stale_fails_closed_without_the_fork_library() {
-  local out status=0 hidden
-  start_fake_holder
+  local out status=0 degraded
+  mkdir -p "$HOME_FIX/state"
   printf '%s\n' 999999 > "$HOME_FIX/state/.lock"
-  hidden="$TMP_ROOT/fm-primary-handoff-lib.sh.hidden"
-  cp "$ROOT/bin/fm-primary-handoff-lib.sh" "$hidden"
-  mv "$ROOT/bin/fm-primary-handoff-lib.sh" "$hidden.orig"
-  out=$(FM_HOME="$HOME_FIX" "$ROOT/bin/fm-lock.sh" release-stale 2>&1) || status=$?
-  mv "$hidden.orig" "$ROOT/bin/fm-primary-handoff-lib.sh"
-  rm -f "$hidden"
+  degraded="$TMP_ROOT/degraded"
+  rm -rf "$degraded"
+  mkdir -p "$degraded/bin"
+  cp "$ROOT/bin/fm-lock.sh" "$ROOT/bin/fm-primary-scope-lib.sh" "$degraded/bin/"
+  chmod +x "$degraded/bin/fm-lock.sh"
+  [ ! -e "$degraded/bin/fm-primary-handoff-lib.sh" ] \
+    || fail "the degraded tree must not contain the fork library"
+  out=$(FM_HOME="$HOME_FIX" "$degraded/bin/fm-lock.sh" release-stale 2>&1) || status=$?
   [ "$status" -ne 0 ] || fail "release-stale must refuse when the fork library is absent"
   assert_contains "$out" 'needs bin/fm-primary-handoff-lib.sh' \
     "the refusal must name the missing fork file"
