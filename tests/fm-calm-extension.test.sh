@@ -16,6 +16,21 @@ set -u
 
 command -v node >/dev/null 2>&1 || { echo "skip: node not found for the Pi calm extension tests"; exit 0; }
 command -v npm >/dev/null 2>&1 || { echo "skip: npm not found for the Pi calm extension tests"; exit 0; }
+node_strips_types() {
+  local probe_dir
+  probe_dir=$(mktemp -d "${TMPDIR:-/tmp}/fm-calm-ts-probe.XXXXXX") || return 1
+  printf 'export const ok: number = 1;\n' >"$probe_dir/probe.ts"
+  ( cd "$probe_dir" && node --input-type=module -e \
+      'import("./probe.ts").then((m) => process.exit(m.ok === 1 ? 0 : 1), () => process.exit(1));' \
+      >/dev/null 2>&1 )
+  local status=$?
+  rm -rf "$probe_dir"
+  return "$status"
+}
+node_strips_types || {
+  echo "skip: node $(node --version) cannot import .ts modules natively; the Pi calm extension tests need type stripping"
+  exit 0
+}
 PI_PACKAGE_DIR=${FM_PI_PACKAGE_DIR:-"$(npm root -g 2>/dev/null)/@earendil-works/pi-coding-agent"}
 [ -f "$PI_PACKAGE_DIR/package.json" ] || {
   echo "skip: installed @earendil-works/pi-coding-agent package not found"
