@@ -127,6 +127,9 @@ init_changed_fixture_repo() {
     fm-baby-menu-quota.test.sh \
     fm-home-manifest.test.sh \
     fm-bootstrap.test.sh \
+    fm-account.test.sh \
+    fm-primary.test.sh \
+    fm-spawn-account.test.sh \
     fm-backend-cmux.test.sh \
     fm-backend-zellij.test.sh \
     fm-backend-orca.test.sh; do
