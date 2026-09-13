@@ -144,6 +144,9 @@ init_changed_fixture_repo() {
     fm-action-gateway-v2.test.sh \
     fm-order.test.sh \
     fm-tray.test.sh \
+    fm-deck.test.sh \
+    fm-project-presentation.test.sh \
+    fm-spawn-herdr-presentation.test.sh \
     fm-primary-handoff.test.sh \
     fm-backend-cmux.test.sh \
     fm-backend-zellij.test.sh \
@@ -163,7 +166,8 @@ init_changed_fixture_repo() {
   # fm-brief.test.sh is in the runner's own pure-contract-unit map, so this
   # mention makes bin/fm-fork-surface.sh a path upstream genuinely owns.
   printf '# bin/fm-fork-surface.sh\n' >>"$repo/tests/fm-brief.test.sh"
-  printf '# bin/fm-fork-test-registry-lib.sh\n' >>"$repo/tests/fm-test-run.test.sh"
+  printf '# bin/fm-fork-test-registry-lib.sh\n# bin/fm-visible-format-lib.sh\n' \
+    >>"$repo/tests/fm-test-run.test.sh"
   # Each ops suite names its own source, and nothing else does. That is what
   # makes their exclusive registry rows legitimate, and it is also the reference
   # fallback the runner must still reach when the registry is absent.
