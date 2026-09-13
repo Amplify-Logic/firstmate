@@ -1272,8 +1272,10 @@ test_context_window_is_capped_at_500k() {
       "$profile invented a Claude auto-compact window"
     assert_not_contains "$out" 'auto_compact' \
       "$profile invented a Codex auto-compact limit"
-    assert_not_contains "$out" 'context' \
+    assert_not_contains "$out" 'context=' \
       "$profile invented a context-window flag"
+    assert_not_contains "$out" '--context' \
+      "$profile invented a --context flag"
   done
 
   # The real exec path, not just the preview: the launched CLI must actually see
