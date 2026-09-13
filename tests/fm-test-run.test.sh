@@ -168,11 +168,14 @@ init_changed_fixture_repo() {
   printf '# bin/fm-fork-surface.sh\n' >>"$repo/tests/fm-brief.test.sh"
   printf '# bin/fm-fork-test-registry-lib.sh\n# bin/fm-visible-format-lib.sh\n' \
     >>"$repo/tests/fm-test-run.test.sh"
-  # Each ops suite names its own source, and nothing else does. That is what
-  # makes their exclusive registry rows legitimate, and it is also the reference
-  # fallback the runner must still reach when the registry is absent.
+  # Each ops suite names its own source, and the deck suite names both. The
+  # deck suite is unclassified in the runner's map, which the no-shadow
+  # assertion treats as no upstream answer, so the exclusive registry rows stay
+  # legitimate. The ops suites' own mentions are also the reference fallback
+  # the runner must still reach when the registry is absent.
   printf '# %s\n' "$OPS_ORDER_SRC" >>"$repo/tests/fm-order.test.sh"
   printf '# %s\n' "$OPS_TRAY_SRC" >>"$repo/tests/fm-tray.test.sh"
+  printf '# %s\n# %s\n' "$OPS_TRAY_SRC" "$OPS_ORDER_SRC" >>"$repo/tests/fm-deck.test.sh"
   printf '# .agents/skills/example/SKILL.md\n' >>"$repo/tests/fm-captain-translation-contract.test.sh"
   printf '# .claude/settings.json\n# .pi/extensions/fm-primary-turnend-guard.ts\n' \
     >>"$repo/tests/fm-cd-pretool-check.test.sh"
@@ -525,13 +528,17 @@ test_fork_registry_ops_rows_and_registry_absence() {
   git -C "$repo" checkout -- "$OPS_TRAY_SRC"
 
   # The far side of that guarantee. The fallback only reaches the tray source
-  # because its own suite names it, so with both the registry and that mention
-  # gone the runner has no owner at all. It must then refuse with its own exit
-  # code 2 and say which path it could not map, never select nothing quietly.
-  grep -v "$OPS_TRAY_SRC" "$repo/tests/fm-tray.test.sh" >"$repo/tests/fm-tray.trimmed"
-  mv "$repo/tests/fm-tray.trimmed" "$repo/tests/fm-tray.test.sh"
-  chmod +x "$repo/tests/fm-tray.test.sh"
-  git -C "$repo" add tests/fm-tray.test.sh
+  # because its own suite and the deck suite name it, so with the registry and
+  # every such mention gone the runner has no owner at all. It must then refuse
+  # with its own exit code 2 and say which path it could not map, never select
+  # nothing quietly.
+  local suite
+  for suite in fm-tray fm-deck; do
+    grep -v "$OPS_TRAY_SRC" "$repo/tests/$suite.test.sh" >"$repo/tests/$suite.trimmed"
+    mv "$repo/tests/$suite.trimmed" "$repo/tests/$suite.test.sh"
+    chmod +x "$repo/tests/$suite.test.sh"
+    git -C "$repo" add "tests/$suite.test.sh"
+  done
   git -C "$repo" -c user.name=test -c user.email=test@example.invalid commit -qm no-mention
   printf '# fixture tray change\n' >>"$repo/$OPS_TRAY_SRC"
   set +e
