@@ -134,6 +134,7 @@ init_changed_fixture_repo() {
     fm-deck.test.sh \
     fm-project-presentation.test.sh \
     fm-bridge-view.test.sh \
+    fm-bearings-snapshot.test.sh \
     fm-spawn-herdr-presentation.test.sh \
     fm-primary-handoff.test.sh \
     fm-backend-cmux.test.sh \
