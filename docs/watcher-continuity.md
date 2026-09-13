@@ -167,6 +167,7 @@ A newer path removes the marker before the cadence test, so authenticated checks
 The live waiter still compares signatures around each bounded wait, which covers a write racing catch-up with waiter setup.
 Each watcher loop captures a private marker before filesystem catch-up and publishes that boundary only when an authenticated check sweep completes, so unchanged paths do not fire twice while a later write remains newer for the next loop or successor.
 This catch-up is part of the existing singleton watcher cycle and does not add another watcher, change lock ownership, or alter the one-actionable-reason exit contract.
+Both the catch-up and the forked terminal wait are reached through guarded calls, so a checkout without `bin/fm-file-event-lib.sh` runs the watcher's own `event_wait_or_sleep` and its ordinary check cadence instead.
 `docs/bridge-view.md` owns the separate glasses existence-only watcher-check guidance.
 
 ## Regression coverage
