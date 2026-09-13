@@ -219,7 +219,11 @@ test_absent_library_degrades_without_error() {
 
   launch=$(cat "$LAUNCH_LOG")
   encoded=$("$ROOT/bin/fm-operational-input.sh" encode launch-brief < "$HOME_DIR/data/$id/brief.md")
-  expected="CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION=false claude --dangerously-skip-permissions '$encoded'"
+  # This must stay byte-identical to the baseline in
+  # test_absent_registry_changes_nothing: that is the whole claim, so a change to
+  # the claude launch line has to land in both or this pin fails for the wrong
+  # reason.
+  expected="CLAUDE_CODE_AUTO_COMPACT_WINDOW=500000 CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION=false claude --dangerously-skip-permissions '$encoded'"
   [ "$launch" = "$expected" ] || fail "absent account library changed the claude launch line"$'\n'"expected: $expected"$'\n'"actual:   $launch"
   assert_no_grep 'account=' "$HOME_DIR/state/$id.meta" "absent account library still recorded an account in meta"
   assert_no_grep 'CLAUDE_CONFIG_DIR' "$LAUNCH_LOG" "absent account library still pinned a Claude home"
