@@ -9,6 +9,15 @@
 # registry answer is the complete answer for that path. An adds row contributes
 # an extra owner for a path the upstream map already owns, so the upstream map
 # still runs and its owners are kept alongside the fork owner.
+#
+# A covers row is an override, and an override is legitimate only where its
+# trigger is narrower than "the fork is installed" and upstream's behaviour is
+# unchanged outside that trigger. For this registry that means exclusivity is
+# confined to paths upstream has no answer for. A covers row on a path upstream
+# still owns is not an override but a replacement, and it would delete those
+# owners with no error at all. fork_registry_assert_no_shadow proves the
+# confinement per row and fails closed, so use adds wherever upstream and the
+# fork both have an answer and upstream's answer must survive.
 # Blank lines and lines whose first non-whitespace character is # are ignored.
 # A present malformed registry fails closed with an actionable line number.
 # A missing library or registry is handled by the guarded hooks in the runner
@@ -18,12 +27,17 @@
 #   fork_registry_apply <registry-file>
 #   fork_registry_family_for_basename <test-basename>
 #   fork_registry_scripts_for_path <repository-relative-path>
+#   fork_registry_assert_no_shadow <upstream-map-function>
 
 FORK_REGISTRY_FAMILY_NAMES=()
 FORK_REGISTRY_FAMILY_SCRIPTS=()
 FORK_REGISTRY_COVER_GLOBS=()
 FORK_REGISTRY_COVER_SCRIPTS=()
 FORK_REGISTRY_COVER_EXCLUSIVE=()
+# Set while fork_registry_assert_no_shadow asks the upstream map what it would
+# select on its own. The bypass lives here rather than in the runner's hook so
+# the core script carries no fork-specific conditional.
+FORK_REGISTRY_UPSTREAM_ONLY=
 
 fork_registry_error() {
   printf 'fm-fork-test-registry: %s\n' "$*" >&2
@@ -44,6 +58,12 @@ fork_registry_script_valid() {
 fork_registry_glob_valid() {
   case "$1" in
     ''|/*|./*|../*|*/../*|*/..|*//*|*[$'\r\n']) return 1 ;;
+  esac
+  # A glob must start with a literal character. A leading wildcard, and a bare
+  # * most of all, would claim every changed path, which on a covers row makes
+  # the registry the exclusive answer for the whole repository.
+  case "$1" in
+    '*'*|'?'*|'['*) return 1 ;;
   esac
   return 0
 }
@@ -135,6 +155,10 @@ fork_registry_family_for_basename() { # <test-basename>
 # owners declared there.
 fork_registry_scripts_for_path() { # <repository-relative-path>
   local path=${1:-} index=0 pattern exclusive=1 script
+  # Answer nothing while the shadow assertion is asking the upstream map what
+  # it selects on its own. Returning 1 makes the runner's hook fall through to
+  # the upstream case exactly as it does when this library is absent.
+  [ -z "${FORK_REGISTRY_UPSTREAM_ONLY:-}" ] || return 1
   for pattern in "${FORK_REGISTRY_COVER_GLOBS[@]+"${FORK_REGISTRY_COVER_GLOBS[@]}"}"; do
     # Registry cover values are intentionally expanded as shell globs.
     # shellcheck disable=SC2254
@@ -150,4 +174,77 @@ fork_registry_scripts_for_path() { # <repository-relative-path>
     index=$((index + 1))
   done
   return "$exclusive"
+}
+
+# Every repository path a registry glob claims. A literal glob claims itself; a
+# wildcard glob claims every tracked path it currently matches, so the check
+# below is exact against the working tree rather than a guess about the shape.
+fork_registry_probe_paths() { # <glob>
+  local pattern=${1:-} path
+  printf '%s\n' "$pattern"
+  case "$pattern" in
+    *'*'*|*'?'*|*'['*) ;;
+    *) return 0 ;;
+  esac
+  while IFS= read -r -d '' path; do
+    [ -n "$path" ] || continue
+    # Registry cover values are intentionally expanded as shell globs.
+    # shellcheck disable=SC2254
+    case "$path" in
+      $pattern) printf '%s\n' "$path" ;;
+    esac
+  done < <(git ls-files -z 2>/dev/null)
+}
+
+# What the upstream map selects for <path> with this registry out of the way.
+fork_registry_upstream_owners() { # <upstream-map-function> <path>
+  ( FORK_REGISTRY_UPSTREAM_ONLY=1; "$1" "$2" )
+}
+
+# Fails closed when a covers row claims a path the upstream map still owns.
+# A covers row is exclusive, so such a row deletes upstream's owners for that
+# path with no error at all, and every future upstream change to them becomes a
+# change this fork quietly does not get. That is a replacement wearing an
+# override's clothes, which is the one shape this grammar must refuse.
+# An __unmapped__ answer is not an owner:
+# it is upstream saying it has no mapping, which is exactly what a covers row is
+# for. Call this once from the changed-path selector, in the parent shell, so a
+# failure can stop the run: from a process substitution an exit would only end
+# the subshell and the selection would silently continue. The check asks the
+# upstream map once per claimed path, so it costs about a second on a repository
+# this size, paid once per changed-run and only when a registry is present.
+fork_registry_assert_no_shadow() { # <upstream-map-function>
+  local fn=${1:-} index=0 pattern probe owner script failed=0
+  [ -n "$fn" ] || {
+    fork_registry_error 'upstream map function name is required'
+    return 2
+  }
+  command -v "$fn" >/dev/null 2>&1 || {
+    fork_registry_error "upstream map function is not defined: $fn"
+    return 2
+  }
+  for pattern in "${FORK_REGISTRY_COVER_GLOBS[@]+"${FORK_REGISTRY_COVER_GLOBS[@]}"}"; do
+    if [ "${FORK_REGISTRY_COVER_EXCLUSIVE[$index]}" = 1 ]; then
+      while IFS= read -r probe; do
+        [ -n "$probe" ] || continue
+        while IFS= read -r owner; do
+          [ -n "$owner" ] || continue
+          case "$owner" in
+            __unmapped__:*) continue ;;
+          esac
+          script=${FORK_REGISTRY_COVER_SCRIPTS[$index]}
+          fork_registry_error \
+            "covers $pattern $script shadows the upstream owner of $probe: $owner"
+          failed=1
+        done < <(fork_registry_upstream_owners "$fn" "$probe")
+      done < <(fork_registry_probe_paths "$pattern")
+    fi
+    index=$((index + 1))
+  done
+  [ "$failed" -eq 0 ] || {
+    fork_registry_error \
+      'covers is confined to paths upstream has no answer for: use adds where upstream still selects owners'
+    return 1
+  }
+  return 0
 }

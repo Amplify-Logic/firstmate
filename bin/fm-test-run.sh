@@ -973,6 +973,10 @@ select_changed() {
   local -a wanted_families=()
   local -a wanted_scripts=()
 
+  if command -v fork_registry_assert_no_shadow >/dev/null 2>&1; then
+    fork_registry_assert_no_shadow families_for_changed_path || exit 2
+  fi
+
   if ! git -C "$ROOT" rev-parse --verify "$base" >/dev/null 2>&1; then
     die "changed-file base ref not found: $base (pass --base <ref>)"
   fi

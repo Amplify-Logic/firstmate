@@ -30,13 +30,16 @@ clone_current_tree() {
   rm -f "$patch"
   # Untracked, non-ignored files are invisible to the index checks but visible
   # to the anchor and workflow reads, so the fixture needs them to mirror ROOT.
-  while IFS= read -r untracked; do
+  # Null-delimited: a working tree may hold names with quotes, newlines, or
+  # non-ASCII bytes, and the line-delimited form silently mangles those into
+  # paths that do not exist.
+  while IFS= read -r -d '' untracked; do
     [ -n "$untracked" ] || continue
     mkdir -p "$repo/$(dirname "$untracked")" \
       || fail "could not create fork-surface fixture directory for: $untracked"
     cp -p "$ROOT/$untracked" "$repo/$untracked" \
       || fail "could not copy untracked file into fork-surface fixture: $untracked"
-  done < <(git -C "$ROOT" ls-files --others --exclude-standard)
+  done < <(git -C "$ROOT" ls-files --others --exclude-standard -z)
 }
 
 check_current_manifest() {
