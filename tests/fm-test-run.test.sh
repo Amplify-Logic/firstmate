@@ -472,27 +472,38 @@ test_changed_dependency_selection_and_unmapped_failure() {
 # the rows are the complete answer, and they include the order suite as an owner
 # of the tray source, because the order script calls the tray script and no test
 # text names that dependency for the fallback to find.
+# Every phase asserts the runner's own exit code rather than merely succeeding or
+# merely failing, because a refusal and an accident such as a missing
+# interpreter are both non-zero and only the exact code tells them apart. Each
+# assertion below was confirmed to fail when the row or mention it pins is
+# removed, so none of them is vacuous.
 test_fork_registry_ops_rows_and_registry_absence() {
-  local tmp repo listed out rc
+  local tmp repo out rc
   tmp=$(mktemp -d "${TMPDIR:-/tmp}/fm-test-run-ops-rows.XXXXXX")
   repo="$tmp/repo"
   init_changed_fixture_repo "$repo"
 
   printf '# fixture order change\n' >>"$repo/$OPS_ORDER_SRC"
-  listed=$(cd "$repo" && bin/fm-test-run.sh --list --changed --base HEAD) \
-    || { rm -rf "$tmp"; fail "covers row for $OPS_ORDER_SRC must load"; }
-  assert_contains "$listed" "tests/fm-order.test.sh" \
+  set +e
+  out=$(cd "$repo" && bin/fm-test-run.sh --list --changed --base HEAD 2>&1)
+  rc=$?
+  set -e
+  expect_code 0 "$rc" "covers row for the order source must load"
+  assert_contains "$out" "tests/fm-order.test.sh" \
     "covers row selects the order suite for its own source"
-  assert_not_contains "$listed" "tests/fm-brief.test.sh" \
+  assert_not_contains "$out" "tests/fm-brief.test.sh" \
     "covers row is the complete answer for the order source"
   git -C "$repo" checkout -- "$OPS_ORDER_SRC"
 
   printf '# fixture tray change\n' >>"$repo/$OPS_TRAY_SRC"
-  listed=$(cd "$repo" && bin/fm-test-run.sh --list --changed --base HEAD) \
-    || { rm -rf "$tmp"; fail "covers rows for $OPS_TRAY_SRC must load"; }
-  assert_contains "$listed" "tests/fm-tray.test.sh" \
+  set +e
+  out=$(cd "$repo" && bin/fm-test-run.sh --list --changed --base HEAD 2>&1)
+  rc=$?
+  set -e
+  expect_code 0 "$rc" "covers rows for the tray source must load"
+  assert_contains "$out" "tests/fm-tray.test.sh" \
     "covers row selects the tray suite for its own source"
-  assert_contains "$listed" "tests/fm-order.test.sh" \
+  assert_contains "$out" "tests/fm-order.test.sh" \
     "the order suite is a declared owner of the tray source"
   git -C "$repo" checkout -- "$OPS_TRAY_SRC"
 
@@ -506,15 +517,34 @@ test_fork_registry_ops_rows_and_registry_absence() {
   out=$(cd "$repo" && bin/fm-test-run.sh --list --changed --base HEAD 2>&1)
   rc=$?
   set -e
-  [ "$rc" -eq 0 ] \
-    || { rm -rf "$tmp"; fail "an absent fork registry must not break an ops-path change: $out"; }
+  expect_code 0 "$rc" "an absent fork registry must not break an ops-path change"
   assert_not_contains "$out" "no changed-test mapping" \
     "an absent fork registry must not leave an ops source unmapped"
   assert_contains "$out" "tests/fm-tray.test.sh" \
     "the reference fallback still reaches the tray suite with no registry"
+  git -C "$repo" checkout -- "$OPS_TRAY_SRC"
+
+  # The far side of that guarantee. The fallback only reaches the tray source
+  # because its own suite names it, so with both the registry and that mention
+  # gone the runner has no owner at all. It must then refuse with its own exit
+  # code 2 and say which path it could not map, never select nothing quietly.
+  grep -v "$OPS_TRAY_SRC" "$repo/tests/fm-tray.test.sh" >"$repo/tests/fm-tray.trimmed"
+  mv "$repo/tests/fm-tray.trimmed" "$repo/tests/fm-tray.test.sh"
+  chmod +x "$repo/tests/fm-tray.test.sh"
+  git -C "$repo" add tests/fm-tray.test.sh
+  git -C "$repo" -c user.name=test -c user.email=test@example.invalid commit -qm no-mention
+  printf '# fixture tray change\n' >>"$repo/$OPS_TRAY_SRC"
+  set +e
+  out=$(cd "$repo" && bin/fm-test-run.sh --list --changed --base HEAD 2>&1)
+  rc=$?
+  set -e
+  expect_code 2 "$rc" \
+    "an ops source with no registry row and no test mention must refuse with exit 2"
+  assert_contains "$out" "no changed-test mapping for source path" \
+    "the refusal names the path it could not map"
 
   rm -rf "$tmp"
-  pass "ops command center rows select their declared owners and degrade to the reference fallback"
+  pass "ops command center rows select their declared owners, degrade to the reference fallback, and refuse with exit 2 when neither answers"
 }
 
 test_empty_selection_emits_summary() {
