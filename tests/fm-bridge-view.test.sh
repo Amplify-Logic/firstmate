@@ -162,7 +162,7 @@ start_bridge() {  # <home> <fakebin>
   : > "$log"
   FM_BRIDGE_VIEW_TEST=1 FM_BRIDGE_VIEW_LAUNCHCTL="$fakebin/launchctl" \
     FM_BRIDGE_VIEW_MAILBOX_PORT="${FM_BRIDGE_VIEW_MAILBOX_PORT:-}" \
-    PATH="$fakebin:$PATH" HOME="$home" NVM_BIN= FM_HOME="$home" FM_ROOT_OVERRIDE="$ROOT" \
+    PATH="$fakebin:$PATH" HOME="$home" NVM_BIN='' FM_HOME="$home" FM_ROOT_OVERRIDE="$ROOT" \
     "$BRIDGE" serve --host "$HOST_NAME" --port 0 >"$log" 2>&1 &
   BRIDGE_PIDS+=("$!")
   wait_listening "$log"
