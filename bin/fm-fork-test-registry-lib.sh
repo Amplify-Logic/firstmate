@@ -18,6 +18,15 @@
 # owners with no error at all. fork_registry_assert_no_shadow proves the
 # confinement per row and fails closed, so use adds wherever upstream and the
 # fork both have an answer and upstream's answer must survive.
+#
+# Note what makes upstream "have an answer" here. The runner's map falls back
+# to a grep over the test suite, so it claims a path as soon as any test file
+# mentions that path as text, including in a comment or a fixture filename. A
+# covers row is therefore safe only for a path no test text mentions, and
+# adding such a mention later flips the correct row type from covers to adds.
+# The assertion reports that as a shadow, which is the intended loud failure,
+# but the fix is usually to stop naming the path in the test rather than to
+# widen the row.
 # Blank lines and lines whose first non-whitespace character is # are ignored.
 # A present malformed registry fails closed with an actionable line number.
 # A missing library or registry is handled by the guarded hooks in the runner
@@ -181,11 +190,13 @@ fork_registry_scripts_for_path() { # <repository-relative-path>
 # below is exact against the working tree rather than a guess about the shape.
 fork_registry_probe_paths() { # <glob>
   local pattern=${1:-} path
-  printf '%s\n' "$pattern"
   case "$pattern" in
     *'*'*|*'?'*|*'['*) ;;
-    *) return 0 ;;
+    *) printf '%s\n' "$pattern"; return 0 ;;
   esac
+  # A wildcard glob is never itself a path. Passing its text to the upstream
+  # map would reach the reference fallback as a literal string and could claim
+  # a shadow that no real path has, so only the paths it matches are probed.
   while IFS= read -r -d '' path; do
     [ -n "$path" ] || continue
     # Registry cover values are intentionally expanded as shell globs.
