@@ -97,7 +97,7 @@ test_changed_file_selection_is_conservative() {
 # shadows and fork_registry_assert_no_shadow refuses the run. Assembling the
 # names keeps this script out of their ownership, so the registry rows stay the
 # only claim on them. This is the enforced form of the rule, not a style choice.
-OPS_SRC_EXT=sh
+OPS_SRC_EXT='sh'
 OPS_ORDER_SRC="bin/fm-order.$OPS_SRC_EXT"
 OPS_TRAY_SRC="bin/fm-tray.$OPS_SRC_EXT"
 
