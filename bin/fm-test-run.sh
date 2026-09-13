@@ -128,7 +128,7 @@ family_for_basename() {
     fm-herdr-lab.test.sh|fm-instruction-owners.test.sh|fm-lint.test.sh|fm-fork-surface.test.sh|\
     fm-baby-menu-quota.test.sh|\
     fm-install-herdr.test.sh|fm-nm-test-contract.test.sh|fm-no-mistakes-ownership.test.sh|\
-    fm-pi-primary-types.test.sh|fm-operational-input.test.sh|\
+    fm-pi-primary-types.test.sh|fm-operational-input.test.sh|fm-calm-extension.test.sh|\
     fm-send-popup-settle.test.sh|fm-send-settle.test.sh|fm-stow-contract.test.sh|\
     fm-supervision-instructions.test.sh|fm-tmux-submit-busy.test.sh|fm-transition-lib.test.sh|\
     fm-worker-boundary-regression.test.sh|\
@@ -387,6 +387,7 @@ tests/fm-deck.test.sh
 tests/fm-timeout-lib.test.sh
 tests/fm-voice-relay.test.sh
 tests/fm-speak.test.sh
+tests/fm-calm-extension.test.sh
 EOF
 }
 
