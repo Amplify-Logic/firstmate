@@ -529,8 +529,14 @@ if [ -x "$SCRIPT_DIR/fm-bridge-fields.sh" ]; then
   BRIDGE_SNAP=$(mktemp "${TMPDIR:-/tmp}/fm-bridge-snap.XXXXXX") || BRIDGE_SNAP=
   if [ -n "$BRIDGE_SNAP" ]; then
     printf '%s' "$SNAP" > "$BRIDGE_SNAP"
-    BRIDGE_MODEL=$(printf '%s' "$MODEL" | "$SCRIPT_DIR/fm-bridge-fields.sh" "$BRIDGE_SNAP") \
-      && [ -n "$BRIDGE_MODEL" ] && MODEL=$BRIDGE_MODEL
+    if BRIDGE_MODEL=$(printf '%s' "$MODEL" | "$SCRIPT_DIR/fm-bridge-fields.sh" "$BRIDGE_SNAP") \
+        && [ -n "$BRIDGE_MODEL" ]; then
+      MODEL=$BRIDGE_MODEL
+    else
+      # An absent enricher degrades silently on purpose. A present but broken
+      # one must not: the bridge would lose its fields with no signal at all.
+      echo "fm-bearings-snapshot: bridge enrichment failed, emitting upstream projection" >&2
+    fi
     rm -f "$BRIDGE_SNAP"
   fi
 fi

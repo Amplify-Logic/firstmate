@@ -29,12 +29,17 @@ main() {
   command -v jq >/dev/null 2>&1 || { echo "fm-bridge-fields: jq not found" >&2; return 1; }
 
   jq --slurpfile snap "$snap" '
-    def trunc($n): if . == null then null elif (. | length) > $n then (.[0:$n]) else . end;
+    # Copied verbatim from the projection this enrichment came out of. The
+    # tostring, the whitespace collapse and the ellipsis on a cut all change
+    # rendered output, so a paraphrase here would silently alter every field
+    # longer than its limit.
+    def trunc($n): if . == null then null else
+      (tostring | gsub("\\s+"; " ") | if (length > $n) then (.[:$n] + "\u2026") else . end) end;
     ($snap[0]) as $s
     | ([ $s.backlog.records[]? | {key: .id, value: .} ] | from_entries) as $main_rows
     | ([ ($s.secondmate_current.records // [])[] as $m
          | (($m.decisions_open // [])[] | {key: ($m.id + "/" + .id), value: .}),
-           (($m.queued // [])[] | {key: (.id), value: (. + {__home: $m.id})}) ] | from_entries) as $sm_rows
+           (($m.queued // [])[] | {key: ($m.id + "/" + .id), value: .}) ] | from_entries) as $sm_rows
     | ([ $s.tasks[]? | {key: .id, value: .} ] | from_entries) as $task_rows
     | ([ ($s.secondmate_current.records // [])[] | {key: .id, value: .} ] | from_entries) as $sm_homes
     | .in_flight = [ .in_flight[]
@@ -68,8 +73,8 @@ main() {
           elif $row.owner == "(main)" and ($main_rows[$row.id] != null) then
             ($main_rows[$row.id]) as $r
             | $row + {hold_kind: $r.hold_kind, repo: (($r.repo // null) | trunc(120))}
-          elif ($sm_rows[$row.id] != null) then
-            ($sm_rows[$row.id]) as $r
+          elif ($sm_rows[($row.owner // "") + "/" + ($row.id // "")] != null) then
+            ($sm_rows[($row.owner // "") + "/" + ($row.id // "")]) as $r
             | $row + {hold_kind: ($r.hold_kind // null), repo: (($r.repo // null) | trunc(120))}
           else $row end ]
   '
