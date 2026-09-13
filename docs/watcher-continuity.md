@@ -169,7 +169,7 @@ Each watcher loop captures a private marker before filesystem catch-up and publi
 This catch-up is part of the existing singleton watcher cycle and does not add another watcher, change lock ownership, or alter the one-actionable-reason exit contract.
 Both the catch-up and the forked terminal wait are reached through guarded calls, so a checkout without `bin/fm-file-event-lib.sh` runs the watcher's own `event_wait_or_sleep` and its ordinary check cadence instead.
 `bin/fm-file-event-lib.sh` also checks that shape once each time it loads, which for the watcher is once per start and never per cycle: `fm_fork_assert_watcher_hook_shape` walks the watcher beside it, and if any fork call has escaped its guard or the terminal wait has lost its else branch it names the line on stderr and disables the override by replacing the fork's terminal wait with a direct call to the watcher's own `event_wait_or_sleep` and making the catch-up a no-op, so the watcher always still has a wait even when its call site is the thing that broke.
-`tests/fm-file-eventwait.test.sh` keeps the same walk as an executable proof and feeds the assertion guard-removed watcher copies to show it refuses them.
+`fm_fork_assert_watcher_hook_shape` is the single owner of that check, and `tests/fm-file-eventwait.test.sh` proves it by running the function against the real watcher and against deliberately broken copies that have lost a guard or the else branch.
 `docs/bridge-view.md` owns the separate glasses existence-only watcher-check guidance.
 
 ## Regression coverage

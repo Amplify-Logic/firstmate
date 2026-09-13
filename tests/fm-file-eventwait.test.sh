@@ -595,29 +595,14 @@ WATCHER_SRC="$ROOT/bin/fm-watch.sh"
 grep -q '^\[ ! -r "\$SCRIPT_DIR/fm-file-event-lib.sh" \] || \. "\$SCRIPT_DIR/fm-file-event-lib.sh"$' \
   "$WATCHER_SRC" || fail "the fork library must be sourced through a readability guard"
 
-# Constraint shared with fm_fork_assert_watcher_hook_shape: this walk treats a
-# bare fi as the end of the current guard and a bare else as its else branch,
-# so a future nested if inside either guarded block would end the guard early
-# and be read as an unguarded call; keep those blocks free of nested if/fi.
-unguarded=$(awk '
-  { line = $0 }
-  line ~ /^[[:space:]]*#/ { next }
-  match(line, /if command -v fm_fork_[A-Za-z0-9_]+ >\/dev\/null 2>&1; then$/) {
-    guard = line
-    sub(/^.*command -v /, "", guard)
-    sub(/ .*$/, "", guard)
-    next
-  }
-  line ~ /^[[:space:]]*fi$/ { guard = ""; next }
-  line ~ /fm_fork_[A-Za-z0-9_]+/ {
-    call = line
-    sub(/^.*(fm_fork_)/, "fm_fork_", call)
-    sub(/[^A-Za-z0-9_].*$/, "", call)
-    if (call != guard) { print FILENAME ":" FNR ": " line }
-  }
-' "$WATCHER_SRC")
-[ -z "$unguarded" ] \
-  || fail "an unguarded fork call reached upstream's control flow: $unguarded"
+# fm_fork_assert_watcher_hook_shape in bin/fm-file-event-lib.sh is the single
+# owner of the hook-shape rule; the test asserts it by running that function
+# against the real watcher here and against guard-removed copies below.
+assert_err=$(fm_fork_assert_watcher_hook_shape "$WATCHER_SRC" 2>&1)
+assert_rc=$?
+[ "$assert_rc" -eq 0 ] \
+  || fail "the hook-shape assertion must pass the real watcher, got $assert_rc: $assert_err"
+[ -z "$assert_err" ] || fail "the hook-shape assertion must be quiet on success: $assert_err"
 
 grep -q 'if command -v fm_fork_event_wait_or_sleep >/dev/null 2>&1; then' "$WATCHER_SRC" \
   || fail "the terminal wait must announce its either/or at the call site"
@@ -630,17 +615,11 @@ grep -A 4 'if command -v fm_fork_event_wait_or_sleep >/dev/null 2>&1; then' "$WA
 pass "hook W1: the override is guarded and visible at every call site in the watcher"
 
 # --- the parse-time check the library runs on itself --------------------------
-# fm_fork_assert_watcher_hook_shape proves the same property when the library
-# loads, once per watcher start. It must pass the real watcher quietly, refuse a
+# fm_fork_assert_watcher_hook_shape also runs when the library loads, once per
+# watcher start. Having passed the real watcher above, it must refuse a
 # guard-removed copy at its own exit code naming the line, skip an absent path,
 # and when sourced beside an unsafe watcher it must disable the override rather
 # than the watcher.
-
-assert_err=$(fm_fork_assert_watcher_hook_shape "$WATCHER_SRC" 2>&1)
-assert_rc=$?
-[ "$assert_rc" -eq 0 ] \
-  || fail "the hook-shape assertion must pass the real watcher, got $assert_rc: $assert_err"
-[ -z "$assert_err" ] || fail "the hook-shape assertion must be quiet on success: $assert_err"
 
 assert_err=$(fm_fork_assert_watcher_hook_shape "$TMP/does-not-exist.sh" 2>&1)
 assert_rc=$?
@@ -662,7 +641,7 @@ grep -q 'nowaitguard-watch.sh:[0-9]*: unguarded fork call: .*fm_fork_event_wait_
   || fail "the refusal must name the unguarded terminal-wait line: $assert_err"
 
 # A guard that keeps its if line but drops the else branch is the other shape
-# the walk must catch.
+# the assertion must catch.
 sed '/^  if command -v fm_fork_event_wait_or_sleep >\/dev\/null 2>&1; then$/,/^  fi$/{
   /^  else$/d
   /^    event_wait_or_sleep$/d
@@ -676,7 +655,7 @@ assert_rc=$?
   || fail "the hook-shape assertion must refuse a terminal wait without an else branch at exit 1, got $assert_rc"
 grep -q 'noelse-watch.sh:[0-9]*: terminal wait lost its else branch' <<<"$assert_err" \
   || fail "the refusal must name the either/or that lost its else branch: $assert_err"
-pass "hook W1: the load-time hook-shape assertion passes the real watcher and refuses each broken shape by line"
+pass "hook W1: the load-time hook-shape assertion refuses each broken shape by line"
 
 # Fail closed toward supervision: source the library from a root whose watcher
 # has lost a guard, and require the override to be disabled while the source
