@@ -970,6 +970,7 @@ fi
 # would if the fork had never added the subcommand.
 # shellcheck disable=SC2086  # deliberate word-split of the resolved tool list
 if [ "${1:-}" = manifest ] && [ -x "$SCRIPT_DIR/fm-home-manifest.sh" ]; then
+  [ "$#" -eq 1 ] || { echo "usage: fm-bootstrap.sh manifest" >&2; exit 1; }
   exec "$SCRIPT_DIR/fm-home-manifest.sh" "$BACKEND" $TOOLS
 fi
 

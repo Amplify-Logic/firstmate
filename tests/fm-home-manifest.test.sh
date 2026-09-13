@@ -84,9 +84,56 @@ test_refuses_without_a_backend() {
   pass "manifest refuses an empty argument list"
 }
 
+# Bootstrap's dispatch into this script: the plain subcommand must still
+# produce a manifest, and a trailing argument must be refused with the usage
+# line rather than silently dropped.
+BASE_PATH=${FM_TEST_BASE_PATH:-/usr/bin:/bin:/usr/sbin:/sbin}
+
+make_bootstrap_home() {
+  local case_dir=$1
+  mkdir -p "$case_dir/home/config"
+  printf 'tmux\n' > "$case_dir/home/config/backend"
+  printf '%s\n' "$case_dir/home"
+}
+
+test_bootstrap_dispatch_prints_manifest() {
+  local case_dir home fakebin out
+  case_dir="$TMP_ROOT/dispatch-ok"
+  home=$(make_bootstrap_home "$case_dir")
+  fakebin=$(fm_fakebin "$case_dir")
+  fm_fake_exit0 "$fakebin" node
+  out=$(
+    PATH="$fakebin:$BASE_PATH" FM_HOME="$home" FM_ROOT_OVERRIDE="$ROOT" \
+      "$ROOT/bin/fm-bootstrap.sh" manifest
+  ) || fail "fm-bootstrap.sh manifest should exit 0, got: $out"
+  assert_contains "$out" 'backend=tmux' "dispatched manifest missing the backend"
+  assert_contains "$out" 'generated=' "dispatched manifest missing the generated stamp"
+  pass "fm-bootstrap.sh manifest dispatches into the fork script"
+}
+
+test_bootstrap_dispatch_refuses_extra_arguments() {
+  local case_dir home fakebin out err rc=0
+  case_dir="$TMP_ROOT/dispatch-extra"
+  home=$(make_bootstrap_home "$case_dir")
+  fakebin=$(fm_fakebin "$case_dir")
+  fm_fake_exit0 "$fakebin" node
+  err="$case_dir/stderr"
+  out=$(
+    PATH="$fakebin:$BASE_PATH" FM_HOME="$home" FM_ROOT_OVERRIDE="$ROOT" \
+      "$ROOT/bin/fm-bootstrap.sh" manifest extra 2>"$err"
+  ) || rc=$?
+  [ "$rc" -eq 1 ] || fail "manifest with a trailing argument must exit 1, got $rc: $out"
+  assert_contains "$(cat "$err")" 'usage: fm-bootstrap.sh manifest' \
+    "manifest with a trailing argument must print the usage line on stderr"
+  assert_not_contains "$out" 'backend=' "a refused manifest must not print a manifest"
+  pass "fm-bootstrap.sh manifest refuses trailing arguments with the usage line"
+}
+
 test_reports_backend_and_tool_versions
 test_distinguishes_missing_from_unparseable
 test_output_is_stable_and_deduplicated
 test_refuses_without_a_backend
+test_bootstrap_dispatch_prints_manifest
+test_bootstrap_dispatch_refuses_extra_arguments
 
 echo "# all fm-home-manifest tests passed"
