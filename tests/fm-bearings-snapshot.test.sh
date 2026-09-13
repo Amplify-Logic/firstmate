@@ -1944,9 +1944,15 @@ test_in_flight_rows_carry_captain_facing_title() {
 test_bridge_fields_are_fork_owned_and_degrade_to_upstream() {
   local home fakebin json degraded entry stripped
   home=$(make_home bridge-fields); write_fixture "$home"
+  # An unstructured main row projects with id null; the enricher must skip it
+  # rather than abort and silently drop every field.
+  sed -i.bak 's/^## Queued$/## Queued\
+free-form note without a checkbox/' "$home/data/backlog.md" && rm -f "$home/data/backlog.md.bak"
   fakebin=$(make_fakebin "$home")
 
   json=$(run "$home" "$fakebin" --json) || fail "bearings must succeed with the enricher present"
+  printf '%s' "$json" | jq -e '.omitted | any(.surface | startswith("main unstructured current backlog row(s)"))' >/dev/null \
+    || fail "fixture carries no unstructured main row, so the null-id path is untested: $json"
   printf '%s' "$json" | jq -e '((.decisions_open | length) + (.gates | length)) > 0' >/dev/null \
     || fail "fixture produced no decision or gate rows, so this pin would prove nothing"
   printf '%s' "$json" | jq -e '[(.decisions_open[]?, .gates[]?) | has("hold_kind")] | all' >/dev/null \

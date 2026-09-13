@@ -46,7 +46,9 @@ main() {
     def trunc($n): if . == null then null else
       (tostring | gsub("\\s+"; " ") | if (length > $n) then (.[:$n] + "\u2026") else . end) end;
     ($snap[0]) as $s
-    | ([ $s.backlog.records[]? | {key: .id, value: .} ] | from_entries) as $main_rows
+    # An unstructured main row carries id null, which from_entries rejects as a
+    # key; it can never be matched, so it is dropped rather than aborting.
+    | ([ $s.backlog.records[]? | select(.id != null) | {key: .id, value: .} ] | from_entries) as $main_rows
     | ([ ($s.secondmate_current.records // [])[] as $m
          | ($m.decisions_open // [])[] | {key: ($m.id + "/" + .id), value: .} ] | from_entries) as $sm_decisions
     | ([ ($s.secondmate_current.records // [])[] as $m
