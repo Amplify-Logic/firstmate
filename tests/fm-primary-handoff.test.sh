@@ -309,6 +309,32 @@ test_release_stale_refuses_live_holder() {
   pass "fm-lock release-stale refuses while a live harness holds the lock"
 }
 
+# L1 fails closed on purpose. Every other fork hook degrades to upstream
+# behaviour when its fork file is gone; this one must refuse instead, because
+# the upstream-equivalent fallthrough would remove a lock a live primary may
+# still hold and put two primaries on one home. Pinned here so the exception
+# cannot be quietly turned into a fallthrough later.
+test_release_stale_fails_closed_without_the_fork_library() {
+  local out status=0 hidden
+  start_fake_holder
+  printf '%s\n' 999999 > "$HOME_FIX/state/.lock"
+  hidden="$TMP_ROOT/fm-primary-handoff-lib.sh.hidden"
+  cp "$ROOT/bin/fm-primary-handoff-lib.sh" "$hidden"
+  mv "$ROOT/bin/fm-primary-handoff-lib.sh" "$hidden.orig"
+  out=$(FM_HOME="$HOME_FIX" "$ROOT/bin/fm-lock.sh" release-stale 2>&1) || status=$?
+  mv "$hidden.orig" "$ROOT/bin/fm-primary-handoff-lib.sh"
+  rm -f "$hidden"
+  [ "$status" -ne 0 ] || fail "release-stale must refuse when the fork library is absent"
+  assert_contains "$out" 'needs bin/fm-primary-handoff-lib.sh' \
+    "the refusal must name the missing fork file"
+  [ -f "$HOME_FIX/state/.lock" ] \
+    || fail "a refused release-stale must leave the lock file in place"
+  [ "$(cat "$HOME_FIX/state/.lock")" = 999999 ] \
+    || fail "a refused release-stale must not rewrite the lock"
+  cleanup_holders
+  pass "fm-lock release-stale fails closed when bin/fm-primary-handoff-lib.sh is absent"
+}
+
 test_pre_launch_failure_leaves_zero_or_one_holder() {
   local out status=0 count
   : > "$LAUNCH_LOG"
@@ -796,6 +822,7 @@ test_flush_failure_keeps_outgoing_lock
 test_signal_failure_keeps_outgoing_lock
 test_wait_dead_failure_never_launches
 test_release_stale_refuses_live_holder
+test_release_stale_fails_closed_without_the_fork_library
 test_pre_launch_failure_leaves_zero_or_one_holder
 test_launch_failure_never_dual_holds
 test_check_triggers_when_over_threshold
