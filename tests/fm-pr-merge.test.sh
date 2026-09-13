@@ -17,8 +17,10 @@
 #   (i) agent co-author and session trailers are stripped from the squash body
 #   (j) a human co-author in the squash body is preserved
 #   (k) a squash body with no trailer is passed through unchanged
-#   (l) a caller-supplied body is sanitized the same way
+#   (l) a caller-supplied body is sanitized the same way, in every flag form
 #   (m) a non-squash merge composes no body at all
+#   (n) a body flag with no value refuses the merge
+#   (o) an unreadable or null default body refuses the merge
 set -u
 
 # shellcheck source=tests/lib.sh
@@ -75,6 +77,7 @@ case "\${1:-} \${2:-}" in
     case " \$* " in
       *viewerMergeBodyText*)
         [ -f '$case_dir/default-body-unavailable' ] && exit 1
+        [ -f '$case_dir/default-body-null' ] && { echo null; exit 0; }
         [ -f '$case_dir/default-body.txt' ] && cat '$case_dir/default-body.txt'
         exit 0
         ;;
@@ -346,6 +349,12 @@ Claude-Session: https://claude.ai/code/session_016aDXQL1djK388yyNv89SfB
 
 Co-authored-by: Cursor <cursoragent@cursor.com>
 Co-authored-by: Codex <codex@openai.com>
+Co-authored-by: Copilot <175728472+Copilot@users.noreply.github.com>
+Co-authored-by: ChatGPT <chatgpt@example.invalid>
+Co-authored-by: dependabot[bot] <49699333+dependabot[bot]@users.noreply.github.com>
+Co-authored-by: Release Bot <release-bot@example.invalid>
+Co-authored-by: Vendor Service <noreply@vendor.invalid>
+Co-authored-by: Vendor Service <no-reply@vendor.invalid>
 BODY
 
   run_pr_merge "$case_dir" task-x1 https://github.com/example/repo/pull/31 \
@@ -380,7 +389,9 @@ test_keeps_human_coauthor_trailer() {
 
 Co-authored-by: Dana Verhoeven <dana@example.com>
 Co-authored-by: Sam Okafor <9182734+sokafor@users.noreply.github.com>
+Co-authored-by: Abbott Botha <abbott.botha@example.com>
 Co-authored-by: Claude Opus 5 <noreply@anthropic.com>
+Co-authored-by: Copilot <175728472+Copilot@users.noreply.github.com>
 BODY
 
   run_pr_merge "$case_dir" task-x1 https://github.com/example/repo/pull/32 \
@@ -390,8 +401,12 @@ BODY
     "keep-human-trailer: a human co-author was stripped"
   assert_grep 'Co-authored-by: Sam Okafor <9182734+sokafor@users.noreply.github.com>' "$case_dir/gh-axi.body" \
     "keep-human-trailer: a human co-author on the GitHub privacy domain was stripped"
+  assert_grep 'Co-authored-by: Abbott Botha <abbott.botha@example.com>' "$case_dir/gh-axi.body" \
+    "keep-human-trailer: a human whose name merely contains the letters bot was stripped"
   assert_no_grep 'anthropic' "$case_dir/gh-axi.body" \
     "keep-human-trailer: the agent co-author survived alongside the humans"
+  assert_no_grep 'Copilot' "$case_dir/gh-axi.body" \
+    "keep-human-trailer: the Copilot agent on the GitHub privacy domain survived alongside the humans"
   assert_grep '---------' "$case_dir/gh-axi.body" \
     "keep-human-trailer: the separator was dropped from a trailer block that still has trailers"
   pass "fm-pr-merge preserves human co-authors in the squash message"
@@ -409,6 +424,8 @@ test_body_without_trailers_unchanged() {
 A body with no trailer at all, mentioning cursor keys and gpt only in prose.
 
 * fix(bin): do the other thing
+
+---
 BODY
 
   run_pr_merge "$case_dir" task-x1 https://github.com/example/repo/pull/33 \
@@ -478,6 +495,92 @@ test_unreadable_default_body_refuses_merge() {
   pass "fm-pr-merge refuses to merge when the squash message cannot be read"
 }
 
+test_short_body_flag_is_sanitized() {
+  local case_dir body
+  case_dir=$(make_case caller-short-body)
+  mkdir -p "$case_dir/wt"
+  add_gh_mocks "$case_dir" 1212121212121212121212121212121212121212
+  : > "$case_dir/gh-axi.log"
+  body=$(printf '%s\n' 'A short-flag body.' '' 'Co-authored-by: Claude <noreply@anthropic.com>')
+
+  run_pr_merge "$case_dir" task-x1 https://github.com/example/repo/pull/37 \
+    -- -b"$body" \
+    > "$case_dir/stdout" 2> "$case_dir/stderr" || fail "caller-short-body: fm-pr-merge failed"
+
+  assert_grep 'A short-flag body.' "$case_dir/gh-axi.body" \
+    "caller-short-body: the caller's own text was lost"
+  ! grep -qi 'co-authored-by' "$case_dir/gh-axi.body" \
+    || fail "caller-short-body: an agent co-author trailer reached the squash message"
+  grep -qE '^pr merge 37 --repo example/repo --squash --body-file /' "$case_dir/gh-axi.log" \
+    || fail "caller-short-body: the caller's -b flag was forwarded alongside the sanitized copy"
+  pass "fm-pr-merge sanitizes a body given through the attached -b short flag"
+}
+
+test_short_body_file_flag_is_sanitized() {
+  local case_dir
+  case_dir=$(make_case caller-short-body-file)
+  mkdir -p "$case_dir/wt"
+  add_gh_mocks "$case_dir" 1313131313131313131313131313131313131313
+  : > "$case_dir/gh-axi.log"
+  printf '%s\n' 'A body from a file.' '' 'Co-authored-by: Gemini <gemini@example.invalid>' \
+    > "$case_dir/caller-body.txt"
+
+  run_pr_merge "$case_dir" task-x1 https://github.com/example/repo/pull/38 \
+    -- -F "$case_dir/caller-body.txt" \
+    > "$case_dir/stdout" 2> "$case_dir/stderr" || fail "caller-short-body-file: fm-pr-merge failed"
+
+  assert_grep 'A body from a file.' "$case_dir/gh-axi.body" \
+    "caller-short-body-file: the caller's own text was lost"
+  ! grep -qi 'co-authored-by' "$case_dir/gh-axi.body" \
+    || fail "caller-short-body-file: an agent co-author trailer reached the squash message"
+  grep -qE '^pr merge 38 --repo example/repo --squash --body-file /' "$case_dir/gh-axi.log" \
+    || fail "caller-short-body-file: the caller's -F flag was forwarded alongside the sanitized copy"
+  pass "fm-pr-merge sanitizes a body given through the -F short flag"
+}
+
+test_body_flag_without_value_refuses_merge() {
+  local case_dir rc
+  case_dir=$(make_case body-flag-no-value)
+  mkdir -p "$case_dir/wt"
+  add_gh_mocks "$case_dir" 1414141414141414141414141414141414141414
+  : > "$case_dir/gh-axi.log"
+
+  set +e
+  run_pr_merge "$case_dir" task-x1 https://github.com/example/repo/pull/39 -- --body \
+    > "$case_dir/stdout" 2> "$case_dir/stderr"
+  rc=$?
+  set -e
+
+  expect_code 1 "$rc" "body-flag-no-value: fm-pr-merge should refuse"
+  assert_grep 'a merge body flag is missing its value' "$case_dir/stderr" \
+    "body-flag-no-value: refusal did not name the missing body value"
+  assert_no_grep 'pr merge' "$case_dir/gh-axi.log" \
+    "body-flag-no-value: the merge ran with an empty body in place of the missing value"
+  pass "fm-pr-merge refuses a body flag that has no value"
+}
+
+test_null_default_body_refuses_merge() {
+  local case_dir rc
+  case_dir=$(make_case default-body-null)
+  mkdir -p "$case_dir/wt"
+  add_gh_mocks "$case_dir" 1515151515151515151515151515151515151515
+  : > "$case_dir/gh-axi.log"
+  : > "$case_dir/default-body-null"
+
+  set +e
+  run_pr_merge "$case_dir" task-x1 https://github.com/example/repo/pull/40 \
+    > "$case_dir/stdout" 2> "$case_dir/stderr"
+  rc=$?
+  set -e
+
+  expect_code 1 "$rc" "default-body-null: fm-pr-merge should refuse"
+  assert_grep "could not read the pull request's squash commit message" "$case_dir/stderr" \
+    "default-body-null: refusal did not name the unreadable commit message"
+  assert_no_grep 'pr merge' "$case_dir/gh-axi.log" \
+    "default-body-null: the merge ran with the literal word null as its message"
+  pass "fm-pr-merge refuses to merge when the squash message is null"
+}
+
 test_records_pr_and_head_before_merging
 test_merge_failure_propagates_after_recording
 test_extra_merge_args_forwarded
@@ -494,3 +597,7 @@ test_body_without_trailers_unchanged
 test_caller_supplied_body_is_sanitized
 test_non_squash_merge_composes_no_body
 test_unreadable_default_body_refuses_merge
+test_short_body_flag_is_sanitized
+test_short_body_file_flag_is_sanitized
+test_body_flag_without_value_refuses_merge
+test_null_default_body_refuses_merge

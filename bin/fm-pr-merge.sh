@@ -5,8 +5,9 @@
 # owner/repository and PR number are passed to gh-axi as separate arguments.
 #
 # Merge method defaults to --squash when the caller passes none of --squash,
-# --merge, --rebase, or --method after the optional -- separator. Extra args
-# must not include --repo or -R because the repository comes only from the URL.
+# --merge, --rebase, or --method (or their -s, -m, -r short forms) after the
+# optional -- separator. Extra args must not include --repo or -R because the
+# repository comes only from the URL.
 #
 # A squash merge supplies its own commit body. GitHub composes the default
 # squash body from every commit in the PR and appends a hoisted
@@ -18,7 +19,9 @@
 # with gh rather than gh-axi because gh returns the message verbatim, while
 # gh-axi's api wrapper re-renders and may truncate it, and a commit message
 # must land byte for byte. A body the caller supplies is sanitized the same
-# way. Merge and rebase merges compose no message here.
+# way, whether given as --body, --body-file, or their -b and -F short forms,
+# and a body flag with no value refuses the merge. Merge and rebase merges
+# compose no message here.
 # Usage: fm-pr-merge.sh <task-id> <pr-url> [-- <extra gh-axi pr merge args>]
 set -eu
 
@@ -51,17 +54,9 @@ PR_NUMBER=$FM_PR_NUMBER
 shift 2
 [ "${1:-}" = "--" ] && shift
 
-caller_has_merge_method() {
-  local arg
-  for arg in "$@"; do
-    case "$arg" in
-      --squash|--merge|--rebase|--method|--method=*) return 0 ;;
-    esac
-  done
-  return 1
-}
-
-# Echo the merge method the caller named, for a caller that named one.
+# Echo the merge method the caller named and succeed, or fail when the caller
+# named none. A trailing --method with no value succeeds with empty output so
+# the default is not added and gh-axi refuses the missing value itself.
 caller_merge_method() {
   local arg awaiting_value=0
   for arg in "$@"; do
@@ -70,14 +65,14 @@ caller_merge_method() {
       return 0
     fi
     case "$arg" in
-      --squash) printf 'squash\n'; return 0 ;;
-      --merge) printf 'merge\n'; return 0 ;;
-      --rebase) printf 'rebase\n'; return 0 ;;
+      --squash|-s) printf 'squash\n'; return 0 ;;
+      --merge|-m) printf 'merge\n'; return 0 ;;
+      --rebase|-r) printf 'rebase\n'; return 0 ;;
       --method=*) printf '%s\n' "${arg#--method=}"; return 0 ;;
       --method) awaiting_value=1 ;;
     esac
   done
-  return 1
+  [ "$awaiting_value" -eq 1 ]
 }
 
 reject_repo_overrides() {
@@ -96,26 +91,36 @@ reject_repo_overrides() {
 # Co-authored-by trailer whose identity names an agent, then drop the
 # separator and blank lines a fully stripped trailer block leaves behind.
 # A co-author is an agent when any word of its name or address is one of the
-# agent words, which covers agent addresses at noreply.anthropic.com and at
-# users.noreply.github.com without touching a human who shares that domain.
+# agent words, when it carries a bot marker ("[bot]", a -bot or _bot suffix,
+# or a standalone "bot" word), or when the address is a bare service mailbox
+# such as noreply@ or no-reply@ at a vendor domain. Matching is word based, so
+# an agent at users.noreply.github.com is stripped while a human whose local
+# part is personal on that same privacy domain is preserved. A message with
+# no dropped line is passed through byte for byte.
 strip_agent_trailers() {
   awk '
     BEGIN {
-      split("claude codex cursor grok kimi opus fable gpt openai anthropic", agent_words, " ")
+      split("claude codex cursor grok kimi opus fable gpt openai anthropic" \
+            " copilot gemini devin sonnet haiku chatgpt bot", agent_words, " ")
     }
-    function is_agent(value,   words, i) {
+    function is_agent(value,   words, i, addr) {
       words = " " tolower(value) " "
       gsub(/[^a-z0-9]+/, " ", words)
       for (i in agent_words) {
         if (index(words, " " agent_words[i] " ") > 0) return 1
       }
+      addr = tolower(value)
+      if (match(addr, /<[^<>]*>/)) addr = substr(addr, RSTART + 1, RLENGTH - 2)
+      gsub(/[[:space:]]+/, "", addr)
+      if (index(addr, "@") > 0 && substr(addr, 1, index(addr, "@") - 1) ~ /^no-?reply$/) return 1
       return 0
     }
     {
       lowered = tolower($0)
-      if (lowered ~ /^claude-session:/) { dropped = 1; next }
+      if (lowered ~ /^claude-session:/) { dropped = 1; any_dropped = 1; next }
       if (lowered ~ /^co-authored-by:/ && is_agent(substr($0, index($0, ":") + 1))) {
         dropped = 1
+        any_dropped = 1
         next
       }
       # A trailer removed from the middle of the message leaves the blank line
@@ -128,16 +133,20 @@ strip_agent_trailers() {
       kept[++count] = $0
     }
     END {
-      while (count > 0 && kept[count] ~ /^[[:space:]]*$/) count--
-      if (count > 0 && kept[count] ~ /^-{3,}[[:space:]]*$/) count--
-      while (count > 0 && kept[count] ~ /^[[:space:]]*$/) count--
+      if (any_dropped) {
+        while (count > 0 && kept[count] ~ /^[[:space:]]*$/) count--
+        if (count > 0 && kept[count] ~ /^-{3,}[[:space:]]*$/) count--
+        while (count > 0 && kept[count] ~ /^[[:space:]]*$/) count--
+      }
       for (i = 1; i <= count; i++) print kept[i]
     }
   '
 }
 
 # The forge's own merge-box body for a squash merge, exactly as GitHub would
-# use it when this script supplies none.
+# use it when this script supplies none. The field is nullable, and gh prints
+# a null result as the literal word null with a zero exit, so the caller
+# treats that output as unreadable.
 default_squash_body() {
   # shellcheck disable=SC2016  # GraphQL variables are literal, not shell expansions.
   gh api graphql \
@@ -162,11 +171,7 @@ grep -qxF "pr=$URL" "$META" || {
 }
 
 merge_args=()
-if caller_has_merge_method "$@"; then
-  # A caller-named method with no value stays empty, composes no message, and
-  # is left for gh-axi to refuse.
-  METHOD=$(caller_merge_method "$@" || true)
-else
+if ! METHOD=$(caller_merge_method "$@"); then
   METHOD=squash
   merge_args=(--squash)
 fi
@@ -195,13 +200,19 @@ if [ "$METHOD" = squash ]; then
       body-file) caller_body_file=$arg; awaiting=; continue ;;
     esac
     case "$arg" in
-      --body) awaiting=body; caller_body_set=1; continue ;;
+      --body|-b) awaiting=body; caller_body_set=1; continue ;;
       --body=*) caller_body=${arg#--body=}; caller_body_set=1; continue ;;
-      --body-file) awaiting=body-file; caller_body_set=1; continue ;;
+      -b?*) caller_body=${arg#-b}; caller_body_set=1; continue ;;
+      --body-file|-F) awaiting=body-file; caller_body_set=1; continue ;;
       --body-file=*) caller_body_file=${arg#--body-file=}; caller_body_set=1; continue ;;
+      -F?*) caller_body_file=${arg#-F}; caller_body_set=1; continue ;;
     esac
     forward_args+=("$arg")
   done
+  if [ -n "$awaiting" ]; then
+    echo "error: a merge body flag is missing its value" >&2
+    exit 1
+  fi
 
   BODY_RAW=$(mktemp "${TMPDIR:-/tmp}/fm-pr-merge-body.XXXXXX") || exit 1
   BODY_CLEAN=$(mktemp "${TMPDIR:-/tmp}/fm-pr-merge-body.XXXXXX") || exit 1
@@ -217,7 +228,7 @@ if [ "$METHOD" = squash ]; then
   elif ! command -v gh >/dev/null 2>&1; then
     echo "error: composing a squash commit message requires gh on PATH" >&2
     exit 1
-  elif ! default_squash_body > "$BODY_RAW"; then
+  elif ! default_squash_body > "$BODY_RAW" || [ "$(cat -- "$BODY_RAW")" = null ]; then
     echo "error: could not read the pull request's squash commit message" >&2
     exit 1
   fi
