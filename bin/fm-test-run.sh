@@ -328,6 +328,7 @@ EOF
 # longest first so wall-clock stays near the balanced sum.
 list_portable_serial_1() {
   cat <<'EOF'
+tests/fm-speak.test.sh
 tests/fm-pr-check-security.test.sh
 tests/fm-watcher-lock.test.sh
 tests/fm-spawn-dispatch-profile.test.sh
