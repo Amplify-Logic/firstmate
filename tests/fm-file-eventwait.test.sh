@@ -595,6 +595,10 @@ WATCHER_SRC="$ROOT/bin/fm-watch.sh"
 grep -q '^\[ ! -r "\$SCRIPT_DIR/fm-file-event-lib.sh" \] || \. "\$SCRIPT_DIR/fm-file-event-lib.sh"$' \
   "$WATCHER_SRC" || fail "the fork library must be sourced through a readability guard"
 
+# Constraint shared with fm_fork_assert_watcher_hook_shape: this walk treats a
+# bare fi as the end of the current guard and a bare else as its else branch,
+# so a future nested if inside either guarded block would end the guard early
+# and be read as an unguarded call; keep those blocks free of nested if/fi.
 unguarded=$(awk '
   { line = $0 }
   line ~ /^[[:space:]]*#/ { next }
@@ -675,11 +679,15 @@ grep -q 'noelse-watch.sh:[0-9]*: terminal wait lost its else branch' <<<"$assert
 pass "hook W1: the load-time hook-shape assertion passes the real watcher and refuses each broken shape by line"
 
 # Fail closed toward supervision: source the library from a root whose watcher
-# has lost a guard, and require the override entry points to be gone while the
-# source itself still returns 0 and the first three contracts stay usable.
+# has lost a guard, and require the override to be disabled while the source
+# itself still returns 0 and the first three contracts stay usable. Nothing may
+# be left uncallable: the terminal-wait entry point must still exist and run
+# the watcher's own wait, and the catch-up must still exist and be inert,
+# because for a bare or else-less terminal wait the shim is the loop's only
+# wait.
 UNSAFE_ROOT="$TMP/unsafe-root"
-rm -rf "$UNSAFE_ROOT"
-mkdir -p "$UNSAFE_ROOT/bin"
+rm -rf "$UNSAFE_ROOT" "$TMP/unsafe-state"
+mkdir -p "$UNSAFE_ROOT/bin" "$TMP/unsafe-state"
 ln -s "$ROOT/bin/fm-file-event-lib.sh" "$UNSAFE_ROOT/bin/fm-file-event-lib.sh"
 ln -s "$ROOT/bin/fm-file-eventwait.py" "$UNSAFE_ROOT/bin/fm-file-eventwait.py"
 cp "$TMP/nowaitguard-watch.sh" "$UNSAFE_ROOT/bin/fm-watch.sh"
@@ -688,21 +696,38 @@ unsafe_out=$(bash -c '
   # shellcheck disable=SC1090,SC1091
   . "$1/bin/fm-file-event-lib.sh"
   echo "SOURCE-RC=$?"
-  command -v fm_fork_event_wait_or_sleep >/dev/null 2>&1 && echo "FORK-WAIT-DEFINED"
-  command -v fm_fork_glasses_file_event_catch_up >/dev/null 2>&1 && echo "FORK-CATCHUP-DEFINED"
+  command -v fm_fork_event_wait_or_sleep >/dev/null 2>&1 && echo "FORK-WAIT-CALLABLE"
+  command -v fm_fork_glasses_file_event_catch_up >/dev/null 2>&1 && echo "FORK-CATCHUP-CALLABLE"
+  for helper in fm_fork_file_event_wait_or_sleep fm_fork_race_push_and_file_wait \
+      fm_fork_apply_push_wait_result fm_fork_expire_check_sweep \
+      fm_fork_file_event_sig fm_fork_kill_pid_tree; do
+    command -v "$helper" >/dev/null 2>&1 && echo "HELPER-DEFINED $helper"
+  done
   command -v fm_glasses_watch_paths >/dev/null 2>&1 && echo "LIB-LOADED"
+  event_wait_or_sleep() { echo "UPSTREAM-WAIT-RAN"; }
+  STATE="$2"
+  touch "$STATE/.last-check"
+  fm_fork_event_wait_or_sleep
+  echo "FORK-WAIT-RC=$?"
+  fm_fork_glasses_file_event_catch_up
+  echo "FORK-CATCHUP-RC=$?"
+  [ -e "$STATE/.last-check" ] && echo "LAST-CHECK-KEPT"
   echo "SURVIVED"
-' _ "$UNSAFE_ROOT" 2> "$TMP/unsafe-source.err")
+' _ "$UNSAFE_ROOT" "$TMP/unsafe-state" 2> "$TMP/unsafe-source.err")
 grep -Fqx 'SOURCE-RC=0' <<<"$unsafe_out" \
   || fail "sourcing beside an unsafe watcher must not return non-zero: $unsafe_out"
 grep -Fqx SURVIVED <<<"$unsafe_out" \
   || fail "sourcing beside an unsafe watcher must not abort the caller: $unsafe_out"
 grep -Fqx LIB-LOADED <<<"$unsafe_out" \
   || fail "contracts 1 to 3 must stay usable beside an unsafe watcher: $unsafe_out"
-for marker in FORK-WAIT-DEFINED FORK-CATCHUP-DEFINED; do
+for marker in FORK-WAIT-CALLABLE FORK-CATCHUP-CALLABLE FORK-WAIT-RC=0 FORK-CATCHUP-RC=1 LAST-CHECK-KEPT; do
   grep -Fqx "$marker" <<<"$unsafe_out" \
-    && fail "an unsafe hook shape must disable the fork override, but $marker: $unsafe_out"
+    || fail "a refused shape must leave both entry points callable and inert, missing $marker: $unsafe_out"
 done
+[ "$(grep -Fcx UPSTREAM-WAIT-RAN <<<"$unsafe_out")" -eq 1 ] \
+  || fail "the refused terminal wait must run the watcher's own wait exactly once: $unsafe_out"
+grep -Fq 'HELPER-DEFINED' <<<"$unsafe_out" \
+  && fail "a refused shape must unset every other fork helper: $unsafe_out"
 grep -q 'hook W1 shape is unsafe, override disabled: .*fm-watch.sh:[0-9]*: unguarded fork call' "$TMP/unsafe-source.err" \
   || fail "the disabled override must say why on stderr: $(cat "$TMP/unsafe-source.err")"
 safe_out=$(bash -c '
@@ -713,5 +738,5 @@ safe_out=$(bash -c '
 ' _ "$ROOT" 2>&1)
 grep -Fqx FORK-WAIT-DEFINED <<<"$safe_out" \
   || fail "beside the real watcher the override must stay installed: $safe_out"
-pass "hook W1: an unsafe hook shape disables the fork override at load time and never the watcher"
+pass "hook W1: an unsafe hook shape shims the fork override at load time and the watcher always keeps a wait"
 echo "# fm-file-eventwait.test.sh: all assertions passed"
