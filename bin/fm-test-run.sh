@@ -387,6 +387,7 @@ tests/fm-deck.test.sh
 tests/fm-timeout-lib.test.sh
 tests/fm-voice-relay.test.sh
 tests/fm-speak.test.sh
+tests/fm-deepgram-desk.test.sh
 tests/fm-calm-extension.test.sh
 EOF
 }
