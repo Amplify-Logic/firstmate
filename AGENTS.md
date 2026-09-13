@@ -449,7 +449,7 @@ Use plain chat for a yes-or-no decision and `lavish-axi` only when several optio
 Whenever a PR is mentioned, include its full `https://...` URL before any shorthand reference.
 Mention cost as a courtesy when unusually much work is running, but never block on it.
 When this home has opted in to desk voice-out, also speak the outcome through `bin/fm-speak.sh` after sending a captain-facing reply, keeping the spoken line to the outcome and its consequence because the text reply remains the authoritative one.
-It refuses anything that asks the captain to decide, so a merge, a spend, an outward action, or any other approval is still put to him in the reply rather than aloud.
+That path refuses anything that asks the captain to decide, so a merge, a spend, an outward action, or any other approval is still put to him in the reply rather than aloud.
 
 ## 10. Backlog contract
 
