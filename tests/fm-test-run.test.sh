@@ -132,6 +132,7 @@ init_changed_fixture_repo() {
     fm-spawn-account.test.sh \
     fm-action-gateway-v2.test.sh \
     fm-primary-handoff.test.sh \
+    fm-morning-intake.test.sh \
     fm-backend-cmux.test.sh \
     fm-backend-zellij.test.sh \
     fm-backend-orca.test.sh; do
