@@ -403,6 +403,68 @@ SH
   pass "fm-voice-relay-appserver: a bound hit after the request is reported as an unknown outcome"
 }
 
+# The socket path is operator-supplied and is interpolated into a command
+# STRING that is split again before the proxy starts. Unquoted, a path with a
+# space arrived as two extra arguments and a path with an apostrophe made the
+# whole command line unparseable - reported as the documented usage error
+# instead of attaching to the socket the operator actually named.
+test_a_socket_path_survives_the_proxy_command_string() {
+  local checker out sock
+  checker="$TMP_ROOT/split-proxy-cmd.py"
+  cat > "$checker" <<'PY'
+import shlex, sys
+want = sys.argv[1]
+line = sys.stdin.readline().strip()
+cmd = line.split("would send over ", 1)[1].strip().strip('"')
+try:
+    argv = shlex.split(cmd)
+except ValueError as exc:
+    sys.exit("the proxy command is not parseable at all: %s" % exc)
+if argv[:4] != ["codex", "app-server", "proxy", "--sock"]:
+    sys.exit("the proxy command lost its own arguments: %r" % (argv,))
+if len(argv) != 5 or argv[4] != want:
+    sys.exit("the socket path did not survive splitting: %r" % (argv,))
+PY
+  for sock in "/tmp/fm relay/plain.sock" "/tmp/fm relay/it's.sock" '/tmp/quote"d.sock'; do
+    out=$(FM_VOICE_RELAY_PROXY_CMD='' "$APPSERVER" active-turn --thread THREAD-1 --sock "$sock")
+    assert_contains "$out" "dry-run: would send over" "the dry run must print the command it would use"
+    printf '%s\n' "$out" | python3 "$checker" "$sock" \
+      || fail "the socket path must reach the proxy as exactly one argument: $sock"
+  done
+  pass "fm-voice-relay-appserver: the socket path is quoted into the proxy command, not spliced"
+}
+
+# The bound is per answer. Sharing one deadline between the handshake and the
+# request let a slow initialization spend the budget the call itself needed, and
+# a request the server answered promptly was abandoned as an unknown outcome
+# after waiting almost no time for it - the one verdict a steer should never get
+# without having really waited.
+test_a_slow_handshake_does_not_eat_the_requests_bound() {
+  local slow out code
+  slow="$TMP_ROOT/slow-handshake-app-server"
+  cat > "$slow" <<'SH'
+#!/usr/bin/env bash
+# Answers initialize only just inside the bound, so a shared deadline leaves
+# the request the remainder - well under the time this server then takes to
+# answer it.
+read -r _init
+sleep 3
+printf '{"jsonrpc":"2.0","id":1,"result":{"userAgent":"slow"}}\n'
+read -r _initialized
+read -r _request
+sleep 1.5
+printf '{"jsonrpc":"2.0","id":2,"result":{"data":[{"id":"turn-slow","status":"inProgress"}]}}\n'
+SH
+  chmod +x "$slow"
+
+  out=$(FM_VOICE_RELAY_PROXY_CMD="$slow" FM_VOICE_RELAY_RPC_TIMEOUT=4 \
+    "$APPSERVER" active-turn --thread THREAD-1 --live 2>&1) && code=0 || code=$?
+  expect_code 0 "$code" "a handshake that used most of the bound must still leave the request its own"
+  assert_contains "$out" "turn-slow" "the answer the server did send must be reported"
+  assert_not_contains "$out" "unknown" "a request that was answered must not be reported as unknown"
+  pass "fm-voice-relay-appserver: the request gets its own bound, not the handshake's leftovers"
+}
+
 # The limitation is only useful next to the thing to do instead.
 test_an_unsteerable_thread_names_the_supported_fallback() {
   local out
@@ -446,3 +508,5 @@ test_a_proxy_that_answers_and_stays_open_is_not_a_timeout
 test_an_interrupted_live_call_leaves_no_proxy_running
 test_an_unparseable_proxy_command_is_a_usage_error
 test_an_unsteerable_thread_names_the_supported_fallback
+test_a_socket_path_survives_the_proxy_command_string
+test_a_slow_handshake_does_not_eat_the_requests_bound

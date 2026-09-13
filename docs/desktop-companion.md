@@ -110,6 +110,11 @@ the real timestamp, and exactly which tools you called. Then read that file back
 If the answer file never appears, the message was accepted and nothing more; the app may be closed, the session archived, or the turn still running.
 Do not read the receipt as delivery, and do not infer a result from the absence of an error.
 
+A non-zero exit from the queue command is not the mirror image of exit 0.
+Exit 0 says the message was enqueued; a failure says only that the command failed, and a timeout, a killed process, or a broken pipe can all follow a message that was already accepted.
+So a bare failure leaves the handoff *unknown*, and a blind resend on it can duplicate the work; a definite non-send needs the queue's own refusal in its own words.
+`fm-voice-relay.sh phase` keeps those apart - `handoff-unknown` for a failure with no refusal, `handoff-rejected` only when that refusal is passed in `--rejection` - and a queue message id or a turn id recorded there is a reference the ledger stored, never one it verified, because this ledger never calls the transport.
+
 ### What this transport is and is not
 
 Sending into an existing session and getting a file back are the verified parts.

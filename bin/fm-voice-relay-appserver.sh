@@ -87,10 +87,13 @@
 # FM_VOICE_RELAY_PROXY_CMD overrides the proxy command (tests use a fake
 # app-server; production leaves it unset and gets `codex app-server proxy`).
 # FM_VOICE_RELAY_RPC_TIMEOUT (default 20) bounds the wait for a live answer in
-# seconds. A proxy that accepts the frames and never answers ends as a transport
-# failure at that bound instead of hanging the caller for ever; one that answers
-# and then stays open is not penalised for staying open, because the bound is on
-# the answer arriving rather than on the proxy exiting.
+# seconds. It applies to each answer separately - once to the handshake, then
+# afresh to the request - so a slow initialization cannot spend the budget the
+# call itself needs and leave a steer reported as an unknown outcome it never
+# really waited for. A proxy that accepts the frames and never answers ends as a
+# transport failure at that bound instead of hanging the caller for ever; one
+# that answers and then stays open is not penalised for staying open, because
+# the bound is on the answer arriving rather than on the proxy exiting.
 #
 # Exit codes: 0 ok, 2 usage, 3 the server refused (including a stale
 # expectedTurnId), 4 required protocol support missing, 5 transport failure.
@@ -107,6 +110,14 @@ json_escape() {  # <text>
 
 SOCK=''
 
+# POSIX single-quoting for a value that is interpolated into a command STRING
+# and split again later: the socket path is operator-supplied, so a space in it
+# would otherwise become two extra arguments and an apostrophe would make the
+# whole command line unparseable and report a usage error instead of attaching.
+shell_quote() {  # <text>
+  printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"
+}
+
 rpc_timeout_secs() {
   local secs=${FM_VOICE_RELAY_RPC_TIMEOUT:-20}
   case "$secs" in
@@ -119,7 +130,7 @@ proxy_cmd() {
   if [ -n "${FM_VOICE_RELAY_PROXY_CMD:-}" ]; then
     printf '%s\n' "$FM_VOICE_RELAY_PROXY_CMD"
   elif [ -n "$SOCK" ]; then
-    printf 'codex app-server proxy --sock %s\n' "$SOCK"
+    printf 'codex app-server proxy --sock %s\n' "$(shell_quote "$SOCK")"
   else
     printf 'codex app-server proxy\n'
   fi
@@ -285,7 +296,12 @@ try:
         proc.stdin.close()
     except OSError:
         pass
-    answer, timed_out = read_answer(2, deadline)
+    # The request gets its own full bound. Sharing one deadline with the
+    # handshake meant a server that took nearly the whole timeout to answer
+    # initialize left the actual call about zero seconds, and the steer was
+    # abandoned as "outcome unknown" after waiting almost nothing for it - the
+    # one outcome this adapter exists to avoid reporting needlessly.
+    answer, timed_out = read_answer(2, time.monotonic() + secs)
 finally:
     stop()
 

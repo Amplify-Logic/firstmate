@@ -802,6 +802,137 @@ test_a_failed_write_is_not_reported_as_a_settled_conflict() {
   pass "fm-voice-relay: a failed write and a settled conflict carry different exit codes"
 }
 
+# The reviewer's reproduction: --rejection carries the queue's own refusal, and
+# it used to be read only on the failed-enqueue branch. Passed with a zero or
+# missing exit status - an argument-order slip - the refusal was dropped and the
+# ledger recorded a SUCCESSFUL handoff while holding the proof that nothing was
+# accepted. That is the false-handoff evidence this ledger exists to remove.
+test_a_refusal_can_never_be_dropped_into_a_successful_handoff() {
+  local out code
+  new_home dropped >/dev/null
+  bind_home dropped
+  relay dropped open example --summary harmless >/dev/null
+
+  out=$(relay dropped phase example --revision 1 --phase enqueued \
+    --rejection "queue refused: unknown session" 2>&1) && code=0 || code=$?
+  expect_code 2 "$code" "a refusal with no failing exit status must be refused, not dropped"
+  assert_contains "$out" "would be discarded" "the refusal must say why the combination is refused"
+
+  out=$(relay dropped phase example --revision 1 --phase enqueued --queue-exit 0 \
+    --rejection "queue refused: unknown session" 2>&1) && code=0 || code=$?
+  expect_code 2 "$code" "a refusal against exit 0 must be refused"
+
+  out=$(relay dropped phase example --revision 1 --phase picked-up \
+    --rejection "queue refused: unknown session" 2>&1) && code=0 || code=$?
+  expect_code 2 "$code" "a refusal is only meaningful about a handoff"
+  assert_contains "$out" "only meaningful with --phase enqueued" "the refusal must name the phase it belongs to"
+
+  out=$(relay dropped evidence example)
+  assert_not_contains "$out" "enqueued" "no handoff may be recorded from a refused combination"
+  assert_contains "$out" "handoffs-recorded=0" "the counts must show nothing was handed off"
+
+  out=$(relay dropped sent-status example)
+  assert_contains "$out" "nothing was handed off yet" "the status must not report a handoff that never happened"
+  pass "fm-voice-relay: a queue refusal is never discarded into a recorded enqueue"
+}
+
+# `step` was the one state-writing command with no gate, so a finished topic
+# could gain a substep that no success will ever retire, and a topic under a
+# replaced enrollment could gain one that every later gate refuses to perform -
+# both counted as pending work nobody could ever do.
+test_declaring_a_substep_is_gated_like_performing_one() {
+  local out code
+  new_home lategate >/dev/null
+  bind_home lategate
+  relay lategate open finished --summary "harmless fixture" >/dev/null
+  relay lategate complete finished --revision 1 --outcome "the fixture succeeded" >/dev/null
+
+  out=$(relay lategate step finished --step late-step 2>&1) && code=0 || code=$?
+  expect_code 5 "$code" "a finished topic must not gain a substep no success will retire"
+  assert_contains "$out" "retired" "the refusal must name the terminal state"
+
+  relay lategate open orphaned --summary "harmless fixture" >/dev/null
+  relay lategate step orphaned --step first-step >/dev/null
+  bind_home lategate COMPANION-NEW
+  out=$(relay lategate step orphaned --step never-allowed 2>&1) && code=0 || code=$?
+  expect_code 7 "$code" "a replaced enrollment must not gain a substep no gate will clear"
+  assert_contains "$out" "binding-replaced" "the refusal must name the replacement"
+
+  out=$(relay lategate pending)
+  assert_contains "$out" "steps_pending=1" \
+    "only the substep declared under the live binding may be counted as pending"
+  assert_absent "$TMP_ROOT/lategate/state/voice-relay/topics/orphaned/steps/never-allowed.declared" \
+    "a refused declaration must leave no record behind"
+
+  # Cancelled work is finished work for this purpose, and a still-open topic
+  # under its own binding keeps declaring steps idempotently.
+  new_home lateopen >/dev/null
+  bind_home lateopen
+  relay lateopen open live --summary "harmless fixture" >/dev/null
+  relay lateopen step live --step only-step >/dev/null
+  out=$(relay lateopen step live --step only-step)
+  assert_contains "$out" "1 step(s) declared" "re-declaring a tracked step must stay idempotent"
+  relay lateopen cancel live --reason "no longer needed" >/dev/null
+  out=$(relay lateopen step live --step after-cancel 2>&1) && code=0 || code=$?
+  expect_code 5 "$code" "a cancelled topic must not gain a substep either"
+  pass "fm-voice-relay: declaring a substep is gated exactly as performing one is"
+}
+
+# A header that claims every revision while the lines under it cover one is the
+# single thing "did you send it?" must never do.
+test_sent_status_never_claims_a_wider_scope_than_it_shows() {
+  local out code
+  new_home scopeclash >/dev/null
+  bind_home scopeclash
+  relay scopeclash open scope-topic --summary "first instruction" >/dev/null
+  relay scopeclash phase scope-topic --revision 1 --phase enqueued --message-id OLD-1 --queue-exit 0 >/dev/null
+  relay scopeclash revise scope-topic --summary "the correction" >/dev/null
+
+  out=$(relay scopeclash sent-status scope-topic --all --revision 1 2>&1) && code=0 || code=$?
+  expect_code 2 "$code" "a header claiming all revisions must not be filtered to one"
+  assert_contains "$out" "different scopes" "the refusal must say the two flags disagree"
+  assert_not_contains "$out" "all revisions (current is" "no header may be printed for a refused scope"
+
+  out=$(relay scopeclash sent-status scope-topic --all)
+  assert_contains "$out" "all revisions" "--all alone must still answer for every revision"
+  assert_contains "$out" "OLD-1" "--all must show the older revision's transport line"
+  pass "fm-voice-relay: sent-status refuses a scope its body cannot cover"
+}
+
+# A home with no binding at all is the worst state this ledger can reach: every
+# request answers binding-replaced until someone rebinds. A rebind that cannot
+# write must therefore leave the enrollment in force rather than erasing it.
+test_a_rebind_that_cannot_write_leaves_the_old_enrollment_in_force() {
+  local out code bindings before after
+  if [ "$(id -u)" = 0 ]; then
+    pass "fm-voice-relay: skipped the unwritable-rebind case (running as root)"
+    return 0
+  fi
+  new_home bindfail >/dev/null
+  bind_home bindfail COMPANION-OLD
+  relay bindfail open handover --summary "ask the companion" >/dev/null
+  bindings="$TMP_ROOT/bindfail/state/voice-relay/bindings"
+  before=$(shasum -a 256 "$bindings/current" | awk '{print $1}')
+
+  chmod 0500 "$bindings"
+  out=$(relay bindfail bind --companion COMPANION-NEW --primary PRIMARY-A \
+    --home "$TMP_ROOT/bindfail/codex-home" --dir "$TMP_ROOT/bindfail/shared" 2>&1) && code=0 || code=$?
+  chmod 0700 "$bindings"
+  expect_code 10 "$code" "a rebind that could not be written must use the write-failed code"
+  assert_contains "$out" "write-failed:" "the write-failure verdict word must lead the line"
+  assert_contains "$out" "untouched and still in force" "the refusal must say the existing binding still stands"
+
+  assert_present "$bindings/current" "a failed rebind must never leave the home unbound"
+  [ -z "$(ls -A "$bindings/history" 2>/dev/null)" ] \
+    || fail "an enrollment that was never replaced must not be archived as replaced"
+  after=$(shasum -a 256 "$bindings/current" | awk '{print $1}')
+  [ "$before" = "$after" ] || fail "a failed rebind must leave the previous binding byte-identical"
+
+  out=$(relay bindfail check-action handover --revision 1)
+  assert_contains "$out" "fresh" "work under the surviving binding must stay actionable"
+  pass "fm-voice-relay: a rebind that cannot be written leaves the enrollment intact"
+}
+
 test_a_request_without_a_binding_is_refused() {
   local out code
   new_home unbound >/dev/null
@@ -843,3 +974,7 @@ test_a_correction_cannot_readopt_a_replaced_binding
 test_a_refused_gate_always_says_why
 test_a_failed_write_is_not_reported_as_a_settled_conflict
 test_a_request_without_a_binding_is_refused
+test_a_refusal_can_never_be_dropped_into_a_successful_handoff
+test_declaring_a_substep_is_gated_like_performing_one
+test_sent_status_never_claims_a_wider_scope_than_it_shows
+test_a_rebind_that_cannot_write_leaves_the_old_enrollment_in_force

@@ -60,7 +60,11 @@
 #       bind archives the previous one and invalidates it: every request created
 #       under the old binding is refused from then on, so a replaced session can
 #       never be answered on its old target. This script never discovers,
-#       lists, or guesses a session; the caller supplies verified identifiers.
+#       lists, or guesses a session, and it never checks an identifier against
+#       the transport: the caller supplies the exact ids it established
+#       elsewhere, and they are recorded as given, not as verified here. The
+#       replacement is written in full and renamed into place, so a failed write
+#       leaves the previous enrollment in force rather than unbinding the home.
 #
 #   fm-voice-relay.sh binding
 #       Print the current binding. Exit 1 when none is bound.
@@ -89,6 +93,10 @@
 #
 #   fm-voice-relay.sh step <topic> --step <slug> [--step <slug>]...
 #       Declare substeps of the current revision so success can retire them.
+#       Gated like the commands that act on those substeps: a finished,
+#       cancelled, or re-bound topic is refused rather than accumulating
+#       declarations nobody could ever perform or retire. Re-declaring a step
+#       that is already tracked is idempotent.
 #
 #   fm-voice-relay.sh check-action <topic> --revision <n> [--step <slug>]
 #       THE GATE TO CALL BEFORE PERFORMING ANYTHING. Prints one verdict line and
@@ -105,20 +113,33 @@
 #
 #   fm-voice-relay.sh phase <topic> --revision <n> --phase <phase> [--note <text>]
 #         [--message-id <id>] [--turn-id <id>] [--queue-exit <n>]
+#         [--rejection <text>]
 #       Append one evidence line. Phases are kept distinct on purpose:
-#         enqueued    the queue command accepted the message. NOTHING ELSE.
-#         picked-up   the companion actually began a turn on it.
-#         working     the companion reported progress inside that turn.
-#         completed   the companion persisted and read back its result.
-#         failed      the turn ended without the result.
-#         superseded  a correction overtook this revision.
-#         cancelled   the topic was stopped.
-#         presented   text was released to the speaking frontend (not audio).
+#         enqueued          the queue command accepted the message. NOTHING ELSE.
+#         picked-up         the companion actually began a turn on it.
+#         working           the companion reported progress inside that turn.
+#         completed         the companion persisted and read back its result.
+#         failed            the TURN ended without the result. It says nothing
+#                           about whether the instruction ever arrived.
+#         handoff-unknown   the queue command failed without refusing the
+#                           message, so whether it was accepted is unknown.
+#         handoff-rejected  the queue refused it in its own words: a definite
+#                           non-send.
+#         superseded        a correction overtook this revision.
+#         cancelled         the topic was stopped.
+#         presented         text was released to the speaking frontend (not audio).
 #       The revision and binding are checked as the action gate checks them, so
-#       nothing can be recorded against a request that was never opened. A
-#       non-zero --queue-exit records a FAILED handoff rather than an enqueue.
-#       A record counts as transport evidence only when it carries the proof for
-#       its phase - a queue message id for an enqueue, a turn id for a pickup;
+#       nothing can be recorded against a request that was never opened.
+#       A non-zero --queue-exit is NOT proof of a non-send: a timeout, a killed
+#       process, or a broken pipe can follow a message that was already
+#       enqueued, so on its own it records handoff-unknown and names the
+#       duplicate risk. A definite non-send needs the queue's own refusal in
+#       --rejection, which is accepted only alongside --phase enqueued and a
+#       non-zero --queue-exit - any other combination is refused rather than
+#       dropping the refusal and storing a successful handoff.
+#       A record carries a transport reference only when it carries the id for
+#       its phase - a queue message id for an enqueue, a turn id for a pickup -
+#       and a reference is an id this ledger recorded, never one it checked;
 #       everything else is stored as an operator claim and reported as one.
 #
 #   fm-voice-relay.sh handoff <topic> --revision <n>
@@ -149,14 +170,17 @@
 #       --attribution is required so a companion observation is never reported
 #       as a Firstmate finding, or the other way round.
 #
-#   fm-voice-relay.sh sent-status <topic> [--revision <n>] [--all]
+#   fm-voice-relay.sh sent-status <topic> [--revision <n> | --all]
 #       Answer "did you send it?" from what is recorded. It never re-sends and
 #       never infers: an accepted-but-unconfirmed send is reported as exactly
 #       that, which is the whole point of keeping enqueued separate. It answers
 #       for the CURRENT revision unless one is named, so a corrected request
 #       never reports the fate of the instruction it replaced, and it reports a
-#       turn as confirmed only when the record carries the transport's own turn
-#       id - an operator's typed pickup stays an unconfirmed claim.
+#       pickup as backed only when the record carries the transport's own turn
+#       id - an id this ledger recorded rather than checked, and an operator's
+#       typed pickup stays an unconfirmed claim. --revision and --all ask for
+#       different scopes and are refused together, so the header can never claim
+#       a wider scope than the lines under it cover.
 #
 #   fm-voice-relay.sh pending
 #       The logical pending count, evidence-backed: one line per open topic
@@ -552,7 +576,7 @@ usage() {
 }
 
 cmd_bind() {
-  local companion='' primary='' home='' dir='' file prev fingerprint stamp
+  local companion='' primary='' home='' dir='' file prev fingerprint stamp tmp status
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --companion) companion=${2:-}; shift 2 ;;
@@ -578,28 +602,54 @@ cmd_bind() {
   fingerprint=$(printf '%s\n%s\n%s\n%s\n' "$companion" "$primary" "$home" "$dir" | sha256_text)
   file=$(binding_file)
   mkdir -p "$(dirname "$file")/history" || die "bind: cannot create state directory"
-  if [ -f "$file" ]; then
-    prev=$(record_field "$file" fingerprint)
-    if [ "$prev" = "$fingerprint" ]; then
-      printf 'ok: binding unchanged %s\n' "$fingerprint"
-      return 0
-    fi
-    stamp=$(date -u +%Y%m%dT%H%M%SZ)
-    {
-      cat "$file"
-      printf 'invalidated_utc=%s\n' "$(utc_now)"
-      printf 'replaced_by=%s\n' "$fingerprint"
-    } | publish_once "$(dirname "$file")/history/$stamp-$prev" >/dev/null 2>&1 || true
-    rm -f "$file"
+  if [ -f "$file" ] && [ "$(record_field "$file" fingerprint)" = "$fingerprint" ]; then
+    printf 'ok: binding unchanged %s\n' "$fingerprint"
+    return 0
   fi
-  {
+  # Replace the binding by an atomic rename, never by remove-then-write, and do
+  # every fallible step before the one that retires the old record. A home with
+  # no binding at all is the worst state this script can be in: every request
+  # answers 7 binding-replaced and nothing can be acted on or spoken until
+  # someone rebinds. So the replacement is written in full first, the enrollment
+  # it replaces is archived second, and only then does the rename retire the old
+  # record - a full disk, a read-only state directory, or EPERM at any of those
+  # steps leaves the previous enrollment intact, in force, and unarchived.
+  tmp=$(mktemp "$(dirname "$file")/.fm-voice-relay-binding.XXXXXX" 2>/dev/null) \
+    || refuse 10 write-failed "the binding could not be written; any existing binding is untouched and still in force"
+  if ! {
     printf 'companion=%s\n' "$companion"
     printf 'primary=%s\n' "$primary"
     printf 'home=%s\n' "$home"
     printf 'dir=%s\n' "$dir"
     printf 'fingerprint=%s\n' "$fingerprint"
     printf 'bound_utc=%s\n' "$(utc_now)"
-  } | publish_once "$file" || die "bind: could not publish binding"
+  } > "$tmp" 2>/dev/null; then
+    rm -f "$tmp"
+    refuse 10 write-failed "the binding could not be written; any existing binding is untouched and still in force"
+  fi
+  chmod 0600 "$tmp" 2>/dev/null || true
+  if [ -f "$file" ]; then
+    # The archive is what makes a replaced enrollment recoverable, so a copy
+    # that was never written stops the replacement rather than being shrugged
+    # off. A copy that is already there (status 1) is this same enrollment
+    # archived by a racing caller, which is exactly what was wanted.
+    prev=$(record_field "$file" fingerprint)
+    stamp=$(date -u +%Y%m%dT%H%M%SZ)
+    status=0
+    {
+      cat "$file"
+      printf 'invalidated_utc=%s\n' "$(utc_now)"
+      printf 'replaced_by=%s\n' "$fingerprint"
+    } | publish_once "$(dirname "$file")/history/$stamp-$prev" >/dev/null 2>&1 || status=$?
+    if [ "$status" = 2 ]; then
+      rm -f "$tmp"
+      refuse 10 write-failed "the enrollment being replaced could not be archived; it is untouched and still in force, and nothing was rebound"
+    fi
+  fi
+  if ! mv -f "$tmp" "$file" 2>/dev/null; then
+    rm -f "$tmp"
+    refuse 10 write-failed "the binding could not be published; any existing binding is untouched and still in force"
+  fi
   printf 'ok: bound %s\n' "$fingerprint"
 }
 
@@ -791,11 +841,20 @@ cmd_complete() {
 }
 
 cmd_step() {
-  local topic=${1:-} dir added=0 slug status
+  local topic=${1:-} dir added=0 slug status cur
   shift || true
   require_topic "$topic"
-  dir="$(topic_dir "$topic")/steps"
   [ "$#" -gt 0 ] || die "step requires at least one --step <slug>"
+  # Declaring a substep is a state-writing command and is gated exactly like the
+  # ones that act on it. Ungated, a finished or cancelled topic could still gain
+  # a declaration that no success will ever retire, and a topic under a replaced
+  # enrollment could gain one that every later gate refuses to perform - both of
+  # them counted as pending work nobody can ever do. The gate runs against the
+  # revision these substeps belong to, which is the current one, so a declaration
+  # exists only where the work it describes is still actionable.
+  cur=$(current_revision "$topic")
+  gate_or_refuse "$topic" "$cur" 0
+  dir="$(topic_dir "$topic")/steps"
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --step)
@@ -907,9 +966,12 @@ cmd_performed() {
 # Record one phase event. Two rules keep this from manufacturing evidence:
 # the revision and binding are checked exactly as the action gate checks them,
 # so a phase cannot be recorded against a request that was never opened; and a
-# record is marked as an operator CLAIM unless it carries the concrete transport
-# evidence for that phase - a queue message id for an enqueue, a turn id for a
-# pickup. Only a verified record may later be reported as confirmed.
+# record is marked as an operator CLAIM unless it carries the transport's own
+# identifier for that phase - a queue message id for an enqueue, a turn id for a
+# pickup. That identifier makes the record a REFERENCE, not a verification: this
+# ledger never calls the transport and has checked nothing, so a reference is
+# the strongest thing a record here can carry, and only a reference may later be
+# reported as backed by the transport at all.
 cmd_phase() {
   local topic=${1:-} rev='' phase='' note='' msgid='' qexit='' turnid='' rejection='' detail evidence
   shift || true
@@ -935,6 +997,19 @@ cmd_phase() {
     case "$qexit" in
       ''|*[!0-9]*) die "phase: --queue-exit must be the command's exit status as a whole number" ;;
     esac
+  fi
+  # --rejection carries the queue's own refusal, the one thing that turns a
+  # failed handoff from unknown into a definite non-send. It is only read on the
+  # branch that records a failed enqueue, so any other combination would drop
+  # the refusal on the floor and store a successful handoff while holding the
+  # proof that nothing was accepted. Refuse the combination instead of
+  # discarding it: an argument-order slip must not manufacture a handoff.
+  if [ -n "$rejection" ]; then
+    [ "$phase" = enqueued ] \
+      || die "phase: --rejection is the queue's own refusal of a handoff and is only meaningful with --phase enqueued; got --phase $phase"
+    if [ -z "$qexit" ] || [ "$qexit" = 0 ]; then
+      die "phase: --rejection needs the failing --queue-exit <n> of the same command; a refusal recorded against a zero or missing exit status would be discarded and the handoff stored as accepted"
+    fi
   fi
   # An event about a revision that was never opened, or one belonging to a
   # replaced enrollment, is not history - it is noise that later reads as fact.
@@ -1042,6 +1117,15 @@ cmd_sent_status() {
       *) die "sent-status: unexpected argument: $1" ;;
     esac
   done
+  # The header and the body have to answer for the same scope. --all printed
+  # "all revisions" while the per-event filter still dropped everything but the
+  # named revision, so the one command whose job is to answer "did you send it?"
+  # without misleading claimed more than it showed. The two flags ask different
+  # questions; asking both is a mistake worth naming rather than resolving
+  # silently in either direction.
+  if [ "$all" = 1 ] && [ -n "$rev" ]; then
+    die "sent-status: --all and --revision <n> ask for different scopes; pass one or the other"
+  fi
   require_topic "$topic"
   cur=$(current_revision "$topic")
   # Default to the revision that is current. An older revision's transport
