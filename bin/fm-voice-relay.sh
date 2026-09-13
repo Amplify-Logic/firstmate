@@ -65,6 +65,10 @@
 #       elsewhere, and they are recorded as given, not as verified here. The
 #       replacement is written in full and renamed into place, so a failed write
 #       leaves the previous enrollment in force rather than unbinding the home.
+#       A rebind that fails after archiving can leave a history entry for a
+#       binding that is still the current one: read that as an inconsistency in
+#       the history, never as a lost enrollment. `binding` is authoritative for
+#       which one is in force.
 #
 #   fm-voice-relay.sh binding
 #       Print the current binding. Exit 1 when none is bound.
@@ -92,11 +96,19 @@
 #       touches no other topic.
 #
 #   fm-voice-relay.sh step <topic> --step <slug> [--step <slug>]...
-#       Declare substeps of the current revision so success can retire them.
-#       Gated like the commands that act on those substeps: a finished,
-#       cancelled, or re-bound topic is refused rather than accumulating
-#       declarations nobody could ever perform or retire. Re-declaring a step
-#       that is already tracked is idempotent.
+#       Declare substeps of this topic so success can retire them. A step
+#       identity is scoped to the TOPIC, not to a revision: once a step is
+#       performed it stays performed for the topic, and advancing the revision
+#       never re-opens it. That is deliberate - a correction preserves the
+#       actions already performed and must never re-authorize one - so
+#       re-declaring a performed slug leaves it performed and the next gate
+#       still answers 6 already-performed. To do a comparable action again on
+#       purpose, declare a NEW distinct step slug under the current request, or
+#       open a genuinely new request, and establish authority the normal way
+#       through check-action and begin. Gated like the commands that act on
+#       those substeps: a finished, cancelled, or re-bound topic is refused
+#       rather than accumulating declarations nobody could ever perform or
+#       retire. Re-declaring a step that is already tracked is idempotent.
 #
 #   fm-voice-relay.sh check-action <topic> --revision <n> [--step <slug>]
 #       THE GATE TO CALL BEFORE PERFORMING ANYTHING. Prints one verdict line and
@@ -613,7 +625,12 @@ cmd_bind() {
   # someone rebinds. So the replacement is written in full first, the enrollment
   # it replaces is archived second, and only then does the rename retire the old
   # record - a full disk, a read-only state directory, or EPERM at any of those
-  # steps leaves the previous enrollment intact, in force, and unarchived.
+  # steps leaves the previous enrollment intact and still in force. What that
+  # ordering does NOT promise is that a failure leaves no trace: the archive is
+  # written BEFORE the replacement is published, so a failure at the final
+  # rename leaves a history copy of an enrollment that is still the active one.
+  # That is an inconsistency to read - a history entry marked invalidated for a
+  # binding that never stopped being current - and never a lost enrollment.
   tmp=$(mktemp "$(dirname "$file")/.fm-voice-relay-binding.XXXXXX" 2>/dev/null) \
     || refuse 10 write-failed "the binding could not be written; any existing binding is untouched and still in force"
   if ! {
@@ -850,8 +867,10 @@ cmd_step() {
   # a declaration that no success will ever retire, and a topic under a replaced
   # enrollment could gain one that every later gate refuses to perform - both of
   # them counted as pending work nobody can ever do. The gate runs against the
-  # revision these substeps belong to, which is the current one, so a declaration
-  # exists only where the work it describes is still actionable.
+  # current revision because that is what decides whether the topic is still
+  # actionable at all; the step records themselves are topic-scoped and outlive
+  # every revision. So a declaration exists only where the work it describes is
+  # still actionable.
   cur=$(current_revision "$topic")
   gate_or_refuse "$topic" "$cur" 0
   dir="$(topic_dir "$topic")/steps"
@@ -1198,8 +1217,10 @@ cmd_sent_status() {
   fi
 }
 
-# "verified" only when the record's own evidence field says exactly that. The
-# field is written by this script and read by position, so no operator text -
+# A record counts as carrying a transport "reference" only when its own evidence
+# field says so - `verified` is the older build's spelling of the same token and
+# is read back with the same meaning, which is a recorded pointer, not a check.
+# The field is written by this script and read by position, so no operator text -
 # a note, a message id, a turn id - can reach or imitate it.
 evidence_class() {  # <recorded evidence field>
   case "$1" in
