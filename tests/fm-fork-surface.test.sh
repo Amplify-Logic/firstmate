@@ -69,13 +69,17 @@ check_personal_surface_deletion_is_optional() {
 
 # build_squash_fixture <repo> <commits-value>: clone the repo, declare a fixture
 # capability carrying <commits-value> on a branch, squash-merge that branch into
-# the default branch, and echo the branch commit the squash orphaned. The squash
+# a fixture base branch, and echo the branch commit the squash orphaned. The squash
 # is what a landed pull request does to every entry that named a branch commit.
+# The clone is detached first so the fixture never depends on the source checkout
+# having a branch name: CI pull_request checkouts and pipeline worktrees are detached.
 build_squash_fixture() {
-  local repo=$1 commits=$2 default_branch branch_sha
+  local repo=$1 commits=$2 branch_sha
   git clone -q "$ROOT" "$repo" || fail "could not clone squash fixture"
-  default_branch=$(git -C "$repo" symbolic-ref --short HEAD) \
-    || fail "could not read squash fixture default branch"
+  git -C "$repo" checkout -q --detach HEAD || fail "could not detach the squash fixture"
+  git -C "$repo" symbolic-ref -q HEAD >/dev/null \
+    && fail "squash fixture must start from a detached HEAD"
+  git -C "$repo" checkout -q -B fixture-base || fail "could not create the fixture base branch"
   git -C "$repo" checkout -q -b fixture-capability || fail "could not branch squash fixture"
   cp "$SURFACE" "$repo/bin/fm-fork-surface.sh" || fail "could not copy the fork-surface owner into the fixture"
   cp "$ROOT/fork-surface.conf" "$repo/fork-surface.conf" \
@@ -102,7 +106,7 @@ CONF
   git -C "$repo" commit -qm 'add squash fixture capability' \
     || fail "could not commit squash fixture capability"
   branch_sha=$(git -C "$repo" rev-parse --short=8 HEAD) || fail "could not read fixture branch commit"
-  git -C "$repo" checkout -q "$default_branch" || fail "could not return to fixture default branch"
+  git -C "$repo" checkout -q fixture-base || fail "could not return to the fixture base branch"
   git -C "$repo" merge -q --squash fixture-capability >/dev/null \
     || fail "could not squash-merge the fixture branch"
   git -C "$repo" commit -qm 'squash-merge the fixture capability' \
