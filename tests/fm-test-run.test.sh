@@ -164,6 +164,7 @@ init_changed_fixture_repo() {
     fm-read.test.sh \
     fm-chart-room.test.sh \
     fm-overlay.test.sh \
+    fm-file-eventwait.test.sh \
     fm-backend-cmux.test.sh \
     fm-backend-zellij.test.sh \
     fm-backend-orca.test.sh; do
