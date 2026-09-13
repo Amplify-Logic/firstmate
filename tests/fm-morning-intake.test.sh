@@ -33,6 +33,10 @@
 #     parked, and status prints only declared knobs.
 #   - Install and uninstall work against a temporary home and a fake launchd
 #     transport, and refuse a home that never opted in.
+#   - The session-start bootstrap hook is guarded: with bin/fm-morning-intake.sh
+#     removed, bootstrap still exits 0 and its output is exactly what it prints
+#     with the script present minus the intake lines, so an absent fork script
+#     degrades to upstream behaviour instead of breaking session start.
 # shellcheck disable=SC2016
 set -u
 
@@ -788,6 +792,78 @@ test_bootstrap_surfaces_the_intake() {
   pass 'the session-start bootstrap section surfaces an owed, failed, or finished intake'
 }
 
+# The bootstrap side of this capability is a guarded hook: one -x test and one
+# call. That guard is the whole promise that a home without the fork script
+# behaves exactly as upstream does, and no other case in any suite removes the
+# script, so nothing else can catch the day someone makes the intake a hard
+# dependency of session start. The control run is part of the assertion: it
+# proves the silence below is caused by the missing file rather than by a
+# fixture that had nothing to say.
+test_bootstrap_without_the_intake_script_degrades_to_upstream() {
+  local h report fakebin degraded entry control degraded_out expected code
+
+  h="$TMP_ROOT/bootstrap-degrade"
+  new_home "$h"
+  # Pin the runtime backend so the tool probes are the same in both runs no
+  # matter which terminal the suite is running inside.
+  printf '%s\n' tmux >"$h/config/backend"
+  report="$h/reports/2026-09-10.md"
+  at "$h" "$T_0700" run >/dev/null
+  at "$h" "$T_0715" claim >/dev/null
+  printf '# intake 2026-09-10\nfindings\n' >"$report"
+  at "$h" "$T_0715" complete --report "$report" >/dev/null
+
+  # gh is the only probe that would otherwise reach the network.
+  fakebin=$(fm_fakebin "$h")
+  fm_fake_exit0 "$fakebin" gh
+
+  # A faithful root with exactly one file missing, built by symlink so the real
+  # checkout is never mutated. fm-morning-intake-schedule.sh deliberately stays:
+  # the guard names the gate script alone.
+  degraded="$h/degraded-root"
+  mkdir -p "$degraded/bin"
+  for entry in "$ROOT"/*; do
+    [ "$(basename "$entry")" = bin ] || ln -s "$entry" "$degraded/$(basename "$entry")"
+  done
+  for entry in "$ROOT"/bin/*; do
+    [ "$(basename "$entry")" = fm-morning-intake.sh ] \
+      || ln -s "$entry" "$degraded/bin/$(basename "$entry")"
+  done
+  [ ! -e "$degraded/bin/fm-morning-intake.sh" ] \
+    || fail 'the degraded root must not contain the intake gate script'
+  assert_present "$degraded/bin/fm-morning-intake-schedule.sh" \
+    'the degraded root lost a file the guard does not name'
+
+  control=$(PATH="$fakebin:$PATH" FM_HOME="$h" FM_ROOT_OVERRIDE="$h" \
+    FM_BOOTSTRAP_DETECT_ONLY=1 "$ROOT/bin/fm-bootstrap.sh" 2>/dev/null) && code=0 || code=$?
+  expect_code 0 "$code" 'bootstrap failed with the intake gate present'
+  assert_contains "$control" "MORNING_INTAKE: new morning-intake report at $report" \
+    'bootstrap did not surface the finished report, so the degraded run proves nothing'
+
+  degraded_out=$(PATH="$fakebin:$PATH" FM_HOME="$h" FM_ROOT_OVERRIDE="$h" \
+    FM_BOOTSTRAP_DETECT_ONLY=1 "$degraded/bin/fm-bootstrap.sh" 2>"$h/degraded.err") \
+    && code=0 || code=$?
+  expect_code 0 "$code" 'an absent bin/fm-morning-intake.sh blocked bootstrap'
+  printf '%s\n' "$degraded_out" | grep -q '^MORNING_INTAKE:' \
+    && fail "bootstrap reported an intake with no gate script: $degraded_out"
+
+  # The guard itself, not just its effect. bin/fm-bootstrap.sh runs under set -u
+  # alone, so dropping the -x test would still exit 0 and still print no intake
+  # line; the only trace left is the shell naming the missing file on stderr.
+  # Nothing in an unmodified bootstrap mentions the gate script outside the
+  # guarded call, so any mention here is the guard gone.
+  grep -q fm-morning-intake "$h/degraded.err" \
+    && fail "bootstrap called the intake gate without its guard: $(cat "$h/degraded.err")"
+
+  # Exactly upstream behaviour: everything the control printed apart from the
+  # intake lines, and nothing invented in their place.
+  expected=$(printf '%s\n' "$control" | grep -v '^MORNING_INTAKE:' || true)
+  [ "$degraded_out" = "$expected" ] || fail \
+    "an absent intake gate changed the rest of bootstrap; expected [$expected] but got [$degraded_out]"
+
+  pass 'bootstrap without bin/fm-morning-intake.sh still completes and degrades to upstream output'
+}
+
 test_inert_without_opt_in
 test_daily_gate_and_no_duplicate_wake
 test_missed_morning_catches_up
@@ -806,3 +882,4 @@ test_install_and_uninstall_on_a_temp_home
 test_lost_live_check_is_reported_and_rearming_is_idempotent
 test_force_never_overrides_the_bounded_retry_budget
 test_bootstrap_surfaces_the_intake
+test_bootstrap_without_the_intake_script_degrades_to_upstream
