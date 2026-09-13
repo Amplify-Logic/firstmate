@@ -16,6 +16,16 @@
 #
 # Adds fields only. With this script absent the model is upstream's exact
 # projection, which is what the bridge must degrade against.
+#
+# A secondmate home's decisions_open and queued are looked up in separate maps,
+# never merged: an actionable captain hold appears in both under one id, and
+# the decision row must read its reason from decisions_open while the gate row
+# reads hold_reason from queued, exactly as the projection did in its own loop
+# over each collection.
+#
+# Key order is deliberately not part of the guarantee. The fork fields are
+# appended after upstream's keys, and equivalence with the pre-extraction
+# projection is proven on sorted keys.
 set -eu
 
 usage() {
@@ -38,8 +48,9 @@ main() {
     ($snap[0]) as $s
     | ([ $s.backlog.records[]? | {key: .id, value: .} ] | from_entries) as $main_rows
     | ([ ($s.secondmate_current.records // [])[] as $m
-         | (($m.decisions_open // [])[] | {key: ($m.id + "/" + .id), value: .}),
-           (($m.queued // [])[] | {key: ($m.id + "/" + .id), value: .}) ] | from_entries) as $sm_rows
+         | ($m.decisions_open // [])[] | {key: ($m.id + "/" + .id), value: .} ] | from_entries) as $sm_decisions
+    | ([ ($s.secondmate_current.records // [])[] as $m
+         | ($m.queued // [])[] | {key: ($m.id + "/" + .id), value: .} ] | from_entries) as $sm_queued
     | ([ $s.tasks[]? | {key: .id, value: .} ] | from_entries) as $task_rows
     | ([ ($s.secondmate_current.records // [])[] | {key: .id, value: .} ] | from_entries) as $sm_homes
     | .in_flight = [ .in_flight[]
@@ -61,8 +72,8 @@ main() {
             | $row + {hold_kind: $r.hold_kind,
                       hold_reason: (($r.hold_reason // null) | trunc(160)),
                       repo: (($r.repo // null) | trunc(120))}
-          elif ($sm_rows[$row.id] != null) then
-            ($sm_rows[$row.id]) as $r
+          elif ($sm_decisions[$row.id] != null) then
+            ($sm_decisions[$row.id]) as $r
             | $row + {hold_kind: ($r.hold_kind // null),
                       hold_reason: (($r.reason // null) | trunc(160)),
                       repo: (($r.repo // null) | trunc(120))}
@@ -73,8 +84,8 @@ main() {
           elif $row.owner == "(main)" and ($main_rows[$row.id] != null) then
             ($main_rows[$row.id]) as $r
             | $row + {hold_kind: $r.hold_kind, repo: (($r.repo // null) | trunc(120))}
-          elif ($sm_rows[($row.owner // "") + "/" + ($row.id // "")] != null) then
-            ($sm_rows[($row.owner // "") + "/" + ($row.id // "")]) as $r
+          elif ($sm_queued[($row.owner // "") + "/" + ($row.id // "")] != null) then
+            ($sm_queued[($row.owner // "") + "/" + ($row.id // "")]) as $r
             | $row + {hold_kind: ($r.hold_kind // null), repo: (($r.repo // null) | trunc(120))}
           else $row end ]
   '

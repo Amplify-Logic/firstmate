@@ -1688,6 +1688,8 @@ EOF
   printf '%s' "$json" | jq -e '
     ([.in_flight[].id] | sort) == ["hibit", "home-assistant", "wheel"]
       and (.decisions_open | any(.id == "sshhip/reviewer-decision"))
+      and (.decisions_open[] | select(.id == "sshhip/reviewer-decision")
+        | .hold_reason == "choose reviewer remediation A or B")
       and (.decisions_open | any(.id == "home-assistant/captain-run") | not)
       and (.gates | any(.id == "production-observation" and .owner == "wheel"
         and .reason == "documented no live worker"))
