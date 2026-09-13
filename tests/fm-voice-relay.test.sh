@@ -289,11 +289,14 @@ test_enqueue_is_not_delivery_and_status_never_resends() {
   assert_contains "$out" "do not send a second copy" "a second ask must not cause a second send"
 
   out=$(relay transport phase handoff-topic --revision 1 --phase enqueued --message-id MSG-1 --queue-exit 0)
-  assert_contains "$out" "proves the queue accepted the message and nothing else" \
+  assert_contains "$out" "the queue accepted the message and nothing else" \
     "an enqueue receipt must not be reported as delivery"
+  assert_contains "$out" "has not checked the id itself" \
+    "a receipt id is a reference this ledger did not verify"
 
   out=$(relay transport sent-status handoff-topic)
-  assert_contains "$out" "accepted by the queue, delivery unconfirmed" "an unconfirmed send must be reported as such"
+  assert_contains "$out" "a queue receipt records acceptance; delivery is unconfirmed" \
+    "an unconfirmed send must be reported as such"
   assert_contains "$out" "Not resent" "the status answer must refuse a blind retry"
   assert_contains "$out" "MSG-1" "the status answer must cite the real transport evidence"
 
@@ -301,13 +304,15 @@ test_enqueue_is_not_delivery_and_status_never_resends() {
   # carrying the transport's own turn id may be reported as confirmed.
   relay transport phase handoff-topic --revision 1 --phase picked-up --note "turn started" >/dev/null
   out=$(relay transport sent-status handoff-topic)
-  assert_contains "$out" "recorded by the operator with no transport evidence" \
+  assert_contains "$out" "recorded by the operator with no turn id behind it" \
     "an operator claim must not be reported as a confirmed turn"
   assert_not_contains "$out" "confirmed by transport evidence" "a claim must not read as verification"
 
   relay transport phase handoff-topic --revision 1 --phase picked-up --turn-id TURN-5 >/dev/null
   out=$(relay transport sent-status handoff-topic)
-  assert_contains "$out" "a turn was confirmed by transport evidence" "a real turn id must upgrade the verdict"
+  assert_contains "$out" "the transport's own turn id" "a recorded turn id must upgrade the verdict"
+  assert_contains "$out" "did not itself check it" "a reference must not be described as verified"
+  assert_not_contains "$out" "confirmed by transport evidence" "nothing here verifies a supplied id"
   pass "fm-voice-relay: enqueue, pickup and delivery stay distinct and a status query never resends"
 }
 
@@ -322,14 +327,15 @@ test_recorded_claims_never_become_transport_evidence() {
   relay evidence open example --summary "harmless fixture" >/dev/null
 
   out=$(relay evidence phase example --revision 1 --phase enqueued --queue-exit 1)
-  assert_contains "$out" "the queue did not accept" "a non-zero queue exit must not be recorded as an acceptance"
-  assert_not_contains "$out" "proves the queue accepted" "a failed handoff must never claim acceptance"
+  assert_contains "$out" "handoff-unknown" "a non-zero queue exit must not be recorded as an acceptance"
+  assert_contains "$out" "UNKNOWN" "a bare non-zero exit leaves the outcome unknown"
+  assert_not_contains "$out" "the queue accepted the message" "a failed handoff must never claim acceptance"
 
   out=$(relay evidence phase example --revision 99 --phase picked-up 2>&1) && code=0 || code=$?
   expect_code 4 "$code" "a phase against a revision that was never opened must be refused"
 
   out=$(relay evidence sent-status example)
-  assert_contains "$out" "the handoff failed" "a failed handoff must be reported as failed"
+  assert_contains "$out" "whether it was accepted is unknown" "an unknown handoff must be reported as unknown"
   assert_not_contains "$out" "confirmed" "nothing may be reported as confirmed here"
 
   out=$(relay evidence phase example --revision 1 --phase enqueued)
@@ -338,6 +344,61 @@ test_recorded_claims_never_become_transport_evidence() {
   assert_contains "$out" "even acceptance is unconfirmed" "a receiptless handoff must not read as accepted"
   assert_contains "$out" "Not resent" "the answer must still refuse a blind retry"
   pass "fm-voice-relay: a rejected handoff, a phantom revision and an unbacked pickup are all refused their claims"
+}
+
+# A queue command that fails has not necessarily failed to enqueue. Reporting a
+# timeout as "nothing was handed off" invites exactly the blind resend that
+# duplicates work, so an unknown outcome must be reported as unknown, and only
+# the queue's own refusal may be recorded as a definite non-send.
+test_a_failed_queue_command_is_unknown_not_proof_of_non_delivery() {
+  local out
+  new_home unknown >/dev/null
+  bind_home unknown
+  relay unknown open example --summary harmless >/dev/null
+
+  out=$(relay unknown phase example --revision 1 --phase enqueued --queue-exit 124 \
+    --note "transport timeout")
+  assert_contains "$out" "handoff-unknown" "a bare non-zero exit must record an unknown outcome"
+  assert_contains "$out" "UNKNOWN" "the operator must be told the outcome is unknown"
+  assert_contains "$out" "blind resend can duplicate" "the duplicate risk must be named"
+  assert_not_contains "$out" "nothing was handed off" "an unknown outcome must not claim a non-send"
+
+  out=$(relay unknown sent-status example)
+  assert_contains "$out" "whether it was accepted is unknown" "the verdict must stay unknown"
+  assert_contains "$out" "Not resent" "an unknown outcome must not be resent blindly"
+
+  new_home rejected >/dev/null
+  bind_home rejected
+  relay rejected open example --summary harmless >/dev/null
+  out=$(relay rejected phase example --revision 1 --phase enqueued --queue-exit 2 \
+    --rejection "No active session found")
+  assert_contains "$out" "handoff-rejected" "an explicit refusal must be recorded as a rejection"
+  assert_contains "$out" "Nothing was accepted" "an explicit refusal is a definite non-send"
+  out=$(relay rejected sent-status example)
+  assert_contains "$out" "refused the handoff in its own words" "the verdict must cite the refusal"
+  pass "fm-voice-relay: a failed queue command is unknown, and only a refusal is a non-send"
+}
+
+# The companion's task failing says nothing about whether the handoff arrived.
+test_a_failed_task_is_not_a_failed_handoff() {
+  local out
+  new_home taskfail >/dev/null
+  bind_home taskfail
+  relay taskfail open example --summary harmless >/dev/null
+  relay taskfail phase example --revision 1 --phase failed --note "task computation failed" >/dev/null
+
+  out=$(relay taskfail sent-status example)
+  assert_contains "$out" "task failed:" "a task failure must be labelled as the task's"
+  assert_contains "$out" "outcome, not the handoff's" \
+    "a task failure must not be reported as a handoff failure"
+  assert_not_contains "$out" "the handoff failed" "the handoff was never claimed to fail"
+
+  relay taskfail phase example --revision 1 --phase enqueued --message-id MSG-9 --queue-exit 0 >/dev/null
+  relay taskfail phase example --revision 1 --phase failed --note "turn errored" >/dev/null
+  out=$(relay taskfail sent-status example)
+  assert_contains "$out" "a queue receipt records acceptance" "an accepted handoff stays accepted"
+  assert_contains "$out" "the work's outcome" "the two outcomes stay separate"
+  pass "fm-voice-relay: a failed task and a failed handoff are different outcomes"
 }
 
 # sent-status answers about the instruction that is current, not the one it replaced.
@@ -376,7 +437,7 @@ test_operator_text_cannot_forge_transport_evidence() {
   out=$(relay forge sent-status example)
   assert_not_contains "$out" "confirmed by transport evidence" \
     "operator free text must never be readable back as verification"
-  assert_contains "$out" "recorded by the operator with no transport evidence" \
+  assert_contains "$out" "recorded by the operator with no turn id behind it" \
     "the pickup must stay an unconfirmed claim"
 
   # The same text in every other free-text field the detail is built from.
@@ -499,7 +560,8 @@ test_the_transport_column_only_describes_transport_records() {
   transport_of() { printf '%s\n' "$out" | awk -v p="$1" '$3 == p { print $5 }'; }
   [ "$(transport_of accepted)" = "-" ] || fail "a hash-checked acceptance must not be labelled a claim"
   [ "$(transport_of opened)" = "-" ] || fail "a record the ledger established itself is not a transport claim"
-  [ "$(transport_of enqueued)" = "verified" ] || fail "a receipted handoff must still read as verified"
+  [ "$(transport_of enqueued)" = "reference" ] \
+    || fail "a receipted handoff must read as a reference, not as something this ledger verified"
   [ "$(transport_of picked-up)" = "claim" ] || fail "an operator pickup must still read as a claim"
   pass "fm-voice-relay: the transport column labels handoff records and nothing else"
 }
@@ -518,8 +580,8 @@ test_the_counts_line_separates_claimed_turns_from_referenced_ones() {
   out=$(relay counts evidence tally)
   counts=$(printf '%s\n' "$out" | grep '^counts:')
   assert_not_contains "$counts" "observed" "nothing here observed a turn, so the count must not say so"
-  assert_contains "$counts" "turns-verified=1" "only the pickup carrying a turn id is backed by a reference"
-  assert_contains "$counts" "turns-claimed=1" "the operator-typed pickup must be counted apart, as a claim"
+  assert_contains "$counts" "pickups-with-turn-id=1" "only the pickup carrying a turn id is backed by a reference"
+  assert_contains "$counts" "pickups-claimed-only=1" "the operator-typed pickup must be counted apart, as a claim"
   pass "fm-voice-relay: the counts line keeps claimed turns apart from referenced ones"
 }
 
@@ -769,6 +831,8 @@ test_a_step_that_could_not_be_written_is_not_reported_as_declared
 test_a_completion_that_could_not_retire_a_step_says_so_without_claiming_nothing_landed
 test_the_transport_column_only_describes_transport_records
 test_the_counts_line_separates_claimed_turns_from_referenced_ones
+test_a_failed_queue_command_is_unknown_not_proof_of_non_delivery
+test_a_failed_task_is_not_a_failed_handoff
 test_pending_count_groups_revisions_and_admits_what_is_unknown
 test_concurrent_claims_and_publishes_have_exactly_one_winner
 test_preferences_are_style_only_and_never_authority

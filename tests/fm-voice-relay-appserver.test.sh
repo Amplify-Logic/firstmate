@@ -41,6 +41,7 @@ else:
 stay_open=os.environ.get("FAKE_STAY_OPEN")=="1"
 strict_handshake=os.environ.get("FAKE_STRICT_HANDSHAKE")=="1"
 initialized=False
+handshake_done=False
 
 def send(obj):
     sys.stdout.write(json.dumps(obj)+"\n")
@@ -59,11 +60,14 @@ for line in sys.stdin:
             fh.write(msg.get("method","?")+"\n")
     method=msg.get("method")
     params=msg.get("params") or {}
+    if method=="initialized":
+        handshake_done=True
+        continue
     if method=="initialize":
         initialized=True
         send({"jsonrpc":"2.0","id":msg.get("id"),"result":{"userAgent":"fake"}})
         continue
-    if strict_handshake and not initialized:
+    if strict_handshake and not (initialized and handshake_done):
         send({"jsonrpc":"2.0","id":msg.get("id"),
               "error":{"code":-32002,"message":"request arrived before initialization"}})
         continue
@@ -237,6 +241,7 @@ test_dry_run_prints_the_frames_and_contacts_nothing() {
   local out log
   log="$TMP_ROOT/dry.log"
   out=$(FAKE_SERVER_LOG="$log" appserver steer --thread THREAD-1 --expected-turn TURN-1 --text "left panel instead")
+  assert_contains "$out" '"method":"initialized"' "a dry run must show the handshake notification it sends"
   assert_contains "$out" '"method":"turn/steer"' "a dry run must show the exact method"
   assert_contains "$out" '"expectedTurnId":"TURN-1"' "a dry run must show the turn it would target"
   assert_contains "$out" '"text":"left panel instead"' "a dry run must show the correction text"
@@ -322,9 +327,13 @@ test_the_handshake_is_awaited_before_the_request() {
   expect_code 0 "$code" "a normal call must still succeed"
   [ "$(head -1 "$log")" = initialize ] || fail "initialize must be the first method the server sees"
 
+  # The documented handshake is initialize, then the "initialized" notification,
+  # then the request. This fake server refuses anything that arrives before both,
+  # so the ordering is pinned rather than assumed.
+  [ "$(sed -n 2p "$log")" = initialized ] || fail "the initialized notification must follow the initialize answer"
   out=$(FAKE_STRICT_HANDSHAKE=1 FAKE_TURN_ID=turn-3 appserver active-turn --thread THREAD-1 --live) && code=0 || code=$?
   expect_code 0 "$code" "a server that refuses pre-handshake requests must still be satisfied"
-  assert_contains "$out" "turn turn-3" "the request must be answered after initialization"
+  assert_contains "$out" "turn turn-3" "the request must be answered after the full handshake"
   pass "fm-voice-relay-appserver: the request waits for the initialization answer"
 }
 

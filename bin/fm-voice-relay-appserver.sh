@@ -164,16 +164,21 @@ secs = float(os.environ["FM_RPC_SECS"])
 method = os.environ["FM_RPC_METHOD"]
 params = os.environ["FM_RPC_PARAMS"]
 
-# The handshake is SEQUENTIAL. Writing initialize and the request together and
-# closing stdin lets a server that refuses work before initialization completes
-# drop the request, and the failure would surface as an unexplained transport
-# error. So: send initialize, wait for its answer, then send the request. The
-# installed v2 protocol carries no "initialized" notification, so none is sent -
-# the fix is to await the response, not to invent a frame.
+# The handshake is the documented three steps, in order: send initialize, wait
+# for its answer, send the "initialized" notification, and only then send the
+# request. Writing initialize and the request together and closing stdin lets a
+# server that refuses work before initialization completes drop the request, and
+# the failure surfaces as an unexplained transport error.
+#
+# "initialized" is the installed protocol's sole client notification - it is
+# defined at the top level of the generated schema (ClientNotification.json),
+# NOT inside the v2 subtree, so a grep confined to v2 wrongly concludes it does
+# not exist. It takes no params.
 init_frame = (
     '{"jsonrpc":"2.0","id":1,"method":"initialize","params":'
     '{"clientInfo":{"name":"fm-voice-relay","title":"Firstmate voice relay","version":"1"}}}\n'
 )
+initialized_frame = '{"jsonrpc":"2.0","method":"initialized"}\n'
 request_frame = '{"jsonrpc":"2.0","id":2,"method":%s,"params":%s}\n' % (json.dumps(method), params)
 
 try:
@@ -274,6 +279,7 @@ try:
             sys.stderr.write("transport failure: the proxy closed before answering initialization\n")
         stop()
         raise SystemExit(5)
+    write_frame(initialized_frame)
     write_frame(request_frame)
     try:
         proc.stdin.close()
@@ -305,6 +311,7 @@ emit_or_send() {  # <live> <method> <params-json>
   if [ "$live" != 1 ]; then
     printf 'dry-run: would send over "%s"\n' "$(proxy_cmd)"
     printf '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"clientInfo":{"name":"fm-voice-relay","title":"Firstmate voice relay","version":"1"}}}\n'
+    printf '{"jsonrpc":"2.0","method":"initialized"}\n'
     printf '{"jsonrpc":"2.0","id":2,"method":%s,"params":%s}\n' "$(json_escape "$method")" "$params"
     return 0
   fi

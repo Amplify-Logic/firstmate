@@ -393,12 +393,17 @@ topic_terminal() {  # <topic>
 # ledger writes - an opened request, a hash-checked acceptance, a released
 # sentence - is a fact this code established itself, so it is recorded as n/a
 # rather than being labelled an unbacked claim about a transport.
-record_event() {  # <topic> <revision> <phase> <detail> [verified|claim]
+record_event() {  # <topic> <revision> <phase> <detail> [reference|claim]
   local dir line class
   dir=$(topic_dir "$1")
   mkdir -p "$dir" || return 1
+  # "reference" means the record carries an identifier the transport produced -
+  # a queue message id, a turn id. This ledger never calls the transport, so it
+  # has NOT checked that identifier against anything: a reference is a pointer
+  # someone handed us, not proof. "verified" is accepted for records written by
+  # an older build and read back with the same conservative meaning.
   case "${5:-}" in
-    verified) class=verified ;;
+    reference|verified) class=reference ;;
     claim) class=claim ;;
     *) class=n/a ;;
   esac
@@ -906,7 +911,7 @@ cmd_performed() {
 # evidence for that phase - a queue message id for an enqueue, a turn id for a
 # pickup. Only a verified record may later be reported as confirmed.
 cmd_phase() {
-  local topic=${1:-} rev='' phase='' note='' msgid='' qexit='' turnid='' detail evidence
+  local topic=${1:-} rev='' phase='' note='' msgid='' qexit='' turnid='' rejection='' detail evidence
   shift || true
   while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -916,13 +921,14 @@ cmd_phase() {
       --message-id) msgid=${2:-}; shift 2 ;;
       --turn-id) turnid=${2:-}; shift 2 ;;
       --queue-exit) qexit=${2:-}; shift 2 ;;
+      --rejection) rejection=${2:-}; shift 2 ;;
       *) die "phase: unexpected argument: $1" ;;
     esac
   done
   revision_valid "$rev" || die "phase requires --revision <n>"
   require_topic "$topic"
   case "$phase" in
-    enqueued|picked-up|working|completed|failed|superseded|cancelled|presented) : ;;
+    enqueued|picked-up|working|completed|failed|handoff-rejected|handoff-unknown|superseded|cancelled|presented) : ;;
     *) die "phase: unknown phase: ${phase:-<missing>}" ;;
   esac
   if [ -n "$qexit" ]; then
@@ -935,26 +941,35 @@ cmd_phase() {
   # Superseded and finished revisions DO keep recording: their history is real.
   gate_or_refuse "$topic" "$rev" "0 3 5"
 
-  # A non-zero queue exit means the queue did NOT accept the message. Recording
-  # that as an enqueue, and saying it proves acceptance, is exactly the false
-  # evidence this ledger exists to prevent.
+  # A non-zero queue exit does NOT mean the message was refused. A timeout, a
+  # killed process, or a broken pipe can all follow a message that was already
+  # enqueued, so the only honest outcome is UNKNOWN - and unknown is the answer
+  # that stops a blind resend from creating a duplicate. A definite non-send
+  # needs the queue's own refusal, which the caller passes in --rejection.
   if [ "$phase" = enqueued ] && [ -n "$qexit" ] && [ "$qexit" != 0 ]; then
-    detail="handoff rejected by the queue, queue_exit=$qexit"
+    detail="queue_exit=$qexit"
     [ -n "$note" ] && detail="$detail $(clean_text "$note")"
     [ -n "$msgid" ] && detail="$detail message=$(clean_text "$msgid")"
-    record_event "$topic" "$rev" failed "$detail" verified
-    printf 'failed: the queue did not accept the message for %s revision %s (exit %s); nothing was handed off\n' \
-      "$topic" "$rev" "$qexit"
+    if [ -n "$rejection" ]; then
+      detail="$detail rejection=$(clean_text "$rejection")"
+      record_event "$topic" "$rev" handoff-rejected "$detail" reference
+      printf 'handoff-rejected: the queue refused the message for %s revision %s (exit %s): %s. Nothing was accepted.\n' \
+        "$topic" "$rev" "$qexit" "$(clean_text "$rejection")"
+    else
+      record_event "$topic" "$rev" handoff-unknown "$detail" claim
+      printf 'handoff-unknown: the queue command failed for %s revision %s (exit %s) without saying it refused the message, so whether it was accepted is UNKNOWN. Check the queue or the receipt before sending again - a blind resend can duplicate the work.\n' \
+        "$topic" "$rev" "$qexit"
+    fi
     return 0
   fi
 
   evidence=claim
   case "$phase" in
     enqueued)
-      [ -n "$msgid" ] && [ "${qexit:-0}" = 0 ] && evidence=verified
+      [ -n "$msgid" ] && [ "${qexit:-0}" = 0 ] && evidence=reference
       ;;
     picked-up)
-      [ -n "$turnid" ] && evidence=verified
+      [ -n "$turnid" ] && evidence=reference
       ;;
   esac
 
@@ -965,14 +980,14 @@ cmd_phase() {
   record_event "$topic" "$rev" "$phase" "$detail" "$evidence"
 
   case "$phase:$evidence" in
-    enqueued:verified)
-      printf 'ok: recorded enqueued for %s revision %s with its queue receipt. This proves the queue accepted the message and nothing else.\n' "$topic" "$rev"
+    enqueued:reference)
+      printf 'ok: recorded enqueued for %s revision %s with its queue receipt id. The receipt says the queue accepted the message and nothing else, and this ledger has not checked the id itself.\n' "$topic" "$rev"
       ;;
     enqueued:claim)
       printf 'ok: recorded enqueued for %s revision %s as an operator claim - no queue receipt was supplied, so even acceptance is unconfirmed.\n' "$topic" "$rev"
       ;;
-    picked-up:verified)
-      printf 'ok: recorded picked-up for %s revision %s against turn %s.\n' "$topic" "$rev" "$turnid"
+    picked-up:reference)
+      printf 'ok: recorded picked-up for %s revision %s against turn id %s - a reference from the transport, not something this ledger checked.\n' "$topic" "$rev" "$turnid"
       ;;
     picked-up:claim)
       printf 'ok: recorded picked-up for %s revision %s as an operator claim - without a turn id this is not evidence the companion started a turn.\n' "$topic" "$rev"
@@ -1017,7 +1032,7 @@ cmd_handoff() {
 # is reported as exactly that.
 cmd_sent_status() {
   local topic=${1:-} rev='' all=0 log line f_rev phase detail cur
-  local last_enq='' last_pick='' last_work='' last_done='' last_fail='' last_pres=''
+  local last_enq='' last_pick='' last_work='' last_done='' last_fail='' last_pres='' last_rej='' last_unk=''
   local enq_ev='' pick_ev=''
   shift || true
   while [ "$#" -gt 0 ]; do
@@ -1052,6 +1067,8 @@ cmd_sent_status() {
       working) last_work="$EV_UTC${detail:+ - $detail}" ;;
       completed) last_done="$EV_UTC${detail:+ - $detail}" ;;
       failed) last_fail="$EV_UTC${detail:+ - $detail}" ;;
+      handoff-rejected) last_rej="$EV_UTC${detail:+ - $detail}" ;;
+      handoff-unknown) last_unk="$EV_UTC${detail:+ - $detail}" ;;
       presented) last_pres="$EV_UTC${detail:+ - $detail}" ;;
     esac
   done < "$log"
@@ -1064,22 +1081,36 @@ cmd_sent_status() {
   printf '  picked-up: %s\n' "${last_pick:-no record - the companion is not known to have started a turn}"
   printf '  working: %s\n' "${last_work:-no record}"
   printf '  completed: %s\n' "${last_done:-no record}"
-  [ -n "$last_fail" ] && printf '  failed: %s\n' "$last_fail"
+  [ -n "$last_fail" ] && printf '  task failed: %s\n' "$last_fail"
+  [ -n "$last_rej" ] && printf '  handoff rejected: %s\n' "$last_rej"
+  [ -n "$last_unk" ] && printf '  handoff outcome unknown: %s\n' "$last_unk"
   printf '  released for presentation: %s\n' "${last_pres:-no record}"
-  if [ -z "$last_enq" ] && [ -n "$last_fail" ]; then
-    printf '  verdict: the handoff failed; nothing was accepted, so there is nothing to wait for. Not resent automatically.\n'
+  # Each outcome answers only for itself. A failed TASK says nothing about
+  # whether the handoff was accepted, an unknown handoff is not a refusal, and a
+  # recorded turn id is a reference this ledger never checked.
+  if [ -n "$last_rej" ] && [ -z "$last_enq" ]; then
+    printf '  verdict: the queue refused the handoff in its own words, so nothing was accepted. Nothing to wait for; send again only deliberately.\n'
+  elif [ -n "$last_unk" ] && [ -z "$last_enq" ]; then
+    printf '  verdict: the handoff command failed without a refusal, so whether it was accepted is unknown. Not resent: check the queue or the receipt first, because a blind resend can duplicate the work.\n'
   elif [ -z "$last_enq" ]; then
-    printf '  verdict: nothing was handed off yet.\n'
+    if [ -n "$last_fail" ]; then
+      printf '  verdict: no handoff is recorded. The task failure above is the work'"'"'s outcome, not the handoff'"'"'s.\n'
+    else
+      printf '  verdict: nothing was handed off yet.\n'
+    fi
   elif [ -z "$last_pick" ]; then
-    if [ "$enq_ev" = verified ]; then
-      printf '  verdict: accepted by the queue, delivery unconfirmed. Not resent: a second copy would duplicate the work.\n'
+    if [ "$enq_ev" = reference ]; then
+      printf '  verdict: a queue receipt records acceptance; delivery is unconfirmed. Not resent: a second copy would duplicate the work.\n'
     else
       printf '  verdict: a handoff was recorded without a queue receipt, so even acceptance is unconfirmed. Not resent: read the receipt rather than sending again.\n'
     fi
-  elif [ "$pick_ev" = verified ]; then
-    printf '  verdict: a turn was confirmed by transport evidence, per the record above.\n'
+  elif [ "$pick_ev" = reference ]; then
+    printf '  verdict: a pickup was recorded with the transport'"'"'s own turn id. That reference is the strongest evidence here, and this ledger did not itself check it.\n'
   else
-    printf '  verdict: a pickup was recorded by the operator with no transport evidence behind it, so delivery stays unconfirmed. Not resent.\n'
+    printf '  verdict: a pickup was recorded by the operator with no turn id behind it, so delivery stays unconfirmed. Not resent.\n'
+  fi
+  if [ -n "$last_fail" ] && [ -n "$last_enq" ]; then
+    printf '  note: the task failure above is the work'"'"'s outcome. The handoff state is the line above it.\n'
   fi
 }
 
@@ -1088,7 +1119,7 @@ cmd_sent_status() {
 # a note, a message id, a turn id - can reach or imitate it.
 evidence_class() {  # <recorded evidence field>
   case "$1" in
-    verified) printf 'verified\n' ;;
+    reference|verified) printf 'reference\n' ;;
     *) printf 'claim\n' ;;
   esac
 }
@@ -1097,10 +1128,10 @@ evidence_class() {  # <recorded evidence field>
 # rather than "claim": the ledger established it itself, and rendering a
 # hash-checked acceptance as an unbacked claim invites an operator to discount
 # the strongest record in the file. A transport record still classifies
-# conservatively - anything but the exact verified token reads as a claim.
+# conservatively - anything but a recognised reference token reads as a claim.
 transport_label() {  # <recorded evidence field>
   case "$1" in
-    verified|claim) evidence_class "$1" ;;
+    reference|verified|claim) evidence_class "$1" ;;
     *) printf -- '-\n' ;;
   esac
 }
@@ -1435,7 +1466,7 @@ cmd_steer_command() {
 }
 
 cmd_evidence() {
-  local topic=${1:-} log line prev=0 gap handoffs=0 turns_verified=0 turns_claimed=0 presented=0
+  local topic=${1:-} log line prev=0 gap handoffs=0 turns_referenced=0 turns_claimed=0 presented=0
   require_topic "$topic"
   log="$(topic_dir "$topic")/events.log"
   printf 'topic: %s request=%s current-revision=%s\n' "$topic" "$(request_id "$topic")" "$(current_revision "$topic")"
@@ -1446,7 +1477,7 @@ cmd_evidence() {
     printf 'no events recorded\n'
     return 0
   fi
-  printf '%-22s %-4s %-12s %-9s %-9s %s\n' UTC REV PHASE GAP TRANSPORT DETAIL
+  printf '%-22s %-4s %-16s %-9s %-9s %s\n' UTC REV PHASE GAP TRANSPORT DETAIL
   while IFS= read -r line; do
     parse_event "$line"
     if [ "$prev" = 0 ]; then
@@ -1461,20 +1492,21 @@ cmd_evidence() {
         # A pickup counts as a referenced turn only when the record carries the
         # transport's own turn id. An operator saying a turn started is counted
         # apart, under the same word the TRANSPORT column uses for it.
-        if [ "$(evidence_class "$EV_CLASS")" = verified ]; then
-          turns_verified=$((turns_verified + 1))
+        if [ "$(evidence_class "$EV_CLASS")" = reference ]; then
+          turns_referenced=$((turns_referenced + 1))
         else
           turns_claimed=$((turns_claimed + 1))
         fi
         ;;
       presented) presented=$((presented + 1)) ;;
     esac
-    printf '%-22s %-4s %-12s %-9s %-9s %s\n' \
+    printf '%-22s %-4s %-16s %-9s %-9s %s\n' \
       "$EV_UTC" "$EV_REV" "$EV_PHASE" "$gap" "$(transport_label "$EV_CLASS")" "$EV_DETAIL"
   done < "$log"
-  printf 'counts: handoffs=%s turns-verified=%s turns-claimed=%s presentations=%s\n' \
-    "$handoffs" "$turns_verified" "$turns_claimed" "$presented"
-  printf 'transport: verified = the record carries the transport'"'"'s own proof; claim = the operator said so; - = not a transport record, established by this ledger.\n'
+  # No count here is an observation: nothing in this ledger watched a turn run.
+  printf 'counts: handoffs-recorded=%s pickups-with-turn-id=%s pickups-claimed-only=%s presentations-released=%s\n' \
+    "$handoffs" "$turns_referenced" "$turns_claimed" "$presented"
+  printf 'transport: reference = the record carries an id the transport produced, which this ledger did not check; claim = the operator said so, with no id; - = not a transport record, established by this ledger itself, such as an acceptance whose hash it recomputed.\n'
   printf 'limits: gaps are wall-clock between recorded events, not model or cost measurements.\n'
   printf 'limits: native queue depth and audible playback are unknown to this ledger.\n'
 }
