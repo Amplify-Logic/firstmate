@@ -35,6 +35,7 @@ clone_current_tree() {
   # paths that do not exist.
   while IFS= read -r -d '' untracked; do
     [ -n "$untracked" ] || continue
+    [ -f "$ROOT/$untracked" ] || continue
     mkdir -p "$repo/$(dirname "$untracked")" \
       || fail "could not create fork-surface fixture directory for: $untracked"
     cp -p "$ROOT/$untracked" "$repo/$untracked" \

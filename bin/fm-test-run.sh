@@ -1280,6 +1280,10 @@ while [ "$#" -gt 0 ]; do
   esac
 done
 
+if command -v fork_registry_assert_family_confined >/dev/null 2>&1; then
+  fork_registry_assert_family_confined family_for_basename list_known_families || exit 2
+fi
+
 if [ "$LIST_FAMILIES" -eq 1 ]; then
   list_known_families
   exit 0

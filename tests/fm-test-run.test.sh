@@ -259,8 +259,34 @@ test_fork_registry_shadow_and_glob_guards() {
   assert_contains "$out" 'unsafe repository path glob' \
     "bare glob rejection is actionable"
 
+  # A family row returns before the runner's own map, so a row naming a script
+  # the runner already classifies would silently move it out of its family,
+  # and a row naming a family the runner does not list would hide it from
+  # --list-families and lane composition. Both are refused in every mode.
+  printf 'family secondmate tests/fm-brief.test.sh\n' \
+    > "$repo/tests/fork-test-registry.conf"
+  set +e
+  out=$(cd "$repo" && bin/fm-test-run.sh --list --all 2>&1)
+  rc=$?
+  set -e
+  [ "$rc" -eq 2 ] \
+    || { rm -rf "$tmp"; fail "re-homing family row must fail with exit 2, got $rc"; }
+  assert_contains "$out" 'already classifies as pure-contract-unit' \
+    "re-homing family row names the upstream family it would take the script from"
+
+  printf 'family fork-only tests/fm-fork-surface.test.sh\n' \
+    > "$repo/tests/fork-test-registry.conf"
+  set +e
+  out=$(cd "$repo" && bin/fm-test-run.sh --list-families 2>&1)
+  rc=$?
+  set -e
+  [ "$rc" -eq 2 ] \
+    || { rm -rf "$tmp"; fail "unlisted family row must fail with exit 2, got $rc"; }
+  assert_contains "$out" 'names a family the runner does not list: fork-only' \
+    "unlisted family row rejection is actionable"
+
   rm -rf "$tmp"
-  pass "fork registry refuses shadowing covers rows and repository-wide globs"
+  pass "fork registry refuses shadowing covers rows, repository-wide globs, and unconfined family rows"
 }
 
 test_changed_dependency_selection_and_unmapped_failure() {

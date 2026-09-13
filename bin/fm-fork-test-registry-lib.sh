@@ -27,6 +27,12 @@
 # The assertion reports that as a shadow, which is the intended loud failure,
 # but the fix is usually to stop naming the path in the test rather than to
 # widen the row.
+# A family row is confined the same way on the family dimension: it may name
+# only a family the runner already lists, and only a script the runner's own
+# map leaves unclassified. fork_registry_assert_family_confined proves both per
+# row and fails closed, because a row that re-homes a script upstream already
+# classifies, or that invents a family no lane composition can see, is again a
+# replacement rather than an override.
 # Blank lines and lines whose first non-whitespace character is # are ignored.
 # A present malformed registry fails closed with an actionable line number.
 # A missing library or registry is handled by the guarded hooks in the runner
@@ -37,6 +43,7 @@
 #   fork_registry_family_for_basename <test-basename>
 #   fork_registry_scripts_for_path <repository-relative-path>
 #   fork_registry_assert_no_shadow <upstream-map-function>
+#   fork_registry_assert_family_confined <upstream-family-function> <known-families-function>
 
 FORK_REGISTRY_FAMILY_NAMES=()
 FORK_REGISTRY_FAMILY_SCRIPTS=()
@@ -148,6 +155,7 @@ fork_registry_apply() { # <registry-file>
 
 fork_registry_family_for_basename() { # <test-basename>
   local want=${1:-} index=0 script
+  [ -z "${FORK_REGISTRY_UPSTREAM_ONLY:-}" ] || return 1
   for script in "${FORK_REGISTRY_FAMILY_SCRIPTS[@]+"${FORK_REGISTRY_FAMILY_SCRIPTS[@]}"}"; do
     if [ "${script##*/}" = "$want" ]; then
       printf '%s\n' "${FORK_REGISTRY_FAMILY_NAMES[$index]}"
@@ -255,6 +263,53 @@ fork_registry_assert_no_shadow() { # <upstream-map-function>
   [ "$failed" -eq 0 ] || {
     fork_registry_error \
       'covers is confined to paths upstream has no answer for: use adds where upstream still selects owners'
+    return 1
+  }
+  return 0
+}
+
+# Fails closed when a family row is not confined to what upstream leaves open:
+# the family must already be one the runner lists, so --list-families and lane
+# composition see it, and the script must be one the runner's own map leaves
+# unclassified, so the row adds a home rather than moving a script out of the
+# family upstream gave it. Call it once in the parent shell after the runner's
+# family functions are defined, for the same reason as the shadow assertion.
+fork_registry_assert_family_confined() { # <upstream-family-function> <known-families-function>
+  local family_fn=${1:-} known_fn=${2:-} index=0 script family upstream known failed=0
+  [ -n "$family_fn" ] && [ -n "$known_fn" ] || {
+    fork_registry_error 'upstream family and known-families function names are required'
+    return 2
+  }
+  command -v "$family_fn" >/dev/null 2>&1 || {
+    fork_registry_error "upstream family function is not defined: $family_fn"
+    return 2
+  }
+  command -v "$known_fn" >/dev/null 2>&1 || {
+    fork_registry_error "known-families function is not defined: $known_fn"
+    return 2
+  }
+  for script in "${FORK_REGISTRY_FAMILY_SCRIPTS[@]+"${FORK_REGISTRY_FAMILY_SCRIPTS[@]}"}"; do
+    family=${FORK_REGISTRY_FAMILY_NAMES[$index]}
+    known=0
+    while IFS= read -r upstream; do
+      [ "$upstream" != "$family" ] || known=1
+    done < <("$known_fn")
+    if [ "$known" -ne 1 ]; then
+      fork_registry_error \
+        "family $family $script names a family the runner does not list: $family"
+      failed=1
+    fi
+    upstream=$( FORK_REGISTRY_UPSTREAM_ONLY=1; "$family_fn" "${script##*/}" )
+    if [ "$upstream" != unclassified ]; then
+      fork_registry_error \
+        "family $family $script re-homes a script the runner already classifies as $upstream"
+      failed=1
+    fi
+    index=$((index + 1))
+  done
+  [ "$failed" -eq 0 ] || {
+    fork_registry_error \
+      'family is confined to listed families and scripts upstream leaves unclassified'
     return 1
   }
   return 0
