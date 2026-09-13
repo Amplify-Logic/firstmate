@@ -121,7 +121,6 @@ FM_SENTINEL_LOADED_DIGEST="$FM_SENTINEL_STATE/.supervision-sentinel.loaded-diges
 FM_SENTINEL_LAST_CHECK="$FM_SENTINEL_STATE/$FM_SUP_LAST_CHECK_NAME"
 FM_SENTINEL_DISARMED="$FM_SENTINEL_STATE/$FM_SUP_DISARM_RECORD_NAME"
 FM_SENTINEL_ARM_FAILURE="$FM_SENTINEL_STATE/$FM_SUP_ARM_RECORD_NAME"
-FM_SENTINEL_SHIFT="$FM_SENTINEL_STATE/$FM_SUP_SHIFT_RECORD_NAME"
 FM_SENTINEL_CLAIM_TOKEN=
 FM_SENTINEL_FORCE_ARM=0
 
@@ -774,7 +773,7 @@ fm_sentinel_record_check() {
 # armed glasses shift. Every in-flight gate below goes through this one
 # predicate so the claim and its post-claim revalidation can never disagree.
 fm_sentinel_idle() {
-  [ "$FM_SUP_IN_FLIGHT" -eq 0 ] && [ ! -f "$FM_SENTINEL_SHIFT" ]
+  [ "$FM_SUP_IN_FLIGHT" -eq 0 ] && ! fm_sup_shift_armed "$FM_SENTINEL_STATE"
 }
 
 # What is being supervised, for the outage summary and the OK report. The

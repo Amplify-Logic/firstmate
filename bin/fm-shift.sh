@@ -433,10 +433,17 @@ ANNOUNCE=$(printf '%q' "$ANNOUNCE")
 HEALTH_URL=$(printf '%q' "$HEALTH_URL")
 CURL_TIMEOUT=$(printf '%q' "$CURL_TIMEOUT")
 ARMED="\$STATE/$(printf '%q' "$FM_SUP_SHIFT_RECORD_NAME")"
+AFK="\$STATE/$(printf '%q' "$FM_SUP_AFK_FLAG_NAME")"
 MARK="\$STATE/$(printf '%q' "${OUTAGE_MARK##*/}")"
 LOG="\$STATE/$(printf '%q' "${SHIFT_LOG##*/}")"
 
-[ -f "\$ARMED" ] || exit 0
+# The armed test is the same two conditions as fm_sup_shift_armed in
+# bin/fm-supervision-lib.sh, which owns that definition. It is inlined rather
+# than sourced because the watcher runs this from a hash-validated snapshot that
+# cannot resolve its own location, and tests/fm-shift.test.sh asserts the two
+# stay in step. A record that outlived away mode is a stale shift, not an armed
+# one, so this check goes quiet rather than speaking into a charging headset.
+[ -f "\$ARMED" ] && [ -e "\$AFK" ] || exit 0
 # No way to ask: stay silent rather than report a false outage.
 command -v curl >/dev/null 2>&1 || exit 0
 
@@ -816,10 +823,16 @@ cmd_stop() {
 
 cmd_status() {
   local armed=false rc=0
-  [ -f "$ARMED" ] && armed=true
+  fm_sup_shift_armed "$STATE" && armed=true
 
   if [ "$armed" = true ]; then
     say "shift: armed since $(local_hm "$(armed_field started_epoch)")"
+  elif fm_sup_shift_stale "$STATE"; then
+    # A record that outlived away mode is not the same as nothing armed: the
+    # record, the registered check and the alarm block are all still on disk,
+    # and the block still owns this home's alarm channel until stop clears it.
+    say "shift: STALE - armed at $(local_hm "$(armed_field started_epoch)") but away mode has ended"
+    say '      fix: fm-shift.sh stop - the shift record, its self-check and its alarm route are still in place'
   else
     say 'shift: not armed'
   fi
@@ -850,7 +863,7 @@ cmd_status() {
 # it, then reads as a failed channel rather than as a black hole.
 cmd_alarm() {
   local summary=${1:-} line
-  [ -f "$ARMED" ] || return 1
+  fm_sup_shift_armed "$STATE" || return 1
   case "$summary" in
     *'SUPERVISION DOWN'*)
       line='Firstmate stopped watching. Your questions are not being picked up until that is fixed.' ;;

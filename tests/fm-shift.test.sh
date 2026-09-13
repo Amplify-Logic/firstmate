@@ -665,6 +665,71 @@ test_alarm_route_keeps_the_platform_default_channel() {
 
 # A begin sentinel over a block a hand edit emptied delivers nothing, so
 # presence alone must never read as a route to the captain's ear.
+# ---------------------------------------------------------------------------
+# Armed means the shift record AND away mode. A record that outlives away mode
+# is a stale shift, not a live one: bin/fm-afk-return.sh knows nothing about the
+# shift and removes none of its artifacts, so an ordinary captain return leaves
+# all of them behind. Before this, every read path read that leftover as armed
+# and the host alarm spoke "supervision down" into a headset on a charger, on a
+# five-minute-to-hourly repeat, all night.
+# ---------------------------------------------------------------------------
+test_a_record_outliving_away_mode_is_stale_not_armed() {
+  local tmp out rc=0
+  tmp=$(make_shift_home)
+  arm_shift "$tmp" >/dev/null 2>&1
+  assert_present "$tmp/home/state/.shift" 'the shift record is present'
+  # Exactly what an ordinary away-mode return leaves behind: the flag gone, every
+  # shift artifact still in place.
+  rm -f "$tmp/home/state/.afk"
+
+  out=$(run_shift "$tmp" status 2>&1) || rc=$?
+  assert_contains "$out" 'shift: STALE' 'status names the leftover as stale'
+  assert_contains "$out" 'fm-shift.sh stop' 'status names the command that clears it'
+  assert_not_contains "$out" 'shift: not armed' 'a leftover is never reported as nothing armed'
+  assert_present "$tmp/home/state/fm-shift.check.sh" 'status removed nothing'
+  pass 'armed: a record outliving away mode reports as stale, not armed and not absent'
+}
+
+test_stale_shift_silences_the_spoken_alarm() {
+  local tmp rc=0
+  tmp=$(make_shift_home)
+  arm_shift "$tmp" >/dev/null 2>&1
+  rm -f "$tmp/home/state/.afk"
+  : > "$tmp/announce.log"
+
+  run_shift "$tmp" alarm 'SUPERVISION OUTAGE: SUPERVISION DOWN: down for 12m 3s.' || rc=$?
+  [ "$rc" -ne 0 ] || fail 'a stale shift reported the alarm as delivered'
+  [ ! -s "$tmp/announce.log" ] || fail 'a stale shift spoke into the glasses'
+  pass 'armed: a stale shift refuses the alarm rather than speaking or consuming it'
+}
+
+test_stale_shift_silences_the_self_check() {
+  local tmp out
+  tmp=$(make_shift_home)
+  arm_shift "$tmp" >/dev/null 2>&1
+  rm -f "$tmp/home/state/.afk"
+  : > "$tmp/announce.log"
+
+  out=$(FAKE_HEALTH_CODE=000 run_registered_check "$tmp")
+  [ -z "$out" ] || fail "a stale shift's check still reported: $out"
+  [ ! -s "$tmp/announce.log" ] || fail "a stale shift's check still spoke"
+  pass 'armed: the registered check goes quiet once away mode has ended'
+}
+
+test_generated_check_armed_test_matches_the_library_predicate() {
+  local tmp check
+  tmp=$(make_shift_home)
+  arm_shift "$tmp" >/dev/null 2>&1
+  check="$tmp/home/state/fm-shift.check.sh"
+  # The check is rendered from a snapshot that cannot source the library, so the
+  # two conditions are inlined. This is what catches drift between them.
+  grep -q 'ARMED' "$check" || fail 'the check no longer tests the shift record'
+  grep -q 'AFK' "$check" || fail 'the check no longer tests the away-mode flag'
+  grep -Fq 'fm_sup_shift_armed' "$ROOT/bin/fm-supervision-lib.sh" \
+    || fail 'the library no longer defines fm_sup_shift_armed'
+  pass 'armed: the rendered check tests the same two conditions the library owns'
+}
+
 test_alarm_route_reports_a_gutted_block_as_down() {
   local tmp out rc=0
   tmp=$(make_shift_home)
@@ -933,6 +998,10 @@ test_supervision_alarm_speaks_without_relaying_internal_detail
 test_supervision_alarm_fails_rather_than_consuming_an_alarm_it_cannot_speak
 test_alarm_route_keeps_the_platform_default_channel
 test_alarm_route_reports_a_gutted_block_as_down
+test_a_record_outliving_away_mode_is_stale_not_armed
+test_stale_shift_silences_the_spoken_alarm
+test_stale_shift_silences_the_self_check
+test_generated_check_armed_test_matches_the_library_predicate
 test_alarm_route_preserves_a_captain_written_channel
 test_alarm_route_survives_a_captain_channel_with_no_trailing_newline
 test_shift_log_is_plain_and_never_a_task_status_file

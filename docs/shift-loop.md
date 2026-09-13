@@ -76,7 +76,9 @@ The alarm owner counts a zero exit as delivered and advances the sentinel's back
 - `stop` leaves the mailbox, the keep-awake agent, and the Tailscale mapping running.
   Those are standing services the captain also uses at his desk; tearing them down would break that too.
 - It does not hook the ordinary away-mode return, so ending away mode by any other route does not stand a shift down.
-  `state/.shift` stays, and the self-check and the alarm-route block stay with it, so `status` keeps reporting the shift armed with away mode DOWN until `stop` runs.
+  Away-mode code is deliberately untouched: `stop` calls the away-mode return owner, so having that owner call `stop` would deadlock the captain's return on a lock it already holds.
+  `state/.shift` and its artifacts therefore stay behind, but nothing treats them as a live shift: a shift counts as armed only while away mode is also active, so the host alarm stops supervising, the self-check goes quiet, and the spoken alarm refuses rather than speaking into a headset on a charger.
+  That leftover is reported as a stale shift by `status` and at session start, naming `fm-shift.sh stop`, because the record and the alarm-route block are still on disk until it runs.
 - `status` exits non-zero only when a shift is armed and one of its components is down.
   With no shift armed it still prints an honest line per component, but claims no failure, because nothing is claiming to be armed.
 

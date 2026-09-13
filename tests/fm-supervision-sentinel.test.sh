@@ -419,7 +419,10 @@ test_armed_shift_with_no_crew_task_is_supervised() {
   make_primary "$home"
   make_recorder "$recorder" "$log"
   marker="$home/state/.supervision-outage-alarm"
+  # Armed means the record AND away mode: a shift's lifetime is contained inside
+  # away mode's, and a record without the flag is a stale leftover (below).
   printf 'started_epoch=0\n' > "$home/state/.shift"
+  : > "$home/state/.afk"
   sleep 60 &
   holder=$!
   install_stale_watcher_fixture "$home" "$holder" "$ROOT/bin/fm-watch.sh" || {
@@ -452,7 +455,7 @@ test_armed_shift_with_no_crew_task_is_supervised() {
   rm -f "$home/state/task.meta" "$marker"
 
   # Standing the shift down makes the home idle again: cleared, silent, OK.
-  rm -f "$home/state/.shift"
+  rm -f "$home/state/.shift" "$home/state/.afk"
   run_check "$home" "$recorder"
   kill "$holder" 2>/dev/null || true
   wait "$holder" 2>/dev/null || true
@@ -467,11 +470,35 @@ test_armed_shift_with_no_crew_task_is_supervised() {
 # The real shift failure mode: the away daemon runs the watcher as its child, so
 # when the daemon dies no check runs at all and the host alarm is the only thing
 # left that can speak. No lock, a stale beat, a shift record: it must fire.
+# A shift record that outlived away mode is a stale leftover, not work to
+# supervise. bin/fm-afk-return.sh removes none of the shift's artifacts, so an
+# ordinary captain return leaves the record behind; supervising it would alert
+# on every idle evening and speak into a headset on a charger.
+test_a_shift_record_without_away_mode_is_not_supervised() {
+  local home="$TMP_ROOT/shift-stale" recorder="$TMP_ROOT/record-shift-stale" log="$TMP_ROOT/shift-stale-alerts.log" out status
+  make_primary "$home"
+  make_recorder "$recorder" "$log"
+  printf 'started_epoch=0\n' > "$home/state/.shift"
+  # No state/.afk: exactly what an away-mode return leaves behind.
+  touch -t 202001010000 "$home/state/.last-watcher-beat"
+
+  run_check "$home" "$recorder"
+  [ ! -s "$log" ] || fail "a stale shift record alerted: $(cat "$log")"
+  [ ! -e "$home/state/.supervision-outage-alarm" ] || fail "a stale shift record wrote an outage marker"
+
+  out=$(run_mode "$home" "$recorder" check); status=$?
+  expect_code 0 "$status" "a stale shift record must report OK, not an outage"
+  assert_contains "$out" 'OK - no task metadata in flight and no glasses shift armed' \
+    "the stale-record verdict did not report the home as having nothing to supervise: $out"
+  pass "supervision sentinel: a shift record that outlived away mode is not supervised"
+}
+
 test_dead_away_daemon_with_a_shift_armed_fires_the_host_alarm() {
   local home="$TMP_ROOT/shift-dead" recorder="$TMP_ROOT/record-shift-dead" log="$TMP_ROOT/shift-dead-alerts.log" holder identity out
   make_primary "$home"
   make_recorder "$recorder" "$log"
   printf 'started_epoch=0\n' > "$home/state/.shift"
+  : > "$home/state/.afk"
   touch -t 202001010000 "$home/state/.last-watcher-beat"
 
   run_check "$home" "$recorder"
@@ -1259,6 +1286,7 @@ test_symlinked_home_is_not_reported_as_an_outage
 test_live_identity_matched_watcher_stays_silent
 test_armed_shift_with_no_crew_task_is_supervised
 test_dead_away_daemon_with_a_shift_armed_fires_the_host_alarm
+test_a_shift_record_without_away_mode_is_not_supervised
 test_failed_alert_stays_pending_and_retries
 test_arm_registers_one_home_scoped_read_only_launchd_job
 test_unconverged_arm_backs_off_instead_of_churning_launchd
