@@ -183,6 +183,7 @@ It also asserts both guidance branches verbatim, allows a genuine first run over
 `tests/fm-session-start.test.sh` proves both the deliberate disarm and the suppressed-registration cooldown reach every session-start digest with their timing and recovery command.
 `tests/fm-turnend-guard.test.sh` additionally runs the Stop hook with the sentinel enabled and every channel pointed at a recorder, proving the block still renders fast, the marker lands unclaimed, and no channel fires.
 `tests/fm-file-eventwait.test.sh` proves mailbox and inbox writes during a dead watcher or successor-arm gap expire the check marker on catch-up, unchanged paths do not double-fire, and a write hidden behind a clean wait timeout is recovered on the next loop.
+It also runs the watcher from a mirrored checkout with `bin/fm-file-event-lib.sh` removed and proves the fork wait and catch-up are undefined there, the watcher blind-sleeps its poll interval without expiring the slow-check timer, and stderr stays silent, with a counterfactual that deletes each guard to show those assertions fail.
 `tests/fm-primary.test.sh` proves both Claude primary launchers, including the `claude` and `opus` aliases, export `CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP=1` into the launched process and that other profiles do not.
 
 ## Sanitized live evidence, 2026-07-17
