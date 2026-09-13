@@ -1419,9 +1419,9 @@ EOF
   # it, because running both would serialise a shortened wait behind a full poll
   # sleep and the glasses interrupt would become a no-op. Its trigger is
   # narrower than "the fork is installed" - a home with glasses watch paths -
-  # and for every other home bin/fm-file-event-lib.sh takes exactly the branches
-  # event_wait_or_sleep takes below. With the library absent, this line is the
-  # branch that runs.
+  # and for every other home bin/fm-file-event-lib.sh calls event_wait_or_sleep
+  # below itself rather than copying it. With the library absent, this line is
+  # the branch that runs.
   if command -v fm_fork_event_wait_or_sleep >/dev/null 2>&1; then
     fm_fork_event_wait_or_sleep
   else

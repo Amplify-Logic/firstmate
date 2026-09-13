@@ -168,6 +168,7 @@ The live waiter still compares signatures around each bounded wait, which covers
 Each watcher loop captures a private marker before filesystem catch-up and publishes that boundary only when an authenticated check sweep completes, so unchanged paths do not fire twice while a later write remains newer for the next loop or successor.
 This catch-up is part of the existing singleton watcher cycle and does not add another watcher, change lock ownership, or alter the one-actionable-reason exit contract.
 Both the catch-up and the forked terminal wait are reached through guarded calls, so a checkout without `bin/fm-file-event-lib.sh` runs the watcher's own `event_wait_or_sleep` and its ordinary check cadence instead.
+The check that the override stays visible in the watcher's own control flow lives in `tests/fm-file-eventwait.test.sh` rather than in a fork-owned assertion helper like the test registry's, because the registry assertions run when the test runner calls them at selection time, and the watcher has no equivalent load-time moment: it is a long-running daemon, and re-walking its own source on every start would cost work every cycle for a property that only changes when the file changes.
 `docs/bridge-view.md` owns the separate glasses existence-only watcher-check guidance.
 
 ## Regression coverage

@@ -312,20 +312,31 @@ fm_fork_race_push_and_file_wait() {  # <backend> <session>
 }
 
 # fm_fork_event_wait_or_sleep: the fork's replacement for the watcher's terminal
-# wait. It keeps every branch upstream's event_wait_or_sleep has and adds one
-# input upstream has no answer for: a home whose glasses watch paths exist. For
-# such a home the blind sleep becomes a bounded file wait, and a push-capable
-# home races the file wait against the native transition wait so whichever
-# arrives first unblocks the cycle. For a home with no glasses paths every
-# branch below is upstream's, which is why the additive form of this hook would
-# be a no-op: chaining this wait with upstream's would serialise a shortened
-# wait behind a full poll sleep and the mailbox change would stop interrupting
-# anything. The poll loop in the watcher still runs every cycle, so this only
-# ever SHORTENS latency and can never drop an escalation.
+# wait. Its trigger is one input upstream has no answer for: a home whose
+# glasses watch paths exist. Those paths are collected before anything else,
+# and a home without them is handed straight to the watcher's own
+# event_wait_or_sleep, so upstream's behaviour for that home is upstream's code
+# running rather than a copy of it. For a home with glasses paths the blind
+# sleep becomes a bounded file wait, and a push-capable home races the file
+# wait against the native transition wait so whichever arrives first unblocks
+# the cycle. That race is why the additive form of this hook would be a no-op:
+# chaining this wait with upstream's would serialise a shortened wait behind a
+# full poll sleep and the mailbox change would stop interrupting anything. The
+# poll loop in the watcher still runs every cycle, so this only ever SHORTENS
+# latency and can never drop an escalation.
 fm_fork_event_wait_or_sleep() {
-  local w b session first_backend="" first_session="" rec rc p
+  local w b session first_backend="" first_session="" p
   local windows=()
   local paths=()
+  while IFS= read -r p; do
+    [ -n "$p" ] || continue
+    paths+=("$p")
+  done < <(fm_glasses_watch_paths "$FM_HOME")
+  if [ "${#paths[@]}" -eq 0 ]; then
+    event_wait_or_sleep
+    return
+  fi
+
   while IFS= read -r w; do
     b=$(window_backend "$w")
     fm_backend_has_push "$b" || continue
@@ -344,17 +355,9 @@ fm_fork_event_wait_or_sleep() {
     fi
     windows+=("$w")
   done < <(recorded_windows)
-  while IFS= read -r p; do
-    [ -n "$p" ] || continue
-    paths+=("$p")
-  done < <(fm_glasses_watch_paths "$FM_HOME")
 
   if [ "${#windows[@]}" -eq 0 ]; then
-    if [ "${#paths[@]}" -gt 0 ]; then
-      fm_fork_file_event_wait_or_sleep "${paths[@]}"
-    else
-      sleep "$POLL"
-    fi
+    fm_fork_file_event_wait_or_sleep "${paths[@]}"
     return
   fi
 
@@ -370,22 +373,11 @@ fm_fork_event_wait_or_sleep() {
     _event_cap_fails=0
   fi
   if [ "$_event_cap_ok" != 1 ]; then
-    if [ "${#paths[@]}" -gt 0 ]; then
-      fm_fork_file_event_wait_or_sleep "${paths[@]}"
-    else
-      sleep "$POLL"
-    fi
+    fm_fork_file_event_wait_or_sleep "${paths[@]}"
     return
   fi
 
-  if [ "${#paths[@]}" -gt 0 ]; then
-    FM_FORK_EVENT_WAIT_WINDOWS=("${windows[@]}")
-    FM_FORK_FILE_EVENT_PATHS=("${paths[@]}")
-    fm_fork_race_push_and_file_wait "$first_backend" "$first_session"
-    return
-  fi
-
-  rec=$(FM_BACKEND_EVENTS_CAPABILITY_CONFIRMED=1 fm_backend_wait_transition "$first_backend" "$first_session" "$POLL" "$STATE" "${windows[@]}")
-  rc=$?
-  fm_fork_apply_push_wait_result "$first_backend" "$first_session" "$rec" "$rc"
+  FM_FORK_EVENT_WAIT_WINDOWS=("${windows[@]}")
+  FM_FORK_FILE_EVENT_PATHS=("${paths[@]}")
+  fm_fork_race_push_and_file_wait "$first_backend" "$first_session"
 }

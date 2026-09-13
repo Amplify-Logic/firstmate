@@ -326,6 +326,55 @@ fm_fork_event_wait_or_sleep
 grep -q 'SLEEP' "$SLEEP_LOG" && fail "herdr failure must not blind-sleep while the file waiter remains usable"
 pass "fm_fork_event_wait_or_sleep: fractional poll survives herdr failure and file event still interrupts"
 
+# --- the splice: no glasses paths delegates to upstream's wait ---------------
+# Every case above sets glasses paths. With the library present and no paths,
+# the fork must hand the cycle to event_wait_or_sleep itself, so the assertions
+# here are upstream's own effects for each window shape.
+
+reset_state
+fm_write_meta "$STATE_DIR/tk4.meta" "window=fmses:fm-tk4" "kind=ship"
+touch "$STATE_DIR/.last-check"
+# shellcheck disable=SC2329
+fm_glasses_watch_paths() { :; }
+# shellcheck disable=SC2329
+fm_file_event_wait() { printf 'FILEWAIT %s\n' "$*" >> "$TMP/filewait"; return 0; }
+# shellcheck disable=SC2329
+fm_backend_wait_transition() { printf 'CALLED\n' > "$TMP/wtcalled"; return 1; }
+fm_fork_event_wait_or_sleep
+[ "$(grep -c 'SLEEP' "$SLEEP_LOG")" = 1 ] \
+  || fail "a tmux-only home without glasses paths must take upstream's single poll sleep"
+[ ! -e "$TMP/wtcalled" ] || fail "a tmux-only home must not invoke the herdr wait"
+[ ! -e "$TMP/filewait" ] || fail "a home without glasses paths must not attempt a file wait"
+[ -e "$STATE_DIR/.last-check" ] || fail "upstream's poll sleep must leave .last-check alone"
+pass "fm_fork_event_wait_or_sleep: no glasses paths on a tmux-only home runs upstream's poll sleep"
+
+reset_state
+fm_write_meta "$STATE_DIR/tk5.meta" "window=default:wG:pQ" "backend=herdr" "kind=ship"
+touch "$STATE_DIR/.last-check"
+# shellcheck disable=SC2329
+fm_backend_events_capable() { return 0; }
+# shellcheck disable=SC2329
+fm_glasses_watch_paths() { :; }
+# shellcheck disable=SC2329
+fm_file_event_wait() { printf 'FILEWAIT %s\n' "$*" >> "$TMP/filewait"; return 0; }
+# shellcheck disable=SC2329
+fm_backend_wait_transition() {
+  printf 'CALLED %s\n' "$*" > "$TMP/wtcalled"
+  fm_transition_record wG:pQ "wG" "" blocked claude
+  return 0
+}
+fm_fork_event_wait_or_sleep
+grep -q '^CALLED herdr default ' "$TMP/wtcalled" \
+  || fail "a herdr home without glasses paths must run upstream's native transition wait"
+[ -e "$STATE_DIR/.wake-queue" ] || fail "upstream's herdr wait must still escalate blocked"
+grep -q 'herdr: agent blocked' "$STATE_DIR/.wake-queue" \
+  || fail "upstream's herdr wait must keep the blocked stale payload"
+[ "$_event_cap_fails" = 0 ] || fail "upstream's rc 0 arm resets the fail count, got $_event_cap_fails"
+grep -q 'SLEEP' "$SLEEP_LOG" && fail "upstream's herdr win must not sleep"
+[ ! -e "$TMP/filewait" ] || fail "a home without glasses paths must not attempt a file wait"
+[ -e "$STATE_DIR/.last-check" ] || fail "upstream's herdr wait must leave .last-check alone"
+pass "fm_fork_event_wait_or_sleep: no glasses paths on a herdr home runs upstream's native wait"
+
 # --- hook W1 degrades to upstream when the library is absent -----------------
 # The splice above is a declared override: it replaces the watcher's terminal
 # wait instead of running beside it. The promise that makes that legitimate is
@@ -391,11 +440,9 @@ run_degraded_root() {
   mkdir -p "$state" "$home/data/glasses-voice-runtime"
   : > "$home/data/glasses-voice-runtime/mailbox.db"
   touch "$state/.last-check"
-  set +e
   FM_ROOT_OVERRIDE="$root" FM_STATE_OVERRIDE="$state" FM_HOME="$home" FM_POLL=1 \
     bash "$TMP/degraded-driver.sh" > "$TMP/$tag.out" 2> "$TMP/$tag.err"
   deg_rc=$?
-  set -e
   deg_state=$state
 }
 
