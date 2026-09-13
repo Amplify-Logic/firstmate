@@ -671,6 +671,8 @@ if command -v fm_account_spawn_pin >/dev/null 2>&1; then
   ACCOUNT_NAME=$FM_ACCOUNT_SPAWN_NAME
   ACCOUNT_HOME=$FM_ACCOUNT_SPAWN_HOME
   ACCOUNT_ENV=$FM_ACCOUNT_SPAWN_ENV
+else
+  [ "$ACCOUNT_SET" -eq 0 ] || { echo "error: --account needs bin/fm-account-lib.sh" >&2; exit 1; }
 fi
 
 # config/secondmate-harness may carry optional model/effort tokens alongside the
