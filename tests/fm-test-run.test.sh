@@ -196,7 +196,7 @@ test_fork_registry_overlay() {
   assert_contains "$listed" "tests/fm-secondmate-sync.test.sh" \
     "adds row keeps the upstream seed-marker owner"
   assert_contains "$listed" "tests/fm-upstream-watch.test.sh" \
-    "adds row keeps the upstream private-report owner"
+    "adds row contributes the fork private-report owner"
   rm -f "$repo/.gitignore"
 
   mv "$repo/tests/fork-test-registry.conf" "$repo/tests/fork-test-registry.disabled"
