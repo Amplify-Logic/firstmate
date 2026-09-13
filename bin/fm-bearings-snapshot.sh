@@ -70,6 +70,10 @@
 # Output contract: `fm-bearings.v1`. Read-only; no locks, no mutation, no reports.
 # in_flight rows include a captain-facing `title` (backlog title, else a
 # non-id fallback). `doing` remains the internal current-state detail.
+# The bridge fields (`title`, `repo`, `hold_kind`, `hold_reason`, and the
+# secondmate `repo`) are added by bin/fm-bridge-fields.sh after the projection
+# below, in one guarded step before the format branch. With that script absent
+# the output is the projection alone and those fields are simply missing.
 set -u
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
