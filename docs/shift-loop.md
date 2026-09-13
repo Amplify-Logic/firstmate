@@ -62,7 +62,7 @@ That recovery line is the only one that can actually reach him, which is why it 
 
 A supervision outage is different: the mailbox is still up, so it can be spoken.
 Detection belongs to the host launchd sentinel described in [`wedge-alarm.md`](wedge-alarm.md), which checks the home once a minute from outside the harness process tree.
-While `state/.shift` exists it treats the home as worth supervising even with no crew task in flight, because shift questions arrive as mailbox events and never as tasks.
+While a shift is armed, meaning `state/.shift` is present and away mode is active, it treats the home as worth supervising even with no crew task in flight, because shift questions arrive as mailbox events and never as tasks.
 That matters most when the away daemon dies, since the watcher is its child and no registered check runs at all after that; the host sentinel is then the only thing left that can speak.
 Its alarm goes out through the `command:` directive `start` installed, which runs `fm-shift.sh alarm`, so a dead watcher is spoken once the beacon grace has passed plus one check interval, not instantly.
 That alarm is spoken as one plain line; the raw outage summary carries task ids and durations and is read only to tell the two alarm kinds apart, never relayed.
@@ -79,6 +79,9 @@ The alarm owner counts a zero exit as delivered and advances the sentinel's back
   Away-mode code is deliberately untouched: `stop` calls the away-mode return owner, so having that owner call `stop` would deadlock the captain's return on a lock it already holds.
   `state/.shift` and its artifacts therefore stay behind, but nothing treats them as a live shift: a shift counts as armed only while away mode is also active, so the host alarm stops supervising, the self-check goes quiet, and the spoken alarm refuses rather than speaking into a headset on a charger.
   That leftover is reported as a stale shift by `status` and at session start, naming `fm-shift.sh stop`, because the record and the alarm-route block are still on disk until it runs.
+  A `start` over that leftover begins a fresh shift with its own start time and log line, so the next `stop` report never spans the gap since the earlier one; only a `start` while away mode is still active keeps the original start time.
+- `stop` captures the return owner's output so the report reads as one block, and then prints it in full under its own label, on a clean return as much as on a failed one.
+  The owner prints each drained catch-up wake once and then deletes the evidence, so that output is the only copy and nothing it printed is dropped.
 - `status` exits non-zero only when a shift is armed and one of its components is down.
   With no shift armed it still prints an honest line per component, but claims no failure, because nothing is claiming to be armed.
 

@@ -615,7 +615,7 @@ refuse() {
 
 cmd_start() {
   local rearm=false started_epoch
-  [ -f "$ARMED" ] && rearm=true
+  fm_sup_shift_armed "$STATE" && rearm=true
 
   run_probe probe_power || true
   run_probe probe_keepawake || true
@@ -655,6 +655,7 @@ cmd_start() {
 
   started_epoch=$(now_epoch)
   if [ "$rearm" = false ]; then
+    rm -f "$OUTAGE_MARK"
     # Scoped umask: the armed record is private, and nothing else this run
     # writes should inherit the tighter mask.
     if ! ( umask 077; {
@@ -780,11 +781,14 @@ cmd_stop() {
   [ "$ran" -ge 0 ] || ran=0
 
   # Hand away mode back to its own return owner first, so the shift report below
-  # is one block rather than a block wrapped around that owner's output. Every
-  # piece of shift arming is torn down only once away mode has genuinely
-  # stopped: a failed return leaves the shift, its self-check and its alarm
-  # route in place for the next stop to retry, rather than an away daemon that
-  # nothing claims and no channel can speak for.
+  # is one block rather than a block wrapped around that owner's output. That
+  # output is the only copy of what the owner drained (fm-afk-return.sh prints
+  # each catch-up wake and then deletes its evidence), so it is printed in full
+  # after the report on every path. Every piece of shift arming is torn down
+  # only once away mode has genuinely stopped: a failed return leaves the
+  # shift, its self-check and its alarm route in place for the next stop to
+  # retry, rather than an away daemon that nothing claims and no channel can
+  # speak for.
   local away_out away_rc=0
   away_out=$("$AFK_RETURN" 2>&1) || away_rc=$?
   if [ ! -e "$STATE/.afk" ]; then
@@ -810,14 +814,17 @@ cmd_stop() {
   if [ -e "$STATE/.afk" ]; then
     rc=1
     say "  away mode: STILL RUNNING - its return owner could not stop it; run fm-shift.sh stop again to retry, or stop it by hand with $AFK_LAUNCH stop, then run $AFK_RETURN"
-    printf '%s\n' "$away_out" | sed 's/^/      /'
   elif [ "$away_rc" -eq 0 ]; then
     say '  away mode: stopped'
   else
-    say '  away mode: stopped, and there is catch-up to clear before ordinary work resumes:'
-    printf '%s\n' "$away_out" | sed 's/^/      /'
+    say '  away mode: stopped, and there is catch-up to clear before ordinary work resumes (see below)'
   fi
   say '  left running: the mailbox, the keep-awake agent and the phone route (you use those at your desk too)'
+  if [ -n "$away_out" ]; then
+    say ''
+    say "Away-mode return output (${AFK_RETURN##*/}, exit $away_rc) - the only copy of what was drained while you were out:"
+    printf '%s\n' "$away_out" | sed 's/^/  /'
+  fi
   return "$rc"
 }
 

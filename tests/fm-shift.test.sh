@@ -110,6 +110,8 @@ SH
 
   # FAKE_AFK_RETURN_KEEPS_AFK=1 models the return owner failing to stop the
   # daemon: .afk stays and the owner exits 3, exactly as fm-afk-return.sh does.
+  # FAKE_AFK_RETURN_DRAINED carries the catch-up lines the real owner prints
+  # once and then deletes the evidence of, so the fake is the only copy too.
   cat > "$home/afk-return" <<'SH'
 #!/usr/bin/env bash
 if [ "${FAKE_AFK_RETURN_KEEPS_AFK:-0}" = 1 ]; then
@@ -118,6 +120,7 @@ if [ "${FAKE_AFK_RETURN_KEEPS_AFK:-0}" = 1 ]; then
 fi
 rm -f "$FM_STATE_OVERRIDE/.afk"
 printf 'away mode stopped\n'
+[ -z "${FAKE_AFK_RETURN_DRAINED:-}" ] || printf '%s\n' "$FAKE_AFK_RETURN_DRAINED"
 exit "${FAKE_AFK_RETURN_EXIT:-0}"
 SH
 
@@ -208,6 +211,7 @@ run_shift() {  # <tmp> <args...>
     FAKE_AFK_LAUNCH_EXIT="${FAKE_AFK_LAUNCH_EXIT:-0}" \
     FAKE_AFK_RETURN_EXIT="${FAKE_AFK_RETURN_EXIT:-0}" \
     FAKE_AFK_RETURN_KEEPS_AFK="${FAKE_AFK_RETURN_KEEPS_AFK:-0}" \
+    FAKE_AFK_RETURN_DRAINED="${FAKE_AFK_RETURN_DRAINED:-}" \
     FAKE_ANNOUNCE_EXIT="${FAKE_ANNOUNCE_EXIT:-0}" \
     FAKE_ANNOUNCE_DRYRUN_EXIT="${FAKE_ANNOUNCE_DRYRUN_EXIT:-0}" \
     bash "$SHIFT" "$@"
@@ -356,6 +360,44 @@ test_start_is_safe_to_run_twice() {
   lines=$(grep -c ' armed ' "$tmp/home/state/.shift-log")
   [ "$lines" = 1 ] || fail "arming twice recorded the shift twice ($lines times)"
   pass 'start: safe to run twice - it re-verifies and re-converges, duplicating nothing'
+}
+
+# An ordinary away-mode return leaves the record behind (see the stale tests
+# below). The next start must not adopt it: yesterday's start time would make
+# the stop report span the gap, count questions and outages from before this
+# shift, and the log would show one shift where the captain worked two.
+test_start_over_a_stale_record_begins_a_fresh_shift() {
+  local tmp out old_epoch new_epoch lines
+  tmp=$(make_shift_home)
+  arm_shift "$tmp" >/dev/null 2>&1
+  old_epoch=$(( $(date +%s) - 7200 ))
+  printf 'started_epoch=%s\nstarted_iso=2000-01-01T00:00:00Z\n' "$old_epoch" > "$tmp/home/state/.shift"
+  printf '2000-01-01T00:00:00Z armed shift armed\n2000-01-01T01:00:00Z down mailbox unreachable\n2000-01-01T01:05:00Z up mailbox back\n' \
+    > "$tmp/home/state/.shift-log"
+  : > "$tmp/home/state/.shift-mailbox-outage"
+  rm -f "$tmp/home/state/.afk"
+
+  out=$(run_shift "$tmp" start 2>&1)
+  assert_contains "$out" 'Shift loop armed.' 'start over a stale record still arms'
+  new_epoch=$(sed -n 's/^started_epoch=//p' "$tmp/home/state/.shift")
+  [ "$new_epoch" -gt "$old_epoch" ] || fail "start adopted the stale record's start time ($new_epoch)"
+  assert_no_grep '^started_iso=2000-' "$tmp/home/state/.shift" 'the stale started_iso was rewritten'
+  lines=$(grep -c ' armed ' "$tmp/home/state/.shift-log")
+  [ "$lines" = 2 ] || fail "a fresh shift over a stale record logged $lines armed lines, not 2"
+  assert_absent "$tmp/home/state/.shift-mailbox-outage" 'an outage episode from the earlier shift is not carried into this one'
+
+  out=$(run_shift "$tmp" stop 2>&1)
+  assert_contains "$out" 'ran: 0m' 'the stop report spans only this shift, not the gap since the earlier one'
+  assert_contains "$out" 'interruptions: none' "the earlier shift's outage is not counted against this one"
+
+  # A genuine re-arm, with away mode still active, keeps its start time.
+  tmp=$(make_shift_home)
+  arm_shift "$tmp" >/dev/null 2>&1
+  printf 'started_epoch=%s\nstarted_iso=2000-01-01T00:00:00Z\n' "$old_epoch" > "$tmp/home/state/.shift"
+  run_shift "$tmp" start >/dev/null 2>&1
+  new_epoch=$(sed -n 's/^started_epoch=//p' "$tmp/home/state/.shift")
+  [ "$new_epoch" = "$old_epoch" ] || fail 'a re-arm while away mode is active must keep the original start time'
+  pass 'start: a record that outlived away mode is rewritten as a fresh shift, a live one is kept'
 }
 
 # The host sentinel is the only detector of a watcher outage during a shift, so
@@ -830,6 +872,29 @@ test_stop_reports_what_happened_during_the_shift() {
   pass 'stop: reports the shift in one short block, including its interruptions'
 }
 
+# The return owner prints each drained durable wake once and then deletes its
+# evidence, so its stdout is the only copy. stop captures it to keep the report
+# one block, and that capture must never cost the evidence: on a clean return
+# as much as on a failed one, every line the owner printed reaches the captain.
+test_stop_keeps_the_return_owners_output_on_a_clean_return() {
+  local tmp out rc=0
+  tmp=$(make_shift_home)
+  arm_shift "$tmp" >/dev/null 2>&1
+  out=$(FAKE_AFK_RETURN_DRAINED=$'catch-up wake: mailbox question 1\ncatch-up wake: self-check outage' \
+        run_shift "$tmp" stop 2>&1) || rc=$?
+  expect_code 0 "$rc" 'a clean return is a successful stand-down'
+  assert_contains "$out" 'Shift stood down.' 'the report block is still printed first'
+  assert_contains "$out" 'away mode: stopped' 'away mode is reported stopped'
+  assert_contains "$out" 'catch-up wake: mailbox question 1' 'the first drained wake survives the capture'
+  assert_contains "$out" 'catch-up wake: self-check outage' 'the last drained wake survives the capture'
+  assert_contains "$out" 'Away-mode return output' 'the drained evidence is labelled apart from the shift summary'
+  case "$out" in
+    *'Shift stood down.'*'Away-mode return output'*'catch-up wake: mailbox question 1'*) ;;
+    *) fail 'the return output must follow the report block under its label' ;;
+  esac
+  pass 'stop: a clean return still surfaces every line the return owner printed'
+}
+
 test_stop_clears_an_outage_still_open_at_the_end() {
   local tmp
   tmp=$(make_shift_home)
@@ -984,6 +1049,7 @@ test_missing_serve_mapping_is_rearmed_and_verified
 test_start_arms_and_speaks_one_confirmation
 test_start_uses_the_away_mode_launch_owner_not_a_native_background_path
 test_start_is_safe_to_run_twice
+test_start_over_a_stale_record_begins_a_fresh_shift
 test_start_refuses_when_the_host_sentinel_cannot_fire
 test_sentinel_freshness_uses_the_loaded_jobs_own_interval
 test_status_is_honest_when_the_host_sentinel_cannot_fire
@@ -1008,6 +1074,7 @@ test_shift_log_is_plain_and_never_a_task_status_file
 test_stop_is_safe_when_nothing_is_armed
 test_stop_leaves_the_standing_services_alone
 test_stop_reports_what_happened_during_the_shift
+test_stop_keeps_the_return_owners_output_on_a_clean_return
 test_stop_clears_an_outage_still_open_at_the_end
 test_stop_says_plainly_when_away_mode_is_still_running
 test_stop_keeps_the_shift_armed_until_away_mode_really_stopped
