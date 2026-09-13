@@ -912,6 +912,14 @@ families_for_changed_path() {
       printf '%s\n' pure-contract-unit
       printf '%s\n' real-herdr-gated
       ;;
+    .pi/extensions/fm-calm.ts|.pi/extensions/lib/fm-calm-*.ts)
+      # The Calm lib modules are only reached through the fm-calm.ts factory,
+      # which the calm suite drives after copying the whole lib/ directory, so
+      # a by-path grep finds no owner for the two layout modules. Name both
+      # owners explicitly: the behaviour suite and the strict type check.
+      printf '%s\n' "__script__:fm-calm-extension.test.sh"
+      printf '%s\n' "__script__:fm-pi-primary-types.test.sh"
+      ;;
     docs/fm-test-portable-shards.md|docs/fm-test-isolation-proof.md|\
     docs/fm-test-isolation-proof.json)
       printf '%s\n' pure-contract-unit
