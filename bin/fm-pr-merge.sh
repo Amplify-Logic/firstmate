@@ -5,9 +5,8 @@
 # owner/repository and PR number are passed to gh-axi as separate arguments.
 #
 # Merge method defaults to --squash when the caller passes none of --squash,
-# --merge, --rebase, or --method (or their -s, -m, -r short forms) after the
-# optional -- separator. Extra args must not include --repo or -R because the
-# repository comes only from the URL.
+# --merge, --rebase, or --method after the optional -- separator. Extra args
+# must not include --repo or -R because the repository comes only from the URL.
 #
 # A squash merge supplies its own commit body. GitHub composes the default
 # squash body from every commit in the PR and appends a hoisted
@@ -65,9 +64,9 @@ caller_merge_method() {
       return 0
     fi
     case "$arg" in
-      --squash|-s) printf 'squash\n'; return 0 ;;
-      --merge|-m) printf 'merge\n'; return 0 ;;
-      --rebase|-r) printf 'rebase\n'; return 0 ;;
+      --squash) printf 'squash\n'; return 0 ;;
+      --merge) printf 'merge\n'; return 0 ;;
+      --rebase) printf 'rebase\n'; return 0 ;;
       --method=*) printf '%s\n' "${arg#--method=}"; return 0 ;;
       --method) awaiting_value=1 ;;
     esac
@@ -90,20 +89,23 @@ reject_repo_overrides() {
 # Filter a commit message on stdin: drop Claude-Session trailers and every
 # Co-authored-by trailer whose identity names an agent, then drop the
 # separator and blank lines a fully stripped trailer block leaves behind.
-# A co-author is an agent when any word of its name or address is one of the
-# agent words, when it carries a bot marker ("[bot]", a -bot or _bot suffix,
-# or a standalone "bot" word), or when the address is a bare service mailbox
-# such as noreply@ or no-reply@ at a vendor domain. Matching is word based, so
-# an agent at users.noreply.github.com is stripped while a human whose local
-# part is personal on that same privacy domain is preserved. A message with
-# no dropped line is passed through byte for byte.
+# A co-author is an agent when any whole word of its name or address is one
+# of the known agent names, or when its address is at a known agent vendor
+# domain or a subdomain of one, which covers service mailboxes such as
+# noreply@anthropic.com. Matching is word based, never a bare substring, so an
+# agent at users.noreply.github.com is stripped while a human whose local part
+# is personal on that same privacy domain, and a human surname that merely
+# contains an agent-like fragment, are preserved. A message with no dropped
+# line is passed through byte for byte.
 strip_agent_trailers() {
   awk '
     BEGIN {
-      split("claude codex cursor grok kimi opus fable gpt openai anthropic" \
-            " copilot gemini devin sonnet haiku chatgpt bot", agent_words, " ")
+      split("claude codex cursor grok kimi opus fable gpt chatgpt openai anthropic" \
+            " copilot gemini devin sonnet haiku", agent_words, " ")
+      split("anthropic.com openai.com cursor.com cursor.sh x.ai moonshot.ai" \
+            " moonshot.cn devin.ai cognition.ai", agent_domains, " ")
     }
-    function is_agent(value,   words, i, addr) {
+    function is_agent(value,   words, i, addr, domain) {
       words = " " tolower(value) " "
       gsub(/[^a-z0-9]+/, " ", words)
       for (i in agent_words) {
@@ -112,7 +114,11 @@ strip_agent_trailers() {
       addr = tolower(value)
       if (match(addr, /<[^<>]*>/)) addr = substr(addr, RSTART + 1, RLENGTH - 2)
       gsub(/[[:space:]]+/, "", addr)
-      if (index(addr, "@") > 0 && substr(addr, 1, index(addr, "@") - 1) ~ /^no-?reply$/) return 1
+      if (index(addr, "@") == 0) return 0
+      domain = substr(addr, index(addr, "@") + 1)
+      for (i in agent_domains) {
+        if (domain == agent_domains[i] || substr(domain, length(domain) - length(agent_domains[i])) == "." agent_domains[i]) return 1
+      }
       return 0
     }
     {

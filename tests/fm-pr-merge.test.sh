@@ -351,10 +351,8 @@ Co-authored-by: Cursor <cursoragent@cursor.com>
 Co-authored-by: Codex <codex@openai.com>
 Co-authored-by: Copilot <175728472+Copilot@users.noreply.github.com>
 Co-authored-by: ChatGPT <chatgpt@example.invalid>
-Co-authored-by: dependabot[bot] <49699333+dependabot[bot]@users.noreply.github.com>
-Co-authored-by: Release Bot <release-bot@example.invalid>
-Co-authored-by: Vendor Service <noreply@vendor.invalid>
-Co-authored-by: Vendor Service <no-reply@vendor.invalid>
+Co-authored-by: Vendor Service <noreply@mail.openai.com>
+Co-authored-by: Vendor Service <no-reply@cursor.com>
 BODY
 
   run_pr_merge "$case_dir" task-x1 https://github.com/example/repo/pull/31 \
@@ -390,6 +388,7 @@ test_keeps_human_coauthor_trailer() {
 Co-authored-by: Dana Verhoeven <dana@example.com>
 Co-authored-by: Sam Okafor <9182734+sokafor@users.noreply.github.com>
 Co-authored-by: Abbott Botha <abbott.botha@example.com>
+Co-authored-by: J Bot-Smith <j@example.com>
 Co-authored-by: Claude Opus 5 <noreply@anthropic.com>
 Co-authored-by: Copilot <175728472+Copilot@users.noreply.github.com>
 BODY
@@ -403,6 +402,8 @@ BODY
     "keep-human-trailer: a human co-author on the GitHub privacy domain was stripped"
   assert_grep 'Co-authored-by: Abbott Botha <abbott.botha@example.com>' "$case_dir/gh-axi.body" \
     "keep-human-trailer: a human whose name merely contains the letters bot was stripped"
+  assert_grep 'Co-authored-by: J Bot-Smith <j@example.com>' "$case_dir/gh-axi.body" \
+    "keep-human-trailer: a human whose hyphenated surname contains Bot as a word was stripped"
   assert_no_grep 'anthropic' "$case_dir/gh-axi.body" \
     "keep-human-trailer: the agent co-author survived alongside the humans"
   assert_no_grep 'Copilot' "$case_dir/gh-axi.body" \
