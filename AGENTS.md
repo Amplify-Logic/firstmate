@@ -62,7 +62,7 @@ README.md            public overview and development notes
 .claude/skills       symlink to .agents/skills for claude compatibility
 skills/              standalone public installer-facing skills, committed; not loaded by firstmate
 bin/                 helper scripts, committed; read each script's header before first use
-.env                 optional X-mode pairing token; LOCAL, gitignored; presence-gates section 14
+.env                 optional X-mode pairing token (presence-gates section 14) and optional DEEPGRAM_API_KEY for desk voice (docs/desk-floater.md); LOCAL, gitignored; never logged
 config/crew-harness  crewmate harness override; LOCAL, gitignored; absent or "default" = same as firstmate. Inherited as the literal file: a concrete primary adapter value also controls a secondmate home's own crewmates (section 4)
 config/crew-dispatch.json  optional crewmate dispatch profiles; LOCAL, gitignored; firstmate-maintained but human-editable natural-language rules that choose a per-task harness/model/effort profile (section 4). Inherited by secondmate homes
 config/secondmate-harness  harness the PRIMARY uses to launch SECONDMATE agents, optionally followed by a model and effort token on the same line ("<harness> [<model>] [<effort>]"; section 4); LOCAL, gitignored; absent or "default" harness falls back to config/crew-harness then firstmate's own. The primary's own setting; NOT inherited into secondmate homes (secondmates do not spawn secondmates)
@@ -108,6 +108,7 @@ state/               volatile runtime signals; gitignored
   x-watch.check.sh   generated X-mode relay poll shim; present only when opted in (section 14)
   <label>.check.sh   generated morning-intake or channel-intake poll shim; present only when that intake is armed (docs/configuration.md "Morning intake"; docs/channel-intake.md)
   pending-replies/   parent-owned secondmate pending-reply records for correlated delivery, recovery, and one-shot escalation; bin/fm-pending-reply-lib.sh
+  desk-voice/        durable desk-floater push-to-talk mailbox: inbox/ holds pending captain-input transcripts, processed/ holds drained ones; `bin/fm-desk-voice.sh drain` empties it (docs/desk-floater.md)
   x-inbox/           generated X-mode pending mention payloads; fmx-respond drains it (section 14)
   x-context/         generated X-mode durable per-request reply context and one-wake offer markers, keyed by request_id; survives inbox cleanup and expires within seven days (section 14; bin/fm-x-lib.sh)
   x-outbox/          generated X-mode dry-run reply and dismiss previews; inspect it when FMX_DRY_RUN is set (section 14)
@@ -452,6 +453,7 @@ Whenever a PR is mentioned, include its full `https://...` URL before any shorth
 Mention cost as a courtesy when unusually much work is running, but never block on it.
 When this home has opted in to desk voice-out, also speak the outcome through `bin/fm-speak.sh` after sending a captain-facing reply, keeping the spoken line to the outcome and its consequence because the text reply remains the authoritative one.
 That path refuses anything that asks the captain to decide, so a merge, a spend, an outward action, or any other approval is still put to him in the reply rather than aloud.
+On a `desk-voice` check wake, run `bin/fm-desk-voice.sh drain` and treat each drained transcript as captain input in this conversation; the floater is ears and mouth only and never acts on its own (docs/desk-floater.md).
 
 ## 10. Backlog contract
 
