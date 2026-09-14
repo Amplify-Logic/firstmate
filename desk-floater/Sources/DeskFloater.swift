@@ -73,6 +73,9 @@ final class FloaterModel: ObservableObject {
     let fmHome: String
     private var recorder: AVAudioRecorder?
     private var recordURL: URL?
+    private var pressStartedAt: Date?
+    private var latched = false
+    private let tapWindow: TimeInterval = 0.3
 
     init(repoRoot: String, fmHome: String) {
         self.repoRoot = repoRoot
@@ -83,6 +86,7 @@ final class FloaterModel: ObservableObject {
         switch mode {
         case .idle:
             pressBegan()
+            latched = true
         case .recording:
             stopAndDeliver()
         case .starting, .busy:
@@ -91,19 +95,41 @@ final class FloaterModel: ObservableObject {
     }
 
     func pressBegan() {
-        guard mode == .idle else { return }
-        mode = .starting
-        status = "Starting…"
-        startRecording()
+        switch mode {
+        case .idle:
+            mode = .starting
+            status = "Starting…"
+            pressStartedAt = Date()
+            latched = false
+            startRecording()
+        case .recording where latched:
+            stopAndDeliver()
+        case .starting, .recording, .busy:
+            break
+        }
     }
 
     func pressEnded() {
+        let quick = pressStartedAt.map { Date().timeIntervalSince($0) < tapWindow } ?? false
+        pressStartedAt = nil
         switch mode {
         case .starting:
-            mode = .idle
-            status = "Hold to talk"
+            if quick {
+                latched = true
+            } else {
+                mode = .idle
+                status = "Hold to talk"
+            }
         case .recording:
-            stopAndDeliver()
+            if latched {
+                break
+            }
+            if quick {
+                latched = true
+                status = "Listening… (click to stop)"
+            } else {
+                stopAndDeliver()
+            }
         case .idle, .busy:
             break
         }
@@ -144,7 +170,7 @@ final class FloaterModel: ObservableObject {
                 recorder = rec
                 recordURL = url
                 mode = .recording
-                status = "Listening…"
+                status = latched ? "Listening… (click to stop)" : "Listening…"
             } catch {
                 mode = .idle
                 status = "Record error"
@@ -153,6 +179,8 @@ final class FloaterModel: ObservableObject {
     }
 
     private func stopAndDeliver() {
+        latched = false
+        pressStartedAt = nil
         recorder?.stop()
         recorder = nil
         guard let url = recordURL else {
