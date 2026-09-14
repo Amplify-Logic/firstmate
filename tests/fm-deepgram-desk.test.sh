@@ -8,6 +8,8 @@ set -u
 
 SPEAK="$ROOT/bin/fm-speak.sh"
 TTS="$ROOT/bin/fm-deepgram-tts.sh"
+STT="$ROOT/bin/fm-deepgram-stt.sh"
+FLOATER="$ROOT/bin/fm-desk-floater.sh"
 DESK="$ROOT/bin/fm-desk-voice.sh"
 TMP_ROOT=$(fm_test_tmproot fm-deepgram-desk)
 
@@ -121,6 +123,85 @@ test_tts_dry_run_with_key() {
   assert_contains "$out" "model=" "dry-run names the model"
   assert_contains "$out" "chars=" "dry-run reports length"
   pass "fm-deepgram-tts: dry-run succeeds when a key is present"
+}
+
+# --- Deepgram STT helper ----------------------------------------------------
+
+install_stt_curl() {  # <home> <http-code> <body>
+  local home=$1 code=$2 body=$3
+  printf '%s' "$body" > "$home/stt-body.json"
+  cat > "$home/curl" <<EOF
+#!/usr/bin/env bash
+out=
+prev=
+for a in "\$@"; do
+  [ "\$prev" != -o ] || out=\$a
+  prev=\$a
+done
+printf 'curl-argv: %s\n' "\$*" >> "$home/curl.log"
+cat "$home/stt-body.json" > "\$out"
+printf '%s' "$code"
+EOF
+  chmod +x "$home/curl"
+}
+
+test_stt_refuses_without_key_or_file() {
+  local home out status=0
+  home=$(new_home stt-nokey)
+  printf 'RIFF' > "$home/clip.wav"
+  out=$(FM_DEEPGRAM_ENV_FILE=/dev/null env -u DEEPGRAM_API_KEY "$STT" "$home/clip.wav" 2>&1) || status=$?
+  [ "$status" -eq 2 ] || fail "expected exit 2 without a key, got $status: $out"
+  assert_contains "$out" "DEEPGRAM_API_KEY" "missing-key diagnostic"
+  status=0
+  out=$(DEEPGRAM_API_KEY=test-key-not-real "$STT" "$home/missing.wav" 2>&1) || status=$?
+  [ "$status" -eq 2 ] || fail "expected exit 2 for a missing file, got $status: $out"
+  assert_contains "$out" "not found" "missing-file diagnostic"
+  pass "fm-deepgram-stt: refuses when the key or the audio file is absent"
+}
+
+test_stt_prints_transcript_from_mocked_deepgram() {
+  local home out raw
+  home=$(new_home stt-ok)
+  printf 'RIFF' > "$home/clip.wav"
+  install_stt_curl "$home" 200 \
+    '{"results":{"channels":[{"alternatives":[{"transcript":"merge the finances pull request"}]}]}}'
+  out=$(DEEPGRAM_API_KEY=super-secret-test-key FM_DEEPGRAM_CURL="$home/curl" \
+    "$STT" "$home/clip.wav" 2>&1) || fail "stt failed: $out"
+  [ "$out" = "merge the finances pull request" ] || fail "unexpected transcript: $out"
+  assert_contains "$(cat "$home/curl.log")" "model=nova-2" "default model reaches the request"
+  assert_contains "$(cat "$home/curl.log")" "Content-Type: audio/wav" "wav content type"
+  case "$(cat "$home/curl.log")" in
+    *super-secret*) fail "key leaked into curl argv" ;;
+  esac
+  raw=$(DEEPGRAM_API_KEY=super-secret-test-key FM_DEEPGRAM_CURL="$home/curl" \
+    "$STT" --json "$home/clip.wav" 2>&1) || fail "stt --json failed: $raw"
+  assert_contains "$raw" '"transcript"' "--json passes the raw body through"
+  pass "fm-deepgram-stt: mocked Deepgram transcript is printed and the key stays out of argv"
+}
+
+test_stt_reports_http_failure() {
+  local home out status=0
+  home=$(new_home stt-fail)
+  printf 'RIFF' > "$home/clip.wav"
+  install_stt_curl "$home" 401 '{"err_msg":"invalid credentials"}'
+  out=$(DEEPGRAM_API_KEY=test-key-not-real FM_DEEPGRAM_CURL="$home/curl" \
+    "$STT" "$home/clip.wav" 2>&1) || status=$?
+  [ "$status" -eq 1 ] || fail "expected exit 1 on HTTP failure, got $status: $out"
+  assert_contains "$out" "HTTP 401" "HTTP status is reported"
+  pass "fm-deepgram-stt: a Deepgram failure exits 1 with the status"
+}
+
+# --- desk floater launcher -------------------------------------------------
+
+test_floater_help_and_option_refusal() {
+  local out status=0
+  out=$("$FLOATER" --help 2>&1) || fail "--help should exit 0: $out"
+  assert_contains "$out" "push-to-talk" "help names push-to-talk"
+  assert_contains "$out" "DEEPGRAM_API_KEY" "help names the key source"
+  out=$("$FLOATER" --bogus 2>&1) || status=$?
+  [ "$status" -eq 1 ] || fail "expected exit 1 for an unknown option, got $status: $out"
+  assert_contains "$out" "unexpected option" "unknown option is refused"
+  pass "fm-desk-floater: --help exits 0 and unknown options are refused"
 }
 
 # --- fm-speak Deepgram preference ------------------------------------------
@@ -245,6 +326,10 @@ test_deepgram_lib_reads_dotenv_without_logging_key() {
 
 test_tts_refuses_without_key
 test_tts_dry_run_with_key
+test_stt_refuses_without_key_or_file
+test_stt_prints_transcript_from_mocked_deepgram
+test_stt_reports_http_failure
+test_floater_help_and_option_refusal
 test_speak_uses_say_when_key_absent
 test_speak_prefers_deepgram_when_key_present
 test_speak_falls_back_to_say_when_deepgram_fails

@@ -758,16 +758,23 @@ test_arm_self_eviction_is_loud_without_successor() {
   fakebin="$dir/fakebin"
   armout="$dir/arm.out"
   mark_pr_check_migration_complete "$state"
-  PATH="$fakebin:$PATH" FM_STATE_OVERRIDE="$state" FM_POLL=0.2 FM_SIGNAL_GRACE=1 FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 FM_ARM_CONFIRM_TIMEOUT=1 "$WATCH_ARM" > "$armout" &
+  # The confirm timeout is deliberately left at the arm's default: a one-second
+  # bound gave a loaded CI runner too little time to publish the fresh beacon,
+  # so the arm reported "no live watcher" before it could ever report "started".
+  # Confirmation speed is not what this test measures.
+  PATH="$fakebin:$PATH" FM_STATE_OVERRIDE="$state" FM_POLL=0.2 FM_SIGNAL_GRACE=1 FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 "$WATCH_ARM" > "$armout" &
   armpid=$!
   i=0
-  while [ "$i" -lt 80 ]; do
+  while [ "$i" -lt 150 ]; do
     grep -qF 'watcher: started pid=' "$armout" 2>/dev/null && break
+    is_live_non_zombie "$armpid" || break
     sleep 0.1
     i=$((i + 1))
   done
   watcher_pid=$(cat "$state/.watch.lock/pid" 2>/dev/null || true)
-  grep -qF "watcher: started pid=$watcher_pid" "$armout" || fail "arm did not start before self-eviction check"
+  if [ -z "$watcher_pid" ] || ! grep -qF "watcher: started pid=$watcher_pid" "$armout"; then
+    fail "arm did not start before self-eviction check: $(cat "$armout")"
+  fi
 
   # A live but identity-mismatched replacement lock makes the owned watcher
   # self-evict normally. With no verified successor, the arm must turn that
