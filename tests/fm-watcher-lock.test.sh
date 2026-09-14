@@ -780,7 +780,10 @@ test_arm_self_eviction_is_loud_without_successor() {
   # self-evict normally. With no verified successor, the arm must turn that
   # otherwise clean empty close into the typed nonzero failure.
   printf '%s\n' "$$" > "$state/.watch.lock/pid"
-  wait_for_exit "$armpid" 80
+  # Before it fails, the arm waits its full confirm bound (the default above,
+  # plus one rounding second) for a healthy successor. The exit wait must
+  # outlast that bound, or a correctly loud arm is reported as a timeout.
+  wait_for_exit "$armpid" 200
   status=$?
   [ "$status" -ne 0 ] && [ "$status" -ne 124 ] || fail "self-evicted arm did not fail nonzero (status $status)"
   grep -qF 'watcher: FAILED - cycle ended without an actionable reason' "$armout" || fail "self-evicted arm omitted the typed cycle-end failure"
