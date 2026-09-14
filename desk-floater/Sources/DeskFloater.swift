@@ -61,6 +61,7 @@ final class FloaterPanel: NSPanel {
 final class FloaterModel: ObservableObject {
     enum Mode {
         case idle
+        case starting
         case recording
         case busy
     }
@@ -81,28 +82,39 @@ final class FloaterModel: ObservableObject {
     func toggle() {
         switch mode {
         case .idle:
-            startRecording()
+            pressBegan()
         case .recording:
             stopAndDeliver()
-        case .busy:
+        case .starting, .busy:
             break
         }
     }
 
     func pressBegan() {
         guard mode == .idle else { return }
+        mode = .starting
+        status = "Starting…"
         startRecording()
     }
 
     func pressEnded() {
-        guard mode == .recording else { return }
-        stopAndDeliver()
+        switch mode {
+        case .starting:
+            mode = .idle
+            status = "Hold to talk"
+        case .recording:
+            stopAndDeliver()
+        case .idle, .busy:
+            break
+        }
     }
 
     private func startRecording() {
         Task {
             let ok = await requestMic()
+            guard mode == .starting else { return }
             guard ok else {
+                mode = .idle
                 status = "Mic denied"
                 return
             }
@@ -120,7 +132,13 @@ final class FloaterModel: ObservableObject {
                 let rec = try AVAudioRecorder(url: url, settings: settings)
                 rec.prepareToRecord()
                 guard rec.record() else {
+                    mode = .idle
                     status = "Record failed"
+                    return
+                }
+                guard mode == .starting else {
+                    rec.stop()
+                    try? FileManager.default.removeItem(at: url)
                     return
                 }
                 recorder = rec
@@ -128,6 +146,7 @@ final class FloaterModel: ObservableObject {
                 mode = .recording
                 status = "Listening…"
             } catch {
+                mode = .idle
                 status = "Record error"
             }
         }
@@ -147,24 +166,29 @@ final class FloaterModel: ObservableObject {
         Task.detached(priority: .userInitiated) { [repoRoot, fmHome] in
             let transcript = Self.transcribe(repoRoot: repoRoot, fmHome: fmHome, audio: url)
             try? FileManager.default.removeItem(at: url)
-            await MainActor.run {
-                guard let text = transcript?.trimmingCharacters(in: .whitespacesAndNewlines),
-                      !text.isEmpty else {
-                    self.mode = .idle
-                    self.status = "No speech"
-                    return
+            let text = transcript?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            guard !text.isEmpty else {
+                await MainActor.run {
+                    self.finish(status: "No speech")
                 }
+                return
+            }
+            await MainActor.run {
                 self.status = "Delivering…"
             }
-            let delivered = Self.deliver(repoRoot: repoRoot, fmHome: fmHome, text: transcript ?? "")
+            let delivered = Self.deliver(repoRoot: repoRoot, fmHome: fmHome, text: text)
             await MainActor.run {
-                self.mode = .idle
-                self.status = delivered ? "Sent" : "Deliver failed"
-                DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-                    if self.mode == .idle {
-                        self.status = "Hold to talk"
-                    }
-                }
+                self.finish(status: delivered ? "Sent" : "Deliver failed")
+            }
+        }
+    }
+
+    private func finish(status: String) {
+        mode = .idle
+        self.status = status
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+            if self.mode == .idle {
+                self.status = "Hold to talk"
             }
         }
     }
@@ -195,17 +219,16 @@ final class FloaterModel: ObservableObject {
         for (k, v) in env { environment[k] = v }
         proc.environment = environment
         let out = Pipe()
-        let err = Pipe()
         proc.standardOutput = out
-        proc.standardError = err
+        proc.standardError = FileHandle.standardError
         do {
             try proc.run()
-            proc.waitUntilExit()
         } catch {
             return nil
         }
-        guard proc.terminationStatus == 0 else { return nil }
         let data = out.fileHandleForReading.readDataToEndOfFile()
+        proc.waitUntilExit()
+        guard proc.terminationStatus == 0 else { return nil }
         return String(data: data, encoding: .utf8)
     }
 }
@@ -248,6 +271,7 @@ struct FloaterView: View {
     private var color: Color {
         switch model.mode {
         case .idle: return Color(red: 0.12, green: 0.45, blue: 0.85)
+        case .starting: return Color(red: 0.85, green: 0.55, blue: 0.20)
         case .recording: return Color(red: 0.85, green: 0.20, blue: 0.20)
         case .busy: return Color(red: 0.35, green: 0.35, blue: 0.40)
         }
@@ -256,6 +280,7 @@ struct FloaterView: View {
     private var icon: String {
         switch model.mode {
         case .idle: return "mic.fill"
+        case .starting: return "mic"
         case .recording: return "waveform"
         case .busy: return "hourglass"
         }

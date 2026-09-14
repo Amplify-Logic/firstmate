@@ -61,7 +61,7 @@ PY
 }
 
 main() {
-  local json_out=false audio='' key model http tmp ctype
+  local json_out=false audio='' key model http tmp ctype auth_cfg
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --help|-h) usage; exit 0 ;;
@@ -89,15 +89,21 @@ main() {
   esac
 
   tmp=$(mktemp "${TMPDIR:-/tmp}/fm-deepgram-stt.XXXXXX") || die "cannot create a temporary file"
+  auth_cfg=$(fm_deepgram_auth_config "$key") || {
+    rm -f "$tmp"
+    die "cannot create the auth config file"
+  }
+  trap 'rm -f "$auth_cfg"' EXIT
   http=$("$CURL_BIN" -sS -o "$tmp" -w "%{http_code}" \
     --request POST \
-    --header "Authorization: Token ${key}" \
+    --config "$auth_cfg" \
     --header "Content-Type: ${ctype}" \
     --data-binary @"$audio" \
     --url "https://api.deepgram.com/v1/listen?model=${model}&smart_format=true") || {
     rm -f "$tmp"
     die "curl failed talking to Deepgram"
   }
+  rm -f "$auth_cfg"
 
   if [ "$http" != "200" ]; then
     note "Deepgram listen failed HTTP $http"

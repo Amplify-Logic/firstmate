@@ -48,7 +48,7 @@ refuse() {
 }
 
 main() {
-  local dry_run=false out_file='' text='' key model tmp http body
+  local dry_run=false out_file='' text='' key model tmp http body auth_cfg
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --help|-h) usage; exit 0 ;;
@@ -88,15 +88,21 @@ main() {
     die "cannot encode request body"
   }
 
+  auth_cfg=$(fm_deepgram_auth_config "$key") || {
+    rm -f "$tmp"
+    die "cannot create the auth config file"
+  }
+  trap 'rm -f "$auth_cfg"' EXIT
   http=$("$CURL_BIN" -sS -o "$tmp" -w "%{http_code}" \
     --request POST \
+    --config "$auth_cfg" \
     --header "Content-Type: application/json" \
-    --header "Authorization: Token ${key}" \
     --data "$body" \
     --url "https://api.deepgram.com/v1/speak?model=${model}&encoding=mp3") || {
     rm -f "$tmp"
     die "curl failed talking to Deepgram"
   }
+  rm -f "$auth_cfg"
 
   if [ "$http" != "200" ]; then
     note "Deepgram speak failed HTTP $http"

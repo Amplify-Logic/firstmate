@@ -115,7 +115,11 @@ main() {
   export FM_HOME
   export FM_DESK_FLOATER_ROOT="$ROOT"
   note "launching floater for FM_HOME=$FM_HOME"
-  open "$APP_DIR"
+  if ! open --env FM_HOME="$FM_HOME" --env FM_DESK_FLOATER_ROOT="$ROOT" "$APP_DIR"; then
+    note "open --env failed; launching the bundle binary directly"
+    "$APP_BIN" >/dev/null 2>&1 &
+    disown 2>/dev/null || true
+  fi
 }
 
 main "$@"

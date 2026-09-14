@@ -11,6 +11,9 @@
 #     Internal: read DEEPGRAM_API_KEY from a .env-style file without sourcing it.
 #   fm_deepgram_tts_model / fm_deepgram_stt_model
 #     Resolve model names from env with documented defaults.
+#   fm_deepgram_auth_config <key>
+#     Write a 0600 curl config file carrying the Authorization header and print
+#     its path, so the key never appears in curl's argv. Caller removes it.
 #
 # The key is a secret. Callers must never log it, put it in argv of long-lived
 # processes that other users can read, or write it to state/.
@@ -72,4 +75,15 @@ fm_deepgram_tts_model() {
 
 fm_deepgram_stt_model() {
   printf '%s' "${DEEPGRAM_STT_MODEL:-$FM_DEEPGRAM_DEFAULT_STT_MODEL}"
+}
+
+fm_deepgram_auth_config() {  # <key>
+  local key=$1 path
+  path=$(umask 077 && mktemp "${TMPDIR:-/tmp}/fm-deepgram-auth.XXXXXX") || return 1
+  chmod 600 "$path" 2>/dev/null || true
+  printf 'header = "Authorization: Token %s"\n' "$key" > "$path" || {
+    rm -f "$path"
+    return 1
+  }
+  printf '%s' "$path"
 }
