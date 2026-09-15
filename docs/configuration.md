@@ -1368,6 +1368,7 @@ Selection is explicit and manual by design.
 There is no automatic switching, no fallback to another account when one is exhausted, and no quota-driven selection: which account work runs on is a spend and data-boundary decision that belongs to the captain.
 For the same reason the pin survives recovery: when the session-start secondmate liveness sweep respawns a confidently dead secondmate, it reads `account=` back from that secondmate's metadata and passes it as `--account`, so a pinned secondmate can never come back on a different login.
 A secondmate with no recorded `account=` is respawned with no flag, exactly as before.
+A control-plane relaunch (`bin/fm-control.sh <id> relaunch`, owned by [`docs/agent-control.md`](agent-control.md#transactional-relaunch)) that keeps the recorded harness also reads `account=` back from the task's metadata, so the replacement is pinned exactly as the original was and refuses rather than falling back if that account can no longer be resolved; a relaunch onto a different harness resolves its account afresh, as a new spawn would.
 
 Homes are created by `bin/fm-account.sh create <vendor> <name>`, which makes one empty directory and prints the login command for it.
 Firstmate never copies, links, or seeds a credential directory, `auth.json`, `.credentials.json`, or keychain entry from one account home to another or from the ambient home, and never runs a login itself.
