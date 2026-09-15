@@ -357,8 +357,9 @@ Other backends keep their existing selector and title contracts.
 
 The managed presentation surfaces - `workspace report-metadata`, `pane report-metadata --token`, hidden `.tokens` in workspace/pane list output, and `workspace`/`tab rename` - are verified at protocol 16 (herdr 0.7.4).
 `FM_BACKEND_HERDR_MIN_PROTOCOL` stays 14: the adapter's core spawn/capture/send primitives still work there, so the presentation dependency is capability-gated instead of raising the floor, mirroring the protocol-16 events gate.
-Below `FM_BACKEND_HERDR_MIN_PRESENTATION_PROTOCOL` (16), `fm_backend_herdr_presentation_capable` fails closed: a non-secondmate spawn uses the prior label-based flow (an `fm-<id>` tab in the legacy per-home workspace, no identity tokens, and no `herdr_workspace_managed=1` meta), and `bin/fm-visible-status.sh` exits without touching any tab or workspace, so legacy `fm-<id>` recovery labels survive.
+Below `FM_BACKEND_HERDR_MIN_IDENTITY_PROTOCOL` (16), `fm_backend_herdr_presentation_capable` fails closed: a non-secondmate spawn uses the prior label-based flow (an `fm-<id>` tab in the legacy per-home workspace, no identity tokens, and no `herdr_workspace_managed=1` meta), and `bin/fm-visible-status.sh` exits without touching any tab or workspace, so legacy `fm-<id>` recovery labels survive.
 `FM_BACKEND_HERDR_PRESENTATION_FORCE` (1 = capable, 0 = incapable) overrides the probe for tests, exactly like `FM_BACKEND_HERDR_EVENTS_FORCE`.
+Default-on projection has its own higher floor, `FM_BACKEND_HERDR_MIN_PRESENTATION_PROTOCOL` (19, herdr 0.8.0): a home that configured nothing is projected only at or above it, while an explicit "on" is still honored between the identity floor and that release floor.
 
 ### Bounded presentation refresh and primary boundary
 

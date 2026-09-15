@@ -4079,7 +4079,7 @@ if [ "$KIND" != secondmate ]; then
       ;;
   esac
   case "$HARNESS" in
-    claude*|opencode*|pi|pi-signed|omp)
+    claude*|opencode*|pi|pi-signed|prime-agent|omp)
       BUSY_GEN=$("$FM_ROOT/bin/fm-busy-event.sh" arm "$STATE_REAL" "$ID") || {
         echo "error: failed to arm the busy-state contract for $ID" >&2
         exit 1
@@ -4604,7 +4604,7 @@ fi
 # a worker that is already working is not labeled as waiting. Presentation only:
 # every operational action keeps using the recorded Herdr ids, so a projection
 # failure never fails the spawn.
-if [ "$BACKEND" = herdr ] && [ -n "$HERDR_PROJECT_KEY" ] \
+if [ "$BACKEND" = herdr ] && [ -n "${HERDR_PROJECT_KEY:-}" ] \
   && [ -x "$FM_ROOT/bin/fm-visible-status.sh" ]; then
   "$FM_ROOT/bin/fm-visible-status.sh" "$ID" >/dev/null 2>&1 || true
 fi
