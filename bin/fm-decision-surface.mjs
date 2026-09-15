@@ -170,10 +170,20 @@ function optionsFrom(title, reason, recommendation) {
   return recommendation ? [recommendation] : [];
 }
 
+// bin/fm-captain-hold.sh records only `Origin:` in the held task's body; the
+// decision key lives in the task id, which the legacy identity pins to
+// `<origin>-decision-<key>`. Bodies written before that collapse still carry a
+// `Decision key:` line, and it must agree with the id rather than override it.
 function identityFrom(task) {
   const origin = task.body?.match(/(?:^|\n)Origin: ([A-Za-z0-9._-]+)(?:\n|$)/)?.[1] || "";
-  const key = task.body?.match(/(?:^|\n)Decision key: ([A-Za-z0-9._-]+)(?:\n|$)/)?.[1] || "";
-  if (!origin || !key || `${origin}-decision-${key}` !== task.id) return { origin: "", key: "" };
+  const recorded = task.body?.match(/(?:^|\n)Decision key: ([A-Za-z0-9._-]+)(?:\n|$)/)?.[1] || "";
+  const none = { origin: "", key: "" };
+  if (!origin || typeof task.id !== "string") return none;
+  const prefix = `${origin}-decision-`;
+  if (!task.id.startsWith(prefix)) return none;
+  const key = task.id.slice(prefix.length);
+  if (!/^[A-Za-z0-9._-]+$/.test(key)) return none;
+  if (recorded && recorded !== key) return none;
   return { origin, key };
 }
 
