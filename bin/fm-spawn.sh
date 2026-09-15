@@ -2202,7 +2202,7 @@ spawn_launch_binary() {  # <launch-command>
       ;;
   esac
   case "$binary" in
-    __PIBIN__) printf '%s\n' "${PI_BIN:-}" ;;
+    __PIBIN__*) printf '%s\n' "${PI_BIN:-}" ;;
     __CURSORBIN__) printf '%s\n' "${CURSOR_BIN:-}" ;;
     __OMPBIN__) printf '%s\n' "${OMP_BIN:-}" ;;
     __AGYBIN__) printf '%s\n' "${AGY_BIN:-}" ;;
