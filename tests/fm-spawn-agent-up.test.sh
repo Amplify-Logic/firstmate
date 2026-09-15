@@ -32,6 +32,10 @@
 #   7. A backend with NO liveness reader at all (fake Orca) cannot run the check.
 #      That is an unsupported check, not a failed one, so kimi still spawns
 #      there and warns instead of losing a capability that worked before.
+#   8. A raw `--harness "<command>"` (the unverified-adapter escape hatch) is
+#      never gated: its pane may legitimately never read as a known agent.
+#   9. A refused --relaunch says the prior record is unchanged and hands back
+#      the same --relaunch, never a fresh spawn.
 set -u
 
 # shellcheck source=tests/lib.sh
@@ -275,6 +279,33 @@ run_spawn_scout() {
     GROK_HOME="$HOME_DIR/grok-home" \
     PATH="$FAKEBIN_DIR:/usr/bin:/bin" \
     "$SPAWN" "$ID" "$PROJ_DIR" --scout 2>&1
+}
+
+# run_spawn_args <spawn-arg...>: the run_spawn environment with the spawn's own
+# arguments supplied by the case, for the raw-launch and --relaunch shapes.
+run_spawn_args() {
+  env \
+    FM_ROOT_OVERRIDE='' \
+    FM_HOME="$HOME_DIR" \
+    FM_STATE_OVERRIDE="$HOME_DIR/state" \
+    FM_DATA_OVERRIDE="$HOME_DIR/data" \
+    FM_PROJECTS_OVERRIDE="$HOME_DIR/projects" \
+    FM_CONFIG_OVERRIDE="$HOME_DIR/config" \
+    FM_SPAWN_NO_GUARD=1 \
+    TMUX="fake,1,0" \
+    FM_FAKE_PANE_PATH="$WT_DIR" \
+    FM_FAKE_EVENT_LOG="$EVENT_LOG" \
+    FM_FAKE_COMMAND_SEQ="$COMMAND_SEQ" \
+    FM_FAKE_COMMAND_COUNT="$COMMAND_COUNT" \
+    FM_FAKE_WINDOW_LOG="$WINDOW_LOG" \
+    FM_FAKE_KIMI_STATE="$KIMI_STATE" \
+    HOME="$HOME_DIR/user-home" \
+    CLAUDE_CONFIG_DIR='' \
+    FM_SPAWN_AGENT_UP_SLEEP=0 \
+    FM_SPAWN_AGENT_UP_MAX_POLLS=2 \
+    GROK_HOME="$HOME_DIR/grok-home" \
+    PATH="$FAKEBIN_DIR:/usr/bin:/bin" \
+    "$SPAWN" "$@" 2>&1
 }
 
 cleanup_task_tmp() { rm -rf "/tmp/fm-$1"; }
@@ -666,6 +697,58 @@ test_missing_endpoint_refuses_on_the_first_read() {
   pass "a structurally gone endpoint refuses on the first read and asks for a re-spawn"
 }
 
+# A raw `--harness "<command>"` is the escape hatch for an UNVERIFIED adapter,
+# which may legitimately never classify as a recognised agent. The gate must
+# not run for it: a pane that only ever reads as a shell is the expected shape
+# there, and refusing it would roll back a record for a worker that is running.
+test_raw_launch_is_not_gated_on_agent_liveness() {
+  local out status
+  make_case raw-launch claude claude
+  set_command_sequence zsh
+
+  out=$(run_spawn_args "$ID" "$PROJ_DIR" --harness 'bash -c true' --mode no-mistakes --yolo off)
+  status=$?
+
+  expect_code 0 "$status" "a raw launch command was refused by the agent-up gate"$'\n'"$out"
+  assert_not_contains "$out" "no agent is running" \
+    "a raw launch was held to a liveness proof its unverified adapter cannot give"
+  assert_contains "$out" "spawned $ID" "raw launch did not report success"
+  assert_present "$HOME_DIR/state/$ID.meta" "a raw launch's task record was rolled back"
+  cleanup_task_tmp "$ID"
+  pass "a raw launch command skips the agent-up gate instead of being refused by it"
+}
+
+# A --relaunch never provisions a record: the prior one is intact when the
+# replacement fails the gate, so the refusal must not claim a rollback, and its
+# recovery has to be the same --relaunch rather than a fresh spawn that would
+# provision a second worktree and endpoint for a task that already has both.
+test_relaunch_refusal_keeps_the_record_and_hands_back_a_relaunch() {
+  local out status
+  make_case relaunch-dead claude claude
+  set_command_sequence zsh claude
+  out=$(run_spawn)
+  expect_code 0 $? "the first spawn should succeed so there is a record to relaunch"$'\n'"$out"
+  cleanup_task_tmp "$ID"
+
+  set_command_sequence zsh
+  out=$(run_spawn_args "$ID" --relaunch --harness claude --model opus --effort high)
+  status=$?
+
+  expect_code 1 "$status" "a relaunch whose agent never started should refuse"$'\n'"$out"
+  assert_contains "$out" "no agent is running" "relaunch refusal did not say the agent never started"
+  assert_not_contains "$out" "has been rolled back" \
+    "relaunch refusal claimed a rollback of a record that was never provisional"
+  assert_contains "$out" "durable record ($HOME_DIR/state/$ID.meta) is unchanged" \
+    "relaunch refusal did not say the prior record survives"
+  assert_present "$HOME_DIR/state/$ID.meta" "a refused relaunch removed the task's record"
+  assert_contains "$out" "fm-spawn.sh' '$ID' --relaunch --harness 'claude' --model 'opus' --effort 'high'" \
+    "relaunch refusal did not hand back a --relaunch carrying this attempt's harness and axes"
+  assert_not_contains "$out" "fm-spawn.sh' '$ID' '$PROJ_DIR'" \
+    "relaunch refusal handed back a fresh spawn that would provision a second worktree and endpoint"
+  cleanup_task_tmp "$ID"
+  pass "a refused relaunch keeps the record and hands back the same --relaunch"
+}
+
 test_missing_endpoint_respawn_command_carries_kind_and_axes() {
   local out status
   make_case vanish-scout claude claude
@@ -693,5 +776,7 @@ test_unverified_liveness_backend_still_spawns_and_warns
 test_unverified_non_kimi_backend_still_spawns_and_warns
 test_missing_endpoint_refuses_on_the_first_read
 test_missing_endpoint_respawn_command_carries_kind_and_axes
+test_raw_launch_is_not_gated_on_agent_liveness
+test_relaunch_refusal_keeps_the_record_and_hands_back_a_relaunch
 
 echo "# all fm-spawn-agent-up tests passed"

@@ -7,9 +7,10 @@
 # kind and reason behind a decision or a gate. In-flight rows are no longer
 # enriched here at all - upstream's own projection emits their captain-facing
 # `name` and `repo`, and a second copy written from this side would be the
-# duplicate that drifts. Those used to be edits scattered through upstream's jq program, which is
-# the shape that conflicts on every upstream change to it. They live here
-# instead, and bin/fm-bearings-snapshot.sh calls this in one guarded step.
+# duplicate that drifts. The hold fields used to be edits scattered through
+# upstream's jq program, which is the shape that conflicts on every upstream
+# change to it. They live here instead, and bin/fm-bearings-snapshot.sh calls
+# this in one guarded step.
 #
 # This reads the same fleet snapshot the projection read, so every value is
 # derived from the same source rather than recovered from the rendered model.

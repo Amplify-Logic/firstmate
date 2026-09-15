@@ -3544,6 +3544,13 @@ spawn_render_respawn_command() {
   local cmd sq_home sq_spawn
   sq_home=$(shell_quote "$FM_HOME")
   sq_spawn=$(shell_quote "$FM_ROOT/bin/fm-spawn.sh")
+  if [ "$RELAUNCH" -eq 1 ]; then
+    cmd="FM_HOME=$sq_home $sq_spawn $(shell_quote "$ID") --relaunch --harness $(shell_quote "$HARNESS")"
+    [ -z "$MODEL" ] || cmd="$cmd --model $(shell_quote "$MODEL")"
+    [ -z "$EFFORT" ] || cmd="$cmd --effort $(shell_quote "$EFFORT")"
+    printf '%s' "$cmd"
+    return 0
+  fi
   cmd="FM_HOME=$sq_home $sq_spawn $(shell_quote "$ID") $(shell_quote "$PROJ_ABS")"
   case "$KIND" in
     scout) cmd="$cmd --scout" ;;
@@ -3564,10 +3571,18 @@ spawn_render_respawn_command() {
 # the backlog commit at the very end, so any refusal before that point rolls it
 # back. The endpoint and the worktree are NOT torn down, so both have to be
 # named, and the recovery is a re-spawn rather than a relaunch inside the pane -
-# relaunching there would leave a worker the backlog does not own.
+# relaunching there would leave a worker the backlog does not own. A --relaunch
+# never provisions a record: the prior one stays exactly as it was, so its
+# recovery is the same --relaunch again rather than a fresh spawn that would
+# provision a second worktree and endpoint for a task that already has both.
 spawn_print_refusal_recovery() {
-  echo "Nothing that already existed was torn down: endpoint $T and local copy $WT both remain, and the brief ($BRIEF) is untouched. This task's record was provisional and has been rolled back, so no worker is left that the backlog does not own."
-  echo "Close out that endpoint, then re-spawn the task with this exact command; the existing brief is reused as is:"
+  if [ "$RELAUNCH" -eq 1 ]; then
+    echo "Nothing that already existed was torn down: endpoint $T and local copy $WT both remain, and the brief ($BRIEF) is untouched. This task's durable record ($STATE/$ID.meta) is unchanged, so it is recoverable in place."
+    echo "Relaunch the task with this exact command once the endpoint is agent-free; the existing record and brief are reused as is:"
+  else
+    echo "Nothing that already existed was torn down: endpoint $T and local copy $WT both remain, and the brief ($BRIEF) is untouched. This task's record was provisional and has been rolled back, so no worker is left that the backlog does not own."
+    echo "Close out that endpoint, then re-spawn the task with this exact command; the existing brief is reused as is:"
+  fi
   echo "       $(spawn_render_respawn_command)"
   echo "For reference, the launch line this spawn sent was:"
   echo "       cd $(shell_quote "$WT") && ${SPAWN_RENDERED_LAUNCH:-$LAUNCH}"
@@ -4900,15 +4915,20 @@ spawn_send_key "$T" Enter
 # before anything is typed into it. The per-harness ready waits below are
 # stronger where they exist; this covers every other adapter, which otherwise
 # gets no proof at all that its launch line actually started an agent.
-SPAWN_AGENT_UP_RC=0
-spawn_wait_agent_up "$T" 0 || SPAWN_AGENT_UP_RC=$?
-case "$SPAWN_AGENT_UP_RC" in
-  0) ;;
-  1) spawn_refuse_agent_never_started launch ;;
-  2) spawn_warn_unverified_delivery unreadable ;;
-  3) spawn_refuse_endpoint_missing launch ;;
-  4) spawn_warn_unverified_delivery unsupported ;;
-esac
+# A raw launch command is the escape hatch for an UNVERIFIED adapter, which may
+# legitimately never register as a recognized agent, so it keeps the old
+# unverified behavior rather than being refused for an unmet expectation.
+if [ "$RAW_LAUNCH" -eq 0 ]; then
+  SPAWN_AGENT_UP_RC=0
+  spawn_wait_agent_up "$T" 0 || SPAWN_AGENT_UP_RC=$?
+  case "$SPAWN_AGENT_UP_RC" in
+    0) ;;
+    1) spawn_refuse_agent_never_started launch ;;
+    2) spawn_warn_unverified_delivery unreadable ;;
+    3) spawn_refuse_endpoint_missing launch ;;
+    4) spawn_warn_unverified_delivery unsupported ;;
+  esac
+fi
 if [ "$HARNESS" = kimi ]; then
   if ! kimi_wait_for_ready; then
     kimi_spawn_fail "kimi did not show a verified ready signal before brief delivery"
