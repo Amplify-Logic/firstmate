@@ -109,6 +109,14 @@
   ],
   "surfaces": [
     {
+      "path": ".agents/skills/adhd-auto-fire/SKILL.md",
+      "audience": "agent-runtime"
+    },
+    {
+      "path": ".agents/skills/adhd/SKILL.md",
+      "audience": "agent-runtime"
+    },
+    {
       "path": ".agents/skills/afk/SKILL.md",
       "audience": "agent-runtime"
     },
@@ -221,6 +229,10 @@
       "audience": "agent-runtime"
     },
     {
+      "path": ".agents/skills/harness-adapters/references/harness/prime-agent.md",
+      "audience": "agent-runtime"
+    },
+    {
       "path": ".agents/skills/harness-adapters/references/harness/rovo.md",
       "audience": "agent-runtime"
     },
@@ -238,6 +250,10 @@
     },
     {
       "path": ".agents/skills/quota-array-dispatch/SKILL.md",
+      "audience": "agent-runtime"
+    },
+    {
+      "path": ".agents/skills/second-opinion-auto-fire/SKILL.md",
       "audience": "agent-runtime"
     },
     {
@@ -277,12 +293,28 @@
       "audience": "public-product"
     },
     {
+      "path": "ONBOARDING.md",
+      "audience": "public-product"
+    },
+    {
       "path": "README.md",
       "audience": "public-product"
     },
     {
       "path": "VISION.md",
       "audience": "public-product"
+    },
+    {
+      "path": "docs/action-gateway-v2.md",
+      "audience": "maintainer-architecture"
+    },
+    {
+      "path": "docs/action-gateway.md",
+      "audience": "maintainer-architecture"
+    },
+    {
+      "path": "docs/adhd.md",
+      "audience": "operator-current"
     },
     {
       "path": "docs/agent-control.md",
@@ -297,6 +329,14 @@
       "audience": "maintainer-architecture"
     },
     {
+      "path": "docs/baby-menu-quota-widget.md",
+      "audience": "operator-current"
+    },
+    {
+      "path": "docs/bridge-view.md",
+      "audience": "operator-current"
+    },
+    {
       "path": "docs/calm-mode-feasibility.md",
       "audience": "maintainer-verification"
     },
@@ -305,8 +345,20 @@
       "audience": "operator-current"
     },
     {
+      "path": "docs/captain-hold-lifecycle.md",
+      "audience": "maintainer-architecture"
+    },
+    {
       "path": "docs/cd-guard.md",
       "audience": "maintainer-architecture"
+    },
+    {
+      "path": "docs/channel-intake.md",
+      "audience": "operator-current"
+    },
+    {
+      "path": "docs/chart-room.md",
+      "audience": "operator-current"
     },
     {
       "path": "docs/cmux-backend.md",
@@ -321,19 +373,59 @@
       "audience": "operator-current"
     },
     {
-      "path": "docs/captain-hold-lifecycle.md",
+      "path": "docs/cursor-harness.md",
+      "audience": "maintainer-verification"
+    },
+    {
+      "path": "docs/decision-hold-lifecycle.md",
       "audience": "maintainer-architecture"
+    },
+    {
+      "path": "docs/desk-floater.md",
+      "audience": "operator-current"
+    },
+    {
+      "path": "docs/desktop-companion.md",
+      "audience": "operator-current"
     },
     {
       "path": "docs/documentation-audiences.md",
       "audience": "maintainer-architecture"
     },
     {
-      "path": "docs/extension-bindings.md",
-      "audience": "maintainer-architecture"
+      "path": "docs/evidence/herdr-layout-preview/01-before.txt",
+      "audience": "maintainer-verification"
+    },
+    {
+      "path": "docs/evidence/herdr-layout-preview/02-before-late-worker.txt",
+      "audience": "maintainer-verification"
+    },
+    {
+      "path": "docs/evidence/herdr-layout-preview/03-after-a-grouped.txt",
+      "audience": "maintainer-verification"
+    },
+    {
+      "path": "docs/evidence/herdr-layout-preview/04-after-a-late-worker.txt",
+      "audience": "maintainer-verification"
+    },
+    {
+      "path": "docs/evidence/herdr-layout-preview/05-after-b-prefixed.txt",
+      "audience": "maintainer-verification"
+    },
+    {
+      "path": "docs/evidence/herdr-layout-preview/06-after-b-late-worker.txt",
+      "audience": "maintainer-verification"
     },
     {
       "path": "docs/examples/crew-dispatch.json",
+      "audience": "operator-example"
+    },
+    {
+      "path": "docs/examples/desk-speak-register.toml",
+      "audience": "operator-example"
+    },
+    {
+      "path": "docs/examples/primary-handoff.json",
       "audience": "operator-example"
     },
     {
@@ -353,6 +445,10 @@
       "audience": "operator-example"
     },
     {
+      "path": "docs/extension-bindings.md",
+      "audience": "maintainer-architecture"
+    },
+    {
       "path": "docs/fm-test-isolation-proof.md",
       "audience": "maintainer-verification"
     },
@@ -361,12 +457,32 @@
       "audience": "maintainer-verification"
     },
     {
+      "path": "docs/fork-surface.md",
+      "audience": "maintainer-architecture"
+    },
+    {
       "path": "docs/gitlab-merge-watch.md",
+      "audience": "maintainer-verification"
+    },
+    {
+      "path": "docs/harness-exam.md",
       "audience": "maintainer-verification"
     },
     {
       "path": "docs/herdr-backend.md",
       "audience": "operator-current"
+    },
+    {
+      "path": "docs/herdr-layout-preview.md",
+      "audience": "maintainer-verification"
+    },
+    {
+      "path": "docs/kimi-harness.md",
+      "audience": "maintainer-verification"
+    },
+    {
+      "path": "docs/ops-command-center.md",
+      "audience": "maintainer-architecture"
     },
     {
       "path": "docs/orca-backend.md",
@@ -377,7 +493,27 @@
       "audience": "maintainer-architecture"
     },
     {
+      "path": "docs/porting.md",
+      "audience": "operator-current"
+    },
+    {
+      "path": "docs/primary-handoff.md",
+      "audience": "operator-current"
+    },
+    {
+      "path": "docs/prime-agent-harness.md",
+      "audience": "maintainer-verification"
+    },
+    {
       "path": "docs/remote-secondmates.md",
+      "audience": "operator-current"
+    },
+    {
+      "path": "docs/scripts.md",
+      "audience": "operator-current"
+    },
+    {
+      "path": "docs/second-opinion.md",
       "audience": "operator-current"
     },
     {
@@ -385,11 +521,15 @@
       "audience": "maintainer-architecture"
     },
     {
-      "path": "docs/scripts.md",
+      "path": "docs/sessionstart-nudge.md",
       "audience": "operator-current"
     },
     {
-      "path": "docs/sessionstart-nudge.md",
+      "path": "docs/shift-loop.md",
+      "audience": "operator-current"
+    },
+    {
+      "path": "docs/status-bar.md",
       "audience": "operator-current"
     },
     {
@@ -410,6 +550,10 @@
     },
     {
       "path": "docs/supervision-protocols/grok.md",
+      "audience": "agent-runtime"
+    },
+    {
+      "path": "docs/supervision-protocols/kimi.md",
       "audience": "agent-runtime"
     },
     {
@@ -439,6 +583,10 @@
     {
       "path": "docs/turnend-guard.md",
       "audience": "operator-current"
+    },
+    {
+      "path": "docs/upstream-ported-ledger.txt",
+      "audience": "maintainer-verification"
     },
     {
       "path": "docs/verification/agy.md",
@@ -498,6 +646,14 @@
     },
     {
       "path": "docs/wedge-alarm.md",
+      "audience": "operator-current"
+    },
+    {
+      "path": "docs/worker-boundary-regression.md",
+      "audience": "maintainer-verification"
+    },
+    {
+      "path": "docs/worker-browsing.md",
       "audience": "operator-current"
     },
     {
