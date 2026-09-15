@@ -2,7 +2,8 @@
 """Bounded wait for a filesystem change on named paths.
 
 This is the wire-transport half of the watcher's glasses file-event nudger
-(bin/fm-file-event-lib.sh, consumed by bin/fm-watch.sh event_wait_or_sleep).
+(bin/fm-file-event-lib.sh, whose fm_fork_event_wait_or_sleep bin/fm-watch.sh
+reaches through the guarded either/or of hook W1).
 It does not know supervision policy: it watches the given paths and prints the
 first changed path to stdout, flushing so the bash caller can interrupt its
 poll sleep sub-second.
