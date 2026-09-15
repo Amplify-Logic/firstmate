@@ -83,7 +83,11 @@ case "${1:-}" in
     done
     f="${FM_FAKE_PANE:-/dev/null}"
     out=$(cat "$f" 2>/dev/null)
-    if [ -n "$s" ] && [ -n "$e" ]; then
+    # `-E -` means "to the last line", which is how the real capture asks for
+    # the whole visible pane.
+    if [ -n "$s" ] && [ "$e" = "-" ]; then
+      out=$(printf '%s\n' "$out" | sed -n "$((s + 1)),\$p")
+    elif [ -n "$s" ] && [ -n "$e" ]; then
       out=$(printf '%s\n' "$out" | sed -n "$((s + 1)),$((e + 1))p")
     fi
     if [ "$has_e" = 1 ]; then
