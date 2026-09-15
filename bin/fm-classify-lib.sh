@@ -207,6 +207,49 @@ status_is_paused_or_captain_held() {  # <status-line>
   status_is_paused "$line" || status_is_captain_held "$line"
 }
 
+# 0 for a line that is empty or only whitespace. Stops at the first non-space
+# character, so it stays linear where bash 3.2's ${line//[[:space:]]/} is
+# quadratic (AGENTS.md "Repo style rules").
+_fm_line_is_blank() {  # <line>
+  case "$1" in
+    *[![:space:]]*) return 1 ;;
+    *) return 0 ;;
+  esac
+}
+
+# 0 if a status line's leading verb is the resolution verb.
+status_is_resolved() {  # <status-line>
+  local line=$1 verb
+  [ -n "$line" ] || return 1
+  verb=$(status_line_verb "$line")
+  [ "$verb" = "${FM_CLASSIFY_RESOLVE_VERB:-$FM_CLASSIFY_RESOLVE_VERB_DEFAULT}" ]
+}
+
+# The last line that is not a resolution, i.e. the crew's own last word about the
+# WORK. A `resolved:` line is an event about a decision, so a worker that
+# finished or failed and then had an unrelated decision resolved afterwards must
+# still read as finished or failed.
+_fm_last_non_resolve_line() {  # <status-file>
+  local f=$1 line out=''
+  [ -e "$f" ] || return 0
+  while IFS= read -r line || [ -n "$line" ]; do
+    _fm_line_is_blank "$line" && continue
+    status_is_resolved "$line" && continue
+    out=$line
+  done < "$f"
+  printf '%s' "$out"
+}
+
+# 0 when the task's own last word about the work is a declared wait - an
+# external-wait pause or a verified captain-held transfer - reading past a
+# trailing resolution line, which decided nothing about the crew.
+status_declared_wait() {  # <status-file>
+  local f=$1 last
+  last=$(last_status_line "$f")
+  status_is_resolved "$last" && last=$(_fm_last_non_resolve_line "$f")
+  status_is_paused_or_captain_held "$last"
+}
+
 # A condition-aware declared wait: a `paused:` line may say WHEN it expects to
 # clear with `until <YYYY-MM-DDTHH:MM[:SS]Z>` anywhere in its text (UTC only, so
 # no local-zone guess is ever recorded). Prints that time as epoch seconds so a
