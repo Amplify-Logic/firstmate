@@ -93,6 +93,13 @@ FM_HOME="${FM_HOME:-${FM_ROOT_OVERRIDE:-$FM_ROOT}}"
 # shellcheck source=bin/fm-agent-process-lib.sh
 . "$FM_BACKEND_HERDR_ROOT/bin/fm-agent-process-lib.sh"
 
+# The protocol floor for hidden IDENTITY metadata on workspaces and panes,
+# which is what lets a tab carry a sentence an operator reads while identity
+# stays exact. Deliberately its own constant, separate from the spawn floor
+# above and from the projection-spaces floor further down: a build that cannot
+# carry tokens still runs workers perfectly well, it just gets the opaque
+# window name instead of a title.
+FM_BACKEND_HERDR_MIN_IDENTITY_PROTOCOL=16
 FM_BACKEND_HERDR_MIN_PROTOCOL=14
 # events.subscribe (the native pane.agent_status_changed push stream) and its
 # subscription_event schema first shipped at protocol 16 (verified: herdr
@@ -357,8 +364,59 @@ fm_backend_herdr_presentation_enabled() {  # <config-dir> [<state-dir>]
 # that home. fm-spawn.sh briefly shadows FM_HOME to a secondmate's own home
 # when the PRIMARY spawns that secondmate (its own process's FM_HOME still
 # names the primary at that point) - see fm-spawn.sh's herdr case arm.
+# fm_backend_herdr_physical_path: a directory's real path, symlinks resolved.
+# Identity has to be the physical path: two homes can reach the same directory
+# through different symlinked routes, and a token derived from the spelling
+# would then read as two different homes.
+# fm_backend_herdr_presentation_capable: whether this herdr build can carry the
+# hidden identity tokens human presentation depends on. Answered from the live
+# client's protocol rather than assumed, so an older build degrades to the
+# opaque window name instead of silently minting a second workspace per spawn.
+fm_backend_herdr_presentation_capable() {
+  local protocol
+  case "${FM_BACKEND_HERDR_PRESENTATION_FORCE:-}" in
+    1) return 0 ;;
+    0) return 1 ;;
+  esac
+  command -v herdr >/dev/null 2>&1 || return 1
+  command -v jq >/dev/null 2>&1 || return 1
+  protocol=$(herdr status --json 2>/dev/null | jq -r '.client.protocol // empty' 2>/dev/null)
+  case "$protocol" in ''|*[!0-9]*) return 1 ;; esac
+  [ "$protocol" -ge "$FM_BACKEND_HERDR_MIN_IDENTITY_PROTOCOL" ]
+}
+
+fm_backend_herdr_physical_path() {  # <path>
+  local path=$1
+  if [ -d "$path" ]; then
+    (CDPATH='' cd -- "$path" && pwd -P)
+  else
+    printf '%s' "$path"
+  fi
+}
+
+# fm_backend_herdr_identity_token: the hidden per-path identity a workspace is
+# bound to. Herdr's own metadata tokens are the right home for it because they
+# are invisible to the operator, so the LABEL stays free to be whatever reads
+# well to a human while identity stays exact. Hashing rather than storing the
+# path keeps the token compact and keeps a home's filesystem layout out of a
+# shared herdr server's metadata.
+fm_backend_herdr_identity_token() {  # <physical-path>
+  local physical
+  physical=$(fm_backend_herdr_physical_path "$1")
+  printf 'path-v1:%s' "$(printf '%s' "$physical" | git -C "$FM_BACKEND_HERDR_ROOT" hash-object --stdin)"
+}
+
+# A human-facing project label overrides the home-derived one: with the fork's
+# presentation on, a workspace is named for the PROJECT an operator recognizes
+# rather than for the home that happens to own it. Identity does not follow the
+# label - that is what the tokens above are for - so two projects sharing a
+# display name, or two homes sharing a project, still resolve exactly.
 fm_backend_herdr_workspace_label() {
   local marker="$FM_HOME/$FM_BACKEND_HERDR_SECONDMATE_MARKER" id
+  if [ -n "${FM_HERDR_PROJECT_LABEL:-}" ]; then
+    printf '%s' "$FM_HERDR_PROJECT_LABEL"
+    return 0
+  fi
   if [ -f "$marker" ]; then
     id=$(tr -d '[:space:]' < "$marker" 2>/dev/null)
     if [ -n "$id" ]; then
@@ -387,6 +445,13 @@ fm_backend_herdr_workspace_label() {
 fm_backend_herdr_cli() {  # <session> <herdr-subcommand-and-args...>
   local session=$1 rc=0 err failed_bin selected_bin client_bin=herdr
   shift
+  # An absent herdr CLI is refused HERE, silently, before anything downstream
+  # reaches its bounded readiness poll: without this a scrubbed PATH costs ten
+  # seconds per live task, which is the phone-bridge glance hang. Named the
+  # same way fm_backend_herdr_tool_check names it, so an absent install is one
+  # question with one answer, and kept to a single self-contained statement so
+  # the regression's mutation proof can strip exactly this guard.
+  command -v herdr >/dev/null 2>&1 || return 1
   if [ "${FM_BACKEND_HERDR_CLIENT_SESSION:-}" = "$session" ]; then
     client_bin=$(fm_backend_herdr_bin)
   fi
@@ -1655,6 +1720,10 @@ fm_backend_herdr_projection_order_best_effort() {  # <session> <created-workspac
 # server to report running.
 fm_backend_herdr_server_ensure() {  # <session>
   local session=$1 running out i
+  # Validate before the background launch so a missing CLI cannot enter the
+  # bounded readiness poll and cost ten seconds per live task;
+  # tests/fm-backend-herdr.test.sh covers this guard.
+  fm_backend_herdr_tool_check || return 1
   running=$(fm_backend_herdr_cli "$session" status --json 2>/dev/null | jq -r '.server.running // false' 2>/dev/null)
   [ "$running" = "true" ] && return 0
   (
@@ -1685,9 +1754,22 @@ fm_backend_herdr_server_ensure() {  # <session>
 # which one is the caller's, while the read-only recovery path below keeps its
 # historical first-match behavior.
 fm_backend_herdr_workspace_find_all() {  # <session>
-  local session=$1 label list
+  local session=$1 label list owner project
   label=$(fm_backend_herdr_workspace_label)
   list=$(fm_backend_herdr_cli "$session" workspace list 2>/dev/null) || return 0
+  if [ -n "${FM_HERDR_PROJECT_KEY:-}" ]; then
+    # Identity, not display text: with presentation on, the label is a human
+    # project name that a second home working the same project - or a second
+    # project that happens to read the same - would match too. The hidden
+    # owner/project token pair is exact, so this path never falls back to the
+    # label match below, and an unbound legacy workspace is deliberately not
+    # adopted.
+    owner=$(fm_backend_herdr_identity_token "$FM_HOME")
+    project=$(fm_backend_herdr_identity_token "$FM_HERDR_PROJECT_KEY")
+    printf '%s' "$list" | jq -r --arg owner "$owner" --arg project "$project" \
+      '.result.workspaces[]? | select(.tokens.fm_owner == $owner and .tokens.fm_project == $project) | .workspace_id' 2>/dev/null
+    return 0
+  fi
   # NOTE: the jq variable is $want, NOT $label - `label` is a jq reserved
   # keyword (label/break), so declaring a jq variable named "label" is a
   # compile error that `2>/dev/null` would silently swallow, making this find
@@ -1958,7 +2040,7 @@ fm_backend_herdr_workspace_prune_seeded_default_tab() {  # <session> <workspace_
 # Returns 0 on success, 3 for a refusal whose exact reason is already on
 # stderr, and 1 for a failed or unparseable herdr call.
 fm_backend_herdr_workspace_ensure() {  # <session> <cwd> [<launcher-relationship>]
-  local session=$1 cwd=$2 relationship=${3:-launcher-home} wsid out label matches count status
+  local session=$1 cwd=$2 relationship=${3:-launcher-home} wsid out label matches count status owner project
   FM_BACKEND_HERDR_WS_ID=""
   FM_BACKEND_HERDR_WS_SEEDED_TAB_ID=""
   if [ "$relationship" = launcher-home ]; then
@@ -1990,6 +2072,20 @@ fm_backend_herdr_workspace_ensure() {  # <session> <cwd> [<launcher-relationship
   wsid=$(printf '%s' "$out" | jq -r '.result.workspace.workspace_id // empty' 2>/dev/null)
   [ -n "$wsid" ] || return 1
   FM_BACKEND_HERDR_WS_ID=$wsid
+  if [ -n "${FM_HERDR_PROJECT_KEY:-}" ]; then
+    # Bind identity at creation, and refuse if the binding does not take: an
+    # unbound workspace is invisible to the token lookup above, so the very
+    # next spawn would mint another one beside it forever.
+    owner=$(fm_backend_herdr_identity_token "$FM_HOME")
+    project=$(fm_backend_herdr_identity_token "$FM_HERDR_PROJECT_KEY")
+    fm_backend_herdr_cli "$session" workspace report-metadata "$wsid" \
+      --source firstmate-project-identity-v1 \
+      --token "fm_owner=$owner" \
+      --token "fm_project=$project" >/dev/null 2>&1 || {
+        echo "error: could not bind Herdr workspace $wsid to its Firstmate home and project" >&2
+        return 1
+      }
+  fi
   # Herdr seeds a new workspace with one auto-created default tab firstmate
   # never uses. It is NOT pruned here: at this instant it is the workspace's
   # ONLY tab, and closing a workspace's last tab deletes the workspace itself
@@ -2406,25 +2502,40 @@ fm_backend_herdr_agent_alive() {  # <target>
 # the safety argument). An ADOPTED workspace's caller always passes an empty
 # 4th arg, so this function never even queries for a prune candidate in that
 # case. Echoes "<tab_id> <pane_id>" on success.
-fm_backend_herdr_create_task() {  # <container> <label> <cwd> <seeded_default_tab_id>
-  local container=$1 label=$2 cwd=$3 seeded_tab_id=${4:-} session wsid list dup_tabs dup dup_pane dup_tab_ids out tab_id pane_id remaining_dup_tabs
+fm_backend_herdr_create_task() {  # <container> <label> <cwd> <seeded_default_tab_id> [task_id]
+  local container=$1 label=$2 cwd=$3 seeded_tab_id=${4:-} task_id=${5:-}
+  local session wsid list panes dup_tabs dup dup_pane dup_tab_ids out tab_id pane_id remaining_dup_tabs legacy_label
   session=${container%%:*}
   wsid=${container#*:}
   list=$(fm_backend_herdr_cli "$session" tab list --workspace "$wsid" 2>/dev/null) || return 1
-  dup_tabs=$(printf '%s' "$list" | jq -r --arg want "$label" 'if (.result.tabs | type) == "array" then .result.tabs[] | select(.label == $want) | .tab_id else error("missing result.tabs") end' 2>/dev/null) || {
-    echo "error: could not parse herdr tab list output for workspace $wsid (session $session)" >&2
-    return 1
-  }
+  if [ -n "$task_id" ]; then
+    # With presentation on, the tab LABEL is a human sentence two different
+    # tasks may legitimately share, so it cannot be the identity. Identity is
+    # the hidden per-pane token, plus the legacy fm-<id> label for tabs created
+    # before the token existed. Matching on the label here instead would refuse
+    # the second of two same-titled tasks, or adopt the first one's tab.
+    panes=$(fm_backend_herdr_cli "$session" pane list --workspace "$wsid" 2>/dev/null) || return 1
+    dup_tabs=$(printf '%s' "$panes" | jq -r --arg task "$task_id" \
+      '.result.panes[]? | select(.tokens.fm_task_id == $task) | .tab_id' 2>/dev/null)
+    legacy_label="fm-$task_id"
+    dup_tabs="${dup_tabs}${dup_tabs:+$'\n'}$(printf '%s' "$list" | jq -r --arg want "$legacy_label" '.result.tabs[]? | select(.label == $want) | .tab_id' 2>/dev/null)"
+  else
+    dup_tabs=$(printf '%s' "$list" | jq -r --arg want "$label" 'if (.result.tabs | type) == "array" then .result.tabs[] | select(.label == $want) | .tab_id else error("missing result.tabs") end' 2>/dev/null) || {
+      echo "error: could not parse herdr tab list output for workspace $wsid (session $session)" >&2
+      return 1
+    }
+  fi
   dup_tab_ids=""
   if [ -n "$dup_tabs" ]; then
     while IFS= read -r dup; do
       [ -n "$dup" ] || continue
+      case "$dup_tab_ids" in *$'\n'"$dup"$'\n'*) continue ;; esac
       dup_pane=$(fm_backend_herdr_pane_for_tab "$session" "$wsid" "$dup")
       if [ -z "$dup_pane" ] || ! fm_backend_herdr_tab_is_husk "$session" "$dup_pane"; then
-        echo "error: herdr tab '$label' already exists in workspace $wsid (session $session)" >&2
+        echo "error: herdr tab '${task_id:-$label}' already exists in workspace $wsid (session $session)" >&2
         return 1
       fi
-      dup_tab_ids="${dup_tab_ids}${dup}"$'\n'
+      dup_tab_ids="${dup_tab_ids}"$'\n'"${dup}"$'\n'
     done <<EOF
 $dup_tabs
 EOF
@@ -2435,6 +2546,15 @@ EOF
   if [ -z "$tab_id" ] || [ -z "$pane_id" ]; then
     echo "error: could not parse tab/pane id from herdr tab create output" >&2
     return 1
+  fi
+  if [ -n "$task_id" ]; then
+    # Hidden identity is a projection onto the pane, never the record: recovery
+    # reads it to find an orphan, but the recorded backend ids stay
+    # authoritative, so a metadata failure warns rather than failing the spawn.
+    fm_backend_herdr_cli "$session" pane report-metadata "$pane_id" \
+      --source firstmate-task-identity-v1 \
+      --token "fm_task_id=$task_id" >/dev/null 2>&1 \
+      || echo "warning: could not project hidden task identity onto Herdr pane $pane_id; recorded backend ids remain authoritative" >&2
   fi
   [ -z "$seeded_tab_id" ] || fm_backend_herdr_workspace_prune_seeded_default_tab "$session" "$wsid" "$seeded_tab_id"
   if [ -n "$dup_tab_ids" ]; then
@@ -2452,11 +2572,23 @@ EOF
       echo "error: could not parse herdr tab list output for workspace $wsid (session $session)" >&2
       return 1
     fi
-    remaining_dup_tabs=$(printf '%s' "$list" | jq -r --arg want "$label" --arg replacement "$tab_id" \
-      '.result.tabs[]? | select(.label == $want and .tab_id != $replacement) | .tab_id' 2>/dev/null)
+    if [ -n "$task_id" ]; then
+      panes=$(fm_backend_herdr_cli "$session" pane list --workspace "$wsid" 2>/dev/null) || return 1
+      remaining_dup_tabs=$(printf '%s' "$panes" | jq -r --arg task "$task_id" --arg replacement "$pane_id" \
+        '.result.panes[]? | select(.tokens.fm_task_id == $task and .pane_id != $replacement) | .pane_id' 2>/dev/null)
+      if [ -n "$remaining_dup_tabs" ]; then
+        echo "error: failed to remove preexisting herdr task '$task_id' in workspace $wsid (session $session)" >&2
+        return 1
+      fi
+      remaining_dup_tabs=$(printf '%s' "$list" | jq -r --arg want "$legacy_label" --arg replacement "$tab_id" \
+        '.result.tabs[]? | select(.label == $want and .tab_id != $replacement) | .tab_id' 2>/dev/null)
+    else
+      remaining_dup_tabs=$(printf '%s' "$list" | jq -r --arg want "$label" --arg replacement "$tab_id" \
+        '.result.tabs[]? | select(.label == $want and .tab_id != $replacement) | .tab_id' 2>/dev/null)
+    fi
     remaining_dup_tabs=${remaining_dup_tabs//$'\n'/ }
     if [ -n "$remaining_dup_tabs" ]; then
-      echo "error: failed to remove preexisting herdr tab(s) $remaining_dup_tabs for label '$label' in workspace $wsid (session $session)" >&2
+      echo "error: failed to remove preexisting herdr tab(s) $remaining_dup_tabs for '${task_id:-$label}' in workspace $wsid (session $session)" >&2
       return 1
     fi
   fi
@@ -3547,17 +3679,34 @@ EOF
 # primary-spawns-a-secondmate path in fm-spawn.sh. Read-only: a session/
 # workspace that does not exist yet simply lists nothing. One
 # "<session>:<pane_id>\t<label>" line per live task tab.
+# Recovery reads IDENTITY, not display text. A task's tab now carries a human
+# sentence, so a scan for fm-<id> labels alone would miss every managed worker
+# and report the whole fleet as orphaned. It walks every workspace this physical
+# home owns (plus the legacy per-home workspace, which predates the tokens and
+# stays readable until its tasks finish) and recovers each pane from its hidden
+# fm_task_id, falling back to the legacy label for panes created before it.
+# Another home's tokened workspace is never claimed by label.
 fm_backend_herdr_list_live() {  # <session>
-  local session=$1 wsid tabs tab_id label pane_id
-  wsid=$(fm_backend_herdr_workspace_find "$session") || return 0
-  [ -n "$wsid" ] || return 0
-  tabs=$(fm_backend_herdr_cli "$session" tab list --workspace "$wsid" 2>/dev/null) || return 0
-  while IFS=$'\t' read -r tab_id label; do
-    [ -n "$tab_id" ] || continue
-    pane_id=$(fm_backend_herdr_pane_for_tab "$session" "$wsid" "$tab_id") || continue
-    [ -n "$pane_id" ] || continue
-    printf '%s:%s\t%s\n' "$session" "$pane_id" "$label"
-  done < <(printf '%s' "$tabs" | jq -r '.result.tabs[]? | select(.label | startswith("fm-")) | "\(.tab_id)\t\(.label)"' 2>/dev/null)
+  local session=$1 workspaces owner legacy_label wsid tabs panes pane_id tab_id task_id label
+  owner=$(fm_backend_herdr_identity_token "$FM_HOME")
+  legacy_label=$(FM_HERDR_PROJECT_KEY='' FM_HERDR_PROJECT_LABEL='' fm_backend_herdr_workspace_label)
+  workspaces=$(fm_backend_herdr_cli "$session" workspace list 2>/dev/null) || return 0
+  while IFS= read -r wsid; do
+    [ -n "$wsid" ] || continue
+    tabs=$(fm_backend_herdr_cli "$session" tab list --workspace "$wsid" 2>/dev/null) || continue
+    panes=$(fm_backend_herdr_cli "$session" pane list --workspace "$wsid" 2>/dev/null) || continue
+    while IFS=$'\t' read -r pane_id tab_id task_id; do
+      [ -n "$pane_id" ] || continue
+      if [ -n "$task_id" ]; then
+        printf '%s:%s\tfm-%s\n' "$session" "$pane_id" "$task_id"
+        continue
+      fi
+      label=$(printf '%s' "$tabs" | jq -r --arg tab "$tab_id" \
+        '.result.tabs[]? | select(.tab_id == $tab) | .label // ""' 2>/dev/null | head -1)
+      case "$label" in fm-*) printf '%s:%s\t%s\n' "$session" "$pane_id" "$label" ;; esac
+    done < <(printf '%s' "$panes" | jq -r '.result.panes[]? | "\(.pane_id)\t\(.tab_id // "")\t\(.tokens.fm_task_id // "")"' 2>/dev/null)
+  done < <(printf '%s' "$workspaces" | jq -r --arg owner "$owner" --arg legacy "$legacy_label" \
+    '.result.workspaces[]? | select(.tokens.fm_owner == $owner or (((.tokens.fm_owner // "") == "") and .label == $legacy)) | .workspace_id' 2>/dev/null)
 }
 
 # --- native event push: pane.agent_status_changed subscriber -----------------

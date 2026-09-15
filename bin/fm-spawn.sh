@@ -3197,6 +3197,40 @@ case "$BACKEND" in
       HERDR_LABEL_HOME=$PROJ_ABS
       HERDR_LAUNCHER_RELATIONSHIP=other-home
     fi
+    # Human presentation, independently of the projection layout below: the tab
+    # carries the outcome this task is FOR, and the workspace is named for the
+    # project rather than for the home that owns it, so an operator reads the
+    # fleet without decoding task identifiers. Every call is guarded because
+    # this file runs under set -e, where an unguarded command substitution into
+    # a missing script aborts the whole spawn at 127 instead of degrading to
+    # the opaque window name. Identity does NOT follow those human strings -
+    # the backend binds hidden owner/project/task tokens - so two projects that
+    # read alike, or two tasks titled alike, still resolve exactly.
+    HERDR_PROJECT_KEY=
+    HERDR_PROJECT_NAME=
+    HERDR_TASK_OUTCOME=
+    HERDR_TAB_TITLE=$W
+    if [ "$KIND" != secondmate ] && fm_backend_herdr_presentation_capable; then
+      if [ -x "$FM_ROOT/bin/fm-task-outcome.sh" ]; then
+        HERDR_TASK_OUTCOME=$(FM_HOME="$FM_HOME" FM_DATA_OVERRIDE="$DATA" \
+          "$FM_ROOT/bin/fm-task-outcome.sh" "$ID" "$OUTCOME") || HERDR_TASK_OUTCOME=
+      fi
+      if [ -n "$HERDR_TASK_OUTCOME" ] && [ -x "$FM_ROOT/bin/fm-visible-title.sh" ]; then
+        HERDR_TAB_TITLE=$("$FM_ROOT/bin/fm-visible-title.sh" "$HERDR_TASK_OUTCOME") \
+          || HERDR_TAB_TITLE=$W
+      fi
+      HERDR_PROJECT_KEY=$PROJ_ABS_REAL
+      HERDR_PROJECT_NAME=$(basename "$PROJ_ABS_REAL")
+      if [ -x "$FM_ROOT/bin/fm-project-display-name.sh" ]; then
+        HERDR_PROJECT_NAME=$("$FM_ROOT/bin/fm-project-display-name.sh" "$HERDR_PROJECT_NAME") \
+          || HERDR_PROJECT_NAME=$(basename "$PROJ_ABS_REAL")
+      fi
+    fi
+    # Clear rather than inherit: a herdr launching pane may already export an
+    # unrelated project's FM_HERDR_PROJECT_* into this process, which would
+    # place this worker in that project's workspace.
+    HERDR_PROJECT_ENV_KEY=$HERDR_PROJECT_KEY
+    HERDR_PROJECT_ENV_LABEL=$HERDR_PROJECT_NAME
     HERDR_PRESENTATION_JOURNAL=$(fm_backend_herdr_projection_journal_path "$STATE" "$ID")
     HERDR_PROJECTED=0
     if [ "$KIND" != secondmate ] && fm_backend_herdr_presentation_enabled "$CONFIG" "$STATE"; then
@@ -3317,7 +3351,10 @@ case "$BACKEND" in
       fi
     fi
     if [ "$HERDR_PROJECTED" -ne 1 ]; then
-      HERDR_CONTAINER_RAW=$(FM_HOME="$HERDR_LABEL_HOME" fm_backend_herdr_container_ensure "$PROJ_ABS" "$HERDR_LAUNCHER_RELATIONSHIP") || exit 1
+      HERDR_CONTAINER_RAW=$(FM_HOME="$HERDR_LABEL_HOME" \
+        FM_HERDR_PROJECT_KEY="$HERDR_PROJECT_ENV_KEY" \
+        FM_HERDR_PROJECT_LABEL="$HERDR_PROJECT_ENV_LABEL" \
+        fm_backend_herdr_container_ensure "$PROJ_ABS" "$HERDR_LAUNCHER_RELATIONSHIP") || exit 1
       # fm_backend_herdr_container_ensure echoes "<session>:<workspace_id>\t<seeded_default_tab_id>"
       # (the second field empty when this call ADOPTED a pre-existing workspace
       # rather than creating a fresh one). Split on the guaranteed single tab
@@ -3328,7 +3365,15 @@ case "$BACKEND" in
       HERDR_SEEDED_DEFAULT_TAB_ID=${HERDR_CONTAINER_RAW#*$'\t'}
       HERDR_SES=${CONTAINER%%:*}
       HERDR_WORKSPACE_ID=${CONTAINER#*:}
-      HERDR_TASK_IDS=$(FM_HOME="$HERDR_LABEL_HOME" fm_backend_herdr_create_task "$CONTAINER" "$W" "$PROJ_ABS" "$HERDR_SEEDED_DEFAULT_TAB_ID") || exit 1
+      # The task id goes in as identity only when presentation is on; without
+      # it the tab label IS the identity, exactly as upstream has it.
+      HERDR_TOKEN_TASK_ID=$ID
+      [ -n "$HERDR_PROJECT_KEY" ] || HERDR_TOKEN_TASK_ID=
+      HERDR_TASK_IDS=$(FM_HOME="$HERDR_LABEL_HOME" \
+        FM_HERDR_PROJECT_KEY="$HERDR_PROJECT_ENV_KEY" \
+        FM_HERDR_PROJECT_LABEL="$HERDR_PROJECT_ENV_LABEL" \
+        fm_backend_herdr_create_task "$CONTAINER" "$HERDR_TAB_TITLE" "$PROJ_ABS" \
+        "$HERDR_SEEDED_DEFAULT_TAB_ID" "$HERDR_TOKEN_TASK_ID") || exit 1
       read -r HERDR_TAB_ID HERDR_PANE_ID <<EOF
 $HERDR_TASK_IDS
 EOF
@@ -4554,6 +4599,16 @@ if [ "$RELAUNCH" -eq 0 ]; then
   SPAWN_META_TMP=
 fi
 
+# Project the authoritative human presentation onto the tab now that the record
+# exists. It reads state from the record rather than guessing at spawn time, so
+# a worker that is already working is not labeled as waiting. Presentation only:
+# every operational action keeps using the recorded Herdr ids, so a projection
+# failure never fails the spawn.
+if [ "$BACKEND" = herdr ] && [ -n "$HERDR_PROJECT_KEY" ] \
+  && [ -x "$FM_ROOT/bin/fm-visible-status.sh" ]; then
+  "$FM_ROOT/bin/fm-visible-status.sh" "$ID" >/dev/null 2>&1 || true
+fi
+
 # Fuse the backlog In-flight transition into the publication that just created
 # the record (bin/fm-backlog-transition-lib.sh owns the invariant). It runs under
 # this task's own meta lock, so a steer or teardown racing the same id stays
@@ -4762,6 +4817,19 @@ spawn_record_traceparent() {
 # process (go build, go test, ...) inherit it. Sent before the launch command so
 # the env is set when the agent starts; the brief sleep lets the export land.
 spawn_send_text_line "$T" "export GOTMPDIR=$TASK_TMP/gotmp"
+# Pin FM_HERDR_PROJECT_* to this task. A worker pane spawned inside herdr
+# otherwise inherits the LAUNCHING environment, which can name a completely
+# unrelated project, and this worker's own spawns would then land in that
+# project's workspace. Set the task's own project when herdr presentation
+# identity applies; otherwise clear both so nothing can leak through.
+if [ "$BACKEND" = herdr ] && [ "$KIND" != secondmate ] && [ -n "${HERDR_PROJECT_KEY:-}" ]; then
+  spawn_send_text_line "$T" "export FM_HERDR_PROJECT_KEY=$(shell_quote "$HERDR_PROJECT_KEY") FM_HERDR_PROJECT_LABEL=$(shell_quote "$HERDR_PROJECT_NAME")"
+else
+  # Every other path CLEARS, including a non-herdr backend: the launching
+  # environment's values are not this task's, and a worker that inherited them
+  # would place its own spawns in someone else's workspace.
+  spawn_send_text_line "$T" "unset FM_HERDR_PROJECT_KEY FM_HERDR_PROJECT_LABEL"
+fi
 # Mark the pane as a task worker so bin/fm-test-run.sh can refuse to run the
 # suite in the repository's primary checkout. Ship and scout workers are the
 # ones assigned an isolated worktree; a secondmate runs its own home instead.

@@ -14,6 +14,11 @@ HERDR_STATE="$TMP_ROOT/herdr-state.json"
 HERDR_LOG="$TMP_ROOT/herdr.log"
 WT_ROOT="$TMP_ROOT/worktrees"
 mkdir -p "$HOME_FIX/state" "$HOME_FIX/data" "$HOME_FIX/config" "$WT_ROOT"
+# This suite is about Herdr presentation, not backlog ownership: pin the home to
+# the hand-edited backlog contract so the dispatch gate is not part of what is
+# under test here (bin/fm-spawn.sh owns the transition itself, and
+# tests/fm-transition-lib.test.sh proves it).
+printf 'manual\n' > "$HOME_FIX/config/backlog-backend"
 printf '{"next":1,"workspaces":[],"tabs":[]}\n' > "$HERDR_STATE"
 : > "$HERDR_LOG"
 
@@ -149,11 +154,28 @@ make_project() {  # <slug>
   printf '%s' "$dir"
 }
 
+# fm-spawn refuses a brief without both subsections, so every fixture here is
+# written through one writer rather than a bare line per site.
+write_brief() {  # <id>
+  local id=$1
+  mkdir -p "$HOME_FIX/data/$id"
+  cat > "$HOME_FIX/data/$id/brief.md" <<BRIEF
+# Task
+
+## Captain's intent
+
+fake spawn instructions for $id
+
+## Firstmate spec
+
+Stay inside the task worktree.
+BRIEF
+}
+
 JOURNEY=$(make_project your-magical-journey)
 ARTEVO=$(make_project artevo)
 for id in journey-single journey-batch-one journey-batch-two artevo-single; do
-  mkdir -p "$HOME_FIX/data/$id"
-  printf 'fake spawn instructions for %s\n' "$id" > "$HOME_FIX/data/$id/brief.md"
+  write_brief "$id"
 done
 cat > "$HOME_FIX/data/projects.md" <<'EOF'
 - your-magical-journey [local-only] - Journey
@@ -172,8 +194,20 @@ journey-batch-two=working
 artevo-single=blocked
 EOF
 
+# This fixture models a firstmate that is NOT itself running inside a herdr
+# pane, so the ambient launcher identity of whatever runs this suite must be
+# scrubbed: left in place it names a real workspace on the developer's own herdr
+# server and the spawn refuses a cross-session parent rather than exercising the
+# label path under test.
 run_spawn() {
-  PATH="$FAKEBIN:$PATH" \
+  # --mode is a ship-only axis; a scout records no delivery posture.
+  local arg mode_args='--mode no-mistakes --yolo off'
+  for arg in "$@"; do
+    [ "$arg" = --scout ] && mode_args=
+  done
+  # shellcheck disable=SC2086  # mode_args is a deliberate two-flag word split
+  env -u HERDR_ENV -u HERDR_PANE_ID -u HERDR_TAB_ID -u HERDR_WORKSPACE_ID -u HERDR_SOCKET_PATH \
+    PATH="$FAKEBIN:$PATH" \
     FM_HOME="$HOME_FIX" \
     FM_ROOT_OVERRIDE="$ROOT" \
     FM_SPAWN_NO_GUARD=1 \
@@ -182,7 +216,7 @@ run_spawn() {
     FM_FAKE_WT_ROOT="$WT_ROOT" \
     FM_VISIBLE_STATE_FILE="$TMP_ROOT/states" \
     HERDR_SESSION=fm-lab-fake-presentation \
-    "$ROOT/bin/fm-spawn.sh" "$@"
+    "$ROOT/bin/fm-spawn.sh" "$@" $mode_args
 }
 
 run_spawn journey-single "$JOURNEY" --harness pi --backend herdr >/dev/null \
@@ -235,8 +269,7 @@ assert_contains "$(cat "$HOME_FIX/state/journey-single.meta")" 'kind=ship' 'ship
 assert_contains "$(cat "$HOME_FIX/state/journey-batch-one.meta")" 'kind=scout' 'scout kind was not preserved'
 pass 'fm-spawn fake Herdr E2E: single, batch, projects, axes, human labels, outcomes, states, and hidden ids converge'
 
-mkdir -p "$HOME_FIX/data/journey-protocol14"
-printf 'fake spawn instructions for journey-protocol14\n' > "$HOME_FIX/data/journey-protocol14/brief.md"
+write_brief journey-protocol14
 cat >> "$HOME_FIX/data/backlog.md" <<'EOF'
 - [ ] journey-protocol14 - Keep spawning on an old Herdr build (repo: your-magical-journey)
 EOF
@@ -278,11 +311,10 @@ for missing in fm-task-outcome.sh fm-visible-title.sh fm-project-display-name.sh
     || fail "degraded root must not contain bin/$missing"
 done
 
-mkdir -p "$HOME_FIX/data/degraded-single"
-printf 'fake spawn instructions for degraded-single\n' \
-  > "$HOME_FIX/data/degraded-single/brief.md"
+write_brief degraded-single
 
-PATH="$FAKEBIN:$PATH" \
+env -u HERDR_ENV -u HERDR_PANE_ID -u HERDR_TAB_ID -u HERDR_WORKSPACE_ID -u HERDR_SOCKET_PATH \
+  PATH="$FAKEBIN:$PATH" \
   FM_HOME="$HOME_FIX" \
   FM_ROOT_OVERRIDE="$degraded" \
   FM_SPAWN_NO_GUARD=1 \
@@ -291,7 +323,8 @@ PATH="$FAKEBIN:$PATH" \
   FM_FAKE_WT_ROOT="$WT_ROOT" \
   FM_VISIBLE_STATE_FILE="$TMP_ROOT/states" \
   HERDR_SESSION=fm-lab-fake-presentation \
-  "$degraded/bin/fm-spawn.sh" degraded-single "$JOURNEY" --harness pi --backend herdr >/dev/null \
+  "$degraded/bin/fm-spawn.sh" degraded-single "$JOURNEY" --harness pi --backend herdr \
+  --mode no-mistakes --yolo off >/dev/null \
   || fail 'a herdr spawn must still succeed with the fork presentation scripts absent'
 
 degraded_label=$(jq -r '.tabs[]|select(.tokens.fm_task_id=="degraded-single")|.label' "$HERDR_STATE")

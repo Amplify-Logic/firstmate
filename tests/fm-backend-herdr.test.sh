@@ -320,7 +320,8 @@ test_missing_herdr_cli_refuses_before_the_readiness_poll() {
   # Mutation proof: strip the guard lines into a copy that resolves its shared
   # libraries through the same relative layout, and show the pin discriminates.
   stripped="$dir/stripped"; mkdir -p "$stripped/bin/backends"
-  for tool in fm-composer-lib.sh fm-busy-lib.sh fm-transition-lib.sh; do
+  for tool in fm-composer-lib.sh fm-busy-lib.sh fm-transition-lib.sh \
+    fm-agent-process-lib.sh fm-session-lock-lib.sh fm-cursor-lib.sh fm-gemini-lib.sh; do
     ln -s "$ROOT/bin/$tool" "$stripped/bin/$tool"
   done
   grep -v -F 'command -v herdr >/dev/null 2>&1 || return 1' "$ROOT/bin/backends/herdr.sh" \

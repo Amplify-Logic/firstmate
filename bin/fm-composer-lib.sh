@@ -1158,8 +1158,18 @@ _fm_composer_select_cursorless() {
     FM_COMPOSER_SELECTED_FIRST=$((FM_COMPOSER_SCAN_PI_OPEN + 1))
     FM_COMPOSER_SELECTED_LAST=$((FM_COMPOSER_SCAN_PI_CLOSE - 1))
   fi
+  # A lower unmatched separator below the generic candidate proves that
+  # candidate is stale decoration (pi chrome or a leftover banner) rather than
+  # the live composer - but ONLY for a container shape. It must NOT wipe a bare
+  # AGENT GLYPH row: Claude and Codex frame their live unbordered composer with
+  # full-width horizontal rules, and a custom statusLine or bypass-permissions
+  # footer sits below those rules. Reading that frame as stale pi classified an
+  # idle Claude primary as unknown forever and silently blocked every away-mode
+  # escalation delivery (2026-07-20/21 overnight incident: 1630 deferred
+  # injects, 0 deliveries).
   if [ "$FM_COMPOSER_SCAN_PI_PAIR_FOUND" = 0 ] \
-     && [ "$FM_COMPOSER_SCAN_PI_LAST_SEPARATOR" -gt "$generic" ]; then
+     && [ "$FM_COMPOSER_SCAN_PI_LAST_SEPARATOR" -gt "$generic" ] \
+     && [ "$FM_COMPOSER_SELECTED_KIND" != bare ]; then
     FM_COMPOSER_SELECTED_KIND=
     return 1
   fi
