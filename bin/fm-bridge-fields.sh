@@ -3,9 +3,11 @@
 #
 # Usage: fm-bridge-fields.sh <fleet-snapshot-json-file> < model.json > enriched.json
 #
-# The phone bridge renders fields upstream's projection does not emit: a human
-# title, an owner, a repo, and the hold kind and reason behind a decision or a
-# gate. Those used to be edits scattered through upstream's jq program, which is
+# The phone bridge renders fields upstream's projection does not emit: the hold
+# kind and reason behind a decision or a gate. In-flight rows are no longer
+# enriched here at all - upstream's own projection emits their captain-facing
+# `name` and `repo`, and a second copy written from this side would be the
+# duplicate that drifts. Those used to be edits scattered through upstream's jq program, which is
 # the shape that conflicts on every upstream change to it. They live here
 # instead, and bin/fm-bearings-snapshot.sh calls this in one guarded step.
 #
@@ -57,20 +59,6 @@ main() {
          | ($m.decisions_open // [])[] | {key: ($m.id + "/" + .id), value: .} ] | from_entries) as $sm_decisions
     | ([ ($s.secondmate_current.records // [])[] as $m
          | ($m.queued // [])[] | {key: ($m.id + "/" + .id), value: .} ] | from_entries) as $sm_queued
-    | ([ $s.tasks[]? | select(.id != null) | {key: .id, value: .} ] | from_entries) as $task_rows
-    | ([ ($s.secondmate_current.records // [])[] | select(.id != null) | {key: .id, value: .} ] | from_entries) as $sm_homes
-    | .in_flight = [ .in_flight[]
-        | . as $row
-        | if $row.owner == "(main)" and $row.id != null and ($task_rows[$row.id] != null) then
-            ($task_rows[$row.id]) as $t
-            | $row + {title: (($t.backlog.title // "Untitled work") | trunc(90)),
-                      repo: (($t.backlog.repo // $t.project // null) | trunc(120))}
-          elif $row.owner != null and ($sm_homes[$row.owner] != null) then
-            ($sm_homes[$row.owner]) as $m
-            | $row + {title: "Second-mate work",
-                      repo: ((([ ($m.active_children // [])[] | (.backlog.repo // .project // empty) ] | unique)) as $repos
-                             | if ($repos | length) == 1 then ($repos[0] | trunc(120)) else null end)}
-          else $row end ]
     | .decisions_open = [ .decisions_open[]
         | . as $row
         | if $row.owner == "(main)" and $row.id != null and ($main_rows[$row.id] != null) then

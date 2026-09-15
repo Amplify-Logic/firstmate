@@ -85,10 +85,18 @@
 #   --all-recorded-prs include every locally recorded PR
 #   --all-unhealthy  include every unhealthy endpoint
 #   --all-pr-repos   query every discovered repository under --include-prs
+#   --passive-view   named read-only observation for the phone bridge page;
+#                    skips the away-return guard so a refresh still works while
+#                    the captain is away. Ordinary Bearings chat still calls the
+#                    guard. Refuses --include-prs (local-only).
 #   -h,--help        usage
 #
 # Output contract: `fm-bearings.v1`. No locks or reports; the underlying snapshot's
 # parent-side remote-ledger cache refresh is the only default fleet-state mutation.
+# The phone bridge's own fields (a decision's and a gate's `hold_kind` and
+# `hold_reason`) are added by bin/fm-bridge-fields.sh after the projection below,
+# in one guarded step before the format branch. With that script absent the output
+# is the projection alone and those fields are simply missing.
 set -u
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -131,7 +139,8 @@ validate_bound FM_BEARINGS_PR_LIMIT "$FM_BEARINGS_PR_LIMIT"
 
 usage() {
   cat <<'EOF'
-usage: fm-bearings-snapshot.sh [--json] [--include-prs] [--fields <list>]
+usage: fm-bearings-snapshot.sh [--json] [--include-prs] [--passive-view]
+                               [--fields <list>]
                                [--all-in-flight] [--all-decisions]
                                [--all-secondmates] [--all-landed]
                                [--all-reports] [--all-queued]
@@ -171,6 +180,7 @@ EOF
 
 FORMAT=toon
 INCLUDE_PRS=0
+PASSIVE_VIEW=0
 ALL_REPORTS=0
 ALL_QUEUED=0
 ALL_IN_FLIGHT=0
@@ -185,6 +195,7 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --json) FORMAT=json ;;
     --include-prs) INCLUDE_PRS=1 ;;
+    --passive-view) PASSIVE_VIEW=1 ;;
     --all-reports) ALL_REPORTS=1 ;;
     --all-queued) ALL_QUEUED=1 ;;
     --all-in-flight) ALL_IN_FLIGHT=1 ;;
@@ -204,6 +215,15 @@ done
 
 command -v jq >/dev/null 2>&1 || { echo "fm-bearings-snapshot: jq not found" >&2; exit 1; }
 
+if [ "$PASSIVE_VIEW" = 1 ] && [ "$INCLUDE_PRS" = 1 ]; then
+  echo "fm-bearings-snapshot: --passive-view is local-only and refuses --include-prs" >&2
+  exit 2
+fi
+
+# --passive-view is the ONE named exception to the block below: the phone bridge
+# observation page is most useful precisely while the captain is away, and it
+# must not copy or skip the guard in bridge code, so the exception lives here
+# with the guard it excepts. Ordinary Bearings chat still calls it.
 # The shared read-only away-return owner is consulted, not obeyed. An active
 # away window still refuses here: the correct answer to a bearings request then
 # is to run the return first. Return CATCH-UP is different - the captain is
@@ -213,7 +233,11 @@ command -v jq >/dev/null 2>&1 || { echo "fm-bearings-snapshot: jq not found" >&2
 # neither. Acting on the fleet still waits for its `check`.
 RETURN_CATCHUP=null
 GUARD_RC=0
-GUARD_ERR=$("$SCRIPT_DIR/fm-afk-return.sh" guard 2>&1 >/dev/null) || GUARD_RC=$?
+if [ "$PASSIVE_VIEW" != 1 ]; then
+  GUARD_ERR=$("$SCRIPT_DIR/fm-afk-return.sh" guard 2>&1 >/dev/null) || GUARD_RC=$?
+else
+  GUARD_ERR=
+fi
 if [ "$GUARD_RC" -ne 0 ] && [ "$GUARD_RC" -ne 4 ]; then
   [ -z "$GUARD_ERR" ] || printf '%s\n' "$GUARD_ERR" >&2
   exit "$GUARD_RC"
