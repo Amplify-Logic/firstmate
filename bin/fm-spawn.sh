@@ -4222,11 +4222,28 @@ EOF
       # no trust gate either way; the extension still lives in state/ (outside
       # the worktree) so it cannot pollute the task's git state, matching pi.
       cat > "$STATE/$ID.prime-ext.ts" <<EOF
-// Firstmate turn-end signal; written by fm-spawn.
+// Firstmate semantic busy-state events + turn-end notification; written by
+// fm-spawn under the contract owned by bin/fm-busy-lib.sh. prime-agent is a
+// hard fork of Pi and keeps its extension API, so this is Pi's extension with
+// prime-ext as its source; the one deliberate omission is Pi's
+// codex-native:progress marker, which prime-agent has no equivalent for.
 // "turn_end" fires after each completed turn (not "agent_end", which fires
-// only when the whole run exits): the watcher needs every turn boundary.
+// only when the whole run exits) and stays a wake NOTIFICATION touch for the
+// watcher, never current-state truth.
 import { execFile } from "node:child_process";
+const busyEvent = (state: string, event: string) =>
+  new Promise<void>((resolve) => {
+    execFile("$FM_ROOT/bin/fm-busy-event.sh", [
+      "apply", "$STATE_REAL", "$ID", state,
+      "--gen", "$BUSY_GEN", "--source", "prime-ext", "--event", event,
+    ], () => resolve());
+  });
 export default function (pi: any) {
+  pi.on("agent_start", () => busyEvent("busy", "agent-start"));
+  pi.on("agent_settled", (_event: any, ctx: any) => {
+    if (ctx && typeof ctx.isIdle === "function" && !ctx.isIdle()) return;
+    return busyEvent("idle", "agent-settled");
+  });
   pi.on("turn_end", () => execFile("touch", ["$TURNEND"]));
 }
 EOF

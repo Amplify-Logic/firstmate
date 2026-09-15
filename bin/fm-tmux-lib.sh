@@ -162,6 +162,25 @@ fm_tmux_composer_state() {  # <target> -> empty|pending|pending-unproven|unknown
   if [ "$verdict" = unknown ] && fm_tmux_pane_is_cursor "$target"; then
     verdict=$(fm_composer_classify_screen "$(fm_tmux_composer_caps)" "$pane" '')
   fi
+  # prime-agent draws a BARE `> ` composer whose glyph is a SHELL glyph, which
+  # the shared scanner deliberately refuses as container proof (the dead-shell
+  # rule): its cursor row is therefore never an identified composer and the
+  # read can only ever answer `unknown`, deferring every away-mode escalation
+  # on an idle prime-agent worker forever (verified 2026-08-07, v0.7.0). On a
+  # pane prime-agent's own process identity positively claims, that row IS the
+  # agent prompt row - which is what the shared verdict owner counts as
+  # bordered. Only the row plumbing lives here; every shape and verdict
+  # decision still comes from fm_composer_classify_content, and the
+  # identity gate is what keeps a real dead shell (no foreground prime-agent)
+  # on the safe `unknown` path.
+  if [ "$verdict" = unknown ] && fm_tmux_pane_is_prime_agent "$target"; then
+    local raw content plain
+    raw=$(printf '%s\n' "$pane" | sed -n "$((cy + 1))p")
+    content=$(printf '%s\n' "$raw" | fm_composer_strip_ghost)
+    plain=$(printf '%s\n' "$raw" | fm_composer_strip_ansi)
+    verdict=$(fm_composer_classify_content 1 "$content" \
+      "${FM_COMPOSER_IDLE_RE:-$FM_COMPOSER_IDLE_RE_DEFAULT}" insensitive "$plain" 1 1)
+  fi
   printf '%s' "$verdict"
 }
 
@@ -183,6 +202,32 @@ fm_tmux_pane_is_cursor() {  # <target>
     args=${args#"${args%%[![:space:]]*}"}
     argv0=${args%%[[:space:]]*}
     fm_cursor_process_matches "$comm" '' "$argv0" && return 0
+  done <<EOF
+$(LC_ALL=C ps -t "${tty#/dev/}" -o pid=,pgid=,tpgid=,comm= 2>/dev/null)
+EOF
+  return 1
+}
+
+# fm_tmux_pane_is_prime_agent: true when the pane's FOREGROUND process group
+# contains a genuine prime-agent (Prime Intellect) TUI. The CLI rewrites its
+# process title, so tmux's own #{pane_current_command} reports a bare `node`
+# and identity comes from the argv of a foreground node process (verified
+# 2026-08-07, v0.7.0, macOS: pane_current_command=node, `ps -o args=` on the
+# foreground child prints "prime-agent"). Same foreground scoping (pgid =
+# tpgid) as fm_tmux_pane_is_cursor, so a pane whose agent exited to a shell has
+# no prime-agent foreground process and gets no reclassification. The real
+# agent work runs in a daemon OUTSIDE this pane; this identifies the attached
+# TUI client only.
+fm_tmux_pane_is_prime_agent() {  # <target>
+  local target=$1 tty pid pgid tpgid comm args
+  tty=$(tmux display-message -p -t "$target" '#{pane_tty}' 2>/dev/null) || return 1
+  case "$tty" in /dev/*) ;; *) return 1 ;; esac
+  while read -r pid pgid tpgid comm; do
+    [ -n "$comm" ] || continue
+    [ "$pgid" = "$tpgid" ] || continue
+    case "${comm##*/}" in node*) ;; *) continue ;; esac
+    args=$(LC_ALL=C ps -p "$pid" -o args= 2>/dev/null) || args=
+    case "$args" in *prime-agent*) return 0 ;; esac
   done <<EOF
 $(LC_ALL=C ps -t "${tty#/dev/}" -o pid=,pgid=,tpgid=,comm= 2>/dev/null)
 EOF
