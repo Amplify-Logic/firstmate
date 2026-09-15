@@ -2403,12 +2403,8 @@ esac
 # refusal. With that library absent nothing is pinned, and the launch, its env,
 # and its meta are byte-identical to a spawn from before account pinning.
 if [ "$RELAUNCH" -eq 1 ] && [ "$ACCOUNT_SET" -eq 0 ] && [ "$RAW_LAUNCH" -eq 0 ] && [ "$HARNESS" = "$RELAUNCH_PRIOR_HARNESS" ]; then
-  case "$HARNESS" in
-    claude|codex)
-      ACCOUNT=$(fm_meta_get "$RELAUNCH_META" account)
-      [ -z "$ACCOUNT" ] || ACCOUNT_SET=1
-      ;;
-  esac
+  ACCOUNT=$(fm_meta_get "$RELAUNCH_META" account)
+  [ -z "$ACCOUNT" ] || ACCOUNT_SET=1
 fi
 ACCOUNT_NAME=
 ACCOUNT_HOME=
