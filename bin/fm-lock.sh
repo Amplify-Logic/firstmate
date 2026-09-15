@@ -63,7 +63,7 @@ if [ "${1:-}" = "status" ]; then
     echo "lock: unreadable"
     exit 0
   }
-  if fm_harness_pid_alive "$old"; then echo "lock: held by live harness pid $old"; else echo "lock: stale (pid $old dead or not a harness)"; fi
+  if fm_harness_holder_alive "$old"; then echo "lock: held by live harness pid $old"; else echo "lock: stale (pid $old dead or not a harness)"; fi
   exit 0
 fi
 
@@ -98,7 +98,7 @@ if [ -f "$LOCK" ] && [ ! -L "$LOCK" ]; then
     echo "lock acquired: harness pid $me"
     exit 0
   fi
-  if fm_harness_pid_alive "$old"; then
+  if fm_harness_holder_alive "$old"; then
     if fm_harness_ancestry_contains "$old"; then
       # This session's own earlier acquisition, recorded from a different depth
       # of the same harness run: recognize it as ours and keep its record.
@@ -129,7 +129,7 @@ if [ -e "$LOCK" ] || [ -L "$LOCK" ]; then
     echo "error: session lock is unreadable; operate read-only until resolved" >&2
     exit 1
   }
-  if [ "$old" != "$me" ] && fm_harness_pid_alive "$old"; then
+  if [ "$old" != "$me" ] && fm_harness_holder_alive "$old"; then
     if fm_harness_ancestry_contains "$old"; then
       release_claim_lock
       echo "lock acquired: harness pid $old"
