@@ -10,7 +10,7 @@ set -u
 AGENTS="$ROOT/AGENTS.md"
 BOOTSTRAP="$ROOT/.agents/skills/bootstrap-diagnostics/SKILL.md"
 AFK="$ROOT/.agents/skills/afk/SKILL.md"
-DECISION="$ROOT/.agents/skills/decision-hold-lifecycle/SKILL.md"
+DECISION="$ROOT/.agents/skills/captain-hold-lifecycle/SKILL.md"
 RECOVERY="$ROOT/.agents/skills/stuck-crewmate-recovery/SKILL.md"
 HARNESS="$ROOT/.agents/skills/harness-adapters/SKILL.md"
 CODEXAPP="$ROOT/.agents/skills/firstmate-codexapp/SKILL.md"
@@ -128,7 +128,7 @@ test_ahoy_contract() {
     "Ahoy does not preserve visibly unanswered decisions"
   assert_grep 'address the captain directly at least once' "$AHOY" \
     "Ahoy does not enforce the direct-address contract"
-  assert_grep 'Use the captain'"'"'s project language' "$AHOY" \
+  assert_grep 'Use captain-facing outcome language' "$AHOY" \
     "Ahoy does not require captain-facing outcome language"
   pass "ahoy is internal, visible-history-only, decision-aware, and captain-facing"
 }
@@ -136,20 +136,25 @@ test_ahoy_contract() {
 test_outward_facing_skill_points_reference_section_9_owner() {
   assert_grep "using \`AGENTS.md\` section 9's captain-facing translation contract" "$BOOTSTRAP" \
     "bootstrap diagnostics do not reference section 9 at captain handoff"
-  assert_grep "Acknowledge** in \`AGENTS.md\` section 9 language" "$AFK" \
-    "afk acknowledgement does not reference section 9"
-  assert_grep "Captain, away mode is active; I will batch routine updates" "$AFK" \
-    "afk acknowledgement lacks a local plain-English example"
+  # The entry announcement is no longer authored in the skill - bin/fm-afk-launch.sh
+  # prints it - so what this pins is the surviving contract: the captain-facing
+  # read-back and the return brief are both relayed in section 9 language.
+  assert_grep "relay its read-back to the captain in \`AGENTS.md\` section 9 language" "$AFK" \
+    "afk read-back does not reference section 9"
+  assert_grep "Relay the return brief in section 9 language" "$AFK" \
+    "afk return brief does not reference section 9"
   assert_grep "as decisions from Bearings' Captain's Call section under \`AGENTS.md\` section 9" "$DECISION" \
     "decision relay does not reference section 9"
   assert_grep "using \`AGENTS.md\` section 9; do not mention metadata, harness, window, or worktree" "$RECOVERY" \
     "stuck-worker failure does not reference section 9"
-  assert_grep "under \`AGENTS.md\` section 9 that the requested worker runtime is not verified yet" "$HARNESS" \
+  assert_grep "section 9 that the requested worker runtime is not verified" "$HARNESS" \
     "runtime fallback does not reference section 9"
   assert_grep "use firstmate's own verified runtime for current work" "$HARNESS" \
     "runtime fallback does not require the current-work fallback"
-  assert_grep "Do not pause current work for that future-verification choice, and never launch an unverified adapter." "$HARNESS" \
-    "runtime fallback permits waiting on future verification or launching an unverified adapter"
+  assert_grep "Do not pause current work for that choice." "$HARNESS" \
+    "runtime fallback permits waiting on future verification"
+  assert_grep "Never dispatch a crewmate or secondmate on an unverified adapter." "$HARNESS" \
+    "runtime fallback permits launching an unverified adapter"
   assert_grep "translate status prefixes and return-channel evidence through \`AGENTS.md\` section 9" "$CODEXAPP" \
     "Codex Desktop result reporting does not reference section 9"
   assert_grep "It supplements \`AGENTS.md\` section 9; apply both, and this public-channel rule wins wherever it is stricter." "$FMX" \

@@ -1630,7 +1630,7 @@ reconcile_note() {
 
 command_complete() {
   local origin=${1:-} meta previous='' supplied='' keys='' entry key status_file open raw_open has_meta=0 transfer_rc resolved
-  local resolved_how attested_by_prefix=''
+  local resolved_how attested_by_prefix='' reuse_id legacy
   [ "$#" -ge 2 ] || { usage >&2; exit 2; }
   validate_slug origin-id "$origin"
   shift
@@ -1677,6 +1677,34 @@ EOF
   open=$(origin_open_decisions "$origin")
   if [ -n "$open" ] && [ -z "$keys" ]; then
     fail "origin $origin still has open captain decisions in its status stream; hold a captain task for what remains, or answer them, before attesting --none"
+  fi
+
+  # A still-open status key whose own inventory entry is already DONE is a
+  # re-use: the crew wrote a fresh needs-decision under a retired key. The
+  # transfer below would point that fresh decision's quiet-state at a closed
+  # task whose compensating controls never fire again, so it would rot
+  # invisibly. Refuse BEFORE the metadata attestation, or a refused complete
+  # still leaves decisions_reviewed=1 and an inventory a later verify accepts.
+  # The key is matched against the inventory by its own collapsed spelling and
+  # by the legacy `<origin>-decision-<key>` identity; a hold filed under an
+  # unrelated task id carries no name relation to match on.
+  if [ -n "$keys" ]; then
+    while IFS=$'\t' read -r key _verb _summary; do
+      [ -n "$key" ] || continue
+      reuse_id=
+      if list_has_key "$keys" "$key"; then
+        reuse_id=$key
+      else
+        legacy=$(legacy_hold_id "$origin" "$key")
+        ! list_has_key "$keys" "$legacy" || reuse_id=$legacy
+      fi
+      [ -n "$reuse_id" ] || continue
+      task_show "$reuse_id" || continue
+      [ "$(show_field "$TASK_SHOW_OUTPUT" state)" != "done" ] \
+        || fail "captain decision $reuse_id is already durably resolved; use a new decision key for a new decision"
+    done <<EOF
+$raw_open
+EOF
   fi
 
   if [ "$has_meta" = 1 ]; then

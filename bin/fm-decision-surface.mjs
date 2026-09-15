@@ -558,7 +558,11 @@ function routeAnswers({ home, root, page, answersFile, apply }) {
       fail(`answer type is invalid for ${answer.hold_id}`);
     }
     const hold = taskShow(home, answer.hold_id);
-    const alreadyResolved = hold.state === "done" && hold.body.includes("Resolution recorded by fm-decision-hold.");
+    // The collapse moved the owner to bin/fm-captain-hold.sh, which stamps its own
+    // name; pre-collapse records still carry the retired one. Both mean resolved.
+    const alreadyResolved = hold.state === "done"
+      && (hold.body.includes("Resolution recorded by fm-captain-hold.")
+        || hold.body.includes("Resolution recorded by fm-decision-hold."));
     if (!alreadyResolved && (hold.state !== "queued" || hold.held !== "yes" || hold.kind !== "captain" || hold.hold_kind !== "captain")) {
       fail(`captain decision is no longer actively held: ${answer.hold_id}`);
     }

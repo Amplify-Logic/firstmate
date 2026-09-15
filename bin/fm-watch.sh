@@ -130,6 +130,11 @@ mkdir -p "$STATE"
 # runtime can exceed the bounded CI lint worker while adding no uncovered file.
 # shellcheck source=/dev/null
 . "$SCRIPT_DIR/fm-push-transition-lib.sh"
+# Hook W1, part one of three. The fork's glasses mailbox/inbox file-event wait is
+# carried entirely by this library; the call sites below are guarded, so an
+# absent library leaves this watcher running its own terminal wait unchanged.
+# shellcheck source=bin/fm-file-event-lib.sh
+[ ! -r "$SCRIPT_DIR/fm-file-event-lib.sh" ] || . "$SCRIPT_DIR/fm-file-event-lib.sh"
 # shellcheck source=bin/fm-pr-lib.sh
 . "$SCRIPT_DIR/fm-pr-lib.sh"
 # Only for the arm-time check on FM_PROCEVENT_LAUNCH_CONFIRM_SECONDS below;
@@ -1741,6 +1746,26 @@ watch_hold_sleep_assertion() {  # <watcher-pid>
   FM_WATCH_CAFFEINATE_PID=$!
 }
 
+# Hook W1, part two of three. A slow-check sweep records the moment it STARTED,
+# not the moment it finished: a mailbox or inbox write that lands while the
+# sweep is running is newer than the sweep's start and must still fire, and
+# stamping .last-check at completion would swallow it for a whole cadence.
+# The pending marker is per-watcher so a successor never adopts a stale one.
+check_sweep_begin() {  # <pending-marker>
+  local pending_marker=$1
+  rm -f "$pending_marker"
+  touch "$pending_marker"
+}
+
+# Idempotent within one cycle: a sweep that publishes several results completes
+# once, and every later call in that same cycle is a no-op that leaves the
+# recorded boundary at the sweep's start.
+check_sweep_complete() {  # <pending-marker>
+  local pending_marker=$1
+  [ -e "$pending_marker" ] || return 0
+  mv -f "$pending_marker" "$STATE/.last-check"
+}
+
 watch_release_sleep_assertion() {
   local pid=${FM_WATCH_CAFFEINATE_PID:-}
   FM_WATCH_CAFFEINATE_PID=
@@ -1879,6 +1904,7 @@ pr_poll_control_release() {
 watcher_cleanup() {
   local cleanup_status=0 owns_lock=0 transition=release-lock
   watch_release_sleep_assertion
+  [ -z "${CHECK_SWEEP_PENDING:-}" ] || rm -f "$CHECK_SWEEP_PENDING"
   pr_poll_control_release || cleanup_status=1
   if [ "$(cat "$WATCH_LOCK/pid" 2>/dev/null || true)" = "${WATCHER_PID:-}" ]; then
     owns_lock=1
@@ -1906,6 +1932,7 @@ WATCHER_PID=${BASHPID:-$$}
 # Keep the host awake for exactly as long as this watcher owns the lock, so a
 # laptop that sleeps does not silently stop supervising the fleet.
 watch_hold_sleep_assertion "$WATCHER_PID"
+CHECK_SWEEP_PENDING="$STATE/.last-check.pending.$WATCHER_PID"
 printf '%s\n' "$FM_HOME" > "$WATCH_LOCK/fm-home" || true
 printf '%s\n' "$WATCH_PATH" > "$WATCH_LOCK/watcher-path" || true
 # shellcheck disable=SC2034 # Consumed by wake() in the separately linted transition owner.
@@ -1969,6 +1996,17 @@ while :; do
   # Liveness beacon for fm-guard.sh: a fresh mtime here means a watcher is
   # alive. Supervision scripts warn when this goes stale with tasks in flight.
   touch "$STATE/.last-watcher-beat"
+
+  check_sweep_begin "$CHECK_SWEEP_PENDING" || exit 1
+
+  # The fork catches mailbox/inbox writes that landed while no watcher was
+  # alive, during successor setup, or during the just-completed bounded wait,
+  # and expires .last-check before the slow-check cadence test below so the
+  # sweep runs in this same loop. Without the library nothing runs here and the
+  # cadence is the creator's.
+  if command -v fm_fork_glasses_file_event_catch_up >/dev/null 2>&1; then
+    fm_fork_glasses_file_event_catch_up || true
+  fi
 
   if [ "$(age_of "$STATE/home-summary.json")" -ge "$HOME_SUMMARY_INTERVAL" ]; then
     home_summary_refresh_detached
@@ -2099,7 +2137,7 @@ while :; do
           fi
           retire_merged_pr_poll "$id"
           pr_poll_control_release || exit 1
-          touch "$STATE/.last-check"
+          check_sweep_complete "$CHECK_SWEEP_PENDING" || exit 1
           if [ "$FM_MERGE_OUTCOME_ALREADY_RECORDED" = true ]; then
             triage_log "absorbed duplicate merged PR poll result for $id"
             continue
@@ -2108,7 +2146,7 @@ while :; do
         fi
         pr_poll_control_release || exit 1
         fm_wake_append check "$c" "$reason" || exit 1
-        touch "$STATE/.last-check"
+        check_sweep_complete "$CHECK_SWEEP_PENDING" || exit 1
         wake "$reason"
       fi
       pr_poll_control_release || exit 1
@@ -2116,10 +2154,12 @@ while :; do
     if [ -n "$rejected_checks" ]; then
       reason="check: rejected unauthenticated state checks:$rejected_checks"
       fm_wake_append check unauthenticated-state-checks "$reason" || exit 1
-      touch "$STATE/.last-check"
+      check_sweep_complete "$CHECK_SWEEP_PENDING" || exit 1
       wake "$reason"
     fi
-    touch "$STATE/.last-check"
+    check_sweep_complete "$CHECK_SWEEP_PENDING" || exit 1
+  else
+    rm -f "$CHECK_SWEEP_PENDING"
   fi
 
   # On the first changed signal, linger one grace period and re-scan before
@@ -2510,5 +2550,18 @@ EOF
 
   # Terminal wait: a bounded native-event wait for push-capable homes (herdr),
   # else the blind poll sleep. See event_wait_or_sleep.
-  event_wait_or_sleep
+  #
+  # Hook W1, part three of three. This is a declared override, not a
+  # contribution: the fork's wait replaces this one rather than running beside
+  # it, because running both would serialise a shortened wait behind a full poll
+  # sleep and the glasses interrupt would become a no-op. Its trigger is
+  # narrower than "the fork is installed" - a home with glasses watch paths -
+  # and for every other home bin/fm-file-event-lib.sh calls event_wait_or_sleep
+  # below itself rather than copying it. With the library absent, this line is
+  # the branch that runs.
+  if command -v fm_fork_event_wait_or_sleep >/dev/null 2>&1; then
+    fm_fork_event_wait_or_sleep
+  else
+    event_wait_or_sleep
+  fi
 done

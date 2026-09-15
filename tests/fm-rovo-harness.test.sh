@@ -59,10 +59,30 @@ case "$*" in
   *"#{pane_current_path}"*) printf '%s\n' "$FM_FAKE_PANE_PATH"; exit 0 ;;
   *"#{cursor_y}"*) fake_cursor_y; exit 0 ;;
 esac
+# The window inventory this fake keeps is what the liveness owner reads back
+# after the launch: a created window must be listed or the spawn is refused as
+# a gone endpoint. It rides beside the launch log, which each case resets.
+fake_window_log=${FM_FAKE_LAUNCH_LOG:+$FM_FAKE_LAUNCH_LOG.windows}
 case "${1:-}" in
   display-message) printf 'firstmate\n'; exit 0 ;;
-  list-windows) exit 0 ;;
-  has-session|new-session|new-window|kill-window) exit 0 ;;
+  list-windows)
+    if [ -n "$fake_window_log" ] && [ -f "$fake_window_log" ]; then
+      cat "$fake_window_log"
+    fi
+    exit 0
+    ;;
+  new-window)
+    if [ -n "$fake_window_log" ]; then
+      prev=
+      for arg in "$@"; do
+        [ "$prev" != "-n" ] || printf '%s\n' "$arg" >> "$fake_window_log"
+        prev=$arg
+      done
+    fi
+    printf '@42\n'
+    exit 0
+    ;;
+  has-session|new-session|kill-window) exit 0 ;;
   send-keys)
     prev=
     literal=

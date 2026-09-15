@@ -42,7 +42,7 @@ test_file_mode_owns_prior_report_artifact_behavior() {
     "file mode does not write the dated report"
   assert_grep 'If today'"'"'s file already exists, delete it first, then create a new file from scratch.' "$BEARINGS_SKILL" \
     "file mode does not replace today's report from scratch"
-  assert_grep 'This is the only write allowed by the skill.' "$BEARINGS_SKILL" \
+  assert_grep 'This is the only file-mode write allowed by the skill.' "$BEARINGS_SKILL" \
     "file mode write boundary is missing"
   assert_grep 'After writing the file, return the concise four-section chat digest and include the report path or link without adding a fifth section.' "$BEARINGS_SKILL" \
     "file mode does not return the linked four-section digest"
@@ -50,15 +50,15 @@ test_file_mode_owns_prior_report_artifact_behavior() {
 }
 
 test_file_option_is_explicit_and_prs_compose() {
-  assert_grep 'Treat `file` only as an explicit invocation option in the slash command.' "$BEARINGS_SKILL" \
+  assert_grep 'Treat `file` and `lavish` only as explicit invocation options in the slash command.' "$BEARINGS_SKILL" \
     "file is not pinned to an explicit slash option"
-  assert_grep 'Do not treat natural-language requests such as "write a report", "save this", "persist it", or "make a file" as file mode unless the invocation explicitly includes the standalone `file` option.' "$BEARINGS_SKILL" \
+  assert_grep 'Do not treat natural-language requests such as "write a report", "save this", "persist it", "make a file", or "make a board" as file or lavish mode unless the invocation explicitly includes the standalone option.' "$BEARINGS_SKILL" \
     "file mode can be triggered fuzzily"
   assert_grep 'When the captain asks to include PRs, pass the snapshot command'"'"'s live-PR opt-in.' "$BEARINGS_SKILL" \
     "live PR opt-in is missing"
   assert_grep '`/bearings include PRs` remains chat-only and makes the live-PR opt-in.' "$BEARINGS_SKILL" \
     "include PRs does not compose with chat-only mode"
-  assert_grep '`/bearings file include PRs` writes the dated report and makes the live-PR opt-in.' "$BEARINGS_SKILL" \
+  assert_grep '`/bearings file include PRs` and `/bearings lavish include PRs` compose the same way.' "$BEARINGS_SKILL" \
     "include PRs does not compose with file mode"
   pass "file is explicit and live PR enrichment composes with both modes"
 }
@@ -68,15 +68,15 @@ test_single_fresh_snapshot_source_and_authoritative_provenance() {
   body=$(skill_body)
   count=$(grep -cF 'bin/fm-bearings-snapshot.sh' "$BEARINGS_SKILL")
   [ "$count" = 1 ] || fail "bearings should reference the snapshot owner exactly once, found $count"
-  assert_contains "$body" 'Run `bin/fm-bearings-snapshot.sh` at invocation time and read its compact output.' \
+  assert_contains "$body" 'Run `snapshot=$(bin/fm-bearings-snapshot.sh --json)` at invocation time and read that compact output.' \
     "bearings does not gather a fresh snapshot at invocation time"
-  assert_contains "$body" 'It is the single bounded, deterministic fleet-state source for Bearings and renders TOON by default.' \
+  assert_contains "$body" 'It is the single bounded, deterministic fleet-state source for Bearings.' \
     "bearings does not name the single bounded source"
   assert_contains "$body" 'Do not create or consult a second fleet-state reader, parser contract, status-event-tail interpretation, visible-session recap, ad-hoc project probe, or ad-hoc `gh-axi`/`gh` query.' \
     "bearings allows a second reader or ad-hoc probe"
   assert_contains "$body" 'For registered secondmates, use the snapshot'"'"'s structured-home classification and provenance.' \
     "bearings does not use structured secondmate provenance"
-  assert_contains "$body" 'Structured captain-held decisions come from `decision-hold-lifecycle` and appear under `decisions_open`.' \
+  assert_contains "$body" 'A decision is simply a task held for the captain (`captain-hold-lifecycle`), whatever its kind.' \
     "bearings does not preserve structured captain-held decisions"
   assert_not_contains "$body" 'fm-fleet-snapshot.sh' "bearings creates a second canonical snapshot path"
   assert_not_contains "$body" 'fm-crew-state.sh' "bearings creates an extra current-state reader"
@@ -84,7 +84,7 @@ test_single_fresh_snapshot_source_and_authoritative_provenance() {
 }
 
 test_captain_visible_warnings_use_outcome_language() {
-  assert_grep 'Render it under Charted Next as "The main work list is incomplete, so some active work may be missing from this recap."' "$BEARINGS_SKILL" \
+  assert_grep 'Word that Charted Next row for the captain as "The main work list is incomplete, so some active work may be missing from this recap."' "$BEARINGS_SKILL" \
     "main inventory warning lacks concrete captain-facing wording"
   assert_grep 'Never show the `(main-inventory)` identifier, `omitted`, child metadata, unstructured rows, or other snapshot vocabulary to the captain.' "$BEARINGS_SKILL" \
     "Bearings can leak snapshot vocabulary into captain chat"
@@ -107,16 +107,20 @@ test_chat_contract_four_sections_for_both_modes() {
   [ "$report_headings" = "$expected" ] || fail "detailed report contract must contain the same four complete sections, got: $report_headings"
   assert_contains "$body" "no At Anchor section" "the At Anchor exclusion must be documented"
   assert_contains "$body" "Every chat digest and file-mode report is a complete current snapshot" "both modes must be complete current snapshots"
-  assert_contains "$body" "Detailed decisions, plans, full gate reasons, and evidence belong in the file only when file mode is explicit" \
+  assert_contains "$body" "Detailed decisions, plans, full gate reasons, and evidence stay out of chat" \
     "plain chat must not depend on a detailed report file"
+  assert_contains "$body" "Plain chat stays concise, and file-mode chat stays materially shorter than the report it links." \
+    "file-mode chat may grow into a second copy of the report"
   assert_contains "$body" "In file mode, include the report path or link inside the four-section digest without adding another heading." \
     "file mode must link the report without a fifth section"
   pass "both Bearings modes keep the exact four-section chat contract"
 }
 
 test_readme_describes_bearings_modes() {
-  assert_grep '| `/bearings`        | Generate a concise four-section chat digest from bounded local fleet and registered-secondmate state; use `/bearings file` to also replace today'"'"'s dated report in `data/`, and add `include PRs` when live PR enrichment is wanted |' "$README" \
-    "README skill table does not describe chat-only default and file option"
+  assert_grep '| `/bearings`        | Generate a concise four-section chat digest' "$README" \
+    "README skill table does not describe the chat-only default"
+  assert_grep 'use `/bearings file` to also replace today'"'"'s dated report in `data/`, and add `include PRs`' "$README" \
+    "README skill table does not describe the file option and PR enrichment"
   assert_grep '- `/bearings` returns the fresh four-section digest in chat only.' "$README" \
     "README lacks plain bearings example"
   assert_grep '- `/bearings include PRs` keeps chat-only mode and opts into live PR enrichment.' "$README" \
