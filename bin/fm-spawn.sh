@@ -3490,14 +3490,6 @@ spawn_wait_agent_up() {  # <target> <strict>
   return 1
 }
 
-spawn_brief_pointer() {
-  if [ "$KIND" = secondmate ]; then
-    printf '%s' "Read $BRIEF and execute it fully."
-  else
-    printf '%s' "Read $BRIEF and execute it fully. Work in the current directory - it is your isolated task worktree."
-  fi
-}
-
 spawn_render_respawn_command() {
   local cmd sq_home sq_spawn
   sq_home=$(shell_quote "$FM_HOME")
@@ -3517,29 +3509,18 @@ spawn_render_respawn_command() {
   printf '%s' "$cmd"
 }
 
-# The in-pane recovery for a task whose endpoint still exists: interrupt the
-# shell, then re-run this task's OWN launch line. That line is
-# SPAWN_RENDERED_LAUNCH, captured after every placeholder was substituted and
-# before the pane-environment wrapper went on, so it is the real command for
-# this harness, model, and effort rather than a generic hint. It is safe to
-# retype because the launch names the brief FILE - no adapter's launch line
-# carries brief text - so nothing can spill through the shell a second time.
-spawn_print_in_pane_recovery() {
-  local sq_home sq_send
-  sq_home=$(shell_quote "$FM_HOME")
-  sq_send=$(shell_quote "$FM_ROOT/bin/fm-send.sh")
-  echo "Recover it without retyping the brief through the shell:"
-  echo "  1. Interrupt the pane twice: FM_HOME=$sq_home $(shell_quote "$FM_ROOT/bin/fm-control.sh") $(shell_quote "$ID") interrupt (run it twice)"
-  echo "  2. Send this ONE-LINE relaunch to the same pane; it names the brief file rather than pasting it:"
+# What a refused spawn leaves behind, and how to get the task moving again.
+# Dispatch is transactional in this tree: the task record is provisional until
+# the backlog commit at the very end, so any refusal before that point rolls it
+# back. The endpoint and the worktree are NOT torn down, so both have to be
+# named, and the recovery is a re-spawn rather than a relaunch inside the pane -
+# relaunching there would leave a worker the backlog does not own.
+spawn_print_refusal_recovery() {
+  echo "Nothing that already existed was torn down: endpoint $T and local copy $WT both remain, and the brief ($BRIEF) is untouched. This task's record was provisional and has been rolled back, so no worker is left that the backlog does not own."
+  echo "Close out that endpoint, then re-spawn the task with this exact command; the existing brief is reused as is:"
+  echo "       $(spawn_render_respawn_command)"
+  echo "For reference, the launch line this spawn sent was:"
   echo "       cd $(shell_quote "$WT") && ${SPAWN_RENDERED_LAUNCH:-$LAUNCH}"
-  # kimi and rovo take no brief on their launch lines at all, so the relaunch
-  # above starts an agent with no brief and the pointer follows separately.
-  case "$HARNESS" in
-    kimi|rovo)
-      echo "  3. Wait for the TUI to accept input, then deliver the brief as a FILE POINTER into it:"
-      echo "       FM_HOME=$sq_home $sq_send $(shell_quote "$ID") $(shell_quote "$(spawn_brief_pointer)")"
-      ;;
-  esac
 }
 
 spawn_refuse_agent_never_started() {  # <phase>
@@ -3549,11 +3530,9 @@ spawn_refuse_agent_never_started() {  # <phase>
     if [ "$phase" = brief ]; then
       echo "The brief was NOT delivered: typing it into a pane that is still a plain shell is the dead-pane spill, where the brief becomes shell input and no agent ever reads it."
     else
-      echo "The launch command went into a pane that is still a plain shell. It names the brief file rather than carrying its text, so nothing spilled and the brief itself is untouched - but no agent started, and the pane keeps looking alive."
+      echo "The brief was NOT delivered: the launch command went into a pane that is still a plain shell. It names the brief file rather than carrying its text, so nothing spilled and the brief itself is untouched - but no agent started, and the pane keeps looking alive."
     fi
-    echo "Nothing was torn down. $ID keeps its worktree ($WT), its brief ($BRIEF), and its durable record ($STATE/$ID.meta), so it is recoverable in place."
-    spawn_print_in_pane_recovery
-    echo "Never paste a multi-line brief inline through a shell: that is what spills."
+    spawn_print_refusal_recovery
   } >&2
   exit 1
 }
@@ -3571,11 +3550,10 @@ spawn_refuse_endpoint_missing() {  # <phase>
     if [ "$phase" = brief ]; then
       echo "The brief was NOT delivered: there is no pane left to deliver it into."
     else
-      echo "The launch command named the brief file to an endpoint that no longer exists, so no agent ever read it; the brief itself was not pasted and remains untouched."
+      echo "The brief was NOT delivered: the launch command named the brief file to an endpoint that no longer exists, so no agent ever read it, and the brief itself remains untouched."
     fi
-    echo "Nothing was torn down. $ID keeps its worktree ($WT), its brief ($BRIEF), and its durable record ($STATE/$ID.meta)."
-    echo "A gone endpoint can never come back and host an agent, so do NOT relaunch into it - there is nothing there to interrupt or type into. RE-SPAWN the task onto a fresh endpoint instead, with this exact command; the existing brief ($BRIEF) is reused as is:"
-    echo "       $(spawn_render_respawn_command)"
+    echo "A gone endpoint can never come back and host an agent, so there is nothing there to interrupt or type into."
+    spawn_print_refusal_recovery
   } >&2
   exit 1
 }
@@ -3591,8 +3569,8 @@ spawn_warn_unverified_delivery() {  # <unreadable|unsupported>
       unreadable) echo "The $BACKEND pane could not be read for the $HARNESS harness; delivery proceeded UNVERIFIED." ;;
     esac
     echo "If the brief does not land, peek with: FM_HOME=$sq_home $sq_peek $(shell_quote "$ID")"
-    echo "If it is sitting at a shell rather than an agent:"
-    spawn_print_in_pane_recovery
+    echo "If it is sitting at a shell rather than an agent, close out endpoint $T and re-spawn the task:"
+    echo "       $(spawn_render_respawn_command)"
   } >&2
 }
 
