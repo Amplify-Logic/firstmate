@@ -1725,6 +1725,30 @@ event_wait_or_sleep() {
   esac
 }
 
+# Hold a macOS sleep assertion for this lock-owning watcher process.
+# Spawns `caffeinate -ims -w <pid>` as a child so the assertion dies with the
+# watcher and does not pile up across successor chains. No-op when caffeinate
+# is missing or the host is not Darwin. Idempotent inside one process, and
+# safe to re-call each poll cycle so a dead child is respawned.
+watch_hold_sleep_assertion() {  # <watcher-pid>
+  local target_pid=${1:-${BASHPID:-$$}}
+  [ "$(uname)" = Darwin ] || return 0
+  command -v caffeinate >/dev/null 2>&1 || return 0
+  if [ -n "${FM_WATCH_CAFFEINATE_PID:-}" ] && kill -0 "$FM_WATCH_CAFFEINATE_PID" 2>/dev/null; then
+    return 0
+  fi
+  caffeinate -ims -w "$target_pid" >/dev/null 2>&1 &
+  FM_WATCH_CAFFEINATE_PID=$!
+}
+
+watch_release_sleep_assertion() {
+  local pid=${FM_WATCH_CAFFEINATE_PID:-}
+  FM_WATCH_CAFFEINATE_PID=
+  [ -n "$pid" ] || return 0
+  kill "$pid" 2>/dev/null || true
+  wait "$pid" 2>/dev/null || true
+}
+
 # --- Main entry: the runtime below runs only when this file is executed as a
 # script. When sourced (unit tests loading the functions above), return here
 # before acquiring the singleton lock or entering the blocking loop.
@@ -1850,30 +1874,6 @@ PR_POLL_CONTROL_LOCK=
 pr_poll_control_release() {
   [ -z "$PR_POLL_CONTROL_LOCK" ] || fm_lock_release "$PR_POLL_CONTROL_LOCK" || return 1
   PR_POLL_CONTROL_LOCK=
-}
-
-# Hold a macOS sleep assertion for this lock-owning watcher process.
-# Spawns `caffeinate -ims -w <pid>` as a child so the assertion dies with the
-# watcher and does not pile up across successor chains. No-op when caffeinate
-# is missing or the host is not Darwin. Idempotent inside one process, and
-# safe to re-call each poll cycle so a dead child is respawned.
-watch_hold_sleep_assertion() {  # <watcher-pid>
-  local target_pid=${1:-${BASHPID:-$$}}
-  [ "$(uname)" = Darwin ] || return 0
-  command -v caffeinate >/dev/null 2>&1 || return 0
-  if [ -n "${FM_WATCH_CAFFEINATE_PID:-}" ] && kill -0 "$FM_WATCH_CAFFEINATE_PID" 2>/dev/null; then
-    return 0
-  fi
-  caffeinate -ims -w "$target_pid" >/dev/null 2>&1 &
-  FM_WATCH_CAFFEINATE_PID=$!
-}
-
-watch_release_sleep_assertion() {
-  local pid=${FM_WATCH_CAFFEINATE_PID:-}
-  FM_WATCH_CAFFEINATE_PID=
-  [ -n "$pid" ] || return 0
-  kill "$pid" 2>/dev/null || true
-  wait "$pid" 2>/dev/null || true
 }
 
 watcher_cleanup() {

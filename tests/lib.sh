@@ -161,8 +161,28 @@ fm_test_reap_procevent_homes() {
 FM_TEST_STUB_MAX_BLOCK_SECONDS=${FM_TEST_STUB_MAX_BLOCK_SECONDS:-120}
 export FM_TEST_STUB_MAX_BLOCK_SECONDS
 
+# Watchers, arms, and daemons a suite spawns are tracked here and reaped by the
+# cleanup below, so an ordinary suite exit can never leak a supervision process
+# that outlives its fixture and holds a lock, or a sleep assertion, that the
+# next suite then reads as live. Tracking is idempotent and a pid that already
+# exited is skipped.
+FM_TEST_CHILD_PIDS=()
+
+# fm_test_track_pid <pid>: register a background child for cleanup reaping.
+fm_test_track_pid() {
+  local pid=$1
+  case "$pid" in
+    ''|*[!0-9]*) return 0 ;;
+  esac
+  FM_TEST_CHILD_PIDS+=("$pid")
+}
+
 fm_test_cleanup() {
-  local d
+  local d pid
+  for pid in "${FM_TEST_CHILD_PIDS[@]:-}"; do
+    [ -n "$pid" ] || continue
+    kill "$pid" 2>/dev/null || true
+  done
   fm_test_reap_procevent_homes
   for d in "${FM_TEST_CLEANUP_DIRS[@]:-}"; do
     [ -n "$d" ] && rm -rf "$d"
@@ -358,6 +378,41 @@ exit 0
 SH
     chmod +x "$fakebin/$tool"
   done
+}
+
+# fm_install_fake_caffeinate <fakebin>: drop a PATH stub that mimics
+# `caffeinate -ims -w <pid>` without touching the host's real sleep assertion -
+# a test must never keep the developer's own machine awake. It stays alive until
+# the watched pid exits, or until it is killed, so a test can assert both the
+# spawn and the cleanup. When FM_FAKE_CAFFEINATE_LOG is set, each invocation
+# appends "<stub-pid> <args>".
+fm_install_fake_caffeinate() {
+  local fakebin=$1
+  mkdir -p "$fakebin"
+  cat > "$fakebin/caffeinate" <<'SH'
+#!/usr/bin/env bash
+set -u
+if [ -n "${FM_FAKE_CAFFEINATE_LOG:-}" ]; then
+  printf '%s %s\n' "$$" "$*" >> "$FM_FAKE_CAFFEINATE_LOG"
+fi
+watched=
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    -w)
+      shift
+      watched=${1:-}
+      ;;
+  esac
+  [ "$#" -gt 0 ] && shift
+done
+if [ -n "$watched" ]; then
+  while kill -0 "$watched" 2>/dev/null; do
+    sleep 0.05
+  done
+fi
+exit 0
+SH
+  chmod +x "$fakebin/caffeinate"
 }
 
 # fm_fake_crash_injector <fakebin>

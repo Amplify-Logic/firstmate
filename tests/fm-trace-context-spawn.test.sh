@@ -35,13 +35,32 @@ set -u
 case "$*" in
   *"#{pane_current_path}"*) printf '%s\n' "${FM_FAKE_PANE_PATH:-}"; exit 0 ;;
 esac
+# The window inventory this fake keeps is what the liveness owner reads back
+# after the launch, so a created window must be listed or every spawn is
+# refused as a gone endpoint. It rides beside the launch log, which each run
+# resets, so a relaunch starts from an empty inventory.
+fake_window_log=${FM_FAKE_LAUNCH_LOG:+$FM_FAKE_LAUNCH_LOG.windows}
 case "${1:-}" in
   display-message) printf 'firstmate\n'; exit 0 ;;
   list-windows)
     [ -z "${FM_FAKE_DUPLICATE_WINDOW:-}" ] || printf '%s\n' "$FM_FAKE_DUPLICATE_WINDOW"
+    if [ -n "$fake_window_log" ] && [ -f "$fake_window_log" ]; then
+      cat "$fake_window_log"
+    fi
     exit 0
     ;;
-  has-session|new-session|new-window|kill-window) exit 0 ;;
+  new-window)
+    if [ -n "$fake_window_log" ]; then
+      prev=
+      for arg in "$@"; do
+        [ "$prev" != "-n" ] || printf '%s\n' "$arg" >> "$fake_window_log"
+        prev=$arg
+      done
+    fi
+    printf '@42\n'
+    exit 0
+    ;;
+  has-session|new-session|kill-window) exit 0 ;;
   send-keys)
     if [ "${FM_FAKE_TRACEPARENT_SEND_FAIL:-0}" = 1 ]; then
       for a in "$@"; do
@@ -120,6 +139,7 @@ run_spawn() {
   local home=$1 wt=$2 fakebin=$3 launchlog=$4
   shift 4
   : > "$launchlog"
+  : > "$launchlog.windows"
   # A claude spawn pre-registers workspace trust in the launching user's own
   # store (bin/fm-claude-trust.sh), so it runs against a throwaway HOME;
   # without it this suite would write the developer's real ~/.claude.json.
@@ -142,6 +162,7 @@ run_spawn_tc() {
   local tc=$1 home=$2 wt=$3 fakebin=$4 launchlog=$5
   shift 5
   : > "$launchlog"
+  : > "$launchlog.windows"
   # A claude spawn pre-registers workspace trust in the launching user's own
   # store (bin/fm-claude-trust.sh), so it runs against a throwaway HOME;
   # without it this suite would write the developer's real ~/.claude.json.
@@ -214,6 +235,7 @@ run_two_level() {
   smlog="$base/sm-launch.log"
   smfake=$(make_spawn_fakebin "$base/sm-fake")
   : > "$smlog"
+  : > "$smlog.windows"
   # A claude secondmate spawn pre-registers workspace trust for the HOME it
   # launches into (bin/fm-claude-trust.sh), so this runs against a throwaway
   # HOME; without it this suite would write the developer's real ~/.claude.json.
@@ -244,6 +266,7 @@ run_two_level() {
   wlog="$base/worker-launch.log"
   wfake=$(make_spawn_fakebin "$base/w-fake")
   : > "$wlog"
+  : > "$wlog.windows"
   mkdir -p "$sm/user-home"
   env FM_TRACE_CONTEXT="$TL_ENV_TC" TRACEPARENT="$TL_CARRIER" \
     FM_ROOT_OVERRIDE="$ROOT" FM_HOME="$sm" HOME="$sm/user-home" CLAUDE_CONFIG_DIR='' \
