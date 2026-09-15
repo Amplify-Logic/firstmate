@@ -129,6 +129,14 @@ SH
 exit 0
 SH
   chmod +x "$fb/sleep"
+  # fm-spawn's launch-binary preflight resolves and `--version`-probes the
+  # harness binary before creating the endpoint, so every harness this suite
+  # relaunches onto must exist on the fake PATH regardless of what the host has
+  # installed. Cases that need a richer harness stub overwrite these.
+  local harness
+  for harness in claude codex grok; do
+    fm_fake_version_tool "$fb" "$harness" FM_FAKE_HARNESS_VERSION 1.0.0
+  done
 }
 
 # new_case <name> [id] -> echoes a case dir with a live claude ship task.
