@@ -5214,13 +5214,19 @@ test_capture_shows_busy_ignores_spinner_verb_alone() {
   pass "fm_backend_herdr_capture_shows_busy: spinner verb alone is not the busy signal"
 }
 
+# Kimi's busy signature is its moon-phase spinner row, not a state word: the
+# lowercase `thinking` label on its own idle status bar, and its rotating tip
+# text, are not busy signals and must not be read as one. The signature is
+# per-harness, so this passes the harness the way the corroborating caller does;
+# read with no harness a capture falls to the cross-harness union, which
+# deliberately does not carry any vendor's state words.
 test_capture_shows_busy_matches_kimi_without_idle_false_positive() {
-  local name text expected dir log resp fb rc
-  for name in thinking command idle; do
+  local name text harness expected dir log resp fb rc
+  for name in spinner idle-label leaked; do
     case "$name" in
-      thinking) text='thinking...'; expected=0 ;;
-      command) text='Running a command'; expected=0 ;;
-      idle) text='K3 thinking: max/high'; expected=1 ;;
+      spinner) text='  🌑 · Tip: Kimi is working'; harness=kimi; expected=0 ;;
+      idle-label) text='K3 thinking: max/high'; harness=kimi; expected=1 ;;
+      leaked) text='  🌑 · Tip: Kimi is working'; harness=codex; expected=1 ;;
     esac
     dir="$TMP_ROOT/capture-kimi-$name"; mkdir -p "$dir/responses"
     log="$dir/log"; resp="$dir/responses"; : > "$log"
@@ -5228,10 +5234,10 @@ test_capture_shows_busy_matches_kimi_without_idle_false_positive() {
     fb=$(make_herdr_fakebin "$dir")
     rc=0
     PATH="$fb:$PATH" FM_HERDR_LOG="$log" FM_HERDR_RESPONSES="$resp" \
-      bash -c '. "$0/bin/backends/herdr.sh"; fm_backend_herdr_capture_shows_busy default wK:p3' "$ROOT" || rc=$?
-    [ "$rc" = "$expected" ] || fail "Kimi capture '$text' returned $rc, expected $expected"
+      bash -c '. "$0/bin/backends/herdr.sh"; fm_backend_herdr_capture_shows_busy default wK:p3 "$1"' "$ROOT" "$harness" || rc=$?
+    [ "$rc" = "$expected" ] || fail "Kimi capture '$text' as $harness returned $rc, expected $expected"
   done
-  pass "fm_backend_herdr_capture_shows_busy: Kimi reasoning/tool phases are busy and K3 thinking level is idle"
+  pass "fm_backend_herdr_capture_shows_busy: Kimi's spinner row is busy, its idle thinking label is not, and the signature does not leak to another harness"
 }
 
 test_apply_transition_busy_cursor_footer_absorbs_blocked() {
