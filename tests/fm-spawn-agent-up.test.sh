@@ -34,8 +34,9 @@
 #      there and warns instead of losing a capability that worked before.
 #   8. A raw `--harness "<command>"` (the unverified-adapter escape hatch) is
 #      never gated: its pane may legitimately never read as a known agent.
-#   9. A refused --relaunch says the prior record is unchanged and hands back
-#      the same --relaunch, never a fresh spawn.
+#   9. A refused --relaunch rolls nothing back: it says the replacement record
+#      was already published and kept, and hands back the same --relaunch,
+#      never a fresh spawn.
 set -u
 
 # shellcheck source=tests/lib.sh
@@ -718,10 +719,11 @@ test_raw_launch_is_not_gated_on_agent_liveness() {
   pass "a raw launch command skips the agent-up gate instead of being refused by it"
 }
 
-# A --relaunch never provisions a record: the prior one is intact when the
-# replacement fails the gate, so the refusal must not claim a rollback, and its
-# recovery has to be the same --relaunch rather than a fresh spawn that would
-# provision a second worktree and endpoint for a task that already has both.
+# A --relaunch publishes its replacement record BEFORE the gate runs and rolls
+# nothing back when the replacement fails it, so the refusal must not claim a
+# rollback or an untouched record, and its recovery has to be the same
+# --relaunch rather than a fresh spawn that would provision a second worktree
+# and endpoint for a task that already has both.
 test_relaunch_refusal_keeps_the_record_and_hands_back_a_relaunch() {
   local out status
   make_case relaunch-dead claude claude
@@ -738,9 +740,11 @@ test_relaunch_refusal_keeps_the_record_and_hands_back_a_relaunch() {
   assert_contains "$out" "no agent is running" "relaunch refusal did not say the agent never started"
   assert_not_contains "$out" "has been rolled back" \
     "relaunch refusal claimed a rollback of a record that was never provisional"
-  assert_contains "$out" "durable record ($HOME_DIR/state/$ID.meta) is unchanged" \
-    "relaunch refusal did not say the prior record survives"
+  assert_contains "$out" "durable record ($HOME_DIR/state/$ID.meta) was already republished for this attempt" \
+    "relaunch refusal did not say the replacement record was published and kept"
   assert_present "$HOME_DIR/state/$ID.meta" "a refused relaunch removed the task's record"
+  assert_grep 'model=opus' "$HOME_DIR/state/$ID.meta" \
+    "the kept record does not carry this attempt's model, so the refusal's republished claim would be false"
   assert_contains "$out" "fm-spawn.sh' '$ID' --relaunch --harness 'claude' --model 'opus' --effort 'high'" \
     "relaunch refusal did not hand back a --relaunch carrying this attempt's harness and axes"
   assert_not_contains "$out" "fm-spawn.sh' '$ID' '$PROJ_DIR'" \

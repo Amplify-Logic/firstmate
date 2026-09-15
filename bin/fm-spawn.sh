@@ -3572,13 +3572,14 @@ spawn_render_respawn_command() {
 # back. The endpoint and the worktree are NOT torn down, so both have to be
 # named, and the recovery is a re-spawn rather than a relaunch inside the pane -
 # relaunching there would leave a worker the backlog does not own. A --relaunch
-# never provisions a record: the prior one stays exactly as it was, so its
-# recovery is the same --relaunch again rather than a fresh spawn that would
-# provision a second worktree and endpoint for a task that already has both.
+# rolls nothing back: its replacement record is published before the gate runs
+# and is kept, so its recovery is the same --relaunch again rather than a fresh
+# spawn that would provision a second worktree and endpoint for a task that
+# already has both.
 spawn_print_refusal_recovery() {
   if [ "$RELAUNCH" -eq 1 ]; then
-    echo "Nothing that already existed was torn down: endpoint $T and local copy $WT both remain, and the brief ($BRIEF) is untouched. This task's durable record ($STATE/$ID.meta) is unchanged, so it is recoverable in place."
-    echo "Relaunch the task with this exact command once the endpoint is agent-free; the existing record and brief are reused as is:"
+    echo "Nothing that already existed was torn down: endpoint $T and local copy $WT both remain, and the brief ($BRIEF) is untouched. This task's durable record ($STATE/$ID.meta) was already republished for this attempt (harness, model, effort and generation) and is kept, so it is recoverable in place."
+    echo "Confirm the endpoint is agent-free, then relaunch the task with this exact command; the kept record and brief are reused as is:"
   else
     echo "Nothing that already existed was torn down: endpoint $T and local copy $WT both remain, and the brief ($BRIEF) is untouched. This task's record was provisional and has been rolled back, so no worker is left that the backlog does not own."
     echo "Close out that endpoint, then re-spawn the task with this exact command; the existing brief is reused as is:"
