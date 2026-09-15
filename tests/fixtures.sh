@@ -114,9 +114,24 @@ case "${1:-}" in
     if [ -n "${FM_FAKE_DUPLICATE_WINDOW:-}" ]; then
       printf '%s\n' "$FM_FAKE_DUPLICATE_WINDOW"
     fi
+    # Windows this stub was asked to create. fm-spawn's agent-up gate reads the
+    # window inventory before it will report a spawn as started, so a stub that
+    # never lists what it created reads as a vanished endpoint.
+    [ -z "${FM_FAKE_WINDOW_LOG:-}" ] || [ ! -f "$FM_FAKE_WINDOW_LOG" ] \
+      || cat "$FM_FAKE_WINDOW_LOG"
     exit 0
     ;;
-  has-session|new-session|new-window|kill-window|set-window-option) exit 0 ;;
+  new-window)
+    if [ -n "${FM_FAKE_WINDOW_LOG:-}" ]; then
+      prev=
+      for a in "$@"; do
+        [ "$prev" != "-n" ] || printf '%s\n' "$a" >> "$FM_FAKE_WINDOW_LOG"
+        prev=$a
+      done
+    fi
+    exit 0
+    ;;
+  has-session|new-session|kill-window|set-window-option) exit 0 ;;
   send-keys)
     if [ -n "${FM_FAKE_LAUNCH_LOG:-}" ]; then
       prev=
@@ -292,6 +307,7 @@ fm_test_run_spawn() {
     FM_STATE_OVERRIDE="$home/state" FM_DATA_OVERRIDE="$home/data" \
     FM_PROJECTS_OVERRIDE="$home/projects" FM_CONFIG_OVERRIDE="$home/config" \
     FM_SPAWN_NO_GUARD=1 FM_FAKE_PANE_PATH="$pane" TMUX="${TMUX:-fake,1,0}" \
+    FM_FAKE_WINDOW_LOG="${FM_FAKE_WINDOW_LOG:-$home/state/.fake-windows}" \
     PATH="$fakebin:$PATH" \
     "$ROOT/bin/fm-spawn.sh" "$@" 2>&1
 }

@@ -14,7 +14,9 @@ make_spawn_case() {
   home="$case_dir/home"
   proj="$case_dir/project"
   wt="$case_dir/wt"
-  fakebin=$(make_spawn_fakebin "$case_dir/fake" gh-axi gh)
+  # grok is stubbed because fm-spawn probes the launch binary before it will
+  # create an endpoint; these cases test the hook wiring, not a real install.
+  fakebin=$(make_spawn_fakebin "$case_dir/fake" grok gh-axi gh)
   grok_home="$case_dir/grok"
   id="grok-$name-x1"
   mkdir -p "$grok_home"

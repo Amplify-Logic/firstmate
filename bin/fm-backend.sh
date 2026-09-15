@@ -593,6 +593,21 @@ fm_backend_expected_label_of_selector() {  # <raw-target> <state-dir>
   return 0
 }
 
+# fm_backend_resolve_executable: the path a tool will actually run as under the
+# selected backend. Everything resolves from PATH except cmux, whose CLI the
+# adapter locates itself; the launch-binary preflight in bin/fm-spawn.sh uses
+# this so it probes the same file the launch will exec.
+fm_backend_resolve_executable() {  # <backend> <tool>
+  local backend=$1 tool=$2
+  case "$backend:$tool" in
+    cmux:cmux)
+      fm_backend_source cmux >/dev/null 2>&1 || return 1
+      fm_backend_cmux_bin
+      ;;
+    *) command -v "$tool" ;;
+  esac
+}
+
 # fm_backend_source: source the named backend's adapter file, once per shell.
 # Each adapter is an independently linted canonical root. The /dev/null source
 # boundaries keep runtime dispatch from importing all five adapter ASTs into

@@ -2082,8 +2082,75 @@ run_version_probe() {  # <resolved-binary> <timeout-secs>
   wait "$pid"
 }
 
+launch_binary_from_command() {  # <launch-command>
+  # First word that is actually the executable: env-var assignments and an
+  # `env -u NAME ...` prefix are skipped, because upstream's launch templates
+  # clear foreign harness markers that way before naming the binary.
+  local launch_command=$1 word skip_value=0
+  local -a words
+  read -r -a words <<< "$launch_command"
+  for word in "${words[@]}"; do
+    if [ "$skip_value" -eq 1 ]; then
+      skip_value=0
+      continue
+    fi
+    case "$word" in
+      [A-Za-z_]*=*) continue ;;
+      env) continue ;;
+      -u) skip_value=1; continue ;;
+      -i|--) continue ;;
+      *) printf '%s\n' "$word"; return 0 ;;
+    esac
+  done
+  return 1
+}
+
+launch_binary_install_hint() {  # <binary-basename>
+  # Advisory only. An adapter with no hint here still gets the full missing-
+  # binary refusal below, just without an install line to quote; inventing one
+  # would be worse than saying nothing.
+  case "$1" in
+    claude) printf '%s' 'npm install -g @anthropic-ai/claude-code' ;;
+    codex) printf '%s' 'npm install -g @openai/codex' ;;
+    opencode) printf '%s' 'npm install -g opencode-ai' ;;
+    pi|pi-signed) printf '%s' 'npm install -g @earendil-works/pi-coding-agent' ;;
+    grok) printf '%s' 'curl -fsSL https://x.ai/cli/install.sh | bash' ;;
+    agent|cursor-agent) printf '%s' 'curl https://cursor.com/install -fsS | bash' ;;
+    kimi) printf '%s' 'curl -fsSL https://code.kimi.com/kimi-code/install.sh | bash' ;;
+    prime-agent) printf '%s' 'curl -fsSL https://app.primeintellect.ai/prime-agent/install.sh | sh' ;;
+    *) return 1 ;;
+  esac
+}
+
+spawn_launch_binary() {  # <launch-command>
+  # The executable the launch will really exec. Upstream resolves several
+  # adapters through its own resolve_*_binary owners and leaves a placeholder in
+  # the template until late; those are already resolved into these variables by
+  # the time the preflight runs, so the probe tests the same file the launch
+  # will, not a literal __PIBIN__ token.
+  local binary
+  binary=$(launch_binary_from_command "$1") || return 1
+  # An upstream resolver substitutes a shell-quoted absolute path, so the word
+  # arrives wrapped in single quotes; the probe needs the path itself.
+  case "$binary" in
+    \'*\')
+      binary=${binary#\'}
+      binary=${binary%\'}
+      binary=${binary//\'\\\'\'/\'}
+      ;;
+  esac
+  case "$binary" in
+    __PIBIN__) printf '%s\n' "${PI_BIN:-}" ;;
+    __CURSORBIN__) printf '%s\n' "${CURSOR_BIN:-}" ;;
+    __OMPBIN__) printf '%s\n' "${OMP_BIN:-}" ;;
+    __AGYBIN__) printf '%s\n' "${AGY_BIN:-}" ;;
+    __*__) return 2 ;;
+    *) printf '%s\n' "$binary" ;;
+  esac
+}
+
 preflight_verified_launch_binary() {  # <backend> <harness> <launch-command>
-  local backend=$1 harness=$2 launch_command=$3 binary resolved hint probe_rc
+  local backend=$1 harness=$2 launch_command=$3 binary resolved hint reinstall probe_rc
   local timeout_secs=${FM_SPAWN_PROBE_TIMEOUT_SECS:-10}
   case "$timeout_secs" in
     ''|0|*[!0-9]*)
@@ -2091,16 +2158,29 @@ preflight_verified_launch_binary() {  # <backend> <harness> <launch-command>
       return 1
       ;;
   esac
-  binary=$(launch_binary_from_command "$launch_command") || {
+  binary=$(spawn_launch_binary "$launch_command")
+  case "$?" in
+    0) ;;
+    # A placeholder still unresolved here belongs to an upstream resolver that
+    # runs later and refuses on its own; probing the token would be nonsense.
+    2) return 0 ;;
+    *)
+      echo "error: harness '$harness' launch template has no executable; refusing before creating a task endpoint" >&2
+      return 1
+      ;;
+  esac
+  [ -n "$binary" ] || {
     echo "error: harness '$harness' launch template has no executable; refusing before creating a task endpoint" >&2
     return 1
   }
-  hint=$(launch_binary_install_hint "$binary") || {
-    echo "error: harness '$harness' launch binary '$binary' has no install hint; refusing before creating a task endpoint" >&2
-    return 1
-  }
+  hint=$(launch_binary_install_hint "$(basename "$binary")") || hint=
+  reinstall=
+  if [ -n "$hint" ]; then
+    reinstall=" (reinstall: $hint)"
+    hint=" (install: $hint)"
+  fi
   if ! resolved=$(fm_backend_resolve_executable "$backend" "$binary" 2>/dev/null); then
-    echo "error: harness '$harness' launch binary '$binary' was not found (install: $hint); refusing before creating a task endpoint" >&2
+    echo "error: harness '$harness' launch binary '$binary' was not found$hint; refusing before creating a task endpoint" >&2
     return 1
   fi
   run_version_probe "$resolved" "$timeout_secs"
@@ -2110,7 +2190,7 @@ preflight_verified_launch_binary() {  # <backend> <harness> <launch-command>
     return 1
   fi
   if [ "$probe_rc" -ne 0 ]; then
-    echo "error: harness '$harness' launch binary '$binary' failed its --version probe (reinstall: $hint); refusing before creating a task endpoint" >&2
+    echo "error: harness '$harness' launch binary '$binary' failed its --version probe$reinstall; refusing before creating a task endpoint" >&2
     return 1
   fi
 }
@@ -2254,6 +2334,85 @@ case "$LAUNCH" in
     LAUNCH=${LAUNCH//__ROVOBIN__/$(shell_quote "$ROVO_BIN")}
     ;;
 esac
+
+# The agent-up wait's bound is validated HERE, before the endpoint exists and
+# before anything has been typed into it, for the same reason the worktree
+# settle bound is validated before its first send: a malformed knob discovered
+# only after the launch line (which carries the launch-brief input for every
+# adapter but kimi) has been submitted would refuse a spawn whose agent is
+# already up and working on the task.
+SPAWN_AGENT_UP_POLLS=${FM_SPAWN_AGENT_UP_MAX_POLLS:-60}
+SPAWN_AGENT_UP_SLEEP_S=${FM_SPAWN_AGENT_UP_SLEEP:-1}
+SPAWN_AGENT_UP_BOUND_DESC=
+SPAWN_AGENT_UP_POLLS_DONE=0
+SPAWN_AGENT_UP_LAST_STATE=
+if [ "$RAW_LAUNCH" -eq 0 ]; then
+  case "$SPAWN_AGENT_UP_POLLS" in
+    ''|0|*[!0-9]*)
+      echo "error: FM_SPAWN_AGENT_UP_MAX_POLLS must be a positive integer (got '${FM_SPAWN_AGENT_UP_MAX_POLLS:-}'); refusing before waiting for the agent to start" >&2
+      exit 1
+      ;;
+  esac
+  case "$SPAWN_AGENT_UP_SLEEP_S" in
+    ''|*[!0-9]*)
+      echo "error: FM_SPAWN_AGENT_UP_SLEEP must be a non-negative integer number of seconds (got '${FM_SPAWN_AGENT_UP_SLEEP:-}'); refusing before waiting for the agent to start" >&2
+      exit 1
+      ;;
+  esac
+fi
+
+# The fork's per-adapter launch-model resolution, ahead of flag construction so
+# meta and the launch line always record the same token.
+LAUNCH_MODEL=$MODEL
+if [ "$HARNESS" = cursor ]; then
+  LAUNCH_MODEL=$(cursor_model_with_effort "$MODEL" "$EFFORT")
+fi
+if [ "$HARNESS" = prime-agent ]; then
+  # The CLI's own default model is a PAID route (verified: a model-less launch
+  # 401s on the free Zen key), so an absent --model folds to the verified-free
+  # Zen model rather than inheriting the CLI default.
+  if [ -z "$LAUNCH_MODEL" ] || [ "$LAUNCH_MODEL" = default ]; then
+    LAUNCH_MODEL=opencode/deepseek-v4-flash-free
+  fi
+  # The per-task daemon socket lives at $STATE/<id>.prime-agent-home/daemon.sock
+  # and AF_UNIX sockets cap sun_path at 104 bytes (hit live on macOS's deep
+  # TMPDIR). Refuse an over-long path here, before any endpoint, rather than
+  # letting the daemon fail to bind at worker runtime. The 30 covers
+  # "/<id>.prime-agent-home/daemon.sock" minus the id itself plus the
+  # separators; the 100 threshold keeps a few spare bytes under 104.
+  pa_state_phys=$STATE
+  pa_state_tail=
+  while [ -n "$pa_state_phys" ] && [ ! -d "$pa_state_phys" ]; do
+    pa_state_tail="/${pa_state_phys##*/}$pa_state_tail"
+    pa_state_phys=${pa_state_phys%/*}
+  done
+  if [ -n "$pa_state_phys" ]; then
+    pa_state_phys=$(cd "$pa_state_phys" 2>/dev/null && pwd -P) || pa_state_phys=${STATE%"$pa_state_tail"}
+  fi
+  if [ "$pa_state_phys" = / ]; then
+    pa_state_phys=
+  fi
+  pa_state_phys=$pa_state_phys$pa_state_tail
+  if [ -z "$pa_state_phys" ]; then
+    pa_state_phys=$STATE
+  fi
+  if [ $(( ${#pa_state_phys} + ${#ID} + 30 )) -gt 100 ]; then
+    echo "error: prime-agent daemon socket path '$pa_state_phys/$ID.prime-agent-home/daemon.sock' risks exceeding the 104-byte AF_UNIX limit; use a shorter task id or state home" >&2
+    exit 1
+  fi
+  if ! prime_agent_model_route_ok "$LAUNCH_MODEL"; then
+    echo "error: prime-agent model '$LAUNCH_MODEL' is not a subscription-quota route; allowed: opencode/big-pickle, opencode/*-free (OpenCode Zen free models), openai-codex/* (ChatGPT Plus/Pro Codex subscription OAuth). anthropic/* bills per-token extra usage even on Claude Pro/Max OAuth (verified \$0.1845 for a one-liner). Refusing before creating a task endpoint" >&2
+    exit 1
+  fi
+fi
+# Refuse before the endpoint exists when the resolved launch binary is missing
+# or fails its version probe: a task window holding a dead shell is far worse to
+# recover from than a spawn that never started. Raw launch commands are exempt
+# (see the header); this sits after every resolve_*_binary owner above so the
+# probe runs against the same executable the launch will.
+if [ "$RAW_LAUNCH" -eq 0 ]; then
+  preflight_verified_launch_binary "$BACKEND" "$HARNESS" "$LAUNCH" || exit 1
+fi
 
 json_escape() {
   printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'
@@ -3231,7 +3390,11 @@ spawn_wait_agent_up() {  # <target> <strict>
       alive) return 0 ;;
       missing) return 3 ;;
       unverified) return 4 ;;
-      unreadable)
+      unreadable|ambiguous)
+        # Neither one proves the pane is agent-free: unreadable is a failed
+        # read, and ambiguous is a readable process group this backend cannot
+        # attribute either way. Only a PROVEN bare shell refuses, so both take
+        # the same two-consecutive-reads discipline as the settle loop.
         inconclusive=$((inconclusive + 1))
         if [ "$strict" != 1 ] && [ "$inconclusive" -ge 2 ]; then return 2; fi
         ;;
@@ -3247,16 +3410,66 @@ spawn_wait_agent_up() {  # <target> <strict>
   return 1
 }
 
+spawn_brief_pointer() {
+  if [ "$KIND" = secondmate ]; then
+    printf '%s' "Read $BRIEF and execute it fully."
+  else
+    printf '%s' "Read $BRIEF and execute it fully. Work in the current directory - it is your isolated task worktree."
+  fi
+}
+
+spawn_render_respawn_command() {
+  local cmd sq_home sq_spawn
+  sq_home=$(shell_quote "$FM_HOME")
+  sq_spawn=$(shell_quote "$FM_ROOT/bin/fm-spawn.sh")
+  cmd="FM_HOME=$sq_home $sq_spawn $(shell_quote "$ID") $(shell_quote "$PROJ_ABS")"
+  case "$KIND" in
+    scout) cmd="$cmd --scout" ;;
+    secondmate) cmd="$cmd --secondmate" ;;
+  esac
+  cmd="$cmd --harness $(shell_quote "$HARNESS") --backend $(shell_quote "$BACKEND")"
+  [ -z "$MODEL" ] || cmd="$cmd --model $(shell_quote "$MODEL")"
+  [ -z "$EFFORT" ] || cmd="$cmd --effort $(shell_quote "$EFFORT")"
+  [ -z "$MODE" ] || cmd="$cmd --mode $(shell_quote "$MODE")"
+  [ -z "$YOLO" ] || cmd="$cmd --yolo $(shell_quote "$YOLO")"
+  [ -z "${OUTCOME:-}" ] || cmd="$cmd --outcome $(shell_quote "$OUTCOME")"
+  [ -z "${TASK_TYPE:-}" ] || cmd="$cmd --task-type $(shell_quote "$TASK_TYPE")"
+  printf '%s' "$cmd"
+}
+
+# The in-pane recovery for a task whose endpoint still exists: interrupt the
+# shell, then re-run this task's OWN launch line. That line is
+# SPAWN_RENDERED_LAUNCH, captured after every placeholder was substituted and
+# before the pane-environment wrapper went on, so it is the real command for
+# this harness, model, and effort rather than a generic hint. It is safe to
+# retype because the launch names the brief FILE - no adapter's launch line
+# carries brief text - so nothing can spill through the shell a second time.
+spawn_print_in_pane_recovery() {
+  local sq_home sq_send
+  sq_home=$(shell_quote "$FM_HOME")
+  sq_send=$(shell_quote "$FM_ROOT/bin/fm-send.sh")
+  echo "Recover it without retyping the brief through the shell:"
+  echo "  1. Interrupt the pane twice: FM_HOME=$sq_home $(shell_quote "$FM_ROOT/bin/fm-control.sh") $(shell_quote "$ID") interrupt (run it twice)"
+  echo "  2. Send this ONE-LINE relaunch to the same pane; it names the brief file rather than pasting it:"
+  echo "       cd $(shell_quote "$WT") && ${SPAWN_RENDERED_LAUNCH:-$LAUNCH}"
+  # kimi and rovo take no brief on their launch lines at all, so the relaunch
+  # above starts an agent with no brief and the pointer follows separately.
+  case "$HARNESS" in
+    kimi|rovo)
+      echo "  3. Wait for the TUI to accept input, then deliver the brief as a FILE POINTER into it:"
+      echo "       FM_HOME=$sq_home $sq_send $(shell_quote "$ID") $(shell_quote "$(spawn_brief_pointer)")"
+      ;;
+  esac
+}
+
 spawn_refuse_agent_never_started() {  # <phase>
   local phase=$1
   {
     echo "error: $ID: no agent is running in $T after $SPAWN_AGENT_UP_POLLS_DONE of $SPAWN_AGENT_UP_BOUND_DESC (last liveness read: ${SPAWN_AGENT_UP_LAST_STATE:-none}); refusing to report this spawn as started"
     if [ "$phase" = brief ]; then
       echo "The brief was NOT delivered: typing it into a pane that is still a plain shell is the dead-pane spill, where the brief becomes shell input and no agent ever reads it."
-    elif [ "$BRIEF_DELIVERY" = pointer ]; then
-      echo "The launch command went into a pane that is still a plain shell. It carried only a one-line pointer at the brief file, so nothing spilled and the brief itself is untouched - but no agent started, and the pane keeps looking alive."
     else
-      echo "The launch command carries the brief, so it went into a pane that is still a plain shell: the brief becomes shell continuation input, no agent starts, and the pane keeps looking alive."
+      echo "The launch command went into a pane that is still a plain shell. It names the brief file rather than carrying its text, so nothing spilled and the brief itself is untouched - but no agent started, and the pane keeps looking alive."
     fi
     echo "Nothing was torn down. $ID keeps its worktree ($WT), its brief ($BRIEF), and its durable record ($STATE/$ID.meta), so it is recoverable in place."
     spawn_print_in_pane_recovery
@@ -3277,10 +3490,8 @@ spawn_refuse_endpoint_missing() {  # <phase>
     echo "error: $ID: the endpoint $T is gone (liveness read: ${SPAWN_AGENT_UP_LAST_STATE:-missing}) after $SPAWN_AGENT_UP_POLLS_DONE of $SPAWN_AGENT_UP_BOUND_DESC; refusing to report this spawn as started"
     if [ "$phase" = brief ]; then
       echo "The brief was NOT delivered: there is no pane left to deliver it into."
-    elif [ "$BRIEF_DELIVERY" = pointer ]; then
-      echo "The launch command carried only a one-line pointer into an endpoint that no longer exists, so no agent ever read it; the brief itself was not pasted and remains untouched."
     else
-      echo "The launch command carried the brief into an endpoint that no longer exists, so no agent ever read it."
+      echo "The launch command named the brief file to an endpoint that no longer exists, so no agent ever read it; the brief itself was not pasted and remains untouched."
     fi
     echo "Nothing was torn down. $ID keeps its worktree ($WT), its brief ($BRIEF), and its durable record ($STATE/$ID.meta)."
     echo "A gone endpoint can never come back and host an agent, so do NOT relaunch into it - there is nothing there to interrupt or type into. RE-SPAWN the task onto a fresh endpoint instead, with this exact command; the existing brief ($BRIEF) is reused as is:"
@@ -3294,11 +3505,7 @@ spawn_warn_unverified_delivery() {  # <unreadable|unsupported>
   sq_home=$(shell_quote "$FM_HOME")
   sq_peek=$(shell_quote "$FM_ROOT/bin/fm-peek.sh")
   {
-    if [ "$BRIEF_DELIVERY" = pointer ]; then
-      echo "warning: $ID: this spawn could not confirm that $HARNESS actually owns the $BACKEND pane before the brief pointer was delivered, so the one-line pointer may have gone into a shell; the brief itself was not pasted and remains untouched."
-    else
-      echo "warning: $ID: this spawn could not confirm that $HARNESS actually owns the $BACKEND pane before the brief was delivered, so the brief may have gone into a shell."
-    fi
+    echo "warning: $ID: this spawn could not confirm that $HARNESS actually owns the $BACKEND pane before the launch command was delivered, so it may have gone into a shell; the brief itself was not pasted and remains untouched."
     case "$reason" in
       unsupported) echo "The $BACKEND backend cannot report agent liveness for the $HARNESS harness at all; delivery proceeded UNVERIFIED." ;;
       unreadable) echo "The $BACKEND pane could not be read for the $HARNESS harness; delivery proceeded UNVERIFIED." ;;
@@ -4210,7 +4417,15 @@ preserve_relaunch_meta() {
   [ -z "$MODE" ] || echo "mode=$MODE"
   [ -z "$YOLO" ] || echo "yolo=$YOLO"
   echo "tasktmp=$TASK_TMP"
-  echo "model=${MODEL:-default}"
+  if [ "$HARNESS" = prime-agent ] || [ "$HARNESS" = cursor ]; then
+    # Both adapters resolve a launch model that differs from the requested one:
+    # prime-agent folds an absent --model to the verified-free Zen route, and
+    # cursor folds the effort axis into the model id. Recording the resolved
+    # token keeps this record honest about what the worker is actually running.
+    echo "model=$LAUNCH_MODEL"
+  else
+    echo "model=${MODEL:-default}"
+  fi
   echo "effort=${EFFORT:-default}"
   [ -z "${BUSY_GEN:-}" ] || echo "busy_gen=$BUSY_GEN"
   echo "spawn_gen=$SPAWN_GEN"
@@ -4352,50 +4567,6 @@ sq_primeext=$(shell_quote "$STATE/$ID.prime-ext.ts")
 sq_ompcfg=$(shell_quote "${OMP_WORKER_CFG:-$FM_ROOT/.omp/fm-worker-overlay.yml}")
 sq_opinput=$(shell_quote "$FM_ROOT/bin/fm-operational-input.sh")
 sq_worktree=$(shell_quote "$WT")
-# The fork's per-adapter launch-model resolution, ahead of flag construction so
-# meta and the launch line always record the same token.
-LAUNCH_MODEL=$MODEL
-if [ "$HARNESS" = cursor ]; then
-  LAUNCH_MODEL=$(cursor_model_with_effort "$MODEL" "$EFFORT")
-fi
-if [ "$HARNESS" = prime-agent ]; then
-  # The CLI's own default model is a PAID route (verified: a model-less launch
-  # 401s on the free Zen key), so an absent --model folds to the verified-free
-  # Zen model rather than inheriting the CLI default.
-  if [ -z "$LAUNCH_MODEL" ] || [ "$LAUNCH_MODEL" = default ]; then
-    LAUNCH_MODEL=opencode/deepseek-v4-flash-free
-  fi
-  # The per-task daemon socket lives at $STATE/<id>.prime-agent-home/daemon.sock
-  # and AF_UNIX sockets cap sun_path at 104 bytes (hit live on macOS's deep
-  # TMPDIR). Refuse an over-long path here, before any endpoint, rather than
-  # letting the daemon fail to bind at worker runtime. The 30 covers
-  # "/<id>.prime-agent-home/daemon.sock" minus the id itself plus the
-  # separators; the 100 threshold keeps a few spare bytes under 104.
-  pa_state_phys=$STATE
-  pa_state_tail=
-  while [ -n "$pa_state_phys" ] && [ ! -d "$pa_state_phys" ]; do
-    pa_state_tail="/${pa_state_phys##*/}$pa_state_tail"
-    pa_state_phys=${pa_state_phys%/*}
-  done
-  if [ -n "$pa_state_phys" ]; then
-    pa_state_phys=$(cd "$pa_state_phys" 2>/dev/null && pwd -P) || pa_state_phys=${STATE%"$pa_state_tail"}
-  fi
-  if [ "$pa_state_phys" = / ]; then
-    pa_state_phys=
-  fi
-  pa_state_phys=$pa_state_phys$pa_state_tail
-  if [ -z "$pa_state_phys" ]; then
-    pa_state_phys=$STATE
-  fi
-  if [ $(( ${#pa_state_phys} + ${#ID} + 30 )) -gt 100 ]; then
-    echo "error: prime-agent daemon socket path '$pa_state_phys/$ID.prime-agent-home/daemon.sock' risks exceeding the 104-byte AF_UNIX limit; use a shorter task id or state home" >&2
-    exit 1
-  fi
-  if ! prime_agent_model_route_ok "$LAUNCH_MODEL"; then
-    echo "error: prime-agent model '$LAUNCH_MODEL' is not a subscription-quota route; allowed: opencode/big-pickle, opencode/*-free (OpenCode Zen free models), openai-codex/* (ChatGPT Plus/Pro Codex subscription OAuth). anthropic/* bills per-token extra usage even on Claude Pro/Max OAuth (verified \$0.1845 for a one-liner). Refusing before creating a task endpoint" >&2
-    exit 1
-  fi
-fi
 MODELFLAG=$(model_flag_for_harness "$HARNESS" "$LAUNCH_MODEL")
 # cursor carries no effort flag: the tier is already folded into LAUNCH_MODEL.
 if [ "$HARNESS" = cursor ]; then
@@ -4431,6 +4602,10 @@ case "$HARNESS" in
   agy) LAUNCH=${LAUNCH//__AGYBIN__/"$(shell_quote "$AGY_BIN")"} ;;
 esac
 LAUNCH=${LAUNCH//__WORKTREE__/$sq_worktree}
+# The fully substituted launch line, kept before the pane-environment wrappers
+# below go on: the agent-up refusals print this as the in-pane recovery, and a
+# reader has to be able to paste it.
+SPAWN_RENDERED_LAUNCH=$LAUNCH
 case "$HARNESS" in
   claude|codex|opencode|pi|pi-signed|grok|kimi|gemini|muse|rovo|agy)
     LAUNCH="env -u CURSOR_AGENT -u CURSOR_INVOKED_AS -u GEMINI_CLI $LAUNCH"
@@ -4547,16 +4722,6 @@ if [ "$LAUNCH_ENV_ENABLED" = 1 ]; then
     LAUNCH_ENV_PREFIX="$LAUNCH_ENV_PREFIX "'${TRACEPARENT+"TRACEPARENT=$TRACEPARENT"}'
   fi
   LAUNCH="$LAUNCH_ENV_PREFIX /bin/sh -c $(shell_quote "$LAUNCH")"
-fi
-# Refuse before the endpoint exists when the resolved launch binary is missing
-# or fails its version probe: a task window holding a dead shell is far worse to
-# recover from than a spawn that never started.
-preflight_verified_launch_binary "$BACKEND" "$HARNESS" "$LAUNCH" || exit 1
-# Named vendor account pinning, when this home declares one. Absent config, an
-# absent library, or no --account leaves the ambient login exactly as it was.
-if command -v fm_account_spawn_pin >/dev/null 2>&1; then
-  LAUNCH=$(fm_account_spawn_pin "$CONFIG" "$DATA" "$HARNESS" "$LAUNCH" "${ACCOUNT_SET:-0}" \
-    "${ACCOUNT:-}" "$STATE" "$ID") || exit 1
 fi
 sleep 0.3
 spawn_send_literal "$T" "$LAUNCH"
