@@ -46,7 +46,10 @@ function operationalInputAnswer(
   stdout: string,
 ): string | undefined {
   if (status !== 0) return undefined;
-  return command === "classify" ? stdout.replace(/\n$/, "") : stdout;
+  // Only `encode` returns transport bytes the caller must keep intact; every
+  // other command returns a bare token, so its trailing newline is framing
+  // rather than data (bin/fm-operational-input.sh owns that contract).
+  return command === "encode" ? stdout : stdout.replace(/\n$/, "");
 }
 
 function runOperationalInputCommand(

@@ -22,6 +22,17 @@
 #                 "BOOTSTRAP_INFO: nudged fm-<id> with '<message>'",
 #                 "SECONDMATE_LIVENESS: secondmate <id>: skipped: <reason>|respawn failed after <cause>: <reason>",
 #                 "SECONDMATE_HANDOFF: secondmate <id>: pending delivery: <n> item(s)",
+#                 "TOOLCHAIN_DRIFT: <runtime> installed <version>, certified
+#                  <version> (<evidence>) - <why>",
+#                 "UPSTREAM: <N> commits behind <remote>/<branch> (<url>)
+#                  [- <R> upstream commits, <D> already delivered here] - <subjects>",
+#                 "UPSTREAM_REPORT: new private report at <path>",
+#                 "MORNING_INTAKE: <label> due|failed|complete ..." or
+#                 "MORNING_INTAKE: new <label> report at <path>",
+#                 "CHANNEL_INTAKE: <N> source(s) due ...", "<N> item(s) ready
+#                  to send|blocked, ...|held, ...", "source(s) reading
+#                  unknown ...", or
+#                  "<label> live check is absent|unregistered ...",
 #                 "FMX: X mode on ..." or "FMX: X mode off ...".
 #          When a RUNNING secondmate home is fast-forwarded, its target is
 #          firstmate's own current default-branch commit. A local worktree uses
@@ -74,6 +85,35 @@
 #          guesses at malformed or unsafe existing files, and secondmate homes
 #          await the primary-authoritative inherited value instead of creating
 #          their own.
+#          TOOLCHAIN_DRIFT compares docs/toolchain-manifest.tsv against PATH and
+#          prints one line per runtime whose installed version differs from the
+#          version this repo carries certification evidence for. It reports and
+#          never blocks a launch, never installs, and never pins, because every
+#          certified runtime here self-updates and a strict gate in front of a
+#          self-updating binary is a scheduled outage. It is silent for a
+#          matching runtime, an absent binary (MISSING already owns that), and
+#          an unparseable --version; see bin/fm-toolchain-lib.sh.
+#          UPSTREAM is detect-only and silent when there is no upstream remote,
+#          origin and upstream share a URL (not a fork), the home is a secondmate,
+#          the network is unavailable, or HEAD already contains the upstream tip.
+#          Its count is the raw upstream delta MINUS the commits this fork has
+#          already delivered, derived from port references in the fork's own
+#          commit history plus a reviewable override ledger, so the number falls
+#          as batches land instead of only ever rising; the optional accounting
+#          clause reports the raw and delivered figures whenever the ledger
+#          accounted for anything, and a fully delivered delta is silent.
+#          It never merges and never touches projects/; see bin/fm-upstream-lib.sh.
+#          UPSTREAM_REPORT is the read-only pending-report check owned by
+#          bin/fm-upstream-watch.sh. The weekly job writes only private data/;
+#          acknowledge the report after reading it so later sessions stay quiet.
+#          MORNING_INTAKE is the read-only owed/failed/pending check owned by
+#          bin/fm-morning-intake.sh, silent unless this home opted in.
+#          CHANNEL_INTAKE is the read-only due/ready/unknown check owned by
+#          bin/fm-channel-intake.sh, silent unless this home opted in. A source
+#          reading `unknown` did not complete its last read, which is not the
+#          same as nothing new, and a notification the gate refused or held is
+#          named as such rather than counted as quiet;
+#          docs/channel-intake.md owns the response.
 #          X mode is OPTIONAL and inert unless FM_HOME/.env has a non-empty
 #          FMX_PAIRING_TOKEN. When opted in, bootstrap requires curl+jq, writes
 #          the relay poll shim and 30s cadence config, and prints an FMX line.
