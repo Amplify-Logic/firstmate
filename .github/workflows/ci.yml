@@ -481,6 +481,7 @@ jobs:
   fork-surface:
     name: Declared fork surface
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v6
         with:
@@ -504,6 +505,7 @@ jobs:
   leak-guard:
     name: Public-repo leak guard
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v6
       - name: Fail on email, absolute home paths, or live-token shapes
