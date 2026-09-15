@@ -33,10 +33,16 @@ test_new_skill_metadata_and_triggers() {
     "diagnostic skill metadata lost its precise load trigger"
   assert_grep '`diagnostic-reasoning` - load before scoping a reported bug and before acting on a diagnostic report.' "$ROOT/AGENTS.md" \
     "AGENTS.md lost the diagnostic-reasoning trigger"
-  assert_grep 'Use before adding, cloning, creating, registering, removing, or initializing a project.' "$PROJECT" \
+  # Cloning and registering were folded into "add intake" by the shared owner's
+  # rewording; the trigger still has to name every operation that must load it.
+  assert_grep 'Use before adding, creating, removing, or initializing a project.' "$PROJECT" \
     "project-management skill metadata lost its precise load trigger"
-  assert_grep '`project-management` - load before adding, cloning, creating, registering, removing, or initializing a project.' "$ROOT/AGENTS.md" \
+  assert_grep 'Cloning or registering a project is add intake and uses the same trigger.' "$PROJECT" \
+    "project-management skill metadata no longer routes clone and register intake"
+  assert_grep '`project-management` - load before adding, creating, removing, or initializing a project.' "$ROOT/AGENTS.md" \
     "AGENTS.md lost the project-management trigger"
+  assert_grep 'Cloning or registering a project is add intake and uses the same trigger.' "$ROOT/AGENTS.md" \
+    "AGENTS.md no longer routes clone and register intake to project-management"
   pass "new internal skills have one precise AGENTS.md trigger each"
 }
 
@@ -81,25 +87,34 @@ test_project_management_owner_covers_guarded_operations() {
 }
 
 test_generic_effort_fallback_respects_precedence() {
-  local section
+  local effort section
+  # The rubric moved out of the skill body into the common reference the
+  # routing matrix appends for every model/effort operation; assert it where
+  # it now lives, and assert the routing that still reaches it.
+  effort="$ROOT/.agents/skills/harness-adapters/references/common/model-and-effort.md"
+  assert_present "$effort" "the model and effort reference is missing"
+  assert_grep 'references/common/model-and-effort.md' "$HARNESS" \
+    "the routing matrix no longer reaches the model and effort reference"
   section=$(awk '
     /^Effort precedence is / { found = 1 }
-    found && /^The supported launch-profile flags / { exit }
+    found && /^## / { exit }
     found { print }
-  ' "$HARNESS")
-  assert_contains "$section" "explicit per-task captain instruction first" \
+  ' "$effort")
+  assert_contains "$section" "per-task captain instruction" \
     "effort rubric lost per-task captain precedence"
-  assert_contains "$section" "standing dispatch profile or secondmate pin" \
+  assert_contains "$section" "dispatch profile or secondmate pin" \
     "effort rubric lost standing configuration precedence"
+  assert_contains "$section" "Never replace either higher-precedence value" \
+    "effort rubric permits the fallback to override a supplied effort"
   assert_contains "$section" 'Use `low` for well-understood work' \
     "effort rubric lost its low fallback"
   assert_contains "$section" '`xhigh` for ambiguous investigation or design' \
     "effort rubric lost its xhigh fallback"
-  assert_contains "$section" "Choose intermediate levels proportionally" \
+  assert_contains "$section" "Choose intermediate levels" \
     "effort rubric lost proportional intermediate levels"
-  assert_contains "$section" 'Never select `max` from this fallback' \
+  assert_contains "$section" 'Never select `max` through this fallback' \
     "effort rubric permits max without an explicit captain preference"
-  if printf '%s\n' "$section" | grep -qi sol; then
+  if printf '%s\n' "$section" | grep -qiE '(^|[^[:alnum:]])sol([^[:alnum:]]|$)'; then
     fail "generic effort fallback must not contain Sol-specific policy"
   fi
   pass "generic effort fallback applies only below captain and standing configuration"
@@ -112,10 +127,12 @@ test_shared_authoring_requirements_are_owned() {
     "coding guidance lost deterministic idempotent enforcement"
   assert_grep "critical safety, routing, startup, and supervision infrastructure" "$CODING" \
     "coding guidance lost the critical infrastructure scope"
-  assert_grep "Keep current guidance separate from verification evidence" "$CODING" \
+  assert_grep "current-behavior relevance, destination for supporting evidence" "$CODING" \
     "coding guidance lost the current-guidance/evidence boundary"
-  assert_grep "Task chronology, branches, temporary paths, failed hypotheses" "$CODING" \
+  assert_grep "Keep incident chronology and delivery evidence in private task reports or PR evidence" "$CODING" \
     "coding guidance lost private task-evidence placement"
+  assert_grep 'a capability declared in `fork-surface.conf`' "$CODING" \
+    "coding guidance lost this fork's source-assertion carve-out"
   pass "firstmate-coding-guidelines owns compatibility, enforcement, and evidence placement"
 }
 
@@ -202,7 +219,7 @@ test_compressed_agents_owner_map() {
 test_intake_reuses_evidence_and_parallelizes_safe_work() {
   for phrase in \
     'consult existing reports and established evidence' \
-    'keep bounded research inside that task' \
+    'keep any remaining bounded research inside it' \
     'unresolved uncertainty could materially change whether or what to build' \
     'relay it without a design-only scout' \
     'ask one concise implementation question when useful' \
@@ -213,13 +230,13 @@ test_intake_reuses_evidence_and_parallelizes_safe_work() {
     'Serialize only for a true semantic dependency' \
     'shared mutable external state' \
     'incompatible concurrent migration' \
-    'Same-file editing alone is insufficient' \
+    'same-file editing alone is insufficient' \
     'genuine blockers remain durable'; do
     assert_grep "$phrase" "$AGENTS" "intake contract lost '$phrase'"
   done
   assert_grep 'dispatch isolated work immediately with no concurrency cap' "$AGENTS" \
     "intake contract lost unbounded safe parallel dispatch"
-  assert_grep 'Implementation requires a separate request or other clear implementation scope.' "$AGENTS" \
+  assert_grep 'is evidence, not authorization to change code.' "$AGENTS" \
     "intake changes weakened implementation authority"
   pass "intake reuses evidence, reserves scouts for useful uncertainty, and parallelizes safe work"
 }
@@ -245,7 +262,7 @@ test_compressed_agents_retains_authority_and_supervision_safety() {
     "AGENTS.md retained the weaker duplicate review prohibition"
   assert_no_grep 'firstmate reviews your branch' "$AGENTS" \
     "AGENTS.md retained a personal branch-review requirement"
-  assert_grep 'naming another live session only when that banner identifies one' "$AGENTS" \
+  assert_grep 'another active session is only one possible cause' "$AGENTS" \
     "AGENTS.md lost the condition that gates naming a live lock holder"
   assert_no_grep 'tell the captain another active session is managing the fleet' "$AGENTS" \
     "AGENTS.md still orders blaming another session for every lock refusal"

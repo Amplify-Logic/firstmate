@@ -27,6 +27,7 @@ Do not turn the registry into project documentation.
 Before adding, cloning, creating, or registering any project in the main home, inspect the authoritative `data/secondmates.md` routing table and judge every existing natural-language `scope:` against the proposed project or domain.
 Apply `AGENTS.md` section 7's authoritative secondmate routing rules; if an existing scope owns that domain, route the new-project operation or work there instead of creating or registering a duplicate main-home clone.
 Absence from the main `data/projects.md` registry is never evidence that no second mate owns the domain.
+If no second mates are registered or no scope fits, continue in the main home.
 If the owning second mate cannot accept the route, report that concrete blocker or obtain an explicit captain redirection rather than silently duplicating the project in the main home.
 
 Resolve the project name, destination, delivery posture, and autonomy posture before changing local or remote state.
@@ -51,6 +52,11 @@ Registering a conditional policy is a one-time choice and never requires classif
 The optional `+yolo` posture changes merge authority only and does not change the delivery mode.
 Default it off for every project and every posture, and enable it only on the captain's explicit instruction.
 `AGENTS.md` section 7 owns the merge-authority contract.
+
+A current concrete captain approval settles only the exact project operation, project, remote, visibility, delivery posture, or other bounded scope it names.
+Do not ask again for a value the captain already supplied, but do not infer omitted values or broaden that approval.
+Approval never changes the execution boundary: use only the guarded project paths authorized by `AGENTS.md`, and route privileged outward actions through the action gateway when its operation registry covers them.
+If no guarded path exists for the approved operation, report that implementation gap rather than performing a raw project write.
 
 ## Add or clone an existing project
 
