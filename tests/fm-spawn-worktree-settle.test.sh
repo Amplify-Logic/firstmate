@@ -54,8 +54,21 @@ case "$*" in
 esac
 case "${1:-}" in
   display-message) printf 'firstmate\n'; exit 0 ;;
-  list-windows) exit 0 ;;
-  has-session|new-session|new-window|kill-window) exit 0 ;;
+  # fm-spawn reads the window inventory before it will report a spawn as
+  # started, so the stub has to list back the window it was asked to create.
+  new-window)
+    prev=
+    for a in "$@"; do
+      [ "$prev" != "-n" ] || printf '%s\n' "$a" >> "${FM_FAKE_WINDOW_LOG:?}"
+      prev=$a
+    done
+    exit 0
+    ;;
+  list-windows)
+    [ ! -f "${FM_FAKE_WINDOW_LOG:?}" ] || cat "$FM_FAKE_WINDOW_LOG"
+    exit 0
+    ;;
+  has-session|new-session|kill-window) exit 0 ;;
   send-keys) exit 0 ;;
 esac
 exit 0
@@ -110,6 +123,7 @@ run_settle_spawn() {
     FM_SPAWN_NO_GUARD=1 TMUX="fake,1,0" \
     FM_FAKE_PANE_PATH="$WT_DIR" FM_FAKE_PANE_STALE="$STALE_DIR" \
     FM_FAKE_PANE_STALE_READS="$STALE_READS" FM_FAKE_PANE_COUNTFILE="$COUNTFILE" \
+    FM_FAKE_WINDOW_LOG="$HOME_DIR/state/.fake-windows" \
     PATH="$FAKEBIN_DIR:$PATH" \
     "$SPAWN" "$id" "$PROJ_DIR" --mode no-mistakes --yolo off 2>&1
 }

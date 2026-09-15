@@ -54,7 +54,7 @@ TMP_ROOT=$(fm_test_tmproot fm-spawn-agent-up)
 # repeating forever), so a case can model a shell that becomes an agent, or one
 # that never does.
 make_case() {
-  local name=$1 harness=$2 launch_binary=$3 fakebin
+  local name=$1 harness=$2 launch_binary=$3 fakebin real real_bin
   CASE_DIR="$TMP_ROOT/$name"
   HOME_DIR="$CASE_DIR/home"
   PROJ_DIR="$CASE_DIR/project"
@@ -62,25 +62,66 @@ make_case() {
   EVENT_LOG="$CASE_DIR/events.log"
   COMMAND_SEQ="$CASE_DIR/pane-command-seq"
   COMMAND_COUNT="$CASE_DIR/pane-command-count"
+  WINDOW_LOG="$CASE_DIR/windows.log"
+  KIMI_STATE="$CASE_DIR/kimi-state"
   ID="agentup-$name"
   fakebin=$(fm_fakebin "$CASE_DIR")
   FAKEBIN_DIR=$fakebin
 
-  mkdir -p "$HOME_DIR/data/$ID" "$HOME_DIR/projects" "$HOME_DIR/config" "$HOME_DIR/state"
+  mkdir -p "$HOME_DIR/data/$ID" "$HOME_DIR/projects" "$HOME_DIR/config" "$HOME_DIR/state" \
+    "$HOME_DIR/user-home/.kimi-code"
+  # A kimi spawn installs its turn-end hook into the launching user's own Kimi
+  # config and refuses when it is absent, so the pinned throwaway HOME gets one.
+  printf '# test config\n' > "$HOME_DIR/user-home/.kimi-code/config.toml"
   printf '%s\n' "$harness" > "$HOME_DIR/config/crew-harness"
   # A multi-line brief is the shape that spills through a shell, so fixtures use
   # one rather than a single tidy line.
-  printf 'brief for %s\nsecond line of the brief\n' "$ID" > "$HOME_DIR/data/$ID/brief.md"
+  cat > "$HOME_DIR/data/$ID/brief.md" <<EOF
+# Task
+## Captain's intent
+brief for $ID
+second line of the brief
+
+## Firstmate spec
+Exercise the agent-up verification.
+EOF
   fm_git_worktree "$PROJ_DIR" "$WT_DIR" "wt-$name"
   touch "$HOME_DIR/state/.last-watcher-beat"
   : > "$EVENT_LOG"
+  : > "$KIMI_STATE"
 
   cat > "$fakebin/tmux" <<'SH'
 #!/usr/bin/env bash
 set -u
 log=${FM_FAKE_EVENT_LOG:?}
+kimi_state=$(cat "${FM_FAKE_KIMI_STATE:?}" 2>/dev/null || true)
+# The rendered Kimi screen for the current delivery stage. `ready` carries the
+# fresh-launch banner the readiness gate matches; `delivered` carries the
+# echoed pointer and a nonzero context percentage, which is what confirms
+# delivery. The composer box is empty in both, as a settled Kimi pane's is.
+kimi_screen() {
+  case "$kimi_state" in
+    ready)
+      printf 'Welcome to Kimi Code!\ncontext: 0%% (0/256k)\n╭────────────────────────────────╮\n│ >                              │\n╰────────────────────────────────╯\n'
+      ;;
+    pointer-typed)
+      printf 'context: 0%% (0/256k)\n╭────────────────────────────────╮\n│ > Read the brief at            │\n│                                │\n╰────────────────────────────────╯\n'
+      ;;
+    delivered)
+      printf '✨ Read the brief at %s and follow it exactly.\ncontext: 1%% (2k/256k)\n╭────────────────────────────────╮\n│ >                              │\n╰────────────────────────────────╯\n' "${FM_FAKE_BRIEF_REAL:-}"
+      ;;
+    *) printf 'shell starting\n$ \n' ;;
+  esac
+}
 case "$*" in
   *"#{pane_current_path}"*) printf '%s\n' "${FM_FAKE_PANE_PATH:-}"; exit 0 ;;
+  *"#{cursor_y}"*)
+    case "$kimi_state" in
+      ready|pointer-typed|delivered) printf '3\n' ;;
+      *) printf '1\n' ;;
+    esac
+    exit 0
+    ;;
   *"#{pane_current_command}"*)
     countfile=${FM_FAKE_COMMAND_COUNT:?}
     n=0
@@ -97,18 +138,63 @@ case "$*" in
 esac
 case "${1:-}" in
   display-message) printf 'firstmate\n'; exit 0 ;;
-  new-window) printf '@42\n'; exit 0 ;;
-  list-windows|has-session|new-session|set-window-option|kill-window) exit 0 ;;
-  send-keys)
+  # The liveness owner reads the window inventory before the pane command, so a
+  # stub that lists nothing reads as a structurally gone endpoint.
+  new-window)
     prev=
     for arg in "$@"; do
+      [ "$prev" != "-n" ] || printf '%s\n' "$arg" >> "${FM_FAKE_WINDOW_LOG:?}"
+      prev=$arg
+    done
+    printf '@42\n'
+    exit 0
+    ;;
+  list-windows)
+    [ ! -f "${FM_FAKE_WINDOW_LOG:?}" ] || cat "$FM_FAKE_WINDOW_LOG"
+    exit 0
+    ;;
+  has-session|new-session|set-window-option|kill-window) exit 0 ;;
+  capture-pane)
+    start= end= prev=
+    for arg in "$@"; do
       case "$prev" in
-        -l) printf 'literal:%s\n' "$arg" >> "$log" ;;
+        -S) start=$arg ;;
+        -E) end=$arg ;;
+      esac
+      case "$arg" in -S|-E) prev=$arg ;; *) prev= ;; esac
+    done
+    case "$start:$end" in
+      *[!0-9:]*|'':*|*:'') kimi_screen ;;
+      *) kimi_screen | awk -v start="$start" -v end="$end" 'NR - 1 >= start && NR - 1 <= end' ;;
+    esac
+    exit 0
+    ;;
+  send-keys)
+    prev=
+    literal=
+    for arg in "$@"; do
+      case "$prev" in
+        -l) printf 'literal:%s\n' "$arg" >> "$log"; [ -n "$literal" ] || literal=$arg ;;
       esac
       prev=$arg
     done
+    # Advance the Kimi delivery stage the same way a real pane would: the
+    # launch line starts the TUI, the first Enter brings it up ready, the
+    # pointer is typed next, and the Enter after that delivers it.
+    if [ -n "$literal" ]; then
+      case "$literal" in
+        *' --auto') printf 'launched\n' > "${FM_FAKE_KIMI_STATE:?}" ;;
+        *) printf 'pointer-typed\n' > "${FM_FAKE_KIMI_STATE:?}" ;;
+      esac
+    fi
     case "$*" in
-      *" Enter") printf 'key:Enter\n' >> "$log" ;;
+      *" Enter")
+        printf 'key:Enter\n' >> "$log"
+        case "$kimi_state" in
+          launched) printf 'ready\n' > "${FM_FAKE_KIMI_STATE:?}" ;;
+          pointer-typed) printf 'delivered\n' > "${FM_FAKE_KIMI_STATE:?}" ;;
+        esac
+        ;;
     esac
     exit 0
     ;;
@@ -117,6 +203,13 @@ exit 0
 SH
   chmod +x "$fakebin/tmux"
   fm_fake_exit0 "$fakebin" treehouse
+  # PATH is pinned narrow so the harness stubs decide resolution, but two real
+  # tools are needed: node records Claude workspace trust, and python3 with
+  # tomllib validates the Kimi config the turn-end hook edits.
+  for real in node python3; do
+    real_bin=$(command -v "$real" 2>/dev/null || true)
+    [ -z "$real_bin" ] || ln -sf "$real_bin" "$fakebin/$real"
+  done
   cat > "$fakebin/$launch_binary" <<'SH'
 #!/usr/bin/env bash
 set -u
@@ -145,12 +238,17 @@ run_spawn() {
     FM_FAKE_EVENT_LOG="$EVENT_LOG" \
     FM_FAKE_COMMAND_SEQ="$COMMAND_SEQ" \
     FM_FAKE_COMMAND_COUNT="$COMMAND_COUNT" \
+    FM_FAKE_WINDOW_LOG="$WINDOW_LOG" \
+    FM_FAKE_KIMI_STATE="$KIMI_STATE" \
+    FM_FAKE_BRIEF_REAL="$HOME_DIR/data/$ID/launch-brief.md" \
+    HOME="$HOME_DIR/user-home" \
+    CLAUDE_CONFIG_DIR='' \
     FM_KIMI_BRIEF_SETTLE_SECS=0 \
     FM_SPAWN_AGENT_UP_SLEEP=0 \
     GROK_HOME="$HOME_DIR/grok-home" \
     PATH="$FAKEBIN_DIR:/usr/bin:/bin" \
     "$@" \
-    "$SPAWN" "$ID" "$PROJ_DIR" 2>&1
+    "$SPAWN" "$ID" "$PROJ_DIR" --mode no-mistakes --yolo off 2>&1
 }
 
 cleanup_task_tmp() { rm -rf "/tmp/fm-$1"; }
@@ -171,6 +269,7 @@ test_kimi_brief_is_typed_only_after_the_agent_is_up() {
   out=$(run_spawn)
   status=$?
 
+  [ "$status" -eq 0 ] || printf '%s\n' "$out" >&2
   expect_code 0 "$status" "kimi spawn should succeed once the agent comes up"
   assert_contains "$out" "spawned $ID harness=kimi" "kimi spawn did not reach the healthy path"
   # kimi's launch line carries no brief, so the launch-brief literal IS the
@@ -361,7 +460,7 @@ test_invalid_bound_knobs_are_refused() {
 # agent-liveness reader (fm_backend_agent_state answers `unverified`), which is
 # the state this fixture exists to reach - tmux can never produce it.
 make_orca_case() {  # <name> [harness]
-  local name=$1 harness=${2:-kimi} fakebin
+  local name=$1 harness=${2:-kimi} fakebin real real_bin
   CASE_DIR="$TMP_ROOT/$name"
   HOME_DIR="$CASE_DIR/home"
   PROJ_DIR="$CASE_DIR/project"
@@ -373,7 +472,15 @@ make_orca_case() {  # <name> [harness]
   FAKEBIN_DIR=$fakebin
 
   mkdir -p "$HOME_DIR/data/$ID" "$HOME_DIR/projects" "$HOME_DIR/config" "$HOME_DIR/state" "$ORCA_RESP"
-  printf 'brief for %s\nsecond line of the brief\n' "$ID" > "$HOME_DIR/data/$ID/brief.md"
+  cat > "$HOME_DIR/data/$ID/brief.md" <<EOF
+# Task
+## Captain's intent
+brief for $ID
+second line of the brief
+
+## Firstmate spec
+Exercise the agent-up verification.
+EOF
   fm_git_worktree "$PROJ_DIR" "$WT_DIR" "wt-$name"
   touch "$HOME_DIR/state/.last-watcher-beat"
   : > "$ORCA_LOG"
@@ -438,7 +545,7 @@ test_unverified_liveness_backend_still_spawns_and_warns() {
     FM_ORCA_LOG="$ORCA_LOG" \
     FM_ORCA_RESPONSES="$ORCA_RESP" \
     PATH="$FAKEBIN_DIR:$PATH" \
-    "$SPAWN" "$ID" "$PROJ_DIR" kimi --backend orca 2>&1 )
+    "$SPAWN" "$ID" "$PROJ_DIR" kimi --backend orca --mode no-mistakes --yolo off 2>&1 )
   status=$?
 
   expect_code 0 "$status" "kimi on a backend with no liveness reader should still spawn"$'\n'"$out"
@@ -463,7 +570,7 @@ test_unverified_non_kimi_backend_still_spawns_and_warns() {
     FM_CONFIG_OVERRIDE="$HOME_DIR/config" FM_SPAWN_NO_GUARD=1 \
     FM_SPAWN_AGENT_UP_SLEEP=0 FM_ORCA_LOG="$ORCA_LOG" \
     FM_ORCA_RESPONSES="$ORCA_RESP" PATH="$FAKEBIN_DIR:$PATH" \
-    "$SPAWN" "$ID" "$PROJ_DIR" claude --backend orca 2>&1 )
+    "$SPAWN" "$ID" "$PROJ_DIR" claude --backend orca --mode no-mistakes --yolo off 2>&1 )
   status=$?
 
   expect_code 0 "$status" "claude on an unsupported liveness backend should still spawn"$'\n'"$out"
@@ -493,7 +600,7 @@ test_unverified_non_kimi_backend_still_spawns_and_warns() {
 # the launch is a property of the exact bytes typed into the pane - including
 # whether they contain a newline - which the shared arg log cannot preserve.
 make_herdr_case() {  # <name> <harness> <launch-binary>
-  local name=$1 harness=$2 launch_binary=$3 fakebin
+  local name=$1 harness=$2 launch_binary=$3 fakebin real real_bin
   CASE_DIR="$TMP_ROOT/$name"
   HOME_DIR="$CASE_DIR/home"
   PROJ_DIR="$CASE_DIR/project"
@@ -509,7 +616,15 @@ make_herdr_case() {  # <name> <harness> <launch-binary>
   mkdir -p "$HOME_DIR/data/$ID" "$HOME_DIR/projects" "$HOME_DIR/config" "$HOME_DIR/state" \
     "$HERDR_WT_ROOT" "$HERDR_SENDTEXT_DIR"
   printf '%s\n' "$harness" > "$HOME_DIR/config/crew-harness"
-  printf 'brief for %s\nsecond line of the brief\n' "$ID" > "$HOME_DIR/data/$ID/brief.md"
+  cat > "$HOME_DIR/data/$ID/brief.md" <<EOF
+# Task
+## Captain's intent
+brief for $ID
+second line of the brief
+
+## Firstmate spec
+Exercise the agent-up verification.
+EOF
   fm_git_init_commit "$PROJ_DIR"
   touch "$HOME_DIR/state/.last-watcher-beat"
   printf '{"next":1,"workspaces":[],"tabs":[]}\n' > "$HERDR_STATE_FILE"
@@ -637,6 +752,13 @@ esac
 SH
   chmod +x "$fakebin/herdr"
   fm_fake_exit0 "$fakebin" treehouse
+  # PATH is pinned narrow so the harness stubs decide resolution, but two real
+  # tools are needed: node records Claude workspace trust, and python3 with
+  # tomllib validates the Kimi config the turn-end hook edits.
+  for real in node python3; do
+    real_bin=$(command -v "$real" 2>/dev/null || true)
+    [ -z "$real_bin" ] || ln -sf "$real_bin" "$fakebin/$real"
+  done
   cat > "$fakebin/$launch_binary" <<'SH'
 #!/usr/bin/env bash
 set -u
@@ -673,7 +795,7 @@ run_herdr_spawn_as() {  # <harness> <extra-spawn-args...>
     FM_FAKE_WT_ROOT="$HERDR_WT_ROOT" \
     HERDR_SESSION="fm-agentup-fake" \
     PATH="$FAKEBIN_DIR:$PATH" \
-    "$SPAWN" "$ID" "$PROJ_DIR" --harness "$harness" --backend herdr "$@" 2>&1
+    "$SPAWN" "$ID" "$PROJ_DIR" --harness "$harness" --backend herdr --mode no-mistakes --yolo off "$@" 2>&1
 }
 
 # The Nth `pane send-text` payload, exactly as it was typed into the pane.

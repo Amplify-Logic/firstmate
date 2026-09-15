@@ -1251,6 +1251,19 @@ A missing or failing channel logs and falls through to the next, never crashing 
 `bin/fm-shift.sh` appends and removes one sentinel-delimited `command:` block here while a glasses shift is armed, so a watcher outage is spoken into the captain's glasses; see [`shift-loop.md`](shift-loop.md).
 See [`wedge-alarm.md`](wedge-alarm.md) for the channel reference and macOS verification evidence, and [`examples/wedge-alarm`](examples/wedge-alarm) for a copyable config.
 
+## Context window
+
+Every Firstmate session and every Claude or Codex worker is launched with its auto-compaction window capped at 500,000 tokens, so an orchestrator compacts itself instead of being managed by hand (captain's order, 2026-09-13).
+The cap is applied per launch by [`bin/fm-primary.sh`](../bin/fm-primary.sh) and [`bin/fm-spawn.sh`](../bin/fm-spawn.sh), whose headers are the single owners of the exact mechanism; it is never written into the captain's global config for any harness.
+Existing sessions are not affected, because both launchers only shape new launches.
+
+Claude Code reads `CLAUDE_CODE_AUTO_COMPACT_WINDOW` as a token count and says so itself: claude 2.1.270 renders the window as "<n> tokens (from CLAUDE_CODE_AUTO_COMPACT_WINDOW)" and tells `/config` that "CLAUDE_CODE_AUTO_COMPACT_WINDOW is set and takes precedence", and its resolver returns `min(model maximum window, the parsed value)`, so a model smaller than 500k stays capped by its own window.
+Codex accepts `model_auto_compact_token_limit` as a launch-line config override: `codex debug models -c model_auto_compact_token_limit=500000` exits 0 on codex-cli 0.154.0 while the same key with a string value exits 1 with `invalid type: string "nope", expected i64`, which proves the key is real, typed, and settable without touching `config.toml`.
+Pi has no context-window or auto-compaction launch knob: pi 0.80.10's `shouldCompact` is `contextTokens > contextWindow - settings.reserveTokens`, where `contextWindow` comes from the model catalog and `reserveTokens` exists only in `~/.pi/agent/settings.json` or a project's `.pi/settings.json`, so nothing is passed at launch and pi's threshold remains whatever its model allows.
+The Cursor CLI exposes no context or compaction setting: `agent --help` on 2026.09.02-c22c1a3 lists no such flag, the binary carries no `CURSOR_*` context or compaction environment variable, and `contextWindowSize` appears only in its token-usage display code.
+
+Every other worker adapter is outside that order and its launch is unchanged.
+
 ## Primary effort (config/primary-effort)
 
 `config/primary-effort` is an optional local, gitignored one-token file that sets the launch effort for the `claude-fable` and `claude-opus` primary profiles.
