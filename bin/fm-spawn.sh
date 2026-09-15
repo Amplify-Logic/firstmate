@@ -1416,6 +1416,7 @@ if [ "$RELAUNCH" -eq 1 ]; then
     exit 1
   }
   RELAUNCH_PRIOR_HARNESS=$(fm_meta_get "$RELAUNCH_META" harness)
+  [ "$TASK_TYPE_SET" -eq 1 ] || TASK_TYPE=$(fm_meta_get "$RELAUNCH_META" task_type)
   KIND=$(fm_meta_get "$RELAUNCH_META" kind)
   [ -n "$KIND" ] || KIND=ship
   MODE=$(fm_meta_get "$RELAUNCH_META" mode)
@@ -2401,6 +2402,14 @@ esac
 # pin costs nothing. bin/fm-account-lib.sh owns the registry contract and every
 # refusal. With that library absent nothing is pinned, and the launch, its env,
 # and its meta are byte-identical to a spawn from before account pinning.
+if [ "$RELAUNCH" -eq 1 ] && [ "$ACCOUNT_SET" -eq 0 ] && [ "$RAW_LAUNCH" -eq 0 ] && [ "$HARNESS" = "$RELAUNCH_PRIOR_HARNESS" ]; then
+  case "$HARNESS" in
+    claude|codex)
+      ACCOUNT=$(fm_meta_get "$RELAUNCH_META" account)
+      [ -z "$ACCOUNT" ] || ACCOUNT_SET=1
+      ;;
+  esac
+fi
 ACCOUNT_NAME=
 ACCOUNT_HOME=
 ACCOUNT_ENV=
@@ -4036,6 +4045,14 @@ mkdir -p "$TASK_TMP/gotmp"
 # check or leak into a commit.
 mkdir -p "$STATE"
 STATE_REAL=$(cd "$STATE" && pwd -P)
+if [ "$HARNESS" = prime-agent ] && [ "$RAW_LAUNCH" -eq 0 ]; then
+  PA_WORKER_HOME="$STATE_REAL/$ID.prime-agent-home"
+  PA_SOURCE_HOME=${FM_PRIME_AGENT_SOURCE_HOME:-$HOME/.prime/agent}
+  mkdir -p "$PA_WORKER_HOME"
+  if [ -f "$PA_SOURCE_HOME/auth.json" ] && [ ! -e "$PA_WORKER_HOME/auth.json" ]; then
+    ln -s "$PA_SOURCE_HOME/auth.json" "$PA_WORKER_HOME/auth.json"
+  fi
+fi
 TURNEND="$STATE_REAL/$ID.turn-ended"
 exclude_path() {
   local rel=$1 EXCL

@@ -416,9 +416,16 @@ test_relaunch_preserves_durable_task_metadata() {
     printf '%s\n' 'pr=https://github.com/example/repo/pull/19'
     printf '%s\n' 'pr_head=feature/relaunch'
     printf '%s\n' 'x_request=request-19'
-    printf '%s\n' 'decisions_reviewed=1'
+    printf '%s\n' 'decisions_reviewed=1' 'task_type=review' 'account=work'
   } >> "$dir/home/state/rl19.meta"
 
+  mkdir -p "$dir/home/config" "$dir/home/data/accounts/claude/work" "$dir/home/data/accounts/claude/personal"
+  printf '%s\n' '{"claude":{"default":"personal","accounts":{"work":{},"personal":{}}}}' > "$dir/home/config/accounts.json"
+  cat > "$dir/fakebin/claude" <<'SH'
+#!/usr/bin/env bash
+printf '%s\n' '{"loggedIn":true}'
+SH
+  chmod +x "$dir/fakebin/claude"
   out=$(run_control "$dir" rl19 relaunch --note "continuing review work"); rc=$?
   expect_code 0 "$rc" "relaunch should preserve durable metadata"$'\n'"$out"
   [ "$(meta_field "$dir" rl19 pr)" = "https://github.com/example/repo/pull/19" ] \
@@ -429,6 +436,9 @@ test_relaunch_preserves_durable_task_metadata() {
     || fail "the task X request must survive relaunch"
   [ "$(meta_field "$dir" rl19 decisions_reviewed)" = 1 ] \
     || fail "the task decision state must survive relaunch"
+  [ "$(meta_field "$dir" rl19 account)" = work ] || fail "relaunch lost account pin"
+  [ "$(meta_field "$dir" rl19 task_type)" = review ] || fail "relaunch lost task type"
+  assert_contains "$(cat "$dir/fake/literal")" "$dir/home/data/accounts/claude/work" "replacement launch lost pinned home"
   pass "fm-control relaunch: durable task metadata survives replacement launch publication"
 }
 

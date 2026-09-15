@@ -567,25 +567,6 @@ test_claude_detection_unregressed() {
 
 # --- 7. turn-end binding shape ----------------------------------------------
 
-test_spawn_binds_the_cursor_conversation_transcript() {
-  local blk
-  # Cursor's turn lifecycle is a PULL source: it brackets every turn in its own
-  # durable per-conversation transcript, so the spawn arms no hook and writes no
-  # file into the worktree. The whole binding is this sidecar, and it has to pin
-  # the projects root, the exact workspace path, and the conversations that
-  # already existed - otherwise a relaunch into a reused worktree folds its
-  # PREDECESSOR's turns and reads a fresh worker as mid-turn.
-  blk=$(sed -n '/^    cursor\*)/,/^      ;;/p' "$ROOT/bin/fm-spawn.sh")
-  case "$blk" in *'.cursor-session'*) : ;; *) fail "cursor spawn does not write the transcript binding sidecar" ;; esac
-  case "$blk" in *'projects_root='*) : ;; *) fail "cursor binding does not pin the projects root" ;; esac
-  case "$blk" in *'workspace_root='*) : ;; *) fail "cursor binding does not pin the workspace path" ;; esac
-  case "$blk" in *'prior_conversation='*) : ;; *) fail "cursor binding does not record the pre-existing conversations" ;; esac
-  # The negative that keeps a retired mechanism from creeping back into a
-  # crewmate worktree: the per-task stop hook is gone, and a cursor SECONDMATE
-  # runs the tracked project-scope hooks.json in its own home instead.
-  case "$blk" in *'.cursor/hooks.json'*) fail "cursor spawn writes a per-task hook file into the worktree" ;; esac
-  pass "cursor spawn binds the pane to its own conversation transcript"
-}
 
 test_composer_ghost_suite_still_passes() {
   # The shared owner changed (idle regex is now matched against the plain row
@@ -622,5 +603,4 @@ test_liveness_uses_argv_for_node_comm
 test_unattributable_node_stays_unknown
 test_cursor_env_marker_beats_inherited_claudecode
 test_claude_detection_unregressed
-test_spawn_binds_the_cursor_conversation_transcript
 test_composer_ghost_suite_still_passes

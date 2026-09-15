@@ -690,7 +690,6 @@ tests/fm-backlog-atomicity.test.sh 161989
 tests/fm-backlog-handoff.test.sh 52291
 tests/fm-bearings-board-render.test.sh 1528
 tests/fm-bearings-board.test.sh 4195
-tests/fm-bearings-skill.test.sh 1319
 tests/fm-bearings-snapshot.test.sh 116374
 tests/fm-bootstrap-network-parallel.test.sh 8214
 tests/fm-bootstrap.test.sh 25208
@@ -701,7 +700,6 @@ tests/fm-busy-adapter-wiring.test.sh 49731
 tests/fm-busy-state.test.sh 2926
 tests/fm-calm-pi-extension.test.sh 256
 tests/fm-capability.test.sh 1621
-tests/fm-captain-translation-contract.test.sh 1268
 tests/fm-channel-intake.test.sh 41335
 tests/fm-chart-room.test.sh 18859
 tests/fm-check-unregister.test.sh 481
@@ -751,7 +749,6 @@ tests/fm-home-port.test.sh 4117
 tests/fm-home-summary-refresh.test.sh 34793
 tests/fm-inactive-reconcile.test.sh 74399
 tests/fm-install-herdr.test.sh 1126
-tests/fm-instruction-owners.test.sh 1337
 tests/fm-kimi-harness.test.sh 18015
 tests/fm-kimi-primary.test.sh 1281
 tests/fm-kimi-worker.test.sh 1298

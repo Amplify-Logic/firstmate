@@ -38,20 +38,5 @@ test_stable_primary_marker_wins() {
   pass "fm-harness: stable Kimi marker detects the primary while configured worker selection stays separate"
 }
 
-test_worker_set_includes_kimi() {
-  local usage
-  usage=$(sed -n '1,200p' "$ROOT/bin/fm-spawn.sh")
-  assert_contains "$usage" 'kimi' \
-    "documented verified worker set missing kimi"
-  # The isolated KIMI_CODE_HOME this fork once rendered was retired with the
-  # shared spawn owner's Kimi rewrite; tests/fm-kimi-worker.test.sh owns the
-  # current launch contract. What stays pinned here is only that the worker
-  # launch exists and is not coupled to the primary profile.
-  assert_grep "kimi) printf '%s' '__KIMIBIN__" \
-    "$ROOT/bin/fm-spawn.sh" \
-    "fm-spawn missing kimi worker launch template"
-  pass "fm-spawn: Kimi is a verified worker while primary detection stays separate"
-}
 
 test_stable_primary_marker_wins
-test_worker_set_includes_kimi

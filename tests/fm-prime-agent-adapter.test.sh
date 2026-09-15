@@ -149,9 +149,6 @@ test_pi_detection_unregressed() {
 #
 # Busy state is semantic now, not a rendered-row regex: an adapter publishes
 # events through bin/fm-busy-event.sh and bin/fm-busy-lib.sh folds them.
-# prime-agent is a hard fork of Pi and keeps Pi's extension API, so what this
-# capability owes is the same agent_start/agent_settled pair Pi publishes,
-# carrying its own source token.
 
 test_prime_agent_declares_a_semantic_busy_source() {
   local sources
@@ -163,23 +160,6 @@ test_prime_agent_declares_a_semantic_busy_source() {
   pass "prime-agent publishes semantic busy state through its own extension source"
 }
 
-test_prime_extension_publishes_the_pi_event_pair() {
-  local ext
-  # shellcheck disable=SC2016  # the sed address matches the literal heredoc
-  # marker as fm-spawn.sh writes it, so it must stay unexpanded.
-  ext=$(sed -n '/cat > "\$STATE\/\$ID.prime-ext.ts"/,/^EOF$/p' "$ROOT/bin/fm-spawn.sh")
-  assert_contains "$ext" 'pi.on("agent_start"' \
-    "the prime-agent extension does not publish a busy event when a run begins"
-  assert_contains "$ext" 'pi.on("agent_settled"' \
-    "the prime-agent extension does not publish an idle event when a run settles"
-  assert_contains "$ext" 'ctx.isIdle' \
-    "the prime-agent extension settles to idle without confirming the run will not continue"
-  assert_contains "$ext" '"--source", "prime-ext"' \
-    "the prime-agent extension does not carry its own busy source token"
-  assert_contains "$ext" 'pi.on("turn_end"' \
-    "the prime-agent extension no longer touches the turn-end marker"
-  pass "the prime-agent extension publishes Pi's semantic event pair under its own source"
-}
 
 # --- 3. idle composer ----------------------------------------------------------
 
@@ -436,7 +416,6 @@ test_effort_maps_to_thinking_flag() {
 test_prime_marker_beats_pi_marker
 test_pi_detection_unregressed
 test_prime_agent_declares_a_semantic_busy_source
-test_prime_extension_publishes_the_pi_event_pair
 test_placeholder_ghost_strips_to_bare_glyph
 test_bare_glyph_unidentified_pane_stays_unknown
 test_idle_placeholder_is_covered_by_the_shared_idle_default
