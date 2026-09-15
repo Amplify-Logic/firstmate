@@ -6,6 +6,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
 test_kimi_busy_regex_wired() {
   local composer="$ROOT/bin/fm-composer-lib.sh"
+  # shellcheck source=bin/fm-composer-lib.sh
   . "$composer"
   printf '\xf0\x9f\x8c\x91 \xc2\xb7 thinking...\n' | grep -qE "$FM_DELIVERY_KIMI_BUSY_REGEX_DEFAULT" \
     || fail "Kimi busy spinner did not match its delivery signature"

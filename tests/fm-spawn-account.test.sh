@@ -217,7 +217,7 @@ trap 'clear_spawn_task_tmps' EXIT
 # The compatibility guarantee: with no registry, the launch line and the meta are
 # exactly what they were before account pinning existed.
 test_absent_registry_changes_nothing() {
-  local rec id out status launch encoded expected
+  local rec id out status launch expected
   id=account-absent-a1
   rec=$(make_spawn_case account-absent claude "$id")
   read_case_record "$rec"
@@ -244,7 +244,7 @@ test_absent_registry_changes_nothing() {
 # existed and prints no shell error, while an explicit --account is refused
 # rather than silently launched on the ambient login.
 test_absent_library_degrades_without_error() {
-  local rec id out status launch encoded expected bin
+  local rec id out status launch expected bin
   id=account-nolib-a8
   rec=$(make_spawn_case account-nolib claude "$id")
   read_case_record "$rec"

@@ -585,7 +585,7 @@ for a in "$@"; do
     --account=*) ACCOUNT=${a#--account=}; ACCOUNT_SET=1 ;;
     --outcome) want_value=outcome ;;
     --outcome=*) OUTCOME=${a#--outcome=}; OUTCOME_SET=1 ;;
-    --task-type) want_value=task-type ;;
+    --task-type) want_value='task-type' ;;
     --task-type=*) TASK_TYPE=${a#--task-type=}; TASK_TYPE_SET=1 ;;
     --mode) want_value=mode ;;
     --mode=*) MODE=${a#--mode=}; MODE_SET=1 ;;

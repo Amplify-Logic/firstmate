@@ -678,7 +678,7 @@ test_unverified_non_kimi_backend_still_spawns_and_warns() {
 # created is no longer listed, which is exactly what a killed window looks like.
 
 test_missing_endpoint_refuses_on_the_first_read() {
-  local out status polls
+  local out status
   make_case vanish-claude claude claude
   set_command_sequence zsh
 
