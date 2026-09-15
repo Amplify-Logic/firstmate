@@ -61,9 +61,12 @@ case "${1:-}" in
         *cursor_y*) printf '%s\n' "${FM_FAKE_CY:-0}"; exit 0 ;;
         *pane_pid*) printf '%s\n' "${FM_FAKE_PID:-4242}"; exit 0 ;;
         *pane_current_command*) printf '%s\n' "${FM_FAKE_COMM:-node}"; exit 0 ;;
+        *pane_tty*) printf '%s\n' "${FM_FAKE_TTY:-/dev/ttyfake}"; exit 0 ;;
       esac
     done
     printf 'fakepane\n'; exit 0 ;;
+  list-windows)
+    printf '%s\n' "${FM_FAKE_WINDOW:-cur}"; exit 0 ;;
   capture-pane)
     has_e=0; s=""; e=""
     prev=""
@@ -74,7 +77,11 @@ case "${1:-}" in
     done
     f="${FM_FAKE_PANE:-/dev/null}"
     out=$(cat "$f" 2>/dev/null)
-    if [ -n "$s" ] && [ -n "$e" ]; then
+    # `-E -` means "to the last line", which is how the real capture asks for
+    # the whole visible pane.
+    if [ -n "$s" ] && [ "$e" = "-" ]; then
+      out=$(printf '%s\n' "$out" | sed -n "$((s + 1)),\$p")
+    elif [ -n "$s" ] && [ -n "$e" ]; then
       out=$(printf '%s\n' "$out" | sed -n "$((s + 1)),$((e + 1))p")
     fi
     if [ "$has_e" = 1 ]; then
@@ -89,15 +96,27 @@ SH
   chmod +x "$fb/tmux"
   cat > "$fb/ps" <<'SH'
 #!/usr/bin/env bash
+# The two reads the shared foreground-process-group probe makes:
+# `ps -t <tty> -o pid=,pgid=,tpgid=,comm=` lists the tty's processes (the single
+# fake entry is a foreground one, pgid = tpgid, with FM_FAKE_COMM as its COMM),
+# and `ps -p <pid> -o args=` answers that process's argv from FM_FAKE_ARGS.
+for a in "$@"; do
+  case "$a" in
+    -t) printf '%s %s %s %s\n' "${FM_FAKE_PID:-4242}" 900 900 "${FM_FAKE_COMM:-node}"; exit 0 ;;
+  esac
+done
 printf '%s\n' "${FM_FAKE_ARGS:-}"
 SH
   chmod +x "$fb/ps"
   printf '%s\n' "$fb"
 }
 
-# The verbatim argv the real cursor wrapper leaves behind (exec -a rewrites
-# argv[0], the versioned index.js path survives) - what marks a pane as cursor.
-CURSOR_ARGS="/Users/x/.local/bin/agent --use-system-ca /Users/x/.local/share/cursor-agent/versions/2026.07.16-899851b/index.js --yolo"
+# The verbatim argv the real cursor wrapper leaves behind - what marks a pane
+# as cursor. The launcher on PATH is a symlink into the versioned install tree
+# (verified: ~/.local/bin/agent -> .../cursor-agent/versions/<v>/cursor-agent),
+# and the identity owner canonicalizes argv[0] before matching, so argv[0] is
+# spelled here already resolved rather than through the launcher alias.
+CURSOR_ARGS="/Users/x/.local/share/cursor-agent/versions/2026.07.16-899851b/cursor-agent --use-system-ca /Users/x/.local/share/cursor-agent/versions/2026.07.16-899851b/index.js --yolo"
 
 # Build a realistic cursor pane: chrome, a completed turn, the composer row at
 # index 5, then the two bottom status rows the terminal cursor actually sits on.
@@ -119,16 +138,24 @@ make_cursor_pane() {  # <file> <composer-row>
 # --- 1. composer row selection ----------------------------------------------
 
 test_composer_row_found_structurally_not_by_cursor_y() {
-  local d fb pane
+  local d fb pane out
   d="$TMP_ROOT/rowsel"; mkdir -p "$d"
   fb=$(make_fake_tmux "$d")
   pane="$d/pane.txt"
+  # cursor_y=8 is the cwd/status row, exactly as the real CLI reports it, while
+  # the composer is row 5. The guarantee is that the verdict comes from the
+  # structurally located composer and never from the cursor row: with the SAME
+  # wrong cursor row, an idle composer must read empty and a composer holding
+  # text must read pending, which no reading of row 8 can produce.
   make_cursor_pane "$pane" "$CURSOR_IDLE_ROW"
-  # cursor_y=8 is the cwd/status row, exactly as the real CLI reports it.
-  PATH="$fb:$PATH" FM_FAKE_PANE="$pane" FM_FAKE_CY=8 FM_FAKE_ARGS="$CURSOR_ARGS" \
-    bash -c ". '$ROOT/bin/fm-tmux-lib.sh'; fm_tmux_cursor_composer_row t" > "$d/row" 2>/dev/null
-  [ "$(cat "$d/row")" = "5" ] || fail "structural scan did not find composer row 5: '$(cat "$d/row")'"
-  pass "cursor composer row is located structurally, not from #{cursor_y}"
+  out=$(PATH="$fb:$PATH" FM_FAKE_PANE="$pane" FM_FAKE_CY=8 FM_FAKE_ARGS="$CURSOR_ARGS" \
+    bash -c ". '$ROOT/bin/fm-tmux-lib.sh'; fm_tmux_composer_state t" 2>/dev/null)
+  [ "$out" = empty ] || fail "idle cursor composer under a wrong cursor row classified '$out', expected empty"
+  make_cursor_pane "$pane" " ${ESC}[2m→ ${ESC}[0mrow five is the composer"
+  out=$(PATH="$fb:$PATH" FM_FAKE_PANE="$pane" FM_FAKE_CY=8 FM_FAKE_ARGS="$CURSOR_ARGS" \
+    bash -c ". '$ROOT/bin/fm-tmux-lib.sh'; fm_tmux_composer_state t" 2>/dev/null)
+  [ "$out" = pending ] || fail "text on the cursor composer row classified '$out', expected pending"
+  pass "cursor composer verdict comes from the structural composer row, not #{cursor_y}"
 }
 
 test_real_typed_text_is_pending_despite_wrong_cursor_y() {
@@ -240,40 +267,46 @@ test_idle_regex_does_not_swallow_real_text() {
 
 test_grok_placeholder_still_empty() {
   local out
-  # The shared default must not regress the harness it already covered.
+  # The shared default must not regress the harness it already covered. grok
+  # draws its placeholder at the prompt row of a bordered box, which is the
+  # proven placeholder position a plain read is allowed to call empty.
   out=$(fm_composer_classify_content 1 "Type a message..." "$FM_COMPOSER_IDLE_RE_DEFAULT" \
-        insensitive "Type a message...")
+        insensitive "Type a message..." 1 0)
   [ "$out" = empty ] || fail "grok placeholder classified '$out', expected empty"
   pass "shared idle default still covers grok's placeholder"
 }
 
 # --- 3. busy signature ------------------------------------------------------
 
-test_busy_regex_matches_footer_not_spinner_verb() {
+# The busy signature is a DELIVERY guard: it acknowledges a submit and gates
+# away-mode injection. Cursor's recorded worker state comes from its own
+# conversation-transcript fold (bin/fm-busy-lib.sh), never from this row.
+busy_row_matches() {  # <row> [harness]
+  printf '%s\0' "$1" | fm_busy_lines_match "${2:-}"
+}
+
+test_busy_signature_is_the_footer_not_the_spinner_verb() {
   # Verbatim busy footer, and the two spinner verbs seen in one turn.
-  printf '  → Add a follow-up                    ctrl+c to stop\n' \
-    | grep -qiE "$FM_BUSY_REGEX_DEFAULT" \
-    || fail "busy footer 'ctrl+c to stop' did not match the busy regex"
+  busy_row_matches '  → Add a follow-up                    ctrl+c to stop' cursor \
+    || fail "busy footer 'ctrl+c to stop' is not cursor's busy signature"
   # The verb alone must NOT be the signal: matching it would read a
   # tool-executing pane as idle when the verb flips Working -> Running.
-  printf '⠠⠛ Running  67 tokens\n' | grep -qiE "$FM_BUSY_REGEX_DEFAULT" \
+  busy_row_matches '⠠⠛ Running  67 tokens' cursor \
     && fail "spinner verb 'Running' must not be the busy signal on its own"
   # An idle cursor footer must not match.
-  printf '  Cursor Grok 4.5 Low · 7%%            Run Everything\n' \
-    | grep -qiE "$FM_BUSY_REGEX_DEFAULT" \
-    && fail "idle cursor status line matched the busy regex"
+  busy_row_matches '  Cursor Grok 4.5 Low · 7%            Run Everything' cursor \
+    && fail "idle cursor status line matched cursor's busy signature"
   pass "cursor busy signature is the stable footer hint, not the spinner verb"
 }
 
-test_watch_and_tmux_busy_regexes_agree() {
-  # shellcheck disable=SC2016  # inspect the literal source expression
-  assert_grep 'BUSY_REGEX=${FM_BUSY_REGEX:-$FM_BUSY_REGEX_DEFAULT}' "$ROOT/bin/fm-watch.sh" \
-    "fm-watch.sh does not consume the shared busy default"
-  case "$FM_BUSY_REGEX_DEFAULT" in
-    *'ctrl\+c to stop'*) : ;;
-    *) fail "FM_BUSY_REGEX_DEFAULT is missing cursor's footer" ;;
-  esac
-  pass "fm-watch.sh and fm-tmux-lib.sh consume the shared cursor signature"
+test_harnessless_union_still_carries_the_cursor_footer() {
+  # A pane reached with no recorded harness reads the union of every harness
+  # signature. Cursor has to be in it: cursor parks its terminal cursor outside
+  # its composer, so the composer verdict is always unknown and this footer is
+  # the only turn-started acknowledgement that path can read.
+  busy_row_matches '  → Add a follow-up                    ctrl+c to stop' \
+    || fail "the harness-less busy union is missing cursor's footer"
+  pass "the harness-less busy union still carries cursor's footer"
 }
 
 # --- 4. launch flags and the effort-in-model axis ---------------------------
@@ -483,9 +516,11 @@ test_liveness_uses_argv_for_node_comm() {
   d="$TMP_ROOT/live"; mkdir -p "$d"
   fb=$(make_fake_tmux "$d")
   # Fake ps (from make_fake_tmux): argv carries the versioned cursor-agent
-  # bundle path, exactly as the real wrapper leaves it.
+  # bundle path, exactly as the real wrapper leaves it. The recorded window is
+  # in the session inventory, so the foreground read is trusted at all.
   out=$(PATH="$fb:$PATH" FM_FAKE_COMM=node FM_FAKE_ARGS="$CURSOR_ARGS" \
-    bash -c ". '$ROOT/bin/fm-tmux-lib.sh'; . '$ROOT/bin/backends/tmux.sh'; fm_backend_tmux_agent_alive t" 2>/dev/null)
+    FM_BACKEND_LIB_DIR="$ROOT/bin" \
+    bash -c ". '$ROOT/bin/backends/tmux.sh'; fm_backend_tmux_agent_alive fm:cur" 2>/dev/null)
   [ "$out" = alive ] || fail "cursor pane (node comm + cursor-agent argv) classified '$out', expected alive"
   pass "cursor liveness resolves through argv when COMM is a bare node"
 }
@@ -497,19 +532,25 @@ test_unattributable_node_stays_unknown() {
   # pi's generic node: still unknown, and NEVER inferred dead (a wrong `dead`
   # would let the secondmate-liveness sweep respawn over a live agent).
   out=$(PATH="$fb:$PATH" FM_FAKE_COMM=node FM_FAKE_ARGS="/usr/bin/node /opt/somewhere/index.js" \
-    bash -c ". '$ROOT/bin/fm-tmux-lib.sh'; . '$ROOT/bin/backends/tmux.sh'; fm_backend_tmux_agent_alive t" 2>/dev/null)
+    FM_BACKEND_LIB_DIR="$ROOT/bin" \
+    bash -c ". '$ROOT/bin/backends/tmux.sh'; fm_backend_tmux_agent_alive fm:cur" 2>/dev/null)
   [ "$out" = unknown ] || fail "unattributable node classified '$out', expected unknown"
   pass "a non-cursor bare node stays unknown, never dead"
 }
 
 # --- 6. harness detection ---------------------------------------------------
+#
+# What this capability owns is the ENV-MARKER verdict. The full detection above
+# it arbitrates the marker against process ancestry, which is a separate
+# contract and would otherwise let the ancestry of whatever runs this suite
+# decide the answer; `fm-harness.sh marker` is that marker read on its own.
 
 test_cursor_env_marker_beats_inherited_claudecode() {
   local out
   # cursor does not clear an INHERITED CLAUDECODE=1, so a cursor worker spawned
   # from a claude-hosted firstmate carries both markers. CURSOR_AGENT must win,
   # or that pane is steered with claude's interrupt/exit/resume vocabulary.
-  out=$(CURSOR_AGENT=1 CLAUDECODE=1 "$ROOT/bin/fm-harness.sh")
+  out=$(CURSOR_AGENT=1 CLAUDECODE=1 "$ROOT/bin/fm-harness.sh" marker)
   [ "$out" = cursor ] || fail "CURSOR_AGENT=1 with inherited CLAUDECODE=1 detected '$out', expected cursor"
   pass "CURSOR_AGENT=1 outranks an inherited CLAUDECODE=1"
 }
@@ -519,21 +560,13 @@ test_claude_detection_unregressed() {
   # Unset CURSOR_AGENT explicitly: this suite itself often runs inside a cursor
   # worker whose ambient CURSOR_AGENT=1 would otherwise make the probe report
   # cursor even when the test only sets CLAUDECODE=1.
-  out=$(env -u CURSOR_AGENT CLAUDECODE=1 "$ROOT/bin/fm-harness.sh")
+  out=$(env -u CURSOR_AGENT CLAUDECODE=1 "$ROOT/bin/fm-harness.sh" marker)
   [ "$out" = claude ] || fail "claude detection regressed: '$out'"
   pass "claude detection is unchanged when CURSOR_AGENT is absent"
 }
 
-# --- 7. turn-end hook shape -------------------------------------------------
+# --- 7. turn-end binding shape ----------------------------------------------
 
-test_spawn_installs_cursor_stop_hook() {
-  local blk
-  blk=$(sed -n '/^    cursor\*)/,/^      ;;/p' "$ROOT/bin/fm-spawn.sh")
-  case "$blk" in *'.cursor/hooks.json'*) : ;; *) fail "cursor spawn does not write .cursor/hooks.json" ;; esac
-  case "$blk" in *'"stop"'*) : ;; *) fail "cursor hook does not register the stop event" ;; esac
-  case "$blk" in *'exclude_path'*) : ;; *) fail "cursor hook file is not kept out of git's view" ;; esac
-  pass "cursor spawn installs a gitignored per-task stop hook"
-}
 
 test_composer_ghost_suite_still_passes() {
   # The shared owner changed (idle regex is now matched against the plain row
@@ -553,8 +586,8 @@ test_idle_placeholder_reads_empty
 test_fresh_session_placeholder_reads_empty
 test_idle_regex_does_not_swallow_real_text
 test_grok_placeholder_still_empty
-test_busy_regex_matches_footer_not_spinner_verb
-test_watch_and_tmux_busy_regexes_agree
+test_busy_signature_is_the_footer_not_the_spinner_verb
+test_harnessless_union_still_carries_the_cursor_footer
 test_launch_template_flags
 write_catalog_45
 write_catalog_46
@@ -570,5 +603,4 @@ test_liveness_uses_argv_for_node_comm
 test_unattributable_node_stays_unknown
 test_cursor_env_marker_beats_inherited_claudecode
 test_claude_detection_unregressed
-test_spawn_installs_cursor_stop_hook
 test_composer_ghost_suite_still_passes
