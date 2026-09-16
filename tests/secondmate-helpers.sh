@@ -25,8 +25,23 @@ make_fake_tmux() {
   cat > "$fakebin/tmux" <<'SH'
 #!/usr/bin/env bash
 set -u
+# Windows this stub was asked to create. fm-spawn's agent-up gate reads the
+# window inventory back before it will report a spawn as started, so a window
+# that is created and never listed reads as a vanished endpoint. The inventory
+# lives beside the stub; a case that pins FM_FAKE_TMUX_WINDOW still decides
+# what list-windows reports.
+window_log=${0%/*}/.fake-windows
 case "${1:-}" in
-  has-session|new-session|new-window|send-keys|kill-window)
+  new-window)
+    printf '%s\n' "$*" >> "$FM_FAKE_TMUX_LOG"
+    prev=
+    for arg in "$@"; do
+      [ "$prev" != -n ] || printf '%s\n' "$arg" >> "$window_log"
+      prev=$arg
+    done
+    exit 0
+    ;;
+  has-session|new-session|send-keys|kill-window)
     printf '%s\n' "$*" >> "$FM_FAKE_TMUX_LOG"
     exit 0
     ;;
@@ -49,7 +64,7 @@ case "${1:-}" in
         *) printf '%s\n' "$recorded" ;;
       esac
     done <<EOF
-${FM_FAKE_TMUX_WINDOW:-}
+${FM_FAKE_TMUX_WINDOW:-$([ ! -f "$window_log" ] || cat "$window_log")}
 EOF
     exit 0
     ;;

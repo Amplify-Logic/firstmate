@@ -215,6 +215,28 @@ test_kimi_preflights_and_reaches_its_own_post_launch_gate() {
   pass "kimi preflights its binary and reaches its own post-launch readiness gate"
 }
 
+# Every spawn-driving suite in this tree clears the preflight above with the
+# shared tests/lib.sh shim rather than a hand-rolled stub, so that helper is
+# what stands between those suites and the missing-binary refusal on any host
+# without the real CLI - which is every CI runner. Prove it against the same
+# preflight, on the same code path, as the refusal case above: identical
+# harness, identical fixture, the shim the only difference.
+test_shared_launch_binary_shim_clears_the_preflight() {
+  local out status
+  make_spawn_case shimmed-opencode opencode opencode
+  fm_fake_launch_binary "$FAKEBIN_DIR" opencode
+
+  out=$(run_spawn "$ID" "$PROJ_DIR")
+  status=$?
+
+  expect_code 0 "$status" "the shared launch-binary shim should clear the preflight"
+  assert_contains "$out" "spawned $ID harness=opencode" "shimmed launch binary did not reach the healthy spawn path"
+  assert_grep "new-window" "$ENDPOINT_LOG" "shimmed launch binary did not create the normal tmux endpoint"
+  assert_present "$HOME_DIR/state/$ID.meta" "shimmed launch binary did not write task meta"
+  cleanup_task_tmp "$ID"
+  pass "the shared launch-binary shim clears the preflight that refuses the same spawn without it"
+}
+
 test_raw_launch_command_remains_exempt() {
   local out status launch
   make_spawn_case raw-exempt claude
@@ -410,6 +432,7 @@ test_prime_agent_subscription_routes_pass_the_guard() {
 test_missing_verified_binary_refuses_before_endpoint_creation
 test_present_verified_binaries_spawn_as_before
 test_kimi_preflights_and_reaches_its_own_post_launch_gate
+test_shared_launch_binary_shim_clears_the_preflight
 test_raw_launch_command_remains_exempt
 test_hanging_version_probe_times_out_before_endpoint_creation
 test_sigterm_ignoring_probe_is_killed_after_grace

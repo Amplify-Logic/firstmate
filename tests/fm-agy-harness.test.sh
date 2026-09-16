@@ -484,8 +484,19 @@ case "$*" in
 esac
 case "${1:-}" in
   display-message) printf 'firstmate\n'; exit 0 ;;
-  list-windows) exit 0 ;;
-  has-session|new-session|new-window|kill-window) exit 0 ;;
+  # fm-spawn's agent-up gate reads the window inventory back before it will
+  # report a spawn as started, so a window that is created and never listed
+  # reads as a vanished endpoint. The inventory lives beside the stub.
+  new-window)
+    prev=
+    for arg in "$@"; do
+      [ "$prev" != -n ] || printf '%s\n' "$arg" >> "${0%/*}/.fake-windows"
+      prev=$arg
+    done
+    exit 0
+    ;;
+  list-windows) [ ! -f "${0%/*}/.fake-windows" ] || cat "${0%/*}/.fake-windows"; exit 0 ;;
+  has-session|new-session|kill-window) exit 0 ;;
   send-keys)
     literal=
     prev=
@@ -532,6 +543,13 @@ SH
   cat > "$fakebin/agy" <<'SH'
 #!/usr/bin/env bash
 set -u
+# fm-spawn resolves this binary and `--version`-probes it before it will create
+# a task endpoint, so a stub that refuses every argument but `models` is refused
+# before the launch it exists to observe.
+if [ "${1:-}" = --version ]; then
+  printf '%s\n' "${FM_FAKE_AGY_VERSION:-1.0.0}"
+  exit 0
+fi
 if [ "${1:-}" = models ]; then
   if [ "${FM_FAKE_AGY_MODELS_FAIL:-0}" = 1 ]; then exit 3; fi
   if [ "${FM_FAKE_AGY_MODELS_HANG:-0}" = 1 ]; then cat > /dev/null; sleep 30; exit 0; fi

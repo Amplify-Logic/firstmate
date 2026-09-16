@@ -802,6 +802,31 @@ SH
   chmod +x "$fakebin/$tool"
 }
 
+# fm_fake_launch_binary <fakebin> <binary>...: install PATH stubs for the
+# harness launch binaries that bin/fm-spawn.sh's launch-binary preflight
+# resolves and `--version`-probes before it will create a task endpoint. A
+# fixture that omits one only ever proves that refusal - and only on a host
+# where the real CLI is absent, which is every CI runner and almost no
+# developer laptop, so the gap passes locally and fails in CI.
+#
+# Each stub answers --version and exits 0 otherwise, the same shape
+# tests/fm-control-relaunch.test.sh already shims its harnesses with.
+#
+# The install is proven rather than assumed: a stub that is not executable, or
+# that fails the very probe the preflight runs, would let a suite go green
+# against the refusal it was written to avoid, so each one is probed here.
+fm_fake_launch_binary() {
+  local fakebin=$1 binary
+  shift
+  mkdir -p "$fakebin"
+  for binary in "$@"; do
+    fm_fake_version_tool "$fakebin" "$binary" FM_FAKE_HARNESS_VERSION 1.0.0
+    [ -x "$fakebin/$binary" ] || fail "launch-binary shim '$binary' is not executable in $fakebin"
+    "$fakebin/$binary" --version >/dev/null 2>&1 \
+      || fail "launch-binary shim '$binary' failed the --version probe the spawn preflight runs"
+  done
+}
+
 # --- portable file timestamps -----------------------------------------------
 
 # fm_touch_epoch <epoch> <path> [path...]: set each path's modification time to

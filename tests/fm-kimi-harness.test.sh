@@ -65,8 +65,19 @@ case "$*" in
 esac
 case "${1:-}" in
   display-message) printf 'firstmate\n'; exit 0 ;;
-  list-windows) exit 0 ;;
-  has-session|new-session|new-window|kill-window) exit 0 ;;
+  # fm-spawn's agent-up gate reads the window inventory back before it will
+  # report a spawn as started, so a window that is created and never listed
+  # reads as a vanished endpoint. The inventory lives beside the stub.
+  new-window)
+    prev=
+    for arg in "$@"; do
+      [ "$prev" != -n ] || printf '%s\n' "$arg" >> "${0%/*}/.fake-windows"
+      prev=$arg
+    done
+    exit 0
+    ;;
+  list-windows) [ ! -f "${0%/*}/.fake-windows" ] || cat "${0%/*}/.fake-windows"; exit 0 ;;
+  has-session|new-session|kill-window) exit 0 ;;
   send-keys)
     prev=
     literal=

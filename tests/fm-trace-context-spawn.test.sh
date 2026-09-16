@@ -109,6 +109,9 @@ exit 0
 SH
   chmod +x "$fakebin/tmux"
   fm_fake_exit0 "$fakebin" treehouse
+  # claude is the crew harness every case here spawns, and fm-spawn refuses
+  # before the endpoint exists when its launch binary is absent from PATH.
+  fm_fake_launch_binary "$fakebin" claude
   printf '%s\n' "$fakebin"
 }
 

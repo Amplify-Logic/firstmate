@@ -231,14 +231,28 @@ case "$*" in
 esac
 case "${1:-}" in
   display-message) printf 'firstmate\n'; exit 0 ;;
-  new-window) printf '%s\n' "@spawnwid"; exit 0 ;;
-  list-windows) exit 0 ;;
+  # fm-spawn's agent-up gate reads the window inventory back before it will
+  # report a spawn as started, so a window that is created and never listed
+  # reads as a vanished endpoint. The inventory lives beside the stub.
+  new-window)
+    prev=
+    for arg in "$@"; do
+      [ "$prev" != -n ] || printf '%s\n' "$arg" >> "${0%/*}/.fake-windows"
+      prev=$arg
+    done
+    printf '%s\n' "@spawnwid"
+    exit 0
+    ;;
+  list-windows) [ ! -f "${0%/*}/.fake-windows" ] || cat "${0%/*}/.fake-windows"; exit 0 ;;
   has-session|new-session|send-keys|set-window-option) exit 0 ;;
 esac
 exit 0
 SH
   chmod +x "$fakebin/tmux"
   fm_fake_exit0 "$fakebin" treehouse
+  # codex is the harness this case spawns, and fm-spawn refuses before the
+  # endpoint exists when its launch binary is absent from PATH.
+  fm_fake_launch_binary "$fakebin" codex
   printf '%s\n' "$fakebin"
 }
 

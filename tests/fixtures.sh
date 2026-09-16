@@ -105,6 +105,12 @@ fm_test_fake_tmux_spawn() {
   cat > "$fakebin/tmux" <<'SH'
 #!/usr/bin/env bash
 set -u
+# Windows this stub was asked to create. fm-spawn's agent-up gate reads the
+# window inventory before it will report a spawn as started, so a stub that
+# never lists what it created reads as a vanished endpoint. The inventory lives
+# beside the stub unless the suite names its own file, so every fixture gets a
+# consistent endpoint without wiring an environment variable through each spawn.
+window_log=${FM_FAKE_WINDOW_LOG:-${0%/*}/.fake-windows}
 case "$*" in
   *"#{pane_current_path}"*) printf '%s\n' "${FM_FAKE_PANE_PATH:-}"; exit 0 ;;
 esac
@@ -114,21 +120,15 @@ case "${1:-}" in
     if [ -n "${FM_FAKE_DUPLICATE_WINDOW:-}" ]; then
       printf '%s\n' "$FM_FAKE_DUPLICATE_WINDOW"
     fi
-    # Windows this stub was asked to create. fm-spawn's agent-up gate reads the
-    # window inventory before it will report a spawn as started, so a stub that
-    # never lists what it created reads as a vanished endpoint.
-    [ -z "${FM_FAKE_WINDOW_LOG:-}" ] || [ ! -f "$FM_FAKE_WINDOW_LOG" ] \
-      || cat "$FM_FAKE_WINDOW_LOG"
+    [ ! -f "$window_log" ] || cat "$window_log"
     exit 0
     ;;
   new-window)
-    if [ -n "${FM_FAKE_WINDOW_LOG:-}" ]; then
-      prev=
-      for a in "$@"; do
-        [ "$prev" != "-n" ] || printf '%s\n' "$a" >> "$FM_FAKE_WINDOW_LOG"
-        prev=$a
-      done
-    fi
+    prev=
+    for a in "$@"; do
+      [ "$prev" != "-n" ] || printf '%s\n' "$a" >> "$window_log"
+      prev=$a
+    done
     exit 0
     ;;
   has-session|new-session|kill-window|set-window-option) exit 0 ;;
@@ -266,14 +266,24 @@ EOF
 }
 
 # fm_test_make_spawn_fakebin <dir> [extra-exit0-tool...]
-# Creates <dir>/fakebin with the spawn tmux stub, a no-op treehouse, and any
-# extra exit-0 tools. Echoes the fakebin path.
+# Creates <dir>/fakebin with the spawn tmux stub, a no-op treehouse, stubs for
+# the harness launch binaries fm-spawn names literally in its launch templates,
+# and any extra exit-0 tools. Echoes the fakebin path.
+#
+# The launch-binary stubs are load-bearing: fm-spawn refuses a spawn before the
+# endpoint exists when the resolved launch binary is absent from PATH, so a
+# fixture without one proves only that refusal - on CI runners, which carry no
+# agent CLIs, while passing on a developer machine that has them installed.
+# Harnesses whose binary comes from an fm-spawn resolver (pi, cursor, kimi,
+# muse, omp, agy, rovo) are stubbed by the suites that exercise them, which
+# must place the binary where that resolver looks.
 fm_test_make_spawn_fakebin() {
   local dir=$1 fakebin
   shift
   fakebin=$(fm_fakebin "$dir")
   fm_test_fake_tmux_spawn "$fakebin"
   fm_fake_exit0 "$fakebin" treehouse "$@"
+  fm_fake_launch_binary "$fakebin" claude codex grok opencode
   printf '%s\n' "$fakebin"
 }
 

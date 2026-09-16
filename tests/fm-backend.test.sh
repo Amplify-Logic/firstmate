@@ -802,12 +802,26 @@ case "\${1:-}" in
   display-message)
     for a in "\$@"; do case "\$a" in *pane_current_path*) printf '%s\\n' "$wt"; exit 0 ;; esac; done
     printf 'firstmate\\n'; exit 0 ;;
-  list-windows) exit 0 ;;
+  # fm-spawn's agent-up gate reads the window inventory back before it will
+  # report a spawn as started, so a window that is created and never listed
+  # reads as a vanished endpoint. The inventory lives beside the stub.
+  new-window)
+    prev=
+    for a in "\$@"; do
+      [ "\$prev" != -n ] || printf '%s\\n' "\$a" >> "\${0%/*}/.fake-windows"
+      prev=\$a
+    done
+    exit 0
+    ;;
+  list-windows) [ ! -f "\${0%/*}/.fake-windows" ] || cat "\${0%/*}/.fake-windows"; exit 0 ;;
 esac
 exit 0
 SH
   chmod +x "$fb/tmux"
   fm_fake_exit0 "$fb" treehouse
+  # claude is the harness these cases spawn, and fm-spawn refuses before the
+  # endpoint exists when its launch binary is absent from PATH.
+  fm_fake_launch_binary "$fb" claude
   printf '%s\n' "$fb"
 }
 
@@ -872,12 +886,26 @@ case "\${1:-}" in
       exit 0
     ;; esac; done
     printf 'firstmate\\n'; exit 0 ;;
-  list-windows) exit 0 ;;
+  # fm-spawn's agent-up gate reads the window inventory back before it will
+  # report a spawn as started, so a window that is created and never listed
+  # reads as a vanished endpoint. The inventory lives beside the stub.
+  new-window)
+    prev=
+    for a in "\$@"; do
+      [ "\$prev" != -n ] || printf '%s\\n' "\$a" >> "\${0%/*}/.fake-windows"
+      prev=\$a
+    done
+    exit 0
+    ;;
+  list-windows) [ ! -f "\${0%/*}/.fake-windows" ] || cat "\${0%/*}/.fake-windows"; exit 0 ;;
 esac
 exit 0
 SH
   chmod +x "$fb/tmux"
   fm_fake_exit0 "$fb" treehouse
+  # claude is the harness these cases spawn, and fm-spawn refuses before the
+  # endpoint exists when its launch binary is absent from PATH.
+  fm_fake_launch_binary "$fb" claude
   printf '%s\n' "$fb"
 }
 
