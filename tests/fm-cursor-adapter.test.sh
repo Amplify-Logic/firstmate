@@ -658,9 +658,19 @@ test_catalog_on_a_runnerless_host_is_still_read_and_still_bounded() {
 # fallback's `alarm 0` disable the deadline outright, so FM_CURSOR_PROBE_TIMEOUT=0
 # would hand a stalled --list-models an open-ended run on the spawn path.
 test_a_budget_that_is_not_a_bound_falls_back_to_the_default() {
-  local home started elapsed rc
+  local home healthy started elapsed rc
   home="$TMP_ROOT/zero-budget-home"
+  healthy="$TMP_ROOT/zero-budget-healthy"
   write_stalling_cursor_agent "$home/.local/bin/cursor-agent"
+  write_fake_cursor_agent "$healthy/.local/bin/cursor-agent"
+
+  # Falling back is not the same as refusing, and only a readable catalog tells
+  # them apart: a clamp that failed closed would report this listed id absent.
+  rc=0
+  probe_catalog_has_model cursor-grok-4.6-xhigh "$healthy/.local/bin/cursor-agent" \
+    "$healthy" "/usr/bin:/bin" 0 || rc=$?
+  [ "$rc" -eq 0 ] \
+    || fail "a zero budget must still read a healthy catalog, got rc=$rc"
 
   started=$SECONDS
   rc=0
@@ -673,6 +683,10 @@ test_a_budget_that_is_not_a_bound_falls_back_to_the_default() {
   # The fixture stalls for 30s; the 10s probe default must cut it off first.
   [ "$elapsed" -lt 25 ] \
     || fail "a zero budget ran unbounded: ${elapsed}s against a 30s stall"
+  # And the read must actually have run for that default. An instant return
+  # would mean the clamp refused rather than fell back.
+  [ "$elapsed" -ge 8 ] \
+    || fail "the read returned in ${elapsed}s, so no 10s bound was ever applied"
   pass "a budget that is not a bound falls back to the probe default rather than running unbounded"
 }
 
@@ -711,14 +725,14 @@ EOF
 probe_bounded_list_models() {  # <cursor-bin> <path> <probe-timeout>
   cat > "$TMP_ROOT/bounded-probe.sh" <<'PROBE'
 . "$1/bin/fm-cursor-lib.sh"
-fm_cursor_list_models "$2" >/dev/null
+fm_cursor_list_models "$2"
 PROBE
   env PATH="$2" FM_CURSOR_PROBE_TIMEOUT="$3" \
     bash "$TMP_ROOT/bounded-probe.sh" "$ROOT" "$1"
 }
 
 test_a_zero_budget_cannot_disable_the_creator_probe_bound() {
-  local home stalling runner path started elapsed rc
+  local home stalling runner path started elapsed rc out
   home="$TMP_ROOT/runner-host-home"
   stalling="$TMP_ROOT/runner-host-stalling"
   runner="$TMP_ROOT/faithful-runner"
@@ -730,18 +744,36 @@ test_a_zero_budget_cannot_disable_the_creator_probe_bound() {
   # Without this the zero case below could pass on a runnerless host, where the
   # bounded probe refuses instantly for an entirely different reason.
   rc=0
-  probe_bounded_list_models "$home/.local/bin/cursor-agent" "$path" 1 || rc=$?
+  out=$(probe_bounded_list_models "$home/.local/bin/cursor-agent" "$path" 1) || rc=$?
   [ "$rc" -eq 0 ] \
     || fail "the stand-in runner did not carry a normal bounded read, got rc=$rc"
+  case "$out" in
+    *cursor-grok-4.6-xhigh*) ;;
+    *) fail "the bounded read returned no catalog: '$out'" ;;
+  esac
+
+  # A clamp that refused an unusable budget instead of falling back would starve
+  # every caller on a host that sets one, so the healthy catalog must still come
+  # back whole under a budget of zero.
+  rc=0
+  out=$(probe_bounded_list_models "$home/.local/bin/cursor-agent" "$path" 0) || rc=$?
+  [ "$rc" -eq 0 ] \
+    || fail "a zero budget must still read a healthy catalog, got rc=$rc"
+  case "$out" in
+    *cursor-grok-4.6-xhigh*) ;;
+    *) fail "a zero budget returned no catalog: '$out'" ;;
+  esac
 
   started=$SECONDS
   rc=0
-  probe_bounded_list_models "$stalling/.local/bin/cursor-agent" "$path" 0 || rc=$?
+  probe_bounded_list_models "$stalling/.local/bin/cursor-agent" "$path" 0 >/dev/null || rc=$?
   elapsed=$((SECONDS - started))
   [ "$rc" -ne 0 ] \
     || fail "a stalled catalog read must not report success"
   [ "$elapsed" -lt 20 ] \
     || fail "a zero budget reached the runner unclamped: ${elapsed}s against a 30s stall"
+  [ "$elapsed" -ge 8 ] \
+    || fail "the runner returned in ${elapsed}s, so it never ran under the 10s default"
 
   pass "a zero budget cannot disable the bound on hosts that have a timeout runner"
 }

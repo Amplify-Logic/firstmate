@@ -39,16 +39,19 @@
 # adapter-local composer normalizer would be the second copy that owner exists
 # to prevent.
 
-# fm_cursor_probe_bound: FM_CURSOR_PROBE_TIMEOUT reduced to a value that can
-# actually bound something, and the one owner of that rule - every bounded
-# cursor call reads the budget through here rather than reaching for the
-# variable, so no caller can hand a runner a non-bound.
+# fm_cursor_probe_bound: the bounded probe budget in seconds, and the single
+# place that settles it. Cursor's --help is local and returns immediately; the
+# bound exists so a hung or interactive impostor cannot wedge a spawn or a
+# readiness check. FM_CURSOR_PROBE_TIMEOUT is the operator's way in, read here
+# and nowhere else, so every bounded cursor call inherits one rule instead of
+# re-deriving it.
 #
 # A non-positive or non-numeric budget is not a bound at all: bin/fm-timeout-lib.sh
 # records that `timeout 0` and the perl fallback's `alarm 0` both disable the
 # deadline outright, so passing one through would let a stalled probe wedge the
 # very spawn this budget exists to protect. Such a value falls back to the
-# default rather than running unbounded.
+# default; it never refuses, because a probe that cannot run is a catalog that
+# reads as unavailable, and that silently under-tiers every spawn on the host.
 fm_cursor_probe_bound() {
   local fallback=10 bound=${FM_CURSOR_PROBE_TIMEOUT:-}
   case "$bound" in
@@ -57,11 +60,6 @@ fm_cursor_probe_bound() {
   esac
   printf '%s\n' "$bound"
 }
-
-# Bounded probe budget in seconds. Cursor's --help is local and returns
-# immediately; the bound exists so a hung or interactive impostor cannot wedge
-# a spawn or a readiness check.
-FM_CURSOR_PROBE_TIMEOUT=$(fm_cursor_probe_bound)
 
 # Canonical absolute path for $1, or the input unchanged when it cannot be
 # resolved. Symlink resolution is what makes the structural signal work, since
