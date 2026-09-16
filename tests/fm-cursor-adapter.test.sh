@@ -540,8 +540,10 @@ test_catalog_reads_the_binary_the_spawn_resolved() {
   local home bare_path rc
   home="$TMP_ROOT/offpath-home"
   write_fake_cursor_agent "$home/.local/bin/cursor-agent"
-  mkdir -p "$TMP_ROOT/emptybin"
-  bare_path="$TMP_ROOT/emptybin:/usr/bin:/bin"
+  # The catalog read is bounded and fails closed, so a usable timeout runner is
+  # part of "the catalog is readable at all" on every host.
+  write_fixture_timeout "$TMP_ROOT/resolvebin-runner"
+  bare_path="$TMP_ROOT/resolvebin-runner:/usr/bin:/bin"
 
   rc=0
   probe_catalog_has_model cursor-grok-4.6-xhigh "$home/.local/bin/cursor-agent" "$home" "$bare_path" || rc=$?
@@ -621,6 +623,38 @@ test_stalled_catalog_read_is_bounded_and_reads_unavailable() {
   [ "$elapsed" -lt 15 ] \
     || fail "the catalog read was not bounded: ${elapsed}s against a 1s budget"
   pass "a stalled cursor catalog read is bounded and reads as unavailable, not absent"
+}
+
+# A host with no timeout runner has no readable catalog: the read is bounded by
+# the creator's fail-closed runner and there is no unbounded path behind it, so
+# the fold takes the safe tier instead of risking a spawn that hangs on an
+# account-scoped network call.
+runnerless_path() {  # <dir>
+  local dir=$1 tool src
+  mkdir -p "$dir"
+  for tool in bash env cat sed rm mktemp dirname stat sleep; do
+    src=$(command -v "$tool" 2>/dev/null) || continue
+    ln -sf "$src" "$dir/$tool"
+  done
+  printf '%s' "$dir"
+}
+
+test_catalog_without_a_timeout_runner_reads_unavailable() {
+  local home path rc
+  home="$TMP_ROOT/runnerless-home"
+  write_fake_cursor_agent "$home/.local/bin/cursor-agent"
+  path=$(runnerless_path "$TMP_ROOT/runnerless-bin")
+  if PATH="$path" command -v timeout >/dev/null 2>&1 \
+    || PATH="$path" command -v gtimeout >/dev/null 2>&1; then
+    fail "the fixture PATH still resolves a timeout runner; the case proves nothing"
+  fi
+
+  rc=0
+  probe_catalog_has_model cursor-grok-4.6-xhigh "$home/.local/bin/cursor-agent" \
+    "$home" "$path" || rc=$?
+  [ "$rc" -eq 2 ] \
+    || fail "without a timeout runner the catalog must read unavailable (2), got rc=$rc"
+  pass "a host with no timeout runner reads no catalog rather than reading it unbounded"
 }
 
 # --- 5. liveness ------------------------------------------------------------
@@ -715,6 +749,7 @@ test_catalog_has_model_and_equivalence
 test_catalog_has_model_through_ansi_color
 test_catalog_reads_the_binary_the_spawn_resolved
 test_stalled_catalog_read_is_bounded_and_reads_unavailable
+test_catalog_without_a_timeout_runner_reads_unavailable
 test_liveness_uses_argv_for_node_comm
 test_unattributable_node_stays_unknown
 test_cursor_env_marker_beats_inherited_claudecode

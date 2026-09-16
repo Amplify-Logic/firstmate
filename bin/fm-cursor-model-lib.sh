@@ -148,17 +148,15 @@ fm_cursor_list_models_text() {  # [<cursor-bin>]
   else
     [ -n "$bin" ] || bin=$(fm_cursor_resolve_binary 2>/dev/null) || bin=''
     if [ -n "$bin" ] && [ -x "$bin" ]; then
-      # --list-models is an account-scoped network call, so it runs under the
-      # creator's bounded runner (fm_cursor_list_models, FM_CURSOR_PROBE_TIMEOUT)
-      # wherever one of the timeout binaries it needs exists. A host with
-      # neither reads directly: fm_cursor_bounded_output refuses outright
-      # without a runner, and a refusal here reads as "catalog unavailable",
-      # which silently degrades the effort tier on every such spawn.
-      if command -v timeout >/dev/null 2>&1 || command -v gtimeout >/dev/null 2>&1; then
-        text=$(fm_cursor_list_models "$bin") && status=0
-      else
-        text=$("$bin" --list-models 2>/dev/null) && status=0
-      fi
+      # --list-models is an account-scoped network call, so the ONLY read here
+      # is the creator's bounded one (fm_cursor_bounded_output via
+      # fm_cursor_list_models, budget FM_CURSOR_PROBE_TIMEOUT), and it fails
+      # closed exactly as that owner does. A host with no timeout runner
+      # installed therefore has no readable catalog at all: every read reports
+      # unavailable and every effort fold takes the safe tier. That is the
+      # deliberate trade - an unbounded read would let one stalled CLI call
+      # wedge a spawn, or a presentation refresh, with no pane to look at.
+      text=$(fm_cursor_list_models "$bin") && status=0
     fi
   fi
   if [ -n "$text" ]; then
