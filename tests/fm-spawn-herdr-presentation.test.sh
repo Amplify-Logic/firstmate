@@ -40,10 +40,11 @@ log=${FM_FAKE_HERDR_LOG:?}
 save() { local tmp="$state.tmp.$$"; cat > "$tmp" && mv "$tmp" "$state"; }
 query() { jq "$@" "$state"; }
 args=("$@")
-cmd=${1:-}; sub=${2:-}; workspace= label= cwd=
+cmd=${1:-}; sub=${2:-}; workspace= label= cwd= pane_sel=
 tokens=(); clears=()
 for ((i=0; i<${#args[@]}; i++)); do
   case "${args[$i]}" in
+    --pane) pane_sel=${args[$((i+1))]:-} ;;
     --workspace) workspace=${args[$((i+1))]:-} ;;
     --label) label=${args[$((i+1))]:-} ;;
     --cwd) cwd=${args[$((i+1))]:-} ;;
@@ -140,7 +141,31 @@ case "$cmd $sub" in
     target=${3:-}
     query --arg id "$target" '.tabs |= map(select(.pane_id != $id))' | save
     ;;
-  'pane read'|'pane send-text'|'pane send-keys') : ;;
+  'pane process-info')
+    # Answered only for a case that asks (FM_FAKE_HERDR_PANE_FREE), because the
+    # spawn path's own liveness poll reads this too and every other case here
+    # relies on the unreadable verdict an unsupported verb produces.
+    #
+    # The answer is a pane holding its shell alone, which is what a stopped
+    # worker's endpoint looks like and what a relaunch has to see before it
+    # adopts one. The reported shell must still be alive when the classifier
+    # confirms it in the host's process table, so it is this suite's own pid
+    # rather than the short-lived process that invoked this fake.
+    [ -n "${FM_FAKE_HERDR_PANE_FREE:-}" ] || exit 1
+    target=${pane_sel:-${3:-}}
+    if [ -e "$state.launched" ]; then
+      jq -n --arg pane "$target" --argjson shell "${FM_FAKE_HERDR_SHELL_PID:-$PPID}" \
+        '{result:{type:"pane_process_info",process_info:{pane_id:$pane,shell_pid:$shell,foreground_processes:[{pid:$shell,name:"pi",argv:["pi"],cmdline:"pi"}]}}}'
+    else
+      jq -n --arg pane "$target" --argjson shell "${FM_FAKE_HERDR_SHELL_PID:-$PPID}" \
+        '{result:{type:"pane_process_info",process_info:{pane_id:$pane,shell_pid:$shell,foreground_processes:[{pid:$shell,name:"bash",argv:["-bash"],cmdline:"-bash"}]}}}'
+    fi
+    ;;
+  'pane read') : ;;
+  'pane send-text'|'pane send-keys')
+    # The endpoint holds an agent from the moment a launch is delivered into it.
+    [ -z "${FM_FAKE_HERDR_PANE_FREE:-}" ] || : > "$state.launched"
+    ;;
   'agent get') printf '{"result":{"agent":{"agent":"pi","agent_status":"idle"}}}\n' ;;
   *) : ;;
 esac
@@ -200,10 +225,11 @@ EOF
 # server and the spawn refuses a cross-session parent rather than exercising the
 # label path under test.
 run_spawn() {
-  # --mode is a ship-only axis; a scout records no delivery posture.
+  # --mode is a ship-only axis; a scout records no delivery posture, and a
+  # relaunch reuses the recorded one and refuses an override outright.
   local arg mode_args='--mode no-mistakes --yolo off'
   for arg in "$@"; do
-    [ "$arg" = --scout ] && mode_args=
+    case "$arg" in --scout|--relaunch) mode_args= ;; esac
   done
   # shellcheck disable=SC2086  # mode_args is a deliberate two-flag word split
   env -u HERDR_ENV -u HERDR_PANE_ID -u HERDR_TAB_ID -u HERDR_WORKSPACE_ID -u HERDR_SOCKET_PATH \
@@ -213,6 +239,7 @@ run_spawn() {
     FM_SPAWN_NO_GUARD=1 \
     FM_FAKE_HERDR_STATE="$HERDR_STATE" \
     FM_FAKE_HERDR_LOG="$HERDR_LOG" \
+    FM_FAKE_HERDR_SHELL_PID="$$" \
     FM_FAKE_WT_ROOT="$WT_ROOT" \
     FM_VISIBLE_STATE_FILE="$TMP_ROOT/states" \
     HERDR_SESSION=fm-lab-fake-presentation \
@@ -287,6 +314,32 @@ grep -qxF 'outcome=Align Artevo launch surfaces' "$HOME_FIX/state/artevo-single.
 assert_grep 'Your Magical Journey · ' "$HERDR_LOG" \
   'the project workspace never received its fleet aggregate'
 pass 'fm-spawn fake Herdr E2E: single, batch, projects, axes, human labels, outcomes, states, and hidden ids converge'
+
+# A relaunch ADOPTS the recorded endpoint: it never re-enters the backend case
+# that derives presentation state for a fresh spawn, so the record is the only
+# place that state can come from. Drive a real relaunch and require both halves
+# of it - the record the next refresh reads, and the workspace rename that
+# record gates.
+: > "$HERDR_LOG"
+rm -f "$HERDR_STATE.launched"
+export FM_FAKE_HERDR_PANE_FREE=1
+run_spawn journey-single --relaunch --harness pi >/dev/null \
+  || fail 'a herdr relaunch failed'
+unset FM_FAKE_HERDR_PANE_FREE
+relaunched_meta="$HOME_FIX/state/journey-single.meta"
+grep -qxF 'herdr_workspace_managed=1' "$relaunched_meta" \
+  || fail 'the relaunch dropped the managed marker of the workspace it adopted'
+grep -qxF "herdr_project_key=$journey_path" "$relaunched_meta" \
+  || fail "the relaunch dropped the project key: $(grep '^herdr_project_key=' "$relaunched_meta" || true)"
+grep -qxF 'herdr_project_name=Your Magical Journey' "$relaunched_meta" \
+  || fail "the relaunch dropped the project name: $(grep '^herdr_project_name=' "$relaunched_meta" || true)"
+grep -qxF 'outcome=Validate GPS triggers across all seven Amsterdam stops' "$relaunched_meta" \
+  || fail "the relaunch dropped the task outcome: $(grep '^outcome=' "$relaunched_meta" || true)"
+[ "$(grep -c '^herdr_workspace_managed=' "$relaunched_meta")" -eq 1 ] \
+  || fail 'the relaunched record carries more than one managed marker'
+assert_grep 'Your Magical Journey · ' "$HERDR_LOG" \
+  'the relaunched task stopped feeding its project workspace aggregate'
+pass 'fm-spawn fake Herdr E2E: a relaunch adopts its endpoint presentation state instead of losing it'
 
 write_brief journey-protocol14
 cat >> "$HOME_FIX/data/backlog.md" <<'EOF'

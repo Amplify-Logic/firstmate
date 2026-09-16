@@ -1444,6 +1444,17 @@ if [ "$RELAUNCH" -eq 1 ]; then
     HERDR_WORKSPACE_ID=$(fm_meta_get "$RELAUNCH_META" herdr_workspace_id)
     HERDR_TAB_ID=$(fm_meta_get "$RELAUNCH_META" herdr_tab_id)
     HERDR_PANE_ID=$(fm_meta_get "$RELAUNCH_META" herdr_pane_id)
+    # The presentation state describes the ENDPOINT this relaunch adopts, not
+    # the agent it replaces: the workspace was created managed (or was not),
+    # and it belongs to a project and a task outcome that a replacement agent
+    # does not change. The fresh-spawn derivation lives in the herdr arm of the
+    # backend case, which a relaunch deliberately skips, so the only honest
+    # source is the record the adopted endpoint already carries.
+    HERDR_WORKSPACE_MANAGED=$(fm_meta_get "$RELAUNCH_META" herdr_workspace_managed)
+    [ "$HERDR_WORKSPACE_MANAGED" = 1 ] || HERDR_WORKSPACE_MANAGED=0
+    HERDR_PROJECT_KEY=$(fm_meta_get "$RELAUNCH_META" herdr_project_key)
+    HERDR_PROJECT_NAME=$(fm_meta_get "$RELAUNCH_META" herdr_project_name)
+    HERDR_TASK_OUTCOME=$(fm_meta_get "$RELAUNCH_META" outcome)
   fi
   # With no explicit harness, a relaunch reuses the harness already recorded
   # for this task. It must NOT fall through to the fresh-spawn config
