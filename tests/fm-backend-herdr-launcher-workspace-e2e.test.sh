@@ -117,23 +117,41 @@ journal_field() {  # <presentation-journal> <key>
   grep "^$2=" "$1" 2>/dev/null | head -1 | cut -d= -f2-
 }
 
+# presentation_force_for <home>: the value of FM_BACKEND_HERDR_PRESENTATION_FORCE
+# this home's spawns run under (docs/herdr-backend.md "Presentation spaces").
+# Once Herdr can carry hidden identity tokens, a worker's container is bound to
+# an owner/project token pair and labeled for the PROJECT, which retires the
+# home-label container to the fallback docs/herdr-backend.md "Legacy home
+# labels" describes. Label collisions cannot arise on the tokened path at all -
+# it never matches by label - so every case below that asserts the legacy label
+# contract pins the capability probe off and exercises that fallback directly,
+# rather than depending on whichever protocol the installed client happens to
+# speak. The presentation home pins it ON for the same reason: its projection
+# cases must not silently go vacuous on an older client.
+presentation_force_for() {  # <home>
+  if [ "$1" = "$PRES_HOME" ]; then printf 1; else printf 0; fi
+}
+
 # spawn_from_launcher <launcher-pane|""> <home> <task-id> <project> [extra fm-spawn args...]
 # Composes exactly the Herdr identity Herdr itself injects into a pane's
 # processes. An empty launcher pane means "this firstmate is not running inside
 # Herdr at all".
 SPAWN_OUT=; SPAWN_ERR=; SPAWN_RC=
 spawn_from_launcher() {
-  local pane=$1 home=$2 id=$3 proj=$4
+  local pane=$1 home=$2 id=$3 proj=$4 force
   shift 4
+  force=$(presentation_force_for "$home")
   SPAWN_OUT="$TMP_ROOT/$id.out"; SPAWN_ERR="$TMP_ROOT/$id.err"
   if [ -n "$pane" ]; then
     env HERDR_ENV=1 HERDR_PANE_ID="$pane" HERDR_SESSION="$HERDR_LAB_SESSION" \
       HERDR_SOCKET_PATH="$LAB_SOCKET" \
+      FM_BACKEND_HERDR_PRESENTATION_FORCE="$force" \
       FM_SPAWN_NO_GUARD=1 FM_HOME="$home" FM_ROOT_OVERRIDE="$ROOT" \
       "$ROOT/bin/fm-spawn.sh" "$id" "$proj" "sh -c 'echo launcher-ws-ok'" --backend herdr "$@" \
       >"$SPAWN_OUT" 2>"$SPAWN_ERR"
   else
     env -u HERDR_ENV -u HERDR_PANE_ID -u HERDR_SOCKET_PATH HERDR_SESSION="$HERDR_LAB_SESSION" \
+      FM_BACKEND_HERDR_PRESENTATION_FORCE="$force" \
       FM_SPAWN_NO_GUARD=1 FM_HOME="$home" FM_ROOT_OVERRIDE="$ROOT" \
       "$ROOT/bin/fm-spawn.sh" "$id" "$proj" "sh -c 'echo launcher-ws-ok'" --backend herdr "$@" \
       >"$SPAWN_OUT" 2>"$SPAWN_ERR"
@@ -291,7 +309,8 @@ WS_PRIMARY_TABS_BEFORE=$(tab_labels_of_workspace "$WS_PRIMARY")
 cat > "$TMP_ROOT/spawn-in-pane.sh" <<SPAWN
 #!/usr/bin/env bash
 set -u
-FM_SPAWN_NO_GUARD=1 FM_HOME="$PRIMARY_HOME" FM_ROOT_OVERRIDE="$ROOT" \\
+FM_BACKEND_HERDR_PRESENTATION_FORCE=0 \\
+  FM_SPAWN_NO_GUARD=1 FM_HOME="$PRIMARY_HOME" FM_ROOT_OVERRIDE="$ROOT" \\
   "$ROOT/bin/fm-spawn.sh" dupC "$PROJ" "sh -c 'echo launcher-ws-ok'" --mode no-mistakes --yolo off --backend herdr \\
   > "$TMP_ROOT/dupC.out" 2> "$TMP_ROOT/dupC.err"
 echo \$? > "$TMP_ROOT/dupC.rc"
