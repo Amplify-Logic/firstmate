@@ -2171,6 +2171,10 @@ while :; do
   if [ -n "$pending" ]; then
     sleep "$SIGNAL_GRACE"
     pending=$(printf '%s\n%s' "$pending" "$(scan_signals)")
+    # Status writes and turn-end markers are bounded authoritative-state refresh
+    # points for captain-facing Herdr presentation, so the coalesced set is also
+    # where every task's pane label is brought back in line.
+    "$SCRIPT_DIR/fm-visible-status.sh" --all >/dev/null 2>&1 || true
     # The final coalesced signal set is the watcher-carried status-change
     # trigger for this home's published summary. Start it before either
     # surfacing or absorbing the signal, but never wait on it: see

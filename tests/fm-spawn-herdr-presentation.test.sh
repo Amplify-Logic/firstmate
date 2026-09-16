@@ -323,7 +323,9 @@ pass 'fm-spawn fake Herdr E2E: single, batch, projects, axes, human labels, outc
 : > "$HERDR_LOG"
 rm -f "$HERDR_STATE.launched"
 export FM_FAKE_HERDR_PANE_FREE=1
-run_spawn journey-single --relaunch --harness pi >/dev/null \
+# Switch runtime on the way in, so the projection this relaunch publishes can be
+# told apart from the one the previous incarnation left behind.
+run_spawn journey-single --relaunch --harness codex >/dev/null \
   || fail 'a herdr relaunch failed'
 unset FM_FAKE_HERDR_PANE_FREE
 relaunched_meta="$HOME_FIX/state/journey-single.meta"
@@ -339,6 +341,13 @@ grep -qxF 'outcome=Validate GPS triggers across all seven Amsterdam stops' "$rel
   || fail 'the relaunched record carries more than one managed marker'
 assert_grep 'Your Magical Journey · ' "$HERDR_LOG" \
   'the relaunched task stopped feeding its project workspace aggregate'
+# The refresh has to read the record this relaunch published, not the one it
+# replaced: the pane now runs codex, and a projection naming the previous
+# runtime is permanent until something else refreshes it.
+assert_grep '<fm_runtime=codex>' "$HERDR_LOG" \
+  'the relaunch projected a runtime other than the one it launched'
+assert_not_contains "$(cat "$HERDR_LOG")" '<fm_runtime=pi>' \
+  'the relaunch projected the previous incarnation record'
 pass 'fm-spawn fake Herdr E2E: a relaunch adopts its endpoint presentation state instead of losing it'
 
 write_brief journey-protocol14

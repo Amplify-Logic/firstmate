@@ -4692,16 +4692,6 @@ if [ "$RELAUNCH" -eq 0 ]; then
   SPAWN_META_TMP=
 fi
 
-# Project the authoritative human presentation onto the tab now that the record
-# exists. It reads state from the record rather than guessing at spawn time, so
-# a worker that is already working is not labeled as waiting. Presentation only:
-# every operational action keeps using the recorded Herdr ids, so a projection
-# failure never fails the spawn.
-if [ "$BACKEND" = herdr ] && [ -n "${HERDR_PROJECT_KEY:-}" ] \
-  && [ -x "$FM_ROOT/bin/fm-visible-status.sh" ]; then
-  "$FM_ROOT/bin/fm-visible-status.sh" "$ID" >/dev/null 2>&1 || true
-fi
-
 # Fuse the backlog In-flight transition into the publication that just created
 # the record (bin/fm-backlog-transition-lib.sh owns the invariant). It runs under
 # this task's own meta lock, so a steer or teardown racing the same id stays
@@ -4759,6 +4749,18 @@ if [ "$RELAUNCH" -eq 1 ]; then
   RELAUNCH_REPLACEMENT_PENDING=0
   SPAWN_META_PUBLISH_STARTED=0
   SPAWN_META_TMP=
+fi
+
+# Project the authoritative human presentation onto the tab now that the record
+# exists. It reads state from the record rather than guessing at spawn time, so
+# a worker that is already working is not labeled as waiting, and it runs after
+# BOTH publish paths so a relaunch projects its own replacement record rather
+# than the record it just replaced. Presentation only: every operational action
+# keeps using the recorded Herdr ids, so a projection failure never fails the
+# spawn.
+if [ "$BACKEND" = herdr ] && [ -n "${HERDR_PROJECT_KEY:-}" ] \
+  && [ -x "$FM_ROOT/bin/fm-visible-status.sh" ]; then
+  "$FM_ROOT/bin/fm-visible-status.sh" "$ID" >/dev/null 2>&1 || true
 fi
 # A dispatch or relaunch keeps the per-task meta lock through launch delivery.
 # The backlog mutation is deliberately the final fallible commit below, so

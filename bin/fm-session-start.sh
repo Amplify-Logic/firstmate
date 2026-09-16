@@ -786,6 +786,10 @@ if [ "$PRIMARY_HARNESS" = omp ]; then
     printf 'OMP_WATCH_EXTENSION: not loaded - restart omp with this home as its working directory so %s and %s auto-load from .omp/extensions/ for turn-end guard and background wake coverage; pass -e %s -e %s only when omp must start from another directory, never together with auto-discovery (omp loads a file named both ways twice)\n' "$OMP_TURNEND_EXT" "$OMP_EXT" "$OMP_TURNEND_EXT" "$OMP_EXT"
   fi
 fi
+# Recovery is a bounded presentation refresh point, and only for the session
+# owner: a lock-refused read-only session must not mutate Herdr presentation.
+# Projection is best-effort and never affects durable task control.
+[ "$READ_ONLY" -eq 1 ] || "$SCRIPT_DIR/fm-visible-status.sh" --all >/dev/null 2>&1 || true
 "$SCRIPT_DIR/fm-supervision-instructions.sh" \
   --harness "$PRIMARY_HARNESS" \
   --read-only "$READ_ONLY" \

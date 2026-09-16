@@ -3508,6 +3508,11 @@ if [ "$BACKEND" = herdr ] \
   fi
 fi
 
+# Clear only presentation metadata before closing the stable recorded target, so
+# a retired worker's pane cannot keep this task's tokens if the close leaves the
+# pane behind. A cosmetic failure never weakens endpoint cleanup, and the clear
+# is a no-op for a backend or build with no presentation.
+"$FM_ROOT/bin/fm-visible-status.sh" --clear "$ID" >/dev/null 2>&1 || true
 if [ "$HERDR_PRESENTATION_RETIRE_CANDIDATE" = 1 ]; then
   # The presentation lock was acquired before the worktree return above; a
   # contended lock already refused this teardown while everything was intact.
@@ -3671,6 +3676,9 @@ fi
 # A secondmate retirement may remove the home containing an overridden control
 # state directory. Do not let the side-band refresh recreate that retired home.
 if [ -d "$STATE" ]; then
+  # The removed record changes every remaining task's project aggregate, so the
+  # fleet's pane labels are refreshed from what survives this teardown.
+  "$FM_ROOT/bin/fm-visible-status.sh" --all >/dev/null 2>&1 || true
   "$SCRIPT_DIR/fm-home-summary-refresh.sh" --best-effort || true
 fi
 if [ "$TEARDOWN_LEGACY_ACCEPTED" = 1 ]; then

@@ -59,6 +59,33 @@ grep -q 'herdr: agent blocked' "$STATE_DIR/.wake-queue" || fail "the stale paylo
 [ -e "$STATE_DIR/.herdr-escalated-default_wG_pQ" ] || fail "handle_push_transition must commit dedupe only after enqueue"
 pass "handle_push_transition: a blocked crew enqueues a stale wake naming its window and wakes the supervisor"
 
+# --- handle_push_transition: the captain-facing pane label ---------------------
+# A push transition IS an authoritative-state change, so the pane label the
+# operator reads has to follow it. bin/fm-visible-status.sh owns that label and
+# reads the task record, so the only observable proof is the herdr call it makes.
+reset_state
+HERDR_CALLS="$TMP/herdr-calls"
+PRESENTATION_BIN="$TMP/presentation-bin"
+mkdir -p "$PRESENTATION_BIN"
+cat > "$PRESENTATION_BIN/herdr" <<SH
+#!/usr/bin/env bash
+set -u
+printf '%s\n' "\$*" >> '$HERDR_CALLS'
+case "\${1:-} \${2:-}" in
+  "status --json") printf '%s\n' '{"client":{"version":"0.8.0","protocol":16},"server":{"running":true}}' ;;
+esac
+exit 0
+SH
+chmod +x "$PRESENTATION_BIN/herdr"
+: > "$HERDR_CALLS"
+fm_write_meta "$STATE_DIR/tk2.meta" "window=default:wG:pQ" "backend=herdr" "kind=ship" \
+  "harness=claude" "herdr_session=default" "herdr_workspace_id=wG" "herdr_tab_id=wG:tQ" \
+  "herdr_pane_id=wG:pQ"
+PATH="$PRESENTATION_BIN:$PATH" handle_push_transition herdr default "$(mkrec wG:pQ blocked)"
+grep -q 'pane report-metadata wG:pQ' "$HERDR_CALLS" \
+  || fail "a push transition left the crew's pane label naming the state it just left"
+pass "handle_push_transition: an authoritative-state change re-projects the crew's pane label"
+
 reset_state
 fm_write_meta "$STATE_DIR/tk1.meta" "window=default:wG:pQ" "backend=herdr" "kind=ship"
 (

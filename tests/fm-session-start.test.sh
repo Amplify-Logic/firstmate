@@ -764,6 +764,67 @@ EOF
 
 # --- lock refusal: read-only path --------------------------------------------
 
+# Session start is a bounded recovery point for the captain-facing pane labels:
+# whatever moved while no session was running is re-projected here. It is also a
+# mutating step, so the lock-refused read-only session must not perform it.
+seed_herdr_presentation_world() {  # <home> <root> <fakebin> <log>
+  local home=$1 root=$2 fakebin=$3 log=$4
+  : > "$log"
+  cat > "$fakebin/herdr" <<SH
+#!/usr/bin/env bash
+set -u
+printf '%s\n' "\$*" >> '$log'
+case "\${1:-} \${2:-}" in
+  "status --json") printf '%s\n' '{"client":{"version":"0.8.0","protocol":16},"server":{"running":true}}' ;;
+  "pane get") printf '%s\n' '{"result":{"pane":{"pane_id":"wA:pA","tab_id":"wA:tA","workspace_id":"wA"}}}' ;;
+esac
+exit 0
+SH
+  chmod +x "$fakebin/herdr"
+  fm_write_meta "$home/state/task-p1.meta" \
+    "window=default:wA:pA" \
+    "endpoint_task_id=task-p1" \
+    "worktree=$root" \
+    "project=$root" \
+    "kind=ship" \
+    "mode=local-only" \
+    "harness=claude" \
+    "backend=herdr" \
+    "herdr_session=default" \
+    "herdr_workspace_id=wA" \
+    "herdr_tab_id=wA:tA" \
+    "herdr_pane_id=wA:pA" \
+    "spawn_gen=session-start-presentation"
+}
+
+test_session_start_refreshes_presentation_only_for_the_session_owner() {
+  local rec root home fakebin log holder_pid
+  rec=$(new_world presentation-refresh)
+  IFS='|' read -r root home fakebin <<EOF
+$rec
+EOF
+  make_fake_toolchain "$fakebin"
+  make_fake_ps_claude "$fakebin"
+  log="$home/herdr-calls.log"
+  seed_herdr_presentation_world "$home" "$root" "$fakebin" "$log"
+
+  run_session_start "$home" "$root" "$fakebin:$BASE_PATH" >/dev/null 2>&1 || true
+  grep -q 'pane report-metadata wA:pA' "$log" \
+    || fail "the session owner did not re-project the fleet's pane labels"
+
+  : > "$log"
+  sleep 300 &
+  holder_pid=$!
+  printf '%s\n' "$holder_pid" > "$home/state/.lock"
+  run_session_start "$home" "$root" "$fakebin:$BASE_PATH" >/dev/null 2>&1 || true
+  kill "$holder_pid" 2>/dev/null || true
+  wait "$holder_pid" 2>/dev/null || true
+  if grep -q 'report-metadata' "$log"; then
+    fail "a lock-refused read-only session mutated Herdr presentation"
+  fi
+  pass "fm-session-start: presentation is re-projected for the session owner and never by a read-only session"
+}
+
 test_lock_refusal_read_only_path() {
   local rec root home fakebin holder_pid out status
   rec=$(new_world lock-refusal)
@@ -2672,6 +2733,7 @@ EOF
 
 test_context_digest_absent_empty_present
 test_lock_refusal_read_only_path
+test_session_start_refreshes_presentation_only_for_the_session_owner
 test_lock_write_failure_read_only_path
 test_trace_context_effective_state_is_frozen_after_lock
 test_session_lock_concurrent_single_winner

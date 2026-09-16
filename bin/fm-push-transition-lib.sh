@@ -146,6 +146,11 @@ handle_push_transition() {  # <backend> <session> <record>
   [ -n "$pane_id" ] || { sleep 1; return; }
   window="$session:$pane_id"
   task=$(window_to_task "$window" "$STATE")
+  # A push transition is an authoritative-state change, which is exactly when
+  # the captain-facing pane label goes stale. Refresh before the branches below
+  # decide whether to absorb or escalate, so an absorbed transition still
+  # updates the label. Presentation only; never affects the verdict.
+  "$FM_PUSH_TRANSITION_LIB_DIR/fm-visible-status.sh" "$task" >/dev/null 2>&1 || true
   # A declared wait already names the human this transition would report: an
   # external dependency, or the captain a verified hold transferred the work to.
   # Either way the wait is durably recorded, so absorb the immediate escalation

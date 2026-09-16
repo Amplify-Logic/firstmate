@@ -1967,6 +1967,51 @@ test_teardown_missing_busy_sidecar_completes() {
   pass "teardown completes when an exact busy-state sidecar is already absent"
 }
 
+# bin/fm-visible-status.sh owns the captain-facing pane labels, and teardown is
+# the only place that can retire them: the pane may outlive the task (a close
+# that cannot be confirmed leaves it standing), and the tasks that survive this
+# one need their project aggregate recomputed without it.
+test_herdr_teardown_retires_pane_presentation_and_refreshes_the_rest() {
+  local case_dir log other
+  case_dir=$(make_case herdr-presentation-retire)
+  write_meta "$case_dir" local-only ship
+  configure_flat_herdr_teardown_case "$case_dir"
+  # The shared fake reports no protocol, which reads as a build without
+  # presentation; this case is about the presentation path, so raise it.
+  sed -i.bak 's/{"server":{"running":true}}/{"client":{"version":"0.8.0","protocol":16},"server":{"running":true}}/' \
+    "$case_dir/fakebin/herdr"
+  rm -f "$case_dir/fakebin/herdr.bak"
+  # A second herdr task that this teardown does not touch: only the fleet-wide
+  # refresh after the record is removed can reach its pane.
+  other="$case_dir/state/task-x2.meta"
+  fm_write_meta "$other" \
+    "window=default:wS:pS" \
+    "endpoint_task_id=task-x2" \
+    "worktree=$case_dir/wt" \
+    "project=$case_dir/project" \
+    "kind=ship" \
+    "mode=local-only" \
+    "harness=claude" \
+    "backend=herdr" \
+    "herdr_session=default" \
+    "herdr_workspace_id=wS" \
+    "herdr_tab_id=wS:tS" \
+    "herdr_pane_id=wS:pS" \
+    "spawn_gen=teardown-test-task-x2"
+  log="$case_dir/herdr-calls.log"
+  : > "$log"
+
+  FM_FAKE_HERDR_LOG="$log" FM_FAKE_HERDR_CLOSED="$case_dir/closed" \
+    run_teardown "$case_dir" --force > "$case_dir/stdout" 2> "$case_dir/stderr" \
+    || fail "herdr-presentation-retire: forced teardown failed: $(cat "$case_dir/stderr")"
+
+  grep -q -- 'pane report-metadata wG:pQ .*--clear-token fm_task_id' "$log" \
+    || fail "teardown left the retired worker's pane carrying its task tokens"
+  grep -q -- 'pane report-metadata wS:pS ' "$log" \
+    || fail "teardown never refreshed the tasks that outlived it"
+  pass "herdr teardown clears the retired pane and refreshes the fleet that survives it"
+}
+
 test_herdr_teardown_clears_escalation_marker() {
   local case_dir marker
   case_dir=$(make_case herdr-marker-cleanup)
@@ -3678,6 +3723,7 @@ test_secondmate_pr_registration_publishes_ready_line
 test_secondmate_home_teardown_delivers_final_line_or_refuses
 test_teardown_missing_busy_sidecar_completes
 test_herdr_teardown_clears_escalation_marker
+test_herdr_teardown_retires_pane_presentation_and_refreshes_the_rest
 test_herdr_flat_teardown_refuses_orphaning_records_then_retry_completes
 test_herdr_flat_teardown_refuses_records_on_unparseable_presence
 test_herdr_flat_teardown_preflight_refuses_before_changes
