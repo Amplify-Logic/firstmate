@@ -685,16 +685,21 @@ test_a_reap_of_the_callers_process_group_does_not_cut_the_line() {
   wait_for_spoken "$home/spoken.log" "the speaker was never started"
   kill -TERM "-$caller" 2>/dev/null || true
 
+  # The speaker writes its end marker and only then removes the file it was
+  # handed, so both halves of the signature have to be waited for together -
+  # counting the moment the marker lands would read a file the speaker is still
+  # a few milliseconds from cleaning up.
   waited=0
+  left=1
   while [ "$waited" -lt 50 ]; do
-    ! grep -q finished "$home/spoken.log" 2>/dev/null || break
+    left=$(find "$scratch" -name 'fm-speak-*' 2>/dev/null | wc -l | tr -d ' ')
+    ! grep -q finished "$home/spoken.log" 2>/dev/null || [ "$left" != 0 ] || break
     sleep 0.2
     waited=$((waited + 1))
   done
   assert_grep finished "$home/spoken.log" \
     "fm-speak: the line was cut short when the caller's process group was reaped"
 
-  left=$(find "$scratch" -name 'fm-speak-*' 2>/dev/null | wc -l | tr -d ' ')
   [ "$left" = 0 ] \
     || fail "fm-speak: a cut-short speaker left $left temporary file(s) behind"
   pass "fm-speak: a reap of the caller's process group does not cut the line short"
