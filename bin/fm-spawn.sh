@@ -3397,7 +3397,14 @@ case "$BACKEND" in
         fi
       fi
     fi
-    if [ "$HERDR_PROJECTED" -ne 1 ]; then
+    if [ "$HERDR_PROJECTED" -eq 1 ]; then
+      # A projected task owns a disposable one-task workspace, which is NOT the
+      # token-owned project workspace herdr_workspace_managed marks
+      # (docs/herdr-backend.md "Task metadata"). Leaving the marker on would
+      # point the presentation refresh's project aggregate at the projection and
+      # rename it over its own "<corner> <outcome> - p:<token>" label.
+      HERDR_WORKSPACE_MANAGED=0
+    else
       HERDR_CONTAINER_RAW=$(FM_HOME="$HERDR_LABEL_HOME" \
         FM_HERDR_PROJECT_KEY="$HERDR_PROJECT_ENV_KEY" \
         FM_HERDR_PROJECT_LABEL="$HERDR_PROJECT_ENV_LABEL" \
