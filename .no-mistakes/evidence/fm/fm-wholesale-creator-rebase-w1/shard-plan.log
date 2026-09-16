@@ -1,0 +1,46 @@
+portable-serial-1of5 scripts=46
+portable-serial-2of5 scripts=46
+portable-serial-3of5 scripts=47
+portable-serial-4of5 scripts=46
+portable-serial-5of5 scripts=47
+tests/fm-watch-triage.test.sh
+tests/fm-remote-reply.test.sh
+tests/fm-procevent.test.sh
+== hint table sample
+220:PORTABLE_SERIAL_MAX_UNHINTED_PERCENT=15
+387:    fm-afk-contract.test.sh|fm-afk-inject-e2e.test.sh|fm-afk-return.test.sh)
+677:tests/fm-afk-return.test.sh 1837
+1146:    [ "$((unhinted * 100))" -gt "$((serial_total * PORTABLE_SERIAL_MAX_UNHINTED_PERCENT))" ]; then
+1147:    log "coverage guard: $unhinted of $serial_total portable serial scripts have no measured duration hint (max ${PORTABLE_SERIAL_MAX_UNHINTED_PERCENT}%)"
+== changed selection
+# coupling a maintainer recorded is preserved while an incidental single-script
+# reference no longer selects that script's whole family.
+BIN_FALLBACK_DEPTH=0
+families_for_unmapped_bin() {
+  local path=$1 needle consumer out found=0
+  needle=$(basename "$path")
+  if out=$(scripts_for_test_reference "$needle"); then
+    printf '%s\n' "$out"
+    found=1
+  fi
+  if [ "$BIN_FALLBACK_DEPTH" -lt 2 ]; then
+    BIN_FALLBACK_DEPTH=$((BIN_FALLBACK_DEPTH + 1))
+    while IFS= read -r consumer; do
+      [ -n "$consumer" ] || continue
+      out=$(families_for_changed_path "$consumer" | grep -v '^__unmapped__:' || true)
+      if [ -n "$out" ]; then
+        printf '%s\n' "$out"
+        found=1
+      fi
+    done < <(bin_consumers_of "$needle")
+    BIN_FALLBACK_DEPTH=$((BIN_FALLBACK_DEPTH - 1))
+  fi
+  [ "$found" -eq 1 ]
+}
+
+# Conservative path → family map. Over-selects rather than under-selects.
+1914:    --changed)
+1915-      [ -z "$MODE" ] || die "only one selection mode is allowed"
+1916-      MODE=changed
+1917-      shift
+1918-      ;;

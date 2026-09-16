@@ -1,0 +1,15 @@
+ok - kimi's post-launch brief is typed only after the agent is proven up
+ok - a bare shell refuses loudly at the bound instead of receiving the brief
+ok - a kimi refusal reports its own launch line and hands back the exact re-spawn
+ok - a refusal names what survived, rolls the record back, and hands back the exact re-spawn
+ok - the healthy launch path is unchanged and still names the brief file on the launch line
+ok - an unreadable liveness answer warns without refusing or waiting out the bound
+ok - malformed agent-up bound knobs are refused before anything is typed into the pane
+ok - an unsupported liveness check warns and proceeds instead of removing a working spawn
+ok - an unsupported non-kimi liveness check warns and proceeds
+ok - a structurally gone endpoint refuses on the first read and asks for a re-spawn
+ok - the re-spawn command carries this task's own kind and resolved axes
+ok - a raw launch command skips the agent-up gate instead of being refused by it
+ok - a refused relaunch keeps the record and hands back the same --relaunch
+# all fm-spawn-agent-up tests passed
+exit=0

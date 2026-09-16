@@ -1,0 +1,19 @@
+== diff of adversarial manifest vs shipped
+444c444
+< scope = personal
+---
+> scope = team
+463,464c463,464
+< anchor = tests/fork-test-registry.conf :: adds bin/fm-order\.sh
+< anchor = tests/fork-test-registry.conf :: adds bin/fm-deck\.sh
+---
+> anchor = tests/fork-test-registry.conf :: covers bin/fm-order\.sh
+> anchor = tests/fork-test-registry.conf :: covers bin/fm-deck\.sh
+== check with STALE anchors + scope team (expect anchor-missing failures)
+fm-fork-surface: action-gateway-broker: anchor missing in tests/fork-test-registry.conf: covers bin/fm-order\.sh; restore the fork edit or update the declaration in the same change
+fm-fork-surface: action-gateway-broker: anchor missing in tests/fork-test-registry.conf: covers bin/fm-deck\.sh; restore the fork edit or update the declaration in the same change
+FORK_SURFACE FAIL failures=2
+exit=1
+== check with SHIPPED anchors + scope team (expect no anchor-missing lines for action-gateway-broker)
+FORK_SURFACE OK capabilities=70 owned_paths=193
+exit=0

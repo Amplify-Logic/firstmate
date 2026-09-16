@@ -1,0 +1,5 @@
+keys: ['version', 'scope', 'allowedAudiences', 'setupAudiences', 'readmeSetupTargets', 'requiredOwnerPointers', 'surfaces']
+dropped docs/ops-command-center.md from surfaces: 139 -> 138
+== audience gate with fork doc unclassified (expect failure)
+fm-doc-audience-check: unclassified: docs/ops-command-center.md
+exit=1

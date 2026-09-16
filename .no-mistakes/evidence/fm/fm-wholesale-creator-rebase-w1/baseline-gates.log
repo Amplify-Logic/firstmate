@@ -1,0 +1,11 @@
+$ bin/fm-fork-surface.sh check
+FORK_SURFACE OK capabilities=70 owned_paths=193
+exit=0
+
+$ bin/fm-doc-audience-check.sh
+fm-doc-audience-check: ok surfaces=139 local_links=473
+exit=0
+
+$ bin/fm-test-run.sh --check-coverage
+FM_TEST_COVERAGE ok total=272 parallel=24 parallel_max_ms=417163 parallel_imbalance_ms=2894 parallel_unhinted=0 serial=232 serial_shards=5 serial_unhinted=22 herdr=16
+exit=0

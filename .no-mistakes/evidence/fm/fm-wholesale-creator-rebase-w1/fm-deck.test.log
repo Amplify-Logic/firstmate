@@ -1,0 +1,36 @@
+ok - fm-deck --help exits 0 and states the read-only boundary
+ok - an empty home renders honest empty sections, never an error wall
+ok - a home with no readable sources still renders the frame
+ok - staged actions group by standing order with the age headline and expiry countdown
+ok - needs-you distinguishes answer, unblock, review and decide, with full PR URLs
+ok - worker status notes never reach the captain's pane
+ok - the pane carries no internal vocabulary
+ok - under way gives one outcome line per worker, most urgent first
+ok - every rendered line fits the width it was drawn for, wide state dots and all
+ok - the state projection reads past a trailing resolve and maps every known verb
+ok - a resolved decision projects the waiting state and sorts with the waiting workers
+ok - needs you withholds a failed worker's pull request and asks once per task
+ok - a finished worker's ready pull request still reaches needs you once
+ok - a recorded pull request survives every way this home's backlog can go unreadable
+ok - a readable backlog still carries the review row, with nothing added
+ok - an unreadable backlog with no recorded pull request invents no ask
+ok - one pull request asks for one look however many records carry it
+ok - a dead record claims a pull request without silencing the live one
+ok - several records of one pull request collapse into its strongest ask
+ok - the unconfirmed-record caveat is cut with the row it describes
+ok - both source-availability lines survive the clip at the minimum width
+ok - bin/fm-deck-render.py turns the deck's payload into the pane
+ok - no worker-authored control character reaches the captain's terminal
+ok - a crafted sweep line cannot forge or hide what needs him
+ok - a Unicode line separator drops neither a backlog row nor a worker
+ok - just in shows recent completions and findings with their artifact
+ok - loose ends shows a headline count and the top urgent and waiting items
+ok - a sweep with nothing urgent or waiting renders an honest line
+ok - the counts strip summarizes every section above the fold
+ok - a hand-edited backlog degrades the backlog-fed rows without breaking the pane
+ok - the pane refuses acting verbs and writes nothing
+ok - --json emits the whole pane as one fm-deck.v1 model with the pane's own selection rules
+ok - --json degrades to honest empties, names an unreadable backlog, and scrubs control characters
+ok - --interval refuses anything but a positive whole number of seconds
+ok - the refresh loop redraws on its interval and re-reads records each frame
+exit=0

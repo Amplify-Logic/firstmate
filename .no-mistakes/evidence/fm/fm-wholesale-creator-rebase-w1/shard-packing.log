@@ -1,0 +1,14 @@
+== per-shard packed minutes (hint table + 27000ms default for unhinted)
+portable-serial-1of5 scripts=46 unhinted=5 hint_sum_min=18.4
+portable-serial-2of5 scripts=46 unhinted=4 hint_sum_min=18.4
+portable-serial-3of5 scripts=47 unhinted=5 hint_sum_min=18.4
+portable-serial-4of5 scripts=46 unhinted=4 hint_sum_min=18.4
+portable-serial-5of5 scripts=47 unhinted=4 hint_sum_min=18.4
+== six fork-only serial scripts named as unmeasured in the doc: do they lack hint rows?
+fm-calm-extension exists=y hint_row=0
+fm-claude-continuity-live-e2e exists=y hint_row=0
+fm-cursor-primary-profile exists=y hint_row=0
+fm-herdr-layout-preview-e2e exists=y hint_row=0
+fm-herdr-worker-presentation-e2e exists=y hint_row=0
+fm-voice-relay-freshness exists=y hint_row=0
+== how --changed finds paths

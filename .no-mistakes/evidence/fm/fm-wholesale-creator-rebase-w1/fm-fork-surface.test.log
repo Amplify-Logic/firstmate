@@ -1,0 +1,8 @@
+ok - current fork surface passes every declaration assertion
+ok - list, topology, config, and port queries expose declared data
+ok - required core surface deletion fails and names the capability and path
+ok - declared personal capability may be omitted without weakening core and team checks
+ok - a pre-merge entry still passes after its branch is squash-merged
+ok - a branch commit orphaned by a squash fails even while the local clone still holds it
+# all fm-fork-surface tests passed
+exit=0
