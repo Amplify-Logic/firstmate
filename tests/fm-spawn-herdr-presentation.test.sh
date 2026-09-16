@@ -267,6 +267,25 @@ assert_contains "$(cat "$HOME_FIX/state/journey-single.meta")" 'harness=pi' 'Pi 
 assert_contains "$(cat "$HOME_FIX/state/journey-batch-one.meta")" 'harness=codex' 'Codex runtime was not preserved'
 assert_contains "$(cat "$HOME_FIX/state/journey-single.meta")" 'kind=ship' 'ship kind was not preserved'
 assert_contains "$(cat "$HOME_FIX/state/journey-batch-one.meta")" 'kind=scout' 'scout kind was not preserved'
+# The presentation surfaces read the TASK RECORD, not this spawn: every later
+# refresh re-derives the project workspace aggregate, the project label and the
+# human outcome from these keys, and the aggregate runs only for a task whose
+# record marks its workspace managed.
+journey_meta="$HOME_FIX/state/journey-single.meta"
+grep -qxF 'herdr_workspace_managed=1' "$journey_meta" \
+  || fail 'a presentation-capable spawn did not mark its workspace managed'
+grep -qxF "herdr_project_key=$journey_path" "$journey_meta" \
+  || fail "the record did not name the project its workspace belongs to: $(grep '^herdr_project_key=' "$journey_meta" || true)"
+grep -qxF 'herdr_project_name=Your Magical Journey' "$journey_meta" \
+  || fail "the record did not carry the human project name: $(grep '^herdr_project_name=' "$journey_meta" || true)"
+grep -qxF 'outcome=Validate GPS triggers across all seven Amsterdam stops' "$journey_meta" \
+  || fail "the record did not carry the derived outcome: $(grep '^outcome=' "$journey_meta" || true)"
+grep -qxF 'outcome=Align Artevo launch surfaces' "$HOME_FIX/state/artevo-single.meta" \
+  || fail "the captain's explicit --outcome was not recorded, so a refresh renames the tab over it"
+# The marker is not decoration: it is the gate on the project-workspace fleet
+# aggregate, which the spawn's own presentation refresh must have run.
+assert_grep 'Your Magical Journey · ' "$HERDR_LOG" \
+  'the project workspace never received its fleet aggregate'
 pass 'fm-spawn fake Herdr E2E: single, batch, projects, axes, human labels, outcomes, states, and hidden ids converge'
 
 write_brief journey-protocol14

@@ -674,6 +674,33 @@ test_relaunch_records_the_requested_model_of_the_new_incarnation() {
   pass "fm-spawn --relaunch: the record names the model this incarnation was asked for"
 }
 
+test_relaunch_drops_the_previous_agents_live_model() {
+  local dir catalog out rc
+  dir=$(new_case livemodel rl62)
+  add_ship_task "$dir" rl62 cursor
+  make_cursor_stub "$dir"
+  catalog="$dir/catalog.txt"
+  printf '%s\n' 'Available models' 'gpt-5.2 - GPT 5.2' 'gpt-5.2-high - GPT 5.2 High' \
+    'gpt-5.4 - GPT 5.4' 'gpt-5.4-high - GPT 5.4 High' > "$catalog"
+  seed_prior_cursor_fold "$dir" rl62 gpt-5.2-high gpt-5.2
+  # What bin/fm-visible-status.sh observed the PREVIOUS agent running.
+  printf 'model_live=Cursor Grok 4.5 High\n' >> "$dir/home/state/rl62.meta"
+  printf 'cursor-agent' > "$dir/fake/becomes"
+  # A relaunch requires a positively agent-free endpoint.
+  printf 'zsh' > "$dir/fake/command"
+
+  export FM_FAKE_CURSOR_CATALOG="$catalog" FM_CURSOR_MODEL_CATALOG="$catalog"
+  out=$(run_spawn "$dir" rl62 --relaunch --model gpt-5.4 --effort high); rc=$?
+  unset FM_FAKE_CURSOR_CATALOG FM_CURSOR_MODEL_CATALOG
+
+  expect_code 0 "$rc" "a cursor relaunch should succeed"$'\n'"$out"
+  [ "$(meta_field "$dir" rl62 model)" = gpt-5.4-high ] \
+    || fail "the relaunch did not record its own launch model"
+  [ -z "$(meta_field "$dir" rl62 model_live)" ] \
+    || fail "a reader still sees '$(meta_field "$dir" rl62 model_live)', what the PREVIOUS agent was running"
+  pass "fm-spawn --relaunch: a live-model observation does not outlive the agent it described"
+}
+
 test_relaunch_drops_a_requested_model_belonging_to_the_old_harness() {
   local dir out rc
   dir=$(new_case requested-switch rl61)
@@ -1781,6 +1808,7 @@ test_harness_switch_moves_the_record_and_clears_prior_wiring
 test_harness_switch_does_not_carry_the_old_profile_axes
 test_relaunch_records_the_requested_model_of_the_new_incarnation
 test_relaunch_drops_a_requested_model_belonging_to_the_old_harness
+test_relaunch_drops_the_previous_agents_live_model
 test_harness_switch_resolves_a_prefixed_recorded_harness
 test_prefixed_recorded_harness_requires_explicit_replacement
 test_same_harness_relaunch_keeps_the_profile_axes

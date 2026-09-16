@@ -3240,7 +3240,13 @@ case "$BACKEND" in
     HERDR_PROJECT_NAME=
     HERDR_TASK_OUTCOME=
     HERDR_TAB_TITLE=$W
+    # The verdict is taken ONCE here and carried to the task record, rather than
+    # re-probed when meta is written: presentation capability is a live protocol
+    # check, and a record that claims a token-owned workspace the spawn did not
+    # actually take is worse than no claim at all.
+    HERDR_WORKSPACE_MANAGED=0
     if [ "$KIND" != secondmate ] && fm_backend_herdr_presentation_capable; then
+      HERDR_WORKSPACE_MANAGED=1
       if [ -x "$FM_ROOT/bin/fm-task-outcome.sh" ]; then
         HERDR_TASK_OUTCOME=$(FM_HOME="$FM_HOME" FM_DATA_OVERRIDE="$DATA" \
           "$FM_ROOT/bin/fm-task-outcome.sh" "$ID" "$OUTCOME") || HERDR_TASK_OUTCOME=
@@ -4575,7 +4581,7 @@ SPAWN_META_PATH=$SPAWN_META_TMP
 preserve_relaunch_meta() {
   awk -F= '
     BEGIN {
-      split("window endpoint_task_id worktree project harness kind mode yolo tasktmp model model_requested effort task_type account busy_gen spawn_gen traceparent backend herdr_session herdr_workspace_id herdr_tab_id herdr_pane_id zellij_session zellij_tab_id zellij_pane_id orca_worktree_id terminal cmux_workspace_id cmux_surface_id home projects control_relaunch_tx", keys, " ")
+      split("window endpoint_task_id worktree project harness kind mode yolo tasktmp model model_requested model_live effort task_type outcome account busy_gen spawn_gen traceparent backend herdr_session herdr_workspace_id herdr_tab_id herdr_pane_id herdr_workspace_managed herdr_project_key herdr_project_name zellij_session zellij_tab_id zellij_pane_id orca_worktree_id terminal cmux_workspace_id cmux_surface_id home projects control_relaunch_tx", keys, " ")
       for (i in keys) owned[keys[i]] = 1
     }
     !($1 in owned)
@@ -4628,6 +4634,17 @@ preserve_relaunch_meta() {
     echo "herdr_workspace_id=$HERDR_WORKSPACE_ID"
     echo "herdr_tab_id=$HERDR_TAB_ID"
     echo "herdr_pane_id=$HERDR_PANE_ID"
+    # The presentation surfaces read the task record, not this process: the
+    # workspace aggregate in bin/fm-visible-status.sh runs only for a task that
+    # marks its workspace managed, and both it and bin/fm-deck.sh name the
+    # project and the human outcome from here. Below the identity protocol the
+    # spawn takes the legacy label-based flow and claims none of it.
+    if [ "$HERDR_WORKSPACE_MANAGED" -eq 1 ]; then
+      echo "herdr_workspace_managed=1"
+      echo "herdr_project_key=$HERDR_PROJECT_KEY"
+      echo "herdr_project_name=$HERDR_PROJECT_NAME"
+      echo "outcome=$HERDR_TASK_OUTCOME"
+    fi
   fi
   if [ "$BACKEND" = zellij ]; then
     echo "zellij_session=$ZELLIJ_SES"
