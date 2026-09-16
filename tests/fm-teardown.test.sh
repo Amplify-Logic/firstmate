@@ -1971,16 +1971,38 @@ test_teardown_missing_busy_sidecar_completes() {
 # the only place that can retire them: the pane may outlive the task (a close
 # that cannot be confirmed leaves it standing), and the tasks that survive this
 # one need their project aggregate recomputed without it.
+# Both presentation-path cases below need the case's fake herdr to report a
+# presentation-capable protocol. Without it bin/fm-visible-status.sh exits before
+# touching anything, and the NEGATIVE assertions on the retain path would pass
+# while proving nothing - the same fixture blind spot that let the pre-close
+# clear ship in the first place. So raise the shared fixture in one place, and
+# prove the raise is what did it by asking the real consumer, the backend's own
+# capability verdict, both before and after.
+make_case_presentation_capable() {  # <case-dir>
+  local case_dir=$1 name
+  name=$(basename "$case_dir")
+  if case_herdr_presentation_capable "$case_dir"; then
+    fail "$name: the shared herdr fixture already reports a presentation-capable protocol; drop this raise rather than leaving a substitution that proves nothing"
+  fi
+  sed -i.bak 's/{"server":{"running":true}}/{"client":{"version":"0.8.0","protocol":16},"server":{"running":true}}/' \
+    "$case_dir/fakebin/herdr"
+  rm -f "$case_dir/fakebin/herdr.bak"
+  case_herdr_presentation_capable "$case_dir" \
+    || fail "$name: raising the fake herdr to protocol 16 did not take, so every presentation assertion in this case would be vacuous"
+}
+
+case_herdr_presentation_capable() {  # <case-dir>
+  PATH="$1/fakebin:$PATH" FM_FAKE_HERDR_LOG="$1/capability-probe.log" \
+    bash -c '. "$1/bin/backends/herdr.sh" >/dev/null 2>&1; fm_backend_herdr_presentation_capable' \
+      _ "$ROOT"
+}
+
 test_herdr_teardown_retires_pane_presentation_and_refreshes_the_rest() {
   local case_dir log other
   case_dir=$(make_case herdr-presentation-retire)
   write_meta "$case_dir" local-only ship
   configure_flat_herdr_teardown_case "$case_dir"
-  # The shared fake reports no protocol, which reads as a build without
-  # presentation; this case is about the presentation path, so raise it.
-  sed -i.bak 's/{"server":{"running":true}}/{"client":{"version":"0.8.0","protocol":16},"server":{"running":true}}/' \
-    "$case_dir/fakebin/herdr"
-  rm -f "$case_dir/fakebin/herdr.bak"
+  make_case_presentation_capable "$case_dir"
   # A second herdr task that this teardown does not touch: only the fleet-wide
   # refresh after the record is removed can reach its pane.
   other="$case_dir/state/task-x2.meta"
@@ -2193,11 +2215,7 @@ test_herdr_retained_teardown_leaves_pane_presentation_intact() {
   case_dir=$(make_case herdr-retain-presentation)
   write_meta "$case_dir" local-only ship
   configure_herdr_projection_teardown_case "$case_dir"
-  # The shared fake reports no protocol, which reads as a build without
-  # presentation and would make every presentation call a silent no-op.
-  sed -i.bak 's/{"server":{"running":true}}/{"client":{"version":"0.8.0","protocol":16},"server":{"running":true}}/' \
-    "$case_dir/fakebin/herdr"
-  rm -f "$case_dir/fakebin/herdr.bak"
+  make_case_presentation_capable "$case_dir"
   log="$case_dir/herdr.log"; : > "$log"
   : > "$case_dir/state/task-x1.status"
   rc=0
