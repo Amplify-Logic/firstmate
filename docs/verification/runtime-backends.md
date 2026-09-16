@@ -198,14 +198,14 @@ FM_HARNESS_LIVENESS_DRIFT=1 bin/fm-test-run.sh tests/fm-harness-liveness-drift-l
 Running the guard with no variable set on macOS 26.5.2 arm64 checked 8 installed harnesses and classified every one `alive`:
 
 ```text
-# claude 2.1.263 (Claude Code): title='2.1.263' foreground=[/Users/kunchen/.local/bin/claude <defunct> <defunct> ]
+# claude 2.1.263 (Claude Code): title='2.1.263' foreground=[<HOME>/.local/bin/claude <defunct> <defunct> ]
 # codex codex-cli 0.147.0: title='codex' foreground=[/opt/homebrew/bin/codex ]
 # opencode 1.18.29: title='opencode' foreground=[/opt/homebrew/bin/opencode ]
 # pi 0.84.4: title='pi-launcher' foreground=[/opt/homebrew/bin/pi-signed .../pi ]
 # pi-signed 0.84.4: title='pi-launcher' foreground=[/opt/homebrew/bin/pi-signed .../pi ]
-# grok grok 1.0.13 (5e9a58528b76) [stable]: title='grok-1.0.13-mac' foreground=[/Users/kunchen/.local/bin/grok ]
-# cursor 2026.09.02-c22c1a3: title='node' foreground=[/Users/kunchen/.local/bin/cursor-agent ]
-# muse Muse Code 1.0.3 (1.0.3-R2198.1): title='muse-bin-1.0.3-' foreground=[/Users/kunchen/.local/bin/muse-bin-1.0.3-R2198.1 ]
+# grok grok 1.0.13 (5e9a58528b76) [stable]: title='grok-1.0.13-mac' foreground=[<HOME>/.local/bin/grok ]
+# cursor 2026.09.02-c22c1a3: title='node' foreground=[<HOME>/.local/bin/cursor-agent ]
+# muse Muse Code 1.0.3 (1.0.3-R2198.1): title='muse-bin-1.0.3-' foreground=[<HOME>/.local/bin/muse-bin-1.0.3-R2198.1 ]
 # checked 8 installed harness(es)
 ```
 
@@ -868,7 +868,7 @@ HERDR_LAB_HELPER=bin/fm-herdr-lab.sh
 HERDR_ENV=1
 HERDR_PANE_ID=w1:p1
 HERDR_SESSION=fm-lab-fm-herdr-env-pro-65961-25535
-HERDR_SOCKET_PATH=/Users/kunchen/.config/herdr/sessions/fm-lab-fm-herdr-env-pro-65961-25535/herdr.sock
+HERDR_SOCKET_PATH=<HOME>/.config/herdr/sessions/fm-lab-fm-herdr-env-pro-65961-25535/herdr.sock
 HERDR_TAB_ID=w1:t1
 HERDR_WORKSPACE_ID=w1
 ```
@@ -1237,7 +1237,7 @@ herdr status --json --session fm-lab-never-started | jq -c "{running: .server.ru
 ```
 
 ```text
-{"id":"cli:pane:get","error":{"code":"server_not_running","message":"no herdr server is running at /Users/kunchen/.config/herdr/sessions/fm-lab-never-started/herdr.sock; run `herdr session attach fm-lab-never-started` to start or attach it"}}
+{"id":"cli:pane:get","error":{"code":"server_not_running","message":"no herdr server is running at <HOME>/.config/herdr/sessions/fm-lab-never-started/herdr.sock; run `herdr session attach fm-lab-never-started` to start or attach it"}}
 {"running":false,"status":"not_running"}
 ```
 

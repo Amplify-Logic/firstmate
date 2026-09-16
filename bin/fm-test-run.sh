@@ -1630,6 +1630,13 @@ families_for_changed_path() {
       families_for_test_reference git-config-helpers.sh lib.sh herdr-test-safety.sh \
         || printf '%s\n' "__unmapped__:$path"
       ;;
+    tests/assets/board-render-harness.mjs)
+      # The board render suite owns every assertion over this harness. It has
+      # to be named here because the tests/* arm below answers __unmapped__
+      # for anything under tests/ that is not itself a suite, before the
+      # reference scan that would otherwise find the suite naming it.
+      printf '%s\n' '__script__:fm-bearings-board-render.test.sh'
+      ;;
     tests/fixtures/*/*)
       # A fixture belongs to whichever suite reads its directory, found by the
       # same reference scan used for shared helpers. Keyed on the directory
@@ -1663,7 +1670,10 @@ families_for_changed_path() {
     tests/*)
       printf '%s\n' "__unmapped__:$path"
       ;;
-    README.md|LICENSE|assets/*|docs/*|.gitignore)
+    # Standalone public prose (VISION, GROK_BOT) and .greptile/ code-review
+    # configuration carry no executable surface, so they have no test
+    # ownership, exactly like README and docs beside them.
+    README.md|VISION.md|GROK_BOT.md|LICENSE|assets/*|docs/*|.gitignore|.greptile/*)
       ;;
     *)
       if [ -e "$path" ]; then
