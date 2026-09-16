@@ -111,6 +111,7 @@ phase_seed() {
 }
 
 phase_spawn() {
+  local launch argv prompt recbin
   : > "$LOG"
   PATH="$FAKEBIN:$PATH" FM_HOME="$HOME_DIR" FM_CONFIG_OVERRIDE="$HOME_DIR/parent-config" \
     FM_FAKE_TMUX_LOG="$LOG" FM_FAKE_TMUX_CAPTURE="$PANE" \
@@ -127,8 +128,31 @@ phase_spawn() {
   assert_grep "FM_HOME='$SUB_ABS'" "$LOG" "secondmate launch did not set FM_HOME to the subhome"
   assert_grep 'FM_ROOT_OVERRIDE= FM_STATE_OVERRIDE= FM_DATA_OVERRIDE= FM_PROJECTS_OVERRIDE=' "$LOG" "launch did not clear operational overrides"
   assert_grep 'FM_CONFIG_OVERRIDE=' "$LOG" "launch did not clear the config override"
-  assert_grep 'FIRSTMATE_OP: v1 launch-brief:' "$LOG" "launch did not encode the charter as launch-brief operational input"
-  assert_grep 'customer onboarding charter' "$LOG" "launch did not use the persistent charter body"
+  # The launch line defers the brief to a `fm-operational-input.sh encode
+  # launch-brief` substitution the pane evaluates, so the envelope exists only
+  # once that line runs. Run the exact recorded line against a codex stub that
+  # records its argv, and assert the delivery contract on what the harness
+  # actually received rather than on the unexpanded line.
+  launch=$(sed -n 's/^send-keys -t [^ ]* -l //p' "$LOG")
+  [ -n "$launch" ] || fail "spawn typed no launch line into the pane"
+  recbin=$(fm_fakebin "$TMP_ROOT/launch-record")
+  argv="$TMP_ROOT/launch-record/argv.txt"
+  prompt="$TMP_ROOT/launch-record/brief.txt"
+  cat > "$recbin/codex" <<'SH'
+#!/usr/bin/env bash
+# fm-spawn --version-probes the launch binary, and that probe carries no brief.
+[ "${1:-}" != --version ] || exit 0
+printf '%s\n' "$@" > "$FM_FAKE_CODEX_ARGV"
+SH
+  chmod +x "$recbin/codex"
+  FM_FAKE_CODEX_ARGV="$argv" PATH="$recbin:$PATH" bash -c "$launch" \
+    || fail "could not consume the recorded secondmate launch command"
+  assert_present "$argv" "the launch command never reached the codex harness"
+  assert_grep 'FIRSTMATE_OP: v1 launch-brief:' "$argv" "launch did not encode the charter as launch-brief operational input"
+  sed -n '/FIRSTMATE_OP: v1 launch-brief:/,$p' "$argv" \
+    | "$ROOT/bin/fm-operational-input.sh" body > "$prompt" \
+    || fail "the harness did not receive a decodable launch-brief envelope"
+  assert_grep 'customer onboarding charter' "$prompt" "launch did not deliver the persistent charter body"
   assert_no_grep 'notify=' "$LOG" "secondmate codex launch included the parent turn-end notify hook"
   assert_no_grep 'turn-ended' "$LOG" "secondmate codex launch referenced a parent turn-ended signal"
   assert_no_grep 'treehouse get' "$LOG" "secondmate spawn ran a project treehouse get"
