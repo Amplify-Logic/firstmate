@@ -3508,11 +3508,6 @@ if [ "$BACKEND" = herdr ] \
   fi
 fi
 
-# Clear only presentation metadata before closing the stable recorded target, so
-# a retired worker's pane cannot keep this task's tokens if the close leaves the
-# pane behind. A cosmetic failure never weakens endpoint cleanup, and the clear
-# is a no-op for a backend or build with no presentation.
-"$FM_ROOT/bin/fm-visible-status.sh" --clear "$ID" >/dev/null 2>&1 || true
 if [ "$HERDR_PRESENTATION_RETIRE_CANDIDATE" = 1 ]; then
   # The presentation lock was acquired before the worktree return above; a
   # contended lock already refused this teardown while everything was intact.
@@ -3637,6 +3632,13 @@ rm -rf "$STATE/$ID.prime-agent-home"
 # retired endpoint; teardown only runs after landing is confirmed, so any
 # leftover unhandled steer here is moot rather than unlanded work.
 rm -rf "$STATE/$ID.inbox"
+# Retire the task's presentation metadata, so a tab that outlives its pane stops
+# advertising a task that no longer exists. It runs here, after every gate that
+# can still RETAIN a live task and exit - the endpoint-confirmed-gone check, the
+# parent-channel report, and the secondmate home removal - because a teardown
+# that refuses must leave the pane exactly as it found it. It also runs before
+# the record is removed, since the ids it clears are read from that record.
+"$FM_ROOT/bin/fm-visible-status.sh" --clear "$ID" >/dev/null 2>&1 || true
 # The record is gone, so the backlog must not still show this task in flight
 # when teardown reports success. Still under this task's meta lock, so a steer
 # racing the same id stays serialized exactly as it was before. A captain-held

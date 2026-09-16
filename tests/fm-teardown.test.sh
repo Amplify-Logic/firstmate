@@ -2184,6 +2184,43 @@ SH
   pass "herdr flat teardown refuses before returning the isolated copy under lock contention and the retry completes cleanly"
 }
 
+# A teardown that REFUSES must leave the endpoint exactly as it found it. The
+# pane is still running its worker, and nothing else re-projects a stuck task:
+# the watcher only refreshes on a signal batch, which a wedged worker never
+# produces. So a retained task must keep its label until a rerun retires it.
+test_herdr_retained_teardown_leaves_pane_presentation_intact() {
+  local case_dir log rc
+  case_dir=$(make_case herdr-retain-presentation)
+  write_meta "$case_dir" local-only ship
+  configure_herdr_projection_teardown_case "$case_dir"
+  # The shared fake reports no protocol, which reads as a build without
+  # presentation and would make every presentation call a silent no-op.
+  sed -i.bak 's/{"server":{"running":true}}/{"client":{"version":"0.8.0","protocol":16},"server":{"running":true}}/' \
+    "$case_dir/fakebin/herdr"
+  rm -f "$case_dir/fakebin/herdr.bak"
+  log="$case_dir/herdr.log"; : > "$log"
+  : > "$case_dir/state/task-x1.status"
+  rc=0
+  # The close is attempted and the post-close presence reads unknown, which is
+  # the documented retain-and-rerun path: records stay, the worker is still live.
+  FM_FAKE_HERDR_LOG="$log" FM_FAKE_HERDR_CLOSED="$case_dir/closed" \
+    FM_FAKE_HERDR_RESTORED="$case_dir/restored" FM_FAKE_HERDR_PRESENCE_UNKNOWN=1 \
+    run_teardown "$case_dir" --force > "$case_dir/stdout" 2> "$case_dir/stderr" || rc=$?
+  [ "$rc" -ne 0 ] \
+    || fail "herdr-retain-presentation: teardown retired a task whose pane is not confirmed gone"
+  [ -e "$case_dir/state/task-x1.meta" ] \
+    || fail "herdr-retain-presentation: the refusal erased the durable endpoint metadata"
+  assert_grep "not confirmed gone" "$case_dir/stderr" \
+    "herdr-retain-presentation: the case did not exercise the retain-and-rerun refusal"
+  if grep -q -- '--clear-token' "$log"; then
+    fail "herdr-retain-presentation: a retained task's pane lost its tokens: $(grep -- '--clear-token' "$log" | head -1)"
+  fi
+  if grep -q 'tab rename .* fm-task-x1' "$log"; then
+    fail "herdr-retain-presentation: a retained task's tab was renamed back to its recovery label"
+  fi
+  pass "a herdr teardown that retains a live task leaves its pane presentation untouched"
+}
+
 test_herdr_flat_teardown_refuses_records_on_unparseable_presence() {
   local case_dir log closed rc
   case_dir=$(make_case herdr-garbage-presence)
@@ -3726,6 +3763,7 @@ test_herdr_teardown_clears_escalation_marker
 test_herdr_teardown_retires_pane_presentation_and_refreshes_the_rest
 test_herdr_flat_teardown_refuses_orphaning_records_then_retry_completes
 test_herdr_flat_teardown_refuses_records_on_unparseable_presence
+test_herdr_retained_teardown_leaves_pane_presentation_intact
 test_herdr_flat_teardown_preflight_refuses_before_changes
 test_forced_secondmate_herdr_child_preflight_refuses_before_changes
 test_forced_secondmate_teardown_holds_descendant_lifecycle_locks
