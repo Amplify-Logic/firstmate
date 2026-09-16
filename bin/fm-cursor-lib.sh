@@ -39,10 +39,29 @@
 # adapter-local composer normalizer would be the second copy that owner exists
 # to prevent.
 
+# fm_cursor_probe_bound: FM_CURSOR_PROBE_TIMEOUT reduced to a value that can
+# actually bound something, and the one owner of that rule - every bounded
+# cursor call reads the budget through here rather than reaching for the
+# variable, so no caller can hand a runner a non-bound.
+#
+# A non-positive or non-numeric budget is not a bound at all: bin/fm-timeout-lib.sh
+# records that `timeout 0` and the perl fallback's `alarm 0` both disable the
+# deadline outright, so passing one through would let a stalled probe wedge the
+# very spawn this budget exists to protect. Such a value falls back to the
+# default rather than running unbounded.
+fm_cursor_probe_bound() {
+  local fallback=10 bound=${FM_CURSOR_PROBE_TIMEOUT:-}
+  case "$bound" in
+    ''|*[!0-9]*) bound=$fallback ;;
+    *) [ "$bound" -gt 0 ] || bound=$fallback ;;
+  esac
+  printf '%s\n' "$bound"
+}
+
 # Bounded probe budget in seconds. Cursor's --help is local and returns
 # immediately; the bound exists so a hung or interactive impostor cannot wedge
 # a spawn or a readiness check.
-FM_CURSOR_PROBE_TIMEOUT=${FM_CURSOR_PROBE_TIMEOUT:-10}
+FM_CURSOR_PROBE_TIMEOUT=$(fm_cursor_probe_bound)
 
 # Canonical absolute path for $1, or the input unchanged when it cannot be
 # resolved. Symlink resolution is what makes the structural signal work, since
@@ -92,7 +111,7 @@ fm_cursor_bounded_output() {  # <path> <args...>
   elif command -v gtimeout >/dev/null 2>&1; then runner=gtimeout
   fi
   [ -n "$runner" ] || return 1
-  "$runner" "$FM_CURSOR_PROBE_TIMEOUT" "$path" "$@" 2>/dev/null
+  "$runner" "$(fm_cursor_probe_bound)" "$path" "$@" 2>/dev/null
 }
 
 fm_cursor_probe_is_cursor() {  # <path>

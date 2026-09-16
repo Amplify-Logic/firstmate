@@ -676,6 +676,76 @@ test_a_budget_that_is_not_a_bound_falls_back_to_the_default() {
   pass "a budget that is not a bound falls back to the probe default rather than running unbounded"
 }
 
+# The creator's own bounded probe (fm_cursor_bounded_output, behind
+# fm_cursor_list_models and fm_cursor_probe_is_cursor) runs only where a
+# coreutils/BSD timeout exists, so this Mac never reaches it - but every Linux
+# home and every CI runner does, and that is the path the cursor spawn takes
+# first, at its pre-fold catalog check. A budget of 0 must not reach the runner
+# there either: `timeout 0` runs without a deadline, which would wedge the spawn
+# on a stalled --list-models.
+#
+# The stand-in runner reproduces that documented "0 means no deadline"
+# behaviour, so an unclamped budget is observable as the stall running to
+# completion rather than as an argument.
+write_faithful_timeout() {  # <dir>
+  mkdir -p "$1"
+  cat > "$1/timeout" <<'EOF'
+#!/usr/bin/env bash
+secs=$1
+shift
+if [ "$secs" -le 0 ] 2>/dev/null; then
+  exec "$@"
+fi
+"$@" &
+child=$!
+( sleep "$secs"; kill -TERM "$child" 2>/dev/null ) >/dev/null 2>&1 &
+guard=$!
+wait "$child"
+rc=$?
+kill -TERM "$guard" 2>/dev/null
+exit "$rc"
+EOF
+  chmod +x "$1/timeout"
+}
+
+probe_bounded_list_models() {  # <cursor-bin> <path> <probe-timeout>
+  cat > "$TMP_ROOT/bounded-probe.sh" <<'PROBE'
+. "$1/bin/fm-cursor-lib.sh"
+fm_cursor_list_models "$2" >/dev/null
+PROBE
+  env PATH="$2" FM_CURSOR_PROBE_TIMEOUT="$3" \
+    bash "$TMP_ROOT/bounded-probe.sh" "$ROOT" "$1"
+}
+
+test_a_zero_budget_cannot_disable_the_creator_probe_bound() {
+  local home stalling runner path started elapsed rc
+  home="$TMP_ROOT/runner-host-home"
+  stalling="$TMP_ROOT/runner-host-stalling"
+  runner="$TMP_ROOT/faithful-runner"
+  write_fake_cursor_agent "$home/.local/bin/cursor-agent"
+  write_stalling_cursor_agent "$stalling/.local/bin/cursor-agent"
+  write_faithful_timeout "$runner"
+  path="$runner:/usr/bin:/bin"
+
+  # Without this the zero case below could pass on a runnerless host, where the
+  # bounded probe refuses instantly for an entirely different reason.
+  rc=0
+  probe_bounded_list_models "$home/.local/bin/cursor-agent" "$path" 1 || rc=$?
+  [ "$rc" -eq 0 ] \
+    || fail "the stand-in runner did not carry a normal bounded read, got rc=$rc"
+
+  started=$SECONDS
+  rc=0
+  probe_bounded_list_models "$stalling/.local/bin/cursor-agent" "$path" 0 || rc=$?
+  elapsed=$((SECONDS - started))
+  [ "$rc" -ne 0 ] \
+    || fail "a stalled catalog read must not report success"
+  [ "$elapsed" -lt 20 ] \
+    || fail "a zero budget reached the runner unclamped: ${elapsed}s against a 30s stall"
+
+  pass "a zero budget cannot disable the bound on hosts that have a timeout runner"
+}
+
 # --- 5. liveness ------------------------------------------------------------
 
 test_liveness_uses_argv_for_node_comm() {
@@ -770,6 +840,7 @@ test_catalog_reads_the_binary_the_spawn_resolved
 test_stalled_catalog_read_is_bounded_and_reads_unavailable
 test_catalog_on_a_runnerless_host_is_still_read_and_still_bounded
 test_a_budget_that_is_not_a_bound_falls_back_to_the_default
+test_a_zero_budget_cannot_disable_the_creator_probe_bound
 test_liveness_uses_argv_for_node_comm
 test_unattributable_node_stays_unknown
 test_cursor_env_marker_beats_inherited_claudecode
