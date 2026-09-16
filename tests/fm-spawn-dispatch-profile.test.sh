@@ -551,6 +551,9 @@ test_cursor_without_a_model_records_the_default() {
   # The effort fold produces nothing for an absent model, so without a guard
   # the durable record carries a bare `model=` that no reader can interpret.
   assert_meta_profile "$HOME_DIR/state/$id.meta" cursor default default
+  if grep -q '^model_requested=' "$HOME_DIR/state/$id.meta"; then
+    fail "a spawn with no model must not record a requested model"
+  fi
   pass "a cursor spawn with no model records the default, never an empty model"
 }
 
@@ -570,6 +573,117 @@ test_cursor_refuses_model_absent_from_live_catalog() {
     "cursor model refusal did not tell the caller how to find valid ids"
   [ ! -s "$LAUNCH_LOG" ] || fail "cursor model refusal must happen before launch"
   pass "cursor refuses model ids absent from its resolved binary's live catalog"
+}
+
+# The creator's pre-fold check validates the id the captain typed. The effort
+# fold then rewrites it, and most catalog ids have no tier ladder at all, so the
+# folded id can be one Cursor does not know - and Cursor exits 1 on an unknown
+# id rather than falling back, leaving a dead pane supervision reads as wedged.
+#
+# FM_CURSOR_MODEL_CATALOG pins the catalog the post-fold check reads, and
+# FM_TEST_CURSOR_MODELS gives the fake binary the same text, so both checks in
+# the spawn agree on one catalog.
+CURSOR_LADDERLESS_CATALOG='Available models\ngpt-5.2 - GPT 5.2\ngpt-5.2-high - GPT 5.2 High'
+
+write_cursor_catalog_fixture() {  # <path>
+  printf '%b\n' "$CURSOR_LADDERLESS_CATALOG" > "$1"
+}
+
+test_cursor_refuses_a_folded_model_absent_from_the_catalog() {
+  local rec id out status catalog
+  id=profile-cursor-fold-unknown-z6f
+  rec=$(make_spawn_case profile-cursor-fold-unknown cursor "$id")
+  read_case_record "$rec"
+  catalog="$CASE_DIR/catalog.txt"
+  write_cursor_catalog_fixture "$catalog"
+
+  export FM_CURSOR_MODEL_CATALOG="$catalog"
+  FM_TEST_CURSOR_MODELS="$CURSOR_LADDERLESS_CATALOG" \
+    out=$(run_ship_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" "$id" "$PROJ_DIR" \
+      --model gpt-5.2 --effort medium)
+  status=$?
+  unset FM_CURSOR_MODEL_CATALOG
+
+  expect_code 1 "$status" "cursor spawn should refuse a folded id the catalog does not list"
+  assert_contains "$out" "gpt-5.2-medium" \
+    "the refusal did not name the folded id the worker would have received"
+  [ ! -s "$LAUNCH_LOG" ] || fail "the folded-id refusal must happen before launch"
+  assert_absent "$HOME_DIR/state/$id.meta" \
+    "the folded-id refusal must not leave a task record"
+  pass "cursor refuses a folded model id its live catalog does not list"
+}
+
+test_cursor_records_the_model_that_was_requested_when_the_fold_changes_it() {
+  local rec id out status meta catalog launch
+  id=profile-cursor-fold-recorded-z6g
+  rec=$(make_spawn_case profile-cursor-fold-recorded cursor "$id")
+  read_case_record "$rec"
+  catalog="$CASE_DIR/catalog.txt"
+  write_cursor_catalog_fixture "$catalog"
+
+  export FM_CURSOR_MODEL_CATALOG="$catalog"
+  FM_TEST_CURSOR_MODELS="$CURSOR_LADDERLESS_CATALOG" \
+    out=$(run_ship_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" "$id" "$PROJ_DIR" \
+      --model gpt-5.2 --effort high)
+  status=$?
+  unset FM_CURSOR_MODEL_CATALOG
+
+  expect_code 0 "$status" "cursor spawn with a folded id the catalog lists should succeed"
+  meta="$HOME_DIR/state/$id.meta"
+  assert_meta_profile "$meta" cursor gpt-5.2-high high
+  assert_grep 'model_requested=gpt-5.2' "$meta" \
+    "meta lost the model the captain actually asked for"
+  launch=$(cat "$LAUNCH_LOG")
+  assert_contains "$launch" "--model 'gpt-5.2-high'" \
+    "the launch did not carry the folded model id"
+  pass "cursor records the pre-fold model alongside the id the worker receives"
+}
+
+test_cursor_records_no_requested_model_when_the_fold_changes_nothing() {
+  local rec id out status meta catalog
+  id=profile-cursor-fold-unchanged-z6h
+  rec=$(make_spawn_case profile-cursor-fold-unchanged cursor "$id")
+  read_case_record "$rec"
+  catalog="$CASE_DIR/catalog.txt"
+  write_cursor_catalog_fixture "$catalog"
+
+  export FM_CURSOR_MODEL_CATALOG="$catalog"
+  FM_TEST_CURSOR_MODELS="$CURSOR_LADDERLESS_CATALOG" \
+    out=$(run_ship_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" "$id" "$PROJ_DIR" \
+      --model gpt-5.2-high --effort high)
+  status=$?
+  unset FM_CURSOR_MODEL_CATALOG
+
+  expect_code 0 "$status" "an already-tiered cursor model should spawn unchanged"
+  meta="$HOME_DIR/state/$id.meta"
+  assert_meta_profile "$meta" cursor gpt-5.2-high high
+  if grep -q '^model_requested=' "$meta"; then
+    fail "meta claimed a different requested model when the fold changed nothing"
+  fi
+  pass "cursor records no requested model when the launch id is the one asked for"
+}
+
+test_cursor_unreadable_catalog_does_not_refuse_a_folded_model() {
+  local rec id out status meta
+  id=profile-cursor-fold-unreadable-z6i
+  rec=$(make_spawn_case profile-cursor-fold-unreadable cursor "$id")
+  read_case_record "$rec"
+
+  # Both catalog reads fail: the fake binary exits non-zero and the pinned
+  # catalog path does not exist. Unreadable must stay "unknown", never "absent".
+  export FM_CURSOR_MODEL_CATALOG="$CASE_DIR/no-such-catalog.txt"
+  FM_TEST_CURSOR_LIST_STATUS=124 \
+    out=$(run_ship_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" "$id" "$PROJ_DIR" \
+      --model gpt-5.2 --effort medium)
+  status=$?
+  unset FM_CURSOR_MODEL_CATALOG
+
+  expect_code 0 "$status" "an unreadable catalog must not turn into a refusal to spawn"
+  meta="$HOME_DIR/state/$id.meta"
+  assert_meta_profile "$meta" cursor gpt-5.2-medium medium
+  assert_grep 'model_requested=gpt-5.2' "$meta" \
+    "meta lost the requested model on the unreadable-catalog path"
+  pass "an unreadable cursor catalog leaves the folded model alone instead of refusing"
 }
 
 test_cursor_failed_catalog_probe_does_not_block_spawn() {
@@ -1407,6 +1521,10 @@ test_grok_omits_invalid_xhigh_reasoning_effort
 test_cursor_threads_model_workspace_and_omits_effort_axis
 test_cursor_without_a_model_records_the_default
 test_cursor_refuses_model_absent_from_live_catalog
+test_cursor_refuses_a_folded_model_absent_from_the_catalog
+test_cursor_records_the_model_that_was_requested_when_the_fold_changes_it
+test_cursor_records_no_requested_model_when_the_fold_changes_nothing
+test_cursor_unreadable_catalog_does_not_refuse_a_folded_model
 test_cursor_failed_catalog_probe_does_not_block_spawn
 test_opencode_threads_model_and_ignores_effort_axis
 test_native_effort_validator_keeps_axes_separate

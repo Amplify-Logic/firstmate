@@ -2457,6 +2457,25 @@ fi
 LAUNCH_MODEL=$MODEL
 if [ "$HARNESS" = cursor ]; then
   LAUNCH_MODEL=$(cursor_model_with_effort "$MODEL" "$EFFORT")
+  # The creator's check above validated the REQUESTED id; the fold can still
+  # produce an id no catalog carries, because most catalog ids have no tier
+  # ladder at all (of the 224 ids this fork's CLI listed on 2026-09-16, 59 carry
+  # no tier suffix and not one of those has a `-medium` sibling). Cursor exits 1
+  # on an id it does not know rather than falling back, so launching one leaves
+  # a dead pane that supervision reads as a wedged worker.
+  #
+  # Only a catalog that LOADED and lacks the id refuses. Unreadable (2) is not
+  # "absent": the read is bounded and can time out, and a refusal to spawn on a
+  # slow network call would be worse than launching the id the captain asked for.
+  if [ -n "$LAUNCH_MODEL" ]; then
+    cursor_launch_model_rc=0
+    fm_fork_cursor_catalog_has_model "$LAUNCH_MODEL" "${CURSOR_BIN:-}" \
+      || cursor_launch_model_rc=$?
+    if [ "$cursor_launch_model_rc" -eq 1 ]; then
+      echo "error: Cursor model '$LAUNCH_MODEL' (from --model '$MODEL' folded with --effort '${EFFORT:-default}') is not in the live catalog; refusing before launch so the task record cannot name a model the worker will not run. Pass an exact id from '--list-models', or drop --effort" >&2
+      exit 1
+    fi
+  fi
 fi
 if [ "$HARNESS" = prime-agent ]; then
   # The CLI's own default model is a PAID route (verified: a model-less launch
@@ -4583,6 +4602,12 @@ preserve_relaunch_meta() {
     # model= line is a record no reader can interpret, so it falls through to
     # the same default every other harness writes.
     echo "model=$LAUNCH_MODEL"
+    # When the fold changed the token, the requested one is the only record of
+    # what the captain actually asked for.
+    if [ "$HARNESS" = cursor ] && [ -n "$MODEL" ] \
+       && [ "$MODEL" != default ] && [ "$MODEL" != "$LAUNCH_MODEL" ]; then
+      echo "model_requested=$MODEL"
+    fi
   else
     echo "model=${MODEL:-default}"
   fi
