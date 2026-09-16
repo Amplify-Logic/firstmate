@@ -625,6 +625,75 @@ test_harness_switch_does_not_carry_the_old_profile_axes() {
   pass "fm-control relaunch: a harness switch resets model and effort unless they are named too"
 }
 
+# model_requested= is the only record of what the captain asked for before the
+# cursor effort fold rewrote it. preserve_relaunch_meta carries forward every key
+# the fresh spawn does NOT write, so a key the spawn does write has to be owned
+# there: otherwise the previous incarnation's line lands after the new one and
+# wins the last-wins read (fm_meta_get in bin/fm-backend.sh, and meta_field here).
+make_cursor_stub() {  # <case-dir>
+  local fb="$1/fakebin"
+  cat > "$fb/cursor-agent" <<'SH'
+#!/usr/bin/env bash
+if [ "${1:-}" = --list-models ]; then
+  cat "${FM_FAKE_CURSOR_CATALOG:-/dev/null}"
+fi
+exit 0
+SH
+  chmod +x "$fb/cursor-agent"
+}
+
+seed_prior_cursor_fold() {  # <case-dir> <id> <launch-model> <requested-model>
+  local meta="$1/home/state/$2.meta"
+  sed "s/^model=default\$/model=$3/" "$meta" > "$meta.tmp"
+  mv "$meta.tmp" "$meta"
+  printf 'model_requested=%s\n' "$4" >> "$meta"
+}
+
+test_relaunch_records_the_requested_model_of_the_new_incarnation() {
+  local dir catalog out rc
+  dir=$(new_case requested rl60)
+  add_ship_task "$dir" rl60 cursor
+  make_cursor_stub "$dir"
+  catalog="$dir/catalog.txt"
+  printf '%s\n' 'Available models' 'gpt-5.2 - GPT 5.2' 'gpt-5.2-high - GPT 5.2 High' \
+    'gpt-5.4 - GPT 5.4' 'gpt-5.4-high - GPT 5.4 High' > "$catalog"
+  seed_prior_cursor_fold "$dir" rl60 gpt-5.2-high gpt-5.2
+  printf 'cursor-agent' > "$dir/fake/becomes"
+  # A relaunch requires a positively agent-free endpoint.
+  printf 'zsh' > "$dir/fake/command"
+
+  export FM_FAKE_CURSOR_CATALOG="$catalog" FM_CURSOR_MODEL_CATALOG="$catalog"
+  out=$(run_spawn "$dir" rl60 --relaunch --model gpt-5.4 --effort high); rc=$?
+  unset FM_FAKE_CURSOR_CATALOG FM_CURSOR_MODEL_CATALOG
+
+  expect_code 0 "$rc" "a cursor relaunch onto a new model should succeed"$'\n'"$out"
+  [ "$(meta_field "$dir" rl60 model)" = gpt-5.4-high ] \
+    || fail "the relaunch did not record the folded launch model, got '$(meta_field "$dir" rl60 model)'"
+  [ "$(meta_field "$dir" rl60 model_requested)" = gpt-5.4 ] \
+    || fail "a reader gets '$(meta_field "$dir" rl60 model_requested)', the model the PREVIOUS incarnation requested"
+  pass "fm-spawn --relaunch: the record names the model this incarnation was asked for"
+}
+
+test_relaunch_drops_a_requested_model_belonging_to_the_old_harness() {
+  local dir out rc
+  dir=$(new_case requested-switch rl61)
+  add_ship_task "$dir" rl61 cursor
+  seed_prior_cursor_fold "$dir" rl61 gpt-5.2-high gpt-5.2
+  printf 'claude' > "$dir/fake/becomes"
+  # A relaunch requires a positively agent-free endpoint.
+  printf 'zsh' > "$dir/fake/command"
+
+  out=$(run_spawn "$dir" rl61 --relaunch --harness claude); rc=$?
+
+  expect_code 0 "$rc" "a switch away from cursor should succeed"$'\n'"$out"
+  [ "$(meta_field "$dir" rl61 harness)" = claude ] || fail "the record should follow the switch"
+  [ "$(meta_field "$dir" rl61 model)" = default ] \
+    || fail "a model chosen for the old harness must not carry to a different one"
+  [ -z "$(meta_field "$dir" rl61 model_requested)" ] \
+    || fail "the claude record claims '$(meta_field "$dir" rl61 model_requested)' was requested, a model only cursor could fold"
+  pass "fm-spawn --relaunch: a requested model does not outlive the harness that folded it"
+}
+
 test_harness_switch_resolves_a_prefixed_recorded_harness() {
   local dir out rc auth
   dir=$(new_case prefixcontrol rl32)
@@ -1710,6 +1779,8 @@ test_relaunch_appends_the_progress_note_to_the_instructions
 test_relaunch_requires_a_note_for_a_ship_task
 test_harness_switch_moves_the_record_and_clears_prior_wiring
 test_harness_switch_does_not_carry_the_old_profile_axes
+test_relaunch_records_the_requested_model_of_the_new_incarnation
+test_relaunch_drops_a_requested_model_belonging_to_the_old_harness
 test_harness_switch_resolves_a_prefixed_recorded_harness
 test_prefixed_recorded_harness_requires_explicit_replacement
 test_same_harness_relaunch_keeps_the_profile_axes
