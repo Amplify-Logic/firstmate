@@ -64,6 +64,11 @@
 # audio device. A speech error downstream of that handoff is unobservable here
 # by design.
 #
+# NEVER SHARES THE CALLER'S PROCESS GROUP. Detaching the speaker from the
+# caller's streams is not enough to let a line finish: the speaker must also
+# leave the caller's process group, or anything that reaps that group takes the
+# audio with it. See detach_speaker for what that costs when it is missed.
+#
 # Environment overrides, for tests and unusual layouts:
 #   FM_SPEAK_SHAPER    register owner exposing the `--dry-run <text>` contract
 #                      (default: $FM_HOME/projects/glasses-voice/bin/announce)
@@ -223,25 +228,67 @@ run_bounded() {  # <seconds> <outfile> <errfile> <cmd...>
   return "$status"
 }
 
-# Hand the shaped line to macOS `say` and return immediately. The standard
-# streams are closed before backgrounding: a caller reading this script through
-# a pipe or command substitution would otherwise stay blocked until the audio
-# finished, which is exactly the turn-blocking this script must never cause.
-speak_say_detached() {  # <textfile>
+# Hand one speaker body to the machine and return immediately, with its standard
+# streams closed and in a process group of its own.
+#
+# The closed streams are the turn-blocking boundary: a caller reading this script
+# through a pipe or command substitution would otherwise stay blocked until the
+# audio finished.
+#
+# The process group is a second and entirely separate boundary, and it is the one
+# the captain was losing the end of every spoken line to. A plain `&` leaves the
+# speaker in the process group of the command that spoke, so anything that reaps
+# that group reaps the audio with it. An agent harness reaps a finished command's
+# process group at the end of its turn, which is exactly when firstmate speaks -
+# right after a captain-facing reply - so the line was cut mid-sentence and the
+# temporary file was left behind every time. Job control gives the job its own
+# group, which a reap aimed at the caller cannot reach.
+detach_speaker() {  # <function> [args...]
+  local detached
+  set -m
+  "$@" </dev/null >/dev/null 2>&1 &
+  detached=$!
+  set +m
+  disown "$detached" 2>/dev/null || true
+}
+
+# Play one line under the speaker bound. Runs only inside detach_speaker, where
+# job control is on for the fork itself; it is turned back off here so the bound
+# below behaves exactly as it does everywhere else in this script.
+# shellcheck disable=SC2329 # Reached only through the speaker bodies below.
+play_bounded() {  # <cmd...>
+  local pid
+  set +m
+  "$@" &
+  pid=$!
+  start_watchdog "$SPEAKER_TIMEOUT" "$pid"
+  wait "$pid" 2>/dev/null || true
+  kill "$WATCHDOG_PID" 2>/dev/null || true
+}
+
+# The two speaker bodies. Each owns the temporary files it was handed and removes
+# them once the line has actually finished playing, so a file left behind is
+# itself the evidence that a speaker was cut short.
+# shellcheck disable=SC2329 # Invoked by name through detach_speaker.
+say_speaker() {  # <textfile>
   local textfile=$1
-  (
-    local say_pid
-    if [ -n "$CFG_VOICE" ]; then
-      "$SAY_BIN" -v "$CFG_VOICE" -f "$textfile" &
-    else
-      "$SAY_BIN" -f "$textfile" &
-    fi
-    say_pid=$!
-    start_watchdog "$SPEAKER_TIMEOUT" "$say_pid"
-    wait "$say_pid" 2>/dev/null || true
-    kill "$WATCHDOG_PID" 2>/dev/null || true
-    rm -f "$textfile"
-  ) </dev/null >/dev/null 2>&1 &
+  if [ -n "$CFG_VOICE" ]; then
+    play_bounded "$SAY_BIN" -v "$CFG_VOICE" -f "$textfile"
+  else
+    play_bounded "$SAY_BIN" -f "$textfile"
+  fi
+  rm -f "$textfile"
+}
+
+# shellcheck disable=SC2329 # Invoked by name through detach_speaker.
+audio_speaker() {  # <player> <audio> <textfile>
+  local player=$1 audio=$2 textfile=$3
+  play_bounded "$player" "$audio"
+  rm -f "$audio" "$textfile"
+}
+
+speak_say_detached() {  # <textfile>
+  detach_speaker say_speaker "$1"
 }
 
 # Prefer Deepgram when a key is available. Synthesis is waited on under the
@@ -278,15 +325,7 @@ speak_deepgram_or_fail() {  # <textfile>
     note "no afplay at $afplay_bin; falling back to say"
     return 1
   fi
-  (
-    local play_pid
-    "$afplay_bin" "$audio" &
-    play_pid=$!
-    start_watchdog "$SPEAKER_TIMEOUT" "$play_pid"
-    wait "$play_pid" 2>/dev/null || true
-    kill "$WATCHDOG_PID" 2>/dev/null || true
-    rm -f "$audio" "$textfile"
-  ) </dev/null >/dev/null 2>&1 &
+  detach_speaker audio_speaker "$afplay_bin" "$audio" "$textfile"
   return 0
 }
 
