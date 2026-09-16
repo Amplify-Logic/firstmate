@@ -677,19 +677,27 @@ SH
 # Scout teardown success fixtures need this when the host PATH is sanitized
 # (e.g. no-mistakes gate worktrees without nvm), otherwise decision-hold refuses
 # with "compatible tasks-axi is required" before the adapter-under-test runs.
+# The reported version is read from the library's own floor rather than pinned
+# here, so a creator-side bump of FM_TASKS_AXI_MIN cannot leave this stub quietly
+# below it - which is exactly how the scout teardown fixtures started refusing.
 fm_install_compatible_tasks_axi() {
-  local fb=$1
+  local fb=$1 floor
   mkdir -p "$fb"
-  cat > "$fb/tasks-axi" <<'SH'
+  floor=$(sed -n 's/^FM_TASKS_AXI_MIN=\([0-9][0-9.]*\)$/\1/p' "$ROOT/bin/fm-tasks-axi-lib.sh" | head -1)
+  [ -n "$floor" ] || {
+    echo "fm_install_compatible_tasks_axi: no FM_TASKS_AXI_MIN in $ROOT/bin/fm-tasks-axi-lib.sh" >&2
+    return 1
+  }
+  cat > "$fb/tasks-axi" <<SH
 #!/usr/bin/env bash
 set -u
-case "${1:-}" in
+case "\${1:-}" in
   --version)
-    printf '%s\n' '0.2.3'
+    printf '%s\n' '$floor'
     exit 0
     ;;
   update)
-    if [ "${2:-}" = --help ]; then
+    if [ "\${2:-}" = --help ]; then
       printf '%s\n' 'usage: tasks-axi update <id> [flags]'
       printf '%s\n' '  --body-file <path>'
       printf '%s\n' '  --archive-body'
@@ -697,13 +705,13 @@ case "${1:-}" in
     fi
     ;;
   mv)
-    if [ "${2:-}" = --help ]; then
+    if [ "\${2:-}" = --help ]; then
       printf '%s\n' 'usage: tasks-axi mv <id> [<id>...] --to <path-or-dir>'
       exit 0
     fi
     ;;
   hold)
-    if [ "${2:-}" = --help ]; then
+    if [ "\${2:-}" = --help ]; then
       printf '%s\n' 'usage: tasks-axi hold <id> [flags]'
       printf '%s\n' '  --kind captain'
       printf '%s\n' '  --reason <text>'
@@ -719,6 +727,13 @@ esac
 exit 0
 SH
   chmod +x "$fb/tasks-axi"
+  # Probe the stub exactly as the gates will, so a drifted floor or helptext
+  # fails loudly here instead of surfacing as "compatible tasks-axi is required"
+  # from whatever gate the case installed this stub to get past.
+  ( PATH="$fb:$PATH"; . "$ROOT/bin/fm-tasks-axi-lib.sh"; fm_tasks_axi_compatible ) || {
+    echo "fm_install_compatible_tasks_axi: stub in $fb does not satisfy fm_tasks_axi_compatible" >&2
+    return 1
+  }
 }
 
 # fm_fake_crash_injector <fakebin>
