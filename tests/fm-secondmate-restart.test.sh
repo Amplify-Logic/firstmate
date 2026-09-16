@@ -44,6 +44,13 @@ trap 'rm -rf -- "$TMP_ROOT"' EXIT
 make_stub() {  # <case-dir>
   local fb="$1/fakebin"
   mkdir -p "$fb"
+  # The restart drives the real bin/fm-spawn.sh, whose launch-binary preflight
+  # resolves and --version-probes the harness executable before it will create
+  # an endpoint. claude is this fixture's default pin and codex the one the
+  # pinned-runtime cases move to, so both need a stub on the fixture's PATH -
+  # without them a host that happens to have the real CLI installed passes
+  # while every runner without one fails.
+  fm_fake_launch_binary "$fb" claude codex
   cat > "$fb/tmux" <<'SH'
 #!/usr/bin/env bash
 set -u

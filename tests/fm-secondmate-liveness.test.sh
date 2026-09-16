@@ -203,10 +203,17 @@ test_agent_state_dispatcher_and_compatibility() {
 # make_toolchain <dir>: the fixed set of stubs bin/fm-bootstrap.sh's read-only
 # diagnostics need to stay quiet (mirrors tests/fm-secondmate-sync.test.sh's
 # make_fake_toolchain), MINUS tmux - callers add their own controllable tmux.
+#
+# The sweep's recovery path runs the real bin/fm-spawn.sh, whose launch-binary
+# preflight resolves and --version-probes the harness executable before it will
+# create an endpoint, so the harnesses these cases relaunch onto need launch
+# stubs too: codex is what new_world pins as the secondmate runtime, and
+# pi-signed is the Pi executable the pi-signed case pins over it.
 make_toolchain() {
   local dir=$1 fakebin
   fakebin=$(fm_fakebin "$dir")
-  fm_fake_exit0 "$fakebin" node chrome-devtools-axi pi-signed
+  fm_fake_exit0 "$fakebin" node chrome-devtools-axi
+  fm_fake_launch_binary "$fakebin" codex pi-signed
   fm_fake_version_tool "$fakebin" lavish-axi FM_FAKE_LAVISH_AXI_VERSION 0.1.46
   cat > "$fakebin/gh-axi" <<'SH'
 #!/usr/bin/env bash
@@ -288,7 +295,13 @@ case "${1:-}" in
     ;;
   list-windows)
     case "$mode" in
-      missing) printf '%s\n' main; exit 0 ;;
+      # An authoritatively absent window stays absent only until this stub's
+      # own new-window creates it - which is exactly what the recovery under
+      # test does, and what fm-spawn.sh then reads back to confirm the
+      # endpoint it just launched into is really there.
+      missing)
+        if [ -e "${FM_TMUX_CALL_LOG:?}.created" ]; then printf '%s\n' fm-sm1; else printf '%s\n' main; fi
+        exit 0 ;;
       unreadable) exit 1 ;;
       *) [ -e "${FM_TMUX_CALL_LOG:?}.killed" ] || printf '%s\n' fm-sm1; exit 0 ;;
     esac
@@ -297,7 +310,7 @@ case "${1:-}" in
     printf '%s\n' "$*" >> "${FM_TMUX_CALL_LOG:?}"
     [ "${1:-}" = kill-window ] && : > "${FM_TMUX_CALL_LOG}.killed"
     [ "${FM_TEST_FAIL_NEW_WINDOW:-0}" = 1 ] && [ "${1:-}" = new-window ] && exit 1
-    [ "${1:-}" = new-window ] && rm -f "${FM_TMUX_CALL_LOG}.killed"
+    [ "${1:-}" = new-window ] && { rm -f "${FM_TMUX_CALL_LOG}.killed"; : > "${FM_TMUX_CALL_LOG}.created"; }
     exit 0
     ;;
   has-session) exit 0 ;;
