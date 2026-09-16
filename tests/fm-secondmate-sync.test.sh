@@ -346,10 +346,6 @@ case "$*" in
   *display-message*'#{pane_id}'*) printf '%s\n' '%1'; exit 0 ;;
   *display-message*'#{cursor_y}'*) printf '%s\n' 0; exit 0 ;;
   *capture-pane*) printf '❯\n'; exit 0 ;;
-  *'send-keys'*' -l '*)
-    [ "${FM_FAKE_TMUX_FAIL_LITERAL:-0}" = 1 ] && exit 1
-    exit 0
-    ;;
 esac
 exit 0
 SH
@@ -646,9 +642,10 @@ test_bootstrap_nudge_retry_names_refused_registry_symlink() {
   add_sm_worktree "$w" sm-instr "$c1"
   bump_primary "$w" instr
   fakebin=$(make_fake_toolchain "$w")
+  : > "$w/home/state/sm-instr.inbox"   # block the steer record: a real local failure
 
   out=$(PATH="$fakebin:$BASE_PATH" FM_HOME="$w/home" FM_ROOT_OVERRIDE="$w/main" \
-    FM_SEND_SETTLE=0 FM_FAKE_TMUX_FAIL_LITERAL=1 \
+    FM_SEND_SETTLE=0 \
     "$ROOT/bin/fm-bootstrap.sh" 2>/dev/null)
   assert_contains "$out" "NUDGE_SECONDMATES: secondmate sm-instr: send failed:" \
     "precondition: first nudge should fail"

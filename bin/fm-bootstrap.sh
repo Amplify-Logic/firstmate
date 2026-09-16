@@ -460,7 +460,7 @@ secondmate_sync() {
   }
 
   secondmate_retry_pending_nudges() {
-    local marker id selector home commit message remote expected_marker meta meta_home home_real head out
+    local marker id selector home commit message remote expected_marker meta meta_home home_real head out registry_rc
     [ -d "$SECOND_MATE_NUDGE_PENDING_DIR" ] || return 0
     for marker in "$SECOND_MATE_NUDGE_PENDING_DIR"/*.pending; do
       [ -f "$marker" ] || continue
@@ -504,7 +504,15 @@ secondmate_sync() {
         continue
       }
       meta_home=$(fm_meta_get "$meta" home)
-      [ -n "$meta_home" ] || meta_home=$(secondmate_registry_field "$DATA/secondmates.md" "$id" home || true)
+      if [ -z "$meta_home" ]; then
+        registry_rc=0
+        meta_home=$(secondmate_registry_field "$DATA/secondmates.md" "$id" home) || registry_rc=$?
+        # Report the refused registry rather than a home that merely looks unset.
+        if [ "$registry_rc" -eq 2 ]; then
+          echo "NUDGE_SECONDMATES: secondmate $id: send failed: $(secondmate_registry_symlink_refusal "$DATA/secondmates.md")"
+          continue
+        fi
+      fi
       if ! validate_secondmate_home "$id" "$meta_home"; then
         echo "NUDGE_SECONDMATES: secondmate $id: send failed: retry target home unsafe: $VALIDATION_ERROR"
         continue

@@ -75,10 +75,26 @@ secondmate_registry_parse_line() {
   return 0
 }
 
+# rc=2 from the read helpers below is produced only by this refusal, and they
+# usually run inside a command substitution where SECONDMATE_REGISTRY_ERROR
+# cannot reach the caller, so rc=2 call sites rebuild the exact message here.
+secondmate_registry_symlink_refusal() {
+  printf 'secondmate registry is unavailable or unsafe: %s (registry is a symlink and is refused)\n' "$1"
+}
+
+# Returns 2 when the registry itself cannot be read safely, and 1 when the file
+# is fine but holds no single usable entry for the id.
+# Callers must keep those apart: a refused symlink is an operator-visible fault
+# that has to name its cause, not an id that happens to be unregistered.
 secondmate_registry_line_for_id() {
   local reg=$1 id=$2 line count=0
+  SECONDMATE_REGISTRY_ERROR=
   case "$id" in ''|*[!A-Za-z0-9._-]*) return 1 ;; esac
-  [ -f "$reg" ] && [ ! -L "$reg" ] || return 1
+  if [ -L "$reg" ]; then
+    SECONDMATE_REGISTRY_ERROR=$(secondmate_registry_symlink_refusal "$reg")
+    return 2
+  fi
+  [ -f "$reg" ] || return 1
   while IFS= read -r line || [ -n "$line" ]; do
     [ "$line" = "- $id" ] || case "$line" in "- $id "*) ;; *) continue ;; esac
     count=$((count + 1))
@@ -89,9 +105,12 @@ secondmate_registry_line_for_id() {
   secondmate_registry_parse_line "$SECONDMATE_REGISTRY_LINE"
 }
 
+# Propagates the registry-unreadable code so callers can report the real cause
+# instead of reporting the id as unregistered.
 secondmate_registry_field() {
-  local reg=$1 id=$2 key=$3
-  secondmate_registry_line_for_id "$reg" "$id" || return 1
+  local reg=$1 id=$2 key=$3 rc=0
+  secondmate_registry_line_for_id "$reg" "$id" || rc=$?
+  [ "$rc" -eq 0 ] || return "$rc"
   case "$key" in
     host) printf '%s\n' "$SECONDMATE_REGISTRY_HOST" ;;
     root) printf '%s\n' "$SECONDMATE_REGISTRY_ROOT" ;;
