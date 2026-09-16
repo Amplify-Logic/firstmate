@@ -156,11 +156,50 @@ pass "real herdr $HERDR_VERSION: a gone session reads recoverable while a live p
 
 FAKEBIN="$SCRATCH/fakebin"
 mkdir -p "$FAKEBIN"
+# The inert harness stub has to present what a relaunch is required to prove
+# before it reports the spawn as started: a registered agent backed by a live
+# agent-named process in the pane. So besides dropping the launch marker it
+# registers itself through Herdr's own agent registry and then holds the pane
+# under a process literally named `codex` - a symlink to a long-running system
+# binary, the same construction the live-agent case below uses for `claude`
+# (a copied platform binary fails code signing on macOS arm64; the symlink name
+# is what the kernel records). retire_fake_agent below undoes both, so the
+# agent-free cases that follow each relaunch still start from a plain shell.
+FAKE_AGENT_BIN="$SCRATCH/fake-agent-bin"
+mkdir -p "$FAKE_AGENT_BIN"
+FAKE_SLEEP_BIN=$(command -v sleep) || fail "sleep not found"
+ln -s "$FAKE_SLEEP_BIN" "$FAKE_AGENT_BIN/codex"
 cat > "$FAKEBIN/codex" <<EOF
 #!/usr/bin/env bash
+# The launch-binary preflight probes \`--version\` in the spawn's own process
+# and bounds it, so that answer has to return immediately and must not count as
+# a launch.
+case "\${1:-}" in
+  --version|-V|version) echo "codex 0.0.0-fm-control-smoke"; exit 0 ;;
+esac
 : > "$SCRATCH/codex-launched"
+herdr pane report-agent "$PANE_ID" --source fm-control-smoke-launch --agent codex \
+  --state idle --session "$SESSION" >/dev/null 2>&1 || true
+exec "$FAKE_AGENT_BIN/codex" 900
 EOF
 chmod +x "$FAKEBIN/codex"
+
+# Return the relaunched pane to the plain shell the agent-free cases below
+# operate on: stop the stub's process and drop its registration.
+retire_fake_agent() {
+  local pid i=0
+  pid=$(herdr pane process-info --pane "$PANE_ID" --session "$SESSION" 2>/dev/null \
+    | jq -r '.result.process_info.foreground_processes[0].pid // empty')
+  [ -z "$pid" ] || kill "$pid" 2>/dev/null || true
+  herdr pane release-agent "$PANE_ID" --source fm-control-smoke-launch --agent codex \
+    --session "$SESSION" >/dev/null 2>&1 || true
+  while [ "$i" -lt 100 ]; do
+    [ "$(fm_backend_herdr_pane_agent_state "$SESSION" "$PANE_ID")" != no-agent ] || return 0
+    sleep 0.1
+    i=$((i + 1))
+  done
+  fail "the fake harness did not release the pane back to an agent-free shell"
+}
 printf -v FAKEBIN_Q '%q' "$FAKEBIN"
 printf -v PROJ_Q '%q' "$PROJ"
 fm_backend_herdr_send_text_line "$SESSION:$PANE_ID" "export PATH=$FAKEBIN_Q:\$PATH" \
@@ -174,7 +213,12 @@ done
 [ "$(fm_backend_herdr_current_path "$SESSION:$PANE_ID" 2>/dev/null || true)" = "$PROJ_REAL" ] \
   || fail "the real Herdr pane did not drift out of its recorded worktree"
 
-OUT=$(env FM_HOME="$HOME_DIR" HERDR_SESSION="$SESSION" FM_SPAWN_NO_GUARD=1 \
+# fm-spawn.sh verifies the harness launch binary in ITS OWN process before it
+# touches any endpoint, so the inert stub has to be on the PATH of the spawn
+# invocation too - putting it only on the pane's PATH leaves the preflight
+# resolving the real `codex` against this test process's PATH, which no CI
+# runner has.
+OUT=$(env PATH="$FAKEBIN:$PATH" FM_HOME="$HOME_DIR" HERDR_SESSION="$SESSION" FM_SPAWN_NO_GUARD=1 \
   "$ROOT/bin/fm-spawn.sh" hsmoke --relaunch --harness codex) \
   || fail "a drifted, agent-free Herdr pane should be re-homed and relaunched: $OUT"
 for _ in $(seq 1 20); do
@@ -192,6 +236,7 @@ awk -F= '$1 == "harness" {$0="harness=claude"} {print}' "$HOME_DIR/state/hsmoke.
   > "$HOME_DIR/state/hsmoke.meta.tmp"
 mv "$HOME_DIR/state/hsmoke.meta.tmp" "$HOME_DIR/state/hsmoke.meta"
 pass "real herdr: a drifted agent-free shell returns to its worktree and reuses the same endpoint"
+retire_fake_agent
 
 if OUT=$(run_control hsmoke interrupt 2>&1); then
   fail "interrupt should refuse when herdr reports no agent on the pane: $OUT"
@@ -289,7 +334,7 @@ esac
 pass "real herdr: exit on a pane with a stale registration is idempotent success"
 
 rm -f "$SCRATCH/codex-launched"
-OUT=$(env FM_HOME="$HOME_DIR" HERDR_SESSION="$SESSION" FM_SPAWN_NO_GUARD=1 \
+OUT=$(env PATH="$FAKEBIN:$PATH" FM_HOME="$HOME_DIR" HERDR_SESSION="$SESSION" FM_SPAWN_NO_GUARD=1 \
   "$ROOT/bin/fm-spawn.sh" hsmoke --relaunch --harness codex) \
   || fail "a stale-registration Herdr pane should be relaunched: $OUT"
 for _ in $(seq 1 20); do
@@ -306,6 +351,7 @@ awk -F= '$1 == "harness" {$0="harness=claude"} {print}' "$HOME_DIR/state/hsmoke.
   > "$HOME_DIR/state/hsmoke.meta.tmp"
 mv "$HOME_DIR/state/hsmoke.meta.tmp" "$HOME_DIR/state/hsmoke.meta"
 pass "real herdr: a stale registration no longer blocks relaunch, and the endpoint and local copy survive"
+retire_fake_agent
 
 # Last: the foreground process is a plain `sleep`, so the pane never draws any
 # recognized composer chrome. exit's composer-empty guard (bin/fm-control.sh)
