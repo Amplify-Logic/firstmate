@@ -530,7 +530,14 @@ make_orca_case() {  # <name> [harness]
   fakebin=$(fm_fakebin "$CASE_DIR")
   FAKEBIN_DIR=$fakebin
 
-  mkdir -p "$HOME_DIR/data/$ID" "$HOME_DIR/projects" "$HOME_DIR/config" "$HOME_DIR/state" "$ORCA_RESP"
+  mkdir -p "$HOME_DIR/data/$ID" "$HOME_DIR/projects" "$HOME_DIR/config" "$HOME_DIR/state" \
+    "$ORCA_RESP" "$HOME_DIR/user-home/.kimi-code"
+  # A kimi spawn installs its turn-end hook into the launching user's own Kimi
+  # config and refuses when it is absent, so the pinned throwaway HOME gets one -
+  # the same pinning make_case does. Without it this case would read (and write)
+  # the launching developer's real ~/.kimi-code, and refuse outright on a host
+  # that has never run Kimi, which is every CI runner.
+  printf '# test config\n' > "$HOME_DIR/user-home/.kimi-code/config.toml"
   cat > "$HOME_DIR/data/$ID/brief.md" <<EOF
 # Task
 ## Captain's intent
@@ -617,6 +624,7 @@ test_unverified_liveness_backend_still_spawns_and_warns() {
     FM_SPAWN_AGENT_UP_SLEEP=0 \
     FM_ORCA_LOG="$ORCA_LOG" \
     FM_ORCA_RESPONSES="$ORCA_RESP" \
+    HOME="$HOME_DIR/user-home" \
     PATH="$FAKEBIN_DIR:$PATH" \
     "$SPAWN" "$ID" "$PROJ_DIR" kimi --backend orca --mode no-mistakes --yolo off 2>&1 )
   status=$?
@@ -643,6 +651,7 @@ test_unverified_non_kimi_backend_still_spawns_and_warns() {
     FM_CONFIG_OVERRIDE="$HOME_DIR/config" FM_SPAWN_NO_GUARD=1 \
     FM_SPAWN_AGENT_UP_SLEEP=0 FM_ORCA_LOG="$ORCA_LOG" \
     FM_ORCA_RESPONSES="$ORCA_RESP" PATH="$FAKEBIN_DIR:$PATH" \
+    HOME="$HOME_DIR/user-home" CLAUDE_CONFIG_DIR='' \
     "$SPAWN" "$ID" "$PROJ_DIR" claude --backend orca --mode no-mistakes --yolo off 2>&1 )
   status=$?
 

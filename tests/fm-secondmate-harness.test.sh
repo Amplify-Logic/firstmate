@@ -45,6 +45,8 @@ set -u
 
 # shellcheck source=tests/lib.sh
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
+# shellcheck source=tests/fixtures.sh
+. "$(dirname "${BASH_SOURCE[0]}")/fixtures.sh"
 # shellcheck source=/dev/null
 . "$ROOT/bin/fm-ff-lib.sh"
 # shellcheck source=/dev/null
@@ -431,18 +433,24 @@ test_propagate_lib() {
 
 # A tmux stub that accepts every subcommand and prints nothing, so no window
 # pre-exists and the spawn proceeds to write its meta. Echoes the fakebin dir.
-make_noop_tmux() {
+make_spawn_tmux() {
   local dir=$1 fakebin="$1/fakebin"
   mkdir -p "$fakebin"
-  cat > "$fakebin/tmux" <<'SH'
-#!/usr/bin/env bash
-exit 0
-SH
-  chmod +x "$fakebin/tmux"
+  # The shared spawn-world tmux. A stub that answers list-windows with nothing
+  # reads as an endpoint that vanished, and fm-spawn's agent-up gate then
+  # refuses the spawn and rolls its record back, so the inventory this fixture
+  # keeps of the windows it was asked to create is load-bearing here.
+  fm_test_fake_tmux_spawn "$fakebin"
   # BASE_PATH deliberately omits the developer's node, which the trust
   # registration below needs, so link the real one in rather than presenting a
   # node-less spawn host no real fleet member looks like.
   ln -sf "$(command -v node)" "$fakebin/node"
+  # fm-spawn's launch-binary preflight resolves and --version-probes the harness
+  # binary before it will create a task endpoint, so the harnesses these cases
+  # pin have to be present. Without them the spawn is refused and rolled back,
+  # and every assertion below reads a meta that was never written - on a host
+  # where the real CLIs are absent, which is every CI runner.
+  fm_fake_launch_binary "$fakebin" claude codex
   printf '%s\n' "$fakebin"
 }
 
@@ -465,7 +473,7 @@ make_seeded_home() {
 spawn_secondmate() {
   local world=$1 id=$2 home=$3 harness=${4:-} fakebin
   mkdir -p "$world/home/state" "$world/home/data"
-  fakebin=$(make_noop_tmux "$world/tmux-$id")
+  fakebin=$(make_spawn_tmux "$world/tmux-$id")
   # An empty harness must contribute zero args, not an empty positional; build the
   # arg list explicitly so the optional harness is omitted cleanly.
   local spawn_args=("$id" "$home")
@@ -581,7 +589,7 @@ test_spawn_unverified_secondmate_harness_refused() {
   mkdir -p "$w/home/config" "$w/home/state"
   printf 'bogus\n' > "$w/home/config/secondmate-harness"
   make_seeded_home "$sm" sm
-  fakebin=$(make_noop_tmux "$w/tmux")
+  fakebin=$(make_spawn_tmux "$w/tmux")
   err="$w/spawn.err"
   rc=0
   PATH="$fakebin:$BASE_PATH" TMUX='' CLAUDECODE=1 \
@@ -642,46 +650,26 @@ test_spawn_cursor_secondmate_launches_with_its_primary_contract() {
 
 meta_field() { grep "^$2=" "$1" 2>/dev/null | tail -1 | cut -d= -f2-; }
 
-# A tmux stub that behaves like make_noop_tmux but also captures the literal
-# `send-keys -l <cmd>` launch command into FM_FAKE_LAUNCH_LOG, mirroring the
-# capture technique in fm-spawn-dispatch-profile.test.sh so the constructed
-# launch command (not just meta) can be asserted on. Also answers the
-# `#{pane_current_path}` probe from FM_FAKE_PANE_PATH so this same stub works
-# for a crew/scout (non-secondmate) spawn's treehouse-worktree wait loop.
+# make_spawn_tmux plus a pi stub. The shared fixture already captures the
+# literal `send-keys -l <cmd>` launch command into FM_FAKE_LAUNCH_LOG and
+# answers the `#{pane_current_path}` probe from FM_FAKE_PANE_PATH, so the
+# constructed launch command can be asserted on and a crew/scout (non-
+# secondmate) spawn's treehouse-worktree wait loop works against this stub too.
 make_launch_capturing_tmux() {
   local dir=$1 fakebin="$1/fakebin"
   mkdir -p "$fakebin"
-  cat > "$fakebin/tmux" <<'SH'
-#!/usr/bin/env bash
-set -u
-case "$*" in
-  *"#{pane_current_path}"*) printf '%s\n' "${FM_FAKE_PANE_PATH:-}"; exit 0 ;;
-esac
-case "${1:-}" in
-  display-message) printf 'firstmate\n'; exit 0 ;;
-  list-windows) exit 0 ;;
-  has-session|new-session|new-window|kill-window) exit 0 ;;
-  send-keys)
-    if [ -n "${FM_FAKE_LAUNCH_LOG:-}" ]; then
-      prev=
-      for a in "$@"; do
-        if [ "$prev" = "-l" ]; then
-          printf '%s\n' "$a" >> "$FM_FAKE_LAUNCH_LOG"
-        fi
-        prev=$a
-      done
-    fi
-    exit 0
-    ;;
-esac
-exit 0
-SH
-  chmod +x "$fakebin/tmux"
+  fm_test_fake_tmux_spawn "$fakebin"
   fm_fake_exit0 "$fakebin" pi
   # BASE_PATH deliberately omits the developer's node, which the trust
   # registration below needs, so link the real one in rather than presenting a
   # node-less spawn host no real fleet member looks like.
   ln -sf "$(command -v node)" "$fakebin/node"
+  # fm-spawn's launch-binary preflight resolves and --version-probes the harness
+  # binary before it will create a task endpoint, so the harnesses these cases
+  # pin have to be present. Without them the spawn is refused and rolled back,
+  # and every assertion below reads a meta that was never written - on a host
+  # where the real CLIs are absent, which is every CI runner.
+  fm_fake_launch_binary "$fakebin" claude codex
   printf '%s\n' "$fakebin"
 }
 

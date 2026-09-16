@@ -25,6 +25,8 @@ set -u
 
 # shellcheck source=tests/lib.sh
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
+# shellcheck source=tests/fixtures.sh
+. "$(dirname "${BASH_SOURCE[0]}")/fixtures.sh"
 
 # An exported TASKS_AXI_BACKEND would outrank each case's .tasks.toml fixture
 # in fm_tasks_axi_backend, so the backend cases must start from a clean slate.
@@ -88,14 +90,17 @@ Delivery contract: mode=no-mistakes
 EOF
   done
 
-  cat > "$fakebin/tmux" <<'SH'
-#!/usr/bin/env bash
-case "$*" in *"#{pane_current_path}"*) printf '%s\n' "${FM_FAKE_PANE_PATH:-}"; exit 0 ;; esac
-case "${1:-}" in display-message) printf 'firstmate\n'; exit 0 ;; esac
-exit 0
-SH
-  chmod +x "$fakebin/tmux"
+  # The shared spawn-world tmux: the same pane_current_path and display-message
+  # answers this suite already relied on, plus the window inventory fm-spawn's
+  # agent-up gate reads back after it launches. A stub that never lists what it
+  # created reads as an endpoint that vanished.
+  fm_test_fake_tmux_spawn "$fakebin"
   fm_fake_exit0 "$fakebin" treehouse gh gh-axi no-mistakes
+  # fm-spawn's launch-binary preflight resolves and --version-probes the harness
+  # binary before it will create a task endpoint, so a fixture without this stub
+  # only ever proves that refusal - and only on a host where the real CLI is
+  # absent, which is every CI runner.
+  fm_fake_launch_binary "$fakebin" claude
 
   fm_git_init_commit "$case_dir/project"
   fm_git_add_origin "$case_dir/project" "$case_dir/project.origin.git"

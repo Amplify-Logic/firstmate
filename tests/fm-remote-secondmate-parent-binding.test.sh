@@ -119,6 +119,16 @@ pass "remote provisioning publishes durable parent state before its completion m
 ) | (cd "$REMOTE_ROOT" && tar -xf -)
 install_remote_herdr_fixture "$REMOTE_ROOT" "$HERDR_STATE" "$HERDR_LOG" \
   "$TMP_ROOT/herdr-send-fail" "$TMP_ROOT/herdr.sock"
+# The remote host's own fm-spawn resolves and --version-probes the secondmate
+# harness binary before it will create a task endpoint, and it does so on the
+# REMOTE child PATH, which fm_remote_job_build_child_path composes from the
+# remote code root's bin plus the remote ACCOUNT home (~/.local/bin, the nvm
+# bin, mise, homebrew). The parent's PATH never reaches it, so a shim on the
+# local PATH would not be seen: it belongs in the remote fixture's own bin,
+# which leads that child PATH. Without it the launch is refused wherever the
+# remote account has no codex installed - which is every CI runner, and no
+# developer machine that has one.
+fm_fake_launch_binary "$REMOTE_ROOT/bin" codex
 git -C "$REMOTE_ROOT" init -q -b main
 git -C "$REMOTE_ROOT" config user.email test@example.com
 git -C "$REMOTE_ROOT" config user.name Test

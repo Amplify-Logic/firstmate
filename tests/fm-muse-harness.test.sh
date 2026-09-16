@@ -66,6 +66,17 @@ write_session_log() {
 
 # --- spawn scaffolding ------------------------------------------------------
 
+# Present a RUNNABLE bash under an arbitrary name, which is what the detection
+# cases below need: they prove the ancestry walk follows a live process rather
+# than a string, so the renamed executable has to actually run. Symlink rather
+# than copy: macOS refuses to exec a copy of a system-signed binary (a copied
+# /bin/bash is SIGKILLed, so the probe never prints and the case reads as a
+# detection miss), while both kernels set the process name from the path passed
+# to exec, so a symlink carries the name the walk must match on either platform.
+link_named_bash() {  # <path>
+  ln -sf "$(command -v bash)" "$1"
+}
+
 make_spawn_fakebin() {
   local dir=$1 fakebin
   fakebin=$(fm_fakebin "$dir")
@@ -115,7 +126,7 @@ esac
 exit 0
 SH
   chmod +x "$fakebin/tmux"
-  cp "$(command -v bash)" "$fakebin/muse-bin-test-version"
+  link_named_bash "$fakebin/muse-bin-test-version"
   cat > "$fakebin/muse" <<'SH'
 #!/usr/bin/env bash
 set -u
@@ -192,7 +203,7 @@ test_detects_versioned_process_ancestor() {
   dir="$TMP_ROOT/detect"
   mkdir -p "$dir"
   for bin in muse-bin-0.1.0-R708.1 muse-bin-9.9.9-RZZZ.9 muse; do
-    cp "$(command -v bash)" "$dir/$bin"
+    link_named_bash "$dir/$bin"
     out=$(env -u CLAUDECODE -u PI_CODING_AGENT -u FM_PI_HARNESS -u GROK_AGENT \
       -u CURSOR_AGENT -u CURSOR_INVOKED_AS -u GEMINI_CLI \
       "$dir/$bin" -c "r=\$(\"$HARNESS\"); printf '%s' \"\$r\"")
@@ -208,7 +219,7 @@ test_detection_is_anchored() {
   dir="$TMP_ROOT/detect-neg"
   mkdir -p "$dir"
   for bin in musescore amuse notmuse-bin muse-binary muse-bind; do
-    cp "$(command -v bash)" "$dir/$bin"
+    link_named_bash "$dir/$bin"
     out=$(env -u CLAUDECODE -u PI_CODING_AGENT -u FM_PI_HARNESS -u GROK_AGENT \
       -u CURSOR_AGENT -u CURSOR_INVOKED_AS -u GEMINI_CLI \
       "$dir/$bin" -c "r=\$(\"$HARNESS\"); printf '%s' \"\$r\"")
