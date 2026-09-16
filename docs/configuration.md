@@ -185,7 +185,7 @@ The spoken register - outcome first, a few short sentences inside a bounded spok
 Reusing that owner is deliberate: a second copy of the register in this repository would drift from the one the glasses already speak.
 The practical consequence is that desk voice-out needs that project's local entry point present, and `FM_SPEAK_SHAPER` can name another one exposing the same `--dry-run <text>` contract.
 
-**Deepgram preference.** When `DEEPGRAM_API_KEY` is set in the environment or this home's gitignored `.env`, `bin/fm-speak.sh` synthesizes through Deepgram Aura (`bin/fm-deepgram-tts.sh`, default model `aura-2-thalia-en`) and plays with `afplay`. macOS `say` remains the fallback when the key is absent or Deepgram fails. The key is never logged.
+**Speaker preference.** A named voice picks the speaker. With a non-empty `voice` in `config/speak`, `bin/fm-speak.sh` speaks through macOS `say` in that voice, because Deepgram takes its voice from `DEEPGRAM_TTS_MODEL` and cannot honour that key. With no voice named, `DEEPGRAM_API_KEY` in the environment or this home's gitignored `.env` sends the line to Deepgram Aura (`bin/fm-deepgram-tts.sh`, default model `aura-2-thalia-en`), played with `afplay`. Either way the other speaker is the fallback: Deepgram when there is no usable `say` binary, `say` when the key is absent or Deepgram fails. The key is never logged, and this covers speech out only - the desk floater's transcription still uses the same key.
 **Desk spoken bound.** The register owner truncates before playback and its own default budget is the ~8s one tuned for the glasses, which cuts an ordinary desk outcome mid-message.
 So `bin/fm-speak.sh` points that owner at [`docs/examples/desk-speak-register.toml`](examples/desk-speak-register.toml) via `GLASSES_ANNOUNCE_CONFIG` (unless already set) for every desk line, raising the spoken budget to **30 seconds** while keeping the same URL/path/id and decision refusals.
 The bound belongs to the desk, not to the speaker, so it is the same for Deepgram Aura and for the `say` fallback.
@@ -195,7 +195,7 @@ Because the register owner refuses text that asks the captain to decide, a merge
 Nothing here observes audio, so a successful call means the shaped line was handed to the speaker, never that it was produced or heard.
 
 Configuration is `key = value` lines; unknown keys are refused rather than ignored.
-`enabled` arms this home, and the optional `voice` names a `say` voice (ignored for Deepgram).
+`enabled` arms this home, and the optional `voice` names a `say` voice, which also selects `say` as the speaker.
 The script's header and `--help` own the exact invocation, the environment overrides, and the exit codes.
 `AGENTS.md` section 9 owns when the orchestrator speaks.
 The Mac push-to-talk floater that feeds captain input into this home is documented in [`desk-floater.md`](desk-floater.md).

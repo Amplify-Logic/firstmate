@@ -257,6 +257,37 @@ test_speak_prefers_deepgram_when_key_present() {
   pass "fm-speak: key present prefers Deepgram"
 }
 
+# A configured voice is the captain choosing how the desk sounds, and Deepgram
+# cannot speak in it - its voice comes from DEEPGRAM_TTS_MODEL. So a home that
+# names one must reach `say` even with a Deepgram key sitting right there, or the
+# outcome comes back in a voice nobody asked for.
+test_speak_prefers_the_configured_voice_over_deepgram() {
+  local home out
+  home=$(new_home voice-prefer "enabled = true" "voice = Ava (Premium)")
+  printf 'DEEPGRAM_API_KEY=test-key-not-real\n' > "$home/.env"
+  install_shaper "$home"
+  install_speaker "$home"
+  install_deepgram_tts_ok "$home"
+  install_afplay "$home"
+  out=$(
+    env -u DEEPGRAM_API_KEY \
+      FM_HOME="$home" \
+      FM_DEEPGRAM_ENV_FILE="$home/.env" \
+      FM_SPEAK_SHAPER="$home/shaper" \
+      FM_SPEAK_SAY="$home/speaker" \
+      FM_SPEAK_DEEPGRAM_TTS="$home/deepgram-tts" \
+      FM_SPEAK_DEEPGRAM_REGISTER= \
+      FM_DEEPGRAM_AFPLAY="$home/afplay" \
+      "$SPEAK" "The desk voice fix is green." 2>&1
+  ) || fail "speak failed: $out"
+  wait_for_file "$home/spoken.log" "say should have recorded the shaped line"
+  assert_contains "$(cat "$home/spoken.log")" "desk voice fix" "say received the line"
+  assert_contains "$(cat "$home/spoken.log")" "Ava (Premium)" "say was given the configured voice"
+  [ ! -f "$home/deepgram.log" ] || fail "deepgram must not run when a voice is configured"
+  [ ! -f "$home/afplay.log" ] || fail "afplay must not run when a voice is configured"
+  pass "fm-speak: a configured voice is spoken by say, not by Deepgram"
+}
+
 test_speak_falls_back_to_say_when_deepgram_fails() {
   local home out
   home=$(new_home dg-fail "enabled = true")
@@ -332,6 +363,7 @@ test_stt_reports_http_failure
 test_floater_help_and_option_refusal
 test_speak_uses_say_when_key_absent
 test_speak_prefers_deepgram_when_key_present
+test_speak_prefers_the_configured_voice_over_deepgram
 test_speak_falls_back_to_say_when_deepgram_fails
 test_desk_voice_deliver_pending_drain
 test_deepgram_lib_reads_dotenv_without_logging_key

@@ -16,8 +16,8 @@ primary already running in this home.
 - Transcript delivery into a durable mailbox under the home
   (`state/desk-voice/inbox/`), plus a wake so the primary can see it.
 - Optional speak-back of Firstmate outcome lines through `bin/fm-speak.sh`,
-  which prefers Deepgram Aura when `DEEPGRAM_API_KEY` is configured and falls
-  back to macOS `say`.
+  which speaks through macOS `say` when `config/speak` names a `voice` and
+  through Deepgram Aura otherwise, each the fallback for the other.
 
 ## Enablement
 

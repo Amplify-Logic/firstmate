@@ -33,13 +33,21 @@
 # repo, seeding a secondmate home, or adding a device never makes it talk.
 # Config is `key = value` lines; unknown keys are refused rather than ignored.
 #   enabled   true to arm this home (default false)
-#   voice     optional `say` voice name (default: the system voice; ignored for
-#             Deepgram, which uses DEEPGRAM_TTS_MODEL instead)
+#   voice     optional `say` voice name (default: the system voice). Setting it
+#             also selects `say` as the speaker, since Deepgram cannot speak in
+#             it - see SPEAKER PREFERENCE below
 #
-# SPEAKER PREFERENCE: when DEEPGRAM_API_KEY is set in the environment or in this
-# home's gitignored .env, the shaped line is handed to Deepgram Aura first
-# (bin/fm-deepgram-tts.sh). macOS `say` remains the fallback when the key is
-# absent or Deepgram fails. The key is never logged.
+# SPEAKER PREFERENCE: naming a voice picks the speaker, because only one of them
+# can honour it. With a non-empty `voice` in config/speak the shaped line goes to
+# macOS `say` in that voice; Deepgram's voice comes from DEEPGRAM_TTS_MODEL and
+# ignores the key entirely, so a home that asked for a particular voice and got
+# Deepgram would simply not be heard in it. With no voice named, DEEPGRAM_API_KEY
+# in the environment or in this home's gitignored .env sends the line to Deepgram
+# Aura first (bin/fm-deepgram-tts.sh). Either way the other speaker remains the
+# fallback: Deepgram when there is no usable `say` binary, `say` when the key is
+# absent or Deepgram fails. The key is never logged, and this preference is about
+# speech out only - the desk floater's ears still use the same key for Deepgram
+# transcription (docs/desk-floater.md).
 #
 # DESK SPOKEN BOUND: the register owner's own default budget is tuned for the
 # glasses, about eight seconds, and it truncates the shaped line before any
@@ -331,6 +339,14 @@ speak_deepgram_or_fail() {  # <textfile>
 
 speak_detached() {  # <textfile>
   local textfile=$1
+  # A configured voice is a choice this script can only keep through `say`:
+  # Deepgram takes its voice from DEEPGRAM_TTS_MODEL and ignores the config key,
+  # so preferring Deepgram here would silently answer in a voice the home did not
+  # ask for. Deepgram stays the fallback for a host with no usable `say`.
+  if [ -n "$CFG_VOICE" ] && [ -x "$SAY_BIN" ]; then
+    speak_say_detached "$textfile"
+    return 0
+  fi
   if speak_deepgram_or_fail "$textfile"; then
     return 0
   fi
