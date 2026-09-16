@@ -526,12 +526,13 @@ EOF
   chmod +x "$1"
 }
 
-probe_catalog_has_model() {  # <model-id> <bin-arg> <home> <path>
+probe_catalog_has_model() {  # <model-id> <bin-arg> <home> <path> [probe-timeout]
   cat > "$TMP_ROOT/catalog-probe.sh" <<'PROBE'
 . "$1/bin/fm-cursor-model-lib.sh"
 fm_fork_cursor_catalog_has_model "$2" "$3"
 PROBE
   env -u FM_CURSOR_MODEL_CATALOG HOME="$3" PATH="$4" \
+    FM_CURSOR_PROBE_TIMEOUT="${5:-}" \
     bash "$TMP_ROOT/catalog-probe.sh" "$ROOT" "$1" "$2"
 }
 
@@ -563,6 +564,63 @@ test_catalog_reads_the_binary_the_spawn_resolved() {
     || fail "no resolvable cursor binary must report the catalog unavailable (2), got rc=$rc"
 
   pass "cursor catalog is read from the resolved launch binary, not a bare PATH lookup"
+}
+
+# `--list-models` is an account-scoped network call, so a stalled CLI must not
+# wedge the spawn that is asking which tiers a model offers. The stall is bounded
+# by the creator's own runner and its FM_CURSOR_PROBE_TIMEOUT budget; a bound
+# that expires reports the catalog unavailable, which drops the fold to the safe
+# tier rather than claiming the model does not exist.
+#
+# The timeout binary is supplied by the fixture so the bound is exercised on
+# hosts that ship no coreutils timeout. Those hosts read the catalog directly,
+# which is what test_catalog_reads_the_binary_the_spawn_resolved above pins.
+write_stalling_cursor_agent() {  # <path>
+  mkdir -p "$(dirname "$1")"
+  cat > "$1" <<'EOF'
+#!/usr/bin/env bash
+[ "${1:-}" = --list-models ] || exit 1
+exec sleep 30
+EOF
+  chmod +x "$1"
+}
+
+write_fixture_timeout() {  # <dir>
+  mkdir -p "$1"
+  cat > "$1/timeout" <<'EOF'
+#!/usr/bin/env bash
+secs=$1
+shift
+"$@" &
+child=$!
+( sleep "$secs"; kill -TERM "$child" 2>/dev/null ) &
+guard=$!
+wait "$child"
+rc=$?
+kill -TERM "$guard" 2>/dev/null
+exit "$rc"
+EOF
+  chmod +x "$1/timeout"
+}
+
+test_stalled_catalog_read_is_bounded_and_reads_unavailable() {
+  local home runner_dir started elapsed rc
+  home="$TMP_ROOT/stalling-home"
+  runner_dir="$TMP_ROOT/runnerbin"
+  write_stalling_cursor_agent "$home/.local/bin/cursor-agent"
+  write_fixture_timeout "$runner_dir"
+
+  started=$SECONDS
+  rc=0
+  probe_catalog_has_model cursor-grok-4.6-xhigh "$home/.local/bin/cursor-agent" \
+    "$home" "$runner_dir:/usr/bin:/bin" 1 || rc=$?
+  elapsed=$((SECONDS - started))
+
+  [ "$rc" -eq 2 ] \
+    || fail "a catalog read that never completes must report unavailable (2), got rc=$rc"
+  [ "$elapsed" -lt 15 ] \
+    || fail "the catalog read was not bounded: ${elapsed}s against a 1s budget"
+  pass "a stalled cursor catalog read is bounded and reads as unavailable, not absent"
 }
 
 # --- 5. liveness ------------------------------------------------------------
@@ -656,6 +714,7 @@ test_parse_footer_model_from_idle_capture
 test_catalog_has_model_and_equivalence
 test_catalog_has_model_through_ansi_color
 test_catalog_reads_the_binary_the_spawn_resolved
+test_stalled_catalog_read_is_bounded_and_reads_unavailable
 test_liveness_uses_argv_for_node_comm
 test_unattributable_node_stays_unknown
 test_cursor_env_marker_beats_inherited_claudecode

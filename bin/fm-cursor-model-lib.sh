@@ -75,7 +75,9 @@ EOF
 # FM_CURSOR_MODEL_CATALOG, when set to an existing file path, is the sole
 # source (tests and offline checks). Otherwise the catalog is read from the
 # executable the caller already resolved, and only from fm_cursor_resolve_binary
-# when the caller has none.
+# when the caller has none. A read that cannot complete within the bound is
+# "unavailable", never "the model is absent", so a stalled CLI falls back to the
+# safe tier instead of denying a model the catalog would have listed.
 # fm_cursor_catalog_cache_cleanup: remove this process's catalog cache dir.
 # Chained onto the EXIT trap at source time; callers that install their own
 # EXIT trap after sourcing must include this in it.
@@ -146,7 +148,17 @@ fm_cursor_list_models_text() {  # [<cursor-bin>]
   else
     [ -n "$bin" ] || bin=$(fm_cursor_resolve_binary 2>/dev/null) || bin=''
     if [ -n "$bin" ] && [ -x "$bin" ]; then
-      text=$("$bin" --list-models 2>/dev/null) && status=0
+      # --list-models is an account-scoped network call, so it runs under the
+      # creator's bounded runner (fm_cursor_list_models, FM_CURSOR_PROBE_TIMEOUT)
+      # wherever one of the timeout binaries it needs exists. A host with
+      # neither reads directly: fm_cursor_bounded_output refuses outright
+      # without a runner, and a refusal here reads as "catalog unavailable",
+      # which silently degrades the effort tier on every such spawn.
+      if command -v timeout >/dev/null 2>&1 || command -v gtimeout >/dev/null 2>&1; then
+        text=$(fm_cursor_list_models "$bin") && status=0
+      else
+        text=$("$bin" --list-models 2>/dev/null) && status=0
+      fi
     fi
   fi
   if [ -n "$text" ]; then
