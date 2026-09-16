@@ -64,6 +64,7 @@ It is not deterministic across the verified adapters: codex, grok, and gemini re
    A recorded raw-command basename that differs from its resolved adapter cannot reproduce the command actually running, so relaunch refuses before the checkpoint unless the caller passes an explicit `--harness` to choose the replacement runtime deliberately.
    A harness change resets model and effort unless they are named too, because a model chosen for one adapter does not transfer to another.
    A recorded `task_type=` always carries over; a recorded vendor account pin carries over only while the harness stays the same, and a harness change drops it with the model so the replacement resolves its account as a fresh spawn would ([`docs/configuration.md`](configuration.md#vendor-account-pinning-configaccountsjson)).
+   Record fields *derived* from the agent that is being replaced - the resolved launch model, the requested model it was folded from, and any live-model mismatch `bin/fm-visible-status.sh` recorded - never carry over; the replacement re-derives them, so no reader sees the previous agent's model on the new one.
 2. **Safe checkpoint.**
    The recorded worktree must exist and be a worktree root; its head and dirty state are recorded.
    For a `kind=secondmate` task, the home's identity marker must match and its child records must be readable, so a relaunch can never strand child work behind an unreadable home.

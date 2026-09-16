@@ -350,7 +350,8 @@ Two projects or homes may safely share the same human display name without being
 
 Existing live tasks keep their recorded pane targets and remain operational in legacy `firstmate` or `2ndmate-*` workspaces.
 A bounded presentation refresh may rename a legacy task's recorded tab and update that recorded pane's metadata, but it never renames the shared legacy workspace to one task's project and never moves panes implicitly.
-If cleanup cannot close a refreshed legacy pane, `fm-visible-status.sh --clear` restores `fm-<id>` before returning so the legacy recovery fallback remains available.
+When teardown retires a refreshed legacy task, `fm-visible-status.sh --clear` restores `fm-<id>` so the legacy recovery fallback remains available.
+That clear runs only once teardown has passed every gate that can still retain a live task, so a teardown that refuses and exits leaves the pane labeled exactly as it found it rather than stripping a still-running worker's label.
 Other backends keep their existing selector and title contracts.
 
 ### Presentation capability gate
@@ -363,7 +364,14 @@ Default-on projection has its own higher floor, `FM_BACKEND_HERDR_MIN_PRESENTATI
 
 ### Bounded presentation refresh and primary boundary
 
-`bin/fm-visible-status.sh` refreshes after spawn metadata is written, during session recovery, on status or native blocked transitions, and before cleanup.
+`bin/fm-visible-status.sh` refreshes at bounded authoritative-state points, never on a timer:
+
+- `bin/fm-spawn.sh` projects the single task after its record is published, and after both the fresh-spawn and the relaunch publish paths, so a relaunch projects its own replacement record rather than the record it replaced.
+- `bin/fm-session-start.sh` refreshes `--all` during session recovery, but only for the session owner: a lock-refused read-only session must not mutate presentation.
+- `bin/fm-push-transition-lib.sh` refreshes the single task on a push transition, before that transition is absorbed or escalated, so an absorbed transition still updates the label.
+- `bin/fm-watch.sh` refreshes `--all` on each coalesced signal batch, where status writes and turn-end markers have already been gathered.
+- `bin/fm-teardown.sh` clears the retired task with `--clear <id>` once it has committed to retiring it, then refreshes `--all` after the record is removed, because the removal changes every remaining task's project aggregate.
+
 Every Herdr presentation call is best-effort because recorded ids, landed-work checks, and endpoint cleanup remain authoritative.
 The helper updates only recorded, non-secondmate task panes and never emits `FIRSTMATE` or `LAB`.
 `bin/fm-primary.sh` is the structural owner of primary projection: only an invocation through the primary launcher may emit `FIRSTMATE`, and its guarded non-default lab mode emits `LAB · PRIMARY` instead.
