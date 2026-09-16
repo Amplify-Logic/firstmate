@@ -97,6 +97,15 @@ SH
 chmod +x "$REMOTE_ROOT/bin/tmux"
 install_remote_herdr_fixture "$REMOTE_ROOT" "$HERDR_STATE" "$HERDR_LOG" \
   "$TMP_ROOT/herdr-send-fail" "$TMP_ROOT/herdr.sock"
+# The remote-side spawn runs under the child PATH fm_remote_job_build_child_path
+# composes, which puts <remote-root>/bin first and then rebuilds the rest from
+# the ACCOUNT HOME (~/.local/bin, the selected nvm bin, ...) rather than from
+# this process's PATH. So the launch-binary preflight resolves the harness from
+# the operator's own installs unless the fixture owns it here: a developer with
+# codex installed passes while every runner without one is refused before an
+# endpoint exists. <remote-root>/bin is where the tmux and herdr fakes already
+# live, and it precedes every account-home directory.
+fm_fake_launch_binary "$REMOTE_ROOT/bin" codex
 git -C "$REMOTE_ROOT" init -q -b main
 git -C "$REMOTE_ROOT" config user.email test@example.com
 git -C "$REMOTE_ROOT" config user.name Test
