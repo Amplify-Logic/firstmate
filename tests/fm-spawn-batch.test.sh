@@ -78,7 +78,15 @@ ROWS
 # A projects/ path is resolved through the firstmate home, never the caller cwd,
 # before the missing-brief check. One row per home-scoping override.
 test_projects_path_scoping() {
-  local label use_override id home projects out status expected
+  local label use_override id home projects out status expected fakebin
+  # These rows name a harness, and bin/fm-spawn.sh refuses a spawn whose launch
+  # binary is missing before it resolves the brief - earlier than the check these
+  # rows assert on, since the brief path is only known after project resolution.
+  # codex is present on a developer laptop and absent on every CI runner, so
+  # without this shim the case asserts the path scoping locally and the
+  # launch-binary refusal in CI.
+  fakebin="$TMP_ROOT/launch-bin"
+  fm_fake_launch_binary "$fakebin" codex
   while IFS='|' read -r label use_override id; do
     [ -n "$label" ] || continue
     home="$TMP_ROOT/$id home"
@@ -86,13 +94,15 @@ test_projects_path_scoping() {
     mkdir -p "$home/data" "$projects/alpha"
     git -C "$projects/alpha" init -q || fail "$label: could not initialize project fixture"
     if [ "$use_override" = yes ]; then
-      out=$(FM_ROOT_OVERRIDE='' FM_STATE_OVERRIDE='' FM_DATA_OVERRIDE='' FM_CONFIG_OVERRIDE='' \
+      # shellcheck disable=SC2031  # PATH is scoped to this one invocation on purpose.
+      out=$(PATH="$fakebin:$PATH" FM_ROOT_OVERRIDE='' FM_STATE_OVERRIDE='' FM_DATA_OVERRIDE='' FM_CONFIG_OVERRIDE='' \
         FM_HOME="$home" FM_PROJECTS_OVERRIDE="$projects" FM_SPAWN_NO_GUARD=1 \
         "$SPAWN" "$id" projects/alpha codex --mode no-mistakes --yolo off 2>&1)
     else
       mkdir -p "$home/projects/alpha"
       git -C "$home/projects/alpha" init -q || fail "$label: could not initialize home project fixture"
-      out=$(FM_ROOT_OVERRIDE='' FM_STATE_OVERRIDE='' FM_DATA_OVERRIDE='' FM_PROJECTS_OVERRIDE='' FM_CONFIG_OVERRIDE='' \
+      # shellcheck disable=SC2031  # PATH is scoped to this one invocation on purpose.
+      out=$(PATH="$fakebin:$PATH" FM_ROOT_OVERRIDE='' FM_STATE_OVERRIDE='' FM_DATA_OVERRIDE='' FM_PROJECTS_OVERRIDE='' FM_CONFIG_OVERRIDE='' \
         FM_HOME="$home" FM_SPAWN_NO_GUARD=1 \
         "$SPAWN" "$id" projects/alpha codex --mode no-mistakes --yolo off 2>&1)
     fi
