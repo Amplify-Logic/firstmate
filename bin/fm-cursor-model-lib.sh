@@ -67,6 +67,13 @@ EOF
 # shellcheck source=bin/fm-cursor-lib.sh
 . "$(dirname -- "${BASH_SOURCE[0]}")/fm-cursor-lib.sh"
 
+# Bounded execution has one owner too, and it is the one with a mechanism on
+# every host: coreutils/BSD timeout where installed, perl next, and a
+# dependency-free bash floor. The budget stays FM_CURSOR_PROBE_TIMEOUT, so the
+# catalog read and the creator's executable probe answer to the same number.
+# shellcheck source=bin/fm-timeout-lib.sh
+. "$(dirname -- "${BASH_SOURCE[0]}")/fm-timeout-lib.sh"
+
 # fm_cursor_list_models_text: `<cursor-bin> --list-models` (or catalog override)
 # with CSI stripped. Prints catalog text on stdout. Returns non-zero when the
 # catalog cannot be read so callers can soft-skip rather than treat "empty"
@@ -149,14 +156,20 @@ fm_cursor_list_models_text() {  # [<cursor-bin>]
     [ -n "$bin" ] || bin=$(fm_cursor_resolve_binary 2>/dev/null) || bin=''
     if [ -n "$bin" ] && [ -x "$bin" ]; then
       # --list-models is an account-scoped network call, so the ONLY read here
-      # is the creator's bounded one (fm_cursor_bounded_output via
-      # fm_cursor_list_models, budget FM_CURSOR_PROBE_TIMEOUT), and it fails
-      # closed exactly as that owner does. A host with no timeout runner
-      # installed therefore has no readable catalog at all: every read reports
-      # unavailable and every effort fold takes the safe tier. That is the
-      # deliberate trade - an unbounded read would let one stalled CLI call
-      # wedge a spawn, or a presentation refresh, with no pane to look at.
-      text=$(fm_cursor_list_models "$bin") && status=0
+      # is a bounded one, and it fails closed: a bound that elapses (124) or a
+      # CLI that errors leaves the catalog unavailable, which the effort fold
+      # reads as "take the safe tier" rather than "this model is absent".
+      #
+      # The bound is fm_run_timed rather than the creator's
+      # fm_cursor_bounded_output because that helper needs a coreutils/BSD
+      # timeout binary and refuses outright without one. Refusing is the wrong
+      # answer here: this same read backs the live-model presentation in
+      # bin/fm-visible-status.sh, so on a host with no timeout installed - the
+      # captain's macOS home, where cursor is the primary - a permanent refusal
+      # would report a pane's real model as a mismatch against the model the
+      # task recorded. fm_run_timed is bounded on every host, so both callers
+      # get a real read.
+      text=$(fm_run_timed "$FM_CURSOR_PROBE_TIMEOUT" "$bin" --list-models 2>/dev/null) && status=0
     fi
   fi
   if [ -n "$text" ]; then

@@ -540,10 +540,8 @@ test_catalog_reads_the_binary_the_spawn_resolved() {
   local home bare_path rc
   home="$TMP_ROOT/offpath-home"
   write_fake_cursor_agent "$home/.local/bin/cursor-agent"
-  # The catalog read is bounded and fails closed, so a usable timeout runner is
-  # part of "the catalog is readable at all" on every host.
-  write_fixture_timeout "$TMP_ROOT/resolvebin-runner"
-  bare_path="$TMP_ROOT/resolvebin-runner:/usr/bin:/bin"
+  mkdir -p "$TMP_ROOT/emptybin"
+  bare_path="$TMP_ROOT/emptybin:/usr/bin:/bin"
 
   rc=0
   probe_catalog_has_model cursor-grok-4.6-xhigh "$home/.local/bin/cursor-agent" "$home" "$bare_path" || rc=$?
@@ -569,14 +567,16 @@ test_catalog_reads_the_binary_the_spawn_resolved() {
 }
 
 # `--list-models` is an account-scoped network call, so a stalled CLI must not
-# wedge the spawn that is asking which tiers a model offers. The stall is bounded
-# by the creator's own runner and its FM_CURSOR_PROBE_TIMEOUT budget; a bound
-# that expires reports the catalog unavailable, which drops the fold to the safe
-# tier rather than claiming the model does not exist.
+# wedge the spawn that is asking which tiers a model offers, nor the
+# presentation refresh that asks what a pane is running. The read is bounded by
+# FM_CURSOR_PROBE_TIMEOUT and fails closed: a bound that expires reports the
+# catalog unavailable, which drops the fold to the safe tier rather than
+# claiming the model does not exist.
 #
-# The timeout binary is supplied by the fixture so the bound is exercised on
-# hosts that ship no coreutils timeout. Those hosts read the catalog directly,
-# which is what test_catalog_reads_the_binary_the_spawn_resolved above pins.
+# No timeout binary is staged here. The bound comes from the repo's own owner,
+# which has a mechanism on every host, and
+# test_catalog_on_a_runnerless_host_is_still_read_and_still_bounded below pins
+# that a host with no timeout, gtimeout or perl still gets both halves.
 write_stalling_cursor_agent() {  # <path>
   mkdir -p "$(dirname "$1")"
   cat > "$1" <<'EOF'
@@ -587,35 +587,15 @@ EOF
   chmod +x "$1"
 }
 
-write_fixture_timeout() {  # <dir>
-  mkdir -p "$1"
-  cat > "$1/timeout" <<'EOF'
-#!/usr/bin/env bash
-secs=$1
-shift
-"$@" &
-child=$!
-( sleep "$secs"; kill -TERM "$child" 2>/dev/null ) &
-guard=$!
-wait "$child"
-rc=$?
-kill -TERM "$guard" 2>/dev/null
-exit "$rc"
-EOF
-  chmod +x "$1/timeout"
-}
-
 test_stalled_catalog_read_is_bounded_and_reads_unavailable() {
-  local home runner_dir started elapsed rc
+  local home started elapsed rc
   home="$TMP_ROOT/stalling-home"
-  runner_dir="$TMP_ROOT/runnerbin"
   write_stalling_cursor_agent "$home/.local/bin/cursor-agent"
-  write_fixture_timeout "$runner_dir"
 
   started=$SECONDS
   rc=0
   probe_catalog_has_model cursor-grok-4.6-xhigh "$home/.local/bin/cursor-agent" \
-    "$home" "$runner_dir:/usr/bin:/bin" 1 || rc=$?
+    "$home" "/usr/bin:/bin" 1 || rc=$?
   elapsed=$((SECONDS - started))
 
   [ "$rc" -eq 2 ] \
@@ -625,10 +605,12 @@ test_stalled_catalog_read_is_bounded_and_reads_unavailable() {
   pass "a stalled cursor catalog read is bounded and reads as unavailable, not absent"
 }
 
-# A host with no timeout runner has no readable catalog: the read is bounded by
-# the creator's fail-closed runner and there is no unbounded path behind it, so
-# the fold takes the safe tier instead of risking a spawn that hangs on an
-# account-scoped network call.
+# A host with no timeout, gtimeout or perl installed - the captain's macOS home
+# is the runnerless case, minus perl - must still READ the catalog and must
+# still bound the read. Refusing to read there would be silent under-tiering on
+# the spawn path and, worse, a false model-mismatch claim on the presentation
+# path, where bin/fm-visible-status.sh compares a pane's live footer label
+# against the id the task recorded.
 runnerless_path() {  # <dir>
   local dir=$1 tool src
   mkdir -p "$dir"
@@ -639,22 +621,36 @@ runnerless_path() {  # <dir>
   printf '%s' "$dir"
 }
 
-test_catalog_without_a_timeout_runner_reads_unavailable() {
-  local home path rc
+test_catalog_on_a_runnerless_host_is_still_read_and_still_bounded() {
+  local home stalling path started elapsed rc
   home="$TMP_ROOT/runnerless-home"
+  stalling="$TMP_ROOT/runnerless-stalling-home"
   write_fake_cursor_agent "$home/.local/bin/cursor-agent"
+  write_stalling_cursor_agent "$stalling/.local/bin/cursor-agent"
   path=$(runnerless_path "$TMP_ROOT/runnerless-bin")
-  if PATH="$path" command -v timeout >/dev/null 2>&1 \
-    || PATH="$path" command -v gtimeout >/dev/null 2>&1; then
-    fail "the fixture PATH still resolves a timeout runner; the case proves nothing"
-  fi
+  for tool in timeout gtimeout perl; do
+    if PATH="$path" command -v "$tool" >/dev/null 2>&1; then
+      fail "the fixture PATH still resolves $tool; the runnerless case proves nothing"
+    fi
+  done
 
   rc=0
   probe_catalog_has_model cursor-grok-4.6-xhigh "$home/.local/bin/cursor-agent" \
     "$home" "$path" || rc=$?
+  [ "$rc" -eq 0 ] \
+    || fail "a runnerless host must still read the catalog, got rc=$rc"
+
+  started=$SECONDS
+  rc=0
+  probe_catalog_has_model cursor-grok-4.6-xhigh "$stalling/.local/bin/cursor-agent" \
+    "$stalling" "$path" 1 || rc=$?
+  elapsed=$((SECONDS - started))
   [ "$rc" -eq 2 ] \
-    || fail "without a timeout runner the catalog must read unavailable (2), got rc=$rc"
-  pass "a host with no timeout runner reads no catalog rather than reading it unbounded"
+    || fail "a stalled read on a runnerless host must report unavailable (2), got rc=$rc"
+  [ "$elapsed" -lt 15 ] \
+    || fail "the runnerless bound did not hold: ${elapsed}s against a 1s budget"
+
+  pass "a runnerless host reads the cursor catalog and still bounds the read"
 }
 
 # --- 5. liveness ------------------------------------------------------------
@@ -749,7 +745,7 @@ test_catalog_has_model_and_equivalence
 test_catalog_has_model_through_ansi_color
 test_catalog_reads_the_binary_the_spawn_resolved
 test_stalled_catalog_read_is_bounded_and_reads_unavailable
-test_catalog_without_a_timeout_runner_reads_unavailable
+test_catalog_on_a_runnerless_host_is_still_read_and_still_bounded
 test_liveness_uses_argv_for_node_comm
 test_unattributable_node_stays_unknown
 test_cursor_env_marker_beats_inherited_claudecode
