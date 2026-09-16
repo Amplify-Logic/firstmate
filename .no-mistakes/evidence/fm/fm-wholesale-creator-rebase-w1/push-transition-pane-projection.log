@@ -1,0 +1,3 @@
+status --json
+tab rename wG:tQ WORKER · tk2 · 🟡 WAITING --session default
+pane report-metadata wG:pQ --source firstmate-worker-visible-v1 --title WORKER · tk2 · 🟡 WAITING --display-agent claude · detached --state-label working=🟡 WAITING --state-label blocked=🟡 WAITING --state-label idle=🟡 WAITING --state-label done=🟡 WAITING --token fm_task_id=tk2 --token fm_runtime=claude --token fm_branch=detached --token fm_state=WAITING --session default

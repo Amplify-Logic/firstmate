@@ -1,0 +1,21 @@
+pane get w1:p2 --session fmtest
+session list --json --session fmtest
+session list --json --session fmtest
+workspace list --session fmtest
+workspace list --session fmtest
+tab list --workspace w2 --session fmtest
+pane get w1:p2 --session fmtest
+tab list --workspace w1 --session fmtest
+terminal title clear --session fmtest
+workspace list --session fmtest
+tab list --workspace w2 --session fmtest
+pane close w1:p2 --session fmtest
+pane get w1:p2 --session fmtest
+workspace list --session fmtest
+tab list --workspace w3 --session fmtest
+tab get w2:t2 --session fmtest
+tab focus w2:t2 --session fmtest
+workspace list --session fmtest
+tab list --workspace w2 --session fmtest
+pane get w1:p2 --session fmtest
+pane get w1:p2 --session fmtest

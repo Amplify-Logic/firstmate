@@ -1,0 +1,39 @@
+pane get wG:pQ --session default
+session list --json --session default
+session list --json --session default
+workspace list --session default
+tab list --workspace wH --session default
+pane get wG:pQ --session default
+tab list --workspace wG --session default
+pane list --workspace wG --session default
+workspace list --session default
+pane process-info --pane wG:pQ --session default
+pane process-info --pane wG:pQ --session default
+pane process-info --pane wG:pQ --session default
+pane process-info --pane wG:pQ --session default
+pane process-info --pane wG:pQ --session default
+pane process-info --pane wG:pQ --session default
+pane process-info --pane wG:pQ --session default
+pane process-info --pane wG:pQ --session default
+pane process-info --pane wG:pQ --session default
+pane process-info --pane wG:pQ --session default
+pane close wG:pQ --session default
+pane get wG:pQ --session default
+workspace list --session default
+tab list --workspace wH --session default
+pane get wG:pQ --session default
+status --json
+pane report-metadata wG:pQ --source firstmate-worker-visible-v1 --clear-title --clear-display-agent --clear-state-labels --clear-token fm_task_id --clear-token fm_runtime --clear-token fm_branch --clear-token fm_state --session default
+tab rename wG:tQ fm-task-x1 --session default
+status --json
+status --json --session default
+pane read wS:pS --source recent --lines 200 --session default
+status --json --session default
+agent get wS:pS --session default
+tab rename wS:tS WORKER · task x2 · 🟡 WAITING --session default
+pane report-metadata wS:pS --source firstmate-worker-visible-v1 --title WORKER · task x2 · 🟡 WAITING --display-agent claude · detached --state-label working=🟡 WAITING --state-label blocked=🟡 WAITING --state-label idle=🟡 WAITING --state-label done=🟡 WAITING --token fm_task_id=task-x2 --token fm_runtime=claude --token fm_branch=detached --token fm_state=WAITING --session default
+pane get wS:pS --session default
+status --json --session default
+pane read wS:pS --source recent --lines 200 --session default
+status --json --session default
+agent get wS:pS --session default

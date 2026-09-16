@@ -1,0 +1,8 @@
+ok - visible status: concurrent projects, ship/scout, Pi/Codex, outcomes, runtime/model, branches, and authoritative states
+ok - visible status: legacy mixed workspace stays in place and worker environments never project FIRSTMATE
+ok - visible status: kind=secondmate keeps its legacy fm-<id> tab untouched
+ok - visible status: below the presentation capability no tab or workspace is touched
+ok - visible status: cleanup clears cosmetics while preserving stable metadata and a legacy title fallback
+ok - primary boundary: only the primary launcher emits FIRSTMATE and guarded experiments remain LAB
+ok - visible status: cursor live footer relabels runtime over meta model=
+ok - visible status: busy cursor pane without footer model keeps meta
