@@ -1382,6 +1382,9 @@ test_remote_launch_does_not_retarget_host_copy() {
     "$w/herdr.sendfail" "$w/herdr.sock"
   cp "$herdrbin/bin/herdr" "$fakebin/herdr"
   fm_fake_exit0 "$fakebin" gh treehouse tmux node
+  # Both legs below spawn the codex harness, and bin/fm-spawn.sh resolves and
+  # --version-probes its launch binary before it will touch the home.
+  fm_fake_launch_binary "$fakebin" codex
 
   # The real launch leg, exactly as the parent invokes it after its own sync.
   launch_out=$(PATH="$fakebin:$BASE_PATH" \
