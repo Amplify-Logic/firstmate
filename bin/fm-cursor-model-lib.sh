@@ -59,13 +59,23 @@ EOF
 # shellcheck source=bin/fm-composer-lib.sh
 . "$(dirname -- "${BASH_SOURCE[0]}")/fm-composer-lib.sh"
 
-# fm_cursor_list_models_text: `agent --list-models` (or catalog override) with
-# CSI stripped. Prints catalog text on stdout. Returns non-zero when the
+# Which executable IS the Cursor CLI is owned once, by fm_cursor_resolve_binary
+# in bin/fm-cursor-lib.sh: cursor-agent then agent, on PATH then in
+# ~/.local/bin, each verified. A bare `command -v agent` here would be a second,
+# narrower rule, and a spawn whose launch binary came from the wider one would
+# read its catalog from a different place than it launches.
+# shellcheck source=bin/fm-cursor-lib.sh
+. "$(dirname -- "${BASH_SOURCE[0]}")/fm-cursor-lib.sh"
+
+# fm_cursor_list_models_text: `<cursor-bin> --list-models` (or catalog override)
+# with CSI stripped. Prints catalog text on stdout. Returns non-zero when the
 # catalog cannot be read so callers can soft-skip rather than treat "empty"
 # as "no models exist".
 #
 # FM_CURSOR_MODEL_CATALOG, when set to an existing file path, is the sole
-# source (tests and offline checks). Otherwise runs `agent --list-models`.
+# source (tests and offline checks). Otherwise the catalog is read from the
+# executable the caller already resolved, and only from fm_cursor_resolve_binary
+# when the caller has none.
 # fm_cursor_catalog_cache_cleanup: remove this process's catalog cache dir.
 # Chained onto the EXIT trap at source time; callers that install their own
 # EXIT trap after sourcing must include this in it.
@@ -105,13 +115,14 @@ if [ "${_FM_CURSOR_CATALOG_CACHE_PID:-}" != "$$" ] \
   fi
 fi
 
-fm_cursor_list_models_text() {
-  local key=${FM_CURSOR_MODEL_CATALOG:-} text status cache stamp
+fm_cursor_list_models_text() {  # [<cursor-bin>]
+  local bin=${1:-} key=${FM_CURSOR_MODEL_CATALOG:-} text status cache stamp
   if [ -n "$key" ]; then
     [ -f "$key" ] || return 1
     stamp=$(stat -f '%m:%z' "$key" 2>/dev/null || stat -c '%Y:%s' "$key" 2>/dev/null) || stamp=''
     key="$key@$stamp"
   fi
+  key="$key|$bin"
   cache=''
   if [ -n "${_FM_CURSOR_CATALOG_CACHE_DIR:-}" ] && [ -d "$_FM_CURSOR_CATALOG_CACHE_DIR" ]; then
     cache="$_FM_CURSOR_CATALOG_CACHE_DIR/catalog"
@@ -132,8 +143,11 @@ fm_cursor_list_models_text() {
   text=''
   if [ -n "${FM_CURSOR_MODEL_CATALOG:-}" ]; then
     text=$(cat "$FM_CURSOR_MODEL_CATALOG" 2>/dev/null) && status=0
-  elif command -v agent >/dev/null 2>&1; then
-    text=$(agent --list-models 2>/dev/null) && status=0
+  else
+    [ -n "$bin" ] || bin=$(fm_cursor_resolve_binary 2>/dev/null) || bin=''
+    if [ -n "$bin" ] && [ -x "$bin" ]; then
+      text=$("$bin" --list-models 2>/dev/null) && status=0
+    fi
   fi
   if [ -n "$text" ]; then
     text=$(printf '%s\n' "$text" | fm_composer_strip_ansi)
@@ -162,11 +176,11 @@ fm_cursor_list_models_text() {
 # owns a different fm_cursor_catalog_has_model that reads catalog text from
 # STDIN and returns only 0/1. bin/fm-spawn.sh sources both libraries and uses
 # each contract at a different call site, so the two must not share a name.
-fm_fork_cursor_catalog_has_model() {  # <model-id>
-  local want=$1 bare catalog line id
+fm_fork_cursor_catalog_has_model() {  # <model-id> [<cursor-bin>]
+  local want=$1 bin=${2:-} bare catalog line id
   [ -n "$want" ] && [ "$want" != default ] || return 0
   bare=${want%%\[*}
-  catalog=$(fm_cursor_list_models_text) || return 2
+  catalog=$(fm_cursor_list_models_text "$bin") || return 2
   [ -n "$catalog" ] || return 2
   while IFS= read -r line || [ -n "$line" ]; do
     case "$line" in

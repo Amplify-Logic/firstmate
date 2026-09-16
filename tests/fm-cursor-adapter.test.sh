@@ -509,6 +509,62 @@ test_catalog_has_model_through_ansi_color() {
   pass "cursor catalog parser matches ids through ANSI-colored --list-models lines"
 }
 
+# The catalog probe must read the executable the spawn resolved and will launch,
+# not whatever `agent` happens to sit on PATH. Cursor's user-local install is
+# routinely absent from a non-interactive login PATH, and a probe that misses it
+# reports "catalog unavailable", which silently degrades the effort tier.
+#
+# Each case runs in its own process so it gets its own catalog cache and its own
+# HOME/PATH, the way a spawn does.
+write_fake_cursor_agent() {  # <path>
+  mkdir -p "$(dirname "$1")"
+  cat > "$1" <<'EOF'
+#!/usr/bin/env bash
+[ "${1:-}" = --list-models ] || exit 1
+printf 'Available models\ncursor-grok-4.6-high - Cursor Grok 4.6\ncursor-grok-4.6-xhigh - Cursor Grok 4.6 Extra High\n'
+EOF
+  chmod +x "$1"
+}
+
+probe_catalog_has_model() {  # <model-id> <bin-arg> <home> <path>
+  cat > "$TMP_ROOT/catalog-probe.sh" <<'PROBE'
+. "$1/bin/fm-cursor-model-lib.sh"
+fm_fork_cursor_catalog_has_model "$2" "$3"
+PROBE
+  env -u FM_CURSOR_MODEL_CATALOG HOME="$3" PATH="$4" \
+    bash "$TMP_ROOT/catalog-probe.sh" "$ROOT" "$1" "$2"
+}
+
+test_catalog_reads_the_binary_the_spawn_resolved() {
+  local home bare_path rc
+  home="$TMP_ROOT/offpath-home"
+  write_fake_cursor_agent "$home/.local/bin/cursor-agent"
+  mkdir -p "$TMP_ROOT/emptybin"
+  bare_path="$TMP_ROOT/emptybin:/usr/bin:/bin"
+
+  rc=0
+  probe_catalog_has_model cursor-grok-4.6-xhigh "$home/.local/bin/cursor-agent" "$home" "$bare_path" || rc=$?
+  [ "$rc" -eq 0 ] \
+    || fail "a resolved cursor binary off PATH must still answer the catalog, got rc=$rc"
+
+  rc=0
+  probe_catalog_has_model definitely-not-a-real-model-xyz "$home/.local/bin/cursor-agent" "$home" "$bare_path" || rc=$?
+  [ "$rc" -eq 1 ] \
+    || fail "an absent id read through the resolved binary must be 'absent' (1), got rc=$rc"
+
+  rc=0
+  probe_catalog_has_model cursor-grok-4.6-xhigh '' "$home" "$bare_path" || rc=$?
+  [ "$rc" -eq 0 ] \
+    || fail "with no binary threaded, the shared resolver must still find ~/.local/bin/cursor-agent, got rc=$rc"
+
+  rc=0
+  probe_catalog_has_model cursor-grok-4.6-xhigh '' "$TMP_ROOT/no-cursor-home" "$bare_path" || rc=$?
+  [ "$rc" -eq 2 ] \
+    || fail "no resolvable cursor binary must report the catalog unavailable (2), got rc=$rc"
+
+  pass "cursor catalog is read from the resolved launch binary, not a bare PATH lookup"
+}
+
 # --- 5. liveness ------------------------------------------------------------
 
 test_liveness_uses_argv_for_node_comm() {
@@ -599,6 +655,7 @@ test_fast_variant_is_never_implicit
 test_parse_footer_model_from_idle_capture
 test_catalog_has_model_and_equivalence
 test_catalog_has_model_through_ansi_color
+test_catalog_reads_the_binary_the_spawn_resolved
 test_liveness_uses_argv_for_node_comm
 test_unattributable_node_stays_unknown
 test_cursor_env_marker_beats_inherited_claudecode

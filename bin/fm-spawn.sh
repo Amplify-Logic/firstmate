@@ -2065,8 +2065,11 @@ muse_credential_present() {
 # Called only from an `if` condition, so errexit stays suspended for the
 # legitimate non-zero returns of fm_fork_cursor_catalog_has_model (1 absent,
 # 2 catalog unavailable), both of which mean "do not use this tier".
+# The catalog is read from CURSOR_BIN, the executable this spawn already
+# resolved and will launch, so the tier ladder cannot come from a different
+# install than the worker runs.
 cursor_model_tier_offered() {  # <base-model> <tier>
-  fm_fork_cursor_catalog_has_model "$1-$2"
+  fm_fork_cursor_catalog_has_model "$1-$2" "${CURSOR_BIN:-}"
 }
 
 # cursor_model_with_effort: cursor is the one verified adapter with NO effort
