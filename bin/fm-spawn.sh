@@ -4572,11 +4572,16 @@ preserve_relaunch_meta() {
   [ -z "$MODE" ] || echo "mode=$MODE"
   [ -z "$YOLO" ] || echo "yolo=$YOLO"
   echo "tasktmp=$TASK_TMP"
-  if [ "$HARNESS" = prime-agent ] || [ "$HARNESS" = cursor ]; then
+  if { [ "$HARNESS" = prime-agent ] || [ "$HARNESS" = cursor ]; } \
+     && [ -n "$LAUNCH_MODEL" ]; then
     # Both adapters resolve a launch model that differs from the requested one:
     # prime-agent folds an absent --model to the verified-free Zen route, and
     # cursor folds the effort axis into the model id. Recording the resolved
     # token keeps this record honest about what the worker is actually running.
+    #
+    # A cursor spawn with no --model folds to nothing at all, and an empty
+    # model= line is a record no reader can interpret, so it falls through to
+    # the same default every other harness writes.
     echo "model=$LAUNCH_MODEL"
   else
     echo "model=${MODEL:-default}"

@@ -539,6 +539,21 @@ test_cursor_threads_model_workspace_and_omits_effort_axis() {
   pass "cursor receives its model-qualified reasoning class and exact task workspace"
 }
 
+test_cursor_without_a_model_records_the_default() {
+  local rec id out status
+  id=profile-cursor-nomodel-z6e
+  rec=$(make_spawn_case profile-cursor-nomodel cursor "$id")
+  read_case_record "$rec"
+
+  out=$(run_ship_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" "$id" "$PROJ_DIR")
+  status=$?
+  expect_code 0 "$status" "cursor spawn without a model should succeed"
+  # The effort fold produces nothing for an absent model, so without a guard
+  # the durable record carries a bare `model=` that no reader can interpret.
+  assert_meta_profile "$HOME_DIR/state/$id.meta" cursor default default
+  pass "a cursor spawn with no model records the default, never an empty model"
+}
+
 test_cursor_refuses_model_absent_from_live_catalog() {
   local rec id out status
   id=profile-cursor-unsupported-z6d
@@ -1390,6 +1405,7 @@ test_grok_threads_model_and_reasoning_effort
 test_grok_omits_invalid_max_reasoning_effort
 test_grok_omits_invalid_xhigh_reasoning_effort
 test_cursor_threads_model_workspace_and_omits_effort_axis
+test_cursor_without_a_model_records_the_default
 test_cursor_refuses_model_absent_from_live_catalog
 test_cursor_failed_catalog_probe_does_not_block_spawn
 test_opencode_threads_model_and_ignores_effort_axis

@@ -653,6 +653,29 @@ test_catalog_on_a_runnerless_host_is_still_read_and_still_bounded() {
   pass "a runnerless host reads the cursor catalog and still bounds the read"
 }
 
+# A budget that cannot bound anything is not a reason to run unbounded.
+# bin/fm-timeout-lib.sh's own header states that `timeout 0` and the perl
+# fallback's `alarm 0` disable the deadline outright, so FM_CURSOR_PROBE_TIMEOUT=0
+# would hand a stalled --list-models an open-ended run on the spawn path.
+test_a_budget_that_is_not_a_bound_falls_back_to_the_default() {
+  local home started elapsed rc
+  home="$TMP_ROOT/zero-budget-home"
+  write_stalling_cursor_agent "$home/.local/bin/cursor-agent"
+
+  started=$SECONDS
+  rc=0
+  probe_catalog_has_model cursor-grok-4.6-xhigh "$home/.local/bin/cursor-agent" \
+    "$home" "/usr/bin:/bin" 0 || rc=$?
+  elapsed=$((SECONDS - started))
+
+  [ "$rc" -eq 2 ] \
+    || fail "a zero budget must still end in an unavailable catalog (2), got rc=$rc"
+  # The fixture stalls for 30s; the 10s probe default must cut it off first.
+  [ "$elapsed" -lt 25 ] \
+    || fail "a zero budget ran unbounded: ${elapsed}s against a 30s stall"
+  pass "a budget that is not a bound falls back to the probe default rather than running unbounded"
+}
+
 # --- 5. liveness ------------------------------------------------------------
 
 test_liveness_uses_argv_for_node_comm() {
@@ -746,6 +769,7 @@ test_catalog_has_model_through_ansi_color
 test_catalog_reads_the_binary_the_spawn_resolved
 test_stalled_catalog_read_is_bounded_and_reads_unavailable
 test_catalog_on_a_runnerless_host_is_still_read_and_still_bounded
+test_a_budget_that_is_not_a_bound_falls_back_to_the_default
 test_liveness_uses_argv_for_node_comm
 test_unattributable_node_stays_unknown
 test_cursor_env_marker_beats_inherited_claudecode

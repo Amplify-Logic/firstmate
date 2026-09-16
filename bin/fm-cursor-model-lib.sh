@@ -125,7 +125,7 @@ if [ "${_FM_CURSOR_CATALOG_CACHE_PID:-}" != "$$" ] \
 fi
 
 fm_cursor_list_models_text() {  # [<cursor-bin>]
-  local bin=${1:-} key=${FM_CURSOR_MODEL_CATALOG:-} text status cache stamp
+  local bin=${1:-} key=${FM_CURSOR_MODEL_CATALOG:-} text status cache stamp bound
   if [ -n "$key" ]; then
     [ -f "$key" ] || return 1
     stamp=$(stat -f '%m:%z' "$key" 2>/dev/null || stat -c '%Y:%s' "$key" 2>/dev/null) || stamp=''
@@ -169,7 +169,19 @@ fm_cursor_list_models_text() {  # [<cursor-bin>]
       # would report a pane's real model as a mismatch against the model the
       # task recorded. fm_run_timed is bounded on every host, so both callers
       # get a real read.
-      text=$(fm_run_timed "$FM_CURSOR_PROBE_TIMEOUT" "$bin" --list-models 2>/dev/null) && status=0
+      #
+      # The budget is checked before it is handed over, because a non-positive
+      # or non-numeric one is not a bound at all (bin/fm-timeout-lib.sh: both
+      # `timeout 0` and the perl fallback's `alarm 0` disable the deadline), and
+      # an unbounded read here is the wedge this whole path exists to prevent.
+      # A budget that cannot bound anything falls back to the 10 seconds
+      # bin/fm-cursor-lib.sh documents as the probe default.
+      bound=${FM_CURSOR_PROBE_TIMEOUT:-}
+      case "$bound" in
+        ''|*[!0-9]*) bound=10 ;;
+        *) [ "$bound" -gt 0 ] || bound=10 ;;
+      esac
+      text=$(fm_run_timed "$bound" "$bin" --list-models 2>/dev/null) && status=0
     fi
   fi
   if [ -n "$text" ]; then
