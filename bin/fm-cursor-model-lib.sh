@@ -153,11 +153,16 @@ fm_cursor_list_models_text() {
   return "$status"
 }
 
-# fm_cursor_catalog_has_model: 0 if <model-id> appears as a catalog id (left of
-# " - "), 1 if the catalog loaded and the id is absent, 2 if the catalog is
+# fm_fork_cursor_catalog_has_model: 0 if <model-id> appears as a catalog id (left
+# of " - "), 1 if the catalog loaded and the id is absent, 2 if the catalog is
 # unavailable. Parameterized overrides ("id[context=1m,...]") match on the bare
 # id before '['.
-fm_cursor_catalog_has_model() {  # <model-id>
+#
+# The name carries the fork prefix because the creator's bin/fm-cursor-lib.sh
+# owns a different fm_cursor_catalog_has_model that reads catalog text from
+# STDIN and returns only 0/1. bin/fm-spawn.sh sources both libraries and uses
+# each contract at a different call site, so the two must not share a name.
+fm_fork_cursor_catalog_has_model() {  # <model-id>
   local want=$1 bare catalog line id
   [ -n "$want" ] && [ "$want" != default ] || return 0
   bare=${want%%\[*}

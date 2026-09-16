@@ -503,6 +503,8 @@ fm_backlog_directory_present "$STATE" "state directory" || {
 . "$SCRIPT_DIR/fm-busy-lib.sh"
 # shellcheck source=bin/fm-cursor-lib.sh
 . "$SCRIPT_DIR/fm-cursor-lib.sh"
+# shellcheck source=bin/fm-cursor-model-lib.sh
+. "$SCRIPT_DIR/fm-cursor-model-lib.sh"
 # shellcheck source=bin/fm-pr-lib.sh
 . "$SCRIPT_DIR/fm-pr-lib.sh"
 # shellcheck source=bin/fm-dod-lib.sh
@@ -1148,6 +1150,7 @@ spawn_abort_cleanup() {
     CONFIG_INHERIT_LOCK_HELD=0
     fm_lock_release "$CONFIG_INHERIT_LOCK" || true
   fi
+  fm_cursor_catalog_cache_cleanup
   return "$status"
 }
 trap spawn_abort_cleanup EXIT
@@ -2060,10 +2063,10 @@ muse_credential_present() {
 
 # cursor_model_tier_offered: 0 when "<base>-<tier>" is a real catalog id.
 # Called only from an `if` condition, so errexit stays suspended for the
-# legitimate non-zero returns of fm_cursor_catalog_has_model (1 absent,
+# legitimate non-zero returns of fm_fork_cursor_catalog_has_model (1 absent,
 # 2 catalog unavailable), both of which mean "do not use this tier".
 cursor_model_tier_offered() {  # <base-model> <tier>
-  fm_cursor_catalog_has_model "$1-$2"
+  fm_fork_cursor_catalog_has_model "$1-$2"
 }
 
 # cursor_model_with_effort: cursor is the one verified adapter with NO effort

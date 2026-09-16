@@ -467,9 +467,9 @@ Available models
 cursor-grok-4.5-medium-fast - Cursor Grok 4.5 Medium Fast
 gpt-5.6-sol-xhigh - GPT-5.6 Sol 1M Extra High
 EOF
-  FM_CURSOR_MODEL_CATALOG="$catalog" fm_cursor_catalog_has_model gpt-5.6-sol-xhigh \
+  FM_CURSOR_MODEL_CATALOG="$catalog" fm_fork_cursor_catalog_has_model gpt-5.6-sol-xhigh \
     || fail "known catalog id should match"
-  if FM_CURSOR_MODEL_CATALOG="$catalog" fm_cursor_catalog_has_model definitely-not-a-real-model-xyz; then
+  if FM_CURSOR_MODEL_CATALOG="$catalog" fm_fork_cursor_catalog_has_model definitely-not-a-real-model-xyz; then
     fail "unknown catalog id must not match"
   fi
   FM_CURSOR_MODEL_CATALOG="$catalog" fm_cursor_models_equivalent \
@@ -496,11 +496,11 @@ test_catalog_has_model_through_ansi_color() {
     printf '%s\n' "${ESC}[36mcursor-grok-4.6-high-fast${ESC}[39m ${ESC}[2m- Cursor Grok 4.6 Fast${ESC}[22m"
     printf '%s\n' "cursor-grok-4.6-high - Cursor Grok 4.6"
   } > "$catalog"
-  FM_CURSOR_MODEL_CATALOG="$catalog" fm_cursor_catalog_has_model cursor-grok-4.6-high-fast \
+  FM_CURSOR_MODEL_CATALOG="$catalog" fm_fork_cursor_catalog_has_model cursor-grok-4.6-high-fast \
     || fail "ANSI-colored catalog id should match after CSI strip"
-  FM_CURSOR_MODEL_CATALOG="$catalog" fm_cursor_catalog_has_model cursor-grok-4.6-high \
+  FM_CURSOR_MODEL_CATALOG="$catalog" fm_fork_cursor_catalog_has_model cursor-grok-4.6-high \
     || fail "plain catalog id in a mixed ANSI file should still match"
-  if FM_CURSOR_MODEL_CATALOG="$catalog" fm_cursor_catalog_has_model definitely-not-a-real-model-xyz; then
+  if FM_CURSOR_MODEL_CATALOG="$catalog" fm_fork_cursor_catalog_has_model definitely-not-a-real-model-xyz; then
     fail "unknown id must still miss on an ANSI-colored catalog"
   fi
   out=$(FM_CURSOR_MODEL_CATALOG="$catalog" fm_cursor_catalog_display_for_id cursor-grok-4.6-high-fast)
