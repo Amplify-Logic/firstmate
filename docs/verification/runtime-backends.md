@@ -5,6 +5,7 @@ Audience: maintainer verification.
 This record contains reusable version-scoped evidence for active runtime guarantees.
 The backend guides own current setup, safety boundaries, and limitations.
 Exact task chronology, branch names, temporary homes, local paths, process ids, thread ids, and delivery transcripts remain in private reports or PR evidence.
+Where a captured line carries a path under the operator's home directory, the record shows that directory as `<HOME>`, which is the public-repo leak guard's requirement rather than the tool's output.
 
 ## Harness detection precedence
 
