@@ -107,6 +107,15 @@ git -C "$REMOTE_ROOT" config user.email test@example.com
 git -C "$REMOTE_ROOT" config user.name Test
 git -C "$REMOTE_ROOT" add .
 git -C "$REMOTE_ROOT" commit -qm 'remote fixture root'
+# Provisioning clones this root over git's local transport, which walks the
+# source object store entry by entry and links or copies each file it finds
+# there. A fresh fixture commit leaves that walk ~800 loose object files to
+# cross, and an entry that is no longer exactly what the walk stat'd kills the
+# whole clone - which is how CI lost it once, with
+# "fatal: failed to copy file to '<home>/.git/objects/<xx>/<rest>': No such
+# file or directory". Pack the fixture first so the clone links a single pack
+# and the walk has nothing left to lose.
+git -C "$REMOTE_ROOT" repack -a -d -q
 
 cat > "$FAKEBIN/fake-ssh" <<'SH'
 #!/usr/bin/env bash
@@ -167,11 +176,15 @@ remote_launch_snapshot() {
 }
 meta_traceparent() { sed -n 's/^traceparent=//p' "$1"; }
 
-# Provision and register the remote route from the captain-facing primary.
+# Provision and register the remote route from the captain-facing primary. The
+# seed's own diagnosis is carried into the failure message: it is the only thing
+# that names which step of the provisioning refused, and a bare refusal here
+# costs a whole round to re-discover.
+SEED_ERR="$TMP_ROOT/seed.err"
 FM_SECONDMATE_CHARTER='Own iOS delivery on the build Mac.' \
   FM_SECONDMATE_SCOPE='iOS implementation and Xcode validation' \
-  remote_env "$ROOT/bin/fm-remote-home-seed.sh" ios remote-mac "$REMOTE_ROOT" "$REMOTE_HOME" --no-projects >/dev/null \
-  || fail "remote seed did not provision the traced route"
+  remote_env "$ROOT/bin/fm-remote-home-seed.sh" ios remote-mac "$REMOTE_ROOT" "$REMOTE_HOME" --no-projects >/dev/null 2>"$SEED_ERR" \
+  || fail "remote seed did not provision the traced route: $(cat "$SEED_ERR")"
 
 # --- disabled: the remote route must stay byte-identically untraced ----------
 freeze_parent_session
