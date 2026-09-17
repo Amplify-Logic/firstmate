@@ -3345,11 +3345,39 @@ case "$BACKEND" in
           set -e
           case "$HERDR_LAUNCHER_STATUS" in
             0) HERDR_PARENT_WORKSPACE_ID=$FM_BACKEND_HERDR_LAUNCHER_WORKSPACE_ID ;;
-            2) HERDR_PARENT_WORKSPACE_ID=$(fm_backend_herdr_projection_parent_workspace_exact \
-                 "$HERDR_SES" "$HERDR_PARENT_LABEL" 2>/dev/null || true) ;;
+            2)
+              if [ -n "$HERDR_PROJECT_KEY" ]; then
+                # The parent is this home's own task container, which with the
+                # fork's project presentation is bound to a hidden owner/project
+                # token pair and labeled with a human project name carrying a
+                # live fleet aggregate. That label is neither stable nor unique
+                # enough to anchor a projection, so the parent is resolved from
+                # the same token pair container_ensure binds it with, and stays
+                # ambiguous (empty) unless exactly one workspace answers.
+                HERDR_PARENT_MATCHES=$(FM_HOME="$HERDR_LABEL_HOME" \
+                  FM_HERDR_PROJECT_KEY="$HERDR_PROJECT_ENV_KEY" \
+                  FM_HERDR_PROJECT_LABEL="$HERDR_PROJECT_ENV_LABEL" \
+                  fm_backend_herdr_workspace_find_all "$HERDR_SES")
+                HERDR_PARENT_WORKSPACE_ID=
+                if [ "$(printf '%s' "$HERDR_PARENT_MATCHES" | grep -c '[^[:space:]]' || true)" -eq 1 ]; then
+                  HERDR_PARENT_WORKSPACE_ID=${HERDR_PARENT_MATCHES%%$'\n'*}
+                fi
+              else
+                HERDR_PARENT_WORKSPACE_ID=$(fm_backend_herdr_projection_parent_workspace_exact \
+                  "$HERDR_SES" "$HERDR_PARENT_LABEL" 2>/dev/null || true)
+              fi
+              ;;
             *) spawn_herdr_presentation_order_lock_release; exit 1 ;;
           esac
-          if [ -z "$HERDR_PARENT_WORKSPACE_ID" ]; then
+          if [ -n "$HERDR_PARENT_WORKSPACE_ID" ]; then
+            # Name the parent by the label it actually carries: the ordering
+            # block and the binding verification both compare against the live
+            # workspace list, and a re-derived home label no longer matches a
+            # container the presentation refresh has renamed.
+            HERDR_PARENT_LABEL=$(fm_backend_herdr_workspace_live_label \
+              "$HERDR_SES" "$HERDR_PARENT_WORKSPACE_ID") || HERDR_PARENT_LABEL=
+          fi
+          if [ -z "$HERDR_PARENT_WORKSPACE_ID" ] || [ -z "$HERDR_PARENT_LABEL" ]; then
             echo "warning: herdr presentation parent is absent or ambiguous; using the ordinary flat layout without projection" >&2
             spawn_herdr_presentation_order_lock_release
           else
@@ -4652,13 +4680,15 @@ preserve_relaunch_meta() {
     echo "herdr_workspace_id=$HERDR_WORKSPACE_ID"
     echo "herdr_tab_id=$HERDR_TAB_ID"
     echo "herdr_pane_id=$HERDR_PANE_ID"
-    # The presentation surfaces read the task record, not this process: the
-    # workspace aggregate in bin/fm-visible-status.sh runs only for a task that
-    # marks its workspace managed, and both it and bin/fm-deck.sh name the
-    # project and the human outcome from here. Below the identity protocol the
+    # The presentation surfaces read the task record, not this process. The
+    # workspace aggregate in bin/fm-visible-status.sh renames the RECORDED
+    # workspace, so it runs only for a task whose workspace is the token-owned
+    # project container; the project and the human outcome name the task itself
+    # and are read by the per-task title and by bin/fm-deck.sh whether or not
+    # this task's workspace is that container. Below the identity protocol the
     # spawn takes the legacy label-based flow and claims none of it.
-    if [ "$HERDR_WORKSPACE_MANAGED" -eq 1 ]; then
-      echo "herdr_workspace_managed=1"
+    [ "$HERDR_WORKSPACE_MANAGED" -ne 1 ] || echo "herdr_workspace_managed=1"
+    if [ -n "$HERDR_PROJECT_KEY" ]; then
       echo "herdr_project_key=$HERDR_PROJECT_KEY"
       echo "herdr_project_name=$HERDR_PROJECT_NAME"
       echo "outcome=$HERDR_TASK_OUTCOME"

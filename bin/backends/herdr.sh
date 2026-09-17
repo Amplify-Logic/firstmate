@@ -2752,6 +2752,16 @@ fm_backend_herdr_projection_parent_workspace_exact() {  # <session> <parent-labe
   ' 2>/dev/null
 }
 
+# fm_backend_herdr_workspace_live_label: one workspace's CURRENT label inside
+# <session>, or empty. With the fork's project presentation a container's label
+# is a human project name plus a live fleet aggregate, so a caller that has to
+# name the parent it bound - the projection's ordering block and its binding
+# verification both do - has to read the label rather than re-derive it.
+fm_backend_herdr_workspace_live_label() {  # <session> <workspace-id>
+  fm_backend_herdr_cli "$1" workspace list 2>/dev/null \
+    | jq -r --arg want "$2" '.result.workspaces[]? | select(.workspace_id == $want) | .label' 2>/dev/null
+}
+
 # fm_backend_herdr_projection_live_binding_matches: verify one exact projected
 # workspace, its single task tab/pane, its unique token label, and its current
 # position inside the exact parent workspace's contiguous child block.
