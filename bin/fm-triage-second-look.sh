@@ -67,7 +67,6 @@
 #   FM_TRIAGE_SECOND_LOOK_TIMEOUT           per-request bound in seconds (default 8)
 #   FM_TRIAGE_SECOND_LOOK_BOUND             hard bound on the whole call (default 20)
 #   FM_TRIAGE_SECOND_LOOK_MAX_LINES         lines per batch (default 25)
-#   FM_TRIAGE_SECOND_LOOK_MODEL             pinned model (default jev-1.13.0)
 #   FM_TRIAGE_SECOND_LOOK_ENDPOINT          API endpoint
 #   FM_TRIAGE_SECOND_LOOK_ENV_FILE          .env holding TYPESAFE_API_KEY
 #   FM_TRIAGE_SECOND_LOOK_RESPONSE          test seam: a recorded response body,
@@ -137,7 +136,7 @@ print_status() {
     printf 'armed: no (add "enabled = true" to %s)\n' "$CONFIG_FILE"
   fi
   printf 'gate: %s\n' "$CONFIG_FILE"
-  printf 'model: %s\n' "${FM_TRIAGE_SECOND_LOOK_MODEL:-jev-1.13.0}"
+  printf 'model: jev-1.13.0\n'
   printf 'engine: %s\n' "$ENGINE"
   if command -v python3 >/dev/null 2>&1; then
     printf 'python3: present\n'

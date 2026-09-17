@@ -41,7 +41,7 @@ ENDPOINT = os.environ.get("FM_TRIAGE_SECOND_LOOK_ENDPOINT",
                           "https://api.typesafe.ai/v1/systemone")
 # Pinned, never an alias: the thresholds below were measured against this exact
 # version and the vendor's own docs warn that an alias moves underneath you.
-MODEL = os.environ.get("FM_TRIAGE_SECOND_LOOK_MODEL", "jev-1.13.0")
+MODEL = "jev-1.13.0"
 
 # Promotion rule. Three separate ORed conditions, never a weighted score: these
 # are "any one of these is reason enough" hazards, and blending them buries the
@@ -138,6 +138,17 @@ def brief_intent(home, task):
     return " ".join(" ".join(body).split())[:MAX_GOAL_CHARS]
 
 
+def normalize(line):
+    """The one form a status line takes once it is a record.
+
+    A tab inside a line would corrupt the caller's own record format, so it is
+    flattened here rather than handed back as a record the caller misparses.
+    Every lookup against the stored status file compares through this, so a
+    line stored with trailing whitespace still finds itself.
+    """
+    return line.strip().replace("\t", " ")
+
+
 def worker_kind(home, task):
     path = pathlib.Path(home) / "state" / ("%s.meta" % task)
     try:
@@ -161,11 +172,13 @@ def preceding_lines(home, task, line):
                  if x.strip()]
     except OSError:
         return []
-    index = len(lines)
+    index = None
     for i in range(len(lines) - 1, -1, -1):
-        if lines[i] == line:
+        if normalize(lines[i]) == line:
             index = i
             break
+    if index is None:
+        return []
     start = max(0, index - MAX_PRECEDING)
     return [x[:MAX_LINE_CHARS] for x in lines[start:index]]
 
@@ -270,12 +283,10 @@ def read_records():
         if "\t" not in raw:
             continue
         task, line = raw.split("\t", 1)
-        task, line = task.strip(), line.strip()
+        task, line = task.strip(), normalize(line)
         if not task or not line:
             continue
-        # A tab inside a line would corrupt the caller's own record format, so
-        # flatten it here rather than handing the caller a record it misparses.
-        parsed.append((task, line.replace("\t", " ")))
+        parsed.append((task, line))
     if len(parsed) > MAX_LINES:
         note("scan carried %d dropped lines; looking at the newest %d"
              % (len(parsed), MAX_LINES))
@@ -310,19 +321,35 @@ def call(payload, key):
         return json.loads(response.read().decode("utf-8", errors="replace"))
 
 
+def noul_or_zero(answers, tag, name):
+    """An unusable answer for one condition reads as 0.0, never as a veto.
+
+    The pass is escalate-only, so a condition the model failed to answer must
+    not be able to hold back the two that did answer and did fire.
+    """
+    try:
+        return float(answers["%s__%s" % (tag, name)]["noul"])
+    except (KeyError, TypeError, ValueError):
+        return 0.0
+
+
 def decide(answers, tag):
     """Apply the rule. Returns (tier, reason) with tier "silent" when nothing fired."""
     nouls = {}
-    for name in ("understated_terminal", "needs_captain", "adverse_event"):
-        nouls[name] = float(answers["%s__%s" % (tag, name)]["noul"])
+    for name in PROMOTE_AT:
+        nouls[name] = noul_or_zero(answers, tag, name)
     fired = [name for name, at in PROMOTE_AT.items() if nouls[name] >= at]
     if not fired:
         return "silent", ""
-    score = answers["%s__urgency" % tag]
-    urgency = float(score["score"])
-    confidence = float(score.get("confidence", 0.0))
-    tier = ("alert" if urgency >= ALERT_URGENCY and confidence >= ALERT_MIN_CONFIDENCE
-            else "digest")
+    tier = "digest"
+    try:
+        score = answers["%s__urgency" % tag]
+        urgency = float(score["score"])
+        confidence = float(score.get("confidence", 0.0))
+        if urgency >= ALERT_URGENCY and confidence >= ALERT_MIN_CONFIDENCE:
+            tier = "alert"
+    except (KeyError, TypeError, ValueError):
+        pass
     # Stable reason order, so a digest line reads the same way every time.
     order = ["needs_captain", "adverse_event", "understated_terminal"]
     return tier, "+".join(name for name in order if name in fired)

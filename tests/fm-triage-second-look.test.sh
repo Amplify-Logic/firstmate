@@ -416,14 +416,18 @@ test_promotions_carry_their_reason() {
   promotions=$(dropped_fixture_records t1 \
     | FM_HOME="$dir" FM_TRIAGE_SECOND_LOOK_RESPONSE="$RESPONSE" "$TOOL")
 
-  printf '%s\n' "$promotions" | while IFS=$(printf '\t') read -r _task tier reason _line; do
+  [ -n "$promotions" ] || fail "the fixture batch promoted nothing to check"
+
+  while IFS=$(printf '\t') read -r _task tier reason _line; do
     [ -n "$reason" ] || fail "a promotion carried no reason"
     case "$tier" in alert|digest) ;; *) fail "a promotion carried an unknown tier: $tier" ;; esac
     case "$reason" in
       *needs_captain*|*adverse_event*|*understated_terminal*) ;;
       *) fail "a promotion carried an unrecognised reason: $reason" ;;
     esac
-  done
+  done <<EOF
+$promotions
+EOF
   pass "every promotion names the tier and the conditions that fired"
 }
 
@@ -485,6 +489,49 @@ EOF
   assert_not_contains "$promotions" 'working: first line' "an unusable answer still promoted its line"
   assert_contains "$promotions" 'working: second line' "one unusable answer lost the rest of the batch"
   pass "an unusable answer for one line promotes nothing for it and keeps the rest of the batch"
+}
+
+test_an_unusable_condition_cannot_veto_the_ones_that_fired() {
+  local dir response promotions
+  dir=$(new_home fail-open-veto armed)
+  seed_task "$dir" t1 ship "Ship it." 'working: one'
+
+  # Escalate-only: a condition the model failed to answer, and an urgency it
+  # failed to score, must not hold back the two conditions that did fire.
+  response="$dir/veto.json"
+  cat > "$response" <<'EOF'
+{"answers":{
+"l1__needs_captain":{"type":"noul","noul":0.92},
+"l1__adverse_event":{"type":"noul","noul":0.97}}}
+EOF
+  promotions=$(printf 't1\tworking: the backfill migration truncated public.users\n' \
+    | FM_HOME="$dir" FM_TRIAGE_SECOND_LOOK_RESPONSE="$response" "$TOOL" 2>/dev/null)
+
+  assert_contains "$promotions" 'working: the backfill migration truncated public.users' \
+    "a missing condition silenced a line two other conditions fired on"
+  assert_contains "$promotions" 'needs_captain+adverse_event' \
+    "the promotion lost the conditions that fired"
+  assert_contains "$promotions" 'digest' \
+    "an unusable urgency answer did not fall back to the digest tier"
+  pass "an unusable condition or urgency answer can never silence a line that fired"
+}
+
+test_history_is_found_for_a_line_stored_with_stray_whitespace() {
+  local dir request count
+  dir=$(new_home request-history armed)
+  seed_task "$dir" t1 scout "Investigate the shipper." 'working: first' 'working: second'
+  # A worker that appends a trailing space still writes the same status line.
+  printf 'note: found the production password in plaintext \n' >> "$dir/state/t1.status"
+
+  request=$(printf 't1\tnote: found the production password in plaintext\n' \
+    | FM_HOME="$dir" "$TOOL" --dry-run)
+  count=$(printf '%s' "$request" | python3 -c '
+import json, sys
+preceding = json.load(sys.stdin)["state"]["lines"]["l1"]["preceding_lines"]
+print("%d %s" % (len(preceding), "self" if any("production password" in x for x in preceding) else "clean"))')
+
+  [ "$count" = "2 clean" ] || fail "history for a line stored with a trailing space was wrong: $count"
+  pass "preceding lines are the lines before the target, not the file tail"
 }
 
 test_the_bound_is_enforced() {
@@ -587,6 +634,8 @@ test_low_confidence_demotes_but_never_silences
 test_promotions_carry_their_reason
 test_every_failure_promotes_nothing
 test_one_unusable_answer_does_not_lose_the_rest_of_the_batch
+test_an_unusable_condition_cannot_veto_the_ones_that_fired
+test_history_is_found_for_a_line_stored_with_stray_whitespace
 test_the_bound_is_enforced
 test_daemon_catch_all_escalates_a_promotion_with_its_reason
 test_daemon_catch_all_is_unchanged_when_the_home_is_not_armed
