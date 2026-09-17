@@ -730,7 +730,12 @@ SH
   # Probe the stub exactly as the gates will, so a drifted floor or helptext
   # fails loudly here instead of surfacing as "compatible tasks-axi is required"
   # from whatever gate the case installed this stub to get past.
-  ( PATH="$fb:$PATH"; . "$ROOT/bin/fm-tasks-axi-lib.sh"; fm_tasks_axi_compatible ) || {
+  # A child process, not a `( PATH=...; . lib; ... )` subshell: assigning PATH
+  # inside a subshell of this sourced library is an SC2030 whose SC2031 partner
+  # then fires on every `PATH="$fakebin:$PATH" cmd` in every suite that sources
+  # this file, which is the whole canonical set under CI's --external-sources.
+  PATH="$fb:$PATH" bash -c 'set -u; . "$1"; fm_tasks_axi_compatible' \
+    fm-tasks-axi-probe "$ROOT/bin/fm-tasks-axi-lib.sh" || {
     echo "fm_install_compatible_tasks_axi: stub in $fb does not satisfy fm_tasks_axi_compatible" >&2
     return 1
   }
