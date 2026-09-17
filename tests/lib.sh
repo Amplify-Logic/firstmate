@@ -63,6 +63,17 @@ unset FM_TASK_ID
 # against an ambient override sets TASKS_AXI_FILE itself.
 unset TASKS_AXI_FILE TASKS_AXI_BACKEND
 
+# Drop the inherited operational-home overrides. Every production entry point a
+# fixture drives - watcher, arm, daemon, lock script - prefers an inherited
+# FM_ROOT_OVERRIDE/FM_STATE_OVERRIDE over its own resolution, so a single value
+# leaked from the invoking environment (a live firstmate lane is the observed
+# case) silently rebinds a fixture onto a REAL home's state: it steals the watch
+# lock, touches the liveness beacon, and a fixture --restart TERMs the real
+# fleet watcher. A suite that needs an override sets it explicitly AFTER
+# sourcing this library, which is how every current suite already works.
+# tests/fm-supervision-test-isolation.test.sh owns the regression coverage.
+unset FM_ROOT_OVERRIDE FM_STATE_OVERRIDE
+
 # Resolve the repo root from this library's own location. Consumed by sourcing
 # test files, not by this library, so it reads as "unused" here.
 # shellcheck disable=SC2034
@@ -110,6 +121,20 @@ FM_TEST_OWNER_IDENTITY=$(fm_test_pid_identity "$$") || {
   rm -f "$FM_TEST_CLEANUP_REGISTRY"
   return 1
 }
+
+# Hermetic operational home for EVERY suite. Paired with the unset above, a
+# spawned watcher, arm, daemon, or lock script that carries no override still
+# resolves every FM_HOME-derived path into this suite's own temp tree - never
+# into a real firstmate home, and never into this worktree's own state. A suite
+# that needs a different fixture home sets FM_HOME itself AFTER sourcing this
+# library.
+FM_TEST_HERMETIC_HOME=$(mktemp -d "${TMPDIR:-/tmp}/fm-hermetic-home.XXXXXX") || {
+  rm -f "$FM_TEST_CLEANUP_REGISTRY"
+  return 1
+}
+mkdir -p "$FM_TEST_HERMETIC_HOME/state"
+FM_TEST_CLEANUP_DIRS+=("$FM_TEST_HERMETIC_HOME")
+export FM_HOME="$FM_TEST_HERMETIC_HOME"
 
 # --- process-event runner reaping -------------------------------------------
 #
