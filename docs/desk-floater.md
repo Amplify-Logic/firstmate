@@ -99,4 +99,4 @@ STT model default: `nova-2` (`DEEPGRAM_STT_MODEL`).
 | `bin/fm-desk-voice.sh` | Inbox deliver / pending / drain |
 | `bin/fm-deepgram-stt.sh` | Audio file → transcript |
 | `bin/fm-deepgram-tts.sh` | Text → Deepgram Aura audio |
-| `bin/fm-speak.sh` | Captain-facing speak-out (Deepgram preferred, `say` fallback) |
+| `bin/fm-speak.sh` | Captain-facing speak-out (a named `voice` selects `say`, else Deepgram Aura; each the other's fallback) |

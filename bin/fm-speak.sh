@@ -44,13 +44,13 @@
 # Deepgram would simply not be heard in it. With no voice named, DEEPGRAM_API_KEY
 # in the environment or in this home's gitignored .env sends the line to Deepgram
 # Aura first (bin/fm-deepgram-tts.sh). Either way the other speaker remains the
-# fallback: Deepgram when there is no usable `say` binary or when `say` refuses
-# the named voice, `say` when the key is absent or Deepgram fails. Whether a
-# named voice exists on this Mac is only knowable once `say` has run, which is
-# already past the handoff, so that one retry happens inside the detached speaker
-# rather than as a probe before it - see say_speaker. The key is never logged, and
-# this preference is about speech out only - the desk floater's ears still use the
-# same key for Deepgram transcription (docs/desk-floater.md).
+# fallback: Deepgram when there is no usable `say` binary, `say` when the key is
+# absent or Deepgram fails. That choice is made once, before the handoff, and is
+# never revisited afterwards: a `say` that fails once it has the line is left to
+# fail silently rather than re-spoken through Deepgram, because paid synthesis is
+# not this script's answer to a local speaker problem. The key is never logged,
+# and this preference is about speech out only - the desk floater's ears still use
+# the same key for Deepgram transcription (docs/desk-floater.md).
 #
 # DESK SPOKEN BOUND: the register owner's own default budget is tuned for the
 # glasses, about eight seconds, and it truncates the shaped line before any
@@ -202,9 +202,12 @@ start_watchdog() {  # <seconds> <pid> [firedfile]
     sleep "$seconds" &
     timer=$!
     wait "$timer" 2>/dev/null || true
-    if kill "$pid" 2>/dev/null && [ -n "$fired" ]; then
-      : > "$fired"
-    fi
+    # Recorded before the kill, not after it: reaching this line means the bound
+    # elapsed (an earlier cancellation leaves through the TERM trap above), and
+    # the waiting caller wakes on the kill and can cancel this watchdog before a
+    # marker written afterwards would land.
+    [ -z "$fired" ] || : > "$fired"
+    kill "$pid" 2>/dev/null || true
   ) </dev/null >/dev/null 2>&1 &
   WATCHDOG_PID=$!
   # Drop the watchdog from the job table: killing it is the normal path, and
@@ -265,27 +268,18 @@ detach_speaker() {  # <function> [args...]
 
 # Play one line under the speaker bound. Runs only inside detach_speaker, where
 # job control is on for the fork itself; it is turned back off here so the bound
-# below behaves exactly as it does everywhere else in this script. Returns the
-# player's own status and sets PLAY_BOUNDED_TIMED_OUT, so a speaker body can tell
-# a player that refused the line from one the bound stopped mid-audio: retrying a
-# refusal is the point, retrying a bounded line would speak it twice.
-PLAY_BOUNDED_TIMED_OUT=false
+# below behaves exactly as it does everywhere else in this script. The player's
+# status is deliberately not reported upwards: no caller acts on it, because the
+# speaker chosen before the handoff is the only one that speaks this line.
 # shellcheck disable=SC2329 # Reached only through the speaker bodies below.
 play_bounded() {  # <cmd...>
-  local pid status=0 fired
+  local pid
   set +m
-  PLAY_BOUNDED_TIMED_OUT=false
-  fired=$(mktemp "${TMPDIR:-/tmp}/fm-speak-bound.XXXXXX") && rm -f "$fired" || fired=
   "$@" &
   pid=$!
-  start_watchdog "$SPEAKER_TIMEOUT" "$pid" "$fired"
-  wait "$pid" 2>/dev/null || status=$?
+  start_watchdog "$SPEAKER_TIMEOUT" "$pid"
+  wait "$pid" 2>/dev/null || true
   kill "$WATCHDOG_PID" 2>/dev/null || true
-  if [ "$status" -ne 0 ] && [ -n "$fired" ] && [ -e "$fired" ]; then
-    PLAY_BOUNDED_TIMED_OUT=true
-  fi
-  [ -z "$fired" ] || rm -f "$fired"
-  return "$status"
 }
 
 # The two speaker bodies. Each owns the temporary files it was handed and removes
@@ -293,22 +287,11 @@ play_bounded() {  # <cmd...>
 # itself the evidence that a speaker was cut short.
 # shellcheck disable=SC2329 # Invoked by name through detach_speaker.
 say_speaker() {  # <textfile>
-  local textfile=$1 status=0
+  local textfile=$1
   if [ -n "$CFG_VOICE" ]; then
-    play_bounded "$SAY_BIN" -v "$CFG_VOICE" -f "$textfile" || status=$?
+    play_bounded "$SAY_BIN" -v "$CFG_VOICE" -f "$textfile"
   else
-    play_bounded "$SAY_BIN" -f "$textfile" || status=$?
-  fi
-  # Whether `say` can honour the configured voice is only knowable once it has
-  # run, and running it is already past the handoff. So the Deepgram fallback for
-  # a refused voice happens here, inside the detached speaker, where it costs the
-  # caller's turn nothing. Only the configured-voice path retries: `say` is the
-  # last resort everywhere else, so there is nothing left to fall back to.
-  if [ "$status" -ne 0 ] && [ "$PLAY_BOUNDED_TIMED_OUT" != true ] && [ -n "$CFG_VOICE" ]; then
-    note "say exited $status in voice '$CFG_VOICE'; falling back to Deepgram"
-    if speak_deepgram_or_fail "$textfile"; then
-      return 0
-    fi
+    play_bounded "$SAY_BIN" -f "$textfile"
   fi
   rm -f "$textfile"
 }
@@ -316,7 +299,7 @@ say_speaker() {  # <textfile>
 # shellcheck disable=SC2329 # Invoked by name through detach_speaker.
 audio_speaker() {  # <player> <audio> <textfile>
   local player=$1 audio=$2 textfile=$3
-  play_bounded "$player" "$audio" || true
+  play_bounded "$player" "$audio"
   rm -f "$audio" "$textfile"
 }
 

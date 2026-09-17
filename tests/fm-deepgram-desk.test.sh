@@ -64,16 +64,6 @@ EOF
   chmod +x "$home/speaker"
 }
 
-install_speaker_that_hangs() {
-  local home=$1
-  cat > "$home/speaker" <<EOF
-#!/usr/bin/env bash
-printf 'argv: %s\n' "\$*" >> "$home/spoken.log"
-exec sleep 30
-EOF
-  chmod +x "$home/speaker"
-}
-
 install_deepgram_tts_ok() {
   local home=$1
   cat > "$home/deepgram-tts" <<EOF
@@ -321,13 +311,12 @@ test_speak_prefers_the_configured_voice_over_deepgram() {
   pass "fm-speak: a configured voice is spoken by say, not by Deepgram"
 }
 
-# Whether a configured voice exists on this Mac is only knowable once `say` has
-# run, which is after the handoff. A misspelled or uninstalled voice must still
-# be heard through Deepgram rather than ending in silence, and the line must not
-# be left behind as an orphaned temporary file.
-test_speak_falls_back_to_deepgram_when_the_voice_is_refused() {
+# A `say` that fails once it already has the line is left to fail: the speaker is
+# chosen before the handoff and never swapped afterwards, so a local speaker
+# problem never turns into paid Deepgram synthesis behind the captain's back.
+test_speak_does_not_swap_to_deepgram_when_say_fails() {
   local home out leftover waited
-  home=$(new_home voice-refused "enabled = true" "voice = Nonexistent Voice")
+  home=$(new_home voice-say-fails "enabled = true" "voice = Nonexistent Voice")
   printf 'DEEPGRAM_API_KEY=test-key-not-real\n' > "$home/.env"
   install_shaper "$home"
   install_speaker_refusing_voice "$home"
@@ -346,49 +335,18 @@ test_speak_falls_back_to_deepgram_when_the_voice_is_refused() {
       "$SPEAK" "The rejected voice line is green." 2>&1
   ) || fail "speak failed: $out"
   wait_for_content "$home/spoken.log" "Nonexistent Voice" "say should have been tried in the configured voice"
-  wait_for_content "$home/deepgram.log" "rejected voice line" "Deepgram should have spoken the refused line"
-  wait_for_content "$home/afplay.log" ".mp3" "afplay should have played the synthesized file"
   leftover=1
   waited=0
-  while [ "$waited" -lt 50 ]; do
+  while [ "$waited" -lt 25 ]; do
     leftover=$(find "$home" -maxdepth 1 -name 'fm-speak-*' | wc -l | tr -d ' ')
     [ "$leftover" -eq 0 ] && break
     sleep 0.2
     waited=$((waited + 1))
   done
-  [ "$leftover" -eq 0 ] || fail "the fallback left $leftover temporary file(s) behind"
-  pass "fm-speak: a voice say refuses falls back to Deepgram, not to silence"
-}
-
-# The retry above is for a voice `say` refused, not for a line the speaker bound
-# stopped part-way: a bounded line was already spoken, so speaking it again
-# through Deepgram would say the same outcome to the captain twice.
-test_speak_does_not_repeat_a_line_its_bound_stopped() {
-  local home out
-  home=$(new_home voice-bounded "enabled = true" "voice = Ava (Premium)")
-  printf 'DEEPGRAM_API_KEY=test-key-not-real\n' > "$home/.env"
-  install_shaper "$home"
-  install_speaker_that_hangs "$home"
-  install_deepgram_tts_ok "$home"
-  install_afplay "$home"
-  out=$(
-    env -u DEEPGRAM_API_KEY \
-      FM_HOME="$home" \
-      TMPDIR="$home" \
-      FM_DEEPGRAM_ENV_FILE="$home/.env" \
-      FM_SPEAK_SHAPER="$home/shaper" \
-      FM_SPEAK_SAY="$home/speaker" \
-      FM_SPEAK_DEEPGRAM_TTS="$home/deepgram-tts" \
-      FM_SPEAK_DEEPGRAM_REGISTER= \
-      FM_SPEAK_TIMEOUT=1 \
-      FM_DEEPGRAM_AFPLAY="$home/afplay" \
-      "$SPEAK" "The bounded voice line is green." 2>&1
-  ) || fail "speak failed: $out"
-  wait_for_content "$home/spoken.log" "Ava (Premium)" "say should have been given the configured voice"
-  sleep 3
-  [ ! -f "$home/deepgram.log" ] || fail "a bounded line must not be spoken again through Deepgram"
-  [ ! -f "$home/afplay.log" ] || fail "a bounded line must not be played again"
-  pass "fm-speak: a line the speaker bound stopped is not spoken twice"
+  [ "$leftover" -eq 0 ] || fail "a failed say left $leftover temporary file(s) behind"
+  [ ! -f "$home/deepgram.log" ] || fail "a failed say must not spend Deepgram credit"
+  [ ! -f "$home/afplay.log" ] || fail "a failed say must not reach the Deepgram player"
+  pass "fm-speak: a say that fails is not re-spoken through Deepgram"
 }
 
 test_speak_falls_back_to_say_when_deepgram_fails() {
@@ -467,8 +425,7 @@ test_floater_help_and_option_refusal
 test_speak_uses_say_when_key_absent
 test_speak_prefers_deepgram_when_key_present
 test_speak_prefers_the_configured_voice_over_deepgram
-test_speak_falls_back_to_deepgram_when_the_voice_is_refused
-test_speak_does_not_repeat_a_line_its_bound_stopped
+test_speak_does_not_swap_to_deepgram_when_say_fails
 test_speak_falls_back_to_say_when_deepgram_fails
 test_desk_voice_deliver_pending_drain
 test_deepgram_lib_reads_dotenv_without_logging_key
