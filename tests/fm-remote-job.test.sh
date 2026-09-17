@@ -22,6 +22,7 @@ REPEAT_WORKER_PID=
 STALE_LOCK_WORKER_PID=
 LIVE_LOCK_WORKER_PID=
 LIVE_LOCK_CHALLENGER_PID=
+LIVE_CLAIM_WORKER_PID=
 DRIFT_OWNER_PID=
 DRIFT_HEARTBEAT_PID=
 DRIFT_CHALLENGER_PID=
@@ -42,6 +43,7 @@ cleanup_remote_job_fixture() {
   [ -z "$DRIFT_OWNER_PID" ] || kill "$DRIFT_OWNER_PID" 2>/dev/null || true
   [ -z "$DRIFT_CHALLENGER_PID" ] || kill "$DRIFT_CHALLENGER_PID" 2>/dev/null || true
   [ -z "$ABANDONED_CLAIM_WORKER_PID" ] || kill "$ABANDONED_CLAIM_WORKER_PID" 2>/dev/null || true
+  [ -z "$LIVE_CLAIM_WORKER_PID" ] || kill "$LIVE_CLAIM_WORKER_PID" 2>/dev/null || true
   [ -z "$RESTART_SUPERVISOR_PID" ] || kill -KILL "$RESTART_SUPERVISOR_PID" 2>/dev/null || true
   if [ -f "$STATE_ROOT/worker.pid" ]; then
     fm_remote_job_stop_worker_tree "$(cat "$STATE_ROOT/worker.pid")" || true
@@ -858,7 +860,7 @@ HOME="$DRIFT_HOME" FM_ROOT_OVERRIDE="$REMOTE_ROOT" FM_REMOTE_JOB_STATE_ROOT="$DR
   FM_REMOTE_JOB_PLATFORM_OVERRIDE=Linux "$REMOTE_ROOT/bin/fm-remote-job-worker.sh" --serve \
   > "$TMP_ROOT/drift-lock.out" 2> "$TMP_ROOT/drift-lock.err" &
 DRIFT_CHALLENGER_PID=$!
-DRIFT_DEADLINE=$((SECONDS + 5))
+DRIFT_DEADLINE=$((SECONDS + 2))
 while [ "$SECONDS" -lt "$DRIFT_DEADLINE" ]; do
   [ "$(cat "$DRIFT_STATE/worker.lock/pid" 2>/dev/null || true)" = "$DRIFT_OWNER_PID" ] \
     || fail "a challenger swept a live owner whose recorded ps records had drifted"
@@ -897,7 +899,7 @@ pass "a heartbeating owner with drifted ps records is deferred to until it goes 
 # directory while it sweeps, so a loser cannot delete the records the winner
 # publishes. A reclaimer killed while holding that marker must not wedge the
 # account forever, so a marker left behind on an otherwise stale lock is taken
-# over by the next worker.
+# over by the next worker once the marker itself has gone stale.
 ABANDONED_HOME="$TMP_ROOT/abandoned-claim-account"
 ABANDONED_STATE="$TMP_ROOT/abandoned-claim-jobs"
 mkdir -p "$ABANDONED_HOME" "$ABANDONED_STATE/worker.lock/claim"
@@ -909,7 +911,8 @@ printf 'stale-command\n' > "$ABANDONED_STATE/worker.lock/command"
 printf '999999\n' > "$ABANDONED_STATE/worker.ready"
 chmod 600 "$ABANDONED_STATE/worker.lock"/pid "$ABANDONED_STATE/worker.lock"/start \
   "$ABANDONED_STATE/worker.lock"/command "$ABANDONED_STATE/worker.ready"
-touch -t 200001010000 "$ABANDONED_STATE/worker.lock" "$ABANDONED_STATE/worker.ready"
+touch -t 200001010000 "$ABANDONED_STATE/worker.lock/claim" "$ABANDONED_STATE/worker.ready" \
+  "$ABANDONED_STATE/worker.lock"
 HOME="$ABANDONED_HOME" FM_ROOT_OVERRIDE="$REMOTE_ROOT" FM_REMOTE_JOB_STATE_ROOT="$ABANDONED_STATE" \
   FM_REMOTE_JOB_PLATFORM_OVERRIDE=Linux "$REMOTE_ROOT/bin/fm-remote-job-worker.sh" --serve \
   > "$TMP_ROOT/abandoned-claim.out" 2> "$TMP_ROOT/abandoned-claim.err" &
@@ -938,6 +941,51 @@ kill -TERM "$ABANDONED_CLAIM_WORKER_PID"
 wait "$ABANDONED_CLAIM_WORKER_PID" 2>/dev/null || true
 ABANDONED_CLAIM_WORKER_PID=
 pass "a lock left claimed by a killed reclaimer is taken over, not wedged"
+
+# The marker a reclaiming worker holds is only abandoned once the marker itself
+# has gone stale. The ownership directory around it can be arbitrarily old - a
+# dead owner published its records long ago - so reading that directory's age
+# instead would let a challenger rename a peer's live marker aside and reclaim
+# alongside it. A fresh marker on an otherwise stale lock has to be left exactly
+# as it stands while the challenger exits 0.
+LIVE_CLAIM_HOME="$TMP_ROOT/live-claim-account"
+LIVE_CLAIM_STATE="$TMP_ROOT/live-claim-jobs"
+mkdir -p "$LIVE_CLAIM_HOME" "$LIVE_CLAIM_STATE/worker.lock"
+chmod 700 "$LIVE_CLAIM_HOME" "$LIVE_CLAIM_STATE" "$LIVE_CLAIM_STATE/worker.lock"
+printf '999999\n' > "$LIVE_CLAIM_STATE/worker.lock/pid"
+printf 'stale-start\n' > "$LIVE_CLAIM_STATE/worker.lock/start"
+printf 'stale-command\n' > "$LIVE_CLAIM_STATE/worker.lock/command"
+printf '999999\n' > "$LIVE_CLAIM_STATE/worker.ready"
+chmod 600 "$LIVE_CLAIM_STATE/worker.lock"/* "$LIVE_CLAIM_STATE/worker.ready"
+mkdir "$LIVE_CLAIM_STATE/worker.lock/claim"
+chmod 700 "$LIVE_CLAIM_STATE/worker.lock/claim"
+touch -t 200001010000 "$LIVE_CLAIM_STATE/worker.lock" "$LIVE_CLAIM_STATE/worker.ready"
+HOME="$LIVE_CLAIM_HOME" FM_ROOT_OVERRIDE="$REMOTE_ROOT" FM_REMOTE_JOB_STATE_ROOT="$LIVE_CLAIM_STATE" \
+  FM_REMOTE_JOB_PLATFORM_OVERRIDE=Linux "$REMOTE_ROOT/bin/fm-remote-job-worker.sh" --serve \
+  > "$TMP_ROOT/live-claim.out" 2> "$TMP_ROOT/live-claim.err" &
+LIVE_CLAIM_WORKER_PID=$!
+LIVE_CLAIM_DEADLINE=$((SECONDS + 8))
+while kill -0 "$LIVE_CLAIM_WORKER_PID" 2>/dev/null && [ "$SECONDS" -lt "$LIVE_CLAIM_DEADLINE" ]; do
+  sleep 0.05
+done
+if kill -0 "$LIVE_CLAIM_WORKER_PID" 2>/dev/null; then
+  kill -TERM "$LIVE_CLAIM_WORKER_PID" 2>/dev/null || true
+  wait "$LIVE_CLAIM_WORKER_PID" 2>/dev/null || true
+  LIVE_CLAIM_WORKER_PID=
+  fail "a challenger did not defer to a peer's fresh reclaim marker"
+fi
+set +e
+wait "$LIVE_CLAIM_WORKER_PID"
+LIVE_CLAIM_RC=$?
+set -e
+LIVE_CLAIM_WORKER_PID=
+[ "$LIVE_CLAIM_RC" -eq 0 ] \
+  || fail "a challenger failed instead of deferring to a peer's reclaim marker (rc=$LIVE_CLAIM_RC): $(cat "$TMP_ROOT/live-claim.err")"
+assert_present "$LIVE_CLAIM_STATE/worker.lock/claim" \
+  "a challenger took over a peer's fresh reclaim marker"
+[ "$(cat "$LIVE_CLAIM_STATE/worker.lock/pid")" = 999999 ] \
+  || fail "a challenger reclaimed a lock a peer was still claiming"
+pass "a peer's fresh reclaim marker is deferred to, not taken over"
 
 # A child that stays up for FM_REMOTE_JOB_SUPERVISOR_HEALTHY_SECONDS clears the
 # consecutive-failure backoff, so a child that dies just past that threshold
