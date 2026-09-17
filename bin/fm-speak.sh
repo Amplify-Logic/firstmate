@@ -112,7 +112,8 @@
 #   0  handed to the speaker, printed under --dry-run, or this home is not
 #      opted in
 #   1  cannot speak: the register owner is unreachable, failed or exceeded its
-#      bound, the speech binary is missing, or the config is invalid
+#      bound, the speech binary is missing, the configured voice is not one
+#      this machine has, or the config is invalid
 #   2  refused by the register; nothing was spoken and the reason is reported
 set -eu
 

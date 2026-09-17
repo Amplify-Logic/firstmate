@@ -74,7 +74,7 @@ So `bin/fm-speak.sh` points that owner at
 That example keeps the same URL/path/id and decision refusals but raises the
 spoken budget to **30 seconds** (about 78 words at 2.6 wps).
 The budget belongs to the desk rather than to the speaker, so it is the same
-whether Deepgram Aura or the macOS `say` fallback plays the line.
+whichever speaker plays the line, macOS `say` or Deepgram Aura.
 
 Override the example path with `FM_SPEAK_DEEPGRAM_REGISTER`, or keep the short
 glasses cut by exporting `FM_SPEAK_DEEPGRAM_REGISTER=` (empty).
