@@ -1952,10 +1952,15 @@ test_landed_default_preserves_internal_order_for_ties() {
   printf '## Done\n' > "$home/data/backlog.md"
   tie_a=$(make_landed_secondmate "$home" tie-a)
   tie_b=$(make_landed_secondmate "$home" tie-b)
-  append_landed_row "$tie_b" tie-b-a "Tie B A" 2026-07-10
+  # Every row shares one completion date, so the date decides nothing here and the
+  # ordering has to come from each home's recording position. A Done section is
+  # maintained NEWEST FIRST - tasks-axi's `done` prepends each newly completed row,
+  # verified live on 0.2.5 - so each home's newest row is written first, exactly as
+  # the dated fixtures above append in descending-date order.
   append_landed_row "$tie_b" tie-b-z "Tie B Z" 2026-07-10
-  append_landed_row "$tie_a" tie-a-a "Tie A A" 2026-07-10
+  append_landed_row "$tie_b" tie-b-a "Tie B A" 2026-07-10
   append_landed_row "$tie_a" tie-a-z "Tie A Z" 2026-07-10
+  append_landed_row "$tie_a" tie-a-a "Tie A A" 2026-07-10
   fakebin=$(make_fakebin "$home")
   json=$(run "$home" "$fakebin" --json)
   actual=$(printf '%s' "$json" | jq -r '.landed[] | "\(.owner)/\(.id)"')
