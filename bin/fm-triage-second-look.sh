@@ -31,7 +31,6 @@
 # Usage:
 #   fm-triage-second-look.sh                 read records on stdin, print promotions
 #   fm-triage-second-look.sh --dry-run       build and print the request; no network
-#   fm-triage-second-look.sh status          print whether this home is armed; no network
 #   fm-triage-second-look.sh --help
 #
 # stdin   one record per line: <task-id> TAB <status-line>
@@ -83,7 +82,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 FM_ROOT="${FM_ROOT:-$(cd "$SCRIPT_DIR/.." && pwd)}"
 FM_HOME="${FM_HOME:-$FM_ROOT}"
 ENGINE="$SCRIPT_DIR/fm-triage-second-look.py"
-CONFIG_FILE="$FM_HOME/config/triage-second-look"
+CONFIG_FILE="${FM_CONFIG_OVERRIDE:-$FM_HOME/config}/triage-second-look"
 BOUND="${FM_TRIAGE_SECOND_LOOK_BOUND:-20}"
 
 # shellcheck source=bin/fm-timeout-lib.sh
@@ -129,26 +128,9 @@ armed() {
   [ "$enabled" = true ]
 }
 
-print_status() {
-  if armed; then
-    printf 'armed: yes\n'
-  else
-    printf 'armed: no (add "enabled = true" to %s)\n' "$CONFIG_FILE"
-  fi
-  printf 'gate: %s\n' "$CONFIG_FILE"
-  printf 'model: jev-1.13.0\n'
-  printf 'engine: %s\n' "$ENGINE"
-  if command -v python3 >/dev/null 2>&1; then
-    printf 'python3: present\n'
-  else
-    printf 'python3: absent (this home stays inert)\n'
-  fi
-}
-
 DRY_RUN=0
 case "${1:-}" in
   --help|-h) usage; exit 0 ;;
-  status) print_status; exit 0 ;;
   --dry-run) DRY_RUN=1 ;;
   '') ;;
   *) note "unknown argument: $1"; exit 2 ;;

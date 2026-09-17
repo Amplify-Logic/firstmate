@@ -199,19 +199,6 @@ test_malformed_gate_stays_inert_instead_of_failing_loudly() {
   pass "a malformed gate reports and stays inert rather than failing a supervision loop"
 }
 
-test_status_reports_the_arm_state_without_a_network_call() {
-  local dir out
-  dir=$(new_home gate-status)
-  out=$(FM_HOME="$dir" "$TOOL" status)
-  assert_contains "$out" 'armed: no' "status did not report an unarmed home"
-
-  printf 'enabled = true\n' > "$dir/config/triage-second-look"
-  out=$(FM_HOME="$dir" "$TOOL" status)
-  assert_contains "$out" 'armed: yes' "status did not report an armed home"
-  assert_contains "$out" 'jev-1.13.0' "status did not report the pinned model"
-  pass "status reports whether this home is armed and which model is pinned"
-}
-
 # --- the request ------------------------------------------------------------
 
 test_request_carries_only_the_fields_the_questions_name() {
@@ -491,6 +478,69 @@ EOF
   pass "an unusable answer for one line promotes nothing for it and keeps the rest of the batch"
 }
 
+test_a_gate_under_a_config_override_arms_the_home() {
+  local dir out status
+  dir=$(new_home gate-override)
+  mkdir -p "$dir/elsewhere"
+  printf 'enabled = true\n' > "$dir/elsewhere/triage-second-look"
+
+  # A home whose config lives elsewhere must arm from the file the watcher
+  # checks, not from one nobody wrote.
+  out=$(printf 't1\tworking: anything\n' | FM_HOME="$dir" \
+    FM_CONFIG_OVERRIDE="$dir/elsewhere" FM_TRIAGE_SECOND_LOOK_ENV_FILE=/dev/null \
+    "$TOOL" 2>/dev/null) && status=0 || status=$?
+  [ "$status" -eq 2 ] || fail "an overridden gate did not arm the home (got $status, wanted 2)"
+  [ -z "$out" ] || fail "an armed home with no key promoted something: $out"
+
+  # And the same home with the gate only in its default location stays inert.
+  out=$(printf 't1\tworking: anything\n' | FM_HOME="$dir" \
+    FM_CONFIG_OVERRIDE="$dir/empty" "$TOOL" 2>/dev/null) && status=0 || status=$?
+  [ "$status" -eq 1 ] || fail "an override pointing at no gate should stay inert, got $status"
+  pass "the gate is read from the overridden config directory, not always from the home"
+}
+
+test_unreadable_answers_are_reported_not_silently_read_as_zero() {
+  local dir response out err
+  dir=$(new_home fail-open-rename armed)
+  seed_task "$dir" t1 ship "Ship it." 'working: one'
+
+  # The vendor renames the answer field. Every condition reads 0.0 and nothing
+  # promotes, which must not look like "the model judged nothing captain-worthy".
+  response="$dir/renamed.json"
+  cat > "$response" <<'EOF'
+{"answers":{
+"l1__understated_terminal":{"type":"noul","value":0.05},
+"l1__needs_captain":{"type":"noul","value":0.97},
+"l1__adverse_event":{"type":"noul","value":0.97},
+"l1__urgency":{"type":"score","value":1.90}}}
+EOF
+  err="$dir/stderr"
+  out=$(printf 't1\tworking: the backfill migration truncated public.users\n' \
+    | FM_HOME="$dir" FM_TRIAGE_SECOND_LOOK_RESPONSE="$response" "$TOOL" 2>"$err")
+
+  [ -z "$out" ] || fail "unreadable answers promoted something: $out"
+  assert_contains "$(cat "$err")" 'unusable answer' \
+    "unreadable answers produced no diagnostic, so silence looks like a verdict"
+  assert_contains "$(cat "$err")" 'needs_captain' \
+    "the diagnostic did not name which answers were unreadable"
+  assert_not_contains "$(cat "$err")" 'public.users' \
+    "the diagnostic leaked the status line content"
+
+  # A genuinely below-threshold batch stays quiet on both streams.
+  cat > "$response" <<'EOF'
+{"answers":{
+"l1__understated_terminal":{"type":"noul","noul":0.05},
+"l1__needs_captain":{"type":"noul","noul":0.10},
+"l1__adverse_event":{"type":"noul","noul":0.10},
+"l1__urgency":{"type":"score","score":0.10,"confidence":0.90}}}
+EOF
+  out=$(printf 't1\tworking: tidying the branches\n' \
+    | FM_HOME="$dir" FM_TRIAGE_SECOND_LOOK_RESPONSE="$response" "$TOOL" 2>"$err")
+  [ -z "$out" ] || fail "a below-threshold batch promoted something: $out"
+  [ ! -s "$err" ] || fail "a below-threshold batch produced a diagnostic: $(cat "$err")"
+  pass "unreadable answers are reported on stderr and never mistaken for a quiet verdict"
+}
+
 test_an_unusable_condition_cannot_veto_the_ones_that_fired() {
   local dir response promotions
   dir=$(new_home fail-open-veto armed)
@@ -622,7 +672,7 @@ test_span_reader_returns_and_bounds_match_the_actionable_sibling
 test_span_reader_makes_no_network_call
 test_absent_gate_is_inert
 test_malformed_gate_stays_inert_instead_of_failing_loudly
-test_status_reports_the_arm_state_without_a_network_call
+test_a_gate_under_a_config_override_arms_the_home
 test_request_carries_only_the_fields_the_questions_name
 test_request_is_one_batch_for_the_whole_scan
 test_only_lines_the_real_classifier_dropped_can_reach_the_request
@@ -635,6 +685,7 @@ test_promotions_carry_their_reason
 test_every_failure_promotes_nothing
 test_one_unusable_answer_does_not_lose_the_rest_of_the_batch
 test_an_unusable_condition_cannot_veto_the_ones_that_fired
+test_unreadable_answers_are_reported_not_silently_read_as_zero
 test_history_is_found_for_a_line_stored_with_stray_whitespace
 test_the_bound_is_enforced
 test_daemon_catch_all_escalates_a_promotion_with_its_reason

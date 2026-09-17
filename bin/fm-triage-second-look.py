@@ -321,26 +321,33 @@ def call(payload, key):
         return json.loads(response.read().decode("utf-8", errors="replace"))
 
 
-def noul_or_zero(answers, tag, name):
+def noul_or_zero(answers, tag, name, unusable):
     """An unusable answer for one condition reads as 0.0, never as a veto.
 
     The pass is escalate-only, so a condition the model failed to answer must
-    not be able to hold back the two that did answer and did fire.
+    not be able to hold back the two that did answer and did fire. The name is
+    recorded so the caller can say so: "the model read nothing captain-worthy"
+    and "the model's answers were unreadable" must never look alike on a path
+    whose callers have already advanced their offsets past these lines.
     """
     try:
         return float(answers["%s__%s" % (tag, name)]["noul"])
     except (KeyError, TypeError, ValueError):
+        unusable.append(name)
         return 0.0
 
 
 def decide(answers, tag):
-    """Apply the rule. Returns (tier, reason) with tier "silent" when nothing fired."""
-    nouls = {}
-    for name in PROMOTE_AT:
-        nouls[name] = noul_or_zero(answers, tag, name)
+    """Apply the rule.
+
+    Returns (tier, reason, unusable): tier is "silent" when nothing fired, and
+    unusable names the answers that could not be read at all.
+    """
+    unusable = []
+    nouls = {name: noul_or_zero(answers, tag, name, unusable) for name in PROMOTE_AT}
     fired = [name for name, at in PROMOTE_AT.items() if nouls[name] >= at]
     if not fired:
-        return "silent", ""
+        return "silent", "", unusable
     tier = "digest"
     try:
         score = answers["%s__urgency" % tag]
@@ -349,10 +356,10 @@ def decide(answers, tag):
         if urgency >= ALERT_URGENCY and confidence >= ALERT_MIN_CONFIDENCE:
             tier = "alert"
     except (KeyError, TypeError, ValueError):
-        pass
+        unusable.append("urgency")
     # Stable reason order, so a digest line reads the same way every time.
     order = ["needs_captain", "adverse_event", "understated_terminal"]
-    return tier, "+".join(name for name in order if name in fired)
+    return tier, "+".join(name for name in order if name in fired), unusable
 
 
 def main():
@@ -393,13 +400,10 @@ def main():
 
     promoted = 0
     for tag, task, line in records:
-        try:
-            tier, reason = decide(answers, tag)
-        except (KeyError, TypeError, ValueError):
-            # A missing or malformed answer for ONE line promotes nothing for
-            # that line and leaves the rest of the batch intact.
-            note("unusable answer for one line (promoting nothing for it)")
-            continue
+        tier, reason, unusable = decide(answers, tag)
+        if unusable:
+            # Never the line itself, only which answers could not be read.
+            note("unusable answer(s) for one line, read as 0.0: %s" % "+".join(unusable))
         if tier == "silent":
             continue
         sys.stdout.write("%s\t%s\t%s\t%s\n" % (task, tier, reason, line[:MAX_LINE_CHARS]))

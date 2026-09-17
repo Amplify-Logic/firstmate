@@ -248,7 +248,7 @@ Unlike `config/speak`, a malformed gate file reports on stderr and leaves this h
 `TYPESAFE_API_KEY` is read from the environment, else from this home's gitignored `.env`, and never appears in argv, stdout, stderr or any state file.
 The model is pinned to an exact version rather than an alias because the thresholds were tuned against that version.
 [`../bin/fm-triage-second-look.sh`](../bin/fm-triage-second-look.sh)'s header and `--help` own the exact invocation, the environment overrides and the exit codes, and its engine owns the request shape, the four questions, the thresholds and the tier rule.
-Run `bin/fm-triage-second-look.sh status` to see whether a home is armed, and `--dry-run` to read the exact request a scan would send.
+Run `bin/fm-triage-second-look.sh --dry-run` to read the exact request a scan would send.
 Dated live evidence is in [`verification/triage-second-look.md`](verification/triage-second-look.md).
 
 ## Gate defaults (.no-mistakes.yaml)
