@@ -3525,7 +3525,7 @@ test_projection_reclaim_refusal_matrix_is_non_mutating() {
 }
 
 test_projection_reclaim_replaces_only_exact_husk_and_advances_binding() {
-  local dir state home home_real log resp fb journal token label parent_live out calls create_line close_line agent_line boundary_mutations
+  local dir state home home_real log resp fb journal token label parent_live husk_live out calls create_line close_line agent_line boundary_mutations
   dir="$TMP_ROOT/projection-reclaim-exact"; state="$dir/state"; home="$dir/home"
   mkdir -p "$dir/responses" "$state" "$home"
   home_real=$(cd "$home" && pwd -P)
@@ -3542,8 +3542,12 @@ test_projection_reclaim_replaces_only_exact_husk_and_advances_binding() {
   journal="$state/fm-hibit-r1.herdr-presentation"
   label="└ hibit-r1 · p:$token"
   parent_live="Your Magical Journey · 🟡 1 WAITING"
+  # bin/fm-visible-status.sh renames a projected task tab to the worker's human
+  # title as soon as the record exists, and again on every state change, so the
+  # live husk tab never carries the label its journal recorded at bind time.
+  husk_live="WORKER · hibit r1 · 🟢 WORKING"
   printf '%s\n' "{\"result\":{\"workspaces\":[{\"workspace_id\":\"w0\",\"label\":\"$parent_live\",\"focused\":false,\"active_tab_id\":\"w0:t1\"},{\"workspace_id\":\"w1\",\"label\":\"$parent_live\",\"focused\":true,\"active_tab_id\":\"w1:t1\"},{\"workspace_id\":\"w2\",\"label\":\"$label\",\"focused\":false,\"active_tab_id\":\"w2:t2\"}]}}" > "$resp/1.out"
-  printf '%s\n' '{"result":{"tabs":[{"tab_id":"w2:t2","label":"fm-fm-hibit-r1"}]}}' > "$resp/2.out"
+  printf '%s\n' "{\"result\":{\"tabs\":[{\"tab_id\":\"w2:t2\",\"label\":\"$husk_live\"}]}}" > "$resp/2.out"
   printf '%s\n' '{"result":{"panes":[{"pane_id":"w2:p2","tab_id":"w2:t2"}]}}' > "$resp/3.out"
   printf '%s\n' '{"result":{"pane":{"pane_id":"w2:p2"}}}' > "$resp/4.out"
   printf '%s\n' '{"error":{"code":"agent_not_found"}}' > "$resp/5.out"
@@ -3563,7 +3567,7 @@ test_projection_reclaim_replaces_only_exact_husk_and_advances_binding() {
   printf '%s\n' '{"error":{"code":"agent_not_found"}}' > "$resp/19.out"
   # The emptying-close plan sees the replacement tab alongside the old husk
   # tab, so the husk close stays plain.
-  printf '%s\n' '{"result":{"tabs":[{"tab_id":"w2:t2","label":"fm-fm-hibit-r1"},{"tab_id":"w2:t3","label":"fm-fm-hibit-r1"}]}}' > "$resp/20.out"
+  printf '%s\n' "{\"result\":{\"tabs\":[{\"tab_id\":\"w2:t2\",\"label\":\"$husk_live\"},{\"tab_id\":\"w2:t3\",\"label\":\"fm-fm-hibit-r1\"}]}}" > "$resp/20.out"
   : > "$resp/21.out"
   printf '%s\n' '{"error":{"code":"pane_not_found"}}' > "$resp/22.out"
   cp "$resp/6.out" "$resp/23.out"
@@ -3602,7 +3606,9 @@ test_projection_reclaim_replaces_only_exact_husk_and_advances_binding() {
   assert_not_contains "$calls" $'\x1fw0' "reclaim touched the same-labeled sibling parent"
   [ "$(sed -n 's/^parent_label=//p' "$journal")" != "$parent_live" ] \
     || fail "the parent label never drifted, so this case cannot prove reclaim ignores it"
-  pass "herdr presentation reclaim: exact agent-free husk survives duplicate parent labels and a drifted parent aggregate while its sibling stays untouched"
+  [ "$(sed -n 's/^task_label=//p' "$journal")" != "$husk_live" ] \
+    || fail "the husk tab label never drifted, so this case cannot prove reclaim ignores it"
+  pass "herdr presentation reclaim: exact agent-free husk survives duplicate parent labels, a drifted parent aggregate, and its own renamed task tab while its sibling stays untouched"
 }
 
 test_projection_recovery_is_read_only_and_refuses_live_duplicate_risk() {
