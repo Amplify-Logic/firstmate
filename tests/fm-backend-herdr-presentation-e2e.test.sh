@@ -562,6 +562,42 @@ container_label_in() {  # <workspace-list-json>
   printf '%s' "$label"
 }
 
+# task_workspace_id <home> <task-id>: the Herdr workspace one task's durable
+# record says it landed in.
+task_workspace_id() {  # <home> <task-id>
+  local wsid
+  wsid=$(grep '^herdr_workspace_id=' "$1/state/$2.meta" | cut -d= -f2-)
+  [ -n "$wsid" ] || return 1
+  printf '%s' "$wsid"
+}
+
+# owning_container_of <home> <task-id>: the EXACT task container one projection
+# bound itself under, read from the projection's own version 2 journal binding.
+# Every home owns one container per (physical home, physical project), resolved
+# by hidden tokens and never by visible label, and the legacy firstmate /
+# 2ndmate-<id> workspaces stay the secondmate PRIMARY pane's container rather
+# than a project worker's parent (docs/herdr-backend.md "Home-workspace fallback
+# and identity tokens", "Legacy home labels"). So a multi-home expectation can
+# only name each home's container by identity. Fails when the task published no
+# bound journal, so an expectation built on it cannot quietly go vacuous.
+owning_container_of() {  # <home> <task-id>
+  local journal="$1/state/$2.herdr-presentation" parent
+  [ -f "$journal" ] || return 1
+  parent=$(grep '^parent_workspace_id=' "$journal" | cut -d= -f2-)
+  [ -n "$parent" ] || return 1
+  printf '%s' "$parent"
+}
+
+# workspace_position_in <workspace-list-json> <workspace-id>: one workspace's
+# 0-based index in Herdr's own sidebar order, or failure when it is absent.
+workspace_position_in() {  # <workspace-list-json> <workspace-id>
+  local index
+  index=$(printf '%s' "$1" | jq -r --arg id "$2" \
+    '[.result.workspaces[].workspace_id] | index($id) // empty')
+  [ -n "$index" ] || return 1
+  printf '%s' "$index"
+}
+
 # The same task id and project run once opted out and once projected, so
 # Treehouse commands and metadata can be compared after normalizing endpoint
 # IDs and the deliberately fresh per-spawn incarnation.
@@ -1097,36 +1133,82 @@ done
 assert_focus_is "$CAPTAIN_FOCUS" "multi-home sequential spawns"
 assert_raw_presentation_mutations_preserved_since "$MULTI_FOCUS_START" "multi-home sequential spawns"
 
-P1_LABEL=$(lab workspace get "$(grep '^herdr_workspace_id=' "$HOME_DIR/state/p1.meta" | cut -d= -f2-)" | jq -r '.result.workspace.label')
-P2_LABEL=$(lab workspace get "$(grep '^herdr_workspace_id=' "$HOME_DIR/state/p2.meta" | cut -d= -f2-)" | jq -r '.result.workspace.label')
-A1_LABEL=$(lab workspace get "$(grep '^herdr_workspace_id=' "$SECOND_HOME_A/state/a1.meta" | cut -d= -f2-)" | jq -r '.result.workspace.label')
-A2_LABEL=$(lab workspace get "$(grep '^herdr_workspace_id=' "$SECOND_HOME_A/state/a2.meta" | cut -d= -f2-)" | jq -r '.result.workspace.label')
-B1_LABEL=$(lab workspace get "$(grep '^herdr_workspace_id=' "$SECOND_HOME_B/state/b1.meta" | cut -d= -f2-)" | jq -r '.result.workspace.label')
-B2_LABEL=$(lab workspace get "$(grep '^herdr_workspace_id=' "$SECOND_HOME_B/state/b2.meta" | cut -d= -f2-)" | jq -r '.result.workspace.label')
-case "$P1_LABEL" in $'└ p1 · p:'*) ;; *) fail "primary p1 label wrong: $P1_LABEL" ;; esac
-case "$P2_LABEL" in $'└ p2 · p:'*) ;; *) fail "primary p2 label wrong: $P2_LABEL" ;; esac
-case "$A1_LABEL" in $'└ a1 · p:'*) ;; *) fail "secondmate A a1 label wrong: $A1_LABEL" ;; esac
-case "$A2_LABEL" in $'└ a2 · p:'*) ;; *) fail "secondmate A a2 label wrong: $A2_LABEL" ;; esac
-case "$B1_LABEL" in $'└ b1 · p:'*) ;; *) fail "secondmate B b1 label wrong: $B1_LABEL" ;; esac
-case "$B2_LABEL" in $'└ b2 · p:'*) ;; *) fail "secondmate B b2 label wrong: $B2_LABEL" ;; esac
+assert_own_projection_label() {  # <workspace-id> <task-id> <what>
+  local label
+  label=$(lab workspace get "$1" | jq -r '.result.workspace.label')
+  case "$label" in
+    "└ $2 · p:"*) return 0 ;;
+    *) fail "$3 label wrong: $label" ;;
+  esac
+}
+P1_WSID=$(task_workspace_id "$HOME_DIR" p1) || fail "primary p1 recorded no Herdr workspace"
+P2_WSID=$(task_workspace_id "$HOME_DIR" p2) || fail "primary p2 recorded no Herdr workspace"
+A1_WSID=$(task_workspace_id "$SECOND_HOME_A" a1) || fail "secondmate A a1 recorded no Herdr workspace"
+A2_WSID=$(task_workspace_id "$SECOND_HOME_A" a2) || fail "secondmate A a2 recorded no Herdr workspace"
+B1_WSID=$(task_workspace_id "$SECOND_HOME_B" b1) || fail "secondmate B b1 recorded no Herdr workspace"
+B2_WSID=$(task_workspace_id "$SECOND_HOME_B" b2) || fail "secondmate B b2 recorded no Herdr workspace"
+assert_own_projection_label "$P1_WSID" p1 "primary p1"
+assert_own_projection_label "$P2_WSID" p2 "primary p2"
+assert_own_projection_label "$A1_WSID" a1 "secondmate A a1"
+assert_own_projection_label "$A2_WSID" a2 "secondmate A a2"
+assert_own_projection_label "$B1_WSID" b1 "secondmate B b1"
+assert_own_projection_label "$B2_WSID" b2 "secondmate B b2"
 
+# Each home owns its OWN task container, one per (physical home, physical
+# project) and resolved by hidden tokens, so the three blocks are named by the
+# parent each projection actually bound rather than by the legacy home labels -
+# which stay the secondmate primary pane's container, not a project worker's
+# parent (docs/herdr-backend.md "Legacy home labels").
 MULTI_LIST=$(lab workspace list) || fail "could not list multi-home topology"
-MULTI_LABELS=$(printf '%s' "$MULTI_LIST" | jq -r '
-  .result.workspaces[]
-  | select(
-      .label == "firstmate"
-      or .label == "2ndmate-alpha"
-      or .label == "2ndmate-bravo"
-      or (.label | startswith("└ "))
-    )
-  | .label
-')
-MULTI_EXPECTED=$(printf '%s\n' \
-  firstmate "$P1_LABEL" "$P2_LABEL" \
-  2ndmate-alpha "$A1_LABEL" "$A2_LABEL" \
-  2ndmate-bravo "$B1_LABEL" "$B2_LABEL")
-[ "$MULTI_LABELS" = "$MULTI_EXPECTED" ] \
-  || fail "multi-home topology was not owning-parent grouped: $MULTI_LABELS"
+P_CONTAINER=$(owning_container_of "$HOME_DIR" p1) \
+  || fail "primary p1 published no bound owning parent"
+A_CONTAINER=$(owning_container_of "$SECOND_HOME_A" a1) \
+  || fail "secondmate A a1 published no bound owning parent"
+B_CONTAINER=$(owning_container_of "$SECOND_HOME_B" b1) \
+  || fail "secondmate B b1 published no bound owning parent"
+[ "$P_CONTAINER" = "$FIRSTMATE_WSID" ] \
+  || fail "primary projections left this home's own task container: $P_CONTAINER"
+[ "$A_CONTAINER" != "$P_CONTAINER" ] && [ "$B_CONTAINER" != "$P_CONTAINER" ] \
+  && [ "$A_CONTAINER" != "$B_CONTAINER" ] \
+  || fail "the three homes did not each own a distinct task container"
+[ "$(owning_container_of "$HOME_DIR" p2)" = "$P_CONTAINER" ] \
+  || fail "primary p2 bound a different owning parent than p1"
+[ "$(owning_container_of "$SECOND_HOME_A" a2)" = "$A_CONTAINER" ] \
+  || fail "secondmate A a2 bound a different owning parent than a1"
+[ "$(owning_container_of "$SECOND_HOME_B" b2)" = "$B_CONTAINER" ] \
+  || fail "secondmate B b2 bound a different owning parent than b1"
+# Ownership order by identity: every home's container precedes its own two
+# workers, and no home's block interleaves with another's.
+MULTI_OWNED=$(printf '%s' "$MULTI_LIST" | jq -r --args '
+  [$ARGS.positional[]] as $owned
+  | .result.workspaces[] | select(.workspace_id as $id | $owned | index($id)) | .workspace_id
+' "$P_CONTAINER" "$P1_WSID" "$P2_WSID" \
+  "$A_CONTAINER" "$A1_WSID" "$A2_WSID" \
+  "$B_CONTAINER" "$B1_WSID" "$B2_WSID")
+MULTI_OWNED_EXPECTED=$(printf '%s\n' \
+  "$P_CONTAINER" "$P1_WSID" "$P2_WSID" \
+  "$A_CONTAINER" "$A1_WSID" "$A2_WSID" \
+  "$B_CONTAINER" "$B1_WSID" "$B2_WSID")
+[ "$MULTI_OWNED" = "$MULTI_OWNED_EXPECTED" ] \
+  || fail "multi-home topology was not owning-parent grouped: $MULTI_OWNED"
+# Contiguity: each secondmate container was minted by its own first worker and
+# holds exactly those two, so its block must be immediately adjacent. The
+# primary's container also holds the earlier cases' retained workers, so only
+# its newest pair can be required adjacent.
+assert_block_is_adjacent() {  # <container> <first> <second> <what>
+  local at
+  at=$(workspace_position_in "$MULTI_LIST" "$1") \
+    || fail "$4 task container is no longer present in the lab session"
+  [ "$(workspace_position_in "$MULTI_LIST" "$2")" = "$((at + 1))" ] \
+    && [ "$(workspace_position_in "$MULTI_LIST" "$3")" = "$((at + 2))" ] \
+    || fail "$4 workers do not sit immediately under their own task container"
+}
+assert_block_is_adjacent "$A_CONTAINER" "$A1_WSID" "$A2_WSID" "secondmate A"
+assert_block_is_adjacent "$B_CONTAINER" "$B1_WSID" "$B2_WSID" "secondmate B"
+MULTI_P1_AT=$(workspace_position_in "$MULTI_LIST" "$P1_WSID") \
+  || fail "primary p1 is no longer present in the lab session"
+[ "$(workspace_position_in "$MULTI_LIST" "$P2_WSID")" = "$((MULTI_P1_AT + 1))" ] \
+  || fail "the primary's newest pair did not append adjacently to its own block"
 pass "real Herdr lab: primary and two secondmate homes each own a top-level contiguous child block"
 
 # Concurrent cross-home wave under the one session lock.
@@ -1150,19 +1232,31 @@ remember_meta_worktree "$SECOND_HOME_B/state/bcw.meta" >/dev/null
 assert_focus_is "$CAPTAIN_FOCUS" "cross-home concurrent wave"
 assert_raw_presentation_mutations_preserved_since "$WAVE_CROSS_FOCUS" "cross-home concurrent wave"
 CROSS_LIST=$(lab workspace list)
-printf '%s' "$CROSS_LIST" | jq -e '
-  ([.result.workspaces[].label] | index("firstmate")) as $fm
-  | ([.result.workspaces[].label] | index("2ndmate-alpha")) as $a
-  | ([.result.workspaces[].label] | index("2ndmate-bravo")) as $b
-  | $fm != null and $a != null and $b != null
-  and $fm < $a and $a < $b
+printf '%s' "$CROSS_LIST" | jq -e \
+  --arg fm "$P_CONTAINER" --arg a "$A_CONTAINER" --arg b "$B_CONTAINER" '
+  [.result.workspaces[].workspace_id] as $ids
+  | ($ids | index($fm)) as $fmi
+  | ($ids | index($a)) as $ai
+  | ($ids | index($b)) as $bi
+  | $fmi != null and $ai != null and $bi != null
+  and $fmi < $ai and $ai < $bi
 ' >/dev/null 2>&1 || fail "cross-home concurrent wave reordered parents"
-PCW_LABEL=$(lab workspace get "$(grep '^herdr_workspace_id=' "$HOME_DIR/state/pcw.meta" | cut -d= -f2-)" | jq -r '.result.workspace.label')
-ACW_LABEL=$(lab workspace get "$(grep '^herdr_workspace_id=' "$SECOND_HOME_A/state/acw.meta" | cut -d= -f2-)" | jq -r '.result.workspace.label')
-BCW_LABEL=$(lab workspace get "$(grep '^herdr_workspace_id=' "$SECOND_HOME_B/state/bcw.meta" | cut -d= -f2-)" | jq -r '.result.workspace.label')
-case "$PCW_LABEL" in $'└ pcw · p:'*|firstmate) ;; *) fail "cross-home primary label wrong: $PCW_LABEL" ;; esac
-case "$ACW_LABEL" in $'└ acw · p:'*|2ndmate-alpha) ;; *) fail "cross-home A label wrong: $ACW_LABEL" ;; esac
-case "$BCW_LABEL" in $'└ bcw · p:'*|2ndmate-bravo) ;; *) fail "cross-home B label wrong: $BCW_LABEL" ;; esac
+# Under the session lock one of the three may legitimately lose the ordering
+# lock and fall back flat, which lands it in its OWN home's task container -
+# never in another home's, and never in the legacy home-labeled workspace.
+assert_cross_home_placement() {  # <home> <task-id> <container> <what>
+  local wsid label
+  wsid=$(task_workspace_id "$1" "$2") || fail "$4 recorded no Herdr workspace"
+  label=$(lab workspace get "$wsid" | jq -r '.result.workspace.label')
+  case "$label" in
+    "└ $2 · p:"*) return 0 ;;
+  esac
+  [ "$wsid" = "$3" ] \
+    || fail "$4 landed in neither its own projection nor its home's task container: $label"
+}
+assert_cross_home_placement "$HOME_DIR" pcw "$P_CONTAINER" "cross-home primary pcw"
+assert_cross_home_placement "$SECOND_HOME_A" acw "$A_CONTAINER" "cross-home A acw"
+assert_cross_home_placement "$SECOND_HOME_B" bcw "$B_CONTAINER" "cross-home B bcw"
 pass "real Herdr lab: concurrent primary/A/B spawns preserve parent order and exact focus"
 
 # Hold the shared session lock from a different home and force flat fallback.
@@ -1196,8 +1290,8 @@ grep -F "presentation focus lock unavailable; using the ordinary flat layout wit
 remember_meta_worktree "$SECOND_HOME_A/state/aflat.meta" >/dev/null
 AFLAT_WSID=$(grep '^herdr_workspace_id=' "$SECOND_HOME_A/state/aflat.meta" | cut -d= -f2-)
 AFLAT_LABEL=$(lab workspace get "$AFLAT_WSID" | jq -r '.result.workspace.label')
-[ "$AFLAT_LABEL" = 2ndmate-alpha ] \
-  || fail "cross-home lock contention did not use the ordinary secondmate home workspace: $AFLAT_LABEL"
+[ "$AFLAT_WSID" = "$A_CONTAINER" ] \
+  || fail "cross-home lock contention did not use home A's own task container: $AFLAT_LABEL"
 [ ! -e "$SECOND_HOME_A/state/aflat.herdr-presentation" ] \
   || fail "cross-home lock contention published a projection journal"
 assert_focus_is "$CAPTAIN_FOCUS" "cross-home lock contention flat fallback"
