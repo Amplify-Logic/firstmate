@@ -2586,31 +2586,74 @@ PACE_STAMPS=$(find "$HPACE/state/procevent" -maxdepth 1 -type f \
 [ "$PACE_STAMPS" = 1 ] || fail "replacement registrations accumulated stale pacing state"
 pass "a replacement registration starts with one fresh launch floor"
 
-HPACE_RACE="$TMP_ROOT/registration-pacing-race"; new_home "$HPACE_RACE"
-fm_test_track_procevent_home "$HPACE_RACE"
-PACE_RACE_LOG="$TMP_ROOT/registration-pacing-race.log"
-pe_register "$HPACE_RACE" lavish pace-race-src -- "$FAST_SOURCE" "$PACE_RACE_LOG" >/dev/null
-FM_PROCEVENT_LAUNCH_FLOOR_SECONDS=3 pe "$HPACE_RACE" start pace-race-src >/dev/null
-FM_PROCEVENT_LAUNCH_FLOOR_SECONDS=3 \
-  pe "$HPACE_RACE" start pace-race-src > "$TMP_ROOT/registration-pacing-race.out" 2>&1 &
-PACE_RACE_PID=$!
-wait_for "$FM_PROCEVENT_CLAIM_ROOT/pace-race-src.claim" \
-  || fail "the superseded pacing fixture did not claim its registration"
-[ "$(wc -l < "$PACE_RACE_LOG" | tr -d ' ')" = 1 ] \
-  || fail "the superseded pacing fixture was not waiting on its launch floor"
-pe_register "$HPACE_RACE" lavish pace-race-src -- "$FAST_SOURCE" "$PACE_RACE_LOG" >/dev/null
-wait "$PACE_RACE_PID" || fail "the superseded paced runner failed"
+# The floor window this case needs opens when the FIRST generation launches,
+# not when the second one starts sleeping, so the fixture spends part of it on
+# its own setup: one runner start that has to reach its claim, then one
+# registration that has to publish. How long that takes is a property of the
+# machine, not of the runner under test, so the case does not assume a fixed
+# floor covers it. Each attempt measures the window it actually had left - the
+# fake source timestamps every launch, so the window's opening is observed
+# rather than guessed - and only asserts once it has proof the replacement was
+# published while the runner was still sleeping. A fixture that lost its own
+# setup race widens the floor to cover the cost it just measured and retries,
+# instead of reporting a runner that was never superseded in time as broken.
+PACE_RACE_FLOOR=3
+PACE_RACE_READY=0
+for PACE_RACE_TRY in 1 2 3; do
+  PACE_RACE_ID="pace-race-src-$PACE_RACE_TRY"
+  HPACE_RACE="$TMP_ROOT/registration-pacing-race-$PACE_RACE_TRY"; new_home "$HPACE_RACE"
+  fm_test_track_procevent_home "$HPACE_RACE"
+  PACE_RACE_LOG="$TMP_ROOT/registration-pacing-race-$PACE_RACE_TRY.log"
+  pe_register "$HPACE_RACE" lavish "$PACE_RACE_ID" -- "$FAST_SOURCE" "$PACE_RACE_LOG" >/dev/null
+  FM_PROCEVENT_LAUNCH_FLOOR_SECONDS=$PACE_RACE_FLOOR \
+    pe "$HPACE_RACE" start "$PACE_RACE_ID" >/dev/null
+  FM_PROCEVENT_LAUNCH_FLOOR_SECONDS=$PACE_RACE_FLOOR \
+    pe "$HPACE_RACE" start "$PACE_RACE_ID" \
+      > "$TMP_ROOT/registration-pacing-race-$PACE_RACE_TRY.out" 2>&1 &
+  PACE_RACE_PID=$!
+  wait_for "$FM_PROCEVENT_CLAIM_ROOT/$PACE_RACE_ID.claim" \
+    || fail "the superseded pacing fixture did not claim its registration"
+  [ "$(wc -l < "$PACE_RACE_LOG" | tr -d ' ')" = 1 ] \
+    || fail "the superseded pacing fixture was not waiting on its launch floor"
+  pe_register "$HPACE_RACE" lavish "$PACE_RACE_ID" -- "$FAST_SOURCE" "$PACE_RACE_LOG" >/dev/null
+  # Seconds of floor still unspent when the replacement registration became the
+  # published one, measured from the launch the source recorded. The stamp the
+  # runner paces against is written just before that launch, so this reads the
+  # window as slightly longer than it was; the margin below covers the skew.
+  PACE_RACE_LEFT=$(perl -MTime::HiRes=time -e '
+    open my $in, "<", $ARGV[0] or exit 1;
+    my $launch = <$in>;
+    close $in or exit 1;
+    defined($launch) && $launch =~ /\A([0-9]+(?:\.[0-9]+)?)\n?\z/ or exit 1;
+    printf "%.3f\n", $1 + $ARGV[1] - time;
+  ' "$PACE_RACE_LOG" "$PACE_RACE_FLOOR") \
+    || fail "the superseded pacing fixture did not record its first launch"
+  wait "$PACE_RACE_PID" || fail "the superseded paced runner failed"
+  if perl -e 'exit($ARGV[0] >= 1 ? 0 : 1)' -- "$PACE_RACE_LEFT"; then
+    PACE_RACE_READY=1
+    break
+  fi
+  PACE_RACE_FLOOR=$(perl -e '
+    my ($floor, $left) = @ARGV;
+    my $spent = $floor - $left;
+    $spent = 1 if $spent < 1;
+    printf "%d\n", int(3 * $spent) + 1;
+  ' -- "$PACE_RACE_FLOOR" "$PACE_RACE_LEFT")
+done
+[ "$PACE_RACE_READY" = 1 ] \
+  || fail "the superseded pacing fixture never published its replacement inside the launch floor"
 [ "$(wc -l < "$PACE_RACE_LOG" | tr -d ' ')" = 1 ] \
   || fail "the superseded paced runner invoked its stale command"
 # The runner marker is written before the launch floor is waited on, and a home
 # sweep counts a marker with no owned claim as a preflight failure. A superseded
 # generation that exits without clearing its marker therefore makes the whole
 # home refuse to sweep, so assert the marker is gone and the sweep still runs.
-assert_absent "$HPACE_RACE/state/procevent/pace-race-src.runner" \
+assert_absent "$HPACE_RACE/state/procevent/$PACE_RACE_ID.runner" \
   "a superseded paced runner leaves no runner marker behind"
-FM_PROCEVENT_LAUNCH_FLOOR_SECONDS=3 pe "$HPACE_RACE" start pace-race-src >/dev/null
+FM_PROCEVENT_LAUNCH_FLOOR_SECONDS=$PACE_RACE_FLOOR \
+  pe "$HPACE_RACE" start "$PACE_RACE_ID" >/dev/null
 PACE_RACE_STAMPS=$(find "$HPACE_RACE/state/procevent" -maxdepth 1 -type f \
-  -name 'pace-race-src.*.last-launch' | wc -l | tr -d ' ')
+  -name "$PACE_RACE_ID.*.last-launch" | wc -l | tr -d ' ')
 [ "$PACE_RACE_STAMPS" = 1 ] \
   || fail "a superseded sleeping runner recreated stale pacing state"
 pass "a superseded sleeping runner cannot recreate stale pacing state"
