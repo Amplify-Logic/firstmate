@@ -145,33 +145,35 @@ worker_path_recent() { # <path>
 # nobody may take over would wedge the account into the restart storm this path
 # exists to end. Taking one over is gated on the marker's own age rather than
 # the ownership directory's, which a live holder's own mkdir has just
-# refreshed, and the marker is taken by renaming it aside: a rename moves the
-# one directory that was observed, so of every worker that sees the same
-# abandoned marker exactly one takes it and the rest find it gone. Re-reading
-# the age of what the rename captured is the proof: a captured marker that is
-# still fresh is a live peer's, recreated under the same name in between, so it
-# goes back where it was and this worker defers instead of claiming. Only a
-# capture the re-read proved stale is removed, and the restore is skipped if the
-# name is taken again, since moving a directory onto an existing one nests it
-# and would leave a marker no holder can release.
+# refreshed, and the marker is taken by moving it into a scratch directory made
+# fresh for the attempt: a rename moves the one directory that was observed, so
+# of every worker that sees the same abandoned marker exactly one takes it and
+# the rest find it gone. A scratch directory that cannot already exist is what
+# lets the capture be a bare mv - there is no name to pre-clean, and the
+# captured marker always lands at exactly one path, which is the path the age is
+# re-read from. That re-read is the proof: a captured marker that is still fresh
+# is a live peer's, recreated under the same name in between, so the name is put
+# back and this worker defers instead of claiming. Putting it back is a mkdir
+# rather than a move, which can neither nest inside a marker a third worker
+# recreated in the gap nor clobber it.
 worker_claim_stale_lock() {
-  local captured
+  local holder
   [ -d "$WORKER_LOCK" ] && [ ! -L "$WORKER_LOCK" ] || return 1
   [ ! -e "$WORKER_LOCK/quarantine" ] && [ ! -L "$WORKER_LOCK/quarantine" ] || return 1
   (umask 077; mkdir "$WORKER_LOCK/claim") 2>/dev/null && return 0
   [ -d "$WORKER_LOCK/claim" ] && [ ! -L "$WORKER_LOCK/claim" ] || return 1
   worker_path_recent "$WORKER_LOCK/claim" && return 2
-  captured="$WORKER_LOCK.claim.${BASHPID:-$$}"
-  rmdir "$captured" 2>/dev/null || true
-  [ ! -e "$captured" ] && [ ! -L "$captured" ] || return 2
-  mv "$WORKER_LOCK/claim" "$captured" 2>/dev/null || return 2
-  if worker_path_recent "$captured"; then
-    [ ! -e "$WORKER_LOCK/claim" ] && [ ! -L "$WORKER_LOCK/claim" ] &&
-      mv "$captured" "$WORKER_LOCK/claim" 2>/dev/null && return 2
-    rmdir "$captured" 2>/dev/null || true
+  holder=$(umask 077; mktemp -d "$FM_REMOTE_JOB_STATE/.claim.XXXXXX") || return 2
+  if ! mv "$WORKER_LOCK/claim" "$holder/" 2>/dev/null; then
+    rmdir "$holder" 2>/dev/null || true
     return 2
   fi
-  rmdir "$captured" 2>/dev/null || true
+  if worker_path_recent "$holder/claim"; then
+    (umask 077; mkdir "$WORKER_LOCK/claim") 2>/dev/null || true
+    rmdir "$holder/claim" "$holder" 2>/dev/null || true
+    return 2
+  fi
+  rmdir "$holder/claim" "$holder" 2>/dev/null || true
   (umask 077; mkdir "$WORKER_LOCK/claim") 2>/dev/null || return 2
 }
 
