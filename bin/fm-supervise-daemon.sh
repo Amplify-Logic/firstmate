@@ -1219,7 +1219,13 @@ housekeeping() {  # <state>
       # opt-in second look after the loop. Away mode is where this silence gap
       # bites hardest: nobody is watching the pane and hours pass. A pure read,
       # no network; the one bounded call happens once per scan below.
-      if [ "$rc" -ne 2 ]; then
+      #
+      # The gate file's PRESENCE is only a precondition here, never the arm
+      # decision - bin/fm-triage-second-look.sh still owns whether an existing
+      # gate actually arms this home. Checking it keeps a home that never created
+      # the file from paying a second span read per status log on every scan for
+      # a capability it has not opted into.
+      if [ "$rc" -ne 2 ] && [ -f "$FM_HOME/config/triage-second-look" ]; then
         dropped=$(status_span_dropped_lines "$f" "$offset") || dropped=''
         if [ -n "$dropped" ]; then
           while IFS= read -r line; do

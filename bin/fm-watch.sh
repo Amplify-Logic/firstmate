@@ -1643,7 +1643,13 @@ heartbeat_scan_finds_actionable() {
     # second look below. A pure read with no network in it, so this scan keeps
     # the "pure detect, no side effects" contract its callers rely on; the one
     # bounded network call happens at the call site, once per scan.
-    if [ "$rc" -ne 2 ]; then
+    #
+    # The gate file's PRESENCE is only a precondition here, never the arm
+    # decision - bin/fm-triage-second-look.sh still owns whether an existing gate
+    # actually arms this home. Checking it keeps a home that never created the
+    # file from paying a second span read per status log on every heartbeat for a
+    # capability it has not opted into.
+    if [ "$rc" -ne 2 ] && [ -f "$CONFIG/triage-second-look" ]; then
       dropped=$(status_span_dropped_lines "$f" "$offset") || dropped=''
       if [ -n "$dropped" ]; then
         while IFS= read -r line; do
