@@ -457,8 +457,13 @@ finish_concurrent_teardown() {  # <id> <status> <stdout> <stderr>
 }
 
 normalize_meta() {  # <meta>
+  # herdr_workspace_managed is part of the container description, not of the
+  # task: it marks the token-owned project container the presentation refresh
+  # aggregates over, which a disposable one-task projection is not. So it is
+  # normalized alongside the container ids this comparison excludes.
   sed -E \
     -e 's|^window=.*$|window=<herdr-container-id>|' \
+    -e '/^herdr_workspace_managed=/d' \
     -e 's|^herdr_workspace_id=.*$|herdr_workspace_id=<herdr-container-id>|' \
     -e 's|^herdr_tab_id=.*$|herdr_tab_id=<herdr-container-id>|' \
     -e 's|^herdr_pane_id=.*$|herdr_pane_id=<herdr-container-id>|' \
@@ -541,6 +546,21 @@ ANCHOR_META="$HOME_DIR/state/anchor.meta"
 remember_meta_worktree "$ANCHOR_META" >/dev/null
 FIRSTMATE_WSID=$(grep '^herdr_workspace_id=' "$ANCHOR_META" | cut -d= -f2-)
 [ -n "$FIRSTMATE_WSID" ] || fail "anchor metadata did not record the firstmate workspace"
+
+# container_label_in <workspace-list-json>: the CURRENT label of this home's own
+# task container, named by the workspace id the anchor task recorded rather than
+# by a label. The container is token-owned and its label is mutable presentation
+# carrying the human project name plus a live fleet aggregate (docs/herdr-backend.md
+# "Home-workspace fallback and identity tokens"), so the ordering assertions below
+# can only name it by identity. Fails when the container is gone, so an ordering
+# expectation built on it cannot quietly go vacuous.
+container_label_in() {  # <workspace-list-json>
+  local label
+  label=$(printf '%s' "$1" | jq -r --arg id "$FIRSTMATE_WSID" \
+    '.result.workspaces[] | select(.workspace_id == $id) | .label')
+  [ -n "$label" ] || return 1
+  printf '%s' "$label"
+}
 
 # The same task id and project run once opted out and once projected, so
 # Treehouse commands and metadata can be compared after normalizing endpoint
@@ -661,9 +681,13 @@ PROJECTED_PANES=$(lab pane list --workspace "$PROJECTED_WSID")
   || fail "projected workspace retained a seeded or placeholder tab"
 [ "$(printf '%s' "$PROJECTED_PANES" | jq -r '.result.panes | length')" = 1 ] \
   || fail "projected workspace did not contain exactly one task pane"
+# The tab is created under the legacy fm-<id> name and then renamed by this
+# spawn's own presentation refresh to the worker title convention
+# (docs/herdr-backend.md "Human titles"), so identity is the recorded tab id and
+# the surviving name is that title rather than the create-time label.
 printf '%s' "$PROJECTED_TABS" | jq -e --arg tab "$PROJECTED_TAB" \
-  '.result.tabs[0].tab_id == $tab and .result.tabs[0].label == "fm-shape"' >/dev/null 2>&1 \
-  || fail "projected workspace's only tab was not the normal fm-shape task tab"
+  '.result.tabs[0].tab_id == $tab and (.result.tabs[0].label | startswith("WORKER · "))' >/dev/null 2>&1 \
+  || fail "projected workspace's only tab was not this home's own worker task tab: $(printf '%s' "$PROJECTED_TABS" | jq -c '.result.tabs')"
 printf '%s' "$PROJECTED_PANES" | jq -e --arg pane "$PROJECTED_PANE" \
   '.result.panes[0].pane_id == $pane' >/dev/null 2>&1 \
   || fail "projected workspace's only pane was not the exact recorded task pane"
@@ -758,7 +782,7 @@ PROJECTION_ORDER_START=$(log_line_count)
 normalize_meta "$OFF_META" > "$TMP_ROOT/off.meta.normalized"
 normalize_meta "$ON_META" > "$TMP_ROOT/on.meta.normalized"
 cmp -s "$TMP_ROOT/off.meta.normalized" "$TMP_ROOT/on.meta.normalized" \
-  || fail "metadata changed beyond Herdr container IDs between opted-out and projected paths"
+  || fail "metadata changed beyond Herdr container IDs between opted-out and projected paths"$'\n'"$(diff "$TMP_ROOT/off.meta.normalized" "$TMP_ROOT/on.meta.normalized" || true)"
 
 # Two real primary spawns begin concurrently.
 # The fresh-spawn task-set lock may fail closed for one while the other
@@ -783,7 +807,10 @@ remember_meta_worktree "$ORDER_B_META" >/dev/null
 
 ORDER_LIST=$(lab workspace list) || fail "could not inspect concurrent presentation ordering"
 CREATED_LABELS=$(projection_labels_from_log "$PROJECTION_ORDER_START")
-EXPECTED_LABELS=$(printf 'firstmate\n%s\n%s\n2ndmate-alpha\n2ndmate-bravo' "$PROJECTED_LABEL" "$CREATED_LABELS")
+ORDER_CONTAINER_LABEL=$(container_label_in "$ORDER_LIST") \
+  || fail "this home's own task container is no longer present in the lab session"
+EXPECTED_LABELS=$(printf '%s\n%s\n%s\n2ndmate-alpha\n2ndmate-bravo' \
+  "$ORDER_CONTAINER_LABEL" "$PROJECTED_LABEL" "$CREATED_LABELS")
 ACTUAL_LABELS=$(printf '%s' "$ORDER_LIST" | jq -r '.result.workspaces[].label')
 [ "$ACTUAL_LABELS" = "$EXPECTED_LABELS" ] || fail "workspace order was not firstmate, stable primary block, secondmates: $ACTUAL_LABELS"
 PRIMARY_IDS=$(printf '%s' "$ORDER_LIST" | jq -r '
@@ -940,8 +967,11 @@ for ROUND in 1 2 3; do
   assert_focus_is "$CAPTAIN_FOCUS" "focus wave $ROUND concurrent spawns"
   assert_raw_presentation_mutations_preserved_since "$WAVE_FOCUS_START" "focus wave $ROUND concurrent spawns"
   WAVE_LABELS=$(projection_labels_from_log "$WAVE_LOG_START")
-  WAVE_EXPECTED=$(printf 'firstmate\n%s\n2ndmate-alpha\n2ndmate-bravo' "$WAVE_LABELS")
-  WAVE_ACTUAL=$(lab workspace list | jq -r '.result.workspaces[] | select(.label == "firstmate" or (.label | startswith("└ ")) or (.label | startswith("2ndmate-"))) | .label')
+  WAVE_LIST=$(lab workspace list) || fail "focus wave $ROUND could not inspect ordering"
+  WAVE_CONTAINER_LABEL=$(container_label_in "$WAVE_LIST") \
+    || fail "focus wave $ROUND lost this home's own task container"
+  WAVE_EXPECTED=$(printf '%s\n%s\n2ndmate-alpha\n2ndmate-bravo' "$WAVE_CONTAINER_LABEL" "$WAVE_LABELS")
+  WAVE_ACTUAL=$(printf '%s' "$WAVE_LIST" | jq -r --arg id "$FIRSTMATE_WSID" '.result.workspaces[] | select(.workspace_id == $id or (.label | startswith("└ ")) or (.label | startswith("2ndmate-"))) | .label')
   [ "$WAVE_ACTUAL" = "$WAVE_EXPECTED" ] \
     || fail "focus wave $ROUND lost stable contiguous ordering: $WAVE_ACTUAL"
   WAVE_SECOND_ORDER=$(lab workspace list | jq -r '.result.workspaces[] | select(.label | startswith("2ndmate-")) | .workspace_id')
@@ -957,8 +987,11 @@ for ROUND in 1 2 3; do
   finish_concurrent_teardown "focus-$ROUND-a" "$WAVE_A_TEARDOWN_STATUS" "$TMP_ROOT/focus-$ROUND-a-teardown.out" "$TMP_ROOT/focus-$ROUND-a-teardown.err"
   finish_concurrent_teardown "focus-$ROUND-b" "$WAVE_B_TEARDOWN_STATUS" "$TMP_ROOT/focus-$ROUND-b-teardown.out" "$TMP_ROOT/focus-$ROUND-b-teardown.err"
   assert_focus_is "$CAPTAIN_FOCUS" "focus wave $ROUND concurrent teardowns"
-  WAVE_REMAINING=$(lab workspace list | jq -r '.result.workspaces[].label')
-  [ "$WAVE_REMAINING" = $'firstmate\n2ndmate-alpha\n2ndmate-bravo' ] \
+  WAVE_REMAINING_LIST=$(lab workspace list) || fail "focus wave $ROUND could not inspect cleanup"
+  WAVE_REMAINING_CONTAINER=$(container_label_in "$WAVE_REMAINING_LIST") \
+    || fail "focus wave $ROUND cleanup removed this home's own task container"
+  WAVE_REMAINING=$(printf '%s' "$WAVE_REMAINING_LIST" | jq -r '.result.workspaces[].label')
+  [ "$WAVE_REMAINING" = "$(printf '%s\n2ndmate-alpha\n2ndmate-bravo' "$WAVE_REMAINING_CONTAINER")" ] \
     || fail "focus wave $ROUND cleanup left a projected workspace behind: $WAVE_REMAINING"
 done
 pass "real Herdr lab: three repeated concurrent create/order/cleanup waves have zero active workspace or tab drift"
