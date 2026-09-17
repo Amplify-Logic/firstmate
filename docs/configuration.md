@@ -1213,24 +1213,28 @@ An opt-in, per-home and per-device gate for speaking a captain-facing outcome ou
 It ships inert: with no `enabled = true` line in private gitignored `config/speak`, `bin/fm-speak.sh` makes no sound at all, so cloning this repo, seeding a secondmate home, or adding a device never makes it talk.
 
 This is a sink, not a companion.
-The spoken register - outcome first, two or three short sentences, never a URL, path or id, and never a request for a spoken yes - is owned once by the glasses project's `announce` entry point, which already enforces it for the glasses loop.
+The spoken register - outcome first, a few short sentences inside a bounded spoken length, never a URL, path or id, and never a request for a spoken yes - is owned once by the glasses project's `announce` entry point, which already enforces it for the glasses loop.
 `bin/fm-speak.sh` shapes every line through that owner and refuses to speak when it cannot reach it, because speaking unshaped text would read a URL aloud.
 Reusing that owner is deliberate: a second copy of the register in this repository would drift from the one the glasses already speak.
 The practical consequence is that desk voice-out needs that project's local entry point present, and `FM_SPEAK_SHAPER` can name another one exposing the same `--dry-run <text>` contract.
 
-**Deepgram preference.** When `DEEPGRAM_API_KEY` is set in the environment or this home's gitignored `.env`, `bin/fm-speak.sh` synthesizes through Deepgram Aura (`bin/fm-deepgram-tts.sh`, default model `aura-2-thalia-en`) and plays with `afplay`. macOS `say` remains the fallback when the key is absent or Deepgram fails. The key is never logged.
-When Deepgram is the intended sink, the script also points the glasses register owner at [`docs/examples/desk-speak-register.toml`](examples/desk-speak-register.toml) via `GLASSES_ANNOUNCE_CONFIG` (unless already set), raising the spoken budget from ~8s to **30 seconds** while keeping the same URL/path/id and decision refusals. Override with `FM_SPEAK_DEEPGRAM_REGISTER`, or keep the short cut with `FM_SPEAK_DEEPGRAM_REGISTER=` (empty).
+**Speaker preference.** A named voice picks the speaker. With a non-empty `voice` in `config/speak`, `bin/fm-speak.sh` speaks through macOS `say` in that voice, because Deepgram takes its voice from `DEEPGRAM_TTS_MODEL` and cannot honour that key. With no voice named, `DEEPGRAM_API_KEY` in the environment or this home's gitignored `.env` sends the line to Deepgram Aura (`bin/fm-deepgram-tts.sh`, default model `aura-2-thalia-en`), played with `afplay`. Either way the other speaker is the fallback: Deepgram when there is no usable `say` binary, `say` when the key is absent or Deepgram fails. The speaker is chosen before the line is handed over and never swapped afterwards, so a speaker that fails once it has the line is not re-spoken through the other one. A named `voice` is checked against the voices `say` actually has before the handoff, because `say` substitutes a voice it does not have and still exits 0; a voice this machine does not have is reported on stderr and nothing is spoken. The name is matched no more strictly than `say` resolves it - case is ignored, and a bare `Ava` reaches `Ava (Premium)` - so only a name that cannot resolve at all is refused. That check runs beside the register call under its own bound rather than after it, so it does not extend the worst case a turn can be held, and a voice confirmed once is remembered in `state/speak-voice-confirmed` so only the first spoken line waits for it. The key is never logged, and this covers speech out only - the desk floater's transcription still uses the same key.
+**Desk spoken bound.** The register owner truncates before playback and its own default budget is the ~8s one tuned for the glasses, which cuts an ordinary desk outcome mid-message.
+So `bin/fm-speak.sh` points that owner at [`docs/examples/desk-speak-register.toml`](examples/desk-speak-register.toml) via `GLASSES_ANNOUNCE_CONFIG` (unless already set) for every desk line, raising the spoken budget to **30 seconds** while keeping the same URL/path/id and decision refusals.
+The bound belongs to the desk, not to the speaker, so it is the same whichever speaker plays the line, macOS `say` or Deepgram Aura.
+Override with `FM_SPEAK_DEEPGRAM_REGISTER`, or keep the short glasses cut with `FM_SPEAK_DEEPGRAM_REGISTER=` (empty); the variable keeps its historical name because it is the published opt-out.
 
 Because the register owner refuses text that asks the captain to decide, a merge, a spend, an outward action, or any other approval structurally cannot be put to him by voice; those stay in the reply he reads.
 Nothing here observes audio, so a successful call means the shaped line was handed to the speaker, never that it was produced or heard.
 
 Configuration is `key = value` lines; unknown keys are refused rather than ignored.
-`enabled` arms this home, and the optional `voice` names a `say` voice (ignored for Deepgram).
+`enabled` arms this home, and the optional `voice` names a `say` voice, which also selects `say` as the speaker.
 The script's header and `--help` own the exact invocation, the environment overrides, and the exit codes.
 `AGENTS.md` section 9 owns when the orchestrator speaks.
 The Mac push-to-talk floater that feeds captain input into this home is documented in [`desk-floater.md`](desk-floater.md).
 
 Each call is bounded on both halves so a captain-facing turn is never held open: the register call is waited on under a watchdog because its output is needed, and speaker playback is detached with its standard streams closed (Deepgram synthesis is waited only for the network `--to` file, then playback is detached).
+Detachment also puts the speaker in a process group of its own, so a harness that reaps the speaking command's process group at the end of its turn cannot cut the spoken line short; the script's header owns that mechanic.
 The two bounds are deliberately separate because they protect different things: `FM_SPEAK_SHAPER_TIMEOUT` bounds the waited-on register call and is therefore the worst case a turn can be held, while `FM_SPEAK_TIMEOUT` bounds synthesis/playback runaways without ever holding the caller for the duration of the audio.
 The script's header owns their defaults.
 
@@ -1282,6 +1286,27 @@ When the file is present, its first line must trim to exactly one of `low`, `med
 `max` is not accepted, and that refusal is retained pending the separate follow-up astra-max-effort.
 Any other content, including an empty token, refuses rather than falling back.
 The file is not inherited by secondmate homes.
+
+## Primary Astra context window (config/astra-context, config/astra-compact-at)
+
+`config/astra-context` is an optional local, gitignored one-token file that selects the context window for the `astra` primary profile.
+`bin/fm-primary.sh` reads it only at launch.
+When the file is absent nothing changes: no override is passed and Codex uses its own catalog default.
+When the file is present, its first line must trim to either `max` or a positive integer.
+`max` resolves to the installed Codex model catalog's own `max_context_window` for `gpt-6-astra`, read from `$CODEX_HOME/models_cache.json` at launch.
+An explicit integer is honoured only up to that same ceiling; a larger request refuses rather than being clamped or passed through, because both would leave the launcher asserting a window the provider never granted.
+An unreadable or malformed catalog refuses rather than supplying a remembered number.
+
+The provider's published API maximum for a model and the window this subscription CLI will actually open are different quantities, and only the second one is ever used here.
+
+`config/astra-compact-at` is an optional local, gitignored one-token file holding a positive integer, the token count at which Codex compacts the thread.
+It is never derived: how much of a window to spend before summarising is an operational choice, and the catalog prescribes none.
+It must be strictly below the selected window, and it refuses if `config/astra-context` selects no window.
+When it is set, its value REPLACES the 500,000-token default from [Context window](#context-window) above rather than adding a second limit, so exactly one `model_auto_compact_token_limit` is ever passed.
+When it is absent, the `astra` launch keeps that 500,000-token default even if `config/astra-context` selects a larger window.
+
+Neither file is inherited by secondmate homes.
+A raised window takes effect on the next launch, and the first `token_count` event in the new session reports the `model_context_window` that was actually granted, which is where to verify it.
 
 ## Calm presentation (config/calm)
 

@@ -163,6 +163,9 @@ The shared no-mistakes gate refusal for fleet lifecycle entrypoints is summarize
 | `fm-account-lib.sh`      | Shared named-account resolution, derived `data/accounts/<vendor>/<name>` homes, and the missing/logged-out/wrong-seat launch gate |
 | `fm-status-bar.sh`       | Render the canonical guarded primary status bar on native surfaces and on tmux or herdr companion panes (docs/status-bar.md) |
 | `fm-cursor-statusline.sh` | Opt-in install, status, and exact-restore uninstall of Firstmate's status line in Cursor CLI's own user config (docs/status-bar.md) |
+| `fm-fleet-status-lib.sh`  | Fold `fm-crew-state.sh` into the status row's working/validating/paused/attention counts, out of band and cached (docs/status-bar.md) |
+| `fm-codex-session-metrics-lib.sh` | Supply the Codex companion's real context and provider-quota figures from the exact followed session and the account owner (docs/status-bar.md) |
+| `fm-status-cache-lib.sh` | Shared status-row cache freshness, staleness bounds, and single-refresh claim ownership |
 | `fm-landed-lib.sh`       | Shared newest-first completion-recency ordering for every capped landed surface       |
 | `fm-startup-memory-budget.sh` | Validate and report the bounded startup-memory allowance and current usage |
 | `fm-backlog-handoff.sh`  | Validate and delegate queued backlog-item moves into a secondmate home               |
@@ -173,7 +176,7 @@ The shared no-mistakes gate refusal for fleet lifecycle entrypoints is summarize
 | `fm-bridge-fields.sh`    | Add the bridge's title, repo, hold kind and hold reason to a finished bearings model, so the projection itself carries none of them |
 | `fm-overlay.sh`          | Open a Markdown view as an in-terminal Herdr overlay pane, degrading to a printed pointer to the same content; installs nothing and is called nowhere by default (docs/chart-room.md) |
 | `fm-present.sh`          | Present a captain-action artifact once per unchanged milestone through its existing local owner |
-| `fm-speak.sh` | Speak one captain-facing outcome line out of this machine's speaker, shaped by the glasses spoken-register owner; prefers Deepgram Aura when DEEPGRAM_API_KEY is set, else macOS say; inert unless config/speak opts the home in (docs/configuration.md "Desk voice-out", docs/desk-floater.md) |
+| `fm-speak.sh` | Speak one captain-facing outcome line out of this machine's speaker, shaped by the glasses spoken-register owner; a named `voice` selects macOS say, otherwise Deepgram Aura leads when DEEPGRAM_API_KEY is set, each the other's fallback (the script header owns the mechanic); inert unless config/speak opts the home in (docs/configuration.md "Desk voice-out", docs/desk-floater.md) |
 | `fm-deepgram-tts.sh` | Synthesize one line with Deepgram Aura and play it (or --to a file); reads DEEPGRAM_API_KEY from env or gitignored .env; never logs the key |
 | `fm-deepgram-stt.sh` | Transcribe one audio file with Deepgram for the desk floater push-to-talk path; never logs the key |
 | `fm-desk-voice.sh` | Durable desk-voice mailbox: deliver / pending / drain captain-input transcripts under state/desk-voice/ and wake the primary (docs/desk-floater.md) |

@@ -90,9 +90,10 @@ config/crew-dispatch.json  optional crewmate dispatch profiles; LOCAL, gitignore
 config/primary-handoff  optional quota- and context-aware primary orchestrator rotation; LOCAL, gitignored; absent or enabled:false leaves primary launch unchanged; see docs/primary-handoff.md
 config/primary-effort  optional Claude primary launch effort for claude-fable and claude-opus; LOCAL, gitignored; one of low, medium, high, xhigh, max; absent = xhigh; read only by bin/fm-primary.sh at launch; not inherited by secondmate homes; see docs/configuration.md
 config/astra-effort  optional Astra primary launch effort; LOCAL, gitignored; one of low, medium, high, xhigh; absent = xhigh; read only by bin/fm-primary.sh at launch; not inherited by secondmate homes; see docs/configuration.md
+config/astra-context config/astra-compact-at  optional Astra primary context window and compaction point; LOCAL, gitignored; absent = Codex's own catalog default; a window above the installed catalog's max_context_window refuses; read only by bin/fm-primary.sh at launch; not inherited by secondmate homes; see docs/configuration.md
 config/morning-intake  optional opt-in once-per-local-day morning intake gate; LOCAL, gitignored; absent or without `enabled = true` leaves the home inert, so no clone or device self-enrols; see docs/configuration.md "Morning intake"
 config/channel-intake  optional opt-in continuous channel intake gate; LOCAL, gitignored; absent or without `enabled = true` leaves the home inert, so no clone or device self-enrols; source identities live in its private inventory, never here; see docs/channel-intake.md
-config/speak  optional opt-in desk voice-out gate and `say` voice name; LOCAL, gitignored; absent or without `enabled = true` leaves the home silent, so no clone or device starts talking; prefers Deepgram Aura when DEEPGRAM_API_KEY is set (else macOS `say`); see docs/configuration.md "Desk voice-out" and docs/desk-floater.md
+config/speak  optional opt-in desk voice-out gate and `say` voice name; LOCAL, gitignored; absent or without `enabled = true` leaves the home silent, so no clone or device starts talking; a named `voice` selects macOS `say`, otherwise Deepgram Aura leads when DEEPGRAM_API_KEY is set, each the other's fallback (bin/fm-speak.sh's header owns the mechanic); see docs/configuration.md "Desk voice-out" and docs/desk-floater.md
 config/bridge-links  optional LOCAL, gitignored bridge-page pinned links; see docs/configuration.md
 data/                personal fleet records; LOCAL, gitignored as a whole
   backlog.md         task queue, dependencies, history
@@ -164,6 +165,7 @@ state/               runtime records and signals; gitignored
   .watch.lock .wake-queue.lock watcher singleton and queue serialization locks
   .claude-autoarm.lock .claude-autoarm-epoch .claude-autoarm-failure-notified .claude-autoarm-failure-alarmed .turnend-claude-blocks .turnend-claude-blocks.lock   Claude Stop auto-arm single-flight, epoch, failure-episode, attended-alarm, guard-budget, and budget-lock records; never touch
   .cursor-park-owner .cursor-park-owner.lock .turnend-cursor-blocks   Cursor stop-hook owner record, publication and commit lock, and bounded repair-nag budget; never touch
+  .status-fleet-state* .status-codex-*   status-bar renderer caches and single-refresh claims for the canonical fleet fold and the Codex context/quota supply; never touch (docs/status-bar.md)
   .hash-* .count-* .stale-* .stale-since-* .churn-since-* .paused-* .wedge-escalations-* .writing-* .seen-* .hb-surfaced-* .last-* .heartbeat-streak   watcher internals; never touch
   .watch-triage.log  watcher's absorbed-wake debug log (size-capped); never relied on, safe to delete
   .last-watcher-beat watcher liveness beacon, touched every poll (including while absorbing benign wakes); guard scripts read it

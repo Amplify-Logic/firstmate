@@ -16,8 +16,8 @@ primary already running in this home.
 - Transcript delivery into a durable mailbox under the home
   (`state/desk-voice/inbox/`), plus a wake so the primary can see it.
 - Optional speak-back of Firstmate outcome lines through `bin/fm-speak.sh`,
-  which prefers Deepgram Aura when `DEEPGRAM_API_KEY` is configured and falls
-  back to macOS `say`.
+  which speaks through macOS `say` when `config/speak` names a `voice` and
+  through Deepgram Aura otherwise, each the fallback for the other.
 
 ## Enablement
 
@@ -63,19 +63,23 @@ Drain prints each transcript as plain text (or `--print` for JSON) and moves
 the file to `processed/`. Treat the drained text as captain input in the
 primary conversation. Do not paste blindly into random terminals.
 
-## Deepgram speak-out bound
+## Desk speak-out bound
 
-When Deepgram is the preferred sink, `bin/fm-speak.sh` points the glasses
-spoken-register owner at
+The register owner truncates the shaped line before any speaker sees it, and
+its own default budget is the ~8s one tuned for the glasses, which cuts an
+ordinary two- or three-sentence desk outcome mid-message.
+So `bin/fm-speak.sh` points that owner at
 [`docs/examples/desk-speak-register.toml`](examples/desk-speak-register.toml)
-(via `GLASSES_ANNOUNCE_CONFIG`, unless already set). That example keeps the
-same URL/path/id and decision refusals but raises the spoken budget to
-**30 seconds** (about 78 words at 2.6 wps). macOS `say` remains the fallback
-when the key is absent or Deepgram fails; without Deepgram the register stays
-on the glasses ~8s default.
+(via `GLASSES_ANNOUNCE_CONFIG`, unless already set) for every desk line.
+That example keeps the same URL/path/id and decision refusals but raises the
+spoken budget to **30 seconds** (about 78 words at 2.6 wps).
+The budget belongs to the desk rather than to the speaker, so it is the same
+whichever speaker plays the line, macOS `say` or Deepgram Aura.
 
 Override the example path with `FM_SPEAK_DEEPGRAM_REGISTER`, or keep the short
-cut by exporting `FM_SPEAK_DEEPGRAM_REGISTER=` (empty).
+glasses cut by exporting `FM_SPEAK_DEEPGRAM_REGISTER=` (empty).
+The variable keeps its historical name because it is the published opt-out; it
+has never been a Deepgram gate.
 
 TTS model default: `aura-2-thalia-en` (`DEEPGRAM_TTS_MODEL`).
 STT model default: `nova-2` (`DEEPGRAM_STT_MODEL`).
@@ -95,4 +99,4 @@ STT model default: `nova-2` (`DEEPGRAM_STT_MODEL`).
 | `bin/fm-desk-voice.sh` | Inbox deliver / pending / drain |
 | `bin/fm-deepgram-stt.sh` | Audio file → transcript |
 | `bin/fm-deepgram-tts.sh` | Text → Deepgram Aura audio |
-| `bin/fm-speak.sh` | Captain-facing speak-out (Deepgram preferred, `say` fallback) |
+| `bin/fm-speak.sh` | Captain-facing speak-out (a named `voice` selects `say`, else Deepgram Aura; each the other's fallback) |
