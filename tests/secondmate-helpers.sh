@@ -134,6 +134,19 @@ SH
   printf '%s\n' "$fakebin"
 }
 
+# Retire a window from the fake tmux's inventory, the way a restarted tmux server
+# loses the windows it was holding. The inventory is what makes a created window
+# list back as live, so a case that simulates a restart has to retire it here as
+# well as dropping the durable meta; leaving it behind leaves a window that really
+# is live by the fixture's own account, which fm-spawn then correctly refuses to
+# spawn over.
+fake_tmux_forget_window() {  # <fakebin> <window-name>
+  local log=$1/.fake-windows
+  [ -f "$log" ] || return 0
+  grep -vxF -- "$2" "$log" > "$log.tmp" || :
+  mv "$log.tmp" "$log"
+}
+
 # A fake no-mistakes that touches .no-mistakes-init / .no-mistakes-doctor markers.
 make_fake_no_mistakes() {
   local dir=$1 fakebin

@@ -233,9 +233,11 @@ EOF
 }
 
 phase_recovery() {
-  # Simulate a restart: drop the live meta, then respawn from the registry +
-  # persistent home (no explicit home argument).
+  # Simulate a restart: drop the live meta and the tmux window the restart took
+  # with it, then respawn from the registry + persistent home (no explicit home
+  # argument).
   rm -f "$HOME_DIR/state/design.meta"
+  fake_tmux_forget_window "$FAKEBIN" fm-design
   PATH="$FAKEBIN:$PATH" FM_HOME="$HOME_DIR" FM_FAKE_TMUX_LOG="$LOG" FM_FAKE_TMUX_CAPTURE="$PANE" \
     "$ROOT/bin/fm-spawn.sh" design "echo relaunch" --secondmate >/dev/null 2>&1 \
     || fail "recovery respawn failed"
