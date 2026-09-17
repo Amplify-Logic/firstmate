@@ -69,7 +69,16 @@
 # The default landed baseline is balanced across homes: each home keeps its internal
 # newest-first ordering, homes iterate in deterministic id order, sparse homes do not
 # waste capacity, and --all-landed switches back to the complete global newest-first
-# order. Which closed rows either side contributes is bin/fm-landed-lib.sh's rule.
+# order. Balance alone would drop the newest completion in the fleet once there are
+# more homes than the overall cap has slots, so the merge reserves a leading slot for
+# every home whose newest dated completion - the row bin/fm-landed-lib.sh ranks first
+# in that home, published with recency_rank 1 - carries the fleet's newest completion
+# date, and balances the rest. Completion dates are day-granularity and nothing in
+# the system records anything finer, so a same-date cross-home tie reserves EVERY
+# tied home's newest row rather than letting home-id order cut a later-sorting
+# home's just-finished completion; only a cap with fewer slots than tied homes can
+# still drop one, and omitted[] discloses it.
+# Which closed rows either side contributes is bin/fm-landed-lib.sh's rule.
 #
 # Flags:
 #   (default)        compact projection with bounded remote-ledger collection, TOON
@@ -162,9 +171,11 @@ Default gates are selected newest filed first before their bound; undated gates
   retain input order after dated gates.
 landed merges this home's Done with registered secondmate homes' Done, bounded by
   a per-home cap (FM_BEARINGS_LANDED_PER_HOME) and an overall cap (FM_BEARINGS_LANDED),
-  with omitted[] disclosure. Default selection is balanced across deterministic home
-  order while preserving each home's internal newest-first order; sparse homes do
-  not waste capacity. --all-landed reveals the full global newest-first set.
+  with omitted[] disclosure. Default selection reserves a leading slot for every home
+  whose newest dated completion carries the fleet's newest completion date, then
+  balances the rest across deterministic home order while preserving each home's
+  internal newest-first order; sparse homes do not waste capacity. --all-landed
+  reveals the full global newest-first set.
 For every registered secondmate, readable structured facts from its own home are
   authoritative, including independently trustworthy surfaces from a partial summary.
   Parent events and bounded terminal reads are labeled fallback or contradiction
@@ -445,10 +456,18 @@ MODEL=$(printf '%s' "$SNAP" | jq \
      filed:((.since // null) | trunc(40))};
   def round_robin_landed($n):
     . as $groups
+    | ($groups | length) as $g
     | [range(0; (($groups | map(length) | max) // 0)) as $i
        | $groups[]
        | select(length > $i)
-       | .[$i]][:$n];
+       | .[$i]] as $merged
+    | $merged[:$g] as $heads
+    | ([$heads[] | .completion.date // "" | select(. != "")] | max) as $top_date
+    | (if $top_date == null then $merged
+       else [$heads[] | select((.completion.date // "") == $top_date)]
+            + [$heads[] | select((.completion.date // "") != $top_date)]
+            + $merged[$g:]
+       end)[:$n];
   ($fields | split(",") | map(gsub("^\\s+|\\s+$"; "")) | map(select(. != ""))) as $fl
   | (($fl | index("bodies")) != null) as $f_bodies
   | (($fl | index("paths")) != null) as $f_paths

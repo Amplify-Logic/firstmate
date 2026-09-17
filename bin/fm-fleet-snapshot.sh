@@ -102,6 +102,13 @@
 #     unavailable child state or an untrustworthy backlog collapses to unknown.
 #     Which closed rows a home contributes is bin/fm-landed-lib.sh's rule, shared
 #     with the bearings projection so one Recently Landed section has one owner.
+#   recency_rank: stable PUBLISHED CONTRACT on every landed row in
+#     fm-secondmate-home-summary.v1 landed[], fm-fleet-snapshot.v1
+#     secondmate_current.records[].landed[], and secondmate_landed.records[].
+#     It is the row's 1-based position in its OWN home's newest-first landed
+#     ordering, where 1 is that home's newest completion. It replaces the
+#     internal backlog parse position (order), which is never published, and it
+#     is per-home recency evidence rather than a cross-home ordering.
 #   secondmate_guidance: return-channel action note for renderers and bearings.
 #
 # Compatibility: JSON is the primary machine-readable surface.
@@ -989,8 +996,11 @@ secondmate_home_summary_json() {  # <backlog-json-file> <tasks-json-file>
             hold_kind:((.hold_kind // null) | if . == null then null else trunc(40) end),
             pr_url:((.pr_url // null) | if . == null then null else trunc(500) end),
             report_path:((.report_path // null) | if . == null then null else trunc(500) end),
-            local_note:((.local_note // null) | if . == null then null else trunc(120) end),completion} ]
-       | sort_by([(.completion.date // ""), .id]) | reverse) as $landed_all
+            local_note:((.local_note // null) | if . == null then null else trunc(120) end),
+            completion,order} ]
+       | landed_newest_first
+       | to_entries
+       | map(.value + {recency_rank:(.key + 1)} | del(.order))) as $landed_all
     | ([ $tasks[] | select(.current_state.state == "unknown") ]) as $unknown_children
     | ([ $owned_in_flight[]
          | select(.requires_child_metadata)
