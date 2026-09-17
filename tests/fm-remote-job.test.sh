@@ -19,6 +19,9 @@ REAL_GIT=$(command -v git)
 OTHER_PID=
 RECOVERY_WORKER_PID=
 REPEAT_WORKER_PID=
+STALE_LOCK_WORKER_PID=
+LIVE_LOCK_WORKER_PID=
+LIVE_LOCK_CHALLENGER_PID=
 RESTART_SUPERVISOR_PID=
 mkdir -p "$REMOTE_ROOT/bin" "$REMOTE_HOME" "$ACCOUNT_HOME" "$RUNTIME_BIN"
 # worker.pid records the serving child, not its restart supervisor, so stopping
@@ -28,6 +31,9 @@ cleanup_remote_job_fixture() {
   [ -z "$OTHER_PID" ] || kill "$OTHER_PID" 2>/dev/null || true
   [ -z "$RECOVERY_WORKER_PID" ] || kill "$RECOVERY_WORKER_PID" 2>/dev/null || true
   [ -z "$REPEAT_WORKER_PID" ] || kill "$REPEAT_WORKER_PID" 2>/dev/null || true
+  [ -z "$STALE_LOCK_WORKER_PID" ] || kill "$STALE_LOCK_WORKER_PID" 2>/dev/null || true
+  [ -z "$LIVE_LOCK_WORKER_PID" ] || kill "$LIVE_LOCK_WORKER_PID" 2>/dev/null || true
+  [ -z "$LIVE_LOCK_CHALLENGER_PID" ] || kill "$LIVE_LOCK_CHALLENGER_PID" 2>/dev/null || true
   [ -z "$RESTART_SUPERVISOR_PID" ] || kill -KILL "$RESTART_SUPERVISOR_PID" 2>/dev/null || true
   if [ -f "$STATE_ROOT/worker.pid" ]; then
     fm_remote_job_stop_worker_tree "$(cat "$STATE_ROOT/worker.pid")" || true
@@ -654,8 +660,9 @@ pass "quarantine recovery refuses unverifiable supervisors and ignores reused pi
 # bounded burst and then keep signalling until it is gone: the first signal
 # starts the shutdown and every later one lands inside it, the same way the group
 # signal and the forwarded signal do. A shutdown that dies part way through
-# leaves its ownership lock behind holding a half-written temp file no later
-# worker can clear, and every replacement then fails to report ready.
+# leaves its ownership lock behind holding a half-written temp file. Acquire
+# reclaim clears those leftovers, but this case still pins that shutdown itself
+# ignores the repeat so it can finish and release ownership without a race.
 #
 # The burst is bounded and the follow-up signals are paced deliberately. An
 # unpaced signal loop delivers hundreds of thousands of signals per second,
@@ -715,6 +722,104 @@ kill -TERM "$REPEAT_WORKER_PID"
 wait "$REPEAT_WORKER_PID" 2>/dev/null || true
 REPEAT_WORKER_PID=
 pass "a repeatedly signalled shutdown still releases ownership for the next worker"
+
+# Crash or a shutdown killed part way through leaves the ownership directory
+# holding half-written mktemp files. Reclaim used to remove only pid/start/command
+# and then rmdir, so those leftovers made every later worker exit 1 and the
+# supervisor restart-storm. A dead owner, leftover temps, and a leftover
+# heartbeat must all be reclaimable; a live owner that still heartbeats must not
+# be stolen.
+STALE_LOCK_HOME="$TMP_ROOT/stale-lock-account"
+STALE_LOCK_STATE="$TMP_ROOT/stale-lock-jobs"
+mkdir -p "$STALE_LOCK_HOME" "$STALE_LOCK_STATE/worker.lock"
+chmod 700 "$STALE_LOCK_HOME" "$STALE_LOCK_STATE" "$STALE_LOCK_STATE/worker.lock"
+printf '999999\n' > "$STALE_LOCK_STATE/worker.lock/pid"
+printf 'stale-start\n' > "$STALE_LOCK_STATE/worker.lock/start"
+printf 'stale-command\n' > "$STALE_LOCK_STATE/worker.lock/command"
+printf 'interrupted\n' > "$STALE_LOCK_STATE/worker.lock/.pid.XXXXXX"
+printf 'interrupted\n' > "$STALE_LOCK_STATE/worker.lock/.start.XXXXXX"
+printf 'interrupted\n' > "$STALE_LOCK_STATE/worker.lock/.command.XXXXXX"
+printf 'interrupted\n' > "$STALE_LOCK_STATE/worker.lock/.quarantine.XXXXXX"
+printf '999999\n' > "$STALE_LOCK_STATE/worker.pid"
+printf '999999\n' > "$STALE_LOCK_STATE/worker.ready"
+chmod 600 "$STALE_LOCK_STATE/worker.lock"/* "$STALE_LOCK_STATE/worker.lock"/.[!.]* \
+  "$STALE_LOCK_STATE/worker.pid" "$STALE_LOCK_STATE/worker.ready"
+touch -t 200001010000 "$STALE_LOCK_STATE/worker.lock" "$STALE_LOCK_STATE/worker.ready" \
+  "$STALE_LOCK_STATE/worker.pid"
+HOME="$STALE_LOCK_HOME" FM_ROOT_OVERRIDE="$REMOTE_ROOT" FM_REMOTE_JOB_STATE_ROOT="$STALE_LOCK_STATE" \
+  FM_REMOTE_JOB_PLATFORM_OVERRIDE=Linux "$REMOTE_ROOT/bin/fm-remote-job-worker.sh" --serve \
+  > "$TMP_ROOT/stale-lock.out" 2> "$TMP_ROOT/stale-lock.err" &
+STALE_LOCK_WORKER_PID=$!
+STALE_LOCK_READY=
+for _ in $(seq 1 300); do
+  STALE_LOCK_READY=$(cat "$STALE_LOCK_STATE/worker.ready" 2>/dev/null || true)
+  case "$STALE_LOCK_READY" in
+    ''|999999) ;;
+    *) kill -0 "$STALE_LOCK_READY" 2>/dev/null && break ;;
+  esac
+  if ! kill -0 "$STALE_LOCK_WORKER_PID" 2>/dev/null; then
+    break
+  fi
+  sleep 0.05
+done
+if ! kill -0 "$STALE_LOCK_WORKER_PID" 2>/dev/null; then
+  wait "$STALE_LOCK_WORKER_PID" 2>/dev/null || true
+  STALE_LOCK_WORKER_PID=
+  fail "a stale leftover lock made the next worker exit instead of reclaiming: $(cat "$TMP_ROOT/stale-lock.err")"
+fi
+case "$STALE_LOCK_READY" in
+  ''|999999) fail "the worker did not reclaim a stale leftover ownership lock" ;;
+esac
+kill -0 "$STALE_LOCK_READY" 2>/dev/null \
+  || fail "the reclaimed worker pid is not alive"
+kill -TERM "$STALE_LOCK_WORKER_PID"
+wait "$STALE_LOCK_WORKER_PID" 2>/dev/null || true
+STALE_LOCK_WORKER_PID=
+pass "a stale leftover ownership lock is reclaimed by the next worker"
+
+LIVE_LOCK_HOME="$TMP_ROOT/live-lock-account"
+LIVE_LOCK_STATE="$TMP_ROOT/live-lock-jobs"
+mkdir -p "$LIVE_LOCK_HOME"
+chmod 700 "$LIVE_LOCK_HOME"
+HOME="$LIVE_LOCK_HOME" FM_ROOT_OVERRIDE="$REMOTE_ROOT" FM_REMOTE_JOB_STATE_ROOT="$LIVE_LOCK_STATE" \
+  FM_REMOTE_JOB_PLATFORM_OVERRIDE=Linux "$REMOTE_ROOT/bin/fm-remote-job-worker.sh" --serve \
+  > "$TMP_ROOT/live-lock.out" 2> "$TMP_ROOT/live-lock.err" &
+LIVE_LOCK_WORKER_PID=$!
+for _ in $(seq 1 300); do
+  [ -f "$LIVE_LOCK_STATE/worker.ready" ] && break
+  sleep 0.05
+done
+assert_present "$LIVE_LOCK_STATE/worker.ready" "the live owner did not become ready"
+LIVE_LOCK_PID=$(cat "$LIVE_LOCK_STATE/worker.ready")
+kill -0 "$LIVE_LOCK_PID" 2>/dev/null || fail "the live owner pid is not alive"
+HOME="$LIVE_LOCK_HOME" FM_ROOT_OVERRIDE="$REMOTE_ROOT" FM_REMOTE_JOB_STATE_ROOT="$LIVE_LOCK_STATE" \
+  FM_REMOTE_JOB_PLATFORM_OVERRIDE=Linux "$REMOTE_ROOT/bin/fm-remote-job-worker.sh" --serve \
+  > "$TMP_ROOT/live-lock-challenger.out" 2> "$TMP_ROOT/live-lock-challenger.err" &
+LIVE_LOCK_CHALLENGER_PID=$!
+LIVE_LOCK_CHALLENGER_DEADLINE=$((SECONDS + 5))
+while kill -0 "$LIVE_LOCK_CHALLENGER_PID" 2>/dev/null && [ "$SECONDS" -lt "$LIVE_LOCK_CHALLENGER_DEADLINE" ]; do
+  sleep 0.05
+done
+if kill -0 "$LIVE_LOCK_CHALLENGER_PID" 2>/dev/null; then
+  kill -TERM "$LIVE_LOCK_CHALLENGER_PID" 2>/dev/null || true
+  wait "$LIVE_LOCK_CHALLENGER_PID" 2>/dev/null || true
+  LIVE_LOCK_CHALLENGER_PID=
+  fail "a challenger waited on a live owner instead of leaving the lock in place"
+fi
+set +e
+wait "$LIVE_LOCK_CHALLENGER_PID"
+LIVE_LOCK_CHALLENGER_RC=$?
+set -e
+LIVE_LOCK_CHALLENGER_PID=
+[ "$LIVE_LOCK_CHALLENGER_RC" -eq 0 ] \
+  || fail "a challenger stole or failed against a live owner (rc=$LIVE_LOCK_CHALLENGER_RC): $(cat "$TMP_ROOT/live-lock-challenger.err")"
+[ "$(cat "$LIVE_LOCK_STATE/worker.lock/pid")" = "$LIVE_LOCK_PID" ] \
+  || fail "a challenger replaced a live owner's lock pid"
+kill -0 "$LIVE_LOCK_PID" 2>/dev/null || fail "a challenger killed the live owner"
+kill -TERM "$LIVE_LOCK_WORKER_PID"
+wait "$LIVE_LOCK_WORKER_PID" 2>/dev/null || true
+LIVE_LOCK_WORKER_PID=
+pass "a live owner that still heartbeats is not stolen"
 
 # A child that stays up for FM_REMOTE_JOB_SUPERVISOR_HEALTHY_SECONDS clears the
 # consecutive-failure backoff, so a child that dies just past that threshold

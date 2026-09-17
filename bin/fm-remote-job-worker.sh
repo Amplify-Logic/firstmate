@@ -133,6 +133,28 @@ worker_lock_recent() {
   [ $((now - mtime)) -le 10 ]
 }
 
+worker_lock_has_recorded_pid() {
+  [ -e "$WORKER_LOCK/pid" ] || [ -L "$WORKER_LOCK/pid" ]
+}
+
+# Drop a stale ownership directory so the next mkdir can claim it. pid/start/command
+# are the published owner records; the .pid.*, .start.*, .command.*, and
+# .quarantine.* names are the mktemp leftovers a crash or interrupted shutdown
+# leaves behind. Removing only the published records left those temps in place,
+# rmdir failed, and every later worker exited 1 into a restart storm.
+worker_clear_stale_lock() {
+  local f
+  [ -d "$WORKER_LOCK" ] && [ ! -L "$WORKER_LOCK" ] || return 1
+  [ ! -e "$WORKER_LOCK/quarantine" ] && [ ! -L "$WORKER_LOCK/quarantine" ] || return 1
+  for f in "$WORKER_LOCK"/* "$WORKER_LOCK"/.[!.]*; do
+    [ -e "$f" ] || [ -L "$f" ] || continue
+    [ ! -L "$f" ] || return 1
+    [ -f "$f" ] || return 1
+    rm -f -- "$f" || return 1
+  done
+  rmdir "$WORKER_LOCK"
+}
+
 worker_quarantined_execution_stopped() { # <account-home>
   local account_home=$1 job state kind file pid
   fm_remote_job_regular_bounded "$WORKER_LOCK/quarantine" 256 || return 1
@@ -171,14 +193,19 @@ worker_acquire_lock() {
       continue
     fi
     if fm_remote_job_lock_owner_matches_process "$account_home"; then return 2; fi
-    if fm_remote_job_probe "$account_home" || worker_lock_recent; then
+    # A just-created lock with no pid yet is another worker publishing identity.
+    # A leftover heartbeat or leftover temp files must not keep a dead owner in
+    # this wait until the attempt budget expires and we exit 1.
+    if [ "$attempt" -lt 149 ] && worker_lock_recent && ! worker_lock_has_recorded_pid; then
       attempt=$((attempt + 1))
       sleep 0.1
       continue
     fi
-    [ ! -L "$WORKER_LOCK/pid" ] && [ ! -L "$WORKER_LOCK/start" ] && [ ! -L "$WORKER_LOCK/command" ] || return 1
-    rm -f -- "$WORKER_LOCK/pid" "$WORKER_LOCK/start" "$WORKER_LOCK/command" || return 1
-    rmdir "$WORKER_LOCK" || return 1
+    if worker_clear_stale_lock; then
+      continue
+    fi
+    attempt=$((attempt + 1))
+    sleep 0.1
   done
   return 1
 }
@@ -394,9 +421,10 @@ worker_stop_active_execution() {
 # to this same serving child, so a repeat is the normal case and not an
 # exception. Restoring the default let that second signal kill the shutdown part
 # way through, which left the ownership lock behind holding a half-written temp
-# file that no later worker could clear, so every replacement then failed to
-# report ready. A shutdown that hangs is still stopped: the caller escalates to
-# KILL, which no disposition can block.
+# file. worker_acquire_lock reclaims those leftovers for the next worker, but a
+# shutdown killed mid-write still races the replacement, so ignore the repeat
+# rather than restoring the default. A shutdown that hangs is still stopped: the
+# caller escalates to KILL, which no disposition can block.
 worker_shutdown() {
   trap '' HUP INT TERM
   worker_publish_quarantine || {
