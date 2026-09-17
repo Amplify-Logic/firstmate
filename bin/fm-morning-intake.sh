@@ -361,7 +361,7 @@ lock_state() {
   [ "$STATE_LOCK_HELD" != true ] || return 0
   load_wake_lib
   mkdir -p "$INTAKE_DIR"
-  fm_lock_acquire_wait "$STATE_LOCK" "$timeout" || return 1
+  fm_lock_acquire_wait_bounded "$STATE_LOCK" "$timeout" || return 1
   STATE_LOCK_HELD=true
   trap 'unlock_state' EXIT
 }
