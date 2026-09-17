@@ -46,9 +46,14 @@
 # Aura first (bin/fm-deepgram-tts.sh). Either way the other speaker remains the
 # fallback: Deepgram when there is no usable `say` binary, `say` when the key is
 # absent or Deepgram fails. That choice is made once, before the handoff, and is
-# never revisited afterwards: a `say` that fails once it has the line is left to
-# fail silently rather than re-spoken through Deepgram, because paid synthesis is
-# not this script's answer to a local speaker problem. The key is never logged,
+# never revisited afterwards: a speaker that fails once it has the line is not
+# re-spoken through the other one, because paid synthesis is not this script's
+# answer to a local speaker problem. A named voice is checked against the voices
+# `say` actually has before the line is handed over, because `say` substitutes a
+# voice it does not have and still exits 0 - so an unavailable voice would
+# otherwise be neither heard as asked for nor reported anywhere. A voice this
+# machine does not have is refused on stderr with exit 1, never quietly spoken in
+# some other voice and never swapped to Deepgram. The key is never logged,
 # and this preference is about speech out only - the desk floater's ears still use
 # the same key for Deepgram transcription (docs/desk-floater.md).
 #
@@ -345,6 +350,65 @@ speak_deepgram_or_fail() {  # <textfile>
   return 0
 }
 
+# --- configured voice -------------------------------------------------------
+
+# Ask `say` which voices it has. The question is asked here rather than after the
+# handoff because the detached speaker has no way back to the caller, and it is
+# asked in the background so it runs while the register owner is shaping the
+# line: the answer is already waiting when the speaker is chosen, so the caller's
+# turn is not held for it. Nothing here touches the network.
+VOICE_LIST_FILE=
+VOICE_LIST_PID=
+
+# The register can refuse or fail after the list was asked for, so the file is
+# dropped on the way out as well as on the way through. An orphaned fm-speak
+# temporary file is this script's evidence that a speaker was cut short; asking
+# `say` a question must never spend that signal.
+# shellcheck disable=SC2329 # Invoked through the EXIT trap below.
+drop_voice_list() {
+  [ -z "$VOICE_LIST_FILE" ] || rm -f "$VOICE_LIST_FILE"
+  VOICE_LIST_FILE=
+}
+trap drop_voice_list EXIT
+
+start_voice_list() {
+  [ -n "$CFG_VOICE" ] || return 0
+  [ -x "$SAY_BIN" ] || return 0
+  VOICE_LIST_FILE=$(mktemp "${TMPDIR:-/tmp}/fm-speak-voices.XXXXXX") || return 0
+  "$SAY_BIN" -v '?' </dev/null >"$VOICE_LIST_FILE" 2>/dev/null &
+  VOICE_LIST_PID=$!
+}
+
+# True when the configured voice is one `say` listed. A list that never arrived,
+# came back empty, or exceeded its bound means the question could not be answered
+# rather than that the voice is missing, so the line is still spoken: this check
+# exists to catch a misspelled name, not to become a new way to lose a line.
+# Each listed line is `<name> <locale> # <sample>`, and the name itself can hold
+# spaces and brackets, so the locale and the sample are stripped from the end
+# rather than the name being read from the start.
+configured_voice_is_available() {
+  local available=0
+  [ -n "$VOICE_LIST_PID" ] || return 0
+  start_watchdog "$SHAPER_TIMEOUT" "$VOICE_LIST_PID"
+  { wait "$VOICE_LIST_PID"; } 2>/dev/null || true
+  kill "$WATCHDOG_PID" 2>/dev/null || true
+  VOICE_LIST_PID=
+  if [ -s "$VOICE_LIST_FILE" ]; then
+    awk -v want="$CFG_VOICE" '
+      {
+        name = $0
+        sub(/[[:space:]]*#.*$/, "", name)
+        sub(/[[:space:]]+[^[:space:]]+[[:space:]]*$/, "", name)
+        if (name == want) { found = 1 }
+      }
+      END { exit found ? 0 : 1 }
+    ' "$VOICE_LIST_FILE" || available=1
+  fi
+  rm -f "$VOICE_LIST_FILE"
+  VOICE_LIST_FILE=
+  return "$available"
+}
+
 speak_detached() {  # <textfile>
   local textfile=$1
   # A configured voice is a choice this script can only keep through `say`:
@@ -352,6 +416,10 @@ speak_detached() {  # <textfile>
   # so preferring Deepgram here would silently answer in a voice the home did not
   # ask for. Deepgram stays the fallback for a host with no usable `say`.
   if [ -n "$CFG_VOICE" ] && [ -x "$SAY_BIN" ]; then
+    if ! configured_voice_is_available; then
+      rm -f "$textfile"
+      die "say has no voice named '$CFG_VOICE' (config/speak); nothing was spoken"
+    fi
     speak_say_detached "$textfile"
     return 0
   fi
@@ -422,6 +490,7 @@ main() {
   fi
 
   apply_desk_register
+  [ "$dry_run" = true ] || start_voice_list
 
   outfile=$(mktemp "${TMPDIR:-/tmp}/fm-speak-out.XXXXXX") || die "cannot create a temporary file"
   errfile=$(mktemp "${TMPDIR:-/tmp}/fm-speak-err.XXXXXX") || {

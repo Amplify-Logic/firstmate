@@ -42,6 +42,10 @@ install_speaker() {
   local home=$1
   cat > "$home/speaker" <<EOF
 #!/usr/bin/env bash
+if [ "\${1:-}" = -v ] && [ "\${2:-}" = '?' ]; then
+  [ ! -f "$home/voices" ] || cat "$home/voices"
+  exit 0
+fi
 printf 'argv: %s\n' "\$*" >> "$home/spoken.log"
 prev=
 for a in "\$@"; do
@@ -57,11 +61,27 @@ install_speaker_refusing_voice() {
   local home=$1
   cat > "$home/speaker" <<EOF
 #!/usr/bin/env bash
+if [ "\${1:-}" = -v ] && [ "\${2:-}" = '?' ]; then
+  [ ! -f "$home/voices" ] || cat "$home/voices"
+  exit 0
+fi
 printf 'argv: %s\n' "\$*" >> "$home/spoken.log"
 printf 'Voice not found\n' >&2
 exit 1
 EOF
   chmod +x "$home/speaker"
+}
+
+# The stand-in speaker answers `-v ?` from this file, the way `say` lists the
+# voices it has. A home without one answers with an empty list, which the script
+# treats as "could not be asked" rather than as "voice missing".
+install_voices() {  # <home> <voice-name...>
+  local home=$1
+  shift
+  : > "$home/voices"
+  for v in "$@"; do
+    printf '%-20s en_US    # Hello! My name is %s.\n' "$v" "$v" >> "$home/voices"
+  done
 }
 
 install_deepgram_tts_ok() {
@@ -288,6 +308,7 @@ test_speak_prefers_the_configured_voice_over_deepgram() {
   local home out
   home=$(new_home voice-prefer "enabled = true" "voice = Ava (Premium)")
   printf 'DEEPGRAM_API_KEY=test-key-not-real\n' > "$home/.env"
+  install_voices "$home" "Ava (Premium)" "Eddy (English (UK))"
   install_shaper "$home"
   install_speaker "$home"
   install_deepgram_tts_ok "$home"
@@ -309,6 +330,68 @@ test_speak_prefers_the_configured_voice_over_deepgram() {
   [ ! -f "$home/deepgram.log" ] || fail "deepgram must not run when a voice is configured"
   [ ! -f "$home/afplay.log" ] || fail "afplay must not run when a voice is configured"
   pass "fm-speak: a configured voice is spoken by say, not by Deepgram"
+}
+
+# Asking `say` for its voice list creates a temporary file before the register
+# has had its say. A refused line must not leave that file behind: an orphaned
+# fm-speak temporary file is how this repo tells that a speaker was cut short.
+test_speak_leaves_no_voice_list_behind_when_the_register_refuses() {
+  local home out status=0 leftover
+  home=$(new_home voice-refused-register "enabled = true" "voice = Ava (Premium)")
+  printf '#!/usr/bin/env bash\nexit 2\n' > "$home/shaper"
+  chmod +x "$home/shaper"
+  install_speaker "$home"
+  install_voices "$home" "Ava (Premium)"
+  out=$(
+    env -u DEEPGRAM_API_KEY \
+      FM_HOME="$home" \
+      TMPDIR="$home" \
+      FM_DEEPGRAM_ENV_FILE=/dev/null \
+      FM_SPEAK_SHAPER="$home/shaper" \
+      FM_SPEAK_SAY="$home/speaker" \
+      FM_SPEAK_DEEPGRAM_REGISTER= \
+      "$SPEAK" "Shall I merge it?" 2>&1
+  ) || status=$?
+  [ "$status" -eq 2 ] || fail "expected exit 2 from a refusing register, got $status: $out"
+  sleep 1
+  leftover=$(find "$home" -maxdepth 1 -name 'fm-speak-*' | wc -l | tr -d ' ')
+  [ "$leftover" -eq 0 ] || fail "a refused line left $leftover temporary file(s) behind"
+  pass "fm-speak: a refused line leaves no voice list behind"
+}
+
+# `say` does not refuse a voice it does not have - it substitutes one and exits 0
+# - and the substitution happens inside the detached speaker, where nothing can
+# reach the caller. So a voice this machine does not have has to be caught before
+# the handoff and reported there, rather than heard as some other voice.
+test_speak_refuses_a_voice_this_machine_does_not_have() {
+  local home out status=0
+  home=$(new_home voice-missing "enabled = true" "voice = Nonexistent Voice")
+  printf 'DEEPGRAM_API_KEY=test-key-not-real\n' > "$home/.env"
+  install_shaper "$home"
+  install_speaker "$home"
+  install_voices "$home" "Ava (Premium)" "Samantha"
+  install_deepgram_tts_ok "$home"
+  install_afplay "$home"
+  out=$(
+    env -u DEEPGRAM_API_KEY \
+      FM_HOME="$home" \
+      TMPDIR="$home" \
+      FM_DEEPGRAM_ENV_FILE="$home/.env" \
+      FM_SPEAK_SHAPER="$home/shaper" \
+      FM_SPEAK_SAY="$home/speaker" \
+      FM_SPEAK_DEEPGRAM_TTS="$home/deepgram-tts" \
+      FM_SPEAK_DEEPGRAM_REGISTER= \
+      FM_DEEPGRAM_AFPLAY="$home/afplay" \
+      "$SPEAK" "The missing voice line is green." 2>&1
+  ) || status=$?
+  [ "$status" -eq 1 ] || fail "expected exit 1 for a voice this machine lacks, got $status: $out"
+  assert_contains "$out" "Nonexistent Voice" "the caller is told which voice is missing"
+  assert_contains "$out" "config/speak" "the caller is told where the voice is configured"
+  sleep 1
+  [ ! -f "$home/spoken.log" ] || fail "the line must not be spoken in a substitute voice"
+  [ ! -f "$home/deepgram.log" ] || fail "a missing voice must not spend Deepgram credit"
+  [ ! -f "$home/afplay.log" ] || fail "a missing voice must not reach the Deepgram player"
+  pass "fm-speak: a voice this machine does not have is reported, not substituted"
 }
 
 # A `say` that fails once it already has the line is left to fail: the speaker is
@@ -425,6 +508,8 @@ test_floater_help_and_option_refusal
 test_speak_uses_say_when_key_absent
 test_speak_prefers_deepgram_when_key_present
 test_speak_prefers_the_configured_voice_over_deepgram
+test_speak_refuses_a_voice_this_machine_does_not_have
+test_speak_leaves_no_voice_list_behind_when_the_register_refuses
 test_speak_does_not_swap_to_deepgram_when_say_fails
 test_speak_falls_back_to_say_when_deepgram_fails
 test_desk_voice_deliver_pending_drain

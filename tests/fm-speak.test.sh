@@ -75,6 +75,10 @@ install_speaker() {  # <home> [linger-seconds]
   local home=$1 linger=${2:-0}
   cat > "$home/speaker" <<EOF
 #!/usr/bin/env bash
+if [ "\${1:-}" = -v ] && [ "\${2:-}" = '?' ]; then
+  [ ! -f "$home/voices" ] || cat "$home/voices"
+  exit 0
+fi
 printf 'argv: %s\n' "\$*" >> "$home/spoken.log"
 prev=
 for a in "\$@"; do
