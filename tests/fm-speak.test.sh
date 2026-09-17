@@ -76,8 +76,9 @@ install_speaker() {  # <home> [linger-seconds]
   cat > "$home/speaker" <<EOF
 #!/usr/bin/env bash
 if [ "\${1:-}" = -v ] && [ "\${2:-}" = '?' ]; then
+  printf 'asked\n' >> "$home/voices.log"
   [ ! -f "$home/voices" ] || cat "$home/voices"
-  exit 0
+  exit \$(cat "$home/voices.status" 2>/dev/null || printf 0)
 fi
 printf 'argv: %s\n' "\$*" >> "$home/spoken.log"
 prev=

@@ -43,8 +43,9 @@ install_speaker() {
   cat > "$home/speaker" <<EOF
 #!/usr/bin/env bash
 if [ "\${1:-}" = -v ] && [ "\${2:-}" = '?' ]; then
+  printf 'asked\n' >> "$home/voices.log"
   [ ! -f "$home/voices" ] || cat "$home/voices"
-  exit 0
+  exit \$(cat "$home/voices.status" 2>/dev/null || printf 0)
 fi
 printf 'argv: %s\n' "\$*" >> "$home/spoken.log"
 prev=
@@ -62,8 +63,9 @@ install_speaker_refusing_voice() {
   cat > "$home/speaker" <<EOF
 #!/usr/bin/env bash
 if [ "\${1:-}" = -v ] && [ "\${2:-}" = '?' ]; then
+  printf 'asked\n' >> "$home/voices.log"
   [ ! -f "$home/voices" ] || cat "$home/voices"
-  exit 0
+  exit \$(cat "$home/voices.status" 2>/dev/null || printf 0)
 fi
 printf 'argv: %s\n' "\$*" >> "$home/spoken.log"
 printf 'Voice not found\n' >&2
@@ -82,6 +84,15 @@ install_voices() {  # <home> <voice-name...>
   for v in "$@"; do
     printf '%-20s en_US    # Hello! My name is %s.\n' "$v" "$v" >> "$home/voices"
   done
+}
+
+# A voice list that was cut off part-way: `say` wrote some names and then died,
+# so the names it never reached say nothing about which voices exist.
+install_truncated_voices() {  # <home> <voice-name...>
+  local home=$1
+  shift
+  install_voices "$home" "$@"
+  printf '1\n' > "$home/voices.status"
 }
 
 install_deepgram_tts_ok() {
@@ -359,6 +370,64 @@ test_speak_leaves_no_voice_list_behind_when_the_register_refuses() {
   pass "fm-speak: a refused line leaves no voice list behind"
 }
 
+# A voice list killed part-way has already flushed whole blocks of the alphabet,
+# so a name missing from it proves nothing. Refusing on that evidence would turn a
+# degraded speech subsystem into a silent desk and blame the captain's config.
+test_speak_still_speaks_when_the_voice_list_was_cut_off() {
+  local home out
+  home=$(new_home voice-list-truncated "enabled = true" "voice = Samantha")
+  install_shaper "$home"
+  install_speaker "$home"
+  install_truncated_voices "$home" "Albert" "Alice"
+  out=$(
+    env -u DEEPGRAM_API_KEY \
+      FM_HOME="$home" \
+      TMPDIR="$home" \
+      FM_DEEPGRAM_ENV_FILE=/dev/null \
+      FM_SPEAK_SHAPER="$home/shaper" \
+      FM_SPEAK_SAY="$home/speaker" \
+      FM_SPEAK_DEEPGRAM_REGISTER= \
+      "$SPEAK" "The truncated list line is green." 2>&1
+  ) || fail "an unanswerable voice question must not stop the line: $out"
+  wait_for_content "$home/spoken.log" "text: " "the line should still have been spoken"
+  assert_contains "$(cat "$home/spoken.log")" "truncated list line" "say received the line"
+  assert_contains "$(cat "$home/spoken.log")" "Samantha" "say was given the configured voice"
+  pass "fm-speak: an incomplete voice list never refuses a voice"
+}
+
+# Only the first line of a home waits for the voice list; a confirmed voice is
+# remembered. Renaming the voice must ask again, or the memory would outlive the
+# answer it stands for.
+test_speak_asks_for_the_voice_list_once_per_confirmed_voice() {
+  local home out asked
+  home=$(new_home voice-remembered "enabled = true" "voice = Ava (Premium)")
+  install_shaper "$home"
+  install_speaker "$home"
+  install_voices "$home" "Ava (Premium)" "Samantha"
+  speak_here() {
+    env -u DEEPGRAM_API_KEY \
+      FM_HOME="$home" \
+      TMPDIR="$home" \
+      FM_DEEPGRAM_ENV_FILE=/dev/null \
+      FM_SPEAK_SHAPER="$home/shaper" \
+      FM_SPEAK_SAY="$home/speaker" \
+      FM_SPEAK_DEEPGRAM_REGISTER= \
+      "$SPEAK" "$1" 2>&1
+  }
+  out=$(speak_here "The first line is green.") || fail "first speak failed: $out"
+  asked=$(wc -l < "$home/voices.log" | tr -d ' ')
+  [ "$asked" -eq 1 ] || fail "expected one voice-list question on the first line, got $asked"
+  out=$(speak_here "The second line is green.") || fail "second speak failed: $out"
+  asked=$(wc -l < "$home/voices.log" | tr -d ' ')
+  [ "$asked" -eq 1 ] || fail "a confirmed voice must not be asked about again, got $asked questions"
+  wait_for_content "$home/spoken.log" "second line" "the second line should still have been spoken"
+
+  printf 'enabled = true\nvoice = Nonexistent Voice\n' > "$home/config/speak"
+  out=$(speak_here "The renamed line is green.") && fail "a voice this machine lacks must be refused: $out"
+  assert_contains "$out" "Nonexistent Voice" "the renamed voice is checked again, not remembered"
+  pass "fm-speak: a confirmed voice is asked about once, a renamed one is asked again"
+}
+
 # `say` does not refuse a voice it does not have - it substitutes one and exits 0
 # - and the substitution happens inside the detached speaker, where nothing can
 # reach the caller. So a voice this machine does not have has to be caught before
@@ -509,6 +578,8 @@ test_speak_uses_say_when_key_absent
 test_speak_prefers_deepgram_when_key_present
 test_speak_prefers_the_configured_voice_over_deepgram
 test_speak_refuses_a_voice_this_machine_does_not_have
+test_speak_still_speaks_when_the_voice_list_was_cut_off
+test_speak_asks_for_the_voice_list_once_per_confirmed_voice
 test_speak_leaves_no_voice_list_behind_when_the_register_refuses
 test_speak_does_not_swap_to_deepgram_when_say_fails
 test_speak_falls_back_to_say_when_deepgram_fails

@@ -53,9 +53,12 @@
 # voice it does not have and still exits 0 - so an unavailable voice would
 # otherwise be neither heard as asked for nor reported anywhere. A voice this
 # machine does not have is refused on stderr with exit 1, never quietly spoken in
-# some other voice and never swapped to Deepgram. The key is never logged,
-# and this preference is about speech out only - the desk floater's ears still use
-# the same key for Deepgram transcription (docs/desk-floater.md).
+# some other voice and never swapped to Deepgram. A voice confirmed once is
+# remembered in state/speak-voice-confirmed, so only the first spoken line of a
+# home pays for that question; renaming the voice in config/speak asks it again.
+# The key is never logged, and this preference is about speech out only - the desk
+# floater's ears still use the same key for Deepgram transcription
+# (docs/desk-floater.md).
 #
 # DESK SPOKEN BOUND: the register owner's own default budget is tuned for the
 # glasses, about eight seconds, and it truncates the shaped line before any
@@ -74,7 +77,10 @@
 # NEVER BLOCKS THE CALLER'S TURN. The register call is bounded and waited on
 # because its output is needed, so its bound is the worst case a captain-facing
 # turn can be held: 15 seconds by default against an owner measured at about
-# one. The speaker call is bounded and detached, with its standard streams
+# one. The configured-voice check runs beside that call under a bound of its own
+# that starts when it does, so the two overlap rather than add up and the register
+# call stays the worst case. The speaker call is bounded and detached, with its
+# standard streams
 # closed, so a caller that captures this script's output is never held open by
 # audio that is still playing; its bound only stops a runaway from holding the
 # audio device. A speech error downstream of that handoff is unobservable here
@@ -100,6 +106,8 @@
 #                      bounded seconds for the waited-on register call
 #                      (default 15)
 #   FM_SPEAK_TIMEOUT   bounded seconds for the detached speaker (default 60)
+#   FM_STATE_OVERRIDE  state directory holding the confirmed-voice memory
+#                      (default: $FM_HOME/state)
 #
 # EXIT CODES (mirroring the register owner's own contract):
 #   0  handed to the speaker, printed under --dry-run, or this home is not
@@ -114,6 +122,8 @@ ROOT="${FM_ROOT_OVERRIDE:-$(cd "$SCRIPT_DIR/.." && pwd)}"
 FM_HOME="${FM_HOME:-${FM_ROOT_OVERRIDE:-$ROOT}}"
 CONFIG="${FM_CONFIG_OVERRIDE:-$FM_HOME/config}"
 CONFIG_FILE="$CONFIG/speak"
+STATE="${FM_STATE_OVERRIDE:-$FM_HOME/state}"
+VOICE_CONFIRMED_FILE="$STATE/speak-voice-confirmed"
 
 DEFAULT_SHAPER_TIMEOUT=15
 DEFAULT_SPEAKER_TIMEOUT=60
@@ -352,49 +362,82 @@ speak_deepgram_or_fail() {  # <textfile>
 
 # --- configured voice -------------------------------------------------------
 
-# Ask `say` which voices it has. The question is asked here rather than after the
-# handoff because the detached speaker has no way back to the caller, and it is
-# asked in the background so it runs while the register owner is shaping the
-# line: the answer is already waiting when the speaker is chosen, so the caller's
-# turn is not held for it. Nothing here touches the network.
+# `say` does not refuse a voice it does not have: it substitutes one and still
+# exits 0, so a misspelled `voice` would be answered in some other voice with
+# nothing said about it. Asking which voices exist is therefore done here, before
+# the handoff, because the detached speaker has no way back to the caller.
+#
+# Two things keep that question off the captain's turn. It is asked in the
+# background, under a bound that starts with it rather than when it is collected,
+# so it runs beside the register call and the two bounds overlap instead of
+# adding up: the register call remains the worst case a turn can be held. And a
+# voice this machine confirmed once is remembered, so only the first spoken line
+# of a home ever waits for the answer at all. Nothing here touches the network.
 VOICE_LIST_FILE=
+VOICE_LIST_FIRED=
 VOICE_LIST_PID=
+VOICE_LIST_GUARD=
 
-# The register can refuse or fail after the list was asked for, so the file is
+# The register can refuse or fail after the list was asked for, so the files are
 # dropped on the way out as well as on the way through. An orphaned fm-speak
 # temporary file is this script's evidence that a speaker was cut short; asking
 # `say` a question must never spend that signal.
 # shellcheck disable=SC2329 # Invoked through the EXIT trap below.
 drop_voice_list() {
   [ -z "$VOICE_LIST_FILE" ] || rm -f "$VOICE_LIST_FILE"
+  [ -z "$VOICE_LIST_FIRED" ] || rm -f "$VOICE_LIST_FIRED"
   VOICE_LIST_FILE=
+  VOICE_LIST_FIRED=
 }
 trap drop_voice_list EXIT
+
+# Only a confirmed voice is remembered. A voice that was not found is re-asked
+# every line on purpose: the captain is being told about it every line too, and a
+# remembered "missing" would go on refusing after he installed it.
+voice_already_confirmed() {
+  [ -n "$CFG_VOICE" ] || return 1
+  [ -r "$VOICE_CONFIRMED_FILE" ] || return 1
+  [ "$(cat "$VOICE_CONFIRMED_FILE" 2>/dev/null)" = "$CFG_VOICE" ]
+}
+
+remember_confirmed_voice() {
+  mkdir -p "$STATE" 2>/dev/null || return 0
+  printf '%s\n' "$CFG_VOICE" > "$VOICE_CONFIRMED_FILE" 2>/dev/null || true
+}
 
 start_voice_list() {
   [ -n "$CFG_VOICE" ] || return 0
   [ -x "$SAY_BIN" ] || return 0
+  ! voice_already_confirmed || return 0
   VOICE_LIST_FILE=$(mktemp "${TMPDIR:-/tmp}/fm-speak-voices.XXXXXX") || return 0
+  VOICE_LIST_FIRED="$VOICE_LIST_FILE.fired"
+  rm -f "$VOICE_LIST_FIRED"
   "$SAY_BIN" -v '?' </dev/null >"$VOICE_LIST_FILE" 2>/dev/null &
   VOICE_LIST_PID=$!
+  start_watchdog "$SHAPER_TIMEOUT" "$VOICE_LIST_PID" "$VOICE_LIST_FIRED"
+  VOICE_LIST_GUARD=$WATCHDOG_PID
 }
 
-# True when the configured voice is one `say` listed. A list that never arrived,
-# came back empty, or exceeded its bound means the question could not be answered
-# rather than that the voice is missing, so the line is still spoken: this check
-# exists to catch a misspelled name, not to become a new way to lose a line.
+# True when the configured voice is one `say` listed. Anything short of a
+# complete answer - a lister that never ran, exited non-zero, was stopped by its
+# bound, or produced nothing - means the question could not be answered rather
+# than that the voice is missing, so the line is still spoken. A list killed
+# part-way has already flushed whole blocks of the alphabet, so a name absent
+# from it proves nothing; this check exists to catch a misspelled name, not to
+# become a new way to lose a line.
+#
 # Each listed line is `<name> <locale> # <sample>`, and the name itself can hold
 # spaces and brackets, so the locale and the sample are stripped from the end
 # rather than the name being read from the start.
 configured_voice_is_available() {
-  local available=0
+  local available=0 status=0
+  ! voice_already_confirmed || return 0
   [ -n "$VOICE_LIST_PID" ] || return 0
-  start_watchdog "$SHAPER_TIMEOUT" "$VOICE_LIST_PID"
-  { wait "$VOICE_LIST_PID"; } 2>/dev/null || true
-  kill "$WATCHDOG_PID" 2>/dev/null || true
+  { wait "$VOICE_LIST_PID"; } 2>/dev/null || status=$?
+  kill "$VOICE_LIST_GUARD" 2>/dev/null || true
   VOICE_LIST_PID=
-  if [ -s "$VOICE_LIST_FILE" ]; then
-    awk -v want="$CFG_VOICE" '
+  if [ "$status" -eq 0 ] && [ ! -e "$VOICE_LIST_FIRED" ] && [ -s "$VOICE_LIST_FILE" ]; then
+    if awk -v want="$CFG_VOICE" '
       {
         name = $0
         sub(/[[:space:]]*#.*$/, "", name)
@@ -402,10 +445,13 @@ configured_voice_is_available() {
         if (name == want) { found = 1 }
       }
       END { exit found ? 0 : 1 }
-    ' "$VOICE_LIST_FILE" || available=1
+    ' "$VOICE_LIST_FILE"; then
+      remember_confirmed_voice
+    else
+      available=1
+    fi
   fi
-  rm -f "$VOICE_LIST_FILE"
-  VOICE_LIST_FILE=
+  drop_voice_list
   return "$available"
 }
 
