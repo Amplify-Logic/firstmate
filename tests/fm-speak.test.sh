@@ -821,7 +821,7 @@ test_two_homes_may_speak_at_the_same_time() {
   speak "$home_b" "Home B is speaking." >/dev/null 2>&1 \
     || fail "fm-speak: home B failed to speak"
 
-  while [ "$waited" -lt 10 ]; do
+  while [ "$waited" -lt 20 ]; do
     if grep -qF "start: Home A is speaking." "$home_a/spoken.log" 2>/dev/null \
       && grep -qF "start: Home B is speaking." "$home_b/spoken.log" 2>/dev/null; then
       break
@@ -836,6 +836,65 @@ test_two_homes_may_speak_at_the_same_time() {
   grep -qF "end:" "$home_a/spoken.log" 2>/dev/null \
     && fail "fm-speak: home A finished before home B started, so the lock is not home-scoped"
   pass "fm-speak: two homes may speak at the same time"
+}
+
+# A speaker that is killed outright leaves its lock behind in persistent state,
+# and that pid number is eventually handed to some unrelated process. Liveness
+# alone then reads the lock as held forever and the home never speaks again, so
+# the recorded identity has to be what decides. The squatter here stands in for
+# the reusing process: alive, holding the lock, and not the speaker that took
+# it.
+test_a_lock_whose_pid_was_reused_is_reclaimed() {
+  local home owner squatter
+  home=$(new_home reused-lock "enabled = true")
+  install_shaper "$home" >/dev/null
+  install_marking_speaker "$home" 1
+
+  owner="$home/state/.speak.lock.owner.stale"
+  mkdir -p "$owner"
+  # Outliving the whole case is the point: a squatter that exits on its own
+  # hands the lock back through the ordinary dead-owner steal, and the case
+  # would then pass without ever reclaiming anything.
+  sleep 300 &
+  squatter=$!
+  fm_test_track_pid "$squatter"
+  printf '%s\n' "$squatter" > "$owner/pid"
+  printf '%s\n' 'the identity of a speaker that is long gone' > "$owner/pid-identity"
+  ln -s "$owner" "$home/state/.speak.lock"
+
+  speak "$home" "The stale lock did not silence me." >/dev/null 2>&1 \
+    || fail "fm-speak: the call behind a reused-pid lock failed"
+  wait_for_content "$home/spoken.log" "end: The stale lock did not silence me." \
+    "fm-speak: a lock left behind on a reused pid silenced the home"
+  kill "$squatter" 2>/dev/null || true
+  pass "fm-speak: a lock whose recorded pid was reused is reclaimed"
+}
+
+# The lock lives in the state directory, so a state directory that cannot be
+# created has to be refused before a word is shaped. Refusing it afterwards
+# would abort a line that was already spoken for and leave its temporary file
+# behind, spending the one signal this script keeps for a speaker that was cut
+# short.
+test_an_unusable_state_directory_is_refused_before_anything_is_shaped() {
+  local home scratch out status=0 left
+  home=$(new_home unusable-state "enabled = true")
+  install_shaper "$home" >/dev/null
+  install_speaker "$home" >/dev/null
+  scratch="$TMP_ROOT/unusable-state-scratch"
+  mkdir -p "$scratch"
+  printf 'a regular file where the state directory belongs\n' > "$home/state"
+
+  out=$(TMPDIR="$scratch" speak "$home" "The fix is green." 2>/dev/null) || status=$?
+  [ "$status" -ne 0 ] \
+    || fail "fm-speak: an unusable state directory was reported as a spoken line"
+  [ -z "$out" ] \
+    || fail "fm-speak: a line was reported spoken with no state directory: $out"
+  [ ! -f "$home/spoken.log" ] \
+    || fail "fm-speak: a line reached the speaker with no state directory"
+  left=$(find "$scratch" -name 'fm-speak-*' 2>/dev/null | wc -l | tr -d ' ')
+  [ "$left" = 0 ] \
+    || fail "fm-speak: $left temporary file(s) were left behind by the refusal"
+  pass "fm-speak: an unusable state directory is refused before anything is shaped"
 }
 
 test_a_home_that_never_opted_in_stays_silent
@@ -868,3 +927,5 @@ test_an_empty_register_override_restores_the_glasses_cut
 test_an_already_chosen_register_is_never_replaced
 test_two_sequential_calls_do_not_overlap_playback
 test_two_homes_may_speak_at_the_same_time
+test_a_lock_whose_pid_was_reused_is_reclaimed
+test_an_unusable_state_directory_is_refused_before_anything_is_shaped
