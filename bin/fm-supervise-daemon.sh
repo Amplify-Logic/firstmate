@@ -1208,13 +1208,28 @@ housekeeping() {  # <state>
   #     read decides relevance, and the classified-through offset is the dedup.
   if [ "$(_file_age "$state/.subsuper-last-scan")" -ge "${FM_HEARTBEAT_SCAN_SECS:-$HEARTBEAT_SCAN_SECS_DEFAULT}" ]; then
     _now > "$state/.subsuper-last-scan"
-    local event record rest endpoint ident rc
+    local event record rest endpoint ident rc offset dropped line dropped_lines=''
     for f in "$state"/*.status; do
       [ -e "$f" ] || [ -L "$f" ] || continue
       task=$(basename "$f"); task="${task%.status}"
-      record=$(status_span_first_actionable_record "$f" \
-        "$(status_seen_offset "$state" "$task")")
+      offset=$(status_seen_offset "$state" "$task")
+      record=$(status_span_first_actionable_record "$f" "$offset")
       rc=$?
+      # Collect what this same span DROPPED, from the same offset, for the
+      # opt-in second look after the loop. Away mode is where this silence gap
+      # bites hardest: nobody is watching the pane and hours pass. A pure read,
+      # no network; the one bounded call happens once per scan below.
+      if [ "$rc" -ne 2 ]; then
+        dropped=$(status_span_dropped_lines "$f" "$offset") || dropped=''
+        if [ -n "$dropped" ]; then
+          while IFS= read -r line; do
+            [ -n "$line" ] || continue
+            dropped_lines="${dropped_lines}${task}"$'\t'"${line}"$'\n'
+          done <<EOF
+$dropped
+EOF
+        fi
+      fi
       if [ "$rc" -eq 2 ]; then
         ident=$(status_observed_signature "$f")
         status_presentation_marker_reported_matches "$(_seen_status_path "$state" "$task")" "$ident" \
@@ -1236,7 +1251,33 @@ housekeeping() {  # <state>
         escalate_add "$state" "$(basename "$f"): status position commit failed (catch-all scan)"
       fi
     done
+    second_look_escalate "$state" "$dropped_lines"
   fi
+}
+
+# The opt-in second look over the lines the catch-all scan above walked past.
+# bin/fm-triage-second-look.sh owns the whole contract; this is only the delivery
+# mapping. ESCALATE-ONLY and additive: it is handed only lines the deterministic
+# classifier already dropped, and all it can do is add an escalation. An unarmed
+# home, a failure, a timeout or an absent key all produce nothing and leave this
+# daemon behaving exactly as it does today.
+#
+# The tier decides delivery, never whether to speak. alert flushes the buffer
+# immediately - the same delivery the zero-batch setting uses, preserving the
+# buffer if the inject cannot be confirmed - while digest simply joins the next
+# batch. The model's own confidence can only demote alert to digest, never
+# silence a line.
+second_look_escalate() {  # <state> <dropped-records>
+  local state=$1 records=$2 tool task tier reason line
+  [ -n "$records" ] || return 0
+  tool="$FM_DAEMON_DIR/fm-triage-second-look.sh"
+  [ -x "$tool" ] || return 0
+  while IFS=$(printf '\t') read -r task tier reason line; do
+    [ -n "$task" ] && [ -n "$line" ] || continue
+    if escalate_add "$state" "$task.status: $line (second look: $reason)"; then
+      [ "$tier" = alert ] && { escalate_flush "$state" || true; }
+    fi
+  done < <(printf '%s' "$records" | "$tool" 2>/dev/null || true)
 }
 
 # Find a recorded or live window target whose task id matches the marker key.

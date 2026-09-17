@@ -107,6 +107,7 @@ FALLBACK_PORTABLE_CONFIG_FILES=(
   config/wedge-alarm
   config/primary-handoff
   config/upstream-watch
+  config/triage-second-look
 )
 PORTABLE_CONFIG_FILES=("${FALLBACK_PORTABLE_CONFIG_FILES[@]}")
 
