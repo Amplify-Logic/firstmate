@@ -126,7 +126,8 @@
 #      opted in
 #   1  cannot speak: the register owner is unreachable, failed or exceeded its
 #      bound, the speech binary is missing, the configured voice is not one
-#      this machine has, or the config is invalid
+#      this machine has, the state directory that holds the playback lock
+#      cannot be created, or the config is invalid
 #   2  refused by the register; nothing was spoken and the reason is reported
 set -eu
 
@@ -313,14 +314,17 @@ play_bounded() {  # <cmd...>
 }
 
 # Portable lock helpers live in fm-wake-lib.sh. Loaded in the parent before a
-# word has been shaped, because sourcing the library creates the state
-# directory the lock lives in: a state directory that cannot be created has to
-# fail here, while nothing is outstanding, rather than abort a line that was
-# already shaped and leave its temporary file behind. A missing library fails
-# the same way, on stderr, instead of dying silently in the detached speaker
-# whose streams are already closed.
+# word has been shaped: the state directory the lock lives in has to be refused
+# here, while nothing is outstanding, rather than abort a line that was already
+# shaped and leave its temporary file behind. The directory is created under
+# this script's own refusal because the library creates it unguarded when
+# sourced, which would report the failure as a bare mkdir error from a tool the
+# captain never called. A missing library fails the same way, on stderr,
+# instead of dying silently in the detached speaker whose streams are already
+# closed.
 load_speak_lock_helpers() {
-  command -v fm_lock_acquire_wait >/dev/null 2>&1 && return 0
+  mkdir -p "$STATE" 2>/dev/null \
+    || die "cannot create the state directory that holds the playback lock: $STATE"
   # shellcheck source=bin/fm-wake-lib.sh
   . "$ROOT/bin/fm-wake-lib.sh"
 }

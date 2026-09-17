@@ -813,8 +813,11 @@ test_two_homes_may_speak_at_the_same_time() {
   home_b=$(new_home serialize-b "enabled = true")
   install_shaper "$home_a" >/dev/null
   install_shaper "$home_b" >/dev/null
-  install_marking_speaker "$home_a" 5
-  install_marking_speaker "$home_b" 5
+  # The linger has to outlast the poll below by a wide margin: home A's `end:`
+  # marker landing while the loop is still waiting for home B would fail the
+  # overlap proof with a complaint about lock scope that scheduling caused.
+  install_marking_speaker "$home_a" 15
+  install_marking_speaker "$home_b" 15
 
   speak "$home_a" "Home A is speaking." >/dev/null 2>&1 \
     || fail "fm-speak: home A failed to speak"
@@ -870,23 +873,40 @@ test_a_lock_whose_pid_was_reused_is_reclaimed() {
   pass "fm-speak: a lock whose recorded pid was reused is reclaimed"
 }
 
+# A register owner that records every call, so "nothing was shaped" is an
+# observable fact rather than an inference from the absence of leftovers.
+install_recording_shaper() {  # <home>
+  local home=$1
+  cat > "$home/shaper" <<EOF
+#!/usr/bin/env bash
+printf 'called: %s\n' "\$*" >> "$home/shaper.log"
+shift
+printf '%s\n' "\$*"
+EOF
+  chmod +x "$home/shaper"
+}
+
 # The lock lives in the state directory, so a state directory that cannot be
 # created has to be refused before a word is shaped. Refusing it afterwards
-# would abort a line that was already spoken for and leave its temporary file
-# behind, spending the one signal this script keeps for a speaker that was cut
-# short.
+# would spend the register owner on a line that is then thrown away, abort a
+# line that was already spoken for, and leave its temporary file behind,
+# spending the one signal this script keeps for a speaker that was cut short.
 test_an_unusable_state_directory_is_refused_before_anything_is_shaped() {
   local home scratch out status=0 left
   home=$(new_home unusable-state "enabled = true")
-  install_shaper "$home" >/dev/null
+  install_recording_shaper "$home"
   install_speaker "$home" >/dev/null
   scratch="$TMP_ROOT/unusable-state-scratch"
   mkdir -p "$scratch"
   printf 'a regular file where the state directory belongs\n' > "$home/state"
 
-  out=$(TMPDIR="$scratch" speak "$home" "The fix is green." 2>/dev/null) || status=$?
+  out=$(TMPDIR="$scratch" speak "$home" "The fix is green." 2>"$home/refusal") || status=$?
   [ "$status" -ne 0 ] \
     || fail "fm-speak: an unusable state directory was reported as a spoken line"
+  [ ! -f "$home/shaper.log" ] \
+    || fail "fm-speak: the register owner was spent on a line that was never spoken"
+  assert_grep "fm-speak:" "$home/refusal" \
+    "the refusal must name the tool that refused"
   [ -z "$out" ] \
     || fail "fm-speak: a line was reported spoken with no state directory: $out"
   [ ! -f "$home/spoken.log" ] \
