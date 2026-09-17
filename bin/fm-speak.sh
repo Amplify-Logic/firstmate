@@ -378,11 +378,20 @@ reclaim_reused_speak_lock() {
 
 # Wait for any earlier line in this home to finish, then keep the lock until
 # this line has played. The wait is unbounded on a holder that is genuinely
-# speaking because that holder's own speaker bound is what ends it.
+# speaking because that holder's own speaker bound is what ends it. Acquisition
+# is attempted at the library's own cadence, but the reuse probe runs once a
+# second rather than on every spin: it reads the holder's identity through `ps`,
+# and a line queued behind a thirty-second one would otherwise pay that on the
+# captain's machine ten times a second for the whole line. A lock left on a
+# reused pid is recovered a second later either way.
 # shellcheck disable=SC2329 # Reached only through play_serialized.
 hold_playback_lock() {
+  local spins=0
   until fm_lock_try_acquire "$SPEAK_LOCK"; do
-    reclaim_reused_speak_lock
+    spins=$((spins + 1))
+    if [ "$((spins % 10))" -eq 0 ]; then
+      reclaim_reused_speak_lock
+    fi
     sleep 0.1
   done
   SPEAK_LOCK_HELD=true
