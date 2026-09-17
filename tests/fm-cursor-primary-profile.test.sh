@@ -6,8 +6,11 @@
 # marker and a Cursor primary does not clear an inherited CLAUDECODE. That claim
 # is observable through `fm-harness.sh marker`; `detect_own` deliberately lets a
 # contradicting harness ANCESTOR outrank it, so a variable leaked into an
-# unrelated pane cannot rename that session. Assert the marker layer here rather
-# than detect_own, whose verdict depends on the ancestry of whatever ran the test.
+# unrelated pane cannot rename that session. The detect_own case below builds
+# the contradicting ancestor it needs, because detect_own's verdict otherwise
+# depends on the ancestry of whatever ran the test - and with no harness above
+# the runner at all the marker is the only evidence there is, so cursor is then
+# the CORRECT answer rather than a leak.
 set -u
 
 # shellcheck source=tests/lib.sh
@@ -24,13 +27,24 @@ test_primary_marker_states_the_launched_identity() {
 }
 
 test_ancestry_still_outranks_a_leaked_marker() {
-  local out
-  # A marker with no matching process in the ancestry must not rename this
-  # session: the test itself runs under some other harness or a bare shell.
-  out=$(FM_PRIMARY_HARNESS=cursor "$ROOT/bin/fm-harness.sh")
-  [ "$out" != cursor ] || [ -n "${CURSOR_AGENT:-}" ] || \
-    fail "a leaked FM_PRIMARY_HARNESS renamed a session with no Cursor ancestor"
-  pass "fm-harness: ancestry still arbitrates a marker that no live process supports"
+  local dir out
+  # Build the contradicting ancestor rather than borrowing whatever launched the
+  # suite: with an EMPTY ancestry the marker is the only evidence there is and
+  # cursor is the correct verdict, so a runner with no harness above it (CI)
+  # would read this case as a leak. A process whose kernel-recorded name is
+  # `claude` is a structural (comm) ancestor of another harness, which is the
+  # one thing detect_own lets outrank the marker. Symlink to the system shell,
+  # never a copy: a copied platform binary fails macOS code signing
+  # (tests/fm-omp-harness.test.sh:49). The command substitution around the probe
+  # is load-bearing - a bare `-c <cmd>` lets bash exec the probe in place and
+  # REPLACE the `claude` process the walk has to find.
+  dir=$(fm_test_tmproot fm-cursor-leaked-marker)
+  mkdir -p "$dir"
+  ln -sf "$(command -v bash)" "$dir/claude"
+  out=$("$dir/claude" -c "r=\$(FM_PRIMARY_HARNESS=cursor \"$ROOT/bin/fm-harness.sh\"); printf '%s' \"\$r\"")
+  [ "$out" = claude ] || \
+    fail "a leaked FM_PRIMARY_HARNESS renamed a session under a live claude ancestor (got '$out')"
+  pass "fm-harness: ancestry still arbitrates a marker that a live process contradicts"
 }
 
 test_configured_worker_selection_stays_separate() {
