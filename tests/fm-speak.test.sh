@@ -727,6 +727,117 @@ test_no_temporary_files_are_left_behind() {
   pass "fm-speak: no temporary files are left behind"
 }
 
+# A speaker that records when a line starts and when it actually finishes, so
+# overlapping playback is visible as a second start before the first end.
+install_marking_speaker() {  # <home> <linger-seconds>
+  local home=$1 linger=$2
+  cat > "$home/speaker" <<EOF
+#!/usr/bin/env bash
+text=
+prev=
+for a in "\$@"; do
+  [ "\$prev" != -f ] || text=\$(cat "\$a")
+  prev=\$a
+done
+printf 'start: %s\n' "\$text" >> "$home/spoken.log"
+sleep $linger
+printf 'end: %s\n' "\$text" >> "$home/spoken.log"
+EOF
+  chmod +x "$home/speaker"
+}
+
+wait_for_content() {  # <path> <needle> <msg>
+  local path=$1 needle=$2 msg=$3 waited=0
+  while [ "$waited" -lt 100 ]; do
+    grep -qF "$needle" "$path" 2>/dev/null && return 0
+    sleep 0.2
+    waited=$((waited + 1))
+  done
+  fail "$msg"
+}
+
+assert_playback_did_not_overlap() {  # <log>
+  local log=$1 in_progress=0 line snapshot
+  snapshot=$(cat "$log")
+  while IFS= read -r line || [ -n "$line" ]; do
+    case "$line" in
+      start:*)
+        [ "$in_progress" -eq 0 ] || fail "fm-speak: a second line started before the first ended: $snapshot"
+        in_progress=1
+        ;;
+      end:*)
+        [ "$in_progress" -eq 1 ] || fail "fm-speak: an end marker arrived with no line in progress: $snapshot"
+        in_progress=0
+        ;;
+    esac
+  done <<EOF
+$snapshot
+EOF
+  [ "$in_progress" -eq 0 ] || fail "fm-speak: a line started and never ended: $snapshot"
+}
+
+# The Helena 2026-09-17 failure: two sequential speak calls from one shell
+# handed audio off and returned, so the second line started while the first
+# was still playing. The caller must still return before either line finishes.
+test_two_sequential_calls_do_not_overlap_playback() {
+  local home started finished elapsed
+  home=$(new_home serialize "enabled = true")
+  install_shaper "$home" >/dev/null
+  install_marking_speaker "$home" 5
+
+  started=$(date +%s)
+  speak "$home" "The first line is green." >/dev/null 2>&1 \
+    || fail "fm-speak: the first sequential call failed"
+  speak "$home" "The second line is ready." >/dev/null 2>&1 \
+    || fail "fm-speak: the second sequential call failed"
+  finished=$(date +%s)
+  elapsed=$((finished - started))
+
+  [ "$elapsed" -lt 4 ] \
+    || fail "fm-speak: sequential calls waited ${elapsed}s for audio instead of handing off"
+
+  wait_for_content "$home/spoken.log" "end: The second line is ready." \
+    "fm-speak: sequential calls never finished both lines"
+  assert_grep "start: The first line is green." "$home/spoken.log" \
+    "the first line must reach the speaker"
+  assert_grep "start: The second line is ready." "$home/spoken.log" \
+    "the second line must reach the speaker"
+  assert_playback_did_not_overlap "$home/spoken.log"
+  pass "fm-speak: two sequential calls from one shell do not overlap playback"
+}
+
+# The lock is per home, so two homes may speak at the same time.
+test_two_homes_may_speak_at_the_same_time() {
+  local home_a home_b waited=0
+  home_a=$(new_home serialize-a "enabled = true")
+  home_b=$(new_home serialize-b "enabled = true")
+  install_shaper "$home_a" >/dev/null
+  install_shaper "$home_b" >/dev/null
+  install_marking_speaker "$home_a" 5
+  install_marking_speaker "$home_b" 5
+
+  speak "$home_a" "Home A is speaking." >/dev/null 2>&1 \
+    || fail "fm-speak: home A failed to speak"
+  speak "$home_b" "Home B is speaking." >/dev/null 2>&1 \
+    || fail "fm-speak: home B failed to speak"
+
+  while [ "$waited" -lt 10 ]; do
+    if grep -qF "start: Home A is speaking." "$home_a/spoken.log" 2>/dev/null \
+      && grep -qF "start: Home B is speaking." "$home_b/spoken.log" 2>/dev/null; then
+      break
+    fi
+    sleep 0.2
+    waited=$((waited + 1))
+  done
+  grep -qF "start: Home A is speaking." "$home_a/spoken.log" 2>/dev/null \
+    || fail "fm-speak: home A never started"
+  grep -qF "start: Home B is speaking." "$home_b/spoken.log" 2>/dev/null \
+    || fail "fm-speak: home B never started within the overlap window"
+  grep -qF "end:" "$home_a/spoken.log" 2>/dev/null \
+    && fail "fm-speak: home A finished before home B started, so the lock is not home-scoped"
+  pass "fm-speak: two homes may speak at the same time"
+}
+
 test_a_home_that_never_opted_in_stays_silent
 test_an_absent_config_is_the_same_as_not_opted_in
 test_an_opted_in_home_speaks_the_shaped_line
@@ -755,3 +866,5 @@ test_a_reap_of_the_callers_process_group_does_not_cut_the_line
 test_a_desk_line_is_not_cut_by_the_glasses_budget
 test_an_empty_register_override_restores_the_glasses_cut
 test_an_already_chosen_register_is_never_replaced
+test_two_sequential_calls_do_not_overlap_playback
+test_two_homes_may_speak_at_the_same_time

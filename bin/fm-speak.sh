@@ -85,6 +85,16 @@
 # from holding the audio device. A speech error downstream of that handoff is unobservable here
 # by design.
 #
+# SERIAL PLAYBACK. Two calls in one turn used to overlap because each handoff
+# returned before audio started. Playback is now serialized per home through
+# state/.speak.lock, acquired by the detached speaker after that handoff: a
+# second line waits for the current one to finish, then plays, and the calling
+# turn is still not held open by audio. Dry-run and register refusals never
+# take the lock. The wait is outside the speaker bound, so a queued line still
+# gets its own playback budget after the line ahead of it ends. A dead holder
+# is stolen by the portable lock helpers in bin/fm-wake-lib.sh; a live holder
+# is waited out. See hold_playback_lock.
+#
 # NEVER SHARES THE CALLER'S PROCESS GROUP. Detaching the speaker from the
 # caller's streams is not enough to let a line finish: the speaker must also
 # leave the caller's process group, or anything that reaps that group takes the
@@ -106,7 +116,7 @@
 #                      (default 15)
 #   FM_SPEAK_TIMEOUT   bounded seconds for the detached speaker (default 60)
 #   FM_STATE_OVERRIDE  state directory holding the confirmed-voice memory
-#                      (default: $FM_HOME/state)
+#                      and the per-home playback lock (default: $FM_HOME/state)
 #
 # EXIT CODES (mirroring the register owner's own contract):
 #   0  handed to the speaker, printed under --dry-run, or this home is not
@@ -124,6 +134,8 @@ CONFIG="${FM_CONFIG_OVERRIDE:-$FM_HOME/config}"
 CONFIG_FILE="$CONFIG/speak"
 STATE="${FM_STATE_OVERRIDE:-$FM_HOME/state}"
 VOICE_CONFIRMED_FILE="$STATE/speak-voice-confirmed"
+SPEAK_LOCK="$STATE/.speak.lock"
+SPEAK_LOCK_HELD=false
 
 DEFAULT_SHAPER_TIMEOUT=15
 DEFAULT_SPEAKER_TIMEOUT=60
@@ -297,6 +309,49 @@ play_bounded() {  # <cmd...>
   kill "$WATCHDOG_PID" 2>/dev/null || true
 }
 
+# Portable lock helpers live in fm-wake-lib.sh. Loaded here, in the parent, so
+# a missing lib fails the handoff on stderr instead of dying silently in the
+# detached speaker whose streams are already closed.
+load_speak_lock_helpers() {
+  command -v fm_lock_acquire_wait >/dev/null 2>&1 && return 0
+  # shellcheck source=bin/fm-wake-lib.sh
+  . "$ROOT/bin/fm-wake-lib.sh"
+}
+
+# Wait for any earlier line in this home to finish, then keep the lock until
+# this line has played. A state directory that cannot be created leaves the
+# line unlocked rather than silent: overlapping speech is the older bug, and
+# dropping the line would be a new one. The acquire is unbounded on a live
+# holder because that holder's own speaker bound is what ends the wait.
+# shellcheck disable=SC2329 # Reached only through play_serialized.
+hold_playback_lock() {
+  SPEAK_LOCK="$STATE/.speak.lock"
+  SPEAK_LOCK_HELD=false
+  mkdir -p "$STATE" 2>/dev/null || return 0
+  command -v fm_lock_acquire_wait >/dev/null 2>&1 || return 0
+  fm_lock_acquire_wait "$SPEAK_LOCK" || return 0
+  SPEAK_LOCK_HELD=true
+}
+
+# shellcheck disable=SC2329 # Reached only through play_serialized.
+release_playback_lock() {
+  [ "$SPEAK_LOCK_HELD" = true ] || return 0
+  SPEAK_LOCK_HELD=false
+  fm_lock_release "$SPEAK_LOCK" || true
+}
+
+# Serial wrapper around play_bounded: acquire after detach, release after the
+# line ends or the speaker bound kills it. The EXIT trap covers a speaker that
+# never reaches the explicit release.
+# shellcheck disable=SC2329 # Reached only through the speaker bodies below.
+play_serialized() {  # <cmd...>
+  set +m
+  hold_playback_lock
+  trap 'release_playback_lock; drop_voice_list' EXIT
+  play_bounded "$@"
+  release_playback_lock
+}
+
 # The two speaker bodies. Each owns the temporary files it was handed and removes
 # them once the line has actually finished playing, so a file left behind is
 # itself the evidence that a speaker was cut short.
@@ -304,9 +359,9 @@ play_bounded() {  # <cmd...>
 say_speaker() {  # <textfile>
   local textfile=$1
   if [ -n "$CFG_VOICE" ]; then
-    play_bounded "$SAY_BIN" -v "$CFG_VOICE" -f "$textfile"
+    play_serialized "$SAY_BIN" -v "$CFG_VOICE" -f "$textfile"
   else
-    play_bounded "$SAY_BIN" -f "$textfile"
+    play_serialized "$SAY_BIN" -f "$textfile"
   fi
   rm -f "$textfile"
 }
@@ -314,7 +369,7 @@ say_speaker() {  # <textfile>
 # shellcheck disable=SC2329 # Invoked by name through detach_speaker.
 audio_speaker() {  # <player> <audio> <textfile>
   local player=$1 audio=$2 textfile=$3
-  play_bounded "$player" "$audio"
+  play_serialized "$player" "$audio"
   rm -f "$audio" "$textfile"
 }
 
@@ -469,6 +524,7 @@ configured_voice_is_available() {
 
 speak_detached() {  # <textfile>
   local textfile=$1
+  load_speak_lock_helpers
   # A configured voice is a choice this script can only keep through `say`:
   # Deepgram takes its voice from DEEPGRAM_TTS_MODEL and ignores the config key,
   # so preferring Deepgram here would silently answer in a voice the home did not
