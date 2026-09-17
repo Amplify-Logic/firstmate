@@ -507,6 +507,18 @@ MARK_FROM_FIRSTMATE=0
 PENDING_REPLY_CORR=
 PENDING_REPLY_CREATED=0
 TARGET_TASK_ID=
+# Append one line to state/<id>.steers, the per-task supervisor steer counter
+# bin/fm-capability-lib.sh reads for the capability outcome log and
+# bin/fm-teardown.sh removes with the rest of the task's volatile state. Called
+# once from each data plane's confirmed-delivery point, so the count is of
+# steers that actually landed. Best-effort: a counter that cannot be written
+# must never fail a delivered steer. An explicit backend target names an
+# endpoint rather than a task, so it carries no selector and never counts; the
+# --key path exits long before any of these points.
+fm_send_count_steer() {
+  [ -n "$TARGET_SELECTOR" ] || return 0
+  printf 'steer\n' >> "$STATE/$(fm_send_id_from_meta "$TARGET_META").steers" 2>/dev/null || true
+}
 fm_send_known_undelivered_cleanup() {
   [ -n "$PENDING_REPLY_CORR" ] || return 0
   if [ "$PENDING_REPLY_CREATED" = 1 ]; then
@@ -911,6 +923,7 @@ else
       exit 1
     fi
     # The remote record is durable delivery, exactly as a local enqueue is.
+    fm_send_count_steer
     if [ -n "$PENDING_REPLY_CORR" ]; then
       if fm_pending_reply_confirm_delivery "$STATE" "$PENDING_REPLY_CORR"; then
         :
@@ -975,6 +988,7 @@ else
       exit 1
     fi
     fm_lock_release "$INBOX_META_LOCK"
+    fm_send_count_steer
     # Enqueue IS durable delivery to the task's record: mark the pending
     # expectation delivered now, without resolving it - only a correlated
     # parent report acknowledges the request.
@@ -1095,6 +1109,7 @@ else
       exit 1
       ;;
   esac
+  fm_send_count_steer
   # Delivery confirmed. Mark the pending expectation delivered without resolving
   # it: only a correlated parent report acknowledges the request.
   if [ -n "$PENDING_REPLY_CORR" ]; then
