@@ -1719,6 +1719,32 @@ if network_phase; then
 fi
 local_phase && detect_local_config
 
+# Read-only runtime drift check: compares docs/toolchain-manifest.tsv against
+# PATH. Detection only - it reports and never blocks a launch; see
+# bin/fm-toolchain-lib.sh for why a strict gate is the wrong shape here.
+command -v fm_toolchain_check >/dev/null 2>&1 && fm_toolchain_check "$FM_ROOT"
+# Read-only fork drift check: surfaces commits on the configured upstream remote
+# that this home lacks, minus the commits the derived ported ledger accounts for.
+# Silent when not a fork / offline / current. Never merges.
+command -v fm_upstream_check >/dev/null 2>&1 && fm_upstream_check "$FM_ROOT" "$FM_HOME"
+# Read-only pending-report check for the standing private upstream watch.
+# Generation, watermarking, acknowledgement, and path validation remain owned
+# by fm-upstream-watch.sh rather than being reimplemented here.
+[ ! -x "$SCRIPT_DIR/fm-upstream-watch.sh" ] \
+  || "$SCRIPT_DIR/fm-upstream-watch.sh" pending
+# Read-only owed/failed/pending check for the opt-in morning intake. Inert on
+# every home without an `enabled = true` line in config/morning-intake, and the
+# local day, thresholds, retries and watermark all remain owned by
+# fm-morning-intake.sh rather than being reimplemented here.
+[ ! -x "$SCRIPT_DIR/fm-morning-intake.sh" ] \
+  || "$SCRIPT_DIR/fm-morning-intake.sh" pending
+# Read-only due/ready/unknown check for the opt-in continuous channel intake.
+# Inert on every home without an `enabled = true` line in config/channel-intake,
+# and the cadence, per-source checkpoints, ledger and notification budget all
+# remain owned by fm-channel-intake.sh rather than being reimplemented here.
+[ ! -x "$SCRIPT_DIR/fm-channel-intake.sh" ] \
+  || "$SCRIPT_DIR/fm-channel-intake.sh" pending
+
 if [ "${FM_BOOTSTRAP_DETECT_ONLY:-0}" != 1 ]; then
   # secondmate_sync consumes SECONDMATE_RESPAWNED_IDS from the liveness sweep, so
   # those two always run together in the same phase. Clone refresh does not
@@ -1765,30 +1791,5 @@ if [ "${FM_BOOTSTRAP_DETECT_ONLY:-0}" != 1 ]; then
     rm -f "$fleet_sync_out"
   fi
 fi
-# Read-only runtime drift check: compares docs/toolchain-manifest.tsv against
-# PATH. Detection only - it reports and never blocks a launch; see
-# bin/fm-toolchain-lib.sh for why a strict gate is the wrong shape here.
-command -v fm_toolchain_check >/dev/null 2>&1 && fm_toolchain_check "$FM_ROOT"
-# Read-only fork drift check: surfaces commits on the configured upstream remote
-# that this home lacks, minus the commits the derived ported ledger accounts for.
-# Silent when not a fork / offline / current. Never merges.
-command -v fm_upstream_check >/dev/null 2>&1 && fm_upstream_check "$FM_ROOT" "$FM_HOME"
-# Read-only pending-report check for the standing private upstream watch.
-# Generation, watermarking, acknowledgement, and path validation remain owned
-# by fm-upstream-watch.sh rather than being reimplemented here.
-[ ! -x "$SCRIPT_DIR/fm-upstream-watch.sh" ] \
-  || "$SCRIPT_DIR/fm-upstream-watch.sh" pending
-# Read-only owed/failed/pending check for the opt-in morning intake. Inert on
-# every home without an `enabled = true` line in config/morning-intake, and the
-# local day, thresholds, retries and watermark all remain owned by
-# fm-morning-intake.sh rather than being reimplemented here.
-[ ! -x "$SCRIPT_DIR/fm-morning-intake.sh" ] \
-  || "$SCRIPT_DIR/fm-morning-intake.sh" pending
-# Read-only due/ready/unknown check for the opt-in continuous channel intake.
-# Inert on every home without an `enabled = true` line in config/channel-intake,
-# and the cadence, per-source checkpoints, ledger and notification budget all
-# remain owned by fm-channel-intake.sh rather than being reimplemented here.
-[ ! -x "$SCRIPT_DIR/fm-channel-intake.sh" ] \
-  || "$SCRIPT_DIR/fm-channel-intake.sh" pending
 local_phase && secondmate_handoff_detect
 exit 0
