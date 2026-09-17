@@ -184,10 +184,10 @@ test_turnend_guard_stands_down_on_cursor_payload() {
   local dir out status
   dir=$(make_primary_dir "$TMP_ROOT/host-turnend")
   : > "$dir/state/task1.meta"
-  out=$(printf '%s' "$CURSOR_PAYLOAD" | bash "$dir/bin/fm-turnend-guard.sh" 2>&1); status=$?
+  out=$(printf '%s' "$CURSOR_PAYLOAD" | FM_HOME="$dir" bash "$dir/bin/fm-turnend-guard.sh" 2>&1); status=$?
   expect_code 0 "$status" "a Cursor-delivered Stop payload must not block through the Claude-settings duplicate"
   [ -z "$out" ] || fail "duplicate entry produced output: $out"
-  out=$(printf '%s' "$CURSOR_PAYLOAD" | bash "$dir/bin/fm-turnend-guard.sh" --cursor 2>&1); status=$?
+  out=$(printf '%s' "$CURSOR_PAYLOAD" | FM_HOME="$dir" bash "$dir/bin/fm-turnend-guard.sh" --cursor 2>&1); status=$?
   expect_code 2 "$status" "--cursor must let Cursor's own adapter reach the shared block decision"
   case "$out" in *'TURN WOULD END BLIND'*) ;; *) fail "expected the shared banner, got: $out" ;; esac
   pass "fm-turnend-guard: Cursor payload is inert without --cursor and blocks with it"
@@ -197,7 +197,7 @@ test_turnend_guard_still_blocks_for_claude_payload() {
   local dir status
   dir=$(make_primary_dir "$TMP_ROOT/host-claude")
   : > "$dir/state/task1.meta"
-  printf '%s' "$CLAUDE_STOP_PAYLOAD" | bash "$dir/bin/fm-turnend-guard.sh" >/dev/null 2>&1
+  printf '%s' "$CLAUDE_STOP_PAYLOAD" | FM_HOME="$dir" bash "$dir/bin/fm-turnend-guard.sh" >/dev/null 2>&1
   status=$?
   expect_code 2 "$status" "the host guard must not disturb a genuine Claude Stop payload"
   pass "fm-turnend-guard: a non-Cursor payload keeps blocking"
@@ -239,11 +239,11 @@ test_pretool_guards_deduplicate_and_render_cursor_deny() {
   local dir payload out status decision
   dir=$(make_primary_dir "$TMP_ROOT/host-pretool")
   payload='{"tool_name":"Shell","tool_input":{"command":"bin/fm-watch-arm.sh &"},"cursor_version":"2026.08.11-e8db854"}'
-  out=$(printf '%s' "$payload" | bash "$dir/bin/fm-arm-pretool-check.sh" 2>&1); status=$?
+  out=$(printf '%s' "$payload" | FM_HOME="$dir" bash "$dir/bin/fm-arm-pretool-check.sh" 2>&1); status=$?
   expect_code 0 "$status" "the Claude-settings duplicate must allow under Cursor"
   [ -z "$out" ] || fail "duplicate pretool entry produced output: $out"
 
-  out=$(printf '%s' "$payload" | bash "$dir/bin/fm-arm-pretool-check.sh" --cursor 2>/dev/null); status=$?
+  out=$(printf '%s' "$payload" | FM_HOME="$dir" bash "$dir/bin/fm-arm-pretool-check.sh" --cursor 2>/dev/null); status=$?
   expect_code 0 "$status" "Cursor reads the decision object, so the deny path exits 0"
   decision=$(printf '%s' "$out" | jq -r '.permission // empty' 2>/dev/null)
   [ "$decision" = deny ] || fail "expected a Cursor deny object on stdout, got: $out"
