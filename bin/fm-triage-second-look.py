@@ -65,11 +65,22 @@ ALERT_MIN_CONFIDENCE = 0.50
 # Hard bounds. A supervision backstop must not grow without limit because a
 # worker wrote a lot, so the batch and each line are truncated rather than
 # dropped, and the request is time-bounded independently of the caller's own.
-MAX_LINES = int(os.environ.get("FM_TRIAGE_SECOND_LOOK_MAX_LINES", "25"))
+# A malformed override falls back to the default rather than raising: this runs
+# inside a supervision loop, where a traceback from a typo would be noise on a
+# path whose whole contract is to stay quiet when it cannot work.
+def _bounded(name, default, cast, minimum):
+    try:
+        value = cast(os.environ[name])
+    except (KeyError, TypeError, ValueError):
+        return default
+    return value if value >= minimum else default
+
+
+MAX_LINES = _bounded("FM_TRIAGE_SECOND_LOOK_MAX_LINES", 25, int, 1)
 MAX_LINE_CHARS = 400
 MAX_GOAL_CHARS = 400
 MAX_PRECEDING = 3
-TIMEOUT_S = float(os.environ.get("FM_TRIAGE_SECOND_LOOK_TIMEOUT", "8"))
+TIMEOUT_S = _bounded("FM_TRIAGE_SECOND_LOOK_TIMEOUT", 8.0, float, 0.1)
 
 
 def note(message):
