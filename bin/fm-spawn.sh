@@ -3346,26 +3346,27 @@ case "$BACKEND" in
           case "$HERDR_LAUNCHER_STATUS" in
             0) HERDR_PARENT_WORKSPACE_ID=$FM_BACKEND_HERDR_LAUNCHER_WORKSPACE_ID ;;
             2)
-              if [ -n "$HERDR_PROJECT_KEY" ]; then
-                # The parent is this home's own task container, which with the
-                # fork's project presentation is bound to a hidden owner/project
-                # token pair and labeled with a human project name carrying a
-                # live fleet aggregate. That label is neither stable nor unique
-                # enough to anchor a projection, so the parent is resolved from
-                # the same token pair container_ensure binds it with, and stays
-                # ambiguous (empty) unless exactly one workspace answers.
-                HERDR_PARENT_MATCHES=$(FM_HOME="$HERDR_LABEL_HOME" \
-                  FM_HERDR_PROJECT_KEY="$HERDR_PROJECT_ENV_KEY" \
-                  FM_HERDR_PROJECT_LABEL="$HERDR_PROJECT_ENV_LABEL" \
-                  fm_backend_herdr_workspace_find_all "$HERDR_SES")
-                HERDR_PARENT_WORKSPACE_ID=
-                if [ "$(printf '%s' "$HERDR_PARENT_MATCHES" | grep -c '[^[:space:]]' || true)" -eq 1 ]; then
-                  HERDR_PARENT_WORKSPACE_ID=${HERDR_PARENT_MATCHES%%$'\n'*}
-                fi
-              else
-                HERDR_PARENT_WORKSPACE_ID=$(fm_backend_herdr_projection_parent_workspace_exact \
-                  "$HERDR_SES" "$HERDR_PARENT_LABEL" 2>/dev/null || true)
-              fi
+              # The parent is this home's own task container. ENSURE it rather
+              # than look it up: a container is created by the first spawn that
+              # needs one, so a home whose first spawn is projected would find
+              # nothing and fall back flat - and that fallback then creates the
+              # container, so exactly the first task of every home silently lost
+              # its projection while every later one kept it. The same call the
+              # flat path uses owns resolve-or-create, including binding a fresh
+              # container to its owner/project token pair and refusing to guess
+              # when two workspaces answer, so this path needs no second
+              # resolver of its own.
+              HERDR_PARENT_RAW=$(FM_HOME="$HERDR_LABEL_HOME" \
+                FM_HERDR_PROJECT_KEY="$HERDR_PROJECT_ENV_KEY" \
+                FM_HERDR_PROJECT_LABEL="$HERDR_PROJECT_ENV_LABEL" \
+                fm_backend_herdr_container_ensure "$PROJ_ABS" "$HERDR_LAUNCHER_RELATIONSHIP") \
+                || HERDR_PARENT_RAW=
+              # container_ensure echoes "<session>:<workspace_id>\t<seeded-tab>".
+              # The seeded default tab is deliberately not pruned here: this
+              # container holds no task tab of its own under a projected layout,
+              # and a workspace whose last tab closes is deleted with it.
+              HERDR_PARENT_WORKSPACE_ID=${HERDR_PARENT_RAW%%$'\t'*}
+              HERDR_PARENT_WORKSPACE_ID=${HERDR_PARENT_WORKSPACE_ID#*:}
               ;;
             *) spawn_herdr_presentation_order_lock_release; exit 1 ;;
           esac
