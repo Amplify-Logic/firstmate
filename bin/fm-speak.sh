@@ -80,10 +80,9 @@
 # one. The configured-voice check runs beside that call under a bound of its own
 # that starts when it does, so the two overlap rather than add up and the register
 # call stays the worst case. The speaker call is bounded and detached, with its
-# standard streams
-# closed, so a caller that captures this script's output is never held open by
-# audio that is still playing; its bound only stops a runaway from holding the
-# audio device. A speech error downstream of that handoff is unobservable here
+# standard streams closed, so a caller that captures this script's output is
+# never held open by audio that is still playing; its bound only stops a runaway
+# from holding the audio device. A speech error downstream of that handoff is unobservable here
 # by design.
 #
 # NEVER SHARES THE CALLER'S PROCESS GROUP. Detaching the speaker from the
@@ -374,20 +373,21 @@ speak_deepgram_or_fail() {  # <textfile>
 # voice this machine confirmed once is remembered, so only the first spoken line
 # of a home ever waits for the answer at all. Nothing here touches the network.
 VOICE_LIST_FILE=
-VOICE_LIST_FIRED=
 VOICE_LIST_PID=
 VOICE_LIST_GUARD=
 
-# The register can refuse or fail after the list was asked for, so the files are
-# dropped on the way out as well as on the way through. An orphaned fm-speak
-# temporary file is this script's evidence that a speaker was cut short; asking
-# `say` a question must never spend that signal.
+# The register can refuse or fail after the list was asked for, so the question
+# is cleaned up on the way out as well as on the way through: the file is dropped
+# and the bound that guards it is cancelled, because a watchdog left sleeping
+# outlives this script and its trap. An orphaned fm-speak temporary file is this
+# script's evidence that a speaker was cut short; asking `say` a question must
+# never spend that signal.
 # shellcheck disable=SC2329 # Invoked through the EXIT trap below.
 drop_voice_list() {
+  [ -z "$VOICE_LIST_GUARD" ] || kill "$VOICE_LIST_GUARD" 2>/dev/null || true
   [ -z "$VOICE_LIST_FILE" ] || rm -f "$VOICE_LIST_FILE"
-  [ -z "$VOICE_LIST_FIRED" ] || rm -f "$VOICE_LIST_FIRED"
+  VOICE_LIST_GUARD=
   VOICE_LIST_FILE=
-  VOICE_LIST_FIRED=
 }
 trap drop_voice_list EXIT
 
@@ -410,39 +410,50 @@ start_voice_list() {
   [ -x "$SAY_BIN" ] || return 0
   ! voice_already_confirmed || return 0
   VOICE_LIST_FILE=$(mktemp "${TMPDIR:-/tmp}/fm-speak-voices.XXXXXX") || return 0
-  VOICE_LIST_FIRED="$VOICE_LIST_FILE.fired"
-  rm -f "$VOICE_LIST_FIRED"
   "$SAY_BIN" -v '?' </dev/null >"$VOICE_LIST_FILE" 2>/dev/null &
   VOICE_LIST_PID=$!
-  start_watchdog "$SHAPER_TIMEOUT" "$VOICE_LIST_PID" "$VOICE_LIST_FIRED"
+  start_watchdog "$SHAPER_TIMEOUT" "$VOICE_LIST_PID"
   VOICE_LIST_GUARD=$WATCHDOG_PID
 }
 
 # True when the configured voice is one `say` listed. Anything short of a
-# complete answer - a lister that never ran, exited non-zero, was stopped by its
-# bound, or produced nothing - means the question could not be answered rather
-# than that the voice is missing, so the line is still spoken. A list killed
-# part-way has already flushed whole blocks of the alphabet, so a name absent
-# from it proves nothing; this check exists to catch a misspelled name, not to
-# become a new way to lose a line.
+# complete answer - a lister that never ran, exited non-zero, or produced nothing
+# - means the question could not be answered rather than that the voice is
+# missing, so the line is still spoken. A list killed part-way has already flushed
+# whole blocks of the alphabet, so a name absent from it proves nothing; a killed
+# lister is caught by its non-zero status. This check exists to catch a name that
+# is clearly wrong, not to become a new way to lose a line.
+#
+# It must therefore match at least as loosely as `say` resolves, or it would
+# refuse a name `say` speaks perfectly well. `say` matches case-insensitively,
+# and it resolves a bare base name to its qualified voice: `Eddy` reaches
+# `Eddy (English (UK))` and `Ava` reaches `Ava (Premium)`, byte for byte. The
+# qualifier is stripped from the listed name only, never from the configured one,
+# because the resolution does not run the other way: `Zarvox (Premium)` does not
+# reach the listed `Zarvox`, it falls through to the substitute voice, and that
+# is a name worth refusing.
 #
 # Each listed line is `<name> <locale> # <sample>`, and the name itself can hold
 # spaces and brackets, so the locale and the sample are stripped from the end
 # rather than the name being read from the start.
 configured_voice_is_available() {
   local available=0 status=0
-  ! voice_already_confirmed || return 0
   [ -n "$VOICE_LIST_PID" ] || return 0
   { wait "$VOICE_LIST_PID"; } 2>/dev/null || status=$?
   kill "$VOICE_LIST_GUARD" 2>/dev/null || true
+  VOICE_LIST_GUARD=
   VOICE_LIST_PID=
-  if [ "$status" -eq 0 ] && [ ! -e "$VOICE_LIST_FIRED" ] && [ -s "$VOICE_LIST_FILE" ]; then
+  if [ "$status" -eq 0 ] && [ -s "$VOICE_LIST_FILE" ]; then
     if awk -v want="$CFG_VOICE" '
+      BEGIN { want = tolower(want) }
       {
         name = $0
         sub(/[[:space:]]*#.*$/, "", name)
         sub(/[[:space:]]+[^[:space:]]+[[:space:]]*$/, "", name)
-        if (name == want) { found = 1 }
+        name = tolower(name)
+        base = name
+        sub(/[[:space:]]*\(.*\)$/, "", base)
+        if (name == want || base == want) { found = 1 }
       }
       END { exit found ? 0 : 1 }
     ' "$VOICE_LIST_FILE"; then

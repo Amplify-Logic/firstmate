@@ -360,14 +360,15 @@ test_speak_leaves_no_voice_list_behind_when_the_register_refuses() {
       FM_DEEPGRAM_ENV_FILE=/dev/null \
       FM_SPEAK_SHAPER="$home/shaper" \
       FM_SPEAK_SAY="$home/speaker" \
+      FM_SPEAK_SHAPER_TIMEOUT=2 \
       FM_SPEAK_DEEPGRAM_REGISTER= \
       "$SPEAK" "Shall I merge it?" 2>&1
   ) || status=$?
   [ "$status" -eq 2 ] || fail "expected exit 2 from a refusing register, got $status: $out"
-  sleep 1
+  sleep 4
   leftover=$(find "$home" -maxdepth 1 -name 'fm-speak-*' | wc -l | tr -d ' ')
   [ "$leftover" -eq 0 ] || fail "a refused line left $leftover temporary file(s) behind"
-  pass "fm-speak: a refused line leaves no voice list behind"
+  pass "fm-speak: a refused line leaves no voice list or watchdog marker behind"
 }
 
 # A voice list killed part-way has already flushed whole blocks of the alphabet,
@@ -460,7 +461,59 @@ test_speak_refuses_a_voice_this_machine_does_not_have() {
   [ ! -f "$home/spoken.log" ] || fail "the line must not be spoken in a substitute voice"
   [ ! -f "$home/deepgram.log" ] || fail "a missing voice must not spend Deepgram credit"
   [ ! -f "$home/afplay.log" ] || fail "a missing voice must not reach the Deepgram player"
+
+  # `say` resolves a bare name up to its qualified voice, never the other way:
+  # `Zarvox (Premium)` reaches no voice and falls through to the substitute.
+  printf 'enabled = true\nvoice = Samantha (Premium)\n' > "$home/config/speak"
+  status=0
+  out=$(
+    env -u DEEPGRAM_API_KEY \
+      FM_HOME="$home" \
+      TMPDIR="$home" \
+      FM_DEEPGRAM_ENV_FILE="$home/.env" \
+      FM_SPEAK_SHAPER="$home/shaper" \
+      FM_SPEAK_SAY="$home/speaker" \
+      FM_SPEAK_DEEPGRAM_TTS="$home/deepgram-tts" \
+      FM_SPEAK_DEEPGRAM_REGISTER= \
+      FM_DEEPGRAM_AFPLAY="$home/afplay" \
+      "$SPEAK" "The over-qualified voice line is green." 2>&1
+  ) || status=$?
+  [ "$status" -eq 1 ] || fail "a qualifier the listed name does not carry must be refused, got $status: $out"
+  assert_contains "$out" "Samantha (Premium)" "the caller is told which voice is missing"
   pass "fm-speak: a voice this machine does not have is reported, not substituted"
+}
+
+# The check must never be stricter than `say` itself, or it refuses a name say
+# speaks perfectly well and the desk goes silent - the failure it exists to
+# prevent. Both spellings below were proved on this machine to render audio
+# byte-identical to the listed name they resolve to.
+test_speak_accepts_the_spellings_say_itself_resolves() {
+  local home out
+  home=$(new_home voice-spellings "enabled = true" "voice = Ava")
+  install_shaper "$home"
+  install_speaker "$home"
+  install_voices "$home" "Ava (Premium)" "Samantha" "Zarvox"
+  speak_spelling() {
+    env -u DEEPGRAM_API_KEY \
+      FM_HOME="$home" \
+      TMPDIR="$home" \
+      FM_DEEPGRAM_ENV_FILE=/dev/null \
+      FM_SPEAK_SHAPER="$home/shaper" \
+      FM_SPEAK_SAY="$home/speaker" \
+      FM_SPEAK_DEEPGRAM_REGISTER= \
+      "$SPEAK" "$1" 2>&1
+  }
+  out=$(speak_spelling "The bare name line is green.") \
+    || fail "a bare name that say resolves must not be refused: $out"
+  wait_for_content "$home/spoken.log" "bare name line" "the bare-name line should have been spoken"
+  assert_contains "$(cat "$home/spoken.log")" "-v Ava -f" "say was given the configured spelling unchanged"
+
+  printf 'enabled = true\nvoice = samantha\n' > "$home/config/speak"
+  rm -f "$home/state/speak-voice-confirmed"
+  out=$(speak_spelling "The lowercase name line is green.") \
+    || fail "a lowercase name that say resolves must not be refused: $out"
+  wait_for_content "$home/spoken.log" "lowercase name line" "the lowercase-name line should have been spoken"
+  pass "fm-speak: a spelling say resolves is spoken, not refused"
 }
 
 # A `say` that fails once it already has the line is left to fail: the speaker is
@@ -578,6 +631,7 @@ test_speak_uses_say_when_key_absent
 test_speak_prefers_deepgram_when_key_present
 test_speak_prefers_the_configured_voice_over_deepgram
 test_speak_refuses_a_voice_this_machine_does_not_have
+test_speak_accepts_the_spellings_say_itself_resolves
 test_speak_still_speaks_when_the_voice_list_was_cut_off
 test_speak_asks_for_the_voice_list_once_per_confirmed_voice
 test_speak_leaves_no_voice_list_behind_when_the_register_refuses
