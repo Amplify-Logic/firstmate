@@ -149,10 +149,13 @@ worker_path_recent() { # <path>
 # one directory that was observed, so of every worker that sees the same
 # abandoned marker exactly one takes it and the rest find it gone. Re-reading
 # the age of what the rename captured is the proof: a captured marker that is
-# still fresh is a live peer's, recreated under the same name in between, so
-# this worker defers instead of claiming.
+# still fresh is a live peer's, recreated under the same name in between, so it
+# goes back where it was and this worker defers instead of claiming. Only a
+# capture the re-read proved stale is removed, and the restore is skipped if the
+# name is taken again, since moving a directory onto an existing one nests it
+# and would leave a marker no holder can release.
 worker_claim_stale_lock() {
-  local captured status
+  local captured
   [ -d "$WORKER_LOCK" ] && [ ! -L "$WORKER_LOCK" ] || return 1
   [ ! -e "$WORKER_LOCK/quarantine" ] && [ ! -L "$WORKER_LOCK/quarantine" ] || return 1
   (umask 077; mkdir "$WORKER_LOCK/claim") 2>/dev/null && return 0
@@ -162,10 +165,13 @@ worker_claim_stale_lock() {
   rmdir "$captured" 2>/dev/null || true
   [ ! -e "$captured" ] && [ ! -L "$captured" ] || return 2
   mv "$WORKER_LOCK/claim" "$captured" 2>/dev/null || return 2
-  worker_path_recent "$captured"
-  status=$?
+  if worker_path_recent "$captured"; then
+    [ ! -e "$WORKER_LOCK/claim" ] && [ ! -L "$WORKER_LOCK/claim" ] &&
+      mv "$captured" "$WORKER_LOCK/claim" 2>/dev/null && return 2
+    rmdir "$captured" 2>/dev/null || true
+    return 2
+  fi
   rmdir "$captured" 2>/dev/null || true
-  [ "$status" -ne 0 ] || return 2
   (umask 077; mkdir "$WORKER_LOCK/claim") 2>/dev/null || return 2
 }
 
