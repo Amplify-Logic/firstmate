@@ -22,6 +22,10 @@ REPEAT_WORKER_PID=
 STALE_LOCK_WORKER_PID=
 LIVE_LOCK_WORKER_PID=
 LIVE_LOCK_CHALLENGER_PID=
+DRIFT_OWNER_PID=
+DRIFT_HEARTBEAT_PID=
+DRIFT_CHALLENGER_PID=
+ABANDONED_CLAIM_WORKER_PID=
 RESTART_SUPERVISOR_PID=
 mkdir -p "$REMOTE_ROOT/bin" "$REMOTE_HOME" "$ACCOUNT_HOME" "$RUNTIME_BIN"
 # worker.pid records the serving child, not its restart supervisor, so stopping
@@ -34,6 +38,10 @@ cleanup_remote_job_fixture() {
   [ -z "$STALE_LOCK_WORKER_PID" ] || kill "$STALE_LOCK_WORKER_PID" 2>/dev/null || true
   [ -z "$LIVE_LOCK_WORKER_PID" ] || kill "$LIVE_LOCK_WORKER_PID" 2>/dev/null || true
   [ -z "$LIVE_LOCK_CHALLENGER_PID" ] || kill "$LIVE_LOCK_CHALLENGER_PID" 2>/dev/null || true
+  [ -z "$DRIFT_HEARTBEAT_PID" ] || kill "$DRIFT_HEARTBEAT_PID" 2>/dev/null || true
+  [ -z "$DRIFT_OWNER_PID" ] || kill "$DRIFT_OWNER_PID" 2>/dev/null || true
+  [ -z "$DRIFT_CHALLENGER_PID" ] || kill "$DRIFT_CHALLENGER_PID" 2>/dev/null || true
+  [ -z "$ABANDONED_CLAIM_WORKER_PID" ] || kill "$ABANDONED_CLAIM_WORKER_PID" 2>/dev/null || true
   [ -z "$RESTART_SUPERVISOR_PID" ] || kill -KILL "$RESTART_SUPERVISOR_PID" 2>/dev/null || true
   if [ -f "$STATE_ROOT/worker.pid" ]; then
     fm_remote_job_stop_worker_tree "$(cat "$STATE_ROOT/worker.pid")" || true
@@ -820,6 +828,116 @@ kill -TERM "$LIVE_LOCK_WORKER_PID"
 wait "$LIVE_LOCK_WORKER_PID" 2>/dev/null || true
 LIVE_LOCK_WORKER_PID=
 pass "a live owner that still heartbeats is not stolen"
+
+# A live owner is only recognised by its recorded ps start and command, and a
+# suspend/resume can change what ps reports for a process that never died. The
+# owner is still alive and still refreshing its heartbeat, so that fresh
+# heartbeat has to keep the lock: a challenger must leave the records alone
+# rather than sweep a live owner out and serve the same account queue alongside
+# it. Once the heartbeat does go stale the same challenger must still reclaim,
+# so the guard cannot become the restart storm it replaced.
+DRIFT_HOME="$TMP_ROOT/drift-lock-account"
+DRIFT_STATE="$TMP_ROOT/drift-lock-jobs"
+mkdir -p "$DRIFT_HOME" "$DRIFT_STATE/worker.lock"
+chmod 700 "$DRIFT_HOME" "$DRIFT_STATE" "$DRIFT_STATE/worker.lock"
+sleep 300 &
+DRIFT_OWNER_PID=$!
+printf '%s\n' "$DRIFT_OWNER_PID" > "$DRIFT_STATE/worker.lock/pid"
+printf 'Thu Jan  1 00:00:00 2000\n' > "$DRIFT_STATE/worker.lock/start"
+printf 'a command ps no longer reports\n' > "$DRIFT_STATE/worker.lock/command"
+printf '%s\n' "$DRIFT_OWNER_PID" > "$DRIFT_STATE/worker.pid"
+printf '%s\n' "$DRIFT_OWNER_PID" > "$DRIFT_STATE/worker.ready"
+chmod 600 "$DRIFT_STATE/worker.lock"/* "$DRIFT_STATE/worker.pid" "$DRIFT_STATE/worker.ready"
+touch -t 200001010000 "$DRIFT_STATE/worker.lock"
+while kill -0 "$DRIFT_OWNER_PID" 2>/dev/null; do
+  touch "$DRIFT_STATE/worker.ready" 2>/dev/null || break
+  sleep 1
+done &
+DRIFT_HEARTBEAT_PID=$!
+HOME="$DRIFT_HOME" FM_ROOT_OVERRIDE="$REMOTE_ROOT" FM_REMOTE_JOB_STATE_ROOT="$DRIFT_STATE" \
+  FM_REMOTE_JOB_PLATFORM_OVERRIDE=Linux "$REMOTE_ROOT/bin/fm-remote-job-worker.sh" --serve \
+  > "$TMP_ROOT/drift-lock.out" 2> "$TMP_ROOT/drift-lock.err" &
+DRIFT_CHALLENGER_PID=$!
+DRIFT_DEADLINE=$((SECONDS + 5))
+while [ "$SECONDS" -lt "$DRIFT_DEADLINE" ]; do
+  [ "$(cat "$DRIFT_STATE/worker.lock/pid" 2>/dev/null || true)" = "$DRIFT_OWNER_PID" ] \
+    || fail "a challenger swept a live owner whose recorded ps records had drifted"
+  kill -0 "$DRIFT_CHALLENGER_PID" 2>/dev/null \
+    || fail "a challenger failed against a heartbeating owner: $(cat "$TMP_ROOT/drift-lock.err")"
+  sleep 0.25
+done
+kill -0 "$DRIFT_OWNER_PID" 2>/dev/null || fail "a challenger killed the drifted owner"
+kill "$DRIFT_HEARTBEAT_PID" 2>/dev/null || true
+wait "$DRIFT_HEARTBEAT_PID" 2>/dev/null || true
+DRIFT_HEARTBEAT_PID=
+DRIFT_DEAD_OWNER_PID=$DRIFT_OWNER_PID
+kill "$DRIFT_OWNER_PID" 2>/dev/null || true
+wait "$DRIFT_OWNER_PID" 2>/dev/null || true
+DRIFT_OWNER_PID=
+DRIFT_READY=
+for _ in $(seq 1 600); do
+  DRIFT_READY=$(cat "$DRIFT_STATE/worker.ready" 2>/dev/null || true)
+  case "$DRIFT_READY" in
+    ''|"$DRIFT_DEAD_OWNER_PID") ;;
+    *) kill -0 "$DRIFT_READY" 2>/dev/null && break ;;
+  esac
+  kill -0 "$DRIFT_CHALLENGER_PID" 2>/dev/null || break
+  sleep 0.1
+done
+kill -0 "$DRIFT_CHALLENGER_PID" 2>/dev/null \
+  || fail "the deferring challenger exited instead of reclaiming a lock gone stale: $(cat "$TMP_ROOT/drift-lock.err")"
+kill -0 "${DRIFT_READY:-0}" 2>/dev/null \
+  || fail "the deferring challenger never reclaimed the lock once the heartbeat went stale"
+kill -TERM "$DRIFT_CHALLENGER_PID"
+wait "$DRIFT_CHALLENGER_PID" 2>/dev/null || true
+DRIFT_CHALLENGER_PID=
+pass "a heartbeating owner with drifted ps records is deferred to until it goes stale"
+
+# Reclaim is single-writer: the winner holds a claim marker inside the ownership
+# directory while it sweeps, so a loser cannot delete the records the winner
+# publishes. A reclaimer killed while holding that marker must not wedge the
+# account forever, so a marker left behind on an otherwise stale lock is taken
+# over by the next worker.
+ABANDONED_HOME="$TMP_ROOT/abandoned-claim-account"
+ABANDONED_STATE="$TMP_ROOT/abandoned-claim-jobs"
+mkdir -p "$ABANDONED_HOME" "$ABANDONED_STATE/worker.lock/claim"
+chmod 700 "$ABANDONED_HOME" "$ABANDONED_STATE" "$ABANDONED_STATE/worker.lock" \
+  "$ABANDONED_STATE/worker.lock/claim"
+printf '999999\n' > "$ABANDONED_STATE/worker.lock/pid"
+printf 'stale-start\n' > "$ABANDONED_STATE/worker.lock/start"
+printf 'stale-command\n' > "$ABANDONED_STATE/worker.lock/command"
+printf '999999\n' > "$ABANDONED_STATE/worker.ready"
+chmod 600 "$ABANDONED_STATE/worker.lock"/pid "$ABANDONED_STATE/worker.lock"/start \
+  "$ABANDONED_STATE/worker.lock"/command "$ABANDONED_STATE/worker.ready"
+touch -t 200001010000 "$ABANDONED_STATE/worker.lock" "$ABANDONED_STATE/worker.ready"
+HOME="$ABANDONED_HOME" FM_ROOT_OVERRIDE="$REMOTE_ROOT" FM_REMOTE_JOB_STATE_ROOT="$ABANDONED_STATE" \
+  FM_REMOTE_JOB_PLATFORM_OVERRIDE=Linux "$REMOTE_ROOT/bin/fm-remote-job-worker.sh" --serve \
+  > "$TMP_ROOT/abandoned-claim.out" 2> "$TMP_ROOT/abandoned-claim.err" &
+ABANDONED_CLAIM_WORKER_PID=$!
+ABANDONED_READY=
+for _ in $(seq 1 300); do
+  ABANDONED_READY=$(cat "$ABANDONED_STATE/worker.ready" 2>/dev/null || true)
+  case "$ABANDONED_READY" in
+    ''|999999) ;;
+    *) kill -0 "$ABANDONED_READY" 2>/dev/null && break ;;
+  esac
+  kill -0 "$ABANDONED_CLAIM_WORKER_PID" 2>/dev/null || break
+  sleep 0.05
+done
+if ! kill -0 "$ABANDONED_CLAIM_WORKER_PID" 2>/dev/null; then
+  wait "$ABANDONED_CLAIM_WORKER_PID" 2>/dev/null || true
+  ABANDONED_CLAIM_WORKER_PID=
+  fail "an abandoned reclaim marker wedged the next worker: $(cat "$TMP_ROOT/abandoned-claim.err")"
+fi
+case "$ABANDONED_READY" in
+  ''|999999) fail "the worker did not take over a lock left behind by a killed reclaimer" ;;
+esac
+assert_absent "$ABANDONED_STATE/worker.lock/claim" \
+  "the reclaiming worker left its claim marker behind"
+kill -TERM "$ABANDONED_CLAIM_WORKER_PID"
+wait "$ABANDONED_CLAIM_WORKER_PID" 2>/dev/null || true
+ABANDONED_CLAIM_WORKER_PID=
+pass "a lock left claimed by a killed reclaimer is taken over, not wedged"
 
 # A child that stays up for FM_REMOTE_JOB_SUPERVISOR_HEALTHY_SECONDS clears the
 # consecutive-failure backoff, so a child that dies just past that threshold

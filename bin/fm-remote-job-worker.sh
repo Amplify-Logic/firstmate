@@ -133,26 +133,41 @@ worker_lock_recent() {
   [ $((now - mtime)) -le 10 ]
 }
 
-worker_lock_has_recorded_pid() {
-  [ -e "$WORKER_LOCK/pid" ] || [ -L "$WORKER_LOCK/pid" ]
-}
-
-# Drop a stale ownership directory so the next mkdir can claim it. pid/start/command
-# are the published owner records; the .pid.*, .start.*, .command.*, and
-# .quarantine.* names are the mktemp leftovers a crash or interrupted shutdown
-# leaves behind. Removing only the published records left those temps in place,
-# rmdir failed, and every later worker exited 1 into a restart storm.
-worker_clear_stale_lock() {
-  local f
+# Reclaim is single-writer. Two workers that both find the same stale lock would
+# otherwise sweep it at once, and the loser would delete the records the winner
+# had already published and become a second owner of the same account queue. The
+# claim marker is an ordinary mkdir inside the ownership directory, so exactly
+# one worker can create it, and reclaim never removes and recreates the
+# directory itself, so no loser can rmdir it out from under the winner. Creating
+# the marker also refreshes the ownership directory's mtime, so a marker still
+# standing once that window has passed was abandoned by a reclaimer killed part
+# way through and can be taken over.
+worker_claim_stale_lock() {
   [ -d "$WORKER_LOCK" ] && [ ! -L "$WORKER_LOCK" ] || return 1
   [ ! -e "$WORKER_LOCK/quarantine" ] && [ ! -L "$WORKER_LOCK/quarantine" ] || return 1
+  (umask 077; mkdir "$WORKER_LOCK/claim") 2>/dev/null && return 0
+  [ -d "$WORKER_LOCK/claim" ] && [ ! -L "$WORKER_LOCK/claim" ] || return 1
+  worker_lock_recent && return 2
+  rmdir "$WORKER_LOCK/claim" 2>/dev/null || return 2
+  (umask 077; mkdir "$WORKER_LOCK/claim") 2>/dev/null || return 2
+}
+
+# Drop what a dead owner left behind so the claiming worker can publish its own
+# records in place. pid/start/command are the published owner records; the
+# .pid.*, .start.*, .command.*, and .quarantine.* names are the mktemp leftovers
+# a crash or interrupted shutdown leaves behind. Removing only the published
+# records left those temps in place, rmdir failed, and every later worker exited
+# 1 into a restart storm.
+worker_clear_stale_lock_records() {
+  local f
   for f in "$WORKER_LOCK"/* "$WORKER_LOCK"/.[!.]*; do
     [ -e "$f" ] || [ -L "$f" ] || continue
+    [ "$f" = "$WORKER_LOCK/claim" ] && continue
     [ ! -L "$f" ] || return 1
     [ -f "$f" ] || return 1
     rm -f -- "$f" || return 1
   done
-  rmdir "$WORKER_LOCK"
+  return 0
 }
 
 worker_quarantined_execution_stopped() { # <account-home>
@@ -180,7 +195,7 @@ worker_recover_quarantine() { # <account-home>
 }
 
 worker_acquire_lock() {
-  local account_home=$1 attempt=0
+  local account_home=$1 attempt=0 status
   while [ "$attempt" -lt 150 ]; do
     if (umask 077; mkdir "$WORKER_LOCK") 2>/dev/null; then
       WORKER_LOCK_HELD=1
@@ -193,20 +208,34 @@ worker_acquire_lock() {
       continue
     fi
     if fm_remote_job_lock_owner_matches_process "$account_home"; then return 2; fi
-    # A just-created lock with no pid yet is another worker publishing identity.
-    # A leftover heartbeat or leftover temp files must not keep a dead owner in
-    # this wait until the attempt budget expires and we exit 1.
-    if [ "$attempt" -lt 149 ] && worker_lock_recent && ! worker_lock_has_recorded_pid; then
+    # A fresh heartbeat proves a live owner even when its recorded ps start or
+    # command no longer matches, and a just-created lock is another worker
+    # publishing its identity. Either way wait rather than steal; a dead owner's
+    # heartbeat and leftovers both go stale inside this budget.
+    if fm_remote_job_probe "$account_home" || worker_lock_recent; then
       attempt=$((attempt + 1))
       sleep 0.1
       continue
     fi
-    if worker_clear_stale_lock; then
+    worker_claim_stale_lock
+    status=$?
+    if [ "$status" -eq 2 ]; then return 2; fi
+    if [ "$status" -ne 0 ]; then
+      attempt=$((attempt + 1))
+      sleep 0.1
       continue
     fi
-    attempt=$((attempt + 1))
-    sleep 0.1
+    WORKER_LOCK_HELD=1
+    worker_clear_stale_lock_records && worker_publish_lock_owner
+    status=$?
+    rmdir "$WORKER_LOCK/claim" 2>/dev/null || true
+    [ "$status" -eq 0 ] || return 1
+    return 0
   done
+  # An owner that is still heartbeating after the whole budget is alive and this
+  # worker is redundant: leave its lock alone and exit 0 instead of failing into
+  # a supervisor restart storm.
+  fm_remote_job_probe "$account_home" && return 2
   return 1
 }
 
