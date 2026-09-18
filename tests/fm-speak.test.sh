@@ -799,8 +799,13 @@ test_two_sequential_calls_do_not_overlap_playback() {
   [ "$elapsed" -lt 8 ] \
     || fail "fm-speak: sequential calls waited ${elapsed}s for audio instead of handing off"
 
+  # Nothing orders the two speakers, so both end markers have to land before
+  # the log is a complete snapshot: waiting on one of them can catch the other
+  # line mid-play and read its dangling start as an overlap.
+  wait_for_content "$home/spoken.log" "end: The first line is green." \
+    "fm-speak: sequential calls never finished the first line"
   wait_for_content "$home/spoken.log" "end: The second line is ready." \
-    "fm-speak: sequential calls never finished both lines"
+    "fm-speak: sequential calls never finished the second line"
   assert_grep "start: The first line is green." "$home/spoken.log" \
     "the first line must reach the speaker"
   assert_grep "start: The second line is ready." "$home/spoken.log" \
