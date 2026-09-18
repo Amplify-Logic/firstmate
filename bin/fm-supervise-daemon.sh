@@ -1276,7 +1276,7 @@ EOF
 # batch. The model's own confidence can only demote alert to digest, never
 # silence a line.
 second_look_escalate() {  # <state> <dropped-records>
-  local state=$1 records=$2 tool task tier reason line err
+  local state=$1 records=$2 tool task tier reason line err alert=0
   [ -n "$records" ] || return 0
   tool="$FM_DAEMON_DIR/fm-triage-second-look.sh"
   [ -x "$tool" ] || return 0
@@ -1284,9 +1284,13 @@ second_look_escalate() {  # <state> <dropped-records>
   while IFS=$(printf '\t') read -r task tier reason line; do
     [ -n "$task" ] && [ -n "$line" ] || continue
     if escalate_add "$state" "$task.status: $line (second look: $reason)"; then
-      [ "$tier" = alert ] && { escalate_flush "$state" || true; }
+      [ "$tier" = alert ] && alert=1
     fi
   done < <(printf '%s' "$records" | "$tool" 2>"$err" || true)
+  # One scan, one digest. Flushing inside the loop would empty the buffer before
+  # the rest of this scan's promotions were added, so a span that destroyed data
+  # over several lines would arrive as several single-event injections.
+  [ "$alert" -eq 1 ] && { escalate_flush "$state" || true; }
   if [ "$err" != /dev/null ]; then
     while IFS= read -r line; do
       [ -n "$line" ] || continue

@@ -1717,6 +1717,17 @@ heartbeat_second_look() {
 # promoted lines still reach an away captain either way - the daemon's own
 # catch-all keeps a separate offset marker from the watcher's, so it re-reads
 # and re-promotes the same dropped lines on its next scan.
+# The dedupe key for a promotion row, derived from the payload it carries.
+#
+# Distinct promotions must not collapse onto each other: two unacknowledged
+# rows sharing one key leave only the last, and the status logs behind both were
+# already marked surfaced through their end, so the earlier line and its reason
+# would never be read. Keying on the content keeps every distinct promotion and
+# still collapses an identical one re-queued before the drain.
+heartbeat_second_look_key() {  # <payload>
+  printf 'second-look:%s' "$(printf '%s' "$1" | hash_pane | cut -c1-12)"
+}
+
 heartbeat_second_look_payload() {  # <promotions>
   local promotions=$1 task tier reason line payload='' count=0
   while IFS=$(printf '\t') read -r task tier reason line; do
@@ -2615,7 +2626,9 @@ EOF
       # this wake sends firstmate to the whole fleet, so every log is read.
       promotions=$(heartbeat_second_look)
       if [ -n "$promotions" ]; then
-        fm_wake_append heartbeat second-look "$(heartbeat_second_look_payload "$promotions")" || exit 1
+        promotion_payload=$(heartbeat_second_look_payload "$promotions")
+        fm_wake_append heartbeat "$(heartbeat_second_look_key "$promotion_payload")" \
+          "$promotion_payload" || exit 1
       else
         fm_wake_append heartbeat heartbeat heartbeat || exit 1
       fi
@@ -2631,7 +2644,9 @@ EOF
       # produce an empty result and the absorb below is byte-for-byte today's.
       promotions=$(heartbeat_second_look)
       if [ -n "$promotions" ]; then
-        fm_wake_append heartbeat second-look "$(heartbeat_second_look_payload "$promotions")" || exit 1
+        promotion_payload=$(heartbeat_second_look_payload "$promotions")
+        fm_wake_append heartbeat "$(heartbeat_second_look_key "$promotion_payload")" \
+          "$promotion_payload" || exit 1
         touch "$STATE/.last-heartbeat"
         mark_all_captain_relevant_surfaced || true
         wake "heartbeat"

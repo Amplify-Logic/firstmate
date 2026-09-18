@@ -976,6 +976,44 @@ EOF
   pass "an unusable answer reaches the daemon log rather than /dev/null"
 }
 
+test_one_away_scan_produces_one_digest_not_one_per_alert() {
+  local dir out attempts
+  dir=$(new_home daemon-one-digest armed)
+  seed_task "$dir" miss ship "Ship it." 'working: writing the backfill migration'
+
+  # A span that destroys data usually writes several such lines at once, so a
+  # scan carrying two alert-tier promotions is the realistic case. Flushing per
+  # row would empty the buffer between them and inject one message each.
+  cat > "$dir/resp.json" <<'EOF'
+{"answers":{
+"l1__understated_terminal":{"type":"noul","noul":0.12},
+"l1__needs_captain":{"type":"noul","noul":0.74},
+"l1__adverse_event":{"type":"noul","noul":0.97},
+"l1__urgency":{"type":"score","score":1.90,"confidence":0.85},
+"l2__understated_terminal":{"type":"noul","noul":0.12},
+"l2__needs_captain":{"type":"noul","noul":0.91},
+"l2__adverse_event":{"type":"noul","noul":0.10},
+"l2__urgency":{"type":"score","score":1.95,"confidence":0.90},
+"l3__understated_terminal":{"type":"noul","noul":0.12},
+"l3__needs_captain":{"type":"noul","noul":0.74},
+"l3__adverse_event":{"type":"noul","noul":0.80},
+"l3__urgency":{"type":"score","score":0.50,"confidence":0.85}}}
+EOF
+  LOG="$dir/daemon.log" FM_HOME="$dir" FM_TRIAGE_SECOND_LOOK_RESPONSE="$dir/resp.json" \
+    second_look_escalate "$dir/state" "$(printf 'miss\tworking: the backfill migration truncated public.users\nmiss\tworking: the shipper config has the production password\nmiss\tworking: the retry loop is on its sixth attempt\n')"
+
+  # afk is inactive here, so each flush attempt defers and preserves the buffer.
+  # The count of attempts is the number of messages an operator would have read.
+  attempts=$(grep -c 'inject deferred' "$dir/daemon.log" 2>/dev/null || true)
+  [ "$attempts" -eq 1 ] || fail "one scan made $attempts flush attempts, not 1"
+
+  out=$(cat "$dir/state/.subsuper-escalations" 2>/dev/null || true)
+  assert_contains "$out" 'truncated public.users' "the first alert promotion is missing from the digest"
+  assert_contains "$out" 'production password' "the second alert promotion is missing from the digest"
+  assert_contains "$out" 'sixth attempt' "the digest-tier promotion is missing from the digest"
+  pass "one away scan builds one digest, whatever mix of alert and digest tiers it promotes"
+}
+
 test_daemon_catch_all_is_unchanged_when_the_home_is_not_armed() {
   local dir
   dir=$(new_home daemon-inert)
@@ -1039,6 +1077,7 @@ test_heartbeat_backstop_without_a_promotion_keeps_the_ordinary_key
 test_a_promoted_heartbeat_is_never_an_unknown_wake
 test_the_away_scan_repromotes_what_a_drained_heartbeat_absorbed
 test_daemon_catch_all_escalates_a_promotion_with_its_reason
+test_one_away_scan_produces_one_digest_not_one_per_alert
 test_daemon_catch_all_is_unchanged_when_the_home_is_not_armed
 test_daemon_reports_an_unusable_answer_instead_of_discarding_it
 test_daemon_second_look_never_runs_without_dropped_lines
