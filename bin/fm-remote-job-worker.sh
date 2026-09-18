@@ -163,7 +163,7 @@ worker_claim_stale_lock() {
   (umask 077; mkdir "$WORKER_LOCK/claim") 2>/dev/null && return 0
   [ -d "$WORKER_LOCK/claim" ] && [ ! -L "$WORKER_LOCK/claim" ] || return 1
   worker_path_recent "$WORKER_LOCK/claim" && return 2
-  holder=$(umask 077; mktemp -d "$FM_REMOTE_JOB_STATE/.claim.XXXXXX") || return 2
+  holder=$(umask 077; mktemp -d "$FM_REMOTE_JOB_STATE/.claim.XXXXXX") || return 1
   if ! mv "$WORKER_LOCK/claim" "$holder/" 2>/dev/null; then
     rmdir "$holder" 2>/dev/null || true
     return 2

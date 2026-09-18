@@ -23,6 +23,7 @@ STALE_LOCK_WORKER_PID=
 LIVE_LOCK_WORKER_PID=
 LIVE_LOCK_CHALLENGER_PID=
 LIVE_CLAIM_WORKER_PID=
+SCRATCH_FAIL_WORKER_PID=
 DRIFT_OWNER_PID=
 DRIFT_HEARTBEAT_PID=
 DRIFT_CHALLENGER_PID=
@@ -44,6 +45,7 @@ cleanup_remote_job_fixture() {
   [ -z "$DRIFT_CHALLENGER_PID" ] || kill "$DRIFT_CHALLENGER_PID" 2>/dev/null || true
   [ -z "$ABANDONED_CLAIM_WORKER_PID" ] || kill "$ABANDONED_CLAIM_WORKER_PID" 2>/dev/null || true
   [ -z "$LIVE_CLAIM_WORKER_PID" ] || kill "$LIVE_CLAIM_WORKER_PID" 2>/dev/null || true
+  [ -z "$SCRATCH_FAIL_WORKER_PID" ] || kill "$SCRATCH_FAIL_WORKER_PID" 2>/dev/null || true
   [ -z "$RESTART_SUPERVISOR_PID" ] || kill -KILL "$RESTART_SUPERVISOR_PID" 2>/dev/null || true
   if [ -f "$STATE_ROOT/worker.pid" ]; then
     fm_remote_job_stop_worker_tree "$(cat "$STATE_ROOT/worker.pid")" || true
@@ -986,6 +988,60 @@ assert_present "$LIVE_CLAIM_STATE/worker.lock/claim" \
 [ "$(cat "$LIVE_CLAIM_STATE/worker.lock/pid")" = 999999 ] \
   || fail "a challenger reclaimed a lock a peer was still claiming"
 pass "a peer's fresh reclaim marker is deferred to, not taken over"
+
+# Taking over an abandoned marker needs a scratch directory, and failing to make
+# one is a local resource failure - a full or read-only state root - not proof
+# that a peer owns the lock. Reporting it as ownership would exit 0, which the
+# Linux supervisor reads as a clean stop and never restarts, leaving the account
+# with no worker at all. It has to stay retryable instead.
+SCRATCH_FAIL_HOME="$TMP_ROOT/scratch-fail-account"
+SCRATCH_FAIL_STATE="$TMP_ROOT/scratch-fail-jobs"
+SCRATCH_FAIL_BIN="$TMP_ROOT/scratch-fail-bin"
+mkdir -p "$SCRATCH_FAIL_HOME" "$SCRATCH_FAIL_STATE/worker.lock/claim" "$SCRATCH_FAIL_BIN"
+chmod 700 "$SCRATCH_FAIL_HOME" "$SCRATCH_FAIL_STATE" "$SCRATCH_FAIL_STATE/worker.lock" \
+  "$SCRATCH_FAIL_STATE/worker.lock/claim"
+cat > "$SCRATCH_FAIL_BIN/mktemp" <<SH
+#!/bin/bash
+for arg in "\$@"; do
+  case "\$arg" in *.claim.XXXXXX) exit 1 ;; esac
+done
+exec $(command -v mktemp) "\$@"
+SH
+chmod 755 "$SCRATCH_FAIL_BIN/mktemp"
+printf '999999\n' > "$SCRATCH_FAIL_STATE/worker.lock/pid"
+printf 'stale-start\n' > "$SCRATCH_FAIL_STATE/worker.lock/start"
+printf 'stale-command\n' > "$SCRATCH_FAIL_STATE/worker.lock/command"
+printf '999999\n' > "$SCRATCH_FAIL_STATE/worker.ready"
+chmod 600 "$SCRATCH_FAIL_STATE/worker.lock"/pid "$SCRATCH_FAIL_STATE/worker.lock"/start \
+  "$SCRATCH_FAIL_STATE/worker.lock"/command "$SCRATCH_FAIL_STATE/worker.ready"
+touch -t 200001010000 "$SCRATCH_FAIL_STATE/worker.lock/claim" "$SCRATCH_FAIL_STATE/worker.ready" \
+  "$SCRATCH_FAIL_STATE/worker.lock"
+HOME="$SCRATCH_FAIL_HOME" PATH="$SCRATCH_FAIL_BIN:$PATH" FM_ROOT_OVERRIDE="$REMOTE_ROOT" \
+  FM_REMOTE_JOB_STATE_ROOT="$SCRATCH_FAIL_STATE" FM_REMOTE_JOB_PLATFORM_OVERRIDE=Linux \
+  "$REMOTE_ROOT/bin/fm-remote-job-worker.sh" --serve \
+  > "$TMP_ROOT/scratch-fail.out" 2> "$TMP_ROOT/scratch-fail.err" &
+SCRATCH_FAIL_WORKER_PID=$!
+SCRATCH_FAIL_DEADLINE=$((SECONDS + 3))
+while [ "$SECONDS" -lt "$SCRATCH_FAIL_DEADLINE" ]; do
+  kill -0 "$SCRATCH_FAIL_WORKER_PID" 2>/dev/null || break
+  sleep 0.1
+done
+if ! kill -0 "$SCRATCH_FAIL_WORKER_PID" 2>/dev/null; then
+  set +e
+  wait "$SCRATCH_FAIL_WORKER_PID"
+  SCRATCH_FAIL_RC=$?
+  set -e
+  SCRATCH_FAIL_WORKER_PID=
+  [ "$SCRATCH_FAIL_RC" -ne 0 ] \
+    || fail "a worker that could not make its reclaim scratch directory reported peer ownership"
+  fail "a worker that could not make its reclaim scratch directory stopped retrying (rc=$SCRATCH_FAIL_RC)"
+fi
+[ "$(cat "$SCRATCH_FAIL_STATE/worker.lock/pid")" = 999999 ] \
+  || fail "a worker reclaimed the lock without its reclaim scratch directory"
+kill -TERM "$SCRATCH_FAIL_WORKER_PID"
+wait "$SCRATCH_FAIL_WORKER_PID" 2>/dev/null || true
+SCRATCH_FAIL_WORKER_PID=
+pass "a failed reclaim scratch directory keeps retrying instead of reporting peer ownership"
 
 # A child that stays up for FM_REMOTE_JOB_SUPERVISOR_HEALTHY_SECONDS clears the
 # consecutive-failure backoff, so a child that dies just past that threshold
