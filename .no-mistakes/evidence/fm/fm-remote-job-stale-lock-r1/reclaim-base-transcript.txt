@@ -1,0 +1,38 @@
+
+=== 1. operator brings the account's remote worker up (fm on ensure path) ===
+ensure_worker: ready, serving pid 58277
+
+=== 2. the machine suspends and the worker family is killed (Dell resume) ===
+/Users/larsmusic/.no-mistakes/evidence/01M2RQM0H30CJJKX0BHV4NFVJ0/drive-stale-lock-reclaim.sh: line 77: 57934 Killed: 9               nohup env HOME="$account_home" FM_ROOT_OVERRIDE="$root" FM_REMOTE_JOB_STATE_ROOT="$FM_REMOTE_JOB_STATE" FM_REMOTE_JOB_PLATFORM_OVERRIDE="${FM_REMOTE_JOB_PLATFORM_OVERRIDE:-}" "$worker" >> "$FM_REMOTE_JOB_STATE/logs/$FM_REMOTE_JOB_LABEL.log" 2>&1 < /dev/null
+killed worker family pgid 57934
+ownership lock left behind:
+  worker.lock/command
+  worker.lock/pid
+  worker.lock/start
+plus a half-written .command.XXXXXX left by the interrupted shutdown
+worker.ready heartbeat aged to 2000-01-01 00:00
+
+=== 3. the next worker starts on that stale lock (what fm on does on resume) ===
+FAIL: ensure_worker could not reclaim the stale lock after 142s: remote job worker did not report ready after startup
+
+=== 4. supervisor log (restart storm evidence) ===
+worker startup failures logged: 40
+  rmdir: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-reclaim-base.MBFOeM/remote-jobs/worker.lock: Directory not empty
+  remote-job-worker: cannot acquire or safely reclaim worker ownership
+  rmdir: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-reclaim-base.MBFOeM/remote-jobs/worker.lock: Directory not empty
+  remote-job-worker: cannot acquire or safely reclaim worker ownership
+  rmdir: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-reclaim-base.MBFOeM/remote-jobs/worker.lock: Directory not empty
+  remote-job-worker: cannot acquire or safely reclaim worker ownership
+  rmdir: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-reclaim-base.MBFOeM/remote-jobs/worker.lock: Directory not empty
+  remote-job-worker: cannot acquire or safely reclaim worker ownership
+  rmdir: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-reclaim-base.MBFOeM/remote-jobs/worker.lock: Directory not empty
+  remote-job-worker: cannot acquire or safely reclaim worker ownership
+  rmdir: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-reclaim-base.MBFOeM/remote-jobs/worker.lock: Directory not empty
+  remote-job-worker: cannot acquire or safely reclaim worker ownership
+FAIL: the replacement worker restart-stormed 40 times
+
+=== 5. an operator's remote job actually runs on the reclaimed worker ===
+FAIL: the job never completed on the reclaimed worker: remote job did not complete within its bounded wait
+
+=== RESULT ===
+NO-GO (base): see FAIL lines above

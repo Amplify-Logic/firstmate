@@ -1,0 +1,38 @@
+ok - default queue and execution bounds independently cover long polls
+ok - operator PATH excludes a symlinked local bin
+ok - operator PATH honors nvm defaults with a deterministic fallback
+ok - operator PATH resolves the authorized Nix profile bin link
+ok - operator PATH orders discovered tool installs deterministically
+ok - the worker preserves bounded argv and stdin in an empty environment
+ok - active jobs keep the worker ready for concurrent requests
+ok - ensure replaces a live worker after its code changes
+ok - worker identity binds the canonical configured code root
+ok - stale ownership is reclaimed without signaling a reused pid
+ok - the worker enforces the job timeout and publishes its result
+ok - the worker expires queued jobs before they can mutate
+ok - queued jobs receive a fresh bounded execution window
+ok - a queued short command preempts a running long poll instead of waiting its window
+ok - a poll re-armed after preemption reads the same cursor with nothing lost
+ok - sibling polls never preempt each other into a re-arm churn loop
+ok - worker shutdown terminates the active command tree before replacement
+ok - Linux supervision recovers crashes and stops orphaned commands
+ok - pre-execution validation obeys the job timeout
+ok - the worker drains bounded output without changing command results
+ok - the worker refuses symlinked job fields before command execution
+ok - failed shutdown quarantines ownership against replacement workers
+ok - quarantine recovery refuses unverifiable supervisors and ignores reused pids
+ok - a repeatedly signalled shutdown still releases ownership for the next worker
+ok - a stale leftover ownership lock is reclaimed by the next worker
+ok - a live owner that still heartbeats is not stolen
+ok - a heartbeating owner with drifted ps records is deferred to until it goes stale
+ok - a lock left claimed by a killed reclaimer is taken over, not wedged
+ok - a peer's fresh reclaim marker is deferred to, not taken over
+ok - a failed reclaim scratch directory keeps retrying instead of reporting peer ownership
+ok - a quarantine published inside the claim window survives reclaim
+ok - a claim won against a finished peer reclaim defers instead of sweeping it
+ok - reclaim leaves an in-flight shutdown guard temp alone
+ok - a guard published during the sweep stops reclaim before it records ownership
+ok - barely healthy worker failures remain bounded by the restart guard
+ALL TESTS PASSED
+bash tests/fm-remote-job.test.sh  15.79s user 34.51s system 37% cpu 2:14.01 total
+EXIT=0

@@ -1,0 +1,33 @@
+
+=== 12 workers start at once on one stale lock ===
+launched: 40110 40112 40114 40118 40120 40122 40126 40129 40132 40136 40137 40156
+
+=== outcome per worker ===
+worker 1 pid 40110: exited 1 -- rmdir: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-stampede-base.xzN0Jn/remote-jobs/worker.lock: Directory not emptyremote-job-worker: cannot acquire or safely reclaim worker ownership
+worker 2 pid 40112: exited 1 -- rmdir: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-stampede-base.xzN0Jn/remote-jobs/worker.lock: Directory not emptyremote-job-worker: cannot acquire or safely reclaim worker ownership
+worker 3 pid 40114: exited 1 -- rmdir: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-stampede-base.xzN0Jn/remote-jobs/worker.lock: Directory not emptyremote-job-worker: cannot acquire or safely reclaim worker ownership
+worker 4 pid 40118: exited 1 -- rmdir: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-stampede-base.xzN0Jn/remote-jobs/worker.lock: Directory not emptyremote-job-worker: cannot acquire or safely reclaim worker ownership
+worker 5 pid 40120: exited 1 -- rmdir: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-stampede-base.xzN0Jn/remote-jobs/worker.lock: Directory not emptyremote-job-worker: cannot acquire or safely reclaim worker ownership
+worker 6 pid 40122: exited 1 -- rmdir: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-stampede-base.xzN0Jn/remote-jobs/worker.lock: Directory not emptyremote-job-worker: cannot acquire or safely reclaim worker ownership
+worker 7 pid 40126: exited 1 -- rmdir: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-stampede-base.xzN0Jn/remote-jobs/worker.lock: Directory not emptyremote-job-worker: cannot acquire or safely reclaim worker ownership
+worker 8 pid 40129: exited 1 -- rmdir: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-stampede-base.xzN0Jn/remote-jobs/worker.lock: Directory not emptyremote-job-worker: cannot acquire or safely reclaim worker ownership
+worker 9 pid 40132: exited 1 -- rmdir: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-stampede-base.xzN0Jn/remote-jobs/worker.lock: Directory not emptyremote-job-worker: cannot acquire or safely reclaim worker ownership
+worker 10 pid 40136: exited 1 -- rmdir: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-stampede-base.xzN0Jn/remote-jobs/worker.lock: Directory not emptyremote-job-worker: cannot acquire or safely reclaim worker ownership
+worker 11 pid 40137: exited 1 -- rmdir: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-stampede-base.xzN0Jn/remote-jobs/worker.lock: Directory not emptyremote-job-worker: cannot acquire or safely reclaim worker ownership
+worker 12 pid 40156: exited 1 -- rmdir: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-stampede-base.xzN0Jn/remote-jobs/worker.lock: Directory not emptyremote-job-worker: cannot acquire or safely reclaim worker ownership
+serving: 0   deferred cleanly (exit 0): 0   failed (nonzero): 12
+
+=== recorded ownership ===
+worker.lock contents: .pid.XXXXXX 
+worker.lock/pid: <none>
+worker.ready:    999999
+FAIL: expected exactly one serving worker, got 0
+FAIL: 12 worker(s) failed into the supervisor's restart path
+FAIL: the lock owner and the heartbeat disagree
+FAIL: the crash leftover was not swept
+
+=== the account still serves exactly one result for one job ===
+FAIL: no worker served the job: remote job did not complete within its bounded wait
+
+=== RESULT ===
+NO-GO (base)

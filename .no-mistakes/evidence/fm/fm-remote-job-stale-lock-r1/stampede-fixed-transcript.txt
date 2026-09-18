@@ -1,0 +1,19 @@
+
+=== 12 workers start at once on one stale lock ===
+launched: 30008 30009 30010 30012 30013 30014 30015 30016 30017 30018 30019 30020
+
+=== outcome per worker ===
+worker 5 pid 30013: still serving
+serving: 1   deferred cleanly (exit 0): 11   failed (nonzero): 0
+
+=== recorded ownership ===
+worker.lock contents: command pid start 
+worker.lock/pid: 30013
+worker.ready:    30013
+
+=== the account still serves exactly one result for one job ===
+job job-O4P1G2 exit=0 stdout=job ran once
+
+=== RESULT ===
+PASS (fixed): one owner, no failures, queue served
+/Users/larsmusic/.no-mistakes/evidence/01M2RQM0H30CJJKX0BHV4NFVJ0/drive-reclaim-stampede.sh: line 20: 30013 Killed: 9               HOME="$ACCT" FM_ROOT_OVERRIDE="$ROOT" FM_REMOTE_JOB_STATE_ROOT="$STATE" FM_REMOTE_JOB_PLATFORM_OVERRIDE=Linux "$ROOT/bin/fm-remote-job-worker.sh" --serve > "$WORK/w$i.out" 2> "$WORK/w$i.err"

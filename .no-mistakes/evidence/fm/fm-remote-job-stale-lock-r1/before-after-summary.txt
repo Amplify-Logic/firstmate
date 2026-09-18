@@ -1,0 +1,22 @@
+BEFORE (base worker 03961847) - same stale lock, same operator steps:
+  ensure_worker: ready, serving pid 58277
+  FAIL: ensure_worker could not reclaim the stale lock after 142s: remote job worker did not report ready after startup
+  worker startup failures logged: 40
+  FAIL: the replacement worker restart-stormed 40 times
+  FAIL: the job never completed on the reclaimed worker: remote job did not complete within its bounded wait
+  NO-GO (base): see FAIL lines above
+
+AFTER (ac01cd17):
+  ensure_worker: ready, serving pid 45576
+  ensure_worker: READY after 2s, serving pid 47345
+  worker startup failures logged: 0
+  job job-8WceAn exit=0
+  PASS (fixed): stale lock reclaimed, no restart storm, job served
+
+12 workers racing one stale lock:
+  fixed: serving: 1   deferred cleanly (exit 0): 11   failed (nonzero): 0
+  fixed: worker.lock/pid: 30013
+  fixed: worker.ready:    30013
+  fixed: PASS (fixed): one owner, no failures, queue served
+  base:  serving: 0   deferred cleanly (exit 0): 0   failed (nonzero): 12
+  base:  NO-GO (base)
