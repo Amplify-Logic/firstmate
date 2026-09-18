@@ -748,7 +748,7 @@ EOF
 
 wait_for_content() {  # <path> <needle> <msg>
   local path=$1 needle=$2 msg=$3 waited=0
-  while [ "$waited" -lt 100 ]; do
+  while [ "$waited" -lt 250 ]; do
     grep -qF "$needle" "$path" 2>/dev/null && return 0
     sleep 0.2
     waited=$((waited + 1))
@@ -783,7 +783,10 @@ test_two_sequential_calls_do_not_overlap_playback() {
   local home started finished elapsed
   home=$(new_home serialize "enabled = true")
   install_shaper "$home" >/dev/null
-  install_marking_speaker "$home" 5
+  # One line of audio has to outlast the handoff budget below by a wide
+  # margin: the proof is that both calls returned while the first line was
+  # still playing, not that the pair happened to be quick.
+  install_marking_speaker "$home" 12
 
   started=$(date +%s)
   speak "$home" "The first line is green." >/dev/null 2>&1 \
@@ -793,7 +796,7 @@ test_two_sequential_calls_do_not_overlap_playback() {
   finished=$(date +%s)
   elapsed=$((finished - started))
 
-  [ "$elapsed" -lt 4 ] \
+  [ "$elapsed" -lt 8 ] \
     || fail "fm-speak: sequential calls waited ${elapsed}s for audio instead of handing off"
 
   wait_for_content "$home/spoken.log" "end: The second line is ready." \
