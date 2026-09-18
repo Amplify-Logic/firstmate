@@ -1720,7 +1720,6 @@ heartbeat_second_look_payload() {  # <promotions>
   done <<EOF
 $promotions
 EOF
-  [ "$count" -gt 0 ] || { printf 'heartbeat'; return; }
   printf 'second look promoted %s dropped status line(s): %s' "$count" "$payload"
 }
 

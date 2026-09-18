@@ -57,7 +57,8 @@
 # than exiting loudly, because the caller is a supervision loop and a config typo
 # must never change what that loop does.
 #
-# Cost: ~516 input tokens per dropped line at $42/Btok. A heartbeat scan carrying
+# Cost: at most ~516 input tokens per dropped line at $42/Btok, measured
+# 2026-09-17 before the request was narrowed to the dropped line alone. A heartbeat scan carrying
 # five new dropped lines is about $0.0001, and a busy home all day is under $1 a
 # month. Most scans carry zero or one line.
 #

@@ -2,7 +2,7 @@
 # tests/fm-triage-second-look.test.sh - the opt-in second look over the status
 # lines the deterministic wake classifier drops.
 #
-# Three surfaces, each with its own failure mode:
+# Four surfaces, each with its own failure mode:
 #   - status_span_dropped_lines (bin/fm-classify-lib.sh): the pure span read that
 #     decides WHICH lines are eligible at all, including the three declarations
 #     that are silent by design and must stay silent;
@@ -10,12 +10,11 @@
 #     the threshold rule and every fail-open path;
 #   - the away-mode daemon's catch-all backstop (bin/fm-supervise-daemon.sh):
 #     that a promotion actually reaches the escalation buffer with its reason,
-#     and that an unarmed home adds nothing.
-#
-# The always-on watcher's heartbeat backstop is the other call site, and its
-# cases live with the rest of that backstop's coverage in
-# tests/fm-watch-triage.test.sh, which already owns the scaffolding that drives a
-# real fm-watch.sh subprocess.
+#     and that an unarmed home adds nothing;
+#   - the always-on watcher's heartbeat backstop (bin/fm-watch.sh): the same
+#     against a real fm-watch.sh subprocess. These live here rather than in
+#     tests/fm-watch-triage.test.sh so a timing-sensitive case elsewhere in that
+#     file cannot end the run before this capability is exercised.
 #
 # Only the network is stubbed. Every case drives the real classifier, the real
 # request build and the real thresholds against the recorded 2026-09-17 probe
@@ -35,6 +34,65 @@ TOOL="$ROOT/bin/fm-triage-second-look.sh"
 FIXTURES="$(dirname "${BASH_SOURCE[0]}")/fixtures/triage-second-look/fixtures.json"
 RESPONSE="$(dirname "${BASH_SOURCE[0]}")/fixtures/triage-second-look/response.json"
 TMP_ROOT=$(fm_test_tmproot fm-triage-second-look)
+
+WATCH="$ROOT/bin/fm-watch.sh"
+
+# --- watcher-subprocess scaffolding -----------------------------------------
+#
+# The watcher cases below drive a real bin/fm-watch.sh. These four helpers are
+# the minimum that needs, and match the copies in tests/fm-watch-triage.test.sh.
+
+size_of() { LC_ALL=C wc -c < "$1" | tr -d '[:space:]'; }
+
+reap() { kill "$1" 2>/dev/null || true; wait "$1" 2>/dev/null || true; }
+
+# Portable mtime in epoch seconds. Platform-detected, never the `stat -f || stat -c`
+# fallback (which writes a partial filesystem dump on Linux; see fm-watch.sh).
+file_mtime() {
+  if [ "$(uname)" = Darwin ]; then stat -f %m "$1" 2>/dev/null; else stat -c %Y "$1" 2>/dev/null; fi
+}
+
+# The suppression signature the per-wake scan writes, so a case can pre-mark a
+# status log seen and leave the heartbeat backstop as its only reader.
+seen_sig() {
+  local reported size ident
+  case "$1" in
+    *.status)
+      reported=$(status_observed_signature "$1")
+      size=$(size_of "$1")
+      ident=$(_fm_open_decisions_file_ident "$1")
+      printf 'v2\t%s\t%s@%s' "$reported" "$size" "$ident"
+      ;;
+    *)
+      if [ "$(uname)" = Darwin ]; then stat -f '%z:%Fm' "$1" 2>/dev/null; else stat -c '%s:%Y' "$1" 2>/dev/null; fi
+      ;;
+  esac
+}
+
+# Block until the watcher has completed one full poll cycle without exiting.
+wait_poll_cycle() {  # <state> <pid> [limit-ticks]
+  local state=$1 pid=$2 limit=${3:-300} beat first now i=0
+  beat="$state/.last-watcher-beat"
+  rm -f "$beat"
+  first=""
+  while [ "$i" -lt "$limit" ]; do
+    kill -0 "$pid" 2>/dev/null || return 1
+    first=$(file_mtime "$beat")
+    [ -n "$first" ] && break
+    sleep 0.1
+    i=$((i + 1))
+  done
+  while [ "$i" -lt "$limit" ]; do
+    kill -0 "$pid" 2>/dev/null || return 1
+    now=$(file_mtime "$beat")
+    if [ -n "$now" ] && [ "$now" != "$first" ]; then
+      return 0
+    fi
+    sleep 0.1
+    i=$((i + 1))
+  done
+  return 1
+}
 
 # An ambient key must never reach a case: every case here is either inert or
 # stubbed, and a real key would turn a stub into a live paid call.
@@ -201,10 +259,10 @@ test_malformed_gate_stays_inert_instead_of_failing_loudly() {
 
 # --- the request ------------------------------------------------------------
 
-test_request_carries_only_the_fields_the_questions_name() {
+test_request_carries_the_dropped_line_and_nothing_else() {
   local dir request fields
   dir=$(new_home request-state armed)
-  seed_task "$dir" t1 scout "Investigate why the log shipper is slow." \
+  seed_task "$dir" t1 scout "Investigate why the log shipper is slow; ask ACME first." \
     'working: reading the shipper config' \
     'working: checking the disk' \
     'note: found the production password in plaintext'
@@ -212,54 +270,29 @@ test_request_carries_only_the_fields_the_questions_name() {
   request=$(printf 't1\tnote: found the production password in plaintext\n' \
     | FM_HOME="$dir" "$TOOL" --dry-run)
 
+  # A brief can carry a client name, a hostname or an unreleased plan. Arming a
+  # supervision backstop is not consent to ship any of that to a third party, so
+  # the dropped line is the whole of what leaves the machine.
   fields=$(printf '%s' "$request" | python3 -c '
 import json, sys
 state = json.load(sys.stdin)["state"]["lines"]["l1"]
 print(",".join(sorted(state)))
-print(state["worker_kind"])
-print(state["task_goal"])
-print(len(state["preceding_lines"]))')
+print(state["line"])')
 
-  assert_contains "$fields" 'line,preceding_lines,task_goal,worker_kind' \
-    "the request carried fields no question names"
-  assert_contains "$fields" 'scout' "the request did not carry the worker kind"
-  assert_contains "$fields" 'Investigate why the log shipper is slow.' \
-    "the request did not carry the task goal from the brief"
+  assert_contains "$fields" 'line' "the request did not carry the dropped line"
+  assert_contains "$fields" 'found the production password in plaintext' \
+    "the request did not carry the dropped line verbatim"
+  [ "$(printf '%s' "$request" | python3 -c '
+import json, sys
+print(",".join(sorted(json.load(sys.stdin)["state"]["lines"]["l1"])))')" = line ] \
+    || fail "the request carried task state beyond the dropped line"
+  assert_not_contains "$request" 'ACME' "the brief's intent left the machine"
+  assert_not_contains "$request" 'scout' "the worker kind left the machine"
+  assert_not_contains "$request" 'reading the shipper config' "a prior status line left the machine"
   assert_contains "$(printf '%s' "$request" | python3 -c '
 import json, sys
 print(json.load(sys.stdin)["model"])')" 'jev-1.13.0' "the request did not pin the model version"
-  pass "the request carries the pinned model and only the four state fields the questions name"
-}
-
-test_state_and_data_overrides_are_honored_when_they_point_elsewhere() {
-  local dir elsewhere request fields
-  dir=$(new_home request-roots armed)
-  elsewhere=$(new_home request-roots-elsewhere armed)
-  seed_task "$elsewhere" t1 scout "Investigate why the log shipper is slow." \
-    'working: reading the shipper config' \
-    'working: checking the disk' \
-    'note: found the production password in plaintext'
-
-  # Both callers resolve state and data through these overrides before the
-  # engine is reached, and this repo does launch subprocesses with the roots
-  # pointing at different homes. A request built with an empty goal and no
-  # history is answered differently, since needs_captain is asked about work
-  # that has grown beyond the goal.
-  request=$(printf 't1\tnote: found the production password in plaintext\n' \
-    | FM_HOME="$dir" FM_STATE_OVERRIDE="$elsewhere/state" FM_DATA_OVERRIDE="$elsewhere/data" \
-      "$TOOL" --dry-run)
-  fields=$(printf '%s' "$request" | python3 -c '
-import json, sys
-state = json.load(sys.stdin)["state"]["lines"]["l1"]
-print(state["worker_kind"])
-print(state["task_goal"])
-print(len(state["preceding_lines"]))')
-
-  assert_contains "$fields" 'scout' "the overridden state root did not supply the worker kind"
-  assert_contains "$fields" 'Investigate why the log shipper is slow.' \
-    "the overridden data root did not supply the task goal"
-  assert_contains "$fields" '2' "the overridden state root did not supply the preceding lines"
-  pass "state and data roots are resolved through their overrides, not always from the home"
+  pass "the request carries the pinned model and the dropped line, and no other task state"
 }
 
 test_request_is_one_batch_for_the_whole_scan() {
@@ -614,24 +647,6 @@ EOF
   pass "an unusable condition or urgency answer can never silence a line that fired"
 }
 
-test_history_is_found_for_a_line_stored_with_stray_whitespace() {
-  local dir request count
-  dir=$(new_home request-history armed)
-  seed_task "$dir" t1 scout "Investigate the shipper." 'working: first' 'working: second'
-  # A worker that appends a trailing space still writes the same status line.
-  printf 'note: found the production password in plaintext \n' >> "$dir/state/t1.status"
-
-  request=$(printf 't1\tnote: found the production password in plaintext\n' \
-    | FM_HOME="$dir" "$TOOL" --dry-run)
-  count=$(printf '%s' "$request" | python3 -c '
-import json, sys
-preceding = json.load(sys.stdin)["state"]["lines"]["l1"]["preceding_lines"]
-print("%d %s" % (len(preceding), "self" if any("production password" in x for x in preceding) else "clean"))')
-
-  [ "$count" = "2 clean" ] || fail "history for a line stored with a trailing space was wrong: $count"
-  pass "preceding lines are the lines before the target, not the file tail"
-}
-
 test_the_batch_reaches_the_engine_under_an_external_timeout() {
   local dir fakebin response promotions
   dir=$(new_home external-timeout armed)
@@ -700,6 +715,117 @@ test_the_bound_is_enforced() {
   [ -z "$out" ] || fail "hitting the bound promoted something: $out"
   [ "$elapsed" -lt 30 ] || fail "the ${elapsed}s call was not bounded by FM_TRIAGE_SECOND_LOOK_BOUND=3"
   pass "a stalled call is cut at the bound and promotes nothing"
+}
+
+# --- call site: the always-on watcher's heartbeat backstop -------------------
+
+second_look_case() {  # <name> [armed]
+  local dir state sig
+  dir=$(make_case "$1"); state="$dir/state"
+  mkdir -p "$dir/config" "$dir/data/miss"
+  [ "${2:-}" = armed ] && printf 'enabled = true\n' > "$dir/config/triage-second-look"
+  printf 'kind=ship\n' > "$state/miss.meta"
+  printf "# Task\n## Captain's intent\nAdd a users.last_seen column and backfill it.\n" \
+    > "$dir/data/miss/brief.md"
+  # Already marked seen, so the per-wake signal scan stays quiet and the
+  # heartbeat backstop is the only thing that can reach these lines.
+  printf '%s\n' \
+    'working: writing the backfill migration' \
+    'working: the backfill migration truncated public.users on staging before I caught it; 4100 rows gone' \
+    > "$state/miss.status"
+  sig=$(seen_sig "$state/miss.status")
+  printf '%s' "$sig" > "$state/.seen-miss_status"
+  # A recorded response for the two dropped lines, in the order the scan reads
+  # them: the first stays silent, the second is promoted on adverse_event.
+  cat > "$dir/resp.json" <<'EOF'
+{"answers":{
+"l1__understated_terminal":{"type":"noul","noul":0.05},
+"l1__needs_captain":{"type":"noul","noul":0.10},
+"l1__adverse_event":{"type":"noul","noul":0.10},
+"l1__urgency":{"type":"score","score":0.20,"confidence":0.80},
+"l2__understated_terminal":{"type":"noul","noul":0.12},
+"l2__needs_captain":{"type":"noul","noul":0.74},
+"l2__adverse_event":{"type":"noul","noul":0.97},
+"l2__urgency":{"type":"score","score":1.90,"confidence":0.85}}}
+EOF
+  printf '%s\n' "$dir"
+}
+
+test_heartbeat_second_look_inert_when_the_home_is_not_armed() {
+  local dir state fakebin out pid i
+  dir=$(second_look_case second-look-inert); state="$dir/state"
+  fakebin="$dir/fakebin"; out="$dir/watch.out"
+  # The control: a home that never opted in absorbs this heartbeat exactly as it
+  # did before the capability existed, and makes no call at all.
+  PATH="$fakebin:$PATH" FM_STATE_OVERRIDE="$state" FM_HOME="$dir" FM_POLL=1 \
+    FM_SIGNAL_GRACE=1 FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=1 \
+    FM_TRIAGE_SECOND_LOOK_RESPONSE="$dir/resp.json" "$WATCH" > "$out" &
+  pid=$!
+  if ! wait_poll_cycle "$state" "$pid"; then
+    reap "$pid"; fail "watcher exited without an armed second look: $(cat "$out")"
+  fi
+  i=0
+  while [ "$i" -lt 200 ]; do
+    [ "$(cat "$state/.heartbeat-streak" 2>/dev/null || echo 0)" -ge 1 ] && break
+    kill -0 "$pid" 2>/dev/null || break
+    sleep 0.1
+    i=$((i + 1))
+  done
+  [ ! -s "$out" ] || fail "an unarmed home surfaced a wake: $(cat "$out")"
+  [ ! -s "$state/.wake-queue" ] || fail "an unarmed home enqueued a wake record"
+  [ "$(cat "$state/.heartbeat-streak" 2>/dev/null || echo 0)" -ge 1 ] \
+    || fail "an unarmed home did not absorb and back off as it does today"
+  reap "$pid"
+  pass "a home that never opted in absorbs the heartbeat exactly as it does today"
+}
+
+test_heartbeat_second_look_promotes_a_dropped_line_with_its_reason() {
+  local dir state fakebin out pid queue
+  dir=$(second_look_case second-look-armed armed); state="$dir/state"
+  fakebin="$dir/fakebin"; out="$dir/watch.out"
+  PATH="$fakebin:$PATH" FM_STATE_OVERRIDE="$state" FM_HOME="$dir" FM_POLL=1 \
+    FM_SIGNAL_GRACE=1 FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=1 \
+    FM_TRIAGE_SECOND_LOOK_RESPONSE="$dir/resp.json" "$WATCH" > "$out" &
+  pid=$!
+  wait_for_exit "$pid" 300 \
+    || { reap "$pid"; fail "the second look did not surface a promoted dropped line"; }
+  grep -Fx "heartbeat" "$out" >/dev/null || fail "the promotion did not exit with a heartbeat wake"
+  queue=$(cat "$state/.wake-queue" 2>/dev/null || true)
+  assert_contains "$queue" 'second look promoted' "the queued wake did not say a line was promoted"
+  assert_contains "$queue" 'adverse_event' "the queued wake did not carry why the line was raised"
+  assert_contains "$queue" 'truncated public.users' "the queued wake did not carry the promoted line"
+  assert_not_contains "$queue" 'writing the backfill migration' \
+    "a line the second look left silent was still named in the wake"
+  [ "$(status_presentation_marker_offset "$state/.hb-surfaced-miss" "$state/miss.status")" = \
+    "$(size_of "$state/miss.status")" ] \
+    || fail "a promotion did not record the status as surfaced through its end (would re-fire next heartbeat)"
+  pass "an armed watcher turns an absorbed heartbeat into a wake naming the promoted line and why"
+}
+
+test_heartbeat_backstop_without_a_promotion_keeps_the_ordinary_key() {
+  local dir state fakebin out sig pid keys
+  dir=$(make_case heartbeat-bare-key); state="$dir/state"; fakebin="$dir/fakebin"
+  out="$dir/watch.out"
+  # The backstop branch on a home that never opted in: there is nothing to
+  # promote, so the queued row must keep the key it has always had. A row keyed
+  # for the second look while carrying no promotion would collapse onto a real
+  # promotion queued earlier and replace it, and the status log it came from was
+  # already marked surfaced, so nothing would re-read it.
+  printf 'working: setup\nneeds-decision: pick A or B\nworking: tidying the branch\n' \
+    > "$state/miss.status"
+  sig=$(seen_sig "$state/miss.status"); printf '%s' "$sig" > "$state/.seen-miss_status"
+  PATH="$fakebin:$PATH" FM_STATE_OVERRIDE="$state" FM_HOME="$dir" FM_POLL=1 \
+    FM_SIGNAL_GRACE=1 FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=1 "$WATCH" > "$out" &
+  pid=$!
+  wait_for_exit "$pid" 100 \
+    || { reap "$pid"; fail "the heartbeat backstop did not surface the masked decision"; }
+
+  keys=$(awk -F '\t' 'NF >= 5 { print $4 }' "$state/.wake-queue" 2>/dev/null || true)
+  [ -n "$keys" ] || fail "the backstop queued no wake record"
+  case "$keys" in
+    *second-look*) fail "a heartbeat carrying no promotion took the second-look dedupe key: $keys" ;;
+  esac
+  pass "an actionable heartbeat with nothing promoted keeps the ordinary heartbeat key"
 }
 
 # --- call site: the away-mode daemon's catch-all backstop --------------------
@@ -801,8 +927,7 @@ test_span_reader_makes_no_network_call
 test_absent_gate_is_inert
 test_malformed_gate_stays_inert_instead_of_failing_loudly
 test_a_gate_under_a_config_override_arms_the_home
-test_request_carries_only_the_fields_the_questions_name
-test_state_and_data_overrides_are_honored_when_they_point_elsewhere
+test_request_carries_the_dropped_line_and_nothing_else
 test_request_is_one_batch_for_the_whole_scan
 test_only_lines_the_real_classifier_dropped_can_reach_the_request
 test_the_batch_is_bounded
@@ -816,9 +941,11 @@ test_one_unusable_answer_does_not_lose_the_rest_of_the_batch
 test_an_unusable_condition_cannot_veto_the_ones_that_fired
 test_unreadable_answers_are_reported_not_silently_read_as_zero
 test_an_overridden_root_arms_the_home_it_points_at
-test_history_is_found_for_a_line_stored_with_stray_whitespace
 test_the_batch_reaches_the_engine_under_an_external_timeout
 test_the_bound_is_enforced
+test_heartbeat_second_look_inert_when_the_home_is_not_armed
+test_heartbeat_second_look_promotes_a_dropped_line_with_its_reason
+test_heartbeat_backstop_without_a_promotion_keeps_the_ordinary_key
 test_daemon_catch_all_escalates_a_promotion_with_its_reason
 test_daemon_catch_all_is_unchanged_when_the_home_is_not_armed
 test_daemon_reports_an_unusable_answer_instead_of_discarding_it

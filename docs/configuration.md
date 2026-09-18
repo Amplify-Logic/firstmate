@@ -239,13 +239,14 @@ Batching is a security property as well as the cheaper shape: a status line argu
 In the away-mode daemon a promotion joins the escalation buffer with the same reason; a promotion the model is both confident about and rates as interrupting also triggers the buffer flush immediately, which is the same delivery a zero-batch setting uses and preserves the buffer if the injection cannot be confirmed.
 Low model confidence only ever demotes an interrupt to the next batch; it can never silence a promotion.
 
-**Cost.** About 516 input tokens per dropped line.
+**Cost.** At most about 516 input tokens per dropped line: that is the 2026-09-17 measurement, taken before the request was narrowed to the line alone.
 A scan carrying five new dropped lines is roughly $0.0001, and a busy home polling all day stays under $1 a month against three orders of magnitude of rate-limit headroom.
 Most scans carry zero or one new dropped line.
 
 Configuration is `key = value` lines and the only key is `enabled`.
 Unlike `config/speak`, a malformed gate file reports on stderr and leaves this home inert rather than exiting loudly, because the caller is a supervision loop and a config typo must never change what that loop does.
 `TYPESAFE_API_KEY` is read from the environment, else from this home's gitignored `.env`, and never appears in argv, stdout, stderr or any state file.
+The dropped status line itself is the whole of what leaves this machine: the task's brief, its worker kind and its earlier status lines are never sent, so arming this gate does not ship a brief's client names, hostnames or unreleased plans to a third party.
 The model is pinned to an exact version rather than an alias because the thresholds were tuned against that version.
 [`../bin/fm-triage-second-look.sh`](../bin/fm-triage-second-look.sh)'s header and `--help` own the exact invocation, the environment overrides and the exit codes, and its engine owns the request shape, the four questions, the thresholds and the tier rule.
 The tool reads its batch on stdin as `<task-id>` TAB `<status line>` records, one per line, so feed it one to read the exact request a scan would send:

@@ -78,8 +78,6 @@ def _bounded(name, default, cast, minimum):
 
 MAX_LINES = _bounded("FM_TRIAGE_SECOND_LOOK_MAX_LINES", 25, int, 1)
 MAX_LINE_CHARS = 400
-MAX_GOAL_CHARS = 400
-MAX_PRECEDING = 3
 TIMEOUT_S = _bounded("FM_TRIAGE_SECOND_LOOK_TIMEOUT", 8.0, float, 0.1)
 
 
@@ -88,13 +86,6 @@ def note(message):
 
 
 HOME_ROOT = os.environ.get("FM_HOME") or os.path.expanduser("~/starship")
-# The two roots a task's state and brief live under. Both callers resolve these
-# through the same overrides before they ever reach this engine, and a home that
-# points them elsewhere would otherwise build every request with an empty goal,
-# an unknown worker kind and no history - silently, and needs_captain is asked
-# about work that has grown beyond the goal.
-STATE_ROOT = pathlib.Path(os.environ.get("FM_STATE_OVERRIDE") or (pathlib.Path(HOME_ROOT) / "state"))
-DATA_ROOT = pathlib.Path(os.environ.get("FM_DATA_OVERRIDE") or (pathlib.Path(HOME_ROOT) / "data"))
 
 
 def api_key(home):
@@ -124,97 +115,33 @@ def api_key(home):
     return value
 
 
-def brief_intent(task):
-    """The body of the brief's `## Captain's intent`, truncated.
-
-    This is what lets the model see work that has grown beyond what was asked.
-    An absent or unreadable brief is not an error: the questions still stand
-    without it, so it degrades to an empty goal rather than dropping the line.
-    """
-    path = DATA_ROOT / task / "brief.md"
-    try:
-        text = path.read_text(encoding="utf-8", errors="replace")
-    except OSError:
-        return ""
-    body, collecting = [], False
-    for line in text.splitlines():
-        if line.startswith("## "):
-            if collecting:
-                break
-            collecting = line.strip().lower().startswith("## captain's intent")
-            continue
-        if collecting:
-            body.append(line)
-    return " ".join(" ".join(body).split())[:MAX_GOAL_CHARS]
-
-
 def normalize(line):
     """The one form a status line takes once it is a record.
 
     A tab inside a line would corrupt the caller's own record format, so it is
     flattened here rather than handed back as a record the caller misparses.
-    Every lookup against the stored status file compares through this, so a
-    line stored with trailing whitespace still finds itself.
     """
     return line.strip().replace("\t", " ")
 
 
-def worker_kind(task):
-    path = STATE_ROOT / ("%s.meta" % task)
-    try:
-        for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
-            if line.startswith("kind="):
-                return line.split("=", 1)[1].strip() or "unknown"
-    except OSError:
-        pass
-    return "unknown"
+def state_for(line):
+    """The dropped status line, and nothing else.
 
-
-def preceding_lines(task, line):
-    """Up to MAX_PRECEDING status lines from the same task, before this one.
-
-    This is what separates a sixth identical rerun from a first attempt, and it
-    is the only history the request carries.
+    This is the whole of what leaves the machine. The brief's intent, the worker
+    kind and the task's prior status lines all stay here: a brief can carry a
+    client name, a hostname or an unreleased plan, and arming a supervision
+    backstop is not consent to ship those to a third party. Everything else
+    Firstmate knows - whether the task already escalated, how long the pane has
+    been idle, the PR state - stays in code, because code knows it exactly.
     """
-    path = STATE_ROOT / ("%s.status" % task)
-    try:
-        lines = [x for x in path.read_text(encoding="utf-8", errors="replace").splitlines()
-                 if x.strip()]
-    except OSError:
-        return []
-    index = None
-    for i in range(len(lines) - 1, -1, -1):
-        if normalize(lines[i]) == line:
-            index = i
-            break
-    if index is None:
-        return []
-    start = max(0, index - MAX_PRECEDING)
-    return [x[:MAX_LINE_CHARS] for x in lines[start:index]]
-
-
-def state_for(task, line):
-    """Only the fields the questions name.
-
-    jev-1.13 loses accuracy on state carrying detail no question uses, so the
-    filtering happens here rather than by handing over whatever Firstmate knows.
-    Everything else Firstmate knows - whether the task already escalated, how
-    long the pane has been idle, the PR state - stays in code, because code
-    knows it exactly.
-    """
-    return {
-        "line": line[:MAX_LINE_CHARS],
-        "task_goal": brief_intent(task),
-        "worker_kind": worker_kind(task),
-        "preceding_lines": preceding_lines(task, line),
-    }
+    return {"line": line[:MAX_LINE_CHARS]}
 
 
 def questions_for(tag):
     """Four narrow judgments per dropped line.
 
-    Each names its own state path, is written as a literal condition, and keeps
-    its criteria aligned with its instruction. The three Nouls are the three
+    Each is answered from the line alone, is written as a literal condition, and
+    keeps its criteria aligned with its instruction. The three Nouls are the three
     things AGENTS.md section 9 says must reach the captain that a status verb
     cannot express: a finished or stuck outcome, an approval the captain owns,
     and something destructive or security-sensitive. The false criteria are
@@ -225,8 +152,8 @@ def questions_for(tag):
             "type": "noul",
             "instructions": (
                 "`lines.%s.line` is a progress note from a worker. Does it report that the "
-                "work in `lines.%s.task_goal` has actually finished, failed outright, or hit a "
-                "dead end the worker cannot get past on its own?" % (tag, tag)),
+                "work has actually finished, failed outright, or hit a dead end the worker "
+                "cannot get past on its own?" % tag),
             "criteria": {
                 "true": "The line states the work is over, or that the worker is out of "
                         "options and going in circles.",
@@ -238,9 +165,8 @@ def questions_for(tag):
             "type": "noul",
             "instructions": (
                 "Does `lines.%s.line` describe something that needs a human owner's approval "
-                "before it can proceed: spending money, obtaining a credential or login, an "
-                "action that reaches outside this machine or cannot be undone, or work that "
-                "has grown beyond `lines.%s.task_goal`?" % (tag, tag)),
+                "before it can proceed: spending money, obtaining a credential or login, or an "
+                "action that reaches outside this machine or cannot be undone?" % tag),
             "criteria": {
                 "true": "A human must approve, pay for, authorise, or grant access before the "
                         "work can continue.",
@@ -318,7 +244,7 @@ def build_request(records):
         questions.update(questions_for(tag))
     return {
         "model": MODEL,
-        "state": {"lines": {tag: state_for(task, line) for tag, task, line in records}},
+        "state": {"lines": {tag: state_for(line) for tag, _task, line in records}},
         "questions": questions,
     }
 

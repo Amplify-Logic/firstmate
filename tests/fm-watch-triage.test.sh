@@ -4430,32 +4430,6 @@ test_heartbeat_backstop_surfaces_a_masked_status() {
   pass "the heartbeat backstop surfaces a captain event hidden behind a later routine append"
 }
 
-test_heartbeat_backstop_without_a_promotion_keeps_the_ordinary_key() {
-  local dir state fakebin out sig pid keys
-  dir=$(make_case heartbeat-bare-key); state="$dir/state"; fakebin="$dir/fakebin"
-  out="$dir/watch.out"
-  # The backstop branch on a home that never opted in: there is nothing to
-  # promote, so the queued row must keep the key it has always had. A row keyed
-  # for the second look while carrying no promotion would collapse onto a real
-  # promotion queued earlier and replace it, and the status log it came from was
-  # already marked surfaced, so nothing would re-read it.
-  printf 'working: setup\nneeds-decision: pick A or B\nworking: tidying the branch\n' \
-    > "$state/miss.status"
-  sig=$(seen_sig "$state/miss.status"); printf '%s' "$sig" > "$state/.seen-miss_status"
-  PATH="$fakebin:$PATH" FM_STATE_OVERRIDE="$state" FM_HOME="$dir" FM_POLL=1 \
-    FM_SIGNAL_GRACE=1 FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=1 "$WATCH" > "$out" &
-  pid=$!
-  wait_for_exit "$pid" 100 \
-    || { reap "$pid"; fail "the heartbeat backstop did not surface the masked decision"; }
-
-  keys=$(awk -F '\t' 'NF >= 5 { print $4 }' "$state/.wake-queue" 2>/dev/null || true)
-  [ -n "$keys" ] || fail "the backstop queued no wake record"
-  case "$keys" in
-    *second-look*) fail "a heartbeat carrying no promotion took the second-look dedupe key: $keys" ;;
-  esac
-  pass "an actionable heartbeat with nothing promoted keeps the ordinary heartbeat key"
-}
-
 test_heartbeat_backstop_surfaces_unsurfaced_status() {
   local dir state fakebin out drain_out sig pid
   dir=$(make_case heartbeat-backstop); state="$dir/state"; fakebin="$dir/fakebin"
@@ -4477,99 +4451,6 @@ test_heartbeat_backstop_surfaces_unsurfaced_status() {
   FM_STATE_OVERRIDE="$state" "$DRAIN" > "$drain_out" 2>/dev/null || fail "drain after the backstop heartbeat failed"
   grep "$(printf '\theartbeat\t')" "$drain_out" >/dev/null || fail "backstop heartbeat was not queued"
   pass "heartbeat backstop fail-safe surfaces a captain-relevant status the per-wake path missed"
-}
-
-# --- heartbeat: the opt-in second look over the lines the scan walked past ---
-#
-# The gap: a worker reports destroyed data in a line with no captain verb. Every
-# deterministic caller drops it, so without the second look the backstop above
-# absorbs it too and nobody ever learns the table is gone. The second look is
-# ESCALATE-ONLY - it is handed only already-dropped lines and can only add a
-# wake - and opt-in, so the unarmed control below is today's behaviour exactly.
-# bin/fm-triage-second-look.sh owns the contract; tests/fm-triage-second-look.test.sh
-# owns the request, the thresholds and every fail-open path.
-
-second_look_case() {  # <name> [armed]
-  local dir state sig
-  dir=$(make_case "$1"); state="$dir/state"
-  mkdir -p "$dir/config" "$dir/data/miss"
-  [ "${2:-}" = armed ] && printf 'enabled = true\n' > "$dir/config/triage-second-look"
-  printf 'kind=ship\n' > "$state/miss.meta"
-  printf "# Task\n## Captain's intent\nAdd a users.last_seen column and backfill it.\n" \
-    > "$dir/data/miss/brief.md"
-  # Already marked seen, so the per-wake signal scan stays quiet and the
-  # heartbeat backstop is the only thing that can reach these lines.
-  printf '%s\n' \
-    'working: writing the backfill migration' \
-    'working: the backfill migration truncated public.users on staging before I caught it; 4100 rows gone' \
-    > "$state/miss.status"
-  sig=$(seen_sig "$state/miss.status")
-  printf '%s' "$sig" > "$state/.seen-miss_status"
-  # A recorded response for the two dropped lines, in the order the scan reads
-  # them: the first stays silent, the second is promoted on adverse_event.
-  cat > "$dir/resp.json" <<'EOF'
-{"answers":{
-"l1__understated_terminal":{"type":"noul","noul":0.05},
-"l1__needs_captain":{"type":"noul","noul":0.10},
-"l1__adverse_event":{"type":"noul","noul":0.10},
-"l1__urgency":{"type":"score","score":0.20,"confidence":0.80},
-"l2__understated_terminal":{"type":"noul","noul":0.12},
-"l2__needs_captain":{"type":"noul","noul":0.74},
-"l2__adverse_event":{"type":"noul","noul":0.97},
-"l2__urgency":{"type":"score","score":1.90,"confidence":0.85}}}
-EOF
-  printf '%s\n' "$dir"
-}
-
-test_heartbeat_second_look_inert_when_the_home_is_not_armed() {
-  local dir state fakebin out pid i
-  dir=$(second_look_case second-look-inert); state="$dir/state"
-  fakebin="$dir/fakebin"; out="$dir/watch.out"
-  # The control: a home that never opted in absorbs this heartbeat exactly as it
-  # did before the capability existed, and makes no call at all.
-  PATH="$fakebin:$PATH" FM_STATE_OVERRIDE="$state" FM_HOME="$dir" FM_POLL=1 \
-    FM_SIGNAL_GRACE=1 FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=1 \
-    FM_TRIAGE_SECOND_LOOK_RESPONSE="$dir/resp.json" "$WATCH" > "$out" &
-  pid=$!
-  if ! wait_poll_cycle "$state" "$pid"; then
-    reap "$pid"; fail "watcher exited without an armed second look: $(cat "$out")"
-  fi
-  i=0
-  while [ "$i" -lt 200 ]; do
-    [ "$(cat "$state/.heartbeat-streak" 2>/dev/null || echo 0)" -ge 1 ] && break
-    kill -0 "$pid" 2>/dev/null || break
-    sleep 0.1
-    i=$((i + 1))
-  done
-  [ ! -s "$out" ] || fail "an unarmed home surfaced a wake: $(cat "$out")"
-  [ ! -s "$state/.wake-queue" ] || fail "an unarmed home enqueued a wake record"
-  [ "$(cat "$state/.heartbeat-streak" 2>/dev/null || echo 0)" -ge 1 ] \
-    || fail "an unarmed home did not absorb and back off as it does today"
-  reap "$pid"
-  pass "a home that never opted in absorbs the heartbeat exactly as it does today"
-}
-
-test_heartbeat_second_look_promotes_a_dropped_line_with_its_reason() {
-  local dir state fakebin out pid queue
-  dir=$(second_look_case second-look-armed armed); state="$dir/state"
-  fakebin="$dir/fakebin"; out="$dir/watch.out"
-  PATH="$fakebin:$PATH" FM_STATE_OVERRIDE="$state" FM_HOME="$dir" FM_POLL=1 \
-    FM_SIGNAL_GRACE=1 FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=1 \
-    FM_TRIAGE_SECOND_LOOK_RESPONSE="$dir/resp.json" "$WATCH" > "$out" &
-  pid=$!
-  wait_for_exit "$pid" 300 \
-    || { reap "$pid"; fail "the second look did not surface a promoted dropped line"; }
-  grep -Fx "heartbeat" "$out" >/dev/null || fail "the promotion did not exit with a heartbeat wake"
-  queue=$(cat "$state/.wake-queue" 2>/dev/null || true)
-  assert_contains "$queue" 'second look promoted' "the queued wake did not say a line was promoted"
-  assert_contains "$queue" 'adverse_event' "the queued wake did not carry why the line was raised"
-  assert_contains "$queue" 'truncated public.users' "the queued wake did not carry the promoted line"
-  assert_not_contains "$queue" 'writing the backfill migration' \
-    "a line the second look left silent was still named in the wake"
-  [ "$(status_presentation_marker_offset "$state/.hb-surfaced-miss" "$state/miss.status")" = \
-    "$(size_of "$state/miss.status")" ] \
-    || fail "a promotion did not record the status as surfaced through its end (would re-fire next heartbeat)"
-  pass "an armed watcher turns an absorbed heartbeat into a wake naming the promoted line and why"
 }
 
 # --- beacon stays fresh while absorbing -------------------------------------
@@ -5011,10 +4892,7 @@ test_procevent_surface_crash_boundaries
 test_procevent_marker_failure_exits_and_replays
 test_heartbeat_no_change_absorbed
 test_heartbeat_backstop_surfaces_unsurfaced_status
-test_heartbeat_second_look_inert_when_the_home_is_not_armed
-test_heartbeat_second_look_promotes_a_dropped_line_with_its_reason
 test_heartbeat_backstop_surfaces_a_masked_status
-test_heartbeat_backstop_without_a_promotion_keeps_the_ordinary_key
 test_beacon_stays_fresh_while_absorbing
 test_afk_signal_records_heartbeat_endpoint
 test_afk_present_reverts_watcher_to_one_shot
