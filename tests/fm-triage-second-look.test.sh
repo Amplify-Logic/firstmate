@@ -492,11 +492,28 @@ test_a_gate_under_a_config_override_arms_the_home() {
   [ "$status" -eq 2 ] || fail "an overridden gate did not arm the home (got $status, wanted 2)"
   [ -z "$out" ] || fail "an armed home with no key promoted something: $out"
 
-  # And the same home with the gate only in its default location stays inert.
+  # And an armed gate in the DEFAULT location is ignored once an override is
+  # set, so the override replaces $FM_HOME/config rather than adding to it.
+  printf 'enabled = true\n' > "$dir/config/triage-second-look"
   out=$(printf 't1\tworking: anything\n' | FM_HOME="$dir" \
     FM_CONFIG_OVERRIDE="$dir/empty" "$TOOL" 2>/dev/null) && status=0 || status=$?
-  [ "$status" -eq 1 ] || fail "an override pointing at no gate should stay inert, got $status"
+  [ "$status" -eq 1 ] || fail "the default home gate was still consulted under an override, got $status"
   pass "the gate is read from the overridden config directory, not always from the home"
+}
+
+test_an_overridden_root_arms_the_home_it_points_at() {
+  local dir out status
+  dir=$(new_home root-override armed)
+
+  # fm-afk-start.sh execs the daemon with FM_ROOT_OVERRIDE and no FM_HOME, so a
+  # tool that reads only FM_ROOT resolves the repo root and finds no gate there.
+  out=$(printf 't1\tworking: anything\n' | env -u FM_HOME -u FM_ROOT \
+    FM_ROOT_OVERRIDE="$dir" FM_TRIAGE_SECOND_LOOK_ENV_FILE=/dev/null \
+    "$TOOL" 2>/dev/null) && status=0 || status=$?
+
+  [ "$status" -eq 2 ] || fail "an overridden root did not arm the home it points at (got $status, wanted 2)"
+  [ -z "$out" ] || fail "an armed home with no key promoted something: $out"
+  pass "the home is resolved through FM_ROOT_OVERRIDE the way every sibling script resolves it"
 }
 
 test_unreadable_answers_are_reported_not_silently_read_as_zero() {
@@ -633,6 +650,36 @@ EOF
   pass "an armed daemon escalates a promoted dropped line and names why it was raised"
 }
 
+test_daemon_reports_an_unusable_answer_instead_of_discarding_it() {
+  local dir out
+  dir=$(new_home daemon-diagnostic armed)
+  seed_task "$dir" miss ship "Ship it." 'working: writing the backfill migration'
+
+  # The vendor renames the answer field. Nothing can promote any more, and the
+  # offsets advance regardless, so the only thing standing between that and an
+  # unbounded silent spend is the diagnostic reaching the daemon's own log.
+  cat > "$dir/resp.json" <<'EOF'
+{"answers":{
+"l1__understated_terminal":{"type":"noul","value":0.12},
+"l1__needs_captain":{"type":"noul","value":0.74},
+"l1__adverse_event":{"type":"noul","value":0.97},
+"l1__urgency":{"type":"score","value":0.90}}}
+EOF
+  LOG="$dir/daemon.log" FM_HOME="$dir" FM_TRIAGE_SECOND_LOOK_RESPONSE="$dir/resp.json" \
+    second_look_escalate "$dir/state" \
+    "$(printf 'miss\tworking: the backfill migration truncated public.users; 4100 rows gone\n')"
+
+  [ ! -s "$dir/state/.subsuper-escalations" ] \
+    || fail "an unreadable answer escalated: $(cat "$dir/state/.subsuper-escalations")"
+  out=$(cat "$dir/daemon.log" 2>/dev/null || true)
+  assert_contains "$out" 'unusable answer' \
+    "the daemon discarded the second look's diagnostic, so a dead call looks like a quiet scan"
+  assert_not_contains "$out" 'public.users' "the daemon log leaked the status line content"
+  ls "$dir/state"/.second-look-stderr.* >/dev/null 2>&1 \
+    && fail "the stderr capture file was left behind in state/"
+  pass "an unusable answer reaches the daemon log rather than /dev/null"
+}
+
 test_daemon_catch_all_is_unchanged_when_the_home_is_not_armed() {
   local dir
   dir=$(new_home daemon-inert)
@@ -686,8 +733,10 @@ test_every_failure_promotes_nothing
 test_one_unusable_answer_does_not_lose_the_rest_of_the_batch
 test_an_unusable_condition_cannot_veto_the_ones_that_fired
 test_unreadable_answers_are_reported_not_silently_read_as_zero
+test_an_overridden_root_arms_the_home_it_points_at
 test_history_is_found_for_a_line_stored_with_stray_whitespace
 test_the_bound_is_enforced
 test_daemon_catch_all_escalates_a_promotion_with_its_reason
 test_daemon_catch_all_is_unchanged_when_the_home_is_not_armed
+test_daemon_reports_an_unusable_answer_instead_of_discarding_it
 test_daemon_second_look_never_runs_without_dropped_lines

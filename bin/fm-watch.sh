@@ -1686,12 +1686,25 @@ EOF
 # heartbeat into a delivered one or add a reason to one that was already
 # delivering. No answer it returns can silence a wake, so a failure, a timeout,
 # an absent key or an unarmed home leaves this watcher behaving exactly as it
-# does today - which is why every failure path here is a silent empty result.
+# does today - which is why every failure path here is an empty result. Empty is
+# not the same as unremarkable, so the tool's diagnostics go to the triage log
+# rather than to /dev/null: an answer shape that stopped parsing looks exactly
+# like a quiet scan from the outside.
 heartbeat_second_look() {
-  local tool="$SCRIPT_DIR/fm-triage-second-look.sh"
+  local tool="$SCRIPT_DIR/fm-triage-second-look.sh" err line
   [ -n "${FM_HEARTBEAT_DROPPED_LINES:-}" ] || return 0
   [ -x "$tool" ] || return 0
-  printf '%s' "$FM_HEARTBEAT_DROPPED_LINES" | "$tool" 2>/dev/null || true
+  err=$(mktemp "$STATE/.second-look-stderr.XXXXXX") || err=''
+  if [ -n "$err" ]; then
+    printf '%s' "$FM_HEARTBEAT_DROPPED_LINES" | "$tool" 2>"$err" || true
+    while IFS= read -r line; do
+      [ -n "$line" ] || continue
+      triage_log "second look: $line"
+    done < "$err"
+    rm -f "$err"
+  else
+    printf '%s' "$FM_HEARTBEAT_DROPPED_LINES" | "$tool" 2>/dev/null || true
+  fi
 }
 
 # The heartbeat wake payload for a set of promotions, bounded to one line.

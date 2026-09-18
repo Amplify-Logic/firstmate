@@ -1266,7 +1266,9 @@ EOF
 # mapping. ESCALATE-ONLY and additive: it is handed only lines the deterministic
 # classifier already dropped, and all it can do is add an escalation. An unarmed
 # home, a failure, a timeout or an absent key all produce nothing and leave this
-# daemon behaving exactly as it does today.
+# daemon behaving exactly as it does today. Producing nothing is not the same as
+# having nothing to say, so the tool's diagnostics reach the daemon log rather
+# than /dev/null.
 #
 # The tier decides delivery, never whether to speak. alert flushes the buffer
 # immediately - the same delivery the zero-batch setting uses, preserving the
@@ -1274,16 +1276,24 @@ EOF
 # batch. The model's own confidence can only demote alert to digest, never
 # silence a line.
 second_look_escalate() {  # <state> <dropped-records>
-  local state=$1 records=$2 tool task tier reason line
+  local state=$1 records=$2 tool task tier reason line err
   [ -n "$records" ] || return 0
   tool="$FM_DAEMON_DIR/fm-triage-second-look.sh"
   [ -x "$tool" ] || return 0
+  err=$(mktemp "$state/.second-look-stderr.XXXXXX") || err=/dev/null
   while IFS=$(printf '\t') read -r task tier reason line; do
     [ -n "$task" ] && [ -n "$line" ] || continue
     if escalate_add "$state" "$task.status: $line (second look: $reason)"; then
       [ "$tier" = alert ] && { escalate_flush "$state" || true; }
     fi
-  done < <(printf '%s' "$records" | "$tool" 2>/dev/null || true)
+  done < <(printf '%s' "$records" | "$tool" 2>"$err" || true)
+  if [ "$err" != /dev/null ]; then
+    while IFS= read -r line; do
+      [ -n "$line" ] || continue
+      log "second look: $line"
+    done < "$err"
+    rm -f "$err"
+  fi
 }
 
 # Find a recorded or live window target whose task id matches the marker key.

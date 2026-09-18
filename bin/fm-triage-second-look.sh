@@ -22,7 +22,7 @@
 # malformed body - every one of them prints nothing and exits nonzero, and
 # supervision behaves exactly as it does today. "The second look is down" and
 # "the second look was never built" are the same state, so callers run it with
-# `|| true` and read only its stdout.
+# `|| true`, read promotions from its stdout, and send its stderr to their own log.
 #
 # NEVER ON THE PER-WAKE PATH. The two callers are the heartbeat backstops
 # (bin/fm-watch.sh and bin/fm-supervise-daemon.sh), which run on the heartbeat
@@ -79,8 +79,8 @@
 set -u
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-FM_ROOT="${FM_ROOT:-$(cd "$SCRIPT_DIR/.." && pwd)}"
-FM_HOME="${FM_HOME:-$FM_ROOT}"
+FM_ROOT="${FM_ROOT_OVERRIDE:-${FM_ROOT:-$(cd "$SCRIPT_DIR/.." && pwd)}}"
+FM_HOME="${FM_HOME:-${FM_ROOT_OVERRIDE:-$FM_ROOT}}"
 ENGINE="$SCRIPT_DIR/fm-triage-second-look.py"
 CONFIG_FILE="${FM_CONFIG_OVERRIDE:-$FM_HOME/config}/triage-second-look"
 BOUND="${FM_TRIAGE_SECOND_LOOK_BOUND:-20}"
