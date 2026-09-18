@@ -24,6 +24,8 @@ LIVE_LOCK_WORKER_PID=
 LIVE_LOCK_CHALLENGER_PID=
 LIVE_CLAIM_WORKER_PID=
 SCRATCH_FAIL_WORKER_PID=
+LATE_QUARANTINE_WORKER_PID=
+LATE_QUARANTINE_PROCESS_PID=
 DRIFT_OWNER_PID=
 DRIFT_HEARTBEAT_PID=
 DRIFT_CHALLENGER_PID=
@@ -46,6 +48,8 @@ cleanup_remote_job_fixture() {
   [ -z "$ABANDONED_CLAIM_WORKER_PID" ] || kill "$ABANDONED_CLAIM_WORKER_PID" 2>/dev/null || true
   [ -z "$LIVE_CLAIM_WORKER_PID" ] || kill "$LIVE_CLAIM_WORKER_PID" 2>/dev/null || true
   [ -z "$SCRATCH_FAIL_WORKER_PID" ] || kill "$SCRATCH_FAIL_WORKER_PID" 2>/dev/null || true
+  [ -z "$LATE_QUARANTINE_WORKER_PID" ] || kill -KILL "$LATE_QUARANTINE_WORKER_PID" 2>/dev/null || true
+  [ -z "$LATE_QUARANTINE_PROCESS_PID" ] || kill "$LATE_QUARANTINE_PROCESS_PID" 2>/dev/null || true
   [ -z "$RESTART_SUPERVISOR_PID" ] || kill -KILL "$RESTART_SUPERVISOR_PID" 2>/dev/null || true
   if [ -f "$STATE_ROOT/worker.pid" ]; then
     fm_remote_job_stop_worker_tree "$(cat "$STATE_ROOT/worker.pid")" || true
@@ -1042,6 +1046,94 @@ kill -TERM "$SCRATCH_FAIL_WORKER_PID"
 wait "$SCRATCH_FAIL_WORKER_PID" 2>/dev/null || true
 SCRATCH_FAIL_WORKER_PID=
 pass "a failed reclaim scratch directory keeps retrying instead of reporting peer ownership"
+
+# An owner whose shutdown cannot confirm its execution stopped publishes the
+# quarantine guard before it starts the slow part of stopping, so the guard can
+# land in the ownership directory after a reclaiming worker has already checked
+# for it and won its claim marker. Reclaim sweeps that directory, and sweeping
+# the guard away would let the replacement serve the account queue beside a
+# command tree nobody confirmed dead. The guard has to survive the sweep and
+# send the reclaimer back to the quarantine branch. The staged mkdir publishes
+# it exactly in that window, which is the only way to reach it deterministically.
+LATE_QUARANTINE_HOME="$TMP_ROOT/late-quarantine-account"
+LATE_QUARANTINE_STATE="$TMP_ROOT/late-quarantine-jobs"
+LATE_QUARANTINE_BIN="$TMP_ROOT/late-quarantine-bin"
+LATE_QUARANTINE_JOB="$LATE_QUARANTINE_STATE/jobs/job-late-quarantine"
+LATE_QUARANTINE_ONCE="$TMP_ROOT/late-quarantine-published"
+mkdir -p "$LATE_QUARANTINE_HOME" "$LATE_QUARANTINE_STATE/jobs" "$LATE_QUARANTINE_STATE/logs" \
+  "$LATE_QUARANTINE_STATE/worker.lock" "$LATE_QUARANTINE_JOB/.claim" "$LATE_QUARANTINE_BIN"
+chmod 700 "$LATE_QUARANTINE_HOME" "$LATE_QUARANTINE_STATE" "$LATE_QUARANTINE_STATE/jobs" \
+  "$LATE_QUARANTINE_STATE/logs" "$LATE_QUARANTINE_STATE/worker.lock" "$LATE_QUARANTINE_JOB" \
+  "$LATE_QUARANTINE_JOB/.claim"
+cat > "$LATE_QUARANTINE_BIN/mkdir" <<SH
+#!/bin/bash
+for arg in "\$@"; do
+  case "\$arg" in
+    */worker.lock/claim)
+      $(command -v mkdir) "\$@" || exit \$?
+      if [ ! -e "$LATE_QUARANTINE_ONCE" ]; then
+        : > "$LATE_QUARANTINE_ONCE"
+        printf 'active execution could not be confirmed stopped\n' > "\${arg%/claim}/quarantine"
+        chmod 600 "\${arg%/claim}/quarantine"
+      fi
+      exit 0
+      ;;
+  esac
+done
+exec $(command -v mkdir) "\$@"
+SH
+chmod 755 "$LATE_QUARANTINE_BIN/mkdir"
+sleep 20 &
+LATE_QUARANTINE_PROCESS_PID=$!
+sleep 0.01 &
+LATE_QUARANTINE_OWNER_PID=$!
+wait "$LATE_QUARANTINE_OWNER_PID" 2>/dev/null || true
+printf '%s\n' "$LATE_QUARANTINE_OWNER_PID" > "$LATE_QUARANTINE_STATE/worker.lock/pid"
+printf 'stale\n' > "$LATE_QUARANTINE_STATE/worker.lock/start"
+printf 'stale\n' > "$LATE_QUARANTINE_STATE/worker.lock/command"
+printf 'running\n' > "$LATE_QUARANTINE_JOB/state"
+printf '%s\n' "$LATE_QUARANTINE_OWNER_PID" > "$LATE_QUARANTINE_JOB/.claim/owner"
+printf '%s\n' "$LATE_QUARANTINE_PROCESS_PID" > "$LATE_QUARANTINE_JOB/.claim/supervisor"
+: > "$LATE_QUARANTINE_JOB/stdout"
+: > "$LATE_QUARANTINE_JOB/stderr"
+chmod 600 "$LATE_QUARANTINE_STATE/worker.lock"/* "$LATE_QUARANTINE_JOB/state" \
+  "$LATE_QUARANTINE_JOB/.claim"/* "$LATE_QUARANTINE_JOB/stdout" "$LATE_QUARANTINE_JOB/stderr"
+touch -t 200001010000 "$LATE_QUARANTINE_STATE/worker.lock"
+HOME="$LATE_QUARANTINE_HOME" PATH="$LATE_QUARANTINE_BIN:$PATH" FM_ROOT_OVERRIDE="$REMOTE_ROOT" \
+  FM_REMOTE_JOB_STATE_ROOT="$LATE_QUARANTINE_STATE" FM_REMOTE_JOB_PLATFORM_OVERRIDE=Linux \
+  "$REMOTE_ROOT/bin/fm-remote-job-worker.sh" --serve \
+  > "$TMP_ROOT/late-quarantine.out" 2> "$TMP_ROOT/late-quarantine.err" &
+LATE_QUARANTINE_WORKER_PID=$!
+LATE_QUARANTINE_DEADLINE=$((SECONDS + 20))
+while kill -0 "$LATE_QUARANTINE_WORKER_PID" 2>/dev/null && [ "$SECONDS" -lt "$LATE_QUARANTINE_DEADLINE" ]; do
+  sleep 0.1
+done
+if kill -0 "$LATE_QUARANTINE_WORKER_PID" 2>/dev/null; then
+  kill -KILL "$LATE_QUARANTINE_WORKER_PID" 2>/dev/null || true
+  wait "$LATE_QUARANTINE_WORKER_PID" 2>/dev/null || true
+  LATE_QUARANTINE_WORKER_PID=
+  fail "a reclaiming worker kept serving after a quarantine landed inside its claim window"
+fi
+set +e
+wait "$LATE_QUARANTINE_WORKER_PID"
+LATE_QUARANTINE_RC=$?
+set -e
+LATE_QUARANTINE_WORKER_PID=
+assert_present "$LATE_QUARANTINE_ONCE" "the staged quarantine was never published into the claim window"
+[ "$LATE_QUARANTINE_RC" -ne 0 ] \
+  || fail "a reclaiming worker accepted ownership after a quarantine landed inside its claim window"
+assert_present "$LATE_QUARANTINE_STATE/worker.lock/quarantine" \
+  "reclaim swept away a quarantine published inside its claim window"
+[ "$(cat "$LATE_QUARANTINE_STATE/worker.lock/pid")" = "$LATE_QUARANTINE_OWNER_PID" ] \
+  || fail "a reclaiming worker took ownership despite a quarantine published inside its claim window"
+assert_absent "$LATE_QUARANTINE_STATE/worker.ready" \
+  "a quarantined reclaim still reported the account ready"
+assert_absent "$LATE_QUARANTINE_STATE/worker.lock/claim" \
+  "a reclaim that deferred to quarantine left its claim marker behind"
+kill "$LATE_QUARANTINE_PROCESS_PID" 2>/dev/null || true
+wait "$LATE_QUARANTINE_PROCESS_PID" 2>/dev/null || true
+LATE_QUARANTINE_PROCESS_PID=
+pass "a quarantine published inside the claim window survives reclaim"
 
 # A child that stays up for FM_REMOTE_JOB_SUPERVISOR_HEALTHY_SECONDS clears the
 # consecutive-failure backoff, so a child that dies just past that threshold

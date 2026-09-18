@@ -182,12 +182,14 @@ worker_claim_stale_lock() {
 # .pid.*, .start.*, .command.*, and .quarantine.* names are the mktemp leftovers
 # a crash or interrupted shutdown leaves behind. Removing only the published
 # records left those temps in place, rmdir failed, and every later worker exited
-# 1 into a restart storm.
+# 1 into a restart storm. A published quarantine is not a leftover: an owner
+# whose shutdown could not confirm its execution stopped can land one here at any
+# moment, and only worker_recover_quarantine may retire it.
 worker_clear_stale_lock_records() {
   local f
   for f in "$WORKER_LOCK"/* "$WORKER_LOCK"/.[!.]*; do
     [ -e "$f" ] || [ -L "$f" ] || continue
-    [ "$f" = "$WORKER_LOCK/claim" ] && continue
+    case "$f" in "$WORKER_LOCK/claim"|"$WORKER_LOCK/quarantine") continue ;; esac
     [ ! -L "$f" ] || return 1
     [ -f "$f" ] || return 1
     rm -f -- "$f" || return 1
@@ -248,6 +250,10 @@ worker_acquire_lock() {
     if [ "$status" -ne 0 ]; then
       attempt=$((attempt + 1))
       sleep 0.1
+      continue
+    fi
+    if [ -e "$WORKER_LOCK/quarantine" ] || [ -L "$WORKER_LOCK/quarantine" ]; then
+      rmdir "$WORKER_LOCK/claim" 2>/dev/null || true
       continue
     fi
     WORKER_LOCK_HELD=1
