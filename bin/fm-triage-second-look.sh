@@ -172,6 +172,9 @@ trap 'rm -f "$SPOOL"' EXIT
 cat > "$SPOOL"
 
 status=0
+# shellcheck disable=SC2016 # $1 and $2 are the INNER shell's positional
+# parameters, supplied after the -c script; expanding them here would bake this
+# shell's values into the script text instead of passing them.
 if [ "$DRY_RUN" -eq 1 ]; then
   fm_run_timed "$BOUND" bash -c 'exec python3 "$1" --dry-run < "$2"' _ "$ENGINE" "$SPOOL" || status=$?
 else
