@@ -236,7 +236,8 @@ Each scan makes at most one request, never one request per line, covering every 
 Batching is a security property as well as the cheaper shape: a status line arguing for its own escalation measurably wins when evaluated alone and measurably loses when evaluated beside its peers, and it is also cheaper and faster.
 Both margins were measured by the 2026-09-17 probe, which asked a richer request than the line-only one this home now sends; the verification page linked at the end of this section owns those numbers and says what has not been re-measured since.
 
-**What a promotion does.** In the always-on watcher a promotion turns an otherwise absorbed heartbeat into an ordinary heartbeat wake whose payload names each promoted line and why it was raised.
+**What a promotion does.** In the always-on watcher a promotion rides in that heartbeat's wake payload, which names each promoted line and why it was raised.
+A heartbeat that would otherwise have been absorbed becomes an ordinary heartbeat wake instead, and one whose scan already found captain-relevant work wakes as it would have anyway, carrying the promoted lines with it.
 In the away-mode daemon a promotion joins the escalation buffer with the same reason; when any promotion in a scan is one the model is both confident about and rates as interrupting, the buffer is flushed once after every promotion from that scan has joined it, so one scan delivers one digest however many lines it promoted.
 That flush is the same delivery a zero-batch setting uses and preserves the buffer if the injection cannot be confirmed.
 Low model confidence only ever demotes an interrupt to the next batch; it can never silence a promotion.
