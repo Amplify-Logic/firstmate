@@ -67,7 +67,6 @@
 #   FM_HOME                                 operational home (default: this repo root)
 #   FM_TRIAGE_SECOND_LOOK_TIMEOUT           per-request bound in seconds (default 8)
 #   FM_TRIAGE_SECOND_LOOK_BOUND             hard bound on the whole call (default 20)
-#   FM_TRIAGE_SECOND_LOOK_MAX_LINES         lines per batch (default 25)
 #   FM_TRIAGE_SECOND_LOOK_ENDPOINT          API endpoint
 #   FM_TRIAGE_SECOND_LOOK_ENV_FILE          .env holding TYPESAFE_API_KEY
 #   FM_TRIAGE_SECOND_LOOK_RESPONSE          test seam: a recorded response body,

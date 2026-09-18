@@ -1710,6 +1710,13 @@ heartbeat_second_look() {
 # The heartbeat wake payload for a set of promotions, bounded to one line.
 # Promoted lines carry their reason so the supervisor reads WHY each was raised
 # rather than being sent back to the fleet with no pointer.
+#
+# It is a `heartbeat: ` reason because that is what this row is: the away-mode
+# supervisor dispatches on the payload, and an unqualified sentence would be
+# escalated as an "unknown wake" for a wake this home deliberately creates. The
+# promoted lines still reach an away captain either way - the daemon's own
+# catch-all keeps a separate offset marker from the watcher's, so it re-reads
+# and re-promotes the same dropped lines on its next scan.
 heartbeat_second_look_payload() {  # <promotions>
   local promotions=$1 task tier reason line payload='' count=0
   while IFS=$(printf '\t') read -r task tier reason line; do
@@ -1720,7 +1727,7 @@ heartbeat_second_look_payload() {  # <promotions>
   done <<EOF
 $promotions
 EOF
-  printf 'second look promoted %s dropped status line(s): %s' "$count" "$payload"
+  printf 'heartbeat: second look promoted %s dropped status line(s): %s' "$count" "$payload"
 }
 
 # event_wait_or_sleep: the terminal wait of each supervision cycle. For a home

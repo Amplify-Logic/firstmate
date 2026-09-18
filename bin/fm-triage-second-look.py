@@ -77,7 +77,7 @@ def _bounded(name, default, cast, minimum):
     return value if value >= minimum else default
 
 
-MAX_LINES = _bounded("FM_TRIAGE_SECOND_LOOK_MAX_LINES", 25, int, 1)
+MAX_LINES = 25
 MAX_LINE_CHARS = 400
 TIMEOUT_S = _bounded("FM_TRIAGE_SECOND_LOOK_TIMEOUT", 8.0, float, 0.1)
 

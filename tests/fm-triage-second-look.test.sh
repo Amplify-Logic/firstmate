@@ -355,7 +355,7 @@ test_the_batch_is_bounded() {
     lines="${lines}t1"$'\t'"working: line number $i"$'\n'
     i=$((i + 1))
   done
-  request=$(printf '%s' "$lines" | FM_HOME="$dir" FM_TRIAGE_SECOND_LOOK_MAX_LINES=25 "$TOOL" --dry-run 2>/dev/null)
+  request=$(printf '%s' "$lines" | FM_HOME="$dir" "$TOOL" --dry-run 2>/dev/null)
   count=$(printf '%s' "$request" | python3 -c '
 import json, sys
 print(len(json.load(sys.stdin)["state"]["lines"]))')
@@ -860,6 +860,65 @@ test_heartbeat_backstop_without_a_promotion_keeps_the_ordinary_key() {
 
 # --- call site: the away-mode daemon's catch-all backstop --------------------
 
+test_a_promoted_heartbeat_is_never_an_unknown_wake() {
+  local dir payload out
+  dir=$(new_home daemon-wake-label armed)
+  seed_task "$dir" miss ship "Ship it." 'working: writing the backfill migration'
+
+  # The watcher promotes while the captain is present and exits; the away marker
+  # appears before firstmate drains, so the away-mode daemon handles the queued
+  # row. It dispatches on the PAYLOAD, and a payload it cannot place is escalated
+  # as an "unknown wake" - a label that would misdescribe a wake this capability
+  # deliberately creates. The payload is built by the real producer, in a
+  # subshell so the watcher's globals cannot reach the daemon functions this
+  # file already sourced.
+  payload=$(FM_HOME="$dir" FM_STATE_OVERRIDE="$dir/state" bash -c '
+    . "$1" >/dev/null 2>&1
+    heartbeat_second_look_payload "$(cat)"
+  ' _ "$ROOT/bin/fm-watch.sh" \
+    <<< "$(printf 'miss\talert\tadverse_event\tworking: the backfill migration truncated public.users')")
+  [ -n "$payload" ] || fail "the watcher produced no promotion payload to dispatch"
+
+  FM_HOME="$dir" LOG="$dir/daemon.log" handle_wake "$payload" "$dir/state"
+
+  out=$(cat "$dir/state/.subsuper-escalations" 2>/dev/null || true)
+  assert_not_contains "$out" 'unknown wake' \
+    "a wake this capability creates was escalated as an unknown wake"
+  assert_not_contains "$(cat "$dir/daemon.log" 2>/dev/null || true)" 'unknown wake' \
+    "the daemon logged an unknown-wake escalation for a wake it knows about"
+  pass "a promoted heartbeat is dispatched as the heartbeat it is, never as an unknown wake"
+}
+
+test_the_away_scan_repromotes_what_a_drained_heartbeat_absorbed() {
+  local dir out
+  dir=$(new_home daemon-rescan armed)
+  seed_task "$dir" miss ship "Ship it." 'working: writing the backfill migration'
+  # The watcher already marked this log surfaced through its end before exiting.
+  printf 'v2\tx\t4096@y\n' > "$dir/state/.hb-surfaced-miss"
+
+  # The away daemon keeps its own offset marker, so the lines the watcher
+  # promoted are still unread by IT and are promoted again on its next scan.
+  # That is what makes the heartbeat: payload safe to absorb on the drain path.
+  [ "$(status_seen_offset "$dir/state" miss)" = 0 ] \
+    || fail "the watcher's marker moved the away scan's offset off the start of the log"
+
+  cat > "$dir/resp.json" <<'EOF'
+{"answers":{
+"l1__understated_terminal":{"type":"noul","noul":0.12},
+"l1__needs_captain":{"type":"noul","noul":0.74},
+"l1__adverse_event":{"type":"noul","noul":0.97},
+"l1__urgency":{"type":"score","score":0.90,"confidence":0.85}}}
+EOF
+  FM_HOME="$dir" FM_TRIAGE_SECOND_LOOK_RESPONSE="$dir/resp.json" \
+    second_look_escalate "$dir/state" \
+    "$(printf 'miss\tworking: the backfill migration truncated public.users; 4100 rows gone\n')"
+
+  out=$(cat "$dir/state/.subsuper-escalations" 2>/dev/null || true)
+  assert_contains "$out" 'truncated public.users' "the away scan did not re-promote the dropped line"
+  assert_contains "$out" 'adverse_event' "the re-promotion lost why the line was raised"
+  pass "the away-mode scan re-promotes dropped lines the watcher already marked surfaced"
+}
+
 test_daemon_catch_all_escalates_a_promotion_with_its_reason() {
   local dir out
   dir=$(new_home daemon-armed armed)
@@ -977,6 +1036,8 @@ test_the_bound_is_enforced
 test_heartbeat_second_look_inert_when_the_home_is_not_armed
 test_heartbeat_second_look_promotes_a_dropped_line_with_its_reason
 test_heartbeat_backstop_without_a_promotion_keeps_the_ordinary_key
+test_a_promoted_heartbeat_is_never_an_unknown_wake
+test_the_away_scan_repromotes_what_a_drained_heartbeat_absorbed
 test_daemon_catch_all_escalates_a_promotion_with_its_reason
 test_daemon_catch_all_is_unchanged_when_the_home_is_not_armed
 test_daemon_reports_an_unusable_answer_instead_of_discarding_it
