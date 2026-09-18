@@ -18,9 +18,13 @@
 #
 # Only the network is stubbed. Every case drives the real classifier, the real
 # request build and the real thresholds against the recorded 2026-09-17 probe
-# response in tests/fixtures/triage-second-look/, so a threshold or question
-# change that would have promoted or silenced a different line fails here.
-# The live smoke against the real API is tests/fm-triage-second-look-live-e2e.test.sh.
+# response in tests/fixtures/triage-second-look/, so a THRESHOLD change that
+# would have promoted or silenced a different line fails here.
+#
+# A question change does not. The recording is keyed by synthetic tag, so the
+# replay never sees the request it is answering: rewriting a question, or what
+# the request carries, leaves every verdict below unchanged. Only the live smoke
+# in tests/fm-triage-second-look-live-e2e.test.sh asks the model anything.
 set -u
 
 # shellcheck source=tests/wake-helpers.sh
@@ -390,8 +394,10 @@ test_recorded_probe_response_reproduces_the_measured_verdicts() {
   promotions=$(dropped_fixture_records t1 \
     | FM_HOME="$dir" FM_TRIAGE_SECOND_LOOK_RESPONSE="$RESPONSE" "$TOOL")
 
-  # 8/8 captain-worthy lines caught, 0/8 false promotions, as measured live on
-  # 2026-09-17. A threshold or question change that moves any line fails here.
+  # The 8/8 captain-worthy, 0/8 false split measured live on 2026-09-17, against
+  # the richer request of that date. What this replay still proves is the rule:
+  # a threshold change that moves any line fails here. A question change cannot,
+  # because the recording is keyed by tag and never sees the request.
   got=$(printf '%s\n' "$promotions" | grep -c '[^[:space:]]' || true)
   [ "$got" -eq 8 ] || fail "expected 8 promotions from the recorded response, got $got: $promotions"
 
@@ -411,10 +417,11 @@ test_conditions_are_separate_not_blended() {
   dir=$(new_home rule-separate armed)
   seed_task "$dir" t1 ship "Ship it." 'working: one'
 
-  # g05 - a production password in a world-readable file - scores 0.38 on
-  # needs_captain, UNDER its threshold, and is caught only by adverse_event at
-  # 0.76. Any blended score would have buried it, which is why the rule is three
-  # separate ORed conditions.
+  # g05 - a production password in a world-readable file - scored 0.38 on
+  # needs_captain, UNDER its threshold, and was caught only by adverse_event at
+  # 0.76 (2026-09-17, against the richer request of that date). Any blended score
+  # would have buried it, which is why the rule is three separate ORed
+  # conditions. What this case still proves is that the rule keeps ORing them.
   promotions=$(dropped_fixture_records t1 \
     | FM_HOME="$dir" FM_TRIAGE_SECOND_LOOK_RESPONSE="$RESPONSE" "$TOOL")
   line=$(printf '%s\n' "$promotions" | grep -F "$(fixture_field g05 line)")
@@ -540,6 +547,29 @@ EOF
   assert_not_contains "$promotions" 'working: first line' "an unusable answer still promoted its line"
   assert_contains "$promotions" 'working: second line' "one unusable answer lost the rest of the batch"
   pass "an unusable answer for one line promotes nothing for it and keeps the rest of the batch"
+}
+
+test_dry_run_previews_the_request_before_a_home_is_armed() {
+  local dir request status out
+  dir=$(new_home gate-preview)
+  seed_task "$dir" t1 ship "Ship it." 'working: one'
+
+  # The gate guards the paid call. An operator deciding whether to arm needs to
+  # see what would leave the machine first, and the preview reaches no network.
+  request=$(printf 't1\tworking: the migration truncated public.users\n' \
+    | FM_HOME="$dir" FM_TRIAGE_SECOND_LOOK_ENDPOINT='http://127.0.0.1:1/never' \
+      "$TOOL" --dry-run) && status=0 || status=$?
+
+  [ "$status" -eq 0 ] || fail "--dry-run on an unarmed home exited $status instead of previewing"
+  assert_contains "$request" 'truncated public.users' "the preview did not carry the dropped line"
+  assert_contains "$request" 'jev-1.13.0' "the preview did not carry the pinned model"
+
+  # The live path is still gated: same home, no --dry-run, nothing happens.
+  out=$(printf 't1\tworking: the migration truncated public.users\n' \
+    | FM_HOME="$dir" TYPESAFE_API_KEY=unused "$TOOL" 2>/dev/null) && status=0 || status=$?
+  [ "$status" -eq 1 ] || fail "an unarmed home ran the live path, got $status"
+  [ -z "$out" ] || fail "an unarmed home promoted something: $out"
+  pass "--dry-run previews the request without the gate while the live path still needs it"
 }
 
 test_a_gate_under_a_config_override_arms_the_home() {
@@ -926,6 +956,7 @@ test_span_reader_returns_and_bounds_match_the_actionable_sibling
 test_span_reader_makes_no_network_call
 test_absent_gate_is_inert
 test_malformed_gate_stays_inert_instead_of_failing_loudly
+test_dry_run_previews_the_request_before_a_home_is_armed
 test_a_gate_under_a_config_override_arms_the_home
 test_request_carries_the_dropped_line_and_nothing_else
 test_request_is_one_batch_for_the_whole_scan

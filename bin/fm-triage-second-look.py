@@ -46,7 +46,8 @@ MODEL = "jev-1.13.0"
 # Promotion rule. Three separate ORed conditions, never a weighted score: these
 # are "any one of these is reason enough" hazards, and blending them buries the
 # case that only one of them sees (a production password in a world-readable
-# file scores 0.38 on needs_captain and 0.76 on adverse_event).
+# file scored 0.38 on needs_captain and 0.76 on adverse_event in the 2026-09-17
+# probe, which asked against a richer request than the line-only one shipped).
 # The thresholds are asymmetric on purpose. A wrong promotion costs one extra
 # line in a digest; a wrong silence costs hours of nobody knowing the users
 # table is gone. understated_terminal sits higher because "nearly done" prose is

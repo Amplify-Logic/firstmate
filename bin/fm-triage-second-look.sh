@@ -30,7 +30,8 @@
 #
 # Usage:
 #   fm-triage-second-look.sh                 read records on stdin, print promotions
-#   fm-triage-second-look.sh --dry-run       build and print the request; no network
+#   fm-triage-second-look.sh --dry-run       build and print the request; no network,
+#                                           and no gate, so an unarmed home can preview it
 #   fm-triage-second-look.sh --help
 #
 # stdin   one record per line: <task-id> TAB <status-line>
@@ -44,8 +45,8 @@
 # stderr  diagnostics only; never the API key, never a line's content.
 #
 # Exit 0 when a decision was reached, including "promote nothing". Exit 1 when
-# this home is not armed. Exit 2 on any bounded failure. Every nonzero exit means
-# the same thing to a caller: promote nothing.
+# this home is not armed, which --dry-run never returns. Exit 2 on any bounded
+# failure. Every nonzero exit means the same thing to a caller: promote nothing.
 #
 # OPT-IN: per home and per device, through the private gitignored
 # config/triage-second-look. With no `enabled = true` line this command is inert
@@ -137,7 +138,10 @@ case "${1:-}" in
   *) note "unknown argument: $1"; exit 2 ;;
 esac
 
-armed || exit 1
+# The gate guards the paid call, not the preview. --dry-run reaches no network
+# and costs nothing, and it is the one command that shows an operator what would
+# leave this machine, so it must answer before anyone decides whether to arm.
+[ "$DRY_RUN" -eq 1 ] || armed || exit 1
 
 if [ ! -r "$ENGINE" ]; then
   note "engine missing: $ENGINE"
