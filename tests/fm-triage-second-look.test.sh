@@ -601,6 +601,56 @@ print("%d %s" % (len(preceding), "self" if any("production password" in x for x 
   pass "preceding lines are the lines before the target, not the file tail"
 }
 
+test_the_batch_reaches_the_engine_under_an_external_timeout() {
+  local dir fakebin response promotions
+  dir=$(new_home external-timeout armed)
+  seed_task "$dir" t1 ship "Ship it." 'working: one'
+
+  # fm_run_timed picks GNU/BSD `timeout` over its perl and bash fallbacks
+  # whenever one is on PATH - every Linux home and this repo's own CI runner.
+  # That mechanism launches its runner asynchronously, and bash points an async
+  # command's stdin at /dev/null, so a batch piped into this tool has to survive
+  # that. FM_TIMEOUT_MECHANISM_OVERRIDE cannot reach this path, so the mechanism
+  # is selected the way a real host selects it: by what is on PATH.
+  fakebin="$dir/fakebin"
+  mkdir -p "$fakebin"
+  cat > "$fakebin/timeout" <<'SH'
+#!/usr/bin/env bash
+set -u
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -k) shift 2 ;;
+    [0-9]*) shift; break ;;
+    *) shift ;;
+  esac
+done
+exec "$@"
+SH
+  chmod +x "$fakebin/timeout"
+
+  response="$dir/resp.json"
+  cat > "$response" <<'EOF'
+{"answers":{
+"l1__understated_terminal":{"type":"noul","noul":0.05},
+"l1__needs_captain":{"type":"noul","noul":0.92},
+"l1__adverse_event":{"type":"noul","noul":0.97},
+"l1__urgency":{"type":"score","score":1.90,"confidence":0.85}}}
+EOF
+  promotions=$(printf 't1\tworking: the migration truncated public.users\n' \
+    | PATH="$fakebin:$PATH" FM_HOME="$dir" FM_TRIAGE_SECOND_LOOK_RESPONSE="$response" "$TOOL")
+
+  assert_contains "$promotions" 'truncated public.users' \
+    "the batch never reached the engine under an external timeout, so the home is silently inert"
+  assert_contains "$promotions" 'needs_captain+adverse_event' "the promotion lost its reason"
+
+  # The same stdin has to reach --dry-run, the operator-facing request preview.
+  promotions=$(printf 't1\tworking: the migration truncated public.users\n' \
+    | PATH="$fakebin:$PATH" FM_HOME="$dir" "$TOOL" --dry-run)
+  assert_contains "$promotions" 'truncated public.users' \
+    "--dry-run built an empty request under an external timeout"
+  pass "the batch reaches the engine on hosts where an external timeout is the bounding mechanism"
+}
+
 test_the_bound_is_enforced() {
   local dir out status started elapsed
   dir=$(new_home bound armed)
@@ -735,6 +785,7 @@ test_an_unusable_condition_cannot_veto_the_ones_that_fired
 test_unreadable_answers_are_reported_not_silently_read_as_zero
 test_an_overridden_root_arms_the_home_it_points_at
 test_history_is_found_for_a_line_stored_with_stray_whitespace
+test_the_batch_reaches_the_engine_under_an_external_timeout
 test_the_bound_is_enforced
 test_daemon_catch_all_escalates_a_promotion_with_its_reason
 test_daemon_catch_all_is_unchanged_when_the_home_is_not_armed

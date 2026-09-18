@@ -154,11 +154,24 @@ esac
 # bounds its own HTTP read, and this is what stops a wedged interpreter or a
 # stalled DNS lookup from holding a supervision loop open.
 export FM_HOME
+
+# The batch is spooled and redirected INSIDE the bounded command. fm_run_timed's
+# external-timeout mechanism launches its runner asynchronously without job
+# control, and bash points an async command's stdin at /dev/null, so a pipe into
+# this script would otherwise reach the engine as an empty batch on every host
+# that has GNU or BSD timeout - silently, since an empty batch promotes nothing.
+SPOOL=$(mktemp "${TMPDIR:-/tmp}/fm-triage-second-look.XXXXXX") || {
+  note "could not spool the batch (promoting nothing)"
+  exit 2
+}
+trap 'rm -f "$SPOOL"' EXIT
+cat > "$SPOOL"
+
 status=0
 if [ "$DRY_RUN" -eq 1 ]; then
-  fm_run_timed "$BOUND" python3 "$ENGINE" --dry-run || status=$?
+  fm_run_timed "$BOUND" bash -c 'exec python3 "$1" --dry-run < "$2"' _ "$ENGINE" "$SPOOL" || status=$?
 else
-  fm_run_timed "$BOUND" python3 "$ENGINE" || status=$?
+  fm_run_timed "$BOUND" bash -c 'exec python3 "$1" < "$2"' _ "$ENGINE" "$SPOOL" || status=$?
 fi
 case "$status" in
   0) exit 0 ;;

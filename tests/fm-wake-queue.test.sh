@@ -227,6 +227,30 @@ test_drain_dedupes_obvious_duplicates() {
   pass "drain collapses obvious duplicate heartbeat and signal records"
 }
 
+test_a_second_look_heartbeat_survives_a_later_bare_heartbeat() {
+  local dir state out count payload
+  dir=$(make_case second-look-heartbeat)
+  state="$dir/state"
+  out="$dir/drain.out"
+  # The promotion payload names the line and why it was raised, and the status
+  # log it came from was already marked surfaced, so nothing re-reads it. A bare
+  # heartbeat queued before the drain must not be able to take its place.
+  append_wake "$state" heartbeat second-look \
+    'second look promoted 1 dropped status line(s): miss (alert, adverse_event): working: the backfill migration truncated public.users' \
+    || fail "second-look heartbeat append failed"
+  append_wake "$state" heartbeat heartbeat heartbeat || fail "first bare heartbeat append failed"
+  append_wake "$state" heartbeat heartbeat heartbeat || fail "second bare heartbeat append failed"
+
+  FM_STATE_OVERRIDE="$state" "$DRAIN" > "$out" || fail "drain failed"
+
+  payload=$(grep -F 'truncated public.users' "$out" || true)
+  [ -n "$payload" ] || fail "the second-look promotion payload was replaced by a bare heartbeat"
+  case "$payload" in *adverse_event*) ;; *) fail "the surviving row lost the reason the line was raised" ;; esac
+  count=$(awk -F '\t' '$3 == "heartbeat" { count++ } END { print count + 0 }' "$out")
+  [ "$count" -eq 2 ] || fail "expected the promotion row plus one collapsed bare heartbeat, got $count"
+  pass "a second-look promotion heartbeat keeps its payload while bare heartbeats still collapse to one"
+}
+
 # The drain runs at the top of every wake-handling turn, so it also asserts
 # watcher liveness via fm-guard.sh: a lapsed re-arm chain then surfaces even on a
 # plain drain-and-handle turn that runs no other supervision script. It must warn
@@ -1928,6 +1952,7 @@ test_not_working_stale_enqueue_before_suppressor
 test_check_output_is_queued
 test_atomic_double_drain
 test_drain_dedupes_obvious_duplicates
+test_a_second_look_heartbeat_survives_a_later_bare_heartbeat
 test_drain_asserts_watcher_liveness
 test_structural_signal_enrichment_preserves_raw_rows
 test_enrichment_preserves_all_unread_lines_and_status_file_failures

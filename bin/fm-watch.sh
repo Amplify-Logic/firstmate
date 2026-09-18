@@ -2608,7 +2608,7 @@ EOF
       # next heartbeat does not re-fire it (enqueue-before-suppress preserved);
       # this wake sends firstmate to the whole fleet, so every log is read.
       promotions=$(heartbeat_second_look)
-      fm_wake_append heartbeat heartbeat "$(heartbeat_second_look_payload "$promotions")" || exit 1
+      fm_wake_append heartbeat second-look "$(heartbeat_second_look_payload "$promotions")" || exit 1
       touch "$STATE/.last-heartbeat"
       mark_all_captain_relevant_surfaced || true
       wake "heartbeat"
@@ -2621,7 +2621,7 @@ EOF
       # produce an empty result and the absorb below is byte-for-byte today's.
       promotions=$(heartbeat_second_look)
       if [ -n "$promotions" ]; then
-        fm_wake_append heartbeat heartbeat "$(heartbeat_second_look_payload "$promotions")" || exit 1
+        fm_wake_append heartbeat second-look "$(heartbeat_second_look_payload "$promotions")" || exit 1
         touch "$STATE/.last-heartbeat"
         mark_all_captain_relevant_surfaced || true
         wake "heartbeat"
