@@ -1,0 +1,13 @@
+Desk speak, two lines handed over in one turn.
+Each '#' is a speaker process really playing its line (macOS say synthesis,
+afplay playback at volume 0). Time runs left to right.
+
+BEFORE the fix (base 03961847) - two lines in one turn, played concurrently:
+  0s                                                                10.8s
+  |##############################################################          |  The gate is green and the pull request is   0.0s- 9.3s
+  |########################################################################|  The second outcome is that continuous inte  0.0s-10.8s
+
+AFTER the fix (71917c7c) - the second line waits for the first to finish:
+  0s                                                                18.7s
+  |##################################                                      |  The gate is green and the pull request is   0.0s- 8.8s
+  |                                  ######################################|  The second outcome is that continuous inte  9.0s-18.7s

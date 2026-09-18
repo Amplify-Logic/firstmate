@@ -1,0 +1,151 @@
+==============================================================================
+fm-speak serial playback - live drive on macOS 26.5.1
+Each line is really synthesised by /usr/bin/say and really played back by
+afplay at volume 0, so a line takes its true audio duration. START/END are
+the speaker process entering and leaving.
+==============================================================================
+
+### S1a  BEFORE the fix (base 03961847): two lines in one turn overlap
+The gate is green and the pull request is ready for review whenever you have a moment to look at it.
+The second outcome is that continuous integration finished clean on every shard and nothing else is waiting on you.
+$ (both calls returned after 0.52s)
+playback.log:
+    START 1789692677.537  The gate is green and the pull request is ready for review whenever you have a moment to look at it.
+    START 1789692677.537  The second outcome is that continuous integration finished clean on every shard and nothing else is waiting on you.
+    END   1789692686.868  The gate is green and the pull request is ready for review whenever you have a moment to look at it. [241594 bytes of real audio]
+    END   1789692688.327  The second outcome is that continuous integration finished clean on every shard and nothing else is waiting on you. [303932 bytes of real audio]
+  => concurrent playback: 9.33s of the run had two speakers inside their line
+
+### S1b  AFTER the fix (71917c7c): the second line waits for the first
+The gate is green and the pull request is ready for review whenever you have a moment to look at it.
+The second outcome is that continuous integration finished clean on every shard and nothing else is waiting on you.
+$ (both calls returned after 0.41s - the turn is not held open by audio)
+playback.log:
+    START 1789692720.005  The gate is green and the pull request is ready for review whenever you have a moment to look at it.
+    END   1789692728.839  The gate is green and the pull request is ready for review whenever you have a moment to look at it. [241594 bytes of real audio]
+    START 1789692728.996  The second outcome is that continuous integration finished clean on every shard and nothing else is waiting on you.
+    END   1789692738.667  The second outcome is that continuous integration finished clean on every shard and nothing else is waiting on you. [303932 bytes of real audio]
+  => concurrent playback: 0.00s (peak 1 speaker(s) at once)
+state/ after both lines finished:
+    .
+    ..
+
+### S2  Three lines in one turn never overlap (order between queued lines is not guaranteed, by accepted design)
+First outcome, the branch is pushed.
+Second outcome, the review is clean.
+Third outcome, continuous integration is green.
+$ (three calls returned after 0.55s)
+state/ while the first line plays (the lock the other two are waiting on):
+    .
+    ..
+    .speak.lock
+    .speak.lock.owner.cu1G2H
+    .speak.lock -> /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fmspeak-live.GjL3lL/s2/state/.speak.lock.owner.cu1G2H
+    holder pid: 72240
+playback.log:
+    START 1789692762.392  First outcome, the branch is pushed.
+    END   1789692768.048  First outcome, the branch is pushed. [108856 bytes of real audio]
+    START 1789692768.190  Third outcome, continuous integration is green.
+    END   1789692774.198  Third outcome, continuous integration is green. [139516 bytes of real audio]
+    START 1789692774.370  Second outcome, the review is clean.
+    END   1789692780.347  Second outcome, the review is clean. [117078 bytes of real audio]
+  => concurrent playback: 0.00s (peak 1 speaker(s) at once), 3 lines played
+state/ after all three lines:
+    .
+    ..
+
+### S3  The lock is per home: two homes speak at the same time
+Home A is speaking its own long outcome line right now for several seconds.
+Home B is speaking its own long outcome line right now for several seconds.
+both homes, four seconds in:
+  home A: START 1789692799.771  Home A is speaking its own long outcome line right now for several seconds.|
+  home B: START 1789692800.000  Home B is speaking its own long outcome line right now for several seconds.|
+home A playback.log:
+    START 1789692799.771  Home A is speaking its own long outcome line right now for several seconds.
+    END   1789692808.278  Home A is speaking its own long outcome line right now for several seconds. [199372 bytes of real audio]
+home B playback.log:
+    START 1789692800.000  Home B is speaking its own long outcome line right now for several seconds.
+    END   1789692808.278  Home B is speaking its own long outcome line right now for several seconds. [200396 bytes of real audio]
+  => the two homes played simultaneously for 8.28s
+
+### S4  --dry-run never takes the lock and never waits behind a playing line
+A long line is playing right now and will keep the playback lock for a while.
+lock held by the playing line: .speak.lock.owner.I9Wmtp
+$ fm-speak.sh --dry-run "This one is only being previewed."
+    This one is only being previewed.
+    returned in 0.14s while the other line still held the lock
+lock still held by the same owner: .speak.lock.owner.I9Wmtp
+
+### S7  A register refusal takes no lock and leaves none behind
+$ fm-speak.sh "Shall I push the branch?"   (the register owner refuses)
+    refused: asks the captain to decide
+fm-speak: refused by the spoken register; nothing was spoken
+    exit 2
+state/ afterwards: . .. 
+speaker log: (the speaker was never reached)
+S4 home playback.log (the previewed line was never spoken):
+    START 1789692834.206  A long line is playing right now and will keep the playback lock for a while.
+    END   1789692842.209  A long line is playing right now and will keep the playback lock for a while. [200504 bytes of real audio]
+
+### S5a  A speaker killed mid-line leaves its lock behind; the next line still speaks
+This line is about to be killed while it is still playing.
+killed the whole detached speaker group (pid 39606) mid-line; the lock is still on disk:
+    .speak.lock -> .speak.lock.owner.6OLjFa  (pid 39606, alive: no)
+    playback.log so far: START 1789692893.609  This line is about to be killed while it is still playing.|
+The home is not silenced by the lock a killed speaker left behind.
+playback.log:
+    START 1789692893.609  This line is about to be killed while it is still playing.
+    START 1789692897.381  The home is not silenced by the lock a killed speaker left behind.
+    END   1789692903.607  The home is not silenced by the lock a killed speaker left behind. [179518 bytes of real audio]
+state/ afterwards: . .. 
+
+### S5b  ADVERSARIAL: the killed speaker's pid number is reused by an unrelated live process
+planted a lock whose recorded pid (54471) is a live process that is NOT the speaker:
+    pid-identity on disk: the identity of the speaker that was killed, long gone
+    that pid is really alive: yes
+The stale lock did not silence this home.
+playback.log:
+    START 1789692931.885  The stale lock did not silence this home.
+    END   1789692937.429  The stale lock did not silence this home. [113928 bytes of real audio]
+
+### S5c  ADVERSARIAL: a live holder with no proof of reuse is NOT stolen from
+planted a live holder (pid 61182) with no recorded identity - unprovable either way
+This line must wait for the holder rather than cut it off.
+eight seconds in, with the holder still alive: (still waiting, nothing spoken - correct)
+after the holder exited:
+    START 1789692966.923  This line must wait for the holder rather than cut it off.
+    END   1789692973.773  This line must wait for the holder rather than cut it off. [149832 bytes of real audio]
+
+### S6  ADVERSARIAL: a state directory that cannot be created is refused before a word is shaped
+$ fm-speak.sh "The fix is green."   (with $FM_HOME/state occupied by a regular file)
+    stdout: (empty)
+    stderr: fm-speak: cannot create the state directory that holds the playback lock: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fmspeak-live.GjL3lL/s6/state
+    exit 1  (documented exit 1: the state directory that holds the playback lock cannot be created)
+    register owner called: never - nothing was shaped
+    speaker reached: no
+    fm-speak temporary files left in TMPDIR: 0
+
+### Timeline
+    Desk speak, two lines handed over in one turn.
+    Each '#' is a speaker process really playing its line (macOS say synthesis,
+    afplay playback at volume 0). Time runs left to right.
+    
+    BEFORE the fix (base 03961847) - two lines in one turn, played concurrently:
+      0s                                                                10.8s
+      |##############################################################          |  The gate is green and the pull request is   0.0s- 9.3s
+      |########################################################################|  The second outcome is that continuous inte  0.0s-10.8s
+    
+    AFTER the fix (71917c7c) - the second line waits for the first to finish:
+      0s                                                                18.7s
+      |##################################                                      |  The gate is green and the pull request is   0.0s- 8.8s
+      |                                  ######################################|  The second outcome is that continuous inte  9.0s-18.7s
+
+### Regression proof: the new case fails on the pre-fix script
+Copied the tree to a scratch dir, swapped bin/fm-speak.sh for the base
+(03961847) version, and ran the four new cases:
+    $ bash tests/fm-speak.test.sh   # pre-fix bin/fm-speak.sh
+    not ok - fm-speak: a second line started before the first ended: start: The second line is ready.
+    start: The first line is green.
+    end: The first line is green.
+    end: The second line is ready.
+On the branch under test the same file runs all 32 cases green, three times in a row.
