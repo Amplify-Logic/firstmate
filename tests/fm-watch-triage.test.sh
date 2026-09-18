@@ -4430,6 +4430,32 @@ test_heartbeat_backstop_surfaces_a_masked_status() {
   pass "the heartbeat backstop surfaces a captain event hidden behind a later routine append"
 }
 
+test_heartbeat_backstop_without_a_promotion_keeps_the_ordinary_key() {
+  local dir state fakebin out sig pid keys
+  dir=$(make_case heartbeat-bare-key); state="$dir/state"; fakebin="$dir/fakebin"
+  out="$dir/watch.out"
+  # The backstop branch on a home that never opted in: there is nothing to
+  # promote, so the queued row must keep the key it has always had. A row keyed
+  # for the second look while carrying no promotion would collapse onto a real
+  # promotion queued earlier and replace it, and the status log it came from was
+  # already marked surfaced, so nothing would re-read it.
+  printf 'working: setup\nneeds-decision: pick A or B\nworking: tidying the branch\n' \
+    > "$state/miss.status"
+  sig=$(seen_sig "$state/miss.status"); printf '%s' "$sig" > "$state/.seen-miss_status"
+  PATH="$fakebin:$PATH" FM_STATE_OVERRIDE="$state" FM_HOME="$dir" FM_POLL=1 \
+    FM_SIGNAL_GRACE=1 FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=1 "$WATCH" > "$out" &
+  pid=$!
+  wait_for_exit "$pid" 100 \
+    || { reap "$pid"; fail "the heartbeat backstop did not surface the masked decision"; }
+
+  keys=$(awk -F '\t' 'NF >= 5 { print $4 }' "$state/.wake-queue" 2>/dev/null || true)
+  [ -n "$keys" ] || fail "the backstop queued no wake record"
+  case "$keys" in
+    *second-look*) fail "a heartbeat carrying no promotion took the second-look dedupe key: $keys" ;;
+  esac
+  pass "an actionable heartbeat with nothing promoted keeps the ordinary heartbeat key"
+}
+
 test_heartbeat_backstop_surfaces_unsurfaced_status() {
   local dir state fakebin out drain_out sig pid
   dir=$(make_case heartbeat-backstop); state="$dir/state"; fakebin="$dir/fakebin"
@@ -4988,6 +5014,7 @@ test_heartbeat_backstop_surfaces_unsurfaced_status
 test_heartbeat_second_look_inert_when_the_home_is_not_armed
 test_heartbeat_second_look_promotes_a_dropped_line_with_its_reason
 test_heartbeat_backstop_surfaces_a_masked_status
+test_heartbeat_backstop_without_a_promotion_keeps_the_ordinary_key
 test_beacon_stays_fresh_while_absorbing
 test_afk_signal_records_heartbeat_endpoint
 test_afk_present_reverts_watcher_to_one_shot

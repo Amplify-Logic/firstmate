@@ -87,6 +87,16 @@ def note(message):
     sys.stderr.write("fm-triage-second-look: %s\n" % message)
 
 
+HOME_ROOT = os.environ.get("FM_HOME") or os.path.expanduser("~/starship")
+# The two roots a task's state and brief live under. Both callers resolve these
+# through the same overrides before they ever reach this engine, and a home that
+# points them elsewhere would otherwise build every request with an empty goal,
+# an unknown worker kind and no history - silently, and needs_captain is asked
+# about work that has grown beyond the goal.
+STATE_ROOT = pathlib.Path(os.environ.get("FM_STATE_OVERRIDE") or (pathlib.Path(HOME_ROOT) / "state"))
+DATA_ROOT = pathlib.Path(os.environ.get("FM_DATA_OVERRIDE") or (pathlib.Path(HOME_ROOT) / "data"))
+
+
 def api_key(home):
     """The key from the environment, else the one line of the home's .env.
 
@@ -114,14 +124,14 @@ def api_key(home):
     return value
 
 
-def brief_intent(home, task):
+def brief_intent(task):
     """The body of the brief's `## Captain's intent`, truncated.
 
     This is what lets the model see work that has grown beyond what was asked.
     An absent or unreadable brief is not an error: the questions still stand
     without it, so it degrades to an empty goal rather than dropping the line.
     """
-    path = pathlib.Path(home) / "data" / task / "brief.md"
+    path = DATA_ROOT / task / "brief.md"
     try:
         text = path.read_text(encoding="utf-8", errors="replace")
     except OSError:
@@ -149,8 +159,8 @@ def normalize(line):
     return line.strip().replace("\t", " ")
 
 
-def worker_kind(home, task):
-    path = pathlib.Path(home) / "state" / ("%s.meta" % task)
+def worker_kind(task):
+    path = STATE_ROOT / ("%s.meta" % task)
     try:
         for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
             if line.startswith("kind="):
@@ -160,13 +170,13 @@ def worker_kind(home, task):
     return "unknown"
 
 
-def preceding_lines(home, task, line):
+def preceding_lines(task, line):
     """Up to MAX_PRECEDING status lines from the same task, before this one.
 
     This is what separates a sixth identical rerun from a first attempt, and it
     is the only history the request carries.
     """
-    path = pathlib.Path(home) / "state" / ("%s.status" % task)
+    path = STATE_ROOT / ("%s.status" % task)
     try:
         lines = [x for x in path.read_text(encoding="utf-8", errors="replace").splitlines()
                  if x.strip()]
@@ -183,7 +193,7 @@ def preceding_lines(home, task, line):
     return [x[:MAX_LINE_CHARS] for x in lines[start:index]]
 
 
-def state_for(home, task, line):
+def state_for(task, line):
     """Only the fields the questions name.
 
     jev-1.13 loses accuracy on state carrying detail no question uses, so the
@@ -194,9 +204,9 @@ def state_for(home, task, line):
     """
     return {
         "line": line[:MAX_LINE_CHARS],
-        "task_goal": brief_intent(home, task),
-        "worker_kind": worker_kind(home, task),
-        "preceding_lines": preceding_lines(home, task, line),
+        "task_goal": brief_intent(task),
+        "worker_kind": worker_kind(task),
+        "preceding_lines": preceding_lines(task, line),
     }
 
 
@@ -294,7 +304,7 @@ def read_records():
     return [("l%d" % (i + 1), task, line) for i, (task, line) in enumerate(parsed)]
 
 
-def build_request(home, records):
+def build_request(records):
     """One request for the whole batch, never one per line.
 
     Batching is a SECURITY property here, not only the cheaper shape. A status
@@ -308,7 +318,7 @@ def build_request(home, records):
         questions.update(questions_for(tag))
     return {
         "model": MODEL,
-        "state": {"lines": {tag: state_for(home, task, line) for tag, task, line in records}},
+        "state": {"lines": {tag: state_for(task, line) for tag, task, line in records}},
         "questions": questions,
     }
 
@@ -365,13 +375,12 @@ def decide(answers, tag):
 def main():
     args = sys.argv[1:]
     dry_run = "--dry-run" in args
-    home = os.environ.get("FM_HOME") or os.path.expanduser("~/starship")
 
     records = read_records()
     if not records:
         return 0
 
-    payload = build_request(home, records)
+    payload = build_request(records)
     if dry_run:
         json.dump(payload, sys.stdout, indent=2, sort_keys=True)
         sys.stdout.write("\n")
@@ -385,7 +394,7 @@ def main():
             # so only the network itself is stubbed.
             body = json.loads(pathlib.Path(canned).read_text(encoding="utf-8"))
         else:
-            key = api_key(home)
+            key = api_key(HOME_ROOT)
             if not key:
                 note("no TYPESAFE_API_KEY (inert; supervision behaves as it does without it)")
                 return 2

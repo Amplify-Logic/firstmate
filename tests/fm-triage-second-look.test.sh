@@ -231,6 +231,37 @@ print(json.load(sys.stdin)["model"])')" 'jev-1.13.0' "the request did not pin th
   pass "the request carries the pinned model and only the four state fields the questions name"
 }
 
+test_state_and_data_overrides_are_honored_when_they_point_elsewhere() {
+  local dir elsewhere request fields
+  dir=$(new_home request-roots armed)
+  elsewhere=$(new_home request-roots-elsewhere armed)
+  seed_task "$elsewhere" t1 scout "Investigate why the log shipper is slow." \
+    'working: reading the shipper config' \
+    'working: checking the disk' \
+    'note: found the production password in plaintext'
+
+  # Both callers resolve state and data through these overrides before the
+  # engine is reached, and this repo does launch subprocesses with the roots
+  # pointing at different homes. A request built with an empty goal and no
+  # history is answered differently, since needs_captain is asked about work
+  # that has grown beyond the goal.
+  request=$(printf 't1\tnote: found the production password in plaintext\n' \
+    | FM_HOME="$dir" FM_STATE_OVERRIDE="$elsewhere/state" FM_DATA_OVERRIDE="$elsewhere/data" \
+      "$TOOL" --dry-run)
+  fields=$(printf '%s' "$request" | python3 -c '
+import json, sys
+state = json.load(sys.stdin)["state"]["lines"]["l1"]
+print(state["worker_kind"])
+print(state["task_goal"])
+print(len(state["preceding_lines"]))')
+
+  assert_contains "$fields" 'scout' "the overridden state root did not supply the worker kind"
+  assert_contains "$fields" 'Investigate why the log shipper is slow.' \
+    "the overridden data root did not supply the task goal"
+  assert_contains "$fields" '2' "the overridden state root did not supply the preceding lines"
+  pass "state and data roots are resolved through their overrides, not always from the home"
+}
+
 test_request_is_one_batch_for_the_whole_scan() {
   local dir request count
   dir=$(new_home request-batched armed)
@@ -771,6 +802,7 @@ test_absent_gate_is_inert
 test_malformed_gate_stays_inert_instead_of_failing_loudly
 test_a_gate_under_a_config_override_arms_the_home
 test_request_carries_only_the_fields_the_questions_name
+test_state_and_data_overrides_are_honored_when_they_point_elsewhere
 test_request_is_one_batch_for_the_whole_scan
 test_only_lines_the_real_classifier_dropped_can_reach_the_request
 test_the_batch_is_bounded
