@@ -90,13 +90,16 @@
 # state/.speak.lock, acquired by the detached speaker after that handoff: a
 # second line waits for the current one to finish, then plays, and the calling
 # turn is still not held open by audio. Dry-run and register refusals never
-# take the lock. The wait is outside the speaker bound, so a queued line still
-# gets its own playback budget after the line ahead of it ends. A dead holder
-# is stolen by the portable lock helpers in bin/fm-wake-lib.sh, and a holder
-# whose pid number has since been handed to an unrelated process is reclaimed
-# on its recorded identity, so a killed speaker cannot silence the home for
-# good; a holder that is genuinely still speaking is waited out. See
-# hold_playback_lock.
+# take the lock. The lock serializes playback without ordering it: waiting
+# speakers race for the free lock rather than queueing on it, so two lines
+# handed off close together play one after the other but not necessarily in
+# the order they were handed off. The wait is outside the speaker bound, so a
+# queued line still gets its own playback budget after the line ahead of it
+# ends. A dead holder is stolen by the portable lock helpers in
+# bin/fm-wake-lib.sh, and a holder whose pid number has since been handed to
+# an unrelated process is reclaimed on its recorded identity, so a killed
+# speaker cannot silence the home for good; a holder that is genuinely still
+# speaking is waited out. See hold_playback_lock.
 #
 # NEVER SHARES THE CALLER'S PROCESS GROUP. Detaching the speaker from the
 # caller's streams is not enough to let a line finish: the speaker must also
