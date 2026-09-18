@@ -256,6 +256,14 @@ worker_acquire_lock() {
       rmdir "$WORKER_LOCK/claim" 2>/dev/null || true
       continue
     fi
+    # Every staleness gate above was read before the marker was taken, and the
+    # marker only becomes free again once a peer reclaim has published and
+    # released it. Records that now match a live process are that peer's, so
+    # this worker is the redundant one rather than the reclaimer.
+    if fm_remote_job_lock_owner_matches_process "$account_home"; then
+      rmdir "$WORKER_LOCK/claim" 2>/dev/null || true
+      return 2
+    fi
     WORKER_LOCK_HELD=1
     worker_clear_stale_lock_records && worker_publish_lock_owner
     status=$?

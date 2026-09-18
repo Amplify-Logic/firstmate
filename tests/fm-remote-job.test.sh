@@ -26,6 +26,8 @@ LIVE_CLAIM_WORKER_PID=
 SCRATCH_FAIL_WORKER_PID=
 LATE_QUARANTINE_WORKER_PID=
 LATE_QUARANTINE_PROCESS_PID=
+FINISHED_RECLAIM_WORKER_PID=
+FINISHED_RECLAIM_OWNER_PID=
 DRIFT_OWNER_PID=
 DRIFT_HEARTBEAT_PID=
 DRIFT_CHALLENGER_PID=
@@ -50,6 +52,8 @@ cleanup_remote_job_fixture() {
   [ -z "$SCRATCH_FAIL_WORKER_PID" ] || kill "$SCRATCH_FAIL_WORKER_PID" 2>/dev/null || true
   [ -z "$LATE_QUARANTINE_WORKER_PID" ] || kill -KILL "$LATE_QUARANTINE_WORKER_PID" 2>/dev/null || true
   [ -z "$LATE_QUARANTINE_PROCESS_PID" ] || kill "$LATE_QUARANTINE_PROCESS_PID" 2>/dev/null || true
+  [ -z "$FINISHED_RECLAIM_WORKER_PID" ] || kill -KILL "$FINISHED_RECLAIM_WORKER_PID" 2>/dev/null || true
+  [ -z "$FINISHED_RECLAIM_OWNER_PID" ] || kill "$FINISHED_RECLAIM_OWNER_PID" 2>/dev/null || true
   [ -z "$RESTART_SUPERVISOR_PID" ] || kill -KILL "$RESTART_SUPERVISOR_PID" 2>/dev/null || true
   if [ -f "$STATE_ROOT/worker.pid" ]; then
     fm_remote_job_stop_worker_tree "$(cat "$STATE_ROOT/worker.pid")" || true
@@ -1134,6 +1138,82 @@ kill "$LATE_QUARANTINE_PROCESS_PID" 2>/dev/null || true
 wait "$LATE_QUARANTINE_PROCESS_PID" 2>/dev/null || true
 LATE_QUARANTINE_PROCESS_PID=
 pass "a quarantine published inside the claim window survives reclaim"
+
+# Every staleness gate is read before the claim marker is taken, and a peer
+# reclaim only frees that marker after it has published its own ownership
+# records. A worker descheduled across that whole window therefore wins the
+# marker against a lock that is no longer stale, and sweeping it would delete a
+# live owner's records and put two workers on one account queue. Winning the
+# marker has to be re-validated against the records. The staged mkdir publishes
+# a live owner's records exactly as the marker is taken, which is the only way
+# to reach that window deterministically.
+FINISHED_RECLAIM_HOME="$TMP_ROOT/finished-reclaim-account"
+FINISHED_RECLAIM_STATE="$TMP_ROOT/finished-reclaim-jobs"
+FINISHED_RECLAIM_BIN="$TMP_ROOT/finished-reclaim-bin"
+FINISHED_RECLAIM_ONCE="$TMP_ROOT/finished-reclaim-published"
+mkdir -p "$FINISHED_RECLAIM_HOME" "$FINISHED_RECLAIM_STATE/worker.lock" "$FINISHED_RECLAIM_BIN"
+chmod 700 "$FINISHED_RECLAIM_HOME" "$FINISHED_RECLAIM_STATE" "$FINISHED_RECLAIM_STATE/worker.lock"
+sleep 30 &
+FINISHED_RECLAIM_OWNER_PID=$!
+cat > "$FINISHED_RECLAIM_BIN/mkdir" <<SH
+#!/bin/bash
+for arg in "\$@"; do
+  case "\$arg" in
+    */worker.lock/claim)
+      $(command -v mkdir) "\$@" || exit \$?
+      if [ ! -e "$FINISHED_RECLAIM_ONCE" ]; then
+        : > "$FINISHED_RECLAIM_ONCE"
+        lock=\${arg%/claim}
+        printf '%s\n' "$FINISHED_RECLAIM_OWNER_PID" > "\$lock/pid"
+        ps -p "$FINISHED_RECLAIM_OWNER_PID" -o lstart= > "\$lock/start"
+        ps -p "$FINISHED_RECLAIM_OWNER_PID" -o command= > "\$lock/command"
+        chmod 600 "\$lock/pid" "\$lock/start" "\$lock/command"
+      fi
+      exit 0
+      ;;
+  esac
+done
+exec $(command -v mkdir) "\$@"
+SH
+chmod 755 "$FINISHED_RECLAIM_BIN/mkdir"
+printf '999999\n' > "$FINISHED_RECLAIM_STATE/worker.lock/pid"
+printf 'stale-start\n' > "$FINISHED_RECLAIM_STATE/worker.lock/start"
+printf 'stale-command\n' > "$FINISHED_RECLAIM_STATE/worker.lock/command"
+printf '999999\n' > "$FINISHED_RECLAIM_STATE/worker.ready"
+chmod 600 "$FINISHED_RECLAIM_STATE/worker.lock"/* "$FINISHED_RECLAIM_STATE/worker.ready"
+touch -t 200001010000 "$FINISHED_RECLAIM_STATE/worker.lock" "$FINISHED_RECLAIM_STATE/worker.ready"
+HOME="$FINISHED_RECLAIM_HOME" PATH="$FINISHED_RECLAIM_BIN:$PATH" FM_ROOT_OVERRIDE="$REMOTE_ROOT" \
+  FM_REMOTE_JOB_STATE_ROOT="$FINISHED_RECLAIM_STATE" FM_REMOTE_JOB_PLATFORM_OVERRIDE=Linux \
+  "$REMOTE_ROOT/bin/fm-remote-job-worker.sh" --serve \
+  > "$TMP_ROOT/finished-reclaim.out" 2> "$TMP_ROOT/finished-reclaim.err" &
+FINISHED_RECLAIM_WORKER_PID=$!
+FINISHED_RECLAIM_DEADLINE=$((SECONDS + 20))
+while kill -0 "$FINISHED_RECLAIM_WORKER_PID" 2>/dev/null && [ "$SECONDS" -lt "$FINISHED_RECLAIM_DEADLINE" ]; do
+  sleep 0.1
+done
+if kill -0 "$FINISHED_RECLAIM_WORKER_PID" 2>/dev/null; then
+  kill -KILL "$FINISHED_RECLAIM_WORKER_PID" 2>/dev/null || true
+  wait "$FINISHED_RECLAIM_WORKER_PID" 2>/dev/null || true
+  FINISHED_RECLAIM_WORKER_PID=
+  fail "a worker served the account after winning the claim against a finished peer reclaim"
+fi
+set +e
+wait "$FINISHED_RECLAIM_WORKER_PID"
+FINISHED_RECLAIM_RC=$?
+set -e
+FINISHED_RECLAIM_WORKER_PID=
+assert_present "$FINISHED_RECLAIM_ONCE" "the staged owner records were never published into the claim window"
+[ "$FINISHED_RECLAIM_RC" -eq 0 ] \
+  || fail "a worker that found a live owner after winning the claim did not defer (rc=$FINISHED_RECLAIM_RC): $(cat "$TMP_ROOT/finished-reclaim.err")"
+[ "$(cat "$FINISHED_RECLAIM_STATE/worker.lock/pid")" = "$FINISHED_RECLAIM_OWNER_PID" ] \
+  || fail "a worker swept the ownership records a finished peer reclaim had just published"
+assert_absent "$FINISHED_RECLAIM_STATE/worker.lock/claim" \
+  "a worker that deferred to a finished peer reclaim left its claim marker behind"
+kill -0 "$FINISHED_RECLAIM_OWNER_PID" 2>/dev/null || fail "the staged live owner is not alive"
+kill "$FINISHED_RECLAIM_OWNER_PID" 2>/dev/null || true
+wait "$FINISHED_RECLAIM_OWNER_PID" 2>/dev/null || true
+FINISHED_RECLAIM_OWNER_PID=
+pass "a claim won against a finished peer reclaim defers instead of sweeping it"
 
 # A child that stays up for FM_REMOTE_JOB_SUPERVISOR_HEALTHY_SECONDS clears the
 # consecutive-failure backoff, so a child that dies just past that threshold
