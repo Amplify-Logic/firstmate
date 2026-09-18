@@ -178,18 +178,23 @@ worker_claim_stale_lock() {
 }
 
 # Drop what a dead owner left behind so the claiming worker can publish its own
-# records in place. pid/start/command are the published owner records; the
-# .pid.*, .start.*, .command.*, and .quarantine.* names are the mktemp leftovers
-# a crash or interrupted shutdown leaves behind. Removing only the published
-# records left those temps in place, rmdir failed, and every later worker exited
-# 1 into a restart storm. A published quarantine is not a leftover: an owner
-# whose shutdown could not confirm its execution stopped can land one here at any
-# moment, and only worker_recover_quarantine may retire it.
+# records in place. pid/start/command are the published owner records and the
+# .pid.*, .start.*, .command.* names are the mktemp leftovers a crash or
+# interrupted shutdown leaves behind. Removing only the published records left
+# those temps in place, rmdir failed, and every later worker exited 1 into a
+# restart storm. Nothing about quarantine is swept: the published name is the
+# guard itself, which only worker_recover_quarantine may retire, and a
+# .quarantine.* temp is what an owner's shutdown is writing right now, so
+# deleting one makes its mv fail and sends that owner back to serving. Reclaim
+# publishes in place and no longer rmdirs the lock, so a temp left by a crash
+# costs nothing beyond a deferred rmdir on this worker's own clean exit.
 worker_clear_stale_lock_records() {
   local f
   for f in "$WORKER_LOCK"/* "$WORKER_LOCK"/.[!.]*; do
     [ -e "$f" ] || [ -L "$f" ] || continue
-    case "$f" in "$WORKER_LOCK/claim"|"$WORKER_LOCK/quarantine") continue ;; esac
+    case "$f" in
+      "$WORKER_LOCK/claim"|"$WORKER_LOCK/quarantine"|"$WORKER_LOCK"/.quarantine.*) continue ;;
+    esac
     [ ! -L "$f" ] || return 1
     [ -f "$f" ] || return 1
     rm -f -- "$f" || return 1
@@ -265,7 +270,21 @@ worker_acquire_lock() {
       return 2
     fi
     WORKER_LOCK_HELD=1
-    worker_clear_stale_lock_records && worker_publish_lock_owner
+    if ! worker_clear_stale_lock_records; then
+      rmdir "$WORKER_LOCK/claim" 2>/dev/null || true
+      return 1
+    fi
+    # An owner's shutdown can land the guard any time up to the moment this
+    # worker records itself. Taking ownership over one would leave an account
+    # that never probes ready and whose replacements can no longer retire the
+    # guard against these live records, so stop while the lock still holds
+    # nothing but the guard.
+    if [ -e "$WORKER_LOCK/quarantine" ] || [ -L "$WORKER_LOCK/quarantine" ]; then
+      WORKER_LOCK_HELD=0
+      rmdir "$WORKER_LOCK/claim" 2>/dev/null || true
+      return 3
+    fi
+    worker_publish_lock_owner
     status=$?
     rmdir "$WORKER_LOCK/claim" 2>/dev/null || true
     [ "$status" -eq 0 ] || return 1

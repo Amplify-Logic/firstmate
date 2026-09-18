@@ -28,6 +28,8 @@ LATE_QUARANTINE_WORKER_PID=
 LATE_QUARANTINE_PROCESS_PID=
 FINISHED_RECLAIM_WORKER_PID=
 FINISHED_RECLAIM_OWNER_PID=
+SHUTDOWN_TEMP_WORKER_PID=
+SWEPT_QUARANTINE_WORKER_PID=
 DRIFT_OWNER_PID=
 DRIFT_HEARTBEAT_PID=
 DRIFT_CHALLENGER_PID=
@@ -54,6 +56,8 @@ cleanup_remote_job_fixture() {
   [ -z "$LATE_QUARANTINE_PROCESS_PID" ] || kill "$LATE_QUARANTINE_PROCESS_PID" 2>/dev/null || true
   [ -z "$FINISHED_RECLAIM_WORKER_PID" ] || kill -KILL "$FINISHED_RECLAIM_WORKER_PID" 2>/dev/null || true
   [ -z "$FINISHED_RECLAIM_OWNER_PID" ] || kill "$FINISHED_RECLAIM_OWNER_PID" 2>/dev/null || true
+  [ -z "$SHUTDOWN_TEMP_WORKER_PID" ] || kill -KILL "$SHUTDOWN_TEMP_WORKER_PID" 2>/dev/null || true
+  [ -z "$SWEPT_QUARANTINE_WORKER_PID" ] || kill -KILL "$SWEPT_QUARANTINE_WORKER_PID" 2>/dev/null || true
   [ -z "$RESTART_SUPERVISOR_PID" ] || kill -KILL "$RESTART_SUPERVISOR_PID" 2>/dev/null || true
   if [ -f "$STATE_ROOT/worker.pid" ]; then
     fm_remote_job_stop_worker_tree "$(cat "$STATE_ROOT/worker.pid")" || true
@@ -1214,6 +1218,120 @@ kill "$FINISHED_RECLAIM_OWNER_PID" 2>/dev/null || true
 wait "$FINISHED_RECLAIM_OWNER_PID" 2>/dev/null || true
 FINISHED_RECLAIM_OWNER_PID=
 pass "a claim won against a finished peer reclaim defers instead of sweeping it"
+
+# An owner guarding its shutdown writes worker.lock/.quarantine.XXXXXX, fills it,
+# chmods it and only then renames it onto worker.lock/quarantine, so that temp is
+# present in the ownership directory for several forks. Reclaim sweeps that
+# directory. Deleting the temp makes the owner's rename fail, and a failed guard
+# publish sends the owner back to its serving loop instead of stopping it, so the
+# reclaimer and the owner both serve the account. The lock directory is this
+# protocol's persisted state, so the temp surviving a completed reclaim is the
+# contract being asserted here.
+SHUTDOWN_TEMP_HOME="$TMP_ROOT/shutdown-temp-account"
+SHUTDOWN_TEMP_STATE="$TMP_ROOT/shutdown-temp-jobs"
+SHUTDOWN_TEMP_INFLIGHT="$SHUTDOWN_TEMP_STATE/worker.lock/.quarantine.aBcDeF"
+mkdir -p "$SHUTDOWN_TEMP_HOME" "$SHUTDOWN_TEMP_STATE/worker.lock"
+chmod 700 "$SHUTDOWN_TEMP_HOME" "$SHUTDOWN_TEMP_STATE" "$SHUTDOWN_TEMP_STATE/worker.lock"
+printf '999999\n' > "$SHUTDOWN_TEMP_STATE/worker.lock/pid"
+printf 'stale-start\n' > "$SHUTDOWN_TEMP_STATE/worker.lock/start"
+printf 'stale-command\n' > "$SHUTDOWN_TEMP_STATE/worker.lock/command"
+printf 'active execution could not be confirmed stopped\n' > "$SHUTDOWN_TEMP_INFLIGHT"
+printf '999999\n' > "$SHUTDOWN_TEMP_STATE/worker.ready"
+chmod 600 "$SHUTDOWN_TEMP_STATE/worker.lock"/* "$SHUTDOWN_TEMP_INFLIGHT" \
+  "$SHUTDOWN_TEMP_STATE/worker.ready"
+touch -t 200001010000 "$SHUTDOWN_TEMP_STATE/worker.lock" "$SHUTDOWN_TEMP_STATE/worker.ready"
+HOME="$SHUTDOWN_TEMP_HOME" FM_ROOT_OVERRIDE="$REMOTE_ROOT" \
+  FM_REMOTE_JOB_STATE_ROOT="$SHUTDOWN_TEMP_STATE" FM_REMOTE_JOB_PLATFORM_OVERRIDE=Linux \
+  "$REMOTE_ROOT/bin/fm-remote-job-worker.sh" --serve \
+  > "$TMP_ROOT/shutdown-temp.out" 2> "$TMP_ROOT/shutdown-temp.err" &
+SHUTDOWN_TEMP_WORKER_PID=$!
+SHUTDOWN_TEMP_READY=
+for _ in $(seq 1 300); do
+  SHUTDOWN_TEMP_READY=$(cat "$SHUTDOWN_TEMP_STATE/worker.ready" 2>/dev/null || true)
+  case "$SHUTDOWN_TEMP_READY" in
+    ''|999999) ;;
+    *) kill -0 "$SHUTDOWN_TEMP_READY" 2>/dev/null && break ;;
+  esac
+  kill -0 "$SHUTDOWN_TEMP_WORKER_PID" 2>/dev/null || break
+  sleep 0.05
+done
+case "$SHUTDOWN_TEMP_READY" in
+  ''|999999) fail "the worker did not reclaim past an in-flight shutdown guard temp: $(cat "$TMP_ROOT/shutdown-temp.err")" ;;
+esac
+assert_present "$SHUTDOWN_TEMP_INFLIGHT" \
+  "reclaim deleted the guard temp an owner shutdown was still writing"
+kill -TERM "$SHUTDOWN_TEMP_WORKER_PID"
+wait "$SHUTDOWN_TEMP_WORKER_PID" 2>/dev/null || true
+SHUTDOWN_TEMP_WORKER_PID=
+pass "reclaim leaves an in-flight shutdown guard temp alone"
+
+# The guard can also land after reclaim has read for it and while the sweep is
+# still running. Taking ownership then records live pid/start/command beside a
+# live guard, and from there the account can never probe ready while every
+# replacement refuses to retire a guard held by a live recorded owner. Reclaim
+# has to re-read the guard before recording itself and stop while the lock still
+# holds nothing but the guard. The staged rm publishes it mid-sweep, which is the
+# only way to reach that window deterministically.
+SWEPT_QUARANTINE_HOME="$TMP_ROOT/swept-quarantine-account"
+SWEPT_QUARANTINE_STATE="$TMP_ROOT/swept-quarantine-jobs"
+SWEPT_QUARANTINE_BIN="$TMP_ROOT/swept-quarantine-bin"
+SWEPT_QUARANTINE_ONCE="$TMP_ROOT/swept-quarantine-published"
+mkdir -p "$SWEPT_QUARANTINE_HOME" "$SWEPT_QUARANTINE_STATE/worker.lock" "$SWEPT_QUARANTINE_BIN"
+chmod 700 "$SWEPT_QUARANTINE_HOME" "$SWEPT_QUARANTINE_STATE" "$SWEPT_QUARANTINE_STATE/worker.lock"
+cat > "$SWEPT_QUARANTINE_BIN/rm" <<SH
+#!/bin/bash
+for arg in "\$@"; do
+  case "\$arg" in
+    */worker.lock/*)
+      if [ ! -e "$SWEPT_QUARANTINE_ONCE" ]; then
+        : > "$SWEPT_QUARANTINE_ONCE"
+        lock=\${arg%/*}
+        printf 'active execution could not be confirmed stopped\n' > "\$lock/quarantine"
+        chmod 600 "\$lock/quarantine"
+      fi
+      break
+      ;;
+  esac
+done
+exec $(command -v rm) "\$@"
+SH
+chmod 755 "$SWEPT_QUARANTINE_BIN/rm"
+printf '999999\n' > "$SWEPT_QUARANTINE_STATE/worker.lock/pid"
+printf 'stale-start\n' > "$SWEPT_QUARANTINE_STATE/worker.lock/start"
+printf 'stale-command\n' > "$SWEPT_QUARANTINE_STATE/worker.lock/command"
+printf '999999\n' > "$SWEPT_QUARANTINE_STATE/worker.ready"
+chmod 600 "$SWEPT_QUARANTINE_STATE/worker.lock"/* "$SWEPT_QUARANTINE_STATE/worker.ready"
+touch -t 200001010000 "$SWEPT_QUARANTINE_STATE/worker.lock" "$SWEPT_QUARANTINE_STATE/worker.ready"
+HOME="$SWEPT_QUARANTINE_HOME" PATH="$SWEPT_QUARANTINE_BIN:$PATH" FM_ROOT_OVERRIDE="$REMOTE_ROOT" \
+  FM_REMOTE_JOB_STATE_ROOT="$SWEPT_QUARANTINE_STATE" FM_REMOTE_JOB_PLATFORM_OVERRIDE=Linux \
+  "$REMOTE_ROOT/bin/fm-remote-job-worker.sh" --serve \
+  > "$TMP_ROOT/swept-quarantine.out" 2> "$TMP_ROOT/swept-quarantine.err" &
+SWEPT_QUARANTINE_WORKER_PID=$!
+SWEPT_QUARANTINE_DEADLINE=$((SECONDS + 20))
+while kill -0 "$SWEPT_QUARANTINE_WORKER_PID" 2>/dev/null && [ "$SECONDS" -lt "$SWEPT_QUARANTINE_DEADLINE" ]; do
+  sleep 0.1
+done
+if kill -0 "$SWEPT_QUARANTINE_WORKER_PID" 2>/dev/null; then
+  kill -KILL "$SWEPT_QUARANTINE_WORKER_PID" 2>/dev/null || true
+  wait "$SWEPT_QUARANTINE_WORKER_PID" 2>/dev/null || true
+  SWEPT_QUARANTINE_WORKER_PID=
+  fail "a reclaiming worker served the account over a guard published during its sweep"
+fi
+set +e
+wait "$SWEPT_QUARANTINE_WORKER_PID"
+SWEPT_QUARANTINE_RC=$?
+set -e
+SWEPT_QUARANTINE_WORKER_PID=
+assert_present "$SWEPT_QUARANTINE_ONCE" "the staged guard was never published into the sweep window"
+[ "$SWEPT_QUARANTINE_RC" -eq 75 ] \
+  || fail "a reclaim stopped by a guard published mid-sweep did not report quarantined ownership (rc=$SWEPT_QUARANTINE_RC): $(cat "$TMP_ROOT/swept-quarantine.err")"
+assert_present "$SWEPT_QUARANTINE_STATE/worker.lock/quarantine" \
+  "a guard published during the sweep did not survive it"
+assert_absent "$SWEPT_QUARANTINE_STATE/worker.lock/pid" \
+  "a reclaiming worker recorded ownership beside a guard published during its sweep"
+assert_absent "$SWEPT_QUARANTINE_STATE/worker.lock/claim" \
+  "a reclaim stopped by a guard left its claim marker behind"
+pass "a guard published during the sweep stops reclaim before it records ownership"
 
 # A child that stays up for FM_REMOTE_JOB_SUPERVISOR_HEALTHY_SECONDS clears the
 # consecutive-failure backoff, so a child that dies just past that threshold
