@@ -2,10 +2,10 @@
 # fm-triage-second-look.py - the TypeSafe (Jev) engine behind
 # bin/fm-triage-second-look.sh.
 #
-# It reads dropped status lines on stdin, gathers the small amount of task state
-# the questions actually name, asks Jev four narrow judgments about every line in
-# ONE request, applies the promotion rule in code, and prints the lines that
-# should be promoted. The opt-in gate, the home resolution and the hard time
+# It reads dropped status lines on stdin, asks Jev four narrow judgments about
+# every line in ONE request, applies the promotion rule in code, and prints the
+# lines that should be promoted. The dropped line itself is the whole of what is
+# sent - see state_for. The opt-in gate, the home resolution and the hard time
 # bound are the bash entry point's; everything from request construction to the
 # threshold decision is here.
 #
@@ -316,9 +316,9 @@ def main():
     canned = os.environ.get("FM_TRIAGE_SECOND_LOOK_RESPONSE")
     try:
         if canned:
-            # Test seam: exercise the real request build, the real state
-            # gathering and the real threshold rule against a recorded response,
-            # so only the network itself is stubbed.
+            # Test seam: exercise the real request build and the real threshold
+            # rule against a recorded response, so only the network itself is
+            # stubbed.
             body = json.loads(pathlib.Path(canned).read_text(encoding="utf-8"))
         else:
             key = api_key(HOME_ROOT)

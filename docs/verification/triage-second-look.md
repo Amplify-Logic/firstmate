@@ -21,6 +21,7 @@ It covers the span reader (dropped lines emitted, already-escalating lines never
 
 The same file also covers the always-on watcher call site, driving a real `bin/fm-watch.sh` subprocess: an unarmed home absorbs the heartbeat and advances its backoff exactly as before, and an armed home turns the same absorb into a heartbeat wake whose payload names the promoted line and `adverse_event`, leaves the line the second look silenced out of the wake, and still records the log surfaced through its end so the next heartbeat does not re-fire it; a backstop heartbeat carrying no promotion keeps the ordinary heartbeat key, so nothing can collapse onto a promotion queued earlier.
 These three cases sit here rather than in `tests/fm-watch-triage.test.sh` because `fail()` ends a test file, and a timing-sensitive case elsewhere in that file could end the run before this capability was ever exercised.
+`tests/fm-wake-queue.test.sh` holds the other half of that property at the queue itself, where wake-row collapse lives: a promotion keeps its payload past a later bare heartbeat, and two distinct promotions queued before one drain both survive it because each is keyed by its own payload, while bare heartbeats still collapse to one.
 
 ```console
 $ bash tests/fm-triage-second-look.test.sh | tail -3

@@ -232,11 +232,13 @@ That containment is structural and does not depend on the model reading any part
 "The second look is down" and "the second look was never built" are the same state.
 
 **Where it runs.** The two heartbeat backstops only, never the per-wake path, which must stay cheap and work offline: the always-on watcher's fleet scan ([`../bin/fm-watch.sh`](../bin/fm-watch.sh)) and the away-mode daemon's catch-all scan ([`../bin/fm-supervise-daemon.sh`](../bin/fm-supervise-daemon.sh)).
-Each scan makes at most one request covering every dropped line it found, never one request per line.
-Batching is a security property as well as the cheaper shape: a status line arguing for its own escalation measurably wins when evaluated alone and measurably loses when evaluated beside its peers (probe, 2026-09-17), and it is also 1.5x cheaper and 11x faster.
+Each scan makes at most one request, never one request per line, covering every dropped line it found up to a fixed batch bound the engine pins; a scan carrying more than that looks at the newest lines, because a status log is append-only and the tail is what just happened.
+Batching is a security property as well as the cheaper shape: a status line arguing for its own escalation measurably wins when evaluated alone and measurably loses when evaluated beside its peers, and it is also cheaper and faster.
+Both margins were measured by the 2026-09-17 probe, which asked a richer request than the line-only one this home now sends; the verification page linked at the end of this section owns those numbers and says what has not been re-measured since.
 
 **What a promotion does.** In the always-on watcher a promotion turns an otherwise absorbed heartbeat into an ordinary heartbeat wake whose payload names each promoted line and why it was raised.
-In the away-mode daemon a promotion joins the escalation buffer with the same reason; a promotion the model is both confident about and rates as interrupting also triggers the buffer flush immediately, which is the same delivery a zero-batch setting uses and preserves the buffer if the injection cannot be confirmed.
+In the away-mode daemon a promotion joins the escalation buffer with the same reason; when any promotion in a scan is one the model is both confident about and rates as interrupting, the buffer is flushed once after every promotion from that scan has joined it, so one scan delivers one digest however many lines it promoted.
+That flush is the same delivery a zero-batch setting uses and preserves the buffer if the injection cannot be confirmed.
 Low model confidence only ever demotes an interrupt to the next batch; it can never silence a promotion.
 
 **Cost.** At most about 516 input tokens per dropped line: that is the 2026-09-17 measurement, taken before the request was narrowed to the line alone.
@@ -248,7 +250,7 @@ Unlike `config/speak`, a malformed gate file reports on stderr and leaves this h
 `TYPESAFE_API_KEY` is read from the environment, else from this home's gitignored `.env`, and never appears in argv, stdout, stderr or any state file.
 The dropped status line itself is the whole of what leaves this machine: the task's brief, its worker kind and its earlier status lines are never sent, so arming this gate does not ship a brief's client names, hostnames or unreleased plans to a third party.
 The model is pinned to an exact version rather than an alias because the thresholds were tuned against that version.
-[`../bin/fm-triage-second-look.sh`](../bin/fm-triage-second-look.sh)'s header and `--help` own the exact invocation, the environment overrides and the exit codes, and its engine owns the request shape, the four questions, the thresholds and the tier rule.
+[`../bin/fm-triage-second-look.sh`](../bin/fm-triage-second-look.sh)'s header and `--help` own the exact invocation, the environment overrides and the exit codes, and its engine owns the request shape, the four questions, the batch bound, the thresholds and the tier rule.
 The tool reads its batch on stdin as `<task-id>` TAB `<status line>` records, one per line, so feed it one to read the exact request a scan would send:
 `printf 'my-task\tworking: the backfill migration truncated public.users\n' | bin/fm-triage-second-look.sh --dry-run`.
 Dated live evidence is in [`verification/triage-second-look.md`](verification/triage-second-look.md).
