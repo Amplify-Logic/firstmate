@@ -15,6 +15,9 @@
 #   - A gap while the laptop slept is caught up from the checkpoint rather than
 #     skipped, and the interval is a target rather than an upper bound.
 #   - An unavailable source reads `unknown`, never "nothing new".
+#   - An optional scanning window bounds the reads themselves: outside it no
+#     source is due, so nothing reads and nothing wakes, while the first tick
+#     after the window opens reads at once instead of waiting for a boundary.
 #   - No poll loop can run away: the interval has a hard floor, a failing source
 #     backs off geometrically to a ceiling, and one armed cycle produces one wake.
 #   - A cross-source duplicate keeps every source's provenance and stays ONE
@@ -72,6 +75,8 @@ T_0900=1789023600   # 09:00 local
 T_0915=1789024500   # 09:15 local - one interval later
 T_2300=1789074000   # 23:00 local - inside the configured quiet hours
 T_NEXT_0900=1789110000  # 2026-09-11 09:00 local
+T_1015=1789028100   # 10:15 local - a laptop opened partway into a 09:00 window
+T_1700=1789052400   # 17:00 local - after a 16:30 scanning window closes
 
 new_home() {
   local h=$1
@@ -1194,6 +1199,72 @@ test_unresolvable_timezone_is_refused() {
   pass 'a timezone that does not resolve is refused instead of silently becoming UTC'
 }
 
+# The read side, not the alert side: quiet hours already have their own test.
+test_scan_window_bounds_the_reads() {
+  local h out code
+
+  # With no window configured nothing changes: a source is due whenever the
+  # interval says so, at any hour.
+  h="$TMP_ROOT/window-unset"
+  new_home "$h"
+  out=$(at "$h" "$T_1700" tick)
+  assert_contains "$out" 'source(s) due' 'an unconfigured window stopped an ordinary read'
+
+  h="$TMP_ROOT/window"
+  new_home "$h"
+  printf 'active_start = 09:00\nactive_end = 16:30\n' >>"$h/config/channel-intake"
+
+  # Outside the window nothing is due at all, so the scheduled tick enqueues no
+  # wake, the watcher check stays silent, and a claim hands back no source.
+  out=$(at "$h" "$T_1700" tick)
+  [ -z "$out" ] || fail "a tick outside the scanning window reported work: $out"
+  [ "$(queue_lines "$h")" = 0 ] || fail 'a tick outside the scanning window woke the primary'
+  out=$(at "$h" "$T_1700" check)
+  [ -z "$out" ] || fail "the watcher check fired outside the scanning window: $out"
+  out=$(at "$h" "$T_1700" claim)
+  assert_contains "$out" '<none due>' 'a claim outside the scanning window handed back a source'
+  out=$(at "$h" "$T_1700" status)
+  assert_contains "$out" 'active_window: 09:00-16:30' 'status did not report the scanning window'
+  assert_contains "$out" 'in_active_window: false' 'status placed 17:00 inside a 09:00-16:30 window'
+  assert_contains "$out" 'sources_due: 0' 'sources read as due outside the scanning window'
+
+  # A laptop opened partway into the window reads on that first tick rather
+  # than waiting for the next interval boundary.
+  out=$(at "$h" "$T_1015" tick)
+  assert_contains "$out" '2 source(s) due' 'the first tick after the window opened did not read'
+  out=$(at "$h" "$T_1015" status)
+  assert_contains "$out" 'in_active_window: true' 'status placed 10:15 outside a 09:00-16:30 window'
+
+  # A window whose end is at or before its start wraps midnight, the same rule
+  # quiet hours use.
+  h="$TMP_ROOT/window-wrap"
+  new_home "$h"
+  printf 'active_start = 22:00\nactive_end = 07:00\n' >>"$h/config/channel-intake"
+  out=$(at "$h" "$T_2300" status)
+  assert_contains "$out" 'in_active_window: true' '23:00 fell outside a 22:00-07:00 window'
+  out=$(at "$h" "$T_2300" tick)
+  assert_contains "$out" 'source(s) due' 'a read inside the wrapped window was suppressed'
+  out=$(at "$h" "$T_0900" status)
+  assert_contains "$out" 'in_active_window: false' '09:00 fell inside a 22:00-07:00 window'
+
+  # Half a window is a configuration error, not a silent all-day scan.
+  h="$TMP_ROOT/window-half"
+  new_home "$h"
+  printf 'active_start = 09:00\n' >>"$h/config/channel-intake"
+  out=$(at "$h" "$T_0900" status 2>&1) && code=0 || code=$?
+  expect_code 2 "$code" 'a half-configured scanning window was accepted'
+  assert_contains "$out" 'must be set together' 'the refusal did not name the missing bound'
+
+  h="$TMP_ROOT/window-equal"
+  new_home "$h"
+  printf 'active_start = 09:00\nactive_end = 09:00\n' >>"$h/config/channel-intake"
+  out=$(at "$h" "$T_0900" status 2>&1) && code=0 || code=$?
+  expect_code 2 "$code" 'equal scanning-window bounds were accepted'
+  assert_contains "$out" 'must differ' 'the refusal did not explain the equal bounds'
+
+  pass 'the scanning window bounds the reads themselves and opens with an immediate first read'
+}
+
 test_equal_quiet_bounds_are_refused() {
   local h out code
   h="$TMP_ROOT/quiet-equal"
@@ -1307,6 +1378,7 @@ test_blocked_notifications_are_visible_rather_than_silent
 test_only_a_requested_render_opens_the_page
 test_unresolvable_timezone_is_refused
 test_equal_quiet_bounds_are_refused
+test_scan_window_bounds_the_reads
 test_both_schedules_share_one_launchd_writer
 test_install_and_uninstall_on_a_temp_home
 test_bootstrap_surfaces_the_intake

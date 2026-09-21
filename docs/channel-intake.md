@@ -179,6 +179,10 @@ Real latency also absorbs sleep and offline stretches, rate limiting and backoff
 ## Cost and quota discipline
 
 `interval_seconds` has a hard 300-second floor, because an awake laptop multiplies the cadence by every enrolled source.
+`active_start` and `active_end` bound the scanning day: set together as `HH:MM`, they make every source not-due outside the window, so the tick enqueues no wake, the watcher check stays silent, and a claim hands back an empty set.
+The window wraps midnight when the end is at or before the start, exactly as quiet hours do, and leaving both unset keeps the historical all-day behavior.
+It bounds reads, not alerts: quiet hours still own whether a rendered payload goes out.
+A laptop opened partway into the window reads on that first tick rather than waiting for the next interval boundary, because the cadence is measured from each source's last attempt.
 A source whose read failed backs off geometrically to `backoff_max_seconds`, so a permanently broken source settles into a cheap heartbeat instead of a retry loop.
 One armed cycle produces one wake, no matter how many ticks fire inside it.
 
