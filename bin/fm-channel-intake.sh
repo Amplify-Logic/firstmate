@@ -56,6 +56,11 @@
 #   `brief` and `todo` render from the ledger every time, so a correction, a
 #   resolution and a completed obligation reconcile across both by construction
 #   instead of needing a second reconciliation pass.
+#   `complete` additionally refreshes the day's Lavish page through
+#   bin/fm-todo-render.sh when one already exists, so the captain's standard
+#   to-do surface re-ranks itself on every read instead of being a snapshot of
+#   06:00. No page exists yet, or a renderer that fails, is logged and never
+#   fails the read.
 #   Opening a rendered page is OPT-IN and never automatic. `--open` is what a
 #   captain-requested render passes, and it is the only thing that opens
 #   anything; a scheduled or background render always omits it, always
@@ -1069,6 +1074,37 @@ complete_source() {
   clear_armed
   log_event "source $id complete at checkpoint $checkpoint"
   printf 'CHANNEL_INTAKE: %s read complete, checkpoint %s\n' "$id" "$checkpoint"
+  refresh_todo_page "$epoch"
+}
+
+# The day's page re-ranks itself on every completed read. This is the whole
+# reason the ordering is not a once-a-morning decision: an outage observed at
+# 15:00 reaches the top of the page on the read that recorded it, with no
+# model call and nothing re-verified, because bin/fm-todo-render.sh rebuilds
+# the page from this same ledger.
+#
+# It is deliberately BOUNDED AND FAIL-SOFT. `--if-exists` means a home that
+# never wrote today's page has one manufactured for it by a background read,
+# and a renderer that is missing or that fails is logged rather than turned
+# into a failed read: the checkpoint this command just advanced is the durable
+# thing, and losing a page refresh must never cost a completed read.
+refresh_todo_page() {
+  local epoch=$1 renderer="$SCRIPT_DIR/fm-todo-render.sh" out code
+  if [ ! -x "$renderer" ]; then
+    log_event 'todo page not refreshed: no renderer at fm-todo-render.sh'
+    return 0
+  fi
+  # This gate's own clock, not a second reading of the wall clock: the page is
+  # rendered as of the read that produced it, which is also what keeps a
+  # pinned-clock test deterministic across the two commands.
+  out=$(FM_TODO_RENDER_NOW="$epoch" "$renderer" render --if-exists 2>&1) && code=0 || code=$?
+  if [ "$code" -ne 0 ]; then
+    log_event "todo page refresh failed: $out"
+    printf 'CHANNEL_INTAKE: the day page was not refreshed - %s\n' "$out"
+    return 0
+  fi
+  log_event "todo page refresh: $out"
+  printf '%s\n' "$out"
 }
 
 fail_source() {
