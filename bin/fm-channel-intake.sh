@@ -121,6 +121,12 @@
 #   backoff_max_seconds      backoff ceiling (default 21600)
 #   quiet_start              HH:MM start of local quiet hours (default unset)
 #   quiet_end                HH:MM end of local quiet hours (default unset)
+#   active_start             HH:MM start of the local scanning window; outside
+#                            it no source is ever due, so nothing reads and
+#                            nothing wakes (default unset, meaning all day)
+#   active_end               HH:MM end of the local scanning window; set with
+#                            active_start, wraps midnight the same way quiet
+#                            hours do (default unset)
 #   notify_min_interval_seconds  minimum gap between payloads (default 1800)
 #   notify_max_per_day       bounded payloads per local day (default 8)
 #   notify_recipient         the private direct-message recipient
@@ -183,6 +189,8 @@ CFG_BACKOFF=$DEFAULT_BACKOFF
 CFG_BACKOFF_MAX=$DEFAULT_BACKOFF_MAX
 CFG_QUIET_START=
 CFG_QUIET_END=
+CFG_ACTIVE_START=
+CFG_ACTIVE_END=
 CFG_NOTIFY_MIN_INTERVAL=$DEFAULT_NOTIFY_MIN_INTERVAL
 CFG_NOTIFY_MAX_PER_DAY=$DEFAULT_NOTIFY_MAX_PER_DAY
 CFG_NOTIFY_RECIPIENT=
@@ -301,6 +309,8 @@ load_config() {
           require_positive_int backoff_max_seconds "$value"; CFG_BACKOFF_MAX=$value ;;
         quiet_start) require_hhmm quiet_start "$value"; CFG_QUIET_START=$value ;;
         quiet_end) require_hhmm quiet_end "$value"; CFG_QUIET_END=$value ;;
+        active_start) require_hhmm active_start "$value"; CFG_ACTIVE_START=$value ;;
+        active_end) require_hhmm active_end "$value"; CFG_ACTIVE_END=$value ;;
         notify_min_interval_seconds)
           require_positive_int notify_min_interval_seconds "$value"
           CFG_NOTIFY_MIN_INTERVAL=$value ;;
@@ -354,6 +364,12 @@ load_config() {
     [ "$CFG_QUIET_START" != "$CFG_QUIET_END" ] \
       || die 'quiet_start and quiet_end must differ; equal bounds would silence every hour of the day'
   fi
+  if [ -n "$CFG_ACTIVE_START" ] || [ -n "$CFG_ACTIVE_END" ]; then
+    [ -n "$CFG_ACTIVE_START" ] && [ -n "$CFG_ACTIVE_END" ] \
+      || die 'active_start and active_end must be set together'
+    [ "$CFG_ACTIVE_START" != "$CFG_ACTIVE_END" ] \
+      || die 'active_start and active_end must differ; equal bounds would not describe a window'
+  fi
 }
 
 enabled() {
@@ -405,6 +421,21 @@ in_quiet_hours() {
     ! [ "$hhmm" \< "$CFG_QUIET_START" ] && [ "$hhmm" \< "$CFG_QUIET_END" ]
   else
     ! [ "$hhmm" \< "$CFG_QUIET_START" ] || [ "$hhmm" \< "$CFG_QUIET_END" ]
+  fi
+}
+
+# The scanning window. Unset means all day, which is the historical behavior.
+# It wraps midnight on the same rule as quiet hours, so an overnight window is
+# expressible rather than an error. This bounds the READ side only: quiet hours
+# still own whether an alert payload goes out.
+in_active_window() {
+  local epoch=$1 hhmm
+  [ -n "$CFG_ACTIVE_START" ] || return 0
+  hhmm=$(local_fmt "$epoch" '%H:%M')
+  if [ "$CFG_ACTIVE_START" \< "$CFG_ACTIVE_END" ]; then
+    ! [ "$hhmm" \< "$CFG_ACTIVE_START" ] && [ "$hhmm" \< "$CFG_ACTIVE_END" ]
+  else
+    ! [ "$hhmm" \< "$CFG_ACTIVE_START" ] || [ "$hhmm" \< "$CFG_ACTIVE_END" ]
   fi
 }
 
@@ -642,6 +673,11 @@ source_status() {
 
 source_due() {
   local id=$1 epoch=$2 rec last_attempt backoff_until last_ok
+  # Outside the scanning window nothing is due at all, so the tick enqueues no
+  # wake and a claim hands back an empty set. The first tick after the window
+  # opens reads immediately, because the interval test below measures the age
+  # of the last attempt rather than aligning to the window boundary.
+  in_active_window "$epoch" || return 1
   rec=$(source_record "$id")
   backoff_until=$(record_field "$rec" backoff_until)
   case "$backoff_until" in ''|*[!0-9]*) backoff_until=0 ;; esac
@@ -1966,6 +2002,9 @@ status_cmd() {
   printf 'quiet_hours: %s\n' \
     "$([ -z "$CFG_QUIET_START" ] && printf '<unset>' || printf '%s-%s' "$CFG_QUIET_START" "$CFG_QUIET_END")"
   printf 'in_quiet_hours: %s\n' "$(in_quiet_hours "$epoch" && printf true || printf false)"
+  printf 'active_window: %s\n' \
+    "$([ -z "$CFG_ACTIVE_START" ] && printf '<unset>' || printf '%s-%s' "$CFG_ACTIVE_START" "$CFG_ACTIVE_END")"
+  printf 'in_active_window: %s\n' "$(in_active_window "$epoch" && printf true || printf false)"
   printf 'notify_min_interval_seconds: %s\n' "$CFG_NOTIFY_MIN_INTERVAL"
   printf 'notify_max_per_day: %s\n' "$CFG_NOTIFY_MAX_PER_DAY"
   printf 'notify_recipient_set: %s\n' \
