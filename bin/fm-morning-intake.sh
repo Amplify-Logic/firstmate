@@ -647,6 +647,7 @@ claim_intake() {
   log_event "claimed attempt $ST_ATTEMPTS"
   printf 'local_date: %s\n' "$day"
   printf 'attempt: %s of %s\n' "$ST_ATTEMPTS" "$CFG_MAX_ATTEMPTS"
+  printf 'todo_composition: write action metadata and details-only morning HTML per %s/fm-todo-render.sh --help; render the unified page before complete\n' "$SCRIPT_DIR"
   printf 'source_watermark: %s\n' "$(read_line_file "$SOURCE_FILE")"
   [ -z "$CFG_REPORT_DIR" ] || printf 'report_dir: %s\n' "$CFG_REPORT_DIR"
 }
@@ -654,8 +655,8 @@ claim_intake() {
 # The day's Lavish page. A captain-facing surface is the deliverable, so this
 # is proven the same way the report is - an existing, non-empty regular file,
 # under this home's own .lavish/ directory and named .html - rather than taken
-# on the orchestrator's word. Nothing here reads or renders the page: this gate
-# never opens a file's contents, and bin/fm-todo-render.sh owns the rendering.
+# on the orchestrator's word. When a matching morning fragment exists,
+# completion composes it through bin/fm-todo-render.sh before publishing success.
 require_lavish_page() {
   local page=$1
   case "$page" in
@@ -720,6 +721,12 @@ complete_intake() {
   load_state
   [ "$ST_DATE" = "$day" ] || die "no intake is armed for $day"
   [ "$ST_PHASE" = claimed ] || die "complete requires a claimed intake (phase: $ST_PHASE)"
+
+  if [ -n "$lavish" ] && [ -f "${lavish%.html}.morning.html" ]; then
+    FM_TODO_RENDER_NOW="$epoch" "$SCRIPT_DIR/fm-todo-render.sh" render \
+      --out "$lavish" --date "$day" \
+      || die 'morning composition failed; intake remains claimed'
+  fi
 
   ST_PHASE=complete
   ST_UPDATED=$epoch

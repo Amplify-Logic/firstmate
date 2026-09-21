@@ -8,6 +8,11 @@
 #                                [--class CLASS] [--title TEXT] [--link URL]
 #                                [--dedup-key KEY] [--thread PARENT] [--reply-marker VALUE]
 #                                [--source-epoch EPOCH]
+#                                [--condition b14|freezing --count N --units TEXT]
+# Fleet condition snapshots use a stable source-scoped identity instead of a
+# per-read reference. Supply the full current count and newest affected units;
+# the renderer never sums snapshots. Only telemetry-fleet-alerts accepts these
+# flags. This changes composition/identity, never source enrollment or cadence.
 #   fm-channel-intake.sh complete --source ID --checkpoint VALUE
 #   fm-channel-intake.sh fail --source ID --reason TEXT
 #   fm-channel-intake.sh resolve --item KEY --reason TEXT [--waiting]
@@ -1161,6 +1166,7 @@ clear_armed() {
 observe() {
   local id='' ref='' digest_in='' digest_file='' class=routine title='' link=''
   local dedup='' thread='' marker='' source_epoch='' epoch key path digest thread_marker
+  local condition='' condition_count='' condition_units=''
   local existing_digest existing_state created revisions provenance notified
   local notified_digest kind outcome prov_tag
   while [ "$#" -gt 0 ]; do
@@ -1175,6 +1181,9 @@ observe() {
       --dedup-key) [ "$#" -ge 2 ] || die '--dedup-key requires a value'; dedup=$2; shift 2 ;;
       --thread) [ "$#" -ge 2 ] || die '--thread requires a value'; thread=$2; shift 2 ;;
       --reply-marker) [ "$#" -ge 2 ] || die '--reply-marker requires a value'; marker=$2; shift 2 ;;
+      --condition) [ "$#" -ge 2 ] || die '--condition requires a value'; condition=$2; shift 2 ;;
+      --count) [ "$#" -ge 2 ] || die '--count requires a value'; condition_count=$2; shift 2 ;;
+      --units) [ "$#" -ge 2 ] || die '--units requires a value'; condition_units=$2; shift 2 ;;
       --source-epoch) [ "$#" -ge 2 ] || die '--source-epoch requires a value'; source_epoch=$2; shift 2 ;;
       *) die "unknown observe argument: $1" ;;
     esac
@@ -1182,6 +1191,22 @@ observe() {
   require_enabled
   [ -n "$id" ] || die '--source is required'
   require_id 'source id' "$id"
+  if [ -n "$condition" ]; then
+    [ "$(inventory_field "$id" 2)" = telemetry-fleet-alerts ] \
+      || die '--condition requires a telemetry-fleet-alerts source'
+    case "$condition_count" in ''|*[!0-9]*) die '--count must be a non-negative integer' ;; esac
+    [ -n "$condition_units" ] || die '--units is required (use none for an empty snapshot)'
+    [ -z "$dedup" ] || die '--condition supplies its own identity; omit --dedup-key'
+    ref="condition-$condition"
+    case "$condition" in
+      b14) title="$condition_count active B.14 units; newest: $condition_units" ;;
+      freezing) title="$condition_count coolers under 1 C; newest: $condition_units" ;;
+      *) die '--condition must be b14 or freezing' ;;
+    esac
+    class=routine
+  elif [ -n "$condition_count$condition_units" ]; then
+    die '--count and --units require --condition'
+  fi
   [ -n "$ref" ] || die '--ref is required'
   # A ref is hashed into the item key and never becomes a path, so it only has
   # to be a single-line token; a Gmail message id is not a filename slug.

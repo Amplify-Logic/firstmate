@@ -974,3 +974,26 @@ test_lost_live_check_is_reported_and_rearming_is_idempotent
 test_force_never_overrides_the_bounded_retry_budget
 test_bootstrap_surfaces_the_intake
 test_bootstrap_without_the_intake_script_degrades_to_upstream
+
+test_completion_composes_morning_and_preserves_failure() {
+  local h page report out code
+  h="$TMP_ROOT/composition"
+  new_home "$h"
+  at "$h" "$T_0700" run >/dev/null
+  at "$h" "$T_0700" claim >/dev/null
+  page=$(new_page "$h")
+  report="$h/reports/composition.md"
+  printf 'source-verified report\n' >"$report"
+  printf '<h2>Calendar</h2><p>Meeting details</p>\n' >"${page%.html}.morning.html"
+  printf '{invalid\n' >"${page%.html}.morning.json"
+  out=$(at "$h" "$T_0715" complete --report "$report" --lavish "$page" 2>&1) && code=0 || code=$?
+  expect_code 2 "$code" 'invalid morning metadata must prevent completion'
+  [ ! -f "$h/data/morning-intake/last-complete" ] || fail 'failed composition advanced completion'
+  printf '{"version":1,"date":"2026-09-10","actions":[]}\n' >"${page%.html}.morning.json"
+  at "$h" "$T_0715" complete --report "$report" --lavish "$page" >/dev/null
+  assert_contains "$(cat "$page")" '<h2>Needs you now' 'morning completion did not compose the page'
+  assert_contains "$(cat "$page")" 'Meeting details' 'composition lost morning details'
+  pass 'morning completion composes the page and failed composition preserves the claim'
+}
+
+test_completion_composes_morning_and_preserves_failure
