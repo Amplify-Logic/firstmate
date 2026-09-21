@@ -45,7 +45,7 @@ For every ticket that will appear on the surface:
 2. Resolve the stage id to its label through the ticket pipeline-stage property definition; never print the numeric id and never paraphrase the stage.
 3. Treat `hs_last_message_sent_at` as the tripwire for the whole shared-inbox class: if it is later than the last outbound visible in Gmail, an answer went out from the shared inbox.
 4. Fetch the ticket's `EMAIL` engagements sorted newest first and read the newest inbound body and the newest outbound body; never infer an inbound's content from the stage.
-5. An outbound whose from-address is `support@aquablu.com` is a real reply from us regardless of who wrote it and regardless of Gmail.
+5. An outbound whose from-address is the shared support inbox (`support@`) is a real reply from us regardless of who wrote it and regardless of Gmail.
 6. If `hs_last_message_sent_at` has no matching `EMAIL` engagement, the message is a conversations-inbox message, an auto-acknowledgement or an agent reply; say so explicitly and claim neither that a human answered nor that nothing went out.
 7. Fetch the ticket's `NOTE` engagements sorted newest first; a note mentioning `@Lars Tolhurst` makes the item his even when the stage says otherwise.
 8. Recount ownership live rather than reusing a number: search tickets owned by the captain whose stage is not Closed, and break the count down by stage label.
