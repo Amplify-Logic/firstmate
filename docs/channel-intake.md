@@ -118,6 +118,12 @@ Nothing is lost in either case - the items stay notifiable and re-render once th
 
 `brief` and `todo` render from the same ledger every time.
 A correction, a resolution and a completed obligation reconcile across both by construction rather than needing a second pass over two stores.
+The day's Lavish page is the third surface over that same ledger, and it re-ranks itself during the day rather than being a snapshot of 06:00.
+A completed read calls [`bin/fm-todo-render.sh`](../bin/fm-todo-render.sh), which rebuilds `.lavish/today-<YYYY-MM-DD>.html` from the ledger with no model call: open items ranked by class - outage, urgent, deadline, obligation, routine - then newest read first inside each class, waiting items in their own block, and items archived on that day in a closed table with the reason `resolve --reason` recorded.
+An `automation-candidate` is excluded there exactly as it is from `todo`, because a proposal is not a human obligation.
+Each line carries its source label and the time that item was last read, and the page carries its own render time separately, so a line's provenance and the page's build time can never be read as one fact.
+The hand-verified morning section, if the orchestrator wrote one, is copied through byte for byte below the live section and is never parsed or re-ordered, because those lines were verified by hand under the `daily-todo-freshness` procedure and the renderer cannot re-verify them.
+The refresh is fail-soft and never manufactures a page: a home with no page for the day is told so, a renderer that fails is reported, and neither costs the read whose checkpoint has already advanced.
 Both accept `--out FILE` inside the configured `report_dir` and overwrite the same path, so a background render updates the existing page instead of leaving a trail of dated files; a path with a `..` component is refused before the directory check.
 
 Opening a rendered page is opt-in and never automatic.

@@ -13,6 +13,10 @@
 #     -> acknowledge, through the same commands a live orchestrator runs.
 #   - A failed or partial intake cannot advance the completion watermark, and a
 #     corrected source message after a same-day failure is still ingested.
+#   - The day's Lavish page is part of completion, not an extra: `complete`
+#     refuses without a real, non-empty page under the home's own .lavish/
+#     directory, and a day that genuinely cannot have one completes only with a
+#     reason recorded in the day's durable record.
 #   - Retries are bounded and the exhausted state stays visible, including for a
 #     failure recorded before any claim, and only `reset` gives the budget back.
 #   - Writes to the durable record are serialized, so a watcher sweep cannot
@@ -65,6 +69,17 @@ report_dir = $h/reports
 max_attempts = 2
 retry_after_seconds = 1800
 EOF
+}
+
+# The day's Lavish page, which `complete` now proves alongside the report.
+# Written as a real file under the home's own .lavish/ so the gate's check is
+# exercised rather than stubbed out.
+new_page() {
+  local h=$1 day=${2:-2026-09-10}
+  mkdir -p "$h/.lavish"
+  printf '<!doctype html><title>Today</title><p>page</p>\n' \
+    >"$h/.lavish/today-$day.html"
+  printf '%s\n' "$h/.lavish/today-$day.html"
 }
 
 # Every invocation pins the clock instead of sleeping or suspending anything.
@@ -215,7 +230,8 @@ test_wake_drives_intake_to_acknowledged_report() {
   assert_contains "$out" 'attempt: 1 of 2' 'claim did not report the bounded attempt'
 
   printf '# intake 2026-09-10\nfindings\n' >"$report"
-  out=$(at "$h" "$T_0715" complete --report "$report" --source-watermark 1789023821.730139)
+  out=$(at "$h" "$T_0715" complete --report "$report" --lavish "$(new_page "$h")" \
+    --source-watermark 1789023821.730139)
   assert_contains "$out" 'complete for 2026-09-10' 'complete did not confirm the finished intake'
   [ "$(cat "$h/data/morning-intake/last-complete")" = 2026-09-10 ] \
     || fail 'a verified report did not advance the completion watermark'
@@ -286,7 +302,7 @@ test_failure_cannot_advance_watermark_and_correction_still_lands() {
   assert_contains "$out" 'source read timed out' 'the retry did not carry the prior failure reason'
   at "$h" "$T_1100" claim >/dev/null
   printf '# corrected intake\ncorrected findings\n' >"$report"
-  out=$(at "$h" "$T_1100" complete --report "$report")
+  out=$(at "$h" "$T_1100" complete --report "$report" --lavish "$(new_page "$h")")
   assert_contains "$out" 'complete for 2026-09-10' 'the corrected intake could not complete'
   [ "$(cat "$h/data/morning-intake/last-complete")" = 2026-09-10 ] \
     || fail 'the corrected intake did not advance the watermark'
@@ -403,7 +419,7 @@ test_state_writes_are_serialized() {
   printf '# intake 2026-09-10
 findings
 ' >"$h/reports/2026-09-10.md"
-  out=$(at "$h" "$T_0715" complete --report "$h/reports/2026-09-10.md")
+  out=$(at "$h" "$T_0715" complete --report "$h/reports/2026-09-10.md" --lavish "$(new_page "$h")")
   assert_contains "$out" 'complete for 2026-09-10' 'the day could not complete after contention cleared'
   assert_absent "$h/data/morning-intake/state.lock" 'the state mutex was left behind'
 
@@ -811,7 +827,7 @@ test_bootstrap_without_the_intake_script_degrades_to_upstream() {
   at "$h" "$T_0700" run >/dev/null
   at "$h" "$T_0715" claim >/dev/null
   printf '# intake 2026-09-10\nfindings\n' >"$report"
-  at "$h" "$T_0715" complete --report "$report" >/dev/null
+  at "$h" "$T_0715" complete --report "$report" --lavish "$(new_page "$h")" >/dev/null
 
   # gh is the only probe that would otherwise reach the network.
   fakebin=$(fm_fakebin "$h")
@@ -864,11 +880,86 @@ test_bootstrap_without_the_intake_script_degrades_to_upstream() {
   pass 'bootstrap without bin/fm-morning-intake.sh still completes and degrades to upstream output'
 }
 
+# The captain made the Lavish page the standard daily to-do surface, so a
+# markdown report alone is no longer the deliverable. This pins the gate: the
+# page is proved like the report, a skipped page is a recorded reason rather
+# than a silent omission, and neither refusal advances the day.
+test_completion_requires_the_days_page() {
+  local h report out code page
+  h="$TMP_ROOT/lavish-gate"
+  new_home "$h"
+  report="$h/reports/2026-09-10.md"
+  at "$h" "$T_0700" run >/dev/null
+  at "$h" "$T_0700" claim >/dev/null
+  printf '# intake 2026-09-10\nfindings\n' >"$report"
+
+  # A verified report with no page is not a completed intake.
+  out=$(at "$h" "$T_0700" complete --report "$report" 2>&1) && code=0 || code=$?
+  expect_code 2 "$code" 'complete accepted a report with no day page'
+  assert_contains "$out" '--lavish is required' 'the refusal did not name the missing page'
+  assert_absent "$h/data/morning-intake/last-complete" \
+    'a completion with no page advanced the watermark'
+
+  # A page that does not exist is refused exactly like a missing report.
+  mkdir -p "$h/.lavish"
+  out=$(at "$h" "$T_0700" complete --report "$report" \
+    --lavish "$h/.lavish/today-2026-09-10.html" 2>&1) && code=0 || code=$?
+  expect_code 2 "$code" 'complete accepted a page that does not exist'
+  assert_contains "$out" 'lavish page is not a regular file' \
+    'the refusal did not name the absent page'
+
+  # An empty page is not a page.
+  : >"$h/.lavish/today-2026-09-10.html"
+  out=$(at "$h" "$T_0700" complete --report "$report" \
+    --lavish "$h/.lavish/today-2026-09-10.html" 2>&1) && code=0 || code=$?
+  expect_code 2 "$code" 'complete accepted an empty page'
+  assert_contains "$out" 'lavish page is empty' 'the refusal did not name the empty page'
+
+  # A page outside the home's own .lavish/ directory is refused.
+  printf '<p>elsewhere</p>\n' >"$TMP_ROOT/elsewhere.html"
+  out=$(at "$h" "$T_0700" complete --report "$report" \
+    --lavish "$TMP_ROOT/elsewhere.html" 2>&1) && code=0 || code=$?
+  expect_code 2 "$code" 'complete accepted a page outside the home .lavish directory'
+  assert_contains "$out" 'must name a page under' 'the refusal did not name the expected directory'
+  assert_absent "$h/data/morning-intake/last-complete" \
+    'a refused page advanced the watermark'
+
+  # A real page completes the day and is recorded.
+  page=$(new_page "$h")
+  out=$(at "$h" "$T_0700" complete --report "$report" --lavish "$page")
+  assert_contains "$out" "page $page" 'complete did not confirm the page it accepted'
+  [ "$(state_field "$h" lavish)" = "$page" ] \
+    || fail 'the accepted page was not written into the day record'
+
+  # The deliberate exception, on a second day: no page, but a recorded reason.
+  at "$h" "$T_NEXT_0700" run >/dev/null
+  at "$h" "$T_NEXT_0700" claim >/dev/null
+  printf '# intake 2026-09-11\nfindings\n' >"$h/reports/2026-09-11.md"
+  out=$(at "$h" "$T_NEXT_0700" complete --report "$h/reports/2026-09-11.md" \
+    --no-lavish 'HubSpot was unreachable all morning, nothing verified to publish')
+  assert_contains "$out" 'NO PAGE: HubSpot was unreachable' \
+    'a waived page was not reported as a waiver'
+  assert_contains "$(at "$h" "$T_NEXT_0700" status)" \
+    'state_lavish_waiver: HubSpot was unreachable' \
+    'the waiver reason was not kept in the day record'
+  [ "$(state_field "$h" lavish)" = '' ] \
+    || fail 'a waived day carried a page path forward'
+
+  # Both at once is a contradiction, not a preference.
+  out=$(at "$h" "$T_NEXT_0700" complete --report "$h/reports/2026-09-11.md" \
+    --lavish "$page" --no-lavish 'reason' 2>&1) && code=0 || code=$?
+  expect_code 2 "$code" 'complete accepted both a page and a waiver'
+  assert_contains "$out" 'not both' 'the contradiction was not named'
+
+  pass "the day's page is part of completion, and skipping it is a recorded reason rather than a silent omission"
+}
+
 test_inert_without_opt_in
 test_daily_gate_and_no_duplicate_wake
 test_missed_morning_catches_up
 test_wake_drives_intake_to_acknowledged_report
 test_failure_cannot_advance_watermark_and_correction_still_lands
+test_completion_requires_the_days_page
 test_retries_are_bounded_and_exhaustion_is_visible
 test_no_existing_fleet_is_overridden
 test_state_writes_are_serialized

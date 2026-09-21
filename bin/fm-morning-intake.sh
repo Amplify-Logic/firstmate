@@ -4,7 +4,8 @@
 # Usage:
 #   fm-morning-intake.sh run [--force]
 #   fm-morning-intake.sh claim
-#   fm-morning-intake.sh complete --report FILE [--source-watermark VALUE]
+#   fm-morning-intake.sh complete --report FILE (--lavish FILE | --no-lavish REASON)
+#                                 [--source-watermark VALUE]
 #   fm-morning-intake.sh fail --reason TEXT
 #   fm-morning-intake.sh rearm --reason TEXT
 #   fm-morning-intake.sh check
@@ -29,6 +30,16 @@
 # When that report is a captain-facing to-do, needs-you or waiting-on-you
 # surface, the orchestrator loads the `daily-todo-freshness` skill before
 # writing it.
+#
+# THE DAY'S PAGE IS PART OF COMPLETION, NOT AN EXTRA. Since the captain made
+# the Lavish page the standard surface for the daily to-do, a markdown report
+# alone is not the deliverable, so `complete` refuses without `--lavish`
+# naming an existing, non-empty .html file under this home's .lavish/
+# directory. A day that genuinely cannot have one completes with
+# `--no-lavish REASON` instead: the reason is written into the day's durable
+# record and printed by `status`, so a skipped page is visible rather than
+# indistinguishable from a rendered one. The two are mutually exclusive and
+# one of them is required.
 #
 # Two delivery paths reach the orchestrator, and neither one starts a session:
 #
@@ -91,6 +102,7 @@ FM_HOME="${FM_HOME:-${FM_ROOT_OVERRIDE:-$ROOT}}"
 CONFIG="${FM_CONFIG_OVERRIDE:-$FM_HOME/config}"
 DATA="${FM_DATA_OVERRIDE:-$FM_HOME/data}"
 CONFIG_FILE="$CONFIG/morning-intake"
+LAVISH_DIR="${FM_LAVISH_OVERRIDE:-$FM_HOME/.lavish}"
 INTAKE_DIR="$DATA/morning-intake"
 STATE_FILE="$INTAKE_DIR/state"
 COMPLETE_FILE="$INTAKE_DIR/last-complete"
@@ -290,11 +302,13 @@ ST_REPORT=
 ST_ERROR=
 ST_REARMS=0
 ST_SURFACED=
+ST_LAVISH=
+ST_LAVISH_WAIVER=
 
 load_state() {
   local line key value
   ST_DATE=; ST_PHASE=idle; ST_ATTEMPTS=0; ST_UPDATED=0
-  ST_REPORT=; ST_ERROR=; ST_REARMS=0; ST_SURFACED=
+  ST_REPORT=; ST_ERROR=; ST_REARMS=0; ST_SURFACED=; ST_LAVISH=; ST_LAVISH_WAIVER=
   [ -f "$STATE_FILE" ] && [ ! -L "$STATE_FILE" ] || return 0
   while IFS= read -r line || [ -n "$line" ]; do
     key=${line%%=*}
@@ -308,6 +322,8 @@ load_state() {
       error) ST_ERROR=$value ;;
       rearms) ST_REARMS=$value ;;
       surfaced) ST_SURFACED=$value ;;
+      lavish) ST_LAVISH=$value ;;
+      lavish_waiver) ST_LAVISH_WAIVER=$value ;;
     esac
   done <"$STATE_FILE"
   case "$ST_ATTEMPTS" in ''|*[!0-9]*) ST_ATTEMPTS=0 ;; esac
@@ -317,9 +333,11 @@ load_state() {
 
 save_state() {
   local body parent tmp
-  body=$(printf 'date=%s\nphase=%s\nattempts=%s\nupdated=%s\nrearms=%s\nsurfaced=%s\nreport=%s\nerror=%s' \
+  body=$(printf 'date=%s\nphase=%s\nattempts=%s\nupdated=%s\nrearms=%s\nsurfaced=%s\nreport=%s\nlavish=%s\nlavish_waiver=%s\nerror=%s' \
     "$ST_DATE" "$ST_PHASE" "$ST_ATTEMPTS" "$ST_UPDATED" "$ST_REARMS" \
-    "$(sanitize "$ST_SURFACED")" "$(sanitize "$ST_REPORT")" "$(sanitize "$ST_ERROR")")
+    "$(sanitize "$ST_SURFACED")" "$(sanitize "$ST_REPORT")" \
+    "$(sanitize "$ST_LAVISH")" "$(sanitize "$ST_LAVISH_WAIVER")" \
+    "$(sanitize "$ST_ERROR")")
   parent=$INTAKE_DIR
   mkdir -p "$parent"
   tmp=$(umask 077; mktemp "$parent/.morning-intake.XXXXXX") || die 'cannot write state'
@@ -552,6 +570,7 @@ run_intake() {
   if [ "$ST_DATE" != "$day" ]; then
     # A new local day resets attempts; yesterday's failure never blocks today.
     ST_DATE=$day; ST_PHASE=idle; ST_ATTEMPTS=0; ST_REARMS=0; ST_REPORT=; ST_ERROR=; ST_SURFACED=
+    ST_LAVISH=; ST_LAVISH_WAIVER=
   fi
 
   if [ "$force" != true ]; then
@@ -632,11 +651,39 @@ claim_intake() {
   [ -z "$CFG_REPORT_DIR" ] || printf 'report_dir: %s\n' "$CFG_REPORT_DIR"
 }
 
+# The day's Lavish page. A captain-facing surface is the deliverable, so this
+# is proven the same way the report is - an existing, non-empty regular file,
+# under this home's own .lavish/ directory and named .html - rather than taken
+# on the orchestrator's word. Nothing here reads or renders the page: this gate
+# never opens a file's contents, and bin/fm-todo-render.sh owns the rendering.
+require_lavish_page() {
+  local page=$1
+  case "$page" in
+    /*) ;;
+    *) die "--lavish must be an absolute path: $page" ;;
+  esac
+  case "/$page/" in
+    */../*) die "--lavish must not contain a .. path component: $page" ;;
+  esac
+  case "$page" in
+    "$LAVISH_DIR"/*) ;;
+    *) die "--lavish must name a page under $LAVISH_DIR: $page" ;;
+  esac
+  case "$page" in
+    *.html) ;;
+    *) die "--lavish must name an .html page: $page" ;;
+  esac
+  [ -f "$page" ] && [ ! -L "$page" ] || die "lavish page is not a regular file: $page"
+  [ -s "$page" ] || die "lavish page is empty: $page"
+}
+
 complete_intake() {
-  local report='' watermark='' epoch day
+  local report='' watermark='' lavish='' waiver='' epoch day
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --report) [ "$#" -ge 2 ] || die '--report requires a value'; report=$2; shift 2 ;;
+      --lavish) [ "$#" -ge 2 ] || die '--lavish requires a value'; lavish=$2; shift 2 ;;
+      --no-lavish) [ "$#" -ge 2 ] || die '--no-lavish requires a reason'; waiver=$2; shift 2 ;;
       --source-watermark) [ "$#" -ge 2 ] || die '--source-watermark requires a value'; watermark=$2; shift 2 ;;
       *) die "unknown complete argument: $1" ;;
     esac
@@ -657,6 +704,16 @@ complete_intake() {
       *) die "report is outside the configured report_dir: $report" ;;
     esac
   fi
+  # The page is proved after the report, so the primary deliverable's own
+  # refusal is still the one an operator sees when both are wrong.
+  [ -z "$lavish" ] || [ -z "$waiver" ] \
+    || die 'pass --lavish or --no-lavish, not both'
+  if [ -n "$lavish" ]; then
+    require_lavish_page "$lavish"
+  else
+    [ -n "$waiver" ] \
+      || die "--lavish is required; the day's page under $LAVISH_DIR is the captain-facing deliverable, or complete with --no-lavish REASON"
+  fi
   epoch=$(now_epoch)
   day=$(local_date "$epoch")
   require_state_lock
@@ -667,6 +724,8 @@ complete_intake() {
   ST_PHASE=complete
   ST_UPDATED=$epoch
   ST_REPORT=$report
+  ST_LAVISH=$lavish
+  ST_LAVISH_WAIVER=$waiver
   ST_ERROR=
   save_state
   write_atomic "$PENDING_FILE" "$report" || die 'cannot record the pending report'
@@ -674,8 +733,15 @@ complete_intake() {
     || die 'cannot record the source watermark'
   # Last, and only now: the day is done.
   write_atomic "$COMPLETE_FILE" "$day" || die 'cannot advance the completion watermark'
-  log_event "completed with report $report"
-  printf 'MORNING_INTAKE: %s complete for %s - report %s\n' "$CFG_LABEL" "$day" "$report"
+  if [ -n "$lavish" ]; then
+    log_event "completed with report $report and page $lavish"
+    printf 'MORNING_INTAKE: %s complete for %s - report %s, page %s\n' \
+      "$CFG_LABEL" "$day" "$report" "$lavish"
+  else
+    log_event "completed with report $report and no page: $waiver"
+    printf 'MORNING_INTAKE: %s complete for %s - report %s, NO PAGE: %s\n' \
+      "$CFG_LABEL" "$day" "$report" "$waiver"
+  fi
 }
 
 fail_intake() {
@@ -734,6 +800,7 @@ rearm_intake() {
     # Same new-local-day reset `run` performs: yesterday's spent budget and
     # yesterday's report path never carry into today's first re-arm.
     ST_DATE=$day; ST_PHASE=idle; ST_ATTEMPTS=0; ST_REARMS=0; ST_REPORT=; ST_ERROR=; ST_SURFACED=
+    ST_LAVISH=; ST_LAVISH_WAIVER=
   fi
   [ "$ST_ATTEMPTS" -lt "$CFG_MAX_ATTEMPTS" ] \
     || die "attempt budget exhausted for $day ($ST_ATTEMPTS/$CFG_MAX_ATTEMPTS)"
@@ -741,6 +808,10 @@ rearm_intake() {
   ST_UPDATED=$epoch
   ST_REARMS=$((ST_REARMS + 1))
   ST_REPORT=
+  # The page is re-proved by the next `complete`, never inherited from the
+  # revision this re-arm just superseded.
+  ST_LAVISH=
+  ST_LAVISH_WAIVER=
   ST_ERROR=
   ST_SURFACED=
   save_state
@@ -860,6 +931,8 @@ status_intake() {
   printf 'state_surfaced: %s\n' "$ST_SURFACED"
   printf 'check_armed: %s\n' "$(check_armed_state)"
   printf 'state_report: %s\n' "$ST_REPORT"
+  printf 'state_lavish: %s\n' "$ST_LAVISH"
+  printf 'state_lavish_waiver: %s\n' "$ST_LAVISH_WAIVER"
   printf 'state_error: %s\n' "$ST_ERROR"
 }
 
