@@ -1105,8 +1105,10 @@ test_claude_secondmate_launch_disables_the_background_shell_pressure_reap() {
   status=$?
   expect_code 0 "$status" "secondmate claude spawn should succeed"$'\n'"$out"
   launch=$(cat "$LAUNCH_LOG")
-  assert_contains "$launch" "CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP=1 claude " \
+  assert_contains "$launch" "CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP=1 CLAUDE_CODE_AUTO_COMPACT_WINDOW=" \
     "claude secondmate launch left its own watcher arm reapable"
+  assert_contains "$launch" "CLAUDE_CODE_SEND_FEEDBACK=0 claude " \
+    "the pressure-reap disable broke the feedback-draft launch contract"
   pass "a claude secondmate launch disables the background-shell pressure reap that would kill its watcher arm"
 }
 
