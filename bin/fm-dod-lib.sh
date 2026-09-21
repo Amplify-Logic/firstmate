@@ -238,14 +238,16 @@ EOF
 # in a pull request. A fork's worktree makes `gh` default a new PR to the parent
 # repository, which has landed task PRs on the wrong repo, so the block names
 # one command for resolving origin's owner/repo and one check before the done
-# line. Rendered by the direct-PR and no-mistakes definitions of done, and so by
+# line. The command reads the remote directly because a bare `gh repo view` on
+# a fork reports the parent repository. Rendered by the direct-PR and no-mistakes definitions of done, and so by
 # bin/fm-brief.sh and the ship contract bin/fm-promote.sh writes.
 fm_pr_target_block() {
   cat <<'EOF'
 
 ## PR target
 This repository may be a fork, and `gh` defaults a fork's pull request to the parent repository, so always name the repository your worktree's `origin` points at.
-Resolve it once with `ORIGIN_REPO=$(gh repo view --json nameWithOwner -q .nameWithOwner)` (or parse `git remote get-url origin` into owner/repo), and pass `--repo "$ORIGIN_REPO"` on PR creation.
+Resolve it once from the remote itself - `ORIGIN_REPO=$(git remote get-url origin | sed -E 's#^[^/]*//[^/]*/##; s#^[^:/]*:##; s#\.git$##')` - and pass `--repo "$ORIGIN_REPO"` on PR creation.
+Do not resolve it with a bare `gh repo view`: on a fork that reports the parent repository, which is the mistake this guards against.
 Before you append the done line, confirm the PR URL the forge printed is under `$ORIGIN_REPO`; if it is not, close that PR and raise it again against `$ORIGIN_REPO`.
 EOF
 }

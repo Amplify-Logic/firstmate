@@ -920,9 +920,12 @@ test_pr_target_follows_origin_in_both_pr_modes() {
       || fail "$id: scaffold failed"
     brief="$home/data/$id/brief.md"
     assert_grep "## PR target" "$brief" "$id: brief missing the PR target instruction"
-    assert_grep 'gh repo view --json nameWithOwner -q .nameWithOwner' "$brief" \
+    # shellcheck disable=SC2016 # The brief prose names the literal shell command.
+    assert_grep 'ORIGIN_REPO=$(git remote get-url origin' "$brief" \
       "$id: brief missing the exact origin-resolving command"
-    assert_grep 'git remote get-url origin' "$brief" "$id: brief missing the origin fallback"
+    # shellcheck disable=SC2016 # The brief prose quotes a literal command name.
+    assert_grep 'Do not resolve it with a bare `gh repo view`' "$brief" \
+      "$id: brief lost the warning that gh resolves a fork to its parent"
     # shellcheck disable=SC2016 # The brief prose names the literal shell variable.
     assert_grep 'pass `--repo "$ORIGIN_REPO"` on PR creation' "$brief" \
       "$id: brief does not require the explicit repository on PR creation"
