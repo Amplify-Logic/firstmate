@@ -26,6 +26,9 @@
 # owed and, when it is, records the durable armed state and appends one wake.
 # The orchestrator does the actual ingestion and report writing, then calls
 # `complete`; the intake is not finished until that call verifies a report.
+# When that report is a captain-facing to-do, needs-you or waiting-on-you
+# surface, the orchestrator loads the `daily-todo-freshness` skill before
+# writing it.
 #
 # Two delivery paths reach the orchestrator, and neither one starts a session:
 #
