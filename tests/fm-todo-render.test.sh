@@ -9,15 +9,15 @@
 #     without anyone re-ordering it by hand.
 #   - Waiting and closed work never mix into the live section: a handed-over
 #     item renders under "Waiting on others" with its hand-over note, and an
-#     item archived on the rendered day renders under "Closed since morning"
+#     item archived on the rendered day renders under "Cleared today"
 #     with its recorded resolution.
 #   - An item archived on an earlier day is history, not something that closed
 #     since this morning, and never reappears.
 #   - Every live line carries its own read time, taken from the ledger's
 #     `updated` stamp in the configured local zone, and the page's own render
 #     stamp is a separate, differently labelled time.
-#   - The hand-verified morning fragment is copied through byte for byte and is
-#     never parsed, re-ordered or rewritten.
+#   - Legacy morning prose remains a labelled historical reference; structured
+#     morning actions join the queue and ledger resolutions supersede them.
 #   - Nothing is invented and nothing is carried forward: a resolved item does
 #     not survive into the next render of the same page.
 #   - The page renders with no visual tool installed, from the tracked house
@@ -149,9 +149,9 @@ test_waiting_and_closed_never_mix_into_the_live_section() {
   # heading, and the closed one after the closed heading.
   assert_contains "$(cat "$page")" 'handed to Naomi, she answers the dealer' \
     'the hand-over note is missing from the page'
-  [ "$(line_of "$page" 'quote for the dealer')" -gt "$(line_of "$page" 'Waiting on others<small>')" ] \
+  [ "$(line_of "$page" 'quote for the dealer')" -gt "$(line_of "$page" '<summary>Waiting on others</summary>')" ] \
     || fail 'a handed-over item did not render under Waiting on others'
-  [ "$(line_of "$page" 'invoice dispute')" -gt "$(line_of "$page" 'Closed since morning<small>')" ] \
+  [ "$(line_of "$page" 'invoice dispute')" -gt "$(line_of "$page" '<summary>Cleared today')" ] \
     || fail 'an item archived today did not render under Closed since morning'
   assert_contains "$(cat "$page")" 'credit note sent, customer confirmed' \
     'the recorded resolution is missing from the closed table'
@@ -163,7 +163,7 @@ test_waiting_and_closed_never_mix_into_the_live_section() {
 
   # And the waiting item stays inside its own block rather than leaking into
   # the live table above it or the closed table below it.
-  [ "$(line_of "$page" 'quote for the dealer')" -lt "$(line_of "$page" 'Closed since morning<small>')" ] \
+  [ "$(line_of "$page" 'quote for the dealer')" -lt "$(line_of "$page" '<summary>Cleared today')" ] \
     || fail 'the waiting item did not stay inside the Waiting on others block'
 
   pass 'waiting, closed-today and closed-earlier items each render in exactly one place'
@@ -197,8 +197,8 @@ test_every_line_carries_its_own_read_time() {
   pass 'each live line carries the channel and the time that item was read, separately from the render stamp'
 }
 
-test_morning_fragment_is_preserved_verbatim() {
-  local h page fragment rendered
+test_legacy_morning_is_a_historical_reference() {
+  local h page fragment
 
   h="$TMP_ROOT/morning-fragment"
   new_home "$h"
@@ -209,30 +209,77 @@ test_morning_fragment_is_preserved_verbatim() {
   # ampersand and an ordering the renderer would change if it parsed it.
   fragment="$h/.lavish/today-2026-09-10.morning.html"
   cat >"$fragment" <<'FRAG'
+<div class="wrap"><header><h1>Old Today heading</h1></header>
 <h2>Verified this morning<small>read by hand at 06:00</small></h2>
 <div class="note"><b>Accenture Lochristi.</b> Stage read live &amp; unchanged.</div>
 <ul><li>routine last</li><li>outage first</li></ul>
+<h2>Pilot-partner connectivity</h2><p>Retired silence observation</p>
+<h2>Calendar through Friday</h2><p>Calendar snapshot</p>
+</div>
 FRAG
 
   render_at "$h" "$T_1530" render >/dev/null
   page=$(page_of "$h")
 
-  # Byte for byte: the fragment's exact lines, in their exact order, appear
-  # between the renderer's markers.
-  rendered=$(awk '
-    /fm-todo-render: hand-verified morning section begins/ { inside = 1; next }
-    /fm-todo-render: hand-verified morning section ends/ { inside = 0 }
-    inside { print }
-  ' "$page")
-  [ "$rendered" = "$(cat "$fragment")" ] \
-    || fail "the morning fragment was not preserved verbatim:
-$rendered"
+  assert_contains "$(cat "$page")" '<summary>Earlier morning reference - not re-verified by this update</summary>' 'legacy content must be collapsed and labelled'
+  assert_contains "$(cat "$page")" 'Stage read live &amp; unchanged.' 'legacy evidence must survive'
+  [ "$(grep -c '<h1>' "$page")" = 1 ] || fail 'page must have one title'
+  assert_not_contains "$(cat "$page")" 'Retired silence observation' 'retired connectivity must not return'
+  [ "$(line_of "$page" 'Calendar snapshot')" -lt "$(line_of "$page" '<summary>Earlier morning reference')" ] || fail 'calendar should be visible below the action queue'
+  pass 'legacy morning content stays in a labelled historical disclosure'
 
-  # It sits BELOW the live section, which is the point of keeping it.
-  [ "$(line_of "$page" 'Verified this morning')" -gt "$(line_of "$page" 'live item')" ] \
-    || fail 'the morning fragment rendered above the live section'
+}
 
-  pass 'the hand-verified morning fragment is copied through byte for byte, below the live section'
+test_structured_morning_merges_and_ledger_supersedes() {
+  local h page key out
+  h="$TMP_ROOT/structured"
+  new_home "$h"
+  out=$(observe_at "$h" "$T_0900" observe --source C_BRIEF --ref shared --digest a --class urgent --title 'ledger action')
+  key=$(printf '%s' "$out" | awk '{ print $2 }')
+  cat >"$h/.lavish/today-2026-09-10.morning.html" <<'HTML'
+<h2>Tickets and calendar</h2><p>Detail without duplicate actions</p>
+HTML
+  cat >"$h/.lavish/today-2026-09-10.morning.json" <<JSON
+{"version":1,"date":"2026-09-10","actions":[
+{"key":"morning-only","source":"C_BRIEF","ref":"decision","class":"urgent","title":"new morning decision","updated":$T_1100},
+{"key":"$key","source":"C_BRIEF","ref":"shared","class":"urgent","title":"duplicate morning action","updated":$T_0900}]}
+JSON
+  render_at "$h" "$T_1530" render >/dev/null
+  page=$(page_of "$h")
+  [ "$(line_of "$page" 'new morning decision')" -lt "$(line_of "$page" 'ledger action')" ] || fail 'morning and ledger priorities must sort together'
+  assert_not_contains "$(cat "$page")" 'duplicate morning action' 'ledger identity must win'
+  observe_at "$h" "$T_1500" resolve --item "$key" --reason 'no longer needed' >/dev/null
+  render_at "$h" "$T_1530" render >/dev/null
+  assert_not_contains "$(cat "$page")" 'duplicate morning action' 'resolved ledger item must not reappear from morning'
+  [ "$(line_of "$page" 'no longer needed')" -gt "$(line_of "$page" '<summary>Cleared today')" ] || fail 'cleared reason must be in closed footer'
+  cp "$page" "$h/previous.html"
+  printf '{invalid' >"$h/.lavish/today-2026-09-10.morning.json"
+  if render_at "$h" "$T_1530" render >/dev/null 2>&1; then fail 'invalid metadata must refuse'; fi
+  cmp -s "$page" "$h/previous.html" || fail 'failed composition must preserve page'
+  pass 'morning actions merge, resolutions win, and invalid metadata preserves the page'
+}
+
+test_fleet_snapshots_group_without_accumulating() {
+  local h page out first second
+  h="$TMP_ROOT/fleet"
+  new_home "$h"
+  printf 'FLEET\ttelemetry-fleet-alerts\tfault conditions\n' >>"$h/data/channel-intake/sources.tsv"
+  out=$(observe_at "$h" "$T_0900" observe --source FLEET --condition b14 --count 10 --units 'Old 867684070443686' --digest first)
+  first=$(printf '%s' "$out" | awk '{ print $2 }')
+  out=$(observe_at "$h" "$T_1500" observe --source FLEET --condition b14 --count 11 --units 'Newest 867684070443687' --digest second)
+  second=$(printf '%s' "$out" | awk '{ print $2 }')
+  [ "$first" = "$second" ] || fail 'successive snapshots must update one stable identity'
+  observe_at "$h" "$T_1500" observe --source FLEET --condition freezing --count 58 --units 'Cold 867684070443688' --digest cold >/dev/null
+  observe_at "$h" "$T_0900" observe --source FLEET --ref legacy-read --class routine --title 'Fleet: 9 active B.14 units, 57 coolers under 1 C (first read)' --digest legacy >/dev/null
+  render_at "$h" "$T_1530" render >/dev/null
+  page=$(page_of "$h")
+  [ "$(grep -c 'class="watch-line"' "$page")" = 2 ] || fail 'fleet must have one line per condition'
+  assert_contains "$(cat "$page")" '11 units at 15:00 CEST' 'use newest full count, never sum reads'
+  assert_contains "$(cat "$page")" 'Newest 867684070443687' 'newest unit missing'
+  assert_not_contains "$(cat "$page")" 'Old 867684070443686' 'old unit must not compete with current snapshot'
+  [ "$(line_of "$page" 'Newest 867684070443687')" -gt "$(line_of "$page" '<h2>Watching')" ] || fail 'fleet condition leaked into needs-you'
+  if observe_at "$h" "$T_1500" observe --source FLEET --condition offline --count 1 --units example --digest bad >/dev/null 2>&1; then fail 'silence conditions must refuse'; fi
+  pass 'fleet snapshots group by condition with newest counts and units'
 }
 
 test_nothing_is_carried_forward_between_renders() {
@@ -252,7 +299,7 @@ test_nothing_is_carried_forward_between_renders() {
   render_at "$h" "$T_1530" render >/dev/null
 
   # It may appear in the closed table, but never again as open work.
-  [ "$(line_of "$page" 'ask that gets answered')" -gt "$(line_of "$page" 'Closed since morning<small>')" ] \
+  [ "$(line_of "$page" 'ask that gets answered')" -gt "$(line_of "$page" '<summary>Cleared today')" ] \
     || fail 'a resolved item survived into the live section of the next render'
 
   # An empty ledger renders an honest empty page rather than the previous one.
@@ -345,7 +392,9 @@ $order"
 test_severity_then_recency_orders_the_live_section
 test_waiting_and_closed_never_mix_into_the_live_section
 test_every_line_carries_its_own_read_time
-test_morning_fragment_is_preserved_verbatim
+test_legacy_morning_is_a_historical_reference
+test_structured_morning_merges_and_ledger_supersedes
+test_fleet_snapshots_group_without_accumulating
 test_nothing_is_carried_forward_between_renders
 test_house_style_comes_from_the_tracked_templates
 test_completed_read_refreshes_an_existing_page_only

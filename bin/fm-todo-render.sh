@@ -3,7 +3,7 @@
 #
 # Usage:
 #   fm-todo-render.sh render [--out FILE] [--morning-section FILE]
-#                            [--date YYYY-MM-DD] [--if-exists] [--open]
+#                            [--date YYYY-MM-DD] [--if-exists]
 #   fm-todo-render.sh path [--date YYYY-MM-DD]
 #   fm-todo-render.sh --help
 #
@@ -15,30 +15,30 @@
 # 30-minute channel read refresh the page's ordering for free.
 #
 # NOTHING IS INVENTED AND NOTHING IS CARRIED FORWARD. Every line on the live
-# section comes from a record in data/channel-intake/items or
-# data/channel-intake/archive. An item the ledger does not hold does not
-# appear, and an earlier version of the page is never read back for content:
+# section comes from a ledger record or explicit morning action metadata.
+# An earlier version of the page is never read back for content:
 # the page is rebuilt from the ledger each time. That is the mechanical half of
 # the `daily-todo-freshness` contract - the verification half stays with the
 # orchestrator that wrote those records.
 #
-# TWO INPUTS, ONE OUTPUT.
-#   (a) The ledger. Open items become the live section, ranked by class -
-#       outage, urgent, deadline, obligation, routine - and then newest
-#       `updated` first inside each class, so a severe item arriving at 15:00
-#       sits above a routine one from 09:00 without anyone re-ordering it by
-#       hand. `automation-candidate` is a PROPOSAL and never a human
-#       obligation, so it is excluded here exactly as `fm-channel-intake.sh
-#       todo` excludes it. Items in `waiting` go to "Waiting on others", and
-#       items archived on the rendered local day go to "Closed since morning"
-#       with the resolution text the captain's own `resolve --reason` recorded.
-#   (b) An OPTIONAL hand-verified morning section: the HTML body fragment the
-#       orchestrator writes at 06:00 after running the `daily-todo-freshness`
-#       stages. It is copied through byte for byte below the live section and
-#       is never parsed, rewritten or re-ordered, because those lines were
-#       verified by hand and this renderer cannot re-verify them. Its default
-#       path is the page path with `.html` replaced by `.morning.html`.
-#       Absent, the page simply has no morning section.
+# TWO INPUTS, ONE OUTPUT. Python 3's standard library composes one action queue,
+# grouped fleet conditions and collapsed cleared history. Routine ledger traffic
+# is context, not an obligation. No source is queried or re-verified here.
+#
+# MORNING COMPOSITION CONTRACT (version 1): write details-only ticket tables and
+# calendar to today-<date>.morning.html, and action metadata beside it at
+# today-<date>.morning.json. The JSON object has version:1, date:"YYYY-MM-DD",
+# actions:[{key, source, ref, class, title, link, updated}]. Each action needs a
+# stable key, source/ref matching the ledger when available, a ranked non-routine
+# class, and updated as the SAME-DAY verification epoch from daily-todo-freshness.
+# Decisions and waiting-on-you lines belong only in actions, never duplicated
+# in the details HTML. Closed details belong in an HTML details disclosure.
+# A ledger identity supersedes morning metadata, including waiting/archived
+# states. The fragment must not contain a document shell/header/h1. Missing or
+# invalid metadata is never inferred from prose: legacy HTML stays in a closed
+# historical-reference disclosure; invalid supplied metadata fails the render.
+# Legacy pilot-connectivity prose is omitted because silence is not a condition.
+# The renderer never substitutes its build time for a source read time.
 #
 # PROVENANCE IS ON EVERY LINE. Each live row carries its source label and the
 # ledger's `updated` stamp rendered in the configured local zone, which is the
@@ -67,24 +67,12 @@ DATA="${FM_DATA_OVERRIDE:-$FM_HOME/data}"
 LAVISH_DIR="${FM_LAVISH_OVERRIDE:-$FM_HOME/.lavish}"
 CONFIG_FILE="$CONFIG/channel-intake"
 INTAKE_DIR="$DATA/channel-intake"
-ITEM_DIR="$INTAKE_DIR/items"
-ARCHIVE_DIR="$INTAKE_DIR/archive"
 TEMPLATE_DIR="${FM_TODO_TEMPLATE_DIR:-$SCRIPT_DIR/templates}"
 HEAD_TEMPLATE="$TEMPLATE_DIR/today-page.head.html"
 FOOT_TEMPLATE="$TEMPLATE_DIR/today-page.foot.html"
 
-# The live section's rank order. First token is the most urgent, and the whole
-# order is stated once here so the ordering cannot drift between the ranking
-# and the rendering.
-RANKED_CLASSES='outage urgent deadline obligation routine'
-
 CFG_TIMEZONE=
 CFG_SOURCES_FILE=
-
-# A NON-whitespace separator, the same one bin/fm-channel-intake.sh writes its
-# scanned columns with: tab is an IFS whitespace character, so `read` would
-# merge two adjacent empty columns into one and shift every later field.
-FIELD_SEP=$'\037'
 
 usage() {
   awk '
@@ -184,270 +172,20 @@ local_date() {
   local_fmt "$1" '%Y-%m-%d'
 }
 
-# --- ledger reading ---------------------------------------------------------
-
-for_each_item() {
-  local dir=$1 f
-  [ -d "$dir" ] || return 0
-  for f in "$dir"/*; do
-    [ -f "$f" ] && [ ! -L "$f" ] || continue
-    printf '%s\n' "$f"
-  done
-}
-
-# One awk process for the whole directory rather than one per field per record,
-# the same bound bin/fm-channel-intake.sh's own surfaces take, so refreshing
-# the page on every 30-minute read stays cheap as the ledger grows.
-scan_records() {
-  local dir=$1 files
-  shift
-  files=$(for_each_item "$dir")
-  [ -n "$files" ] || return 0
-  # shellcheck disable=SC2016
-  printf '%s\n' "$files" | tr '\n' '\0' | xargs -0 awk -v keylist="$*" '
-    function flush(   i, out) {
-      if (path == "") return
-      out = path
-      for (i = 1; i <= nk; i++) { out = out "\037" val[i]; val[i] = "" }
-      print out
-      path = ""
-    }
-    BEGIN { nk = split(keylist, keys, " ") }
-    FNR == 1 { flush(); path = FILENAME }
-    {
-      for (i = 1; i <= nk; i++) {
-        if (index($0, keys[i] "=") == 1) val[i] = substr($0, length(keys[i]) + 2)
-      }
-    }
-    END { flush() }
-  '
-}
-
-# The coverage sentence the private inventory records for a source, which is
-# the honest label for "where was this read". Absent from the inventory, the
-# source id itself is printed rather than a guess.
-source_label() {
-  local id=$1 label=
-  [ -n "$id" ] || { printf 'unattributed\n'; return 0; }
-  if [ -f "$CFG_SOURCES_FILE" ] && [ ! -L "$CFG_SOURCES_FILE" ]; then
-    label=$(awk -F'\t' -v want="$id" '$1 == want { print $2; exit }' "$CFG_SOURCES_FILE")
-  fi
-  if [ -n "$label" ]; then
-    printf '%s (%s)\n' "$label" "$id"
-  else
-    printf '%s\n' "$id"
-  fi
-}
-
-# --- html -------------------------------------------------------------------
-
-esc() {
-  printf '%s' "${1:-}" \
-    | LC_ALL=C sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g' \
-        -e 's/"/\&quot;/g' -e "s/'/\&#39;/g"
-}
-
-class_pill() {
-  case "$1" in
-    outage) printf 'bad\n' ;;
-    urgent) printf 'warn\n' ;;
-    deadline) printf 'warn\n' ;;
-    obligation) printf 'info\n' ;;
-    *) printf 'ok\n' ;;
-  esac
-}
-
-class_rank() {
-  local want=$1 c rank=0
-  for c in $RANKED_CLASSES; do
-    rank=$((rank + 1))
-    [ "$c" != "$want" ] || { printf '%s\n' "$rank"; return 0; }
-  done
-  printf '99\n'
-}
-
-is_ranked_class() {
-  local want=$1 c
-  for c in $RANKED_CLASSES; do
-    [ "$c" != "$want" ] || return 0
-  done
-  return 1
-}
-
-link_cell() {
-  local link=$1
-  if [ -n "$link" ]; then
-    printf '<td class="links"><a href="%s" target="_blank" rel="noreferrer">Open</a></td>' \
-      "$(esc "$link")"
-  else
-    printf '<td class="links"><span class="nolink">no link recorded</span></td>'
-  fi
-}
-
-# --- sections ---------------------------------------------------------------
-
-# Open items, ranked. The sort key is built here rather than in awk so the
-# class order stays the single list above: rank, then descending `updated` so
-# the newest arrival leads its class, then the key so two records stamped in
-# the same second still render in one fixed order.
-live_rows() {
-  local path state class title link source updated rows='' rank sorted
-  local item_class item_title item_link item_source item_updated
-  while IFS="$FIELD_SEP" read -r path state class title link source updated; do
-    [ -n "$path" ] || continue
-    [ "$state" = open ] || continue
-    is_ranked_class "$class" || continue
-    case "$updated" in ''|*[!0-9]*) updated=0 ;; esac
-    rank=$(class_rank "$class")
-    rows="$rows$rank$FIELD_SEP$updated$FIELD_SEP${path##*/}$FIELD_SEP$class$FIELD_SEP$title$FIELD_SEP$link$FIELD_SEP$source$FIELD_SEP$updated
-"
-  done <<EOF
-$(scan_records "$ITEM_DIR" state class title link source updated)
-EOF
-  [ -n "$(printf '%s' "$rows" | tr -d '[:space:]')" ] || return 0
-  sorted=$(printf '%s' "$rows" | LC_ALL=C sort -t"$FIELD_SEP" -k1,1n -k2,2nr -k3,3)
-  while IFS="$FIELD_SEP" read -r _ _ _ item_class item_title item_link item_source item_updated; do
-    [ -n "$item_class" ] || continue
-    printf '<tr><td class="who">%s<span class="org">%s</span></td>\n' \
-      "$(esc "$item_class")" "$(esc "$(source_label "$item_source")")"
-    printf '<td class="what">%s<span class="prov obs">read %s</span></td>\n' \
-      "$(esc "${item_title:-untitled item}")" \
-      "$(esc "$(local_fmt "$item_updated" '%H:%M %Z')")"
-    printf '<td class="since"><span class="lab">class</span><span class="pill %s">%s</span></td>\n' \
-      "$(class_pill "$item_class")" "$(esc "$item_class")"
-    printf '%s</tr>\n' "$(link_cell "$item_link")"
-  done <<EOF
-$sorted
-EOF
-}
-
-waiting_rows() {
-  local path state class title link source updated resolution
-  while IFS="$FIELD_SEP" read -r path state class title link source updated resolution; do
-    [ -n "$path" ] || continue
-    [ "$state" = waiting ] || continue
-    case "$updated" in ''|*[!0-9]*) updated=0 ;; esac
-    printf '<li><b>%s</b> - %s<span class="why">%s, handed over %s</span></li>\n' \
-      "$(esc "${title:-untitled item}")" \
-      "$(esc "${resolution:-no hand-over note recorded}")" \
-      "$(esc "$(source_label "$source")")" \
-      "$(esc "$(local_fmt "$updated" '%H:%M %Z')")"
-  done <<EOF
-$(scan_records "$ITEM_DIR" state class title link source updated resolution)
-EOF
-}
-
-# Archived on the RENDERED local day only. An older archive is history, not
-# something that closed since this morning, and printing it would quietly
-# reopen yesterday's page inside today's.
-closed_rows() {
-  local day=$1 path state title source resolved_at resolution rows sorted
-  local r_title r_source r_resolution r_at
-  rows=''
-  while IFS="$FIELD_SEP" read -r path state title source resolved_at resolution; do
-    [ -n "$path" ] || continue
-    [ "$state" = archived ] || continue
-    case "$resolved_at" in ''|*[!0-9]*) continue ;; esac
-    [ "$(local_date "$resolved_at")" = "$day" ] || continue
-    rows="$rows$resolved_at$FIELD_SEP${path##*/}$FIELD_SEP$title$FIELD_SEP$source$FIELD_SEP$resolution$FIELD_SEP$resolved_at
-"
-  done <<EOF
-$(scan_records "$ARCHIVE_DIR" state title source resolved_at resolution)
-EOF
-  [ -n "$(printf '%s' "$rows" | tr -d '[:space:]')" ] || return 0
-  sorted=$(printf '%s' "$rows" | LC_ALL=C sort -t"$FIELD_SEP" -k1,1nr -k2,2)
-  while IFS="$FIELD_SEP" read -r _ _ r_title r_source r_resolution r_at; do
-    [ -n "$r_at" ] || continue
-    printf '<tr class="closed"><td class="who">%s</td><td class="what">%s</td>' \
-      "$(esc "$(source_label "$r_source")")" "$(esc "${r_title:-untitled item}")"
-    printf '<td class="what">%s</td><td class="since">%s</td></tr>\n' \
-      "$(esc "${r_resolution:-no resolution recorded}")" \
-      "$(esc "$(local_fmt "$r_at" '%H:%M %Z')")"
-  done <<EOF
-$sorted
-EOF
-}
-
-count_lines() {
-  local text=$1
-  [ -n "$(printf '%s' "$text" | tr -d '[:space:]')" ] || { printf '0\n'; return 0; }
-  printf '%s\n' "$text" | grep -c '^<' || true
-}
-
-# --- render -----------------------------------------------------------------
+# --- composition ------------------------------------------------------------
 
 render_page() {
-  local epoch=$1 day=$2 morning=$3 live waiting closed n_live n_waiting n_closed
-
+  local epoch=$1 day=$2 morning=$3
   [ -f "$HEAD_TEMPLATE" ] && [ ! -L "$HEAD_TEMPLATE" ] \
     || die "house-style head template is missing: $HEAD_TEMPLATE"
   [ -f "$FOOT_TEMPLATE" ] && [ ! -L "$FOOT_TEMPLATE" ] \
     || die "house-style foot template is missing: $FOOT_TEMPLATE"
-
-  live=$(live_rows)
-  waiting=$(waiting_rows)
-  closed=$(closed_rows "$day")
-  n_live=$(count_lines "$live")
-  n_live=$((n_live / 4))
-  n_waiting=$(count_lines "$waiting")
-  n_closed=$(count_lines "$closed")
-
   awk -v title="Today - $(local_fmt "$epoch" '%A %-d %B %Y')" \
     '{ gsub(/\{\{TITLE\}\}/, title); print }' "$HEAD_TEMPLATE"
-
-  printf '\n<header>\n'
-  printf '<div><div class="kicker">Aquablu Starship</div><h1>Today</h1></div>\n'
-  printf '<div class="meta">%s<br>\n' "$(esc "$(local_fmt "$epoch" '%A %-d %B %Y')")"
-  printf 'Live section rebuilt from the channel ledger at <span class="mono">%s</span>.<br>\n' \
-    "$(esc "$(local_fmt "$epoch" '%H:%M %Z')")"
-  printf 'Each row carries the time that item was last read on its own channel.</div>\n'
-  printf '</header>\n\n'
-
-  printf '<div class="tiles">\n'
-  printf '<div class="tile"><div class="n">%s</div><div class="l">Open, ranked below</div><div class="s">from the channel ledger</div></div>\n' "$n_live"
-  printf '<div class="tile"><div class="n">%s</div><div class="l">Waiting on others</div><div class="s">handed over, not closed</div></div>\n' "$n_waiting"
-  printf '<div class="tile"><div class="n">%s</div><div class="l">Closed since morning</div><div class="s">with the reason recorded</div></div>\n' "$n_closed"
-  printf '</div>\n\n'
-
-  printf '<h2>Live now<small>most severe first, newest first inside each class</small></h2>\n'
-  if [ -n "$live" ]; then
-    printf '<div class="tablewrap"><table>\n'
-    printf '<thead><tr><th>Class</th><th>What</th><th>Severity</th><th></th></tr></thead>\n<tbody>\n'
-    printf '%s\n' "$live"
-    printf '</tbody></table></div>\n'
-  else
-    printf '<div class="note"><b>Nothing open.</b> The channel ledger holds no open item for this home right now.</div>\n'
-  fi
-
-  printf '\n<h2>Waiting on others<small>handed over, still on the ledger</small></h2>\n'
-  printf '<div class="strip">\n'
-  if [ -n "$waiting" ]; then
-    printf '<ul>\n%s\n</ul>\n' "$waiting"
-  else
-    printf '<p class="sub">Nothing is waiting on anyone else.</p>\n'
-  fi
-  printf '</div>\n'
-
-  printf '\n<h2>Closed since morning<small>archived today, with the recorded reason</small></h2>\n'
-  if [ -n "$closed" ]; then
-    printf '<div class="tablewrap"><table>\n'
-    printf '<thead><tr><th>Source</th><th>What</th><th>Resolution</th><th>Closed</th></tr></thead>\n<tbody>\n'
-    printf '%s\n' "$closed"
-    printf '</tbody></table></div>\n'
-  else
-    printf '<div class="note">Nothing has been closed on this day yet.</div>\n'
-  fi
-
-  # The hand-verified morning section, byte for byte. It is never parsed and
-  # never re-ordered: those lines were verified by hand under the
-  # `daily-todo-freshness` stages and this renderer cannot re-verify them.
-  if [ -n "$morning" ]; then
-    printf '\n<!-- fm-todo-render: hand-verified morning section begins -->\n'
-    cat "$morning"
-    printf '\n<!-- fm-todo-render: hand-verified morning section ends -->\n'
-  fi
-
-  printf '\n'
+  printf '<header><div><div class="kicker">Aquablu Starship</div><h1>Today</h1></div>\n'
+  printf '<div class="meta">%s<br>Page rebuilt from the channel ledger at <span class="mono">%s</span>.<br>Source read times stay on each item.</div></header>\n' \
+    "$(local_fmt "$epoch" '%A %-d %B %Y')" "$(local_fmt "$epoch" '%H:%M %Z')"
+  python3 "$SCRIPT_DIR/fm-todo-compose.py" "$INTAKE_DIR" "$morning" "$day" "$epoch" "$CFG_TIMEZONE" "$CFG_SOURCES_FILE" || return 1
   cat "$FOOT_TEMPLATE"
 }
 
@@ -520,7 +258,7 @@ render_cmd() {
     [ -f "$morning" ] && [ ! -L "$morning" ] \
       || die "--morning-section is not a regular file: $morning"
   fi
-  body=$(render_page "$epoch" "$day" "$morning")
+  body=$(render_page "$epoch" "$day" "$morning") || die "composition failed; existing page preserved"
   write_atomic "$out" "$body" || die "cannot write the page: $out"
   printf 'TODO_RENDER: %s rendered at %s\n' "$out" "$(local_fmt "$epoch" '%H:%M %Z')"
 }
