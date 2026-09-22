@@ -1,0 +1,505 @@
+#!/usr/bin/env python3
+"""Private item-store core for fm-todo.sh; that script's header owns the contract."""
+import argparse
+import datetime
+import fcntl
+import hashlib
+import json
+import os
+from pathlib import Path
+import re
+import sys
+import tempfile
+import time
+
+RANK = ('outage', 'urgent', 'deadline', 'obligation')
+KINDS = ('decision', 'approval', 'reply', 'info')
+WEEKDAYS = ('monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday')
+SLOT_FIELDS = ('title', 'link', 'class', 'kind', 'ask', 'why', 'label')
+
+
+class Refusal(Exception):
+    pass
+
+
+def number(value):
+    try:
+        return max(0, int(value))
+    except (ValueError, TypeError):
+        return 0
+
+
+def local_day(epoch):
+    return time.strftime('%Y-%m-%d', time.localtime(int(epoch)))
+
+
+def digest(*parts):
+    return hashlib.sha256('\x1f'.join(str(p) for p in parts).encode()).hexdigest()[:16]
+
+
+def when(epoch):
+    return time.strftime('%Y-%m-%d %H:%M %Z', time.localtime(int(epoch)))
+
+
+class Store:
+    """data/todo: items/<id>.json, sweeps, journal; one lock serializes every write."""
+
+    def __init__(self, root):
+        self.root = Path(root)
+        self.items_dir = self.root / 'items'
+
+    def __enter__(self):
+        self.items_dir.mkdir(parents=True, exist_ok=True)
+        os.chmod(self.root, 0o700)
+        self.lock = open(self.root / '.lock', 'a')
+        fcntl.flock(self.lock, fcntl.LOCK_EX)
+        return self
+
+    def __exit__(self, *exc):
+        fcntl.flock(self.lock, fcntl.LOCK_UN)
+        self.lock.close()
+
+    def load(self):
+        items = {}
+        for path in sorted(self.items_dir.glob('*.json')):
+            if path.is_symlink() or not path.is_file():
+                continue
+            rec = json.loads(path.read_text())
+            items[rec['id']] = rec
+        return items
+
+    def save(self, rec):
+        body = json.dumps(rec, indent=1, sort_keys=True, ensure_ascii=False) + '\n'
+        path = self.items_dir / (rec['id'] + '.json')
+        if path.is_file() and path.read_text() == body:
+            return
+        fd, tmp = tempfile.mkstemp(dir=self.items_dir, prefix='.item.')
+        with os.fdopen(fd, 'w') as fh:
+            fh.write(body)
+        os.chmod(tmp, 0o600)
+        os.replace(tmp, path)
+
+    def sweeps(self):
+        path = self.root / 'sweeps'
+        if not path.is_file():
+            return []
+        return sorted(number(x) for x in path.read_text().split() if number(x))
+
+    def add_sweep(self, epoch):
+        kept = sorted(set(self.sweeps() + [int(epoch)]))[-30:]
+        (self.root / 'sweeps').write_text(''.join(f'{e}\n' for e in kept))
+
+    def journal(self, entry):
+        with open(self.root / 'journal', 'a') as fh:
+            fh.write(json.dumps(entry, sort_keys=True, ensure_ascii=False) + '\n')
+
+
+# --- source readers: each returns observations and never mutates a source -----
+
+def kv_records(folder):
+    result = []
+    if not folder.is_dir():
+        return result
+    for path in sorted(folder.glob('*')):
+        if not path.is_file() or path.is_symlink():
+            continue
+        rec = dict(line.split('=', 1) for line in path.read_text().splitlines() if '=' in line)
+        rec.setdefault('key', path.name)
+        result.append(rec)
+    return result
+
+
+def ledger_observations(intake_dir, labels):
+    """The channel ledger. Only an open record's change time is a source read."""
+    obs = []
+    for folder in ('items', 'archive'):
+        for rec in kv_records(Path(intake_dir) / folder):
+            cls = rec.get('class', '')
+            if cls == 'automation-candidate':
+                continue
+            source = rec.get('source', 'unattributed')
+            label = labels.get(source, source)
+            aliases = ([f'{source}:{rec["ref"]}'] if rec.get('ref') else []) + [f'ledger:{rec["key"]}']
+            aliases += rec.get('provenance', '').split()
+            state = {'archived': 'closed', 'waiting': 'waiting'}.get(rec.get('state'), 'open')
+            o = {
+                'slot': 'ledger:' + rec['key'], 'aliases': aliases,
+                # An edit after resolution lands in edited_digest, never in digest.
+                'rev': rec.get('edited_digest') or rec.get('digest', ''),
+                'title': rec.get('title', ''), 'link': rec.get('link', ''), 'class': cls or 'obligation',
+                'kind': 'condition' if rec.get('kind') == 'telemetry-fleet-alerts' else ('reply' if cls in RANK else 'info'),
+                'label': label, 'state': state,
+            }
+            if state == 'closed':
+                o['closed_at'] = number(rec.get('resolved_at')) or number(rec.get('updated'))
+                o['evidence'] = rec.get('resolution') or 'resolved on the channel ledger, no reason recorded'
+            elif state == 'waiting':
+                o['handover'] = rec.get('resolution', '')
+            else:
+                # `resolve --waiting` advances `updated` without a read, so only
+                # an open record's change time counts as reading the source.
+                o['verified'] = {'at': number(rec.get('updated')) or number(rec.get('created')),
+                                 'how': f'read by the channel intake on {label}'}
+            obs.append(o)
+    return obs
+
+
+def morning_observations(doc, day, now):
+    """Morning action metadata (version 1 or 2); invalid metadata refuses."""
+    if doc is None:
+        return []
+    if not isinstance(doc, dict) or doc.get('version') not in (1, 2) or doc.get('date') != day:
+        raise Refusal('morning metadata must have version 1 or 2 and the rendered date')
+    obs = []
+    for raw in doc.get('actions', []):
+        key = str(raw.get('key', ''))
+        read = number(raw.get('updated'))
+        if (not key or not raw.get('source') or not raw.get('ref') or raw.get('class') not in RANK
+                or not read or local_day(read) != day or read > now):
+            raise Refusal('morning actions need key, source, ref, ranked class and same-day read epoch')
+        kind = raw.get('kind', 'decision')
+        if kind not in KINDS:
+            raise Refusal(f'morning action kind must be one of {", ".join(KINDS)}: {kind}')
+        ident = f'{raw["source"]}:{raw["ref"]}'
+        aliases = [ident, f'ledger:{key}'] + [a for a in raw.get('aliases', []) if isinstance(a, str) and ':' in a]
+        obs.append({
+            'slot': 'morning:' + ident, 'aliases': aliases,
+            # The key and wording change daily; only an explicit fingerprint of
+            # the underlying ask is a meaningful revision.
+            'rev': str(raw.get('digest', '')),
+            'title': raw.get('title', ''), 'link': raw.get('link', ''), 'class': raw['class'], 'kind': kind,
+            'ask': raw.get('ask', ''), 'why': raw.get('why', ''), 'label': raw['source'], 'state': 'open',
+            # The sidecar is the morning sweep's own verification record.
+            'verified': {'at': read, 'how': raw.get('verified_how') or 'morning verification sweep'},
+        })
+    return obs
+
+
+def balanced_tail(line):
+    """Split trailing `(key: value)` annotations, which may nest parentheses."""
+    notes = {}
+    rest = line.rstrip()
+    while rest.endswith(')'):
+        depth = 0
+        for i in range(len(rest) - 1, -1, -1):
+            depth += {')': 1, '(': -1}.get(rest[i], 0)
+            if depth == 0:
+                break
+        else:
+            break
+        match = re.match(r'^([a-z][a-z-]*)(?::\s*|\s+)(.*)$', rest[i + 1:-1], re.S)
+        if not match or match.group(1) not in ('repo', 'kind', 'priority', 'since', 'hold', 'hold-kind',
+                                               'hold-until', 'blocked-by', 'pr'):
+            break
+        notes[match.group(1)] = match.group(2).strip()
+        rest = rest[:i].rstrip()
+    return rest, notes
+
+
+def backlog_observations(path):
+    """Captain-held tasks in the markdown backlog; None when there is no readable file."""
+    backlog = Path(path) if path else None
+    if not backlog or not backlog.is_file() or backlog.is_symlink():
+        return None
+    obs = []
+    for line in backlog.read_text().splitlines():
+        match = re.match(r'^- \[ \] (\S+) - (.*)$', line)
+        if not match:
+            continue
+        title, notes = balanced_tail(match.group(2))
+        if notes.get('hold-kind') != 'captain':
+            continue
+        until = notes.get('hold-until', '')
+        obs.append({
+            'slot': 'backlog:' + match.group(1), 'aliases': [f'firstmate-backlog:{match.group(1)}'],
+            'rev': digest(notes.get('hold', ''), until),
+            'title': title, 'link': '', 'class': 'obligation', 'kind': 'decision',
+            'ask': notes.get('hold', ''), 'label': 'firstmate-backlog', 'state': 'open',
+            'snoozed_until': until if re.match(r'^\d{4}-\d{2}-\d{2}$', until) else '',
+        })
+    return obs
+
+
+# --- folding ------------------------------------------------------------------
+
+PRIORITY = {'ledger': 0, 'morning': 1, 'backlog': 2}
+
+
+def rev_of(rec):
+    """The item's meaningful revision: every source's own revision, in order."""
+    return digest(*sorted(f'{slot}={s["rev"]}' for slot, s in rec['slots'].items() if s.get('rev')))[:10]
+
+
+def transition(store, rec, at, state, actor, reason, evidence='', **extra):
+    store.journal({'at': at, 'item': rec['id'], 'from': rec['state'], 'to': state, 'actor': actor,
+                   'reason': reason, 'evidence': evidence, 'rev': rec['rev']})
+    rec['state'] = state
+    rec['closure'] = ({'reason': reason, 'actor': actor, 'evidence': evidence, 'at': at}
+                      if state == 'closed' else {})
+    rec.update(extra)
+
+
+def present(rec):
+    """Presentation fields come from the slots; nothing here changes state."""
+    slots = sorted(rec['slots'].values(), key=lambda s: PRIORITY.get(s['slot'].split(':', 1)[0], 9))
+    for field in SLOT_FIELDS:
+        rec[field] = next((s[field] for s in slots if s.get(field)), '')
+    # The morning sweep's curated kind outranks a channel default.
+    rec['kind'] = next((s['kind'] for s in slots if s['slot'].startswith('morning:')), rec['kind'] or 'info')
+    rec['source_snooze'] = next((s['snoozed_until'] for s in slots if s.get('snoozed_until')), '')
+    rec['rev'] = rev_of(rec)
+
+
+def fold(store, items, observations, now, backlog_seen):
+    """Apply observation CHANGES to items, so repeated syncs of the same inputs are no-ops."""
+    index = {a: r['id'] for r in items.values() for a in r['aliases']}
+    seen = set()
+    reads = []
+    for o in observations:
+        iid = next((index[a] for a in o['aliases'] if a in index), None)
+        fresh = iid is None
+        if fresh:
+            iid = 't-' + digest(o['aliases'][0])[:12]
+            items[iid] = {'id': iid, 'aliases': [], 'slots': {}, 'first_seen': now, 'state': 'open',
+                          'owner': '', 'snoozed_until': '', 'pending': {}, 'verification': {}, 'closure': {},
+                          'handover': '', 'note': '', 'rev': '', 'kind': ''}
+        rec = items[iid]
+        for alias in o['aliases']:
+            if alias not in rec['aliases']:
+                rec['aliases'].append(alias)
+            index.setdefault(alias, iid)
+        seen.add((iid, o['slot']))
+        before = rec['slots'].get(o['slot'])
+        rec['slots'][o['slot']] = dict({k: v for k, v in o.items() if k not in ('aliases', 'verified')})
+        present(rec)
+        if before is None:
+            # A first sighting sets the state only for a brand-new item; a new
+            # alias of a closed item is not a reason to reopen it.
+            if fresh and o['state'] == 'closed':
+                transition(store, rec, o['closed_at'] or now, 'closed', 'source', 'resolved', o['evidence'])
+            elif fresh and o['state'] == 'waiting':
+                transition(store, rec, now, 'waiting', 'source', 'handed over', handover=o['handover'])
+        elif o['rev'] and before.get('rev', '') != o['rev'] and rec['state'] == 'closed':
+            transition(store, rec, now, 'open', 'source', 'reopened',
+                       note=f'reopened: {o["label"]} changed after it was closed ({rec["closure"].get("reason")})')
+        elif before.get('state') != o['state']:
+            if o['state'] == 'closed' and rec['state'] != 'closed':
+                transition(store, rec, o['closed_at'] or now, 'closed', 'source', 'resolved', o['evidence'])
+            elif o['state'] == 'waiting' and rec['state'] == 'open':
+                transition(store, rec, now, 'waiting', 'source', 'handed over', handover=o['handover'])
+            elif o['state'] == 'open' and rec['state'] == 'closed':
+                transition(store, rec, now, 'open', 'source', 'reopened', note=f'reopened at {o["label"]}')
+        if o.get('verified'):
+            reads.append((rec, o['verified']))
+    # Verification is its own fact: only a newer source read replaces it, and it
+    # binds to the revision this sync settles on, after every slot has folded.
+    for rec, v in reads:
+        if v['at'] > number(rec['verification'].get('at')):
+            rec['verification'] = {'at': v['at'], 'how': v['how'], 'rev': rec['rev']}
+    # A task no longer held for the captain releases only its own ask; an
+    # unreadable backlog releases nothing.
+    if backlog_seen:
+        for rec in items.values():
+            for slot, s in rec['slots'].items():
+                if slot.startswith('backlog:') and (rec['id'], slot) not in seen and s['state'] == 'open':
+                    s['state'] = 'closed'
+                    if rec['state'] != 'closed':
+                        transition(store, rec, now, 'closed', 'source', 'released',
+                                   'no longer held for you in the backlog')
+    return items
+
+
+# --- commands ---------------------------------------------------------------
+
+def parse_when(text, now):
+    text = text.strip().lower()
+    today = datetime.date.fromisoformat(local_day(now))
+    if re.match(r'^\d{4}-\d{2}-\d{2}$', text):
+        return datetime.date.fromisoformat(text).isoformat()
+    if text in ('today', 'tomorrow'):
+        return (today + datetime.timedelta(days=int(text == 'tomorrow'))).isoformat()
+    if text == 'next week':
+        return (today + datetime.timedelta(days=7 - today.weekday())).isoformat()
+    for n, name in enumerate(WEEKDAYS):
+        if text in (name, name[:3]):
+            return (today + datetime.timedelta(days=(n - today.weekday()) % 7 or 7)).isoformat()
+    raise Refusal(f'park needs a real date (YYYY-MM-DD, today, tomorrow, a weekday or next week): {text}')
+
+
+def parse_line(line, targeted, now):
+    """(verb, words, extra), or None for a line with no leading verb."""
+    match = re.match(r'^\s*(drop|done|park|mine|you|dig)\b\s*(.*)$', line, re.I | re.S)
+    if not match:
+        return None
+    verb, rest = match.group(1).lower(), match.group(2).strip()
+    extra = {}
+    if verb == 'park':
+        split = re.match(r'^(.*?)\s*\b(?:til|till|until)\b\s*(.+)$', rest, re.I)
+        if split:
+            rest, extra['until'] = split.group(1).strip(), parse_when(split.group(2), now)
+        elif targeted:
+            rest, extra['until'] = '', parse_when(rest, now)
+        else:
+            raise Refusal('park needs "til <when>"')
+    elif verb == 'you':
+        words, sep, what = rest.partition(':')
+        rest, what = (words.strip(), what.strip()) if sep else (('', rest) if targeted else (rest, ''))
+        if not what:
+            raise Refusal('you needs "<words>: <what to do>"')
+        extra['what'] = what
+    return verb, rest, extra
+
+
+def match_item(items, words):
+    if words in items:
+        return items[words]
+    needle = words.lower()
+    hits = [r for r in items.values() if r['state'] != 'closed' and needle
+            and needle in (r.get('title', '') + ' ' + r.get('ask', '')).lower()]
+    if len(hits) == 1:
+        return hits[0]
+    if not hits:
+        raise Refusal(f'no open item matches "{words}"')
+    raise Refusal(f'"{words}" matches {len(hits)} items: ' + ', '.join(r['id'] for r in hits[:6]))
+
+
+def apply_command(store, items, line, target, shown_rev, now):
+    parsed = parse_line(line, bool(target), now)
+    if parsed is None:
+        return f'not-a-command {line.strip()}'
+    verb, words, extra = parsed
+    rec = one(items, target) if target else match_item(items, words)
+    if shown_rev and shown_rev != rec['rev']:
+        raise Refusal(f'the page showed revision {shown_rev} but {rec["id"]} is now {rec["rev"]}; refresh the page first')
+    refs = ' '.join(a for a in rec['aliases'] if not a.startswith('ledger:'))
+    tail = f' :: {extra["what"]}' if 'what' in extra else (f' until {extra["until"]}' if 'until' in extra else '')
+    result = f'{verb} {rec["id"]} [{refs}] {rec["title"]}{tail}'
+    if verb in ('done', 'drop'):
+        if rec['state'] == 'closed':
+            return 'already ' + result
+        transition(store, rec, now, 'closed', 'captain', 'fulfilled' if verb == 'done' else 'dismissed',
+                   f'you wrote "{line.strip()}" on the page', pending={}, note='')
+        if any(a.startswith('firstmate-backlog:') for a in rec['aliases']):
+            result += ' (held decision: record the answer through fm-captain-hold.sh)'
+    else:
+        field, value = {'park': ('snoozed_until', extra.get('until')), 'mine': ('owner', 'captain')}.get(
+            verb, ('pending', {'verb': verb, 'what': extra.get('what', 'investigate and come back with findings')}))
+        if rec[field] == value:
+            return 'already ' + result
+        rec[field] = value
+        store.journal({'at': now, 'item': rec['id'], field: value, 'actor': 'captain', 'rev': rec['rev']})
+    store.save(rec)
+    return result
+
+
+# --- entry points -------------------------------------------------------------
+
+def load_labels(path):
+    labels = {}
+    if path and Path(path).is_file() and not Path(path).is_symlink():
+        for line in Path(path).read_text().splitlines():
+            fields = line.split('\t')
+            if len(fields) >= 2:
+                labels[fields[0]] = f'{fields[1]} ({fields[0]})'
+    return labels
+
+
+def sync(args, store, now):
+    doc = None
+    if args.morning_json and Path(args.morning_json).is_file() and not Path(args.morning_json).is_symlink():
+        try:
+            doc = json.loads(Path(args.morning_json).read_text())
+        except ValueError as exc:
+            raise Refusal(f'morning metadata is not valid JSON: {exc}')
+    # Every input is read and validated before anything is written.
+    observations = ledger_observations(args.intake, load_labels(args.sources))
+    observations += morning_observations(doc, local_day(now), now)
+    held = backlog_observations(args.backlog)
+    observations += held or []
+    items = fold(store, store.load(), observations, now, held is not None)
+    started = number(doc.get('sweep_started')) if doc else 0
+    if started and started <= now and local_day(started) == local_day(now):
+        store.add_sweep(started)
+    for rec in items.values():
+        store.save(rec)
+    return items
+
+
+def one(items, iid):
+    if iid not in items:
+        raise Refusal(f'no item with id {iid}')
+    return items[iid]
+
+
+def main():
+    parser = argparse.ArgumentParser(prog='fm-todo-items.py')
+    parser.add_argument('command')
+    parser.add_argument('lines', nargs='*')
+    for flag in ('--store', '--intake', '--sources', '--morning-json', '--backlog', '--item', '--how',
+                 '--evidence', '--state', '--rev', '--actor', '--reason'):
+        parser.add_argument(flag, default='')
+    parser.add_argument('--now', type=int, required=True)
+    parser.add_argument('--at', type=int, default=0)
+    args = parser.parse_intermixed_args()
+    now = args.now
+    try:
+        with Store(args.store) as store:
+            if args.command == 'sync':
+                print(f'TODO_ITEMS: {len(sync(args, store, now))} items synced')
+                return 0
+            if args.command == 'sweep-start':
+                store.add_sweep(args.at or now)
+                print(f'TODO_ITEMS: verification sweep started at {when(args.at or now)}')
+                return 0
+            items = store.load()
+            if args.command == 'command':
+                lines = args.lines or [l for l in sys.stdin.read().splitlines() if l.strip()]
+                failed = False
+                for line in lines:
+                    try:
+                        result = apply_command(store, items, line, args.item, args.rev, now)
+                    except Refusal as exc:
+                        result, failed = f'refused {line.strip()} :: {exc}', True
+                    print(f'TODO_CMD: {result}')
+                return 1 if failed else 0
+            if args.command == 'list':
+                for rec in sorted(items.values(), key=lambda r: r['id']):
+                    if not args.state or rec['state'] == args.state:
+                        print('\t'.join([rec['id'], rec['state'], rec.get('kind', ''), rec['rev'], rec.get('title', '')]))
+                return 0
+            rec = one(items, args.item)
+            if args.command == 'verify':
+                if not args.how:
+                    raise Refusal('verify needs --how naming the read that re-checked it')
+                if args.rev and args.rev != rec['rev']:
+                    raise Refusal(f'verified revision {args.rev} is not the current {rec["rev"]}')
+                rec['verification'] = {'at': args.at or now, 'how': args.how, 'rev': rec['rev']}
+            elif args.command == 'close':
+                if not args.evidence:
+                    raise Refusal('close needs --evidence; nothing closes without it')
+                reason = args.reason or 'fulfilled'
+                if reason not in ('fulfilled', 'dismissed', 'superseded'):
+                    raise Refusal('close --reason is fulfilled, dismissed or superseded')
+                if rec['state'] != 'closed':
+                    transition(store, rec, now, 'closed', args.actor or 'unknown', reason, args.evidence, pending={})
+            elif args.command == 'reopen':
+                if rec['state'] == 'closed':
+                    transition(store, rec, now, 'open', args.actor or 'firstmate', 'reopened',
+                               note=args.reason or 'reopened by firstmate')
+            elif args.command == 'ack':
+                if not rec['pending']:
+                    raise Refusal(f'{rec["id"]} has no pending handoff')
+                transition(store, rec, now, 'waiting', 'firstmate', 'handoff accepted', pending={},
+                           owner='firstmate', handover=rec['pending']['what'])
+            else:
+                raise Refusal(f'unknown command: {args.command}')
+            store.save(rec)
+            print(f'TODO_ITEMS: {args.command} {rec["id"]} -> {rec["state"]}')
+    except Refusal as exc:
+        print(f'fm-todo: {exc}', file=sys.stderr)
+        return 2
+    return 0
+
+
+if __name__ == '__main__':
+    sys.exit(main())

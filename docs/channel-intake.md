@@ -118,12 +118,12 @@ Nothing is lost in either case - the items stay notifiable and re-render once th
 
 `brief` and `todo` render from the same ledger every time.
 A correction, a resolution and a completed obligation reconcile across both by construction rather than needing a second pass over two stores.
-The day's Lavish page is the third surface over that same ledger, and it re-ranks itself during the day rather than being a snapshot of 06:00.
-A completed read calls [`bin/fm-todo-render.sh`](../bin/fm-todo-render.sh), which rebuilds `.lavish/today-<YYYY-MM-DD>.html` from the ledger with no model call: actionable items ranked by urgency then recency, fleet conditions grouped under Watching, and routine activity, waiting items, and cleared reasons in collapsed disclosures.
+The day's Lavish page is the third surface, and it re-ranks itself during the day rather than being a snapshot of 06:00.
+A completed read calls [`bin/fm-todo-render.sh`](../bin/fm-todo-render.sh), which first folds this ledger, the morning action metadata and the captain-held backlog into one durable item per ask through [`bin/fm-todo.sh`](../bin/fm-todo.sh), then rebuilds `.lavish/today-<YYYY-MM-DD>.html` from those items with no model call.
 An `automation-candidate` is excluded there exactly as it is from `todo`, because a proposal is not a human obligation.
-Each line carries its source label and the time that item was last read, and the page carries its own render time separately, so a line's provenance and the page's build time can never be read as one fact.
-The morning action metadata joins the ledger in one ranked queue, with ticket detail and calendar below; legacy unstructured morning HTML remains a collapsed historical reference.
-The composition format and stable fleet snapshot flags are owned by `bin/fm-todo-render.sh --help` and `bin/fm-channel-intake.sh --help`; verification remains owned by `daily-todo-freshness`.
+Each line says when it was last verified against its source, and a line not re-read in the current verification sweep says "not re-checked since" rather than passing as current; the page carries its own render time separately.
+Closures, including the captain's page commands, are durable on the item and show under "Closed since" with their evidence; a closed item returns only when its source meaningfully changes, with the reason shown.
+`bin/fm-todo.sh --help` owns the item record, identity, verification and page commands; `bin/fm-todo-render.sh --help` owns the page shape and the morning composition format; `bin/fm-channel-intake.sh --help` owns the fleet snapshot flags; verification procedure remains owned by `daily-todo-freshness`.
 The refresh is fail-soft and never manufactures a page: a home with no page for the day is told so, a renderer that fails is reported, and neither costs the read whose checkpoint has already advanced.
 Both accept `--out FILE` inside the configured `report_dir` and overwrite the same path, so a background render updates the existing page instead of leaving a trail of dated files; a path with a `..` component is refused before the directory check.
 

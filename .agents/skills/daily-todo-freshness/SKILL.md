@@ -36,6 +36,7 @@ Every stage below exists to close one of those gaps.
 1. Record the sweep start time in CEST and in UTC.
 2. Every HubSpot and Gmail timestamp is UTC, printed with a trailing `Z`.
 3. Convert to CEST before writing any time on the surface; never print a raw UTC value as local.
+4. For the daily page, record the sweep start with `bin/fm-todo.sh sweep-start`, so a line not re-read in this sweep renders as not re-checked.
 
 ## Stage 1 - HubSpot, per ticket, in this order
 
@@ -100,6 +101,7 @@ For anything still looking open after Stages 1 to 6:
 2. Re-read the last message in any Slack thread quoted on the surface.
 3. If a re-fetch shows a change, fix the line; if a line cannot be re-read, drop it to "cannot verify".
 4. Stamp the surface with the re-read time, not the sweep start time.
+5. For the daily page, record each successful re-read on its item with `bin/fm-todo.sh verify`, and each proven closure with `bin/fm-todo.sh close` and its evidence; that script's `--help` owns the commands, and a line with no recorded re-read is never shown as current.
 
 A ten-minute gap between reading and publishing produced two wrong lines on 2026-09-21; the re-read is what closes it.
 

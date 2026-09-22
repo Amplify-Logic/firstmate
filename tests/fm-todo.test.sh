@@ -1,0 +1,246 @@
+#!/usr/bin/env bash
+# Behavior tests for the daily to-do's durable item store.
+#
+# Contracts under test, each through bin/fm-todo.sh and the rendered page:
+#   - Verification is its own fact: an unchanged re-read and a re-sync never
+#     renew it, a sweep downgrades an older check to "not re-checked since",
+#     and an explicit verify makes the line current again.
+#   - A page command is durable: `done` survives repeated syncs, the next
+#     morning and a re-asserted sidecar, and a meaningful new ask resurfaces
+#     exactly once with its reason.
+#   - An edit after a ledger resolution (edited_digest) reopens the item once.
+#   - A stale page revision is refused, a repeated command is harmless, and
+#     `you` stays a requested handoff until firstmate accepts it.
+#   - Missing or corrupt input closes nothing; a released hold closes only its
+#     own item; one ask seen twice is one item, two asks stay two.
+#   - A snooze ends on its day without claiming a fresh check.
+#   - Only a named, fulfilled close counts as handled without you.
+# shellcheck disable=SC2016
+set -u
+
+# shellcheck source=tests/lib.sh disable=SC1091
+. "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
+
+TODO="$ROOT/bin/fm-todo.sh"
+RENDER="$ROOT/bin/fm-todo-render.sh"
+INTAKE="$ROOT/bin/fm-channel-intake.sh"
+TMP_ROOT=$(fm_test_tmproot fm-todo-tests)
+
+# 2026-09-10 in Europe/Amsterdam (CEST, UTC+2).
+T_0900=1789023600
+T_1000=1789027200
+T_1030=1789029000
+T_1100=1789030800
+T_1500=1789045200
+T_NEXT_0900=$((T_0900 + 86400))
+T_NEXT_1000=$((T_1000 + 86400))
+
+new_home() {
+  local h=$1
+  mkdir -p "$h/config" "$h/data/channel-intake" "$h/.lavish"
+  printf 'enabled = true\ntimezone = Europe/Amsterdam\ninterval_seconds = 900\n' >"$h/config/channel-intake"
+  printf 'C_BRIEF\tslack-channel\tdaily brief channel\n' >"$h/data/channel-intake/sources.tsv"
+  : >"$h/backlog.md"
+}
+
+intake_at() {
+  local h=$1 now=$2
+  shift 2
+  FM_HOME="$h" FM_ROOT_OVERRIDE="$ROOT" FM_CHANNEL_INTAKE_NOW="$now" "$INTAKE" "$@"
+}
+
+todo_at() {
+  local h=$1 now=$2
+  shift 2
+  FM_HOME="$h" FM_ROOT_OVERRIDE="$ROOT" FM_TODO_NOW="$now" \
+    FM_TODO_BACKLOG_OVERRIDE="$h/backlog.md" "$TODO" "$@"
+}
+
+render_at() {
+  local h=$1 now=$2
+  shift 2
+  FM_HOME="$h" FM_ROOT_OVERRIDE="$ROOT" FM_TODO_RENDER_NOW="$now" \
+    FM_TODO_BACKLOG_OVERRIDE="$h/backlog.md" "$RENDER" render "$@" >/dev/null
+}
+
+page() {
+  cat "$1/.lavish/today-$2.html"
+}
+
+# The id, state or revision of the one item whose title contains $2.
+field_of() {
+  local h=$1 title=$2 col=$3
+  todo_at "$h" "$T_1500" list | awk -F '\t' -v t="$title" -v c="$col" 'index($5, t) { print $c; exit }'
+}
+
+sidecar() {
+  local h=$1 day=$2 body=$3
+  printf '{"version":2,"date":"%s","actions":[%s]}\n' "$day" "$body" >"$h/.lavish/today-$day.morning.json"
+}
+
+test_verification_is_never_renewed_by_sync() {
+  local h out
+  h="$TMP_ROOT/verification"
+  new_home "$h"
+  intake_at "$h" "$T_0900" observe --source C_BRIEF --ref v1 --digest a --class urgent --title 'dealer quote' >/dev/null
+  todo_at "$h" "$T_1000" sweep-start >/dev/null
+  # An unchanged re-read after the sweep does not renew the 09:00 check.
+  intake_at "$h" "$T_1030" observe --source C_BRIEF --ref v1 --digest a --class urgent --title 'dealer quote' >/dev/null
+  render_at "$h" "$T_1030"
+  out=$(page "$h" 2026-09-10)
+  assert_contains "$out" 'dealer quote<span class="prov unv">not re-checked since 09:00 CEST</span>' \
+    'a check older than the sweep was shown as current'
+  assert_contains "$out" 'No action re-checked in this build' 'the Now strip claimed a stale item'
+  todo_at "$h" "$T_1030" verify --item "$(field_of "$h" 'dealer quote' 1)" --how 'Slack thread read directly' >/dev/null
+  render_at "$h" "$T_1100"
+  out=$(page "$h" 2026-09-10)
+  assert_contains "$out" 'dealer quote<span class="prov obs">read 10:30 CEST</span>' 'an explicit verify was not recorded'
+  assert_contains "$out" 'Slack thread read directly' 'the verification method is not on the line'
+  # A later render never moves the check forward on its own.
+  render_at "$h" "$T_1500"
+  assert_contains "$(page "$h" 2026-09-10)" 'read 10:30 CEST' 'a re-render renewed the verification time'
+  # A new day without a new read is not current.
+  render_at "$h" "$T_NEXT_0900"
+  assert_contains "$(page "$h" 2026-09-11)" 'not re-checked since Thu 10 Sep 10:30 CEST' \
+    'yesterday'"'"'s check was treated as current today'
+  pass 'verification changes only on a source read or an explicit verify, never on a sync or render'
+}
+
+test_done_survives_and_a_new_ask_resurfaces_once() {
+  local h id out reopens
+  h="$TMP_ROOT/done"
+  new_home "$h"
+  sidecar "$h" 2026-09-10 '{"key":"k-0910","source":"firstmate-backlog","ref":"catena","class":"urgent","title":"Catena firmware call","digest":"ask-1","updated":'"$T_0900"'}'
+  render_at "$h" "$T_1000"
+  id=$(field_of "$h" 'Catena' 1)
+  out=$(todo_at "$h" "$T_1000" command --item "$id" 'done')
+  assert_contains "$out" "TODO_CMD: done $id" 'done was not applied'
+  render_at "$h" "$T_1100"
+  render_at "$h" "$T_1500"
+  # Next morning the sidecar re-asserts the same ask with a new key and wording.
+  sidecar "$h" 2026-09-11 '{"key":"k-0911","source":"firstmate-backlog","ref":"catena","class":"urgent","title":"Catena: still the firmware call","digest":"ask-1","updated":'"$T_NEXT_0900"'}'
+  render_at "$h" "$T_NEXT_0900"
+  [ "$(field_of "$h" 'Catena' 2)" = closed ] || fail 'done did not survive the next morning'
+  assert_not_contains "$(page "$h" 2026-09-11)" 'id="item-'"$id"'"' 'a done item came back on the page'
+  # A meaningful change of the ask reopens it once, with the reason shown.
+  sidecar "$h" 2026-09-11 '{"key":"k-0911","source":"firstmate-backlog","ref":"catena","class":"urgent","title":"Catena: now a thermostat call","digest":"ask-2","updated":'"$T_NEXT_0900"'}'
+  render_at "$h" "$T_NEXT_1000"
+  render_at "$h" "$T_NEXT_1000"
+  out=$(page "$h" 2026-09-11)
+  [ "$(field_of "$h" 'Catena' 2)" = open ] || fail 'a changed ask did not reopen'
+  assert_contains "$out" 'reopened: firstmate-backlog changed after it was closed (fulfilled)' 'the reopen reason is missing'
+  reopens=$(grep -c '"to": "open"' "$h/data/todo/journal")
+  [ "$reopens" = 1 ] || fail "the item reopened $reopens times, not once"
+  pass 'done survives repeated syncs and the next morning; a changed ask resurfaces once with its reason'
+}
+
+test_edit_after_resolution_reopens_once() {
+  local h key
+  h="$TMP_ROOT/edited"
+  new_home "$h"
+  key=$(intake_at "$h" "$T_0900" observe --source C_BRIEF --ref e1 --digest a --class urgent --title 'invoice dispute' | awk '{ print $2 }')
+  intake_at "$h" "$T_1000" resolve --item "$key" --reason 'credit note sent' >/dev/null
+  render_at "$h" "$T_1000"
+  [ "$(field_of "$h" 'invoice dispute' 2)" = closed ] || fail 'a ledger resolution did not close the item'
+  intake_at "$h" "$T_1100" observe --source C_BRIEF --ref e1 --digest b --class urgent --title 'invoice dispute' >/dev/null
+  render_at "$h" "$T_1100"
+  render_at "$h" "$T_1500"
+  [ "$(field_of "$h" 'invoice dispute' 2)" = open ] || fail 'an edit after resolution did not reopen the item'
+  [ "$(grep -c '"to": "open"' "$h/data/todo/journal")" = 1 ] || fail 'the archived resolution re-closed or re-reopened the item'
+  pass 'an edit after a ledger resolution reopens the item once and the old resolution does not re-close it'
+}
+
+test_commands_refuse_stale_pages_and_track_handoffs() {
+  local h id rev out code
+  h="$TMP_ROOT/commands"
+  new_home "$h"
+  intake_at "$h" "$T_0900" observe --source C_BRIEF --ref c1 --digest a --class urgent --title 'Tomra restore' >/dev/null
+  render_at "$h" "$T_0900"
+  id=$(field_of "$h" 'Tomra' 1)
+  rev=$(field_of "$h" 'Tomra' 4)
+  assert_contains "$(page "$h" 2026-09-10)" "rev:&quot;$rev&quot;" 'the page does not carry the revision it shows'
+  intake_at "$h" "$T_1000" observe --source C_BRIEF --ref c1 --digest b --class urgent --title 'Tomra restore' >/dev/null
+  render_at "$h" "$T_1000"
+  out=$(todo_at "$h" "$T_1000" command --item "$id" --rev "$rev" 'drop') && code=0 || code=$?
+  expect_code 1 "$code" 'a command from a stale page was applied'
+  assert_contains "$out" 'refresh the page first' 'the stale refusal does not say why'
+  [ "$(field_of "$h" 'Tomra' 2)" = open ] || fail 'a refused command changed the item'
+  rev=$(field_of "$h" 'Tomra' 4)
+  todo_at "$h" "$T_1000" command --item "$id" --rev "$rev" 'you: ask Queco for the three facts' >/dev/null
+  out=$(todo_at "$h" "$T_1000" command --item "$id" --rev "$rev" 'you: ask Queco for the three facts')
+  assert_contains "$out" 'TODO_CMD: already you' 'a repeated command was not idempotent'
+  render_at "$h" "$T_1030"
+  assert_contains "$(page "$h" 2026-09-10)" 'handoff requested, not yet accepted: ask Queco for the three facts' \
+    'a requested handoff was not shown as pending'
+  todo_at "$h" "$T_1030" ack --item "$id" >/dev/null
+  render_at "$h" "$T_1100"
+  [ "$(field_of "$h" 'Tomra' 2)" = waiting ] || fail 'an accepted handoff did not move to waiting'
+  assert_contains "$(page "$h" 2026-09-10)" 'firstmate has it: ask Queco for the three facts' 'the accepted owner is not shown'
+  out=$(todo_at "$h" "$T_1100" command 'mine' 'no verb here') && code=0 || code=$?
+  expect_code 1 "$code" 'a verb with no matching words was not refused'
+  assert_contains "$out" 'TODO_CMD: not-a-command no verb here' 'a plain line was treated as a command'
+  pass 'stale pages are refused, repeats are harmless, and a handoff stays requested until accepted'
+}
+
+test_missing_input_closes_nothing_and_release_is_scoped() {
+  local h
+  h="$TMP_ROOT/inputs"
+  new_home "$h"
+  cat >"$h/backlog.md" <<'MD'
+## Queued
+- [ ] fleet-a - Approve reads on unit A (since 2026-09-01) (hold: needs the captain's go (reads, not pushes)) (hold-kind: captain)
+- [ ] fleet-b - Approve reads on unit B (since 2026-09-01) (hold: needs the captain's go) (hold-kind: captain)
+- [ ] plain - Ordinary queued work (since 2026-09-01)
+MD
+  render_at "$h" "$T_0900"
+  [ "$(field_of "$h" 'unit A' 2)" = open ] || fail 'a captain hold was not folded in'
+  assert_contains "$(page "$h" 2026-09-10)" 'needs the captain&#x27;s go (reads, not pushes)' 'the nested hold reason was cut'
+  assert_contains "$(page "$h" 2026-09-10)" 'cannot verify - no source read recorded' 'a backlog hold was shown as verified'
+  assert_not_contains "$(page "$h" 2026-09-10)" 'Ordinary queued work' 'an unheld task reached the page'
+  mv "$h/backlog.md" "$h/backlog.moved"
+  render_at "$h" "$T_1000"
+  [ "$(field_of "$h" 'unit A' 2)" = open ] || fail 'a missing backlog closed a held item'
+  grep -v fleet-b "$h/backlog.moved" >"$h/backlog.md"
+  render_at "$h" "$T_1100"
+  [ "$(field_of "$h" 'unit B' 2)" = closed ] || fail 'a released hold did not close its item'
+  [ "$(field_of "$h" 'unit A' 2)" = open ] || fail 'releasing one hold closed another'
+  assert_contains "$(page "$h" 2026-09-10)" 'no longer held for you in the backlog' 'the release evidence is missing'
+  cp -R "$h/data/todo" "$h/todo.before"
+  printf '{broken' >"$h/.lavish/today-2026-09-10.morning.json"
+  if render_at "$h" "$T_1500" 2>/dev/null; then fail 'a corrupt sidecar was accepted'; fi
+  diff -r "$h/data/todo/items" "$h/todo.before/items" >/dev/null || fail 'a refused sync changed the store'
+  pass 'missing or corrupt input closes nothing and a released hold closes only its own item'
+}
+
+test_identity_snooze_and_counter() {
+  local h out id key
+  h="$TMP_ROOT/identity"
+  new_home "$h"
+  key=$(intake_at "$h" "$T_0900" observe --source C_BRIEF --ref t1 --digest a --class urgent --title 'ticket ask one' | awk '{ print $2 }')
+  sidecar "$h" 2026-09-10 '{"key":"'"$key"'","source":"C_BRIEF","ref":"t1","class":"urgent","title":"same ask from the sweep","updated":'"$T_0900"'},{"key":"second","source":"C_BRIEF","ref":"t1-b","class":"urgent","title":"ticket ask two","updated":'"$T_0900"'}'
+  render_at "$h" "$T_1000"
+  [ "$(todo_at "$h" "$T_1000" list | wc -l | tr -d ' ')" = 2 ] || fail 'one ask seen twice was not one item, or two asks merged'
+  id=$(field_of "$h" 'ticket ask two' 1)
+  todo_at "$h" "$T_1000" command --item "$id" 'park til tomorrow' >/dev/null
+  render_at "$h" "$T_1030"
+  assert_contains "$(page "$h" 2026-09-10)" 'back on 2026-09-11' 'a parked item is not listed with its date'
+  render_at "$h" "$T_NEXT_0900"
+  out=$(page "$h" 2026-09-11)
+  assert_contains "$out" 'ticket ask two<span class="prov unv">not re-checked since' 'a snooze expiry claimed a fresh check'
+  todo_at "$h" "$T_NEXT_0900" close --item "$(field_of "$h" 'ticket ask one' 1)" --evidence 'Naomi answered the dealer' --actor Naomi >/dev/null
+  todo_at "$h" "$T_NEXT_0900" command --item "$id" 'drop' >/dev/null
+  render_at "$h" "$T_NEXT_1000"
+  out=$(page "$h" 2026-09-11)
+  assert_contains "$out" '<div class="n">1</div><div class="l">Handled without you' 'a named fulfilled close was not counted'
+  assert_contains "$out" '<div class="n">2</div><div class="l">Closed since' 'the closed count is wrong'
+  assert_contains "$out" 'fulfilled by Naomi' 'the closing actor is not shown'
+  assert_contains "$out" 'dismissed by you' 'a dismissal was not labelled as one'
+  pass 'one ask seen twice dedupes, a snooze returns unverified, and only a named fulfilled close counts'
+}
+
+test_verification_is_never_renewed_by_sync
+test_done_survives_and_a_new_ask_resurfaces_once
+test_edit_after_resolution_reopens_once
+test_commands_refuse_stale_pages_and_track_handoffs
+test_missing_input_closes_nothing_and_release_is_scoped
+test_identity_snooze_and_counter

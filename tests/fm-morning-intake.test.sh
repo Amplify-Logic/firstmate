@@ -991,7 +991,7 @@ test_completion_composes_morning_and_preserves_failure() {
   [ ! -f "$h/data/morning-intake/last-complete" ] || fail 'failed composition advanced completion'
   printf '{"version":1,"date":"2026-09-10","actions":[]}\n' >"${page%.html}.morning.json"
   at "$h" "$T_0715" complete --report "$report" --lavish "$page" >/dev/null
-  assert_contains "$(cat "$page")" '<h2>Needs you now' 'morning completion did not compose the page'
+  assert_contains "$(cat "$page")" '<div class="strip now"><h3>Now</h3>' 'morning completion did not compose the page'
   assert_contains "$(cat "$page")" 'Meeting details' 'composition lost morning details'
   pass 'morning completion composes the page and failed composition preserves the claim'
 }
