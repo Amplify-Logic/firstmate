@@ -16,6 +16,7 @@ RANK = ('outage', 'urgent', 'deadline', 'obligation')
 KINDS = ('decision', 'approval', 'reply', 'info')
 WEEKDAYS = ('monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday')
 SLOT_FIELDS = ('title', 'link', 'class', 'kind', 'ask', 'why', 'label', 'since')
+RETIRED_TTL = 30 * 86400
 
 
 class Refusal(Exception):
@@ -67,6 +68,11 @@ class Store:
             rec = json.loads(path.read_text())
             items[rec['id']] = rec
         return items
+
+    def remove(self, iid):
+        path = self.items_dir / (iid + '.json')
+        if path.is_file() and not path.is_symlink():
+            path.unlink()
 
     def save(self, rec):
         body = json.dumps(rec, indent=1, sort_keys=True, ensure_ascii=False) + '\n'
@@ -445,9 +451,22 @@ def sync(args, store, now):
     started = number(doc.get('sweep_started')) if doc else 0
     if started and started <= now and local_day(started) == local_day(now):
         store.add_sweep(started)
+    # Retired routine chatter renders nowhere, so past its retention the record
+    # is only cost on a path that runs every half hour. The journal keeps it.
+    for iid in [i for i, rec in items.items() if prunable(rec, now)]:
+        store.remove(iid)
+        del items[iid]
     for rec in items.values():
         store.save(rec)
     return items
+
+
+def prunable(rec, now):
+    """Only an intake-retired routine record past its retention; it was never an ask."""
+    c = rec.get('closure') or {}
+    return (rec.get('state') == 'closed' and rec.get('kind') == 'info'
+            and c.get('reason') == 'superseded' and c.get('actor') == 'source'
+            and 0 < number(c.get('at')) <= now - RETIRED_TTL)
 
 
 def one(items, iid):

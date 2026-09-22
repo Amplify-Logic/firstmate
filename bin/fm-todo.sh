@@ -29,7 +29,10 @@
 # evidence, at}, `owner`, `snoozed_until`, `pending` handoff, `verification`
 # {at, how, rev} and `rev`, the item's meaningful revision over its slots.
 # data/todo/journal is an append-only line per transition or command effect.
-# One lock serializes sync and every write.
+# One lock serializes sync and every write. Sync deletes one kind of record
+# and no other: a routine item the intake retired, thirty days after that
+# closure. Every closed obligation and every command tombstone is kept, so
+# done and drop keep suppressing a reopen, and the journal is never trimmed.
 #
 # IDENTITY. An item is one ask. It is matched by an explicitly shared alias
 # only: a ledger record's `source:ref`, key and provenance tokens; a morning

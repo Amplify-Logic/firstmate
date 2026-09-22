@@ -24,6 +24,8 @@
 #   - A routine item the ledger no longer carries closes as superseded without
 #     reaching the Closed since evidence, and an unreadable ledger closes nothing.
 #   - The held fold shows the oldest holds first, by the backlog's since date.
+#   - Sync prunes a retired routine record thirty days on, and nothing else:
+#     a command tombstone and a closed obligation both survive it.
 # shellcheck disable=SC2016
 set -u
 
@@ -158,6 +160,33 @@ test_held_fold_shows_the_oldest_holds_first() {
   assert_contains "$out" '2 more held for you, not shown here.' 'the held fold is not capped'
   assert_not_contains "$out" '<td class="what">Approve batch 12' 'the newest hold displaced an older one'
   pass 'the held fold surfaces the oldest holds first, so the cut is stable and meaningful'
+}
+
+test_sync_prunes_only_retired_routine_records() {
+  local h chatter gone kept
+  h="$TMP_ROOT/prune"
+  new_home "$h"
+  chatter=$(intake_at "$h" "$T_0900" observe --source C_BRIEF --ref chat --digest a --title 'old channel chatter' | awk '{ print $2 }')
+  intake_at "$h" "$T_0900" observe --source C_BRIEF --ref ask --digest b --class urgent --title 'dealer needs an answer' >/dev/null
+  render_at "$h" "$T_0900"
+  kept=$(field_of "$h" 'dealer needs' 1)
+  todo_at "$h" "$T_0900" command --item "$kept" 'done' >/dev/null
+  # What the intake does once a routine record passes its brief horizon.
+  mkdir -p "$h/data/channel-intake/inactive"
+  mv "$h/data/channel-intake/items/$chatter" "$h/data/channel-intake/inactive/$chatter"
+  render_at "$h" "$T_1000"
+  gone=$(field_of "$h" 'old channel chatter' 1)
+  [ -n "$gone" ] || fail 'the retired record never became an item'
+  # A day short of the retention the record is still queryable.
+  render_at "$h" "$((T_1000 + 29 * 86400))"
+  [ "$(field_of "$h" 'old channel chatter' 2)" = closed ] || fail 'a retired record was pruned before its retention'
+  render_at "$h" "$((T_1000 + 31 * 86400))"
+  [ -z "$(field_of "$h" 'old channel chatter' 2)" ] || fail 'a retired routine record outlived its retention'
+  [ ! -f "$h/data/todo/items/$gone.json" ] || fail 'the pruned record is still on disk'
+  # Everything that was ever an ask survives, so done keeps suppressing a reopen.
+  [ "$(field_of "$h" 'dealer needs' 2)" = closed ] || fail 'a command tombstone was pruned with the chatter'
+  [ "$(grep -c '"reason": "superseded"' "$h/data/todo/journal")" = 1 ] || fail 'pruning trimmed the journal'
+  pass 'sync prunes a retired routine record after thirty days and keeps every ask it ever tracked'
 }
 
 test_verification_is_never_renewed_by_sync() {
@@ -403,3 +432,4 @@ test_routine_activity_keeps_its_not_re_checked_fold
 test_a_retired_ledger_record_closes_its_routine_item
 test_routine_fold_is_capped_like_the_held_one
 test_held_fold_shows_the_oldest_holds_first
+test_sync_prunes_only_retired_routine_records
