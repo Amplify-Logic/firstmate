@@ -26,7 +26,9 @@
 # decisions awaiting him; replies he owes; the email agent block; waiting on
 # others (including requested handoffs); fleet conditions; the morning detail
 # fragment; everything closed since the previous sweep with its evidence and
-# actor; then folds for parked, "mine", routine activity and intake coverage
+# actor, except routine chatter the intake dropped from its ledger, which was
+# never an ask; then folds for parked, "mine", routine activity and intake
+# coverage
 # (each enrolled source's last successful read and last failure, which is
 # separate from item freshness). Sections with nothing in them are omitted.
 # Inside decisions, replies and routine activity, lines not current for this
@@ -35,7 +37,8 @@
 # decisions section, oldest hold first, at most ten rows and a count of the
 # rest, and the decisions tile carries that held total beside its open count -
 # a hold is never verification, so those lines must not bury the ones read
-# today. The routine fold is capped the same way.
+# today. The routine fold is capped the same way, and a capped fold says how
+# many of its lines are shown.
 # "Handled without you" appears only for a fulfilled close with a named actor
 # other than the captain.
 #

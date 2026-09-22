@@ -257,8 +257,12 @@ def capped(recs, more, reply=True, limit=0):
 
 def stale_fold(recs, reply=True, limit=0):
     """The one labelled fold every section uses for lines this build did not re-check."""
-    return disclosure(f'{len(recs)} not re-checked in this build - each shows its last check',
-                      capped(recs, 'more not re-checked, not shown here.', reply, limit))
+    if limit and len(recs) > limit:
+        recs = sorted(recs, key=lambda r: (number((r.get('verification') or {}).get('at')), r.get('id', '')))
+        summary = f'{len(recs)} not re-checked in this build, oldest {limit} shown'
+    else:
+        summary, limit = f'{len(recs)} not re-checked in this build - each shows its last check', 0
+    return disclosure(summary, capped(recs, 'more not re-checked, not shown here.', reply, limit))
 
 
 def split(recs):
@@ -336,7 +340,16 @@ replies = [r for r in live if r.get('kind') == 'reply']
 conditions = [r for r in live if r.get('kind') == 'condition']
 activity = [r for r in live if r.get('kind') == 'info']
 waiting = sorted([r for r in items if r.get('state') == 'waiting'] + handoffs, key=sortkey)
-closed = [r for r in items if r.get('state') == 'closed' and number((r.get('closure') or {}).get('at')) >= SINCE]
+
+
+def intake_retired(rec):
+    """Routine chatter the intake dropped from its ledger; it was never an ask to close."""
+    c = rec.get('closure') or {}
+    return rec.get('kind') == 'info' and c.get('reason') == 'superseded' and c.get('actor') == 'source'
+
+
+closed = [r for r in items if r.get('state') == 'closed' and not intake_retired(r)
+          and number((r.get('closure') or {}).get('at')) >= SINCE]
 closed.sort(key=lambda r: (-number(r['closure'].get('at')), r['id']))
 # Counted as handled without you only with a named actor other than the
 # captain and a fulfilled close; unknown actors, dismissals and releases never count.

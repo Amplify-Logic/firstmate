@@ -21,8 +21,8 @@
 #     below the live decisions, and the decisions tile keeps them apart.
 #   - Routine activity older than the sweep stays on the page in the same
 #     labelled "not re-checked" fold the sections use, capped at ten rows.
-#   - A routine item the ledger no longer carries closes as superseded, and an
-#     unreadable ledger closes nothing.
+#   - A routine item the ledger no longer carries closes as superseded without
+#     reaching the Closed since evidence, and an unreadable ledger closes nothing.
 #   - The held fold shows the oldest holds first, by the backlog's since date.
 # shellcheck disable=SC2016
 set -u
@@ -102,9 +102,13 @@ test_a_retired_ledger_record_closes_its_routine_item() {
   [ "$(field_of "$h" 'small talk' 2)" = closed ] || fail 'a retired routine record left its item open forever'
   [ "$(field_of "$h" 'stayed chatty' 2)" = open ] || fail 'retiring one record closed another'
   out=$(page "$h" 2026-09-10)
-  assert_contains "$out" 'superseded at the source' 'the retirement closure is not labelled superseded'
-  assert_contains "$out" 'the intake retired it as routine' 'the retirement evidence is missing'
-  assert_not_contains "$out" 'yesterday small talk<span' 'a retired routine line still renders as open'
+  assert_contains "$(grep -h . "$h/data/todo/items/"*.json)" '"reason": "superseded"' \
+    'the retirement closure is not labelled superseded'
+  assert_not_contains "$out" 'yesterday small talk' 'a retired routine line still renders on the page'
+  # Routine chatter the intake dropped was never an ask, so it is not a closure to show.
+  assert_not_contains "$out" 'the intake retired it as routine' 'a retirement reached the Closed since evidence table'
+  assert_contains "$out" '<div class="n">0</div><div class="l">Closed since' \
+    'a retirement was counted as something closed for you'
   # An unreadable ledger is not an absence: it closes nothing.
   mv "$h/data/channel-intake" "$h/intake.away"
   render_at "$h" "$T_1100"
@@ -127,8 +131,8 @@ test_routine_fold_is_capped_like_the_held_one() {
   todo_at "$h" "$T_1000" sweep-start >/dev/null
   render_at "$h" "$T_1030"
   out=$(page "$h" 2026-09-10)
-  assert_contains "$out" '<summary>12 not re-checked in this build - each shows its last check</summary>' \
-    'the stale routine lines are not all counted'
+  assert_contains "$out" '<summary>12 not re-checked in this build, oldest 10 shown</summary>' \
+    'the capped fold still claims every line shows its last check'
   assert_contains "$out" '2 more not re-checked, not shown here.' 'the routine fold is not capped with a count of the rest'
   n=$(printf '%s\n' "$out" | grep -c '<td class="what">channel chatter')
   [ "$n" = 10 ] || fail "the routine fold rendered $n rows, not ten"
