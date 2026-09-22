@@ -331,7 +331,7 @@ def fold(store, items, observations, now, backlog_seen, ledger_seen):
             gone = [s for slot, s in rec['slots'].items()
                     if slot.startswith('ledger:') and (rec['id'], slot) not in seen and s['state'] == 'open']
             if (not gone or rec['state'] != 'open' or rec.get('kind') != 'info'
-                    or rec.get('owner') or rec.get('snoozed_until') or rec.get('pending') or rec.get('note')
+                    or rec.get('owner') or rec.get('snoozed_until') or rec.get('pending')
                     or any((rec['id'], slot) in seen for slot in rec['slots'])):
                 continue
             for s in gone:

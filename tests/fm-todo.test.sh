@@ -27,7 +27,8 @@
 #   - Sync prunes a retired routine record thirty days on, and nothing else:
 #     a command tombstone and a closed obligation both survive it.
 #   - A routine line the captain marked with mine or park is never retired by
-#     the intake's absence, so it is never pruned either.
+#     the intake's absence, so it is never pruned either. A system reopen note
+#     is not such a mark: a revived routine thread still retires and prunes.
 # shellcheck disable=SC2016
 set -u
 
@@ -221,6 +222,34 @@ test_a_marked_routine_line_is_never_retired_by_the_intake() {
   [ -f "$h/data/todo/items/$park_id.json" ] || fail 'the parked line was pruned'
   [ "$(field_of "$h" 'price list' 2)" = open ] || fail 'the claimed line closed once its park had passed'
   pass 'a routine line the captain marked is never retired by the intake, nor pruned'
+}
+
+test_a_revived_routine_thread_still_retires_and_prunes() {
+  local h key id
+  h="$TMP_ROOT/revived"
+  new_home "$h"
+  key=$(intake_at "$h" "$T_0900" observe --source C_BRIEF --ref thread --digest a --title 'weekly ops thread' | awk '{ print $2 }')
+  render_at "$h" "$T_0900"
+  id=$(field_of "$h" 'weekly ops thread' 1)
+  # Quiet past the brief horizon, so the intake retires it.
+  mkdir -p "$h/data/channel-intake/inactive"
+  mv "$h/data/channel-intake/items/$key" "$h/data/channel-intake/inactive/$key"
+  render_at "$h" "$T_1000"
+  [ "$(field_of "$h" 'weekly ops thread' 2)" = closed ] || fail 'the quiet thread was not retired'
+  # A later message on the same ref restores the record, and the item reopens
+  # with a system note. That note is the system's, not a mark the captain made.
+  intake_at "$h" "$T_1030" observe --source C_BRIEF --ref thread --digest b --title 'weekly ops thread' >/dev/null
+  render_at "$h" "$T_1100"
+  [ "$(field_of "$h" 'weekly ops thread' 2)" = open ] || fail 'a revived routine record did not reopen its item'
+  assert_contains "$(page "$h" 2026-09-10)" 'reopened' 'the reopen left no note on the line'
+  # Quiet again: a reopen note must not exempt it from retirement forever.
+  mv "$h/data/channel-intake/items/$key" "$h/data/channel-intake/inactive/$key"
+  render_at "$h" "$T_1500"
+  [ "$(field_of "$h" 'weekly ops thread' 2)" = closed ] || fail 'a reopen note exempted a routine line from retirement'
+  render_at "$h" "$((T_1500 + 31 * 86400))"
+  [ -z "$(field_of "$h" 'weekly ops thread' 2)" ] || fail 'the revived thread outlived its retention'
+  [ ! -f "$h/data/todo/items/$id.json" ] || fail 'the revived thread was never pruned'
+  pass 'a reopen note is not a captain mark: a revived routine thread still retires and prunes'
 }
 
 test_verification_is_never_renewed_by_sync() {
@@ -468,3 +497,4 @@ test_routine_fold_is_capped_like_the_held_one
 test_held_fold_shows_the_oldest_holds_first
 test_sync_prunes_only_retired_routine_records
 test_a_marked_routine_line_is_never_retired_by_the_intake
+test_a_revived_routine_thread_still_retires_and_prunes
