@@ -26,6 +26,8 @@
 #   - The held fold shows the oldest holds first, by the backlog's since date.
 #   - Sync prunes a retired routine record thirty days on, and nothing else:
 #     a command tombstone and a closed obligation both survive it.
+#   - A routine line the captain marked with mine or park is never retired by
+#     the intake's absence, so it is never pruned either.
 # shellcheck disable=SC2016
 set -u
 
@@ -187,6 +189,38 @@ test_sync_prunes_only_retired_routine_records() {
   [ "$(field_of "$h" 'dealer needs' 2)" = closed ] || fail 'a command tombstone was pruned with the chatter'
   [ "$(grep -c '"reason": "superseded"' "$h/data/todo/journal")" = 1 ] || fail 'pruning trimmed the journal'
   pass 'sync prunes a retired routine record after thirty days and keeps every ask it ever tracked'
+}
+
+test_a_marked_routine_line_is_never_retired_by_the_intake() {
+  local h claimed parked loose mine_id park_id out
+  h="$TMP_ROOT/marked"
+  new_home "$h"
+  claimed=$(intake_at "$h" "$T_0900" observe --source C_BRIEF --ref mark --digest a --title 'supplier posted a price list' | awk '{ print $2 }')
+  parked=$(intake_at "$h" "$T_0900" observe --source C_BRIEF --ref park --digest b --title 'shipping notice for week 38' | awk '{ print $2 }')
+  loose=$(intake_at "$h" "$T_0900" observe --source C_BRIEF --ref loose --digest c --title 'nobody claimed this one' | awk '{ print $2 }')
+  render_at "$h" "$T_0900"
+  mine_id=$(field_of "$h" 'price list' 1)
+  park_id=$(field_of "$h" 'shipping notice' 1)
+  todo_at "$h" "$T_0900" command --item "$mine_id" 'mine' >/dev/null
+  todo_at "$h" "$T_0900" command --item "$park_id" 'park til tomorrow' >/dev/null
+  # The intake retires all three once they pass the brief horizon.
+  mkdir -p "$h/data/channel-intake/inactive"
+  mv "$h/data/channel-intake/items/$claimed" "$h/data/channel-intake/inactive/$claimed"
+  mv "$h/data/channel-intake/items/$parked" "$h/data/channel-intake/inactive/$parked"
+  mv "$h/data/channel-intake/items/$loose" "$h/data/channel-intake/inactive/$loose"
+  render_at "$h" "$T_1000"
+  [ "$(field_of "$h" 'nobody claimed' 2)" = closed ] || fail 'an unmarked routine record was not retired'
+  [ "$(field_of "$h" 'price list' 2)" = open ] || fail 'a routine line the captain claimed was auto-closed'
+  [ "$(field_of "$h" 'shipping notice' 2)" = open ] || fail 'a routine line the captain parked was auto-closed'
+  out=$(page "$h" 2026-09-10)
+  assert_contains "$out" 'supplier posted a price list' 'the claimed line vanished from the page'
+  assert_contains "$out" 'shipping notice for week 38' 'the parked line vanished from the page'
+  # Never auto-closed means never pruned, however long the ledger stays silent.
+  render_at "$h" "$((T_1000 + 31 * 86400))"
+  [ -f "$h/data/todo/items/$mine_id.json" ] || fail 'the claimed line was pruned'
+  [ -f "$h/data/todo/items/$park_id.json" ] || fail 'the parked line was pruned'
+  [ "$(field_of "$h" 'price list' 2)" = open ] || fail 'the claimed line closed once its park had passed'
+  pass 'a routine line the captain marked is never retired by the intake, nor pruned'
 }
 
 test_verification_is_never_renewed_by_sync() {
@@ -433,3 +467,4 @@ test_a_retired_ledger_record_closes_its_routine_item
 test_routine_fold_is_capped_like_the_held_one
 test_held_fold_shows_the_oldest_holds_first
 test_sync_prunes_only_retired_routine_records
+test_a_marked_routine_line_is_never_retired_by_the_intake

@@ -324,12 +324,14 @@ def fold(store, items, observations, now, backlog_seen, ledger_seen):
                                    'no longer held for you in the backlog')
     # The intake retires a routine record past the brief horizon to its inactive
     # set. An open routine item nothing asserts any more has no ask left; an
-    # unreadable ledger is not an absence and closes nothing.
+    # unreadable ledger is not an absence and closes nothing. A line the captain
+    # marked is his to clear, never the intake's, however routine it started.
     if ledger_seen:
         for rec in items.values():
             gone = [s for slot, s in rec['slots'].items()
                     if slot.startswith('ledger:') and (rec['id'], slot) not in seen and s['state'] == 'open']
             if (not gone or rec['state'] != 'open' or rec.get('kind') != 'info'
+                    or rec.get('owner') or rec.get('snoozed_until') or rec.get('pending') or rec.get('note')
                     or any((rec['id'], slot) in seen for slot in rec['slots'])):
                 continue
             for s in gone:

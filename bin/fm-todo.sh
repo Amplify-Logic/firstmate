@@ -31,8 +31,10 @@
 # data/todo/journal is an append-only line per transition or command effect.
 # One lock serializes sync and every write. Sync deletes one kind of record
 # and no other: a routine item the intake retired, thirty days after that
-# closure. Every closed obligation and every command tombstone is kept, so
-# done and drop keep suppressing a reopen, and the journal is never trimmed.
+# closure. A routine line you marked with mine, park, you or dig is never
+# retired that way, so it is never pruned either. Every closed obligation and
+# every command tombstone is kept, so done and drop keep suppressing a reopen,
+# and the journal is never trimmed.
 #
 # IDENTITY. An item is one ask. It is matched by an explicitly shared alias
 # only: a ledger record's `source:ref`, key and provenance tokens; a morning
@@ -58,8 +60,9 @@
 # a backlog hold's reason and date. Missing, unreadable or refused input closes
 # nothing; a task that leaves the readable backlog's held set releases only
 # that item, and a routine item the readable ledger no longer carries - the
-# intake retires one past its brief horizon - closes as superseded. An
-# unreadable ledger or backlog is not an absence and closes nothing.
+# intake retires one past its brief horizon - closes as superseded unless you
+# marked it. An unreadable ledger or backlog is not an absence and closes
+# nothing.
 #
 # PAGE COMMANDS. `command` applies the captain's one-line verbs:
 #   drop <words>            closed as dismissed
