@@ -48,7 +48,13 @@ tbody td{padding:12px 12px;border-bottom:1px solid var(--line-2);vertical-align:
 tbody tr:last-child td{border-bottom:none}
 tbody tr:hover td{background:var(--accent-soft)}
 tr.closed td{color:var(--ink-3)}
-tr.replyrow td{padding:0 12px 12px;border-bottom:1px solid var(--line-2)}
+tr.replyrow td{padding:0 12px 8px;border-bottom:1px solid var(--line-2)}
+details.replyd>summary{list-style:none;cursor:pointer;display:inline-block;font-size:12px;color:var(--ink-3);padding:2px 0;user-select:none}
+details.replyd>summary::-webkit-details-marker{display:none}
+details.replyd>summary::before{content:"+ ";font-family:var(--mono)}
+details.replyd[open]>summary::before{content:"- "}
+details.replyd>summary:hover{color:var(--ink-2)}
+details.replyd[open]>summary{margin-bottom:8px}
 tr.replyrow:hover td,tr.replyrow td{background:transparent}
 form.reply{display:flex;gap:8px;align-items:center}
 form.reply input[type=text]{flex:1;min-width:0;font:inherit;font-size:13px;padding:6px 10px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink)}

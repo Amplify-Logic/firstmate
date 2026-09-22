@@ -140,11 +140,12 @@ def reply_form(rec):
         "f.note.value='';f.querySelector('.ack').textContent='queued - press Send to Agent';"
     )
     return (f'<tr class="replyrow"><td colspan="3">'
+            f'<details class="replyd"><summary>Add a note</summary>'
             f'<form class="reply" data-lavish-question="todo-item-{esc(iid)}" onsubmit="{esc(js)}">'
             f'<input type="text" name="note" autocomplete="off" '
             f'placeholder="Note for this item - drop, done, park til Friday, mine, dig, or anything else">'
             f'<button type="submit">Queue</button><span class="ack"></span>'
-            f'</form></td></tr>')
+            f'</form></details></td></tr>')
 
 def row(rec, reply=False):
     title = esc(rec.get('title') or 'untitled item')
