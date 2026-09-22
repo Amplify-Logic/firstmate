@@ -269,6 +269,10 @@
       "audience": "agent-runtime"
     },
     {
+      "path": ".agents/skills/usage-restoration/SKILL.md",
+      "audience": "agent-runtime"
+    },
+    {
       "path": ".agents/skills/stuck-crewmate-recovery/SKILL.md",
       "audience": "agent-runtime"
     },
