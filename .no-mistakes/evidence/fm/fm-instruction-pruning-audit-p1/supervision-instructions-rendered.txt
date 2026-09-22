@@ -1,0 +1,61 @@
+===== --harness claude
+relative '](../' links: 0
+  docs/turnend-guard.md -> exists
+  docs/turnend-guard.md#guard-predicates -> exists, anchor #guard-predicates found
+  docs/watcher-continuity.md -> exists
+===== --harness cursor
+relative '](../' links: 0
+  docs/turnend-guard.md -> exists
+  docs/watcher-continuity.md -> exists
+===== --harness grok
+relative '](../' links: 0
+  docs/turnend-guard.md -> exists
+  docs/watcher-continuity.md -> exists
+===== --harness kimi
+relative '](../' links: 0
+===== --harness opencode
+relative '](../' links: 0
+  docs/watcher-continuity.md -> exists
+===== --harness pi
+relative '](../' links: 0
+  docs/pi-supervision-branch.md -> exists
+  docs/pi-supervision-branch.md#components-and-their-owners -> exists, anchor #components-and-their-owners found
+  docs/watcher-continuity.md -> exists
+===== --harness codex
+relative '](../' links: 0
+===== --harness omp
+relative '](../' links: 0
+  docs/pi-supervision-branch.md -> exists
+  docs/watcher-continuity.md -> exists
+
+===== kimi block (full render)
+================================================================================
+SUPERVISION OPERATING INSTRUCTIONS - primary harness: unknown
+================================================================================
+Current state:
+- Lock: held by this session; this session owns normal supervision unless away mode says otherwise.
+- Away/quiet mode: inactive.
+- X mode: inactive; use the default watcher cadence.
+- Ordinary wake: follow the continuation in the harness protocol below; do not use shell &.
+
+Mode: Unknown harness fallback.
+
+This primary harness does not have a verified watcher wake adapter.
+Follow the generic supervision contract in `AGENTS.md`.
+First cycle: drain queued wakes, then choose a supervision wait that the harness can actually wake from.
+Ordinary wake: drain, handle all emitted wakes, reconcile open decisions and unread status lines, and run the exact `--ack-through` command printed as `WAKE_ACK_REQUIRED`, then repeat that verified wait while supervision is still required.
+Before that acknowledgement, interruption leaves the work durable for idempotent re-handling.
+Use `bin/fm-watch-arm.sh` only when the harness has a tracked background mechanism that survives the tool call and notifies the model on process exit.
+Use a bounded foreground wait over `bin/fm-watch.sh` when that wake mechanism is not verified.
+Never use shell `&` for watcher supervision.
+Failure or missing cycle only: inspect the failure and restore the same verified wait shape.
+
+Record new verification evidence before promoting an unknown harness to a named snippet.
+
+
+===== opencode block tail
+9. Do not rely on this plugin in headless `opencode run`; firstmate primary supervision targets persistent OpenCode TUI sessions.
+
+OpenCode's persistent TUI plugin runtime is the wake mechanism.
+The plugin applies in the main primary checkout and a secondmate's own home, and stays silent only in child crewmate and scout worktrees.
+

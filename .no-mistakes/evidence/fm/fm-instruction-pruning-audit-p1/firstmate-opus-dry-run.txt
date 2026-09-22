@@ -1,0 +1,8 @@
+fm-primary: launching model claude-opus-5-5 at effort xhigh
+root=/Users/larsmusic/.no-mistakes/worktrees/f569cc43ac96/01M35FZ24F7X08ZXXRKG2F33C2
+profile=claude-opus
+role=FIRSTMATE
+CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP=1
+CLAUDE_CODE_AUTO_COMPACT_WINDOW=500000
+'claude' '--model' 'claude-opus-5-5' '--effort' 'xhigh' '--name' 'FIRSTMATE' '--dangerously-skip-permissions'
+rc=0

@@ -1,0 +1,10 @@
+### quiet active, then an away entry with no record (a quiet flag must not unlock away)
+$ FM_AFK_MODE=quiet bin/fm-afk-launch.sh start-native
+rc=0 state/.afk first line=quiet
+$ FM_AFK_MODE=away bin/fm-afk-launch.sh start-native
+fm-afk-launch: a confirmed away-posture record is required; run propose and confirm before starting the daemon
+rc=1 state/.afk first line=quiet
+### unrecognised mode value with no record
+$ FM_AFK_MODE=bogus bin/fm-afk-launch.sh start-native
+fm-afk-launch: a confirmed away-posture record is required; run propose and confirm before starting the daemon
+rc=1

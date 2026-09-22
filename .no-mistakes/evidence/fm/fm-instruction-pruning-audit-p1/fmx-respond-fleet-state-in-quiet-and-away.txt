@@ -1,0 +1,22 @@
+===== state/.afk first line: quiet
+$ bin/fm-fleet-snapshot.sh --json   (in-flight records shown)
+rc=0
+{"schema":"fm-fleet-snapshot.v1","backlog_present":true,"records":[{"id":"fix-login-k3","section":null,"title":"repair OAuth redirect","repo":"yourapp","state":"in_flight"}]}
+
+$ bin/fm-crew-state.sh fix-login-k3
+state: unknown · source: none · no metadata for fix-login-k3
+rc=0
+$ bin/fm-bearings-snapshot.sh --json   (the guarded read the review warned about, for contrast)
+rc=3
+fm-afk-return: away mode is still active; run bin/fm-afk-return.sh before ordinary captain work
+===== state/.afk first line: away
+$ bin/fm-fleet-snapshot.sh --json   (in-flight records shown)
+rc=0
+{"schema":"fm-fleet-snapshot.v1","backlog_present":true,"records":[{"id":"fix-login-k3","section":null,"title":"repair OAuth redirect","repo":"yourapp","state":"in_flight"}]}
+
+$ bin/fm-crew-state.sh fix-login-k3
+state: unknown · source: none · no metadata for fix-login-k3
+rc=0
+$ bin/fm-bearings-snapshot.sh --json   (the guarded read the review warned about, for contrast)
+rc=3
+fm-afk-return: away mode is still active; run bin/fm-afk-return.sh before ordinary captain work

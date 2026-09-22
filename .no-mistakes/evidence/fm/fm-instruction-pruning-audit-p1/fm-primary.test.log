@@ -1,0 +1,59 @@
+fm-primary: launching model claude-fable-5-1 at effort xhigh
+fm-primary: launching model claude-fable-5-1 at effort xhigh
+fm-primary: launching model claude-opus-5-5 at effort xhigh
+fm-primary: launching model claude-opus-5-5 at effort xhigh
+fm-primary: launching model gpt-6-astra at effort xhigh
+fm-primary: Cursor primary is certified on 2026.08.11-e8db854; found 2026.07.20-8cc9c0b (docs/cursor-harness.md) - launching anyway
+fm-primary: Cursor primary is certified on 2026.08.11-e8db854; found 2026.07.20-8cc9c0b (docs/cursor-harness.md) - launching anyway
+fm-primary: Cursor primary is certified on 2026.08.11-e8db854; found 2026.07.20-8cc9c0b (docs/cursor-harness.md) - launching anyway
+ok - fm-primary: profiles expand exact flags and always launch from the tracked root
+fm-primary: launching model claude-fable-5-1 at effort xhigh
+fm-primary: launching model claude-opus-5-5 at effort xhigh
+fm-primary: launching model gpt-6-astra at effort xhigh
+fm-primary: Cursor primary is certified on 2026.08.11-e8db854; found 2026.07.20-8cc9c0b (docs/cursor-harness.md) - launching anyway
+fm-primary: launching model claude-fable-5-1 at effort xhigh
+ok - fm-primary: Claude and Codex launches cap the window at 500k; Pi and Cursor stay bare
+ok - fm-primary: Claude effort applies to Fable and Opus and refuses invalid tokens
+fm-primary: launching model gpt-6-astra at effort xhigh
+ok - fm-primary: astra pins gpt-6-astra, effort, Codex harness, and the Codex login gate
+ok - fm-primary: the Astra context window is selectable, bounded by the installed catalog, and never invented
+fm-primary: launching model claude-fable-5-1 at effort xhigh
+fm-primary: launching model claude-opus-5-5 at effort xhigh
+ok - fm-primary: Claude Fable and Opus disable background-shell pressure reap; other profiles do not
+ok - fm-primary: an absent config/accounts.json leaves every profile byte-identical
+ok - fm-primary: --account selects, defaults, and refuses unknown names, vendorless profiles, and other arguments
+ok - fm-primary: a missing, logged-out, or wrong-identity account home refuses before launch
+ok - fm-primary: dry run previews argv before the account credential gate, and still refuses an unresolvable pin
+ok - fm-primary: an unreadable registry warns and still launches, but refuses an explicit pin
+ok - fm-primary: unknown profiles, missing CLIs, and missing integrations fail closed
+ok - fm-primary: a live Firstmate lock is refused without killing or replacing it
+ok - fm-primary: exec preserves root, stable child marker, role, and CLI exit status
+ok - fm-primary: visible role metadata is scoped to the current pane or window
+fm-primary: Kimi 0.31.1 is the newest-evidence build: hooks re-verified 2026-08-04, not a full certification (docs/kimi-harness.md)
+ok - fm-primary: opt-in shim is idempotent only for the exact safe symlink
+fm-primary: Kimi 0.31.1 is the newest-evidence build: hooks re-verified 2026-08-04, not a full certification (docs/kimi-harness.md)
+fm-primary: Kimi 0.31.1 is the newest-evidence build: hooks re-verified 2026-08-04, not a full certification (docs/kimi-harness.md)
+ok - fm-primary: Kimi is pinned, isolated, lifecycle-integrated, and worker-certified separately
+fm-primary: Kimi 0.31.1 is the newest-evidence build: hooks re-verified 2026-08-04, not a full certification (docs/kimi-harness.md)
+ok - fm-primary: Kimi gets a scoped tmux companion without replacing native controls
+fm-primary: Kimi 0.31.1 is the newest-evidence build: hooks re-verified 2026-08-04, not a full certification (docs/kimi-harness.md)
+ok - fm-primary: the tmux companion command the launcher builds actually renders
+ok - fm-primary: the herdr companion runs in its own new pane and follows the launching session
+ok - fm-primary: the companion is hidden only on proven capability and an uncrowded tab, and the zoom is applied once
+ok - fm-primary: the launcher's own FM_ROOT survives an ambient FM_ROOT_OVERRIDE
+ok - fm-primary: a refused herdr split and an unnamed companion pane are reported apart
+ok - fm-primary: companion cleanup closes only the exact pane the split returned
+ok - fm-primary: both evidenced Kimi builds are quiet, others warn, doctor and managed-path checks fail closed
+fm-primary: Kimi 0.31.1 is the newest-evidence build: hooks re-verified 2026-08-04, not a full certification (docs/kimi-harness.md)
+ok - fm-primary: a corrupt source Kimi registry fails closed and leaves no temp files
+fm-primary: Kimi 0.31.1 is the newest-evidence build: hooks re-verified 2026-08-04, not a full certification (docs/kimi-harness.md)
+ok - fm-primary: LAB role cannot appear as FIRSTMATE or run in default Herdr
+fm-primary: Cursor primary is certified on 2026.08.11-e8db854; found 2026.07.20-8cc9c0b (docs/cursor-harness.md) - launching anyway
+fm-primary: Cursor primary is certified on 2026.08.11-e8db854; found 2026.07.20-8cc9c0b (docs/cursor-harness.md) - launching anyway
+ok - fm-primary: Cursor Grok is pinned, lifecycle-integrated, version-warned, and login-gated
+fm-primary: Cursor primary is certified on 2026.08.11-e8db854; found 2026.07.20-8cc9c0b (docs/cursor-harness.md) - launching anyway
+fm-primary: Cursor primary is certified on 2026.08.11-e8db854; found 2026.07.20-8cc9c0b (docs/cursor-harness.md) - launching anyway
+fm-primary: Cursor primary is certified on 2026.08.11-e8db854; found 2026.07.20-8cc9c0b (docs/cursor-harness.md) - launching anyway
+fm-primary: Cursor primary is certified on 2026.08.11-e8db854; found 2026.07.20-8cc9c0b (docs/cursor-harness.md) - launching anyway
+fm-primary: Cursor primary is certified on 2026.08.11-e8db854; found 2026.07.20-8cc9c0b (docs/cursor-harness.md) - launching anyway
+ok - fm-primary: Cursor Grok 4.5 differs from the certified profile in the model id alone

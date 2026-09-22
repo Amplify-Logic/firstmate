@@ -1,0 +1,22 @@
+### launcher hosted under a real process named 'pi'; bin/fm-harness.sh reports: pi
+$ FM_AFK_MODE=quiet bin/fm-afk-launch.sh start-native
+fm-afk-launch: quiet mode needs the away daemon, which is no longer launched on pi; ordinary supervision continues unchanged
+rc=1 state/.afk: absent
+$ FM_AFK_MODE=quiet bin/fm-afk-launch.sh start
+fm-afk-launch: quiet mode needs the away daemon, which is no longer launched on pi; ordinary supervision continues unchanged
+rc=1 state/.afk: absent
+$ bin/fm-afk-launch.sh start-native   (away entry, for comparison)
+fm-afk-launch: the away daemon is no longer launched on pi; the away-posture record is the posture there (run bin/fm-afk-launch.sh confirm and stop)
+rc=1
+
+### launcher hosted under a real process named 'pi'; bin/fm-harness.sh reports: pi-signed
+$ FM_AFK_MODE=quiet bin/fm-afk-launch.sh start-native
+fm-afk-launch: quiet mode needs the away daemon, which is no longer launched on pi-signed; ordinary supervision continues unchanged
+rc=1 state/.afk: absent
+$ FM_AFK_MODE=quiet bin/fm-afk-launch.sh start
+fm-afk-launch: quiet mode needs the away daemon, which is no longer launched on pi-signed; ordinary supervision continues unchanged
+rc=1 state/.afk: absent
+$ bin/fm-afk-launch.sh start-native   (away entry, for comparison)
+fm-afk-launch: the away daemon is no longer launched on pi-signed; the away-posture record is the posture there (run bin/fm-afk-launch.sh confirm and stop)
+rc=1
+

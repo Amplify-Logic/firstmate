@@ -1,0 +1,35 @@
+### BEFORE (base a9718390)
+$ FM_AFK_MODE=quiet bin/fm-afk-launch.sh start-native   (no state/.afk-contract present)
+fm-afk-launch: a confirmed away-posture record is required; run propose and confirm before starting the daemon
+rc=1
+state/.afk first line: <absent>
+state/.afk-contract: absent
+$ bin/fm-afk-launch.sh start-native   (bare refresh, FM_AFK_MODE unset)
+fm-afk-launch: a confirmed away-posture record is required; run propose and confirm before starting the daemon
+rc=1
+state/.afk first line: <absent>
+$ bin/fm-afk-launch.sh stop
+fm-afk-launch: away mode stopped; daemon terminal torn down, .afk cleared, and the posture record archived
+rc=0
+$ FM_AFK_MODE=away bin/fm-afk-launch.sh start-native   (no record: adversarial away bypass attempt)
+fm-afk-launch: a confirmed away-posture record is required; run propose and confirm before starting the daemon
+rc=1
+state/.afk: absent
+
+### AFTER (target 061ba155)
+$ FM_AFK_MODE=quiet bin/fm-afk-launch.sh start-native   (no state/.afk-contract present)
+rc=0
+state/.afk first line: quiet
+state/.afk-contract: absent
+$ bin/fm-afk-launch.sh start-native   (bare refresh, FM_AFK_MODE unset)
+fm-afk-launch: reconciling leaked daemon terminal none:-
+rc=0
+state/.afk first line: quiet
+$ bin/fm-afk-launch.sh stop
+fm-afk-launch: away mode stopped; daemon terminal torn down, .afk cleared, and the posture record archived
+rc=0
+$ FM_AFK_MODE=away bin/fm-afk-launch.sh start-native   (no record: adversarial away bypass attempt)
+fm-afk-launch: a confirmed away-posture record is required; run propose and confirm before starting the daemon
+rc=1
+state/.afk: absent
+
