@@ -174,6 +174,35 @@ def disclosure(title, content):
 def sortkey(rec):
     return RANK.get(rec.get('class'), 99), -number(rec.get('updated')), rec.get('_id', '')
 
+def drop_ticket_section(fragment):
+    """Drop the morning fragment's frozen ticket table at whatever depth it sits.
+
+    The fragment is usually one wrapper element around the headings, so a
+    top-level scan finds no heading to group on. Descend through single
+    wrappers until the headings are in view, and leave the fragment untouched
+    when none is found rather than guessing at its shape.
+    """
+    parsed = Fragment(fragment)
+
+    def prune(children):
+        if not any(not isinstance(n, str) and n[0] == 'h2' for n in children):
+            elements = [n for n in children if not isinstance(n, str)]
+            if len(elements) == 1:
+                elements[0][2] = prune(elements[0][2])
+            return children
+        lead, groups = [], []
+        for node in children:
+            if not isinstance(node, str) and node[0] == 'h2':
+                groups.append([])
+            (groups[-1] if groups else lead).append(node)
+        for group in groups:
+            if re.match(r'<h2\b[^>]*>\s*Your open tickets\b', parsed.render(group[0]), re.I):
+                continue
+            lead.extend(group)
+        return lead
+
+    return ''.join(parsed.render(n) for n in prune(parsed.root[2]))
+
 WAITING_ON_US = 'Waiting on us'
 
 def tickets_doc():
@@ -282,9 +311,7 @@ if TICKETS is not None:
     # The morning fragment carries a frozen copy of this table; drop it so the
     # page never shows two ticket tables read at different times.
     if details:
-        kept = [sec for sec in Fragment(details).sections()
-                if not re.match(r'<h2\b[^>]*>\s*Your open tickets\b', sec, re.I)]
-        details = ''.join(kept)
+        details = drop_ticket_section(details)
     details = ticket_rows(TICKETS) + details
     actions.extend(ticket_actions(TICKETS))
 

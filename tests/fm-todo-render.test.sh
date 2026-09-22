@@ -389,6 +389,68 @@ $order"
   pass 'a completed read refreshes an existing page, never manufactures one, and never fails on the render'
 }
 
+# A ticket table read once in the morning goes stale within the hour, and a
+# closed ticket presented as open is the exact failure this guards.
+test_live_tickets_replace_the_frozen_table_and_raise_waiting_on_us() {
+  local h page
+  h="$TMP_ROOT/live-tickets"
+  new_home "$h"
+  observe_at "$h" "$T_1100" observe --source C_BRIEF --ref t1 \
+    --digest d --class obligation --title 'routine item' >/dev/null
+
+  # The morning fragment carries its own frozen copy of the table.
+  cat >"$h/.lavish/today-2026-09-10.morning.html" <<'EOF'
+<section class="morning-details">
+  <h2>Your open tickets</h2>
+  <p class="sub">Ten tickets carry you as owner, read at 09:48.</p>
+  <div class="tablewrap"><table><tbody><tr><td>frozen ticket row</td></tr></tbody></table></div>
+  <h2>Calendar</h2>
+  <p>nothing booked</p>
+</section>
+EOF
+  cat >"$h/.lavish/today-2026-09-10.morning.json" <<'JSON'
+{"version":1,"date":"2026-09-10","actions":[]}
+JSON
+
+  cat >"$h/data/channel-intake/tickets.json" <<EOF
+{"version":1,"read_at":$T_1100,"tickets":[
+ {"id":"111","subject":"customer is waiting","stage":"Waiting on us","last_in":"10 Sep 10:00","last_out":"-","link":"https://example.invalid/111"},
+ {"id":"222","subject":"sitting with the customer","stage":"Waiting on contact","last_in":"9 Sep 09:00","last_out":"9 Sep 10:00"}]}
+EOF
+
+  render_at "$h" "$T_1500" render >/dev/null
+  page=$(page_of "$h")
+
+  assert_contains "$(cat "$page")" 'customer is waiting' \
+    'a ticket waiting on us never reached the page'
+  assert_contains "$(cat "$page")" 'sitting with the customer' \
+    'the live ticket table was not rendered'
+  [ "$(grep -c 'frozen ticket row' "$page")" -eq 0 ] \
+    || fail 'the frozen morning ticket table survived beside the live one'
+  [ "$(grep -c '<h2>Your open tickets</h2>' "$page")" -eq 1 ] \
+    || fail 'the page carries more than one ticket table'
+  assert_contains "$(cat "$page")" 'nothing booked' \
+    'dropping the frozen ticket table took the rest of the morning fragment with it'
+
+  # Only the ticket the customer is waiting on is an action; the other stays
+  # in the table.
+  [ "$(line_of "$page" 'customer is waiting')" -lt "$(line_of "$page" 'Your open tickets')" ] \
+    || fail 'the waiting-on-us ticket was not raised above the table'
+
+  # A file stamped in the future is not a read that happened, so the morning
+  # snapshot must stand rather than a fabricated live table.
+  cat >"$h/data/channel-intake/tickets.json" <<EOF
+{"version":1,"read_at":$((T_1500 + 3600)),"tickets":[{"id":"333","subject":"from the future","stage":"Waiting on us"}]}
+EOF
+  render_at "$h" "$T_1500" render >/dev/null
+  [ "$(grep -c 'from the future' "$page")" -eq 0 ] \
+    || fail 'a future-dated ticket file was presented as a live read'
+  assert_contains "$(cat "$page")" 'frozen ticket row' \
+    'the morning snapshot was dropped even though no live read was usable'
+
+  pass 'a live ticket read replaces the frozen table and raises waiting-on-us items'
+}
+
 test_severity_then_recency_orders_the_live_section
 test_waiting_and_closed_never_mix_into_the_live_section
 test_every_line_carries_its_own_read_time
@@ -398,3 +460,4 @@ test_fleet_snapshots_group_without_accumulating
 test_nothing_is_carried_forward_between_renders
 test_house_style_comes_from_the_tracked_templates
 test_completed_read_refreshes_an_existing_page_only
+test_live_tickets_replace_the_frozen_table_and_raise_waiting_on_us
