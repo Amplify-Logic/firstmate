@@ -174,6 +174,66 @@ def disclosure(title, content):
 def sortkey(rec):
     return RANK.get(rec.get('class'), 99), -number(rec.get('updated')), rec.get('_id', '')
 
+WAITING_ON_US = 'Waiting on us'
+
+def tickets_doc():
+    """Live owner-ticket snapshot, refreshed by each ticket-source read.
+
+    Schema is version 1: read_at is the epoch of the read, and each ticket
+    carries id, subject, stage and the ticket URL. An absent, unreadable,
+    stale-dated or malformed file leaves the morning snapshot standing, so a
+    failed refresh never silently presents itself as a live read.
+    """
+    path = Path(DATA) / 'tickets.json'
+    if not path.is_file() or path.is_symlink():
+        return None
+    try:
+        doc = json.loads(path.read_text())
+    except ValueError:
+        return None
+    read = number(doc.get('read_at'))
+    if doc.get('version') != 1 or not read or read > int(NOW):
+        return None
+    if not isinstance(doc.get('tickets'), list):
+        return None
+    return doc
+
+def ticket_rows(doc):
+    head = ('<tr><th>TICKET</th><th>STAGE</th><th>LAST INBOUND</th>'
+            '<th>LAST OUTBOUND</th></tr>')
+    body = []
+    for t in doc['tickets']:
+        body.append(
+            '<tr><td class="what">' + esc(t.get('subject') or 'untitled ticket')
+            + '</td><td>' + esc(t.get('stage') or 'unknown')
+            + '</td><td>' + esc(t.get('last_in') or '-')
+            + '</td><td>' + esc(t.get('last_out') or '-') + '</td></tr>')
+    if not body:
+        body.append('<tr><td colspan="4">No open tickets carry you as owner.</td></tr>')
+    return ('<h2>Your open tickets</h2><p class="sub">Read live at '
+            + esc(stamp(number(doc.get('read_at'))))
+            + ', refreshed on every ticket read. Anything waiting on us is raised into '
+            + 'Needs you now above rather than left here.</p>'
+            + '<div class="tablewrap"><table><thead>' + head
+            + '</thead><tbody>' + ''.join(body) + '</tbody></table></div>')
+
+def ticket_actions(doc):
+    """Only a ticket the customer is actually waiting on becomes an action."""
+    out = []
+    for t in doc['tickets']:
+        if (t.get('stage') or '') != WAITING_ON_US:
+            continue
+        ident = str(t.get('id') or '')
+        if not ident:
+            continue
+        out.append({'_id': 'ticket-' + ident, 'class': 'obligation',
+                    'source': 'hubspot-lars-tickets', 'ref': ident,
+                    'title': (t.get('subject') or 'untitled ticket')
+                              + ': waiting on us since the customer wrote at '
+                              + (t.get('last_in') or 'an unrecorded time'),
+                    'link': t.get('link', ''), 'updated': number(doc.get('read_at'))})
+    return out
+
 items = records('items')
 archived = records('archive')
 # Ledger identity wins even when the latest state is waiting or archived.
@@ -216,6 +276,17 @@ if MORNING:
                 reference += section
         reference = disclosure('Earlier morning reference - not re-verified by this update',
                                '<p class="sub">Historical snapshot. Re-check sources before treating these lines as open.</p>' + reference)
+
+TICKETS = tickets_doc()
+if TICKETS is not None:
+    # The morning fragment carries a frozen copy of this table; drop it so the
+    # page never shows two ticket tables read at different times.
+    if details:
+        kept = [sec for sec in Fragment(details).sections()
+                if not re.match(r'<h2\b[^>]*>\s*Your open tickets\b', sec, re.I)]
+        details = ''.join(kept)
+    details = ticket_rows(TICKETS) + details
+    actions.extend(ticket_actions(TICKETS))
 
 watch = {}
 activity = []
