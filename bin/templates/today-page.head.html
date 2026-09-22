@@ -48,12 +48,13 @@ tbody td{padding:12px 12px;border-bottom:1px solid var(--line-2);vertical-align:
 tbody tr:last-child td{border-bottom:none}
 tbody tr:hover td{background:var(--accent-soft)}
 tr.closed td{color:var(--ink-3)}
-details.replyd{display:inline-block;vertical-align:baseline;margin-left:8px}
-details.replyd[open]{display:block;margin:8px 0 0}
-details.replyd>summary{list-style:none;cursor:pointer;display:inline-block;font-family:var(--mono);font-size:11px;letter-spacing:.04em;color:var(--ink-3);padding:1px 6px;border:1px dashed var(--line);border-radius:4px;user-select:none}
-details.replyd>summary::-webkit-details-marker{display:none}
-details.replyd>summary:hover{color:var(--ink-2);border-color:var(--accent)}
-details.replyd[open]>summary{margin-bottom:8px;border-style:solid}
+tr.replyrow{display:none}
+tr.replyrow.open{display:table-row}
+tr.replyrow td{padding:0 12px 12px;border-bottom:1px solid var(--line-2);background:var(--panel)}
+tbody tr.replyrow:hover td{background:var(--panel)}
+button.notetoggle{font-family:var(--mono);font-size:11px;letter-spacing:.04em;padding:3px 8px;margin-left:6px;border:1px dashed var(--line);border-radius:6px;background:transparent;color:var(--ink-3);cursor:pointer;vertical-align:top}
+button.notetoggle:hover{color:var(--ink-2);border-color:var(--accent)}
+button.notetoggle[aria-expanded=true]{border-style:solid;color:var(--ink-2)}
 form.reply{display:flex;gap:8px;align-items:center}
 form.reply input[type=text]{flex:1;min-width:0;font:inherit;font-size:13px;padding:6px 10px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink)}
 form.reply input[type=text]::placeholder{color:var(--ink-3)}
