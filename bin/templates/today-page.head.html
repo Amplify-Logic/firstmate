@@ -48,6 +48,19 @@ tbody td{padding:12px 12px;border-bottom:1px solid var(--line-2);vertical-align:
 tbody tr:last-child td{border-bottom:none}
 tbody tr:hover td{background:var(--accent-soft)}
 tr.closed td{color:var(--ink-3)}
+tr.replyrow{display:none}
+tr.replyrow.open{display:table-row}
+tr.replyrow td{padding:0 12px 12px;border-bottom:1px solid var(--line-2);background:var(--panel)}
+tbody tr.replyrow:hover td{background:var(--panel)}
+button.notetoggle{font-family:var(--mono);font-size:11px;letter-spacing:.04em;padding:3px 8px;margin-left:6px;border:1px dashed var(--line);border-radius:6px;background:transparent;color:var(--ink-3);cursor:pointer;vertical-align:top}
+button.notetoggle:hover{color:var(--ink-2);border-color:var(--accent)}
+button.notetoggle[aria-expanded=true]{border-style:solid;color:var(--ink-2)}
+form.reply{display:flex;gap:8px;align-items:center}
+form.reply input[type=text]{flex:1;min-width:0;font:inherit;font-size:13px;padding:6px 10px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink)}
+form.reply input[type=text]::placeholder{color:var(--ink-3)}
+form.reply button{font:inherit;font-size:12.5px;padding:6px 14px;border:1px solid var(--line);border-radius:6px;background:var(--panel);color:var(--ink-2);cursor:pointer;white-space:nowrap}
+form.reply button:hover{border-color:var(--accent);color:var(--ink)}
+form.reply .ack{font-size:12px;color:var(--ok);white-space:nowrap}
 tr.closed td.who{color:var(--ink-2)}
 td.who{font-weight:600;white-space:nowrap}
 td.who .org{display:block;font-weight:400;font-size:12.5px;color:var(--ink-3)}

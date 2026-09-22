@@ -121,14 +121,49 @@ def link(url):
         return f'<a href="{esc(url)}" target="_blank" rel="noreferrer">Open</a>'
     return '<span class="nolink">no link recorded</span>'
 
-def row(rec):
+def reply_form(rec):
+    """Hidden full-width note row, revealed by the toggle in the action column."""
+    iid = rec.get('_id') or ''
+    title_raw = rec.get('title') or 'untitled item'
+    js = (
+        "event.preventDefault();"
+        "var f=event.currentTarget,v=f.note.value.trim();if(!v)return;"
+        "if(!window.lavish||!window.lavish.queuePrompt){f.querySelector('.ack').textContent="
+        "'review session not connected';return;}"
+        "window.lavish.queuePrompt("
+        f"'Update on to-do item '+{json.dumps(iid)}+' ('+{json.dumps(title_raw)}+'): '+v,"
+        "{tag:'item-update',"
+        f"text:{json.dumps(title_raw[:70])}+': '+v,"
+        "element:f,"
+        f"queueKey:{json.dumps('todo-item-' + iid)},"
+        f"data:{{item_id:{json.dumps(iid)},title:{json.dumps(title_raw)},note:v}}}});"
+        "f.note.value='';f.querySelector('.ack').textContent='queued';"
+    )
+    return (f'<tr class="replyrow" id="note-{esc(iid)}"><td colspan="3">'
+            f'<form class="reply" data-lavish-question="todo-item-{esc(iid)}" onsubmit="{esc(js)}">'
+            f'<input type="text" name="note" autocomplete="off" '
+            f'placeholder="drop, done, park til Friday, mine, dig, or anything else">'
+            f'<button type="submit">Queue</button><span class="ack"></span>'
+            f'</form></td></tr>')
+
+def note_toggle(rec):
+    iid = esc(rec.get('_id') or '')
+    js = ("var r=document.getElementById('note-" + iid + "');"
+          "var o=r.classList.toggle('open');"
+          "this.setAttribute('aria-expanded',o);"
+          "if(o){r.querySelector('input').focus();}")
+    return f'<button type="button" class="notetoggle" aria-expanded="false" onclick="{esc(js)}">note</button>'
+
+def row(rec, reply=False):
     title = esc(rec.get('title') or 'untitled item')
     read = stamp(number(rec.get('updated')))
     severity = rec.get('class', 'obligation')
     pill = {'outage': 'bad', 'urgent': 'warn', 'deadline': 'warn'}.get(severity, 'info')
-    return (f'<tr><td class="who"><span class="pill {pill}">{esc(severity)}</span><span class="org">{provenance(rec)}</span></td>\n'
+    toggle = note_toggle(rec) if reply else ''
+    main = (f'<tr><td class="who"><span class="pill {pill}">{esc(severity)}</span><span class="org">{provenance(rec)}</span></td>\n'
             f'<td class="what">{title}<span class="prov obs">read {esc(read)}</span></td>\n'
-            f'<td class="links">{link(rec.get("link"))}</td></tr>')
+            f'<td class="links">{link(rec.get("link"))}{toggle}</td></tr>')
+    return main + '\n' + reply_form(rec) if reply else main
 
 def table(rows):
     return '<div class="tablewrap"><table><tbody>\n' + '\n'.join(rows) + '\n</tbody></table></div>'
@@ -206,7 +241,7 @@ for rec in items:
 actions = list({r['_id']: r for r in actions}.values())
 actions.sort(key=sortkey)
 print('<h2>Needs you now<small>urgent first, newest within each priority</small></h2>')
-print(table([row(r) for r in actions]) if actions else '<div class="note"><b>Nothing open.</b> No verified action is recorded in this queue.</div>')
+print(table([row(r, reply=True) for r in actions]) if actions else '<div class="note"><b>Nothing open.</b> No verified action is recorded in this queue.</div>')
 print('<h2>Watching<small>conditions, not additional tasks</small></h2>')
 if not watch:
     print('<p class="sub">No active fleet conditions recorded.</p>')
