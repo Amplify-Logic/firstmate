@@ -148,6 +148,11 @@ def sortkey(rec):
     return RANK.get(rec.get('class'), 99), -number((rec.get('verification') or {}).get('at')), rec.get('id', '')
 
 
+def queued(rec):
+    """Oldest first by the date the source says it has been waiting; undated last."""
+    return rec.get('since') or '9999-12-31', sortkey(rec)
+
+
 # --- rows -------------------------------------------------------------------
 
 def brief(text, limit=240):
@@ -241,10 +246,19 @@ def listing(recs, note):
         for r in recs) + '</ul>'
 
 
-def stale_fold(recs, reply=True):
+def capped(recs, more, reply=True, limit=0):
+    """At most `limit` rows and a count of the rest; limit 0 shows every row."""
+    shown = recs[:limit] if limit else recs
+    body = table([row(r, reply=reply) for r in shown])
+    if len(recs) > len(shown):
+        body += f'\n<p class="sub">{len(recs) - len(shown)} {esc(more)}</p>'
+    return body
+
+
+def stale_fold(recs, reply=True, limit=0):
     """The one labelled fold every section uses for lines this build did not re-check."""
     return disclosure(f'{len(recs)} not re-checked in this build - each shows its last check',
-                      table([row(r, reply=reply) for r in recs]))
+                      capped(recs, 'more not re-checked, not shown here.', reply, limit))
 
 
 def split(recs):
@@ -360,11 +374,10 @@ print('</div>')
 
 section('Decisions awaiting you', 'urgent first, newest within each priority', decisions)
 if holds:
-    shown = sorted(holds, key=sortkey)[:10]
-    body = table([row(r) for r in shown])
-    if len(holds) > len(shown):
-        body += f'\n<p class="sub">{len(holds) - len(shown)} more held for you, not shown here.</p>'
-    print(disclosure(f'Held decisions not re-checked ({len(holds)})', body))
+    # Oldest hold first: nothing re-reads a hold, so without its queued date the
+    # cut would be hash order and the same ten would surface every day.
+    print(disclosure(f'Held decisions not re-checked ({len(holds)})',
+                     capped(sorted(holds, key=queued), 'more held for you, not shown here.', limit=10)))
 section('Replies you owe', 'read by the intake or the morning sweep', replies)
 
 # The email agent block is DATED REFERENCE from the file the morning sidecar
@@ -447,7 +460,7 @@ if activity:
     fresh, older = split(activity)
     body = table([row(r, reply=False) for r in fresh]) if fresh else '<p class="sub">None re-checked in this build.</p>'
     if older:
-        body += '\n' + stale_fold(older, reply=False)
+        body += '\n' + stale_fold(older, reply=False, limit=10)
     print(disclosure('Other channel activity', body))
 
 # Intake coverage is separate from item freshness: a store cannot fix a read that never ran.

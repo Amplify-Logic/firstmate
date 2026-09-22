@@ -32,9 +32,10 @@
 # Inside decisions, replies and routine activity, lines not current for this
 # build sit in one labelled fold, each with its last check. A captain-held
 # backlog decision no read made current sits instead in its own fold under the
-# decisions section, at most ten rows and a count of the rest, and the
-# decisions tile carries that held total beside its open count - a hold is
-# never verification, so those lines must not bury the ones read today.
+# decisions section, oldest hold first, at most ten rows and a count of the
+# rest, and the decisions tile carries that held total beside its open count -
+# a hold is never verification, so those lines must not bury the ones read
+# today. The routine fold is capped the same way.
 # "Handled without you" appears only for a fulfilled close with a named actor
 # other than the captain.
 #

@@ -20,7 +20,10 @@
 #   - Captain holds no read made current collapse into their own capped fold
 #     below the live decisions, and the decisions tile keeps them apart.
 #   - Routine activity older than the sweep stays on the page in the same
-#     labelled "not re-checked" fold the sections use.
+#     labelled "not re-checked" fold the sections use, capped at ten rows.
+#   - A routine item the ledger no longer carries closes as superseded, and an
+#     unreadable ledger closes nothing.
+#   - The held fold shows the oldest holds first, by the backlog's since date.
 # shellcheck disable=SC2016
 set -u
 
@@ -82,6 +85,75 @@ field_of() {
 sidecar() {
   local h=$1 day=$2 body=$3
   printf '{"version":2,"date":"%s","actions":[%s]}\n' "$day" "$body" >"$h/.lavish/today-$day.morning.json"
+}
+
+test_a_retired_ledger_record_closes_its_routine_item() {
+  local h keep drop out
+  h="$TMP_ROOT/retired"
+  new_home "$h"
+  keep=$(intake_at "$h" "$T_0900" observe --source C_BRIEF --ref keep --digest a --title 'channel stayed chatty' | awk '{ print $2 }')
+  drop=$(intake_at "$h" "$T_0900" observe --source C_BRIEF --ref gone --digest b --title 'yesterday small talk' | awk '{ print $2 }')
+  render_at "$h" "$T_0900"
+  [ "$(field_of "$h" 'small talk' 2)" = open ] || fail 'a routine record did not fold in as an open item'
+  # What the intake does once a routine record passes its brief horizon.
+  mkdir -p "$h/data/channel-intake/inactive"
+  mv "$h/data/channel-intake/items/$drop" "$h/data/channel-intake/inactive/$drop"
+  render_at "$h" "$T_1000"
+  [ "$(field_of "$h" 'small talk' 2)" = closed ] || fail 'a retired routine record left its item open forever'
+  [ "$(field_of "$h" 'stayed chatty' 2)" = open ] || fail 'retiring one record closed another'
+  out=$(page "$h" 2026-09-10)
+  assert_contains "$out" 'superseded at the source' 'the retirement closure is not labelled superseded'
+  assert_contains "$out" 'the intake retired it as routine' 'the retirement evidence is missing'
+  assert_not_contains "$out" 'yesterday small talk<span' 'a retired routine line still renders as open'
+  # An unreadable ledger is not an absence: it closes nothing.
+  mv "$h/data/channel-intake" "$h/intake.away"
+  render_at "$h" "$T_1100"
+  [ "$(field_of "$h" 'stayed chatty' 2)" = open ] || fail 'a missing ledger closed a live item'
+  mv "$h/intake.away" "$h/data/channel-intake"
+  [ "$(grep -c '"reason": "superseded"' "$h/data/todo/journal")" = 1 ] || fail 'the retirement closed more than once'
+  pass 'a retired routine record closes its item as superseded and an unreadable ledger closes nothing'
+}
+
+test_routine_fold_is_capped_like_the_held_one() {
+  local h out n i
+  h="$TMP_ROOT/chatter"
+  new_home "$h"
+  i=1
+  while [ "$i" -le 12 ]; do
+    intake_at "$h" "$T_0900" observe --source C_BRIEF --ref "chat-$i" --digest "d$i" \
+      --title "channel chatter $(printf '%02d' "$i")" >/dev/null
+    i=$((i + 1))
+  done
+  todo_at "$h" "$T_1000" sweep-start >/dev/null
+  render_at "$h" "$T_1030"
+  out=$(page "$h" 2026-09-10)
+  assert_contains "$out" '<summary>12 not re-checked in this build - each shows its last check</summary>' \
+    'the stale routine lines are not all counted'
+  assert_contains "$out" '2 more not re-checked, not shown here.' 'the routine fold is not capped with a count of the rest'
+  n=$(printf '%s\n' "$out" | grep -c '<td class="what">channel chatter')
+  [ "$n" = 10 ] || fail "the routine fold rendered $n rows, not ten"
+  pass 'the routine not re-checked fold is capped at ten rows and a count of the rest'
+}
+
+test_held_fold_shows_the_oldest_holds_first() {
+  local h out order i
+  h="$TMP_ROOT/oldest"
+  new_home "$h"
+  printf '## Queued\n' >"$h/backlog.md"
+  # Written newest first, so file order and hash order both disagree with age.
+  i=12
+  while [ "$i" -ge 1 ]; do
+    printf -- '- [ ] aged-%02d - Approve batch %02d (since 2026-09-%02d) (hold: needs the captain) (hold-kind: captain)\n' \
+      "$i" "$i" "$i" >>"$h/backlog.md"
+    i=$((i - 1))
+  done
+  render_at "$h" "$T_1000"
+  out=$(page "$h" 2026-09-10)
+  order=$(printf '%s\n' "$out" | grep -o '<td class="what">Approve batch [0-9][0-9]' | sed 's/.*batch //' | head -3 | tr '\n' ' ')
+  [ "$order" = '01 02 03 ' ] || fail "the held fold is ordered \"$order\", not oldest hold first"
+  assert_contains "$out" '2 more held for you, not shown here.' 'the held fold is not capped'
+  assert_not_contains "$out" '<td class="what">Approve batch 12' 'the newest hold displaced an older one'
+  pass 'the held fold surfaces the oldest holds first, so the cut is stable and meaningful'
 }
 
 test_verification_is_never_renewed_by_sync() {
@@ -324,3 +396,6 @@ test_identity_snooze_and_counter
 test_reopen_returns_a_handed_over_item_to_the_captain
 test_held_decisions_collapse_below_the_live_ones
 test_routine_activity_keeps_its_not_re_checked_fold
+test_a_retired_ledger_record_closes_its_routine_item
+test_routine_fold_is_capped_like_the_held_one
+test_held_fold_shows_the_oldest_holds_first

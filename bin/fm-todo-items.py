@@ -15,7 +15,7 @@ import time
 RANK = ('outage', 'urgent', 'deadline', 'obligation')
 KINDS = ('decision', 'approval', 'reply', 'info')
 WEEKDAYS = ('monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday')
-SLOT_FIELDS = ('title', 'link', 'class', 'kind', 'ask', 'why', 'label')
+SLOT_FIELDS = ('title', 'link', 'class', 'kind', 'ask', 'why', 'label', 'since')
 
 
 class Refusal(Exception):
@@ -110,7 +110,13 @@ def kv_records(folder):
 
 
 def ledger_observations(intake_dir, labels):
-    """The channel ledger. Only an open record's change time is a source read."""
+    """The channel ledger, or None when there is no readable ledger to scan.
+
+    Only an open record's change time is a source read.
+    """
+    root = Path(intake_dir) if intake_dir else None
+    if not root or not root.is_dir() or root.is_symlink():
+        return None
     obs = []
     for folder in ('items', 'archive'):
         for rec in kv_records(Path(intake_dir) / folder):
@@ -210,11 +216,15 @@ def backlog_observations(path):
         if notes.get('hold-kind') != 'captain':
             continue
         until = notes.get('hold-until', '')
+        since = notes.get('since', '')
         obs.append({
             'slot': 'backlog:' + match.group(1), 'aliases': [f'firstmate-backlog:{match.group(1)}'],
+            # The hold's reason and date are its revision; how long it has been
+            # queued orders the page and must never reopen a closed item.
             'rev': digest(notes.get('hold', ''), until),
             'title': title, 'link': '', 'class': 'obligation', 'kind': 'decision',
             'ask': notes.get('hold', ''), 'label': 'firstmate-backlog', 'state': 'open',
+            'since': since if re.match(r'^\d{4}-\d{2}-\d{2}$', since) else '',
             'snoozed_until': until if re.match(r'^\d{4}-\d{2}-\d{2}$', until) else '',
         })
     return obs
@@ -250,7 +260,7 @@ def present(rec):
     rec['rev'] = rev_of(rec)
 
 
-def fold(store, items, observations, now, backlog_seen):
+def fold(store, items, observations, now, backlog_seen, ledger_seen):
     """Apply observation CHANGES to items, so repeated syncs of the same inputs are no-ops."""
     index = {a: r['id'] for r in items.values() for a in r['aliases']}
     seen = set()
@@ -306,6 +316,20 @@ def fold(store, items, observations, now, backlog_seen):
                     if rec['state'] != 'closed':
                         transition(store, rec, now, 'closed', 'source', 'released',
                                    'no longer held for you in the backlog')
+    # The intake retires a routine record past the brief horizon to its inactive
+    # set. An open routine item nothing asserts any more has no ask left; an
+    # unreadable ledger is not an absence and closes nothing.
+    if ledger_seen:
+        for rec in items.values():
+            gone = [s for slot, s in rec['slots'].items()
+                    if slot.startswith('ledger:') and (rec['id'], slot) not in seen and s['state'] == 'open']
+            if (not gone or rec['state'] != 'open' or rec.get('kind') != 'info'
+                    or any((rec['id'], slot) in seen for slot in rec['slots'])):
+                continue
+            for s in gone:
+                s['state'] = 'closed'
+            transition(store, rec, now, 'closed', 'source', 'superseded',
+                       'no longer on the channel ledger; the intake retired it as routine')
     return items
 
 
@@ -412,11 +436,12 @@ def sync(args, store, now):
         except ValueError as exc:
             raise Refusal(f'morning metadata is not valid JSON: {exc}')
     # Every input is read and validated before anything is written.
-    observations = ledger_observations(args.intake, load_labels(args.sources))
+    ledger = ledger_observations(args.intake, load_labels(args.sources))
+    observations = list(ledger or [])
     observations += morning_observations(doc, local_day(now), now)
     held = backlog_observations(args.backlog)
     observations += held or []
-    items = fold(store, store.load(), observations, now, held is not None)
+    items = fold(store, store.load(), observations, now, held is not None, ledger is not None)
     started = number(doc.get('sweep_started')) if doc else 0
     if started and started <= now and local_day(started) == local_day(now):
         store.add_sweep(started)

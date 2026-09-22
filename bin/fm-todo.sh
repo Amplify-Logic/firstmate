@@ -54,7 +54,9 @@
 # morning action's explicit `digest` (never its reworded title or daily key),
 # a backlog hold's reason and date. Missing, unreadable or refused input closes
 # nothing; a task that leaves the readable backlog's held set releases only
-# that item.
+# that item, and a routine item the readable ledger no longer carries - the
+# intake retires one past its brief horizon - closes as superseded. An
+# unreadable ledger or backlog is not an absence and closes nothing.
 #
 # PAGE COMMANDS. `command` applies the captain's one-line verbs:
 #   drop <words>            closed as dismissed
