@@ -16,7 +16,7 @@
 # on Pi, the ordinary supervision session keeps running in both postures, and
 # `start` refuses on those harnesses. Every other harness still runs the daemon
 # for now, so `start` and `start-native` require the confirmed record before they
-# launch the daemon.
+# launch an away daemon (a quiet entry needs none; see FM_AFK_MODE below).
 # `stop` (the return, driven by bin/fm-afk-return.sh) shuts the daemon down,
 # clears state/.afk last, and archives the record under state/afk-contracts/.
 #
