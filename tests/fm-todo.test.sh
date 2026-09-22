@@ -15,6 +15,12 @@
 #     own item; one ask seen twice is one item, two asks stay two.
 #   - A snooze ends on its day without claiming a fresh check.
 #   - Only a named, fulfilled close counts as handled without you.
+#   - `reopen` brings a handed-over item back to the captain's lane and
+#     refuses an item that is already open.
+#   - Captain holds no read made current collapse into their own capped fold
+#     below the live decisions, and the decisions tile keeps them apart.
+#   - Routine activity older than the sweep stays on the page in the same
+#     labelled "not re-checked" fold the sections use.
 # shellcheck disable=SC2016
 set -u
 
@@ -238,9 +244,83 @@ test_identity_snooze_and_counter() {
   pass 'one ask seen twice dedupes, a snooze returns unverified, and only a named fulfilled close counts'
 }
 
+test_reopen_returns_a_handed_over_item_to_the_captain() {
+  local h id out code
+  h="$TMP_ROOT/reopen"
+  new_home "$h"
+  intake_at "$h" "$T_0900" observe --source C_BRIEF --ref r1 --digest a --class urgent --title 'Queco rollout sign-off' >/dev/null
+  render_at "$h" "$T_0900"
+  id=$(field_of "$h" 'Queco' 1)
+  todo_at "$h" "$T_0900" command --item "$id" 'you: ask Queco for the three facts' >/dev/null
+  todo_at "$h" "$T_0900" ack --item "$id" >/dev/null
+  [ "$(field_of "$h" 'Queco' 2)" = waiting ] || fail 'an accepted handoff did not move to waiting'
+  out=$(todo_at "$h" "$T_1000" reopen --item "$id" --reason 'Queco bounced it back to you')
+  assert_contains "$out" "reopen $id -> open" 'reopen left a handed-over item where it was'
+  [ "$(field_of "$h" 'Queco' 2)" = open ] || fail 'a waiting item did not come back to the captain lane'
+  render_at "$h" "$T_1000"
+  out=$(page "$h" 2026-09-10)
+  assert_contains "$out" 'Queco bounced it back to you' 'the reopen reason is not on the line'
+  assert_not_contains "$out" 'firstmate has it' 'the hand-over survived the reopen'
+  out=$(todo_at "$h" "$T_1000" reopen --item "$id" 2>&1) && code=0 || code=$?
+  expect_code 2 "$code" 'reopening an already open item was a silent no-op'
+  assert_contains "$out" 'is already open' 'the refusal does not say why'
+  pass 'reopen brings a handed-over item back to the captain and refuses one already open'
+}
+
+test_held_decisions_collapse_below_the_live_ones() {
+  local h out n
+  h="$TMP_ROOT/held"
+  new_home "$h"
+  printf '## Queued\n' >"$h/backlog.md"
+  n=1
+  while [ "$n" -le 12 ]; do
+    printf -- '- [ ] hold-%02d - Approve change %02d (since 2026-09-01) (hold: needs the captain) (hold-kind: captain)\n' \
+      "$n" "$n" >>"$h/backlog.md"
+    n=$((n + 1))
+  done
+  sidecar "$h" 2026-09-10 '{"key":"k-live","source":"C_BRIEF","ref":"live-1","class":"urgent","title":"Sign the Catena quote","updated":'"$T_1000"'}'
+  todo_at "$h" "$T_1000" sweep-start >/dev/null
+  render_at "$h" "$T_1030"
+  out=$(page "$h" 2026-09-10)
+  assert_contains "$out" '<div class="n">1</div><div class="l">Decisions awaiting you</div><div class="s">1 open in all · 12 held, not re-checked</div>' \
+    'the decisions tile does not keep captain holds apart from what was read today'
+  assert_contains "$out" '<summary>Held decisions not re-checked (12)</summary>' 'the captain holds are not in their own fold'
+  assert_contains "$out" '2 more held for you, not shown here.' 'the held fold is not capped with a count of the rest'
+  n=$(printf '%s\n' "$out" | grep -c '<td class="what">Approve change')
+  [ "$n" = 10 ] || fail "the held fold rendered $n rows, not ten"
+  assert_not_contains "$out" 'None re-checked in this build.' 'holds left the live decisions section looking empty'
+  case "${out%%<summary>Held decisions*}" in
+    *'Sign the Catena quote'*) ;;
+    *) fail 'the held fold is not below the live decisions section' ;;
+  esac
+  pass 'captain holds nobody re-checked collapse into a capped fold under the decisions read today'
+}
+
+test_routine_activity_keeps_its_not_re_checked_fold() {
+  local h out
+  h="$TMP_ROOT/activity"
+  new_home "$h"
+  intake_at "$h" "$T_0900" observe --source C_BRIEF --ref n1 --digest a --title 'weekly partner newsletter' >/dev/null
+  todo_at "$h" "$T_1000" sweep-start >/dev/null
+  intake_at "$h" "$T_1030" observe --source C_BRIEF --ref n2 --digest b --title 'new partner joined the channel' >/dev/null
+  render_at "$h" "$T_1100"
+  out=$(page "$h" 2026-09-10)
+  assert_contains "$out" '<summary>Other channel activity</summary>' 'the routine activity fold is missing'
+  assert_contains "$out" 'new partner joined the channel<span class="prov obs">read 10:30 CEST</span>' \
+    'a routine line read after the sweep is not shown as current'
+  assert_contains "$out" 'weekly partner newsletter<span class="prov unv">not re-checked since 09:00 CEST</span>' \
+    'a routine line older than the sweep vanished from the page'
+  assert_contains "$out" '<summary>1 not re-checked in this build - each shows its last check</summary>' \
+    'stale routine activity is not in the labelled fold the sections use'
+  pass 'routine activity older than the sweep stays on the page in its own not re-checked fold'
+}
+
 test_verification_is_never_renewed_by_sync
 test_done_survives_and_a_new_ask_resurfaces_once
 test_edit_after_resolution_reopens_once
 test_commands_refuse_stale_pages_and_track_handoffs
 test_missing_input_closes_nothing_and_release_is_scoped
 test_identity_snooze_and_counter
+test_reopen_returns_a_handed_over_item_to_the_captain
+test_held_decisions_collapse_below_the_live_ones
+test_routine_activity_keeps_its_not_re_checked_fold

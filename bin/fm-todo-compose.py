@@ -241,20 +241,28 @@ def listing(recs, note):
         for r in recs) + '</ul>'
 
 
+def stale_fold(recs, reply=True):
+    """The one labelled fold every section uses for lines this build did not re-check."""
+    return disclosure(f'{len(recs)} not re-checked in this build - each shows its last check',
+                      table([row(r, reply=reply) for r in recs]))
+
+
+def split(recs):
+    return sorted((r for r in recs if current(r)), key=sortkey), sorted((r for r in recs if not current(r)), key=sortkey)
+
+
 def section(heading, small, recs):
     """Current lines in the table, older ones in one labelled fold; empty sections are omitted."""
     if not recs:
         return
     print(f'<h2>{esc(heading)}<small>{esc(small)}</small></h2>')
-    live = sorted((r for r in recs if current(r)), key=sortkey)
-    stale = sorted((r for r in recs if not current(r)), key=sortkey)
+    live, stale = split(recs)
     if live:
         print(table([row(r) for r in live]))
     else:
         print('<p class="sub">None re-checked in this build.</p>')
     if stale:
-        print(disclosure(f'{len(stale)} not re-checked in this build - each shows its last check',
-                         table([row(r) for r in stale])))
+        print(stale_fold(stale))
 
 
 # --- morning detail fragment ------------------------------------------------
@@ -297,10 +305,22 @@ for rec in items:
         mine.append(rec)
     else:
         live.append(rec)
-decisions = [r for r in live if r.get('kind') in ('decision', 'approval')]
+
+
+
+def held(rec):
+    """A captain-held backlog task: a hold time is never a source read, so it is never current."""
+    return any(slot.startswith('backlog:') for slot in (rec.get('slots') or {}))
+
+
+asks = [r for r in live if r.get('kind') in ('decision', 'approval')]
+# Holds nobody re-checked this build get their own capped fold, so ~95 of them
+# cannot bury the decisions that were actually read today.
+decisions = [r for r in asks if not (held(r) and not current(r))]
+holds = [r for r in asks if held(r) and not current(r)]
 replies = [r for r in live if r.get('kind') == 'reply']
 conditions = [r for r in live if r.get('kind') == 'condition']
-activity = [r for r in live if r.get('kind') == 'info' and current(r)]
+activity = [r for r in live if r.get('kind') == 'info']
 waiting = sorted([r for r in items if r.get('state') == 'waiting'] + handoffs, key=sortkey)
 closed = [r for r in items if r.get('state') == 'closed' and number((r.get('closure') or {}).get('at')) >= SINCE]
 closed.sort(key=lambda r: (-number(r['closure'].get('at')), r['id']))
@@ -316,7 +336,8 @@ sweep_line = (f'Verification sweep began <span class="mono">{esc(when(FLOOR))}</
               else 'No verification sweep recorded today; only reads recorded today count as current.')
 print(f'<p class="sub">{sweep_line} A line not re-read since then says so on the line.</p>')
 print('<div class="tiles">')
-tiles = [(len([r for r in decisions if current(r)]), 'Decisions awaiting you', f'{len(decisions)} open in all'),
+decisions_sub = f'{len(decisions)} open in all' + (f' · {len(holds)} held, not re-checked' if holds else '')
+tiles = [(len([r for r in decisions if current(r)]), 'Decisions awaiting you', decisions_sub),
          (len([r for r in replies if current(r)]), 'Replies you owe', f'{len(replies)} open in all'),
          (len(waiting), 'Waiting on others', 'nothing needed from you'),
          (len(closed), f'Closed since {when(SINCE)}', 'each with its evidence below')]
@@ -338,6 +359,12 @@ else:
 print('</div>')
 
 section('Decisions awaiting you', 'urgent first, newest within each priority', decisions)
+if holds:
+    shown = sorted(holds, key=sortkey)[:10]
+    body = table([row(r) for r in shown])
+    if len(holds) > len(shown):
+        body += f'\n<p class="sub">{len(holds) - len(shown)} more held for you, not shown here.</p>'
+    print(disclosure(f'Held decisions not re-checked ({len(holds)})', body))
 section('Replies you owe', 'read by the intake or the morning sweep', replies)
 
 # The email agent block is DATED REFERENCE from the file the morning sidecar
@@ -417,7 +444,11 @@ if snoozed:
 if mine:
     print(disclosure(f'Yours, tracked but not surfaced ({len(mine)})', listing(sorted(mine, key=sortkey), lambda r: 'you said you are on it')))
 if activity:
-    print(disclosure('Other channel activity', table([row(r, reply=False) for r in sorted(activity, key=sortkey)])))
+    fresh, older = split(activity)
+    body = table([row(r, reply=False) for r in fresh]) if fresh else '<p class="sub">None re-checked in this build.</p>'
+    if older:
+        body += '\n' + stale_fold(older, reply=False)
+    print(disclosure('Other channel activity', body))
 
 # Intake coverage is separate from item freshness: a store cannot fix a read that never ran.
 enrolled = set()

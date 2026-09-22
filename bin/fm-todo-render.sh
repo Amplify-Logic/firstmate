@@ -29,9 +29,14 @@
 # actor; then folds for parked, "mine", routine activity and intake coverage
 # (each enrolled source's last successful read and last failure, which is
 # separate from item freshness). Sections with nothing in them are omitted.
-# Inside decisions and replies, lines not current for this build sit in one
-# labelled fold, each with its last check. "Handled without you" appears only
-# for a fulfilled close with a named actor other than the captain.
+# Inside decisions, replies and routine activity, lines not current for this
+# build sit in one labelled fold, each with its last check. A captain-held
+# backlog decision no read made current sits instead in its own fold under the
+# decisions section, at most ten rows and a count of the rest, and the
+# decisions tile carries that held total beside its open count - a hold is
+# never verification, so those lines must not bury the ones read today.
+# "Handled without you" appears only for a fulfilled close with a named actor
+# other than the captain.
 #
 # FRESHNESS IS ON EVERY LINE. A line is "read <time>" only when its recorded
 # check is at or after this build's sweep (or the start of the day) and

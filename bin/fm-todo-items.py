@@ -483,9 +483,12 @@ def main():
                 if rec['state'] != 'closed':
                     transition(store, rec, now, 'closed', args.actor or 'unknown', reason, args.evidence, pending={})
             elif args.command == 'reopen':
-                if rec['state'] == 'closed':
-                    transition(store, rec, now, 'open', args.actor or 'firstmate', 'reopened',
-                               note=args.reason or 'reopened by firstmate')
+                if rec['state'] == 'open':
+                    raise Refusal(f'{rec["id"]} is already open; reopen takes a closed or waiting item')
+                # Coming back from waiting ends the hand-over: the ask is the captain's again.
+                back = {'owner': '', 'handover': ''} if rec['state'] == 'waiting' else {}
+                transition(store, rec, now, 'open', args.actor or 'firstmate', 'reopened',
+                           note=args.reason or 'reopened by firstmate', **back)
             elif args.command == 'ack':
                 if not rec['pending']:
                     raise Refusal(f'{rec["id"]} has no pending handoff')

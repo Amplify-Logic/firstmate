@@ -69,7 +69,9 @@
 # cannot act on a changed ask. Without --item, <words> must match exactly one
 # open item's title or ask. Repeating a command is harmless (`already`).
 # `you`/`dig` stay "handoff requested" on the page until firstmate accepts
-# them with `ack`, which moves the item to waiting with owner firstmate.
+# them with `ack`, which moves the item to waiting with owner firstmate;
+# `reopen` brings a closed or waiting item back to the captain's lane, ending
+# the hand-over, and refuses an item that is already open.
 # Each line prints one `TODO_CMD:` result naming the item's source refs. A
 # held backlog decision is never answered here: done/drop on one says to
 # record the answer through bin/fm-captain-hold.sh, and the item releases when
