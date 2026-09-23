@@ -60,6 +60,14 @@
 #     parked, and status prints only declared knobs.
 #   - Install and uninstall work against a temporary home and a fake launchd
 #     transport, and refuse a home that never opted in.
+#   - A timeline flags a partner-facing ask awaiting the captain - an
+#     unanswered partner message, an open promise naming him or tech, or an
+#     unanswered colleague note - while an auto-acknowledgement answers nothing
+#     and "Waiting on contact" alone asks nothing of him.
+#   - Awaiting partners lead the to-do, brief and alert order, and every
+#     rewrite of a record keeps the facts the timeline recorded.
+#   - A HubSpot claim names "Waiting on contact" and hands out a bounded
+#     periodic re-scan of every owner's tickets that name the captain.
 # shellcheck disable=SC2016
 set -u
 
@@ -1344,6 +1352,224 @@ test_install_and_uninstall_on_a_temp_home() {
   pass 'install and uninstall work against a temporary home and refuse a home that never opted in'
 }
 
+# --- partner-facing asks awaiting the captain ----------------------------------
+
+# The captain's identity, a HubSpot ticket source and a partner mail source, on
+# top of the ordinary test home.
+partner_home() {
+  local h=$1
+  new_home "$h"
+  printf 'captain_names = Lars Tolhurst\ncaptain_addresses = lars@team.example\nteam_addresses = support@team.example\nrescan_interval_seconds = 3600\n' \
+    >>"$h/config/channel-intake"
+  printf 'H_TICKETS\thubspot-tickets\ttickets owned by or naming the captain\n' \
+    >>"$h/data/channel-intake/sources.tsv"
+}
+
+# Timeline fixtures shaped like the rows of the 23 Sep back-sweep. Times are
+# hours before 09:00 on 10 Sep. Every ticket is owned by a colleague unless it
+# says otherwise, and names the captain, if at all, only inside a message body.
+H=3600
+write_timeline() {
+  local h=$1 name=$2 at_inbound=$((T_0900 - 30 * H)) at_out=$((T_0900 - 28 * H))
+  case "$name" in
+    # Caffeine Mechanics: the customer's chase was answered with a promise that
+    # names the captain, and nothing has gone to the customer since.
+    promise)
+      cat >"$h/$name.json" <<EOF
+{"kind":"hubspot-ticket","owner":"natalia@team.example","stage":"Waiting for Tech",
+ "contacts":["rachel@partner.example"],"companies":[{"name":"Caffeine Mechanics","domain":"partner.example"}],
+ "events":[
+  {"type":"email","at":$at_inbound,"direction":"inbound","from":"rachel@partner.example",
+   "body":"I'd appreciate a steer on the lack of connectivity as the systems should really be online."},
+  {"type":"email","at":$at_out,"direction":"outbound","from":"support@team.example",
+   "body":"Hi Rachel,\nLars is looking into this, and I have just sent him a reminder. I will keep you updated.\nNatalia"},
+  {"type":"note","at":$((at_out + 60)),"author":"natalia@team.example","body":"Sent a reminder about this one."}]}
+EOF
+      ;;
+    # DMG nozzle: the partner's reply to the captain's promise got only an
+    # auto-acknowledgement - a HubSpot send with no EMAIL engagement.
+    autoack)
+      cat >"$h/$name.json" <<EOF
+{"kind":"hubspot-ticket","owner":"natalia@team.example","stage":"Waiting for Logistics",
+ "contacts":["alex@workplace.example"],"last_message_sent_at":$((at_inbound + 240)),
+ "events":[
+  {"type":"email","at":$((at_inbound - 900)),"direction":"outbound","from":"support@team.example",
+   "body":"I've made the request to our operations team, and I'll confirm once I hear.\nLars Tolhurst"},
+  {"type":"email","at":$at_inbound,"direction":"inbound","from":"alex@workplace.example",
+   "body":"Once confirmed, could the delivery charge be amended? And can both parts ship together?"}]}
+EOF
+      ;;
+    # CSG: "Waiting on contact" after our reply. The customer owes the next step,
+    # even though an older customer message sits below it.
+    customer-owes)
+      cat >"$h/$name.json" <<EOF
+{"kind":"hubspot-ticket","owner":"natalia@team.example","stage":"Waiting on contact",
+ "contacts":["it@csg.example"],
+ "events":[
+  {"type":"email","at":$at_inbound,"direction":"inbound","from":"it@csg.example",
+   "body":"The USB install of 2.0.7 failed. What now? Lars mentioned a programmer."},
+  {"type":"email","at":$at_out,"direction":"outbound","from":"support@team.example",
+   "body":"Did we send your team a programmer in the past? Let me know and I'll get back to you.\nNatalia"}]}
+EOF
+      ;;
+    # Culligan: "Waiting on contact" with the customer's own last message
+    # promising photos. Nothing is owed until they arrive.
+    contact-stage)
+      cat >"$h/$name.json" <<EOF
+{"kind":"hubspot-ticket","owner":"captain","stage":"Waiting on contact",
+ "contacts":["carl@culligan.example"],
+ "events":[
+  {"type":"email","at":$at_inbound,"direction":"inbound","from":"carl@culligan.example",
+   "body":"Our team will send photos of the install tomorrow."}]}
+EOF
+      ;;
+    # NS Stations: "Waiting on contact", which HubSpot marks closed, yet a
+    # colleague's note asks the captain and nothing answers it.
+    contact-note)
+      cat >"$h/$name.json" <<EOF
+{"kind":"hubspot-ticket","owner":"luc@team.example","stage":"Waiting on contact",
+ "contacts":["chloe@kiosk.example"],
+ "events":[
+  {"type":"email","at":$at_inbound,"direction":"inbound","from":"chloe@kiosk.example",
+   "body":"Waar kunnen we het serienummer vinden?"},
+  {"type":"note","at":$at_out,"author":"luc@team.example","body":"@Lars see attached pictures"}]}
+EOF
+      ;;
+    # The same promise as above, then a real reply from the support mailbox.
+    answered)
+      cat >"$h/$name.json" <<EOF
+{"kind":"hubspot-ticket","owner":"natalia@team.example","stage":"Waiting for Tech",
+ "contacts":["rachel@partner.example"],
+ "events":[
+  {"type":"email","at":$at_inbound,"direction":"inbound","from":"rachel@partner.example","body":"Any news on the connectivity?"},
+  {"type":"email","at":$at_out,"direction":"outbound","from":"support@team.example","body":"Lars is looking into this. I will keep you updated."},
+  {"type":"email","at":$((at_out + 3600)),"direction":"outbound","from":"support@team.example","body":"The SIMs were suspended; they are active again as of this morning."}]}
+EOF
+      ;;
+    # A colleague's own ticket that never involves the captain.
+    uninvolved)
+      cat >"$h/$name.json" <<EOF
+{"kind":"hubspot-ticket","owner":"luc@team.example","stage":"Waiting for Tech",
+ "contacts":["john@site.example"],
+ "events":[{"type":"email","at":$at_inbound,"direction":"inbound","from":"john@site.example","body":"No sparkling water, please send a technician."}]}
+EOF
+      ;;
+    # An internal ticket: a note asks the captain, but no partner is on it.
+    internal)
+      cat >"$h/$name.json" <<EOF
+{"kind":"hubspot-ticket","owner":"luc@team.example","stage":"New","contacts":["joao@team.example"],
+ "events":[{"type":"note","at":$at_out,"author":"luc@team.example","body":"@Lars can you check the PCB stock?"}]}
+EOF
+      ;;
+  esac
+}
+
+observe_ticket() {
+  local h=$1 name=$2 now=$3
+  shift 3
+  write_timeline "$h" "$name"
+  at "$h" "$now" observe --source H_TICKETS --ref "ticket-$name" --digest "$name v1" \
+    --class routine --title "ticket $name" --timeline-file "$h/$name.json" "$@"
+}
+
+test_partner_facing_asks_awaiting_the_captain_are_flagged() {
+  local h out key name
+  h="$TMP_ROOT/partner-flags"
+  partner_home "$h"
+
+  for name in promise autoack contact-note; do
+    key=$(key_of "$(observe_ticket "$h" "$name" "$T_0900")")
+    [ "$(item_field "$h" "$key" partner)" = 1 ] || fail "$name: a ticket with an external contact is not partner-facing"
+    [ "$(item_field "$h" "$key" awaiting)" = 1 ] || fail "$name: a partner waiting on the captain was not flagged"
+    # A partner waiting on the captain is owed, whatever the first class said.
+    [ "$(item_field "$h" "$key" class)" = obligation ] || fail "$name: an awaiting partner stayed routine"
+    [ "$(item_field "$h" "$key" read_at)" = "$T_0900" ] || fail "$name: the timeline read was not recorded"
+  done
+  key=$(key_of "$(observe_ticket "$h" promise "$T_0900")")
+  assert_contains "$(item_field "$h" "$key" awaiting_why)" 'promise that you are on it has had no message since' \
+    'a colleague-owned ticket naming the captain only in an email body was not caught by its promise'
+  key=$(key_of "$(observe_ticket "$h" autoack "$T_0900")")
+  assert_contains "$(item_field "$h" "$key" awaiting_why)" 'no email: an auto-acknowledgement' \
+    'an auto-acknowledgement was not named as the reason the partner still waits'
+  key=$(key_of "$(observe_ticket "$h" contact-note "$T_0900")")
+  assert_contains "$(item_field "$h" "$key" awaiting_why)" 'colleague note asking you is unanswered' \
+    'a colleague note asking the captain in Waiting on contact was skipped'
+
+  for name in customer-owes contact-stage answered uninvolved internal; do
+    key=$(key_of "$(observe_ticket "$h" "$name" "$T_0900")")
+    [ "$(item_field "$h" "$key" awaiting)" = 0 ] || fail "$name: flagged as awaiting the captain"
+    [ "$(item_field "$h" "$key" class)" = routine ] || fail "$name: a ticket not awaiting the captain was promoted"
+  done
+  key=$(key_of "$(observe_ticket "$h" internal "$T_0900")")
+  [ "$(item_field "$h" "$key" partner)" = 0 ] || fail 'an internal-only ticket was called partner-facing'
+  key=$(key_of "$(observe_ticket "$h" customer-owes "$T_0900")")
+  [ "$(item_field "$h" "$key" partner)" = 1 ] || fail 'a partner ticket in Waiting on contact lost its partner flag'
+
+  # Only the derived facts are kept, never the customer's words.
+  ! grep -rq 'steer on the lack' "$h/data/channel-intake/items" || fail 'timeline text was copied into the ledger'
+  # A timeline cannot be assessed without knowing who the captain is.
+  sed -i.bak '/^captain_/d' "$h/config/channel-intake"
+  out=$(observe_ticket "$h" promise "$T_0900" 2>&1) && fail 'a timeline observe ran with no captain identity'
+  assert_contains "$out" 'needs captain_names or captain_addresses' 'the refusal did not name the missing identity'
+  pass 'a partner-facing ticket awaiting the captain is flagged by promise, note or unanswered message, and an auto-ack or Waiting on contact is not an answer or an ask'
+}
+
+test_awaiting_partners_lead_every_summary_and_survive_rewrites() {
+  local h key out
+  h="$TMP_ROOT/partner-order"
+  partner_home "$h"
+  at "$h" "$T_0900" observe --source C_BRIEF --ref out-1 --digest 'site down' --class outage \
+    --title 'service outage at a site' >/dev/null
+  key=$(key_of "$(observe_ticket "$h" promise "$T_0900")")
+
+  out=$(at "$h" "$T_0900" todo)
+  [ "$(grep -m1 '^- \[ \]' <<<"$out")" = "- [ ] ticket promise (H_TICKETS)" ] \
+    || fail "the to-do summary did not list the awaiting partner first: $out"
+  out=$(at "$h" "$T_0900" brief)
+  out=$(sed -n '/^## What needs you/,/^## /p' <<<"$out" | grep -m1 '^- ')
+  assert_contains "$out" 'ticket promise' 'the brief did not list the awaiting partner first'
+
+  # Stamping a notification or handing the item over keeps the facts it carries.
+  at "$h" "$T_0900" notify-sent --keys "$key" >/dev/null
+  [ "$(item_field "$h" "$key" awaiting)" = 1 ] || fail 'a notification stamp erased the awaiting flag'
+  at "$h" "$T_0900" resolve --item "$key" --waiting --reason 'Natalia chasing' >/dev/null
+  [ "$(item_field "$h" "$key" awaiting)" = 1 ] || fail 'a hand-over erased the awaiting flag'
+  # An unchanged plain re-read keeps them; a timeline re-read replaces them.
+  at "$h" "$T_0915" observe --source H_TICKETS --ref ticket-promise --digest 'promise v1' >/dev/null
+  [ "$(item_field "$h" "$key" read_at)" = "$T_0900" ] || fail 'a plain re-read claimed a timeline read'
+  pass 'awaiting partners lead the to-do, brief and alert order, and every rewrite keeps the facts'
+}
+
+test_hubspot_rescan_covers_colleague_and_waiting_on_contact_tickets() {
+  local h out code
+  h="$TMP_ROOT/rescan"
+  partner_home "$h"
+  out=$(at "$h" "$T_0900" claim --source H_TICKETS)
+  assert_contains "$out" $'stages: H_TICKETS\tevery open stage plus "Waiting on contact"' \
+    'the claim did not name the Waiting on contact stage HubSpot marks closed'
+  assert_contains "$out" $'rescan: H_TICKETS\tlast_rescan: never' 'a never-rescanned source was not handed a re-scan'
+  assert_contains "$out" 'any owner, whose emails or notes name the captain, re-read in full whatever its last-modified date' \
+    'the re-scan scope is not colleague-owned tickets regardless of modification date'
+  at "$h" "$T_0900" complete --source H_TICKETS --checkpoint c1 --rescanned >/dev/null
+  # Inside the re-scan interval, the checkpoint read still names the stages but
+  # re-scans nothing; past it, the re-scan is due again.
+  out=$(at "$h" "$T_0915" claim --source H_TICKETS)
+  assert_contains "$out" 'stages: H_TICKETS' 'a later claim dropped the stage rule'
+  assert_not_contains "$out" 'rescan: H_TICKETS' 'the re-scan ran on every checkpoint read'
+  at "$h" "$T_0915" complete --source H_TICKETS --checkpoint c2 >/dev/null
+  out=$(at "$h" $((T_0900 + 3600)) claim --source H_TICKETS)
+  assert_contains "$out" $'rescan: H_TICKETS\tlast_rescan: '"$T_0900" 'a plain complete lost the last re-scan time'
+  # Only HubSpot sources re-scan, and the cadence cannot undercut the poll.
+  out=$(at "$h" "$T_0900" claim --source C_BRIEF)
+  assert_not_contains "$out" 'rescan:' 'a Slack source was handed a HubSpot re-scan'
+  out=$(at "$h" "$T_0900" complete --source C_BRIEF --checkpoint x --rescanned 2>&1) && code=0 || code=$?
+  expect_code 2 "$code" 'a non-HubSpot source recorded a re-scan'
+  printf 'rescan_interval_seconds = 300\n' >>"$h/config/channel-intake"
+  out=$(at "$h" "$T_0900" status 2>&1) && code=0 || code=$?
+  expect_code 2 "$code" 'a re-scan faster than the poll interval was accepted'
+  pass 'HubSpot claims cover Waiting on contact and a bounded periodic re-scan of every owner'"'"'s tickets'
+}
+
 test_bootstrap_surfaces_the_intake() {
   assert_grep 'fm-channel-intake.sh' "$ROOT/bin/fm-bootstrap.sh" \
     'bootstrap does not surface the channel intake'
@@ -1382,3 +1608,6 @@ test_scan_window_bounds_the_reads
 test_both_schedules_share_one_launchd_writer
 test_install_and_uninstall_on_a_temp_home
 test_bootstrap_surfaces_the_intake
+test_partner_facing_asks_awaiting_the_captain_are_flagged
+test_awaiting_partners_lead_every_summary_and_survive_rewrites
+test_hubspot_rescan_covers_colleague_and_waiting_on_contact_tickets

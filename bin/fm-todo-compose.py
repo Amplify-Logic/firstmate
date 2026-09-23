@@ -144,8 +144,14 @@ def current(rec):
     return number(v.get('at')) >= FLOOR and v.get('rev') == rec.get('rev')
 
 
+def partner_first(rec):
+    """A partner-facing ask awaiting the captain outranks every class, oldest ask first."""
+    return (0, number(rec.get('awaiting_since'))) if rec.get('partner_first') else (1, 0)
+
+
 def sortkey(rec):
-    return RANK.get(rec.get('class'), 99), -number((rec.get('verification') or {}).get('at')), rec.get('id', '')
+    return (partner_first(rec), RANK.get(rec.get('class'), 99),
+            -number((rec.get('verification') or {}).get('at')), rec.get('id', ''))
 
 
 def queued(rec):

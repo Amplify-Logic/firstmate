@@ -50,6 +50,8 @@ For every ticket that will appear on the surface:
 6. If `hs_last_message_sent_at` has no matching `EMAIL` engagement, the message is a conversations-inbox message, an auto-acknowledgement or an agent reply; say so explicitly and claim neither that a human answered nor that nothing went out.
 7. Fetch the ticket's `NOTE` engagements sorted newest first; a note mentioning `@Lars Tolhurst` makes the item his even when the stage says otherwise.
 8. Recount ownership live rather than reusing a number: search tickets owned by the captain whose stage is not Closed, and break the count down by stage label.
+   HubSpot marks "Waiting on contact" as a closed ticket state, so a filter on open state alone misses it; include it by stage.
+9. Record a partner-facing ticket's timeline through the channel intake's `observe --timeline-file`, which decides whether the partner is awaiting the captain; `bin/fm-channel-intake.sh --help` owns those rules.
 
 The HubSpot tool's own help owns object types, filter syntax, and association parameters.
 
