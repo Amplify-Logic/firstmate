@@ -93,10 +93,10 @@ sidecar() {
 }
 
 test_a_retired_ledger_record_closes_its_routine_item() {
-  local h keep drop out
+  local h drop out
   h="$TMP_ROOT/retired"
   new_home "$h"
-  keep=$(intake_at "$h" "$T_0900" observe --source C_BRIEF --ref keep --digest a --title 'channel stayed chatty' | awk '{ print $2 }')
+  intake_at "$h" "$T_0900" observe --source C_BRIEF --ref keep --digest a --title 'channel stayed chatty' >/dev/null
   drop=$(intake_at "$h" "$T_0900" observe --source C_BRIEF --ref gone --digest b --title 'yesterday small talk' | awk '{ print $2 }')
   render_at "$h" "$T_0900"
   [ "$(field_of "$h" 'small talk' 2)" = open ] || fail 'a routine record did not fold in as an open item'
