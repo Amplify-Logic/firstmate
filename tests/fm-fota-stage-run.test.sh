@@ -603,6 +603,70 @@ test_the_generated_request_carries_the_payload_unindented() {
   pass "the generated request carries the payload exactly as the plan holds it"
 }
 
+test_the_generated_request_states_the_plans_permitted_origin() {
+  reset_runs
+  local plan origin run_id request
+  plan=$(make_plan 1)
+  origin=$(PLAN="$plan" python3 -c '
+import json, os
+print(json.load(open(os.environ["PLAN"], encoding="utf-8"))["adapter"]["origin"])
+')
+  # The fixture adapter's invented origin. It reaches the plan as immutable
+  # preparation data and is stated verbatim in the request the browser side gets,
+  # so the instruction names a real scope instead of a placeholder.
+  [ "$origin" = "https://portal.example.invalid" ] \
+    || fail "the plan did not carry the adapter's origin: $origin"
+  run_id=$(start_run "$plan")
+  request="$FM_FOTA_RETURN_DIR/$run_id-request.md"
+  grep -qxF "Permitted origin: $origin" "$request" \
+    || fail "the generated request does not state the plan's origin"
+  assert_not_contains "$(cat "$request")" "declared by the local adapter" \
+    "no placeholder stands in for the real scope"
+  # Honest about what the wording is: a declaration the browser side is asked to
+  # honour, never a claim that this path confines a browser.
+  grep -qF "not enforced by it" "$request" \
+    || fail "the request does not say the origin is declared rather than enforced"
+  pass "the generated request states the plan's own permitted origin"
+}
+
+test_a_plan_without_a_usable_origin_is_never_prepared_or_queued() {
+  reset_runs
+  local plan bad out rc
+  plan=$(make_plan 1)
+  # Missing, empty, wildcard, and path-bearing: none of them may fall back to a
+  # permissive default. A request that cannot name its scope is not dispatched.
+  for bad in '__MISSING__' '' '*' 'https://*.example.invalid' \
+             'https://portal.example.invalid/devices'; do
+    rm -rf "$FM_STATE_OVERRIDE/fota-staging" "$FM_FOTA_RETURN_DIR"
+    mkdir -p "$FM_FOTA_RETURN_DIR"
+    : > "$QUEUE_LOG"
+    bad="$bad" PLAN="$plan" OUT="$TMP/plan-bad-origin.json" python3 -c '
+import json, os
+plan = json.load(open(os.environ["PLAN"], encoding="utf-8"))
+if os.environ["bad"] == "__MISSING__":
+    plan["adapter"].pop("origin", None)
+else:
+    plan["adapter"]["origin"] = os.environ["bad"]
+json.dump(plan, open(os.environ["OUT"], "w", encoding="utf-8"))
+'
+    set +e
+    out=$("$RUNNER" start "$TMP/plan-bad-origin.json" 2>&1)
+    rc=$?
+    set -e
+    expect_code 1 "$rc" "origin [$bad] start exit"
+    assert_contains "$out" 'fm-fota-stage-run:' "the script owns the message for [$bad]"
+    assert_not_contains "$out" 'Traceback' "origin [$bad] is refused, not crashed into"
+    # Refused before a run id is claimed, so there is no record, no request file,
+    # and - the point of the queue-step refusal - nothing enqueued.
+    [ -z "$(ls -A "$FM_STATE_OVERRIDE/fota-staging" 2>/dev/null)" ] \
+      || fail "origin [$bad] claimed a run id"
+    [ -z "$(ls -A "$FM_FOTA_RETURN_DIR" 2>/dev/null)" ] \
+      || fail "origin [$bad] generated a request"
+    [ ! -s "$QUEUE_LOG" ] || fail "origin [$bad] reached the transport"
+  done
+  pass "a plan that cannot name its origin is refused, never queued permissively"
+}
+
 test_runner_never_sends() {
   reset_runs
   local hits
@@ -643,3 +707,5 @@ test_the_deck_is_told_exactly_why_a_run_was_never_queued
 test_a_failed_start_releases_the_run_id_it_claimed
 test_an_incomplete_plan_is_refused_before_anything_is_claimed
 test_the_generated_request_carries_the_payload_unindented
+test_the_generated_request_states_the_plans_permitted_origin
+test_a_plan_without_a_usable_origin_is_never_prepared_or_queued

@@ -137,6 +137,66 @@ test_a_telemetry_row_without_a_usable_value_is_unavailable_not_a_crash() {
   pass "a telemetry row without a usable value is unavailable, never a traceback"
 }
 
+test_an_undeclared_telemetry_encoding_is_unavailable_not_a_reading() {
+  local plan out rc
+  plan=$(stage "$(request 1 3.5 4.0 1234567000111 ',
+  "telemetry": [ { "name": "band_upper", "available": true, "raw": "n/a",
+                   "encoding": "made_up_rule",
+                   "observed_at": "2026-09-12T13:52:00Z" } ]')")
+  # An encoding this tool does not implement decodes to nothing. Left available
+  # the row would silence the unknown below, and the plan would imply it knows a
+  # current value it never decoded - the same defect a missing raw would cause,
+  # so it resolves the same way rather than by a second rule for one field.
+  assert_contains "$plan" '"available": false' "an undeclared telemetry encoding is unavailable"
+  assert_contains "$plan" '"decoded": null' "nothing is decoded through a rule that does not exist"
+  assert_contains "$plan" 'does not implement' "the plan names why the row is unusable"
+  assert_contains "$plan" '"observed_at": null' "no age is carried for a row that read nothing"
+  assert_contains "$plan" "Current values were not read for: band_lower, band_upper" \
+    "an undecodable row never silences the unread-values unknown"
+
+  # The same encoding name on the SETTINGS path stays a strict refusal: that
+  # number would be staged into a device command, so a wrong rule is worse than
+  # no rule. The asymmetry is deliberate and pinned here.
+  set +e
+  out=$(STAGE="$STAGE" ADAPTER="$ADAPTER" TMP="$TMP" python3 - <<'PY'
+import json, os, subprocess, sys
+
+tmp = os.environ["TMP"]
+adapter = json.load(open(os.environ["ADAPTER"], encoding="utf-8"))
+adapter["settings"]["band_upper"]["encoding"] = "made_up_rule"
+adapter_path = os.path.join(tmp, "undeclared-encoding-adapter.json")
+with open(adapter_path, "w", encoding="utf-8") as handle:
+    json.dump(adapter, handle)
+
+request_path = os.path.join(tmp, "undeclared-encoding-request.json")
+with open(request_path, "w", encoding="utf-8") as handle:
+    json.dump(
+        {
+            "action_kind": "device.config.stage",
+            "device_id": "1234567000111",
+            "environment": "prod",
+            "attempt": 1,
+            "settings": [{"name": "band_upper", "value": 4.0}],
+        },
+        handle,
+    )
+
+done = subprocess.run(
+    [os.environ["STAGE"], "--adapter", adapter_path, "--request", request_path],
+    capture_output=True, text=True,
+)
+sys.stdout.write(done.stdout + done.stderr)
+sys.exit(done.returncode)
+PY
+)
+  rc=$?
+  set -e
+  expect_code 1 "$rc" "undeclared setting encoding exit"
+  assert_contains "$out" "unknown encoding" "the settings refusal names the undeclared rule"
+  assert_not_contains "$out" '"wire_value"' "no number is staged through an unimplemented rule"
+  pass "an undeclared telemetry encoding is unavailable, while a setting still refuses"
+}
+
 test_the_payload_is_serialised_not_interpolated() {
   local out
   # An adapter whose declared name key carries a quote and a backslash. Rendered
@@ -302,6 +362,68 @@ test_preview_hash_binds_the_exact_preview() {
   pass "the preview hash binds the exact staged preview"
 }
 
+test_the_permitted_origin_is_staged_and_validated() {
+  local plan origin hashed out rc
+  plan=$(stage "$(request)")
+  origin=$(field "$plan" "p['adapter']['origin']")
+  # The fixture adapter's invented origin, carried through as immutable
+  # preparation data rather than left for a later step to re-derive.
+  [ "$origin" = "https://portal.example.invalid" ] \
+    || fail "the adapter's declared origin did not reach the plan: $origin"
+  # And it is inside the preview the approval hash binds, so it cannot be
+  # swapped after the fact without changing the hash the captain approved.
+  hashed=$(field "$plan" "p['preview_hash']")
+  [ -n "$hashed" ] || fail "no preview hash was produced"
+
+  # Every unresolvable or malformed shape is a refusal. None of them may fall
+  # back to a permissive default, and a wildcard is never an allowlist.
+  local bad
+  for bad in '__MISSING__' '' '*' 'https://*.example.invalid' 'example.invalid' \
+             'https://portal.example.invalid/devices' 'not an origin at all'; do
+    set +e
+    out=$(STAGE="$STAGE" ADAPTER="$ADAPTER" TMP="$TMP" BAD="$bad" python3 - <<'PY'
+import json, os, subprocess, sys
+
+tmp = os.environ["TMP"]
+adapter = json.load(open(os.environ["ADAPTER"], encoding="utf-8"))
+if os.environ["BAD"] == "__MISSING__":
+    adapter["portal"].pop("origin", None)
+else:
+    adapter["portal"]["origin"] = os.environ["BAD"]
+adapter_path = os.path.join(tmp, "origin-adapter.json")
+with open(adapter_path, "w", encoding="utf-8") as handle:
+    json.dump(adapter, handle)
+
+request_path = os.path.join(tmp, "origin-request.json")
+with open(request_path, "w", encoding="utf-8") as handle:
+    json.dump(
+        {
+            "action_kind": "device.config.stage",
+            "device_id": "1234567000111",
+            "environment": "prod",
+            "attempt": 1,
+            "settings": [{"name": "band_lower", "value": 3.5}],
+        },
+        handle,
+    )
+
+done = subprocess.run(
+    [os.environ["STAGE"], "--adapter", adapter_path, "--request", request_path],
+    capture_output=True, text=True,
+)
+sys.stdout.write(done.stdout + done.stderr)
+sys.exit(done.returncode)
+PY
+)
+    rc=$?
+    set -e
+    expect_code 1 "$rc" "origin [$bad] refusal exit"
+    assert_contains "$out" "origin" "the refusal names the origin [$bad]"
+    assert_not_contains "$out" '"preview_hash"' "no plan is produced for origin [$bad]"
+  done
+  pass "the permitted origin is staged from the adapter, or the preparation refuses"
+}
+
 test_no_outward_effect_codepaths() {
   local hits
   set +e
@@ -328,6 +450,7 @@ test_encodes_through_the_declared_rule
 test_payload_matches_the_declared_wire_format
 test_encodings_validate_rather_than_coerce
 test_a_telemetry_row_without_a_usable_value_is_unavailable_not_a_crash
+test_an_undeclared_telemetry_encoding_is_unavailable_not_a_reading
 test_the_payload_is_serialised_not_interpolated
 test_measurement_and_setting_rules_do_not_mix
 test_unconfirmed_encoding_is_refused
@@ -341,5 +464,6 @@ test_unread_current_values_are_named_not_implied
 test_unavailable_telemetry_is_never_rendered_as_a_reading
 test_plan_makes_no_safety_claim_and_never_sends
 test_preview_hash_binds_the_exact_preview
+test_the_permitted_origin_is_staged_and_validated
 test_no_outward_effect_codepaths
 test_attempt_ordinal_is_required

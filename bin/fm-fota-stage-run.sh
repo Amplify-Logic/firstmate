@@ -69,8 +69,10 @@
 #                                  so a test can force the collision branch
 #
 # Exit:
-#   0 on success; 1 on usage, a missing plan, a duplicate operation, or an
-#   unreadable run record. `settle` exits 0 whatever state it decides - an
+#   0 on success; 1 on usage, a missing plan, a duplicate operation, a plan that
+#   cannot name its permitted origin, or an unreadable run record. The generated
+#   request DECLARES that origin to the browser side; this script cannot enforce
+#   where a browser navigates. `settle` exits 0 whatever state it decides - an
 #   honest `unknown` is a successful determination, not a script failure. A
 #   transport that refuses is likewise a determination, not a script failure.
 set -eu
@@ -175,6 +177,24 @@ for field in ("payload", "preview_hash"):
 if not isinstance(plan.get("eligibility"), dict) or "state" not in plan["eligibility"]:
     sys.exit("fm-fota-stage-run: plan is missing eligibility.state; it cannot be staged")
 
+# The generated request has to name the scope it tells the browser side to stay
+# inside, and that scope comes from the plan's immutable preparation data - never
+# from this script, and never from a default. An absent or malformed origin
+# refuses here, before a run id is claimed, so nothing is generated and the queue
+# step never happens. Held to the same shape the preparer validated: scheme and
+# host only, anchored, so a path, a wildcard, or arbitrary text cannot match.
+origin = (plan.get("adapter") or {}).get("origin") or plan.get("origin") or ""
+origin = origin.strip() if isinstance(origin, str) else ""
+if not re.match(
+    r"^https?://(?:[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?|\[[0-9A-Fa-f:.]+\])"
+    r"(?::[0-9]{1,5})?$",
+    origin,
+):
+    sys.exit(
+        "fm-fota-stage-run: plan carries no usable permitted origin (%r); a request "
+        "that cannot name its scope is not prepared and not queued" % origin
+    )
+
 # The duplicate guard covers the queue step too. `prepared` counts as live: its
 # request exists and may already have reached the companion, so re-running it
 # would risk a second delivery of one intent.
@@ -234,9 +254,9 @@ request_path = os.path.join(return_dir, run_id + "-request.md")
 record_written = False
 try:
     # The request is GENERATED from the approved plan, never hand-written prose.
-    # It carries the operation identity, the exact target, an origin allowlist the
-    # browser side is told to stay inside, and the readback this run will verify.
-    origin = (plan.get("adapter") or {}).get("origin") or plan.get("origin") or ""
+    # It carries the operation identity, the exact target, the permitted origin the
+    # plan staged, and the readback this run will verify. The origin line DECLARES a
+    # scope to the browser side; this script cannot enforce where a browser goes.
     # Dedented, so the artifact's content is what it reads as here and does not
     # move with the Python block around it. The payload line especially: the
     # browser side is told to stage it verbatim, so it must not differ from the
@@ -248,10 +268,13 @@ try:
         Run id: {run_id}
         Operation: {key}
         Target device: {device}
-        Allowed origin: {origin}
+        Permitted origin: {origin}
 
         Prepare ONLY. Do not press the send control. Do not press any other preset,
-        apply, or refresh control. Do not navigate outside the allowed origin.
+        apply, or refresh control. Do not navigate outside the permitted origin above.
+        That origin is DECLARED by this request, not enforced by it: nothing in this
+        staging path confines where a browser navigates, so it is an instruction you
+        have to honour rather than a boundary you will be held inside.
 
         1. Open the target device page and read back its identifier from the page.
            The page supplies the target, so a page that is not this device is the
@@ -270,8 +293,7 @@ try:
         send control was pressed (it must be false), and any exact error.
         """
     ).format(
-        run_id=run_id, key=key, device=plan["target"]["device_id"],
-        origin=origin or "(declared by the local adapter)",
+        run_id=run_id, key=key, device=plan["target"]["device_id"], origin=origin,
         payload=plan["payload"], result_name=os.path.basename(result_path),
     )
     fd = os.open(request_path, os.O_CREAT | os.O_TRUNC | os.O_WRONLY, 0o600)

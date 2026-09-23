@@ -17,6 +17,12 @@ What it refuses, and why each refusal exists:
   * an ordered pair whose lower bound is not below its upper bound
   * a write-shaped request against a target whose eligibility is unverified
   * a missing attempt ordinal, because operation identity depends on it
+  * an adapter whose portal.origin is absent or is not an absolute origin - a
+    request that cannot name its permitted scope is never prepared, and an
+    unresolvable scope is refused rather than widened to a permissive default
+
+The origin the plan carries is a DECLARATION the generated request states to the
+browser side. Nothing in this path enforces where a browser actually navigates.
 
 Encodings are per-key, never per-device-series: a measurement and a setting on
 the same device can use different rules, so every emitted number carries the
@@ -37,10 +43,19 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 import sys
 
 PLAN_SCHEMA = "fm.fota-staging-plan.v1"
 ADAPTER_SCHEMA = "fm.fota-adapter.v1"
+
+# An absolute origin: scheme and host only, with an optional port. Anchored at
+# both ends, so a path, a query, userinfo, a wildcard, or any other caller text
+# simply does not match. There is no pattern here that widens a scope.
+ORIGIN_RE = re.compile(
+    r"^https?://(?:[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?|\[[0-9A-Fa-f:.]+\])"
+    r"(?::[0-9]{1,5})?$"
+)
 
 class EncodingError(ValueError):
     """A value that does not fit its declared encoding.
@@ -166,6 +181,35 @@ def resolve_setting(adapter: dict, name: str) -> dict:
             "confirm it against an observed value before staging this key"
         )
     return spec
+
+
+def resolve_origin(adapter: dict) -> str:
+    """The one origin a generated request may name, taken only from the adapter.
+
+    The local adapter definition is the only source; there is no registry, no
+    caller override, and no permissive default. An origin that is absent or does
+    not validate refuses the preparation, because a request that cannot name the
+    scope it is meant to stay inside should not be prepared or dispatched.
+
+    This is a DECLARATION carried into the plan and the generated request. It
+    tells the browser side where it may go; it does not and cannot confine a
+    browser, and nothing in this staging path enforces it.
+    """
+    portal = adapter.get("portal")
+    origin = portal.get("origin") if isinstance(portal, dict) else None
+    if not isinstance(origin, str) or not origin.strip():
+        fail(
+            "adapter declares no portal.origin; a staging request that cannot name "
+            "its permitted origin is refused rather than prepared without one"
+        )
+    origin = origin.strip()
+    if not ORIGIN_RE.match(origin):
+        fail(
+            f"adapter portal.origin {origin!r} is not an absolute origin; it must be "
+            "scheme and host only (https://host[:port]). A wildcard, a path, or an "
+            "empty value is refused - an unresolvable scope is never widened"
+        )
+    return origin
 
 
 def build_payload(adapter: dict, staged: list) -> str:
@@ -314,6 +358,7 @@ def build_plan(adapter: dict, request: dict) -> dict:
         fail("attempt must be an integer >= 1; operation identity depends on it")
     if not isinstance(request["settings"], list) or not request["settings"]:
         fail("request.settings must be a non-empty list")
+    origin = resolve_origin(adapter)
 
     staged = []
     for item in request["settings"]:
@@ -358,7 +403,18 @@ def build_plan(adapter: dict, request: dict) -> dict:
         unusable = None
         if available and raw is None:
             available, unusable = False, "row claims availability with no raw value"
-        if available and encoding in ENCODINGS:
+        if available and encoding not in ENCODINGS:
+            # An encoding this tool does not implement decodes to nothing, so the
+            # row is the third state with a named reason - exactly as a missing or
+            # non-numeric raw already is. One rule for one field: a row that was
+            # never decoded must never stand in for a current value. This is the
+            # telemetry path only; an undeclared SETTING encoding still refuses the
+            # whole preparation, because that number would be staged into a command.
+            available, raw, unusable = False, None, (
+                "row declares encoding %r, which this tool does not implement; "
+                "known encodings: %s" % (encoding, ", ".join(sorted(ENCODINGS)))
+            )
+        if available:
             try:
                 decoded = ENCODINGS[encoding]["from_wire"](raw)
             except EncodingError as exc:
@@ -400,6 +456,9 @@ def build_plan(adapter: dict, request: dict) -> dict:
         "action_kind": request["action_kind"],
         "device_id": request["device_id"],
         "environment": request["environment"],
+        # In the preview, so the permitted origin is bound by the approval hash
+        # like every other staged fact rather than re-derived downstream.
+        "origin": origin,
         "payload": payload,
         "settings": staged,
     }
@@ -409,6 +468,9 @@ def build_plan(adapter: dict, request: dict) -> dict:
         "adapter": {
             "name": adapter.get("name"),
             "adapter_version": adapter.get("adapter_version"),
+            # The validated origin the generated request declares to the browser
+            # side. Immutable preparation data: staged here, never re-derived.
+            "origin": origin,
         },
         "target": {
             "device_id": request["device_id"],

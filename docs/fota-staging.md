@@ -25,6 +25,17 @@ The tool accepts no command, executable, or URL from the adapter that it would r
 The adapter supplies *parameters*; the tracked code supplies *behaviour*.
 `tests/fixtures/staging-portal/adapter.json` is a neutral fixture with invented names - if anything site-specific were compiled into the tool, that fixture could not exercise it.
 
+## The permitted origin is declared, not enforced
+
+The adapter's `portal.origin` is resolved and validated during preparation, emitted into the plan as `adapter.origin`, and included in the preview the approval hash binds - so the scope is staged once, with everything else, rather than re-derived later.
+It must be an absolute origin, scheme and host only (`https://host[:port]`).
+A missing, empty, wildcard or otherwise malformed value **refuses the preparation**, and a plan that does not carry a usable origin refuses `start` before a run id is claimed - so nothing is generated and nothing is enqueued.
+An unresolvable scope is never widened into a permissive default.
+
+The generated request states that origin and asks the browser side to stay inside it.
+That line is a **declaration, not an enforcement mechanism**: nothing in this staging path confines where a browser navigates, and the request says so in as many words.
+Its value is that a request now names the scope it is meant to stay inside, instead of pointing at an allowlist nobody ever stated.
+
 ## Encodings are per key, never per device model
 
 A setting and a reported measurement can use different rules **on the same device**.
@@ -32,6 +43,16 @@ A value that decodes sensibly under one rule can decode to nonsense under the ot
 
 So every setting declares its own encoding, and every emitted number carries the name of the rule that produced it.
 A declared encoding that is not also marked confirmed is **refused, not guessed**: a wrong encoding produces a plausible number that means something else entirely, which is worse than producing nothing.
+
+A setting and a reported measurement diverge on what an *unimplemented* rule costs, so they are handled differently on purpose:
+
+| Path | An encoding this tool does not implement |
+| --- | --- |
+| Setting | **Refuses the whole preparation.** That number would be staged into a device command |
+| Telemetry | The row becomes **unavailable with a named reason**, exactly as a missing or non-numeric raw does |
+
+An unavailable telemetry row never counts as a reading, so it cannot silence the "Current values were not read for ..." unknown.
+A plan must never imply it knows a current value it did not decode.
 
 ## Eligibility is an observed fact, never an inference
 
