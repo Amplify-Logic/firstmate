@@ -33,7 +33,9 @@ A tick therefore looks like this.
    A message the captain has already answered with content that discharges it, or whose source-side task is already completed, is reported as `routine` rather than opened as a new owed item.
    The gate deliberately does not enforce this: it opens an item for whatever class it is handed, because only the connector read can see the thread and the source-side state.
    Silence is not completion. A message nobody replied to and a source-side item nobody closed both stay owed, and an acknowledgement or a promise to act is not a reply that discharges anything.
-6. `complete --source ID --checkpoint VALUE` advances that source's checkpoint, or `fail --source ID --reason TEXT` records the failure and backs off.
+6. A HubSpot ticket source also hands the complete current set of the captain's tickets whose stage is not Closed, Waiting on contact included, to `tickets` on every pass, before `complete`; that snapshot is what the day page's "Your open tickets" section renders, so a pass that skips it leaves the section labelled out of date.
+   The source's private coverage sentence names which owner that is, and `bin/fm-channel-intake.sh --help` owns the input format and the refusals.
+7. `complete --source ID --checkpoint VALUE` advances that source's checkpoint, or `fail --source ID --reason TEXT` records the failure and backs off.
 
 ## Install
 

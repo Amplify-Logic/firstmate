@@ -15,6 +15,7 @@
 # flags. This changes composition/identity, never source enrollment or cadence.
 #   fm-channel-intake.sh complete --source ID --checkpoint VALUE
 #   fm-channel-intake.sh fail --source ID --reason TEXT
+#   fm-channel-intake.sh tickets --owner NAME   (ticket array on stdin)
 #   fm-channel-intake.sh resolve --item KEY --reason TEXT [--waiting]
 #   fm-channel-intake.sh items [--state open|waiting|archived|inactive]
 #   fm-channel-intake.sh sources
@@ -72,6 +73,23 @@
 #   overwrites the same `--out` path, and never takes focus. The open is a
 #   convenience on top of a render that already succeeded, so a missing or
 #   failing opener is reported and the command still exits 0.
+#
+# OPEN-TICKETS SNAPSHOT. `tickets` is the only writer of
+# data/channel-intake/tickets.json, which bin/fm-todo-render.sh renders as the
+# page's "Your open tickets" section on every render. The HubSpot pass pipes it
+# the COMPLETE current set on stdin - every ticket the captain owns whose stage
+# is not Closed, Waiting on contact included - as a bare JSON array of
+# {id, subject, stage, last_in, last_out, link}: id is the numeric ticket id,
+# stage the pipeline-stage label exactly as HubSpot names it, last_in/last_out
+# the display times of the newest inbound and outbound message, link an
+# https:// record URL. subject, last_in and last_out may be empty - the page
+# shows such a row as an untitled ticket rather than losing a whole refresh
+# over one odd ticket. Unknown or missing fields, an empty id, stage or link,
+# a duplicate id, a Closed stage, or anything that is not a bare JSON array of
+# tickets is refused and the previous snapshot stays in place, so a malformed
+# read can never replace a good one. The file is written atomically as
+# {version:1, read_at, owner, tickets}, stamped with the time of the write,
+# which is the read time the page shows.
 #
 # COVERAGE IS STATED, NEVER IMPLIED. The enrolled sources are exactly the rows
 # of the private inventory file, each with its own coverage sentence and its own
@@ -2095,6 +2113,20 @@ status_cmd() {
   printf 'check_armed: %s\n' "$(check_armed_state)"
 }
 
+tickets_cmd() {
+  local owner=''
+  require_enabled
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --owner) [ "$#" -ge 2 ] || die '--owner requires a value'; owner=$2; shift 2 ;;
+      *) die "unknown tickets argument: $1" ;;
+    esac
+  done
+  [ -n "$owner" ] || die 'tickets requires --owner NAME'
+  python3 "$SCRIPT_DIR/fm-channel-intake-tickets.py" "$INTAKE_DIR/tickets.json" \
+    "$(sanitize "$owner")" "$(now_epoch)"
+}
+
 print_interval() {
   [ "$#" -eq 0 ] || die 'interval takes no arguments'
   printf '%s\n' "$CFG_INTERVAL"
@@ -2108,6 +2140,7 @@ case "${1:-}" in
   observe) shift; observe "$@" ;;
   complete) shift; complete_source "$@" ;;
   fail) shift; fail_source "$@" ;;
+  tickets) shift; tickets_cmd "$@" ;;
   resolve) shift; resolve_item "$@" ;;
   items) shift; items_cmd "$@" ;;
   sources) shift; sources_cmd "$@" ;;

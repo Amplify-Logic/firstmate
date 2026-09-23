@@ -24,11 +24,11 @@
 #
 # PAGE SHAPE. A Now strip of at most three current asks with a one-line why;
 # decisions awaiting him; replies he owes; the email agent block; waiting on
-# others (including requested handoffs); fleet conditions; the morning detail
-# fragment; everything closed since the previous sweep with its evidence and
-# actor, except routine chatter the intake dropped from its ledger, which was
-# never an ask; then folds for parked, "mine", routine activity and intake
-# coverage
+# others (including requested handoffs); fleet conditions; "Your open
+# tickets"; the morning detail fragment; everything closed since the previous
+# sweep with its evidence and actor, except routine chatter the intake
+# dropped from its ledger, which was never an ask; then folds for parked,
+# "mine", routine activity and intake coverage
 # (each enrolled source's last successful read and last failure, which is
 # separate from item freshness). Sections with nothing in them are omitted.
 # Inside decisions, replies and routine activity, lines not current for this
@@ -49,6 +49,17 @@
 # looking at; with no review session connected the box says so and queues
 # nothing. Routine activity and the list-style folds carry no box.
 #
+# YOUR OPEN TICKETS IS LIVE. That section is rendered on every build from
+# data/channel-intake/tickets.json, which `bin/fm-channel-intake.sh tickets`
+# alone writes and whose header owns the format: the count with its stage
+# breakdown, each ticket's stage exactly as stored, and the snapshot's own
+# read time. A snapshot older than two of the intake's configured
+# `interval_seconds` polls, and never less than an hour, is headed out of date
+# with that read time and never called live; a missing or unreadable one says
+# the tickets could not be read. Any "Your open tickets" section in a morning
+# detail file, at any depth, is dropped with everything after it up to the
+# next h2, because it is always an older read than the snapshot.
+#
 # FRESHNESS IS ON EVERY LINE. A line is "read <time>" only when its recorded
 # check is at or after this build's sweep (or the start of the day) and
 # checked the revision shown; otherwise "not re-checked since <time>", or
@@ -56,7 +67,7 @@
 # render time separately, so build time and read time are never confused.
 #
 # MORNING COMPOSITION CONTRACT (version 1, or 2 with the optional fields):
-# details-only ticket tables and calendar go in today-<date>.morning.html,
+# details-only context such as the calendar goes in today-<date>.morning.html,
 # action metadata in today-<date>.morning.json: {version, date:"YYYY-MM-DD",
 # actions:[{key, source, ref, class, title, link, updated}], and in version 2
 # optionally sweep_started (epoch the day's verification pass began),
@@ -83,10 +94,15 @@
 # else installed and no visual tool running.
 #
 # Configuration is read - never written - from the private, gitignored
-# config/channel-intake, and only the two keys this renderer needs:
-#   timezone      IANA zone for the local day and every rendered time
-#   sources_file  private inventory, read only for a source's coverage label
-# Every other key belongs to bin/fm-channel-intake.sh, which owns that file.
+# config/channel-intake, and only the three keys this renderer needs:
+#   timezone          IANA zone for the local day and every rendered time
+#   sources_file      private inventory, read only for a source's coverage label
+#   interval_seconds  the intake's poll cadence, default 900; two of those
+#                     polls, and never less than an hour, is how long an
+#                     open-tickets snapshot still counts as live
+# A value this renderer rejects for one of those three exits 2, as it does for
+# a missing template. Every other key belongs to bin/fm-channel-intake.sh,
+# which owns that file.
 set -eu
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -104,6 +120,7 @@ FOOT_TEMPLATE="$TEMPLATE_DIR/today-page.foot.html"
 
 CFG_TIMEZONE=
 CFG_SOURCES_FILE=
+CFG_INTERVAL=900
 
 usage() {
   awk '
@@ -161,6 +178,12 @@ load_config() {
           || die "timezone does not resolve on this host: $value"
         CFG_TIMEZONE=$value
         ;;
+      interval_seconds)
+        case "$value" in
+          ''|*[!0-9]*|0) die "interval_seconds must be a positive integer: $value" ;;
+        esac
+        CFG_INTERVAL=$value
+        ;;
       sources_file)
         case "$value" in
           /*) CFG_SOURCES_FILE=$value ;;
@@ -217,7 +240,7 @@ render_page() {
   printf '<div class="meta">%s<br>Page rebuilt from the to-do records at <span class="mono">%s</span>.<br>Each line carries its own last check.</div></header>\n' \
     "$(local_fmt "$epoch" '%A %-d %B %Y')" "$(local_fmt "$epoch" '%H:%M %Z')"
   python3 "$SCRIPT_DIR/fm-todo-compose.py" "$STORE" "$morning" "$day" "$epoch" "$CFG_TIMEZONE" \
-    "$FM_HOME" "$sidecar" "$INTAKE_DIR" "$CFG_SOURCES_FILE" || return 1
+    "$FM_HOME" "$sidecar" "$INTAKE_DIR" "$CFG_SOURCES_FILE" "$CFG_INTERVAL" || return 1
   cat "$FOOT_TEMPLATE"
 }
 
