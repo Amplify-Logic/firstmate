@@ -5,7 +5,8 @@
 #   - Urgency wins the order: an outage sits above an urgent item, which sits
 #     above a routine one, whatever order the ledger recorded them in.
 #   - One calm "Needs you now" list: live problems and hard deadlines first,
-#     an urgent ask that only waited long never above them, no summary strip,
+#     then a partner awaiting him, an urgent ask that only waited long never
+#     above them, no summary strip,
 #     Now box, sweep banner or held count, and no item rendered twice.
 #   - Waiting on others, other channel activity, closed today and your open
 #     tickets render as collapsed folds below the list, in that order.
@@ -365,14 +366,20 @@ test_calm_layout_ranks_live_problems_first_and_folds_the_rest() {
   observe_at "$h" "$T_1100" resolve --item "$key_wait" --reason 'Naomi has it' --waiting >/dev/null
   observe_at "$h" "$T_1100" resolve --item "$key_done" --reason 'credit note sent' >/dev/null
 
+  # A partner-facing ask awaiting him, flagged by the morning sweep.
+  printf '{"version":2,"date":"2026-09-10","actions":[{"key":"k-p","source":"hubspot","ref":"t-9","class":"obligation","kind":"reply","title":"partner awaiting your answer","partner_awaiting":true,"awaiting_since":%s,"updated":%s}]}\n' \
+    "$T_YESTERDAY_1500" "$T_1100" >"$h/.lavish/today-2026-09-10.morning.json"
+
   render_at "$h" "$T_1530" render >/dev/null
   page=$(page_of "$h")
   body=$(sed -n '/<h2>Needs you now/,/<\/table>/p' "$page")
 
-  # Tier 0 is a live problem or a hard deadline; age alone never lifts the
-  # urgent ask above them, and everything else follows by class.
+  # Tier 0 is a live problem or a hard deadline, tier 1 a partner awaiting
+  # him; age alone never lifts the urgent ask above them, and everything
+  # else follows by class.
   [ "$(grep -o 'class="what">[^<]*' <<<"$body" | sed 's/^class="what">//')" = 'partner machine down now
 feedback due before leave
+partner awaiting your answer
 partner waiting 26 days
 answer the training question' ] || fail "the Needs you list is not in action order:
 $body"

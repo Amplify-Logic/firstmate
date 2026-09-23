@@ -84,8 +84,7 @@
 # true for a partner-facing ask awaiting him) and awaiting_since (epoch second
 # of that ask; an ask with none sorts after every dated partner ask)}.
 # A partner-facing ask awaiting him - flagged here or by the channel intake's
-# timeline assessment - ranks above every class in the Now strip and in every
-# section, oldest ask first. `updated` is the SAME-DAY
+# timeline assessment - ranks in the page's partner tier, oldest ask first. `updated` is the SAME-DAY
 # verification epoch from daily-todo-freshness. Decisions and waiting-on-you
 # lines belong only in actions, never duplicated in the details HTML. The
 # fragment must not contain a document shell/header/h1. Invalid supplied

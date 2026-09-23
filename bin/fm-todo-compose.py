@@ -345,13 +345,12 @@ FIRST = ('outage', 'deadline')
 
 def tier(rec):
     if rec.get('class') in FIRST:
-        return 0, 0
-    if rec.get('partner_first'):
-        return 1, number(rec.get('awaiting_since'))
-    return 2, 0
+        return 0
+    return 1 if rec.get('partner_first') else 2
 
 
 def actionkey(rec):
+    """Tier first; sortkey then puts awaiting partner asks oldest first inside tier 1."""
     return tier(rec), sortkey(rec)
 
 

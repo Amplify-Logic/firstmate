@@ -27,9 +27,10 @@
 #   - A routine line the captain marked with mine or park is never retired by
 #     the intake's absence, so it is never pruned either. A system reopen note
 #     is not such a mark: a revived routine thread still retires and prunes.
-#   - A partner-facing ask awaiting the captain ranks above every class in the
-#     Now strip and its section, oldest ask first and an undated ask last, and
-#     a timeline re-read makes it current.
+#   - A partner-facing ask awaiting the captain ranks in the second tier of
+#     the Needs you list, after live problems and deadlines and above every
+#     other class, oldest ask first and an undated ask last, and a timeline
+#     re-read makes it current.
 # shellcheck disable=SC2016
 set -u
 
@@ -86,6 +87,11 @@ page() {
 field_of() {
   local h=$1 title=$2 col=$3
   todo_at "$h" "$T_1500" list | awk -F '\t' -v t="$title" -v c="$col" 'index($5, t) { print $c; exit }'
+}
+
+# The titles of the Needs you now list, in the order the page shows them.
+needs_order() {
+  sed -n '/<h2>Needs you now/,/<\/table>/p' <<<"$1" | grep -o 'class="what">[^<]*' | sed 's/^class="what">//'
 }
 
 sidecar() {
@@ -485,26 +491,31 @@ EOF
     --title 'Syrup availability and connectivity' --timeline-file "$h/caffeine.json" >/dev/null
   render_at "$h" "$T_1100"
   out=$(page "$h" 2026-09-10)
-  first=$(sed -n '/<div class="strip now">/,/<\/div>/p' <<<"$out" | grep -m1 '<li>')
-  assert_contains "$first" 'Syrup availability and connectivity' 'the partner awaiting the captain is not first in Now'
-  assert_contains "$first" 'promise that you are on it' 'the Now line does not say why the partner is waiting'
+  # Live problems and deadlines lead; the awaiting partner ask comes next,
+  # above urgent asks, and its row says why the partner is waiting.
+  [ "$(needs_order "$out" | sed -n 1,3p)" = 'fresh outage-1
+fresh deadline-1
+Syrup availability and connectivity' ] && [ "$(needs_order "$out" | sed -n 4,5p | sort | tr '\n' ' ')" = 'fresh urgent-1 fresh urgent-2 ' ] || fail "the awaiting partner ask is not second tier in Needs you:
+$(needs_order "$out")"
+  first=$(grep -m1 'class="what">Syrup' <<<"$out")
+  assert_contains "$first" 'promise that you are on it' 'the row does not say why the partner is waiting'
   assert_contains "$out" 'Syrup availability and connectivity<span class="prov obs">read 10:30 CEST</span>' \
     'the re-scan timeline read did not make the line current'
   assert_contains "$out" 'full timeline re-read by the channel intake' 'the line does not name the timeline read'
-  first=$(grep -m1 '<td class="what">' <<<"${out#*<h2>Replies you owe}")
-  assert_contains "$first" 'Syrup availability' 'the partner is not first among the replies, above the outage'
-  # The morning sweep can flag the same way, and still outranks an outage.
+  # The morning sweep can flag the same way; it ranks in the partner tier,
+  # after the outages, oldest ask first.
   sidecar "$h" 2026-09-10 '{"key":"k-out","source":"C_BRIEF","ref":"m-out","class":"outage","title":"Morning outage","updated":'"$T_1030"'},{"key":"k-p","source":"hubspot","ref":"48622709535","class":"obligation","kind":"reply","title":"Morning partner ask","partner_awaiting":true,"awaiting_since":'"$((T_0900 - 3600))"',"updated":'"$T_1030"'}'
   render_at "$h" "$T_1100"
   out=$(page "$h" 2026-09-10)
-  first=$(sed -n '/<div class="strip now">/,/<\/div>/p' <<<"$out" | grep '<li>' | sed -n 2p)
-  assert_contains "$first" 'Morning partner ask' 'a morning partner ask did not outrank the outages'
+  [ "$(needs_order "$out" | sed -n 4,5p)" = 'Syrup availability and connectivity
+Morning partner ask' ] || fail "a morning partner ask is not in the partner tier after the live problems:
+$(needs_order "$out")"
   # An undated partner ask is not the oldest ask: it sorts after the dated one.
   sidecar "$h" 2026-09-10 '{"key":"k-out","source":"C_BRIEF","ref":"m-out","class":"outage","title":"Morning outage","updated":'"$T_1030"'},{"key":"k-p","source":"hubspot","ref":"48622709535","class":"obligation","kind":"reply","title":"Morning partner ask","partner_awaiting":true,"updated":'"$T_1030"'}'
   render_at "$h" "$T_1100"
   out=$(page "$h" 2026-09-10)
-  first=$(sed -n '/<div class="strip now">/,/<\/div>/p' <<<"$out" | grep '<li>' | sed -n 1p)
-  assert_contains "$first" 'Syrup availability' 'an undated partner ask jumped ahead of an older dated one'
+  [ "$(needs_order "$out" | sed -n 4,5p)" = 'Syrup availability and connectivity
+Morning partner ask' ] || fail 'an undated partner ask jumped ahead of an older dated one'
   # A sidecar that spells the flag as a string would silently rank the ask like
   # any other item, so it is refused the way a bad class already is.
   cp -R "$h/data/todo" "$h/todo.before"
@@ -515,7 +526,7 @@ EOF
   sidecar "$h" 2026-09-10 '{"key":"k-p","source":"hubspot","ref":"48622709535","class":"obligation","kind":"reply","title":"Morning partner ask","partner_awaiting":true,"awaiting_since":'"${T_0900}000"',"updated":'"$T_1030"'}'
   if render_at "$h" "$T_1100" 2>/dev/null; then fail 'a sidecar whose awaiting_since is in milliseconds was accepted'; fi
   diff -r "$h/data/todo/items" "$h/todo.before/items" >/dev/null || fail 'a refused sidecar changed the store'
-  pass 'a partner-facing ask awaiting the captain ranks above every class in Now and in its section, oldest first and undated last'
+  pass 'a partner-facing ask awaiting the captain ranks right after live problems and deadlines, oldest first and undated last'
 }
 
 test_verification_is_never_renewed_by_sync
