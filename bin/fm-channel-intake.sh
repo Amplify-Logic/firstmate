@@ -7,13 +7,16 @@
 #   fm-channel-intake.sh observe --source ID --ref REF (--digest TEXT | --digest-file FILE)
 #                                [--class CLASS] [--title TEXT] [--link URL]
 #                                [--dedup-key KEY] [--thread PARENT] [--reply-marker VALUE]
-#                                [--source-epoch EPOCH]
+#                                [--source-epoch EPOCH] [--timeline-file FILE]
 #                                [--condition b14|freezing --count N --units TEXT]
 # Fleet condition snapshots use a stable source-scoped identity instead of a
 # per-read reference. Supply the full current count and newest affected units;
 # the renderer never sums snapshots. Only telemetry-fleet-alerts accepts these
 # flags. This changes composition/identity, never source enrollment or cadence.
-#   fm-channel-intake.sh complete --source ID --checkpoint VALUE
+# A timeline is the orchestrator's normalized read of one HubSpot ticket, used
+# to decide whether the item is PARTNER-FACING and AWAITING THE CAPTAIN; its
+# schema and rules are under "PARTNER-FACING ASKS" below.
+#   fm-channel-intake.sh complete --source ID --checkpoint VALUE [--rescanned]
 #   fm-channel-intake.sh fail --source ID --reason TEXT
 #   fm-channel-intake.sh tickets --owner NAME   (ticket array on stdin)
 #   fm-channel-intake.sh resolve --item KEY --reason TEXT [--waiting]
@@ -129,6 +132,54 @@
 # reported by a connector is a reason to call `fail` and back off, never a
 # reason to measure the ceiling by hitting it.
 #
+# PARTNER-FACING ASKS COME FIRST. `observe --timeline-file FILE` hands the gate
+# one JSON timeline and bin/fm-channel-intake-assess.py derives two facts from
+# it, stored on the item beside a short reason and never the message text:
+#   partner   a contact, a company domain or a message participant on the
+#             ticket is outside the team's own mail domains.
+#   awaiting  partner-facing, and at least one of: (a) the partner's last
+#             inbound has no later reply sent from a team_addresses or
+#             captain_addresses mailbox - only such a reply discharges it, not
+#             the pipeline stage; (b) an outbound promise to act - the team,
+#             tech or the captain acting, not a request to the customer -
+#             that names the captain or the tech team, or that the captain
+#             wrote, has no later reply from such a mailbox; (c) a
+#             colleague's note that names the captain has no later note by
+#             him and no reply.
+# Only an EMAIL engagement is a reply: a `last_message_sent_at` send with no
+# matching email is an auto-acknowledgement and answers nothing. (a) applies
+# only when the ticket involves the captain: he owns it, a message or note
+# names him, or a promise names the tech team. The timeline is
+#   {"kind": "hubspot-ticket", "owner": "captain"|"<owner address>",
+#    "contacts": ["<address>", ...], "companies": [{"domain": "<mail domain>"}],
+#    "last_message_sent_at": EPOCH,
+#    "events": [{"type": "email", "at": EPOCH, "direction": "inbound"|"outbound",
+#                "from": "<address>", "to": [...], "author": "captain"?, "body": ...},
+#               {"type": "note", "at": EPOCH, "author": "captain"|"<address>", "body": ...}]}
+# Every field is typed: a timeline whose shape differs is refused rather than
+# assessed, and a company with no domain places nobody outside the team. An
+# address is a bare `local@domain`, never a `Name <local@domain>` display form,
+# because the display form hides the address every rule here compares. An
+# `owner` or `author` is the captain when it reads `captain` or is one of his
+# captain_addresses, so either spelling HubSpot stores works.
+# An awaiting item handed in as `routine` is recorded as `obligation`, because
+# a partner waiting on the captain is owed by definition. A timeline observe is
+# a full re-read of the ticket, so it stamps `read_at` even when the digest is
+# unchanged; that is the read bin/fm-todo.sh counts as verification. A timeline
+# observe of a resolved ticket records its facts on the archived record, which
+# stays resolved. The day page, `todo` and the brief list awaiting partner items
+# ahead of every other class, oldest ask first; the alert payload orders them
+# first only within the notifiable classes.
+#
+# THE HUBSPOT RE-SCAN. A colleague-owned ticket that names the captain only in
+# an email body, or that sits in "Waiting on contact" (a stage HubSpot marks
+# CLOSED), changes nothing a checkpoint read would return, so `claim` hands
+# every `hubspot-tickets` source a `stages:` line and, once per
+# rescan_interval_seconds, a `rescan:` line: re-read every ticket in an open
+# stage or "Waiting on contact", whoever owns it, whose emails or notes name
+# the captain or in which a colleague promised the customer that the tech team
+# is on it, whatever its last-modified date, and observe each with a timeline. `complete --rescanned` records that the re-scan ran.
+#
 # Opt-in is per home and per device: with no `enabled = true` line in private
 # config/channel-intake this command is inert, so cloning the repo or seeding
 # another home never enrols it.
@@ -168,6 +219,19 @@
 #                            render still succeeds
 #   label                    slug for the wake key and diagnostic line
 #                            (default channel-intake)
+#   captain_names            words that name the captain in a message or note,
+#                            e.g. a first and last name (default unset; with
+#                            none, only a ticket he owns, a message he wrote or
+#                            a promise naming the tech team identifies him)
+#   captain_addresses        the captain's own mail addresses (default unset)
+#   team_addresses           shared mailboxes whose outbound counts as a reply,
+#                            e.g. the support address (default unset); these
+#                            and captain_addresses define the team's domains,
+#                            so a timeline observe is refused until at least
+#                            one of the two is set
+#   rescan_interval_seconds  cadence of the bounded HubSpot re-scan (default
+#                            21600, or interval_seconds when that is larger;
+#                            a configured value is refused below it)
 set -eu
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -200,6 +264,7 @@ DEFAULT_BACKOFF_MAX=21600
 DEFAULT_NOTIFY_MIN_INTERVAL=1800
 DEFAULT_NOTIFY_MAX_PER_DAY=8
 DEFAULT_LABEL=channel-intake
+DEFAULT_RESCAN_INTERVAL=21600
 
 # Notifiable classes are the three the captain named. `outage` is the only one
 # that survives quiet hours, which is what "preserve real severity" means here.
@@ -226,6 +291,10 @@ CFG_NOTIFY_VERIFIED=false
 CFG_REPORT_DIR=
 CFG_OPEN_COMMAND=
 CFG_LABEL=$DEFAULT_LABEL
+CFG_CAPTAIN_NAMES=
+CFG_CAPTAIN_ADDRESSES=
+CFG_TEAM_ADDRESSES=
+CFG_RESCAN_INTERVAL=
 
 usage() {
   awk '
@@ -286,7 +355,7 @@ timezone_resolves() {
 }
 
 load_config() {
-  local line key value
+  local line key value word
   CFG_SOURCES_FILE="$INTAKE_DIR/sources.tsv"
   if [ -f "$CONFIG_FILE" ]; then
     [ ! -L "$CONFIG_FILE" ] || die "config must be a regular file: $CONFIG_FILE"
@@ -380,12 +449,39 @@ load_config() {
           esac
           CFG_LABEL=$value
           ;;
+        captain_names)
+          case "$value" in
+            *[!A-Za-z[:space:]\'-]*) die "captain_names must be plain words: $value" ;;
+          esac
+          CFG_CAPTAIN_NAMES=$value
+          ;;
+        captain_addresses|team_addresses)
+          case "$value" in
+            *[!A-Za-z0-9@._+[:space:]-]*) die "$key must be mail addresses separated by spaces: $value" ;;
+          esac
+          for word in $value; do
+            case "$word" in
+              ?*@?*.?*) ;;
+              *) die "$key must be mail addresses separated by spaces: $word" ;;
+            esac
+          done
+          if [ "$key" = captain_addresses ]; then CFG_CAPTAIN_ADDRESSES=$value; else CFG_TEAM_ADDRESSES=$value; fi
+          ;;
+        rescan_interval_seconds)
+          require_positive_int rescan_interval_seconds "$value"; CFG_RESCAN_INTERVAL=$value ;;
         *) die "unknown config key: $key" ;;
       esac
     done <"$CONFIG_FILE"
   fi
   [ "$CFG_BACKOFF_MAX" -ge "$CFG_BACKOFF" ] \
     || die "backoff_max_seconds must not be below backoff_seconds"
+  if [ -z "$CFG_RESCAN_INTERVAL" ]; then
+    CFG_RESCAN_INTERVAL=$DEFAULT_RESCAN_INTERVAL
+    [ "$CFG_INTERVAL" -le "$CFG_RESCAN_INTERVAL" ] || CFG_RESCAN_INTERVAL=$CFG_INTERVAL
+  else
+    [ "$CFG_RESCAN_INTERVAL" -ge "$CFG_INTERVAL" ] \
+      || die "rescan_interval_seconds must not be below interval_seconds"
+  fi
   if [ -n "$CFG_QUIET_START" ] || [ -n "$CFG_QUIET_END" ]; then
     [ -n "$CFG_QUIET_START" ] && [ -n "$CFG_QUIET_END" ] \
       || die 'quiet_start and quiet_end must be set together'
@@ -527,6 +623,22 @@ scan_records() {
     }
     END { flush() }
   '
+}
+
+# scan_records, with partner-facing asks awaiting the captain first, oldest ask
+# first, and every other record after them in the order scan_records yields.
+scan_awaiting_first() {
+  local dir=$1
+  shift
+  # shellcheck disable=SC2016
+  scan_records "$dir" awaiting awaiting_since "$@" | awk -F'\037' -v OFS='\037' '
+    {
+      rank = ($2 == "1") ? sprintf("0%015d", $3 + 0) : "1"
+      out = rank OFS $1
+      for (i = 4; i <= NF; i++) out = out OFS $i
+      print out
+    }
+  ' | LC_ALL=C sort -s -t "$FIELD_SEP" -k1,1 | cut -d "$FIELD_SEP" -f2-
 }
 
 digest_hex() {
@@ -720,10 +832,10 @@ source_due() {
 
 save_source() {
   local id=$1 checkpoint=$2 last_ok=$3 last_attempt=$4 failures=$5 backoff_until=$6 error=$7
-  local body
-  body=$(printf 'id=%s\ncheckpoint=%s\nlast_ok=%s\nlast_attempt=%s\nfailures=%s\nbackoff_until=%s\nerror=%s' \
+  local last_rescan=${8-$(record_field "$(source_record "$1")" last_rescan)} body
+  body=$(printf 'id=%s\ncheckpoint=%s\nlast_ok=%s\nlast_attempt=%s\nfailures=%s\nbackoff_until=%s\nerror=%s\nlast_rescan=%s' \
     "$id" "$(sanitize "$checkpoint")" "$last_ok" "$last_attempt" "$failures" \
-    "$backoff_until" "$(sanitize "$error")")
+    "$backoff_until" "$(sanitize "$error")" "$last_rescan")
   mkdir -p "$SOURCE_DIR/$id"
   write_atomic "$(source_record "$id")" "$body" || die "cannot write the source record for $id"
 }
@@ -860,11 +972,44 @@ annotate_archived_edit() {
     || die "cannot annotate the archived item record: $path"
 }
 
+# A timeline re-read of a resolved ticket still records the facts it derived,
+# so if the captain reopens the ask it ranks on the ticket as it stands now.
+# The archived evidence and the resolution are left as they were.
+record_archived_attention() {
+  local path=$1 attention=$2 class body
+  class=$(owed_class "$(record_field "$path" class)" "$attention")
+  body=$(awk -v class="$class" '
+    /^class=/ { print "class=" class; next }
+    !/^(partner|awaiting|awaiting_since|awaiting_why|read_at)=/
+  ' "$path") || die "cannot read the archived item record: $path"
+  write_atomic "$path" "$(printf '%s\n%s' "$body" "$attention")" \
+    || die "cannot record the timeline facts on the archived item record: $path"
+}
+
 item_body() {
   printf 'key=%s\nsource=%s\nkind=%s\nref=%s\nlink=%s\nclass=%s\ntitle=%s\ndigest=%s\nstate=%s\ncreated=%s\nupdated=%s\nsource_epoch=%s\nnotified=%s\nnotified_digest=%s\nrevisions=%s\nprovenance=%s\nresolution=%s\nresolved_at=%s' \
     "$1" "$2" "$3" "$4" "$(sanitize "$5")" "$6" "$(sanitize "$7")" "$8" "$9" \
     "${10}" "${11}" "${12}" "${13}" "${14}" "${15}" "$(sanitize "${16}")" \
     "$(sanitize "${17}")" "${18}"
+  [ -z "${19:-}" ] || printf '\n%s' "${19}"
+}
+
+# The partner-facing facts a timeline observe recorded, carried verbatim by
+# every later rewrite of the record so a resolve or a notification stamp
+# cannot silently demote a partner who is waiting on the captain.
+attention_fields() {
+  [ -f "$1" ] && [ ! -L "$1" ] || return 0
+  grep -E '^(partner|awaiting|awaiting_since|awaiting_why|read_at)=' "$1" || true
+}
+
+# The class a record is written with, given the attention facts it carries: a
+# partner waiting on the captain is owed by definition, whatever the
+# orchestrator's classification said, on every path that writes the record.
+owed_class() {
+  case "$1" in
+    routine) printf '%s\n' "$2" | grep -q '^awaiting=1$' && printf 'obligation' || printf 'routine' ;;
+    *) printf '%s' "$1" ;;
+  esac
 }
 
 # --- wake delivery ----------------------------------------------------------
@@ -1052,6 +1197,7 @@ claim() {
       "$id" "$(inventory_field "$id" 2)" \
       "$(record_field "$(source_record "$id")" checkpoint)" \
       "$(inventory_field "$id" 3)"
+    [ "$(inventory_field "$id" 2)" != hubspot-tickets ] || hubspot_claim_lines "$id" "$epoch"
     # Tracked thread parents, so the orchestrator can re-read only the threads
     # whose reply marker advanced instead of re-reading every thread.
     if [ -d "$THREAD_DIR/$id" ]; then
@@ -1074,12 +1220,31 @@ EOF
   [ "$any" = true ] || printf 'source: <none due>\n'
 }
 
+# A checkpoint read of HubSpot returns only tickets modified since it, and a
+# stage filter on "open" drops "Waiting on contact", which HubSpot marks
+# closed. Both hid colleague-owned tickets that name the captain only inside an
+# email body, or that promise the customer the tech team is on it, so every
+# claim names the stages and a bounded periodic re-scan reads the whole set
+# again regardless of modification date.
+hubspot_claim_lines() {
+  local id=$1 epoch=$2 last
+  printf 'stages: %s	every open stage plus "Waiting on contact", which HubSpot marks closed but where a partner can still be waiting on the captain
+' "$id"
+  last=$(record_field "$(source_record "$id")" last_rescan)
+  case "$last" in ''|*[!0-9]*) last=0 ;; esac
+  [ $((epoch - last)) -ge "$CFG_RESCAN_INTERVAL" ] || return 0
+  printf 'rescan: %s	last_rescan: %s	scope: every ticket in those stages, any owner, whose emails or notes name the captain or in which a colleague promised the customer that the tech team is on it, re-read in full whatever its last-modified date; observe each with --timeline-file, then complete with --rescanned
+' \
+    "$id" "$([ "$last" -gt 0 ] && printf '%s' "$last" || printf never)"
+}
+
 complete_source() {
-  local id='' checkpoint='' epoch
+  local id='' checkpoint='' epoch rescanned=false last_rescan
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --source) [ "$#" -ge 2 ] || die '--source requires a value'; id=$2; shift 2 ;;
       --checkpoint) [ "$#" -ge 2 ] || die '--checkpoint requires a value'; checkpoint=$2; shift 2 ;;
+      --rescanned) rescanned=true; shift ;;
       *) die "unknown complete argument: $1" ;;
     esac
   done
@@ -1093,7 +1258,12 @@ complete_source() {
   # The checkpoint advances ONLY here, and only on a read the orchestrator has
   # already captured. An interrupted read leaves the old checkpoint, so the
   # next tick re-reads that window instead of skipping it.
-  save_source "$id" "$checkpoint" "$epoch" "$epoch" 0 0 ''
+  last_rescan=$(record_field "$(source_record "$id")" last_rescan)
+  if [ "$rescanned" = true ]; then
+    [ "$(inventory_field "$id" 2)" = hubspot-tickets ] || die '--rescanned requires a hubspot-tickets source'
+    last_rescan=$epoch
+  fi
+  save_source "$id" "$checkpoint" "$epoch" "$epoch" 0 0 '' "$last_rescan"
   clear_armed
   log_event "source $id complete at checkpoint $checkpoint"
   printf 'CHANNEL_INTAKE: %s read complete, checkpoint %s\n' "$id" "$checkpoint"
@@ -1186,7 +1356,7 @@ observe() {
   local dedup='' thread='' marker='' source_epoch='' epoch key path digest thread_marker
   local condition='' condition_count='' condition_units=''
   local existing_digest existing_state created revisions provenance notified
-  local notified_digest kind outcome prov_tag
+  local notified_digest kind outcome prov_tag existing_class timeline_file='' attention='' facts
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --source) [ "$#" -ge 2 ] || die '--source requires a value'; id=$2; shift 2 ;;
@@ -1203,6 +1373,7 @@ observe() {
       --count) [ "$#" -ge 2 ] || die '--count requires a value'; condition_count=$2; shift 2 ;;
       --units) [ "$#" -ge 2 ] || die '--units requires a value'; condition_units=$2; shift 2 ;;
       --source-epoch) [ "$#" -ge 2 ] || die '--source-epoch requires a value'; source_epoch=$2; shift 2 ;;
+      --timeline-file) [ "$#" -ge 2 ] || die '--timeline-file requires a value'; timeline_file=$2; shift 2 ;;
       *) die "unknown observe argument: $1" ;;
     esac
   done
@@ -1247,6 +1418,20 @@ observe() {
     *[!0-9]*) die "--source-epoch must be an epoch second: $source_epoch" ;;
   esac
   epoch=$(now_epoch)
+  if [ -n "$timeline_file" ]; then
+    [ -z "$condition" ] || die '--timeline-file does not apply to a fleet condition'
+    [ -f "$timeline_file" ] && [ ! -L "$timeline_file" ] \
+      || die "--timeline-file is not a regular file: $timeline_file"
+    [ -n "$CFG_CAPTAIN_ADDRESSES$CFG_TEAM_ADDRESSES" ] \
+      || die "a timeline observe needs captain_addresses or team_addresses in $CONFIG_FILE"
+    # Only the derived facts and their reason are kept: the timeline carries
+    # customer text, which stays in the source system like every digest input.
+    facts=$(TZ="${CFG_TIMEZONE:-${TZ:-UTC}}" python3 "$SCRIPT_DIR/fm-channel-intake-assess.py" \
+      --timeline "$timeline_file" --names "$CFG_CAPTAIN_NAMES" \
+      --captain-addresses "$CFG_CAPTAIN_ADDRESSES" --team-addresses "$CFG_TEAM_ADDRESSES" 2>&1) \
+      || die "${facts#fm-channel-intake: }"
+    attention=$(printf '%s\nread_at=%s' "$(printf '%s\n' "$facts" | LC_ALL=C tr '\037\r' '  ')" "$epoch")
+  fi
   require_state_lock
   digest=$(digest_hex "$digest_in")
   key=$(item_key "$dedup" "$id" "$ref")
@@ -1276,6 +1461,7 @@ observe() {
   # later poll of the same edited message would re-announce it forever.
   if [ -f "$(archive_path "$key")" ]; then
     path=$(archive_path "$key")
+    [ -z "$timeline_file" ] || record_archived_attention "$path" "$attention"
     existing_digest=$(record_field "$path" digest)
     if [ "$existing_digest" = "$digest" ]; then
       printf 'archived-unchanged %s\n' "$key"
@@ -1308,33 +1494,36 @@ observe() {
       # item: it never becomes a second task.
       *) provenance="$provenance $prov_tag"; outcome=merged ;;
     esac
+    [ -n "$timeline_file" ] || attention=$(attention_fields "$path")
     if [ "$existing_digest" = "$digest" ]; then
       # Unchanged content. Provenance may still have grown, so the record is
-      # rewritten, but nothing about the item's attention state moves.
+      # rewritten, but nothing about the item's attention state moves - except
+      # that a timeline re-read records the facts it just derived.
+      existing_class=$(record_field "$path" class)
       save_item "$path" "$(item_body "$key" "$id" "$kind" "$ref" \
-        "$(record_field "$path" link)" "$(record_field "$path" class)" \
+        "$(record_field "$path" link)" "$(owed_class "$existing_class" "$attention")" \
         "$(record_field "$path" title)" "$digest" "$existing_state" "$created" \
         "$(record_field "$path" updated)" "$(record_field "$path" source_epoch)" \
         "$notified" "$notified_digest" "$revisions" "$provenance" \
-        "$(record_field "$path" resolution)" "$(record_field "$path" resolved_at)")"
+        "$(record_field "$path" resolution)" "$(record_field "$path" resolved_at)" "$attention")"
       printf '%s %s\n' "${outcome:-unchanged}" "$key"
       return 0
     fi
     # A correction updates the SAME item rather than creating a second one.
     revisions=$((revisions + 1))
     save_item "$path" "$(item_body "$key" "$id" "$kind" "$ref" \
-      "${link:-$(record_field "$path" link)}" "$class" \
+      "${link:-$(record_field "$path" link)}" "$(owed_class "$class" "$attention")" \
       "${title:-$(record_field "$path" title)}" "$digest" "$existing_state" \
       "$created" "$epoch" "${source_epoch:-$(record_field "$path" source_epoch)}" \
       "$notified" "$notified_digest" "$revisions" "$provenance" \
-      "$(record_field "$path" resolution)" "$(record_field "$path" resolved_at)")"
+      "$(record_field "$path" resolution)" "$(record_field "$path" resolved_at)" "$attention")"
     log_event "item $key updated (revision $revisions)"
     printf 'updated %s\n' "$key"
     return 0
   fi
 
-  save_item "$path" "$(item_body "$key" "$id" "$kind" "$ref" "$link" "$class" \
-    "$title" "$digest" open "$epoch" "$epoch" "$source_epoch" '' '' 0 "$prov_tag" '' '')"
+  save_item "$path" "$(item_body "$key" "$id" "$kind" "$ref" "$link" "$(owed_class "$class" "$attention")" \
+    "$title" "$digest" open "$epoch" "$epoch" "$source_epoch" '' '' 0 "$prov_tag" '' '' "$attention")"
   if [ -n "$source_epoch" ] && [ "$epoch" -ge "$source_epoch" ]; then
     # Measured detection latency, sampled from real runs rather than projected
     # from the poll interval, which is a target and not an upper bound.
@@ -1380,7 +1569,7 @@ resolve_item() {
       "$(record_field "$path" created)" "$epoch" \
       "$(record_field "$path" source_epoch)" "$(record_field "$path" notified)" \
       "$(record_field "$path" notified_digest)" "$(record_field "$path" revisions)" \
-      "$(record_field "$path" provenance)" "$reason" '')"
+      "$(record_field "$path" provenance)" "$reason" '' "$(attention_fields "$path")")"
     log_event "item $key moved to waiting-on-others: $reason"
     printf 'waiting %s\n' "$key"
     return 0
@@ -1396,7 +1585,7 @@ resolve_item() {
     "$(record_field "$path" created)" "$epoch" \
     "$(record_field "$path" source_epoch)" "$(record_field "$path" notified)" \
     "$(record_field "$path" notified_digest)" "$(record_field "$path" revisions)" \
-    "$(record_field "$path" provenance)" "$reason" "$epoch")"
+    "$(record_field "$path" provenance)" "$reason" "$epoch" "$(attention_fields "$path")")"
   rm -f "$path"
   log_event "item $key archived: $reason"
   printf 'archived %s\n' "$key"
@@ -1528,7 +1717,7 @@ notifiable_rows() {
       "$key" "$FIELD_SEP" "$digest" "$FIELD_SEP" "$class" "$FIELD_SEP" \
       "$title" "$FIELD_SEP" "$link"
   done <<EOF
-$(scan_records "$ITEM_DIR" key digest class title link state notified notified_digest)
+$(scan_awaiting_first "$ITEM_DIR" key digest class title link state notified notified_digest)
 EOF
 }
 
@@ -1683,7 +1872,7 @@ notify_sent() {
       "$(record_field "$path" updated)" "$(record_field "$path" source_epoch)" \
       "$epoch" "$(record_field "$path" digest)" "$(record_field "$path" revisions)" \
       "$(record_field "$path" provenance)" "$(record_field "$path" resolution)" \
-      "$(record_field "$path" resolved_at)")"
+      "$(record_field "$path" resolved_at)" "$(attention_fields "$path")")"
   done
   lastday=$(notify_field day)
   sent=$(notify_field count)
@@ -1762,7 +1951,7 @@ section_items() {
     printf -- '- [%s] %s%s (%s, first seen %s)\n' "$class" \
       "$title" "${link:+ $link}" "$source" "$(local_date "$created")"
   done <<EOF
-$(scan_records "$ITEM_DIR" state class title link source created)
+$(scan_awaiting_first "$ITEM_DIR" state class title link source created)
 EOF
   [ "$found" = true ] || printf -- '- nothing\n'
 }
@@ -1923,7 +2112,7 @@ render_todo() {
     found=true
     printf -- '- [ ] %s%s (%s)\n' "$title" "${link:+ $link}" "$source"
   done <<EOF
-$(scan_records "$ITEM_DIR" state class title link source)
+$(scan_awaiting_first "$ITEM_DIR" state class title link source)
 EOF
   [ "$found" = true ] || printf -- '- [ ] nothing outstanding\n'
   printf '\n## Waiting on others\n\n'

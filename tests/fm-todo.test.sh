@@ -29,6 +29,9 @@
 #   - A routine line the captain marked with mine or park is never retired by
 #     the intake's absence, so it is never pruned either. A system reopen note
 #     is not such a mark: a revived routine thread still retires and prunes.
+#   - A partner-facing ask awaiting the captain ranks above every class in the
+#     Now strip and its section, oldest ask first and an undated ask last, and
+#     a timeline re-read makes it current.
 # shellcheck disable=SC2016
 set -u
 
@@ -483,6 +486,66 @@ test_routine_activity_keeps_its_not_re_checked_fold() {
   pass 'routine activity older than the sweep stays on the page in its own not re-checked fold'
 }
 
+test_partner_awaiting_asks_rank_above_every_class() {
+  local h out now first
+  h="$TMP_ROOT/partner-first"
+  new_home "$h"
+  printf 'captain_names = Lars\nteam_addresses = support@team.example\n' >>"$h/config/channel-intake"
+  printf 'H_TICKETS\thubspot-tickets\ttickets naming the captain\n' >>"$h/data/channel-intake/sources.tsv"
+  # Caffeine Mechanics, shaped like the back-sweep row: a colleague's ticket,
+  # the captain named only in her email body, nothing sent since.
+  cat >"$h/caffeine.json" <<EOF
+{"kind":"hubspot-ticket","owner":"natalia@team.example","stage":"Waiting for Tech",
+ "contacts":["rachel@partner.example"],
+ "events":[{"type":"email","at":$((T_0900 - 86400 * 13)),"direction":"inbound","from":"rachel@partner.example","body":"A steer on the connectivity, please."},
+  {"type":"email","at":$((T_0900 - 86400 * 13 + 9000)),"direction":"outbound","from":"support@team.example","body":"Lars is looking into this. I will keep you updated."}]}
+EOF
+  intake_at "$h" "$T_0900" observe --source H_TICKETS --ref 48375229511 --digest v1 --class routine \
+    --title 'Syrup availability and connectivity' --timeline-file "$h/caffeine.json" >/dev/null
+  todo_at "$h" "$T_1000" sweep-start >/dev/null
+  for now in outage-1 urgent-1 urgent-2 deadline-1; do
+    intake_at "$h" "$T_1030" observe --source C_BRIEF --ref "$now" --digest "$now" --class "${now%-*}" \
+      --title "fresh $now" >/dev/null
+  done
+  # The periodic re-scan re-reads the unchanged ticket after the sweep began:
+  # a full timeline read, so the line is current without any content change.
+  intake_at "$h" "$T_1030" observe --source H_TICKETS --ref 48375229511 --digest v1 --class routine \
+    --title 'Syrup availability and connectivity' --timeline-file "$h/caffeine.json" >/dev/null
+  render_at "$h" "$T_1100"
+  out=$(page "$h" 2026-09-10)
+  first=$(sed -n '/<div class="strip now">/,/<\/div>/p' <<<"$out" | grep -m1 '<li>')
+  assert_contains "$first" 'Syrup availability and connectivity' 'the partner awaiting the captain is not first in Now'
+  assert_contains "$first" 'promise that you are on it' 'the Now line does not say why the partner is waiting'
+  assert_contains "$out" 'Syrup availability and connectivity<span class="prov obs">read 10:30 CEST</span>' \
+    'the re-scan timeline read did not make the line current'
+  assert_contains "$out" 'full timeline re-read by the channel intake' 'the line does not name the timeline read'
+  first=$(grep -m1 '<td class="what">' <<<"${out#*<h2>Replies you owe}")
+  assert_contains "$first" 'Syrup availability' 'the partner is not first among the replies, above the outage'
+  # The morning sweep can flag the same way, and still outranks an outage.
+  sidecar "$h" 2026-09-10 '{"key":"k-out","source":"C_BRIEF","ref":"m-out","class":"outage","title":"Morning outage","updated":'"$T_1030"'},{"key":"k-p","source":"hubspot","ref":"48622709535","class":"obligation","kind":"reply","title":"Morning partner ask","partner_awaiting":true,"awaiting_since":'"$((T_0900 - 3600))"',"updated":'"$T_1030"'}'
+  render_at "$h" "$T_1100"
+  out=$(page "$h" 2026-09-10)
+  first=$(sed -n '/<div class="strip now">/,/<\/div>/p' <<<"$out" | grep '<li>' | sed -n 2p)
+  assert_contains "$first" 'Morning partner ask' 'a morning partner ask did not outrank the outages'
+  # An undated partner ask is not the oldest ask: it sorts after the dated one.
+  sidecar "$h" 2026-09-10 '{"key":"k-out","source":"C_BRIEF","ref":"m-out","class":"outage","title":"Morning outage","updated":'"$T_1030"'},{"key":"k-p","source":"hubspot","ref":"48622709535","class":"obligation","kind":"reply","title":"Morning partner ask","partner_awaiting":true,"updated":'"$T_1030"'}'
+  render_at "$h" "$T_1100"
+  out=$(page "$h" 2026-09-10)
+  first=$(sed -n '/<div class="strip now">/,/<\/div>/p' <<<"$out" | grep '<li>' | sed -n 1p)
+  assert_contains "$first" 'Syrup availability' 'an undated partner ask jumped ahead of an older dated one'
+  # A sidecar that spells the flag as a string would silently rank the ask like
+  # any other item, so it is refused the way a bad class already is.
+  cp -R "$h/data/todo" "$h/todo.before"
+  sidecar "$h" 2026-09-10 '{"key":"k-p","source":"hubspot","ref":"48622709535","class":"obligation","kind":"reply","title":"Morning partner ask","partner_awaiting":"true","awaiting_since":'"$T_0900"',"updated":'"$T_1030"'}'
+  if render_at "$h" "$T_1100" 2>/dev/null; then fail 'a sidecar whose partner_awaiting is a string was accepted'; fi
+  sidecar "$h" 2026-09-10 '{"key":"k-p","source":"hubspot","ref":"48622709535","class":"obligation","kind":"reply","title":"Morning partner ask","partner_awaiting":true,"awaiting_since":"2026-09-10","updated":'"$T_1030"'}'
+  if render_at "$h" "$T_1100" 2>/dev/null; then fail 'a sidecar whose awaiting_since is a date was accepted'; fi
+  sidecar "$h" 2026-09-10 '{"key":"k-p","source":"hubspot","ref":"48622709535","class":"obligation","kind":"reply","title":"Morning partner ask","partner_awaiting":true,"awaiting_since":'"${T_0900}000"',"updated":'"$T_1030"'}'
+  if render_at "$h" "$T_1100" 2>/dev/null; then fail 'a sidecar whose awaiting_since is in milliseconds was accepted'; fi
+  diff -r "$h/data/todo/items" "$h/todo.before/items" >/dev/null || fail 'a refused sidecar changed the store'
+  pass 'a partner-facing ask awaiting the captain ranks above every class in Now and in its section, oldest first and undated last'
+}
+
 test_verification_is_never_renewed_by_sync
 test_done_survives_and_a_new_ask_resurfaces_once
 test_edit_after_resolution_reopens_once
@@ -498,3 +561,4 @@ test_held_fold_shows_the_oldest_holds_first
 test_sync_prunes_only_retired_routine_records
 test_a_marked_routine_line_is_never_retired_by_the_intake
 test_a_revived_routine_thread_still_retires_and_prunes
+test_partner_awaiting_asks_rank_above_every_class

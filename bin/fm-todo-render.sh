@@ -75,7 +75,12 @@
 # relative to the home) and per action kind (decision|approval|reply|info,
 # default decision), ask, why, verified_how, digest (a fingerprint of the ask,
 # the only thing that may reopen a closed item) and aliases (extra
-# `source:ref` identities of the SAME ask)}. `updated` is the SAME-DAY
+# `source:ref` identities of the SAME ask), partner_awaiting (the JSON boolean
+# true for a partner-facing ask awaiting him) and awaiting_since (epoch second
+# of that ask; an ask with none sorts after every dated partner ask)}.
+# A partner-facing ask awaiting him - flagged here or by the channel intake's
+# timeline assessment - ranks above every class in the Now strip and in every
+# section, oldest ask first. `updated` is the SAME-DAY
 # verification epoch from daily-todo-freshness. Decisions and waiting-on-you
 # lines belong only in actions, never duplicated in the details HTML. The
 # fragment must not contain a document shell/header/h1. Invalid supplied

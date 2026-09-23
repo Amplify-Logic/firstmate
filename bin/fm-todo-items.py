@@ -15,7 +15,7 @@ import time
 RANK = ('outage', 'urgent', 'deadline', 'obligation')
 KINDS = ('decision', 'approval', 'reply', 'info')
 WEEKDAYS = ('monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday')
-SLOT_FIELDS = ('title', 'link', 'class', 'kind', 'ask', 'why', 'label', 'since')
+SLOT_FIELDS = ('title', 'link', 'class', 'kind', 'ask', 'why', 'label', 'since', 'partner_first', 'awaiting_since')
 RETIRED_TTL = 30 * 86400
 
 
@@ -142,6 +142,11 @@ def ledger_observations(intake_dir, labels):
                 'kind': 'condition' if rec.get('kind') == 'telemetry-fleet-alerts' else ('reply' if cls in RANK else 'info'),
                 'label': label, 'state': state,
             }
+            # A partner-facing ask awaiting the captain, as the intake's timeline
+            # assessment recorded it; the composer ranks it above every class.
+            if rec.get('partner') == '1' and rec.get('awaiting') == '1':
+                o.update(partner_first=True, awaiting_since=number(rec.get('awaiting_since')),
+                         why=rec.get('awaiting_why', ''))
             if state == 'closed':
                 o['closed_at'] = number(rec.get('resolved_at')) or number(rec.get('updated'))
                 o['evidence'] = rec.get('resolution') or 'resolved on the channel ledger, no reason recorded'
@@ -150,8 +155,14 @@ def ledger_observations(intake_dir, labels):
             else:
                 # `resolve --waiting` advances `updated` without a read, so only
                 # an open record's change time counts as reading the source.
-                o['verified'] = {'at': number(rec.get('updated')) or number(rec.get('created')),
-                                 'how': f'read by the channel intake on {label}'}
+                changed = number(rec.get('updated')) or number(rec.get('created'))
+                # A timeline observe re-reads the whole ticket, so it is a source
+                # read even when nothing changed; a plain unchanged re-read is not.
+                if number(rec.get('read_at')) > changed:
+                    o['verified'] = {'at': number(rec.get('read_at')),
+                                     'how': f'full timeline re-read by the channel intake on {label}'}
+                else:
+                    o['verified'] = {'at': changed, 'how': f'read by the channel intake on {label}'}
             obs.append(o)
     return obs
 
@@ -172,6 +183,12 @@ def morning_observations(doc, day, now):
         kind = raw.get('kind', 'decision')
         if kind not in KINDS:
             raise Refusal(f'morning action kind must be one of {", ".join(KINDS)}: {kind}')
+        awaiting = raw.get('partner_awaiting', False)
+        since = raw.get('awaiting_since')
+        if not isinstance(awaiting, bool) or (since is not None and (
+                not isinstance(since, int) or isinstance(since, bool) or not 0 < since < 10 ** 11)):
+            raise Refusal('morning action partner_awaiting must be a JSON boolean '
+                          'and awaiting_since an epoch second')
         ident = f'{raw["source"]}:{raw["ref"]}'
         aliases = [ident, f'ledger:{key}'] + [a for a in raw.get('aliases', []) if isinstance(a, str) and ':' in a]
         obs.append({
@@ -181,6 +198,8 @@ def morning_observations(doc, day, now):
             'rev': str(raw.get('digest', '')),
             'title': raw.get('title', ''), 'link': raw.get('link', ''), 'class': raw['class'], 'kind': kind,
             'ask': raw.get('ask', ''), 'why': raw.get('why', ''), 'label': raw['source'], 'state': 'open',
+            'partner_first': awaiting,
+            'awaiting_since': number(since),
             # The sidecar is the morning sweep's own verification record.
             'verified': {'at': read, 'how': raw.get('verified_how') or 'morning verification sweep'},
         })

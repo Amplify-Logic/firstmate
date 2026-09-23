@@ -43,7 +43,8 @@
 #
 # VERIFICATION IS ITS OWN FACT. Sync never renews it. It changes only on a
 # newer source read: an open ledger record's change time (an unchanged re-read
-# keeps its old time, a hand-over is not a read), a morning action's same-day
+# keeps its old time unless it was a full timeline re-read, which the ledger
+# records as read_at; a hand-over is not a read), a morning action's same-day
 # `updated`, or an explicit `verify` by the orchestrator running the
 # daily-todo-freshness procedure, which owns how an item is re-read. A backlog
 # hold time and a report's written time are never verification. The page calls
