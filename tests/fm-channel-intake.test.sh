@@ -1535,6 +1535,19 @@ EOF
    "body":"Our tech team is looking into this, I'll keep you updated.\nNatalia"}]}
 EOF
       ;;
+    # The captain's own reply puts the next step with the customer: asking them
+    # to check something is not a promise that he is on it.
+    customer-asked)
+      cat >"$h/$name.json" <<EOF
+{"kind":"hubspot-ticket","owner":"captain","stage":"Waiting on contact",
+ "contacts":["ruud@kantoor.example"],
+ "events":[
+  {"type":"email","at":$at_inbound,"direction":"inbound","from":"ruud@kantoor.example",
+   "body":"De tap geeft geen water."},
+  {"type":"email","at":$at_out,"direction":"outbound","from":"support@team.example","author":"captain",
+   "body":"Kun je de filter nakijken? Laat het me weten of het werkt. Houd me op de hoogte.\nCould you also look into the valve and check with your installer?\nLars"}]}
+EOF
+      ;;
     # A colleague's own ticket that never involves the captain.
     uninvolved)
       cat >"$h/$name.json" <<EOF
@@ -1608,7 +1621,7 @@ test_partner_facing_asks_awaiting_the_captain_are_flagged() {
     'a real outbound email was reported as an auto-acknowledgement'
 
   # Only a reply discharges an ask, and only a note naming him is one.
-  for name in customer-owes answered uninvolved internal unnamed-note note-answered; do
+  for name in customer-owes customer-asked answered uninvolved internal unnamed-note note-answered; do
     key=$(key_of "$(observe_ticket "$h" "$name" "$T_0900")")
     [ "$(item_field "$h" "$key" awaiting)" = 0 ] || fail "$name: flagged as awaiting the captain"
     [ "$(item_field "$h" "$key" class)" = routine ] || fail "$name: a ticket not awaiting the captain was promoted"

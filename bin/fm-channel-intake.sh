@@ -140,10 +140,12 @@
 #   awaiting  partner-facing, and at least one of: (a) the partner's last
 #             inbound has no later reply sent from a team_addresses or
 #             captain_addresses mailbox - only such a reply discharges it, not
-#             the pipeline stage; (b) an outbound promise to act that names the
-#             captain or the tech team, or that the captain wrote, has no
-#             later reply from such a mailbox; (c) a colleague's note that
-#             names the captain has no later note by him and no reply.
+#             the pipeline stage; (b) an outbound promise to act - the team,
+#             tech or the captain acting, not a request to the customer -
+#             that names the captain or the tech team, or that the captain
+#             wrote, has no later reply from such a mailbox; (c) a
+#             colleague's note that names the captain has no later note by
+#             him and no reply.
 # Only an EMAIL engagement is a reply: a `last_message_sent_at` send with no
 # matching email is an auto-acknowledgement and answers nothing. (a) applies
 # only when the ticket involves the captain: he owns it, a message or note

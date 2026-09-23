@@ -12,13 +12,18 @@ import time
 
 # A promise to act, in the languages the support timelines use. An outbound
 # carrying one of these is an open commitment until a later reply follows.
-PROMISE = re.compile(
-    r"looking into|look into|check(?:ing)?\b.{0,40}\bwith\b|escalat|get back to you|come back to you"
+PROMISE = (
+    r"escalat|get back to you|come back to you"
     r"|let you know|keep you (?:updated|posted|informed)|update you|once (?:i|we) hear"
-    r"|(?:will|i'll|we'll)\s+(?:confirm|update|follow up|revert|share|send)|follow(?:ing)? up"
-    r"|induiken|achteraan|\bkom\b.{0,60}\bterug\b|\blaat\b.{0,60}\bweten\b|stuur je een update"
-    r"|uitzoeken|nakijken|navragen|terugkoppel|op de hoogte",
-    re.I | re.S)
+    r"|(?:will|i'll|we'll)\s+(?:confirm|update|follow up|revert|share|send)"
+    r"|\bkom\b.{0,60}\bterug\b|stuur je een update|\bhou(?:d|den)?\s+(?:je|u|jullie)\s+op de hoogte")
+# Verbs that also read as a request to the customer ("kun je de filter
+# nakijken?", "please check with your installer") are a promise only when the
+# team, tech or the captain acts on them in the same sentence.
+ACTING = (
+    r"look(?:ing)? into|check(?:ing)?\b[^.?!\n]{0,40}\bwith\b|follow(?:ing)? up"
+    r"|induiken|achteraan|uitzoeken|nakijken|navragen|terugkoppel|\blaat\b[^.?!\n]{0,40}\bweten\b")
+ACTORS = [r"i", r"we", r"our", r"team", r"tech\w*", r"ik", r"wij"]
 TECH = re.compile(r"\btech\b|\btechteam\b|\btechnical (?:team|support|department)\b", re.I)
 QUOTE_START = re.compile(
     r"^\s*(?:>|on .{0,120}wrote:|op .{0,120}schreef|-{2,}\s*original message|from:\s|van:\s|sent from my)",
@@ -143,6 +148,8 @@ def assess(doc, names, captain_addresses, team_addresses):
     answer_addresses = captain_addresses | {a.lower() for a in team_addresses}
     internal = {domain(a) for a in answer_addresses if domain(a)}
     name_re = re.compile(r'(?<![\w.@-])@?(?:' + '|'.join(re.escape(n) for n in names) + r')\b', re.I) if names else None
+    actors = '|'.join(ACTORS + [re.escape(n) for n in names])
+    promise_re = re.compile(PROMISE + r'|\b(?:' + actors + r')\b[^.?!\n]{0,20}?(?:' + ACTING + ')', re.I | re.S)
 
     def names_captain(text):
         return bool(name_re and name_re.search(text))
@@ -186,7 +193,7 @@ def assess(doc, names, captain_addresses, team_addresses):
         if e['type'] != 'email' or e['direction'] != 'outbound':
             continue
         text = fresh_text(e['body'])
-        if not PROMISE.search(text):
+        if not promise_re.search(text):
             continue
         who = 'you' if names_captain(text) or by_captain(e) else ('tech' if TECH.search(text) else '')
         if not who:
