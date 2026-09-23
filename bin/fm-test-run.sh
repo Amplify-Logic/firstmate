@@ -1698,10 +1698,10 @@ families_for_changed_path() {
     tests/*)
       printf '%s\n' "__unmapped__:$path"
       ;;
-    # Standalone public prose (VISION, GROK_BOT) and .greptile/ code-review
-    # configuration carry no executable surface, so they have no test
-    # ownership, exactly like README and docs beside them.
-    README.md|VISION.md|GROK_BOT.md|LICENSE|assets/*|docs/*|.gitignore|.greptile/*)
+    # Standalone public prose (VISION, GROK_BOT, ONBOARDING) and .greptile/
+    # code-review configuration carry no executable surface, so they have no
+    # test ownership, exactly like README and docs beside them.
+    README.md|VISION.md|GROK_BOT.md|ONBOARDING.md|LICENSE|assets/*|docs/*|.gitignore|.greptile/*)
       ;;
     *)
       if [ -e "$path" ]; then
