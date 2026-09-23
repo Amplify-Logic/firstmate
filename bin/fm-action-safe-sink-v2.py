@@ -156,9 +156,10 @@ def describe_store_file(path: Path, expected_gid: int) -> Optional[str]:
 def harden_store_files(expected_gid: int) -> None:
     """Put every file this run created at owner write, group read, and no wider.
 
-    The group is set explicitly as well as the mode: the setgid store root
-    should already have supplied it, and doing it here too means the broker's
-    read authority never rests on that having worked.
+    The setgid store root is what actually supplies the group. Setting it here
+    too only works for a caller that already belongs to that group, which the
+    executor need not; where it does not, the group cannot be corrected and the
+    audit below refuses rather than writing evidence the broker cannot read.
     """
     for path in store_files():
         try:
@@ -202,6 +203,7 @@ def ensure_store_directory(path: Path) -> int:
     """
     path.mkdir(parents=True, exist_ok=True)
     info = path.stat()
+    corrected = False
     if stat.S_IMODE(info.st_mode) != STORE_DIRECTORY_MODE:
         # Only when it is actually wrong. An installed store root is created
         # correctly by the installation, and the executor is not necessarily a
@@ -210,7 +212,12 @@ def ensure_store_directory(path: Path) -> int:
         try:
             path.chmod(STORE_DIRECTORY_MODE)
         except OSError as exc:
-            fail(f"store directory is not {STORE_DIRECTORY_MODE:04o} and cannot be corrected: {exc}")
+            fail(
+                f"store directory is not {STORE_DIRECTORY_MODE:04o} and this process cannot correct it: {exc}. "
+                f"Setting setgid requires owning the directory and belonging to its group {info.st_gid}; "
+                "the installation is what must create this directory setgid."
+            )
+        corrected = True
         info = path.stat()
     mode = stat.S_IMODE(info.st_mode)
     if mode & 0o027:
@@ -218,6 +225,15 @@ def ensure_store_directory(path: Path) -> int:
     if mode & 0o700 != 0o700:
         fail(f"store directory must be owner-accessible, got {mode:04o}")
     if not mode & stat.S_ISGID:
+        if corrected:
+            # chmod is permitted to report success and drop setgid anyway when
+            # the caller is neither privileged nor in the directory's group, so
+            # the bit is read back rather than assumed from a clean return.
+            fail(
+                f"the setgid bit did not take on the store directory (mode is {mode:04o} after the attempt): "
+                f"chmod drops it for a caller that is neither privileged nor a member of group {info.st_gid}; "
+                "the installation is what must create this directory setgid."
+            )
         fail(f"store directory must be setgid so its files inherit the reader's group, got {mode:04o}")
     return info.st_gid
 

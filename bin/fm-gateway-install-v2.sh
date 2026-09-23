@@ -43,10 +43,14 @@
 #   rollback-preview   Print the guarded uninstall script, in the order its steps
 #                      must run. It stops the service, removes the launch
 #                      definitions, quarantines the directories, removes the two
-#                      role accounts, and removes the dedicated group only when
-#                      it can prove nothing else is using it. A group it cannot
-#                      prove is its own is left in place and reported as a
-#                      remaining privileged remnant rather than removed.
+#                      role accounts, and removes the dedicated read group only
+#                      when it can positively read its membership and find
+#                      nothing in it but those accounts. A group in use, or one
+#                      whose membership it cannot read, is
+#                      left in place and reported as a privileged remnant.
+#                      That group's name is its own, matching neither role
+#                      account, so its presence is evidence this installation
+#                      created it.
 #   apply              Always refuses. See above.
 #
 # This script writes only into a DIR the caller names, and runs none of the
@@ -73,8 +77,12 @@ readonly BROKER_LABEL=ai.firstmate.gateway-v2
 readonly BROKER_PLIST=/Library/LaunchDaemons/ai.firstmate.gateway-v2.plist
 readonly EXECUTOR_PLIST=/Library/LaunchDaemons/ai.firstmate.gateway-v2-executor.plist
 readonly BROKER_USER=_firstmate_gateway
-readonly BROKER_GROUP=_firstmate_gateway
 readonly EXECUTOR_USER=_firstmate_executor
+# Deliberately not either account's name. sysadminctl -roleAccount creates a
+# group named after the account it creates, so a group sharing a role account's
+# name can never be proved to be one this installation made - and rollback may
+# only remove a group it can prove is its own.
+readonly SINK_GROUP=_firstmate_sinkread
 readonly ROLE_ACCOUNT_HOME=/var/empty
 
 readonly BROKER_PROGRAM=fm-action-gateway-v2.py
@@ -133,6 +141,9 @@ assert_constants() {
   case "$INSTALL_ROOT" in "$INSTALL_PARENT"/?*) ;; *) die "INSTALL_ROOT is not contained in INSTALL_PARENT" ;; esac
   case "$BROKER_PLIST" in "$LAUNCH_DAEMONS"/?*) ;; *) die "BROKER_PLIST is not contained in LAUNCH_DAEMONS" ;; esac
   case "$EXECUTOR_PLIST" in "$LAUNCH_DAEMONS"/?*) ;; *) die "EXECUTOR_PLIST is not contained in LAUNCH_DAEMONS" ;; esac
+  [ -n "$SINK_GROUP" ] || die "SINK_GROUP is empty"
+  [ "$SINK_GROUP" != "$BROKER_USER" ] || die "SINK_GROUP must not be the broker account's own group name"
+  [ "$SINK_GROUP" != "$EXECUTOR_USER" ] || die "SINK_GROUP must not be the executor account's own group name"
 }
 
 program_digest() {  # <program>
@@ -249,15 +260,18 @@ assert_contained "$SOCKET_ROOT" "$SOCKET_PARENT"
 sudo sysadminctl -addUser "$BROKER_USER" -home "$ROLE_ACCOUNT_HOME" -shell /usr/bin/false -roleAccount
 sudo sysadminctl -addUser "$EXECUTOR_USER" -home "$ROLE_ACCOUNT_HOME" -shell /usr/bin/false -roleAccount
 
-# 2. Create the broker's group. Membership in it is the broker's entire access
+# 2. Create the dedicated read group. Its name belongs to nothing else on the
+#    system - neither role account is called this - so its presence is evidence
+#    this installation created it, which is what lets rollback prove ownership
+#    before it removes anything. Membership in it is the broker's entire access
 #    to the executor's receipt store: group read, and no write anywhere. Both
 #    steps check first, so re-running this install after a partial one does not
 #    abort on a group or a membership that is already there.
-if ! dseditgroup -o read "$BROKER_GROUP" >/dev/null 2>&1; then
-  sudo dseditgroup -o create -r "Firstmate gateway broker" "$BROKER_GROUP"
+if ! dseditgroup -o read "$SINK_GROUP" >/dev/null 2>&1; then
+  sudo dseditgroup -o create -r "Firstmate safe sink receipt readers" "$SINK_GROUP"
 fi
-if ! dseditgroup -o checkmember -m "$BROKER_USER" "$BROKER_GROUP" >/dev/null 2>&1; then
-  sudo dseditgroup -o edit -a "$BROKER_USER" -t user "$BROKER_GROUP"
+if ! dseditgroup -o checkmember -m "$BROKER_USER" "$SINK_GROUP" >/dev/null 2>&1; then
+  sudo dseditgroup -o edit -a "$BROKER_USER" -t user "$SINK_GROUP"
 fi
 
 # 3. Install the programs root-owned and not writable by either service account.
@@ -277,7 +291,7 @@ sudo /usr/bin/install -d -o "$BROKER_USER" -g wheel -m 0700 "$STATE_ROOT"
 #    the broker's group instead of whichever group the executor happens to
 #    have, so the broker's read access is guaranteed by the operating system
 #    rather than by a platform convention.
-sudo /usr/bin/install -d -o "$EXECUTOR_USER" -g "$BROKER_GROUP" -m 2750 "$SINK_ROOT"
+sudo /usr/bin/install -d -o "$EXECUTOR_USER" -g "$SINK_GROUP" -m 2750 "$SINK_ROOT"
 sudo /usr/bin/install -d -o root -g wheel -m 0755 "$SOCKET_PARENT"
 sudo /usr/bin/install -d -o "$BROKER_USER" -g wheel -m 0755 "$SOCKET_ROOT"
 
@@ -357,9 +371,85 @@ for entry in "$SOCKET_ROOT|$BROKER_USER" "$INSTALL_ROOT|root" "$STATE_ROOT|$BROK
   sudo mv -- "\$target" "\$QUARANTINE/\$(basename "\$target")"
 done
 
-# 4. Remove the service principals last, so the quarantined state is never
-#    briefly ownerless. Each account is checked to be the role account this
-#    install created before it is deleted.
+# 4. Judge the dedicated group BEFORE the accounts are removed, while their
+#    names and UUIDs still resolve. Nothing is changed in this step; it only
+#    decides. Membership that cannot be positively read is AMBIGUOUS, which is
+#    a refusal: "no members were found" is never inferred from "the output could
+#    not be parsed".
+#
+#    dscl prints one attribute as "Name: value value", continuing onto indented
+#    lines, and prints "No such key" when the attribute is absent. Anything else
+#    is a shape this script does not understand, and it says so rather than
+#    guessing.
+dscl_values() {  # <record> <attribute>; prints values, returns 1 when unparseable
+  raw=\$(dscl . -read "\$1" "\$2" 2>&1) || return 1
+  case "\$raw" in
+    'No such key'*) return 0 ;;
+    "\$2:") return 0 ;;
+    "\$2: "*) printf '%s\\n' "\$raw" | sed -e "1s/^\$2: //" -e 's/^[[:space:]]*//' ;;
+    *) return 1 ;;
+  esac
+}
+
+GROUP_VERDICT=ambiguous
+GROUP_DETAIL='its membership could not be read'
+GROUP_UNEXPECTED=
+if ! dscl . -read "/Groups/$SINK_GROUP" RecordName >/dev/null 2>&1; then
+  GROUP_VERDICT=absent
+  GROUP_DETAIL='it is not present'
+else
+  GROUP_AMBIGUOUS=
+  if ! GROUP_NAMES=\$(dscl_values "/Groups/$SINK_GROUP" GroupMembership); then
+    GROUP_AMBIGUOUS='its GroupMembership attribute is not in a shape this script can read'
+  fi
+  if ! GROUP_UUIDS=\$(dscl_values "/Groups/$SINK_GROUP" GroupMembers); then
+    GROUP_AMBIGUOUS='its GroupMembers attribute is not in a shape this script can read'
+  fi
+  GROUP_GID=\$(dscl_values "/Groups/$SINK_GROUP" PrimaryGroupID) || GROUP_GID=
+  for member in \$GROUP_NAMES; do
+    case "\$member" in
+      "$BROKER_USER"|"$EXECUTOR_USER") ;;
+      *) GROUP_UNEXPECTED="\$GROUP_UNEXPECTED \$member" ;;
+    esac
+  done
+  # A UUID member is only accounted for when it resolves to one of the two role
+  # accounts. One that resolves to nothing is a member this script cannot name,
+  # which is exactly the ambiguity that must refuse.
+  for uuid in \$GROUP_UUIDS; do
+    owner=\$(dscl . -search /Users GeneratedUID "\$uuid" 2>/dev/null | awk 'NR == 1 { print \$1; exit }') || owner=
+    case "\$owner" in
+      "$BROKER_USER"|"$EXECUTOR_USER") ;;
+      '') GROUP_AMBIGUOUS="one of its member UUIDs (\$uuid) resolves to no account this uninstall created" ;;
+      *) GROUP_UNEXPECTED="\$GROUP_UNEXPECTED \$owner" ;;
+    esac
+  done
+  # Anyone whose primary group is this one is a member without appearing in
+  # either attribute.
+  if [ -z "\$GROUP_GID" ]; then
+    GROUP_AMBIGUOUS='its gid could not be read, so primary-group members cannot be ruled out'
+  else
+    for holder in \$(dscl . -list /Users PrimaryGroupID 2>/dev/null | awk -v gid="\$GROUP_GID" '\$2 == gid { print \$1 }'); do
+      case "\$holder" in
+        "$BROKER_USER"|"$EXECUTOR_USER") ;;
+        *) GROUP_UNEXPECTED="\$GROUP_UNEXPECTED \$holder" ;;
+      esac
+    done
+  fi
+  if [ -n "\$GROUP_AMBIGUOUS" ]; then
+    GROUP_VERDICT=ambiguous
+    GROUP_DETAIL="\$GROUP_AMBIGUOUS"
+  elif [ -n "\$GROUP_UNEXPECTED" ]; then
+    GROUP_VERDICT=in-use
+    GROUP_DETAIL="it still has members:\$GROUP_UNEXPECTED"
+  else
+    GROUP_VERDICT=ours
+    GROUP_DETAIL='it has no member this uninstall is not already removing'
+  fi
+fi
+
+# 5. Remove the service principals, so the quarantined state is never briefly
+#    ownerless. Each account is checked to be the role account this install
+#    created before it is deleted.
 for account in "$EXECUTOR_USER" "$BROKER_USER"; do
   home=\$(dscl . -read /Users/"\$account" NFSHomeDirectory 2>/dev/null | awk '{print \$2}') || home=
   [ -n "\$home" ] || continue
@@ -369,36 +459,30 @@ for account in "$EXECUTOR_USER" "$BROKER_USER"; do
   sudo sysadminctl -deleteUser "\$account"
 done
 
-# 5. Remove the dedicated group, but only when it can be proved to be the one
-#    this installation created: the exact literal name, and no member other than
-#    the two role accounts step 4 just removed. A group with any other member is
-#    a group something else is using, so it is left exactly as it is and
-#    reported rather than deleted. This is the directory rule again: prove it is
-#    ours, or refuse and say so.
+# 6. Act on the verdict from step 4. Only a group positively read as having no
+#    member beyond the accounts just removed is deleted. Absent, ambiguous, or
+#    in use: it is left exactly as it is and reported. This is the directory
+#    rule again - prove it is ours, or refuse and say so.
 GROUP_REMNANT=no
-if dseditgroup -o read "$BROKER_GROUP" >/dev/null 2>&1; then
-  MEMBERS=\$(dseditgroup -o read "$BROKER_GROUP" | awk '/^GroupMembership:/ { for (i = 2; i <= NF; i++) print \$i }')
-  UNEXPECTED=
-  for member in \$MEMBERS; do
-    case "\$member" in
-      "$BROKER_USER"|"$EXECUTOR_USER") ;;
-      *) UNEXPECTED="\$UNEXPECTED \$member" ;;
-    esac
-  done
-  if [ -n "\$UNEXPECTED" ]; then
-    printf 'REFUSING to remove the group %s: it still has members:%s\\n' "$BROKER_GROUP" "\$UNEXPECTED" >&2
+case "\$GROUP_VERDICT" in
+  ours)
+    sudo dseditgroup -o delete "$SINK_GROUP"
+    ;;
+  absent)
+    printf 'group %s: %s. Nothing to remove.\\n' "$SINK_GROUP" "\$GROUP_DETAIL"
+    ;;
+  *)
+    printf 'REFUSING to remove the group %s: %s\\n' "$SINK_GROUP" "\$GROUP_DETAIL" >&2
     printf 'Nothing about that group was changed. Find out what uses it first.\\n' >&2
     GROUP_REMNANT=yes
-  else
-    sudo dseditgroup -o delete "$BROKER_GROUP"
-  fi
-fi
+    ;;
+esac
 
 printf 'Uninstalled. The previous state is quarantined at %s.\\n' "\$QUARANTINE"
 printf 'Nothing was deleted recursively. Review that directory, then remove it\\n'
 printf 'yourself once you are satisfied the audit record is no longer needed.\\n'
 if [ "\$GROUP_REMNANT" = yes ]; then
-  printf 'One privileged remnant is left on purpose: the group %s, which could not\\n' "$BROKER_GROUP"
+  printf 'One privileged remnant is left on purpose: the group %s, which could not\\n' "$SINK_GROUP"
   printf 'be proved to be this installation'"'"'s own. It is still there.\\n'
 fi
 CMD
@@ -425,13 +509,22 @@ Principals
   receipt store, so a worker cannot author the evidence its own action is
   settled from.
 
+  group   $SINK_GROUP  the broker's read access to the receipt store, and
+          nothing else. Its name is deliberately neither account's: a role
+          account's auto-created group cannot be told apart from one this
+          installation made, and rollback removes only a group it can prove is
+          its own.
+
 Receipt store, and why the broker only reads it
-  $SINK_ROOT is $EXECUTOR_USER:$BROKER_GROUP 2750, and the files in it are 0640.
+  $SINK_ROOT is $EXECUTOR_USER:$SINK_GROUP 2750, and the files in it are 0640.
   The setgid bit is deliberate: the operating system then gives every receipt
-  file the broker's group, so the broker's read access does not rest on which
-  group the executor happens to create files with. The sink refuses to write a
-  store whose directory is not setgid, and refuses any file in it whose group or
-  mode is not what that read-only path needs.
+  file the read group, so the broker's read access does not rest on which group
+  the executor happens to create files with. The sink refuses to write a store
+  whose directory is not setgid, and refuses any file in it whose group or mode
+  is not what that read-only path needs. Setting that bit is this installation's
+  job: chmod may report success and drop setgid for a caller that is neither
+  privileged nor a member of the directory's group, so the sink reads the bit
+  back and names that cause rather than trusting a clean return.
   The broker's entire access is group read; it has no write path to that store
   anywhere in its code, which is what makes a receipt evidence rather than
   something the broker could have authored. The store is journal_mode=TRUNCATE
@@ -451,7 +544,7 @@ Programs, with the bytes that would be installed
 Paths, owners, modes
   $INSTALL_ROOT   root:wheel 0755
   $STATE_ROOT      $BROKER_USER:wheel 0700
-  $SINK_ROOT         $EXECUTOR_USER:$BROKER_GROUP 2750 setgid, each file 0640
+  $SINK_ROOT         $EXECUTOR_USER:$SINK_GROUP 2750 setgid, each file 0640
   $SOCKET_ROOT     $BROKER_USER:wheel 0755, each socket 0600
   $BROKER_PLIST   root:wheel 0644
 
@@ -461,7 +554,10 @@ $(emit_install_script)
 Uninstall
   Run the rollback-preview command for the guarded uninstall script. It quarantines by
   moving directories under a timestamp and never deletes a tree, so it cannot
-  destroy the audit record or take a neighbouring path with it.
+  destroy the audit record or take a neighbouring path with it. It removes
+  $SINK_GROUP only when it can positively read that group's membership and find
+  nothing in it beyond the two role accounts it is removing; a group in use, or
+  one whose membership it cannot read, is left in place and reported.
 
 What is still unproven after all of that
   Installing these definitions does not by itself prove distinct principals,
@@ -516,7 +612,7 @@ emit_check() {
   # reporting only the directory above would hide the thing that matters.
   printf 'Receipt store files, created by the first execution rather than by installation\n'
   printf '  each must be %s:%s mode 640, and no -wal or -shm file may exist at all\n' \
-    "$EXECUTOR_USER" "$BROKER_GROUP"
+    "$EXECUTOR_USER" "$SINK_GROUP"
   for entry in \
     "$SINK_ROOT/$SINK_DATABASE|file" \
     "$SINK_ROOT/$SINK_JOURNAL|file" \

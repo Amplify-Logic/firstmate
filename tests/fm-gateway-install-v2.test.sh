@@ -40,8 +40,13 @@ test_preview_prints_the_plan_and_installs_nothing() {
   # The trust boundary the preview has to state plainly: the broker root is the
   # broker's alone, the receipt store is the executor's, and the broker's only
   # access to the evidence it settles from is group read.
-  assert_contains "$out" '-o "_firstmate_executor" -g "_firstmate_gateway" -m 2750 "/var/db/firstmate/sink"' \
-    "the receipt store is executor-owned, broker-group-readable, and setgid"
+  assert_contains "$out" '-o "_firstmate_executor" -g "_firstmate_sinkread" -m 2750 "/var/db/firstmate/sink"' \
+    "the receipt store is executor-owned, read-group-readable, and setgid"
+  # The read group's name must belong to nothing else: sysadminctl -roleAccount
+  # creates a group named after the account, so a group sharing a role account's
+  # name could never be proved to be one this installation made.
+  assert_contains "$out" '_firstmate_sinkread' "the dedicated read group is named"
+  assert_not_contains "$out" '-g "_firstmate_gateway"' "the read group is not a role account's own group"
   assert_contains "$out" 'setgid bit is deliberate' "the preview says why the store root is setgid"
   assert_contains "$out" '-o "_firstmate_gateway" -g wheel -m 0700 "/var/db/firstmate/gateway"' \
     "the broker root stays broker-only 0700"
@@ -56,8 +61,8 @@ test_preview_prints_the_plan_and_installs_nothing() {
   assert_not_contains "$out" 'rm -rf' "no recursive delete appears anywhere in the plan"
   # A re-run after a partial install must not abort on a group that is already
   # there, so the emitted install checks before it creates.
-  assert_contains "$out" 'if ! dseditgroup -o read "_firstmate_gateway"' "group creation is idempotent"
-  assert_contains "$out" 'if ! dseditgroup -o checkmember -m "_firstmate_gateway" "_firstmate_gateway"' \
+  assert_contains "$out" 'if ! dseditgroup -o read "_firstmate_sinkread"' "group creation is idempotent"
+  assert_contains "$out" 'if ! dseditgroup -o checkmember -m "_firstmate_gateway" "_firstmate_sinkread"' \
     "group membership is idempotent"
   assert_nothing_installed preview
   pass "preview prints the complete activation plan, claims nothing it has not proved, and installs nothing"
@@ -95,8 +100,10 @@ test_rollback_preview_promises_only_what_it_does() {
   # The header is the usage text, so an overclaim there is an overclaim to
   # whoever runs this script.
   assert_not_contains "$usage" 'leave no privileged remnant' "rollback must not claim it always leaves nothing behind"
-  assert_contains "$usage" 'remaining privileged remnant rather than removed' \
+  assert_contains "$usage" 'left in place and reported as a privileged remnant' \
     "the header says what rollback actually leaves"
+  assert_contains "$usage" 'matching neither role' \
+    "the header says why the read group's name can be proved to be this installation's"
   pass "rollback-preview describes what the uninstall really leaves behind"
 }
 
@@ -118,7 +125,7 @@ test_uninstall_preview_never_deletes_a_tree() {
   assert_contains "$out" 'REFUSING to remove the group' "an unproven group is refused, not deleted"
   assert_contains "$out" 'Nothing about that group was changed' "a refused group is left exactly as it is"
   assert_contains "$out" 'One privileged remnant is left on purpose' "a remnant left behind is reported"
-  assert_contains "$out" 'sudo dseditgroup -o delete "_firstmate_gateway"' \
+  assert_contains "$out" 'sudo dseditgroup -o delete "_firstmate_sinkread"' \
     "a group proved to be this installation's own is removed"
   assert_nothing_installed rollback-preview
   pass "the uninstall preview quarantines by moving and never deletes a directory tree"
@@ -195,6 +202,159 @@ test_emitted_paths_survive_a_checkout_path_with_a_space() {
   pass "the emitted artifacts quote every interpolated path, so a checkout under a path with a space stays reviewable"
 }
 
+# The group guard is the one piece of the emitted uninstall that decides a
+# privileged deletion, so it is executed rather than grepped. Every command the
+# script would run with privilege is replaced by a stub that only records its
+# argv, so nothing on this machine is created, altered or removed: the
+# directories it would quarantine do not exist, and `sudo` never reaches the
+# real binary. What is exercised is the decision itself.
+install_guard_stubs() {  # <dir>
+  local stubs=$1
+  mkdir -p "$stubs"
+  cat > "$stubs/sudo" <<'SUDO'
+#!/bin/sh
+printf '%s\n' "$*" >> "$FM_SUDO_LOG"
+exit 0
+SUDO
+  cat > "$stubs/dscl" <<'DSCL'
+#!/bin/sh
+case "$*" in
+  ". -read /Groups/_firstmate_sinkread RecordName")
+    [ "${FM_STUB_GROUP_PRESENT:-yes}" = yes ] || exit 1
+    printf 'RecordName: _firstmate_sinkread\n' ;;
+  ". -read /Groups/_firstmate_sinkread GroupMembership")
+    printf '%s\n' "$FM_STUB_MEMBERSHIP" ;;
+  ". -read /Groups/_firstmate_sinkread GroupMembers")
+    printf '%s\n' "$FM_STUB_MEMBERS" ;;
+  ". -read /Groups/_firstmate_sinkread PrimaryGroupID")
+    printf '%s\n' "$FM_STUB_PRIMARY" ;;
+  ". -search /Users GeneratedUID "*)
+    printf '%s\n' "$FM_STUB_SEARCH" ;;
+  ". -list /Users PrimaryGroupID")
+    printf '%s\n' "$FM_STUB_PRIMARY_LIST" ;;
+  ". -read /Users/"*" NFSHomeDirectory")
+    printf 'NFSHomeDirectory: /var/empty\n' ;;
+  *)
+    printf 'unexpected dscl call: %s\n' "$*" >&2
+    exit 9 ;;
+esac
+DSCL
+  cat > "$stubs/launchctl" <<'LAUNCHCTL'
+#!/bin/sh
+exit 0
+LAUNCHCTL
+  chmod 0755 "$stubs/sudo" "$stubs/dscl" "$stubs/launchctl"
+}
+
+run_emitted_uninstall() {  # <script> <stubs> <log>
+  local script=$1 stubs=$2 log=$3
+  FM_SUDO_LOG="$log" PATH="$stubs:$PATH" sh "$script" --i-have-read-every-line 2>&1
+}
+
+test_the_group_guard_refuses_anything_it_cannot_prove() {
+  local dir stubs log out rc
+  dir="$TMP/guard"
+  stubs="$TMP/guard-stubs"
+  "$INSTALL" artifacts "$dir" >/dev/null
+  install_guard_stubs "$stubs"
+
+  # A group holding nothing but the accounts this uninstall removes is the one
+  # case that permits deletion.
+  log="$TMP/guard-ours.log"
+  : > "$log"
+  set +e
+  out=$(FM_STUB_MEMBERSHIP='GroupMembership: _firstmate_gateway' \
+    FM_STUB_MEMBERS='No such key: GroupMembers' \
+    FM_STUB_PRIMARY='PrimaryGroupID: 601' \
+    FM_STUB_SEARCH='' \
+    FM_STUB_PRIMARY_LIST='' \
+    run_emitted_uninstall "$dir/uninstall.sh" "$stubs" "$log")
+  rc=$?
+  set -e
+  expect_code 0 "$rc" "uninstall against a provably-own group"
+  assert_grep 'dseditgroup -o delete _firstmate_sinkread' "$log" "a group proved to be ours is removed"
+  assert_not_contains "$out" 'REFUSING' "a provably-own group is not refused"
+
+  # A group with any other member is a group something else is using. This is
+  # the case the previous guard could not see at all.
+  log="$TMP/guard-inuse.log"
+  : > "$log"
+  set +e
+  out=$(FM_STUB_MEMBERSHIP='GroupMembership: _firstmate_gateway someone_else' \
+    FM_STUB_MEMBERS='No such key: GroupMembers' \
+    FM_STUB_PRIMARY='PrimaryGroupID: 601' \
+    FM_STUB_SEARCH='' \
+    FM_STUB_PRIMARY_LIST='' \
+    run_emitted_uninstall "$dir/uninstall.sh" "$stubs" "$log")
+  rc=$?
+  set -e
+  expect_code 0 "$rc" "uninstall against a group in use"
+  assert_no_grep 'dseditgroup -o delete' "$log" "a group with another member is never deleted"
+  assert_contains "$out" 'REFUSING to remove the group' "a group in use is refused"
+  assert_contains "$out" 'someone_else' "the refusal names the member it found"
+  assert_contains "$out" 'One privileged remnant is left on purpose' "the remnant is reported"
+
+  # The regression that mattered: output in a shape the parser does not
+  # understand - here the block form a different command prints - must read as
+  # ambiguous, never as an empty membership.
+  log="$TMP/guard-ambiguous.log"
+  : > "$log"
+  set +e
+  out=$(FM_STUB_MEMBERSHIP='dsAttrTypeStandard:GroupMembership -
+		someone_else' \
+    FM_STUB_MEMBERS='No such key: GroupMembers' \
+    FM_STUB_PRIMARY='PrimaryGroupID: 601' \
+    FM_STUB_SEARCH='' \
+    FM_STUB_PRIMARY_LIST='' \
+    run_emitted_uninstall "$dir/uninstall.sh" "$stubs" "$log")
+  rc=$?
+  set -e
+  expect_code 0 "$rc" "uninstall against unreadable membership"
+  assert_no_grep 'dseditgroup -o delete' "$log" "membership that cannot be read is never deleted"
+  assert_contains "$out" 'not in a shape this script can read' "an unparseable membership is named as such"
+  assert_contains "$out" 'One privileged remnant is left on purpose' "the remnant is reported"
+
+  # A UUID member that resolves to no account this uninstall created is a
+  # member the script cannot name, which is the same refusal.
+  log="$TMP/guard-uuid.log"
+  : > "$log"
+  set +e
+  out=$(FM_STUB_MEMBERSHIP='GroupMembership: _firstmate_gateway' \
+    FM_STUB_MEMBERS='GroupMembers: FFFFEEEE-DDDD-CCCC-BBBB-AAAA00000000' \
+    FM_STUB_PRIMARY='PrimaryGroupID: 601' \
+    FM_STUB_SEARCH='' \
+    FM_STUB_PRIMARY_LIST='' \
+    run_emitted_uninstall "$dir/uninstall.sh" "$stubs" "$log")
+  rc=$?
+  set -e
+  expect_code 0 "$rc" "uninstall against an unresolvable UUID member"
+  assert_no_grep 'dseditgroup -o delete' "$log" "an unnameable UUID member is never deleted through"
+  assert_contains "$out" 'resolves to no account this uninstall created' "the refusal names the UUID it could not place"
+
+  # An account whose primary group is this one is a member without appearing in
+  # either attribute.
+  log="$TMP/guard-primary.log"
+  : > "$log"
+  set +e
+  out=$(FM_STUB_MEMBERSHIP='GroupMembership: _firstmate_gateway' \
+    FM_STUB_MEMBERS='No such key: GroupMembers' \
+    FM_STUB_PRIMARY='PrimaryGroupID: 601' \
+    FM_STUB_SEARCH='' \
+    FM_STUB_PRIMARY_LIST='someone_else             601' \
+    run_emitted_uninstall "$dir/uninstall.sh" "$stubs" "$log")
+  rc=$?
+  set -e
+  expect_code 0 "$rc" "uninstall against a primary-group member"
+  assert_no_grep 'dseditgroup -o delete' "$log" "a primary-group member is never deleted through"
+  assert_contains "$out" 'it still has members: someone_else' "a primary-group member counts as a member"
+
+  # Everything above ran the real emitted script; nothing privileged happened,
+  # because every privileged command went to a stub that only logged its argv.
+  assert_grep 'sysadminctl -deleteUser' "$log" "the privileged commands went to the stub, not the system"
+  assert_nothing_installed guard-execution
+  pass "the emitted group guard deletes only what it can prove is its own and refuses everything else"
+}
+
 test_artifacts_refuse_an_occupied_or_unsafe_directory() {
   local dir out rc
   dir="$TMP/occupied"
@@ -225,4 +385,5 @@ test_uninstall_preview_never_deletes_a_tree
 test_rollback_preview_promises_only_what_it_does
 test_emitted_artifacts_are_guarded_and_inert
 test_emitted_paths_survive_a_checkout_path_with_a_space
+test_the_group_guard_refuses_anything_it_cannot_prove
 test_artifacts_refuse_an_occupied_or_unsafe_directory

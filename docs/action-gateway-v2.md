@@ -149,12 +149,13 @@ After committing, the sink re-opens its own store read-only and re-reads the app
 
 The sink derives its store root by its own rule rather than accepting one from the caller: a sink whose store the caller could relocate is a sink whose receipts the broker cannot use as evidence.
 
-That store is not under the broker's root. `/var/db/firstmate/gateway` stays broker-owned, `0700`, and broker-only, and the executor has no access to it at all; the receipt store is `/var/db/firstmate/sink`, owned by the executor principal with the broker's group, `2750`, and every file in it `0640`.
+That store is not under the broker's root. `/var/db/firstmate/gateway` stays broker-owned, `0700`, and broker-only, and the executor has no access to it at all; the receipt store is `/var/db/firstmate/sink`, owned by the executor principal with the dedicated `_firstmate_sinkread` group, `2750`, and every file in it `0640`.
 The broker's entire access to the evidence it settles from is group read: it opens that store `?mode=ro` and has no write path to it anywhere, which is what makes a receipt evidence rather than something the broker could have authored.
 A worker never holds either identity - anything that calls prepare is not the executor principal and gets no write access to the receipt store.
 
 The group is guaranteed rather than assumed.
-The store root is setgid, so the operating system gives every file created in it the broker's group instead of leaving that to whichever group the executor happens to create files with, and the sink refuses to write a store whose root is not setgid.
+The store root is setgid, so the operating system gives every file created in it the read group instead of leaving that to whichever group the executor happens to create files with, and the sink refuses to write a store whose root is not setgid.
+Setting that bit is the installation's job, not the executor's: `chmod` is allowed to report success and drop setgid for a caller that is neither privileged nor a member of the directory's group, so the sink reads the bit back after any correction it attempts and refuses with that reason named rather than assuming a clean return worked.
 It also checks rather than trusts: before it writes anything it examines every file the store already holds - the database, the JSONL journal, and any SQLite sidecar - and refuses the whole store when one is not a regular file, is not `0640`, or does not carry the store's own group.
 A receipt store whose modes drifted is one the broker may already have been unable to read, so it is refused rather than quietly rewritten.
 `check` reports the owner, group and mode of those files, not only of the directory, because those are the files the broker actually opens.
@@ -197,10 +198,14 @@ Every privileged path is a literal constant, checked at startup for being absolu
 Uninstall never deletes a directory tree: it moves each directory to a timestamped quarantine after checking the target is not a symlink, is contained in its expected parent, is a real directory, and is owned by the account the installation gave it to - the broker for its own roots, root for the program directory, and the executor for the receipt store.
 The state root holds the audit record and every tombstone, and an uninstall that destroys the evidence of what the gateway did is worse than one that leaves a directory behind.
 
-The installation also creates one dedicated group, which is how the broker reads the receipt store and the only authority it has over it.
+The installation also creates one dedicated group, `_firstmate_sinkread`, which is how the broker reads the receipt store and the only authority it has over it.
+Its name is deliberately neither role account's: `sysadminctl -roleAccount` creates a group named after the account it creates, so a group sharing a role account's name could never be told apart from one the installation made.
 Creating it is idempotent, so re-running the emitted install after a partial one does not abort on a group or a membership that is already there.
-Uninstall removes that group only when it can prove the group is its own: the exact literal name, and no member other than the two role accounts the same uninstall just removed.
-A group with any other member is a group something else is using, so it is left exactly as it is, reported as a remaining privileged remnant, and never deleted.
+
+Uninstall removes that group only when it can positively read its membership and find nothing in it beyond the two role accounts the same uninstall is removing.
+It judges the group before it deletes those accounts, while their names and UUIDs still resolve, and it reads all three ways a member can be attached: the `GroupMembership` names, the `GroupMembers` UUIDs resolved back to accounts, and any account whose primary group is this one.
+Membership it cannot read is ambiguous, and ambiguous refuses: "no members were found" is never inferred from "the output could not be parsed".
+A group that is in use, or whose membership could not be read, is left exactly as it is, reported as a remaining privileged remnant, and never deleted.
 Rollback therefore does not promise to leave nothing behind - it promises to say what it left and why.
 
 The emitted `install.sh` and `uninstall.sh` carry their own copies of those guards, because a person runs them standalone with sudo and cannot rely on the authoring script's checks.

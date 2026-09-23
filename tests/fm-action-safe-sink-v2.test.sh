@@ -310,6 +310,39 @@ test_the_store_root_is_held_setgid() {
   pass "the store root is held setgid so every receipt inherits the group the broker reads through"
 }
 
+test_a_store_root_whose_setgid_cannot_be_set_is_refused() {
+  local plan probe gid out rc
+  reset_state
+  plan="$TMP/plan-foreign-group.json"
+  canonical_plan foreign-group-idem "$plan" >/dev/null
+
+  # Setting setgid needs the caller to own the directory AND belong to its
+  # group, so this needs a directory whose group this UID is not in. On a stock
+  # system /tmp supplies one; where it does not, there is nothing honest to
+  # assert here and the test says so rather than pretending.
+  probe=$(mktemp -d /tmp/fm-sink-setgid.XXXXXX) || fail "could not make a probe root"
+  mkdir -p "$probe/fm-gateway-v2-sink"
+  gid=$(/usr/bin/stat -f '%g' "$probe/fm-gateway-v2-sink")
+  if id -G | tr ' ' '\n' | grep -qx "$gid"; then
+    rm -rf "$probe"
+    pass "the setgid refusal needs a group this UID is not in; this machine offers none, so it is unproven here"
+    return 0
+  fi
+
+  set +e
+  out=$(TMPDIR="$probe" $SINK apply < "$plan" 2>&1)
+  rc=$?
+  set -e
+  rm -rf "$probe"
+  expect_code 1 "$rc" "a store root whose group this process is not in"
+  # The operator has to be told the correction was the thing that failed, not
+  # just that the mode is wrong.
+  assert_contains "$out" 'the installation is what must create this directory setgid' \
+    "the refusal names what must set the bit"
+  assert_contains "$out" "$gid" "the refusal names the group it could not join"
+  pass "a store root whose setgid bit this process cannot set is refused with the reason named"
+}
+
 test_broker_reads_the_store_without_being_able_to_write_it() {
   local plan out
   reset_state
@@ -367,4 +400,5 @@ test_sink_applies_exactly_once
 test_sink_store_is_group_readable_and_writable_by_nobody_else
 test_a_store_whose_group_or_mode_drifted_is_refused
 test_the_store_root_is_held_setgid
+test_a_store_root_whose_setgid_cannot_be_set_is_refused
 test_broker_reads_the_store_without_being_able_to_write_it
