@@ -1389,6 +1389,43 @@ test_queue_starts_costly_roots_first_and_replays_in_root_order() {
   pass "fm-lint.sh starts the costliest root first and replays diagnostics in root order"
 }
 
+test_unmeasured_canonical_root_leads_the_queue_and_warns_once() {
+  local tmp fakebin log unlisted costliest outside out warnings
+  tmp=$(fm_test_tmproot fm-lint-unmeasured)
+  fakebin=$(fm_fakebin "$tmp")
+  log="$tmp/shellcheck.log"
+  fm_lint_stub_shellcheck "$fakebin" "$log"
+  # A canonical-shaped root the committed table cannot list (new or renamed).
+  unlisted="tests/fm-lint-unlisted-root.test.sh"
+  [ ! -e "$ROOT/$unlisted" ] || fail "fixture path $unlisted unexpectedly exists in the repo"
+  costliest=$(grep -v '^#' "$ROOT/bin/fm-lint-costs.tsv" | LC_ALL=C sort -t "$(printf '\t')" -k2,2nr | head -n 1 | cut -f1)
+  [ -n "$costliest" ] || fail "the committed cost table listed no measured root"
+  # A non-canonical root is unlisted by design and must never warn.
+  outside="$tmp/outside.sh"
+  printf '#!/usr/bin/env bash\n:\n' > "$outside"
+
+  out=$(PATH="$fakebin:$PATH" FM_LINT_JOBS=1 "$LINT" "$costliest" "$unlisted" "$outside" 2>&1) \
+    || fail "a run with an unmeasured canonical root must not fail"$'\n'"$out"
+  [ "$(head -n 1 "$log")" = "$unlisted" ] \
+    || fail "the unmeasured canonical root did not lead the queue"$'\n'"logged: $(cat "$log")"
+  [ "$(tail -n 1 "$log")" = "$costliest" ] \
+    || fail "the costliest measured root did not queue behind every unmeasured root"$'\n'"logged: $(cat "$log")"
+  [ "$(LC_ALL=C sort "$log")" = "$(printf '%s\n' "$costliest" "$outside" "$unlisted" | LC_ALL=C sort)" ] \
+    || fail "queueing the unmeasured root first changed which roots were linted"$'\n'"logged: $(cat "$log")"
+
+  warnings=$(printf '%s\n' "$out" | grep -c 'missing from bin/fm-lint-costs.tsv')
+  [ "$warnings" -eq 1 ] || fail "expected exactly one unmeasured-cost warning, got $warnings"$'\n'"$out"
+  assert_contains "$out" "$unlisted" "the unmeasured-cost warning did not name the unlisted canonical root"
+  printf '%s\n' "$out" | grep 'missing from bin/fm-lint-costs.tsv' | grep -q "$outside" \
+    && fail "the unmeasured-cost warning named a non-canonical root"$'\n'"$out"
+
+  out=$(PATH="$fakebin:$PATH" FM_LINT_JOBS=1 "$LINT" "$outside" 2>&1) \
+    || fail "non-canonical lint run failed"$'\n'"$out"
+  printf '%s\n' "$out" | grep -q 'missing from bin/fm-lint-costs.tsv' \
+    && fail "a non-canonical root warned about the cost table"$'\n'"$out"
+  pass "fm-lint.sh queues unmeasured canonical roots first and warns once without failing"
+}
+
 test_record_costs_orders_the_full_queue() {
   local tmp fakebin log costs out first_logged first_cost max_cost listed recorded
   tmp=$(fm_test_tmproot fm-lint-record-costs)
@@ -1440,6 +1477,7 @@ test_clean_fixture_passes
 test_jobs_are_deterministic_and_complete
 test_queue_starts_costly_roots_first_and_replays_in_root_order
 test_record_costs_orders_the_full_queue
+test_unmeasured_canonical_root_leads_the_queue_and_warns_once
 test_worker_trees_stop_on_signal
 test_seeded_module_boundary_parity
 test_changed_mode_lints_only_the_changed_file

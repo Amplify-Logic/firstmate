@@ -43,9 +43,11 @@
 #
 # Lint defaults to two bounded workers pulling roots from one shared queue, one
 # ShellCheck process per root, most expensive root first. Measured per-root CPU
-# cost in bin/fm-lint-costs.tsv orders the queue; an unlisted root is estimated
-# from its size. Because a free worker always takes the next root, adding or
-# resizing files cannot unbalance the workers the way a fixed split can. Each
+# cost in bin/fm-lint-costs.tsv orders the queue. A root the table does not list
+# has no trustworthy cost, so it is queued ahead of every measured root and only
+# size-estimated among its unlisted peers; an unlisted canonical root also warns
+# once on stderr without failing the run. Because a free worker always takes the
+# next root, adding or resizing files cannot unbalance the workers. Each
 # root writes separate diagnostics, and the parent replays them in root order
 # after every worker finishes, so FM_LINT_JOBS=1 gives byte-identical diagnostics
 # and exit selection. --record-costs rewrites the cost table from a full run.
@@ -650,27 +652,51 @@ for path in "${ROOTS[@]}"; do
     bytes=0
   fi
   case "$bytes" in ''|*[!0-9]*) bytes=0 ;; esac
-  printf '%s\t%s\t%s\n' "$index" "$bytes" "$path" >> "$WEIGHTS"
+  canonical=0
+  ! fm_lint_is_canonical_root "$path" || canonical=1
+  printf '%s\t%s\t%s\t%s\n' "$index" "$bytes" "$path" "$canonical" >> "$WEIGHTS"
   index=$((index + 1))
 done
 
 # Queue roots most expensive first so no costly root starts late and leaves one
 # worker running alone. Measured cost comes from COST_TABLE; a root it does not
-# list (new, renamed, or outside the canonical set) is estimated from its bytes.
-# The order only affects wall time: every root is linted exactly once and
-# diagnostics replay in root order, so results never depend on the table.
-awk -F "$TAB" -v OFS="$TAB" -v table="$COST_TABLE" -v per_cs="$COST_ESTIMATE_BYTES_PER_CS" '
+# list (new, renamed, or outside the canonical set) has an unknown cost that
+# bytes model poorly, so it leads the queue ahead of every measured root and its
+# byte estimate only orders it against the other unlisted roots. That way the
+# worst case for a stale table is starting an expensive root too early, never
+# too late. The order only affects wall time: every root is linted exactly once
+# and diagnostics replay in root order, so results never depend on the table.
+UNMEASURED="$TMP_ROOT/unmeasured"
+: > "$UNMEASURED"
+awk -F "$TAB" -v OFS="$TAB" -v table="$COST_TABLE" -v per_cs="$COST_ESTIMATE_BYTES_PER_CS" \
+  -v unmeasured="$UNMEASURED" '
   BEGIN {
     while ((getline line < table) > 0) {
       if (line ~ /^#/ || split(line, field, "\t") < 2 || field[2] !~ /^[0-9]+$/) continue
       measured[field[1]] = field[2]
     }
+    close(table)
   }
   {
-    cost = ($3 in measured) ? measured[$3] : int($2 / per_cs) + 1
-    print cost, $1, $3
+    if ($3 in measured) {
+      print 0, measured[$3], $1, $3
+    } else {
+      print 1, int($2 / per_cs) + 1, $1, $3
+      if ($4 == 1) print $3 >> unmeasured
+    }
   }
-' "$WEIGHTS" | LC_ALL=C sort -t "$TAB" -k1,1nr -k2,2n | cut -f2- > "$QUEUE"
+  END { close(unmeasured) }
+' "$WEIGHTS" | LC_ALL=C sort -t "$TAB" -k1,1nr -k2,2nr -k3,3n | cut -f3- > "$QUEUE"
+
+# One stderr line, never a failure: an unmeasured canonical root still lints, it
+# just schedules on a guess, so the run reports the stale table and continues.
+if [ -s "$UNMEASURED" ]; then
+  printf 'fm-lint.sh: %s canonical root(s) missing from %s, queued first on a size estimate: %s; regenerate with: CI=true bin/fm-lint.sh --record-costs %s\n' \
+    "$(wc -l < "$UNMEASURED" | tr -d '[:space:]')" \
+    "${COST_TABLE#"$ROOT"/}" \
+    "$(tr '\n' ' ' < "$UNMEASURED" | sed 's/ $//')" \
+    "${COST_TABLE#"$ROOT"/}" >&2
+fi
 
 fm_lint_shellcheck_count() {
   if command -v pgrep >/dev/null 2>&1; then
