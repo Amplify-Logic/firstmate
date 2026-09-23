@@ -62,9 +62,11 @@
 #     transport, and refuse a home that never opted in.
 #   - A timeline flags a partner-facing ask awaiting the captain - an
 #     unanswered partner message, an open promise naming him or tech, or a
-#     colleague note naming him - while only a reply discharges one, an
-#     auto-acknowledgement is not a reply, and a malformed or address-less
-#     timeline is refused rather than assessed.
+#     colleague note naming him - recognising him by the sentinel or by his own
+#     address, while only a reply discharges one, an auto-acknowledgement is
+#     not a reply, and a malformed or address-less timeline is refused.
+#   - A later read that carries new content keeps an awaiting partner owed,
+#     and the re-scan cadence defaults around a long poll interval.
 #   - Awaiting partners lead the to-do, brief and alert order, and every
 #     rewrite of a record keeps the facts the timeline recorded.
 #   - A HubSpot claim names "Waiting on contact" and hands out a bounded
@@ -1470,6 +1472,28 @@ EOF
   {"type":"email","at":$((at_out + 3600)),"direction":"outbound","from":"support@team.example","body":"The SIMs were suspended; they are active again as of this morning."}]}
 EOF
       ;;
+    # One of the captain's own tickets, its owner written as the address
+    # HubSpot actually stores, with a partner message nobody answered.
+    owner-address)
+      cat >"$h/$name.json" <<EOF
+{"kind":"hubspot-ticket","owner":"lars@team.example","stage":"Waiting for Tech",
+ "contacts":["frederick@partner.example"],
+ "events":[
+  {"type":"email","at":$at_inbound,"direction":"inbound","from":"frederick@partner.example",
+   "body":"The dispenser is still down after the swap. Can someone look at it?"}]}
+EOF
+      ;;
+    # A colleague's note asking the captain, answered by his own note, which he
+    # signs with his address rather than the sentinel.
+    note-answered)
+      cat >"$h/$name.json" <<EOF
+{"kind":"hubspot-ticket","owner":"luc@team.example","stage":"Waiting for Tech",
+ "contacts":["chloe@kiosk.example"],
+ "events":[
+  {"type":"note","at":$at_inbound,"author":"luc@team.example","body":"@Lars can you check the serial?"},
+  {"type":"note","at":$at_out,"author":"lars@team.example","body":"Checked, it is a 2023 build."}]}
+EOF
+      ;;
     # A colleague's own ticket that never involves the captain.
     uninvolved)
       cat >"$h/$name.json" <<EOF
@@ -1502,7 +1526,7 @@ test_partner_facing_asks_awaiting_the_captain_are_flagged() {
   h="$TMP_ROOT/partner-flags"
   partner_home "$h"
 
-  for name in promise autoack contact-note contact-chase thanks-and-ask; do
+  for name in promise autoack contact-note contact-chase thanks-and-ask owner-address; do
     key=$(key_of "$(observe_ticket "$h" "$name" "$T_0900")")
     [ "$(item_field "$h" "$key" partner)" = 1 ] || fail "$name: a ticket with an external contact is not partner-facing"
     [ "$(item_field "$h" "$key" awaiting)" = 1 ] || fail "$name: a partner waiting on the captain was not flagged"
@@ -1526,8 +1550,12 @@ test_partner_facing_asks_awaiting_the_captain_are_flagged() {
   assert_contains "$(item_field "$h" "$key" awaiting_why)" 'message has no reply' \
     'a thank-you that still asks for the invoice was read as closure'
 
+  key=$(key_of "$(observe_ticket "$h" owner-address "$T_0900")")
+  assert_contains "$(item_field "$h" "$key" awaiting_why)" 'message has no reply' \
+    'a ticket owned by the captain under his own address was read as somebody else'
+
   # Only a reply discharges an ask, and only a note naming him is one.
-  for name in customer-owes answered uninvolved internal unnamed-note; do
+  for name in customer-owes answered uninvolved internal unnamed-note note-answered; do
     key=$(key_of "$(observe_ticket "$h" "$name" "$T_0900")")
     [ "$(item_field "$h" "$key" awaiting)" = 0 ] || fail "$name: flagged as awaiting the captain"
     [ "$(item_field "$h" "$key" class)" = routine ] || fail "$name: a ticket not awaiting the captain was promoted"
@@ -1582,6 +1610,44 @@ test_awaiting_partners_lead_every_summary_and_survive_rewrites() {
   at "$h" "$T_0915" observe --source H_TICKETS --ref ticket-promise --digest 'promise v1' >/dev/null
   [ "$(item_field "$h" "$key" read_at)" = "$T_0900" ] || fail 'a plain re-read claimed a timeline read'
   pass 'awaiting partners lead the to-do, brief and alert order, and every rewrite keeps the facts'
+}
+
+test_a_changed_re_read_keeps_an_awaiting_partner_owed() {
+  local h key out
+  h="$TMP_ROOT/partner-rewrite"
+  partner_home "$h"
+  key=$(key_of "$(observe_ticket "$h" promise "$T_0900")")
+  [ "$(item_field "$h" "$key" class)" = obligation ] || fail 'a timeline observe did not record the ask as owed'
+  # The partner chases again, so the ordinary checkpoint read returns new
+  # content and hands in `routine` with no timeline. The ask is more urgent
+  # than before, not less, and the facts on the record already say so.
+  at "$h" "$T_0915" observe --source H_TICKETS --ref ticket-promise --digest 'promise v2' \
+    --class routine --title 'ticket promise' >/dev/null
+  [ "$(item_field "$h" "$key" awaiting)" = 1 ] || fail 'a changed re-read dropped the awaiting facts'
+  [ "$(item_field "$h" "$key" class)" = obligation ] \
+    || fail 'a changed re-read demoted an awaiting partner back to routine'
+  out=$(at "$h" "$T_0915" todo)
+  assert_contains "$out" 'ticket promise' 'a changed re-read dropped the awaiting partner from the to-do'
+  pass 'a changed re-read with no timeline keeps an awaiting partner owed and on the to-do'
+}
+
+test_a_long_poll_interval_keeps_the_rescan_default_valid() {
+  local h out code
+  h="$TMP_ROOT/rescan-default"
+  partner_home "$h"
+  # A home that polls twice a day never set rescan_interval_seconds, so the
+  # default must follow its interval rather than refuse every command.
+  sed -i.bak '/^rescan_interval_seconds/d; s/^interval_seconds = .*/interval_seconds = 43200/' \
+    "$h/config/channel-intake"
+  at "$h" "$T_0900" status >/dev/null || fail 'a long poll interval made the intake refuse status'
+  out=$(at "$h" "$T_0900" claim --source H_TICKETS)
+  assert_contains "$out" 'rescan: H_TICKETS' 'a never-rescanned source was not handed a re-scan'
+  # An explicitly configured value below the interval is still refused.
+  printf 'rescan_interval_seconds = 3600\n' >>"$h/config/channel-intake"
+  out=$(at "$h" "$T_0900" status 2>&1) && code=0 || code=$?
+  expect_code 2 "$code" 'a re-scan cadence faster than the poll interval was accepted'
+  assert_contains "$out" 'must not be below interval_seconds' 'the refusal did not name the conflict'
+  pass 'the re-scan cadence defaults around a long poll interval and refuses a configured value below it'
 }
 
 test_hubspot_rescan_covers_colleague_and_waiting_on_contact_tickets() {
@@ -1654,4 +1720,6 @@ test_install_and_uninstall_on_a_temp_home
 test_bootstrap_surfaces_the_intake
 test_partner_facing_asks_awaiting_the_captain_are_flagged
 test_awaiting_partners_lead_every_summary_and_survive_rewrites
+test_a_changed_re_read_keeps_an_awaiting_partner_owed
+test_a_long_poll_interval_keeps_the_rescan_default_valid
 test_hubspot_rescan_covers_colleague_and_waiting_on_contact_tickets

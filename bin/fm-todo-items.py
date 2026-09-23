@@ -183,6 +183,12 @@ def morning_observations(doc, day, now):
         kind = raw.get('kind', 'decision')
         if kind not in KINDS:
             raise Refusal(f'morning action kind must be one of {", ".join(KINDS)}: {kind}')
+        awaiting = raw.get('partner_awaiting', False)
+        since = raw.get('awaiting_since')
+        if not isinstance(awaiting, bool) or (since is not None and (
+                not isinstance(since, int) or isinstance(since, bool) or since <= 0)):
+            raise Refusal('morning action partner_awaiting must be a JSON boolean '
+                          'and awaiting_since an epoch second')
         ident = f'{raw["source"]}:{raw["ref"]}'
         aliases = [ident, f'ledger:{key}'] + [a for a in raw.get('aliases', []) if isinstance(a, str) and ':' in a]
         obs.append({
@@ -192,8 +198,8 @@ def morning_observations(doc, day, now):
             'rev': str(raw.get('digest', '')),
             'title': raw.get('title', ''), 'link': raw.get('link', ''), 'class': raw['class'], 'kind': kind,
             'ask': raw.get('ask', ''), 'why': raw.get('why', ''), 'label': raw['source'], 'state': 'open',
-            'partner_first': raw.get('partner_awaiting') is True,
-            'awaiting_since': number(raw.get('awaiting_since')),
+            'partner_first': awaiting,
+            'awaiting_since': number(since),
             # The sidecar is the morning sweep's own verification record.
             'verified': {'at': read, 'how': raw.get('verified_how') or 'morning verification sweep'},
         })

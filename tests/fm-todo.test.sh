@@ -533,6 +533,14 @@ EOF
   out=$(page "$h" 2026-09-10)
   first=$(sed -n '/<div class="strip now">/,/<\/div>/p' <<<"$out" | grep '<li>' | sed -n 1p)
   assert_contains "$first" 'Syrup availability' 'an undated partner ask jumped ahead of an older dated one'
+  # A sidecar that spells the flag as a string would silently rank the ask like
+  # any other item, so it is refused the way a bad class already is.
+  cp -R "$h/data/todo" "$h/todo.before"
+  sidecar "$h" 2026-09-10 '{"key":"k-p","source":"hubspot","ref":"48622709535","class":"obligation","kind":"reply","title":"Morning partner ask","partner_awaiting":"true","awaiting_since":'"$T_0900"',"updated":'"$T_1030"'}'
+  if render_at "$h" "$T_1100" 2>/dev/null; then fail 'a sidecar whose partner_awaiting is a string was accepted'; fi
+  sidecar "$h" 2026-09-10 '{"key":"k-p","source":"hubspot","ref":"48622709535","class":"obligation","kind":"reply","title":"Morning partner ask","partner_awaiting":true,"awaiting_since":"2026-09-10","updated":'"$T_1030"'}'
+  if render_at "$h" "$T_1100" 2>/dev/null; then fail 'a sidecar whose awaiting_since is a date was accepted'; fi
+  diff -r "$h/data/todo/items" "$h/todo.before/items" >/dev/null || fail 'a refused sidecar changed the store'
   pass 'a partner-facing ask awaiting the captain ranks above every class in Now and in its section, oldest first and undated last'
 }
 

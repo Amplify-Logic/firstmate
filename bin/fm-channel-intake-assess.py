@@ -121,8 +121,13 @@ def assess(doc, names, captain_addresses, team_addresses):
     def names_captain(text):
         return bool(name_re and name_re.search(text))
 
+    def is_captain(who):
+        """One spelling of the captain everywhere: the sentinel or his address."""
+        who = who.strip().lower()
+        return who == 'captain' or who in captain_addresses
+
     def by_captain(e):
-        return e['author'] == 'captain' or e['from'].lower() in captain_addresses
+        return is_captain(e['author']) or is_captain(e['from'])
 
     def is_answer(e):
         """A real reply: an EMAIL engagement sent from the team mailbox or by the captain."""
@@ -143,7 +148,7 @@ def assess(doc, names, captain_addresses, team_addresses):
                     external.add(domain(address))
     partner = bool(external)
 
-    captain_owned = doc['owner'] == 'captain'
+    captain_owned = is_captain(doc['owner'])
     named = any(names_captain(fresh_text(e['body'])) for e in events)
     pending = []
 
