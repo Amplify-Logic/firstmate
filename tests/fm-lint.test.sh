@@ -278,6 +278,9 @@ if [ -n "\${FM_TEST_FLAG_LOG:-}" ]; then
 fi
 [ "\$#" -eq 0 ] || shift
 printf '%s\n' "\$@" >> "$log"
+if [ -n "\${FM_TEST_ECHO_ROOTS:-}" ]; then
+  printf 'checked %s\n' "\$@"
+fi
 exit 0
 SH
   chmod +x "$fakebin/shellcheck"
@@ -1362,6 +1365,58 @@ SH
   pass "seeded dispatcher, adapter, production-owner, and test-local diagnostics preserve parity"
 }
 
+test_queue_starts_costly_roots_first_and_replays_in_root_order() {
+  local tmp fakebin log small large out
+  tmp=$(fm_test_tmproot fm-lint-queue-order)
+  fakebin=$(fm_fakebin "$tmp")
+  log="$tmp/shellcheck.log"
+  small="$tmp/small.sh"
+  large="$tmp/large.sh"
+  fm_lint_stub_shellcheck "$fakebin" "$log"
+  printf '#!/usr/bin/env bash\n:\n' > "$small"
+  {
+    printf '#!/usr/bin/env bash\n'
+    awk 'BEGIN { for (i = 0; i < 200; i++) print "# padding that makes this root the larger one" }'
+    printf ':\n'
+  } > "$large"
+
+  out=$(PATH="$fakebin:$PATH" FM_LINT_JOBS=1 FM_TEST_ECHO_ROOTS=1 "$LINT" "$small" "$large" 2>&1) \
+    || fail "queue-order lint failed"$'\n'"$out"
+  [ "$(cat "$log")" = "$large"$'\n'"$small" ] \
+    || fail "an unlisted root was not queued by size, largest first"$'\n'"logged: $(cat "$log")"
+  [ "$(printf '%s\n' "$out" | grep '^checked ')" = "checked $small"$'\n'"checked $large" ] \
+    || fail "diagnostics did not replay in root order"$'\n'"$out"
+  pass "fm-lint.sh starts the costliest root first and replays diagnostics in root order"
+}
+
+test_record_costs_orders_the_full_queue() {
+  local tmp fakebin log costs out first_logged first_cost max_cost listed recorded
+  tmp=$(fm_test_tmproot fm-lint-record-costs)
+  fakebin=$(fm_fakebin "$tmp")
+  log="$tmp/shellcheck.log"
+  costs="$tmp/costs.tsv"
+  fm_lint_stub_shellcheck "$fakebin" "$log"
+
+  out=$(PATH="$fakebin:$PATH" CI=true FM_LINT_JOBS=1 "$LINT" --record-costs "$costs" 2>&1) || true
+  [ -f "$costs" ] || fail "--record-costs wrote no cost table"$'\n'"$out"
+  listed=$(CI=true "$LINT" --list-files | LC_ALL=C sort)
+  recorded=$(grep -v '^#' "$costs" | cut -f1)
+  [ "$recorded" = "$listed" ] || fail "--record-costs did not record exactly the canonical roots"
+  if grep -v '^#' "$costs" | cut -f2 | grep -qv '^[0-9][0-9]*$'; then
+    fail "--record-costs wrote a non-integer cost"
+  fi
+
+  first_logged=$(head -n 1 "$log")
+  max_cost=$(grep -v '^#' "$ROOT/bin/fm-lint-costs.tsv" | cut -f2 | LC_ALL=C sort -nr | head -n 1)
+  first_cost=$(awk -F '\t' -v root="$first_logged" '$1 == root { print $2 }' "$ROOT/bin/fm-lint-costs.tsv")
+  [ -n "$max_cost" ] && [ "$first_cost" = "$max_cost" ] \
+    || fail "the full lint started with $first_logged (cost ${first_cost:-unlisted}), not a costliest measured root ($max_cost)"
+
+  out=$("$LINT" --record-costs "$costs" "$ROOT/bin/fm-lint.sh" 2>&1) && fail "--record-costs accepted explicit paths"
+  assert_contains "$out" "full canonical lint" "--record-costs explicit-path refusal was unclear"
+  pass "fm-lint.sh --record-costs records every canonical root and the committed table orders the queue"
+}
+
 test_help_reports_the_complete_interface
 test_list_files_reports_the_shell_inventory
 test_fast_mode_disables_extended_analysis
@@ -1383,6 +1438,8 @@ test_rejects_direct_beads_cli_in_explicit_core_path
 test_ignores_ambient_shellcheck_opts
 test_clean_fixture_passes
 test_jobs_are_deterministic_and_complete
+test_queue_starts_costly_roots_first_and_replays_in_root_order
+test_record_costs_orders_the_full_queue
 test_worker_trees_stop_on_signal
 test_seeded_module_boundary_parity
 test_changed_mode_lints_only_the_changed_file
