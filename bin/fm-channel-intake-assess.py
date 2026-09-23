@@ -10,6 +10,12 @@ import re
 import sys
 import time
 
+# The customer as the subject or partner of a verb makes it a request or a
+# chase, not the team's own promise: a following or checking "with" names a
+# third party, and no "you" stands between an actor and its verb.
+YOU = r"\b(?:you|je|u|jullie)\b"
+NOT_YOU = r"(?:(?!" + YOU + r")[^.?!\n])"
+WITH_OTHERS = r"\bwith\b(?!\s+" + YOU + ")"
 # A promise to act, in the languages the support timelines use. An outbound
 # carrying one of these is an open commitment until a later reply follows.
 PROMISE = (
@@ -17,14 +23,15 @@ PROMISE = (
     r"|let you know|keep you (?:updated|posted|informed)|update you|once (?:i|we) hear"
     r"|(?:will|i'll|we'll)\s+(?:confirm|update|follow up|revert|share|send)"
     r"|\bkom\b.{0,60}\bterug\b|stuur je een update|\bhou(?:d|den)?\s+(?:je|u|jullie)\s+op de hoogte"
-    r"|(?:^|[.?!]\s+)(?:looking into|checking\b[^.?!\n]{0,40}\bwith\b|following up)")
+    r"|(?:^|[.?!]\s+)(?:looking into|checking\b" + NOT_YOU + "{0,40}" + WITH_OTHERS
+    + r"|following up\s+" + WITH_OTHERS + ")")
 # Verbs that also read as a request to the customer ("kun je de filter
 # nakijken?", "please check with your installer") are a promise only when the
-# team, tech or the captain acts on them in the same sentence, with no "you"
-# between the actor and the verb.
+# team, tech or the captain acts on them in the same sentence.
 ACTING = (
-    r"look(?:ing)? into|check(?:ing)?\b[^.?!\n]{0,40}\bwith\b|follow(?:ing)? up"
-    r"|induiken|achteraan|uitzoeken|nakijken|navragen|terugkoppel|\blaat\b[^.?!\n]{0,40}\bweten\b")
+    r"look(?:ing)? into|check(?:ing)?\b" + NOT_YOU + "{0,40}" + WITH_OTHERS
+    + r"|follow(?:ing)? up\s+" + WITH_OTHERS
+    + r"|induiken|achteraan|uitzoeken|nakijken|navragen|terugkoppel|\blaat\b[^.?!\n]{0,40}\bweten\b")
 ACTORS = [r"i", r"we", r"our", r"team", r"tech\w*", r"ik", r"wij"]
 TECH = re.compile(r"\btech\b|\btechteam\b|\btechnical (?:team|support|department)\b", re.I)
 QUOTE_START = re.compile(
@@ -151,7 +158,7 @@ def assess(doc, names, captain_addresses, team_addresses):
     internal = {domain(a) for a in answer_addresses if domain(a)}
     name_re = re.compile(r'(?<![\w.@-])@?(?:' + '|'.join(re.escape(n) for n in names) + r')\b', re.I) if names else None
     actors = '|'.join(ACTORS + [re.escape(n) for n in names])
-    promise_re = re.compile(PROMISE + r'|\b(?:' + actors + r')\b(?:(?!\b(?:you|je|u|jullie)\b)[^.?!\n]){0,20}?(?:'
+    promise_re = re.compile(PROMISE + r'|\b(?:' + actors + r')\b' + NOT_YOU + '{0,20}?(?:'
                             + ACTING + ')', re.I | re.S | re.M)
 
     def names_captain(text):

@@ -1545,7 +1545,7 @@ EOF
   {"type":"email","at":$at_inbound,"direction":"inbound","from":"ruud@kantoor.example",
    "body":"De tap geeft geen water."},
   {"type":"email","at":$at_out,"direction":"outbound","from":"support@team.example","author":"captain",
-   "body":"Kun je de filter nakijken? Laat het me weten of het werkt. Houd me op de hoogte.\nCould you also look into the valve and check with your installer? We'd like you to check with your installer first.\nLars"}]}
+   "body":"Kun je de filter nakijken? Laat het me weten of het werkt. Houd me op de hoogte.\nCould you also look into the valve and check with your installer? We'd like you to check with your installer first.\nFollowing up on my previous email: could you send the serial number?\nLars"}]}
 EOF
       ;;
     # The captain's own reply is a subjectless promise: he is still on it.
