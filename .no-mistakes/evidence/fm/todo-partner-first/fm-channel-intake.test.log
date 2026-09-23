@@ -1,0 +1,40 @@
+ok - a home without an explicit opt-in is completely inert, so no clone or device self-enrolls
+ok - a new ask appears once and an unchanged poll produces neither a second item nor a repeat ping
+ok - an edit updates the same item, re-notifies once, and is reported as a correction
+ok - a captain response clears the item with its evidence preserved, and no re-read reopens it
+ok - an interrupted read retries from its own checkpoint, and an unavailable source stays unknown
+ok - a gap while the laptop slept is caught up from each checkpoint, and freshness is exposed
+ok - the interval has a floor, one armed cycle wakes once, a failing source backs off to a ceiling, and a quiet cycle succeeds
+ok - a cross-source duplicate retains every provenance and stays one item
+ok - notifications are refused until the recipient is verified, then grouped, rate-limited and severity-scoped
+ok - quiet hours defer ordinary alerts without dropping them, and a service outage still gets through
+ok - an automation candidate is a proposal only: nothing reaches the Action Deck and nothing becomes executable
+ok - the brief and to-do list render from one ledger, so corrections and completions reconcile across both
+ok - thread parents are tracked for re-read inside a bounded set, and both detection limits are disclosed on the brief
+ok - the polled set stays bounded by moving aged routine traffic aside, without deleting evidence or forgetting an obligation
+ok - ledger writes are serialized on a private mutex, so a sweep never clobbers an observation
+ok - the intake never takes a fleet lock, starts a watcher, or touches another home records
+ok - source identities and message content stay out of the tracked repository and out of config
+registered: state/channel-intake.check.sh
+registered: state/channel-intake.check.sh
+registered: state/channel-intake.check.sh
+registered: state/channel-intake.check.sh
+registered: state/channel-intake.check.sh
+ok - arming the live check is all-or-nothing and idempotent, and losing it is reported with its repair
+ok - the watcher check wakes the primary once per state and re-arms when the state recurs
+ok - a blocked or held alert is reported once rather than re-waking the primary every poll
+ok - a cleared alert replaced by a different one still wakes the primary, and an unchanged one still does not
+ok - a refused or capped notification is reported as itself instead of looking like a quiet home
+ok - a requested render opens its page once, a background render never does, and a bad opener never fails the render
+ok - a timezone that does not resolve is refused instead of silently becoming UTC
+ok - quiet hours with equal bounds are refused instead of silencing every alert forever
+ok - the scanning window bounds the reads themselves and opens with an immediate first read
+ok - the schedule reuses the one launchd writer under its own agent label
+ok - install and uninstall work against a temporary home and refuse a home that never opted in
+ok - the session-start bootstrap section surfaces due sources, ready alerts and a lost live check
+ok - a partner-facing ticket awaiting the captain is flagged by promise, note or unanswered message, only a reply discharges one, and a malformed or address-less timeline is refused
+ok - awaiting partners lead the to-do, brief and alert order, and every rewrite keeps the facts
+ok - a changed re-read with no timeline keeps an awaiting partner owed and on the to-do
+ok - a timeline re-read of a resolved ticket records its current facts and leaves it resolved
+ok - the re-scan cadence defaults around a long poll interval and refuses a configured value below it
+ok - HubSpot claims cover Waiting on contact and a bounded periodic re-scan of every owner's tickets

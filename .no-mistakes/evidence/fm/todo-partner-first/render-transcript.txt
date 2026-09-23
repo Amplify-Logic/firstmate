@@ -1,0 +1,3 @@
+$ fm-todo-render.sh render
+TODO_RENDER: $HOME_UNDER_TEST/.lavish/today-2026-09-23.html rendered at 18:53 CEST
+[exit 0]

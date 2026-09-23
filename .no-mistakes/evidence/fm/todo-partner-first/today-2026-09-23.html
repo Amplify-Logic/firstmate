@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Today - Wednesday 23 September 2026</title>
+<style>
+:root{
+  --bg:#f4f7fb; --panel:#ffffff; --ink:#132033; --ink-2:#3e4f66; --ink-3:#6b7a90;
+  --line:#d7e0ec; --line-2:#e8eef6; --accent:#0b4f8a; --accent-ink:#ffffff; --accent-soft:#e3eef9;
+  --ok:#1d7a4f; --ok-soft:#e2f3ea; --warn:#9a6300; --warn-soft:#fdf1d8; --bad:#a8322b; --bad-soft:#fbe5e3; --info:#2f5f9e; --info-soft:#e6eef9;
+  --obs:#0b4f8a; --inf:#7a5a00; --unv:#7a2e80;
+  --serif:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,"Times New Roman",serif;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Helvetica,Arial,sans-serif;
+  --mono:"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#0e1622; --panel:#141f2e; --ink:#e6edf6; --ink-2:#b7c4d6; --ink-3:#8593a8;
+    --line:#26354a; --line-2:#1d2a3c; --accent:#6fb1ea; --accent-ink:#0b1a2b; --accent-soft:#15304a;
+    --ok:#5fcf92; --ok-soft:#123324; --warn:#f0c264; --warn-soft:#3a2d0c; --bad:#f08a82; --bad-soft:#3d1a18; --info:#8fb6ec; --info-soft:#17304d;
+    --obs:#6fb1ea; --inf:#e0b95a; --unv:#cf8fd6;
+  }
+}
+*{box-sizing:border-box;min-width:0}
+html,body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.45}
+a{color:var(--accent);text-decoration:none;border-bottom:1px solid transparent}
+a:hover{border-bottom-color:var(--accent)}
+.wrap{max-width:1180px;margin:0 auto;padding:28px 22px 60px}
+header{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px 24px;margin-bottom:18px}
+h1{font-family:var(--serif);font-weight:600;font-size:34px;line-height:1.1;margin:0;letter-spacing:-.01em}
+h2{font-family:var(--serif);font-weight:600;font-size:22px;margin:34px 0 10px;letter-spacing:-.005em}
+h2 small{font-family:var(--sans);font-weight:500;font-size:13px;color:var(--ink-3);margin-left:10px}
+h3.sub{font-family:var(--sans);font-size:13px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);margin:22px 0 8px}
+.kicker{font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3);margin-bottom:6px}
+.meta{font-size:13px;color:var(--ink-2);text-align:right;max-width:540px}
+.meta .mono{font-family:var(--mono);font-variant-numeric:tabular-nums;color:var(--ink-2)}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin:18px 0 6px}
+.tile{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 16px}
+.tile .n{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:30px;font-weight:600;line-height:1;color:var(--accent)}
+.tile .l{font-size:13px;color:var(--ink-2);margin-top:6px}
+.tile .s{font-size:12px;color:var(--ink-3);margin-top:2px}
+.note{background:var(--panel);border:1px solid var(--line);border-left:4px solid var(--accent);border-radius:8px;padding:12px 16px;font-size:14px;color:var(--ink-2);margin:14px 0}
+.note b{color:var(--ink)}
+.note.warnline{border-left-color:var(--warn)}
+table{width:100%;border-collapse:collapse;background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden;font-size:14px}
+.tablewrap{overflow-x:auto;border-radius:10px}
+thead th{text-align:left;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);font-weight:600;padding:10px 12px;border-bottom:1px solid var(--line);background:var(--panel)}
+tbody td{padding:12px 12px;border-bottom:1px solid var(--line-2);vertical-align:top}
+tbody tr:last-child td{border-bottom:none}
+tbody tr:hover td{background:var(--accent-soft)}
+tr.closed td{color:var(--ink-3)}
+tr.replyrow{display:none}
+tr.replyrow.open{display:table-row}
+tr.replyrow td{padding:0 12px 12px;border-bottom:1px solid var(--line-2);background:var(--panel)}
+tbody tr.replyrow:hover td{background:var(--panel)}
+button.notetoggle{font-family:var(--mono);font-size:11px;letter-spacing:.04em;padding:3px 8px;margin-left:6px;border:1px dashed var(--line);border-radius:6px;background:transparent;color:var(--ink-3);cursor:pointer;vertical-align:top}
+button.notetoggle:hover{color:var(--ink-2);border-color:var(--accent)}
+button.notetoggle[aria-expanded=true]{border-style:solid;color:var(--ink-2)}
+form.reply{display:flex;gap:8px;align-items:center}
+form.reply input[type=text]{flex:1;min-width:0;font:inherit;font-size:13px;padding:6px 10px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink)}
+form.reply input[type=text]::placeholder{color:var(--ink-3)}
+form.reply button{font:inherit;font-size:12.5px;padding:6px 14px;border:1px solid var(--line);border-radius:6px;background:var(--panel);color:var(--ink-2);cursor:pointer;white-space:nowrap}
+form.reply button:hover{border-color:var(--accent);color:var(--ink)}
+form.reply .ack{font-size:12px;color:var(--ok);white-space:nowrap}
+tr.closed td.who{color:var(--ink-2)}
+td.who{font-weight:600;white-space:nowrap}
+td.who .org{display:block;font-weight:400;font-size:12.5px;color:var(--ink-3)}
+td.what{min-width:320px;color:var(--ink)}
+td.what .ctx{display:block;color:var(--ink-2);font-size:13px;margin-top:3px}
+td.what .next{display:block;color:var(--ink);font-size:13px;margin-top:6px}
+td.what .next b{color:var(--accent)}
+td.since{white-space:nowrap;font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:13px;color:var(--ink-2)}
+td.links{white-space:nowrap}
+td.links a{display:inline-block;font-size:12.5px;padding:3px 8px;border:1px solid var(--line);border-radius:6px;margin:0 4px 4px 0;background:var(--bg)}
+td.links a:hover{border-color:var(--accent)}
+td.links .nolink{display:inline-block;font-size:12px;color:var(--ink-3);font-style:italic}
+.pill{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;padding:2px 8px;border-radius:999px;white-space:nowrap}
+.pill.bad{background:var(--bad-soft);color:var(--bad)}
+.pill.warn{background:var(--warn-soft);color:var(--warn)}
+.pill.ok{background:var(--ok-soft);color:var(--ok)}
+.pill.info{background:var(--info-soft);color:var(--info)}
+.prov{display:inline-block;font-family:var(--mono);font-size:11px;letter-spacing:.04em;padding:1px 6px;border-radius:4px;border:1px solid currentColor;margin:6px 0 0 8px}
+.prov.obs{color:var(--obs)} .prov.inf{color:var(--inf)} .prov.unv{color:var(--unv)}
+.id{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:12.5px;color:var(--ink-3)}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:14px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 16px}
+.card h3{font-family:var(--serif);font-size:17px;margin:0 0 8px;font-weight:600}
+.card ol,.card ul{margin:0;padding-left:20px;color:var(--ink-2);font-size:14px}
+.card li{margin:5px 0}
+.card li b{color:var(--ink)}
+.rec{margin-top:8px;font-size:13px;color:var(--ink-2)}
+.rec b{color:var(--ok)}
+.legend{display:flex;flex-wrap:wrap;gap:14px;font-size:12.5px;color:var(--ink-3);margin-top:28px;padding-top:14px;border-top:1px solid var(--line)}
+.done{color:var(--ink-2);font-size:14px}
+.done li{margin:3px 0}
+@media print{ body{background:#fff} .tile,.card,table{break-inside:avoid} }
+
+/* --- private improved variant: presentation only --- */
+td.since .lab{display:block;font-family:var(--sans);font-size:10.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--ink-3);font-weight:600}
+td.since .age{display:block;font-family:var(--sans);font-size:12px;color:var(--ink-3);margin-top:2px;white-space:normal}
+.strips{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr);gap:14px;margin:16px 0 6px}
+@media (max-width:760px){.strips{grid-template-columns:minmax(0,1fr)}}
+.strip{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 16px}
+.strip.now{border-left:4px solid var(--accent)}
+.strip.unv{border-left:4px solid var(--unv)}
+.strip h3{font-family:var(--serif);font-size:17px;font-weight:600;margin:0 0 2px}
+.strip .sub{font-size:12.5px;color:var(--ink-3);margin:0 0 10px}
+.strip .grp{font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:var(--ink-3);font-weight:600;margin:12px 0 6px}
+.strip .grp:first-of-type{margin-top:0}
+.strip ol{margin:0;padding-left:20px;font-size:14px;color:var(--ink-2)}
+.strip ol li{margin:7px 0}
+.strip ul{margin:0;padding-left:18px;font-size:13.5px;color:var(--ink-2)}
+.strip ul li{margin:7px 0}
+.strip a.jump{font-weight:600;border-bottom:1px solid transparent}
+.strip a.jump:hover{border-bottom-color:var(--accent)}
+.strip .why{display:block;font-size:12.5px;color:var(--ink-3);margin-top:2px}
+tr:target td{background:var(--accent-soft)}
+details{margin:20px 0;border-top:1px solid var(--line);padding-top:12px}
+summary{cursor:pointer;font-weight:600;color:var(--ink-2)}
+.watch-line{padding:12px 16px;margin:8px 0;background:var(--panel);border:1px solid var(--line);border-radius:8px}
+.done .why{display:block;font-size:12.5px;color:var(--ink-3);margin-top:2px}
+td.what .ctx.how{font-size:12px;color:var(--ink-3)}
+.strip.now{margin:16px 0 6px}
+@media (max-width:600px){
+  .wrap{padding:18px 16px 48px}
+  td.what{min-width:0}
+  .meta{text-align:left}
+  tr.item{display:grid;grid-template-columns:minmax(0,1fr)}
+  tr.item td{border-bottom:none;padding:8px 12px}
+  tr.item td:last-child{border-bottom:1px solid var(--line-2)}
+  tr.item td.who,tr.item td.links{white-space:normal}
+}
+.watch-line .why{display:block;color:var(--ink-3);font-size:13px;margin-top:5px;overflow-wrap:anywhere}
+</style>
+</head><body><div class="wrap">
+<header><div><div class="kicker">Aquablu Starship</div><h1>Today</h1></div>
+<div class="meta">Wednesday 23 September 2026<br>Page rebuilt from the to-do records at <span class="mono">18:53 CEST</span>.<br>Each line carries its own last check.</div></header>
+<p class="sub">No verification sweep recorded today; only reads recorded today count as current. A line not re-read since then says so on the line.</p>
+<div class="tiles">
+<div class="tile"><div class="n">0</div><div class="l">Decisions awaiting you</div><div class="s">0 open in all</div></div>
+<div class="tile"><div class="n">8</div><div class="l">Replies you owe</div><div class="s">8 open in all</div></div>
+<div class="tile"><div class="n">0</div><div class="l">Waiting on others</div><div class="s">nothing needed from you</div></div>
+<div class="tile"><div class="n">0</div><div class="l">Closed since 00:00 CEST</div><div class="s">each with its evidence below</div></div>
+</div>
+<div class="strip now"><h3>Now</h3><p class="sub">at most three, re-checked in this build</p>
+<ol>
+<li><a class="jump" href="#item-t-7033e58888df">Syrup availability and connectivity (48375229511)</a><span class="why">the Thu 10 Sep 21:23 promise that you are on it has had no message since</span></li>
+<li><a class="jump" href="#item-t-115d89e11a8b">E.A03 after reset (tech promised)</a><span class="why">the Fri 18 Sep 19:53 promise that tech is on it has had no message since</span></li>
+<li><a class="jump" href="#item-t-4e8d194b969a">Serial number question (NS kiosk)</a><span class="why">the partner&#x27;s Sat 19 Sep 17:53 message has no reply; the Sat 19 Sep 18:53 colleague note asking you is unanswered</span></li>
+</ol>
+</div>
+<h2>Replies you owe<small>read by the intake or the morning sweep</small></h2>
+<div class="tablewrap"><table><tbody>
+<tr class="item" id="item-t-7033e58888df"><td class="who"><span class="pill info">obligation</span><span class="org">hubspot-tickets (H_TICKETS)</span></td>
+<td class="what">Syrup availability and connectivity (48375229511)<span class="prov obs">read 18:53 CEST</span><span class="ctx how">read by the channel intake on hubspot-tickets (H_TICKETS)</span></td>
+<td class="links"><span class="nolink">no link recorded</span><button type="button" class="notetoggle" aria-expanded="false" onclick="var r=document.getElementById(&#x27;note-t-7033e58888df&#x27;);var o=r.classList.toggle(&#x27;open&#x27;);this.setAttribute(&#x27;aria-expanded&#x27;,o);if(o){r.querySelector(&#x27;input&#x27;).focus();}">note</button></td></tr>
+<tr class="replyrow" id="note-t-7033e58888df"><td colspan="3"><form class="reply" data-lavish-question="todo-item-t-7033e58888df" onsubmit="event.preventDefault();var f=event.currentTarget,v=f.note.value.trim();if(!v)return;if(!window.lavish||!window.lavish.queuePrompt){f.querySelector(&#x27;.ack&#x27;).textContent=&#x27;review session not connected&#x27;;return;}window.lavish.queuePrompt(&#x27;Update on to-do item &#x27;+&quot;t-7033e58888df&quot;+&#x27; rev &#x27;+&quot;65d723ac3b&quot;+&#x27; (&#x27;+&quot;Syrup availability and connectivity (48375229511)&quot;+&#x27;): &#x27;+v,{tag:&#x27;item-update&#x27;,text:&quot;Syrup availability and connectivity (48375229511)&quot;+&#x27;: &#x27;+v,element:f,queueKey:&quot;todo-item-t-7033e58888df&quot;,data:{item_id:&quot;t-7033e58888df&quot;,rev:&quot;65d723ac3b&quot;,title:&quot;Syrup availability and connectivity (48375229511)&quot;,note:v}});f.note.value=&#x27;&#x27;;f.querySelector(&#x27;.ack&#x27;).textContent=&#x27;queued&#x27;;"><input type="text" name="note" autocomplete="off" placeholder="drop, done, park til Friday, mine, you: what to do, dig, or anything else"><button type="submit">Queue</button><span class="ack"></span></form></td></tr>
+<tr class="item" id="item-t-115d89e11a8b"><td class="who"><span class="pill info">obligation</span><span class="org">hubspot-tickets (H_TICKETS)</span></td>
+<td class="what">E.A03 after reset (tech promised)<span class="prov obs">read 18:53 CEST</span><span class="ctx how">read by the channel intake on hubspot-tickets (H_TICKETS)</span></td>
+<td class="links"><span class="nolink">no link recorded</span><button type="button" class="notetoggle" aria-expanded="false" onclick="var r=document.getElementById(&#x27;note-t-115d89e11a8b&#x27;);var o=r.classList.toggle(&#x27;open&#x27;);this.setAttribute(&#x27;aria-expanded&#x27;,o);if(o){r.querySelector(&#x27;input&#x27;).focus();}">note</button></td></tr>
+<tr class="replyrow" id="note-t-115d89e11a8b"><td colspan="3"><form class="reply" data-lavish-question="todo-item-t-115d89e11a8b" onsubmit="event.preventDefault();var f=event.currentTarget,v=f.note.value.trim();if(!v)return;if(!window.lavish||!window.lavish.queuePrompt){f.querySelector(&#x27;.ack&#x27;).textContent=&#x27;review session not connected&#x27;;return;}window.lavish.queuePrompt(&#x27;Update on to-do item &#x27;+&quot;t-115d89e11a8b&quot;+&#x27; rev &#x27;+&quot;bbc8bb1106&quot;+&#x27; (&#x27;+&quot;E.A03 after reset (tech promised)&quot;+&#x27;): &#x27;+v,{tag:&#x27;item-update&#x27;,text:&quot;E.A03 after reset (tech promised)&quot;+&#x27;: &#x27;+v,element:f,queueKey:&quot;todo-item-t-115d89e11a8b&quot;,data:{item_id:&quot;t-115d89e11a8b&quot;,rev:&quot;bbc8bb1106&quot;,title:&quot;E.A03 after reset (tech promised)&quot;,note:v}});f.note.value=&#x27;&#x27;;f.querySelector(&#x27;.ack&#x27;).textContent=&#x27;queued&#x27;;"><input type="text" name="note" autocomplete="off" placeholder="drop, done, park til Friday, mine, you: what to do, dig, or anything else"><button type="submit">Queue</button><span class="ack"></span></form></td></tr>
+<tr class="item" id="item-t-4e8d194b969a"><td class="who"><span class="pill info">obligation</span><span class="org">hubspot-tickets (H_TICKETS)</span></td>
+<td class="what">Serial number question (NS kiosk)<span class="prov obs">read 18:53 CEST</span><span class="ctx how">read by the channel intake on hubspot-tickets (H_TICKETS)</span></td>
+<td class="links"><span class="nolink">no link recorded</span><button type="button" class="notetoggle" aria-expanded="false" onclick="var r=document.getElementById(&#x27;note-t-4e8d194b969a&#x27;);var o=r.classList.toggle(&#x27;open&#x27;);this.setAttribute(&#x27;aria-expanded&#x27;,o);if(o){r.querySelector(&#x27;input&#x27;).focus();}">note</button></td></tr>
+<tr class="replyrow" id="note-t-4e8d194b969a"><td colspan="3"><form class="reply" data-lavish-question="todo-item-t-4e8d194b969a" onsubmit="event.preventDefault();var f=event.currentTarget,v=f.note.value.trim();if(!v)return;if(!window.lavish||!window.lavish.queuePrompt){f.querySelector(&#x27;.ack&#x27;).textContent=&#x27;review session not connected&#x27;;return;}window.lavish.queuePrompt(&#x27;Update on to-do item &#x27;+&quot;t-4e8d194b969a&quot;+&#x27; rev &#x27;+&quot;d9b28951a1&quot;+&#x27; (&#x27;+&quot;Serial number question (NS kiosk)&quot;+&#x27;): &#x27;+v,{tag:&#x27;item-update&#x27;,text:&quot;Serial number question (NS kiosk)&quot;+&#x27;: &#x27;+v,element:f,queueKey:&quot;todo-item-t-4e8d194b969a&quot;,data:{item_id:&quot;t-4e8d194b969a&quot;,rev:&quot;d9b28951a1&quot;,title:&quot;Serial number question (NS kiosk)&quot;,note:v}});f.note.value=&#x27;&#x27;;f.querySelector(&#x27;.ack&#x27;).textContent=&#x27;queued&#x27;;"><input type="text" name="note" autocomplete="off" placeholder="drop, done, park til Friday, mine, you: what to do, dig, or anything else"><button type="submit">Queue</button><span class="ack"></span></form></td></tr>
+<tr class="item" id="item-t-15334e16b33d"><td class="who"><span class="pill info">obligation</span><span class="org">hubspot-tickets (H_TICKETS)</span></td>
+<td class="what">Frederick - dispenser down after swap<span class="prov obs">read 18:53 CEST</span><span class="ctx how">read by the channel intake on hubspot-tickets (H_TICKETS)</span></td>
+<td class="links"><span class="nolink">no link recorded</span><button type="button" class="notetoggle" aria-expanded="false" onclick="var r=document.getElementById(&#x27;note-t-15334e16b33d&#x27;);var o=r.classList.toggle(&#x27;open&#x27;);this.setAttribute(&#x27;aria-expanded&#x27;,o);if(o){r.querySelector(&#x27;input&#x27;).focus();}">note</button></td></tr>
+<tr class="replyrow" id="note-t-15334e16b33d"><td colspan="3"><form class="reply" data-lavish-question="todo-item-t-15334e16b33d" onsubmit="event.preventDefault();var f=event.currentTarget,v=f.note.value.trim();if(!v)return;if(!window.lavish||!window.lavish.queuePrompt){f.querySelector(&#x27;.ack&#x27;).textContent=&#x27;review session not connected&#x27;;return;}window.lavish.queuePrompt(&#x27;Update on to-do item &#x27;+&quot;t-15334e16b33d&quot;+&#x27; rev &#x27;+&quot;7dd3886429&quot;+&#x27; (&#x27;+&quot;Frederick - dispenser down after swap&quot;+&#x27;): &#x27;+v,{tag:&#x27;item-update&#x27;,text:&quot;Frederick - dispenser down after swap&quot;+&#x27;: &#x27;+v,element:f,queueKey:&quot;todo-item-t-15334e16b33d&quot;,data:{item_id:&quot;t-15334e16b33d&quot;,rev:&quot;7dd3886429&quot;,title:&quot;Frederick - dispenser down after swap&quot;,note:v}});f.note.value=&#x27;&#x27;;f.querySelector(&#x27;.ack&#x27;).textContent=&#x27;queued&#x27;;"><input type="text" name="note" autocomplete="off" placeholder="drop, done, park til Friday, mine, you: what to do, dig, or anything else"><button type="submit">Queue</button><span class="ack"></span></form></td></tr>
+<tr class="item" id="item-t-9efb547c5ced"><td class="who"><span class="pill info">obligation</span><span class="org">hubspot-tickets (H_TICKETS)</span></td>
+<td class="what">Delivery charge amendment<span class="prov obs">read 18:53 CEST</span><span class="ctx how">read by the channel intake on hubspot-tickets (H_TICKETS)</span></td>
+<td class="links"><span class="nolink">no link recorded</span><button type="button" class="notetoggle" aria-expanded="false" onclick="var r=document.getElementById(&#x27;note-t-9efb547c5ced&#x27;);var o=r.classList.toggle(&#x27;open&#x27;);this.setAttribute(&#x27;aria-expanded&#x27;,o);if(o){r.querySelector(&#x27;input&#x27;).focus();}">note</button></td></tr>
+<tr class="replyrow" id="note-t-9efb547c5ced"><td colspan="3"><form class="reply" data-lavish-question="todo-item-t-9efb547c5ced" onsubmit="event.preventDefault();var f=event.currentTarget,v=f.note.value.trim();if(!v)return;if(!window.lavish||!window.lavish.queuePrompt){f.querySelector(&#x27;.ack&#x27;).textContent=&#x27;review session not connected&#x27;;return;}window.lavish.queuePrompt(&#x27;Update on to-do item &#x27;+&quot;t-9efb547c5ced&quot;+&#x27; rev &#x27;+&quot;52c6b7aa27&quot;+&#x27; (&#x27;+&quot;Delivery charge amendment&quot;+&#x27;): &#x27;+v,{tag:&#x27;item-update&#x27;,text:&quot;Delivery charge amendment&quot;+&#x27;: &#x27;+v,element:f,queueKey:&quot;todo-item-t-9efb547c5ced&quot;,data:{item_id:&quot;t-9efb547c5ced&quot;,rev:&quot;52c6b7aa27&quot;,title:&quot;Delivery charge amendment&quot;,note:v}});f.note.value=&#x27;&#x27;;f.querySelector(&#x27;.ack&#x27;).textContent=&#x27;queued&#x27;;"><input type="text" name="note" autocomplete="off" placeholder="drop, done, park til Friday, mine, you: what to do, dig, or anything else"><button type="submit">Queue</button><span class="ack"></span></form></td></tr>
+<tr class="item" id="item-t-a57555556520"><td class="who"><span class="pill bad">outage</span><span class="org">slack-channel (C_BRIEF)</span></td>
+<td class="what">Service outage at Schiphol site<span class="prov obs">read 18:53 CEST</span><span class="ctx how">read by the channel intake on slack-channel (C_BRIEF)</span></td>
+<td class="links"><span class="nolink">no link recorded</span><button type="button" class="notetoggle" aria-expanded="false" onclick="var r=document.getElementById(&#x27;note-t-a57555556520&#x27;);var o=r.classList.toggle(&#x27;open&#x27;);this.setAttribute(&#x27;aria-expanded&#x27;,o);if(o){r.querySelector(&#x27;input&#x27;).focus();}">note</button></td></tr>
+<tr class="replyrow" id="note-t-a57555556520"><td colspan="3"><form class="reply" data-lavish-question="todo-item-t-a57555556520" onsubmit="event.preventDefault();var f=event.currentTarget,v=f.note.value.trim();if(!v)return;if(!window.lavish||!window.lavish.queuePrompt){f.querySelector(&#x27;.ack&#x27;).textContent=&#x27;review session not connected&#x27;;return;}window.lavish.queuePrompt(&#x27;Update on to-do item &#x27;+&quot;t-a57555556520&quot;+&#x27; rev &#x27;+&quot;8b6f449ec4&quot;+&#x27; (&#x27;+&quot;Service outage at Schiphol site&quot;+&#x27;): &#x27;+v,{tag:&#x27;item-update&#x27;,text:&quot;Service outage at Schiphol site&quot;+&#x27;: &#x27;+v,element:f,queueKey:&quot;todo-item-t-a57555556520&quot;,data:{item_id:&quot;t-a57555556520&quot;,rev:&quot;8b6f449ec4&quot;,title:&quot;Service outage at Schiphol site&quot;,note:v}});f.note.value=&#x27;&#x27;;f.querySelector(&#x27;.ack&#x27;).textContent=&#x27;queued&#x27;;"><input type="text" name="note" autocomplete="off" placeholder="drop, done, park til Friday, mine, you: what to do, dig, or anything else"><button type="submit">Queue</button><span class="ack"></span></form></td></tr>
+<tr class="item" id="item-t-291668988da4"><td class="who"><span class="pill warn">urgent</span><span class="org">slack-channel (C_BRIEF)</span></td>
+<td class="what">Urgent: board deck numbers<span class="prov obs">read 18:53 CEST</span><span class="ctx how">read by the channel intake on slack-channel (C_BRIEF)</span></td>
+<td class="links"><span class="nolink">no link recorded</span><button type="button" class="notetoggle" aria-expanded="false" onclick="var r=document.getElementById(&#x27;note-t-291668988da4&#x27;);var o=r.classList.toggle(&#x27;open&#x27;);this.setAttribute(&#x27;aria-expanded&#x27;,o);if(o){r.querySelector(&#x27;input&#x27;).focus();}">note</button></td></tr>
+<tr class="replyrow" id="note-t-291668988da4"><td colspan="3"><form class="reply" data-lavish-question="todo-item-t-291668988da4" onsubmit="event.preventDefault();var f=event.currentTarget,v=f.note.value.trim();if(!v)return;if(!window.lavish||!window.lavish.queuePrompt){f.querySelector(&#x27;.ack&#x27;).textContent=&#x27;review session not connected&#x27;;return;}window.lavish.queuePrompt(&#x27;Update on to-do item &#x27;+&quot;t-291668988da4&quot;+&#x27; rev &#x27;+&quot;f34837fde9&quot;+&#x27; (&#x27;+&quot;Urgent: board deck numbers&quot;+&#x27;): &#x27;+v,{tag:&#x27;item-update&#x27;,text:&quot;Urgent: board deck numbers&quot;+&#x27;: &#x27;+v,element:f,queueKey:&quot;todo-item-t-291668988da4&quot;,data:{item_id:&quot;t-291668988da4&quot;,rev:&quot;f34837fde9&quot;,title:&quot;Urgent: board deck numbers&quot;,note:v}});f.note.value=&#x27;&#x27;;f.querySelector(&#x27;.ack&#x27;).textContent=&#x27;queued&#x27;;"><input type="text" name="note" autocomplete="off" placeholder="drop, done, park til Friday, mine, you: what to do, dig, or anything else"><button type="submit">Queue</button><span class="ack"></span></form></td></tr>
+<tr class="item" id="item-t-6171aab646dc"><td class="who"><span class="pill warn">deadline</span><span class="org">slack-channel (C_BRIEF)</span></td>
+<td class="what">Deadline: insurer form due Friday<span class="prov obs">read 18:53 CEST</span><span class="ctx how">read by the channel intake on slack-channel (C_BRIEF)</span></td>
+<td class="links"><span class="nolink">no link recorded</span><button type="button" class="notetoggle" aria-expanded="false" onclick="var r=document.getElementById(&#x27;note-t-6171aab646dc&#x27;);var o=r.classList.toggle(&#x27;open&#x27;);this.setAttribute(&#x27;aria-expanded&#x27;,o);if(o){r.querySelector(&#x27;input&#x27;).focus();}">note</button></td></tr>
+<tr class="replyrow" id="note-t-6171aab646dc"><td colspan="3"><form class="reply" data-lavish-question="todo-item-t-6171aab646dc" onsubmit="event.preventDefault();var f=event.currentTarget,v=f.note.value.trim();if(!v)return;if(!window.lavish||!window.lavish.queuePrompt){f.querySelector(&#x27;.ack&#x27;).textContent=&#x27;review session not connected&#x27;;return;}window.lavish.queuePrompt(&#x27;Update on to-do item &#x27;+&quot;t-6171aab646dc&quot;+&#x27; rev &#x27;+&quot;3f464d25f3&quot;+&#x27; (&#x27;+&quot;Deadline: insurer form due Friday&quot;+&#x27;): &#x27;+v,{tag:&#x27;item-update&#x27;,text:&quot;Deadline: insurer form due Friday&quot;+&#x27;: &#x27;+v,element:f,queueKey:&quot;todo-item-t-6171aab646dc&quot;,data:{item_id:&quot;t-6171aab646dc&quot;,rev:&quot;3f464d25f3&quot;,title:&quot;Deadline: insurer form due Friday&quot;,note:v}});f.note.value=&#x27;&#x27;;f.querySelector(&#x27;.ack&#x27;).textContent=&#x27;queued&#x27;;"><input type="text" name="note" autocomplete="off" placeholder="drop, done, park til Friday, mine, you: what to do, dig, or anything else"><button type="submit">Queue</button><span class="ack"></span></form></td></tr>
+</tbody></table></div>
+<details><summary>Other channel activity</summary>
+<div class="tablewrap"><table><tbody>
+<tr class="item" id="item-t-a30fa305239d"><td class="who"><span class="pill info">routine</span><span class="org">hubspot-tickets (H_TICKETS)</span></td>
+<td class="what">No sparkling water (Luc)<span class="prov obs">read 18:53 CEST</span><span class="ctx how">read by the channel intake on hubspot-tickets (H_TICKETS)</span></td>
+<td class="links"><span class="nolink">no link recorded</span></td></tr>
+<tr class="item" id="item-t-d7dd3429bb25"><td class="who"><span class="pill info">routine</span><span class="org">hubspot-tickets (H_TICKETS)</span></td>
+<td class="what">PCB stock (internal)<span class="prov obs">read 18:53 CEST</span><span class="ctx how">read by the channel intake on hubspot-tickets (H_TICKETS)</span></td>
+<td class="links"><span class="nolink">no link recorded</span></td></tr>
+<tr class="item" id="item-t-f4786cc60059"><td class="who"><span class="pill info">routine</span><span class="org">hubspot-tickets (H_TICKETS)</span></td>
+<td class="what">Serial - answered by note<span class="prov obs">read 18:53 CEST</span><span class="ctx how">read by the channel intake on hubspot-tickets (H_TICKETS)</span></td>
+<td class="links"><span class="nolink">no link recorded</span></td></tr>
+<tr class="item" id="item-t-87957bc59faf"><td class="who"><span class="pill info">routine</span><span class="org">hubspot-tickets (H_TICKETS)</span></td>
+<td class="what">Connectivity - answered<span class="prov obs">read 18:53 CEST</span><span class="ctx how">read by the channel intake on hubspot-tickets (H_TICKETS)</span></td>
+<td class="links"><span class="nolink">no link recorded</span></td></tr>
+</tbody></table></div>
+</details>
+<details><summary>Intake coverage</summary>
+<ul class="done"><li><b>C_BRIEF</b> - last successful read 18:53 CEST</li><li><b>H_TICKETS</b> - last successful read 18:53 CEST</li></ul>
+</details>
+
+<div class="legend">
+<span><span class="prov obs">observed</span> read from the source system at the time stamped on the row</span>
+<span><span class="prov inf">inferred</span> reasoned from evidence, not stated outright</span>
+<span><span class="prov unv">unverifiable</span> could not be confirmed from any source available here</span>
+</div>
+
+</div></body></html>

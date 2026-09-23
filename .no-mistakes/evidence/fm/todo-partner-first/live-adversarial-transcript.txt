@@ -1,0 +1,48 @@
+=== A. malformed timelines are refused and change nothing ===
+
+$ fm-channel-intake.sh observe --source H_TICKETS --ref bad-display --digest v1 --class routine --title bad display --timeline-file $HOME_UNDER_TEST/tl/bad-display.json
+fm-channel-intake: timeline event 1 from must be a bare local@domain address: Aquablu Support <support@team.example>
+[exit 2]
+
+$ fm-channel-intake.sh observe --source H_TICKETS --ref bad-millis --digest v1 --class routine --title bad millis --timeline-file $HOME_UNDER_TEST/tl/bad-millis.json
+fm-channel-intake: timeline event 0 needs an epoch-second at
+[exit 2]
+
+$ fm-channel-intake.sh observe --source H_TICKETS --ref bad-kind --digest v1 --class routine --title bad kind --timeline-file $HOME_UNDER_TEST/tl/bad-kind.json
+fm-channel-intake: timeline kind must be hubspot-ticket
+[exit 2]
+
+$ fm-channel-intake.sh observe --source H_TICKETS --ref bad-contacts --digest v1 --class routine --title bad contacts --timeline-file $HOME_UNDER_TEST/tl/bad-contacts.json
+fm-channel-intake: timeline contacts must be a list of addresses
+[exit 2]
+ledger unchanged after the four refusals: yes
+
+=== B. an unchanged ticket re-read by the re-scan later is a fresh read ===
+before: read_at=1790182401 updated=1790182401
+unchanged d70997387e48ebd54452cdd83156eec438f45d708967208b0d733ab3843efc4d
+after:  read_at=1790182697 updated=1790182401
+
+=== C. the captain answers Frederick; ledger resolve, later re-scan shows partner waiting again ===
+
+$ fm-channel-intake.sh resolve --item d70997387e48ebd54452cdd83156eec438f45d708967208b0d733ab3843efc4d --reason captain replied to Frederick
+archived d70997387e48ebd54452cdd83156eec438f45d708967208b0d733ab3843efc4d
+[exit 0]
+
+$ fm-channel-intake.sh observe --source H_TICKETS --ref frederick --digest frederick v2 --class routine --title Frederick - dispenser down after swap --timeline-file $HOME_UNDER_TEST/tl/frederick-v2.json
+archived-changed d70997387e48ebd54452cdd83156eec438f45d708967208b0d733ab3843efc4d
+[exit 0]
+open item present: no
+class=obligation
+state=archived
+resolution=captain replied to Frederick
+partner=1
+awaiting=1
+awaiting_since=1790181977
+awaiting_why=the partner's Wed 23 Sep 18:46 message has no reply
+
+=== D. complete refreshes the existing day page ===
+
+$ fm-channel-intake.sh complete --source H_TICKETS --checkpoint hs-2 --rescanned
+CHANNEL_INTAKE: H_TICKETS read complete, checkpoint hs-2
+TODO_RENDER: $HOME_UNDER_TEST/.lavish/today-2026-09-23.html rendered at 18:56 CEST
+[exit 0]

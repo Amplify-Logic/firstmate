@@ -1,0 +1,16 @@
+ok - verification changes only on a source read or an explicit verify, never on a sync or render
+ok - done survives repeated syncs and the next morning; a changed ask resurfaces once with its reason
+ok - an edit after a ledger resolution reopens the item once and the old resolution does not re-close it
+ok - stale pages are refused, repeats are harmless, and a handoff stays requested until accepted
+ok - missing or corrupt input closes nothing and a released hold closes only its own item
+ok - one ask seen twice dedupes, a snooze returns unverified, and only a named fulfilled close counts
+ok - reopen brings a handed-over item back to the captain and refuses one already open
+ok - captain holds nobody re-checked collapse into a capped fold under the decisions read today
+ok - routine activity older than the sweep stays on the page in its own not re-checked fold
+ok - a retired routine record closes its item as superseded and an unreadable ledger closes nothing
+ok - the routine not re-checked fold is capped at ten rows and a count of the rest
+ok - the held fold surfaces the oldest holds first, so the cut is stable and meaningful
+ok - sync prunes a retired routine record after thirty days and keeps every ask it ever tracked
+ok - a routine line the captain marked is never retired by the intake, nor pruned
+ok - a reopen note is not a captain mark: a revived routine thread still retires and prunes
+ok - a partner-facing ask awaiting the captain ranks above every class in Now and in its section, oldest first and undated last

@@ -1,0 +1,175 @@
+=== 1. claim: HubSpot source is told the stages and handed a re-scan ===
+
+$ fm-channel-intake.sh claim
+now: 1790182400
+revision_window_seconds: 86400
+revision_window_from: 1790096000
+thread_tracking_window_seconds: 86400
+source: C_BRIEF	kind: slack-channel	checkpoint: 	coverage: daily brief channel, top-level messages
+source: H_TICKETS	kind: hubspot-tickets	checkpoint: 	coverage: tickets owned by or naming the captain
+stages: H_TICKETS	every open stage plus "Waiting on contact", which HubSpot marks closed but where a partner can still be waiting on the captain
+rescan: H_TICKETS	last_rescan: never	scope: every ticket in those stages, any owner, whose emails or notes name the captain or in which a colleague promised the customer that the tech team is on it, re-read in full whatever its last-modified date; observe each with --timeline-file, then complete with --rescanned
+[exit 0]
+
+=== 2. Slack checkpoint read: an outage, an urgent and a deadline arrive ===
+
+$ fm-channel-intake.sh observe --source C_BRIEF --ref slack-outage --digest site down --class outage --title Service outage at Schiphol site
+new 7a33c29f28a03c389bbb0533a208c788e1c4263214262161ae9c59d80deef09f
+[exit 0]
+
+$ fm-channel-intake.sh observe --source C_BRIEF --ref slack-urgent --digest urgent --class urgent --title Urgent: board deck numbers
+new 638074ee67cb9fa4969937384581f86060d975fc75667102d48633828923515a
+[exit 0]
+
+$ fm-channel-intake.sh observe --source C_BRIEF --ref slack-deadline --digest deadline --class deadline --title Deadline: insurer form due Friday
+new 96fd545113c99db010d9e93ee2eff556bd274647ca0f8be8d56f29cdacd72199
+[exit 0]
+
+$ fm-channel-intake.sh complete --source C_BRIEF --checkpoint slack-1
+CHANNEL_INTAKE: C_BRIEF read complete, checkpoint slack-1
+TODO_RENDER: no page at $HOME_UNDER_TEST/.lavish/today-2026-09-23.html yet; nothing refreshed
+[exit 0]
+
+=== 3. HubSpot re-scan: every ticket observed with its timeline ===
+
+$ fm-channel-intake.sh observe --source H_TICKETS --ref frederick --digest frederick v1 --class routine --title Frederick - dispenser down after swap --timeline-file $HOME_UNDER_TEST/tl/frederick.json
+new d70997387e48ebd54452cdd83156eec438f45d708967208b0d733ab3843efc4d
+[exit 0]
+
+$ fm-channel-intake.sh observe --source H_TICKETS --ref t48375229511 --digest t48375229511 v1 --class routine --title Syrup availability and connectivity (48375229511) --timeline-file $HOME_UNDER_TEST/tl/t48375229511.json
+new 87c2f6a2ee88e7099e033f348564361fcc96f9db87a151e62309a3def9918a62
+[exit 0]
+
+$ fm-channel-intake.sh observe --source H_TICKETS --ref techpromise --digest techpromise v1 --class routine --title E.A03 after reset (tech promised) --timeline-file $HOME_UNDER_TEST/tl/techpromise.json
+new fc6516cb07a36aec774cf73b480058572b1605d6e6ecc6a4a688c0a2ac282571
+[exit 0]
+
+$ fm-channel-intake.sh observe --source H_TICKETS --ref colleaguenote --digest colleaguenote v1 --class routine --title Serial number question (NS kiosk) --timeline-file $HOME_UNDER_TEST/tl/colleaguenote.json
+new 54127e622002319692fe2ed1e6860ab5bfa35f2db69bd1e0c8222f92ca60ee32
+[exit 0]
+
+$ fm-channel-intake.sh observe --source H_TICKETS --ref autoack --digest autoack v1 --class routine --title Delivery charge amendment --timeline-file $HOME_UNDER_TEST/tl/autoack.json
+new c6681bfcbd3c63da925ada2ef330912bd79f0e0b4dfeaa549ae1765526b6aec6
+[exit 0]
+
+$ fm-channel-intake.sh observe --source H_TICKETS --ref answered --digest answered v1 --class routine --title Connectivity - answered --timeline-file $HOME_UNDER_TEST/tl/answered.json
+new 1e24f01b81189a0aa0a0746fad5a7109d041e91dec2db63e0fd57313cc0dac60
+[exit 0]
+
+$ fm-channel-intake.sh observe --source H_TICKETS --ref noteanswered --digest noteanswered v1 --class routine --title Serial - answered by note --timeline-file $HOME_UNDER_TEST/tl/noteanswered.json
+new 6fed930723c359b784e97310dcf002a36516a7664ce34ae6fdec51616bff5073
+[exit 0]
+
+$ fm-channel-intake.sh observe --source H_TICKETS --ref uninvolved --digest uninvolved v1 --class routine --title No sparkling water (Luc) --timeline-file $HOME_UNDER_TEST/tl/uninvolved.json
+new 5c44204d4d9ff6e50fff0f7ab38c92b18800b78904b8caed3e8039f93ed352d8
+[exit 0]
+
+$ fm-channel-intake.sh observe --source H_TICKETS --ref internal --digest internal v1 --class routine --title PCB stock (internal) --timeline-file $HOME_UNDER_TEST/tl/internal.json
+new 0bfeda2f58e86d66466e374f14baed3f04a64111479e1bf3358a8af0482a0925
+[exit 0]
+
+$ fm-channel-intake.sh complete --source H_TICKETS --checkpoint hs-1 --rescanned
+CHANNEL_INTAKE: H_TICKETS read complete, checkpoint hs-1
+TODO_RENDER: no page at $HOME_UNDER_TEST/.lavish/today-2026-09-23.html yet; nothing refreshed
+[exit 0]
+
+=== 4. ledger facts per ticket ===
+class=deadline | title=Deadline: insurer form due Friday | 
+class=obligation | title=Delivery charge amendment | partner=1 | awaiting=1 | awaiting_since=1790009600 | awaiting_why=the partner's Mon 21 Sep 18:53 message has no reply (the Mon 21 Sep 18:57 send has no email: an auto-acknowledgement) | 
+class=obligation | title=E.A03 after reset (tech promised) | partner=1 | awaiting=1 | awaiting_since=1789754000 | awaiting_why=the Fri 18 Sep 19:53 promise that tech is on it has had no message since | 
+class=obligation | title=Frederick - dispenser down after swap | partner=1 | awaiting=1 | awaiting_since=1789930400 | awaiting_why=the Sun 20 Sep 20:53 promise that you are on it has had no message since | 
+class=obligation | title=Serial number question (NS kiosk) | partner=1 | awaiting=1 | awaiting_since=1789833200 | awaiting_why=the partner's Sat 19 Sep 17:53 message has no reply; the Sat 19 Sep 18:53 colleague note asking you is unanswered | 
+class=obligation | title=Syrup availability and connectivity (48375229511) | partner=1 | awaiting=1 | awaiting_since=1789068200 | awaiting_why=the Thu 10 Sep 21:23 promise that you are on it has had no message since | 
+class=outage | title=Service outage at Schiphol site | 
+class=routine | title=Connectivity - answered | partner=1 | awaiting=0 | awaiting_since= | awaiting_why= | 
+class=routine | title=No sparkling water (Luc) | partner=1 | awaiting=0 | awaiting_since= | awaiting_why= | 
+class=routine | title=PCB stock (internal) | partner=0 | awaiting=0 | awaiting_since= | awaiting_why= | 
+class=routine | title=Serial - answered by note | partner=1 | awaiting=0 | awaiting_since= | awaiting_why= | 
+class=urgent | title=Urgent: board deck numbers | 
+
+=== 5. todo summary ===
+
+$ fm-channel-intake.sh todo
+# Daily to-do - 2026-09-23
+
+Human obligations only. Executable automations live in the Action Deck behind their own approval.
+
+- [ ] Syrup availability and connectivity (48375229511) (H_TICKETS)
+- [ ] E.A03 after reset (tech promised) (H_TICKETS)
+- [ ] Serial number question (NS kiosk) (H_TICKETS)
+- [ ] Frederick - dispenser down after swap (H_TICKETS)
+- [ ] Delivery charge amendment (H_TICKETS)
+- [ ] Urgent: board deck numbers (C_BRIEF)
+- [ ] Service outage at Schiphol site (C_BRIEF)
+- [ ] Deadline: insurer form due Friday (C_BRIEF)
+
+## Waiting on others
+
+- nothing
+[exit 0]
+
+=== 6. brief ===
+
+$ fm-channel-intake.sh brief
+# Channel intake brief - 2026-09-23 18:53 CEST
+
+## Coverage
+
+Enrolled sources only. Enrolling these does not enrol every channel, mailbox or board in the workspace.
+A source reading `unknown` did not complete its last read; that is not the same as nothing new.
+
+- `C_BRIEF` (slack-channel): fresh - last read 2s ago, daily brief channel, top-level messages
+- `H_TICKETS` (hubspot-tickets): fresh - last read 0s ago, tickets owned by or naming the captain
+
+## What changed
+
+- PCB stock (internal) (H_TICKETS)
+- Connectivity - answered (H_TICKETS)
+- No sparkling water (Luc) (H_TICKETS)
+- Serial - answered by note (H_TICKETS)
+
+## What needs you
+
+- [obligation] Syrup availability and connectivity (48375229511) (H_TICKETS, first seen 2026-09-23)
+- [obligation] E.A03 after reset (tech promised) (H_TICKETS, first seen 2026-09-23)
+- [obligation] Serial number question (NS kiosk) (H_TICKETS, first seen 2026-09-23)
+- [obligation] Frederick - dispenser down after swap (H_TICKETS, first seen 2026-09-23)
+- [obligation] Delivery charge amendment (H_TICKETS, first seen 2026-09-23)
+- [urgent] Urgent: board deck numbers (C_BRIEF, first seen 2026-09-23)
+- [outage] Service outage at Schiphol site (C_BRIEF, first seen 2026-09-23)
+- [deadline] Deadline: insurer form due Friday (C_BRIEF, first seen 2026-09-23)
+
+## Waiting on others
+
+- nothing
+
+## Next dated actions
+
+- [deadline] Deadline: insurer form due Friday (C_BRIEF, first seen 2026-09-23)
+
+## Automation candidates
+
+Proposals only. Nothing here is prepared, staged or executable, and detecting one grants no permission to act.
+
+- nothing
+
+## Detection limits
+
+- An in-place edit older than the 86400s revision window is not detected.
+- A reply on a thread whose parent is not in the tracked set can appear in no cursor read.
+- The tracked set is bounded, not forever: a parent whose reply marker has not advanced within 86400s leaves it, and replies on a parent that has left are not re-read.
+- Routine traffic older than 86400s leaves the polled set and is listed by `items --state inactive`. Nothing is deleted, and nothing owed, waiting or corrected ever leaves.
+- The 900s poll interval is a target detection latency, not a guaranteed upper bound: sleep, offline stretches, backoff and queue delay all add to it.
+- Measured detection latency so far: no samples yet
+[exit 0]
+
+=== 7. a later claim inside the re-scan interval does not re-scan again ===
+
+$ fm-channel-intake.sh claim --source H_TICKETS
+now: 1790182404
+revision_window_seconds: 86400
+revision_window_from: 1790096004
+thread_tracking_window_seconds: 86400
+source: H_TICKETS	kind: hubspot-tickets	checkpoint: hs-1	coverage: tickets owned by or naming the captain
+stages: H_TICKETS	every open stage plus "Waiting on contact", which HubSpot marks closed but where a partner can still be waiting on the captain
+[exit 0]
