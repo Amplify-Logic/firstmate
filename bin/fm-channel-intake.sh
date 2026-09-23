@@ -15,7 +15,7 @@
 # flags. This changes composition/identity, never source enrollment or cadence.
 #   fm-channel-intake.sh complete --source ID --checkpoint VALUE
 #   fm-channel-intake.sh fail --source ID --reason TEXT
-#   fm-channel-intake.sh tickets --owner NAME --file FILE|- [--read-at EPOCH]
+#   fm-channel-intake.sh tickets --owner NAME --file FILE|-
 #   fm-channel-intake.sh resolve --item KEY --reason TEXT [--waiting]
 #   fm-channel-intake.sh items [--state open|waiting|archived|inactive]
 #   fm-channel-intake.sh sources
@@ -78,15 +78,16 @@
 # data/channel-intake/tickets.json, which bin/fm-todo-render.sh renders as the
 # page's "Your open tickets" section on every render. The HubSpot pass hands it
 # the COMPLETE current set - every ticket the captain owns whose stage is not
-# Closed, Waiting on contact included - as a JSON array (or an object with a
-# `tickets` array) of {id, subject, stage, last_in, last_out, link}: id is the
-# numeric ticket id, stage the pipeline-stage label exactly as HubSpot names
-# it, last_in/last_out the display times of the newest inbound and outbound
-# message (empty when none), link an https:// record URL. Unknown or missing
-# fields, a duplicate id, a Closed stage or a non-JSON input are refused and
-# the previous snapshot stays in place, so a malformed read can never replace
-# a good one. The file is written atomically as {version:1, read_at, owner,
-# tickets}; read_at defaults to now and is what the page stamps.
+# Closed, Waiting on contact included - as a bare JSON array of
+# {id, subject, stage, last_in, last_out, link}: id is the numeric ticket id,
+# stage the pipeline-stage label exactly as HubSpot names it, last_in/last_out
+# the display times of the newest inbound and outbound message (empty when
+# none), link an https:// record URL. Unknown or missing fields, a duplicate
+# id, a Closed stage, or anything that is not a bare JSON array of tickets is
+# refused and the previous snapshot stays in place, so a malformed read can
+# never replace a good one. The file is written atomically as {version:1,
+# read_at, owner, tickets}, stamped with the time of the write, which is the
+# read time the page shows.
 #
 # COVERAGE IS STATED, NEVER IMPLIED. The enrolled sources are exactly the rows
 # of the private inventory file, each with its own coverage sentence and its own
@@ -2111,13 +2112,12 @@ status_cmd() {
 }
 
 tickets_cmd() {
-  local owner='' file='' read_at=''
+  local owner='' file=''
   require_enabled
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --owner) [ "$#" -ge 2 ] || die '--owner requires a value'; owner=$2; shift 2 ;;
       --file) [ "$#" -ge 2 ] || die '--file requires a value'; file=$2; shift 2 ;;
-      --read-at) [ "$#" -ge 2 ] || die '--read-at requires a value'; read_at=$2; shift 2 ;;
       *) die "unknown tickets argument: $1" ;;
     esac
   done
@@ -2126,10 +2126,8 @@ tickets_cmd() {
   if [ "$file" != - ]; then
     [ -f "$file" ] && [ ! -L "$file" ] || die "--file is not a regular file: $file"
   fi
-  [ -n "$read_at" ] || read_at=$(now_epoch)
-  require_positive_int --read-at "$read_at"
   python3 "$SCRIPT_DIR/fm-channel-intake-tickets.py" "$INTAKE_DIR/tickets.json" \
-    "$(sanitize "$owner")" "$read_at" "$file"
+    "$(sanitize "$owner")" "$(now_epoch)" "$file"
 }
 
 print_interval() {

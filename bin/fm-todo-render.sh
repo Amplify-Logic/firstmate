@@ -53,9 +53,10 @@
 # data/channel-intake/tickets.json, which `bin/fm-channel-intake.sh tickets`
 # alone writes and whose header owns the format: the count with its stage
 # breakdown, each ticket's stage exactly as stored, and the snapshot's own
-# read time. A snapshot more than an hour old (the HubSpot pass runs every 30
-# minutes) is headed out of date with that read time and never called live;
-# a missing or unreadable one says the tickets could not be read. Any
+# read time. A snapshot older than two of the intake's configured
+# `interval_seconds` polls, and never less than an hour, is headed out of date
+# with that read time and never called live; a missing or unreadable one says
+# the tickets could not be read. Any
 # "Your open tickets" section in a morning detail file, at any depth, is
 # dropped with everything after it up to the next h2, because it is always an
 # older read than the snapshot.
@@ -115,6 +116,7 @@ FOOT_TEMPLATE="$TEMPLATE_DIR/today-page.foot.html"
 
 CFG_TIMEZONE=
 CFG_SOURCES_FILE=
+CFG_INTERVAL=900
 
 usage() {
   awk '
@@ -172,6 +174,12 @@ load_config() {
           || die "timezone does not resolve on this host: $value"
         CFG_TIMEZONE=$value
         ;;
+      interval_seconds)
+        case "$value" in
+          ''|*[!0-9]*|0) die "interval_seconds must be a positive integer: $value" ;;
+        esac
+        CFG_INTERVAL=$value
+        ;;
       sources_file)
         case "$value" in
           /*) CFG_SOURCES_FILE=$value ;;
@@ -228,7 +236,7 @@ render_page() {
   printf '<div class="meta">%s<br>Page rebuilt from the to-do records at <span class="mono">%s</span>.<br>Each line carries its own last check.</div></header>\n' \
     "$(local_fmt "$epoch" '%A %-d %B %Y')" "$(local_fmt "$epoch" '%H:%M %Z')"
   python3 "$SCRIPT_DIR/fm-todo-compose.py" "$STORE" "$morning" "$day" "$epoch" "$CFG_TIMEZONE" \
-    "$FM_HOME" "$sidecar" "$INTAKE_DIR" "$CFG_SOURCES_FILE" || return 1
+    "$FM_HOME" "$sidecar" "$INTAKE_DIR" "$CFG_SOURCES_FILE" "$CFG_INTERVAL" || return 1
   cat "$FOOT_TEMPLATE"
 }
 

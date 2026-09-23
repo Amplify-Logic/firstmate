@@ -9,7 +9,7 @@ import re
 import sys
 import time
 
-STORE, MORNING, DAY, NOW, ZONE, HOME, MORNING_JSON, INTAKE, SOURCES = sys.argv[1:]
+STORE, MORNING, DAY, NOW, ZONE, HOME, MORNING_JSON, INTAKE, SOURCES, INTERVAL = sys.argv[1:]
 NOW = int(NOW)
 if ZONE:
     os.environ['TZ'] = ZONE
@@ -106,23 +106,41 @@ class Fragment(HTMLParser):
         content = ''.join(self.render(n) for n in children)
         return f'<{tag}{attributes}>' + content + ('' if tag in self.VOID else f'</{tag}>')
 
-    def text(self, node):
-        return node if isinstance(node, str) else ''.join(self.text(n) for n in node[2])
+    def heading_text(self, node):
+        """A heading's own leading text, before any nested qualifier such as <small>."""
+        own = []
+        for child in node[2]:
+            if not isinstance(child, str):
+                break
+            own.append(child)
+        return ''.join(own).strip()
 
-    def drop(self, heading, nodes=None):
-        """Remove every h2 whose text matches `heading`, with what follows it up to the next h2, at any depth."""
-        nodes = self.root[2] if nodes is None else nodes
-        kept, dropping, found = [], False, False
+    def drop(self, heading):
+        """Remove every h2 whose own heading text matches, with what follows it up to the next h2, at any depth."""
+        self.dropped = False
+        self._drop(heading, self.root[2], False)
+        return self.dropped
+
+    def _drop(self, heading, nodes, dropping):
+        kept = []
         for node in nodes:
-            if not isinstance(node, str) and node[0] == 'h2':
-                dropping = bool(re.match(heading, self.text(node).strip(), re.I))
-                found = found or dropping
-            if not dropping:
-                if not isinstance(node, str):
-                    found = self.drop(heading, node[2]) or found
-                kept.append(node)
+            if isinstance(node, str):
+                if not dropping:
+                    kept.append(node)
+                continue
+            if node[0] == 'h2':
+                dropping = bool(re.match(heading, self.heading_text(node), re.I))
+                self.dropped = self.dropped or dropping
+                if dropping:
+                    continue
+            else:
+                inside = dropping
+                dropping = self._drop(heading, node[2], dropping)
+                if inside and not node[2]:
+                    continue
+            kept.append(node)
         nodes[:] = kept
-        return found
+        return dropping
 
     def html(self):
         return ''.join(self.render(n) for n in self.root[2])
@@ -184,9 +202,15 @@ def brief(text, limit=240):
     return f'<span title="{esc(text)}">{esc(text[:limit].rsplit(" ", 1)[0])}…</span>'
 
 
+def link_to(url, label):
+    if re.match(r'^https?://', url or '', re.I):
+        return f'<a href="{esc(url)}" target="_blank" rel="noreferrer">{esc(label)}</a>'
+    return esc(label)
+
+
 def link(url):
     if re.match(r'^https?://', url or '', re.I):
-        return f'<a href="{esc(url)}" target="_blank" rel="noreferrer">Open</a>'
+        return link_to(url, 'Open')
     return '<span class="nolink">no link recorded</span>'
 
 
@@ -486,7 +510,10 @@ for condition, readings in sorted(watch.items()):
 
 # --- open tickets -------------------------------------------------------------
 
-TICKETS_FRESH = 3600  # the HubSpot pass runs every 30 minutes; an hour means it missed
+# The page can be no fresher than the pass that writes the snapshot, so the
+# window follows the configured poll interval and never tightens below an hour.
+TICKETS_FRESH = max(3600, 2 * number(INTERVAL))
+TICKET_FIELDS = ('id', 'subject', 'stage', 'last_in', 'last_out', 'link')
 
 
 def tickets_snapshot():
@@ -500,7 +527,8 @@ def tickets_snapshot():
         return None, 'the snapshot file is not valid JSON'
     if not isinstance(doc, dict) or doc.get('version') != 1 or not number(doc.get('read_at')) \
             or not isinstance(doc.get('tickets'), list) \
-            or not all(isinstance(t, dict) and isinstance(t.get('id'), str) for t in doc['tickets']):
+            or not all(isinstance(t, dict) and all(isinstance(t.get(f), str) for f in TICKET_FIELDS)
+                       for t in doc['tickets']):
         return None, 'the snapshot file is not in the expected format'
     return doc, ''
 
@@ -515,7 +543,7 @@ def tickets_section():
     age = NOW - read_at
     counts = {}
     for t in tickets:
-        counts[t.get('stage', '')] = counts.get(t.get('stage', ''), 0) + 1
+        counts[t['stage']] = counts.get(t['stage'], 0) + 1
     breakdown = ', '.join(f'{n} {esc(stage)}' for stage, n in sorted(counts.items(), key=lambda kv: (-kv[1], kv[0])))
     noun = 'ticket carries' if len(tickets) == 1 else 'tickets carry'
     summary = f'{len(tickets)} {noun} you as owner and {"is" if len(tickets) == 1 else "are"} not closed' + (f': {breakdown}' if breakdown else '') + '.'
@@ -529,22 +557,17 @@ def tickets_section():
     if not tickets:
         return
     rows = ''.join(
-        f'<tr><td>{link_to(t.get("link"), t.get("subject") or "untitled ticket")}</td><td>{esc(t.get("stage", ""))}</td>'
-        f'<td>{esc(t.get("last_in") or "-")}</td><td>{esc(t.get("last_out") or "-")}</td></tr>'
+        f'<tr><td>{link_to(t["link"], t["subject"] or "untitled ticket")}'
+        f'</td><td>{esc(t["stage"])}</td>'
+        f'<td>{esc(t["last_in"] or "-")}</td><td>{esc(t["last_out"] or "-")}</td></tr>'
         for t in tickets)
     print('<div class="tablewrap"><table><thead><tr><th>Ticket</th><th>Stage</th><th>Last inbound</th><th>Last outbound</th></tr></thead>'
           f'<tbody>{rows}</tbody></table></div>')
 
 
-def link_to(url, label):
-    if re.match(r'^https?://', url or '', re.I):
-        return f'<a href="{esc(url)}" target="_blank" rel="noreferrer">{esc(label)}</a>'
-    return esc(label)
-
-
 tickets_section()
 if details:
-    print('<section aria-label="Tickets and calendar">' + details + '</section>')
+    print('<section aria-label="Morning detail">' + details + '</section>')
 
 if closed:
     print(f'<h2>Closed since {esc(when(SINCE))}<small>each with its closing evidence</small></h2>')

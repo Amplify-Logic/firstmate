@@ -50,10 +50,8 @@ def main():
         doc = json.loads(raw)
     except ValueError as err:
         raise Refusal(f'input is not JSON: {err}')
-    if isinstance(doc, dict):
-        doc = doc.get('tickets')
     if not isinstance(doc, list):
-        raise Refusal('input must be a JSON array of tickets, or an object with a tickets array')
+        raise Refusal('input must be a JSON array of tickets')
     tickets = [ticket_of(t, n) for n, t in enumerate(doc, 1)]
     seen = set()
     for t in tickets:

@@ -31,6 +31,9 @@
 #     stored; an out-of-date snapshot says so, a missing one says it could not
 #     be read, and a morning copy of the table is never shown. The snapshot
 #     writer refuses malformed input and leaves the previous snapshot intact.
+#   - The out-of-date window follows the intake's configured poll interval, and
+#     a snapshot whose consumed fields are not strings is reported as malformed
+#     rather than failing the render.
 # shellcheck disable=SC2016
 set -u
 
@@ -44,6 +47,7 @@ TMP_ROOT=$(fm_test_tmproot fm-todo-render-tests)
 # 2026-09-10 in Europe/Amsterdam (CEST, UTC+2).
 T_0900=1789023600
 T_1100=1789030800
+T_1400=1789041600
 T_1500=1789045200
 T_1530=1789047000
 T_YESTERDAY_1500=1788958800  # 2026-09-09 15:00 local
@@ -447,6 +451,8 @@ test_open_tickets_snapshot_writer_refuses_malformed_input() {
     && fail 'a ticket missing a field was accepted'
   write_tickets "$h" "$T_1530" '[{"id":"105","subject":"s","stage":"New","last_in":"","last_out":"","link":"https://x/105","owner":"x"}]' >/dev/null 2>&1 \
     && fail 'a ticket with an unknown field was accepted'
+  write_tickets "$h" "$T_1530" '{"tickets":[{"id":"106","subject":"s","stage":"New","last_in":"","last_out":"","link":"https://x/106"}]}' >/dev/null 2>&1 \
+    && fail 'the snapshot document was re-ingested instead of refused'
   [ "$(cat "$snap")" = "$before" ] || fail 'a refused write changed the previous snapshot'
   pass 'the snapshot writer refuses malformed input and keeps the previous snapshot'
 }
@@ -485,9 +491,10 @@ test_open_tickets_morning_copy_is_never_shown() {
   write_tickets "$h" "$T_1500" "$TICKETS_TWO" >/dev/null
   cat >"$h/.lavish/today-2026-09-10.morning.html" <<'HTML'
 <section class="morning-details">
-  <h2>Your open tickets</h2><p class="sub">Eight tickets carry you as owner. Read live from HubSpot at 06:20 CEST.</p>
+  <h2>Your open tickets<small>read live from HubSpot at 06:20 CEST</small></h2>
+  <p class="sub">Eight tickets carry you as owner.</p>
   <div class="tablewrap"><table><tr><td>Morning-only closed ticket</td></tr></table></div>
-  <h2>Calendar</h2><p>Calendar snapshot</p>
+  <div class="card"><h2>Calendar<small>read by hand at 06:00</small></h2><p>Calendar snapshot</p></div>
 </section>
 HTML
   printf '{"version":1,"date":"2026-09-10","actions":[]}' >"$h/.lavish/today-2026-09-10.morning.json"
@@ -496,7 +503,8 @@ HTML
   assert_not_contains "$page" 'Morning-only closed ticket' 'the morning ticket table is still shown'
   assert_not_contains "$page" '06:20 CEST' 'the morning read time is still shown'
   assert_contains "$page" 'Calendar snapshot' 'the rest of the morning detail was lost'
-  [ "$(grep -c '<h2>Your open tickets' "$(page_of "$h")")" = 1 ] || fail 'the page carries more than one tickets section'
+  [ "$(grep -o '<h2>Your open tickets' "$(page_of "$h")" | wc -l | tr -d ' ')" = 1 ] \
+    || fail 'the page carries more than one tickets section'
 
   # The same holds for a legacy morning file with no action metadata.
   rm "$h/.lavish/today-2026-09-10.morning.json"
@@ -505,6 +513,46 @@ HTML
   assert_not_contains "$page" 'Morning-only closed ticket' 'a legacy morning ticket table is still shown'
   assert_contains "$page" 'Read live from HubSpot at 15:00 CEST.' 'the live section is missing beside a legacy morning file'
   pass 'a morning copy of the tickets table is replaced by the live section'
+}
+
+test_open_tickets_freshness_follows_the_configured_interval() {
+  local h page
+  h="$TMP_ROOT/tickets-interval"
+  new_home "$h"
+  # A home that polls hourly: a 90-minute-old snapshot is still within two polls.
+  cat >"$h/config/channel-intake" <<'EOF'
+enabled = true
+timezone = Europe/Amsterdam
+interval_seconds = 3600
+EOF
+  write_tickets "$h" "$T_1400" "$TICKETS_TWO" >/dev/null
+  render_at "$h" "$T_1530" render >/dev/null
+  page=$(cat "$(page_of "$h")")
+  assert_contains "$page" 'Read live from HubSpot at 14:00 CEST.' 'a snapshot within two configured polls was not called live'
+  assert_not_contains "$page" 'out of date' 'a snapshot within two configured polls was labelled out of date'
+
+  # The same snapshot under the default 15-minute cadence is out of date.
+  new_home "$h"
+  render_at "$h" "$T_1530" render >/dev/null
+  page=$(cat "$(page_of "$h")")
+  assert_contains "$page" 'out of date - last read 14:00 CEST' 'the hour-old snapshot was not out of date at the default cadence'
+  pass 'the out-of-date window follows the configured poll interval'
+}
+
+test_open_tickets_snapshot_with_a_non_string_field_is_refused() {
+  local h page
+  h="$TMP_ROOT/tickets-typed"
+  new_home "$h"
+  cat >"$h/data/channel-intake/tickets.json" <<'JSON'
+{"version":1,"read_at":1789045200,"owner":"Test Owner","tickets":[
+ {"id":"1","subject":"a","stage":1,"last_in":"","last_out":"","link":"https://x/1"},
+ {"id":"2","subject":"b","stage":"New","last_in":"","last_out":"","link":"https://x/2"}]}
+JSON
+  render_at "$h" "$T_1530" render >/dev/null || fail 'a snapshot with a non-string field failed the render'
+  page=$(cat "$(page_of "$h")")
+  assert_contains "$page" 'Could not read your open tickets: the snapshot file is not in the expected format.' \
+    'a snapshot with a non-string stage was not reported as malformed'
+  pass 'a snapshot whose consumed fields are not strings is reported, never crashed on'
 }
 
 test_severity_then_recency_orders_the_live_section
@@ -521,3 +569,5 @@ test_open_tickets_snapshot_writer_refuses_malformed_input
 test_open_tickets_out_of_date_snapshot_says_so
 test_open_tickets_missing_snapshot_says_it_could_not_be_read
 test_open_tickets_morning_copy_is_never_shown
+test_open_tickets_freshness_follows_the_configured_interval
+test_open_tickets_snapshot_with_a_non_string_field_is_refused
