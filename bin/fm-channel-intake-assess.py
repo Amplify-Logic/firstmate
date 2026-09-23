@@ -11,8 +11,8 @@ import sys
 import time
 
 # The customer as the subject or partner of a verb makes it a request or a
-# chase, not the team's own promise: a following or checking "with" names a
-# third party, and no "you" stands between an actor and its verb.
+# chase, not the team's own promise: a subjectless following or checking "with"
+# names a third party, and no "you" stands between an actor and its verb.
 YOU = r"\b(?:you|je|u|jullie)\b"
 NOT_YOU = r"(?:(?!" + YOU + r")[^.?!\n])"
 WITH_OTHERS = r"\bwith\b(?!\s+" + YOU + ")"
