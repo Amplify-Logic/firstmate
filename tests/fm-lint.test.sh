@@ -1427,7 +1427,8 @@ test_unmeasured_canonical_root_leads_the_queue_and_warns_once() {
 }
 
 test_record_costs_orders_the_full_queue() {
-  local tmp fakebin log costs out first_logged first_cost max_cost listed recorded
+  local tmp fakebin log costs out max_cost listed recorded
+  local unlisted_count late_unlisted first_measured first_measured_cost
   tmp=$(fm_test_tmproot fm-lint-record-costs)
   fakebin=$(fm_fakebin "$tmp")
   log="$tmp/shellcheck.log"
@@ -1443,15 +1444,29 @@ test_record_costs_orders_the_full_queue() {
     fail "--record-costs wrote a non-integer cost"
   fi
 
-  first_logged=$(head -n 1 "$log")
+  # Unlisted canonical roots lead the queue by design, so assert the tiering:
+  # every unlisted root starts before the first measured root, and that first
+  # measured root is a costliest measured one. With a complete table there are
+  # no unlisted roots and this reduces to the costliest root starting first.
   max_cost=$(grep -v '^#' "$ROOT/bin/fm-lint-costs.tsv" | cut -f2 | LC_ALL=C sort -nr | head -n 1)
-  first_cost=$(awk -F '\t' -v root="$first_logged" '$1 == root { print $2 }' "$ROOT/bin/fm-lint-costs.tsv")
-  [ -n "$max_cost" ] && [ "$first_cost" = "$max_cost" ] \
-    || fail "the full lint started with $first_logged (cost ${first_cost:-unlisted}), not a costliest measured root ($max_cost)"
+  [ -n "$max_cost" ] || fail "the committed cost table recorded no measured cost"
+  unlisted_count=$(awk -F '\t' 'FNR == NR { if ($0 !~ /^#/) measured[$1] = 1; next }
+    !($1 in measured) { n++ } END { print n + 0 }' "$ROOT/bin/fm-lint-costs.tsv" "$log")
+  late_unlisted=$(awk -F '\t' 'FNR == NR { if ($0 !~ /^#/) measured[$1] = 1; next }
+    { if ($1 in measured) seen = 1; else if (seen) n++ } END { print n + 0 }' \
+    "$ROOT/bin/fm-lint-costs.tsv" "$log")
+  [ "$late_unlisted" -eq 0 ] \
+    || fail "$late_unlisted of $unlisted_count unlisted canonical roots started after the first measured root"
+  first_measured=$(awk -F '\t' 'FNR == NR { if ($0 !~ /^#/) measured[$1] = 1; next }
+    ($1 in measured) { print; exit }' "$ROOT/bin/fm-lint-costs.tsv" "$log")
+  [ -n "$first_measured" ] || fail "the full lint started no measured root"
+  first_measured_cost=$(awk -F '\t' -v root="$first_measured" '$1 == root { print $2 }' "$ROOT/bin/fm-lint-costs.tsv")
+  [ "$first_measured_cost" = "$max_cost" ] \
+    || fail "the first measured root was $first_measured (cost $first_measured_cost), not a costliest measured root ($max_cost)"
 
   out=$("$LINT" --record-costs "$costs" "$ROOT/bin/fm-lint.sh" 2>&1) && fail "--record-costs accepted explicit paths"
   assert_contains "$out" "full canonical lint" "--record-costs explicit-path refusal was unclear"
-  pass "fm-lint.sh --record-costs records every canonical root and the committed table orders the queue"
+  pass "fm-lint.sh --record-costs records every canonical root and the committed table orders the measured queue tier"
 }
 
 test_help_reports_the_complete_interface
