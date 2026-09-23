@@ -66,6 +66,8 @@ Use `--source-manifest PATH` for the reviewed installation manifest and `--attes
 
 Each privileged path declares its kind, its fixed installation path under one of the approved system prefixes printed by `--help`, and the source that verifies every ancestor with `stat`, UID, and root-ownership checks.
 An absolute path outside those prefixes fails, because a correct-looking path the installer does not own is not a trusted installation.
+The approved set covers the two prefixes the gateway v2 installation lifecycle uses, `/usr/local/libexec/firstmate/` for its programs and `/var/db/firstmate/sink/` for the executor-owned receipt store, alongside the original four.
+The receipt store is a separate prefix from `/var/db/firstmate/gateway/` on purpose: the broker root stays broker-only, and the store the broker reads is owned by the executor ([`docs/action-gateway-v2.md`](action-gateway-v2.md)).
 Every privileged source is scanned for worker-selected file input and production trust-state environment overrides.
 The scanned override set mirrors the production path overrides owned by `docs/action-gateway.md`.
 Each required channel has one unique purpose and schema identifier.
