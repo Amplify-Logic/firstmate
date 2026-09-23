@@ -1560,6 +1560,19 @@ EOF
    "body":"Looking into it now.\nLars"}]}
 EOF
       ;;
+    # A colleague's promise that the captain is following up, with no
+    # keep-you-updated clause and nothing sent since.
+    colleague-following)
+      cat >"$h/$name.json" <<EOF
+{"kind":"hubspot-ticket","owner":"natalia@team.example","stage":"Waiting for Tech",
+ "contacts":["ruud@kantoor.example"],
+ "events":[
+  {"type":"email","at":$at_inbound,"direction":"inbound","from":"ruud@kantoor.example",
+   "body":"The replacement part has still not arrived."},
+  {"type":"email","at":$at_out,"direction":"outbound","from":"support@team.example",
+   "body":"Lars is following up on this.\nNatalia"}]}
+EOF
+      ;;
     # A colleague's own ticket that never involves the captain.
     uninvolved)
       cat >"$h/$name.json" <<EOF
@@ -1593,7 +1606,7 @@ test_partner_facing_asks_awaiting_the_captain_are_flagged() {
   partner_home "$h"
 
   for name in promise autoack contact-note contact-chase thanks-and-ask owner-address \
-    participants-only colleague-reply tech-promise captain-looking; do
+    participants-only colleague-reply tech-promise captain-looking colleague-following; do
     key=$(key_of "$(observe_ticket "$h" "$name" "$T_0900")")
     [ "$(item_field "$h" "$key" partner)" = 1 ] || fail "$name: a ticket with an external contact is not partner-facing"
     [ "$(item_field "$h" "$key" awaiting)" = 1 ] || fail "$name: a partner waiting on the captain was not flagged"
@@ -1610,6 +1623,9 @@ test_partner_facing_asks_awaiting_the_captain_are_flagged() {
   key=$(key_of "$(observe_ticket "$h" captain-looking "$T_0900")")
   assert_contains "$(item_field "$h" "$key" awaiting_why)" 'promise that you are on it has had no message since' \
     'the captain'"'"'s subjectless promise was not caught'
+  key=$(key_of "$(observe_ticket "$h" colleague-following "$T_0900")")
+  assert_contains "$(item_field "$h" "$key" awaiting_why)" 'promise that you are on it has had no message since' \
+    'a colleague promise that the captain is following up was not caught'
   key=$(key_of "$(observe_ticket "$h" autoack "$T_0900")")
   assert_contains "$(item_field "$h" "$key" awaiting_why)" 'no email: an auto-acknowledgement' \
     'an auto-acknowledgement was not named as the reason the partner still waits'

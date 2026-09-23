@@ -29,9 +29,8 @@ PROMISE = (
 # nakijken?", "please check with your installer") are a promise only when the
 # team, tech or the captain acts on them in the same sentence.
 ACTING = (
-    r"look(?:ing)? into|check(?:ing)?\b" + NOT_YOU + "{0,40}" + WITH_OTHERS
-    + r"|follow(?:ing)? up\s+" + WITH_OTHERS
-    + r"|induiken|achteraan|uitzoeken|nakijken|navragen|terugkoppel|\blaat\b[^.?!\n]{0,40}\bweten\b")
+    r"look(?:ing)? into|check(?:ing)?\b[^.?!\n]{0,40}\bwith\b|follow(?:ing)? up"
+    r"|induiken|achteraan|uitzoeken|nakijken|navragen|terugkoppel|\blaat\b[^.?!\n]{0,40}\bweten\b")
 ACTORS = [r"i", r"we", r"our", r"team", r"tech\w*", r"ik", r"wij"]
 TECH = re.compile(r"\btech\b|\btechteam\b|\btechnical (?:team|support|department)\b", re.I)
 QUOTE_START = re.compile(
