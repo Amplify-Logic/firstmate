@@ -36,6 +36,7 @@ Every stage below exists to close one of those gaps.
 1. Record the sweep start time in CEST and in UTC.
 2. Every HubSpot and Gmail timestamp is UTC, printed with a trailing `Z`.
 3. Convert to CEST before writing any time on the surface; never print a raw UTC value as local.
+4. For the daily page, record the sweep start with `bin/fm-todo.sh sweep-start`, so a line not re-read in this sweep renders as not re-checked.
 
 ## Stage 1 - HubSpot, per ticket, in this order
 
@@ -100,6 +101,7 @@ For anything still looking open after Stages 1 to 6:
 2. Re-read the last message in any Slack thread quoted on the surface.
 3. If a re-fetch shows a change, fix the line; if a line cannot be re-read, drop it to "cannot verify".
 4. Stamp the surface with the re-read time, not the sweep start time.
+5. For the daily page, record each successful re-read on its item with `bin/fm-todo.sh verify`, and each proven closure with `bin/fm-todo.sh close` and its evidence; that script's `--help` owns the commands, and a line with no recorded re-read is never shown as current.
 
 A ten-minute gap between reading and publishing produced two wrong lines on 2026-09-21; the re-read is what closes it.
 
@@ -109,7 +111,7 @@ A ten-minute gap between reading and publishing produced two wrong lines on 2026
 2. "Cannot verify" names the specific blind spot: WhatsApp, phone, in person, the SIT platform, or a GitHub organisation not reachable from this account.
 3. `support@` is not a blind spot; shared-inbox replies are readable on the ticket's `EMAIL` engagements, so never list it in a legend of unreachable channels.
 4. Never publish an item as closed without evidence of the close, to the same standard as publishing it as open.
-5. Never carry a ticket's state forward between updates; each surface is a fresh live read.
+5. A durable record may carry an item between updates, but its freshness never carries with it: a line counts as current only when this sweep re-read it, and an unread line names the time of its last read instead.
 
 ## Chat claims
 

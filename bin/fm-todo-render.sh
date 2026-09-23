@@ -5,46 +5,76 @@
 #   fm-todo-render.sh render [--out FILE] [--morning-section FILE]
 #                            [--date YYYY-MM-DD] [--if-exists]
 #   fm-todo-render.sh path [--date YYYY-MM-DD]
+#   fm-todo-render.sh settings      (timezone= and sources_file= for fm-todo.sh)
 #   fm-todo-render.sh --help
 #
-# WHAT THIS IS. A PURE RENDERER. It makes NO model call, opens no network
-# connection, reads no source system and never decides anything about an item.
-# It reads the channel-intake ledger this home already holds and writes
-# .lavish/today-<YYYY-MM-DD>.html from it. Running it twice over an unchanged
-# ledger at the same minute produces the same bytes, which is what lets the
-# 30-minute channel read refresh the page's ordering for free.
+# WHAT THIS IS. A DETERMINISTIC RENDERER over the to-do item store. It makes
+# NO model call, opens no network connection and reads no source system. Each
+# render first runs `bin/fm-todo.sh sync`, which folds the channel ledger, the
+# morning sidecar and the captain-held backlog into data/todo, and then writes
+# .lavish/today-<YYYY-MM-DD>.html from those item records alone. bin/fm-todo.sh
+# owns the item record, identity, verification, reopening and page commands.
+# Running it twice over unchanged records at the same minute produces the same
+# bytes, which is what lets the 30-minute channel read refresh the page.
 #
-# NOTHING IS INVENTED AND NOTHING IS CARRIED FORWARD. Every line on the live
-# section comes from a ledger record or explicit morning action metadata.
-# An earlier version of the page is never read back for content:
-# the page is rebuilt from the ledger each time. That is the mechanical half of
-# the `daily-todo-freshness` contract - the verification half stays with the
-# orchestrator that wrote those records.
+# NOTHING IS INVENTED AND NOTHING IS READ BACK. An earlier version of the page
+# is never read for content. That is the mechanical half of the
+# `daily-todo-freshness` contract - the verification half stays with the
+# orchestrator that records each re-read with `fm-todo.sh verify`.
 #
-# TWO INPUTS, ONE OUTPUT. Python 3's standard library composes one action queue,
-# grouped fleet conditions and collapsed cleared history. Routine ledger traffic
-# is context, not an obligation. No source is queried or re-verified here.
+# PAGE SHAPE. A Now strip of at most three current asks with a one-line why;
+# decisions awaiting him; replies he owes; the email agent block; waiting on
+# others (including requested handoffs); fleet conditions; the morning detail
+# fragment; everything closed since the previous sweep with its evidence and
+# actor, except routine chatter the intake dropped from its ledger, which was
+# never an ask; then folds for parked, "mine", routine activity and intake
+# coverage
+# (each enrolled source's last successful read and last failure, which is
+# separate from item freshness). Sections with nothing in them are omitted.
+# Inside decisions, replies and routine activity, lines not current for this
+# build sit in one labelled fold, each with its last check. A captain-held
+# backlog decision no read made current sits instead in its own fold under the
+# decisions section, oldest hold first, at most ten rows and a count of the
+# rest, and the decisions tile carries that held total beside its open count -
+# a hold is never verification, so those lines must not bury the ones read
+# today. The routine fold is capped the same way, and a capped fold says how
+# many of its lines are shown.
+# "Handled without you" appears only for a fulfilled close with a named actor
+# other than the captain.
 #
-# MORNING COMPOSITION CONTRACT (version 1): write details-only ticket tables and
-# calendar to today-<date>.morning.html, and action metadata beside it at
-# today-<date>.morning.json. The JSON object has version:1, date:"YYYY-MM-DD",
-# actions:[{key, source, ref, class, title, link, updated}]. Each action needs a
-# stable key, source/ref matching the ledger when available, a ranked non-routine
-# class, and updated as the SAME-DAY verification epoch from daily-todo-freshness.
-# Decisions and waiting-on-you lines belong only in actions, never duplicated
-# in the details HTML. Closed details belong in an HTML details disclosure.
-# A ledger identity supersedes morning metadata, including waiting/archived
-# states. The fragment must not contain a document shell/header/h1. Missing or
-# invalid metadata is never inferred from prose: legacy HTML stays in a closed
-# historical-reference disclosure; invalid supplied metadata fails the render.
-# Legacy pilot-connectivity prose is omitted because silence is not a condition.
-# The renderer never substitutes its build time for a source read time.
+# Every row of something asked of him - decisions, held decisions and replies -
+# carries a "note" toggle over a one-line box that queues the typed line into
+# the open Lavish review session with the item's id and the revision the page
+# showed, so bin/fm-todo.sh can apply a page command to exactly the ask he was
+# looking at; with no review session connected the box says so and queues
+# nothing. Routine activity and the list-style folds carry no box.
 #
-# PROVENANCE IS ON EVERY LINE. Each live row carries its source label and the
-# ledger's `updated` stamp rendered in the configured local zone, which is the
-# time that item was last read from its channel. The page header carries the
-# render time separately, so "when was this page built" and "when was this line
-# read" can never be confused for each other.
+# FRESHNESS IS ON EVERY LINE. A line is "read <time>" only when its recorded
+# check is at or after this build's sweep (or the start of the day) and
+# checked the revision shown; otherwise "not re-checked since <time>", or
+# "cannot verify" when no read was ever recorded. The page header carries the
+# render time separately, so build time and read time are never confused.
+#
+# MORNING COMPOSITION CONTRACT (version 1, or 2 with the optional fields):
+# details-only ticket tables and calendar go in today-<date>.morning.html,
+# action metadata in today-<date>.morning.json: {version, date:"YYYY-MM-DD",
+# actions:[{key, source, ref, class, title, link, updated}], and in version 2
+# optionally sweep_started (epoch the day's verification pass began),
+# email_agent_source (the named next-actions report for the email agent block,
+# relative to the home) and per action kind (decision|approval|reply|info,
+# default decision), ask, why, verified_how, digest (a fingerprint of the ask,
+# the only thing that may reopen a closed item) and aliases (extra
+# `source:ref` identities of the SAME ask)}. `updated` is the SAME-DAY
+# verification epoch from daily-todo-freshness. Decisions and waiting-on-you
+# lines belong only in actions, never duplicated in the details HTML. The
+# fragment must not contain a document shell/header/h1. Invalid supplied
+# metadata fails the render and changes neither the store nor the page;
+# legacy HTML without metadata stays in a closed historical-reference
+# disclosure, and its pilot-connectivity prose is omitted.
+#
+# THE EMAIL AGENT BLOCK is dated reference read from the report the sidecar
+# names, labelled with that file's written time; it is never treated as
+# fresh obligations and no file is picked by guessing the newest.
 #
 # HOUSE STYLE COMES FROM A TEMPLATE, NOT FROM LAVISH. bin/templates/
 # today-page.head.html and today-page.foot.html hold the head, the styles and
@@ -67,6 +97,7 @@ DATA="${FM_DATA_OVERRIDE:-$FM_HOME/data}"
 LAVISH_DIR="${FM_LAVISH_OVERRIDE:-$FM_HOME/.lavish}"
 CONFIG_FILE="$CONFIG/channel-intake"
 INTAKE_DIR="$DATA/channel-intake"
+STORE="${FM_TODO_STORE_OVERRIDE:-$DATA/todo}"
 TEMPLATE_DIR="${FM_TODO_TEMPLATE_DIR:-$SCRIPT_DIR/templates}"
 HEAD_TEMPLATE="$TEMPLATE_DIR/today-page.head.html"
 FOOT_TEMPLATE="$TEMPLATE_DIR/today-page.foot.html"
@@ -175,7 +206,7 @@ local_date() {
 # --- composition ------------------------------------------------------------
 
 render_page() {
-  local epoch=$1 day=$2 morning=$3
+  local epoch=$1 day=$2 morning=$3 sidecar=$4
   [ -f "$HEAD_TEMPLATE" ] && [ ! -L "$HEAD_TEMPLATE" ] \
     || die "house-style head template is missing: $HEAD_TEMPLATE"
   [ -f "$FOOT_TEMPLATE" ] && [ ! -L "$FOOT_TEMPLATE" ] \
@@ -183,9 +214,10 @@ render_page() {
   awk -v title="Today - $(local_fmt "$epoch" '%A %-d %B %Y')" \
     '{ gsub(/\{\{TITLE\}\}/, title); print }' "$HEAD_TEMPLATE"
   printf '<header><div><div class="kicker">Aquablu Starship</div><h1>Today</h1></div>\n'
-  printf '<div class="meta">%s<br>Page rebuilt from the channel ledger at <span class="mono">%s</span>.<br>Source read times stay on each item.</div></header>\n' \
+  printf '<div class="meta">%s<br>Page rebuilt from the to-do records at <span class="mono">%s</span>.<br>Each line carries its own last check.</div></header>\n' \
     "$(local_fmt "$epoch" '%A %-d %B %Y')" "$(local_fmt "$epoch" '%H:%M %Z')"
-  python3 "$SCRIPT_DIR/fm-todo-compose.py" "$INTAKE_DIR" "$morning" "$day" "$epoch" "$CFG_TIMEZONE" "$CFG_SOURCES_FILE" || return 1
+  python3 "$SCRIPT_DIR/fm-todo-compose.py" "$STORE" "$morning" "$day" "$epoch" "$CFG_TIMEZONE" \
+    "$FM_HOME" "$sidecar" "$INTAKE_DIR" "$CFG_SOURCES_FILE" || return 1
   cat "$FOOT_TEMPLATE"
 }
 
@@ -217,7 +249,7 @@ resolve_day() {
 }
 
 render_cmd() {
-  local out='' morning='' day='' if_exists=false epoch body
+  local out='' morning='' day='' if_exists=false epoch body sidecar
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --out) [ "$#" -ge 2 ] || die '--out requires a value'; out=$2; shift 2 ;;
@@ -258,7 +290,14 @@ render_cmd() {
     [ -f "$morning" ] && [ ! -L "$morning" ] \
       || die "--morning-section is not a regular file: $morning"
   fi
-  body=$(render_page "$epoch" "$day" "$morning") || die "composition failed; existing page preserved"
+  sidecar="${out%.html}.morning.json"
+  [ -z "$morning" ] || sidecar="${morning%.html}.json"
+  [ -f "$sidecar" ] && [ ! -L "$sidecar" ] || sidecar=''
+  # The store is folded first and the page composed only from it; a refused
+  # sidecar changes neither the store nor the page.
+  FM_TODO_NOW="$epoch" "$SCRIPT_DIR/fm-todo.sh" sync --morning-json "$sidecar" >/dev/null \
+    || die "item sync failed; existing page preserved"
+  body=$(render_page "$epoch" "$day" "$morning" "$sidecar") || die "composition failed; existing page preserved"
   write_atomic "$out" "$body" || die "cannot write the page: $out"
   printf 'TODO_RENDER: %s rendered at %s\n' "$out" "$(local_fmt "$epoch" '%H:%M %Z')"
 }
@@ -282,6 +321,7 @@ load_config
 case "${1:-}" in
   render) shift; render_cmd "$@" ;;
   path) shift; path_cmd "$@" ;;
+  settings) printf 'timezone=%s\nsources_file=%s\n' "$CFG_TIMEZONE" "$CFG_SOURCES_FILE" ;;
   -h|--help) usage ;;
   '') usage; exit 2 ;;
   *) die "unknown command: $1" ;;

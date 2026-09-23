@@ -117,6 +117,18 @@ tr:target td{background:var(--accent-soft)}
 details{margin:20px 0;border-top:1px solid var(--line);padding-top:12px}
 summary{cursor:pointer;font-weight:600;color:var(--ink-2)}
 .watch-line{padding:12px 16px;margin:8px 0;background:var(--panel);border:1px solid var(--line);border-radius:8px}
+.done .why{display:block;font-size:12.5px;color:var(--ink-3);margin-top:2px}
+td.what .ctx.how{font-size:12px;color:var(--ink-3)}
+.strip.now{margin:16px 0 6px}
+@media (max-width:600px){
+  .wrap{padding:18px 16px 48px}
+  td.what{min-width:0}
+  .meta{text-align:left}
+  tr.item{display:grid;grid-template-columns:minmax(0,1fr)}
+  tr.item td{border-bottom:none;padding:8px 12px}
+  tr.item td:last-child{border-bottom:1px solid var(--line-2)}
+  tr.item td.who,tr.item td.links{white-space:normal}
+}
 .watch-line .why{display:block;color:var(--ink-3);font-size:13px;margin-top:5px;overflow-wrap:anywhere}
 </style>
 </head><body><div class="wrap">

@@ -149,9 +149,9 @@ test_waiting_and_closed_never_mix_into_the_live_section() {
   # heading, and the closed one after the closed heading.
   assert_contains "$(cat "$page")" 'handed to Naomi, she answers the dealer' \
     'the hand-over note is missing from the page'
-  [ "$(line_of "$page" 'quote for the dealer')" -gt "$(line_of "$page" '<summary>Waiting on others</summary>')" ] \
+  [ "$(line_of "$page" 'quote for the dealer')" -gt "$(line_of "$page" '<h2>Waiting on others')" ] \
     || fail 'a handed-over item did not render under Waiting on others'
-  [ "$(line_of "$page" 'invoice dispute')" -gt "$(line_of "$page" '<summary>Cleared today')" ] \
+  [ "$(line_of "$page" 'invoice dispute')" -gt "$(line_of "$page" '<h2>Closed since')" ] \
     || fail 'an item archived today did not render under Closed since morning'
   assert_contains "$(cat "$page")" 'credit note sent, customer confirmed' \
     'the recorded resolution is missing from the closed table'
@@ -163,7 +163,7 @@ test_waiting_and_closed_never_mix_into_the_live_section() {
 
   # And the waiting item stays inside its own block rather than leaking into
   # the live table above it or the closed table below it.
-  [ "$(line_of "$page" 'quote for the dealer')" -lt "$(line_of "$page" '<summary>Cleared today')" ] \
+  [ "$(line_of "$page" 'quote for the dealer')" -lt "$(line_of "$page" '<h2>Closed since')" ] \
     || fail 'the waiting item did not stay inside the Waiting on others block'
 
   pass 'waiting, closed-today and closed-earlier items each render in exactly one place'
@@ -189,7 +189,7 @@ test_every_line_carries_its_own_read_time() {
   assert_contains "$(cat "$page")" 'afternoon ask<span class="prov obs">read 15:00 CEST</span>' \
     'the afternoon line does not carry its own read time'
   # The page's own build time is separate and separately labelled.
-  assert_contains "$(cat "$page")" 'rebuilt from the channel ledger at <span class="mono">15:30 CEST</span>' \
+  assert_contains "$(cat "$page")" 'rebuilt from the to-do records at <span class="mono">15:30 CEST</span>' \
     'the page does not stamp its own render time'
   assert_contains "$(cat "$page")" 'slack-channel (C_BRIEF)' \
     'the line does not name the channel it was read on'
@@ -251,7 +251,7 @@ JSON
   observe_at "$h" "$T_1500" resolve --item "$key" --reason 'no longer needed' >/dev/null
   render_at "$h" "$T_1530" render >/dev/null
   assert_not_contains "$(cat "$page")" 'duplicate morning action' 'resolved ledger item must not reappear from morning'
-  [ "$(line_of "$page" 'no longer needed')" -gt "$(line_of "$page" '<summary>Cleared today')" ] || fail 'cleared reason must be in closed footer'
+  [ "$(line_of "$page" 'no longer needed')" -gt "$(line_of "$page" '<h2>Closed since')" ] || fail 'cleared reason must be in closed footer'
   cp "$page" "$h/previous.html"
   printf '{invalid' >"$h/.lavish/today-2026-09-10.morning.json"
   if render_at "$h" "$T_1530" render >/dev/null 2>&1; then fail 'invalid metadata must refuse'; fi
@@ -299,19 +299,25 @@ test_nothing_is_carried_forward_between_renders() {
   render_at "$h" "$T_1530" render >/dev/null
 
   # It may appear in the closed table, but never again as open work.
-  [ "$(line_of "$page" 'ask that gets answered')" -gt "$(line_of "$page" '<summary>Cleared today')" ] \
+  [ "$(line_of "$page" 'ask that gets answered')" -gt "$(line_of "$page" '<h2>Closed since')" ] \
     || fail 'a resolved item survived into the live section of the next render'
 
-  # An empty ledger renders an honest empty page rather than the previous one.
-  observe_at "$h" "$T_1500" resolve --item "$key" --reason 'again' >/dev/null 2>&1 || true
-  rm -f "$h/data/channel-intake/archive"/*
+  # The page is rebuilt from the durable records, never read back: deleting
+  # it and rendering again gives the same bytes.
+  cp "$page" "$h/previous.html"
+  rm -f "$page"
+  render_at "$h" "$T_1530" render >/dev/null
+  cmp -s "$page" "$h/previous.html" || fail 'a re-render from the same records produced a different page'
+
+  # With no records at all, the page is honestly empty.
+  rm -rf "$h/data/todo" "$h/data/channel-intake/archive" "$h/data/channel-intake/items"
   render_at "$h" "$T_1530" render >/dev/null
   assert_not_contains "$(cat "$page")" 'ask that gets answered' \
     'the renderer read content back from the page it had already written'
   assert_contains "$(cat "$page")" 'Nothing open.' \
-    'an empty ledger did not render as an empty page'
+    'an empty record set did not render as an empty page'
 
-  pass 'the page is rebuilt from the ledger every time, so nothing is invented or carried forward'
+  pass 'the page is rebuilt from the records every time, so nothing is invented or carried forward'
 }
 
 test_house_style_comes_from_the_tracked_templates() {
