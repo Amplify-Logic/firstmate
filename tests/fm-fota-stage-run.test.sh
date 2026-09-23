@@ -49,6 +49,11 @@ export FM_TEST_QUEUE_LOG="$QUEUE_LOG"
 export FM_FOTA_QUEUE_CMD="$STUB"
 export FM_FOTA_COMPANION_THREAD="isolated-stub-thread"
 
+
+file_mode() {  # portable octal mode; the repo's established uname switch
+  if [ "$(uname)" = Darwin ]; then stat -f %Lp "$1" 2>/dev/null; else stat -c %a "$1" 2>/dev/null; fi
+}
+
 PAYLOAD='[{"n": "band_lower", "v": 135},{"n": "band_upper", "v": 140}]'
 
 # Runs and returned results are durable by design, so each test starts from a
@@ -329,8 +334,7 @@ test_generated_request_is_not_world_readable() {
   run_id=$(start_run "$(make_plan 1)")
   # The request carries the same device identifier, payload and operation
   # identity the 0600 record is protected for.
-  mode=$(stat -f '%Lp' "$FM_FOTA_RETURN_DIR/$run_id-request.md" 2>/dev/null \
-    || stat -c '%a' "$FM_FOTA_RETURN_DIR/$run_id-request.md")
+  mode=$(file_mode "$FM_FOTA_RETURN_DIR/$run_id-request.md")
   [ "$mode" = "600" ] || fail "generated request is mode $mode, expected 600"
   pass "the generated request gets the same protection as the record"
 }
