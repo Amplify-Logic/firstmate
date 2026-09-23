@@ -292,6 +292,27 @@ test_done_survives_and_a_new_ask_resurfaces_once() {
   pass 'done survives repeated syncs and the next morning; a changed ask resurfaces once with its reason'
 }
 
+test_a_sweep_reopen_hides_its_source_label() {
+  local h id key out
+  h="$TMP_ROOT/reopen-label"
+  new_home "$h"
+  # The ledger slot presents the item as "slack-channel (C_BRIEF)"; the
+  # morning slot that reopens it carries the bare "C_BRIEF" label.
+  key=$(intake_at "$h" "$T_0900" observe --source C_BRIEF --ref rl --digest a --class urgent --title 'pallet delivery slot' | awk '{ print $2 }')
+  sidecar "$h" 2026-09-10 '{"key":"'"$key"'","source":"C_BRIEF","ref":"rl","class":"urgent","title":"pallet delivery slot","digest":"ask-1","updated":'"$T_0900"'}'
+  render_at "$h" "$T_1000"
+  id=$(field_of "$h" 'pallet delivery slot' 1)
+  todo_at "$h" "$T_1000" command --item "$id" 'done' >/dev/null
+  render_at "$h" "$T_1100"
+  sidecar "$h" 2026-09-10 '{"key":"'"$key"'","source":"C_BRIEF","ref":"rl","class":"urgent","title":"pallet delivery slot","digest":"ask-2","updated":'"$T_1100"'}'
+  render_at "$h" "$T_1500"
+  [ "$(field_of "$h" 'pallet delivery slot' 2)" = open ] || fail 'a changed sweep ask did not reopen'
+  out=$(page "$h" 2026-09-10)
+  assert_contains "$out" 'reopened: its source changed after it was closed (fulfilled)' 'the reopen reason is missing'
+  assert_not_contains "$out" 'reopened: C_BRIEF' 'the reopening slot label is shown on the line'
+  pass 'a reopen by a slot other than the presented one still hides the source label'
+}
+
 test_edit_after_resolution_reopens_once() {
   local h key
   h="$TMP_ROOT/edited"
@@ -532,6 +553,7 @@ Morning partner ask' ] || fail 'an undated partner ask jumped ahead of an older 
 test_verification_is_never_renewed_by_sync
 test_done_survives_and_a_new_ask_resurfaces_once
 test_edit_after_resolution_reopens_once
+test_a_sweep_reopen_hides_its_source_label
 test_commands_refuse_stale_pages_and_track_handoffs
 test_missing_input_closes_nothing_and_release_is_scoped
 test_identity_snooze_and_counter

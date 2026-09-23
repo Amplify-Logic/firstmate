@@ -35,8 +35,8 @@
 # build in one capped "not re-checked" fold), everything closed since the
 # previous sweep ("Closed today" when that is the start of the day) with its
 # evidence and actor, parked, "mine" and the email agent block; then the live
-# "Your open tickets" fold, whose summary keeps its read time or out-of-date
-# label, the morning detail fragment (calendar, worth knowing) and the intake
+# "Your open tickets" section, open with its ticket table and its read time or
+# out-of-date line, the morning detail fragment (calendar, worth knowing) and the intake
 # coverage fold (each enrolled source's last successful read and last
 # failure, which is separate from item freshness). Routine chatter the intake
 # dropped from its ledger was never an ask and is not a closure. Sections with
@@ -57,8 +57,7 @@
 # data/channel-intake/tickets.json, which `bin/fm-channel-intake.sh tickets`
 # alone writes and whose header owns the format: the count with its stage
 # breakdown, each ticket's stage exactly as stored, and the snapshot's own
-# read time, in one collapsed fold whose summary carries that read time. A
-# snapshot older than two of the intake's configured
+# read time. A snapshot older than two of the intake's configured
 # `interval_seconds` polls, and never less than an hour, is headed out of date
 # with that read time and never called live; a missing or unreadable one says
 # the tickets could not be read. Any "Your open tickets" section in a morning

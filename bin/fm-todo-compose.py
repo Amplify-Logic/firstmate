@@ -16,7 +16,7 @@ if ZONE:
     time.tzset()
 RANK = {name: n for n, name in enumerate(('outage', 'urgent', 'deadline', 'obligation'))}
 RETIRED = ('closed', 'dropped')
-# The sort-last sentinel `queued()` spells as a date, for an undated ask epoch.
+# The sort-last sentinel for a partner ask with no recorded ask epoch.
 UNDATED = 253402300799
 
 
@@ -190,8 +190,10 @@ def current(rec):
 
 
 def partner_first(rec):
-    """A partner-facing ask awaiting the captain outranks every class, oldest ask
-    first; an undated ask is not the oldest, so it sorts after every dated one."""
+    """A partner-facing ask awaiting the captain sorts ahead of every class, oldest
+    ask first, though `tier` still puts live problems and deadlines above it in
+    the Needs you list; an undated ask is not the oldest, so it sorts after every
+    dated one."""
     if not rec.get('partner_first'):
         return (1, 0)
     return (0, number(rec.get('awaiting_since')) or UNDATED)
@@ -277,9 +279,9 @@ def audit(rec):
 
 def context(rec):
     """At most one short line under the ask: a reopen note, else the why, else the ask's wording."""
-    note = rec.get('note') or ''
-    if note and rec.get('label'):
-        note = note.replace(rec['label'], 'its source')
+    note = re.sub(r'^reopened: .+ changed after it was closed', 'reopened: its source changed after it was closed',
+                  rec.get('note') or '')
+    note = re.sub(r'^reopened at .+$', 'reopened at its source', note)
     for text in (note, rec.get('why'), rec.get('ask') if rec.get('ask') != rec.get('title') else ''):
         if text:
             return f'<span class="ctx">{brief(text, 160)}</span>'
@@ -547,11 +549,10 @@ def tickets_snapshot():
 
 
 def tickets_section():
-    """One collapsed fold whose summary keeps the snapshot's read time or its out-of-date label."""
     doc, why = tickets_snapshot()
     if doc is None:
-        print(disclosure('Your open tickets - not available',
-                         f'<p class="sub"><span class="prov unv">Could not read your open tickets: {esc(why)}.</span></p>'))
+        print('<h2>Your open tickets<small>not available</small></h2>')
+        print(f'<p class="sub"><span class="prov unv">Could not read your open tickets: {esc(why)}.</span></p>')
         return
     read_at, tickets = number(doc['read_at']), doc['tickets']
     age = NOW - read_at
@@ -562,22 +563,21 @@ def tickets_section():
     noun = 'ticket carries' if len(tickets) == 1 else 'tickets carry'
     summary = f'{len(tickets)} {noun} you as owner and {"is" if len(tickets) == 1 else "are"} not closed' + (f': {breakdown}' if breakdown else '') + '.'
     if age > TICKETS_FRESH:
-        title = f'Your open tickets ({len(tickets)}) - out of date - last read {when(read_at)}'
-        body = (f'<p class="sub"><span class="prov unv">Not refreshed since {esc(when(read_at))}, {age // 60} minutes ago; '
-                f'stages may have changed since.</span> At that read: {summary}</p>')
+        print(f'<h2>Your open tickets<small>out of date - last read {esc(when(read_at))}</small></h2>')
+        print(f'<p class="sub"><span class="prov unv">Not refreshed since {esc(when(read_at))}, {age // 60} minutes ago; '
+              f'stages may have changed since.</span> At that read: {summary}</p>')
     else:
-        title = f'Your open tickets ({len(tickets)}) - read live from HubSpot at {when(read_at)}'
-        body = f'<p class="sub">{summary} <span class="prov obs">Read live from HubSpot at {esc(when(read_at))}.</span></p>'
-    if tickets:
-        rows = ''.join(
-            f'<tr><td>{link_to(t["link"], t["subject"] or "untitled ticket")}'
-            f'</td><td>{esc(t["stage"])}</td>'
-            f'<td>{esc(t["last_in"] or "-")}</td><td>{esc(t["last_out"] or "-")}</td></tr>'
-            for t in tickets)
-        body += ('<div class="tablewrap"><table><thead><tr><th>Ticket</th><th>Stage</th><th>Last inbound</th><th>Last outbound</th></tr></thead>'
-                 f'<tbody>{rows}</tbody></table></div>')
-    print(disclosure(title, body))
-
+        print('<h2>Your open tickets<small>read live from HubSpot</small></h2>')
+        print(f'<p class="sub">{summary} <span class="prov obs">Read live from HubSpot at {esc(when(read_at))}.</span></p>')
+    if not tickets:
+        return
+    rows = ''.join(
+        f'<tr><td>{link_to(t["link"], t["subject"] or "untitled ticket")}'
+        f'</td><td>{esc(t["stage"])}</td>'
+        f'<td>{esc(t["last_in"] or "-")}</td><td>{esc(t["last_out"] or "-")}</td></tr>'
+        for t in tickets)
+    print('<div class="tablewrap"><table><thead><tr><th>Ticket</th><th>Stage</th><th>Last inbound</th><th>Last outbound</th></tr></thead>'
+          f'<tbody>{rows}</tbody></table></div>')
 
 tickets_section()
 if details.strip():

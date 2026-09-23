@@ -389,7 +389,8 @@ $body"
   assert_not_contains "$(cat "$page")" 'class="strip now"' 'the separate Now box is still on the page'
   assert_not_contains "$(cat "$page")" 'No verification sweep recorded' 'the sweep banner is still on the page'
   assert_not_contains "$(cat "$page")" 'held, not re-checked' 'the held count is still on the page'
-  [ "$(grep -c '<h2>' "$page")" = 1 ] || fail 'the page has headed sections beyond the one Needs you list'
+  [ "$(grep -o '<h2>[^<]*' "$page" | sed 's/^<h2>//')" = 'Needs you now
+Your open tickets' ] || fail 'the page has headed sections beyond the Needs you list and the open tickets'
 
   # No item appears twice anywhere on the page.
   ids=$(grep -o 'id="item-[^"]*"' "$page" | sort)
@@ -402,8 +403,8 @@ $body"
   assert_not_contains "$(cat "$page")" '<details open' 'a fold renders expanded'
   [ "$(line_of "$page" '<summary>Waiting on others (1)</summary>')" -lt "$(line_of "$page" '<summary>Other channel activity</summary>')" ] \
     && [ "$(line_of "$page" '<summary>Other channel activity</summary>')" -lt "$(line_of "$page" '<summary>Closed today (1)</summary>')" ] \
-    && [ "$(line_of "$page" '<summary>Closed today (1)</summary>')" -lt "$(line_of "$page" '<summary>Your open tickets')" ] \
-    || fail 'waiting, activity, closed and open tickets are not folded in order'
+    && [ "$(line_of "$page" '<summary>Closed today (1)</summary>')" -lt "$(line_of "$page" '<h2>Your open tickets')" ] \
+    || fail 'waiting, activity and closed are not folded in order ahead of the open tickets section'
   [ "$(line_of "$page" 'dealer quote handed over')" -gt "$(line_of "$page" '<summary>Waiting on others')" ] \
     || fail 'the handed-over item is not inside the waiting fold'
   [ "$(line_of "$page" 'weekly newsletter')" -gt "$(line_of "$page" '<summary>Other channel activity')" ] \
@@ -590,7 +591,7 @@ HTML
   assert_not_contains "$page" 'Morning-only closed ticket' 'the morning ticket table is still shown'
   assert_not_contains "$page" '06:20 CEST' 'the morning read time is still shown'
   assert_contains "$page" 'Calendar snapshot' 'the rest of the morning detail was lost'
-  [ "$(grep -o -e '<h2>Your open tickets' -e '<summary>Your open tickets' "$(page_of "$h")" | wc -l | tr -d ' ')" = 1 ] \
+  [ "$(grep -o '<h2>Your open tickets' "$(page_of "$h")" | wc -l | tr -d ' ')" = 1 ] \
     || fail 'the page carries more than one tickets section'
 
   # The same holds for a legacy morning file with no action metadata.
