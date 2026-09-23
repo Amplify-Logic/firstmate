@@ -50,6 +50,7 @@ For every ticket that will appear on the surface:
 6. If `hs_last_message_sent_at` has no matching `EMAIL` engagement, the message is a conversations-inbox message, an auto-acknowledgement or an agent reply; say so explicitly and claim neither that a human answered nor that nothing went out.
 7. Fetch the ticket's `NOTE` engagements sorted newest first; a note mentioning `@Lars Tolhurst` makes the item his even when the stage says otherwise.
 8. Recount ownership live rather than reusing a number: search tickets owned by the captain whose stage is not Closed, and break the count down by stage label.
+9. For the daily page, hand that complete recounted set to `bin/fm-channel-intake.sh tickets`, which owns the snapshot the page's "Your open tickets" section renders from; never write that table into the morning detail file, which the page no longer shows.
 
 The HubSpot tool's own help owns object types, filter syntax, and association parameters.
 

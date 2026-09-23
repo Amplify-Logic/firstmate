@@ -26,6 +26,11 @@
 #   - The 30-minute read refreshes an existing page and never manufactures one:
 #     a completed channel read re-ranks a page that exists, reports a page that
 #     does not, and a renderer that fails never fails the read.
+#   - "Your open tickets" is rendered live from the intake's snapshot on every
+#     render, stamped with the snapshot's own read time and stage labels as
+#     stored; an out-of-date snapshot says so, a missing one says it could not
+#     be read, and a morning copy of the table is never shown. The snapshot
+#     writer refuses malformed input and leaves the previous snapshot intact.
 # shellcheck disable=SC2016
 set -u
 
@@ -395,6 +400,113 @@ $order"
   pass 'a completed read refreshes an existing page, never manufactures one, and never fails on the render'
 }
 
+# A HubSpot pass hands the writer the full current set as a JSON array.
+write_tickets() {
+  local h=$1 now=$2
+  shift 2
+  printf '%s' "$*" | observe_at "$h" "$now" tickets --owner 'Test Owner' --file -
+}
+
+TICKETS_TWO='[{"id":"101","subject":"Alvina consumption report","stage":"Waiting for Tech","last_in":"10 Sep 10:36","last_out":"10 Sep 16:10","link":"https://app.hubspot.com/r/101"},
+{"id":"102","subject":"Sparkling water is ambient","stage":"Waiting on contact","last_in":"10 Sep 13:38","last_out":"","link":"https://app.hubspot.com/r/102"}]'
+
+test_open_tickets_render_live_from_a_fresh_snapshot() {
+  local h page
+  h="$TMP_ROOT/tickets-fresh"
+  new_home "$h"
+  write_tickets "$h" "$T_1500" "$TICKETS_TWO" >/dev/null || fail 'a well-formed snapshot was refused'
+  render_at "$h" "$T_1530" render >/dev/null
+  page=$(cat "$(page_of "$h")")
+  assert_contains "$page" '2 tickets carry you as owner and are not closed: 1 Waiting for Tech, 1 Waiting on contact.' 'the count and stage breakdown are missing'
+  assert_contains "$page" 'Read live from HubSpot at 15:00 CEST.' 'the section is not stamped with the snapshot read time'
+  assert_contains "$page" '<td>Waiting on contact</td>' 'the stage label is not printed as stored'
+  assert_contains "$page" '>Alvina consumption report</a>' 'a ticket row is missing'
+  assert_not_contains "$page" 'out of date' 'a fresh snapshot was labelled out of date'
+
+  # A later pass replaces the set: a ticket that closed disappears.
+  write_tickets "$h" "$T_1530" '[{"id":"102","subject":"Sparkling water is ambient","stage":"Waiting on contact","last_in":"","last_out":"","link":"https://app.hubspot.com/r/102"}]' >/dev/null
+  render_at "$h" "$T_1530" render >/dev/null
+  page=$(cat "$(page_of "$h")")
+  assert_contains "$page" '1 ticket carries you as owner and is not closed: 1 Waiting on contact.' 'the refreshed count is missing'
+  assert_contains "$page" 'Read live from HubSpot at 15:30 CEST.' 'the refreshed read time is missing'
+  assert_not_contains "$page" 'Alvina consumption report' 'a ticket no longer in the snapshot is still shown'
+  pass 'open tickets render live from the snapshot with its own read time and stored stage labels'
+}
+
+test_open_tickets_snapshot_writer_refuses_malformed_input() {
+  local h snap before
+  h="$TMP_ROOT/tickets-refuse"
+  new_home "$h"
+  snap="$h/data/channel-intake/tickets.json"
+  write_tickets "$h" "$T_1500" "$TICKETS_TWO" >/dev/null
+  before=$(cat "$snap")
+  write_tickets "$h" "$T_1530" '{not json' >/dev/null 2>&1 && fail 'non-JSON input was accepted'
+  write_tickets "$h" "$T_1530" '[{"id":"103","subject":"s","stage":"Closed","last_in":"","last_out":"","link":"https://x/103"}]' >/dev/null 2>&1 \
+    && fail 'a Closed ticket was accepted'
+  write_tickets "$h" "$T_1530" '[{"id":"104","subject":"s","stage":"New","last_in":"","link":"https://x/104"}]' >/dev/null 2>&1 \
+    && fail 'a ticket missing a field was accepted'
+  write_tickets "$h" "$T_1530" '[{"id":"105","subject":"s","stage":"New","last_in":"","last_out":"","link":"https://x/105","owner":"x"}]' >/dev/null 2>&1 \
+    && fail 'a ticket with an unknown field was accepted'
+  [ "$(cat "$snap")" = "$before" ] || fail 'a refused write changed the previous snapshot'
+  pass 'the snapshot writer refuses malformed input and keeps the previous snapshot'
+}
+
+test_open_tickets_out_of_date_snapshot_says_so() {
+  local h page
+  h="$TMP_ROOT/tickets-stale"
+  new_home "$h"
+  write_tickets "$h" "$T_0900" "$TICKETS_TWO" >/dev/null
+  render_at "$h" "$T_1530" render >/dev/null
+  page=$(cat "$(page_of "$h")")
+  assert_contains "$page" 'out of date - last read 09:00 CEST' 'the heading does not say the snapshot is out of date'
+  assert_contains "$page" 'Not refreshed since 09:00 CEST, 390 minutes ago' 'the stale read time is not stated plainly'
+  assert_not_contains "$page" 'Read live from HubSpot' 'stale data was presented as a live read'
+  pass 'an out-of-date snapshot says so with its read time'
+}
+
+test_open_tickets_missing_snapshot_says_it_could_not_be_read() {
+  local h page
+  h="$TMP_ROOT/tickets-missing"
+  new_home "$h"
+  render_at "$h" "$T_1530" render >/dev/null
+  page=$(cat "$(page_of "$h")")
+  assert_contains "$page" 'Could not read your open tickets: no HubSpot read has been recorded.' 'a missing snapshot is not reported'
+  printf '{broken' >"$h/data/channel-intake/tickets.json"
+  render_at "$h" "$T_1530" render >/dev/null || fail 'a corrupt snapshot failed the render'
+  page=$(cat "$(page_of "$h")")
+  assert_contains "$page" 'Could not read your open tickets: the snapshot file is not valid JSON.' 'a corrupt snapshot is not reported'
+  pass 'a missing or corrupt snapshot says it could not be read'
+}
+
+test_open_tickets_morning_copy_is_never_shown() {
+  local h page
+  h="$TMP_ROOT/tickets-morning"
+  new_home "$h"
+  write_tickets "$h" "$T_1500" "$TICKETS_TWO" >/dev/null
+  cat >"$h/.lavish/today-2026-09-10.morning.html" <<'HTML'
+<section class="morning-details">
+  <h2>Your open tickets</h2><p class="sub">Eight tickets carry you as owner. Read live from HubSpot at 06:20 CEST.</p>
+  <div class="tablewrap"><table><tr><td>Morning-only closed ticket</td></tr></table></div>
+  <h2>Calendar</h2><p>Calendar snapshot</p>
+</section>
+HTML
+  printf '{"version":1,"date":"2026-09-10","actions":[]}' >"$h/.lavish/today-2026-09-10.morning.json"
+  render_at "$h" "$T_1530" render >/dev/null
+  page=$(cat "$(page_of "$h")")
+  assert_not_contains "$page" 'Morning-only closed ticket' 'the morning ticket table is still shown'
+  assert_not_contains "$page" '06:20 CEST' 'the morning read time is still shown'
+  assert_contains "$page" 'Calendar snapshot' 'the rest of the morning detail was lost'
+  [ "$(grep -c '<h2>Your open tickets' "$(page_of "$h")")" = 1 ] || fail 'the page carries more than one tickets section'
+
+  # The same holds for a legacy morning file with no action metadata.
+  rm "$h/.lavish/today-2026-09-10.morning.json"
+  render_at "$h" "$T_1530" render >/dev/null
+  page=$(cat "$(page_of "$h")")
+  assert_not_contains "$page" 'Morning-only closed ticket' 'a legacy morning ticket table is still shown'
+  assert_contains "$page" 'Read live from HubSpot at 15:00 CEST.' 'the live section is missing beside a legacy morning file'
+  pass 'a morning copy of the tickets table is replaced by the live section'
+}
+
 test_severity_then_recency_orders_the_live_section
 test_waiting_and_closed_never_mix_into_the_live_section
 test_every_line_carries_its_own_read_time
@@ -404,3 +516,8 @@ test_fleet_snapshots_group_without_accumulating
 test_nothing_is_carried_forward_between_renders
 test_house_style_comes_from_the_tracked_templates
 test_completed_read_refreshes_an_existing_page_only
+test_open_tickets_render_live_from_a_fresh_snapshot
+test_open_tickets_snapshot_writer_refuses_malformed_input
+test_open_tickets_out_of_date_snapshot_says_so
+test_open_tickets_missing_snapshot_says_it_could_not_be_read
+test_open_tickets_morning_copy_is_never_shown

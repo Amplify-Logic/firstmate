@@ -24,9 +24,9 @@
 #
 # PAGE SHAPE. A Now strip of at most three current asks with a one-line why;
 # decisions awaiting him; replies he owes; the email agent block; waiting on
-# others (including requested handoffs); fleet conditions; the morning detail
-# fragment; everything closed since the previous sweep with its evidence and
-# actor, except routine chatter the intake dropped from its ledger, which was
+# others (including requested handoffs); fleet conditions; "Your open
+# tickets"; the morning detail fragment; everything closed since the previous
+# sweep with its evidence and actor, except routine chatter the intake dropped from its ledger, which was
 # never an ask; then folds for parked, "mine", routine activity and intake
 # coverage
 # (each enrolled source's last successful read and last failure, which is
@@ -49,6 +49,17 @@
 # looking at; with no review session connected the box says so and queues
 # nothing. Routine activity and the list-style folds carry no box.
 #
+# YOUR OPEN TICKETS IS LIVE. That section is rendered on every build from
+# data/channel-intake/tickets.json, which `bin/fm-channel-intake.sh tickets`
+# alone writes and whose header owns the format: the count with its stage
+# breakdown, each ticket's stage exactly as stored, and the snapshot's own
+# read time. A snapshot more than an hour old (the HubSpot pass runs every 30
+# minutes) is headed out of date with that read time and never called live;
+# a missing or unreadable one says the tickets could not be read. Any
+# "Your open tickets" section in a morning detail file, at any depth, is
+# dropped with everything after it up to the next h2, because it is always an
+# older read than the snapshot.
+#
 # FRESHNESS IS ON EVERY LINE. A line is "read <time>" only when its recorded
 # check is at or after this build's sweep (or the start of the day) and
 # checked the revision shown; otherwise "not re-checked since <time>", or
@@ -56,7 +67,7 @@
 # render time separately, so build time and read time are never confused.
 #
 # MORNING COMPOSITION CONTRACT (version 1, or 2 with the optional fields):
-# details-only ticket tables and calendar go in today-<date>.morning.html,
+# details-only context such as the calendar goes in today-<date>.morning.html,
 # action metadata in today-<date>.morning.json: {version, date:"YYYY-MM-DD",
 # actions:[{key, source, ref, class, title, link, updated}], and in version 2
 # optionally sweep_started (epoch the day's verification pass began),
