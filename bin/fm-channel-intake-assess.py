@@ -20,11 +20,9 @@ PROMISE = re.compile(
     r"|uitzoeken|nakijken|navragen|terugkoppel|op de hoogte",
     re.I | re.S)
 TECH = re.compile(r"\btech\b|\btechteam\b|\btechnical (?:team|support|department)\b", re.I)
-THANKS = re.compile(r"\b(?:thanks|thank you|thx|bedankt|dank je|dankjewel|dank u|takk|merci|danke)\b", re.I)
 QUOTE_START = re.compile(
     r"^\s*(?:>|on .{0,120}wrote:|op .{0,120}schreef|-{2,}\s*original message|from:\s|van:\s|sent from my)",
     re.I)
-WAITING_ON_CONTACT = 'waiting on contact'
 
 
 class Refusal(Exception):
@@ -38,7 +36,7 @@ def words(value):
 def fresh_text(body):
     """The message's own words: quoted history below a reply marker is dropped."""
     kept = []
-    for line in str(body or '').splitlines():
+    for line in body.splitlines():
         if QUOTE_START.match(line):
             break
         kept.append(line)
@@ -46,8 +44,25 @@ def fresh_text(body):
 
 
 def domain(address):
-    address = str(address or '').strip().lower()
+    address = address.strip().lower()
     return address.rsplit('@', 1)[1] if '@' in address else ''
+
+
+def text_field(value, what):
+    """A timeline string, absent reading as empty; any other shape is refused."""
+    if value is None:
+        return ''
+    if not isinstance(value, str):
+        raise Refusal(f'{what} must be a string')
+    return value
+
+
+def address_list(value, what):
+    if value is None:
+        return []
+    if not isinstance(value, list) or not all(isinstance(a, str) for a in value):
+        raise Refusal(f'{what} must be a list of addresses')
+    return value
 
 
 def when(epoch):
@@ -62,6 +77,19 @@ def load(path):
         raise Refusal(f'timeline is not readable JSON: {exc}')
     if not isinstance(doc, dict) or doc.get('kind') not in ('hubspot-ticket', 'email-thread'):
         raise Refusal('timeline kind must be hubspot-ticket or email-thread')
+    doc['owner'] = text_field(doc.get('owner'), 'timeline owner')
+    sent = doc.get('last_message_sent_at')
+    if sent is not None and (not isinstance(sent, int) or isinstance(sent, bool) or sent <= 0):
+        raise Refusal('timeline last_message_sent_at must be an epoch second')
+    doc['contacts'] = address_list(doc.get('contacts'), 'timeline contacts')
+    companies = doc.get('companies')
+    if companies is not None and not isinstance(companies, list):
+        raise Refusal('timeline companies must be a list')
+    for n, company in enumerate(companies or []):
+        if not isinstance(company, dict):
+            raise Refusal(f'timeline company {n} must be an object')
+        company['domain'] = text_field(company.get('domain'), f'timeline company {n} domain')
+    doc['companies'] = companies or []
     events = doc.get('events')
     if not isinstance(events, list):
         raise Refusal('timeline events must be a list')
@@ -74,6 +102,10 @@ def load(path):
             raise Refusal(f'timeline event {n} needs an epoch-second at')
         if e['type'] == 'email' and e.get('direction') not in ('inbound', 'outbound'):
             raise Refusal(f'timeline email {n} needs direction inbound or outbound')
+        e['author'] = text_field(e.get('author'), f'timeline event {n} author')
+        e['body'] = text_field(e.get('body'), f'timeline event {n} body')
+        e['from'] = text_field(e.get('from'), f'timeline event {n} from')
+        e['to'] = address_list(e.get('to'), f'timeline event {n} to')
         clean.append(e)
     # Stable order: equal times keep the order the orchestrator listed them in.
     doc['events'] = sorted(clean, key=lambda e: e['at'])
@@ -90,31 +122,29 @@ def assess(doc, names, captain_addresses, team_addresses):
         return bool(name_re and name_re.search(text))
 
     def by_captain(e):
-        return e.get('author') == 'captain' or str(e.get('from', '')).lower() in captain_addresses
+        return e['author'] == 'captain' or e['from'].lower() in captain_addresses
 
     def is_answer(e):
         """A real reply: an EMAIL engagement sent from the team mailbox or by the captain."""
         return (e['type'] == 'email' and e['direction'] == 'outbound'
-                and (str(e.get('from', '')).lower() in answer_addresses or by_captain(e)))
+                and (e['from'].lower() in answer_addresses or by_captain(e)))
 
     events = doc['events']
     external = set()
-    for address in doc.get('contacts') or []:
+    # Only a mail domain places someone outside the team: a company record with
+    # no domain says nothing about who is on the ticket.
+    for address in doc['contacts'] + ['x@' + c['domain'] for c in doc['companies'] if c['domain']]:
         if domain(address) and domain(address) not in internal:
             external.add(domain(address))
-    for company in doc.get('companies') or []:
-        company = company if isinstance(company, dict) else {'name': company}
-        if company.get('name') and domain('x@' + str(company.get('domain') or '')) not in internal:
-            external.add(str(company.get('domain') or company['name']).lower())
     if doc['kind'] == 'email-thread':
         for e in events:
-            for address in [e.get('from')] + list(e.get('to') or []):
+            for address in [e['from']] + e['to']:
                 if domain(address) and domain(address) not in internal:
                     external.add(domain(address))
     partner = bool(external)
 
-    captain_owned = doc.get('owner') == 'captain'
-    named = any(names_captain(fresh_text(e.get('body'))) for e in events)
+    captain_owned = doc['owner'] == 'captain'
+    named = any(names_captain(fresh_text(e['body'])) for e in events)
     pending = []
 
     def answered_after(at, note_answers=False):
@@ -127,7 +157,7 @@ def assess(doc, names, captain_addresses, team_addresses):
     for e in events:
         if e['type'] != 'email' or e['direction'] != 'outbound':
             continue
-        text = fresh_text(e.get('body'))
+        text = fresh_text(e['body'])
         if not PROMISE.search(text):
             continue
         who = 'you' if names_captain(text) or by_captain(e) else ('tech' if TECH.search(text) else '')
@@ -137,30 +167,25 @@ def assess(doc, names, captain_addresses, team_addresses):
         if not answered_after(e['at']):
             pending.append((e['at'], f'the {when(e["at"])} promise that {"you are" if who == "you" else "tech is"} on it has had no message since'))
 
-    # (c) A colleague's note asking the captain, unanswered by his note or a reply.
+    # (c) A colleague's note naming the captain, unanswered by his note or a reply.
     for e in events:
         if e['type'] != 'note' or by_captain(e):
             continue
-        text = fresh_text(e.get('body'))
-        if not (names_captain(text) or (captain_owned and '?' in text)):
+        if not names_captain(fresh_text(e['body'])):
             continue
         if not answered_after(e['at'], note_answers=True):
             pending.append((e['at'], f'the {when(e["at"])} colleague note asking you is unanswered'))
 
-    # (a) The partner's last message unanswered. A HubSpot send with no EMAIL
-    # engagement is an auto-acknowledgement, and "Waiting on contact" is the
-    # stage where the customer owes the next step, so neither counts here.
+    # (a) The partner's last message unanswered. Only a later reply discharges
+    # it; a HubSpot send with no EMAIL engagement is an auto-acknowledgement.
     involved = captain_owned or named or tech_promise
-    stage = str(doc.get('stage') or '').strip().lower()
     inbound = [e for e in events if e['type'] == 'email' and e['direction'] == 'inbound']
-    if involved and inbound and stage != WAITING_ON_CONTACT:
+    if involved and inbound:
         last = inbound[-1]
-        text = fresh_text(last.get('body'))
-        courtesy = THANKS.search(text) and len(text.split()) <= 25 and '?' not in text
-        if not courtesy and not answered_after(last['at']):
+        if not answered_after(last['at']):
             why = f'the partner\'s {when(last["at"])} message has no reply'
             sent = doc.get('last_message_sent_at')
-            if isinstance(sent, int) and sent > last['at']:
+            if sent and sent > last['at']:
                 why += f' (the {when(sent)} send has no email: an auto-acknowledgement)'
             pending.append((last['at'], why))
 
