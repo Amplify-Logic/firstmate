@@ -44,10 +44,9 @@ def ticket_of(ticket, n):
 
 
 def main():
-    out, owner, read_at, source = sys.argv[1:]
-    raw = sys.stdin.read() if source == '-' else Path(source).read_text()
+    out, owner, read_at = sys.argv[1:]
     try:
-        doc = json.loads(raw)
+        doc = json.loads(sys.stdin.read())
     except ValueError as err:
         raise Refusal(f'input is not JSON: {err}')
     if not isinstance(doc, list):

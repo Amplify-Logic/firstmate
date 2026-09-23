@@ -15,7 +15,7 @@
 # flags. This changes composition/identity, never source enrollment or cadence.
 #   fm-channel-intake.sh complete --source ID --checkpoint VALUE
 #   fm-channel-intake.sh fail --source ID --reason TEXT
-#   fm-channel-intake.sh tickets --owner NAME --file FILE|-
+#   fm-channel-intake.sh tickets --owner NAME   (ticket array on stdin)
 #   fm-channel-intake.sh resolve --item KEY --reason TEXT [--waiting]
 #   fm-channel-intake.sh items [--state open|waiting|archived|inactive]
 #   fm-channel-intake.sh sources
@@ -76,9 +76,9 @@
 #
 # OPEN-TICKETS SNAPSHOT. `tickets` is the only writer of
 # data/channel-intake/tickets.json, which bin/fm-todo-render.sh renders as the
-# page's "Your open tickets" section on every render. The HubSpot pass hands it
-# the COMPLETE current set - every ticket the captain owns whose stage is not
-# Closed, Waiting on contact included - as a bare JSON array of
+# page's "Your open tickets" section on every render. The HubSpot pass pipes it
+# the COMPLETE current set on stdin - every ticket the captain owns whose stage
+# is not Closed, Waiting on contact included - as a bare JSON array of
 # {id, subject, stage, last_in, last_out, link}: id is the numeric ticket id,
 # stage the pipeline-stage label exactly as HubSpot names it, last_in/last_out
 # the display times of the newest inbound and outbound message, link an
@@ -2114,22 +2114,17 @@ status_cmd() {
 }
 
 tickets_cmd() {
-  local owner='' file=''
+  local owner=''
   require_enabled
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --owner) [ "$#" -ge 2 ] || die '--owner requires a value'; owner=$2; shift 2 ;;
-      --file) [ "$#" -ge 2 ] || die '--file requires a value'; file=$2; shift 2 ;;
       *) die "unknown tickets argument: $1" ;;
     esac
   done
   [ -n "$owner" ] || die 'tickets requires --owner NAME'
-  [ -n "$file" ] || die 'tickets requires --file FILE (or - for stdin)'
-  if [ "$file" != - ]; then
-    [ -f "$file" ] && [ ! -L "$file" ] || die "--file is not a regular file: $file"
-  fi
   python3 "$SCRIPT_DIR/fm-channel-intake-tickets.py" "$INTAKE_DIR/tickets.json" \
-    "$(sanitize "$owner")" "$(now_epoch)" "$file"
+    "$(sanitize "$owner")" "$(now_epoch)"
 }
 
 print_interval() {

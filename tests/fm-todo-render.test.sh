@@ -408,11 +408,11 @@ $order"
   pass 'a completed read refreshes an existing page, never manufactures one, and never fails on the render'
 }
 
-# A HubSpot pass hands the writer the full current set as a JSON array.
+# A HubSpot pass pipes the writer the full current set as a JSON array.
 write_tickets() {
   local h=$1 now=$2
   shift 2
-  printf '%s' "$*" | observe_at "$h" "$now" tickets --owner 'Test Owner' --file -
+  printf '%s' "$*" | observe_at "$h" "$now" tickets --owner 'Test Owner'
 }
 
 TICKETS_TWO='[{"id":"101","subject":"Alvina consumption report","stage":"Waiting for Tech","last_in":"10 Sep 10:36","last_out":"10 Sep 16:10","link":"https://app.hubspot.com/r/101"},
@@ -457,6 +457,8 @@ test_open_tickets_snapshot_writer_refuses_malformed_input() {
     && fail 'a ticket with an unknown field was accepted'
   write_tickets "$h" "$T_1530" '{"tickets":[{"id":"106","subject":"s","stage":"New","last_in":"","last_out":"","link":"https://x/106"}]}' >/dev/null 2>&1 \
     && fail 'the snapshot document was re-ingested instead of refused'
+  printf '%s' "$TICKETS_TWO" | observe_at "$h" "$T_1530" tickets --owner 'Test Owner' --file - >/dev/null 2>&1 \
+    && fail 'the ticket set was accepted through a second input path'
   [ "$(cat "$snap")" = "$before" ] || fail 'a refused write changed the previous snapshot'
   pass 'the snapshot writer refuses malformed input and keeps the previous snapshot'
 }
