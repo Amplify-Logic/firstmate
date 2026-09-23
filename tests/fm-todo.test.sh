@@ -310,12 +310,12 @@ test_a_sweep_reopen_hides_its_source_label() {
   out=$(page "$h" 2026-09-10)
   assert_contains "$out" 'reopened: its source changed after it was closed (fulfilled)' 'the reopen reason is missing'
   assert_not_contains "$out" 'reopened: C_BRIEF' 'the reopening slot label is shown on the line'
-  # A manual reopen reason names no source and is shown as written.
+  # A manual reopen reason is shown as written, even where it mentions a label.
   todo_at "$h" "$T_1500" close --item "$id" --evidence 'slot confirmed' --actor Naomi >/dev/null
-  todo_at "$h" "$T_1500" reopen --item "$id" --reason 'reopened at the dock' >/dev/null
+  todo_at "$h" "$T_1500" reopen --item "$id" --reason 'reopened at the dock after C_BRIEF-ops asked again' >/dev/null
   render_at "$h" "$T_1500"
   out=$(page "$h" 2026-09-10)
-  assert_contains "$out" 'reopened at the dock' 'a manual reopen reason was rewritten'
+  assert_contains "$out" 'reopened at the dock after C_BRIEF-ops asked again' 'a manual reopen reason was rewritten'
   assert_not_contains "$out" 'reopened at its source' 'a manual reopen was credited to a source'
   pass 'a reopen by any of its slots hides the source label, and a manual reason is shown as written'
 }
