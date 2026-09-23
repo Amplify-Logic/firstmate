@@ -124,8 +124,8 @@
 #             captain_addresses mailbox - only such a reply discharges it, not
 #             the pipeline stage; (b) an outbound promise to act that names the
 #             captain or the tech team, or that the captain wrote, has no
-#             outbound after it; (c) a colleague's note that names the captain
-#             has no later note by him and no reply.
+#             later reply from such a mailbox; (c) a colleague's note that
+#             names the captain has no later note by him and no reply.
 # Only an EMAIL engagement is a reply: a `last_message_sent_at` send with no
 # matching email is an auto-acknowledgement and answers nothing. (a) applies
 # only when the ticket involves the captain: he owns it, a message or note
@@ -145,9 +145,11 @@
 # An awaiting item handed in as `routine` is recorded as `obligation`, because
 # a partner waiting on the captain is owed by definition. A timeline observe is
 # a full re-read of the ticket, so it stamps `read_at` even when the digest is
-# unchanged; that is the read bin/fm-todo.sh counts as verification. The day
-# page, `todo`, the brief and the alert payload list awaiting partner items
-# ahead of every other class, oldest ask first.
+# unchanged; that is the read bin/fm-todo.sh counts as verification. A timeline
+# observe of a resolved ticket records its facts on the archived record, which
+# stays resolved. The day page, `todo` and the brief list awaiting partner items
+# ahead of every other class, oldest ask first; the alert payload orders them
+# first only within the notifiable classes.
 #
 # THE HUBSPOT RE-SCAN. A colleague-owned ticket that names the captain only in
 # an email body, or that sits in "Waiting on contact" (a stage HubSpot marks
@@ -155,8 +157,8 @@
 # every `hubspot-tickets` source a `stages:` line and, once per
 # rescan_interval_seconds, a `rescan:` line: re-read every ticket in an open
 # stage or "Waiting on contact", whoever owns it, whose emails or notes name
-# the captain, whatever its last-modified date, and observe each with a
-# timeline. `complete --rescanned` records that the re-scan ran.
+# the captain or in which a colleague promised the customer that the tech team
+# is on it, whatever its last-modified date, and observe each with a timeline. `complete --rescanned` records that the re-scan ran.
 #
 # Opt-in is per home and per device: with no `enabled = true` line in private
 # config/channel-intake this command is inert, so cloning the repo or seeding
@@ -950,6 +952,20 @@ annotate_archived_edit() {
     || die "cannot annotate the archived item record: $path"
 }
 
+# A timeline re-read of a resolved ticket still records the facts it derived,
+# so if the captain reopens the ask it ranks on the ticket as it stands now.
+# The archived evidence and the resolution are left as they were.
+record_archived_attention() {
+  local path=$1 attention=$2 class body
+  class=$(owed_class "$(record_field "$path" class)" "$attention")
+  body=$(awk -v class="$class" '
+    /^class=/ { print "class=" class; next }
+    !/^(partner|awaiting|awaiting_since|awaiting_why|read_at)=/
+  ' "$path") || die "cannot read the archived item record: $path"
+  write_atomic "$path" "$(printf '%s\n%s' "$body" "$attention")" \
+    || die "cannot record the timeline facts on the archived item record: $path"
+}
+
 item_body() {
   printf 'key=%s\nsource=%s\nkind=%s\nref=%s\nlink=%s\nclass=%s\ntitle=%s\ndigest=%s\nstate=%s\ncreated=%s\nupdated=%s\nsource_epoch=%s\nnotified=%s\nnotified_digest=%s\nrevisions=%s\nprovenance=%s\nresolution=%s\nresolved_at=%s' \
     "$1" "$2" "$3" "$4" "$(sanitize "$5")" "$6" "$(sanitize "$7")" "$8" "$9" \
@@ -1187,8 +1203,9 @@ EOF
 # A checkpoint read of HubSpot returns only tickets modified since it, and a
 # stage filter on "open" drops "Waiting on contact", which HubSpot marks
 # closed. Both hid colleague-owned tickets that name the captain only inside an
-# email body, so every claim names the stages and a bounded periodic re-scan
-# reads the whole set again regardless of modification date.
+# email body, or that promise the customer the tech team is on it, so every
+# claim names the stages and a bounded periodic re-scan reads the whole set
+# again regardless of modification date.
 hubspot_claim_lines() {
   local id=$1 epoch=$2 last
   printf 'stages: %s	every open stage plus "Waiting on contact", which HubSpot marks closed but where a partner can still be waiting on the captain
@@ -1196,7 +1213,7 @@ hubspot_claim_lines() {
   last=$(record_field "$(source_record "$id")" last_rescan)
   case "$last" in ''|*[!0-9]*) last=0 ;; esac
   [ $((epoch - last)) -ge "$CFG_RESCAN_INTERVAL" ] || return 0
-  printf 'rescan: %s	last_rescan: %s	scope: every ticket in those stages, any owner, whose emails or notes name the captain, re-read in full whatever its last-modified date; observe each with --timeline-file, then complete with --rescanned
+  printf 'rescan: %s	last_rescan: %s	scope: every ticket in those stages, any owner, whose emails or notes name the captain or in which a colleague promised the customer that the tech team is on it, re-read in full whatever its last-modified date; observe each with --timeline-file, then complete with --rescanned
 ' \
     "$id" "$([ "$last" -gt 0 ] && printf '%s' "$last" || printf never)"
 }
@@ -1424,6 +1441,7 @@ observe() {
   # later poll of the same edited message would re-announce it forever.
   if [ -f "$(archive_path "$key")" ]; then
     path=$(archive_path "$key")
+    [ -z "$timeline_file" ] || record_archived_attention "$path" "$attention"
     existing_digest=$(record_field "$path" digest)
     if [ "$existing_digest" = "$digest" ]; then
       printf 'archived-unchanged %s\n' "$key"

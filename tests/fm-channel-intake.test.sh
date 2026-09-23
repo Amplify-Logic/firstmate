@@ -69,9 +69,11 @@
 #   - A later read that carries new content keeps an awaiting partner owed,
 #     and the re-scan cadence defaults around a long poll interval.
 #   - Awaiting partners lead the to-do, brief and alert order, and every
-#     rewrite of a record keeps the facts the timeline recorded.
+#     rewrite of a record keeps the facts the timeline recorded, including a
+#     timeline re-read of a resolved ticket, which stays resolved.
 #   - A HubSpot claim names "Waiting on contact" and hands out a bounded
-#     periodic re-scan of every owner's tickets that name the captain.
+#     periodic re-scan of every owner's tickets that name the captain or
+#     promise the customer that tech is on it.
 # shellcheck disable=SC2016
 set -u
 
@@ -1520,6 +1522,19 @@ EOF
    "body":"I have asked the warehouse about it."}]}
 EOF
       ;;
+    # One of the back-sweep's tech cases: a colleague told the customer the
+    # tech team is on it, never naming the captain, and nothing went out since.
+    tech-promise)
+      cat >"$h/$name.json" <<EOF
+{"kind":"hubspot-ticket","owner":"natalia@team.example","stage":"Waiting for Tech",
+ "contacts":["mark@office.example"],
+ "events":[
+  {"type":"email","at":$at_inbound,"direction":"inbound","from":"mark@office.example",
+   "body":"The machine keeps showing E.A03 after the reset."},
+  {"type":"email","at":$at_out,"direction":"outbound","from":"support@team.example",
+   "body":"Our tech team is looking into this, I'll keep you updated.\nNatalia"}]}
+EOF
+      ;;
     # A colleague's own ticket that never involves the captain.
     uninvolved)
       cat >"$h/$name.json" <<EOF
@@ -1553,7 +1568,7 @@ test_partner_facing_asks_awaiting_the_captain_are_flagged() {
   partner_home "$h"
 
   for name in promise autoack contact-note contact-chase thanks-and-ask owner-address \
-    participants-only colleague-reply; do
+    participants-only colleague-reply tech-promise; do
     key=$(key_of "$(observe_ticket "$h" "$name" "$T_0900")")
     [ "$(item_field "$h" "$key" partner)" = 1 ] || fail "$name: a ticket with an external contact is not partner-facing"
     [ "$(item_field "$h" "$key" awaiting)" = 1 ] || fail "$name: a partner waiting on the captain was not flagged"
@@ -1564,6 +1579,9 @@ test_partner_facing_asks_awaiting_the_captain_are_flagged() {
   key=$(key_of "$(observe_ticket "$h" promise "$T_0900")")
   assert_contains "$(item_field "$h" "$key" awaiting_why)" 'promise that you are on it has had no message since' \
     'a colleague-owned ticket naming the captain only in an email body was not caught by its promise'
+  key=$(key_of "$(observe_ticket "$h" tech-promise "$T_0900")")
+  assert_contains "$(item_field "$h" "$key" awaiting_why)" 'promise that tech is on it has had no message since' \
+    'a colleague promise that the tech team is on it was not caught'
   key=$(key_of "$(observe_ticket "$h" autoack "$T_0900")")
   assert_contains "$(item_field "$h" "$key" awaiting_why)" 'no email: an auto-acknowledgement' \
     'an auto-acknowledgement was not named as the reason the partner still waits'
@@ -1621,6 +1639,21 @@ test_partner_facing_asks_awaiting_the_captain_are_flagged() {
     --class routine --title 'ticket display' --timeline-file "$h/promise.json" 2>&1) \
     && fail 'a display-name from address was assessed anyway'
   assert_contains "$out" 'must be a bare local@domain address' 'the refusal did not name the address shape'
+
+  # A millisecond epoch would read as a date tens of millennia away and sort
+  # the ask behind every correctly dated one, so it is refused.
+  write_timeline "$h" promise
+  sed -i.bak "s/\"at\":$((T_0900 - 30 * H)),/\"at\":$((T_0900 - 30 * H))000,/" "$h/promise.json"
+  out=$(at "$h" "$T_0900" observe --source H_TICKETS --ref ticket-millis --digest 'millis v1' \
+    --class routine --title 'ticket millis' --timeline-file "$h/promise.json" 2>&1) \
+    && fail 'a millisecond event time was assessed anyway'
+  assert_contains "$out" 'needs an epoch-second at' 'the refusal did not name the epoch unit'
+  write_timeline "$h" autoack
+  sed -i.bak 's/"last_message_sent_at":\([0-9]*\)/"last_message_sent_at":\1000/' "$h/autoack.json"
+  out=$(at "$h" "$T_0900" observe --source H_TICKETS --ref ticket-millis --digest 'millis v1' \
+    --class routine --title 'ticket millis' --timeline-file "$h/autoack.json" 2>&1) \
+    && fail 'a millisecond last_message_sent_at was assessed anyway'
+  assert_contains "$out" 'last_message_sent_at must be an epoch second' 'the refusal did not name the send time'
 
   # One timeline kind: the HubSpot ticket every rule here is written about.
   write_timeline "$h" promise
@@ -1683,6 +1716,33 @@ test_a_changed_re_read_keeps_an_awaiting_partner_owed() {
   pass 'a changed re-read with no timeline keeps an awaiting partner owed and on the to-do'
 }
 
+test_a_resolved_ticket_re_read_records_its_current_facts() {
+  local h key out
+  h="$TMP_ROOT/partner-archived"
+  partner_home "$h"
+  key=$(key_of "$(observe_ticket "$h" answered "$T_0900")")
+  [ "$(item_field "$h" "$key" awaiting)" = 0 ] || fail 'an answered ticket was flagged as awaiting'
+  at "$h" "$T_0900" resolve --item "$key" --reason 'captain replied' >/dev/null
+  # The ticket stays open in HubSpot and the partner writes again; the re-scan
+  # re-reads it with a timeline that has the partner waiting once more.
+  write_timeline "$h" promise
+  out=$(at "$h" "$T_0915" observe --source H_TICKETS --ref ticket-answered --digest 'answered v2' \
+    --class routine --title 'ticket answered' --timeline-file "$h/promise.json")
+  assert_contains "$out" "archived-changed $key" 'a re-read of a resolved ticket reopened it'
+  assert_present "$h/data/channel-intake/archive/$key" 'the resolved ticket left the archive'
+  [ ! -f "$h/data/channel-intake/items/$key" ] || fail 'a timeline re-read reopened a resolved ticket'
+  [ "$(item_field "$h" "$key" awaiting)" = 1 ] || fail 'the fresh awaiting fact was dropped on the archived record'
+  [ "$(item_field "$h" "$key" awaiting_since)" = "$((T_0900 - 28 * H))" ] \
+    || fail 'the archived record kept a stale awaiting_since'
+  assert_contains "$(item_field "$h" "$key" awaiting_why)" 'promise that you are on it' \
+    'the archived record kept a stale reason'
+  [ "$(item_field "$h" "$key" class)" = obligation ] || fail 'an awaiting partner stayed routine on the archive'
+  [ "$(item_field "$h" "$key" resolution)" = 'captain replied' ] || fail 'the resolution evidence was rewritten'
+  [ "$(grep -c '^awaiting=' "$h/data/channel-intake/archive/$key")" = 1 ] \
+    || fail 'the archived record carries more than one awaiting fact'
+  pass 'a timeline re-read of a resolved ticket records its current facts and leaves it resolved'
+}
+
 test_a_long_poll_interval_keeps_the_rescan_default_valid() {
   local h out code
   h="$TMP_ROOT/rescan-default"
@@ -1710,8 +1770,8 @@ test_hubspot_rescan_covers_colleague_and_waiting_on_contact_tickets() {
   assert_contains "$out" $'stages: H_TICKETS\tevery open stage plus "Waiting on contact"' \
     'the claim did not name the Waiting on contact stage HubSpot marks closed'
   assert_contains "$out" $'rescan: H_TICKETS\tlast_rescan: never' 'a never-rescanned source was not handed a re-scan'
-  assert_contains "$out" 'any owner, whose emails or notes name the captain, re-read in full whatever its last-modified date' \
-    'the re-scan scope is not colleague-owned tickets regardless of modification date'
+  assert_contains "$out" 'any owner, whose emails or notes name the captain or in which a colleague promised the customer that the tech team is on it, re-read in full whatever its last-modified date' \
+    'the re-scan scope is not colleague-owned tickets naming the captain or tech, regardless of modification date'
   at "$h" "$T_0900" complete --source H_TICKETS --checkpoint c1 --rescanned >/dev/null
   # Inside the re-scan interval, the checkpoint read still names the stages but
   # re-scans nothing; past it, the re-scan is due again.
@@ -1773,5 +1833,6 @@ test_bootstrap_surfaces_the_intake
 test_partner_facing_asks_awaiting_the_captain_are_flagged
 test_awaiting_partners_lead_every_summary_and_survive_rewrites
 test_a_changed_re_read_keeps_an_awaiting_partner_owed
+test_a_resolved_ticket_re_read_records_its_current_facts
 test_a_long_poll_interval_keeps_the_rescan_default_valid
 test_hubspot_rescan_covers_colleague_and_waiting_on_contact_tickets
