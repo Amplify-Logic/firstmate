@@ -766,7 +766,6 @@ tests/fm-home-summary-refresh.test.sh 39884
 tests/fm-inactive-reconcile.test.sh 51253
 tests/fm-install-herdr.test.sh 1224
 tests/fm-kimi-harness.test.sh 27597
-tests/fm-kimi-primary.test.sh 1227
 tests/fm-kimi-worker.test.sh 1203
 tests/fm-landed-completion-truth.test.sh 7052
 tests/fm-lint-workflows.test.sh 1950
