@@ -34,15 +34,28 @@ reset_state() {
 # nothing about two separated principals: that remains the captain-at-Mac
 # measurement made by bin/fm-worker-boundary-regression.sh against a real
 # installation.
+# GNU and BSD stat disagree on both the flag and the format, and -f means
+# "file system" to GNU rather than "format", so a BSD-only call does not fail
+# over on Linux - it reads the wrong thing and errors. Try GNU first, then BSD,
+# the same fallback tests/lib.sh already uses. Both spellings render four
+# digits, so the setgid bit is compared rather than dropped.
+stat_mode() {  # <path>
+  stat -c '%04a' "$1" 2>/dev/null || /usr/bin/stat -f '%Mp%Lp' "$1" 2>/dev/null
+}
+
+stat_gid() {  # <path>
+  stat -c '%g' "$1" 2>/dev/null || /usr/bin/stat -f '%g' "$1" 2>/dev/null
+}
+
 assert_mode() {  # <path> <expected>
   local observed
-  observed=$(/usr/bin/stat -f '%Mp%Lp' "$1")
+  observed=$(stat_mode "$1")
   [ "$observed" = "$2" ] || fail "$1 must be mode $2, got $observed"
 }
 
 assert_group() {  # <path> <expected-gid>
   local observed
-  observed=$(/usr/bin/stat -f '%g' "$1")
+  observed=$(stat_gid "$1")
   [ "$observed" = "$2" ] || fail "$1 must carry the store group $2, got $observed"
 }
 
@@ -219,7 +232,7 @@ test_sink_store_is_group_readable_and_writable_by_nobody_else() {
   # author any of it. The setgid bit is what makes the group inheritance the
   # operating system's job rather than a platform convention.
   assert_mode "$SINK_ROOT" 2750
-  store_gid=$(/usr/bin/stat -f '%g' "$SINK_ROOT")
+  store_gid=$(stat_gid "$SINK_ROOT")
   for file in $(store_files); do
     [ -e "$file" ] || continue
     assert_mode "$file" 0640
@@ -269,7 +282,7 @@ test_a_store_whose_group_or_mode_drifted_is_refused() {
   # The group is the broker's entire access, so a file carrying a different one
   # is refused for the same reason. This needs a second group this UID is
   # already in; without one there is nothing honest to assert here.
-  store_gid=$(/usr/bin/stat -f '%g' "$SINK_ROOT")
+  store_gid=$(stat_gid "$SINK_ROOT")
   other_gid=
   for candidate in $(id -G); do
     [ "$candidate" != "$store_gid" ] || continue
@@ -322,7 +335,7 @@ test_a_store_root_whose_setgid_cannot_be_set_is_refused() {
   # assert here and the test says so rather than pretending.
   probe=$(mktemp -d /tmp/fm-sink-setgid.XXXXXX) || fail "could not make a probe root"
   mkdir -p "$probe/fm-gateway-v2-sink"
-  gid=$(/usr/bin/stat -f '%g' "$probe/fm-gateway-v2-sink")
+  gid=$(stat_gid "$probe/fm-gateway-v2-sink")
   if id -G | tr ' ' '\n' | grep -qx "$gid"; then
     rm -rf "$probe"
     pass "the setgid refusal needs a group this UID is not in; this machine offers none, so it is unproven here"
