@@ -34,7 +34,7 @@
 #     but an empty subject is written and shown as an untitled ticket.
 #   - Dropping the morning copy leaves no empty panel behind: a wrapper the
 #     drop emptied goes with it, and a morning file that held nothing else
-#     produces no morning-detail wrapper at all.
+#     produces no morning-detail wrapper and no empty legacy reference fold.
 #   - The out-of-date window follows the intake's configured poll interval, and
 #     a snapshot whose consumed fields are not strings is reported as malformed
 #     rather than failing the render.
@@ -615,6 +615,38 @@ test_open_tickets_empty_subject_renders_as_an_untitled_ticket() {
   pass 'a ticket with no subject is written and rendered as an untitled ticket'
 }
 
+test_open_tickets_legacy_morning_copy_leaves_no_empty_reference_fold() {
+  local h page
+  h="$TMP_ROOT/tickets-legacy-fold"
+  new_home "$h"
+  write_tickets "$h" "$T_1500" "$TICKETS_TWO" >/dev/null
+
+  # A legacy morning file (no action metadata) whose only content is the
+  # tickets section the page now renders live.
+  cat >"$h/.lavish/today-2026-09-10.morning.html" <<'HTML'
+<h2>Your open tickets</h2><p>Eight tickets carry you as owner.</p>
+<div class="tablewrap"><table><tr><td>Morning-only row</td></tr></table></div>
+HTML
+  render_at "$h" "$T_1530" render >/dev/null
+  page=$(cat "$(page_of "$h")")
+  assert_not_contains "$page" 'Morning-only row' 'the legacy morning ticket table is still shown'
+  assert_not_contains "$page" 'Earlier morning reference' 'an empty legacy reference fold was printed'
+  assert_contains "$page" 'Read live from HubSpot at 15:00 CEST.' 'the live section is missing'
+
+  # A legacy file that still carries other prose keeps its reference fold.
+  cat >"$h/.lavish/today-2026-09-10.morning.html" <<'HTML'
+<h2>Your open tickets</h2><p>Eight tickets carry you as owner.</p>
+<div class="tablewrap"><table><tr><td>Morning-only row</td></tr></table></div>
+<h2>Pilot notes</h2><p>Tap pressure checked by hand at 06:00.</p>
+HTML
+  render_at "$h" "$T_1530" render >/dev/null
+  page=$(cat "$(page_of "$h")")
+  assert_not_contains "$page" 'Morning-only row' 'the legacy morning ticket table survived beside other prose'
+  assert_contains "$page" 'Earlier morning reference' 'the reference fold was dropped although prose remained'
+  assert_contains "$page" 'Tap pressure checked by hand at 06:00.' 'the remaining morning prose was lost'
+  pass 'a legacy morning file holding only the tickets copy leaves no empty reference fold'
+}
+
 test_severity_then_recency_orders_the_live_section
 test_waiting_and_closed_never_mix_into_the_live_section
 test_every_line_carries_its_own_read_time
@@ -633,3 +665,4 @@ test_open_tickets_freshness_follows_the_configured_interval
 test_open_tickets_snapshot_with_a_non_string_field_is_refused
 test_open_tickets_drop_leaves_no_empty_panel_behind
 test_open_tickets_empty_subject_renders_as_an_untitled_ticket
+test_open_tickets_legacy_morning_copy_leaves_no_empty_reference_fold

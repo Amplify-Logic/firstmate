@@ -363,7 +363,8 @@ if MORNING:
             else:
                 reference += part
         reference = disclosure('Earlier morning reference - not re-verified by this update',
-                               '<p class="sub">Historical snapshot. Re-check sources before treating these lines as open.</p>' + reference)
+                               '<p class="sub">Historical snapshot. Re-check sources before treating these lines as open.</p>'
+                               + reference) if reference.strip() else ''
 
 # --- partition ----------------------------------------------------------------
 
