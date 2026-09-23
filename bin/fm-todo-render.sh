@@ -26,9 +26,9 @@
 # decisions awaiting him; replies he owes; the email agent block; waiting on
 # others (including requested handoffs); fleet conditions; "Your open
 # tickets"; the morning detail fragment; everything closed since the previous
-# sweep with its evidence and actor, except routine chatter the intake dropped from its ledger, which was
-# never an ask; then folds for parked, "mine", routine activity and intake
-# coverage
+# sweep with its evidence and actor, except routine chatter the intake
+# dropped from its ledger, which was never an ask; then folds for parked,
+# "mine", routine activity and intake coverage
 # (each enrolled source's last successful read and last failure, which is
 # separate from item freshness). Sections with nothing in them are omitted.
 # Inside decisions, replies and routine activity, lines not current for this
@@ -56,10 +56,9 @@
 # read time. A snapshot older than two of the intake's configured
 # `interval_seconds` polls, and never less than an hour, is headed out of date
 # with that read time and never called live; a missing or unreadable one says
-# the tickets could not be read. Any
-# "Your open tickets" section in a morning detail file, at any depth, is
-# dropped with everything after it up to the next h2, because it is always an
-# older read than the snapshot.
+# the tickets could not be read. Any "Your open tickets" section in a morning
+# detail file, at any depth, is dropped with everything after it up to the
+# next h2, because it is always an older read than the snapshot.
 #
 # FRESHNESS IS ON EVERY LINE. A line is "read <time>" only when its recorded
 # check is at or after this build's sweep (or the start of the day) and
