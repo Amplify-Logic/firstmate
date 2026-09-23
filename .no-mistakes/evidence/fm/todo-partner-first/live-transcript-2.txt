@@ -1,0 +1,29 @@
+### 8b. Frederick resolved earlier; re-read shows the partner wrote again after a reply (Lars named)
+archived-changed d70997387e48ebd54452cdd83156eec438f45d708967208b0d733ab3843efc4d
+in archive: yes; in items: no
+archived facts: partner=1 awaiting=1 awaiting_since=1790196757 (expected LATE=1790196757) why=the partner's Wed 23 Sep 22:52 message has no reply
+state listing:
+d70997387e48ebd54452cdd83156eec438f45d708967208b0d733ab3843efc4d	archived	obligation	H_TICKETS	HubSpot ticket frederick
+### 10. unchanged re-scan read 2 min later makes the line a full timeline re-read
+unchanged 87c2f6a2ee88e7099e033f348564361fcc96f9db87a151e62309a3def9918a62
+read_at before=1790197320 after=1790197477 updated=1790197320
+### 11. morning sidecar flags a partner ask (older than all) and an undated one
+TODO_RENDER: /var/folders/2c/9sf1hvpn23q336b08gs1np0c0000gn/T//fm-partner-live.gCVjgB/.lavish/today-2026-09-23.html rendered at 23:05 CEST
+NOW STRIP:
+  - Morning partner ask (dated, oldest) |  | obligation reply owed, read 23:03 CEST
+  - HubSpot ticket t48375229511 |  | the Thu 17 Sep 19:01 promise that you are on it has had no message since
+  - HubSpot ticket ownmailbox |  | the partner's Tue 22 Sep 17:01 message has no reply
+REPLIES YOU OWE (order):
+  - Morning partner ask (dated, oldest)|read 23:03 CEST||morning verification sweep
+  - HubSpot ticket t48375229511|read 23:04 CEST||full timeline re-read by the channel intake on hubspot-tickets (H_TICKETS)
+  - HubSpot ticket ownmailbox|read 23:02 CEST||read by the channel intake on hubspot-tickets (H_TICKETS)
+  - HubSpot ticket ns-note|read 23:02 CEST||read by the channel intake on hubspot-tickets (H_TICKETS)
+  - HubSpot ticket autoack|read 23:02 CEST||read by the channel intake on hubspot-tickets (H_TICKETS)
+  - HubSpot ticket techpromise|read 23:02 CEST||read by the channel intake on hubspot-tickets (H_TICKETS)
+  - Morning partner ask (undated)|read 23:03 CEST||morning verification sweep
+  - Service outage at Schiphol site|read 23:02 CEST||read by the channel intake on slack-channel (C_OPS)
+  - Urgent: CEO demo unit offline|read 23:02 CEST||read by the channel intake on slack-channel (C_OPS)
+### 12. sidecar with partner_awaiting as a string is refused
+fm-todo: morning action partner_awaiting must be a JSON boolean and awaiting_since an epoch second
+fm-todo-render: item sync failed; existing page preserved
+exit=2

@@ -1,0 +1,9 @@
+after first read:  t-41cef0e5b87f	open	reply	c0e7866213	Dealer Oost parts delivery
+after resolve:     t-41cef0e5b87f	closed	reply	c0e7866213	Dealer Oost parts delivery
+archived-changed ea28ff1203a19d51da806650f7aa24d830773a2f38e50e53189ab209ee61f182
+after re-read:     t-41cef0e5b87f	open	reply	5dee8973e9	Dealer Oost parts delivery
+ | | Morning partner ask (dated, oldest) | | obligation reply owed, read 23:03 CEST | | 
+ | | HubSpot ticket t48375229511 | | the Thu 17 Sep 19:01 promise that you are on it has had no message since | | 
+ | | HubSpot ticket ownmailbox | | the partner&#x27;s Tue 22 Sep 17:01 message has no reply | | 
+reopened: hubspot-tickets (H_TICKETS) changed after it was closed (resolved)
+awaiting_since=1790197705 LATE=1790197705

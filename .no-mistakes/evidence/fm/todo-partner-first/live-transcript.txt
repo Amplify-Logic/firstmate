@@ -1,0 +1,103 @@
+### home: /var/folders/2c/9sf1hvpn23q336b08gs1np0c0000gn/T//fm-partner-live.gCVjgB
+### 1. claim for the HubSpot source (first claim: stages + rescan lines)
+now: 1790197319
+revision_window_seconds: 86400
+revision_window_from: 1790110919
+thread_tracking_window_seconds: 86400
+source: H_TICKETS	kind: hubspot-tickets	checkpoint: 	coverage: tickets owned by or naming the captain
+stages: H_TICKETS	every open stage plus "Waiting on contact", which HubSpot marks closed but where a partner can still be waiting on the captain
+rescan: H_TICKETS	last_rescan: never	scope: every ticket in those stages, any owner, whose emails or notes name the captain or in which a colleague promised the customer that the tech team is on it, re-read in full whatever its last-modified date; observe each with --timeline-file, then complete with --rescanned
+### 2. an outage and an urgent item arrive on the ops channel
+new 4f2fc867487350f1bd3fdbe3bd9d9e63e627bb51833e238c7e48f57275e7773a
+new bbbb121741139a8b28a107266a3cafde080e1691c42e397fa66b98df8684e666
+### 3. the re-scan observes each ticket with its timeline (all handed in as routine)
+frederick      new d70997387e48ebd54452cdd83156eec438f45d708967208b0d733ab3843efc4d partner=1 awaiting=1 class=obligation
+    why=the Tue 22 Sep 19:01 promise that you are on it has had no message since
+t48375229511   new 87c2f6a2ee88e7099e033f348564361fcc96f9db87a151e62309a3def9918a62 partner=1 awaiting=1 class=obligation
+    why=the Thu 17 Sep 19:01 promise that you are on it has had no message since
+ns-note        new 39aef7cab947f82e3d61d5e8309ed8fff12da0cad700860e9e7dd55ff25a300e partner=1 awaiting=1 class=obligation
+    why=the partner's Tue 22 Sep 17:01 message has no reply; the Tue 22 Sep 19:01 colleague note asking you is unanswered
+autoack        new c6681bfcbd3c63da925ada2ef330912bd79f0e0b4dfeaa549ae1765526b6aec6 partner=1 awaiting=1 class=obligation
+    why=the partner's Tue 22 Sep 17:01 message has no reply (the Tue 22 Sep 17:05 send has no email: an auto-acknowledgement)
+techpromise    new fc6516cb07a36aec774cf73b480058572b1605d6e6ecc6a4a688c0a2ac282571 partner=1 awaiting=1 class=obligation
+    why=the Tue 22 Sep 19:01 promise that tech is on it has had no message since
+ownmailbox     new 7080f90ee76e07ab16585e214ca701244bd614796f8e660394448301fe91e6c7 partner=1 awaiting=1 class=obligation
+    why=the partner's Tue 22 Sep 17:01 message has no reply
+answered       new 1e24f01b81189a0aa0a0746fad5a7109d041e91dec2db63e0fd57313cc0dac60 partner=1 awaiting=0 class=routine
+    why=
+chase          new 5fa8de183ef306440a879d9ceadddf4463121b5876aab20f1cb93599927bc240 partner=1 awaiting=0 class=routine
+    why=
+uninvolved     new 5c44204d4d9ff6e50fff0f7ab38c92b18800b78904b8caed3e8039f93ed352d8 partner=1 awaiting=0 class=routine
+    why=
+internal       new 0bfeda2f58e86d66466e374f14baed3f04a64111479e1bf3358a8af0482a0925 partner=0 awaiting=0 class=routine
+    why=
+CHANNEL_INTAKE: H_TICKETS read complete, checkpoint 1790197319
+TODO_RENDER: no page at /var/folders/2c/9sf1hvpn23q336b08gs1np0c0000gn/T//fm-partner-live.gCVjgB/.lavish/today-2026-09-23.html yet; nothing refreshed
+### 4. second claim within rescan interval (rescan line should be absent)
+now: 1790197323
+revision_window_seconds: 86400
+revision_window_from: 1790110923
+thread_tracking_window_seconds: 86400
+source: H_TICKETS	kind: hubspot-tickets	checkpoint: 1790197319	coverage: tickets owned by or naming the captain
+stages: H_TICKETS	every open stage plus "Waiting on contact", which HubSpot marks closed but where a partner can still be waiting on the captain
+### 5. todo summary
+# Daily to-do - 2026-09-23
+
+Human obligations only. Executable automations live in the Action Deck behind their own approval.
+
+- [ ] HubSpot ticket t48375229511 https://app.hubspot.com/t/t48375229511 (H_TICKETS)
+- [ ] HubSpot ticket ns-note https://app.hubspot.com/t/ns-note (H_TICKETS)
+- [ ] HubSpot ticket ownmailbox https://app.hubspot.com/t/ownmailbox (H_TICKETS)
+- [ ] HubSpot ticket autoack https://app.hubspot.com/t/autoack (H_TICKETS)
+- [ ] HubSpot ticket frederick https://app.hubspot.com/t/frederick (H_TICKETS)
+- [ ] HubSpot ticket techpromise https://app.hubspot.com/t/techpromise (H_TICKETS)
+- [ ] Service outage at Schiphol site (C_OPS)
+- [ ] Urgent: CEO demo unit offline (C_OPS)
+
+## Waiting on others
+
+- nothing
+### 6. brief (What needs you)
+## What needs you
+
+- [obligation] HubSpot ticket t48375229511 https://app.hubspot.com/t/t48375229511 (H_TICKETS, first seen 2026-09-23)
+- [obligation] HubSpot ticket ns-note https://app.hubspot.com/t/ns-note (H_TICKETS, first seen 2026-09-23)
+- [obligation] HubSpot ticket ownmailbox https://app.hubspot.com/t/ownmailbox (H_TICKETS, first seen 2026-09-23)
+- [obligation] HubSpot ticket autoack https://app.hubspot.com/t/autoack (H_TICKETS, first seen 2026-09-23)
+- [obligation] HubSpot ticket frederick https://app.hubspot.com/t/frederick (H_TICKETS, first seen 2026-09-23)
+- [obligation] HubSpot ticket techpromise https://app.hubspot.com/t/techpromise (H_TICKETS, first seen 2026-09-23)
+- [outage] Service outage at Schiphol site (C_OPS, first seen 2026-09-23)
+- [urgent] Urgent: CEO demo unit offline (C_OPS, first seen 2026-09-23)
+
+## Waiting on others
+
+- nothing
+
+## Next dated actions
+### 7. render the day page
+TODO_RENDER: /var/folders/2c/9sf1hvpn23q336b08gs1np0c0000gn/T//fm-partner-live.gCVjgB/.lavish/today-2026-09-23.html rendered at 23:02 CEST
+page=/var/folders/2c/9sf1hvpn23q336b08gs1np0c0000gn/T//fm-partner-live.gCVjgB/.lavish/today-2026-09-23.html
+NOW STRIP:
+  - HubSpot ticket t48375229511
+  - HubSpot ticket ownmailbox
+  - HubSpot ticket ns-note
+REPLIES YOU OWE (order):
+  - HubSpot ticket t48375229511|read 23:02 CEST||read by the channel intake on hubspot-tickets (H_TICKETS)
+  - HubSpot ticket ownmailbox|read 23:02 CEST||read by the channel intake on hubspot-tickets (H_TICKETS)
+  - HubSpot ticket ns-note|read 23:02 CEST||read by the channel intake on hubspot-tickets (H_TICKETS)
+  - HubSpot ticket autoack|read 23:02 CEST||read by the channel intake on hubspot-tickets (H_TICKETS)
+  - HubSpot ticket techpromise|read 23:02 CEST||read by the channel intake on hubspot-tickets (H_TICKETS)
+  - HubSpot ticket frederick|read 23:02 CEST||read by the channel intake on hubspot-tickets (H_TICKETS)
+  - Service outage at Schiphol site|read 23:02 CEST||read by the channel intake on slack-channel (C_OPS)
+  - Urgent: CEO demo unit offline|read 23:02 CEST||read by the channel intake on slack-channel (C_OPS)
+### 8. resolve Frederick, then a later re-read finds the partner writing again
+archived d70997387e48ebd54452cdd83156eec438f45d708967208b0d733ab3843efc4d
+archived-changed d70997387e48ebd54452cdd83156eec438f45d708967208b0d733ab3843efc4d
+archived? yes awaiting=0 since= (LATE=1790196719) why=
+### 9. malformed timelines are refused
+fm-channel-intake: timeline event 0 needs an epoch-second at
+exit=2
+fm-channel-intake: timeline event 1 from must be a bare local@domain address: Aquablu Support <support@aquablu.example>
+exit=2
+items for refused refs: 0
+HOME=/var/folders/2c/9sf1hvpn23q336b08gs1np0c0000gn/T//fm-partner-live.gCVjgB
