@@ -16,7 +16,7 @@ if ZONE:
     time.tzset()
 RANK = {name: n for n, name in enumerate(('outage', 'urgent', 'deadline', 'obligation'))}
 RETIRED = ('closed', 'dropped')
-# The sort-last sentinel `queued()` spells as a date, for an undated ask epoch.
+# The sort-last sentinel for a partner ask with no recorded ask epoch.
 UNDATED = 253402300799
 
 
@@ -190,8 +190,10 @@ def current(rec):
 
 
 def partner_first(rec):
-    """A partner-facing ask awaiting the captain outranks every class, oldest ask
-    first; an undated ask is not the oldest, so it sorts after every dated one."""
+    """A partner-facing ask awaiting the captain sorts ahead of every class, oldest
+    ask first, though `tier` still puts live problems and deadlines above it in
+    the Needs you list; an undated ask is not the oldest, so it sorts after every
+    dated one."""
     if not rec.get('partner_first'):
         return (1, 0)
     return (0, number(rec.get('awaiting_since')) or UNDATED)
@@ -200,11 +202,6 @@ def partner_first(rec):
 def sortkey(rec):
     return (partner_first(rec), RANK.get(rec.get('class'), 99),
             -number((rec.get('verification') or {}).get('at')), rec.get('id', ''))
-
-
-def queued(rec):
-    """Oldest first by the date the source says it has been waiting; undated last."""
-    return rec.get('since') or '9999-12-31', sortkey(rec)
 
 
 # --- rows -------------------------------------------------------------------
@@ -274,20 +271,36 @@ def note_toggle(rec):
     return f'<button type="button" class="notetoggle" aria-expanded="false" onclick="{esc(js)}">note</button>'
 
 
+def audit(rec):
+    """Where the line came from and how it was read, kept off the visible row for audit."""
+    how = (rec.get('verification') or {}).get('how') or 'no verification recorded'
+    return f' data-source="{esc(rec.get("label", ""))}" data-how="{esc(how)}"'
+
+
+def context(rec):
+    """At most one short line under the ask: a reopen note, else the why, else the ask's wording."""
+    note = rec.get('note') or ''
+    for label in {s.get('label') for s in (rec.get('slots') or {}).values() if s.get('label')}:
+        changed = re.fullmatch(re.escape(f'reopened: {label} changed after it was closed ') + r'(\([^()]*\))', note)
+        if changed:
+            note = f'reopened: its source changed after it was closed {changed.group(1)}'
+            break
+        if note == f'reopened at {label}':
+            note = 'reopened at its source'
+            break
+    for text in (note, rec.get('why'), rec.get('ask') if rec.get('ask') != rec.get('title') else ''):
+        if text:
+            return f'<span class="ctx">{brief(text, 160)}</span>'
+    return ''
+
+
 def row(rec, reply=True):
     title = esc(rec.get('title') or 'untitled item')
     severity = rec.get('class', 'obligation')
     pill = {'outage': 'bad', 'urgent': 'warn', 'deadline': 'warn'}.get(severity, 'info')
-    ctx = ''
-    if rec.get('ask') and rec.get('ask') != rec.get('title'):
-        ctx += f'<span class="ctx">{brief(rec["ask"])}</span>'
-    if rec.get('note'):
-        ctx += f'<span class="next"><b>{esc(rec["note"])}</b></span>'
-    how = (rec.get('verification') or {}).get('how') or 'no verification recorded'
-    ctx += f'<span class="ctx how">{esc(how)}</span>'
     toggle = note_toggle(rec) if reply else ''
-    main = (f'<tr class="item" id="item-{esc(rec.get("id", ""))}"><td class="who"><span class="pill {pill}">{esc(severity)}</span><span class="org">{esc(rec.get("label", ""))}</span></td>\n'
-            f'<td class="what">{title}{freshness(rec)}{ctx}</td>\n'
+    main = (f'<tr class="item" id="item-{esc(rec.get("id", ""))}"{audit(rec)}><td class="who"><span class="pill {pill}">{esc(severity)}</span></td>\n'
+            f'<td class="what">{title}{freshness(rec)}{context(rec)}</td>\n'
             f'<td class="links">{link(rec.get("link"))}{toggle}</td></tr>')
     return main + '\n' + reply_form(rec) if reply else main
 
@@ -302,7 +315,7 @@ def disclosure(title, content):
 
 def listing(recs, note):
     return '<ul class="done">' + ''.join(
-        f'<li id="item-{esc(r["id"])}"><b>{esc(r.get("title"))}</b> - {brief(note(r))}<span class="why">{esc(r.get("label", ""))} · {freshness(r)}</span></li>'
+        f'<li id="item-{esc(r["id"])}"{audit(r)}><b>{esc(r.get("title"))}</b> - {brief(note(r))}<span class="why">{freshness(r)}</span></li>'
         for r in recs) + '</ul>'
 
 
@@ -316,7 +329,7 @@ def capped(recs, more, reply=True, limit=0):
 
 
 def stale_fold(recs, reply=True, limit=0):
-    """The one labelled fold every section uses for lines this build did not re-check."""
+    """The one labelled fold for routine lines this build did not re-check."""
     if limit and len(recs) > limit:
         recs = sorted(recs, key=lambda r: (number((r.get('verification') or {}).get('at')), r.get('id', '')))
         summary = f'{len(recs)} not re-checked in this build, oldest {limit} shown'
@@ -329,18 +342,24 @@ def split(recs):
     return sorted((r for r in recs if current(r)), key=sortkey), sorted((r for r in recs if not current(r)), key=sortkey)
 
 
-def section(heading, small, recs):
-    """Current lines in the table, older ones in one labelled fold; empty sections are omitted."""
-    if not recs:
-        return
-    print(f'<h2>{esc(heading)}<small>{esc(small)}</small></h2>')
-    live, stale = split(recs)
-    if live:
-        print(table([row(r) for r in live]))
-    else:
-        print('<p class="sub">None re-checked in this build.</p>')
-    if stale:
-        print(stale_fold(stale))
+# --- action order -----------------------------------------------------------
+
+# Tier 0 is a live problem or a hard deadline, as the source classed it: an
+# outage, or a deadline. Tier 1 is a partner-facing ask awaiting the captain,
+# oldest ask first. Everything else follows by class, newest read first. An
+# urgent class earned only by waiting long never reaches tier 0.
+FIRST = ('outage', 'deadline')
+
+
+def tier(rec):
+    if rec.get('class') in FIRST:
+        return 0
+    return 1 if rec.get('partner_first') else 2
+
+
+def actionkey(rec):
+    """Tier first; sortkey then puts awaiting partner asks oldest first inside tier 1."""
+    return tier(rec), sortkey(rec)
 
 
 # --- morning detail fragment ------------------------------------------------
@@ -395,18 +414,15 @@ for rec in items:
         live.append(rec)
 
 
-
 def held(rec):
     """A captain-held backlog task: a hold time is never a source read, so it is never current."""
     return any(slot.startswith('backlog:') for slot in (rec.get('slots') or {}))
 
 
-asks = [r for r in live if r.get('kind') in ('decision', 'approval')]
-# Holds nobody re-checked this build get their own capped fold, so ~95 of them
-# cannot bury the decisions that were actually read today.
-decisions = [r for r in asks if not (held(r) and not current(r))]
-holds = [r for r in asks if held(r) and not current(r)]
-replies = [r for r in live if r.get('kind') == 'reply']
+# A captain-held backlog task no read made current stays off the page: the
+# backlog holds it, and a hold is never evidence that it needs him today.
+asks = sorted((r for r in live if r.get('kind') in ('decision', 'approval', 'reply')
+               and not (held(r) and not current(r))), key=actionkey)
 conditions = [r for r in live if r.get('kind') == 'condition']
 activity = [r for r in live if r.get('kind') == 'info']
 waiting = sorted([r for r in items if r.get('state') == 'waiting'] + handoffs, key=sortkey)
@@ -425,78 +441,14 @@ closed.sort(key=lambda r: (-number(r['closure'].get('at')), r['id']))
 # captain and a fulfilled close; unknown actors, dismissals and releases never count.
 handled = [r for r in closed if r['closure'].get('reason') == 'fulfilled'
            and r['closure'].get('actor') not in ('captain', 'source', 'unknown', '')]
-now_strip = sorted((r for r in decisions + replies if current(r)), key=sortkey)[:3]
 
 # --- page -------------------------------------------------------------------
 
-sweep_line = (f'Verification sweep began <span class="mono">{esc(when(FLOOR))}</span>.' if FLOOR != day_start(NOW)
-              else 'No verification sweep recorded today; only reads recorded today count as current.')
-print(f'<p class="sub">{sweep_line} A line not re-read since then says so on the line.</p>')
-print('<div class="tiles">')
-decisions_sub = f'{len(decisions)} open in all' + (f' · {len(holds)} held, not re-checked' if holds else '')
-tiles = [(len([r for r in decisions if current(r)]), 'Decisions awaiting you', decisions_sub),
-         (len([r for r in replies if current(r)]), 'Replies you owe', f'{len(replies)} open in all'),
-         (len(waiting), 'Waiting on others', 'nothing needed from you'),
-         (len(closed), f'Closed since {when(SINCE)}', 'each with its evidence below')]
-if handled:
-    tiles.append((len(handled), 'Handled without you', 'closed by a named colleague or firstmate'))
-for n, label, sub in tiles:
-    print(f'<div class="tile"><div class="n">{n}</div><div class="l">{esc(label)}</div><div class="s">{esc(sub)}</div></div>')
-print('</div>')
-
-print('<div class="strip now"><h3>Now</h3><p class="sub">at most three, re-checked in this build</p>')
-if now_strip:
-    print('<ol>')
-    for r in now_strip:
-        why = r.get('why') or r.get('ask') or f'{r.get("class")} {"reply owed" if r.get("kind") == "reply" else "decision"}, read {when(r["verification"].get("at"))}'
-        print(f'<li><a class="jump" href="#item-{esc(r["id"])}">{esc(r.get("title"))}</a><span class="why">{brief(why, 160)}</span></li>')
-    print('</ol>')
+print('<h2>Needs you now<small>live problems and deadlines first, then partners waiting on you</small></h2>')
+if asks:
+    print(table([row(r) for r in asks]))
 else:
-    print('<p class="sub"><b>Nothing open.</b> No action re-checked in this build is waiting on you.</p>')
-print('</div>')
-
-section('Decisions awaiting you', 'urgent first, newest within each priority', decisions)
-if holds:
-    # Oldest hold first: nothing re-reads a hold, so without its queued date the
-    # cut would be hash order and the same ten would surface every day.
-    print(disclosure(f'Held decisions not re-checked ({len(holds)})',
-                     capped(sorted(holds, key=queued), 'more held for you, not shown here.', limit=10)))
-section('Replies you owe', 'read by the intake or the morning sweep', replies)
-
-# The email agent block is DATED REFERENCE from the file the morning sidecar
-# names, never a fresh obligation and never selected by guessing the newest.
-email = sidecar.get('email_agent_source') or ''
-email_path = Path(email if email.startswith('/') else Path(HOME) / email) if email else None
-if email_path and email_path.is_file() and not email_path.is_symlink():
-    blocks, heading = {}, ''
-    for line in email_path.read_text().splitlines():
-        if line.startswith('## '):
-            heading = line[3:].strip().lower()
-            continue
-        entry = re.match(r'^\s*(?:[-*]|\d+\.)\s+(.*)$', line)
-        if heading and entry:
-            blocks.setdefault(heading, []).append(re.sub(r'[*`]', '', entry.group(1)).strip())
-
-    def pick(prefix, limit):
-        return next((v[:limit] for k, v in blocks.items() if k.startswith(prefix)), [])
-
-    print('<h2>Email agent replies<small>dated reference, not fresh obligations</small></h2>')
-    print(f'<p class="sub"><span class="prov inf">from {esc(email_path.name)}, written {esc(when(int(email_path.stat().st_mtime)))}</span></p>')
-    print('<div class="grid2">')
-    for title, lines in (('Next actions', pick('next actions', 3)), ('In flight', pick('in flight', 4)),
-                         ('Landed', pick('landed', 4))):
-        if lines:
-            print(f'<div class="card"><h3>{esc(title)}</h3><ol>' + ''.join(f'<li>{brief(l)}</li>' for l in lines) + '</ol></div>')
-    print('</div>')
-
-if waiting:
-    print('<h2>Waiting on others<small>nothing needed from you unless it comes back</small></h2>')
-
-    def waiting_note(r):
-        if r.get('pending'):
-            return f'handoff requested, not yet accepted: {r["pending"].get("what")}'
-        return (f'{r.get("owner")} has it: ' if r.get('owner') else 'handed over: ') + (r.get('handover') or 'no hand-over note recorded')
-    print(listing(waiting, waiting_note))
+    print('<div class="note"><b>Nothing open.</b> Nothing recorded is waiting on you.</div>')
 
 watch = {}
 for rec in conditions:
@@ -521,8 +473,61 @@ for condition, readings in sorted(watch.items()):
     newest = readings[0]
     title = newest.get('title', '')
     units = title.split('; newest:', 1)[1].strip() if '; newest:' in title else (title if re.search(r'\b\d{15}\b', title) else 'no unit detail in latest observation')
-    print(f'<div class="watch-line"><b>{esc(condition)}</b> - {esc(summary)}'
-          f'<span class="why">Latest: {esc(units)} · {esc(newest.get("label", ""))} · {freshness(newest)} · {link(newest.get("link"))}</span></div>')
+    print(f'<div class="watch-line"{audit(newest)}><b>{esc(condition)}</b> - {esc(summary)}'
+          f'<span class="why">Latest: {esc(units)} · {freshness(newest)} · {link(newest.get("link"))}</span></div>')
+
+if waiting:
+    def waiting_note(r):
+        if r.get('pending'):
+            return f'handoff requested, not yet accepted: {r["pending"].get("what")}'
+        return (f'{r.get("owner")} has it: ' if r.get('owner') else 'handed over: ') + (r.get('handover') or 'no hand-over note recorded')
+    print(disclosure(f'Waiting on others ({len(waiting)})', listing(waiting, waiting_note)))
+
+if activity:
+    fresh, older = split(activity)
+    body = table([row(r, reply=False) for r in fresh]) if fresh else '<p class="sub">None re-checked in this build.</p>'
+    if older:
+        body += '\n' + stale_fold(older, reply=False, limit=10)
+    print(disclosure('Other channel activity', body))
+
+if closed:
+    who = {'captain': 'by you', 'source': 'at the source', 'unknown': 'actor not recorded'}
+    label = 'Closed today' if SINCE == day_start(NOW) else f'Closed since {when(SINCE)}'
+    count = f'{len(closed)}' + (f', {len(handled)} handled without you' if handled else '')
+    print(disclosure(f'{label} ({count})', table([
+        f'<tr class="closed" id="item-{esc(r["id"])}"{audit(r)}><td>{esc(r.get("title"))}</td><td>{brief(r["closure"].get("evidence") or "no closing evidence recorded")}</td>'
+        f'<td>{esc(r["closure"].get("reason", ""))} {esc(who.get(r["closure"].get("actor"), "by " + str(r["closure"].get("actor"))))} · {esc(when(r["closure"].get("at")))}</td></tr>'
+        for r in closed])))
+
+if snoozed:
+    snoozed.sort(key=lambda r: (max(r.get('snoozed_until') or '', r.get('source_snooze') or ''), r['id']))
+    print(disclosure(f'Parked ({len(snoozed)})', listing(snoozed, lambda r: f'back on {max(r.get("snoozed_until") or "", r.get("source_snooze") or "")}')))
+if mine:
+    print(disclosure(f'Yours, tracked but not surfaced ({len(mine)})', listing(sorted(mine, key=sortkey), lambda r: 'you said you are on it')))
+
+# The email agent block is DATED REFERENCE from the file the morning sidecar
+# names, never a fresh obligation and never selected by guessing the newest.
+email = sidecar.get('email_agent_source') or ''
+email_path = Path(email if email.startswith('/') else Path(HOME) / email) if email else None
+if email_path and email_path.is_file() and not email_path.is_symlink():
+    blocks, heading = {}, ''
+    for line in email_path.read_text().splitlines():
+        if line.startswith('## '):
+            heading = line[3:].strip().lower()
+            continue
+        entry = re.match(r'^\s*(?:[-*]|\d+\.)\s+(.*)$', line)
+        if heading and entry:
+            blocks.setdefault(heading, []).append(re.sub(r'[*`]', '', entry.group(1)).strip())
+
+    def pick(prefix, limit):
+        return next((v[:limit] for k, v in blocks.items() if k.startswith(prefix)), [])
+
+    body = f'<p class="sub"><span class="prov inf">from {esc(email_path.name)}, written {esc(when(int(email_path.stat().st_mtime)))}</span></p><div class="grid2">'
+    for title, lines in (('Next actions', pick('next actions', 3)), ('In flight', pick('in flight', 4)),
+                         ('Landed', pick('landed', 4))):
+        if lines:
+            body += f'<div class="card"><h3>{esc(title)}</h3><ol>' + ''.join(f'<li>{brief(l)}</li>' for l in lines) + '</ol></div>'
+    print(disclosure('Email agent replies - dated reference, not fresh obligations', body + '</div>'))
 
 # --- open tickets -------------------------------------------------------------
 
@@ -580,29 +585,9 @@ def tickets_section():
     print('<div class="tablewrap"><table><thead><tr><th>Ticket</th><th>Stage</th><th>Last inbound</th><th>Last outbound</th></tr></thead>'
           f'<tbody>{rows}</tbody></table></div>')
 
-
 tickets_section()
 if details.strip():
     print('<section aria-label="Morning detail">' + details + '</section>')
-
-if closed:
-    print(f'<h2>Closed since {esc(when(SINCE))}<small>each with its closing evidence</small></h2>')
-    who = {'captain': 'by you', 'source': 'at the source', 'unknown': 'actor not recorded'}
-    print(table([f'<tr class="closed"><td>{esc(r.get("title"))}</td><td>{brief(r["closure"].get("evidence") or "no closing evidence recorded")}</td>'
-                 f'<td>{esc(r["closure"].get("reason", ""))} {esc(who.get(r["closure"].get("actor"), "by " + str(r["closure"].get("actor"))))} · {esc(r.get("label", ""))} · {esc(when(r["closure"].get("at")))}</td></tr>'
-                 for r in closed]))
-
-if snoozed:
-    snoozed.sort(key=lambda r: (max(r.get('snoozed_until') or '', r.get('source_snooze') or ''), r['id']))
-    print(disclosure(f'Parked ({len(snoozed)})', listing(snoozed, lambda r: f'back on {max(r.get("snoozed_until") or "", r.get("source_snooze") or "")}')))
-if mine:
-    print(disclosure(f'Yours, tracked but not surfaced ({len(mine)})', listing(sorted(mine, key=sortkey), lambda r: 'you said you are on it')))
-if activity:
-    fresh, older = split(activity)
-    body = table([row(r, reply=False) for r in fresh]) if fresh else '<p class="sub">None re-checked in this build.</p>'
-    if older:
-        body += '\n' + stale_fold(older, reply=False, limit=10)
-    print(disclosure('Other channel activity', body))
 
 # Intake coverage is separate from item freshness: a store cannot fix a read that never ran.
 enrolled = set()

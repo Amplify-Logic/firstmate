@@ -4,12 +4,19 @@
 # Contracts under test:
 #   - Urgency wins the order: an outage sits above an urgent item, which sits
 #     above a routine one, whatever order the ledger recorded them in.
+#   - One calm "Needs you now" list: live problems and hard deadlines first,
+#     then a partner awaiting him, an urgent ask that only waited long never
+#     above them, no summary strip,
+#     Now box, sweep banner or held count, and no item rendered twice.
+#   - Waiting on others, other channel activity and closed today render as
+#     collapsed folds below the list, in that order, ahead of the open
+#     "Your open tickets" section.
 #   - Recency breaks the tie inside a class, so a severe item arriving at 15:00
 #     leads the class over one recorded at 09:00 and the page re-ranks itself
 #     without anyone re-ordering it by hand.
 #   - Waiting and closed work never mix into the live section: a handed-over
 #     item renders under "Waiting on others" with its hand-over note, and an
-#     item archived on the rendered day renders under "Cleared today"
+#     item archived on the rendered day renders under "Closed today"
 #     with its recorded resolution.
 #   - An item archived on an earlier day is history, not something that closed
 #     since this morning, and never reappears.
@@ -162,10 +169,10 @@ test_waiting_and_closed_never_mix_into_the_live_section() {
   # heading, and the closed one after the closed heading.
   assert_contains "$(cat "$page")" 'handed to Naomi, she answers the dealer' \
     'the hand-over note is missing from the page'
-  [ "$(line_of "$page" 'quote for the dealer')" -gt "$(line_of "$page" '<h2>Waiting on others')" ] \
+  [ "$(line_of "$page" 'quote for the dealer')" -gt "$(line_of "$page" '<summary>Waiting on others')" ] \
     || fail 'a handed-over item did not render under Waiting on others'
-  [ "$(line_of "$page" 'invoice dispute')" -gt "$(line_of "$page" '<h2>Closed since')" ] \
-    || fail 'an item archived today did not render under Closed since morning'
+  [ "$(line_of "$page" 'invoice dispute')" -gt "$(line_of "$page" '<summary>Closed today')" ] \
+    || fail 'an item archived today did not render under Closed today'
   assert_contains "$(cat "$page")" 'credit note sent, customer confirmed' \
     'the recorded resolution is missing from the closed table'
 
@@ -176,7 +183,7 @@ test_waiting_and_closed_never_mix_into_the_live_section() {
 
   # And the waiting item stays inside its own block rather than leaking into
   # the live table above it or the closed table below it.
-  [ "$(line_of "$page" 'quote for the dealer')" -lt "$(line_of "$page" '<h2>Closed since')" ] \
+  [ "$(line_of "$page" 'quote for the dealer')" -lt "$(line_of "$page" '<summary>Closed today')" ] \
     || fail 'the waiting item did not stay inside the Waiting on others block'
 
   pass 'waiting, closed-today and closed-earlier items each render in exactly one place'
@@ -204,10 +211,13 @@ test_every_line_carries_its_own_read_time() {
   # The page's own build time is separate and separately labelled.
   assert_contains "$(cat "$page")" 'rebuilt from the to-do records at <span class="mono">15:30 CEST</span>' \
     'the page does not stamp its own render time'
-  assert_contains "$(cat "$page")" 'slack-channel (C_BRIEF)' \
-    'the line does not name the channel it was read on'
+  # The channel stays on the row for audit, off the visible text.
+  assert_contains "$(cat "$page")" 'data-source="slack-channel (C_BRIEF)"' \
+    'the row does not keep the channel it was read on for audit'
+  assert_not_contains "$(cat "$page")" '<span class="org">' 'the row still shows its source label'
+  assert_not_contains "$(cat "$page")" '<span class="ctx how">' 'the row still shows how it was read'
 
-  pass 'each live line carries the channel and the time that item was read, separately from the render stamp'
+  pass 'each live line carries the time that item was read, separately from the render stamp, with its channel kept for audit'
 }
 
 test_legacy_morning_is_a_historical_reference() {
@@ -264,7 +274,7 @@ JSON
   observe_at "$h" "$T_1500" resolve --item "$key" --reason 'no longer needed' >/dev/null
   render_at "$h" "$T_1530" render >/dev/null
   assert_not_contains "$(cat "$page")" 'duplicate morning action' 'resolved ledger item must not reappear from morning'
-  [ "$(line_of "$page" 'no longer needed')" -gt "$(line_of "$page" '<h2>Closed since')" ] || fail 'cleared reason must be in closed footer'
+  [ "$(line_of "$page" 'no longer needed')" -gt "$(line_of "$page" '<summary>Closed today')" ] || fail 'cleared reason must be in closed footer'
   cp "$page" "$h/previous.html"
   printf '{invalid' >"$h/.lavish/today-2026-09-10.morning.json"
   if render_at "$h" "$T_1530" render >/dev/null 2>&1; then fail 'invalid metadata must refuse'; fi
@@ -312,7 +322,7 @@ test_nothing_is_carried_forward_between_renders() {
   render_at "$h" "$T_1530" render >/dev/null
 
   # It may appear in the closed table, but never again as open work.
-  [ "$(line_of "$page" 'ask that gets answered')" -gt "$(line_of "$page" '<h2>Closed since')" ] \
+  [ "$(line_of "$page" 'ask that gets answered')" -gt "$(line_of "$page" '<summary>Closed today')" ] \
     || fail 'a resolved item survived into the live section of the next render'
 
   # The page is rebuilt from the durable records, never read back: deleting
@@ -331,6 +341,79 @@ test_nothing_is_carried_forward_between_renders() {
     'an empty record set did not render as an empty page'
 
   pass 'the page is rebuilt from the records every time, so nothing is invented or carried forward'
+}
+
+test_calm_layout_ranks_live_problems_first_and_folds_the_rest() {
+  local h page body key_wait key_done ids dupes
+
+  h="$TMP_ROOT/calm"
+  new_home "$h"
+  # Recorded worst-first-last: a long-waiting urgent ask is the newest read,
+  # so only the tiers can put the outage and the deadline above it.
+  observe_at "$h" "$T_0900" observe --source C_BRIEF --ref c-obl \
+    --digest a --class obligation --title 'answer the training question' >/dev/null
+  observe_at "$h" "$T_0900" observe --source M_ACTION --ref c-dl \
+    --digest b --class deadline --title 'feedback due before leave' >/dev/null
+  observe_at "$h" "$T_0900" observe --source C_BRIEF --ref c-out \
+    --digest c --class outage --title 'partner machine down now' >/dev/null
+  observe_at "$h" "$T_1500" observe --source C_BRIEF --ref c-urg \
+    --digest d --class urgent --title 'partner waiting 26 days' >/dev/null
+  observe_at "$h" "$T_0900" observe --source C_BRIEF --ref c-rt \
+    --digest e --class routine --title 'weekly newsletter' >/dev/null
+  key_wait=$(observe_at "$h" "$T_0900" observe --source C_BRIEF --ref c-w \
+    --digest f --class urgent --title 'dealer quote handed over' | awk '{ print $2 }')
+  key_done=$(observe_at "$h" "$T_0900" observe --source M_ACTION --ref c-d \
+    --digest g --class urgent --title 'invoice settled' | awk '{ print $2 }')
+  observe_at "$h" "$T_1100" resolve --item "$key_wait" --reason 'Naomi has it' --waiting >/dev/null
+  observe_at "$h" "$T_1100" resolve --item "$key_done" --reason 'credit note sent' >/dev/null
+
+  # A partner-facing ask awaiting him, flagged by the morning sweep.
+  printf '{"version":2,"date":"2026-09-10","actions":[{"key":"k-p","source":"hubspot","ref":"t-9","class":"obligation","kind":"reply","title":"partner awaiting your answer","partner_awaiting":true,"awaiting_since":%s,"updated":%s}]}\n' \
+    "$T_YESTERDAY_1500" "$T_1100" >"$h/.lavish/today-2026-09-10.morning.json"
+
+  render_at "$h" "$T_1530" render >/dev/null
+  page=$(page_of "$h")
+  body=$(sed -n '/<h2>Needs you now/,/<\/table>/p' "$page")
+
+  # Tier 0 is a live problem or a hard deadline, tier 1 a partner awaiting
+  # him; age alone never lifts the urgent ask above them, and everything
+  # else follows by class.
+  [ "$(grep -o 'class="what">[^<]*' <<<"$body" | sed 's/^class="what">//')" = 'partner machine down now
+feedback due before leave
+partner awaiting your answer
+partner waiting 26 days
+answer the training question' ] || fail "the Needs you list is not in action order:
+$body"
+
+  # One list: no summary strip, no Now box, no sweep banner, no held count.
+  assert_not_contains "$(cat "$page")" 'class="tiles"' 'the summary-count strip is still on the page'
+  assert_not_contains "$(cat "$page")" 'class="strip now"' 'the separate Now box is still on the page'
+  assert_not_contains "$(cat "$page")" 'No verification sweep recorded' 'the sweep banner is still on the page'
+  assert_not_contains "$(cat "$page")" 'held, not re-checked' 'the held count is still on the page'
+  [ "$(grep -o '<h2>[^<]*' "$page" | sed 's/^<h2>//')" = 'Needs you now
+Your open tickets' ] || fail 'the page has headed sections beyond the Needs you list and the open tickets'
+
+  # No item appears twice anywhere on the page.
+  ids=$(grep -o 'id="item-[^"]*"' "$page" | sort)
+  dupes=$(uniq -d <<<"$ids")
+  [ -z "$dupes" ] || fail "items appear twice on the page: $dupes"
+  [ "$(grep -c -F 'class="what">partner machine down now' "$page")" = 1 ] || fail 'the outage is rendered more than once'
+
+  # Waiting, routine activity and closed work sit in collapsed folds, below
+  # the list and in that order, never expanded.
+  assert_not_contains "$(cat "$page")" '<details open' 'a fold renders expanded'
+  [ "$(line_of "$page" '<summary>Waiting on others (1)</summary>')" -lt "$(line_of "$page" '<summary>Other channel activity</summary>')" ] \
+    && [ "$(line_of "$page" '<summary>Other channel activity</summary>')" -lt "$(line_of "$page" '<summary>Closed today (1)</summary>')" ] \
+    && [ "$(line_of "$page" '<summary>Closed today (1)</summary>')" -lt "$(line_of "$page" '<h2>Your open tickets')" ] \
+    || fail 'waiting, activity and closed are not folded in order ahead of the open tickets section'
+  [ "$(line_of "$page" 'dealer quote handed over')" -gt "$(line_of "$page" '<summary>Waiting on others')" ] \
+    || fail 'the handed-over item is not inside the waiting fold'
+  [ "$(line_of "$page" 'weekly newsletter')" -gt "$(line_of "$page" '<summary>Other channel activity')" ] \
+    || fail 'routine activity is not inside its fold'
+  [ "$(line_of "$page" 'invoice settled')" -gt "$(line_of "$page" '<summary>Closed today')" ] \
+    || fail 'the closed item is not inside the closed fold'
+
+  pass 'the calm layout ranks live problems and deadlines first in one list, never repeats an item, and folds the rest'
 }
 
 test_house_style_comes_from_the_tracked_templates() {
@@ -666,3 +749,4 @@ test_open_tickets_snapshot_with_a_non_string_field_is_refused
 test_open_tickets_drop_leaves_no_empty_panel_behind
 test_open_tickets_empty_subject_renders_as_an_untitled_ticket
 test_open_tickets_legacy_morning_copy_leaves_no_empty_reference_fold
+test_calm_layout_ranks_live_problems_first_and_folds_the_rest
