@@ -1,0 +1,24 @@
+### adversarial: malformed HubSpot reads must not replace the 15:40 snapshot
+$ printf '%s' '{not json' | fm-channel-intake.sh tickets --owner 'Test Owner'
+fm-channel-intake: tickets: input is not JSON: Expecting property name enclosed in double quotes: line 1 column 2 (char 1); snapshot left unchanged
+exit=2
+$ printf '%s' '[{"id":"9001","subject":"s","stage":"Closed","last_in":"","last_out":"","link":"https://x/9001"}]' | fm-channel-intake.sh tickets --owner 'Test Owner'
+fm-channel-intake: tickets: ticket 9001: stage is Closed; the snapshot holds only tickets that are not closed; snapshot left unchanged
+exit=2
+$ printf '%s' '[{"id":"9001","subject":"s","stage":"New","last_in":"","link":"https://x/9001"}]' | fm-channel-intake.sh tickets --owner 'Test Owner'
+fm-channel-intake: tickets: ticket 1: missing field last_out; snapshot left unchanged
+exit=2
+$ printf '%s' '[{"id":"9001","subject":"s","stage":"New","last_in":"","last_out":"","link":"https://x/1"},{"id":"9001","subject":"s","stage":"New","last_in":"","last_out":"","link":"https://x/1"}]' | fm-channel-intake.sh tickets --owner 'Test Owner'
+fm-channel-intake: tickets: ticket 9001 appears twice; snapshot left unchanged
+exit=2
+$ printf '%s' '[{"id":"abc","subject":"s","stage":"New","last_in":"","last_out":"","link":"https://x/1"}]' | fm-channel-intake.sh tickets --owner 'Test Owner'
+fm-channel-intake: tickets: ticket 1: id must be the numeric HubSpot ticket id; snapshot left unchanged
+exit=2
+$ printf '%s' '[{"id":"9","subject":"s","stage":"New","last_in":"","last_out":"","link":"javascript:alert(1)"}]' | fm-channel-intake.sh tickets --owner 'Test Owner'
+fm-channel-intake: tickets: ticket 9: link must be an https:// URL; snapshot left unchanged
+exit=2
+snapshot unchanged: yes
+### adversarial: HTML in subject is escaped
+tickets: wrote 1 open tickets for Test Owner read at 1789049400 to /tmp/fm-live-home/data/channel-intake/tickets.json
+TODO_RENDER: /tmp/fm-live-home/.lavish/today-2026-09-10.html rendered at 16:10 CEST
+&lt;img src=x onerror=alert(1)&gt;

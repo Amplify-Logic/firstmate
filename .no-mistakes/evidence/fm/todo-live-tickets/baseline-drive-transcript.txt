@@ -1,0 +1,6 @@
+fm-channel-intake: unknown command: tickets
+TODO_RENDER: /tmp/fm-base-home/.lavish/today-2026-09-10.html rendered at 06:20 CEST
+--- 15:40 HubSpot pass: tickets then complete (no manual render) ---
+fm-channel-intake: unknown command: tickets
+CHANNEL_INTAKE: HS_TICKETS read complete, checkpoint cp-1540
+TODO_RENDER: /tmp/fm-base-home/.lavish/today-2026-09-10.html rendered at 15:40 CEST

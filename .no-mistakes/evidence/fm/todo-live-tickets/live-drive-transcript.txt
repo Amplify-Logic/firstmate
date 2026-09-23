@@ -1,0 +1,6 @@
+tickets: wrote 8 open tickets for Test Owner read at 1789013820 to /tmp/fm-live-home/data/channel-intake/tickets.json
+TODO_RENDER: /tmp/fm-live-home/.lavish/today-2026-09-10.html rendered at 06:20 CEST
+--- 15:40 HubSpot pass: tickets then complete (no manual render) ---
+tickets: wrote 6 open tickets for Test Owner read at 1789047600 to /tmp/fm-live-home/data/channel-intake/tickets.json
+CHANNEL_INTAKE: HS_TICKETS read complete, checkpoint cp-1540
+TODO_RENDER: /tmp/fm-live-home/.lavish/today-2026-09-10.html rendered at 15:40 CEST

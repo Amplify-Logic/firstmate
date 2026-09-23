@@ -1,0 +1,13 @@
+### missing snapshot: morning page at 06:20, no tickets pass ever ran
+TODO_RENDER: /tmp/fm-stale-home/.lavish/today-2026-09-10.html rendered at 06:20 CEST
+ Your open tickets not available Could not read your open tickets: no HubSpot read has been recorded. 
+### stale: snapshot at 06:17, then the 15:40 pass completes WITHOUT handing tickets
+tickets: wrote 1 open tickets for Test Owner read at 1789013820 to /tmp/fm-stale-home/data/channel-intake/tickets.json
+CHANNEL_INTAKE: HS_TICKETS read complete, checkpoint c2
+TODO_RENDER: /tmp/fm-stale-home/.lavish/today-2026-09-10.html rendered at 15:40 CEST
+ Your open tickets out of date - last read 06:17 CEST Not refreshed since 06:17 CEST, 563 minutes ago; stages may have changed since. At that read: 1 ticket carries you as owner and is not closed: 1 Waiting for Tech.
+### zero open tickets
+tickets: wrote 0 open tickets for Test Owner read at 1789047600 to /tmp/fm-stale-home/data/channel-intake/tickets.json
+CHANNEL_INTAKE: HS_TICKETS read complete, checkpoint c3
+TODO_RENDER: /tmp/fm-stale-home/.lavish/today-2026-09-10.html rendered at 15:40 CEST
+ Your open tickets read live from HubSpot 0 tickets carry you as owner and are not closed. Read live from HubSpot at 15:40 CEST. 
