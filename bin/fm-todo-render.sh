@@ -22,38 +22,43 @@
 # `daily-todo-freshness` contract - the verification half stays with the
 # orchestrator that records each re-read with `fm-todo.sh verify`.
 #
-# PAGE SHAPE. A Now strip of at most three current asks with a one-line why;
-# decisions awaiting him; replies he owes; the email agent block; waiting on
-# others (including requested handoffs); fleet conditions; "Your open
-# tickets"; the morning detail fragment; everything closed since the previous
-# sweep with its evidence and actor, except routine chatter the intake
-# dropped from its ledger, which was never an ask; then folds for parked,
-# "mine", routine activity and intake coverage
-# (each enrolled source's last successful read and last failure, which is
-# separate from item freshness). Sections with nothing in them are omitted.
-# Inside decisions, replies and routine activity, lines not current for this
-# build sit in one labelled fold, each with its last check. A captain-held
-# backlog decision no read made current sits instead in its own fold under the
-# decisions section, oldest hold first, at most ten rows and a count of the
-# rest, and the decisions tile carries that held total beside its open count -
-# a hold is never verification, so those lines must not bury the ones read
-# today. The routine fold is capped the same way, and a capped fold says how
-# many of its lines are shown.
-# "Handled without you" appears only for a fulfilled close with a named actor
-# other than the captain.
+# PAGE SHAPE. One "Needs you now" list of every open decision, approval and
+# reply, in action order: first a live problem or hard deadline (class outage
+# or deadline), then a partner-facing ask awaiting him (`partner_first`,
+# oldest ask first), then everything else by class, newest read first. An
+# urgent class alone - which a long wait earns - never lifts a line into the
+# first tier. There is no summary strip, no separate Now box and no sweep
+# banner, and no item renders twice. A captain-held backlog decision no read
+# made current stays off the page; the backlog still holds it. Fleet
+# conditions follow, then collapsed folds for waiting on others (including
+# requested handoffs), other channel activity (its lines not current for this
+# build in one capped "not re-checked" fold), everything closed since the
+# previous sweep ("Closed today" when that is the start of the day) with its
+# evidence and actor, parked, "mine" and the email agent block; then the live
+# "Your open tickets" fold, whose summary keeps its read time or out-of-date
+# label, the morning detail fragment (calendar, worth knowing) and the intake
+# coverage fold (each enrolled source's last successful read and last
+# failure, which is separate from item freshness). Routine chatter the intake
+# dropped from its ledger was never an ask and is not a closure. Sections with
+# nothing in them are omitted. The closed fold counts as "handled without
+# you" only a fulfilled close with a named actor other than the captain.
 #
-# Every row of something asked of him - decisions, held decisions and replies -
-# carries a "note" toggle over a one-line box that queues the typed line into
-# the open Lavish review session with the item's id and the revision the page
-# showed, so bin/fm-todo.sh can apply a page command to exactly the ask he was
-# looking at; with no review session connected the box says so and queues
-# nothing. Routine activity and the list-style folds carry no box.
+# EACH ROW IS THE CLASS BADGE, THE ASK, AT MOST ONE SHORT CONTEXT LINE (a
+# reopen note, else the why, else the ask's wording), ITS READ TIME, the Open
+# link and a "note" toggle. Where the line came from and how it was read stay
+# in the row's data-source and data-how attributes for audit, never in the
+# visible text. The toggle opens a one-line box that queues the typed line
+# into the open Lavish review session with the item's id and the revision the
+# page showed, so bin/fm-todo.sh can apply a page command to exactly the ask
+# he was looking at; with no review session connected the box says so and
+# queues nothing. Routine activity and the list-style folds carry no box.
 #
 # YOUR OPEN TICKETS IS LIVE. That section is rendered on every build from
 # data/channel-intake/tickets.json, which `bin/fm-channel-intake.sh tickets`
 # alone writes and whose header owns the format: the count with its stage
 # breakdown, each ticket's stage exactly as stored, and the snapshot's own
-# read time. A snapshot older than two of the intake's configured
+# read time, in one collapsed fold whose summary carries that read time. A
+# snapshot older than two of the intake's configured
 # `interval_seconds` polls, and never less than an hour, is headed out of date
 # with that read time and never called live; a missing or unreadable one says
 # the tickets could not be read. Any "Your open tickets" section in a morning

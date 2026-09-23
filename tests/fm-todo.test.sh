@@ -17,13 +17,11 @@
 #   - Only a named, fulfilled close counts as handled without you.
 #   - `reopen` brings a handed-over item back to the captain's lane and
 #     refuses an item that is already open.
-#   - Captain holds no read made current collapse into their own capped fold
-#     below the live decisions, and the decisions tile keeps them apart.
+#   - Captain holds no read made current stay in the store and off the page.
 #   - Routine activity older than the sweep stays on the page in the same
-#     labelled "not re-checked" fold the sections use, capped at ten rows.
+#     labelled "not re-checked" fold, capped at ten rows.
 #   - A routine item the ledger no longer carries closes as superseded without
-#     reaching the Closed since evidence, and an unreadable ledger closes nothing.
-#   - The held fold shows the oldest holds first, by the backlog's since date.
+#     reaching the Closed today evidence, and an unreadable ledger closes nothing.
 #   - Sync prunes a retired routine record thirty days on, and nothing else:
 #     a command tombstone and a closed obligation both survive it.
 #   - A routine line the captain marked with mine or park is never retired by
@@ -114,9 +112,8 @@ test_a_retired_ledger_record_closes_its_routine_item() {
     'the retirement closure is not labelled superseded'
   assert_not_contains "$out" 'yesterday small talk' 'a retired routine line still renders on the page'
   # Routine chatter the intake dropped was never an ask, so it is not a closure to show.
-  assert_not_contains "$out" 'the intake retired it as routine' 'a retirement reached the Closed since evidence table'
-  assert_contains "$out" '<div class="n">0</div><div class="l">Closed since' \
-    'a retirement was counted as something closed for you'
+  assert_not_contains "$out" 'the intake retired it as routine' 'a retirement reached the Closed today evidence table'
+  assert_not_contains "$out" '<summary>Closed today' 'a retirement was counted as something closed for you'
   # An unreadable ledger is not an absence: it closes nothing.
   mv "$h/data/channel-intake" "$h/intake.away"
   render_at "$h" "$T_1100"
@@ -126,7 +123,7 @@ test_a_retired_ledger_record_closes_its_routine_item() {
   pass 'a retired routine record closes its item as superseded and an unreadable ledger closes nothing'
 }
 
-test_routine_fold_is_capped_like_the_held_one() {
+test_routine_fold_is_capped() {
   local h out n i
   h="$TMP_ROOT/chatter"
   new_home "$h"
@@ -145,27 +142,6 @@ test_routine_fold_is_capped_like_the_held_one() {
   n=$(printf '%s\n' "$out" | grep -c '<td class="what">channel chatter')
   [ "$n" = 10 ] || fail "the routine fold rendered $n rows, not ten"
   pass 'the routine not re-checked fold is capped at ten rows and a count of the rest'
-}
-
-test_held_fold_shows_the_oldest_holds_first() {
-  local h out order i
-  h="$TMP_ROOT/oldest"
-  new_home "$h"
-  printf '## Queued\n' >"$h/backlog.md"
-  # Written newest first, so file order and hash order both disagree with age.
-  i=12
-  while [ "$i" -ge 1 ]; do
-    printf -- '- [ ] aged-%02d - Approve batch %02d (since 2026-09-%02d) (hold: needs the captain) (hold-kind: captain)\n' \
-      "$i" "$i" "$i" >>"$h/backlog.md"
-    i=$((i - 1))
-  done
-  render_at "$h" "$T_1000"
-  out=$(page "$h" 2026-09-10)
-  order=$(printf '%s\n' "$out" | grep -o '<td class="what">Approve batch [0-9][0-9]' | sed 's/.*batch //' | head -3 | tr '\n' ' ')
-  [ "$order" = '01 02 03 ' ] || fail "the held fold is ordered \"$order\", not oldest hold first"
-  assert_contains "$out" '2 more held for you, not shown here.' 'the held fold is not capped'
-  assert_not_contains "$out" '<td class="what">Approve batch 12' 'the newest hold displaced an older one'
-  pass 'the held fold surfaces the oldest holds first, so the cut is stable and meaningful'
 }
 
 test_sync_prunes_only_retired_routine_records() {
@@ -267,12 +243,11 @@ test_verification_is_never_renewed_by_sync() {
   out=$(page "$h" 2026-09-10)
   assert_contains "$out" 'dealer quote<span class="prov unv">not re-checked since 09:00 CEST</span>' \
     'a check older than the sweep was shown as current'
-  assert_contains "$out" 'No action re-checked in this build' 'the Now strip claimed a stale item'
   todo_at "$h" "$T_1030" verify --item "$(field_of "$h" 'dealer quote' 1)" --how 'Slack thread read directly' >/dev/null
   render_at "$h" "$T_1100"
   out=$(page "$h" 2026-09-10)
   assert_contains "$out" 'dealer quote<span class="prov obs">read 10:30 CEST</span>' 'an explicit verify was not recorded'
-  assert_contains "$out" 'Slack thread read directly' 'the verification method is not on the line'
+  assert_contains "$out" 'data-how="Slack thread read directly"' 'the verification method is not kept on the line for audit'
   # A later render never moves the check forward on its own.
   render_at "$h" "$T_1500"
   assert_contains "$(page "$h" 2026-09-10)" 'read 10:30 CEST' 'a re-render renewed the verification time'
@@ -305,7 +280,7 @@ test_done_survives_and_a_new_ask_resurfaces_once() {
   render_at "$h" "$T_NEXT_1000"
   out=$(page "$h" 2026-09-11)
   [ "$(field_of "$h" 'Catena' 2)" = open ] || fail 'a changed ask did not reopen'
-  assert_contains "$out" 'reopened: firstmate-backlog changed after it was closed (fulfilled)' 'the reopen reason is missing'
+  assert_contains "$out" 'reopened: its source changed after it was closed (fulfilled)' 'the reopen reason is missing'
   reopens=$(grep -c '"to": "open"' "$h/data/todo/journal")
   [ "$reopens" = 1 ] || fail "the item reopened $reopens times, not once"
   pass 'done survives repeated syncs and the next morning; a changed ask resurfaces once with its reason'
@@ -371,9 +346,12 @@ test_missing_input_closes_nothing_and_release_is_scoped() {
 MD
   render_at "$h" "$T_0900"
   [ "$(field_of "$h" 'unit A' 2)" = open ] || fail 'a captain hold was not folded in'
-  assert_contains "$(page "$h" 2026-09-10)" 'needs the captain&#x27;s go (reads, not pushes)' 'the nested hold reason was cut'
-  assert_contains "$(page "$h" 2026-09-10)" 'cannot verify - no source read recorded' 'a backlog hold was shown as verified'
+  # A hold is never a read, so an unverified hold stays off the page.
+  assert_not_contains "$(page "$h" 2026-09-10)" 'Approve reads on unit A' 'an unverified backlog hold reached the page'
   assert_not_contains "$(page "$h" 2026-09-10)" 'Ordinary queued work' 'an unheld task reached the page'
+  todo_at "$h" "$T_0900" verify --item "$(field_of "$h" 'unit A' 1)" --how 'backlog hold re-read' >/dev/null
+  render_at "$h" "$T_0900"
+  assert_contains "$(page "$h" 2026-09-10)" 'needs the captain&#x27;s go (reads, not pushes)' 'the nested hold reason was cut'
   mv "$h/backlog.md" "$h/backlog.moved"
   render_at "$h" "$T_1000"
   [ "$(field_of "$h" 'unit A' 2)" = open ] || fail 'a missing backlog closed a held item'
@@ -408,8 +386,8 @@ test_identity_snooze_and_counter() {
   todo_at "$h" "$T_NEXT_0900" command --item "$id" 'drop' >/dev/null
   render_at "$h" "$T_NEXT_1000"
   out=$(page "$h" 2026-09-11)
-  assert_contains "$out" '<div class="n">1</div><div class="l">Handled without you' 'a named fulfilled close was not counted'
-  assert_contains "$out" '<div class="n">2</div><div class="l">Closed since' 'the closed count is wrong'
+  assert_contains "$out" '<summary>Closed today (2, 1 handled without you)</summary>' \
+    'the closed count or the named fulfilled close is wrong'
   assert_contains "$out" 'fulfilled by Naomi' 'the closing actor is not shown'
   assert_contains "$out" 'dismissed by you' 'a dismissal was not labelled as one'
   pass 'one ask seen twice dedupes, a snooze returns unverified, and only a named fulfilled close counts'
@@ -438,7 +416,7 @@ test_reopen_returns_a_handed_over_item_to_the_captain() {
   pass 'reopen brings a handed-over item back to the captain and refuses one already open'
 }
 
-test_held_decisions_collapse_below_the_live_ones() {
+test_unverified_holds_stay_off_the_page() {
   local h out n
   h="$TMP_ROOT/held"
   new_home "$h"
@@ -453,18 +431,12 @@ test_held_decisions_collapse_below_the_live_ones() {
   todo_at "$h" "$T_1000" sweep-start >/dev/null
   render_at "$h" "$T_1030"
   out=$(page "$h" 2026-09-10)
-  assert_contains "$out" '<div class="n">1</div><div class="l">Decisions awaiting you</div><div class="s">1 open in all · 12 held, not re-checked</div>' \
-    'the decisions tile does not keep captain holds apart from what was read today'
-  assert_contains "$out" '<summary>Held decisions not re-checked (12)</summary>' 'the captain holds are not in their own fold'
-  assert_contains "$out" '2 more held for you, not shown here.' 'the held fold is not capped with a count of the rest'
-  n=$(printf '%s\n' "$out" | grep -c '<td class="what">Approve change')
-  [ "$n" = 10 ] || fail "the held fold rendered $n rows, not ten"
-  assert_not_contains "$out" 'None re-checked in this build.' 'holds left the live decisions section looking empty'
-  case "${out%%<summary>Held decisions*}" in
-    *'Sign the Catena quote'*) ;;
-    *) fail 'the held fold is not below the live decisions section' ;;
-  esac
-  pass 'captain holds nobody re-checked collapse into a capped fold under the decisions read today'
+  [ "$(todo_at "$h" "$T_1030" list --state open | grep -c 'Approve change')" = 12 ] || fail 'the holds did not fold into the store'
+  assert_contains "$out" 'Sign the Catena quote<span class="prov obs">' 'the decision read today is not on the page'
+  assert_not_contains "$out" 'Approve change' 'a hold nobody re-checked reached the page'
+  assert_not_contains "$out" 'held, not re-checked' 'the page still counts holds nobody re-checked'
+  assert_not_contains "$out" 'Held decisions' 'the page still has a held-decisions section'
+  pass 'captain holds nobody re-checked stay in the store and off the page'
 }
 
 test_routine_activity_keeps_its_not_re_checked_fold() {
@@ -553,11 +525,10 @@ test_commands_refuse_stale_pages_and_track_handoffs
 test_missing_input_closes_nothing_and_release_is_scoped
 test_identity_snooze_and_counter
 test_reopen_returns_a_handed_over_item_to_the_captain
-test_held_decisions_collapse_below_the_live_ones
+test_unverified_holds_stay_off_the_page
 test_routine_activity_keeps_its_not_re_checked_fold
 test_a_retired_ledger_record_closes_its_routine_item
-test_routine_fold_is_capped_like_the_held_one
-test_held_fold_shows_the_oldest_holds_first
+test_routine_fold_is_capped
 test_sync_prunes_only_retired_routine_records
 test_a_marked_routine_line_is_never_retired_by_the_intake
 test_a_revived_routine_thread_still_retires_and_prunes
