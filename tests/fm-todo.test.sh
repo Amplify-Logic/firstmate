@@ -30,7 +30,8 @@
 #     the intake's absence, so it is never pruned either. A system reopen note
 #     is not such a mark: a revived routine thread still retires and prunes.
 #   - A partner-facing ask awaiting the captain ranks above every class in the
-#     Now strip and its section, and a timeline re-read makes it current.
+#     Now strip and its section, oldest ask first and an undated ask last, and
+#     a timeline re-read makes it current.
 # shellcheck disable=SC2016
 set -u
 
@@ -526,7 +527,13 @@ EOF
   out=$(page "$h" 2026-09-10)
   first=$(sed -n '/<div class="strip now">/,/<\/div>/p' <<<"$out" | grep '<li>' | sed -n 2p)
   assert_contains "$first" 'Morning partner ask' 'a morning partner ask did not outrank the outages'
-  pass 'a partner-facing ask awaiting the captain ranks above every class in Now and in its section, oldest first'
+  # An undated partner ask is not the oldest ask: it sorts after the dated one.
+  sidecar "$h" 2026-09-10 '{"key":"k-out","source":"C_BRIEF","ref":"m-out","class":"outage","title":"Morning outage","updated":'"$T_1030"'},{"key":"k-p","source":"hubspot","ref":"48622709535","class":"obligation","kind":"reply","title":"Morning partner ask","partner_awaiting":true,"updated":'"$T_1030"'}'
+  render_at "$h" "$T_1100"
+  out=$(page "$h" 2026-09-10)
+  first=$(sed -n '/<div class="strip now">/,/<\/div>/p' <<<"$out" | grep '<li>' | sed -n 1p)
+  assert_contains "$first" 'Syrup availability' 'an undated partner ask jumped ahead of an older dated one'
+  pass 'a partner-facing ask awaiting the captain ranks above every class in Now and in its section, oldest first and undated last'
 }
 
 test_verification_is_never_renewed_by_sync

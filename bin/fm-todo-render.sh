@@ -65,7 +65,8 @@
 # default decision), ask, why, verified_how, digest (a fingerprint of the ask,
 # the only thing that may reopen a closed item) and aliases (extra
 # `source:ref` identities of the SAME ask), partner_awaiting (true for a
-# partner-facing ask awaiting him) and awaiting_since (epoch of that ask)}.
+# partner-facing ask awaiting him) and awaiting_since (epoch of that ask; an
+# ask with none sorts after every dated partner ask)}.
 # A partner-facing ask awaiting him - flagged here or by the channel intake's
 # timeline assessment - ranks above every class in the Now strip and in every
 # section, oldest ask first. `updated` is the SAME-DAY

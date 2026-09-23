@@ -61,9 +61,10 @@
 #   - Install and uninstall work against a temporary home and a fake launchd
 #     transport, and refuse a home that never opted in.
 #   - A timeline flags a partner-facing ask awaiting the captain - an
-#     unanswered partner message, an open promise naming him or tech, or an
-#     unanswered colleague note - while an auto-acknowledgement answers nothing
-#     and "Waiting on contact" alone asks nothing of him.
+#     unanswered partner message, an open promise naming him or tech, or a
+#     colleague note naming him - while only a reply discharges one, an
+#     auto-acknowledgement is not a reply, and a malformed or address-less
+#     timeline is refused rather than assessed.
 #   - Awaiting partners lead the to-do, brief and alert order, and every
 #     rewrite of a record keeps the facts the timeline recorded.
 #   - A HubSpot claim names "Waiting on contact" and hands out a bounded
@@ -1412,15 +1413,38 @@ EOF
    "body":"Did we send your team a programmer in the past? Let me know and I'll get back to you.\nNatalia"}]}
 EOF
       ;;
-    # Culligan: "Waiting on contact" with the customer's own last message
-    # promising photos. Nothing is owed until they arrive.
-    contact-stage)
+    # Culligan: "Waiting on contact" after we asked for photos. They arrived
+    # with a new question, so the stage label outlives what the thread says.
+    contact-chase)
       cat >"$h/$name.json" <<EOF
 {"kind":"hubspot-ticket","owner":"captain","stage":"Waiting on contact",
  "contacts":["carl@culligan.example"],
  "events":[
-  {"type":"email","at":$at_inbound,"direction":"inbound","from":"carl@culligan.example",
-   "body":"Our team will send photos of the install tomorrow."}]}
+  {"type":"email","at":$at_inbound,"direction":"outbound","from":"support@team.example",
+   "body":"Can you send photos of the install?"},
+  {"type":"email","at":$at_out,"direction":"inbound","from":"carl@culligan.example",
+   "body":"Photos attached - but the unit still errors B.14, what now?"}]}
+EOF
+      ;;
+    # A thank-you that still asks for the invoice: courtesy is not closure.
+    thanks-and-ask)
+      cat >"$h/$name.json" <<EOF
+{"kind":"hubspot-ticket","owner":"captain","stage":"Waiting for Tech",
+ "contacts":["ans@horeca.example"],
+ "events":[
+  {"type":"email","at":$at_inbound,"direction":"inbound","from":"ans@horeca.example",
+   "body":"Bedankt! Kunnen jullie de factuur nog sturen."}]}
+EOF
+      ;;
+    # A colleague's note on the captain's own ticket that names nobody: a
+    # question mark is not an ask addressed to him.
+    unnamed-note)
+      cat >"$h/$name.json" <<EOF
+{"kind":"hubspot-ticket","owner":"captain","stage":"Waiting for Tech",
+ "contacts":["bram@retail.example"],
+ "events":[
+  {"type":"note","at":$at_out,"author":"natalia@team.example",
+   "body":"Klant belde vanochtend, heb jij al iets gehoord van logistiek?"}]}
 EOF
       ;;
     # NS Stations: "Waiting on contact", which HubSpot marks closed, yet a
@@ -1458,6 +1482,7 @@ EOF
     internal)
       cat >"$h/$name.json" <<EOF
 {"kind":"hubspot-ticket","owner":"luc@team.example","stage":"New","contacts":["joao@team.example"],
+ "companies":[{"name":"Aquablu"}],
  "events":[{"type":"note","at":$at_out,"author":"luc@team.example","body":"@Lars can you check the PCB stock?"}]}
 EOF
       ;;
@@ -1477,7 +1502,7 @@ test_partner_facing_asks_awaiting_the_captain_are_flagged() {
   h="$TMP_ROOT/partner-flags"
   partner_home "$h"
 
-  for name in promise autoack contact-note; do
+  for name in promise autoack contact-note contact-chase thanks-and-ask; do
     key=$(key_of "$(observe_ticket "$h" "$name" "$T_0900")")
     [ "$(item_field "$h" "$key" partner)" = 1 ] || fail "$name: a ticket with an external contact is not partner-facing"
     [ "$(item_field "$h" "$key" awaiting)" = 1 ] || fail "$name: a partner waiting on the captain was not flagged"
@@ -1494,8 +1519,15 @@ test_partner_facing_asks_awaiting_the_captain_are_flagged() {
   key=$(key_of "$(observe_ticket "$h" contact-note "$T_0900")")
   assert_contains "$(item_field "$h" "$key" awaiting_why)" 'colleague note asking you is unanswered' \
     'a colleague note asking the captain in Waiting on contact was skipped'
+  key=$(key_of "$(observe_ticket "$h" contact-chase "$T_0900")")
+  assert_contains "$(item_field "$h" "$key" awaiting_why)" 'message has no reply' \
+    'an unanswered partner message in Waiting on contact was silenced by the stage'
+  key=$(key_of "$(observe_ticket "$h" thanks-and-ask "$T_0900")")
+  assert_contains "$(item_field "$h" "$key" awaiting_why)" 'message has no reply' \
+    'a thank-you that still asks for the invoice was read as closure'
 
-  for name in customer-owes contact-stage answered uninvolved internal; do
+  # Only a reply discharges an ask, and only a note naming him is one.
+  for name in customer-owes answered uninvolved internal unnamed-note; do
     key=$(key_of "$(observe_ticket "$h" "$name" "$T_0900")")
     [ "$(item_field "$h" "$key" awaiting)" = 0 ] || fail "$name: flagged as awaiting the captain"
     [ "$(item_field "$h" "$key" class)" = routine ] || fail "$name: a ticket not awaiting the captain was promoted"
@@ -1504,14 +1536,26 @@ test_partner_facing_asks_awaiting_the_captain_are_flagged() {
   [ "$(item_field "$h" "$key" partner)" = 0 ] || fail 'an internal-only ticket was called partner-facing'
   key=$(key_of "$(observe_ticket "$h" customer-owes "$T_0900")")
   [ "$(item_field "$h" "$key" partner)" = 1 ] || fail 'a partner ticket in Waiting on contact lost its partner flag'
+  key=$(key_of "$(observe_ticket "$h" unnamed-note "$T_0900")")
+  [ "$(item_field "$h" "$key" partner)" = 1 ] || fail 'a ticket with an external contact lost its partner flag'
 
   # Only the derived facts are kept, never the customer's words.
   ! grep -rq 'steer on the lack' "$h/data/channel-intake/items" || fail 'timeline text was copied into the ledger'
-  # A timeline cannot be assessed without knowing who the captain is.
-  sed -i.bak '/^captain_/d' "$h/config/channel-intake"
-  out=$(observe_ticket "$h" promise "$T_0900" 2>&1) && fail 'a timeline observe ran with no captain identity'
-  assert_contains "$out" 'needs captain_names or captain_addresses' 'the refusal did not name the missing identity'
-  pass 'a partner-facing ticket awaiting the captain is flagged by promise, note or unanswered message, and an auto-ack or Waiting on contact is not an answer or an ask'
+  # A timeline whose shape differs is refused rather than mis-assessed: a
+  # string `contacts` would otherwise read as no partner on the ticket at all.
+  write_timeline "$h" promise
+  sed -i.bak 's/"contacts":\["rachel@partner.example"\]/"contacts":"rachel@partner.example"/' "$h/promise.json"
+  out=$(at "$h" "$T_0900" observe --source H_TICKETS --ref ticket-shape --digest 'shape v1' \
+    --class routine --title 'ticket shape' --timeline-file "$h/promise.json" 2>&1) \
+    && fail 'a timeline whose contacts are a bare string was assessed anyway'
+  assert_contains "$out" 'timeline contacts must be a list of addresses' 'the refusal did not name the malformed field'
+
+  # The team's own addresses define both an internal domain and a real reply,
+  # so a timeline cannot be assessed without at least one of them.
+  sed -i.bak '/^captain_addresses/d;/^team_addresses/d' "$h/config/channel-intake"
+  out=$(observe_ticket "$h" promise "$T_0900" 2>&1) && fail 'a timeline observe ran with no team mail address'
+  assert_contains "$out" 'needs captain_addresses or team_addresses' 'the refusal did not name the missing addresses'
+  pass 'a partner-facing ticket awaiting the captain is flagged by promise, note or unanswered message, only a reply discharges one, and a malformed or address-less timeline is refused'
 }
 
 test_awaiting_partners_lead_every_summary_and_survive_rewrites() {

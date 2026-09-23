@@ -16,6 +16,8 @@ if ZONE:
     time.tzset()
 RANK = {name: n for n, name in enumerate(('outage', 'urgent', 'deadline', 'obligation'))}
 RETIRED = ('closed', 'dropped')
+# The sort-last sentinel `queued()` spells as a date, for an undated ask epoch.
+UNDATED = 253402300799
 
 
 def esc(value):
@@ -145,8 +147,11 @@ def current(rec):
 
 
 def partner_first(rec):
-    """A partner-facing ask awaiting the captain outranks every class, oldest ask first."""
-    return (0, number(rec.get('awaiting_since'))) if rec.get('partner_first') else (1, 0)
+    """A partner-facing ask awaiting the captain outranks every class, oldest ask
+    first; an undated ask is not the oldest, so it sorts after every dated one."""
+    if not rec.get('partner_first'):
+        return (1, 0)
+    return (0, number(rec.get('awaiting_since')) or UNDATED)
 
 
 def sortkey(rec):

@@ -121,22 +121,23 @@
 #             domains, or the email thread has such a participant.
 #   awaiting  partner-facing, and at least one of: (a) the partner's last
 #             inbound has no later reply sent from a team_addresses or
-#             captain_addresses mailbox (skipped in "Waiting on contact",
-#             where the customer owes the next step, and for a short thank-you);
-#             (b) an outbound promise to act that names the captain or the tech
-#             team, or that the captain wrote, has no outbound after it;
-#             (c) a colleague's note that names the captain, or asks a question
-#             on a ticket he owns, has no later note by him and no reply.
+#             captain_addresses mailbox - only such a reply discharges it, not
+#             the pipeline stage; (b) an outbound promise to act that names the
+#             captain or the tech team, or that the captain wrote, has no
+#             outbound after it; (c) a colleague's note that names the captain
+#             has no later note by him and no reply.
 # Only an EMAIL engagement is a reply: a `last_message_sent_at` send with no
 # matching email is an auto-acknowledgement and answers nothing. (a) applies
 # only when the ticket involves the captain: he owns it, a message or note
 # names him, or a promise names the tech team. The timeline is
 #   {"kind": "hubspot-ticket"|"email-thread", "owner": "captain"|<other>,
-#    "stage": "<pipeline stage label>", "contacts": ["<address>", ...],
-#    "companies": [{"name": ..., "domain": ...}], "last_message_sent_at": EPOCH,
+#    "contacts": ["<address>", ...], "companies": [{"domain": "<mail domain>"}],
+#    "last_message_sent_at": EPOCH,
 #    "events": [{"type": "email", "at": EPOCH, "direction": "inbound"|"outbound",
 #                "from": "<address>", "to": [...], "author": "captain"?, "body": ...},
 #               {"type": "note", "at": EPOCH, "author": "captain"|<other>, "body": ...}]}
+# Every field is typed: a timeline whose shape differs is refused rather than
+# assessed, and a company with no domain places nobody outside the team.
 # An awaiting item handed in as `routine` is recorded as `obligation`, because
 # a partner waiting on the captain is owed by definition. A timeline observe is
 # a full re-read of the ticket, so it stamps `read_at` even when the digest is
@@ -193,12 +194,15 @@
 #   label                    slug for the wake key and diagnostic line
 #                            (default channel-intake)
 #   captain_names            words that name the captain in a message or note,
-#                            e.g. a first and last name (default unset; a
-#                            timeline observe is refused until it is set)
+#                            e.g. a first and last name (default unset; with
+#                            none, only a ticket he owns, a message he wrote or
+#                            a promise naming the tech team identifies him)
 #   captain_addresses        the captain's own mail addresses (default unset)
 #   team_addresses           shared mailboxes whose outbound counts as a reply,
 #                            e.g. the support address (default unset); these
-#                            and captain_addresses define the team's domains
+#                            and captain_addresses define the team's domains,
+#                            so a timeline observe is refused until at least
+#                            one of the two is set
 #   rescan_interval_seconds  cadence of the bounded HubSpot re-scan (default
 #                            21600, never below interval_seconds)
 set -eu
@@ -1361,8 +1365,8 @@ observe() {
     [ -z "$condition" ] || die '--timeline-file does not apply to a fleet condition'
     [ -f "$timeline_file" ] && [ ! -L "$timeline_file" ] \
       || die "--timeline-file is not a regular file: $timeline_file"
-    [ -n "$CFG_CAPTAIN_NAMES$CFG_CAPTAIN_ADDRESSES" ] \
-      || die "a timeline observe needs captain_names or captain_addresses in $CONFIG_FILE"
+    [ -n "$CFG_CAPTAIN_ADDRESSES$CFG_TEAM_ADDRESSES" ] \
+      || die "a timeline observe needs captain_addresses or team_addresses in $CONFIG_FILE"
     # Only the derived facts and their reason are kept: the timeline carries
     # customer text, which stays in the source system like every digest input.
     facts=$(TZ="${CFG_TIMEZONE:-${TZ:-UTC}}" python3 "$SCRIPT_DIR/fm-channel-intake-assess.py" \
