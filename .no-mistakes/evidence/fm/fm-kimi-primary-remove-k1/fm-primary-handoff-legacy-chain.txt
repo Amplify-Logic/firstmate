@@ -1,0 +1,18 @@
+config/primary-handoff: {"enabled":true,"chain":["codex","kimi-k3","claude-fable"]}
+$ bin/fm-primary-handoff.sh status
+config: enabled
+threshold_percent_remaining: 15
+threshold_context_percent_used: disabled
+chain: ["codex","kimi-k3","claude-fable"]
+active_profile: unknown
+context_used_percent: na
+lock: free
+handoff_record: none
+[exit 0]
+$ bin/fm-primary-handoff.sh execute --from codex --force
+fm-primary-handoff: session lock is not held by a live harness; refusing handoff
+[exit 1]
+state/.primary-handoff:
+chain=["codex","kimi-k3","claude-fable"]
+next after codex: claude-fable
+[exit 0]

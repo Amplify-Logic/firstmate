@@ -1,0 +1,34 @@
+=== fm-status-bar.sh, kimi adapter ===
+--- BASE ---
+$ FM_PRIMARY_HARNESS=kimi bin/fm-status-bar.sh --adapter kimi --model kimi-code/k3 --effort --
+[1m⚓ kimi-code/k3[0m[2m·[0m-- [2m│[0m [2m🧠--[0m [2m⚡--[0m [2m│[0m [2m🚢-- 🧪-- ⏸-- ⚠-- 🪦--[0m [2m📋0[0m [2m│[0m [91;1m👁 NO-WATCH --[0m [2m│[0m [2m$--[0m [2m│[0m [2m💤--[0m[exit 0]
+--- CHANGE ---
+$ FM_PRIMARY_HARNESS=kimi bin/fm-status-bar.sh --adapter kimi --model kimi-code/k3 --effort --
+[exit 0]
+--- CHANGE: pi adapter still renders ---
+$ FM_PRIMARY_HARNESS=pi bin/fm-status-bar.sh --adapter pi --model m --effort high --context-used 10 --quota-used 20 --cost 1.5
+[1m⚓ m[0m[2m·[0mhigh [2m│[0m [92m🧠10%[0m [92m⚡20%[0m [2m│[0m [2m🚢0[0m [2m🧪0[0m [2m⏸0[0m [2m⚠0[0m [2m🪦0[0m [2m📋0[0m [2m│[0m [91;1m👁 NO-WATCH --[0m [2m│[0m $1.50 [2m│[0m [2m💤--[0m[exit 0]
+
+=== fm-harness.sh with launcher marker FM_PRIMARY_HARNESS=kimi (CLAUDECODE unset) ===
+431:detect_own() {
+432-  local marker ancestry strength harness
+433-  marker=$(harness_marker)
+434-  ancestry=$(harness_ancestry)
+435-  if [ -z "$ancestry" ]; then
+436-    if [ -n "$marker" ]; then echo "$marker"; else echo unknown; fi
+437-    return
+438-  fi
+439-  strength=${ancestry%% *}
+440-  harness=${ancestry#* }
+441-  [ -n "$marker" ] || { echo "$harness"; return; }
+442-  if [ "$(harness_family "$marker")" = "$(harness_family "$harness")" ]; then
+443-    echo "$marker"
+444-    return
+445-  fi
+446-  if [ "$strength" = comm ]; then echo "$harness"; else echo "$marker"; fi
+
+=== fm-harness.sh run as a child of a process named 'kimi' (Kimi WORKER identity must survive) ===
+base, no marker:              kimi
+base, FM_PRIMARY_HARNESS=kimi: kimi
+change, no marker:              kimi
+change, FM_PRIMARY_HARNESS=kimi: kimi

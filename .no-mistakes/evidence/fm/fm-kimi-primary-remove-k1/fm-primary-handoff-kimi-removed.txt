@@ -1,0 +1,33 @@
+=== BASE status ===
+$ bin/fm-primary-handoff.sh status
+config: enabled
+threshold_percent_remaining: 15
+threshold_context_percent_used: disabled
+chain: ["claude-fable","claude-opus","pi","codex","kimi-k3"]
+active_profile: unknown
+context_used_percent: na
+lock: free
+handoff_record: none
+[exit 0]
+
+=== CHANGE status ===
+$ bin/fm-primary-handoff.sh status
+config: enabled
+threshold_percent_remaining: 15
+threshold_context_percent_used: disabled
+chain: ["claude-fable","claude-opus","pi","codex"]
+active_profile: unknown
+context_used_percent: na
+lock: free
+handoff_record: none
+[exit 0]
+
+=== CHANGE: execute --to kimi-k3 --force ===
+$ bin/fm-primary-handoff.sh execute --from codex --to kimi-k3 --force
+fm-primary-handoff: invalid --to profile: kimi-k3
+[exit 1]
+
+=== CHANGE: execute --to kimi --force ===
+$ bin/fm-primary-handoff.sh execute --from codex --to kimi --force
+fm-primary-handoff: invalid --to profile: kimi
+[exit 1]

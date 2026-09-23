@@ -1,0 +1,8 @@
+tests/fm-primary.test.sh rc=0 (15s) pass=27 fail=1
+tests/fm-primary-handoff.test.sh rc=0 (20s) pass=29 fail=6
+tests/fm-status-bar.test.sh rc=0 (22s) pass=32 fail=0
+tests/fm-toolchain-drift.test.sh rc=0 (6s) pass=9 fail=2
+tests/fm-cursor-primary-profile.test.sh rc=0 (0s) pass=4 fail=0
+tests/fm-supervision-instructions.test.sh rc=0 (1s) pass=11 fail=0
+tests/fm-kimi-worker.test.sh rc=0 (0s) pass=1 fail=0
+tests/fm-kimi-harness.test.sh rc=0 (58s) pass=17 fail=1
