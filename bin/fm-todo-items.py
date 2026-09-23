@@ -186,7 +186,7 @@ def morning_observations(doc, day, now):
         awaiting = raw.get('partner_awaiting', False)
         since = raw.get('awaiting_since')
         if not isinstance(awaiting, bool) or (since is not None and (
-                not isinstance(since, int) or isinstance(since, bool) or since <= 0)):
+                not isinstance(since, int) or isinstance(since, bool) or not 0 < since < 10 ** 11)):
             raise Refusal('morning action partner_awaiting must be a JSON boolean '
                           'and awaiting_since an epoch second')
         ident = f'{raw["source"]}:{raw["ref"]}'

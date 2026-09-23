@@ -11,7 +11,7 @@ import sys
 import time
 
 # A promise to act, in the languages the support timelines use. An outbound
-# carrying one of these is an open commitment until a later outbound follows.
+# carrying one of these is an open commitment until a later reply follows.
 PROMISE = re.compile(
     r"looking into|look into|check(?:ing)?\b.{0,40}\bwith\b|escalat|get back to you|come back to you"
     r"|let you know|keep you (?:updated|posted|informed)|update you|once (?:i|we) hear"
@@ -84,6 +84,11 @@ def address_list(value, what):
     return [address_field(a, f'{what} entry') for a in value]
 
 
+def epoch_second(value):
+    """A positive epoch second; a millisecond epoch is refused, not read as far future."""
+    return isinstance(value, int) and not isinstance(value, bool) and 0 < value < 10 ** 11
+
+
 def when(epoch):
     return time.strftime('%a %-d %b %H:%M', time.localtime(int(epoch)))
 
@@ -98,7 +103,7 @@ def load(path):
         raise Refusal('timeline kind must be hubspot-ticket')
     doc['owner'] = identity_field(doc.get('owner'), 'timeline owner')
     sent = doc.get('last_message_sent_at')
-    if sent is not None and (not isinstance(sent, int) or isinstance(sent, bool) or sent <= 0):
+    if sent is not None and not epoch_second(sent):
         raise Refusal('timeline last_message_sent_at must be an epoch second')
     doc['contacts'] = address_list(doc.get('contacts'), 'timeline contacts')
     companies = doc.get('companies')
@@ -119,7 +124,7 @@ def load(path):
         if not isinstance(e, dict) or e.get('type') not in ('email', 'note'):
             raise Refusal(f'timeline event {n} must be an email or a note')
         at = e.get('at')
-        if not isinstance(at, int) or isinstance(at, bool) or at <= 0:
+        if not epoch_second(at):
             raise Refusal(f'timeline event {n} needs an epoch-second at')
         if e['type'] == 'email' and e.get('direction') not in ('inbound', 'outbound'):
             raise Refusal(f'timeline email {n} needs direction inbound or outbound')
@@ -175,7 +180,7 @@ def assess(doc, names, captain_addresses, team_addresses):
                    for e in events)
 
     # (b) A promise naming the captain or the tech team, or the captain's own
-    # promise, with no outbound after it.
+    # promise, with no later reply after it.
     tech_promise = False
     for e in events:
         if e['type'] != 'email' or e['direction'] != 'outbound':
