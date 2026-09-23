@@ -16,10 +16,12 @@ PROMISE = (
     r"escalat|get back to you|come back to you"
     r"|let you know|keep you (?:updated|posted|informed)|update you|once (?:i|we) hear"
     r"|(?:will|i'll|we'll)\s+(?:confirm|update|follow up|revert|share|send)"
-    r"|\bkom\b.{0,60}\bterug\b|stuur je een update|\bhou(?:d|den)?\s+(?:je|u|jullie)\s+op de hoogte")
+    r"|\bkom\b.{0,60}\bterug\b|stuur je een update|\bhou(?:d|den)?\s+(?:je|u|jullie)\s+op de hoogte"
+    r"|(?:^|[.?!]\s+)(?:looking into|checking\b[^.?!\n]{0,40}\bwith\b|following up)")
 # Verbs that also read as a request to the customer ("kun je de filter
 # nakijken?", "please check with your installer") are a promise only when the
-# team, tech or the captain acts on them in the same sentence.
+# team, tech or the captain acts on them in the same sentence, with no "you"
+# between the actor and the verb.
 ACTING = (
     r"look(?:ing)? into|check(?:ing)?\b[^.?!\n]{0,40}\bwith\b|follow(?:ing)? up"
     r"|induiken|achteraan|uitzoeken|nakijken|navragen|terugkoppel|\blaat\b[^.?!\n]{0,40}\bweten\b")
@@ -149,7 +151,8 @@ def assess(doc, names, captain_addresses, team_addresses):
     internal = {domain(a) for a in answer_addresses if domain(a)}
     name_re = re.compile(r'(?<![\w.@-])@?(?:' + '|'.join(re.escape(n) for n in names) + r')\b', re.I) if names else None
     actors = '|'.join(ACTORS + [re.escape(n) for n in names])
-    promise_re = re.compile(PROMISE + r'|\b(?:' + actors + r')\b[^.?!\n]{0,20}?(?:' + ACTING + ')', re.I | re.S)
+    promise_re = re.compile(PROMISE + r'|\b(?:' + actors + r')\b(?:(?!\b(?:you|je|u|jullie)\b)[^.?!\n]){0,20}?(?:'
+                            + ACTING + ')', re.I | re.S | re.M)
 
     def names_captain(text):
         return bool(name_re and name_re.search(text))

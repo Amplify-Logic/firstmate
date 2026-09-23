@@ -1545,7 +1545,19 @@ EOF
   {"type":"email","at":$at_inbound,"direction":"inbound","from":"ruud@kantoor.example",
    "body":"De tap geeft geen water."},
   {"type":"email","at":$at_out,"direction":"outbound","from":"support@team.example","author":"captain",
-   "body":"Kun je de filter nakijken? Laat het me weten of het werkt. Houd me op de hoogte.\nCould you also look into the valve and check with your installer?\nLars"}]}
+   "body":"Kun je de filter nakijken? Laat het me weten of het werkt. Houd me op de hoogte.\nCould you also look into the valve and check with your installer? We'd like you to check with your installer first.\nLars"}]}
+EOF
+      ;;
+    # The captain's own reply is a subjectless promise: he is still on it.
+    captain-looking)
+      cat >"$h/$name.json" <<EOF
+{"kind":"hubspot-ticket","owner":"captain","stage":"Waiting for Tech",
+ "contacts":["ruud@kantoor.example"],
+ "events":[
+  {"type":"email","at":$at_inbound,"direction":"inbound","from":"ruud@kantoor.example",
+   "body":"The tap still gives no water after the filter swap."},
+  {"type":"email","at":$at_out,"direction":"outbound","from":"support@team.example","author":"captain",
+   "body":"Looking into it now.\nLars"}]}
 EOF
       ;;
     # A colleague's own ticket that never involves the captain.
@@ -1581,7 +1593,7 @@ test_partner_facing_asks_awaiting_the_captain_are_flagged() {
   partner_home "$h"
 
   for name in promise autoack contact-note contact-chase thanks-and-ask owner-address \
-    participants-only colleague-reply tech-promise; do
+    participants-only colleague-reply tech-promise captain-looking; do
     key=$(key_of "$(observe_ticket "$h" "$name" "$T_0900")")
     [ "$(item_field "$h" "$key" partner)" = 1 ] || fail "$name: a ticket with an external contact is not partner-facing"
     [ "$(item_field "$h" "$key" awaiting)" = 1 ] || fail "$name: a partner waiting on the captain was not flagged"
@@ -1595,6 +1607,9 @@ test_partner_facing_asks_awaiting_the_captain_are_flagged() {
   key=$(key_of "$(observe_ticket "$h" tech-promise "$T_0900")")
   assert_contains "$(item_field "$h" "$key" awaiting_why)" 'promise that tech is on it has had no message since' \
     'a colleague promise that the tech team is on it was not caught'
+  key=$(key_of "$(observe_ticket "$h" captain-looking "$T_0900")")
+  assert_contains "$(item_field "$h" "$key" awaiting_why)" 'promise that you are on it has had no message since' \
+    'the captain'"'"'s subjectless promise was not caught'
   key=$(key_of "$(observe_ticket "$h" autoack "$T_0900")")
   assert_contains "$(item_field "$h" "$key" awaiting_why)" 'no email: an auto-acknowledgement' \
     'an auto-acknowledgement was not named as the reason the partner still waits'
