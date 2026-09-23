@@ -81,13 +81,15 @@
 # Closed, Waiting on contact included - as a bare JSON array of
 # {id, subject, stage, last_in, last_out, link}: id is the numeric ticket id,
 # stage the pipeline-stage label exactly as HubSpot names it, last_in/last_out
-# the display times of the newest inbound and outbound message (empty when
-# none), link an https:// record URL. Unknown or missing fields, a duplicate
-# id, a Closed stage, or anything that is not a bare JSON array of tickets is
-# refused and the previous snapshot stays in place, so a malformed read can
-# never replace a good one. The file is written atomically as {version:1,
-# read_at, owner, tickets}, stamped with the time of the write, which is the
-# read time the page shows.
+# the display times of the newest inbound and outbound message, link an
+# https:// record URL. subject, last_in and last_out may be empty - the page
+# shows such a row as an untitled ticket rather than losing a whole refresh
+# over one odd ticket. Unknown or missing fields, an empty id, stage or link,
+# a duplicate id, a Closed stage, or anything that is not a bare JSON array of
+# tickets is refused and the previous snapshot stays in place, so a malformed
+# read can never replace a good one. The file is written atomically as
+# {version:1, read_at, owner, tickets}, stamped with the time of the write,
+# which is the read time the page shows.
 #
 # COVERAGE IS STATED, NEVER IMPLIED. The enrolled sources are exactly the rows
 # of the private inventory file, each with its own coverage sentence and its own

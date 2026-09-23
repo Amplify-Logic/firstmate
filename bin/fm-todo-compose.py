@@ -115,6 +115,9 @@ class Fragment(HTMLParser):
             own.append(child)
         return ''.join(own).strip()
 
+    def has_content(self, nodes):
+        return any(not isinstance(n, str) or n.strip() for n in nodes)
+
     def drop(self, heading):
         """Remove every h2 whose own heading text matches, with what follows it up to the next h2, at any depth."""
         self.dropped = False
@@ -135,8 +138,9 @@ class Fragment(HTMLParser):
                     continue
             else:
                 inside = dropping
+                had = self.has_content(node[2])
                 dropping = self._drop(heading, node[2], dropping)
-                if inside and not node[2]:
+                if (inside or had) and not self.has_content(node[2]):
                     continue
             kept.append(node)
         nodes[:] = kept
@@ -566,7 +570,7 @@ def tickets_section():
 
 
 tickets_section()
-if details:
+if details.strip():
     print('<section aria-label="Morning detail">' + details + '</section>')
 
 if closed:

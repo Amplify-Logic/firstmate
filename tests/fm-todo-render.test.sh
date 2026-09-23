@@ -30,7 +30,11 @@
 #     render, stamped with the snapshot's own read time and stage labels as
 #     stored; an out-of-date snapshot says so, a missing one says it could not
 #     be read, and a morning copy of the table is never shown. The snapshot
-#     writer refuses malformed input and leaves the previous snapshot intact.
+#     writer refuses malformed input and leaves the previous snapshot intact,
+#     but an empty subject is written and shown as an untitled ticket.
+#   - Dropping the morning copy leaves no empty panel behind: a wrapper the
+#     drop emptied goes with it, and a morning file that held nothing else
+#     produces no morning-detail wrapper at all.
 #   - The out-of-date window follows the intake's configured poll interval, and
 #     a snapshot whose consumed fields are not strings is reported as malformed
 #     rather than failing the render.
@@ -555,6 +559,60 @@ JSON
   pass 'a snapshot whose consumed fields are not strings is reported, never crashed on'
 }
 
+test_open_tickets_drop_leaves_no_empty_panel_behind() {
+  local h page
+  h="$TMP_ROOT/tickets-empty-panel"
+  new_home "$h"
+  write_tickets "$h" "$T_1500" "$TICKETS_TWO" >/dev/null
+  printf '{"version":1,"date":"2026-09-10","actions":[]}' >"$h/.lavish/today-2026-09-10.morning.json"
+
+  # The morning copy sits inside a .card panel, which the house style gives a
+  # border and padding, so an emptied wrapper would render as a blank panel.
+  cat >"$h/.lavish/today-2026-09-10.morning.html" <<'HTML'
+<section class="morning-details">
+  <div class="card"><h2>Your open tickets<small>read live from HubSpot at 06:20 CEST</small></h2>
+    <div class="tablewrap"><table><tr><td>Morning-only closed ticket</td></tr></table></div></div>
+  <div class="card"><h2>Calendar<small>read by hand at 06:00</small></h2><p>Calendar snapshot</p></div>
+</section>
+HTML
+  render_at "$h" "$T_1530" render >/dev/null
+  page=$(cat "$(page_of "$h")")
+  assert_not_contains "$page" 'Morning-only closed ticket' 'the morning ticket table survived inside its panel'
+  assert_contains "$page" 'Calendar snapshot' 'the sibling panel was lost with the dropped one'
+  assert_not_contains "$page" '<div class="card"></div>' 'the drop left an empty panel on the page'
+
+  # A morning file that held nothing but the tickets section leaves no wrapper,
+  # not even around the stray whitespace the drop leaves behind.
+  cat >"$h/.lavish/today-2026-09-10.morning.html" <<'HTML'
+
+<section class="morning-details">
+  <h2>Your open tickets<small>read live from HubSpot at 06:20 CEST</small></h2>
+  <div class="tablewrap"><table><tr><td>Morning-only closed ticket</td></tr></table></div>
+</section>
+HTML
+  render_at "$h" "$T_1530" render >/dev/null
+  page=$(cat "$(page_of "$h")")
+  assert_not_contains "$page" 'Morning-only closed ticket' 'the only morning section survived the drop'
+  assert_not_contains "$page" 'aria-label="Morning detail"' 'an empty morning-detail wrapper was printed'
+  assert_contains "$page" 'Read live from HubSpot at 15:00 CEST.' 'the live section is missing'
+  pass 'dropping the morning copy leaves no empty panel or wrapper behind'
+}
+
+test_open_tickets_empty_subject_renders_as_an_untitled_ticket() {
+  local h page
+  h="$TMP_ROOT/tickets-untitled"
+  new_home "$h"
+  write_tickets "$h" "$T_1500" '[{"id":"201","subject":"","stage":"New","last_in":"10 Sep 09:00","last_out":"","link":"https://app.hubspot.com/r/201"},
+{"id":"202","subject":"Named ticket","stage":"New","last_in":"","last_out":"","link":"https://app.hubspot.com/r/202"}]' >/dev/null \
+    || fail 'a ticket with an empty subject blocked the whole refresh'
+  render_at "$h" "$T_1530" render >/dev/null
+  page=$(cat "$(page_of "$h")")
+  assert_contains "$page" '>untitled ticket</a>' 'the subject-less ticket is not shown as an untitled ticket'
+  assert_contains "$page" '>Named ticket</a>' 'the rest of the refreshed set is missing'
+  assert_contains "$page" '2 tickets carry you as owner and are not closed: 2 New.' 'the empty-subject ticket was dropped from the count'
+  pass 'a ticket with no subject is written and rendered as an untitled ticket'
+}
+
 test_severity_then_recency_orders_the_live_section
 test_waiting_and_closed_never_mix_into_the_live_section
 test_every_line_carries_its_own_read_time
@@ -571,3 +629,5 @@ test_open_tickets_missing_snapshot_says_it_could_not_be_read
 test_open_tickets_morning_copy_is_never_shown
 test_open_tickets_freshness_follows_the_configured_interval
 test_open_tickets_snapshot_with_a_non_string_field_is_refused
+test_open_tickets_drop_leaves_no_empty_panel_behind
+test_open_tickets_empty_subject_renders_as_an_untitled_ticket

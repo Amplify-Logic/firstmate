@@ -95,10 +95,15 @@
 # else installed and no visual tool running.
 #
 # Configuration is read - never written - from the private, gitignored
-# config/channel-intake, and only the two keys this renderer needs:
-#   timezone      IANA zone for the local day and every rendered time
-#   sources_file  private inventory, read only for a source's coverage label
-# Every other key belongs to bin/fm-channel-intake.sh, which owns that file.
+# config/channel-intake, and only the three keys this renderer needs:
+#   timezone          IANA zone for the local day and every rendered time
+#   sources_file      private inventory, read only for a source's coverage label
+#   interval_seconds  the intake's poll cadence, default 900; two of those
+#                     polls, and never less than an hour, is how long an
+#                     open-tickets snapshot still counts as live
+# A value this renderer rejects for one of those three exits 2, as it does for
+# a missing template. Every other key belongs to bin/fm-channel-intake.sh,
+# which owns that file.
 set -eu
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

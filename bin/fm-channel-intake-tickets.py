@@ -33,7 +33,7 @@ def ticket_of(ticket, n):
     missing = [k for k in FIELDS if k not in ticket]
     if missing:
         raise Refusal(f'ticket {n}: missing field {missing[0]}')
-    rec = {k: text(ticket, k, n, required=k not in ('last_in', 'last_out')) for k in FIELDS}
+    rec = {k: text(ticket, k, n, required=k not in ('subject', 'last_in', 'last_out')) for k in FIELDS}
     if not re.fullmatch(r'[0-9]+', rec['id']):
         raise Refusal(f'ticket {n}: id must be the numeric HubSpot ticket id')
     if not re.match(r'^https://', rec['link']):
