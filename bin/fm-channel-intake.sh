@@ -13,9 +13,9 @@
 # per-read reference. Supply the full current count and newest affected units;
 # the renderer never sums snapshots. Only telemetry-fleet-alerts accepts these
 # flags. This changes composition/identity, never source enrollment or cadence.
-# A timeline is the orchestrator's normalized read of one HubSpot ticket or one
-# email thread, used to decide whether the item is PARTNER-FACING and AWAITING
-# THE CAPTAIN; its schema and rules are under "PARTNER-FACING ASKS" below.
+# A timeline is the orchestrator's normalized read of one HubSpot ticket, used
+# to decide whether the item is PARTNER-FACING and AWAITING THE CAPTAIN; its
+# schema and rules are under "PARTNER-FACING ASKS" below.
 #   fm-channel-intake.sh complete --source ID --checkpoint VALUE [--rescanned]
 #   fm-channel-intake.sh fail --source ID --reason TEXT
 #   fm-channel-intake.sh tickets --owner NAME   (ticket array on stdin)
@@ -135,8 +135,8 @@
 # PARTNER-FACING ASKS COME FIRST. `observe --timeline-file FILE` hands the gate
 # one JSON timeline and bin/fm-channel-intake-assess.py derives two facts from
 # it, stored on the item beside a short reason and never the message text:
-#   partner   the ticket has a contact or company outside the team's own mail
-#             domains, or the email thread has such a participant.
+#   partner   a contact, a company domain or a message participant on the
+#             ticket is outside the team's own mail domains.
 #   awaiting  partner-facing, and at least one of: (a) the partner's last
 #             inbound has no later reply sent from a team_addresses or
 #             captain_addresses mailbox - only such a reply discharges it, not
@@ -148,14 +148,16 @@
 # matching email is an auto-acknowledgement and answers nothing. (a) applies
 # only when the ticket involves the captain: he owns it, a message or note
 # names him, or a promise names the tech team. The timeline is
-#   {"kind": "hubspot-ticket"|"email-thread", "owner": "captain"|<other>,
+#   {"kind": "hubspot-ticket", "owner": "captain"|"<owner address>",
 #    "contacts": ["<address>", ...], "companies": [{"domain": "<mail domain>"}],
 #    "last_message_sent_at": EPOCH,
 #    "events": [{"type": "email", "at": EPOCH, "direction": "inbound"|"outbound",
 #                "from": "<address>", "to": [...], "author": "captain"?, "body": ...},
-#               {"type": "note", "at": EPOCH, "author": "captain"|<other>, "body": ...}]}
+#               {"type": "note", "at": EPOCH, "author": "captain"|"<address>", "body": ...}]}
 # Every field is typed: a timeline whose shape differs is refused rather than
 # assessed, and a company with no domain places nobody outside the team. An
+# address is a bare `local@domain`, never a `Name <local@domain>` display form,
+# because the display form hides the address every rule here compares. An
 # `owner` or `author` is the captain when it reads `captain` or is one of his
 # captain_addresses, so either spelling HubSpot stores works.
 # An awaiting item handed in as `routine` is recorded as `obligation`, because

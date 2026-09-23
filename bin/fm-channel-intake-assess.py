@@ -23,6 +23,8 @@ TECH = re.compile(r"\btech\b|\btechteam\b|\btechnical (?:team|support|department
 QUOTE_START = re.compile(
     r"^\s*(?:>|on .{0,120}wrote:|op .{0,120}schreef|-{2,}\s*original message|from:\s|van:\s|sent from my)",
     re.I)
+ADDRESS = re.compile(r'^[^\s<>,@]+@[^\s<>,@]+\.[^\s<>,@]+$')
+MAIL_DOMAIN = re.compile(r'^[^\s<>,@]+\.[^\s<>,@]+$')
 
 
 class Refusal(Exception):
@@ -57,12 +59,29 @@ def text_field(value, what):
     return value
 
 
+def address_field(value, what):
+    """A bare local@domain: a display-name spelling hides the address it wraps."""
+    value = text_field(value, what)
+    if value and not ADDRESS.match(value):
+        raise Refusal(f'{what} must be a bare local@domain address: {value}')
+    return value
+
+
+def identity_field(value, what):
+    value = text_field(value, what)
+    if value.strip().lower() == 'captain':
+        return value
+    if value and not ADDRESS.match(value):
+        raise Refusal(f'{what} must be `captain` or a bare local@domain address: {value}')
+    return value
+
+
 def address_list(value, what):
     if value is None:
         return []
-    if not isinstance(value, list) or not all(isinstance(a, str) for a in value):
+    if not isinstance(value, list):
         raise Refusal(f'{what} must be a list of addresses')
-    return value
+    return [address_field(a, f'{what} entry') for a in value]
 
 
 def when(epoch):
@@ -75,9 +94,9 @@ def load(path):
             doc = json.load(fh)
     except (OSError, ValueError) as exc:
         raise Refusal(f'timeline is not readable JSON: {exc}')
-    if not isinstance(doc, dict) or doc.get('kind') not in ('hubspot-ticket', 'email-thread'):
-        raise Refusal('timeline kind must be hubspot-ticket or email-thread')
-    doc['owner'] = text_field(doc.get('owner'), 'timeline owner')
+    if not isinstance(doc, dict) or doc.get('kind') != 'hubspot-ticket':
+        raise Refusal('timeline kind must be hubspot-ticket')
+    doc['owner'] = identity_field(doc.get('owner'), 'timeline owner')
     sent = doc.get('last_message_sent_at')
     if sent is not None and (not isinstance(sent, int) or isinstance(sent, bool) or sent <= 0):
         raise Refusal('timeline last_message_sent_at must be an epoch second')
@@ -89,6 +108,8 @@ def load(path):
         if not isinstance(company, dict):
             raise Refusal(f'timeline company {n} must be an object')
         company['domain'] = text_field(company.get('domain'), f'timeline company {n} domain')
+        if company['domain'] and not MAIL_DOMAIN.match(company['domain']):
+            raise Refusal(f'timeline company {n} domain must be a bare mail domain: ' + company['domain'])
     doc['companies'] = companies or []
     events = doc.get('events')
     if not isinstance(events, list):
@@ -102,9 +123,9 @@ def load(path):
             raise Refusal(f'timeline event {n} needs an epoch-second at')
         if e['type'] == 'email' and e.get('direction') not in ('inbound', 'outbound'):
             raise Refusal(f'timeline email {n} needs direction inbound or outbound')
-        e['author'] = text_field(e.get('author'), f'timeline event {n} author')
+        e['author'] = identity_field(e.get('author'), f'timeline event {n} author')
         e['body'] = text_field(e.get('body'), f'timeline event {n} body')
-        e['from'] = text_field(e.get('from'), f'timeline event {n} from')
+        e['from'] = address_field(e.get('from'), f'timeline event {n} from')
         e['to'] = address_list(e.get('to'), f'timeline event {n} to')
         clean.append(e)
     # Stable order: equal times keep the order the orchestrator listed them in.
@@ -136,16 +157,13 @@ def assess(doc, names, captain_addresses, team_addresses):
 
     events = doc['events']
     external = set()
-    # Only a mail domain places someone outside the team: a company record with
-    # no domain says nothing about who is on the ticket.
-    for address in doc['contacts'] + ['x@' + c['domain'] for c in doc['companies'] if c['domain']]:
+    # Only a mail domain places someone outside the team, and it counts wherever
+    # the ticket carries it: a company record with no domain says nothing.
+    participants = [a for e in events for a in [e['from']] + e['to']]
+    for address in (doc['contacts'] + participants
+                    + ['x@' + c['domain'] for c in doc['companies'] if c['domain']]):
         if domain(address) and domain(address) not in internal:
             external.add(domain(address))
-    if doc['kind'] == 'email-thread':
-        for e in events:
-            for address in [e['from']] + e['to']:
-                if domain(address) and domain(address) not in internal:
-                    external.add(domain(address))
     partner = bool(external)
 
     captain_owned = is_captain(doc['owner'])
@@ -190,7 +208,9 @@ def assess(doc, names, captain_addresses, team_addresses):
         if not answered_after(last['at']):
             why = f'the partner\'s {when(last["at"])} message has no reply'
             sent = doc.get('last_message_sent_at')
-            if sent and sent > last['at']:
+            no_email_since = not any(e['type'] == 'email' and e['direction'] == 'outbound'
+                                     and e['at'] > last['at'] for e in events)
+            if sent and sent > last['at'] and no_email_since:
                 why += f' (the {when(sent)} send has no email: an auto-acknowledgement)'
             pending.append((last['at'], why))
 
