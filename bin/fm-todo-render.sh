@@ -42,6 +42,13 @@
 # "Handled without you" appears only for a fulfilled close with a named actor
 # other than the captain.
 #
+# Every row of something asked of him - decisions, held decisions and replies -
+# carries a "note" toggle over a one-line box that queues the typed line into
+# the open Lavish review session with the item's id and the revision the page
+# showed, so bin/fm-todo.sh can apply a page command to exactly the ask he was
+# looking at; with no review session connected the box says so and queues
+# nothing. Routine activity and the list-style folds carry no box.
+#
 # FRESHNESS IS ON EVERY LINE. A line is "read <time>" only when its recorded
 # check is at or after this build's sweep (or the start of the day) and
 # checked the revision shown; otherwise "not re-checked since <time>", or

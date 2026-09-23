@@ -111,7 +111,7 @@ A ten-minute gap between reading and publishing produced two wrong lines on 2026
 2. "Cannot verify" names the specific blind spot: WhatsApp, phone, in person, the SIT platform, or a GitHub organisation not reachable from this account.
 3. `support@` is not a blind spot; shared-inbox replies are readable on the ticket's `EMAIL` engagements, so never list it in a legend of unreachable channels.
 4. Never publish an item as closed without evidence of the close, to the same standard as publishing it as open.
-5. Never carry a ticket's state forward between updates; each surface is a fresh live read.
+5. A durable record may carry an item between updates, but its freshness never carries with it: a line counts as current only when this sweep re-read it, and an unread line names the time of its last read instead.
 
 ## Chat claims
 
