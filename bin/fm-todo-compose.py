@@ -279,9 +279,10 @@ def audit(rec):
 
 def context(rec):
     """At most one short line under the ask: a reopen note, else the why, else the ask's wording."""
-    note = re.sub(r'^reopened: .+ changed after it was closed', 'reopened: its source changed after it was closed',
-                  rec.get('note') or '')
-    note = re.sub(r'^reopened at .+$', 'reopened at its source', note)
+    note = rec.get('note') or ''
+    labels = sorted({s.get('label') for s in (rec.get('slots') or {}).values() if s.get('label')}, key=len, reverse=True)
+    if note and labels:
+        note = re.sub('|'.join(map(re.escape, labels)), 'its source', note)
     for text in (note, rec.get('why'), rec.get('ask') if rec.get('ask') != rec.get('title') else ''):
         if text:
             return f'<span class="ctx">{brief(text, 160)}</span>'

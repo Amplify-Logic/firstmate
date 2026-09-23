@@ -8,8 +8,9 @@
 #     then a partner awaiting him, an urgent ask that only waited long never
 #     above them, no summary strip,
 #     Now box, sweep banner or held count, and no item rendered twice.
-#   - Waiting on others, other channel activity, closed today and your open
-#     tickets render as collapsed folds below the list, in that order.
+#   - Waiting on others, other channel activity and closed today render as
+#     collapsed folds below the list, in that order, ahead of the open
+#     "Your open tickets" section.
 #   - Recency breaks the tie inside a class, so a severe item arriving at 15:00
 #     leads the class over one recorded at 09:00 and the page re-ranks itself
 #     without anyone re-ordering it by hand.
