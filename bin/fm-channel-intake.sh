@@ -137,7 +137,9 @@
 #                "from": "<address>", "to": [...], "author": "captain"?, "body": ...},
 #               {"type": "note", "at": EPOCH, "author": "captain"|<other>, "body": ...}]}
 # Every field is typed: a timeline whose shape differs is refused rather than
-# assessed, and a company with no domain places nobody outside the team.
+# assessed, and a company with no domain places nobody outside the team. An
+# `owner` or `author` is the captain when it reads `captain` or is one of his
+# captain_addresses, so either spelling HubSpot stores works.
 # An awaiting item handed in as `routine` is recorded as `obligation`, because
 # a partner waiting on the captain is owed by definition. A timeline observe is
 # a full re-read of the ticket, so it stamps `read_at` even when the digest is
@@ -204,7 +206,8 @@
 #                            so a timeline observe is refused until at least
 #                            one of the two is set
 #   rescan_interval_seconds  cadence of the bounded HubSpot re-scan (default
-#                            21600, never below interval_seconds)
+#                            21600, or interval_seconds when that is larger;
+#                            a configured value is refused below it)
 set -eu
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -267,7 +270,7 @@ CFG_LABEL=$DEFAULT_LABEL
 CFG_CAPTAIN_NAMES=
 CFG_CAPTAIN_ADDRESSES=
 CFG_TEAM_ADDRESSES=
-CFG_RESCAN_INTERVAL=$DEFAULT_RESCAN_INTERVAL
+CFG_RESCAN_INTERVAL=
 
 usage() {
   awk '
@@ -448,8 +451,13 @@ load_config() {
   fi
   [ "$CFG_BACKOFF_MAX" -ge "$CFG_BACKOFF" ] \
     || die "backoff_max_seconds must not be below backoff_seconds"
-  [ "$CFG_RESCAN_INTERVAL" -ge "$CFG_INTERVAL" ] \
-    || die "rescan_interval_seconds must not be below interval_seconds"
+  if [ -z "$CFG_RESCAN_INTERVAL" ]; then
+    CFG_RESCAN_INTERVAL=$DEFAULT_RESCAN_INTERVAL
+    [ "$CFG_INTERVAL" -le "$CFG_RESCAN_INTERVAL" ] || CFG_RESCAN_INTERVAL=$CFG_INTERVAL
+  else
+    [ "$CFG_RESCAN_INTERVAL" -ge "$CFG_INTERVAL" ] \
+      || die "rescan_interval_seconds must not be below interval_seconds"
+  fi
   if [ -n "$CFG_QUIET_START" ] || [ -n "$CFG_QUIET_END" ]; then
     [ -n "$CFG_QUIET_START" ] && [ -n "$CFG_QUIET_END" ] \
       || die 'quiet_start and quiet_end must be set together'
@@ -956,6 +964,16 @@ attention_fields() {
   grep -E '^(partner|awaiting|awaiting_since|awaiting_why|read_at)=' "$1" || true
 }
 
+# The class a record is written with, given the attention facts it carries: a
+# partner waiting on the captain is owed by definition, whatever the
+# orchestrator's classification said, on every path that writes the record.
+owed_class() {
+  case "$1" in
+    routine) printf '%s\n' "$2" | grep -q '^awaiting=1$' && printf 'obligation' || printf 'routine' ;;
+    *) printf '%s' "$1" ;;
+  esac
+}
+
 # --- wake delivery ----------------------------------------------------------
 
 enqueue_wake() {
@@ -1299,7 +1317,7 @@ observe() {
   local dedup='' thread='' marker='' source_epoch='' epoch key path digest thread_marker
   local condition='' condition_count='' condition_units=''
   local existing_digest existing_state created revisions provenance notified
-  local notified_digest kind outcome prov_tag existing_class timeline_file='' attention='' awaiting=0 facts
+  local notified_digest kind outcome prov_tag existing_class timeline_file='' attention='' facts
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --source) [ "$#" -ge 2 ] || die '--source requires a value'; id=$2; shift 2 ;;
@@ -1373,11 +1391,7 @@ observe() {
       --timeline "$timeline_file" --names "$CFG_CAPTAIN_NAMES" \
       --captain-addresses "$CFG_CAPTAIN_ADDRESSES" --team-addresses "$CFG_TEAM_ADDRESSES" 2>&1) \
       || die "${facts#fm-channel-intake: }"
-    [ "$(printf '%s\n' "$facts" | grep -c '^awaiting=1$')" -eq 0 ] || awaiting=1
     attention=$(printf '%s\nread_at=%s' "$(printf '%s\n' "$facts" | LC_ALL=C tr '\037\r' '  ')" "$epoch")
-    # A partner waiting on the captain is owed by definition, whatever the
-    # orchestrator's first classification said.
-    [ "$awaiting" -eq 0 ] || [ "$class" != routine ] || class=obligation
   fi
   require_state_lock
   digest=$(digest_hex "$digest_in")
@@ -1446,9 +1460,8 @@ observe() {
       # rewritten, but nothing about the item's attention state moves - except
       # that a timeline re-read records the facts it just derived.
       existing_class=$(record_field "$path" class)
-      [ "$awaiting" -eq 0 ] || [ "$existing_class" != routine ] || existing_class=obligation
       save_item "$path" "$(item_body "$key" "$id" "$kind" "$ref" \
-        "$(record_field "$path" link)" "$existing_class" \
+        "$(record_field "$path" link)" "$(owed_class "$existing_class" "$attention")" \
         "$(record_field "$path" title)" "$digest" "$existing_state" "$created" \
         "$(record_field "$path" updated)" "$(record_field "$path" source_epoch)" \
         "$notified" "$notified_digest" "$revisions" "$provenance" \
@@ -1459,7 +1472,7 @@ observe() {
     # A correction updates the SAME item rather than creating a second one.
     revisions=$((revisions + 1))
     save_item "$path" "$(item_body "$key" "$id" "$kind" "$ref" \
-      "${link:-$(record_field "$path" link)}" "$class" \
+      "${link:-$(record_field "$path" link)}" "$(owed_class "$class" "$attention")" \
       "${title:-$(record_field "$path" title)}" "$digest" "$existing_state" \
       "$created" "$epoch" "${source_epoch:-$(record_field "$path" source_epoch)}" \
       "$notified" "$notified_digest" "$revisions" "$provenance" \
@@ -1469,7 +1482,7 @@ observe() {
     return 0
   fi
 
-  save_item "$path" "$(item_body "$key" "$id" "$kind" "$ref" "$link" "$class" \
+  save_item "$path" "$(item_body "$key" "$id" "$kind" "$ref" "$link" "$(owed_class "$class" "$attention")" \
     "$title" "$digest" open "$epoch" "$epoch" "$source_epoch" '' '' 0 "$prov_tag" '' '' "$attention")"
   if [ -n "$source_epoch" ] && [ "$epoch" -ge "$source_epoch" ]; then
     # Measured detection latency, sampled from real runs rather than projected
