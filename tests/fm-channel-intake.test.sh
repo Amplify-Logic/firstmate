@@ -63,8 +63,9 @@
 #   - A timeline flags a partner-facing ask awaiting the captain - an
 #     unanswered partner message, an open promise naming him or tech, or a
 #     colleague note naming him - recognising him by the sentinel or by his own
-#     address, while only a reply discharges one, an auto-acknowledgement is
-#     not a reply, and a malformed or address-less timeline is refused.
+#     address and the partner by any address on the ticket, while only a reply
+#     discharges one, an auto-acknowledgement is claimed only when no email
+#     went out, and a malformed or address-less timeline is refused.
 #   - A later read that carries new content keeps an awaiting partner owed,
 #     and the re-scan cadence defaults around a long poll interval.
 #   - Awaiting partners lead the to-do, brief and alert order, and every
@@ -1494,6 +1495,31 @@ EOF
   {"type":"note","at":$at_out,"author":"lars@team.example","body":"Checked, it is a 2023 build."}]}
 EOF
       ;;
+    # Ticket 48375229511 as the re-scan actually returns it: no contact or
+    # company association resolved, the partner only in the mail itself.
+    participants-only)
+      cat >"$h/$name.json" <<EOF
+{"kind":"hubspot-ticket","owner":"natalia@team.example","stage":"Waiting for Tech",
+ "events":[
+  {"type":"email","at":$at_inbound,"direction":"inbound","from":"rachel@partner.example",
+   "body":"Any news on the syrup availability?"},
+  {"type":"email","at":$at_out,"direction":"outbound","from":"support@team.example",
+   "body":"Lars is looking into this. I will keep you updated."}]}
+EOF
+      ;;
+    # A colleague answered from her own mailbox, which is not a team address:
+    # the ask stands, but an email plainly went out.
+    colleague-reply)
+      cat >"$h/$name.json" <<EOF
+{"kind":"hubspot-ticket","owner":"natalia@team.example","stage":"Waiting for Tech",
+ "contacts":["rachel@partner.example"],"last_message_sent_at":$at_out,
+ "events":[
+  {"type":"email","at":$at_inbound,"direction":"inbound","from":"rachel@partner.example",
+   "body":"Any news? Lars was going to check the connectivity."},
+  {"type":"email","at":$at_out,"direction":"outbound","from":"natalia@team.example",
+   "body":"I have asked the warehouse about it."}]}
+EOF
+      ;;
     # A colleague's own ticket that never involves the captain.
     uninvolved)
       cat >"$h/$name.json" <<EOF
@@ -1526,7 +1552,8 @@ test_partner_facing_asks_awaiting_the_captain_are_flagged() {
   h="$TMP_ROOT/partner-flags"
   partner_home "$h"
 
-  for name in promise autoack contact-note contact-chase thanks-and-ask owner-address; do
+  for name in promise autoack contact-note contact-chase thanks-and-ask owner-address \
+    participants-only colleague-reply; do
     key=$(key_of "$(observe_ticket "$h" "$name" "$T_0900")")
     [ "$(item_field "$h" "$key" partner)" = 1 ] || fail "$name: a ticket with an external contact is not partner-facing"
     [ "$(item_field "$h" "$key" awaiting)" = 1 ] || fail "$name: a partner waiting on the captain was not flagged"
@@ -1553,6 +1580,14 @@ test_partner_facing_asks_awaiting_the_captain_are_flagged() {
   key=$(key_of "$(observe_ticket "$h" owner-address "$T_0900")")
   assert_contains "$(item_field "$h" "$key" awaiting_why)" 'message has no reply' \
     'a ticket owned by the captain under his own address was read as somebody else'
+  key=$(key_of "$(observe_ticket "$h" participants-only "$T_0900")")
+  assert_contains "$(item_field "$h" "$key" awaiting_why)" 'promise that you are on it' \
+    'a ticket whose partner is only in its mail was judged internal'
+  # The clause names a fact about the timeline, so it is only claimed when the
+  # timeline really holds no outbound email after the partner's message.
+  key=$(key_of "$(observe_ticket "$h" colleague-reply "$T_0900")")
+  assert_not_contains "$(item_field "$h" "$key" awaiting_why)" 'auto-acknowledgement' \
+    'a real outbound email was reported as an auto-acknowledgement'
 
   # Only a reply discharges an ask, and only a note naming him is one.
   for name in customer-owes answered uninvolved internal unnamed-note note-answered; do
@@ -1577,6 +1612,23 @@ test_partner_facing_asks_awaiting_the_captain_are_flagged() {
     --class routine --title 'ticket shape' --timeline-file "$h/promise.json" 2>&1) \
     && fail 'a timeline whose contacts are a bare string was assessed anyway'
   assert_contains "$out" 'timeline contacts must be a list of addresses' 'the refusal did not name the malformed field'
+
+  # A display-name address hides the address every rule compares, so it is
+  # refused rather than silently making every reply stop counting as one.
+  write_timeline "$h" promise
+  sed -i.bak 's/"from":"support@team.example"/"from":"Aquablu Support <support@team.example>"/' "$h/promise.json"
+  out=$(at "$h" "$T_0900" observe --source H_TICKETS --ref ticket-display --digest 'display v1' \
+    --class routine --title 'ticket display' --timeline-file "$h/promise.json" 2>&1) \
+    && fail 'a display-name from address was assessed anyway'
+  assert_contains "$out" 'must be a bare local@domain address' 'the refusal did not name the address shape'
+
+  # One timeline kind: the HubSpot ticket every rule here is written about.
+  write_timeline "$h" promise
+  sed -i.bak 's/"kind":"hubspot-ticket"/"kind":"email-thread"/' "$h/promise.json"
+  out=$(at "$h" "$T_0900" observe --source H_TICKETS --ref ticket-kind --digest 'kind v1' \
+    --class routine --title 'ticket kind' --timeline-file "$h/promise.json" 2>&1) \
+    && fail 'a timeline of an undeclared kind was assessed anyway'
+  assert_contains "$out" 'timeline kind must be hubspot-ticket' 'the refusal did not name the accepted kind'
 
   # The team's own addresses define both an internal domain and a real reply,
   # so a timeline cannot be assessed without at least one of them.
