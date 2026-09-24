@@ -31,6 +31,8 @@
 #     the Needs you list, after live problems and deadlines and above every
 #     other class, oldest ask first and an undated ask last, and a timeline
 #     re-read makes it current.
+#   - Every Needs you row names the system it came from beside its severity
+#     pill, and an unrecognised source gets a neutral marker instead of failing.
 # shellcheck disable=SC2016
 set -u
 
@@ -557,6 +559,30 @@ Morning partner ask' ] || fail 'an undated partner ask jumped ahead of an older 
   pass 'a partner-facing ask awaiting the captain ranks right after live problems and deadlines, oldest first and undated last'
 }
 
+test_each_row_marks_where_it_came_from() {
+  local h out
+  h="$TMP_ROOT/source-marker"
+  new_home "$h"
+  sidecar "$h" 2026-09-10 \
+'{"key":"k-s","source":"slack-lars-mentions","ref":"m1","class":"urgent","title":"Slack line","updated":'"$T_0900"'},'\
+'{"key":"k-h","source":"hubspot-lars-tickets","ref":"48622709535","class":"obligation","title":"HubSpot line","updated":'"$T_0900"'},'\
+'{"key":"k-b","source":"firstmate-backlog","ref":"catena","class":"obligation","title":"Backlog line","updated":'"$T_0900"'},'\
+'{"key":"k-u","source":"carrier-pigeon","ref":"coo","class":"obligation","title":"Pigeon line","updated":'"$T_0900"'}'
+  render_at "$h" "$T_1000"
+  out=$(page "$h" 2026-09-10)
+  marker_of() {
+    grep -F "class=\"what\">$1" <<<"$out" >/dev/null || fail "row $1 is missing"
+    grep -B1 -F "class=\"what\">$1" <<<"$out" | grep -o '<span class="src"[^>]*>' | head -n 1
+  }
+  assert_contains "$(marker_of 'Slack line')" 'title="From Slack"' 'the Slack row does not say it came from Slack'
+  assert_contains "$(marker_of 'HubSpot line')" 'title="From HubSpot"' 'the HubSpot row does not say it came from HubSpot'
+  assert_contains "$(marker_of 'Backlog line')" 'title="From Firstmate"' 'the backlog row does not say it came from Firstmate'
+  assert_contains "$(marker_of 'Pigeon line')" 'title="From carrier-pigeon"' 'the unknown source is not named in its marker title'
+  assert_contains "$out" '</svg>Other</span>' 'the unknown source did not get the neutral marker'
+  assert_contains "$out" 'data-source="carrier-pigeon"' 'the audit attribute was dropped'
+  pass 'each row marks the system it came from, and an unknown source gets a neutral marker'
+}
+
 test_verification_is_never_renewed_by_sync
 test_done_survives_and_a_new_ask_resurfaces_once
 test_edit_after_resolution_reopens_once
@@ -573,3 +599,4 @@ test_sync_prunes_only_retired_routine_records
 test_a_marked_routine_line_is_never_retired_by_the_intake
 test_a_revived_routine_thread_still_retires_and_prunes
 test_partner_awaiting_asks_rank_above_every_class
+test_each_row_marks_where_it_came_from
