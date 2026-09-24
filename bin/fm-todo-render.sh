@@ -48,11 +48,12 @@
 # link and a "note" toggle. Under the badge a small icon and name say which
 # system the line came from (Slack, HubSpot, device alert, Email, Calendar,
 # Asana, Firstmate or You, else Other); the exact source label and how it was
-# read stay in the row's data-source and data-how attributes for audit. The toggle opens a one-line box that queues the typed line
-# into the open Lavish review session with the item's id and the revision the
-# page showed, so bin/fm-todo.sh can apply a page command to exactly the ask
-# he was looking at; with no review session connected the box says so and
-# queues nothing. Routine activity and the list-style folds carry no box.
+# read stay in the row's data-source and data-how attributes for audit. The
+# toggle opens a one-line box that queues the typed line into the open Lavish
+# review session with the item's id and the revision the page showed, so
+# bin/fm-todo.sh can apply a page command to exactly the ask he was looking
+# at; with no review session connected the box says so and queues nothing.
+# Routine activity and the list-style folds carry no box.
 #
 # YOUR OPEN TICKETS IS LIVE. That section is rendered on every build from
 # data/channel-intake/tickets.json, which `bin/fm-channel-intake.sh tickets`
