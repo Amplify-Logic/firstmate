@@ -277,6 +277,48 @@ def audit(rec):
     return f' data-source="{esc(rec.get("label", ""))}" data-how="{esc(how)}"'
 
 
+# Where a line came from, shown as a small marker under its severity pill. The
+# first source token that names a known system wins; anything else is "Other".
+SOURCE_ICONS = {
+    'slack': '<path d="M2.5 3.5h11v7h-6l-3 2.5v-2.5h-2z"/>',
+    'hubspot': '<path d="M2.5 4.5h11v2a1.5 1.5 0 0 0 0 3v2h-11v-2a1.5 1.5 0 0 0 0-3z"/>',
+    'device': '<path d="M8 2.5l6 11H2zM8 6.5v3.5M8 12v.1"/>',
+    'email': '<path d="M2 4h12v8H2zM2 4l6 5 6-5"/>',
+    'calendar': '<path d="M2.5 3.5h11v10h-11zM2.5 6.5h11M5.5 2v3M10.5 2v3"/>',
+    'asana': '<circle cx="8" cy="5" r="2.2"/><circle cx="4.5" cy="10.5" r="2.2"/><circle cx="11.5" cy="10.5" r="2.2"/>',
+    'firstmate': '<circle cx="8" cy="3.2" r="1.3"/><path d="M8 4.5v9M5 7h6M3 10a5 3.5 0 0 0 10 0"/>',
+    'you': '<circle cx="8" cy="5.5" r="2.5"/><path d="M3 13.5a5 4 0 0 1 10 0"/>',
+    'other': '<circle cx="8" cy="8" r="2.5"/>',
+}
+SOURCE_NAMES = (('slack', 'slack', 'Slack'), ('hubspot', 'hubspot', 'HubSpot'),
+                ('telemetry', 'device', 'device alert'), ('mail', 'email', 'Email'),
+                ('calendar', 'calendar', 'Calendar'), ('asana', 'asana', 'Asana'),
+                ('backlog', 'firstmate', 'Firstmate'))
+
+
+def source_kind(token):
+    token = token.strip()
+    if token.lower() == 'captain':
+        return 'you', 'You'
+    for needle, icon, name in SOURCE_NAMES:
+        if needle in token.lower():
+            return icon, name
+    # A bare Slack conversation id (channel, DM or group) is a Slack source.
+    if re.fullmatch(r'[CDG][A-Z0-9]{8,11}', token):
+        return 'slack', 'Slack'
+    return None
+
+
+def source_marker(rec):
+    label = rec.get('label') or ''
+    tokens = [label] + re.findall(r'\(([^()]*)\)', label)
+    found = next((k for k in map(source_kind, tokens) if k), None)
+    icon, name = found or ('other', 'Other')
+    title = f'From {name}' if found else f'From {label or "an unrecorded source"}'
+    return (f'<span class="src" title="{esc(title)}" aria-label="{esc(title)}">'
+            f'<svg viewBox="0 0 16 16" aria-hidden="true">{SOURCE_ICONS[icon]}</svg>{esc(name)}</span>')
+
+
 def context(rec):
     """At most one short line under the ask: a reopen note, else the why, else the ask's wording."""
     note = rec.get('note') or ''
@@ -299,7 +341,7 @@ def row(rec, reply=True):
     severity = rec.get('class', 'obligation')
     pill = {'outage': 'bad', 'urgent': 'warn', 'deadline': 'warn'}.get(severity, 'info')
     toggle = note_toggle(rec) if reply else ''
-    main = (f'<tr class="item" id="item-{esc(rec.get("id", ""))}"{audit(rec)}><td class="who"><span class="pill {pill}">{esc(severity)}</span></td>\n'
+    main = (f'<tr class="item" id="item-{esc(rec.get("id", ""))}"{audit(rec)}><td class="who"><span class="pill {pill}">{esc(severity)}</span>{source_marker(rec)}</td>\n'
             f'<td class="what">{title}{freshness(rec)}{context(rec)}</td>\n'
             f'<td class="links">{link(rec.get("link"))}{toggle}</td></tr>')
     return main + '\n' + reply_form(rec) if reply else main
