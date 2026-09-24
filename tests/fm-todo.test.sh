@@ -33,6 +33,8 @@
 #     re-read makes it current.
 #   - Every Needs you row names the system it came from beside its severity
 #     pill, and an unrecognised source gets a neutral marker instead of failing.
+#   - A row merged from several inputs marks the source it presents, not the
+#     input that happened to see it first.
 # shellcheck disable=SC2016
 set -u
 
@@ -567,6 +569,7 @@ test_each_row_marks_where_it_came_from() {
 '{"key":"k-s","source":"slack-lars-mentions","ref":"m1","class":"urgent","title":"Slack line","updated":'"$T_0900"'},'\
 '{"key":"k-h","source":"hubspot-lars-tickets","ref":"48622709535","class":"obligation","title":"HubSpot line","updated":'"$T_0900"'},'\
 '{"key":"k-b","source":"firstmate-backlog","ref":"catena","class":"obligation","title":"Backlog line","updated":'"$T_0900"'},'\
+'{"key":"k-c","source":"captain","ref":"self","class":"obligation","title":"Captain line","updated":'"$T_0900"'},'\
 '{"key":"k-u","source":"carrier-pigeon","ref":"coo","class":"obligation","title":"Pigeon line","updated":'"$T_0900"'}'
   render_at "$h" "$T_1000"
   out=$(page "$h" 2026-09-10)
@@ -577,10 +580,35 @@ test_each_row_marks_where_it_came_from() {
   assert_contains "$(marker_of 'Slack line')" 'title="From Slack"' 'the Slack row does not say it came from Slack'
   assert_contains "$(marker_of 'HubSpot line')" 'title="From HubSpot"' 'the HubSpot row does not say it came from HubSpot'
   assert_contains "$(marker_of 'Backlog line')" 'title="From Firstmate"' 'the backlog row does not say it came from Firstmate'
+  assert_contains "$(marker_of 'Captain line')" 'title="From You"' 'the captain row does not say it came from You'
   assert_contains "$(marker_of 'Pigeon line')" 'title="From carrier-pigeon"' 'the unknown source is not named in its marker title'
   assert_contains "$out" '</svg>Other</span>' 'the unknown source did not get the neutral marker'
   assert_contains "$out" 'data-source="carrier-pigeon"' 'the audit attribute was dropped'
   pass 'each row marks the system it came from, and an unknown source gets a neutral marker'
+}
+
+test_a_merged_row_marks_the_source_it_presents() {
+  local h key out mark
+  h="$TMP_ROOT/source-marker-merged"
+  new_home "$h"
+  printf 'H_TICKETS\thubspot-tickets\ttickets naming the captain\n' >>"$h/data/channel-intake/sources.tsv"
+  # The ledger key is fixed by source and ref, so a scratch intake names it
+  # before the real ledger has seen the ticket.
+  new_home "$h/scratch"
+  cp "$h/data/channel-intake/sources.tsv" "$h/scratch/data/channel-intake/sources.tsv"
+  key=$(intake_at "$h/scratch" "$T_0900" observe --source H_TICKETS --ref 48622709536 --digest a --class urgent --title 'Merged line' | awk '{ print $2 }')
+  # The morning sweep sees it first from a Slack channel; the ledger's
+  # HubSpot record folds in later and becomes the presented source.
+  sidecar "$h" 2026-09-10 '{"key":"'"$key"'","source":"C0ABCDEFGH","ref":"1789023600.000100","class":"urgent","title":"Merged line","updated":'"$T_0900"'}'
+  render_at "$h" "$T_1000"
+  intake_at "$h" "$T_1030" observe --source H_TICKETS --ref 48622709536 --digest a --class urgent --title 'Merged line' >/dev/null
+  render_at "$h" "$T_1100"
+  out=$(page "$h" 2026-09-10)
+  [ "$(grep -c -F 'class="what">Merged line' <<<"$out")" = 1 ] || fail 'the morning line and the ledger record did not merge into one row'
+  assert_contains "$out" 'data-source="hubspot-tickets (H_TICKETS)"' 'the merged row does not present the ledger source'
+  mark=$(grep -B1 -F 'class="what">Merged line' <<<"$out" | grep -o '<span class="src"[^>]*>' | head -n 1)
+  assert_contains "$mark" 'title="From HubSpot"' 'the merged row marker does not follow its presented source'
+  pass 'a row merged from a morning line and a later ledger record marks the source it presents'
 }
 
 test_verification_is_never_renewed_by_sync
@@ -600,3 +628,4 @@ test_a_marked_routine_line_is_never_retired_by_the_intake
 test_a_revived_routine_thread_still_retires_and_prunes
 test_partner_awaiting_asks_rank_above_every_class
 test_each_row_marks_where_it_came_from
+test_a_merged_row_marks_the_source_it_presents

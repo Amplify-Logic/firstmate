@@ -311,8 +311,7 @@ def source_kind(token):
 
 def source_marker(rec):
     label = rec.get('label') or ''
-    tokens = [a.split(':', 1)[0] for a in rec.get('aliases') or [] if ':' in a and not a.startswith('ledger:')]
-    tokens += [label] + re.findall(r'\(([^()]*)\)', label)
+    tokens = [label] + re.findall(r'\(([^()]*)\)', label)
     found = next((k for k in map(source_kind, tokens) if k), None)
     icon, name = found or ('other', 'Other')
     title = f'From {name}' if found else f'From {label or "an unrecorded source"}'
