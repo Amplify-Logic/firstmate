@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Today - Thursday 10 September 2026</title>
+<style>
+:root{
+  --bg:#f4f7fb; --panel:#ffffff; --ink:#132033; --ink-2:#3e4f66; --ink-3:#6b7a90;
+  --line:#d7e0ec; --line-2:#e8eef6; --accent:#0b4f8a; --accent-ink:#ffffff; --accent-soft:#e3eef9;
+  --ok:#1d7a4f; --ok-soft:#e2f3ea; --warn:#9a6300; --warn-soft:#fdf1d8; --bad:#a8322b; --bad-soft:#fbe5e3; --info:#2f5f9e; --info-soft:#e6eef9;
+  --obs:#0b4f8a; --inf:#7a5a00; --unv:#7a2e80;
+  --serif:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,"Times New Roman",serif;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Helvetica,Arial,sans-serif;
+  --mono:"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#0e1622; --panel:#141f2e; --ink:#e6edf6; --ink-2:#b7c4d6; --ink-3:#8593a8;
+    --line:#26354a; --line-2:#1d2a3c; --accent:#6fb1ea; --accent-ink:#0b1a2b; --accent-soft:#15304a;
+    --ok:#5fcf92; --ok-soft:#123324; --warn:#f0c264; --warn-soft:#3a2d0c; --bad:#f08a82; --bad-soft:#3d1a18; --info:#8fb6ec; --info-soft:#17304d;
+    --obs:#6fb1ea; --inf:#e0b95a; --unv:#cf8fd6;
+  }
+}
+*{box-sizing:border-box;min-width:0}
+html,body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.45}
+a{color:var(--accent);text-decoration:none;border-bottom:1px solid transparent}
+a:hover{border-bottom-color:var(--accent)}
+.wrap{max-width:1180px;margin:0 auto;padding:28px 22px 60px}
+header{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px 24px;margin-bottom:18px}
+h1{font-family:var(--serif);font-weight:600;font-size:34px;line-height:1.1;margin:0;letter-spacing:-.01em}
+h2{font-family:var(--serif);font-weight:600;font-size:22px;margin:34px 0 10px;letter-spacing:-.005em}
+h2 small{font-family:var(--sans);font-weight:500;font-size:13px;color:var(--ink-3);margin-left:10px}
+h3.sub{font-family:var(--sans);font-size:13px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);margin:22px 0 8px}
+.kicker{font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3);margin-bottom:6px}
+.meta{font-size:13px;color:var(--ink-2);text-align:right;max-width:540px}
+.meta .mono{font-family:var(--mono);font-variant-numeric:tabular-nums;color:var(--ink-2)}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin:18px 0 6px}
+.tile{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 16px}
+.tile .n{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:30px;font-weight:600;line-height:1;color:var(--accent)}
+.tile .l{font-size:13px;color:var(--ink-2);margin-top:6px}
+.tile .s{font-size:12px;color:var(--ink-3);margin-top:2px}
+.note{background:var(--panel);border:1px solid var(--line);border-left:4px solid var(--accent);border-radius:8px;padding:12px 16px;font-size:14px;color:var(--ink-2);margin:14px 0}
+.note b{color:var(--ink)}
+.note.warnline{border-left-color:var(--warn)}
+table{width:100%;border-collapse:collapse;background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden;font-size:14px}
+.tablewrap{overflow-x:auto;border-radius:10px}
+thead th{text-align:left;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);font-weight:600;padding:10px 12px;border-bottom:1px solid var(--line);background:var(--panel)}
+tbody td{padding:12px 12px;border-bottom:1px solid var(--line-2);vertical-align:top}
+tbody tr:last-child td{border-bottom:none}
+tbody tr:hover td{background:var(--accent-soft)}
+tr.closed td{color:var(--ink-3)}
+tr.replyrow{display:none}
+tr.replyrow.open{display:table-row}
+tr.replyrow td{padding:0 12px 12px;border-bottom:1px solid var(--line-2);background:var(--panel)}
+tbody tr.replyrow:hover td{background:var(--panel)}
+button.notetoggle{font-family:var(--mono);font-size:11px;letter-spacing:.04em;padding:3px 8px;margin-left:6px;border:1px dashed var(--line);border-radius:6px;background:transparent;color:var(--ink-3);cursor:pointer;vertical-align:top}
+button.notetoggle:hover{color:var(--ink-2);border-color:var(--accent)}
+button.notetoggle[aria-expanded=true]{border-style:solid;color:var(--ink-2)}
+form.reply{display:flex;gap:8px;align-items:center}
+form.reply input[type=text]{flex:1;min-width:0;font:inherit;font-size:13px;padding:6px 10px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink)}
+form.reply input[type=text]::placeholder{color:var(--ink-3)}
+form.reply button{font:inherit;font-size:12.5px;padding:6px 14px;border:1px solid var(--line);border-radius:6px;background:var(--panel);color:var(--ink-2);cursor:pointer;white-space:nowrap}
+form.reply button:hover{border-color:var(--accent);color:var(--ink)}
+form.reply .ack{font-size:12px;color:var(--ok);white-space:nowrap}
+tr.closed td.who{color:var(--ink-2)}
+td.who{font-weight:600;white-space:nowrap}
+td.who .src{display:flex;align-items:center;gap:4px;margin-top:5px;font-size:11.5px;font-weight:500;color:var(--ink-3);white-space:nowrap}
+td.who .src svg{width:12px;height:12px;flex:none;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+td.who .org{display:block;font-weight:400;font-size:12.5px;color:var(--ink-3)}
+td.what{min-width:320px;color:var(--ink)}
+td.what .ctx{display:block;color:var(--ink-2);font-size:13px;margin-top:3px}
+td.what .next{display:block;color:var(--ink);font-size:13px;margin-top:6px}
+td.what .next b{color:var(--accent)}
+td.since{white-space:nowrap;font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:13px;color:var(--ink-2)}
+td.links{white-space:nowrap}
+td.links a{display:inline-block;font-size:12.5px;padding:3px 8px;border:1px solid var(--line);border-radius:6px;margin:0 4px 4px 0;background:var(--bg)}
+td.links a:hover{border-color:var(--accent)}
+td.links .nolink{display:inline-block;font-size:12px;color:var(--ink-3);font-style:italic}
+.pill{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;padding:2px 8px;border-radius:999px;white-space:nowrap}
+.pill.bad{background:var(--bad-soft);color:var(--bad)}
+.pill.warn{background:var(--warn-soft);color:var(--warn)}
+.pill.ok{background:var(--ok-soft);color:var(--ok)}
+.pill.info{background:var(--info-soft);color:var(--info)}
+.prov{display:inline-block;font-family:var(--mono);font-size:11px;letter-spacing:.04em;padding:1px 6px;border-radius:4px;border:1px solid currentColor;margin:6px 0 0 8px}
+.prov.obs{color:var(--obs)} .prov.inf{color:var(--inf)} .prov.unv{color:var(--unv)}
+.id{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:12.5px;color:var(--ink-3)}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:14px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 16px}
+.card h3{font-family:var(--serif);font-size:17px;margin:0 0 8px;font-weight:600}
+.card ol,.card ul{margin:0;padding-left:20px;color:var(--ink-2);font-size:14px}
+.card li{margin:5px 0}
+.card li b{color:var(--ink)}
+.rec{margin-top:8px;font-size:13px;color:var(--ink-2)}
+.rec b{color:var(--ok)}
+.legend{display:flex;flex-wrap:wrap;gap:14px;font-size:12.5px;color:var(--ink-3);margin-top:28px;padding-top:14px;border-top:1px solid var(--line)}
+.done{color:var(--ink-2);font-size:14px}
+.done li{margin:3px 0}
+@media print{ body{background:#fff} .tile,.card,table{break-inside:avoid} }
+
+/* --- private improved variant: presentation only --- */
+td.since .lab{display:block;font-family:var(--sans);font-size:10.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--ink-3);font-weight:600}
+td.since .age{display:block;font-family:var(--sans);font-size:12px;color:var(--ink-3);margin-top:2px;white-space:normal}
+.strips{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr);gap:14px;margin:16px 0 6px}
+@media (max-width:760px){.strips{grid-template-columns:minmax(0,1fr)}}
+.strip{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 16px}
+.strip.now{border-left:4px solid var(--accent)}
+.strip.unv{border-left:4px solid var(--unv)}
+.strip h3{font-family:var(--serif);font-size:17px;font-weight:600;margin:0 0 2px}
+.strip .sub{font-size:12.5px;color:var(--ink-3);margin:0 0 10px}
+.strip .grp{font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:var(--ink-3);font-weight:600;margin:12px 0 6px}
+.strip .grp:first-of-type{margin-top:0}
+.strip ol{margin:0;padding-left:20px;font-size:14px;color:var(--ink-2)}
+.strip ol li{margin:7px 0}
+.strip ul{margin:0;padding-left:18px;font-size:13.5px;color:var(--ink-2)}
+.strip ul li{margin:7px 0}
+.strip a.jump{font-weight:600;border-bottom:1px solid transparent}
+.strip a.jump:hover{border-bottom-color:var(--accent)}
+.strip .why{display:block;font-size:12.5px;color:var(--ink-3);margin-top:2px}
+tr:target td{background:var(--accent-soft)}
+details{margin:20px 0;border-top:1px solid var(--line);padding-top:12px}
+summary{cursor:pointer;font-weight:600;color:var(--ink-2)}
+.watch-line{padding:12px 16px;margin:8px 0;background:var(--panel);border:1px solid var(--line);border-radius:8px}
+.done .why{display:block;font-size:12.5px;color:var(--ink-3);margin-top:2px}
+td.what .ctx.how{font-size:12px;color:var(--ink-3)}
+.strip.now{margin:16px 0 6px}
+@media (max-width:600px){
+  .wrap{padding:18px 16px 48px}
+  td.what{min-width:0}
+  .meta{text-align:left}
+  tr.item{display:grid;grid-template-columns:minmax(0,1fr)}
+  tr.item td{border-bottom:none;padding:8px 12px}
+  tr.item td:last-child{border-bottom:1px solid var(--line-2)}
+  tr.item td.who,tr.item td.links{white-space:normal}
+  td.who .src{display:inline-flex;margin:0 0 0 8px;vertical-align:middle}
+}
+.watch-line .why{display:block;color:var(--ink-3);font-size:13px;margin-top:5px;overflow-wrap:anywhere}
+</style>
+</head><body><div class="wrap">
+<header><div><div class="kicker">Aquablu Starship</div><h1>Today</h1></div>
+<div class="meta">Thursday 10 September 2026<br>Page rebuilt from the to-do records at <span class="mono">10:00 CEST</span>.<br>Each line carries its own last check.</div></header>
+<h2>Needs you now<small>live problems and deadlines first, then partners waiting on you</small></h2>
+<div class="tablewrap"><table><tbody>
+<tr class="item" id="item-t-3357b3667694" data-source="telemetry-alerts (T_ALERTS)" data-how="read by the channel intake on telemetry-alerts (T_ALERTS)"><td class="who"><span class="pill bad">outage</span><span class="src" title="From device alert" aria-label="From device alert"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2.5l6 11H2zM8 6.5v3.5M8 12v.1"/></svg>device alert</span></td>
+<td class="what">Unit 4471 reports a water leak<span class="prov obs">read 09:00 CEST</span></td>
+<td class="links"><span class="nolink">no link recorded</span><button type="button" class="notetoggle" aria-expanded="false" onclick="var r=document.getElementById(&#x27;note-t-3357b3667694&#x27;);var o=r.classList.toggle(&#x27;open&#x27;);this.setAttribute(&#x27;aria-expanded&#x27;,o);if(o){r.querySelector(&#x27;input&#x27;).focus();}">note</button></td></tr>
+<tr class="replyrow" id="note-t-3357b3667694"><td colspan="3"><form class="reply" data-lavish-question="todo-item-t-3357b3667694" onsubmit="event.preventDefault();var f=event.currentTarget,v=f.note.value.trim();if(!v)return;if(!window.lavish||!window.lavish.queuePrompt){f.querySelector(&#x27;.ack&#x27;).textContent=&#x27;review session not connected&#x27;;return;}window.lavish.queuePrompt(&#x27;Update on to-do item &#x27;+&quot;t-3357b3667694&quot;+&#x27; rev &#x27;+&quot;aced1ce7c0&quot;+&#x27; (&#x27;+&quot;Unit 4471 reports a water leak&quot;+&#x27;): &#x27;+v,{tag:&#x27;item-update&#x27;,text:&quot;Unit 4471 reports a water leak&quot;+&#x27;: &#x27;+v,element:f,queueKey:&quot;todo-item-t-3357b3667694&quot;,data:{item_id:&quot;t-3357b3667694&quot;,rev:&quot;aced1ce7c0&quot;,title:&quot;Unit 4471 reports a water leak&quot;,note:v}});f.note.value=&#x27;&#x27;;f.querySelector(&#x27;.ack&#x27;).textContent=&#x27;queued&#x27;;"><input type="text" name="note" autocomplete="off" placeholder="drop, done, park til Friday, mine, you: what to do, dig, or anything else"><button type="submit">Queue</button><span class="ack"></span></form></td></tr>
+<tr class="item" id="item-t-93d98da1bc87" data-source="google-calendar" data-how="morning verification sweep"><td class="who"><span class="pill warn">deadline</span><span class="src" title="From Calendar" aria-label="From Calendar"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 3.5h11v10h-11zM2.5 6.5h11M5.5 2v3M10.5 2v3"/></svg>Calendar</span></td>
+<td class="what">Accept or move the partner QBR<span class="prov obs">read 09:00 CEST</span></td>
+<td class="links"><span class="nolink">no link recorded</span><button type="button" class="notetoggle" aria-expanded="false" onclick="var r=document.getElementById(&#x27;note-t-93d98da1bc87&#x27;);var o=r.classList.toggle(&#x27;open&#x27;);this.setAttribute(&#x27;aria-expanded&#x27;,o);if(o){r.querySelector(&#x27;input&#x27;).focus();}">note</button></td></tr>
+<tr class="replyrow" id="note-t-93d98da1bc87"><td colspan="3"><form class="reply" data-lavish-question="todo-item-t-93d98da1bc87" onsubmit="event.preventDefault();var f=event.currentTarget,v=f.note.value.trim();if(!v)return;if(!window.lavish||!window.lavish.queuePrompt){f.querySelector(&#x27;.ack&#x27;).textContent=&#x27;review session not connected&#x27;;return;}window.lavish.queuePrompt(&#x27;Update on to-do item &#x27;+&quot;t-93d98da1bc87&quot;+&#x27; rev &#x27;+&quot;e3b0c44298&quot;+&#x27; (&#x27;+&quot;Accept or move the partner QBR&quot;+&#x27;): &#x27;+v,{tag:&#x27;item-update&#x27;,text:&quot;Accept or move the partner QBR&quot;+&#x27;: &#x27;+v,element:f,queueKey:&quot;todo-item-t-93d98da1bc87&quot;,data:{item_id:&quot;t-93d98da1bc87&quot;,rev:&quot;e3b0c44298&quot;,title:&quot;Accept or move the partner QBR&quot;,note:v}});f.note.value=&#x27;&#x27;;f.querySelector(&#x27;.ack&#x27;).textContent=&#x27;queued&#x27;;"><input type="text" name="note" autocomplete="off" placeholder="drop, done, park til Friday, mine, you: what to do, dig, or anything else"><button type="submit">Queue</button><span class="ack"></span></form></td></tr>
+<tr class="item" id="item-t-ad54cf31f4ae" data-source="gmail-inbox" data-how="morning verification sweep"><td class="who"><span class="pill warn">deadline</span><span class="src" title="From Email" aria-label="From Email"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 4h12v8H2zM2 4l6 5 6-5"/></svg>Email</span></td>
+<td class="what">Sign the Exact renewal by Friday<span class="prov obs">read 09:00 CEST</span></td>
+<td class="links"><span class="nolink">no link recorded</span><button type="button" class="notetoggle" aria-expanded="false" onclick="var r=document.getElementById(&#x27;note-t-ad54cf31f4ae&#x27;);var o=r.classList.toggle(&#x27;open&#x27;);this.setAttribute(&#x27;aria-expanded&#x27;,o);if(o){r.querySelector(&#x27;input&#x27;).focus();}">note</button></td></tr>
+<tr class="replyrow" id="note-t-ad54cf31f4ae"><td colspan="3"><form class="reply" data-lavish-question="todo-item-t-ad54cf31f4ae" onsubmit="event.preventDefault();var f=event.currentTarget,v=f.note.value.trim();if(!v)return;if(!window.lavish||!window.lavish.queuePrompt){f.querySelector(&#x27;.ack&#x27;).textContent=&#x27;review session not connected&#x27;;return;}window.lavish.queuePrompt(&#x27;Update on to-do item &#x27;+&quot;t-ad54cf31f4ae&quot;+&#x27; rev &#x27;+&quot;e3b0c44298&quot;+&#x27; (&#x27;+&quot;Sign the Exact renewal by Friday&quot;+&#x27;): &#x27;+v,{tag:&#x27;item-update&#x27;,text:&quot;Sign the Exact renewal by Friday&quot;+&#x27;: &#x27;+v,element:f,queueKey:&quot;todo-item-t-ad54cf31f4ae&quot;,data:{item_id:&quot;t-ad54cf31f4ae&quot;,rev:&quot;e3b0c44298&quot;,title:&quot;Sign the Exact renewal by Friday&quot;,note:v}});f.note.value=&#x27;&#x27;;f.querySelector(&#x27;.ack&#x27;).textContent=&#x27;queued&#x27;;"><input type="text" name="note" autocomplete="off" placeholder="drop, done, park til Friday, mine, you: what to do, dig, or anything else"><button type="submit">Queue</button><span class="ack"></span></form></td></tr>
+<tr class="item" id="item-t-1033e7e12a81" data-source="D0ABCDEFGH" data-how="morning verification sweep"><td class="who"><span class="pill warn">urgent</span><span class="src" title="From Slack" aria-label="From Slack"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 3.5h11v7h-6l-3 2.5v-2.5h-2z"/></svg>Slack</span></td>
+<td class="what">Direct message from Jayden<span class="prov obs">read 09:00 CEST</span></td>
+<td class="links"><span class="nolink">no link recorded</span><button type="button" class="notetoggle" aria-expanded="false" onclick="var r=document.getElementById(&#x27;note-t-1033e7e12a81&#x27;);var o=r.classList.toggle(&#x27;open&#x27;);this.setAttribute(&#x27;aria-expanded&#x27;,o);if(o){r.querySelector(&#x27;input&#x27;).focus();}">note</button></td></tr>
+<tr class="replyrow" id="note-t-1033e7e12a81"><td colspan="3"><form class="reply" data-lavish-question="todo-item-t-1033e7e12a81" onsubmit="event.preventDefault();var f=event.currentTarget,v=f.note.value.trim();if(!v)return;if(!window.lavish||!window.lavish.queuePrompt){f.querySelector(&#x27;.ack&#x27;).textContent=&#x27;review session not connected&#x27;;return;}window.lavish.queuePrompt(&#x27;Update on to-do item &#x27;+&quot;t-1033e7e12a81&quot;+&#x27; rev &#x27;+&quot;e3b0c44298&quot;+&#x27; (&#x27;+&quot;Direct message from Jayden&quot;+&#x27;): &#x27;+v,{tag:&#x27;item-update&#x27;,text:&quot;Direct message from Jayden&quot;+&#x27;: &#x27;+v,element:f,queueKey:&quot;todo-item-t-1033e7e12a81&quot;,data:{item_id:&quot;t-1033e7e12a81&quot;,rev:&quot;e3b0c44298&quot;,title:&quot;Direct message from Jayden&quot;,note:v}});f.note.value=&#x27;&#x27;;f.querySelector(&#x27;.ack&#x27;).textContent=&#x27;queued&#x27;;"><input type="text" name="note" autocomplete="off" placeholder="drop, done, park til Friday, mine, you: what to do, dig, or anything else"><button type="submit">Queue</button><span class="ack"></span></form></td></tr>
+<tr class="item" id="item-t-ef8defa0dbcd" data-source="slack-channel (C_BRIEF)" data-how="read by the channel intake on slack-channel (C_BRIEF)"><td class="who"><span class="pill warn">urgent</span><span class="src" title="From Slack" aria-label="From Slack"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 3.5h11v7h-6l-3 2.5v-2.5h-2z"/></svg>Slack</span></td>
+<td class="what">Luc asks for the Q3 refill numbers<span class="prov obs">read 09:00 CEST</span></td>
+<td class="links"><span class="nolink">no link recorded</span><button type="button" class="notetoggle" aria-expanded="false" onclick="var r=document.getElementById(&#x27;note-t-ef8defa0dbcd&#x27;);var o=r.classList.toggle(&#x27;open&#x27;);this.setAttribute(&#x27;aria-expanded&#x27;,o);if(o){r.querySelector(&#x27;input&#x27;).focus();}">note</button></td></tr>
+<tr class="replyrow" id="note-t-ef8defa0dbcd"><td colspan="3"><form class="reply" data-lavish-question="todo-item-t-ef8defa0dbcd" onsubmit="event.preventDefault();var f=event.currentTarget,v=f.note.value.trim();if(!v)return;if(!window.lavish||!window.lavish.queuePrompt){f.querySelector(&#x27;.ack&#x27;).textContent=&#x27;review session not connected&#x27;;return;}window.lavish.queuePrompt(&#x27;Update on to-do item &#x27;+&quot;t-ef8defa0dbcd&quot;+&#x27; rev &#x27;+&quot;56286d53e1&quot;+&#x27; (&#x27;+&quot;Luc asks for the Q3 refill numbers&quot;+&#x27;): &#x27;+v,{tag:&#x27;item-update&#x27;,text:&quot;Luc asks for the Q3 refill numbers&quot;+&#x27;: &#x27;+v,element:f,queueKey:&quot;todo-item-t-ef8defa0dbcd&quot;,data:{item_id:&quot;t-ef8defa0dbcd&quot;,rev:&quot;56286d53e1&quot;,title:&quot;Luc asks for the Q3 refill numbers&quot;,note:v}});f.note.value=&#x27;&#x27;;f.querySelector(&#x27;.ack&#x27;).textContent=&#x27;queued&#x27;;"><input type="text" name="note" autocomplete="off" placeholder="drop, done, park til Friday, mine, you: what to do, dig, or anything else"><button type="submit">Queue</button><span class="ack"></span></form></td></tr>
+<tr class="item" id="item-t-3ac8d990ffd5" data-source="firstmate-backlog" data-how="morning verification sweep"><td class="who"><span class="pill info">obligation</span><span class="src" title="From Firstmate" aria-label="From Firstmate"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="3.2" r="1.3"/><path d="M8 4.5v9M5 7h6M3 10a5 3.5 0 0 0 10 0"/></svg>Firstmate</span></td>
+<td class="what">Catena firmware call<span class="prov obs">read 09:00 CEST</span></td>
+<td class="links"><span class="nolink">no link recorded</span><button type="button" class="notetoggle" aria-expanded="false" onclick="var r=document.getElementById(&#x27;note-t-3ac8d990ffd5&#x27;);var o=r.classList.toggle(&#x27;open&#x27;);this.setAttribute(&#x27;aria-expanded&#x27;,o);if(o){r.querySelector(&#x27;input&#x27;).focus();}">note</button></td></tr>
+<tr class="replyrow" id="note-t-3ac8d990ffd5"><td colspan="3"><form class="reply" data-lavish-question="todo-item-t-3ac8d990ffd5" onsubmit="event.preventDefault();var f=event.currentTarget,v=f.note.value.trim();if(!v)return;if(!window.lavish||!window.lavish.queuePrompt){f.querySelector(&#x27;.ack&#x27;).textContent=&#x27;review session not connected&#x27;;return;}window.lavish.queuePrompt(&#x27;Update on to-do item &#x27;+&quot;t-3ac8d990ffd5&quot;+&#x27; rev &#x27;+&quot;e3b0c44298&quot;+&#x27; (&#x27;+&quot;Catena firmware call&quot;+&#x27;): &#x27;+v,{tag:&#x27;item-update&#x27;,text:&quot;Catena firmware call&quot;+&#x27;: &#x27;+v,element:f,queueKey:&quot;todo-item-t-3ac8d990ffd5&quot;,data:{item_id:&quot;t-3ac8d990ffd5&quot;,rev:&quot;e3b0c44298&quot;,title:&quot;Catena firmware call&quot;,note:v}});f.note.value=&#x27;&#x27;;f.querySelector(&#x27;.ack&#x27;).textContent=&#x27;queued&#x27;;"><input type="text" name="note" autocomplete="off" placeholder="drop, done, park til Friday, mine, you: what to do, dig, or anything else"><button type="submit">Queue</button><span class="ack"></span></form></td></tr>
+<tr class="item" id="item-t-3e2d34cfe41b" data-source="asana-my-tasks" data-how="morning verification sweep"><td class="who"><span class="pill info">obligation</span><span class="src" title="From Asana" aria-label="From Asana"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="5" r="2.2"/><circle cx="4.5" cy="10.5" r="2.2"/><circle cx="11.5" cy="10.5" r="2.2"/></svg>Asana</span></td>
+<td class="what">Review the firmware G3 checklist<span class="prov obs">read 09:00 CEST</span></td>
+<td class="links"><span class="nolink">no link recorded</span><button type="button" class="notetoggle" aria-expanded="false" onclick="var r=document.getElementById(&#x27;note-t-3e2d34cfe41b&#x27;);var o=r.classList.toggle(&#x27;open&#x27;);this.setAttribute(&#x27;aria-expanded&#x27;,o);if(o){r.querySelector(&#x27;input&#x27;).focus();}">note</button></td></tr>
+<tr class="replyrow" id="note-t-3e2d34cfe41b"><td colspan="3"><form class="reply" data-lavish-question="todo-item-t-3e2d34cfe41b" onsubmit="event.preventDefault();var f=event.currentTarget,v=f.note.value.trim();if(!v)return;if(!window.lavish||!window.lavish.queuePrompt){f.querySelector(&#x27;.ack&#x27;).textContent=&#x27;review session not connected&#x27;;return;}window.lavish.queuePrompt(&#x27;Update on to-do item &#x27;+&quot;t-3e2d34cfe41b&quot;+&#x27; rev &#x27;+&quot;e3b0c44298&quot;+&#x27; (&#x27;+&quot;Review the firmware G3 checklist&quot;+&#x27;): &#x27;+v,{tag:&#x27;item-update&#x27;,text:&quot;Review the firmware G3 checklist&quot;+&#x27;: &#x27;+v,element:f,queueKey:&quot;todo-item-t-3e2d34cfe41b&quot;,data:{item_id:&quot;t-3e2d34cfe41b&quot;,rev:&quot;e3b0c44298&quot;,title:&quot;Review the firmware G3 checklist&quot;,note:v}});f.note.value=&#x27;&#x27;;f.querySelector(&#x27;.ack&#x27;).textContent=&#x27;queued&#x27;;"><input type="text" name="note" autocomplete="off" placeholder="drop, done, park til Friday, mine, you: what to do, dig, or anything else"><button type="submit">Queue</button><span class="ack"></span></form></td></tr>
+<tr class="item" id="item-t-448853f43d21" data-source="hubspot-tickets (H_TICKETS)" data-how="read by the channel intake on hubspot-tickets (H_TICKETS)"><td class="who"><span class="pill info">obligation</span><span class="src" title="From HubSpot" aria-label="From HubSpot"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 4.5h11v2a1.5 1.5 0 0 0 0 3v2h-11v-2a1.5 1.5 0 0 0 0-3z"/></svg>HubSpot</span></td>
+<td class="what">Ticket: dealer asks about filter swap<span class="prov obs">read 09:00 CEST</span></td>
+<td class="links"><span class="nolink">no link recorded</span><button type="button" class="notetoggle" aria-expanded="false" onclick="var r=document.getElementById(&#x27;note-t-448853f43d21&#x27;);var o=r.classList.toggle(&#x27;open&#x27;);this.setAttribute(&#x27;aria-expanded&#x27;,o);if(o){r.querySelector(&#x27;input&#x27;).focus();}">note</button></td></tr>
+<tr class="replyrow" id="note-t-448853f43d21"><td colspan="3"><form class="reply" data-lavish-question="todo-item-t-448853f43d21" onsubmit="event.preventDefault();var f=event.currentTarget,v=f.note.value.trim();if(!v)return;if(!window.lavish||!window.lavish.queuePrompt){f.querySelector(&#x27;.ack&#x27;).textContent=&#x27;review session not connected&#x27;;return;}window.lavish.queuePrompt(&#x27;Update on to-do item &#x27;+&quot;t-448853f43d21&quot;+&#x27; rev &#x27;+&quot;5d83380c8f&quot;+&#x27; (&#x27;+&quot;Ticket: dealer asks about filter swap&quot;+&#x27;): &#x27;+v,{tag:&#x27;item-update&#x27;,text:&quot;Ticket: dealer asks about filter swap&quot;+&#x27;: &#x27;+v,element:f,queueKey:&quot;todo-item-t-448853f43d21&quot;,data:{item_id:&quot;t-448853f43d21&quot;,rev:&quot;5d83380c8f&quot;,title:&quot;Ticket: dealer asks about filter swap&quot;,note:v}});f.note.value=&#x27;&#x27;;f.querySelector(&#x27;.ack&#x27;).textContent=&#x27;queued&#x27;;"><input type="text" name="note" autocomplete="off" placeholder="drop, done, park til Friday, mine, you: what to do, dig, or anything else"><button type="submit">Queue</button><span class="ack"></span></form></td></tr>
+<tr class="item" id="item-t-730f1608a7d9" data-source="captain" data-how="morning verification sweep"><td class="who"><span class="pill info">obligation</span><span class="src" title="From You" aria-label="From You"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="5.5" r="2.5"/><path d="M3 13.5a5 4 0 0 1 10 0"/></svg>You</span></td>
+<td class="what">Call the installer back<span class="prov obs">read 09:00 CEST</span></td>
+<td class="links"><span class="nolink">no link recorded</span><button type="button" class="notetoggle" aria-expanded="false" onclick="var r=document.getElementById(&#x27;note-t-730f1608a7d9&#x27;);var o=r.classList.toggle(&#x27;open&#x27;);this.setAttribute(&#x27;aria-expanded&#x27;,o);if(o){r.querySelector(&#x27;input&#x27;).focus();}">note</button></td></tr>
+<tr class="replyrow" id="note-t-730f1608a7d9"><td colspan="3"><form class="reply" data-lavish-question="todo-item-t-730f1608a7d9" onsubmit="event.preventDefault();var f=event.currentTarget,v=f.note.value.trim();if(!v)return;if(!window.lavish||!window.lavish.queuePrompt){f.querySelector(&#x27;.ack&#x27;).textContent=&#x27;review session not connected&#x27;;return;}window.lavish.queuePrompt(&#x27;Update on to-do item &#x27;+&quot;t-730f1608a7d9&quot;+&#x27; rev &#x27;+&quot;e3b0c44298&quot;+&#x27; (&#x27;+&quot;Call the installer back&quot;+&#x27;): &#x27;+v,{tag:&#x27;item-update&#x27;,text:&quot;Call the installer back&quot;+&#x27;: &#x27;+v,element:f,queueKey:&quot;todo-item-t-730f1608a7d9&quot;,data:{item_id:&quot;t-730f1608a7d9&quot;,rev:&quot;e3b0c44298&quot;,title:&quot;Call the installer back&quot;,note:v}});f.note.value=&#x27;&#x27;;f.querySelector(&#x27;.ack&#x27;).textContent=&#x27;queued&#x27;;"><input type="text" name="note" autocomplete="off" placeholder="drop, done, park til Friday, mine, you: what to do, dig, or anything else"><button type="submit">Queue</button><span class="ack"></span></form></td></tr>
+<tr class="item" id="item-t-afcd5871688c" data-source="carrier-pigeon" data-how="morning verification sweep"><td class="who"><span class="pill info">obligation</span><span class="src" title="From carrier-pigeon" aria-label="From carrier-pigeon"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="2.5"/></svg>Other</span></td>
+<td class="what">Pigeon note from the COO<span class="prov obs">read 09:00 CEST</span></td>
+<td class="links"><span class="nolink">no link recorded</span><button type="button" class="notetoggle" aria-expanded="false" onclick="var r=document.getElementById(&#x27;note-t-afcd5871688c&#x27;);var o=r.classList.toggle(&#x27;open&#x27;);this.setAttribute(&#x27;aria-expanded&#x27;,o);if(o){r.querySelector(&#x27;input&#x27;).focus();}">note</button></td></tr>
+<tr class="replyrow" id="note-t-afcd5871688c"><td colspan="3"><form class="reply" data-lavish-question="todo-item-t-afcd5871688c" onsubmit="event.preventDefault();var f=event.currentTarget,v=f.note.value.trim();if(!v)return;if(!window.lavish||!window.lavish.queuePrompt){f.querySelector(&#x27;.ack&#x27;).textContent=&#x27;review session not connected&#x27;;return;}window.lavish.queuePrompt(&#x27;Update on to-do item &#x27;+&quot;t-afcd5871688c&quot;+&#x27; rev &#x27;+&quot;e3b0c44298&quot;+&#x27; (&#x27;+&quot;Pigeon note from the COO&quot;+&#x27;): &#x27;+v,{tag:&#x27;item-update&#x27;,text:&quot;Pigeon note from the COO&quot;+&#x27;: &#x27;+v,element:f,queueKey:&quot;todo-item-t-afcd5871688c&quot;,data:{item_id:&quot;t-afcd5871688c&quot;,rev:&quot;e3b0c44298&quot;,title:&quot;Pigeon note from the COO&quot;,note:v}});f.note.value=&#x27;&#x27;;f.querySelector(&#x27;.ack&#x27;).textContent=&#x27;queued&#x27;;"><input type="text" name="note" autocomplete="off" placeholder="drop, done, park til Friday, mine, you: what to do, dig, or anything else"><button type="submit">Queue</button><span class="ack"></span></form></td></tr>
+<tr class="item" id="item-t-d27cdd56fb86" data-source="&lt;img src=x onerror=alert(1)&gt;" data-how="morning verification sweep"><td class="who"><span class="pill info">obligation</span><span class="src" title="From &lt;img src=x onerror=alert(1)&gt;" aria-label="From &lt;img src=x onerror=alert(1)&gt;"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="2.5"/></svg>Other</span></td>
+<td class="what">Line with a hostile source label<span class="prov obs">read 09:00 CEST</span></td>
+<td class="links"><span class="nolink">no link recorded</span><button type="button" class="notetoggle" aria-expanded="false" onclick="var r=document.getElementById(&#x27;note-t-d27cdd56fb86&#x27;);var o=r.classList.toggle(&#x27;open&#x27;);this.setAttribute(&#x27;aria-expanded&#x27;,o);if(o){r.querySelector(&#x27;input&#x27;).focus();}">note</button></td></tr>
+<tr class="replyrow" id="note-t-d27cdd56fb86"><td colspan="3"><form class="reply" data-lavish-question="todo-item-t-d27cdd56fb86" onsubmit="event.preventDefault();var f=event.currentTarget,v=f.note.value.trim();if(!v)return;if(!window.lavish||!window.lavish.queuePrompt){f.querySelector(&#x27;.ack&#x27;).textContent=&#x27;review session not connected&#x27;;return;}window.lavish.queuePrompt(&#x27;Update on to-do item &#x27;+&quot;t-d27cdd56fb86&quot;+&#x27; rev &#x27;+&quot;e3b0c44298&quot;+&#x27; (&#x27;+&quot;Line with a hostile source label&quot;+&#x27;): &#x27;+v,{tag:&#x27;item-update&#x27;,text:&quot;Line with a hostile source label&quot;+&#x27;: &#x27;+v,element:f,queueKey:&quot;todo-item-t-d27cdd56fb86&quot;,data:{item_id:&quot;t-d27cdd56fb86&quot;,rev:&quot;e3b0c44298&quot;,title:&quot;Line with a hostile source label&quot;,note:v}});f.note.value=&#x27;&#x27;;f.querySelector(&#x27;.ack&#x27;).textContent=&#x27;queued&#x27;;"><input type="text" name="note" autocomplete="off" placeholder="drop, done, park til Friday, mine, you: what to do, dig, or anything else"><button type="submit">Queue</button><span class="ack"></span></form></td></tr>
+</tbody></table></div>
+<h2>Your open tickets<small>not available</small></h2>
+<p class="sub"><span class="prov unv">Could not read your open tickets: no HubSpot read has been recorded.</span></p>
+
+<div class="legend">
+<span><span class="prov obs">observed</span> read from the source system at the time stamped on the row</span>
+<span><span class="prov inf">inferred</span> reasoned from evidence, not stated outright</span>
+<span><span class="prov unv">unverifiable</span> could not be confirmed from any source available here</span>
+</div>
+
+</div></body></html>
