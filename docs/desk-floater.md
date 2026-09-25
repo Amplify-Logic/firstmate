@@ -69,7 +69,7 @@ Firstmate's text replies stay the authoritative ones, and nothing about how Firs
 | Right Command, tapped | Starts dictation; tap it again to finish and type the text. |
 
 Only the right-hand keys are watched, so the left Option and Command keys keep working as usual.
-A hotkey used as part of a shortcut is ignored: pressing a letter while Right Option is held (to type a special character) cancels that capture without sending anything, and Right Command pressed with another key or held longer than half a second is an ordinary Command press.
+A hotkey used as part of a shortcut is ignored: pressing a letter or clicking the mouse while Right Option is held (to type a special character, or Option-click) cancels that capture without sending anything, and Right Command pressed with another key or a click, or held longer than half a second, is an ordinary Command press. System shortcuts that macOS keeps to itself, such as a quick Right Command-Tab or Right Command-Space, are hidden from the floater and can read as a tap; use the left Command key for those.
 
 ## Dictation
 

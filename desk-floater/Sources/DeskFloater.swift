@@ -150,7 +150,7 @@ final class HotkeyMonitor {
     }
 
     private func installMonitors() {
-        let mask: NSEvent.EventTypeMask = [.flagsChanged, .keyDown]
+        let mask: NSEvent.EventTypeMask = [.flagsChanged, .keyDown, .leftMouseDown, .rightMouseDown, .otherMouseDown]
         if let global = NSEvent.addGlobalMonitorForEvents(matching: mask, handler: { [weak self] event in
             MainActor.assumeIsolated { self?.handle(event) }
         }) {
@@ -172,9 +172,9 @@ final class HotkeyMonitor {
     }
 
     private func handle(_ event: NSEvent) {
-        if event.type == .keyDown {
-            // Any key pressed while a hotkey is held makes it a shortcut, not a
-            // hotkey: Option-letter types a character, Command-letter is a command.
+        if event.type != .flagsChanged {
+            // Any key or click while a hotkey is held makes it a shortcut, not a
+            // hotkey: Option-letter types a character, Command-click opens a link.
             if talkDown {
                 talkDown = false
                 onTalkChord?()
