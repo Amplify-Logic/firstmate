@@ -65,7 +65,7 @@ When the chat pane cannot be reached, is not showing its chat input, or refuses 
 
 A transcript reaches Firstmate one way only.
 Text that was typed and submitted, even when the submit could not be confirmed, is never also saved to the mailbox.
-The floater shows which way it went: Sent, Sent unconfirmed, or Saved to mailbox.
+The floater shows which way it went: `Sent`, `Sent, unconfirmed`, or `Saved to mailbox`.
 
 The primary (or you) drains the mailbox with:
 
