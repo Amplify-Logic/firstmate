@@ -1,0 +1,79 @@
+== real hook + real fm-speak.sh, Claude-named harness holding state/.lock ==
+hook exit=0
+
+### S01-plain-reply
+reply:  Captain\,\ the\ finances\ fix\ merged\ and\ the\ deploy\ is\ green.
+SPOKEN: Captain, the finances fix merged and the deploy is green.
+hook exit=0
+
+### S02-second-reply-next-turn
+reply:  Captain\,\ the\ calendar\ sync\ is\ back\ and\ nothing\ else\ needs\ you\ tonight.
+SPOKEN: Captain, the calendar sync is back and nothing else needs you tonight.
+hook exit=0
+
+### S03-exact-shipshape
+reply:  Captain\,\ shipshape.
+SPOKEN: (nothing)
+hook exit=0
+
+### S03b-exact-shipshape-padded
+reply:  $'  \n Captain, shipshape. \n\n'
+SPOKEN: (nothing)
+hook exit=0
+
+### S04-shipshape-then-news-paragraph
+reply:  $'Captain, shipshape.\n\nThe finances fix merged and the deploy is running; I will report when it lands.'
+SPOKEN: The finances fix merged and the deploy is running; I will report when it lands.
+hook exit=0
+
+### S05-shipshape-then-news-one-line
+reply:  Captain\,\ shipshape.\ But\ the\ deploy\ failed\ and\ needs\ your\ eyes.
+SPOKEN: But the deploy failed and needs your eyes.
+hook exit=0
+
+### S06-near-miss-lowercase
+reply:  captain\,\ shipshape
+SPOKEN: captain, shipshape
+hook exit=0
+
+### S07-decision-reply
+reply:  Captain\,\ the\ PR\ is\ green.\ Shall\ I\ merge\ it\?
+SPOKEN: Captain, a decision is waiting for you on screen.
+hook exit=0
+
+### S08-markdown
+reply:  $'## Status\n\nCaptain, the **scout** finished; see [report](https://example.com/r) in `data/x`.\n\n| a | b |\n|---|---|\n\n```sh\nrm -rf /\n```'
+SPOKEN: Captain, the scout finished; see report in data/x.
+
+(model itself spoke during the next turn via bin/fm-speak.sh: Captain, model spoke this line itself.)
+hook exit=0
+
+### S09-hook-after-model-spoke
+reply:  Captain\,\ this\ reply\ was\ already\ spoken\ by\ the\ model.
+SPOKEN: (nothing)
+hook exit=0
+
+### S10-turn-after-model-spoke
+reply:  Captain\,\ the\ next\ turn\ still\ speaks.
+SPOKEN: Captain, the next turn still speaks.
+
+### S11-superseded-stop (two Stops 0.3s apart, 1.5s settle)
+SPOKEN: Captain, the real final reply after the continuation.
+hook exit=0
+
+### S12-muted-home
+reply:  Captain\,\ this\ must\ not\ be\ heard\ while\ muted.
+SPOKEN: (nothing)
+hook exit=0
+
+### S13-not-enabled-home
+reply:  Captain\,\ this\ must\ not\ be\ heard\ without\ opt-in.
+SPOKEN: (nothing)
+hook exit=0
+
+### S14-crew-worktree
+reply:  Captain\,\ a\ crew\ worker\ must\ never\ speak.
+SPOKEN: (nothing)
+
+### S15-session-without-home-lock
+SPOKEN: (nothing)
