@@ -1,0 +1,61 @@
+## isolated FM_HOME=/tmp/fmshot.YXe3XT
+$ fm-desk-voice.sh shot   # real macOS screencapture, this process lacks Screen Recording
+could not create image from display
+fm-desk-voice: screen capture failed
+exit=1
+$ ls state/desk-voice/shots
+(empty = nothing left behind)
+
+$ FM_DESK_SHOT_CAPTURE=<stub> fm-desk-voice.sh shot --display 2
+/tmp/fmshot.YXe3XT/state/desk-voice/shots/20260925T205226024845Z-eaf966d0.png
+$ FM_DESK_SHOT_CAPTURE=<stub> fm-desk-voice.sh shot
+/tmp/fmshot.YXe3XT/state/desk-voice/shots/20260925T205226856616Z-4106ba62.png
+capture tool was called as:
+-x -t png -D 2 /tmp/fmshot.YXe3XT/state/desk-voice/shots/.tmp-20260925T205226024845Z-eaf966d0.png
+-x -t png /tmp/fmshot.YXe3XT/state/desk-voice/shots/.tmp-20260925T205226856616Z-4106ba62.png
+total 16
+-rw-------@ 1 larsmusic  wheel  3558 Sep 25 23:52 20260925T205226024845Z-eaf966d0.png
+-rw-------@ 1 larsmusic  wheel  3558 Sep 25 23:52 20260925T205226856616Z-4106ba62.png
+inbox after shots only: 0 messages
+
+$ fm-desk-voice.sh deliver --source desk-floater --image S1 --image S2 -- "Why is this red"
+/tmp/fmshot.YXe3XT/state/desk-voice/inbox/20260925T205226Z-4e793084.json
+$ fm-desk-voice.sh pending
+/tmp/fmshot.YXe3XT/state/desk-voice/inbox/20260925T205226Z-4e793084.json
+$ cat inbox/*.json
+{"schema": "fm-desk-voice-transcript.v1", "id": "4e793084", "created_at": "20260925T205226Z", "source": "desk-floater", "transcript": "Why is this red\nScreenshots: /tmp/fmshot.YXe3XT/state/desk-voice/shots/20260925T205226024845Z-eaf966d0.png /tmp/fmshot.YXe3XT/state/desk-voice/shots/20260925T205226856616Z-4106ba62.png", "images": ["/tmp/fmshot.YXe3XT/state/desk-voice/shots/20260925T205226024845Z-eaf966d0.png", "/tmp/fmshot.YXe3XT/state/desk-voice/shots/20260925T205226856616Z-4106ba62.png"]}
+$ fm-desk-voice.sh drain
+Why is this red
+Screenshots: /tmp/fmshot.YXe3XT/state/desk-voice/shots/20260925T205226024845Z-eaf966d0.png /tmp/fmshot.YXe3XT/state/desk-voice/shots/20260925T205226856616Z-4106ba62.png
+
+$ fm-desk-voice.sh deliver --source desk-floater --image S1 --   # shots alone
+$ fm-desk-voice.sh drain --print
+{"schema": "fm-desk-voice-transcript.v1", "id": "a9a089bd", "created_at": "20260925T205227Z", "source": "desk-floater", "transcript": "Screenshots: /tmp/fmshot.YXe3XT/state/desk-voice/shots/20260925T205226024845Z-eaf966d0.png", "images": ["/tmp/fmshot.YXe3XT/state/desk-voice/shots/20260925T205226024845Z-eaf966d0.png"]}
+
+## adversarial
+$ deliver --image shot.png
+fm-desk-voice: --image needs an absolute path: shot.png
+exit=2
+$ deliver --image /missing.png hi
+fm-desk-voice: no such image: /nope/missing.png
+exit=2
+$ deliver -- "   "
+fm-desk-voice: nothing to deliver
+exit=2
+$ shot --display 0
+fm-desk-voice: --display needs a display number from 1: 0
+exit=2
+$ inbox after refused deliveries:
+       0
+
+## pruning: FM_DESK_SHOTS_KEEP=3, take 5 more shots
+20260925T205228764874Z-7ac2a05a.png
+20260925T205228895079Z-31799c8c.png
+20260925T205229029726Z-fd5f5a92.png
+perms: 700 dir, 600 files
+wakes queued:
+desk-voice
+
+$ cat state/.wake-queue   # one wake per delivered message
+1790369547	1	check	desk-voice	desk-voice: /tmp/fmshot.YXe3XT/state/desk-voice/inbox/20260925T205226Z-4e793084.json
+1790369547	2	check	desk-voice	desk-voice: /tmp/fmshot.YXe3XT/state/desk-voice/inbox/20260925T205227Z-a9a089bd.json

@@ -1,0 +1,14 @@
+rendered floater-idle.png  status="Hold to talk" shotCount=0 screenTrusted=true
+after shot 1: status="1 shot stacked" shotCount=1 inbox=0
+after shot 3: status="3 shots stacked" shotCount=3 inbox=0
+rendered floater-3-shots-stacked.png  status="3 shots stacked" shotCount=3 screenTrusted=true
+2s after last shot (inside 3s window): inbox=0
+4s after last shot: inbox=1 status="Sent" shotCount=0
+rendered floater-sent.png  status="Sent" shotCount=0 screenTrusted=true
+message: Screenshots: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-harness-DF586927/state/desk-voice/shots/20260925T205329022680Z-b8e35cb5.png /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-harness-DF586927/state/desk-voice/shots/20260925T205329772058Z-3d56b14c.png /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-harness-DF586927/state/desk-voice/shots/20260925T205330346219Z-67548648.png
+capture calls:
+-x -t png -D 1 /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-harness-DF586927/state/desk-voice/shots/.tmp-20260925T205329022680Z-b8e35cb5.png
+-x -t png -D 1 /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-harness-DF586927/state/desk-voice/shots/.tmp-20260925T205329772058Z-3d56b14c.png
+-x -t png -D 1 /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-harness-DF586927/state/desk-voice/shots/.tmp-20260925T205330346219Z-67548648.png
+
+single later shot: inbox=2 last=Screenshots: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-harness-DF586927/state/desk-voice/shots/20260925T205335229271Z-33cf7e99.png

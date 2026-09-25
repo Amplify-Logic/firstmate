@@ -1,0 +1,4 @@
+rendered floater-screen-off-badge.png  status="Hold to talk" shotCount=0 screenTrusted=false
+takeShot without permission: status="Screen off - click !" shotCount=0 captureCalled=false
+camera click without permission asks macOS again: onFixScreen called 1x
+inbox after 3.5s: 0

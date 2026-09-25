@@ -1,0 +1,51 @@
+// TRANSIENT test-phase harness; deleted after the run.
+import XCTest
+import AppKit
+@testable import DeskFloater
+
+final class ZZTapHarness: XCTestCase {
+    func flags(_ code: UInt16, _ raw: UInt) -> NSEvent {
+        NSEvent.keyEvent(with: .flagsChanged, location: .zero, modifierFlags: NSEvent.ModifierFlags(rawValue: raw),
+                         timestamp: 0, windowNumber: 0, context: nil, characters: "", charactersIgnoringModifiers: "",
+                         isARepeat: false, keyCode: code)!
+    }
+    let rsDown: UInt = NSEvent.ModifierFlags.shift.rawValue | 0x04
+    let lsDown: UInt = NSEvent.ModifierFlags.shift.rawValue | 0x02
+    let roDown: UInt = NSEvent.ModifierFlags.option.rawValue | 0x40
+
+    func report(_ s: String, _ v: Bool) { print("TAP: \(s) -> \(v ? "SCREENSHOT" : "no screenshot")") }
+
+    func testRightShiftTaps() {
+        var k = TapKey.rightShift
+        _ = k.update(flags(60, rsDown), allowed: [], limit: 0.5)
+        let lone = k.update(flags(60, 0), allowed: [], limit: 0.5)
+        report("lone Right Shift tap", lone); XCTAssertTrue(lone)
+
+        k = TapKey.rightShift
+        _ = k.update(flags(60, rsDown), allowed: [], limit: 0.5)
+        k.chord() // a letter typed while held (capital letter)
+        let chorded = k.update(flags(60, 0), allowed: [], limit: 0.5)
+        report("Right Shift + letter (capital)", chorded); XCTAssertFalse(chorded)
+
+        k = TapKey.rightShift
+        _ = k.update(flags(60, rsDown), allowed: [], limit: 0.5)
+        Thread.sleep(forTimeInterval: 0.6)
+        let held = k.update(flags(60, 0), allowed: [], limit: 0.5)
+        report("Right Shift held 0.6s", held); XCTAssertFalse(held)
+
+        k = TapKey.rightShift
+        _ = k.update(flags(56, lsDown), allowed: [], limit: 0.5)
+        let left = k.update(flags(56, 0), allowed: [], limit: 0.5)
+        report("Left Shift tap", left); XCTAssertFalse(left)
+
+        k = TapKey.rightShift
+        _ = k.update(flags(60, rsDown | roDown), allowed: .option, limit: 0.5)
+        let withTalk = k.update(flags(60, roDown), allowed: .option, limit: 0.5)
+        report("Right Shift tap while Right Option held (talking)", withTalk); XCTAssertTrue(withTalk)
+
+        k = TapKey.rightShift
+        _ = k.update(flags(60, rsDown | NSEvent.ModifierFlags.command.rawValue), allowed: [], limit: 0.5)
+        let withCmd = k.update(flags(60, 0), allowed: [], limit: 0.5)
+        report("Right Shift pressed while Command held (Cmd-Shift shortcut)", withCmd); XCTAssertFalse(withCmd)
+    }
+}

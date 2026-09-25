@@ -1,0 +1,3 @@
+failed capture, while capturing: status="1 shot stacked" shotCount=1
+failed capture: status="Shot failed" shotCount=0
+after 4s: inbox=0 status="Hold to talk"
