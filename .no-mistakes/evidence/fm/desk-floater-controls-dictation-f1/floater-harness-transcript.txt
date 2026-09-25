@@ -1,0 +1,34 @@
+== Voice controls through FloaterModel -> bin/fm-speak.sh (FM_HOME=/tmp/nm-model-home.wMcdBS) ==
+PASS - fresh home reads unmuted; status 'Hold to talk (keys off)'
+PASS - Mute button -> muted=true, status 'Voice muted'
+PASS - state/speak-muted written by fm-speak.sh --mute
+PASS - Repeat while muted -> status 'Voice muted', nothing spoken
+PASS - Unmute -> muted=false, status 'Voice on'
+PASS - Repeat unmuted -> status 'Repeating'
+PASS - the repeat reached the speaker: 16:17:20 start: The kept line.
+PASS - Stop button -> status 'Stopped'
+PASS - status returns to idle after 2s -> 'Hold to talk'
+PASS - refreshMute picks up a mute made outside the floater
+new floater view size (points): (116.0, 71.0); main button 36pt vs old 72pt
+== HotkeyMonitor.handle with synthetic events ==
+PASS - Right Option hold + release: ["talkDown", "talkUp"] (expected ["talkDown", "talkUp"])
+PASS - Right Option + left click (Option-click): ["talkDown", "chord"] (expected ["talkDown", "chord"])
+PASS - Right Option + right click: ["talkDown", "chord"] (expected ["talkDown", "chord"])
+PASS - Right Option + other (middle) click: ["talkDown", "chord"] (expected ["talkDown", "chord"])
+PASS - Right Option + letter key (special char): ["talkDown", "chord"] (expected ["talkDown", "chord"])
+PASS - Left Option ignored: [] (expected [])
+PASS - Right Command lone tap: ["dictateTap"] (expected ["dictateTap"])
+PASS - Right Command + left click (Cmd-click link): [] (expected [])
+PASS - Right Command + right click: [] (expected [])
+PASS - Right Command + key (Cmd-C): [] (expected [])
+PASS - Right Command held 0.6s: [] (expected [])
+PASS - Right Command + Shift: [] (expected [])
+PASS - Left Command tap ignored: [] (expected [])
+PASS - Right Command tap after a chorded press still works: ["dictateTap"] (expected ["dictateTap"])
+PASS - hotkeyTalkChorded with no hotkey capture leaves the model idle
+== Paster on a private pasteboard ==
+PASS - without Accessibility paste() reports not typed (floater shows 'Copied - press ⌘V')
+PASS - clipboard holds the dictated text for a manual paste
+PASS - dictated text is marked org.nspasteboard.TransientType
+PASS - the concealed password is not written back
+ALL CHECKS PASSED
