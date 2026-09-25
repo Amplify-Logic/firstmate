@@ -98,6 +98,7 @@ final class WindowMover {
     private var startOrigin: NSPoint?
     private var startMouse: NSPoint?
     private var anchor: NSPoint?
+    private var fitted: NSRect?
 
     func drag() {
         guard let window else { return }
@@ -108,22 +109,23 @@ final class WindowMover {
         }
         guard let origin = startOrigin, let start = startMouse else { return }
         window.setFrameOrigin(NSPoint(x: origin.x + mouse.x - start.x, y: origin.y + mouse.y - start.y))
-        anchor = NSPoint(x: window.frame.maxX, y: window.frame.maxY)
     }
 
     func fit(_ size: CGSize) {
         guard let window, size.width > 0, size.height > 0 else { return }
         let frame = window.frame
-        let corner = anchor ?? NSPoint(x: frame.maxX, y: frame.maxY)
+        let corner = (frame == fitted ? anchor : nil) ?? NSPoint(x: frame.maxX, y: frame.maxY)
         anchor = corner
         var rect = NSRect(x: corner.x - size.width, y: corner.y - size.height, width: size.width, height: size.height)
         if let visible = (window.screen ?? NSScreen.main)?.visibleFrame {
-            rect.origin.x = max(rect.origin.x, visible.minX)
-            rect.origin.y = max(rect.origin.y, visible.minY)
+            rect.origin.x = max(min(rect.origin.x, visible.maxX - rect.width), visible.minX)
+            rect.origin.y = max(min(rect.origin.y, visible.maxY - rect.height), visible.minY)
         }
-        guard rect != frame else { return }
-        window.setFrame(rect, display: true)
-        window.invalidateShadow()
+        if rect != frame {
+            window.setFrame(rect, display: true)
+            window.invalidateShadow()
+        }
+        fitted = window.frame
     }
 
     func end() {
