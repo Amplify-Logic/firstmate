@@ -57,6 +57,9 @@ final class FloaterPanel: NSPanel {
         let mover = WindowMover()
         let view = FloaterView(model: model, mover: mover)
         let hosting = NSHostingView(rootView: view)
+        // WindowMover sizes the window: left to itself the hosting view would
+        // grow it from the top-left corner and push the controls off-screen.
+        hosting.sizingOptions = []
         hosting.frame = NSRect(origin: .zero, size: hosting.fittingSize)
         super.init(
             contentRect: hosting.frame,
@@ -1126,12 +1129,9 @@ struct FloaterView: View {
                 )
         )
         .fixedSize()
-        .background(
-            GeometryReader { proxy in
-                Color.clear.preference(key: FloaterSizeKey.self, value: proxy.size)
-            }
-        )
-        .onPreferenceChange(FloaterSizeKey.self) { size in
+        .onGeometryChange(for: CGSize.self) { proxy in
+            proxy.size
+        } action: { size in
             mover.fit(size)
         }
     }
@@ -1331,13 +1331,5 @@ struct FloaterView: View {
         case .recording: return "waveform"
         case .busy: return "hourglass"
         }
-    }
-}
-
-private struct FloaterSizeKey: PreferenceKey {
-    static let defaultValue: CGSize = .zero
-
-    static func reduce(value: inout CGSize, nextValue: () -> CGSize) {
-        value = nextValue()
     }
 }
