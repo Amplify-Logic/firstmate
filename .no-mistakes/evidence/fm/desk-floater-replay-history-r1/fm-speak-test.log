@@ -1,0 +1,41 @@
+ok - fm-speak: a home that never opted in stays silent and says why
+ok - fm-speak: an absent config leaves the home inert
+ok - fm-speak: an opted-in home speaks the shaped line
+ok - fm-speak: a request for a spoken yes is reported, never spoken
+ok - fm-speak: a line that is only a link ends in silence
+ok - fm-speak: the speaker receives the shaped line, never the raw one
+ok - fm-speak: a dry run prints the line and makes no sound
+ok - fm-speak: the caller is never held open by audio that is still playing
+ok - fm-speak: a runaway speaker is killed at its bound
+ok - fm-speak: the speaker bound does not bound the register call
+ok - fm-speak: the register bound does not bound the speaker
+ok - fm-speak: an unreachable register owner ends in silence, never in unshaped speech
+ok - fm-speak: a failing register owner ends in silence
+ok - fm-speak: a hung register owner does not hold the caller's turn open
+ok - fm-speak: the register owner never inherits the caller's stdin
+ok - fm-speak: a non-integer bound is refused for either half
+ok - fm-speak: a missing speech binary is reported rather than guessed around
+ok - fm-speak: the configured voice reaches the speaker intact
+ok - fm-speak: a sentence is handed over in a file, never as an argument
+ok - fm-speak: an unknown config key is refused rather than parked in this file
+ok - fm-speak: a non-boolean opt-in is refused rather than guessed
+ok - fm-speak: a symlinked config is refused
+ok - fm-speak: blank text is refused before anything is shaped
+ok - fm-speak: no temporary files are left behind
+ok - fm-speak: a reap of the caller's process group does not cut the line short
+ok - fm-speak: a multi-sentence desk line keeps its ending with no Deepgram key present
+ok - fm-speak: an empty register override restores the glasses cut
+ok - fm-speak: a register the caller already chose is never replaced by the desk default
+ok - fm-speak: two sequential calls from one shell do not overlap playback
+ok - fm-speak: two homes may speak at the same time
+ok - fm-speak: a lock whose recorded pid was reused is reclaimed
+ok - fm-speak: an unusable state directory is refused before anything is shaped
+ok - fm-speak: mute silences every line until unmuted
+ok - fm-speak: stop cuts the current line and cancels the one queued behind it
+ok - fm-speak: repeat replays the last spoken line, never a refused one, and honours mute
+ok - fm-speak: the history lists the newest ten replies, newest first
+ok - fm-speak: replay speaks the chosen reply, refuses unknown numbers, and honours mute
+ok - fm-speak: a replay plays kept audio without synthesizing again
+ok - fm-speak: a named voice wins over kept audio on a replay
+ok - fm-speak: stop cuts a replay of kept audio
+bash tests/fm-speak.test.sh  3.58s user 7.83s system 8% cpu 2:20.77 total

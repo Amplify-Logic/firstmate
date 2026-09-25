@@ -1,0 +1,67 @@
+  didResize -> frame=(1372.0, 431.0, 116.0, 71.0)
+snap r2-1-floater-closed: frame=(1372.0, 431.0, 116.0, 71.0) topRight=(1488.0, 502.0) visibleMaxX=1512.0
+PASS closed floater is on-screen
+click arrow at window point (104, 43)
+  didResize -> frame=(1246.0, 412.0, 242.0, 90.0)
+  didResize -> frame=(1246.0, 334.0, 242.0, 168.0)
+snap r2-2-recent-list-open: frame=(1246.0, 334.0, 242.0, 168.0) topRight=(1488.0, 502.0) visibleMaxX=1512.0
+rows: ["5: The staging deploy is live and the smoke tests passed.", "4: The nightly backup completed without errors.", "3: PR 188 merged and CI is green.", "2: The scout finished the login bug survey; three root causes found.", "1: Yesterday\'s release notes are drafted and waiting for your review."]
+PASS list is showing
+PASS top-right corner unchanged when the list opens (1488.0,502.0) -> (1488.0,502.0)
+PASS open floater fully inside the visible screen
+PASS window grew to fit the list
+PASS list shows the 5 kept replies newest first
+click row:3 at window point (121, 52)
+status=Replaying
+snap r2-3-after-clicking-third-reply: frame=(1246.0, 334.0, 242.0, 168.0) topRight=(1488.0, 502.0) visibleMaxX=1512.0
+player log:
+play-start 1790370785.368 MP3 audio of: PR 188 merged and CI is green.
+play-end
+
+PASS the chosen reply (#3) was played
+PASS only the chosen reply was played
+PASS no new synthesis for the replay (synth calls: 0)
+audio started 0.52s after the click
+PASS floater did not move while replaying
+click repeat at window point (208, 152)
+repeat player log:
+play-start 1790370789.676 MP3 audio of: The staging deploy is live and the smoke tests passed.
+play-end
+
+PASS Repeat played the newest reply
+PASS Repeat did not synthesize again
+Repeat audio started 0.52s after the click
+PASS Repeat audio starts well under the 1.5 s synthesis wait
+  didResize -> frame=(1246.0, 315.0, 242.0, 187.0)
+rows after new reply: ["6: The release branch is cut.", "5: The staging deploy is live and the smoke tests passed.", "4: The nightly backup completed without errors.", "3: PR 188 merged and CI is green.", "2: The scout finished the login bug survey; three root causes found.", "1: Yesterday\'s release notes are drafted and waiting for your review."]
+PASS a reply that arrives while the list is open appears at the top within the refresh
+PASS top-right still fixed after the list grew
+snap r2-4-new-reply-appears: frame=(1246.0, 315.0, 242.0, 187.0) topRight=(1488.0, 502.0) visibleMaxX=1512.0
+click row:1 at window point (121, 14)
+  didResize -> frame=(1246.0, 334.0, 242.0, 168.0)
+status after clicking pruned reply: No longer kept
+PASS a pruned reply reports 'No longer kept'
+PASS nothing plays for a pruned reply
+click mute at window point (184, 128)
+PASS mute button muted the voice
+click row:6 at window point (121, 90)
+status after clicking while muted: Voice muted
+PASS muted: clicking a reply says 'Voice muted'
+PASS muted: nothing plays
+click mute at window point (184, 128)
+PASS mute button unmuted again
+click arrow at window point (230, 140)
+  didResize -> frame=(1372.0, 431.0, 116.0, 71.0)
+snap r2-5-list-closed-again: frame=(1372.0, 431.0, 116.0, 71.0) topRight=(1488.0, 502.0) visibleMaxX=1512.0
+PASS closing the list restores the original frame (1372.0, 431.0, 116.0, 71.0) (now (1372.0, 431.0, 116.0, 71.0))
+PASS list is hidden
+click arrow at window point (104, 43)
+  didResize -> frame=(1246.0, 334.0, 242.0, 168.0)
+  didResize -> frame=(1246.0, 412.0, 242.0, 90.0)
+snap r2-6-empty-history: frame=(1246.0, 412.0, 242.0, 90.0) topRight=(1488.0, 502.0) visibleMaxX=1512.0
+PASS empty history shows no rows
+PASS empty list keeps the top-right corner
+PASS empty list on-screen
+click arrow at window point (230, 62)
+  didResize -> frame=(1372.0, 431.0, 116.0, 71.0)
+ALL CHECKS PASSED

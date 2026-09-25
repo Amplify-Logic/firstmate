@@ -1,0 +1,8 @@
+Repeat latency, base (d4af5e76) vs this change (3fc85f36). Deepgram network stood in by a 1.5 s fake curl behind the real bin/fm-deepgram-tts.sh; the player is a logging stand-in for afplay. host load: { 32.82 56.54 63.28 }
+fm-speak: desk register example missing: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/nm-floater/sb/base/docs/examples/desk-speak-register.toml (continuing with the shaper default)
+base trial 1: --repeat returned 1.77s, audio started 1.83s after click, synth calls during repeat: 1
+base trial 2: --repeat returned 1.77s, audio started 1.83s after click, synth calls during repeat: 1
+base trial 3: --repeat returned 1.86s, audio started 1.95s after click, synth calls during repeat: 1
+new trial 1: --repeat returned 0.11s, audio started 0.18s after click, synth calls during repeat: 0
+new trial 2: --repeat returned 0.12s, audio started 0.20s after click, synth calls during repeat: 0
+new trial 3: --repeat returned 0.19s, audio started 0.27s after click, synth calls during repeat: 0

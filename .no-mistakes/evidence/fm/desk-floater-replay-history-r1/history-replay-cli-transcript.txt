@@ -1,0 +1,88 @@
+# Captain is away; three replies come through
+$ fm-speak.sh The scout finished the login bug survey.
+The scout finished the login bug survey.
+  (exit 0)
+$ fm-speak.sh PR 188 merged and CI is green.
+PR 188 merged and CI is green.
+  (exit 0)
+$ fm-speak.sh The nightly backup completed without errors.
+The nightly backup completed without errors.
+  (exit 0)
+
+# Back at the desk: what did I miss?
+$ fm-speak.sh --history
+3	1790369637	The nightly backup completed without errors.
+2	1790369635	PR 188 merged and CI is green.
+1	1790369633	The scout finished the login bug survey.
+  (exit 0)
+
+# A new reply lands while the captain is reading the list
+$ fm-speak.sh The staging deploy is live.
+The staging deploy is live.
+  (exit 0)
+
+# Captain picks the oldest of the three missed replies (number 1 from the list they read)
+$ fm-speak.sh --replay 1
+The scout finished the login bug survey.
+  (exit 0)
+  player log:
+    play-start MP3 audio of: The scout finished the login bug survey.
+    play-end
+  synth calls during replay: 0
+
+# Adversarial: numbers that are not kept, or not numbers
+$ fm-speak.sh --replay 99
+fm-speak: no reply numbered 99 is kept; see fm-speak.sh --history
+  (exit 1)
+$ fm-speak.sh --replay 0
+fm-speak: --replay needs a reply number from --history: 0
+  (exit 1)
+$ fm-speak.sh --replay 01
+fm-speak: --replay needs a reply number from --history: 01
+  (exit 1)
+$ fm-speak.sh --replay abc
+fm-speak: --replay needs a reply number from --history: abc
+  (exit 1)
+$ fm-speak.sh --replay
+fm-speak: --replay needs a reply number from --history
+  (exit 1)
+$ fm-speak.sh --replay 1 --history
+fm-speak: only one of --stop, --repeat, --history, --replay, --mute, --unmute, --muted
+  (exit 1)
+
+# A line the register refuses is never kept
+$ fm-speak.sh Shall I merge PR 190?
+refused: asks the captain to decide
+fm-speak: refused by the spoken register; nothing was spoken
+  (exit 2)
+$ fm-speak.sh --history
+4	1790369640	The staging deploy is live.
+3	1790369637	The nightly backup completed without errors.
+2	1790369635	PR 188 merged and CI is green.
+1	1790369633	The scout finished the login bug survey.
+  (exit 0)
+
+# Muted: replay stays silent
+$ fm-speak.sh --mute
+  (exit 0)
+$ fm-speak.sh --replay 2
+fm-speak: voice is muted; nothing was spoken (fm-speak.sh --unmute)
+  (exit 0)
+  player log lines while muted: 0
+$ fm-speak.sh --unmute
+  (exit 0)
+
+# Bounded: 12 more replies, only the newest 10 kept
+$ fm-speak.sh --history
+16	1790369666	Batch reply 12.
+15	1790369664	Batch reply 11.
+14	1790369662	Batch reply 10.
+13	1790369660	Batch reply 9.
+12	1790369658	Batch reply 8.
+11	1790369657	Batch reply 7.
+10	1790369655	Batch reply 6.
+9	1790369653	Batch reply 5.
+8	1790369651	Batch reply 4.
+7	1790369649	Batch reply 3.
+  (exit 0)
+  entries on disk: 10 11 12 13 14 15 16 7 8 9 

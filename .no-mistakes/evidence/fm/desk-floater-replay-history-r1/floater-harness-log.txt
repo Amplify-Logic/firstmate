@@ -1,0 +1,21 @@
+screen visibleFrame=Optional((0.0, 56.0, 1512.0, 893.0)) all=[(0.0, 0.0, 1512.0, 982.0)]
+launch frame=(1372.0, 502.0, 116.0, 71.0)
+  fit((0.0, 0.0)) window=true anchor=nil frame=Optional((1372.0, 502.0, 116.0, 71.0))
+snap 1-floater-closed: frame=(1372.0, 502.0, 116.0, 71.0) topRight=(1488.0, 573.0)
+clicked window point (104.0, 43.0)
+  didResize -> frame=(1372.0, 483.0, 242.0, 90.0)
+  didResize -> frame=(1372.0, 405.0, 242.0, 168.0)
+snap 2-recent-list-open: frame=(1372.0, 405.0, 242.0, 168.0) topRight=(1614.0, 573.0)
+showingRecent=true rows=["5: The staging deploy is live and the smoke tests passed.", "4: The nightly backup completed without errors.", "3: PR 188 merged and CI is green.", "2: The scout finished the login bug survey; three root causes found.", "1: Yesterday\'s release notes are drafted and waiting for your review."]
+clicked window point (121.0, 52.0)
+asked to pick: PR 188 merged and CI is green.
+snap 3-after-clicking-a-reply: frame=(1372.0, 405.0, 242.0, 168.0) topRight=(1614.0, 573.0)
+status=Replaying
+clicked window point (230.0, 140.0)
+  didResize -> frame=(1372.0, 502.0, 116.0, 71.0)
+snap 4-list-closed-again: frame=(1372.0, 502.0, 116.0, 71.0) topRight=(1488.0, 573.0)
+showingRecent=false
+--- speaker log during the floater run (stand-in player)
+  play-start MP3 audio of: PR 188 merged and CI is green.
+  play-end
+synth calls during the floater run: 0
