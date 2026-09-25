@@ -18,7 +18,10 @@
 # state/.lock: the lock's pid must be a live harness, the pane named by that
 # process's own environment (TMUX_PANE, or HERDR_ENV + HERDR_PANE_ID, with the
 # precedence bin/fm-supervisor-target-lib.sh owns) must exist, and the pane's
-# root process must be that pid or one of its ancestors. Delivery goes through
+# root process must be that pid or one of its ancestors. The pane's composer
+# must also read empty or pending (bin/fm-backend.sh fm_backend_composer_state):
+# an unknown screen can be a modal dialog, a picker, or a dead shell, where
+# typed words become keypresses. Delivery goes through
 # the backend's submit primitive (bin/fm-backend.sh fm_backend_send_text_submit),
 # so any backend that can report a pane's root pid below can be added. The
 # text is sent as the captain's plain words: control characters, newlines, and
@@ -29,7 +32,8 @@
 #   sent-unconfirmed: <backend> <target> (<verdict>)
 #                                         typed and Enter sent, submit not
 #                                         proven; never re-sent to the mailbox
-#   mailbox: <path>                       the pane could not be resolved or
+#   mailbox: <path>                       the pane could not be resolved, its
+#                                         composer was not empty or pending, or
 #                                         the backend reported send-failed, its
 #                                         known-undelivered verdict; the
 #                                         transcript went to the mailbox below
@@ -228,7 +232,8 @@ pid_within() {  # <pid> <root>
 
 # Type <line> into the lock-holding primary's own pane and submit it. Prints
 # "<verdict><TAB><backend><TAB><target>" once the pane is proven to host the
-# primary, or nothing and returns 1 when it is not (nothing was typed). Call it
+# primary and show its chat input, or nothing and returns 1 when it is not
+# (nothing was typed). Call it
 # in a subshell: it replaces the pane environment with the primary's own.
 primary_submit() {  # <line>
   local lock="$STATE/.lock" pid envs kv backend target root verdict
@@ -250,6 +255,10 @@ EOF
   fm_backend_target_exists "$backend" "$target" || return 1
   root=$(pane_root_pid "$backend" "$target") || return 1
   pid_within "$pid" "$root" || return 1
+  case "$(fm_backend_composer_state "$backend" "$target" 2>/dev/null)" in
+    empty|pending) ;;
+    *) return 1 ;;
+  esac
   verdict=$(fm_backend_send_text_submit "$backend" "$target" "$1" 3 0.4 0.5) || verdict=send-failed
   printf '%s\t%s\t%s\n' "${verdict:-send-failed}" "$backend" "$target"
 }

@@ -46,13 +46,15 @@ primary already running in this home.
 The floater hands each transcript to `bin/fm-desk-voice.sh send`, which types it into the primary Firstmate session's own chat pane and presses Enter.
 The words arrive at once, even while Firstmate is mid-task, and that pane does not need focus.
 Only the session holding this home's session lock is ever typed into, and only after its pane is proven to host that session; the script header owns the resolution and the supported runtime backends.
+The pane must also show its chat input, read as empty or holding a draft.
+A pane showing a dialog, a picker, a shell, or a screen that cannot be read counts as unreachable, because typed words there would become keypresses.
 
 The transcript is sent as the captain's plain words, with no label or marker.
 Line breaks and control characters become spaces, so a transcript cannot submit early or press keys.
 
 A voice message that lands while a half-typed draft sits in the Firstmate chat joins that draft and is submitted with it.
 
-When the chat pane cannot be reached, or refuses the text, the transcript goes to the mailbox instead:
+When the chat pane cannot be reached, is not showing its chat input, or refuses the text, the transcript goes to the mailbox instead:
 
 | Path | Role |
 | --- | --- |

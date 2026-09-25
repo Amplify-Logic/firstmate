@@ -631,10 +631,18 @@ case "${1:-} ${2:-}" in
   "pane process-info")
     printf '{"result":{"type":"pane_process_info","process_info":{"pane_id":"%s","shell_pid":%s,"foreground_processes":[]}}}\n' \
       "$4" "$(cat "$dir/shell-pid")" ;;
+  "pane read")
+    if [ -e "$dir/modal" ]; then
+      printf '  Pick a model\n  > 1. Opus\n    2. Sonnet\n\n  Esc to cancel\n'
+    else
+      printf '❯ %s\n' "$(cat "$dir/draft" 2>/dev/null)"
+    fi ;;
   "pane send-text")
-    [ ! -e "$dir/send-text-fails" ] || exit 1 ;;
+    [ ! -e "$dir/send-text-fails" ] || exit 1
+    printf '%s' "$4" >> "$dir/draft" ;;
   "pane send-keys")
-    : > "$dir/entered" ;;
+    : > "$dir/entered"
+    [ -e "$dir/never-works" ] || : > "$dir/draft" ;;
   "agent get")
     if [ -e "$dir/entered" ] && [ ! -e "$dir/never-works" ]; then s=working; else s=idle; fi
     printf '{"result":{"agent":{"agent_status":"%s"}}}\n' "$s" ;;
@@ -652,6 +660,7 @@ SH
   printf '%s\n' "$pid" > "$home/state/.lock"
   # The pane's root process is the stand-in itself unless a case says otherwise.
   printf '%s\n' "$pid" > "$dir/shell-pid"
+  : > "$dir/draft"
   for i in $(seq 1 50); do
     if [ -r "/proc/$pid/environ" ]; then
       envs=$(tr '\0' '\n' < "/proc/$pid/environ")
@@ -768,6 +777,31 @@ test_desk_voice_send_never_doubles_an_unconfirmed_submit() {
   pass "fm-desk-voice send: typed text whose submit is unproven is never re-sent to the mailbox"
 }
 
+test_desk_voice_send_falls_back_when_the_pane_shows_no_composer() {
+  local home out
+  home=$(desk_send_fixture send-modal) || { desk_send_skip send-modal; return 0; }
+  : > "$home/fixture/modal"
+  out=$(desk_send "$home" "2 and then merge it") || fail "send failed: $out"
+  case "$out" in mailbox:\ *) ;; *) fail "expected a mailbox delivery, got: $out" ;; esac
+  [ -z "$(herdr_calls "$home" pane send-text)" ] || fail "nothing may be typed into a pane with no chat input"
+  [ -z "$(herdr_calls "$home" pane send-keys)" ] || fail "no Enter may reach a pane with no chat input"
+  [ "$(inbox_count "$home")" = 1 ] || fail "the transcript must land in the mailbox once"
+  desk_send_done "$home"
+  pass "fm-desk-voice send: a pane showing a dialog instead of its chat input gets nothing"
+}
+
+test_desk_voice_send_joins_a_pending_draft() {
+  local home out
+  home=$(desk_send_fixture send-draft) || { desk_send_skip send-draft; return 0; }
+  printf 'half typed ' > "$home/fixture/draft"
+  out=$(desk_send "$home" "and ship it") || fail "send failed: $out"
+  assert_contains "$out" "sent: herdr fm-desk-send-test:w7:p3" "a pending draft still takes the transcript"
+  [ "$(herdr_calls "$home" pane send-text | wc -l | tr -d ' ')" = 1 ] || fail "text must be typed exactly once"
+  [ "$(inbox_count "$home")" = 0 ] || fail "a pane delivery must not also land in the mailbox"
+  desk_send_done "$home"
+  pass "fm-desk-voice send: a half-typed draft is joined and submitted"
+}
+
 test_deepgram_lib_reads_dotenv_without_logging_key() {
   local home out
   home=$(new_home dotenv)
@@ -808,4 +842,6 @@ test_desk_voice_send_falls_back_without_a_live_primary
 test_desk_voice_send_refuses_a_pane_not_hosting_the_primary
 test_desk_voice_send_falls_back_when_the_pane_refuses_text
 test_desk_voice_send_never_doubles_an_unconfirmed_submit
+test_desk_voice_send_falls_back_when_the_pane_shows_no_composer
+test_desk_voice_send_joins_a_pending_draft
 test_deepgram_lib_reads_dotenv_without_logging_key
