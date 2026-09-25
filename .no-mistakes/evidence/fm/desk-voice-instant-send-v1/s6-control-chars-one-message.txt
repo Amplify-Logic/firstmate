@@ -1,0 +1,15 @@
+## Scenario 6 (adversarial): transcript with newline, CR, U+2028 and ESC arrives as ONE submitted message
+$ FM_HOME=/tmp/fm-desk-live/home bin/fm-desk-voice.sh send --source desk-floater $'Reply with exactly\nONE MESSAGE\r OK�\200� and nothing else\E'
+stdout: sent: tmux %0
+stderr: 
+exit: 0   elapsed: 1.77s
+mailbox inbox files: 2
+
+--- pane afterwards ---
+❯ Reply with exactly ONE MESSAGE OK and nothing else
+⏺ ONE MESSAGE OK
+✻ Worked for 1s · done 11:45 PM
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏸ manual mode on · ? for shortcuts · ← 2 agents

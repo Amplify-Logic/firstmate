@@ -1,0 +1,45 @@
+## Scenario 4 (adversarial): primary parked on a real Claude Code permission dialog
+--- pane before send ---
+⏺ DRAFT JOINED OK
+✻ Cooked for 2s · done 11:44 PM
+❯ Use the Bash tool to run exactly: touch /tmp/fm-desk-live/permission-granted
+⏺ Bash(touch /tmp/fm-desk-live/permission-granted)
+  ⎿  Waiting…
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ Bash command
+   touch /tmp/fm-desk-live/permission-granted
+   Create file at /tmp/fm-desk-live/permission-granted
+ Do you want to proceed?
+ ❯ 1. Yes
+   2. Yes, and always allow access to /tmp/fm-desk-live from this project
+   3. No
+ Esc to cancel · Tab to amend
+
+shared classifier fm_backend_composer_state on this screen: pending (would have admitted it)
+
+$ FM_HOME=/tmp/fm-desk-live/home bin/fm-desk-voice.sh send --source desk-floater yes\ and\ then\ merge\ it
+stdout: mailbox: /tmp/fm-desk-live/home/state/desk-voice/inbox/20260925T204442Z-ec69dc0d.json
+stderr: fm-desk-voice: the primary's chat pane is not reachable; saving to the mailbox instead
+exit: 0   elapsed: 0.80s
+mailbox inbox files: 1
+
+--- pane afterwards: dialog untouched, option 1 not confirmed ---
+  ⎿  Waiting…
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ Bash command
+   touch /tmp/fm-desk-live/permission-granted
+   Create file at /tmp/fm-desk-live/permission-granted
+ Do you want to proceed?
+ ❯ 1. Yes
+   2. Yes, and always allow access to /tmp/fm-desk-live from this project
+   3. No
+ Esc to cancel · Tab to amend
+
+$ ls /tmp/fm-desk-live/permission-granted
+ls: /tmp/fm-desk-live/permission-granted: No such file or directory   (the command was NOT approved)
+
+--- mailbox file ---
+{"schema": "fm-desk-voice-transcript.v1", "id": "ec69dc0d", "created_at": "20260925T204442Z", "source": "desk-floater", "transcript": "yes and then merge it"}
+
+--- .wake-queue ---
+1790369082	1	check	desk-voice	desk-voice: /tmp/fm-desk-live/home/state/desk-voice/inbox/20260925T204442Z-ec69dc0d.json

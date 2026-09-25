@@ -1,0 +1,19 @@
+## Scenario 7 (adversarial): lock holder's env names pane %0, but %0 hosts a different Claude process
+lock pid 74084 runs in window 'imposter' with TMUX_PANE=%0 forced; pane %0's root pid is 53679
+
+$ FM_HOME=/tmp/fm-desk-live/home bin/fm-desk-voice.sh send --source desk-floater Reply\ with\ exactly\ WRONG\ PANE
+stdout: mailbox: /tmp/fm-desk-live/home/state/desk-voice/inbox/20260925T204542Z-c0919f58.json
+stderr: fm-desk-voice: the primary's chat pane is not reachable; saving to the mailbox instead
+exit: 0   elapsed: 0.68s
+mailbox inbox files: 3
+
+--- pane %0 after (unchanged, nothing typed) ---
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏸ manual mode on · ? for shortcuts · ← 2 agents
+--- imposter pane after ---
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ Try "create a util logging.py that..."
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏸ manual mode on · ? for shortcuts · ← 2 agents                                                                         auto mode unavailable for this model

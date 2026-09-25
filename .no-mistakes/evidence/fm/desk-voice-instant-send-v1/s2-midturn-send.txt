@@ -1,0 +1,29 @@
+## Scenario 2: primary mid-turn (busy counting), transcript still delivered at once
+--- pane just before send (busy: 'esc to interrupt') ---
+✽ Topsy-turvying… (2s · thinking)
+  ⎿  Tip: Use /permissions to pre-approve and pre-deny bash, edit, and MCP tools
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏸ manual mode on · esc to interrupt · ← 2 agents
+
+$ FM_HOME=/tmp/fm-desk-live/home bin/fm-desk-voice.sh send --source desk-floater When\ you\ finish\ counting\,\ reply\ with\ exactly\ MIDTURN\ RECEIVED
+stdout: sent: tmux %0
+stderr: 
+exit: 0   elapsed: 1.67s
+mailbox inbox files: 0
+
+--- pane history afterwards (message queued by Claude Code mid-turn, then answered) ---
+❯ Write the numbers 1 to 150 as English words, one per line, no other text
+⏺ One
+  Two
+  Three
+  One hundred forty-nine
+  One hundred fifty
+✻ Brewed for 10s · done 11:43 PM
+❯ When you finish counting, reply with exactly MIDTURN RECEIVED
+⏺ MIDTURN RECEIVED
+✻ Brewed for 1s · done 11:43 PM
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────

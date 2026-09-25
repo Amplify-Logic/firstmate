@@ -1,0 +1,38 @@
+## Scenario 5 (adversarial): primary showing the real /model picker
+--- pane before send ---
+    1.  Default (recommended)  Opus 5.5 · Best for everyday, complex tasks
+    2.  Opus 5.5               Most capable for ambitious work
+    3.  Fable 5.1              For your toughest challenges
+    4.  Sonnet 5               Most efficient for everyday tasks
+  ❯ 5.  Haiku 4.5 ✔            Fastest for quick answers
+    6.  Opus 5                 Best for everyday, complex tasks
+    7.  Fable 5                Most capable for your hardest and longest-running tasks
+    8.  Opus 4.8               Best for everyday, complex tasks
+    9.  Opus 4.7               Best for everyday, complex tasks
+  ↓ 10. Opus 4.6               Best for everyday, complex tasks
+     … +1 model
+  ○ Effort not supported for Haiku 4.5
+  Use /fast to turn on Fast mode (Opus 5.5).
+  Enter to set as default · s to use this session only · Esc to cancel
+
+$ FM_HOME=/tmp/fm-desk-live/home bin/fm-desk-voice.sh send --source desk-floater 2\ and\ then\ merge\ it
+stdout: mailbox: /tmp/fm-desk-live/home/state/desk-voice/inbox/20260925T204504Z-286921f8.json
+stderr: fm-desk-voice: the primary's chat pane is not reachable; saving to the mailbox instead
+exit: 0   elapsed: 1.43s
+mailbox inbox files: 2
+
+--- pane afterwards (identical: no keypress reached the picker, Haiku still selected) ---
+    1.  Default (recommended)  Opus 5.5 · Best for everyday, complex tasks
+    2.  Opus 5.5               Most capable for ambitious work
+    3.  Fable 5.1              For your toughest challenges
+    4.  Sonnet 5               Most efficient for everyday tasks
+  ❯ 5.  Haiku 4.5 ✔            Fastest for quick answers
+    6.  Opus 5                 Best for everyday, complex tasks
+    7.  Fable 5                Most capable for your hardest and longest-running tasks
+    8.  Opus 4.8               Best for everyday, complex tasks
+    9.  Opus 4.7               Best for everyday, complex tasks
+  ↓ 10. Opus 4.6               Best for everyday, complex tasks
+     … +1 model
+  ○ Effort not supported for Haiku 4.5
+  Use /fast to turn on Fast mode (Opus 5.5).
+  Enter to set as default · s to use this session only · Esc to cancel

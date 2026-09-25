@@ -1,0 +1,23 @@
+## Scenario 3: half-typed draft in the composer is joined and submitted
+--- pane before send (draft pending) ---
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ Reply with exactly the words
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏸ manual mode on
+
+$ FM_HOME=/tmp/fm-desk-live/home bin/fm-desk-voice.sh send --source desk-floater DRAFT\ JOINED\ OK\ and\ nothing\ else
+stdout: sent: tmux %0
+stderr: 
+exit: 0   elapsed: 2.38s
+mailbox inbox files: 0
+
+--- pane afterwards ---
+❯ Reply with exactly the wordsDRAFT JOINED OK and nothing else
+⏺ DRAFT JOINED OK
+✻ Cooked for 2s · done 11:44 PM
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏸ manual mode on · ? for shortcuts · ← 2 agents
+
+note: the draft and transcript are joined with no separating space ('wordsDRAFT').

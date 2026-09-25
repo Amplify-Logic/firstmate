@@ -1,0 +1,18 @@
+## Scenario 8: primary Claude exited (lock pid 53679 dead) -> mailbox fallback with wake
+$ FM_HOME=/tmp/fm-desk-live/home bin/fm-desk-voice.sh send --source desk-floater Check\ the\ backlog\ when\ you\ are\ back
+stdout: mailbox: /tmp/fm-desk-live/home/state/desk-voice/inbox/20260925T204557Z-f730423e.json
+stderr: fm-desk-voice: the primary's chat pane is not reachable; saving to the mailbox instead
+exit: 0   elapsed: 0.56s
+mailbox inbox files: 4
+
+--- mailbox file ---
+{"schema": "fm-desk-voice-transcript.v1", "id": "f730423e", "created_at": "20260925T204557Z", "source": "desk-floater", "transcript": "Check the backlog when you are back"}
+
+--- .wake-queue ---
+1790369157	4	check	desk-voice	desk-voice: /tmp/fm-desk-live/home/state/desk-voice/inbox/20260925T204557Z-f730423e.json
+
+--- fm-desk-voice.sh pending ---
+/tmp/fm-desk-live/home/state/desk-voice/inbox/20260925T204442Z-ec69dc0d.json
+/tmp/fm-desk-live/home/state/desk-voice/inbox/20260925T204504Z-286921f8.json
+/tmp/fm-desk-live/home/state/desk-voice/inbox/20260925T204542Z-c0919f58.json
+/tmp/fm-desk-live/home/state/desk-voice/inbox/20260925T204557Z-f730423e.json

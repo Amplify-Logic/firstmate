@@ -1,0 +1,18 @@
+## Scenario 1: idle primary, transcript typed and submitted
+$ ... send --source desk-floater "Reply with exactly the words DESK VOICE LIVE OK and nothing else"
+stdout: sent: tmux %0
+exit: 0  elapsed: 1.85s  mailbox inbox files: 0  wake-queue: absent
+
+--- primary pane afterwards (real Claude Code 2.1.282 in private tmux server) ---
+ ▐▛███▛█   Claude Code v2.1.282
+▝▜██████▀  Haiku 4.5 · Claude Max
+ ▝▝   ▝▝   /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-spawn-launch-preflight.ozRVMt/present-claude/project
+  ⎿  SessionStart:startup hook error
+  ⎿  Failed with non-blocking status code: /bin/sh: ${CLAUDE_PLUGIN_ROOT}/hooks/run-hook.cmd: No such file or directory
+❯ Reply with exactly the words DESK VOICE LIVE OK and nothing else
+⏺ DESK VOICE LIVE OK
+✻ Cooked for 1s · done 11:43 PM
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏸ manual mode on · ? for shortcuts · ← 2 agents
