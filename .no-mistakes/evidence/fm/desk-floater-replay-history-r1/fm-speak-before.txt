@@ -1,0 +1,14 @@
+=== [before] speak three replies while the captain is away ===
+First: the build is green.
+/Users/larsmusic/.no-mistakes/evidence/01M3DAAPN3B2SKA5EGVAZT38MT/drive-fm-speak.sh: line 38: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-speak-live.VNKw62/home/played.log: No such file or directory
+/Users/larsmusic/.no-mistakes/evidence/01M3DAAPN3B2SKA5EGVAZT38MT/drive-fm-speak.sh: line 38: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-speak-live.VNKw62/home/played.log: No such file or directory
+/Users/larsmusic/.no-mistakes/evidence/01M3DAAPN3B2SKA5EGVAZT38MT/drive-fm-speak.sh: line 38: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-speak-live.VNKw62/home/played.log: No such file or directory
+Second: PR 196 is open for review.
+Third: the scout finished the audit.
+synth calls so far:        3
+
+=== [before] time a --repeat ===
+exit 0, printed: Third: the scout finished the audit.
+repeat click -> player start: 2.39 s
+synth calls after repeat:        4
+

@@ -1,0 +1,9 @@
+[floater-1-closed] frame=1372,431 116x71 topRight=(1488,502)
+recent list: ["3: The scout finished the audit; two findings need your call.", "2: PR 196 is open: replay recent replies from kept audio.", "1: The build on main is green again."]
+[floater-2-recent-open] frame=1246,372 242x130 topRight=(1488,502)
+replay row click -> player start: 0.43 s; status=Replaying
+last played: ["0", "1", ":", "3", "4", ":", "3", "3", " ", "p", "l", "a", "y", ":", " ", "a", "u", "d", "i", "o", " ", "o", "f", " ", "T", "h", "e", " ", "b", "u", "i", "l", "d", " ", "o", "n", " ", "m", "a", "i", "n", " ", "i", "s", " ", "g", "r", "e", "e", "n", " ", "a", "g", "a", "i", "n", "."]
+[floater-3-replaying-third] frame=1246,372 242x130 topRight=(1488,502)
+muted replay: plays before/after=1/1 status=Keys off - click !
+[floater-4-muted-replay] frame=1246,372 242x130 topRight=(1488,502)
+[floater-5-closed-again] frame=1372,431 116x71 topRight=(1488,502)

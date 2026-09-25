@@ -1,0 +1,70 @@
+=== [after] speak three replies while the captain is away ===
+First: the build is green.
+/Users/larsmusic/.no-mistakes/evidence/01M3DAAPN3B2SKA5EGVAZT38MT/drive-fm-speak.sh: line 38: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-speak-live.FJ1AwU/home/played.log: No such file or directory
+/Users/larsmusic/.no-mistakes/evidence/01M3DAAPN3B2SKA5EGVAZT38MT/drive-fm-speak.sh: line 38: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-speak-live.FJ1AwU/home/played.log: No such file or directory
+Second: PR 196 is open for review.
+Third: the scout finished the audit.
+synth calls so far:        3
+
+=== [after] time a --repeat ===
+exit 0, printed: Third: the scout finished the audit.
+repeat click -> player start: 0.69 s
+synth calls after repeat:        3
+
+=== [after] fm-speak.sh --history ===
+3	1790375338	Third: the scout finished the audit.
+2	1790375335	Second: PR 196 is open for review.
+1	1790375332	First: the build is green.
+
+=== [after] replay the third-newest (number 1) ===
+exit 0, printed: First: the build is green.
+replay click -> player start: 0.22 s
+last played: start: audio of First: the build is green.
+synth calls after replay:        3
+
+=== [after] adversarial inputs ===
+--replay '999' -> exit 1 : fm-speak: no reply numbered 999 is kept; see fm-speak.sh --history
+--replay '0' -> exit 1 : fm-speak: --replay needs a reply number from --history: 0
+--replay 'abc' -> exit 1 : fm-speak: --replay needs a reply number from --history: abc
+--replay '01' -> exit 1 : fm-speak: --replay needs a reply number from --history: 01
+--replay '' -> exit 1 : fm-speak: --replay needs a reply number from --history: 
+--replay (no number) -> exit 1 : fm-speak: --replay needs a reply number from --history
+--history --replay 1 -> exit 1 : fm-speak: only one of --stop, --repeat, --history, --replay, --mute, --unmute, --muted
+
+=== [after] muted replay stays silent ===
+muted --replay 1 -> exit 0 : fm-speak: voice is muted; nothing was spoken (fm-speak.sh --unmute)
+plays before/after:        5/       5
+
+=== [after] pruning to 10: speak 9 more ===
+Reply 4.
+Reply 5.
+Reply 6.
+Reply 7.
+Reply 8.
+Reply 9.
+Reply 10.
+Reply 11.
+Reply 12.
+12 Reply 12.
+11 Reply 11.
+10 Reply 10.
+9 Reply 9.
+8 Reply 8.
+7 Reply 7.
+6 Reply 6.
+5 Reply 5.
+4 Reply 4.
+3 Third: the scout finished the audit.
+kept entries: 3 4 5 6 7 8 9 10 11 12 
+--replay 1 (pruned) -> exit 1 : fm-speak: no reply numbered 1 is kept; see fm-speak.sh --history
+
+=== [after] permissions ===
+drwx------ /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-speak-live.FJ1AwU/home/state/speak-history
+drwx------ /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-speak-live.FJ1AwU/home/state/speak-history/12
+-rw------- /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-speak-live.FJ1AwU/home/state/speak-history/12/audio.mp3
+-rw------- /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-speak-live.FJ1AwU/home/state/speak-history/12/text
+-rw------- /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-speak-live.FJ1AwU/home/state/speak-history/12/time
+
+=== [after] empty history ===
+--history on fresh home -> exit 0 : ''
+--repeat on fresh home -> exit 1 : fm-speak: nothing has been spoken here yet; nothing to repeat
