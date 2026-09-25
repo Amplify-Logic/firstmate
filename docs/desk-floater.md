@@ -40,7 +40,7 @@ Exactly one fleet brain remains: the primary already running in this home.
    First launch builds the Swift package under `desk-floater/` into
    `desk-floater/.build/` (gitignored) and opens the floating control.
    Grant microphone permission when macOS asks.
-   macOS also asks once for the Accessibility permission (see [Permissions](#permissions)); the buttons work without it, the hotkeys and typing into other apps do not.
+   macOS also asks for the Accessibility permission, once for each new build (see [Permissions](#permissions)); the buttons work without it, the hotkeys and typing into other apps do not.
 
 4. Hold the button (or click to toggle), speak, release. The transcript is
    written to `state/desk-voice/inbox/<utc>-<id>.json` and a wake is queued.
@@ -93,12 +93,15 @@ Clicking a floater control does not take keyboard focus from the app you are typ
 | Permission | Needed for | Where |
 | --- | --- | --- |
 | Microphone | Every capture | Asked the first time you talk. |
-| Accessibility | The Right Option and Right Command hotkeys, and pasting dictated text into other apps | Asked once, on the floater's first launch. Grant it in System Settings, Privacy & Security, Accessibility, by switching on DeskFloater. |
+| Accessibility | The Right Option and Right Command hotkeys, and pasting dictated text into other apps | Asked on the first launch of each new build. Grant it in System Settings, Privacy & Security, Accessibility, by switching on DeskFloater. |
 
-The floater asks for Accessibility only once.
-After that it checks every few seconds and turns the hotkeys on as soon as the permission is granted, with no restart.
-Until then the status line reads "Hold to talk (keys off)", and the on-screen buttons work as normal.
-macOS ties the grant to the exact app build, so after `bin/fm-desk-floater.sh` rebuilds the floater you may need to switch DeskFloater off and on again in that list (or remove it and relaunch).
+The floater checks the permission every few seconds and turns the hotkeys on as soon as it is granted, with no restart.
+Until then the hotkeys and the paste are off: an orange "!" badge sits on the talk button, the status line reads "Keys off - click !" in orange, and the on-screen buttons work as normal.
+Clicking the badge asks macOS again and opens the Accessibility settings.
+
+macOS ties the grant to the exact app build, so every time `bin/fm-desk-floater.sh` rebuilds the floater (after any change to its code) the old grant stops counting and the badge comes back.
+The rebuilt floater asks once more on its first launch.
+If DeskFloater already shows as switched on in that list, switch it off and on again, or remove it with the minus button and click the badge to add it back.
 
 ## How transcripts reach Firstmate
 

@@ -36,6 +36,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         hotkeys.onTalkChord = { [weak model] in model?.hotkeyTalkChorded() }
         hotkeys.onDictateTap = { [weak model] in model?.toggleDictation() }
         hotkeys.onTrustChanged = { [weak model] trusted in model?.keysTrusted = trusted }
+        model.onFixKeys = { [weak hotkeys] in hotkeys?.requestAccess() }
         hotkeys.start()
         self.hotkeys = hotkeys
         model.refreshMute()
@@ -100,8 +101,9 @@ final class WindowMover {
 
 /// Global keys: Right Option held is push-to-talk to Firstmate, and a lone tap of
 /// Right Command starts or finishes dictation. Watching keys in other apps, and
-/// typing the dictated text into them, both need the Accessibility permission,
-/// which is asked for once and then only read.
+/// typing the dictated text into them, both need the Accessibility permission.
+/// macOS ties that grant to the exact build, so a rebuilt floater is untrusted
+/// again: it asks once per build, and the keys-off badge asks again on demand.
 @MainActor
 final class HotkeyMonitor {
     var onTalkDown: (() -> Void)?
@@ -115,7 +117,7 @@ final class HotkeyMonitor {
     // Device-dependent modifier bits that tell the right-hand key from the left.
     private static let rightOptionBit: UInt = 0x40
     private static let rightCommandBit: UInt = 0x10
-    private static let askedKey = "askedForAccessibility"
+    private static let askedKey = "askedForAccessibilityBuild"
     private let tapLimit: TimeInterval = 0.5
 
     private var monitors: [Any] = []
@@ -127,15 +129,40 @@ final class HotkeyMonitor {
 
     func start() {
         let defaults = UserDefaults.standard
-        if !AXIsProcessTrusted() && !defaults.bool(forKey: Self.askedKey) {
-            defaults.set(true, forKey: Self.askedKey)
-            let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
-            _ = AXIsProcessTrustedWithOptions(options)
+        let build = Self.buildStamp()
+        if !AXIsProcessTrusted() && defaults.string(forKey: Self.askedKey) != build {
+            defaults.set(build, forKey: Self.askedKey)
+            Self.prompt()
         }
         checkTrust()
         trustTimer = Timer.scheduledTimer(withTimeInterval: 3, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.checkTrust() }
         }
+    }
+
+    /// Asks for the permission again and opens its Settings pane. A rebuilt
+    /// floater can still be listed there as switched on while macOS ignores the
+    /// old grant, so the pane is where the captain switches it off and on.
+    func requestAccess() {
+        Self.prompt()
+        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
+            NSWorkspace.shared.open(url)
+        }
+        checkTrust()
+    }
+
+    private static func prompt() {
+        let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
+        _ = AXIsProcessTrustedWithOptions(options)
+    }
+
+    /// Identifies this exact build, so a rebuild is asked about once more.
+    private static func buildStamp() -> String {
+        let path = Bundle.main.executablePath ?? CommandLine.arguments[0]
+        let attrs = (try? FileManager.default.attributesOfItem(atPath: path)) ?? [:]
+        let modified = (attrs[.modificationDate] as? Date)?.timeIntervalSince1970 ?? 0
+        let size = (attrs[.size] as? NSNumber)?.int64Value ?? 0
+        return "\(path)|\(modified)|\(size)"
     }
 
     private func checkTrust() {
@@ -317,7 +344,14 @@ final class FloaterModel: ObservableObject {
         }
     }
 
-    var idleStatus: String { keysTrusted ? "Hold to talk" : "Hold to talk (keys off)" }
+    var idleStatus: String { keysTrusted ? "Hold to talk" : "Keys off - click !" }
+
+    /// Asks macOS for the Accessibility permission again (the keys-off badge).
+    var onFixKeys: (() -> Void)?
+
+    func fixKeys() {
+        onFixKeys?()
+    }
 
     // MARK: main button (talk to Firstmate)
 
@@ -676,7 +710,7 @@ struct FloaterView: View {
             }
             Text(model.status)
                 .font(.system(size: 9, weight: .medium))
-                .foregroundStyle(.white)
+                .foregroundStyle(keysOffIdle ? Color(red: 1.0, green: 0.72, blue: 0.35) : Color.white)
                 .lineLimit(1)
                 .truncationMode(.tail)
                 .frame(width: 104)
@@ -698,6 +732,10 @@ struct FloaterView: View {
 
     private var dictating: Bool {
         model.purpose == .dictate && model.mode != .idle
+    }
+
+    private var keysOffIdle: Bool {
+        !model.keysTrusted && model.mode == .idle
     }
 
     private var dictateColor: Color { Color(red: 0.55, green: 0.30, blue: 0.85) }
@@ -722,6 +760,28 @@ struct FloaterView: View {
         }
         .help("Hold to talk to Firstmate, or click to start and click again to send (or hold Right Option)")
         .accessibilityLabel("Desk push to talk")
+        .overlay(alignment: .topTrailing) {
+            if !model.keysTrusted {
+                keysOffBadge
+                    .offset(x: 4, y: -4)
+            }
+        }
+    }
+
+    /// Shown while macOS has not granted this build Accessibility, so the
+    /// hotkeys and dictation paste are off; clicking it asks again.
+    private var keysOffBadge: some View {
+        Button(action: model.fixKeys) {
+            Image(systemName: "exclamationmark")
+                .font(.system(size: 8, weight: .heavy))
+                .foregroundStyle(.white)
+                .frame(width: 14, height: 14)
+                .background(Circle().fill(Color(red: 0.90, green: 0.50, blue: 0.10)))
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .help("Hotkeys are off: macOS has not allowed this build Accessibility. Click to allow it.")
+        .accessibilityLabel("Hotkeys off - allow Accessibility")
     }
 
     private func control(_ symbol: String, help: String, tint: Color? = nil, action: @escaping () -> Void) -> some View {
