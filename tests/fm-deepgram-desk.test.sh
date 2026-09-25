@@ -633,7 +633,7 @@ case "${1:-} ${2:-}" in
       "$4" "$(cat "$dir/shell-pid")" ;;
   "pane read")
     if [ -e "$dir/modal" ]; then
-      printf '  Pick a model\n  > 1. Opus\n    2. Sonnet\n\n  Esc to cancel\n'
+      cat "$dir/modal"
     else
       printf '❯ %s\n' "$(cat "$dir/draft" 2>/dev/null)"
     fi ;;
@@ -777,16 +777,22 @@ test_desk_voice_send_never_doubles_an_unconfirmed_submit() {
   pass "fm-desk-voice send: typed text whose submit is unproven is never re-sent to the mailbox"
 }
 
-test_desk_voice_send_falls_back_when_the_pane_shows_no_composer() {
-  local home out
-  home=$(desk_send_fixture send-modal) || { desk_send_skip send-modal; return 0; }
-  : > "$home/fixture/modal"
-  out=$(desk_send "$home" "2 and then merge it") || fail "send failed: $out"
-  case "$out" in mailbox:\ *) ;; *) fail "expected a mailbox delivery, got: $out" ;; esac
-  [ -z "$(herdr_calls "$home" pane send-text)" ] || fail "nothing may be typed into a pane with no chat input"
-  [ -z "$(herdr_calls "$home" pane send-keys)" ] || fail "no Enter may reach a pane with no chat input"
-  [ "$(inbox_count "$home")" = 1 ] || fail "the transcript must land in the mailbox once"
-  desk_send_done "$home"
+test_desk_voice_send_falls_back_when_the_pane_shows_a_dialog() {
+  local home out screen n=0
+  for screen in \
+    $' Bash command\n\n   gh pr merge 42\n\n Do you want to proceed?\n ❯ 1. Yes\n   2. Yes, and don\'t ask again for gh commands\n   3. No, and tell Claude what to do differently (esc)\n' \
+    $' Which branch should I merge?\n\n   main\n   release\n\n Enter to select · ↑/↓ to navigate · Esc to cancel\n' \
+    $' Pick a model\n  > 1. Opus\n    2. Sonnet\n'; do
+    n=$((n + 1))
+    home=$(desk_send_fixture "send-modal-$n") || { desk_send_skip "send-modal-$n"; return 0; }
+    printf '%s' "$screen" > "$home/fixture/modal"
+    out=$(desk_send "$home" "2 and then merge it") || fail "send failed: $out"
+    case "$out" in mailbox:\ *) ;; *) fail "expected a mailbox delivery, got: $out" ;; esac
+    [ -z "$(herdr_calls "$home" pane send-text)" ] || fail "nothing may be typed into a dialog"
+    [ -z "$(herdr_calls "$home" pane send-keys)" ] || fail "no Enter may reach a dialog"
+    [ "$(inbox_count "$home")" = 1 ] || fail "the transcript must land in the mailbox once"
+    desk_send_done "$home"
+  done
   pass "fm-desk-voice send: a pane showing a dialog instead of its chat input gets nothing"
 }
 
@@ -842,6 +848,6 @@ test_desk_voice_send_falls_back_without_a_live_primary
 test_desk_voice_send_refuses_a_pane_not_hosting_the_primary
 test_desk_voice_send_falls_back_when_the_pane_refuses_text
 test_desk_voice_send_never_doubles_an_unconfirmed_submit
-test_desk_voice_send_falls_back_when_the_pane_shows_no_composer
+test_desk_voice_send_falls_back_when_the_pane_shows_a_dialog
 test_desk_voice_send_joins_a_pending_draft
 test_deepgram_lib_reads_dotenv_without_logging_key

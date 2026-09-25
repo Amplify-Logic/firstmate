@@ -21,7 +21,9 @@
 # root process must be that pid or one of its ancestors. The pane's composer
 # must also read empty or pending (bin/fm-backend.sh fm_backend_composer_state):
 # an unknown screen can be a modal dialog, a picker, or a dead shell, where
-# typed words become keypresses. Delivery goes through
+# typed words become keypresses. A screen showing a selection dialog (a
+# pointer on a numbered option, or an Enter to select / Esc to cancel footer)
+# is refused too, whatever the composer reads. Delivery goes through
 # the backend's submit primitive (bin/fm-backend.sh fm_backend_send_text_submit),
 # so any backend that can report a pane's root pid below can be added. The
 # text is sent as the captain's plain words: control characters, newlines, and
@@ -33,7 +35,8 @@
 #                                         typed and Enter sent, submit not
 #                                         proven; never re-sent to the mailbox
 #   mailbox: <path>                       the pane could not be resolved, its
-#                                         composer was not empty or pending, or
+#                                         composer was not empty or pending,
+#                                         it showed a selection dialog, or
 #                                         the backend reported send-failed, its
 #                                         known-undelivered verdict; the
 #                                         transcript went to the mailbox below
@@ -230,6 +233,16 @@ pid_within() {  # <pid> <root>
   return 1
 }
 
+# True when <target>'s screen shows a selection dialog (a permission prompt, a
+# question, a picker), where typed words would pick an option. The shared
+# composer classifier reads a pointer on a numbered option as a bare agent
+# prompt holding text, so this is checked here. An unreadable screen counts.
+shows_selection_dialog() {  # <backend> <target>
+  local screen
+  screen=$(fm_backend_capture "$1" "$2" "${FM_COMPOSER_CAPTURE_LINES:-20}" 2>/dev/null) || return 0
+  printf '%s\n' "$screen" | grep -Eiq '(❯|›)[[:space:]]*[0-9]+\.|enter to select|esc to cancel'
+}
+
 # Type <line> into the lock-holding primary's own pane and submit it. Prints
 # "<verdict><TAB><backend><TAB><target>" once the pane is proven to host the
 # primary and show its chat input, or nothing and returns 1 when it is not
@@ -259,6 +272,7 @@ EOF
     empty|pending) ;;
     *) return 1 ;;
   esac
+  ! shows_selection_dialog "$backend" "$target" || return 1
   verdict=$(fm_backend_send_text_submit "$backend" "$target" "$1" 3 0.4 0.5) || verdict=send-failed
   printf '%s\t%s\t%s\n' "${verdict:-send-failed}" "$backend" "$target"
 }
