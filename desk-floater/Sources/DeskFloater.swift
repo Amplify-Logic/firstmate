@@ -223,13 +223,21 @@ final class HotkeyMonitor {
 /// clipboard, Command-V goes to the focused app, and the clipboard the captain
 /// had before is put back.
 enum Paster {
+    private static let concealed = NSPasteboard.PasteboardType("org.nspasteboard.ConcealedType")
+    private static let transient = NSPasteboard.PasteboardType("org.nspasteboard.TransientType")
+
     static func paste(_ text: String) -> Bool {
         let board = NSPasteboard.general
-        let saved: [[(NSPasteboard.PasteboardType, Data)]] = (board.pasteboardItems ?? []).map { item in
-            item.types.compactMap { type in item.data(forType: type).map { (type, $0) } }
-        }
+        let saved: [[(NSPasteboard.PasteboardType, Data)]] = (board.pasteboardItems ?? [])
+            .filter { item in !item.types.contains(concealed) && !item.types.contains(transient) }
+            .map { item in
+                item.types.compactMap { type in item.data(forType: type).map { (type, $0) } }
+            }
         board.clearContents()
-        board.setString(text, forType: .string)
+        let item = NSPasteboardItem()
+        item.setString(text, forType: .string)
+        item.setData(Data(), forType: transient)
+        board.writeObjects([item])
         guard AXIsProcessTrusted() else {
             // Without the permission no keystroke can be sent, so the text is
             // left on the clipboard for the captain to paste by hand.
@@ -418,6 +426,12 @@ final class FloaterModel: ObservableObject {
     }
 
     func repeatLast() {
+        guard !muted else {
+            if mode == .idle {
+                finish(status: "Voice muted")
+            }
+            return
+        }
         runSpeak(["--repeat"]) { ok in ok ? "Repeating" : "Nothing to repeat" }
     }
 

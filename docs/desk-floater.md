@@ -53,7 +53,7 @@ Drag the floater by its dark backing plate or the status line under the buttons.
 | --- | --- |
 | Large round button | Talk to Firstmate: hold, speak, release; or click once to start and click again to send. Double-click also toggles. |
 | Stop (square) | Stops the reply being spoken now, and drops any reply queued to be spoken after it. Runs `bin/fm-speak.sh --stop`. |
-| Repeat (circular arrow) | Speaks the last spoken reply again. Runs `bin/fm-speak.sh --repeat`; the status line says "Nothing to repeat" when nothing has been spoken yet. |
+| Repeat (circular arrow) | Speaks the last spoken reply again. Runs `bin/fm-speak.sh --repeat`; the status line says "Nothing to repeat" when nothing has been spoken yet, and "Voice muted" (without repeating) while the voice is muted. |
 | Mute (speaker) | Toggles voice off and on. While muted the icon is a crossed-out speaker on an orange circle, every reply stays text-only, and a reply playing at the moment you mute stops. Runs `bin/fm-speak.sh --mute` / `--unmute`; the setting is per home and survives restarting the floater. |
 | Type (text cursor) | Dictation: click once to start, click again to finish. See [Dictation](#dictation). |
 
@@ -82,6 +82,7 @@ Dictation types what you say into whatever text box has the cursor: this termina
    The audio is transcribed through the same Deepgram path, and the text is pasted where the cursor is.
 
 The paste puts the text on the clipboard, sends Command-V to the app you are typing in, then puts back whatever the clipboard held before.
+The dictated text is marked transient so clipboard-history tools skip it, and anything a password manager marked concealed or transient is not put back: the clipboard is left without it, so the password manager's own clear-after timer still applies.
 If something else is copied during that moment, the floater leaves the new clipboard contents alone.
 Without the Accessibility permission the text is left on the clipboard instead and the status line reads "Copied - press ⌘V".
 Dictated text never goes to Firstmate's mailbox and never wakes Firstmate.
