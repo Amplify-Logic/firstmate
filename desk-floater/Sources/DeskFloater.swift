@@ -125,7 +125,6 @@ struct TapKey {
 
     static let rightCommand = TapKey(keyCode: 54, bit: 0x10, flag: .command)
     static let rightShift = TapKey(keyCode: 60, bit: 0x04, flag: .shift)
-    static let rightControl = TapKey(keyCode: 62, bit: 0x2000, flag: .control)
 
     /// A key press or click while this key is down makes it part of a shortcut.
     mutating func chord() {
@@ -156,12 +155,11 @@ struct TapKey {
 }
 
 /// Global keys: Right Option held is push-to-talk to Firstmate, a lone tap of
-/// Right Command starts or finishes dictation, and a lone tap of the screenshot
-/// key (Right Shift unless the `screenshotKey` default says otherwise) takes a
-/// screenshot. Watching keys in other apps, and typing the dictated text into
-/// them, both need the Accessibility permission. macOS ties that grant to the
-/// exact build, so a rebuilt floater is untrusted again: it asks once per build,
-/// and the keys-off badge asks again on demand.
+/// Right Command starts or finishes dictation, and a lone tap of Right Shift
+/// takes a screenshot. Watching keys in other apps, and typing the dictated text
+/// into them, both need the Accessibility permission. macOS ties that grant to
+/// the exact build, so a rebuilt floater is untrusted again: it asks once per
+/// build, and the keys-off badge asks again on demand.
 @MainActor
 final class HotkeyMonitor {
     var onTalkDown: (() -> Void)?
@@ -182,17 +180,7 @@ final class HotkeyMonitor {
     private var trusted = false
     private var talkDown = false
     private var dictateKey = TapKey.rightCommand
-    private var shotKey = HotkeyMonitor.configuredShotKey()
-
-    /// The screenshot key from the `screenshotKey` default: "right-shift" (the
-    /// default), "right-control", or "off".
-    private static func configuredShotKey() -> TapKey? {
-        switch UserDefaults.standard.string(forKey: "screenshotKey") {
-        case "off": return nil
-        case "right-control": return .rightControl
-        default: return .rightShift
-        }
-    }
+    private var shotKey = TapKey.rightShift
 
     func start() {
         let defaults = UserDefaults.standard
@@ -274,7 +262,7 @@ final class HotkeyMonitor {
                 onTalkChord?()
             }
             dictateKey.chord()
-            shotKey?.chord()
+            shotKey.chord()
             return
         }
         if event.keyCode == Self.rightOptionKey {
@@ -291,7 +279,7 @@ final class HotkeyMonitor {
             onDictateTap?()
         }
         // Screenshots taken while Right Option is held join that voice message.
-        if shotKey?.update(event, allowed: talkDown ? .option : [], limit: tapLimit) == true {
+        if shotKey.update(event, allowed: talkDown ? .option : [], limit: tapLimit) {
             onShotTap?()
         }
     }
@@ -402,6 +390,71 @@ enum Paster {
     }
 }
 
+/// Screenshots waiting to go to Firstmate, and the talk-to-Firstmate words held
+/// to go with them. They go as one message once `window` has passed since the
+/// last shot or the end of the last talk, so each new one restarts the wait.
+struct ShotStack {
+    static let window: TimeInterval = 3
+
+    private(set) var shots: [String] = []
+    private(set) var inFlight = 0
+    private(set) var transcript: String?
+    private var lastActivity: Date?
+
+    /// Shots taken and not yet sent, counting any still being captured.
+    var count: Int { shots.count + inFlight }
+    var isEmpty: Bool { transcript == nil && count == 0 }
+    /// When the stack may go, unless a capture or a talk is still under way.
+    var dueAt: Date { (lastActivity ?? .distantPast).addingTimeInterval(Self.window) }
+
+    mutating func shotStarted(at now: Date) {
+        inFlight += 1
+        touch(now)
+    }
+
+    /// A capture finished: its image path, or nil when it failed.
+    mutating func shotFinished(_ path: String?, at now: Date) {
+        inFlight -= 1
+        if let path {
+            shots.append(path)
+            touch(now)
+        }
+    }
+
+    mutating func talkEnded(at now: Date) {
+        touch(now)
+    }
+
+    /// Holds a transcript to go with the stack, after any words already held.
+    /// False when nothing is stacked, so the words should go at once instead.
+    mutating func hold(_ text: String) -> Bool {
+        if let held = transcript {
+            transcript = held + " " + text
+            return true
+        }
+        guard count > 0 else { return false }
+        transcript = text
+        return true
+    }
+
+    func ready(at now: Date) -> Bool {
+        !isEmpty && inFlight == 0 && now >= dueAt
+    }
+
+    /// Empties the stack, returning the message it held.
+    mutating func take() -> (text: String?, images: [String]) {
+        defer {
+            transcript = nil
+            shots = []
+        }
+        return (transcript, shots)
+    }
+
+    private mutating func touch(_ now: Date) {
+        lastActivity = max(lastActivity ?? now, now)
+    }
+}
+
 @MainActor
 final class FloaterModel: ObservableObject {
     enum Mode {
@@ -443,15 +496,10 @@ final class FloaterModel: ObservableObject {
     private let tapWindow: TimeInterval = 0.3
     private var muteTimer: Timer?
 
-    // Screenshots stack until the captain stops taking them for `stackWindow`,
-    // then go to Firstmate as one message. A talk-to-Firstmate message recorded
-    // or transcribed meanwhile takes them along instead, so the two arrive as one.
-    private let stackWindow: TimeInterval = 3
-    private var pendingShots: [String] = []
-    private var shotsInFlight = 0
-    private var lastShotAt: Date?
-    private var voiceEndedAt: Date?
-    private var heldTranscript: String?
+    // Screenshots stack until the captain stops taking them, then go to
+    // Firstmate as one message. A talk-to-Firstmate message recorded or
+    // transcribed meanwhile takes them along instead, so the two arrive as one.
+    private var stack = ShotStack()
     private var shotTimer: Timer?
 
     init(repoRoot: String, fmHome: String) {
@@ -463,6 +511,9 @@ final class FloaterModel: ObservableObject {
     }
 
     var idleStatus: String {
+        if stack.transcript != nil {
+            return "Adding shots…"
+        }
         if shotCount > 0 {
             return shotCount == 1 ? "1 shot stacked" : "\(shotCount) shots stacked"
         }
@@ -496,17 +547,12 @@ final class FloaterModel: ObservableObject {
             return
         }
         let display = ScreenAccess.displayUnderPointer()
-        shotsInFlight += 1
-        lastShotAt = Date()
+        stack.shotStarted(at: Date())
         shotsChanged()
         Task.detached(priority: .userInitiated) { [repoRoot, fmHome] in
             let path = Self.shoot(repoRoot: repoRoot, fmHome: fmHome, display: display)
             await MainActor.run {
-                self.shotsInFlight -= 1
-                if let path {
-                    self.pendingShots.append(path)
-                    self.lastShotAt = Date()
-                }
+                self.stack.shotFinished(path, at: Date())
                 self.shotsChanged()
                 if path == nil {
                     self.flash("Shot failed")
@@ -519,11 +565,11 @@ final class FloaterModel: ObservableObject {
     /// A talk-to-Firstmate message is being recorded or transcribed, so stacked
     /// shots wait to go with it.
     private var voiceInProgress: Bool {
-        purpose == .firstmate && mode != .idle && heldTranscript == nil
+        purpose == .firstmate && mode != .idle
     }
 
     private func shotsChanged() {
-        shotCount = pendingShots.count + shotsInFlight
+        shotCount = stack.count
         if mode == .idle {
             status = idleStatus
         }
@@ -531,8 +577,7 @@ final class FloaterModel: ObservableObject {
 
     private func scheduleFlush() {
         shotTimer?.invalidate()
-        let last = [lastShotAt, voiceEndedAt].compactMap { $0 }.max() ?? Date()
-        let delay = max(0.1, last.addingTimeInterval(stackWindow).timeIntervalSinceNow)
+        let delay = max(0.1, stack.dueAt.timeIntervalSinceNow)
         shotTimer = Timer.scheduledTimer(withTimeInterval: delay, repeats: false) { [weak self] _ in
             MainActor.assumeIsolated { self?.flushShots() }
         }
@@ -540,42 +585,37 @@ final class FloaterModel: ObservableObject {
 
     private func flushShots() {
         shotTimer = nil
-        guard heldTranscript != nil || !pendingShots.isEmpty || shotsInFlight > 0 else { return }
-        let quietSince = [lastShotAt, voiceEndedAt].compactMap { $0 }.max() ?? .distantPast
-        if shotsInFlight > 0 || voiceInProgress || Date().timeIntervalSince(quietSince) < stackWindow {
-            // A capture is still being written, the shots are waiting for a voice
+        guard !stack.isEmpty else { return }
+        if voiceInProgress || !stack.ready(at: Date()) {
+            // A capture is still being written, the stack is waiting for a voice
             // message, or the window has not passed: look again shortly.
             shotTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: false) { [weak self] _ in
                 MainActor.assumeIsolated { self?.flushShots() }
             }
             return
         }
-        let text = heldTranscript
-        let images = pendingShots
-        heldTranscript = nil
-        pendingShots = []
+        let (text, images) = stack.take()
         shotsChanged()
-        if text != nil {
-            status = "Delivering…"
-        } else if mode == .idle {
-            status = images.count == 1 ? "Sending 1 shot…" : "Sending \(images.count) shots…"
+        if mode == .idle {
+            if text != nil {
+                status = "Delivering…"
+            } else {
+                status = images.count == 1 ? "Sending 1 shot…" : "Sending \(images.count) shots…"
+            }
         }
         Task.detached(priority: .userInitiated) { [repoRoot, fmHome] in
             let outcome = Self.deliver(repoRoot: repoRoot, fmHome: fmHome, text: text, images: images)
             await MainActor.run {
-                if text != nil {
-                    self.finish(status: outcome)
-                } else {
-                    self.flash(outcome)
-                }
+                self.flash(outcome)
             }
         }
     }
 
-    /// A transcribed talk-to-Firstmate message: sent at once when no shots are
-    /// stacked, otherwise held until the stack window closes and sent with them.
+    /// A transcribed talk-to-Firstmate message: sent at once when nothing is
+    /// stacked, otherwise held until the stack window closes and sent with the
+    /// shots. The floater is free meanwhile, so another talk joins the same message.
     private func voiceTranscribed(_ text: String) {
-        if pendingShots.isEmpty && shotsInFlight == 0 {
+        guard stack.hold(text) else {
             status = "Delivering…"
             Task.detached(priority: .userInitiated) { [repoRoot, fmHome] in
                 let outcome = Self.deliver(repoRoot: repoRoot, fmHome: fmHome, text: text, images: [])
@@ -585,8 +625,9 @@ final class FloaterModel: ObservableObject {
             }
             return
         }
-        heldTranscript = text
-        status = "Adding shots…"
+        mode = .idle
+        purpose = .firstmate
+        status = idleStatus
         scheduleFlush()
     }
 
@@ -816,7 +857,7 @@ final class FloaterModel: ObservableObject {
     private func stopAndDeliver() {
         let purpose = self.purpose
         if purpose == .firstmate {
-            voiceEndedAt = Date()
+            stack.talkEnded(at: Date())
         }
         latched = false
         fromHotkey = false

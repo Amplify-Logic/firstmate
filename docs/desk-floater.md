@@ -72,7 +72,6 @@ Firstmate's text replies stay the authoritative ones, and nothing about how Firs
 
 Only the right-hand keys are watched, so the left Option, Command and Shift keys keep working as usual.
 Right Shift follows the same tap rules as Right Command: held with a letter to type a capital, or held longer than half a second, it is an ordinary Shift press and takes no screenshot.
-To use Right Control for screenshots instead, or to turn the screenshot key off, run `defaults write com.firstmate.desk-floater screenshotKey right-control` (or `off`, or `right-shift` for the default) and restart the floater.
 A hotkey used as part of a shortcut is ignored: pressing a letter or clicking the mouse while Right Option is held (to type a special character, or Option-click) cancels that capture without sending anything, and Right Command pressed with another key or a click, or held longer than half a second, is an ordinary Command press. System shortcuts that macOS keeps to itself, such as a quick Right Command-Tab or Right Command-Space, are hidden from the floater and can read as a tap; use the left Command key for those.
 
 ## Dictation
@@ -106,6 +105,7 @@ Screenshots combine with talk-to-Firstmate:
 - Shots taken while Right Option is held, or while the large button is recording, go with that voice message.
 - Shots still stacking when you start talking wait and go with the voice message too.
 - Shots taken after you finish talking, while the message is still being transcribed, join it; the message then waits until three seconds after the last shot.
+- Talking again while a message waits for its shots ("Adding shots…" on the status line) adds the new words after the first ones, and the wait starts over from the end of that talk.
 
 The words and the image paths arrive as one message, the transcript first, then the `Screenshots:` line.
 A voice message with no shots stacked is sent as soon as it is transcribed, so a shot taken after it has already gone is sent on its own.
