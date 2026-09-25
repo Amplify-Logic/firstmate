@@ -1,0 +1,12 @@
+# real build launched: /Users/larsmusic/.no-mistakes/worktrees/f569cc43ac96/01M3CFJHTYHV3FHQJCBKB7Z4ZP/desk-floater/.build/DeskFloater.app/Contents/MacOS/DeskFloater (pid 65105), FM_HOME=/tmp/nm-fl-home.DuQ7, root=/tmp/nm-fl-root.9Tqa (fm-speak.sh wrapper that logs then runs the real script)
+# process after 4s:
+    PID STAT ELAPSED COMMAND
+  65105 SN     00:04 /Users/larsmusic/.no-mistakes/worktrees/f569cc43ac96/01M3CFJHTYHV3FHQJCBKB7Z4ZP/desk-floater/.build/DeskFloater.app/Contents/MacOS/DeskFloater -askedForAccessibilityBuild /Users/larsmusic/.no-mistakes/worktrees/f569cc43ac96/01M3CFJHTYHV3FHQJCBKB7Z4ZP/desk-floater/.build/DeskFloater.app/Contents/MacOS/DeskFloater|1790346959.145812|360696
+# Accessibility prompt process present? (universalAccessAuthWarn):
+3492 /System/Library/PrivateFrameworks/UniversalAccess.framework/Versions/A/Resources/universalAccessAuthWarn.app/Contents/MacOS/universalAccessAuthWarn launchd -s
+# scripts the app called on startup:
+  fm-speak.sh --muted (FM_HOME=/tmp/nm-fl-home.DuQ7)
+# app stderr:
+# captain's com.firstmate.desk-floater defaults unchanged: yes
+# note: universalAccessAuthWarn pid 3492 is a long-lived launchd agent that predates this launch:
+  Tue Sep  8 19:36:06 2026    

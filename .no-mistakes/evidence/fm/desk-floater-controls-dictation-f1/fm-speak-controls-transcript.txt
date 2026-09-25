@@ -1,97 +1,45 @@
-## Isolated home: /tmp/nm-speak-home.ZNYd8M (config/speak: enabled = true; stub speaker logs start/end, 6s per line)
-
-### Repeat before anything was spoken
-$ fm-speak.sh --repeat
-fm-speak: nothing has been spoken here yet; nothing to repeat
-[exit 1]
-
-### Mute, then a reply stays silent but exits 0
+# isolated home: /tmp/nm-speak-home.ifKg (enabled = true), stub shaper + stub say that logs to spoken.log
 $ fm-speak.sh --muted
 unmuted
-[exit 0]
+  (exit 0)
+$ fm-speak.sh --repeat
+fm-speak: nothing has been spoken here yet; nothing to repeat
+  (exit 1)
+$ fm-speak.sh The fix is green.
+The fix is green.
+  (exit 0)
+spoken.log:
+  start: -f /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-speak-text.a9ieZS
+# Stop while the line is playing
+$ fm-speak.sh --stop
+  (exit 0)
+spoken.log (no 'end:' line = cut short):
+  start: -f /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-speak-text.a9ieZS
+# Mute
 $ fm-speak.sh --mute
-[exit 0]
+  (exit 0)
 $ fm-speak.sh --muted
 muted
-[exit 0]
-$ fm-speak.sh The build is green, see https://example.test/pr/9
+  (exit 0)
+$ fm-speak.sh A reply while muted.
 fm-speak: voice is muted; nothing was spoken (fm-speak.sh --unmute)
-[exit 0]
-spoken.log:
-(empty - nothing spoken)
-
-### Repeat while muted
+  (exit 0)
 $ fm-speak.sh --repeat
 fm-speak: voice is muted; nothing was spoken (fm-speak.sh --unmute)
-[exit 0]
-spoken.log: (empty - nothing spoken)
-
-### Unmute and speak
+  (exit 0)
+spoken.log while muted (should be empty):
+  [       0 bytes]
+# Unmute and repeat
 $ fm-speak.sh --unmute
-[exit 0]
-$ fm-speak.sh The build is green, see https://example.test/pr/9
-The build is green, see 
-[exit 0]
-spoken.log:
-16:14:08 start: The build is green, see 
-
-### Queue a second line, then Stop
-$ fm-speak.sh Second line queued behind it.
-Second line queued behind it.
-[exit 0]
-$ fm-speak.sh --stop
-[exit 0]
-spoken.log after 7s:
-16:14:08 start: The build is green, see 
-lock present? no
-
-### A line after the stop plays; then Repeat replays the last shaped line
-$ fm-speak.sh Third line after the stop.
-Third line after the stop.
-[exit 0]
+  (exit 0)
+$ fm-speak.sh --muted
+unmuted
+  (exit 0)
 $ fm-speak.sh --repeat
-Third line after the stop.
-[exit 0]
-spoken.log:
-16:14:17 start: Third line after the stop.
-16:14:23 end: Third line after the stop.
-16:14:24 start: Third line after the stop.
-16:14:30 end: Third line after the stop.
-
-### Refused line is not kept for Repeat
-$ fm-speak.sh Shall I merge it?
-refused: asks the captain to decide
-fm-speak: refused by the spoken register; nothing was spoken
-[exit 2]
-$ fm-speak.sh --repeat
-Third line after the stop.
-[exit 0]
-16:14:31 start: Third line after the stop.
-16:14:37 end: Third line after the stop.
-
-### Mute stops a line playing now
-$ fm-speak.sh A long reply that gets muted.
-A long reply that gets muted.
-[exit 0]
-$ fm-speak.sh --mute
-[exit 0]
-16:14:38 start: A long reply that gets muted.
-$ fm-speak.sh --unmute
-[exit 0]
-
-### Adversarial: bad combos
-$ fm-speak.sh --stop --mute
-fm-speak: only one of --stop, --repeat, --mute, --unmute, --muted
-[exit 1]
-$ fm-speak.sh --stop text
-fm-speak: --stop takes no text and no --dry-run
-[exit 1]
-$ fm-speak.sh --dry-run --repeat
-fm-speak: --repeat takes no text and no --dry-run
-[exit 1]
-
+The fix is green.
+  (exit 0)
+spoken.log after unmute + repeat:
+  start: -f /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-speak-text.4QTWBN
 state files:
-.
-..
-speak-last
-speak-stop-generation
+  speak-last
+  speak-stop-generation
