@@ -17,6 +17,7 @@ struct DeskFloaterApp: App {
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var panel: FloaterPanel?
     private var hotkeys: HotkeyMonitor?
+    private var screen: ScreenAccess?
 
     @MainActor
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -35,10 +36,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         hotkeys.onTalkUp = { [weak model] in model?.hotkeyTalkEnded() }
         hotkeys.onTalkChord = { [weak model] in model?.hotkeyTalkChorded() }
         hotkeys.onDictateTap = { [weak model] in model?.toggleDictation() }
+        hotkeys.onShotTap = { [weak model] in model?.takeShot() }
         hotkeys.onTrustChanged = { [weak model] trusted in model?.keysTrusted = trusted }
         model.onFixKeys = { [weak hotkeys] in hotkeys?.requestAccess() }
         hotkeys.start()
         self.hotkeys = hotkeys
+
+        let screen = ScreenAccess()
+        screen.onChanged = { [weak model] granted in model?.screenTrusted = granted }
+        model.onFixScreen = { [weak screen] in screen?.requestAccess() }
+        screen.start()
+        self.screen = screen
         model.refreshMute()
     }
 }
@@ -99,24 +107,73 @@ final class WindowMover {
     }
 }
 
-/// Global keys: Right Option held is push-to-talk to Firstmate, and a lone tap of
-/// Right Command starts or finishes dictation. Watching keys in other apps, and
-/// typing the dictated text into them, both need the Accessibility permission.
-/// macOS ties that grant to the exact build, so a rebuilt floater is untrusted
-/// again: it asks once per build, and the keys-off badge asks again on demand.
+/// A modifier key that acts on a lone tap: pressed and released within the tap
+/// limit, with no other key, click or modifier used while it was down.
+struct TapKey {
+    let keyCode: UInt16
+    // Device-dependent modifier bit that tells the right-hand key from the left.
+    let bit: UInt
+    let flag: NSEvent.ModifierFlags
+    private var downAt: Date?
+    private var chorded = false
+
+    init(keyCode: UInt16, bit: UInt, flag: NSEvent.ModifierFlags) {
+        self.keyCode = keyCode
+        self.bit = bit
+        self.flag = flag
+    }
+
+    static let rightCommand = TapKey(keyCode: 54, bit: 0x10, flag: .command)
+    static let rightShift = TapKey(keyCode: 60, bit: 0x04, flag: .shift)
+    static let rightControl = TapKey(keyCode: 62, bit: 0x2000, flag: .control)
+
+    /// A key press or click while this key is down makes it part of a shortcut.
+    mutating func chord() {
+        if downAt != nil {
+            chorded = true
+        }
+    }
+
+    /// Feeds one modifier change; true when it completes a lone tap. Modifiers
+    /// in `allowed` may already be held without making the press a shortcut.
+    mutating func update(_ event: NSEvent, allowed: NSEvent.ModifierFlags, limit: TimeInterval) -> Bool {
+        guard event.keyCode == keyCode else {
+            chord()
+            return false
+        }
+        if event.modifierFlags.rawValue & bit != 0 {
+            let others = NSEvent.ModifierFlags([.shift, .control, .option, .command, .function])
+                .subtracting(flag)
+                .subtracting(allowed)
+            downAt = Date()
+            chorded = !event.modifierFlags.intersection(others).isEmpty
+            return false
+        }
+        guard let started = downAt else { return false }
+        downAt = nil
+        return !chorded && Date().timeIntervalSince(started) < limit
+    }
+}
+
+/// Global keys: Right Option held is push-to-talk to Firstmate, a lone tap of
+/// Right Command starts or finishes dictation, and a lone tap of the screenshot
+/// key (Right Shift unless the `screenshotKey` default says otherwise) takes a
+/// screenshot. Watching keys in other apps, and typing the dictated text into
+/// them, both need the Accessibility permission. macOS ties that grant to the
+/// exact build, so a rebuilt floater is untrusted again: it asks once per build,
+/// and the keys-off badge asks again on demand.
 @MainActor
 final class HotkeyMonitor {
     var onTalkDown: (() -> Void)?
     var onTalkUp: (() -> Void)?
     var onTalkChord: (() -> Void)?
     var onDictateTap: (() -> Void)?
+    var onShotTap: (() -> Void)?
     var onTrustChanged: ((Bool) -> Void)?
 
     private static let rightOptionKey: UInt16 = 61
-    private static let rightCommandKey: UInt16 = 54
-    // Device-dependent modifier bits that tell the right-hand key from the left.
+    // Device-dependent modifier bit that tells the right-hand key from the left.
     private static let rightOptionBit: UInt = 0x40
-    private static let rightCommandBit: UInt = 0x10
     private static let askedKey = "askedForAccessibilityBuild"
     private let tapLimit: TimeInterval = 0.5
 
@@ -124,8 +181,18 @@ final class HotkeyMonitor {
     private var trustTimer: Timer?
     private var trusted = false
     private var talkDown = false
-    private var commandDownAt: Date?
-    private var commandChorded = false
+    private var dictateKey = TapKey.rightCommand
+    private var shotKey = HotkeyMonitor.configuredShotKey()
+
+    /// The screenshot key from the `screenshotKey` default: "right-shift" (the
+    /// default), "right-control", or "off".
+    private static func configuredShotKey() -> TapKey? {
+        switch UserDefaults.standard.string(forKey: "screenshotKey") {
+        case "off": return nil
+        case "right-control": return .rightControl
+        default: return .rightShift
+        }
+    }
 
     func start() {
         let defaults = UserDefaults.standard
@@ -157,7 +224,7 @@ final class HotkeyMonitor {
     }
 
     /// Identifies this exact build, so a rebuild is asked about once more.
-    private static func buildStamp() -> String {
+    static func buildStamp() -> String {
         let path = Bundle.main.executablePath ?? CommandLine.arguments[0]
         let attrs = (try? FileManager.default.attributesOfItem(atPath: path)) ?? [:]
         let modified = (attrs[.modificationDate] as? Date)?.timeIntervalSince1970 ?? 0
@@ -206,18 +273,12 @@ final class HotkeyMonitor {
                 talkDown = false
                 onTalkChord?()
             }
-            if commandDownAt != nil {
-                commandChorded = true
-            }
+            dictateKey.chord()
+            shotKey?.chord()
             return
         }
-        let raw = event.modifierFlags.rawValue
-        if event.keyCode != Self.rightCommandKey && commandDownAt != nil {
-            commandChorded = true
-        }
-        switch event.keyCode {
-        case Self.rightOptionKey:
-            let down = raw & Self.rightOptionBit != 0
+        if event.keyCode == Self.rightOptionKey {
+            let down = event.modifierFlags.rawValue & Self.rightOptionBit != 0
             if down && !talkDown {
                 talkDown = true
                 onTalkDown?()
@@ -225,24 +286,67 @@ final class HotkeyMonitor {
                 talkDown = false
                 onTalkUp?()
             }
-        case Self.rightCommandKey:
-            let down = raw & Self.rightCommandBit != 0
-            if down {
-                commandDownAt = Date()
-                commandChorded = hasOtherModifiers(event.modifierFlags)
-            } else if let started = commandDownAt {
-                commandDownAt = nil
-                if !commandChorded && Date().timeIntervalSince(started) < tapLimit {
-                    onDictateTap?()
-                }
-            }
-        default:
-            break
+        }
+        if dictateKey.update(event, allowed: [], limit: tapLimit) {
+            onDictateTap?()
+        }
+        // Screenshots taken while Right Option is held join that voice message.
+        if shotKey?.update(event, allowed: talkDown ? .option : [], limit: tapLimit) == true {
+            onShotTap?()
+        }
+    }
+}
+
+/// The Screen Recording permission screenshots need. Like Accessibility, macOS
+/// ties it to the exact build: it is asked for once per build, checked every few
+/// seconds, and asked for again from the camera button's badge.
+@MainActor
+final class ScreenAccess {
+    var onChanged: ((Bool) -> Void)?
+
+    private static let askedKey = "askedForScreenRecordingBuild"
+    private var timer: Timer?
+    private var granted: Bool?
+
+    func start() {
+        let defaults = UserDefaults.standard
+        let build = HotkeyMonitor.buildStamp()
+        if !CGPreflightScreenCaptureAccess() && defaults.string(forKey: Self.askedKey) != build {
+            defaults.set(build, forKey: Self.askedKey)
+            _ = CGRequestScreenCaptureAccess()
+        }
+        check()
+        timer = Timer.scheduledTimer(withTimeInterval: 3, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.check() }
         }
     }
 
-    private func hasOtherModifiers(_ flags: NSEvent.ModifierFlags) -> Bool {
-        !flags.intersection([.shift, .control, .option, .function]).isEmpty
+    func requestAccess() {
+        _ = CGRequestScreenCaptureAccess()
+        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture") {
+            NSWorkspace.shared.open(url)
+        }
+        check()
+    }
+
+    private func check() {
+        let now = CGPreflightScreenCaptureAccess()
+        guard now != granted else { return }
+        granted = now
+        onChanged?(now)
+    }
+
+    /// screencapture's number (from 1, the main display first) for the display
+    /// under the mouse pointer, or nil to let it take the main display.
+    static func displayUnderPointer() -> Int? {
+        guard let point = CGEvent(source: nil)?.location else { return nil }
+        var hit: CGDirectDisplayID = 0
+        var hits: UInt32 = 0
+        guard CGGetDisplaysWithPoint(point, 1, &hit, &hits) == .success, hits > 0 else { return nil }
+        var displays = [CGDirectDisplayID](repeating: 0, count: 16)
+        var count: UInt32 = 0
+        guard CGGetActiveDisplayList(16, &displays, &count) == .success else { return nil }
+        return displays.prefix(Int(count)).firstIndex(of: hit).map { $0 + 1 }
     }
 }
 
@@ -325,6 +429,9 @@ final class FloaterModel: ObservableObject {
             }
         }
     }
+    @Published var screenTrusted = false
+    /// Screenshots taken and not yet sent, counting any still being captured.
+    @Published var shotCount = 0
 
     let repoRoot: String
     let fmHome: String
@@ -336,6 +443,17 @@ final class FloaterModel: ObservableObject {
     private let tapWindow: TimeInterval = 0.3
     private var muteTimer: Timer?
 
+    // Screenshots stack until the captain stops taking them for `stackWindow`,
+    // then go to Firstmate as one message. A talk-to-Firstmate message recorded
+    // or transcribed meanwhile takes them along instead, so the two arrive as one.
+    private let stackWindow: TimeInterval = 3
+    private var pendingShots: [String] = []
+    private var shotsInFlight = 0
+    private var lastShotAt: Date?
+    private var voiceEndedAt: Date?
+    private var heldTranscript: String?
+    private var shotTimer: Timer?
+
     init(repoRoot: String, fmHome: String) {
         self.repoRoot = repoRoot
         self.fmHome = fmHome
@@ -344,13 +462,132 @@ final class FloaterModel: ObservableObject {
         }
     }
 
-    var idleStatus: String { keysTrusted ? "Hold to talk" : "Keys off - click !" }
+    var idleStatus: String {
+        if shotCount > 0 {
+            return shotCount == 1 ? "1 shot stacked" : "\(shotCount) shots stacked"
+        }
+        return keysTrusted ? "Hold to talk" : "Keys off - click !"
+    }
 
     /// Asks macOS for the Accessibility permission again (the keys-off badge).
     var onFixKeys: (() -> Void)?
 
     func fixKeys() {
         onFixKeys?()
+    }
+
+    /// Asks macOS for the Screen Recording permission again (the camera badge).
+    var onFixScreen: (() -> Void)?
+
+    // MARK: screenshots (camera button, or a tap of the screenshot key)
+
+    func shotButton() {
+        if screenTrusted {
+            takeShot()
+        } else {
+            onFixScreen?()
+        }
+    }
+
+    /// Captures the display under the pointer and adds it to the stack.
+    func takeShot() {
+        guard screenTrusted else {
+            flash("Screen off - click !")
+            return
+        }
+        let display = ScreenAccess.displayUnderPointer()
+        shotsInFlight += 1
+        lastShotAt = Date()
+        shotsChanged()
+        Task.detached(priority: .userInitiated) { [repoRoot, fmHome] in
+            let path = Self.shoot(repoRoot: repoRoot, fmHome: fmHome, display: display)
+            await MainActor.run {
+                self.shotsInFlight -= 1
+                if let path {
+                    self.pendingShots.append(path)
+                    self.lastShotAt = Date()
+                }
+                self.shotsChanged()
+                if path == nil {
+                    self.flash("Shot failed")
+                }
+                self.scheduleFlush()
+            }
+        }
+    }
+
+    /// A talk-to-Firstmate message is being recorded or transcribed, so stacked
+    /// shots wait to go with it.
+    private var voiceInProgress: Bool {
+        purpose == .firstmate && mode != .idle && heldTranscript == nil
+    }
+
+    private func shotsChanged() {
+        shotCount = pendingShots.count + shotsInFlight
+        if mode == .idle {
+            status = idleStatus
+        }
+    }
+
+    private func scheduleFlush() {
+        shotTimer?.invalidate()
+        let last = [lastShotAt, voiceEndedAt].compactMap { $0 }.max() ?? Date()
+        let delay = max(0.1, last.addingTimeInterval(stackWindow).timeIntervalSinceNow)
+        shotTimer = Timer.scheduledTimer(withTimeInterval: delay, repeats: false) { [weak self] _ in
+            MainActor.assumeIsolated { self?.flushShots() }
+        }
+    }
+
+    private func flushShots() {
+        shotTimer = nil
+        guard heldTranscript != nil || !pendingShots.isEmpty || shotsInFlight > 0 else { return }
+        let quietSince = [lastShotAt, voiceEndedAt].compactMap { $0 }.max() ?? .distantPast
+        if shotsInFlight > 0 || voiceInProgress || Date().timeIntervalSince(quietSince) < stackWindow {
+            // A capture is still being written, the shots are waiting for a voice
+            // message, or the window has not passed: look again shortly.
+            shotTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: false) { [weak self] _ in
+                MainActor.assumeIsolated { self?.flushShots() }
+            }
+            return
+        }
+        let text = heldTranscript
+        let images = pendingShots
+        heldTranscript = nil
+        pendingShots = []
+        shotsChanged()
+        if text != nil {
+            status = "Delivering…"
+        } else if mode == .idle {
+            status = images.count == 1 ? "Sending 1 shot…" : "Sending \(images.count) shots…"
+        }
+        Task.detached(priority: .userInitiated) { [repoRoot, fmHome] in
+            let outcome = Self.deliver(repoRoot: repoRoot, fmHome: fmHome, text: text, images: images)
+            await MainActor.run {
+                if text != nil {
+                    self.finish(status: outcome)
+                } else {
+                    self.flash(outcome)
+                }
+            }
+        }
+    }
+
+    /// A transcribed talk-to-Firstmate message: sent at once when no shots are
+    /// stacked, otherwise held until the stack window closes and sent with them.
+    private func voiceTranscribed(_ text: String) {
+        if pendingShots.isEmpty && shotsInFlight == 0 {
+            status = "Delivering…"
+            Task.detached(priority: .userInitiated) { [repoRoot, fmHome] in
+                let outcome = Self.deliver(repoRoot: repoRoot, fmHome: fmHome, text: text, images: [])
+                await MainActor.run {
+                    self.finish(status: outcome)
+                }
+            }
+            return
+        }
+        heldTranscript = text
+        status = "Adding shots…"
+        scheduleFlush()
     }
 
     // MARK: main button (talk to Firstmate)
@@ -578,6 +815,9 @@ final class FloaterModel: ObservableObject {
 
     private func stopAndDeliver() {
         let purpose = self.purpose
+        if purpose == .firstmate {
+            voiceEndedAt = Date()
+        }
         latched = false
         fromHotkey = false
         pressStartedAt = nil
@@ -610,11 +850,7 @@ final class FloaterModel: ObservableObject {
                 }
             case .firstmate:
                 await MainActor.run {
-                    self.status = "Delivering…"
-                }
-                let outcome = Self.deliver(repoRoot: repoRoot, fmHome: fmHome, text: text)
-                await MainActor.run {
-                    self.finish(status: outcome)
+                    self.voiceTranscribed(text)
                 }
             }
         }
@@ -623,9 +859,15 @@ final class FloaterModel: ObservableObject {
     private func finish(status: String) {
         mode = .idle
         purpose = .firstmate
-        self.status = status
+        flash(status)
+    }
+
+    /// Shows a short outcome on the status line while nothing is being captured.
+    private func flash(_ message: String) {
+        guard mode == .idle else { return }
+        status = message
         DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-            if self.mode == .idle {
+            if self.mode == .idle && self.status == message {
                 self.status = self.idleStatus
             }
         }
@@ -644,16 +886,41 @@ final class FloaterModel: ObservableObject {
         return run(bin: bin, args: [audio.path], env: ["FM_HOME": fmHome])
     }
 
-    // Types the transcript into firstmate's own chat; bin/fm-desk-voice.sh
-    // falls back to its mailbox when that pane cannot be reached.
-    nonisolated private static func deliver(repoRoot: String, fmHome: String, text: String) -> String {
+    /// Sends one message to Firstmate: the transcript, the screenshots, or both,
+    /// and returns the status to show. A transcript alone is typed into
+    /// firstmate's own chat; bin/fm-desk-voice.sh falls back to its mailbox when
+    /// that pane cannot be reached. A message with screenshots goes to the mailbox.
+    nonisolated private static func deliver(repoRoot: String, fmHome: String, text: String?, images: [String]) -> String {
         let bin = (repoRoot as NSString).appendingPathComponent("bin/fm-desk-voice.sh")
-        guard let out = run(bin: bin, args: ["send", "--source", "desk-floater", text], env: ["FM_HOME": fmHome]) else {
-            return "Deliver failed"
+        if images.isEmpty, let text {
+            guard let out = run(bin: bin, args: ["send", "--source", "desk-floater", text], env: ["FM_HOME": fmHome]) else {
+                return "Deliver failed"
+            }
+            if out.hasPrefix("sent:") { return "Sent" }
+            if out.hasPrefix("sent-unconfirmed:") { return "Sent, unconfirmed" }
+            return "Saved to mailbox"
         }
-        if out.hasPrefix("sent:") { return "Sent" }
-        if out.hasPrefix("sent-unconfirmed:") { return "Sent, unconfirmed" }
-        return "Saved to mailbox"
+        var args = ["deliver", "--source", "desk-floater"]
+        for image in images {
+            args += ["--image", image]
+        }
+        args.append("--")
+        if let text {
+            args.append(text)
+        }
+        return run(bin: bin, args: args, env: ["FM_HOME": fmHome]) != nil ? "Sent" : "Deliver failed"
+    }
+
+    /// Captures one display to this home's screenshot folder; nil on failure.
+    nonisolated private static func shoot(repoRoot: String, fmHome: String, display: Int?) -> String? {
+        let bin = (repoRoot as NSString).appendingPathComponent("bin/fm-desk-voice.sh")
+        var args = ["shot"]
+        if let display {
+            args += ["--display", String(display)]
+        }
+        let path = run(bin: bin, args: args, env: ["FM_HOME": fmHome])?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return path.isEmpty ? nil : path
     }
 
     nonisolated private static func speak(repoRoot: String, fmHome: String, args: [String]) -> String? {
@@ -714,13 +981,14 @@ struct FloaterView: View {
                         )
                     }
                 }
+                shotButton
             }
             Text(model.status)
                 .font(.system(size: 9, weight: .medium))
                 .foregroundStyle(keysOffIdle ? Color(red: 1.0, green: 0.72, blue: 0.35) : Color.white)
                 .lineLimit(1)
                 .truncationMode(.tail)
-                .frame(width: 104)
+                .frame(width: 128)
                 .allowsHitTesting(false)
         }
         .padding(6)
@@ -742,7 +1010,41 @@ struct FloaterView: View {
     }
 
     private var keysOffIdle: Bool {
-        !model.keysTrusted && model.mode == .idle
+        model.mode == .idle && model.status == "Keys off - click !"
+    }
+
+    private var badgeOrange: Color { Color(red: 0.90, green: 0.50, blue: 0.10) }
+
+    /// Takes a screenshot of the display under the pointer. While shots are
+    /// stacking it shows how many; without Screen Recording it shows "!" and
+    /// clicking asks macOS again.
+    private var shotButton: some View {
+        control(
+            "camera.fill",
+            help: model.screenTrusted
+                ? "Screenshot to Firstmate (or tap Right Shift); shots taken close together are sent as one message"
+                : "Screenshots are off: macOS has not allowed this build Screen Recording. Click to allow it.",
+            action: model.shotButton
+        )
+        .overlay(alignment: .topTrailing) {
+            if !model.screenTrusted {
+                badge(Text("!"), fill: badgeOrange)
+                    .offset(x: 4, y: -4)
+                    .allowsHitTesting(false)
+            } else if model.shotCount > 0 {
+                badge(Text("\(model.shotCount)"), fill: Color(red: 0.12, green: 0.45, blue: 0.85))
+                    .offset(x: 4, y: -4)
+                    .allowsHitTesting(false)
+            }
+        }
+    }
+
+    private func badge(_ label: Text, fill: Color) -> some View {
+        label
+            .font(.system(size: 8, weight: .heavy))
+            .foregroundStyle(.white)
+            .frame(minWidth: 14, minHeight: 14)
+            .background(Capsule().fill(fill))
     }
 
     private var dictateColor: Color { Color(red: 0.55, green: 0.30, blue: 0.85) }
@@ -783,7 +1085,7 @@ struct FloaterView: View {
                 .font(.system(size: 8, weight: .heavy))
                 .foregroundStyle(.white)
                 .frame(width: 14, height: 14)
-                .background(Circle().fill(Color(red: 0.90, green: 0.50, blue: 0.10)))
+                .background(Circle().fill(badgeOrange))
                 .contentShape(Circle())
         }
         .buttonStyle(.plain)
