@@ -173,13 +173,37 @@ test_routine_shipshape_is_silent() {
   local dir
   dir=$(make_primary_dir "$TMP_ROOT/shipshape")
   run_hook "$dir" "Captain, shipshape."
+  run_hook "$dir" "$(printf '\n  Captain, shipshape.  \n\n')"
+  assert_absent "$dir/spoken.log" "the routine shipshape reply must not be spoken"
+  pass "routine shipshape reply is silent"
+}
+
+test_shipshape_near_misses_are_spoken() {
+  local dir
+  dir=$(make_primary_dir "$TMP_ROOT/shipshape-near")
   run_hook "$dir" "captain, shipshape"
-  run_hook "$dir" "Captain, shipshape. Nothing needs you right now."
-  assert_absent "$dir/spoken.log" "routine shipshape replies must not be spoken"
-  run_hook "$dir" "Captain, shipshape. The finances fix merged, the local copy is updated, and the next task is already under way with the checks running."
-  assert_contains "$(spoken "$dir")" "The finances fix merged" \
-    "a shipshape opener followed by a longer outcome must still be spoken"
-  pass "routine shipshape replies are silent, longer outcomes are not"
+  assert_equals "captain, shipshape" "$(spoken "$dir")" \
+    "only the exact routine line is routine"
+  pass "shipshape near misses are spoken"
+}
+
+test_shipshape_opener_is_dropped_one_line() {
+  local dir
+  dir=$(make_primary_dir "$TMP_ROOT/shipshape-one-line")
+  run_hook "$dir" "Captain, shipshape. But the deploy failed and needs your approval."
+  assert_equals "But the deploy failed and needs your approval." "$(spoken "$dir")" \
+    "a shipshape opener must be dropped and the news after it spoken"
+  pass "one-line shipshape opener is dropped, the news is spoken"
+}
+
+test_shipshape_opener_is_dropped_two_paragraphs() {
+  local dir
+  dir=$(make_primary_dir "$TMP_ROOT/shipshape-two-para")
+  run_hook "$dir" "$(printf '%s\n\n%s\n' "Captain, shipshape." \
+    "The finances fix merged and the deploy is running; I'll report when it lands.")"
+  assert_equals "The finances fix merged and the deploy is running; I'll report when it lands." \
+    "$(spoken "$dir")" "a shipshape first paragraph must be dropped and the next paragraph spoken"
+  pass "two-paragraph shipshape opener is dropped, the news is spoken"
 }
 
 test_long_reply_is_capped() {
@@ -363,6 +387,9 @@ test_list_paragraph_is_joined
 test_empty_and_tool_only_turns_are_silent
 test_code_only_reply_is_silent
 test_routine_shipshape_is_silent
+test_shipshape_near_misses_are_spoken
+test_shipshape_opener_is_dropped_one_line
+test_shipshape_opener_is_dropped_two_paragraphs
 test_long_reply_is_capped
 test_model_already_spoke_is_silent_then_next_turn_speaks
 test_superseded_stop_is_dropped

@@ -1286,7 +1286,7 @@ The script's header and `--help` own the exact invocation, the environment overr
 **Automatic reply speech.** On a Claude primary, the tracked `Stop` hook `bin/fm-claude-reply-speak.sh` is the backstop for that duty.
 It runs in the background after every turn of the lock-holding plain primary checkout, never in a crew or scout worktree or a secondmate home, and speaks the turn's final reply through `bin/fm-speak.sh` only when nothing was spoken during that turn.
 It speaks the first plain paragraph of the reply, capped at about 60 words, and replaces a line the register refuses as a decision request with a short notice that a decision is waiting on screen.
-A routine `Captain, shipshape.` reply stays silent to save speech credits.
+A routine `Captain, shipshape.` reply stays silent to save speech credits, and a reply that opens with that line speaks only what follows it.
 Mute and the opt-in gate above apply unchanged, and the hook's header owns the exact rules.
 The Mac push-to-talk floater that feeds captain input into this home is documented in [`desk-floater.md`](desk-floater.md).
 

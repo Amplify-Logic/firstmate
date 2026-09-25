@@ -9,11 +9,13 @@
 #
 # What it speaks: the Stop payload's `last_assistant_message`, which is the exact
 # final reply, reduced to a spoken line before bin/fm-speak.sh shapes it:
+#   - a leading routine "Captain, shipshape." is dropped first, so that line is
+#     never spoken and the news after it is;
 #   - only the first plain paragraph, with headings, tables, fenced code, and
 #     rules dropped, and list markers, emphasis, backticks, and link targets
 #     stripped, because the register would otherwise read pipes and code aloud;
-#   - at most FM_REPLY_SPEAK_MAX_WORDS words (default 60), cut back to the last
-#     full sentence inside that cap when one exists.
+#   - at most 60 words, cut back to the last full sentence inside that cap when
+#     one exists.
 # When the register refuses the line (bin/fm-speak.sh exit 2, which is how it
 # refuses a line that asks the captain to decide), the hook speaks the fixed
 # notice "Captain, a decision is waiting for you on screen." instead, so the
@@ -23,9 +25,8 @@
 # What stays silent:
 #   - an empty or missing `last_assistant_message`, such as a turn that ended on
 #     tool calls only;
-#   - the routine no-news reply: a reply that opens with "Captain, shipshape."
-#     and has no more than FM_REPLY_SPEAK_ROUTINE_WORDS words in total (default
-#     12), so a bare routine update costs no speech;
+#   - the routine no-news reply: exactly "Captain, shipshape." after trimming,
+#     so a bare routine update costs no speech;
 #   - a turn in which bin/fm-speak.sh already handed a line over: the hook
 #     records a signature of state/speak-last (mtime plus checksum) after each
 #     Stop it accounts for, including after its own speech, and a different
@@ -56,8 +57,6 @@
 # Environment overrides, for tests and unusual layouts:
 #   FM_REPLY_SPEAK_CMD           speak command (default: bin/fm-speak.sh)
 #   FM_REPLY_SPEAK_SETTLE_MS     wait before the superseded check (default 2000)
-#   FM_REPLY_SPEAK_MAX_WORDS     spoken word cap (default 60)
-#   FM_REPLY_SPEAK_ROUTINE_WORDS routine shipshape word bound (default 12)
 #   FM_ROOT_OVERRIDE, FM_HOME, FM_STATE_OVERRIDE  as for the other hooks
 set -u
 
@@ -71,12 +70,11 @@ SEEN_FILE="$STATE/.reply-speak-seen"
 SPEAK_LAST="$STATE/speak-last"
 DECISION_NOTICE="Captain, a decision is waiting for you on screen."
 
+ROUTINE_LINE="Captain, shipshape."
+MAX_WORDS=60
+
 SETTLE_MS=${FM_REPLY_SPEAK_SETTLE_MS:-2000}
-MAX_WORDS=${FM_REPLY_SPEAK_MAX_WORDS:-60}
-ROUTINE_WORDS=${FM_REPLY_SPEAK_ROUTINE_WORDS:-12}
 case "$SETTLE_MS" in ''|*[!0-9]*) SETTLE_MS=2000 ;; esac
-case "$MAX_WORDS" in ''|*[!0-9]*|0) MAX_WORDS=60 ;; esac
-case "$ROUTINE_WORDS" in ''|*[!0-9]*) ROUTINE_WORDS=12 ;; esac
 
 # shellcheck source=bin/fm-primary-scope-lib.sh
 . "$SCRIPT_DIR/fm-primary-scope-lib.sh"
@@ -130,18 +128,16 @@ record_seen
 [ "$SPOKE_THIS_TURN" -eq 0 ] || exit 0
 
 MSG=$(printf '%s' "$PAYLOAD" | jq -r '.last_assistant_message // empty | strings' 2>/dev/null || true)
+
+# --- routine no-news line: never spoken -------------------------------------
+MSG=${MSG#"${MSG%%[![:space:]]*}"}
+case "$MSG" in
+  "$ROUTINE_LINE"|"$ROUTINE_LINE"[[:space:]]*) MSG=${MSG#"$ROUTINE_LINE"} ;;
+esac
 case "$MSG" in
   *[![:space:]]*) ;;
   *) exit 0 ;;
 esac
-
-# --- routine no-news reply ---------------------------------------------------
-FLAT=$(printf '%s\n' "$MSG" | tr -s '[:space:]' ' ' | sed -E 's/^ //; s/ $//')
-TOTAL_WORDS=$(printf '%s\n' "$FLAT" | wc -w | tr -d ' ')
-if printf '%s\n' "$FLAT" | grep -Eiq '^captain, shipshape[.!]?( |$)' \
-  && [ "$TOTAL_WORDS" -le "$ROUTINE_WORDS" ]; then
-  exit 0
-fi
 
 # --- spoken line: first plain paragraph, capped ------------------------------
 LINE=$(printf '%s\n' "$MSG" | awk '
