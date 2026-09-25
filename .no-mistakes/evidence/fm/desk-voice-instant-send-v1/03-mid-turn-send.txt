@@ -1,0 +1,34 @@
+# Primary is mid-turn (streaming a story). Sending from outside the pane:
+--- pane at send time:
+  remembered every step of the spiral staircase—one hundred and forty-four stairs to the lantern room. He'd climbed them so many times that
+  his body moved by memory alone, leaving his mind free to wander across fifty years of service.
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏸ manual mode on · esc to interrupt · ← 2 agents
+$ fm-desk-voice.sh send --source desk-floater "After the story, reply PONG-BETA"
+sent: tmux %0
+exit=0
+--- pane right after send:
+  thousand golden rays. Samuel ran his weathered palm along the brass rail, feeling the salt spray that had accumulated despite the glass
+  enclosure. His fingertips had worn grooves into this metal over five decades.
+❯ After the story, reply PONG-BETA
+  ctrl+x ctrl+s to send now
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ Press up to edit queued messages
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏸ manual mode on · esc to interrupt · ← 2 agents
+
+--- pane after the turn finished (queued transcript was picked up):
+  salt and memory, Samuel realized he didn't feel abandoned. He felt released. His watch was finally over, his vigil complete.
+  The light would find another way to burn.
+✻ Cooked for 14s · done 5:57 PM
+❯ After the story, reply PONG-BETA
+⏺ PONG-BETA
+✻ Crunched for 1s · done 5:57 PM
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏸ manual mode on · ? for shortcuts · ← 2 agents
+--- mailbox inbox count:
+       0

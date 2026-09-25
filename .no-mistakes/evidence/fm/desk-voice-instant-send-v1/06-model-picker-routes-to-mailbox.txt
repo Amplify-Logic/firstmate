@@ -1,0 +1,32 @@
+# Primary shows the real /model picker:
+    3.  Fable 5.1              For your toughest challenges
+    4.  Sonnet 5               Most efficient for everyday tasks
+  ❯ 5.  Haiku 4.5 ✔            Fastest for quick answers
+    6.  Opus 5                 Best for everyday, complex tasks
+    7.  Fable 5                Most capable for your hardest and longest-running tasks
+    8.  Opus 4.8               Best for everyday, complex tasks
+    9.  Opus 4.7               Best for everyday, complex tasks
+  ↓ 10. Opus 4.6               Best for everyday, complex tasks
+     … +1 model
+  ○ Effort not supported for Haiku 4.5
+  Use /fast to turn on Fast mode (Opus 5.5).
+  Enter to set as default · s to use this session only · Esc to cancel
+$ fm-desk-voice.sh send --source desk-floater "3 please"
+fm-desk-voice: the primary's chat pane is not reachable; saving to the mailbox instead
+mailbox: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fmdv.zTlz/home/state/desk-voice/inbox/20260925T145851Z-a4f6b051.json
+exit=0
+--- pane after send (picker unchanged):
+    3.  Fable 5.1              For your toughest challenges
+    4.  Sonnet 5               Most efficient for everyday tasks
+  ❯ 5.  Haiku 4.5 ✔            Fastest for quick answers
+    6.  Opus 5                 Best for everyday, complex tasks
+    7.  Fable 5                Most capable for your hardest and longest-running tasks
+    8.  Opus 4.8               Best for everyday, complex tasks
+    9.  Opus 4.7               Best for everyday, complex tasks
+  ↓ 10. Opus 4.6               Best for everyday, complex tasks
+     … +1 model
+  ○ Effort not supported for Haiku 4.5
+  Use /fast to turn on Fast mode (Opus 5.5).
+  Enter to set as default · s to use this session only · Esc to cancel
+--- mailbox count (expect 2):
+       2

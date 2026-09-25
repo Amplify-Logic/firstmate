@@ -1,0 +1,26 @@
+$ FM_HOME=$HOME_T fm-desk-voice.sh send --source desk-floater "yes and then merge it"   # pane shows Claude Code trust dialog
+fm-desk-voice: the primary's chat pane is not reachable; saving to the mailbox instead
+mailbox: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fmdv.zTlz/home/state/desk-voice/inbox/20260925T145610Z-2a09751d.json
+exit=0
+
+--- pane after send (still the dialog, nothing typed):
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ Accessing workspace:
+ /Users/larsmusic/.no-mistakes/worktrees/f569cc43ac96/01M3CG5D69G4ME7FW63JNVWVZG
+ Quick safety check: Is this a project you created or one you trust? (Like your own code, a well-known open source project, or work from
+ your team). If not, take a moment to review what's in this folder first.
+ Claude Code'll be able to read, edit, and execute files here.
+ Security guide
+ ❯ No, exit
+   Yes, I trust this folder
+ Enter to confirm · Esc to cancel
+
+--- mailbox inbox:
+20260925T145610Z-2a09751d.json
+{"schema": "fm-desk-voice-transcript.v1", "id": "2a09751d", "created_at": "20260925T145610Z", "source": "desk-floater", "transcript": "yes and then merge it"}
+
+--- wake queue:
+1790348171	1	check	desk-voice	desk-voice: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fmdv.zTlz/home/state/desk-voice/inbox/20260925T145610Z-2a09751d.json
+--- claude still alive:
+  PID COMM
+33395 claude

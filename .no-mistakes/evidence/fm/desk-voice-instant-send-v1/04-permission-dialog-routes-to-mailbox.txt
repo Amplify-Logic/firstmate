@@ -1,0 +1,22 @@
+# Primary shows a real Claude Code permission prompt ("❯ 1. Yes"). Captain says "2 and then merge it":
+--- composer classifier reading of this screen:
+pending
+$ fm-desk-voice.sh send --source desk-floater "2 and then merge it"
+fm-desk-voice: the primary's chat pane is not reachable; saving to the mailbox instead
+mailbox: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fmdv.zTlz/home/state/desk-voice/inbox/20260925T145814Z-71e39f4b.json
+exit=0
+--- pane after send (dialog untouched, option 1 still highlighted):
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ Bash command
+   touch fmdv-probe-file
+   Create empty probe file
+ Do you want to proceed?
+ ❯ 1. Yes
+   2. Yes, and always allow access to /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fmdv.zTlz/cwd from this project
+   3. No
+ Esc to cancel · Tab to amend
+--- probe file created? (expect no):
+no
+--- mailbox:
+{"schema": "fm-desk-voice-transcript.v1", "id": "71e39f4b", "created_at": "20260925T145814Z", "source": "desk-floater", "transcript": "2 and then merge it"}
+

@@ -1,0 +1,19 @@
+# Captain had half-typed a draft into the composer:
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ Reply with the word PONG-GAMMA
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏸ manual mode on
+$ fm-desk-voice.sh send --source desk-floater "and nothing else, no tools"
+sent: tmux %0
+exit=0
+--- pane:
+✻ Cooked for 2s · done 5:58 PM
+❯ Reply with the word PONG-GAMMA and nothing else, no tools
+⏺ PONG-GAMMA
+✻ Brewed for 1s · done 5:58 PM
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏸ manual mode on · ? for shortcuts · ← 2 agents
+--- mailbox count (1 = only the earlier dialog transcript):
+       1

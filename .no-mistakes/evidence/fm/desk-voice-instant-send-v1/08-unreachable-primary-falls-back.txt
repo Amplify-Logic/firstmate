@@ -1,0 +1,30 @@
+## (a) session lock names a dead pid
+fm-desk-voice: the primary's chat pane is not reachable; saving to the mailbox instead
+mailbox: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fmdv.zTlz/home/state/desk-voice/inbox/20260925T145923Z-935ef4c1.json
+exit=0
+
+## (b) session lock names a live non-harness process (the tmux shell in a second pane)
+39338 -zsh
+fm-desk-voice: the primary's chat pane is not reachable; saving to the mailbox instead
+mailbox: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fmdv.zTlz/home/state/desk-voice/inbox/20260925T145925Z-8021e869.json
+exit=0
+
+## (c) no session lock at all
+fm-desk-voice: the primary's chat pane is not reachable; saving to the mailbox instead
+mailbox: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fmdv.zTlz/home/state/desk-voice/inbox/20260925T145925Z-8cd2d00c.json
+exit=0
+
+## (d) lock holder is a harness-named process whose env claims pane %0 but which is not running in it
+fm-desk-voice: the primary's chat pane is not reachable; saving to the mailbox instead
+mailbox: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fmdv.zTlz/home/state/desk-voice/inbox/20260925T145927Z-dd92e0f8.json
+exit=0
+
+--- primary pane unchanged by all four sends:
+yes
+--- mailbox transcripts:
+2 and then merge it
+3 please
+stale lock check
+non harness holder check
+no lock check
+foreign pane check

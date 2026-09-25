@@ -1,0 +1,20 @@
+[1m$ fm-desk-voice.sh send --source desk-floater "yes do it and merge"[0m
+fm-desk-voice: the primary's chat pane is not reachable; saving to the mailbox instead
+mailbox: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fmdv.zTlz/home/state/desk-voice/inbox/20260925T150111Z-79935b6a.json
+[1m--- primary pane after the send:[0m
+[38;5;246m[49m⏺[39m [1mBash[0m(touch fmdv-probe-file)
+[38;5;246m  ⎿  Waiting…[39m
+
+[38;5;153m────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+[39m [1m[38;5;153mBash command[0m
+
+   touch fmdv-probe-file
+   [38;5;246mCreate[39m [38;5;246mempty[39m [38;5;246mprobe[39m [38;5;246mfile[39m
+
+ Do you want to proceed?
+ [38;5;153m❯[39m [38;5;246m1.[39m [38;5;153mYes[39m
+   [38;5;246m2.[39m Yes, and always allow access to [1m/private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fmdv.zTlz/cwd[0m from this project
+   [38;5;246m3.[39m No
+
+ [38;5;246mEsc[39m [38;5;246mto[39m [38;5;246mcancel[39m [38;5;246m·[39m [38;5;246mTab[39m [38;5;246mto[39m [38;5;246mamend[39m
+
