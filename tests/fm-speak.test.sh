@@ -1236,7 +1236,7 @@ test_stop_cuts_a_replay_of_kept_audio() {
 
 # Permission bits of a path, as octal digits, on macOS and Linux alike.
 mode_of() {  # <path>
-  stat -f '%Lp' "$1" 2>/dev/null || stat -c '%a' "$1"
+  stat -c '%a' "$1" 2>/dev/null || stat -f '%Lp' "$1"
 }
 
 # The captain's spoken replies are private: other accounts on the Mac must not
