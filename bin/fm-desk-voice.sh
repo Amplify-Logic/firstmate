@@ -8,9 +8,12 @@
 #   fm-desk-voice.sh drain [--print]
 #   fm-desk-voice.sh --help
 #
-# WHY: the floater is mouth/ears only. It must not paste into random terminals
-# or act as a second Firstmate. The only terminal it ever types into is the
-# primary session that holds this home's session lock.
+# WHY: the floater is mouth/ears only. Transcripts meant for Firstmate must not
+# be pasted into random terminals, and the floater must not act as a second
+# Firstmate. The only terminal this script ever types into is the primary
+# session that holds this home's session lock. (The floater's separate
+# dictation mode types only into the text box the captain chose and never
+# reaches this script; see docs/desk-floater.md.)
 #
 # send is the floater's talk-to-firstmate path. It types the transcript into
 # the primary's own chat pane and presses Enter, so the words arrive at once,
