@@ -1,0 +1,2 @@
+rendered r3-floater-saved-to-mailbox.png status="Saved to mailbox" shotCount=0
+mailbox messages: 1

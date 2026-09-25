@@ -1,0 +1,7 @@
+rendered r3-floater-2-shots-stacked.png status="2 shots stacked" shotCount=2
+2.5s after last shot: pane calls=0 inbox=0
+rendered r3-floater-sent-typed-into-chat.png status="Sent" shotCount=0
+pane received:
+  call pane send-text w7:p3 Screenshots: /tmp/fmsend-r3/sw-typed/state/desk-voice/shots/20260925T222629622335Z-daedbea5.png /tmp/fmsend-r3/sw-typed/state/desk-voice/shots/20260925T222630316115Z-dc4938e1.png --session fm-desk-send-test
+  call pane send-keys w7:p3 enter --session fm-desk-send-test
+mailbox messages: 0

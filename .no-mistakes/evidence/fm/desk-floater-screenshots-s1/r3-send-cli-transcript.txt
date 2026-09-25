@@ -1,0 +1,49 @@
+## Scenario A: voice + 2 screenshots typed into the live primary's chat pane (stand-in primary, fake herdr)
+shots: /tmp/fmsend-r3/r3-typed/state/desk-voice/shots/20260925T222549753029Z-80ae5142.png /tmp/fmsend-r3/r3-typed/state/desk-voice/shots/20260925T222549851422Z-0966e133.png
+$ fm-desk-voice.sh send --source desk-floater --image /tmp/fmsend-r3/r3-typed/state/desk-voice/shots/20260925T222549753029Z-80ae5142.png --image /tmp/fmsend-r3/r3-typed/state/desk-voice/shots/20260925T222549851422Z-0966e133.png -- Why is this red
+sent: herdr fm-desk-send-test:w7:p3
+exit=0
+-- what the primary's pane received:
+pane send-text w7:p3 Why is this red Screenshots: /tmp/fmsend-r3/r3-typed/state/desk-voice/shots/20260925T222549753029Z-80ae5142.png /tmp/fmsend-r3/r3-typed/state/desk-voice/shots/20260925T222549851422Z-0966e133.png --session fm-desk-send-test
+pane send-keys w7:p3 enter --session fm-desk-send-test
+-- mailbox messages: 0
+
+## Scenario B: screenshots alone typed into the pane
+$ fm-desk-voice.sh send --source desk-floater --image /tmp/fmsend-r3/r3-typed/state/desk-voice/shots/20260925T222549753029Z-80ae5142.png --
+sent: herdr fm-desk-send-test:w7:p3
+exit=0
+-- what the primary's pane received:
+pane send-text w7:p3 Screenshots: /tmp/fmsend-r3/r3-typed/state/desk-voice/shots/20260925T222549753029Z-80ae5142.png --session fm-desk-send-test
+pane send-keys w7:p3 enter --session fm-desk-send-test
+-- mailbox messages: 0
+
+## Scenario C: pane refuses text -> voice + shot fall back to mailbox with wake
+$ fm-desk-voice.sh send --source desk-floater --image /tmp/fmsend-r3/r3-refused/state/desk-voice/shots/20260925T222553013595Z-cab0829f.png -- Look at this
+fm-desk-voice: the primary's chat pane refused the text; saving it to the mailbox instead
+mailbox: /tmp/fmsend-r3/r3-refused/state/desk-voice/inbox/20260925T222553Z-2ab6fb78.json
+exit=0
+-- wake queue:
+desk-voice	desk-voice: /tmp/fmsend-r3/r3-refused/state/desk-voice/inbox/20260925T222553Z-2ab6fb78.json
+$ fm-desk-voice.sh drain
+Look at this
+Screenshots: /tmp/fmsend-r3/r3-refused/state/desk-voice/shots/20260925T222553013595Z-cab0829f.png
+
+## Scenario D: no live primary (stale lock) -> shots alone saved to mailbox
+$ fm-desk-voice.sh send --source desk-floater --image /tmp/fmsend-r3/r3-nolock/state/desk-voice/shots/20260925T222554440679Z-f2fbc86c.png --
+fm-desk-voice: the primary's chat pane is not reachable; saving to the mailbox instead
+mailbox: /tmp/fmsend-r3/r3-nolock/state/desk-voice/inbox/20260925T222554Z-02cb31e2.json
+exit=0
+$ fm-desk-voice.sh drain
+Screenshots: /tmp/fmsend-r3/r3-nolock/state/desk-voice/shots/20260925T222554440679Z-f2fbc86c.png
+
+## Adversarial: bad images refused by send, nothing typed or saved
+$ fm-desk-voice.sh send --source desk-floater --image relative.png -- hi
+fm-desk-voice: --image needs an absolute path: relative.png
+exit=2
+$ fm-desk-voice.sh send --source desk-floater --image /nope/missing.png -- hi
+fm-desk-voice: no such image: /nope/missing.png
+exit=2
+$ fm-desk-voice.sh send --source desk-floater --
+fm-desk-voice: nothing to deliver
+exit=2
+-- pane calls: 0  mailbox: 0

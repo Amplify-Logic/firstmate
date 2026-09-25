@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+set -u
+REPO=/Users/larsmusic/.no-mistakes/worktrees/f569cc43ac96/01M3D4P4MWJ3SA43X9YW4XGFZ6
+DESK=$REPO/bin/fm-desk-voice.sh
+source /tmp/fmsend-r3/fixture.sh
+unset TMUX TMUX_PANE HERDR_ENV HERDR_PANE_ID HERDR_SESSION HERDR_SOCKET_PATH FM_BACKEND_HERDR_BIN FM_SUPERVISOR_TARGET FM_SUPERVISOR_BACKEND
+cap=/tmp/fmsend-r3/cap; printf '#!/usr/bin/env bash\nfor a in "$@"; do out=$a; done\nprintf PNG > "$out"\n' > $cap; chmod +x $cap
+readlog() { tr '\037' ' ' < "$1/fixture/herdr.log" | grep -E 'send-text|send-keys' | sed 's/^call //'; }
+run() { echo "\$ fm-desk-voice.sh $*"; PATH="$dir/bin:$PATH" FM_FAKE_HERDR_DIR="$dir" FM_HOME="$home" FM_STATE_OVERRIDE="$home/state" FM_BACKEND_HERDR_SUBMIT_MIN_SLEEP=0.1 FM_DESK_SHOT_CAPTURE=$cap "$DESK" "$@"; echo "exit=$?"; }
+inbox() { ls "$home/state/desk-voice/inbox" 2>/dev/null | grep -c json; }
+
+echo "## Scenario A: voice + 2 screenshots typed into the live primary's chat pane (stand-in primary, fake herdr)"
+home=$(desk_send_fixture r3-typed); dir=$home/fixture
+s1=$(run shot --display 1 | head -1 | sed 's/^\$.*//'); 
+s1=$(PATH="$dir/bin:$PATH" FM_HOME="$home" FM_STATE_OVERRIDE="$home/state" FM_DESK_SHOT_CAPTURE=$cap "$DESK" shot --display 1)
+s2=$(PATH="$dir/bin:$PATH" FM_HOME="$home" FM_STATE_OVERRIDE="$home/state" FM_DESK_SHOT_CAPTURE=$cap "$DESK" shot --display 2)
+echo "shots: $s1 $s2"
+run send --source desk-floater --image "$s1" --image "$s2" -- "Why is this red"
+echo "-- what the primary's pane received:"; readlog "$home"
+echo "-- mailbox messages: $(inbox)"
+: > "$dir/herdr.log"
+echo
+echo "## Scenario B: screenshots alone typed into the pane"
+run send --source desk-floater --image "$s1" --
+echo "-- what the primary's pane received:"; readlog "$home"
+echo "-- mailbox messages: $(inbox)"
+desk_send_done "$home"
+echo
+echo "## Scenario C: pane refuses text -> voice + shot fall back to mailbox with wake"
+home=$(desk_send_fixture r3-refused); dir=$home/fixture; : > "$dir/send-text-fails"
+s1=$(PATH="$dir/bin:$PATH" FM_HOME="$home" FM_STATE_OVERRIDE="$home/state" FM_DESK_SHOT_CAPTURE=$cap "$DESK" shot)
+run send --source desk-floater --image "$s1" -- "Look at this"
+echo "-- wake queue:"; cut -f4- "$home/state/.wake-queue"
+echo "\$ fm-desk-voice.sh drain"; FM_HOME="$home" FM_STATE_OVERRIDE="$home/state" "$DESK" drain
+desk_send_done "$home"
+echo
+echo "## Scenario D: no live primary (stale lock) -> shots alone saved to mailbox"
+home=$(new_home r3-nolock); dir=$home/fixture; mkdir -p $dir/bin; echo 999999 > "$home/state/.lock"
+s1=$(FM_HOME="$home" FM_STATE_OVERRIDE="$home/state" FM_DESK_SHOT_CAPTURE=$cap "$DESK" shot)
+run send --source desk-floater --image "$s1" --
+echo "\$ fm-desk-voice.sh drain"; FM_HOME="$home" FM_STATE_OVERRIDE="$home/state" "$DESK" drain
+echo
+echo "## Adversarial: bad images refused by send, nothing typed or saved"
+home=$(desk_send_fixture r3-bad); dir=$home/fixture
+run send --source desk-floater --image relative.png -- hi
+run send --source desk-floater --image /nope/missing.png -- hi
+run send --source desk-floater --
+echo "-- pane calls: $(readlog "$home" | wc -l | tr -d ' ')  mailbox: $(inbox)"
+desk_send_done "$home"
