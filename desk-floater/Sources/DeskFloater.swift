@@ -814,14 +814,14 @@ final class FloaterModel: ObservableObject {
         }
     }
 
-    /// Reads `<number> TAB <epoch> TAB <local time> TAB <text>` lines, newest first.
+    /// Reads `<number> TAB <epoch> TAB <text>` lines, newest first.
     nonisolated private static func parseHistory(_ out: String) -> [RecentReply] {
         out.split(separator: "\n").compactMap { line in
-            let cols = line.split(separator: "\t", maxSplits: 3, omittingEmptySubsequences: false)
-            guard cols.count == 4, let id = Int(cols[0]), let epoch = TimeInterval(cols[1]) else {
+            let cols = line.split(separator: "\t", maxSplits: 2, omittingEmptySubsequences: false)
+            guard cols.count == 3, let id = Int(cols[0]), let epoch = TimeInterval(cols[1]) else {
                 return nil
             }
-            return RecentReply(id: id, time: Date(timeIntervalSince1970: epoch), text: String(cols[3]))
+            return RecentReply(id: id, time: Date(timeIntervalSince1970: epoch), text: String(cols[2]))
         }
     }
 

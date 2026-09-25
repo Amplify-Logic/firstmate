@@ -1037,12 +1037,11 @@ test_history_lists_the_newest_ten_replies_newest_first() {
   first=$(printf '%s\n' "$out" | head -n 1)
   last=$(printf '%s\n' "$out" | tail -n 1)
   assert_equals "12" "$(printf '%s' "$first" | cut -f 1)" "the newest reply must be listed first"
-  assert_equals "Reply 12 is green." "$(printf '%s' "$first" | cut -f 4)" "the listed text is the shaped line"
-  assert_equals "Reply 3 is green." "$(printf '%s' "$last" | cut -f 4)" "the oldest kept reply must be listed last"
+  assert_equals "Reply 12 is green." "$(printf '%s' "$first" | cut -f 3)" "the listed text is the shaped line"
+  assert_equals "Reply 3 is green." "$(printf '%s' "$last" | cut -f 3)" "the oldest kept reply must be listed last"
   printf '%s' "$first" | cut -f 2 | grep -Eq '^[0-9]+$' \
     || fail "fm-speak: the listed time must be epoch seconds: $first"
-  printf '%s' "$first" | cut -f 3 | grep -Eq '^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}$' \
-    || fail "fm-speak: the listed local time must be YYYY-MM-DD HH:MM: $first"
+  assert_equals 3 "$(printf '%s' "$first" | awk -F '\t' '{ print NF }')" "each listed reply has exactly three columns"
   assert_not_contains "$out" "Shall I" "a refused line must never be kept"
   pass "fm-speak: the history lists the newest ten replies, newest first"
 }

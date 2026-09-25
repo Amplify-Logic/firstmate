@@ -125,9 +125,9 @@
 #   --repeat  speaks the newest line in the reply history again (see REPLY
 #             HISTORY below). Nothing spoken yet is exit 1.
 #   --history prints the reply history newest first, one line per reply:
-#             `<number> TAB <epoch seconds> TAB <local YYYY-MM-DD HH:MM> TAB
-#             <text>`, with the text's own tabs and line breaks turned into
-#             spaces. An empty history prints nothing and exits 0.
+#             `<number> TAB <epoch seconds> TAB <text>`, with the text's own
+#             tabs and line breaks turned into spaces. An empty history prints
+#             nothing and exits 0.
 #   --replay <number>
 #             speaks the reply with that number from --history again. The
 #             number belongs to the reply, not to its place in the list, so a
@@ -671,12 +671,6 @@ record_history() {  # <shaped text>
   prune_history
 }
 
-format_time() {  # <epoch>
-  date -d "@$1" '+%Y-%m-%d %H:%M' 2>/dev/null \
-    || date -r "$1" '+%Y-%m-%d %H:%M' 2>/dev/null \
-    || printf '?\n'
-}
-
 list_history() {
   local number entry when text
   history_numbers | sort -rn | while read -r number; do
@@ -686,7 +680,7 @@ list_history() {
     text=$(printf '%s' "$text" | sed -E 's/[[:space:]]+$//')
     when=$(cat "$entry/time" 2>/dev/null) || when=0
     case "$when" in ''|*[!0-9]*) when=0 ;; esac
-    printf '%s\t%s\t%s\t%s\n' "$number" "$when" "$(format_time "$when")" "$text"
+    printf '%s\t%s\t%s\n' "$number" "$when" "$text"
   done
 }
 
