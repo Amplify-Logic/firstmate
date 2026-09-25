@@ -1234,6 +1234,41 @@ test_stop_cuts_a_replay_of_kept_audio() {
   pass "fm-speak: stop cuts a replay of kept audio"
 }
 
+# Permission bits of a path, as octal digits, on macOS and Linux alike.
+mode_of() {  # <path>
+  stat -f '%Lp' "$1" 2>/dev/null || stat -c '%a' "$1"
+}
+
+# The captain's spoken replies are private: other accounts on the Mac must not
+# be able to read the kept text or audio, even under a permissive umask and
+# even when a history directory already exists with looser permissions.
+test_the_reply_history_is_readable_only_by_its_owner() {
+  local home history entry path
+  home=$(new_home history-private "enabled = true")
+  install_shaper "$home" >/dev/null
+  install_speaker "$home" >/dev/null
+  install_deepgram "$home"
+  history="$home/state/speak-history"
+  mkdir -p "$history"
+  chmod 755 "$history"
+
+  (umask 022 && speak_dg "$home" "$home/.env" "The fix is green.") >/dev/null 2>&1 \
+    || fail "fm-speak: the line failed"
+  wait_for_content "$home/played.log" "end: audio of The fix is green." \
+    "fm-speak: the synthesized line never played"
+
+  assert_equals 700 "$(mode_of "$history")" "an existing history directory must be tightened to 0700"
+  entry=$(find "$history" -mindepth 1 -maxdepth 1 -type d | head -n 1)
+  [ -n "$entry" ] || fail "fm-speak: no reply was kept"
+  assert_equals 700 "$(mode_of "$entry")" "a kept reply's directory must be 0700"
+  for path in "$entry"/*; do
+    assert_equals 600 "$(mode_of "$path")" "kept file ${path##*/} must be 0600"
+  done
+  [ -f "$entry/audio.mp3" ] || fail "fm-speak: the reply's audio was not kept"
+  [ -f "$entry/text" ] || fail "fm-speak: the reply's text was not kept"
+  pass "fm-speak: the reply history is readable only by its owner"
+}
+
 test_a_home_that_never_opted_in_stays_silent
 test_an_absent_config_is_the_same_as_not_opted_in
 test_an_opted_in_home_speaks_the_shaped_line
@@ -1274,3 +1309,4 @@ test_replay_speaks_the_chosen_reply
 test_a_replay_plays_kept_audio_without_synthesizing_again
 test_a_named_voice_is_kept_on_replay
 test_stop_cuts_a_replay_of_kept_audio
+test_the_reply_history_is_readable_only_by_its_owner

@@ -145,9 +145,10 @@
 # other, and print the text they replayed.
 #
 # REPLY HISTORY: every line handed to a speaker is kept in
-# state/speak-history/<number>/, with the time it was spoken and the text as it
-# was shaped, so a refused or unshaped sentence can never be replayed, and a
-# replay is never shaped a second time. Numbers only grow; the newest 10 replies
+# state/speak-history/<number>/, readable only by this account (directories
+# 0700, files 0600), with the time it was spoken and the text as it was
+# shaped, so a refused or unshaped sentence can never be replayed, and a replay
+# is never shaped a second time. Numbers only grow; the newest 10 replies
 # are kept and older ones are pruned whenever a new one is kept. A muted line is
 # neither shaped nor kept. When Deepgram synthesized the line, its audio is kept
 # beside the text, and a replay plays that audio straight away instead of paying
@@ -618,7 +619,8 @@ keep_audio() {  # <audio>
   local kept
   KEPT_AUDIO=
   kept=$(mktemp "$STATE/.speak-audio.XXXXXX" 2>/dev/null) || return 0
-  if ln -f "$1" "$kept" 2>/dev/null || cp "$1" "$kept" 2>/dev/null; then
+  if { ln -f "$1" "$kept" 2>/dev/null || cp "$1" "$kept" 2>/dev/null; } \
+    && chmod 600 "$kept" 2>/dev/null; then
     KEPT_AUDIO=$kept
   else
     rm -f "$kept"
@@ -644,11 +646,22 @@ prune_history() {
 
 # Keep one line that was handed to a speaker. Best effort, like the handoff it
 # follows: a history that cannot be written never turns a spoken line into a
-# failure. The number is claimed with mkdir, which is atomic, so two lines kept
-# at once never share one.
+# failure. Everything is written under umask 077 and the directory is tightened
+# to 0700 on every use, so the captain's replies are never readable by another
+# account on the machine, including a history left behind by an older version.
 record_history() {  # <shaped text>
+  local saved
+  saved=$(umask)
+  umask 077
+  store_history "$1"
+  umask "$saved"
+}
+
+# The number is claimed with mkdir, which is atomic, so two lines kept at once
+# never share one.
+store_history() {  # <shaped text>
   local last next tries=0 entry
-  if ! mkdir -p "$HISTORY_DIR" 2>/dev/null; then
+  if ! mkdir -p "$HISTORY_DIR" 2>/dev/null || ! chmod 700 "$HISTORY_DIR" 2>/dev/null; then
     attach_kept_audio /nonexistent
     return 0
   fi

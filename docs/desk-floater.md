@@ -61,7 +61,7 @@ Drag the floater by its dark backing plate or the status line under the buttons.
 
 Repeat and the recent list play a reply as soon as you click, from the audio kept when it was first spoken, rather than waiting for Deepgram to make it again.
 A reply with no kept audio, such as one spoken by macOS `say`, is spoken again the ordinary way.
-The last 10 replies and their audio are kept in this home's private `state/`; older ones are removed as new ones arrive.
+The last 10 replies and their audio are kept in this home's private `state/`, readable only by your own account on the Mac; older ones are removed as new ones arrive.
 
 Muting affects voice only.
 Firstmate's text replies stay the authoritative ones, and nothing about how Firstmate handles your transcripts changes.
