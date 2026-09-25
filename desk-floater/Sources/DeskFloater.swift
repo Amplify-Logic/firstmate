@@ -928,20 +928,12 @@ final class FloaterModel: ObservableObject {
     }
 
     /// Sends one message to Firstmate: the transcript, the screenshots, or both,
-    /// and returns the status to show. A transcript alone is typed into
-    /// firstmate's own chat; bin/fm-desk-voice.sh falls back to its mailbox when
-    /// that pane cannot be reached. A message with screenshots goes to the mailbox.
+    /// and returns the status to show. It is typed into firstmate's own chat;
+    /// bin/fm-desk-voice.sh falls back to its mailbox when that pane cannot be
+    /// reached.
     nonisolated private static func deliver(repoRoot: String, fmHome: String, text: String?, images: [String]) -> String {
         let bin = (repoRoot as NSString).appendingPathComponent("bin/fm-desk-voice.sh")
-        if images.isEmpty, let text {
-            guard let out = run(bin: bin, args: ["send", "--source", "desk-floater", text], env: ["FM_HOME": fmHome]) else {
-                return "Deliver failed"
-            }
-            if out.hasPrefix("sent:") { return "Sent" }
-            if out.hasPrefix("sent-unconfirmed:") { return "Sent, unconfirmed" }
-            return "Saved to mailbox"
-        }
-        var args = ["deliver", "--source", "desk-floater"]
+        var args = ["send", "--source", "desk-floater"]
         for image in images {
             args += ["--image", image]
         }
@@ -949,7 +941,12 @@ final class FloaterModel: ObservableObject {
         if let text {
             args.append(text)
         }
-        return run(bin: bin, args: args, env: ["FM_HOME": fmHome]) != nil ? "Sent" : "Deliver failed"
+        guard let out = run(bin: bin, args: args, env: ["FM_HOME": fmHome]) else {
+            return "Deliver failed"
+        }
+        if out.hasPrefix("sent:") { return "Sent" }
+        if out.hasPrefix("sent-unconfirmed:") { return "Sent, unconfirmed" }
+        return "Saved to mailbox"
     }
 
     /// Captures one display to this home's screenshot folder; nil on failure.

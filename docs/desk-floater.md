@@ -98,7 +98,7 @@ Take several in a row, moving the pointer to another display in between if you l
 The camera shows how many are stacked, the status line reads "2 shots stacked", then "Sent" once they are delivered.
 
 The message names each image by its full path, for example `Screenshots: /…/state/desk-voice/shots/<time>-<id>.png /…/<time>-<id>.png`, so Firstmate can open them.
-A message with screenshots, with or without words, goes to the mailbox with a wake rather than into the Firstmate chat, see [How transcripts reach Firstmate](#how-transcripts-reach-firstmate).
+A message with screenshots, with or without words, travels the same way as a voice message: typed into the Firstmate chat, or saved to the mailbox when that chat cannot be reached, see [How transcripts reach Firstmate](#how-transcripts-reach-firstmate).
 
 Screenshots combine with talk-to-Firstmate:
 
@@ -107,7 +107,7 @@ Screenshots combine with talk-to-Firstmate:
 - Shots taken after you finish talking, while the message is still being transcribed, join it; the message then waits until three seconds after the last shot.
 - Talking again while a message waits for its shots ("Adding shots…" on the status line) adds the new words after the first ones, and the wait starts over from the end of that talk.
 
-The words and the image paths arrive as one message, the transcript first, then the `Screenshots:` line.
+The words and the image paths arrive as one message, the transcript first, then the `Screenshots:` paths (on one typed line in the chat, on a line of their own in the mailbox).
 A voice message with no shots stacked is sent as soon as it is transcribed, so a shot taken after it has already gone is sent on its own.
 Dictation never takes screenshots along: shots taken while dictating are sent to Firstmate on their own.
 
@@ -138,7 +138,7 @@ macOS may only notice a new Screen Recording grant after the floater restarts, s
 
 ## How transcripts reach Firstmate
 
-The floater hands each transcript without screenshots to `bin/fm-desk-voice.sh send`, which types it into the primary Firstmate session's own chat pane and presses Enter.
+The floater hands each message, with or without screenshots, to `bin/fm-desk-voice.sh send`, which types it into the primary Firstmate session's own chat pane and presses Enter.
 The words arrive at once, even while Firstmate is mid-task, and that pane does not need focus.
 Only the session holding this home's session lock is ever typed into, and only after its pane is proven to host that session; the script header owns the resolution and the supported runtime backends.
 The pane must also show its chat input, read as empty or holding a draft.

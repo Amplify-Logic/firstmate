@@ -3,7 +3,7 @@
 # floater.
 #
 # Usage:
-#   fm-desk-voice.sh send [--source <name>] <transcript text...>
+#   fm-desk-voice.sh send [--source <name>] [--image <png>]... [<transcript text...>]
 #   fm-desk-voice.sh deliver [--source <name>] [--image <png>]... [<transcript text...>]
 #   fm-desk-voice.sh shot [--display <n>]
 #   fm-desk-voice.sh pending
@@ -17,7 +17,8 @@
 # dictation mode types only into the text box the captain chose and never
 # reaches this script; see docs/desk-floater.md.)
 #
-# send is the floater's talk-to-firstmate path. It types the transcript into
+# send is the floater's talk-to-firstmate path. It types the message (the
+# transcript and any screenshots, composed as deliver composes them) into
 # the primary's own chat pane and presses Enter, so the words arrive at once,
 # even mid-turn, without that pane needing focus. The pane is resolved from
 # state/.lock: the lock's pid must be a live harness, the pane named by that
@@ -44,8 +45,8 @@
 #                                         it showed a selection dialog, or
 #                                         the backend reported send-failed, its
 #                                         known-undelivered verdict; the
-#                                         transcript went to the mailbox below
-# A transcript therefore reaches the primary exactly one way.
+#                                         message went to the mailbox below
+# A message therefore reaches the primary exactly one way.
 #
 # deliver is the mailbox path. Transcripts land under
 #   $FM_HOME/state/desk-voice/inbox/<utc>-<id>.json
@@ -172,15 +173,22 @@ parse_transcript_args() {
   esac
 }
 
-deliver() {
-  local source text id stamp path tmp
-  parse_transcript_args "$@"
-  source=$ARG_SOURCE
-  text=$ARG_TEXT
+# The message the parsed arguments make: the transcript, if any, then one
+# "Screenshots: <path>..." line when images are attached.
+message_text() {
+  local text=$ARG_TEXT
   if [ "${#ARG_IMAGES[@]}" -gt 0 ]; then
     text="${text:+$text
 }Screenshots: ${ARG_IMAGES[*]}"
   fi
+  printf '%s' "$text"
+}
+
+deliver() {
+  local source text id stamp path tmp
+  parse_transcript_args "$@"
+  source=$ARG_SOURCE
+  text=$(message_text)
   [ -n "$text" ] || refuse "nothing to deliver"
 
   ensure_dirs
@@ -316,12 +324,12 @@ EOF
 }
 
 send() {
-  local source text line result='' verdict backend target path
+  local source text line result='' verdict backend target path image
+  local -a image_args=()
   parse_transcript_args "$@"
-  [ "${#ARG_IMAGES[@]}" -eq 0 ] || refuse "send takes no --image; use deliver"
   source=$ARG_SOURCE
   text=$ARG_TEXT
-  line=$(plain_line "$text") || die "cannot prepare transcript"
+  line=$(plain_line "$(message_text)") || die "cannot prepare transcript"
   [ -n "$line" ] || refuse "nothing to deliver"
 
   if result=$(primary_submit "$line") && [ -n "$result" ]; then
@@ -344,7 +352,10 @@ send() {
   else
     note "the primary's chat pane is not reachable; saving to the mailbox instead"
   fi
-  path=$(deliver --source "$source" -- "$text")
+  for image in ${ARG_IMAGES[@]+"${ARG_IMAGES[@]}"}; do
+    image_args+=(--image "$image")
+  done
+  path=$(deliver --source "$source" ${image_args[@]+"${image_args[@]}"} -- "$text")
   printf 'mailbox: %s\n' "$path"
 }
 

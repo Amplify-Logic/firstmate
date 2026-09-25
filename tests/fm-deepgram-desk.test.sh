@@ -686,14 +686,15 @@ desk_send_skip() {  # <case>
   printf 'skip: %s: this host does not expose the stand-in primary environment\n' "$1"
 }
 
-desk_send() {  # <home> <text> -> stdout of fm-desk-voice.sh send
+desk_send() {  # <home> [--image <png>]... <text> -> stdout of fm-desk-voice.sh send
   local home=$1 dir="$1/fixture"
+  shift
   (
     unset TMUX TMUX_PANE HERDR_ENV HERDR_PANE_ID HERDR_SESSION HERDR_SOCKET_PATH \
       FM_BACKEND_HERDR_BIN FM_SUPERVISOR_TARGET FM_SUPERVISOR_BACKEND
     PATH="$dir/bin:$PATH" FM_FAKE_HERDR_DIR="$dir" FM_HOME="$home" \
       FM_STATE_OVERRIDE="$home/state" FM_BACKEND_HERDR_SUBMIT_MIN_SLEEP=0.1 \
-      "$DESK" send --source test-suite "$2"
+      "$DESK" send --source test-suite "$@"
   )
 }
 
@@ -806,6 +807,45 @@ test_desk_voice_send_joins_a_pending_draft() {
   [ "$(inbox_count "$home")" = 0 ] || fail "a pane delivery must not also land in the mailbox"
   desk_send_done "$home"
   pass "fm-desk-voice send: a half-typed draft is joined and submitted"
+}
+
+test_desk_voice_send_types_screenshots_into_the_primary_pane() {
+  local home out shot1 shot2
+  home=$(desk_send_fixture send-shots) || { desk_send_skip send-shots; return 0; }
+  shot1="$home/one.png"
+  shot2="$home/two.png"
+  printf PNG > "$shot1"
+  printf PNG > "$shot2"
+  out=$(desk_send "$home" --image "$shot1" --image "$shot2" -- "Why is this red") \
+    || fail "send with screenshots failed: $out"
+  assert_contains "$out" "sent: herdr fm-desk-send-test:w7:p3" "screenshots go into the primary pane"
+  assert_contains "$(herdr_calls "$home" pane send-text)" \
+    "pane send-text w7:p3 Why is this red Screenshots: $shot1 $shot2 --session fm-desk-send-test" \
+    "the words and the image paths are typed as one plain line"
+  [ "$(inbox_count "$home")" = 0 ] || fail "a pane delivery must not also land in the mailbox"
+  : > "$home/fixture/herdr.log"
+  out=$(desk_send "$home" --image "$shot1" --) || fail "send of screenshots alone failed: $out"
+  assert_contains "$(herdr_calls "$home" pane send-text)" "pane send-text w7:p3 Screenshots: $shot1 --session" \
+    "screenshots alone are typed too"
+  desk_send_done "$home"
+  pass "fm-desk-voice send: screenshots, alone or with words, are typed into the primary's pane"
+}
+
+test_desk_voice_send_screenshots_fall_back_to_the_mailbox() {
+  local home out shot path drained
+  home=$(desk_send_fixture send-shots-refused) || { desk_send_skip send-shots-refused; return 0; }
+  shot="$home/one.png"
+  printf PNG > "$shot"
+  : > "$home/fixture/send-text-fails"
+  out=$(desk_send "$home" --image "$shot" -- "Look at this") || fail "send failed: $out"
+  case "$out" in mailbox:\ *) ;; *) fail "expected a mailbox delivery, got: $out" ;; esac
+  path=${out#mailbox: }
+  assert_contains "$(cat "$path")" "$shot" "the mailbox record lists the image"
+  drained=$(FM_HOME="$home" FM_STATE_OVERRIDE="$home/state" "$DESK" drain) || fail "drain failed"
+  [ "$drained" = "Look at this
+Screenshots: $shot" ] || fail "unexpected mailbox message: $drained"
+  desk_send_done "$home"
+  pass "fm-desk-voice send: screenshots the pane refuses land in the mailbox with the words"
 }
 
 # The floater's screenshots are captured by a stand-in here: a test must never
@@ -968,6 +1008,8 @@ test_desk_voice_send_falls_back_when_the_pane_refuses_text
 test_desk_voice_send_never_doubles_an_unconfirmed_submit
 test_desk_voice_send_falls_back_when_the_pane_shows_a_dialog
 test_desk_voice_send_joins_a_pending_draft
+test_desk_voice_send_types_screenshots_into_the_primary_pane
+test_desk_voice_send_screenshots_fall_back_to_the_mailbox
 test_desk_voice_shot_captures_the_named_display
 test_desk_voice_shot_keeps_only_the_newest
 test_desk_voice_shot_failure_leaves_nothing
