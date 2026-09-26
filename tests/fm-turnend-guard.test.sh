@@ -199,9 +199,10 @@ test_predicate_standing_record_without_endpoint_is_not_in_flight() {
   printf '#!/usr/bin/env bash\nexit 0\n' > "$state/svc1.check.sh"
   : > "$state/svc1.check-trust"
   fm_supervision_needed "$state" 300 || fail "the standing service's registered poll must still need supervision"
-  [ "$FM_SUP_IN_FLIGHT" -eq 0 ] || fail "a registered poll must not make its standing record in flight, got $FM_SUP_IN_FLIGHT"
+  [ "$FM_SUP_IN_FLIGHT" -eq 1 ] || fail "a registered poll must keep its standing record in flight, got $FM_SUP_IN_FLIGHT"
+  [ "$FM_SUP_IN_FLIGHT_IDS" = svc1 ] || fail "expected svc1 in flight, got $FM_SUP_IN_FLIGHT_IDS"
   [ "$FM_SUP_CHECKS" -eq 1 ] || fail "expected the standing service's poll as one registered check, got $FM_SUP_CHECKS"
-  pass "fm_supervision_status: a standing record with no endpoint is not in flight; its registered poll still needs supervision"
+  pass "fm_supervision_status: a standing record with no endpoint is not in flight until the watcher polls for it"
 }
 
 test_predicate_parked_dead_worker_is_not_in_flight() {

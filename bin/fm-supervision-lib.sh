@@ -80,15 +80,14 @@ fm_sup_agent_liveness() {  # <meta-file>
 #      recorded agent reads confidently dead. A worker that declared a wait
 #      and is still alive - or whose liveness cannot be read - stays in flight.
 # A task still counts, whatever it declares, when the watcher has scheduled
-# work on it that nothing else here counts: a secondmate (a supervisor whose
-# liveness the watcher owns), a task poll with no registration binding such as
-# a PR merge poll, or a pause naming the time it clears (`until`), which the
-# watcher rechecks. A registered custom check is already a supervision need of
-# its own (FM_SUP_CHECKS), so it does not also make its task in flight.
+# work on it: a secondmate (a supervisor whose liveness the watcher owns), any
+# state/<id>.check.sh poll - a registered custom check or an unbound one such
+# as a PR merge poll - or a pause naming the time it clears (`until`), which
+# the watcher rechecks.
 fm_sup_task_inert() {  # <state-dir> <task-id>
   local state=$1 id=$2 meta line standing='' window='' kind='' status wait
   meta="$state/$id.meta"
-  [ -e "$state/$id.check.sh" ] && [ ! -e "$state/$id.check-trust" ] && return 1
+  [ -e "$state/$id.check.sh" ] && return 1
   while IFS= read -r line || [ -n "$line" ]; do
     case "$line" in
       standing=?*) standing=1 ;;
