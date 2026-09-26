@@ -90,7 +90,11 @@ fm_pid_identity() {
   # narrow-COLUMNS hook, where a truncated command would likewise reject a live
   # watcher (issue #799). This mirrors fm_pending_reply_pid_identity, which pins the
   # same width for the same reason.
-  out=$(COLUMNS=10000 LC_ALL=C ps -p "$pid" -o lstart= -o command= 2>/dev/null) || return 1
+  # Pin TZ=UTC0 because lstart renders in the caller's zone: a writer and a checker
+  # launched with different TZ (or across a DST change) would otherwise record the
+  # same start second hours apart and reject a live watcher. bin/fm-extension.mjs
+  # pidIdentity pins the same zone because it compares against this identity.
+  out=$(COLUMNS=10000 LC_ALL=C TZ=UTC0 ps -p "$pid" -o lstart= -o command= 2>/dev/null) || return 1
   [ -n "$out" ] || return 1
   printf '%s\n' "$out" | sed 's/^[[:space:]]*//'
 }
@@ -169,36 +173,71 @@ fm_watcher_lock_unheld() {
   [ -z "$pid" ]
 }
 
+# On a mismatch, FM_WATCHER_MATCH_FAILURE names the failing check as
+# "<check> - <explanation>" so a caller can report which check failed.
 FM_WATCHER_MATCHED_IDENTITY=
+FM_WATCHER_MATCH_FAILURE=
 fm_watcher_lock_matches_pid() {
   local state=$1 watch_path=$2 pid=$3 home=${4:-$FM_HOME} lockdir lock_home lock_path lock_identity current_identity
   FM_WATCHER_MATCHED_IDENTITY=
+  FM_WATCHER_MATCH_FAILURE=
   lockdir="$state/.watch.lock"
   lock_home=$(cat "$lockdir/fm-home" 2>/dev/null || true)
   lock_path=$(cat "$lockdir/watcher-path" 2>/dev/null || true)
   lock_identity=$(cat "$lockdir/pid-identity" 2>/dev/null || true)
-  fm_same_path "$lock_home" "$home" || return 1
-  fm_same_path "$lock_path" "$watch_path" || return 1
-  [ -n "$lock_identity" ] || return 1
-  current_identity=$(fm_pid_identity "$pid") || return 1
-  [ "$current_identity" = "$lock_identity" ] || return 1
+  fm_same_path "$lock_home" "$home" || {
+    FM_WATCHER_MATCH_FAILURE="lock-home - the watcher lock does not name this home"
+    return 1
+  }
+  fm_same_path "$lock_path" "$watch_path" || {
+    FM_WATCHER_MATCH_FAILURE="lock-watcher-path - the watcher lock does not name this home's watcher script"
+    return 1
+  }
+  [ -n "$lock_identity" ] || {
+    FM_WATCHER_MATCH_FAILURE="lock-identity-missing - the watcher lock records no process identity"
+    return 1
+  }
+  current_identity=$(fm_pid_identity "$pid") || {
+    FM_WATCHER_MATCH_FAILURE="pid-identity-unreadable - cannot read the live process identity of watcher pid $pid"
+    return 1
+  }
+  [ "$current_identity" = "$lock_identity" ] || {
+    FM_WATCHER_MATCH_FAILURE="pid-identity-mismatch - watcher pid $pid is running but its live process identity differs from the identity the lock recorded"
+    return 1
+  }
   FM_WATCHER_MATCHED_IDENTITY=$lock_identity
 }
 
+# When unhealthy, FM_WATCHER_UNHEALTHY_CHECK names the failing check the same way.
 FM_WATCHER_HEALTHY_PID=
 FM_WATCHER_HEALTHY_IDENTITY=
+FM_WATCHER_UNHEALTHY_CHECK=
 fm_watcher_healthy() {
   local state=$1 watch_path=$2 grace=${3:-${FM_GUARD_GRACE:-300}} home=${4:-$FM_HOME} lockdir beat pid identity age
   FM_WATCHER_HEALTHY_PID=
   FM_WATCHER_HEALTHY_IDENTITY=
+  FM_WATCHER_UNHEALTHY_CHECK=
   lockdir="$state/.watch.lock"
   beat="$state/.last-watcher-beat"
   pid=$(cat "$lockdir/pid" 2>/dev/null || true)
-  fm_pid_alive "$pid" || return 1
-  fm_watcher_lock_matches_pid "$state" "$watch_path" "$pid" "$home" || return 1
+  fm_pid_alive "$pid" || {
+    if [ -n "$pid" ]; then
+      FM_WATCHER_UNHEALTHY_CHECK="watcher-pid-alive - the watcher lock's recorded pid $pid is not running"
+    else
+      FM_WATCHER_UNHEALTHY_CHECK="watcher-pid-alive - no watcher lock pid is recorded"
+    fi
+    return 1
+  }
+  fm_watcher_lock_matches_pid "$state" "$watch_path" "$pid" "$home" || {
+    FM_WATCHER_UNHEALTHY_CHECK=$FM_WATCHER_MATCH_FAILURE
+    return 1
+  }
   identity=$FM_WATCHER_MATCHED_IDENTITY
   age=$(fm_path_age "$beat")
-  [ "$age" -lt "$grace" ] || return 1
+  [ "$age" -lt "$grace" ] || {
+    FM_WATCHER_UNHEALTHY_CHECK="watcher-beat-fresh - the watcher beat is missing or not newer than the ${grace}s grace"
+    return 1
+  }
   # shellcheck disable=SC2034 # Read by callers after fm_watcher_healthy returns.
   FM_WATCHER_HEALTHY_PID=$pid
   # shellcheck disable=SC2034 # Read by callers after fm_watcher_healthy returns.

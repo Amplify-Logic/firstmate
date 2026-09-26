@@ -913,7 +913,8 @@ async function sleep(milliseconds) {
 
 async function capturedProcessOutput(command, args, maxBytes = 8192) {
   const child = spawn(command, args, {
-    env: { PATH: sanitizedPath(), LANG: "C", LC_ALL: "C" },
+    // TZ matches bin/fm-wake-lib.sh fm_pid_identity, whose ps lstart identity pidIdentity compares against.
+    env: { PATH: sanitizedPath(), LANG: "C", LC_ALL: "C", TZ: "UTC0" },
     shell: false,
     stdio: ["ignore", "pipe", "ignore"],
   });
