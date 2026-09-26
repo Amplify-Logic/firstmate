@@ -1,0 +1,15 @@
+== S5 local secondmate seeding of a project cloned as 'starship', registered as 'firstmate ... alias=starship' ==
+--- fixed-96462ca6: parent registry
+- firstmate [direct-PR +yolo alias=starship] - the firstmate repo (added 2026-06-22)
+$ fm-home-seed.sh design <sub> starship
+home=/private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.irN7js/seed-fixed-96462ca6/sub
+[exit 0]
+seeded sub-home data/projects.md:
+- firstmate [direct-PR +yolo alias=starship] - the firstmate repo (added 2026-06-22)
+$ FM_HOME=<sub> fm-project-mode.sh starship
+direct-PR on
+$ reseed (idempotence)
+[exit 0]
+sub-home data/projects.md after reseed:
+- firstmate [direct-PR +yolo alias=starship] - the firstmate repo (added 2026-06-22)
+

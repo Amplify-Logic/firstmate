@@ -1,0 +1,11 @@
+== tests/fm-task-delivery.test.sh
+ok - fm-project-mode: an alias=<name> token resolves the row's posture under a second name
+not-ok lines: 0
+exit=0 secs=137
+== tests/fm-secondmate-safety.test.sh
+ok - home seeding carries an aliased project's registered row into the seeded home
+not-ok lines: 0
+exit=0 secs=320
+== tests/fm-remote-secondmate-lifecycle-e2e.test.sh
+ok - remote seeding carries an aliased project's registered row to the remote home
+not-ok lines: 0

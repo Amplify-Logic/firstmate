@@ -1,0 +1,15 @@
+== S4 spawn: project cloned as 'starship', registered as 'firstmate [local-only +yolo branch=lt/ alias=starship]' ==
+(fake tmux exits 1 so no window/worktree is created; only the pre-launch delivery checks run)
+
+--- base-b2b5885b: registry
+- firstmate [local-only +yolo branch=lt/ alias=starship] - the firstmate repo (added 2026-06-22)
+$ fm-spawn.sh sd-1 <projects>/starship claude --mode local-only --yolo on   (project dir basename: starship)
+warning: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.irN7js/spawn-base-b2b5885b/home/data/sd-1/launch-brief.md records no ship branch; defaulting to legacy branch fm/sd-1
+notice: sd-1 ships mode=local-only while the standing posture for starship is no-mistakes - less rigor than the captain's standing posture; proceed only on a current explicit captain instruction or an intake judgment you can state
+
+--- fixed-96462ca6: registry
+- firstmate [local-only +yolo branch=lt/ alias=starship] - the firstmate repo (added 2026-06-22)
+$ fm-spawn.sh sd-1 <projects>/starship claude --mode local-only --yolo on   (project dir basename: starship)
+warning: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.irN7js/spawn-fixed-96462ca6/home/data/sd-1/launch-brief.md records no ship branch; defaulting to legacy branch fm/sd-1
+notice: sd-1 ships branch=fm/sd-1 while starship registers the ship-branch prefix 'lt/' (branch lt/sd-1) - the task's branch and PR will read as firstmate-authored; proceed only on a current explicit captain instruction or an intake judgment you can state
+

@@ -1,0 +1,84 @@
+== S1 reproduce: registry row as the captain has it today (no alias) ==
+- firstmate [no-mistakes +yolo] - the firstmate repo (added 2026-06-22)
+-- base b2b5885b parser:
+$ /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.irN7js/base/bin/fm-project-mode.sh starship
+warn: project "starship" not in registry; defaulting to no-mistakes off
+no-mistakes off
+[exit 0]
+-- fixed parser (no alias yet, still unregistered => expected same fallback):
+$ bin/fm-project-mode.sh starship
+warn: project "starship" not in registry; defaulting to no-mistakes off
+no-mistakes off
+[exit 0]
+
+== S2 fix: operator adds alias=starship to the row ==
+- firstmate [no-mistakes +yolo alias=starship] - the firstmate repo (added 2026-06-22)
+-- base b2b5885b parser:
+$ /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.irN7js/base/bin/fm-project-mode.sh starship
+warn: project "starship" not in registry; defaulting to no-mistakes off
+no-mistakes off
+[exit 0]
+-- fixed parser:
+$ bin/fm-project-mode.sh starship
+no-mistakes on
+[exit 0]
+$ bin/fm-project-mode.sh --raw starship
+no-mistakes on
+[exit 0]
+$ bin/fm-project-mode.sh --branch-prefix starship
+fm/
+[exit 0]
+$ bin/fm-project-mode.sh --forge starship
+none
+[exit 0]
+$ bin/fm-project-mode.sh --line starship
+- firstmate [no-mistakes +yolo alias=starship] - the firstmate repo (added 2026-06-22)
+[exit 0]
+$ bin/fm-project-mode.sh firstmate
+no-mistakes on
+[exit 0]
+
+== S3 adversarial: exact registered name beats another row's alias; description text is not an alias; unknown still warns ==
+- firstmate [no-mistakes +yolo alias=starship alias=shared] - aliases shared too (added 2026-06-22)
+- shared [local-only] - exactly registered (added 2026-06-22)
+- plain - mentions [alias=desc] in prose (added 2026-06-22)
+- multi word [direct-PR alias=mw] - multiword name (added 2026-06-22)
+- sneaky [direct-PR alias=] - empty alias (added 2026-06-22)
+$ bin/fm-project-mode.sh shared
+local-only off
+[exit 0]
+$ bin/fm-project-mode.sh --line shared
+- shared [local-only] - exactly registered (added 2026-06-22)
+[exit 0]
+$ bin/fm-project-mode.sh desc
+warn: project "desc" not in registry; defaulting to no-mistakes off
+no-mistakes off
+[exit 0]
+$ bin/fm-project-mode.sh --line desc
+[exit 0]
+$ bin/fm-project-mode.sh nosuch
+warn: project "nosuch" not in registry; defaulting to no-mistakes off
+no-mistakes off
+[exit 0]
+$ bin/fm-project-mode.sh --line nosuch
+[exit 0]
+$ bin/fm-project-mode.sh mw
+direct-PR off
+[exit 0]
+$ bin/fm-project-mode.sh multi word
+direct-PR off
+[exit 0]
+$ bin/fm-project-mode.sh starsh
+warn: project "starsh" not in registry; defaulting to no-mistakes off
+no-mistakes off
+[exit 0]
+$ bin/fm-project-mode.sh 
+bin/fm-project-mode.sh: line 126: 1: usage: fm-project-mode.sh [--raw|--branch-prefix|--forge|--line] <project-name>
+[exit 1]
+-- missing registry, --line prints nothing, exit 0:
+$ bin/fm-project-mode.sh --line starship
+[exit 0]
+$ bin/fm-project-mode.sh starship
+warn: no registry at /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.irN7js/data/projects.md; defaulting starship to no-mistakes off
+no-mistakes off
+[exit 0]
