@@ -1,0 +1,5 @@
+before Control-click: window=25868 1372 469 116 71 3 muted=no
+after Control-click: window=25868 1296 469 192 109 3 muted=no
+after 2nd Control-click (closes): window=25868 1372 469 116 71 3 muted=no
+after plain click: window=25868 1372 469 116 71 3 muted=yes --muted=muted
+after 2nd plain click: window=25868 1372 469 116 71 3 muted=no

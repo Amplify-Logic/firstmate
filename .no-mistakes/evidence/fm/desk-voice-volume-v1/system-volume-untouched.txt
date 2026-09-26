@@ -1,0 +1,5 @@
+system output volume before: 44
+$ bin/fm-speak.sh "Check."  (level 20)
+Check.
+afplay -v 0.20 seen while sampling: yes
+system output volume after: 44

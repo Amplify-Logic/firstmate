@@ -1,0 +1,57 @@
+$ bin/fm-speak.sh --volume            # fresh home
+100
+exit=0
+$ bin/fm-speak.sh --volume 40
+exit=0
+$ bin/fm-speak.sh --volume
+40
+exit=0
+$ cat state/speak-volume
+40
+$ bin/fm-speak.sh --volume 200
+exit=0
+200
+$ bin/fm-speak.sh --volume 0
+exit=0
+0
+--- adversarial: out-of-range and malformed levels ---
+$ bin/fm-speak.sh --volume '201'
+fm-speak: --volume needs a whole percentage from 0 to 200: 201
+exit=1
+$ bin/fm-speak.sh --volume '-5'
+fm-speak: --volume needs a whole percentage from 0 to 200: -5
+exit=1
+$ bin/fm-speak.sh --volume 'abc'
+fm-speak: --volume needs a whole percentage from 0 to 200: abc
+exit=1
+$ bin/fm-speak.sh --volume '1.5'
+fm-speak: --volume needs a whole percentage from 0 to 200: 1.5
+exit=1
+$ bin/fm-speak.sh --volume ''
+fm-speak: --volume needs a whole percentage from 0 to 200: 
+exit=1
+$ bin/fm-speak.sh --volume '0200'
+fm-speak: --volume needs a whole percentage from 0 to 200: 0200
+exit=1
+$ bin/fm-speak.sh --volume '9999'
+fm-speak: --volume needs a whole percentage from 0 to 200: 9999
+exit=1
+$ bin/fm-speak.sh --volume ' 50'
+fm-speak: --volume needs a whole percentage from 0 to 200:  50
+exit=1
+$ bin/fm-speak.sh --volume      # after refusals, still the set level
+40
+$ bin/fm-speak.sh --volume 50 "text"
+fm-speak: --volume takes no other text and no --dry-run
+exit=1
+$ bin/fm-speak.sh --mute --volume 50
+fm-speak: only one of --stop, --repeat, --history, --replay, --mute, --unmute, --muted, --volume
+exit=1
+--- adversarial: damaged state file ---
+state/speak-volume='garbage' -> --volume prints: 100
+state/speak-volume='999' -> --volume prints: 100
+state/speak-volume='-20' -> --volume prints: 100
+state/speak-volume='' -> --volume prints: 100
+state/speak-volume='070' -> --volume prints: 70
+$ bin/fm-speak.sh --volume
+40

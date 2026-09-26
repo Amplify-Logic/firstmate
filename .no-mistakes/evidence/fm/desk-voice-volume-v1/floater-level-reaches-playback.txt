@@ -1,0 +1,4 @@
+level set from the floater slider: 160
+$ bin/fm-speak.sh "Louder."
+Louder.
+/usr/bin/afplay -v 1.60 /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-speak-say.Jga2Ch.aiff

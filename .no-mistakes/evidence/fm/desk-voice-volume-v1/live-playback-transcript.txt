@@ -1,0 +1,29 @@
+system output volume before: 25
+
+### say line at the set level 15%
+$ bin/fm-speak.sh --volume 15
+$ bin/fm-speak.sh "Voice volume check at fifteen percent."
+Voice volume check at fifteen percent.
+exit=0
+--- speaker processes observed (ps) ---
+25246 /usr/bin/afplay -v 0.15 /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-speak-say.uBI4qD.aiff
+24619 /usr/bin/say -v Samantha -o /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-speak-say.uBI4qD.aiff -f /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-speak-text.70D6Ot
+
+### replay of that line at 30%
+$ bin/fm-speak.sh --history
+1	1790455564	Voice volume check at fifteen percent.
+$ bin/fm-speak.sh --repeat
+Voice volume check at fifteen percent.
+exit=0
+--- speaker processes observed (ps) ---
+32111 /usr/bin/afplay -v 0.30 /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-speak-say.7epvJ6.aiff
+31668 /usr/bin/say -v Samantha -o /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-speak-say.7epvJ6.aiff -f /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-speak-text.eId83R
+
+### back to the default 100%: say speaks directly, no afplay, no -v
+$ bin/fm-speak.sh "Default level."
+Default level.
+exit=0
+--- speaker processes observed (ps) ---
+53695 /usr/bin/say -v Samantha -f /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-speak-text.Yvo6WM
+
+system output volume after: 44
