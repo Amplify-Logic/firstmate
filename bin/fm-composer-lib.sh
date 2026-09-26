@@ -116,6 +116,22 @@
 # glyph deliberately outside the agent set, so no opencode shape recorded here
 # can prove a left-bar envelope and open a zone under it.
 #
+# THE SELECTION DIALOG RULE: claude marks the highlighted option of a
+# selection dialog with its own agent glyph followed by the option's number -
+# ` ❯ 1. Yes` on a permission prompt, `❯ 1. Red` on an AskUserQuestion
+# (`Enter to select · Esc to cancel`), `  ❯ 2.  Opus 5.5` on the /model picker
+# (verified live on claude 2.1.283; real captures in
+# tests/fixtures/composer-claude-dialogs/). Read as a composer, that row is a
+# bare agent-glyph row holding text (`pending`), and when ghost colouring
+# strips the option text it is a lone glyph (`empty`). Either way an injector
+# would type into the dialog and its Enter would confirm the highlighted
+# option. So an agent-glyph row whose content opens with a numbered option
+# (`<digits>.` then a space or the row's end) anywhere in the composer region
+# a verdict is about to be read from makes that verdict `unknown`. The test
+# runs on the PLAIN row, so no styling can hide it, and it only ever refuses:
+# a real draft that opens with `1. ` also reads `unknown`, which costs a
+# deferred delivery, never a keystroke into the wrong place.
+#
 # THE SAFETY RULE for glyphs: a bare shell prompt glyph (`>` `$` `%` `#`) -
 # what a pane shows once its agent has exited to a plain login shell - is a
 # genuine empty agent composer ONLY inside a bordered container. On a bare row
@@ -1629,6 +1645,45 @@ EOF
   printf '%s\n' "$joined" | LC_ALL=C awk '{$1=$1; printf "%s", $0}'
 }
 
+# _fm_composer_row_is_selection_option: 0 when the plain row is the
+# HIGHLIGHTED option of a selection dialog - an agent prompt glyph followed by
+# a numbered option (`❯ 1. Yes`), once side borders are stripped (see THE
+# SELECTION DIALOG RULE in this file's header).
+_fm_composer_row_is_selection_option() {  # <plain-row>
+  local row=$1 glyph=''
+  fm_composer_normalize_trim_var row
+  case "$row" in
+    '│'*'│') row=${row#│}; row=${row%│} ;;
+    '┃'*'┃') row=${row#┃}; row=${row%┃} ;;
+    '║'*'║') row=${row#║}; row=${row%║} ;;
+    '|'*'|') row=${row#|}; row=${row%|} ;;
+  esac
+  fm_composer_normalize_trim_var row
+  fm_composer_leading_agent_glyph_var glyph "$row" || return 1
+  row=${row#*"$glyph"}
+  fm_composer_normalize_trim_var row
+  printf '%s' "$row" | LC_ALL=C grep -qE '^[0-9]+\.([[:space:]]|$)'
+}
+
+# _fm_composer_refuse_selection_dialog: print `unknown` and return 0 when any
+# row of <plain> from <first> through <last> is a highlighted selection-dialog
+# option; return 1 (printing nothing) otherwise. Every verdict path of the
+# screen classifier passes its composer region through this first, so the rule
+# cannot be skipped by whichever shape the dialog happens to resemble.
+_fm_composer_refuse_selection_dialog() {  # <plain> <first> <last>
+  local plain=$1 first=$2 last=$3 line
+  [ "$first" -ge 0 ] && [ "$last" -ge "$first" ] || return 1
+  while IFS= read -r line; do
+    if _fm_composer_row_is_selection_option "$line"; then
+      printf 'unknown'
+      return 0
+    fi
+  done <<EOF
+$(printf '%s\n' "$plain" | sed -n "$((first + 1)),$((last + 1))p")
+EOF
+  return 1
+}
+
 fm_composer_classify_screen() {  # <caps> <screen> [cursor_row] [identity]
   local caps=$1 screen=$2 cy=${3:-} identity=${4:-}
   local styled=0 cursor=0 has_identity=0 kv plain
@@ -1653,6 +1708,8 @@ EOF
       printf 'unknown'; return 0
     fi
     if [ "$FM_COMPOSER_SCAN_BOX_TOP" -ge 0 ]; then
+      _fm_composer_refuse_selection_dialog "$plain" "$((FM_COMPOSER_SCAN_BOX_TOP + 1))" \
+        "$((FM_COMPOSER_SCAN_BOX_BOTTOM - 1))" && return 0
       _fm_composer_classify_rows "$screen" "$styled" "$FM_COMPOSER_SCAN_BOX_AMBIG" \
         "$((FM_COMPOSER_SCAN_BOX_TOP + 1))" "$((FM_COMPOSER_SCAN_BOX_BOTTOM - 1))"
       return 0
@@ -1660,11 +1717,14 @@ EOF
     if [ "$FM_COMPOSER_SCAN_LEFTBAR_START" -ge 0 ] \
        && [ "$cy" -ge "$FM_COMPOSER_SCAN_LEFTBAR_START" ] \
        && [ "$cy" -le "$FM_COMPOSER_SCAN_LEFTBAR_END" ]; then
+      _fm_composer_refuse_selection_dialog "$plain" "$FM_COMPOSER_SCAN_LEFTBAR_START" \
+        "$FM_COMPOSER_SCAN_LEFTBAR_END" && return 0
       _fm_composer_classify_leftbar "$screen" "$styled" \
         "$FM_COMPOSER_SCAN_LEFTBAR_START" "$FM_COMPOSER_SCAN_LEFTBAR_END"
       return 0
     fi
     if [ "$FM_COMPOSER_SCAN_BARE_ROW" -ge 0 ] && [ "$cy" -eq "$FM_COMPOSER_SCAN_BARE_ROW" ]; then
+      _fm_composer_refuse_selection_dialog "$plain" "$cy" "$cy" && return 0
       if [ "$FM_COMPOSER_SCAN_PI_PAIR_FOUND" = 1 ] \
          && [ "$cy" -gt "$FM_COMPOSER_SCAN_PI_OPEN" ] \
          && [ "$cy" -lt "$FM_COMPOSER_SCAN_PI_CLOSE" ]; then
@@ -1683,12 +1743,15 @@ EOF
     # and earns its retry.
     if [ "$FM_COMPOSER_SCAN_BARE_ROW" -ge 0 ] && [ "$cy" -gt "$FM_COMPOSER_SCAN_BARE_ROW" ] \
        && _fm_composer_wrap_region_ok "$plain" "$FM_COMPOSER_SCAN_BARE_ROW" "$cy"; then
+      _fm_composer_refuse_selection_dialog "$plain" "$FM_COMPOSER_SCAN_BARE_ROW" "$cy" && return 0
       _fm_composer_classify_bare_wrap "$screen" "$styled" "$FM_COMPOSER_SCAN_BARE_ROW" "$cy"
       return 0
     fi
     if [ "$FM_COMPOSER_SCAN_PI_PAIR_FOUND" = 1 ] \
        && [ "$cy" -gt "$FM_COMPOSER_SCAN_PI_OPEN" ] \
        && [ "$cy" -lt "$FM_COMPOSER_SCAN_PI_CLOSE" ]; then
+      _fm_composer_refuse_selection_dialog "$plain" "$((FM_COMPOSER_SCAN_PI_OPEN + 1))" \
+        "$((FM_COMPOSER_SCAN_PI_CLOSE - 1))" && return 0
       _fm_composer_pi_verdict "$screen" "$styled" "$has_identity" "$identity"
       return 0
     fi
@@ -1708,6 +1771,8 @@ EOF
     printf 'unknown'
     return 0
   fi
+  _fm_composer_refuse_selection_dialog "$plain" "$FM_COMPOSER_SELECTED_FIRST" \
+    "$FM_COMPOSER_SELECTED_LAST" && return 0
   case "$FM_COMPOSER_SELECTED_KIND" in
     pi)
       _fm_composer_pi_verdict "$screen" "$styled" "$has_identity" "$identity"

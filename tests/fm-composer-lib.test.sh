@@ -757,6 +757,77 @@ test_matrix_claude_inside_zellij_ansi_dump() {
   pass "matrix: the real claude-in-zellij --ansi dump reads empty in both locales"
 }
 
+# Real claude 2.1.283 screens captured with `tmux capture-pane -p -e` on a
+# 100x30 pane (tests/fixtures/composer-claude-dialogs/). Each dialog marks its
+# highlighted option with claude's own `❯` glyph followed by the option number;
+# the idle composer from the same session is the control.
+DIALOGS="$ROOT/tests/fixtures/composer-claude-dialogs"
+
+# assert_every_profile <label> <want> <styled-screen> <tmux-cursor-row>: the
+# verdict on every adapter capability profile, the plain profile reading the
+# ANSI-stripped capture exactly as cmux and orca capture it.
+assert_every_profile() {
+  local label=$1 want=$2 screen=$3 cy=$4 plain
+  plain=$(printf '%s\n' "$screen" | fm_composer_strip_ansi)
+  assert_screen "$label on tmux" "$want" "$CAPS_TMUX" "$screen" "$cy" probe-absent
+  assert_screen "$label on herdr" "$want" "$CAPS_STYLED" "$screen" '' probe-absent
+  assert_screen "$label on zellij" "$want" "$CAPS_STYLED_NOID" "$screen"
+  assert_screen "$label on cmux/orca" "$want" "$CAPS_PLAIN" "$plain"
+}
+
+test_matrix_claude_selection_dialogs_are_unknown() {
+  local name cy screen
+  for name in permission-prompt:23 ask-user-question:20 model-picker:16; do
+    cy=${name#*:}
+    name=${name%:*}
+    screen=$(cat "$DIALOGS/claude-2.1.283-$name.ansi")
+    assert_every_profile "claude $name" unknown "$screen" "$cy"
+  done
+  screen=$(cat "$DIALOGS/claude-2.1.283-idle-composer.ansi")
+  assert_every_profile "claude idle composer (same session)" empty "$screen" 9
+  pass "matrix: claude's permission prompt, AskUserQuestion and /model picker read unknown on every profile"
+}
+
+test_selection_dialog_survives_ghost_stripped_option() {
+  # The highlighted option's number and label drawn in a dark truecolor that
+  # ghost stripping removes, leaving the glyph alone on its row - which reads
+  # as claude's empty composer unless the plain row still decides.
+  local screen row stripped
+  screen=$(cat "$DIALOGS/claude-2.1.283-permission-prompt.ansi")
+  screen=${screen//"${ESC}[38;5;246m1.${ESC}[39m ${ESC}[38;5;153mYes"/"${ESC}[38;2;96;96;96m1.${ESC}[39m ${ESC}[38;2;96;96;96mYes"}
+  row=$(printf '%s\n' "$screen" | sed -n 24p)
+  stripped=$(printf '%s\n' "$row" | fm_composer_strip_ghost)
+  fm_composer_normalize_trim_var stripped
+  [ "$stripped" = '❯' ] \
+    || fail "the ghost-coloured option row must strip to a lone glyph for this case to mean anything, got '$stripped'"
+  assert_every_profile "ghost-stripped permission prompt" unknown "$screen" 23
+  pass "selection dialog: a ghost-stripped highlighted option still reads unknown, never empty"
+}
+
+test_selection_dialog_rule_is_bounded() {
+  local box
+  # The same shape inside a bordered box, with the cursor in the box.
+  box=$'╭──────────────────────────╮\n│ Do you want to proceed?  │\n│ ❯ 1. Yes                 │\n│   2. No                  │\n╰──────────────────────────╯'
+  assert_screen "boxed selection dialog on tmux" unknown "$CAPS_TMUX" "$box" 2 probe-absent
+  assert_screen "boxed selection dialog cursorless" unknown "$CAPS_STYLED_NOID" "$box"
+  # A draft that opens with a numbered item is refused too: a deferred
+  # delivery, never a keystroke into a dialog.
+  assert_screen "draft opening with a numbered item" unknown "$CAPS_STYLED_NOID" \
+    $'────────────────────────\n❯ 1. fix the tests\n────────────────────────'
+  # Numbers elsewhere in a draft keep it pending.
+  assert_screen "draft with a version number" pending "$CAPS_STYLED_NOID" \
+    $'────────────────────────\n❯ 3.5 release notes\n────────────────────────'
+  assert_screen "draft with a count" pending "$CAPS_STYLED_NOID" \
+    $'────────────────────────\n❯ fix findings 1. and 3\n────────────────────────'
+  # A numbered row with no agent glyph is ordinary wrapped draft text.
+  assert_screen "wrapped numbered list in a draft" pending "$CAPS_TMUX" \
+    $'────────────────────────\n❯ do these:\n  1. lint\n────────────────────────' 2 probe-absent
+  # A selection option in the transcript above the live composer is history.
+  assert_screen "earlier dialog echoed above an idle composer" empty "$CAPS_STYLED_NOID" \
+    $'❯ 1. Yes\n\n────────────────────────\n❯'"$NBSP"$'\n────────────────────────'
+  pass "selection dialog: the rule refuses only a glyph-led numbered option inside the composer region"
+}
+
 test_strict_blank_row_divergence() {
   # THE STRICT POSTURE PIN (captain decision blank-row-injection-posture,
   # 2026-08-09): a blank or otherwise unidentified input row with no positive
@@ -984,6 +1055,9 @@ test_matrix_opencode_leftbar_signals
 test_matrix_grok_titled_bottom_border
 test_matrix_kimi_bordered_shell_glyph_box
 test_matrix_claude_inside_zellij_ansi_dump
+test_matrix_claude_selection_dialogs_are_unknown
+test_selection_dialog_survives_ghost_stripped_option
+test_selection_dialog_rule_is_bounded
 test_strict_blank_row_divergence
 test_bare_wrap_region_classifies
 test_contiguous_transcript_reanchors_on_live_prompt
