@@ -152,6 +152,25 @@ test_legacy_refresh_and_primary_boundary() {
   pass 'visible status: legacy mixed workspace stays in place and worker environments never project FIRSTMATE'
 }
 
+# A worker that ran bin/fm-primary.sh in its own pane marked it with the
+# primary role, and Herdr keeps that source's fields until the source clears
+# them. Publishing the worker label must therefore clear them first.
+test_worker_pane_sheds_a_primary_role() {
+  local out clear publish
+  run_all --republish
+  out=$(cat "$LOG")
+  clear='pane report-metadata w1:p1 --source firstmate-primary-visible-v1 --clear-title --clear-display-agent --clear-state-labels --clear-token fm_role --clear-token fm_state'
+  publish='pane report-metadata w1:p1 --source firstmate-worker-visible-v1'
+  assert_contains "$out" "$clear" \
+    'a worker pane kept whatever primary role the primary launcher marked onto it'
+  [ "$(grep -n -F -- "$clear" "$LOG" | head -1 | cut -d: -f1)" -lt \
+    "$(grep -n -F -- "$publish" "$LOG" | head -1 | cut -d: -f1)" ] \
+    || fail 'the primary role was cleared after the worker label, not before it'
+  assert_not_contains "$out" 'sm:p1' \
+    'a secondmate pane had its presentation touched'
+  pass 'visible status: publishing a worker pane clears any primary role left on it'
+}
+
 test_secondmate_keeps_legacy_presentation() {
   local out
   run_all --republish
@@ -279,6 +298,7 @@ EOF
 
 test_tasks_projects_axes_and_states
 test_legacy_refresh_and_primary_boundary
+test_worker_pane_sheds_a_primary_role
 test_secondmate_keeps_legacy_presentation
 test_incapable_build_projects_nothing
 test_cleanup_keeps_stable_target_fallback

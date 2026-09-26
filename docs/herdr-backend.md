@@ -667,6 +667,7 @@ Only one pass per home runs at a time (`state/.visible-status-all.lock`), and a 
 
 Every Herdr presentation call is best-effort because recorded ids, landed-work checks, and endpoint cleanup remain authoritative.
 The helper updates only recorded, non-secondmate task panes and never emits `FIRSTMATE` or `LAB`.
+Before it publishes a worker label, it clears any role the primary launcher left on that pane, because Herdr keeps a source's fields until that source clears them.
 `bin/fm-primary.sh` is the structural owner of primary projection: only an invocation through the primary launcher may emit `FIRSTMATE`, and its guarded non-default lab mode emits `LAB · PRIMARY` instead.
 An ordinary worker merely carrying `HERDR_ENV=1` can therefore never become the captain-facing primary.
 

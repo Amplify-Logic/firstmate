@@ -49,6 +49,7 @@
 # without touching any tab or workspace, so legacy fm-<id> labels survive.
 # This script never projects FIRSTMATE or LAB roles: bin/fm-primary.sh owns the
 # structurally guarded primary surface, and lab identity remains lab-owned.
+# Publishing a worker pane also clears any role bin/fm-primary.sh left on it.
 set -u
 
 SCRIPT_DIR=$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)
@@ -56,6 +57,8 @@ FM_ROOT=${FM_ROOT_OVERRIDE:-$(CDPATH='' cd -- "$SCRIPT_DIR/.." && pwd -P)}
 FM_HOME=${FM_HOME:-${FM_ROOT_OVERRIDE:-$FM_ROOT}}
 STATE=${FM_STATE_OVERRIDE:-$FM_HOME/state}
 SOURCE=firstmate-worker-visible-v1
+# The source bin/fm-primary.sh marks its own pane with.
+PRIMARY_SOURCE=firstmate-primary-visible-v1
 
 # fm_backend_herdr_presentation_capable owns the capability verdict shared
 # with fm-spawn.sh's herdr arm.
@@ -434,6 +437,17 @@ update_task() {  # <task-id>
     return 0
   fi
   herdr_call "$session" tab rename "$tab" "$title" >/dev/null 2>&1 || published=0
+  # A worker pane is never the primary, so drop any role the primary launcher
+  # marked onto it. Herdr keeps each source's fields until that source clears
+  # them, so without this a worker that once ran bin/fm-primary.sh in its own
+  # pane would keep the FIRSTMATE role token beside its worker label.
+  herdr_call "$session" pane report-metadata "$pane" \
+    --source "$PRIMARY_SOURCE" \
+    --clear-title \
+    --clear-display-agent \
+    --clear-state-labels \
+    --clear-token fm_role \
+    --clear-token fm_state >/dev/null 2>&1 || published=0
   herdr_call "$session" pane report-metadata "$pane" \
     --source "$SOURCE" \
     --title "$title" \
