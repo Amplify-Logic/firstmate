@@ -552,6 +552,15 @@ EOF
   [ "$out" = "no-mistakes off" ] || fail "an alias-shaped word in a description was read as an alias (got '$out')"
   err=$(FM_HOME="$home" "$PROJECT_MODE" desc 2>&1 >/dev/null)
   assert_contains "$err" "not in registry" "an unregistered name stopped warning"
+
+  out=$(FM_HOME="$home" "$PROJECT_MODE" --line starship 2>/dev/null)
+  [ "$out" = "- firstmate [no-mistakes +yolo alias=starship] - fixture registered under another name (added 2026-01-01)" ] \
+    || fail "--line did not print the row an alias resolves to (got '$out')"
+  out=$(FM_HOME="$home" "$PROJECT_MODE" --line shared 2>/dev/null)
+  [ "$out" = "- shared [local-only] - fixture whose exact name another row aliases (added 2026-01-01)" ] \
+    || fail "--line preferred another row's alias over the exact registered name (got '$out')"
+  out=$(FM_HOME="$home" "$PROJECT_MODE" --line desc 2>&1)
+  [ -z "$out" ] || fail "--line printed something for an unregistered name (got '$out')"
   pass "fm-project-mode: an alias=<name> token resolves the row's posture under a second name"
 }
 

@@ -82,6 +82,12 @@
 # tell a conditional policy apart from a flat mode sees "no-mistakes-prod-only"
 # itself. Not combined with --branch-prefix, which has no conditional-policy leg.
 #
+# --line prints the registry row the name resolves to, verbatim, by the same
+# resolution as the posture (exact name first, else an alias=<name> match), and
+# prints nothing when no row matches or the registry is absent. The seeding
+# scripts copy that row into a seeded home, so the row they carry is always the
+# one whose posture they resolved.
+#
 # An unknown/missing project or unknown mode falls back to "no-mistakes off" (or
 # "fm/" under --branch-prefix) and warns to stderr, so a typo never silently
 # drops the gate. Other annotation tokens are ignored, as they always were, keyed
@@ -99,7 +105,7 @@
 # to the forge binding, so it prints even when the forge token is malformed;
 # every path that reads the forge binding (default, --forge, and spawn's
 # forge-agreement check) still refuses.
-# Usage: fm-project-mode.sh [--raw|--branch-prefix|--forge] <project-name>
+# Usage: fm-project-mode.sh [--raw|--branch-prefix|--forge|--line] <project-name>
 set -eu
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -110,14 +116,17 @@ REG="$DATA/projects.md"
 RAW=0
 BRANCH_PREFIX_QUERY=0
 WANT_FORGE=0
+LINE_QUERY=0
 case "${1:-}" in
   --raw) RAW=1; shift ;;
   --branch-prefix) BRANCH_PREFIX_QUERY=1; shift ;;
   --forge) WANT_FORGE=1; shift ;;
+  --line) LINE_QUERY=1; shift ;;
 esac
-NAME=${1:?usage: fm-project-mode.sh [--raw|--branch-prefix|--forge] <project-name>}
+NAME=${1:?usage: fm-project-mode.sh [--raw|--branch-prefix|--forge|--line] <project-name>}
 
 if [ ! -f "$REG" ]; then
+  [ "$LINE_QUERY" -eq 0 ] || exit 0
   echo "warn: no registry at $REG; defaulting $NAME to no-mistakes off" >&2
   if [ "$BRANCH_PREFIX_QUERY" -eq 1 ]; then
     echo "fm/"
@@ -129,9 +138,10 @@ fi
 # `forge`, then "posture <mode> <yolo> <branch-prefix> <forge>" (branch-prefix is
 # the raw prefix, defaulting to "fm/"; forge is `none` or the whole `forge=<value>`
 # token, so an empty value survives the split), or nothing if the project is
-# absent. alias=<other> tokens only widen which rows match. Every other token
+# absent. Under --line it prints the matched raw row instead. alias=<other>
+# tokens only widen which rows match. Every other token
 # beside the mode is ignored, exactly as before any annotation existed.
-parsed=$(awk -v n="$NAME" '
+parsed=$(awk -v n="$NAME" -v want_line="$LINE_QUERY" '
   function dist(x, y,   i, j, lx, ly, d, c, v) {
     lx = length(x); ly = length(y);
     for (i=0; i<=lx; i++) d[i,0] = i;
@@ -191,7 +201,9 @@ parsed=$(awk -v n="$NAME" '
     if (substr($0, 1, plen) == prefix) {
       after = substr($0, plen + 1);
       if (after == "" || substr(after, 1, 2) == " [" || substr(after, 1, 3) == " - ") {
-        parse(after); emit(); found = 1; exit
+        found = 1
+        if (want_line) { print; exit }
+        parse(after); emit(); exit
       }
     }
     # An alias=<name> token lets a row answer for a second name, such as the
@@ -202,13 +214,19 @@ parsed=$(awk -v n="$NAME" '
     b = index($0, " ["); d = index($0, " - ");
     if (b == 0 || (d > 0 && d < b)) next
     after = substr($0, b);
-    if (index(parse(after), " " n " ") > 0) alias_row = after
+    if (index(parse(after), " " n " ") > 0) { alias_row = after; alias_line = $0 }
   }
   END {
     if (found || alias_row == "") exit
+    if (want_line) { print alias_line; exit }
     parse(alias_row); emit()
   }
 ' "$REG")
+
+if [ "$LINE_QUERY" -eq 1 ]; then
+  [ -z "$parsed" ] || printf '%s\n' "$parsed"
+  exit 0
+fi
 
 if [ -z "$parsed" ]; then
   echo "warn: project \"$NAME\" not in registry; defaulting to no-mistakes off" >&2
