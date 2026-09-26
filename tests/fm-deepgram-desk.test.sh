@@ -857,6 +857,10 @@ test_desk_voice_deliver_pending_drain() {
 # drop-head loses the first typed character; no-marker hides `› stashed`;
 # pop-fails refuses the Ctrl+S that pops a stash; refold makes Enter redraw
 # the box as a pasted-text placeholder plus the typed tail without submitting.
+# Text over 800 characters folds as Claude folds it (verified live on claude
+# 2.1.283): a bracketed paste into one `[Pasted text #N]` placeholder, a typed
+# burst into a placeholder plus its literal tail. Enter expands a placeholder
+# back into its text.
 
 desk_send_fixture() {  # <name> [tmux|herdr] [harness] -> home; starts the stand-in primary
   local name=$1 backend=${2:-herdr} harness=${3:-claude} home dir fb pid i envs marker
@@ -931,6 +935,24 @@ case "${1:-} ${2:-}" in
   "pane send-text")
     [ ! -e "$dir/send-text-fails" ] || exit 1
     if [ -e "$dir/drop-head" ]; then text=${4:1}; else text=$4; fi
+    open=$'\033[200~' close=$'\033[201~'
+    n=$(( $(cat "$dir/pastes" 2>/dev/null || echo 0) + 1 ))
+    if [ "${text#"$open"}" != "$text" ] && [ "${text%"$close"}" != "$text" ]; then
+      text=${text#"$open"}
+      text=${text%"$close"}
+      if [ "${#text}" -gt 800 ]; then
+        printf '%s' "$n" > "$dir/pastes"
+        printf '%s' "$text" > "$dir/paste-$n"
+        text="[Pasted text #$n]"
+      fi
+    else
+      text=${text%"$close"}
+      if [ "${#text}" -gt 800 ]; then
+        printf '%s' "$n" > "$dir/pastes"
+        printf '%s' "${text:0:${#text}-40}" > "$dir/paste-$n"
+        text="[Pasted text #$n]${text: -40}"
+      fi
+    fi
     printf '%s' "$text" >> "$dir/draft" ;;
   "pane send-keys")
     case "$4" in
@@ -959,7 +981,12 @@ case "${1:-} ${2:-}" in
           exit 0
         fi
         if [ -s "$dir/draft" ]; then
-          { cat "$dir/draft"; printf '\n'; } >> "$dir/submitted"
+          draft=$(cat "$dir/draft")
+          for paste in "$dir"/paste-*; do
+            [ -e "$paste" ] || continue
+            draft=${draft//"[Pasted text #${paste##*-}]"/$(cat "$paste")}
+          done
+          printf '%s\n' "$draft" >> "$dir/submitted"
         elif [ -e "$dir/ghost" ]; then
           { cat "$dir/ghost"; printf '\n'; } >> "$dir/submitted"
         fi
@@ -1270,8 +1297,9 @@ test_desk_voice_send_proves_a_long_message_past_a_claude_draft() {
   printf 'claude' > "$home/fixture/agent"
   : > "$home/fixture/wrap"
   printf 'half typed thought' > "$home/fixture/draft"
-  # 1000 characters wrap to 25 box rows, more than a 20-row read can hold.
-  long=$(printf 'word%03d ' $(seq 1 125))
+  # 759 characters, short enough for Claude to show as text, wrap to 19 box
+  # rows, more than a 20-row read can hold with the rules and footer.
+  long=$(printf 'word%03d ' $(seq 1 95))
   long=${long% }
   out=$(desk_send "$home" "$long") || fail "send failed: $out"
   assert_contains "$out" "sent: herdr fm-desk-send-test:w7:p3" "a long message is proven whole and sent"
@@ -1280,6 +1308,31 @@ test_desk_voice_send_proves_a_long_message_past_a_claude_draft() {
   [ "$(inbox_count "$home")" = 0 ] || fail "a pane delivery must not also land in the mailbox"
   desk_send_done "$home"
   pass "fm-desk-voice send: a message that wraps past a 20-row read still goes past a Claude draft"
+}
+
+test_desk_voice_send_pastes_a_voice_length_message_past_a_claude_draft() {
+  local home out long case draft
+  # About 3.2k characters, the length of a long voice transcript: typed, Claude
+  # would fold it into a placeholder plus a literal tail that cannot be proven.
+  long=$(printf 'word%03d ' $(seq 1 400))
+  long=${long% }
+  for case in typed pasted; do
+    home=$(desk_send_fixture "send-draft-voice-$case") || { desk_send_skip "send-draft-voice-$case"; return 0; }
+    cp "$HERDR_CLAUDE_SCREEN" "$home/fixture/screen"
+    printf 'claude' > "$home/fixture/agent"
+    if [ "$case" = typed ]; then draft='half typed thought'; else draft='[Pasted text #1 +42 lines]'; fi
+    printf '%s' "$draft" > "$home/fixture/draft"
+    out=$(desk_send "$home" "$long") || fail "$case: send failed: $out"
+    assert_contains "$out" "sent: herdr fm-desk-send-test:w7:p3" "$case: a voice-length message goes past the draft"
+    [ "$(cat "$home/fixture/submitted")" = "$long" ] || fail "$case: only the whole message may be submitted"
+    [ "$(cat "$home/fixture/draft")" = "$draft" ] || fail "$case: the draft must be back in the chat box"
+    [ ! -e "$home/fixture/stash" ] || fail "$case: the draft must not stay stashed"
+    [ "$(herdr_calls "$home" pane send-keys w7:p3 enter | wc -l | tr -d ' ')" = 1 ] \
+      || fail "$case: Enter must be pressed exactly once"
+    [ "$(inbox_count "$home")" = 0 ] || fail "$case: a pane delivery must not also land in the mailbox"
+    desk_send_done "$home"
+  done
+  pass "fm-desk-voice send: a voice-length message is pasted past a Claude draft, shown as one placeholder, and sent"
 }
 
 test_desk_voice_send_never_confirms_a_redrawn_message_past_a_draft() {
@@ -1752,6 +1805,7 @@ test_desk_voice_send_goes_past_a_claude_draft
 test_desk_voice_send_goes_past_a_pasted_text_draft
 test_desk_voice_send_keeps_a_draft_it_cannot_set_aside
 test_desk_voice_send_proves_a_long_message_past_a_claude_draft
+test_desk_voice_send_pastes_a_voice_length_message_past_a_claude_draft
 test_desk_voice_send_clears_a_refused_message_and_restores_the_draft
 test_desk_voice_send_never_confirms_a_redrawn_message_past_a_draft
 test_desk_voice_send_restores_a_draft_stashed_without_a_marker

@@ -342,12 +342,21 @@ shows_stash() {  # <backend> <target>
   printf '%s\n' "$screen" | fm_composer_strip_ansi | grep -Eq '›[[:space:]]*stashed[[:space:]]*$'
 }
 
-# Type <text> into <target> without submitting it.
-type_text() {  # <backend> <target> <text>
+# Put <text> into <target> as one bracketed paste, without submitting it.
+# Claude reads a paste whole and shows one over 800 characters as a single
+# `[Pasted text #N]` placeholder; a typed burst that long can lose its head or
+# fold into placeholders plus a literal tail, which no proof can tell from a
+# truncated message (verified live on claude 2.1.283). <text> is one plain
+# line (plain_line), so it holds no escape that could end the paste early.
+paste_text() {  # <backend> <target> <text>
+  local buffer="fm-desk-voice-$$"
   fm_backend_source "$1" || return 1
   case "$1" in
-    tmux) fm_backend_tmux_send_literal "$2" "$3" ;;
-    herdr) fm_backend_herdr_send_literal "$2" "$3" ;;
+    tmux)
+      printf '%s' "$3" | tmux load-buffer -b "$buffer" - \
+        && tmux paste-buffer -p -d -b "$buffer" -t "$2"
+      ;;
+    herdr) fm_backend_herdr_send_literal "$2" $'\033[200~'"$3"$'\033[201~' ;;
     *) return 1 ;;
   esac
 }
@@ -378,9 +387,10 @@ unstash_draft() {  # <backend> <target>
 # box; Claude puts the draft back by itself the moment the next message is
 # submitted, and mid-turn too, where that message is queued (verified live on
 # claude 2.1.283; docs/verification/runtime-backends.md "Desk floater send
-# past a draft"). So the message is typed only into a box the stash has
-# emptied, and Enter is pressed once, only while the box shows exactly the
-# message, never again: a second Enter after Claude restored the draft would
+# past a draft"). So the message is pasted (paste_text) only into a box the
+# stash has emptied, and Enter is pressed once, only while the box shows
+# exactly the message, or only the placeholder a long paste becomes, never
+# again: a second Enter after Claude restored the draft would
 # submit the draft. The proof reads, and the Ctrl+U presses that clear a
 # refused message, are sized by the message, which wraps (fm_composer_proof_lines).
 # After Enter the message was submitted only once the box reads empty or
@@ -415,7 +425,7 @@ send_past_draft() {  # <backend> <target> <line>
     printf 'send-failed'
     return 0
   fi
-  if ! type_text "$backend" "$target" "$line"; then
+  if ! paste_text "$backend" "$target" "$line"; then
     unstash_draft "$backend" "$target" || note "the captain's draft is stashed; Ctrl+S in the chat brings it back"
     printf 'send-failed'
     return 0

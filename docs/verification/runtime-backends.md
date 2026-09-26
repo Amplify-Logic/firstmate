@@ -859,6 +859,10 @@ On Herdr 0.7.4 the same day, the real Firstmate primary pane (Claude 2.1.283) wa
 Replaying that pane's captured screen with normal-intensity text in the box sent the previous script to the mailbox (`the primary's chat pane refused the text`), because Herdr's Claude submit path types only into an empty box; the current script sent the message and left the text in the box.
 A suggested prompt accepted with Tab reads as that kind of text: on the tmux run above, Tab turned the dim `yes, go ahead` suggestion into plain text and the verdict from `empty` into `pending`.
 `pane send-keys ctrl+s` itself was not pressed in a real Herdr pane; `tests/fm-deepgram-desk.test.sh` pins the sequence against the captured screen (`tests/fixtures/composer-claude-dialogs/claude-2.1.283-herdr-suggested-prompt.ansi`, transcript text replaced).
+The message goes into the stashed box as one bracketed paste (tmux `paste-buffer -p`; on Herdr, `pane send-text` wrapped in `ESC[200~`/`ESC[201~`).
+Typed as keys, a burst over about 1.2k characters reached Claude 2.1.283 with its head lost or folded into `[Pasted text #N]` placeholders plus a literal tail, which the pre-Enter proof must refuse, so such messages went to the mailbox.
+Pasted, Claude shows a message over 800 characters as one `[Pasted text #N]` placeholder and submits it whole.
+Verified the same day with the real `fm-desk-voice.sh send` against Claude 2.1.283 on tmux 3.6a and in an `fm-lab-*` Herdr 0.7.4 session: messages of about 1.3k and 3.2k characters past a typed draft, and 3.2k past a pasted draft, were reported `sent`, appeared whole as the submitted prompt, and the draft came back to the box unsent.
 This guard submits one short prompt; rerun it after a Claude upgrade.
 
 ## Gemini
