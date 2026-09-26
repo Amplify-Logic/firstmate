@@ -1,0 +1,7 @@
+## Throwaway clone of the worktree at /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/tmp.dMYLWkeeP0/c: check out 03961847 and run the documented 'git revert 03961847'
+revert applied cleanly
+tree after revert : c3ba0863d74f96dcadc4bfb08b711704108081f2
+tree of af3f7d4c  : c3ba0863d74f96dcadc4bfb08b711704108081f2
+RESULT: revert restores the af3f7d4c tree exactly
+## Same revert on the current default-branch tip dc462d90 (doc says later work builds on the re-based tree)
+revert on tip conflicts: 57 conflicted paths

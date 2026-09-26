@@ -1,0 +1,36 @@
+# Fact check of docs/fork-surface.md 'Wholesale re-base history' against git (2026-09-26T08:22:08Z)
+## squash commit 03961847: parents, date, subject
+commit 03961847c35b6a56c6a3dd8cf99222ab18cbf156
+parents af3f7d4cf3e08a2c020fab6f2f9669c651b07d18
+committed 2026-09-17
+subject feat: re-base the fork wholesale onto the creator's firstmate tree at b85e28b5 (#160)
+## parent count
+1
+## tree(03961847) vs tree(a460e747)
+1f3520c21987e1d44914552ddbc1a06fe48277e0
+1f3520c21987e1d44914552ddbc1a06fe48277e0
+## is b85e28b5 ancestor of main target dc462d90?
+no
+## is a460e747 ancestor of dc462d90?
+no
+## is 03961847 ancestor of dc462d90?
+yes
+## remote branch fm/fm-wholesale-creator-rebase-w1 on GitHub (git ls-remote)
+a460e74715ca8b1368ed863595e1d4e28e4fe7ea	refs/heads/fm/fm-wholesale-creator-rebase-w1
+## 74e1a957 ancestor of af3f7d4c?
+yes
+## commits in 74e1a957..af3f7d4c (first-parent)
+af3f7d4c feat(bin): show truthful fleet counts, Codex context and quota in the status bar (#127)
+60d54f88 fix(bin): let a desk spoken line finish and speak it in the configured voice (#161)
+2a62b0ab fix(bin): apply the desk spoken register to every desk line, not just Deepgram ones (#159)
+## manifest upstream_base
+docs/fork-surface.md:29:After a reviewed merge-base advance, update the manifest's `upstream_base`, run `bin/fm-fork-surface.sh sync-base`, and review both changes together.
+docs/fork-surface.md:55:The fork was re-based wholesale onto the creator's tree at `b85e28b5` by https://github.com/Amplify-Logic/firstmate/pull/160, which the manifest's `upstream_base` records.
+bin/fm-fork-surface.sh:17:# sync-base rewrites the base path snapshot from GIT_REF (default: upstream_base).
+bin/fm-fork-surface.sh:90:        if (key != "schema" && key != "upstream_remote" && key != "upstream_base" && key != "upstream_base_paths") {
+bin/fm-fork-surface.sh:107:          header_seen["upstream_base"] != 1 || header_seen["upstream_base_paths"] != 1) {
+bin/fm-fork-surface.sh:108:        printf "fm-fork-surface: manifest requires schema, upstream_remote, upstream_base, and upstream_base_paths exactly once\n" > "/dev/stderr"
+bin/fm-fork-surface.sh:139:  base=$(header_value "$parsed" upstream_base)
+bin/fm-fork-surface.sh:140:  snapshot=$(header_value "$parsed" upstream_base_paths)
+bin/fm-fork-surface.sh:141:  path_is_safe "$snapshot" || { printf 'fm-fork-surface: unsafe upstream_base_paths: %s\n' "$snapshot" >&2; failures=$((failures + 1)); }
+bin/fm-fork-surface.sh:147:    snapshot_base=$(awk 'NR == 1 && /^# upstream_base = / { print $4 }' "$snapshot")

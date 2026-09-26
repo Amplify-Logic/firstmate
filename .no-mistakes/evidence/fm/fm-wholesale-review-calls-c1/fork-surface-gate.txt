@@ -1,0 +1,9 @@
+## manifest header (fork-surface.conf)
+5:schema = 1
+6:upstream_remote = https://github.com/kunchenguid/firstmate
+7:upstream_base = b85e28b5f8aad91a553e33d461da9f238bbdac38
+8:upstream_base_paths = fork-surface.upstream-base
+# upstream_base = b85e28b5f8aad91a553e33d461da9f238bbdac38
+## bin/fm-fork-surface.sh check (the CI gate) on the target commit
+FORK_SURFACE OK capabilities=77 owned_paths=236
+exit=0
