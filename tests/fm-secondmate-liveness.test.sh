@@ -29,7 +29,9 @@
 #     registry-written account= is read back from the meta and passed as
 #     --account, so recovery can never move a pinned secondmate onto a different
 #     login. A worker account pin's own account= value is never passed back, and
-#     a secondmate with no recorded account= respawns with no flag at all.
+#     a secondmate with no recorded account= respawns with no flag at all. Nor is
+#     the account passed when config/secondmate-harness now respawns the mate onto
+#     a different harness: that account is another vendor's login.
 #   - The sweep is skipped entirely under FM_BOOTSTRAP_DETECT_ONLY=1 (the
 #     read-only session path), matching the other mutating sweeps.
 #   - The sweep is naturally scoped to the primary: with no kind=secondmate
@@ -461,6 +463,31 @@ test_sweep_respawn_never_passes_a_worker_pin_value_as_account() {
   pass "sweep: a worker account pin value is never passed back as a registry account"
 }
 
+# A pinned account names one vendor's login. When config/secondmate-harness has
+# since moved secondmates to another harness, the respawn lands there, so the
+# recorded account must not be passed: the new harness's registry has no such
+# account and would refuse, stranding the mate. It resolves afresh instead, as
+# `bin/fm-spawn.sh --relaunch` does onto a different harness.
+test_sweep_respawn_onto_a_switched_harness_resolves_its_account_afresh() {
+  local w fb tmuxfb log out
+  w=$(make_account_world sweep-account-harness-switch $'account=derya\naccount_source=registry\n')
+  printf '%s\n' pi-signed > "$w/home/config/secondmate-harness"
+  fb=$(make_toolchain "$w"); tmuxfb=$(make_liveness_tmux "$w")
+  log="$w/calls.log"; : > "$log"
+
+  out=$(run_bootstrap "$tmuxfb:$fb" "$w/home" missing "$log")
+
+  assert_not_contains "$out" "respawn failed" \
+    "the codex account was passed to a pi-signed respawn and refused it"
+  assert_contains "$(cat "$log")" "new-window" "the secondmate was never respawned onto the switched harness"
+  [ "$(sed -n 's/^harness=//p' "$w/home/state/sm1.meta")" = pi-signed ] \
+    || fail "the respawn did not land on the switched secondmate harness"
+  if grep -q '^account=derya$' "$w/home/state/sm1.meta"; then
+    fail "the codex account followed the secondmate onto the pi-signed harness"
+  fi
+  pass "sweep: a respawn onto a switched harness resolves its account afresh"
+}
+
 # The unpinned case stays a complete no-op: no account= in the meta means no
 # --account flag, and with no registry the respawned meta records no account.
 test_sweep_respawn_without_a_pin_records_no_account() {
@@ -812,6 +839,7 @@ test_agent_state_dispatcher_and_compatibility
 test_sweep_respawns_confirmed_dead_secondmate
 test_sweep_respawn_preserves_the_pinned_account
 test_sweep_respawn_never_passes_a_worker_pin_value_as_account
+test_sweep_respawn_onto_a_switched_harness_resolves_its_account_afresh
 test_sweep_respawn_without_a_pin_records_no_account
 test_sweep_leaves_alive_secondmate_untouched
 test_sweep_respawns_authoritatively_missing_pi_secondmate

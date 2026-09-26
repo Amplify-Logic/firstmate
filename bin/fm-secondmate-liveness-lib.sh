@@ -29,7 +29,8 @@
 # Relaunch goes through `bin/fm-spawn.sh <id> --secondmate` with
 # FM_SPAWN_NO_GUARD=1, the same guarded path every recovery uses, plus
 # --account <name> when the meta records a registry-written vendor account
-# (bin/fm-account-lib.sh's fm_account_recorded_name). That path
+# (bin/fm-account-lib.sh's fm_account_recorded_name) and the respawn resolves
+# the same harness the meta records. That path
 # re-resolves placement from the task's own metadata and registry route, so a
 # remote mate is relaunched on its recorded remote host through bin/fm-on.sh -
 # never as a local replacement - behind fm-spawn's own readiness gate and
@@ -299,13 +300,19 @@ fm_secondmate_liveness_relaunch() {  # <meta> <id> [timeout-secs]
   # decision, so the recorded registry account is passed back as --account
   # rather than re-resolved to the vendor default. An account the spawn can no
   # longer apply refuses the relaunch instead of moving the mate to another
-  # login. No recorded registry account passes no flag.
+  # login. No recorded registry account passes no flag, and neither does a
+  # respawn that config/secondmate-harness now moves onto a different harness:
+  # that account names another vendor's login, so it resolves afresh, as
+  # `bin/fm-spawn.sh --relaunch` does.
   local rc=0 account=
   local -a spawn_args=(--secondmate)
   if command -v fm_account_recorded_name >/dev/null 2>&1; then
     account=$(fm_account_recorded_name "$(fm_meta_get "$meta" account_source)" "$(fm_meta_get "$meta" account)")
   fi
-  [ -z "$account" ] || spawn_args+=(--account "$account")
+  if [ -n "$account" ] \
+    && [ "$(fm_meta_get "$meta" harness)" = "$("$FM_ROOT/bin/fm-harness.sh" secondmate 2>/dev/null)" ]; then
+    spawn_args+=(--account "$account")
+  fi
   if [ -n "$timeout" ]; then
     FM_SM_LIVE_OUT=$(FM_SPAWN_NO_GUARD=1 fm_run_timed "$timeout" "$FM_ROOT/bin/fm-spawn.sh" "$id" "${spawn_args[@]}" 2>&1) || rc=$?
   else
