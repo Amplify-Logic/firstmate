@@ -1,0 +1,33 @@
+Herdr lab session: fm-lab-sharedws-633-19247 (herdr 0.7.4)
+w1 = one managed workspace holding 3 workers: a-voice (Glasses Voice, working), z-journey (Your Magical Journey, parked), z-journey-two (Your Magical Journey, working)
+w2 = managed workspace holding 1 worker: solo-artevo (Artevo, working)
+
+## S1 base 17c0a496, fleet pass (--all), voice task id sorts first
+  w1	Your Magical Journey · 🟣 1 NEEDS LARS · 🔵 1 WORKING
+  w2	Artevo · 🔵 1 WORKING
+## S1 fix HEAD, fleet pass (--all)
+  w1	Firstmate · 🟣 1 NEEDS LARS · 🔵 2 WORKING
+  w2	Artevo · 🔵 1 WORKING
+
+## S2 swap task order: voice task renamed to z-voice, journey tasks to a-journey*
+## S2 base, fleet pass
+  w1	Glasses Voice · 🔵 1 WORKING
+  w2	Artevo · 🔵 1 WORKING
+## S2 fix, fleet pass
+  w1	Firstmate · 🟣 1 NEEDS LARS · 🔵 2 WORKING
+  w2	Artevo · 🔵 1 WORKING
+
+## S3 single-task refresh of z-voice (spawn/push-transition path)
+## S3 base: fm-visible-status.sh z-voice
+  w1	Glasses Voice · 🔵 1 WORKING
+  w2	Artevo · 🔵 1 WORKING
+## S3 fix: fm-visible-status.sh z-voice
+  w1	Firstmate · 🟣 1 NEEDS LARS · 🔵 2 WORKING
+  w2	Artevo · 🔵 1 WORKING
+## S3 fix: fm-visible-status.sh a-journey
+  w1	Firstmate · 🟣 1 NEEDS LARS · 🔵 2 WORKING
+  w2	Artevo · 🔵 1 WORKING
+
+## S4 journey workers retired (metas removed): w1 holds only Glasses Voice again; fix, fleet pass (cache honoured, no --republish)
+  w1	Glasses Voice · 🔵 1 WORKING
+  w2	Artevo · 🔵 1 WORKING
