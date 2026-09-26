@@ -1,0 +1,16 @@
+## Adversarial: FM_DESK_SHOTS_KEEP=1 with real screencapture - prune must keep only newest PNG and not trip on the .tmp folder
+shot 1 exit=0
+shot 2 exit=0
+shot 3 exit=0
+PNGs left: 1
+.tmp contents: 0 file(s), mode drwx------
+
+## Adversarial: capture tool fails (exit 1) - shot reports failure, leaves no temp file
+fm-desk-voice: screen capture failed
+exit=1
+.tmp contents: 0 file(s); PNGs: 1
+
+## Adversarial: capture tool exits 0 but writes nothing (the original silent failure) - reported, not a phantom path
+fm-desk-voice: screen capture failed
+exit=1
+.tmp contents: 0 file(s)

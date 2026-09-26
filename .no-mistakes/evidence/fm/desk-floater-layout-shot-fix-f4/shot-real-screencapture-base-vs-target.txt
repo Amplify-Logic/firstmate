@@ -1,0 +1,22 @@
+## BASE (2dd858a2) bin/fm-desk-voice.sh shot with real macOS screencapture
+$ FM_HOME=$LAB bin/fm-desk-voice.sh shot
+screencapture: cannot write file to intended destination, /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.qyVwow/state/desk-voice/shots/.tmp-20260926T143827052979Z-1d3a2b43.png
+fm-desk-voice: screen capture failed
+exit=1
+files in shots/:
+
+## TARGET (92ba1155) bin/fm-desk-voice.sh shot with real macOS screencapture
+$ FM_HOME=$LAB bin/fm-desk-voice.sh shot
+$LAB/state/desk-voice/shots/20260926T143828476205Z-15f52c79.png
+exit=0
+files in shots/:
+state/desk-voice/shots/20260926T143828476205Z-15f52c79.png  PNG image data, 3024 x 1964, 8-bit/color RGBA, non-interlaced
+
+## TARGET second shot, --display 1
+$LAB/state/desk-voice/shots/20260926T143829523648Z-ca031801.png
+exit=0 (path printed)
+state/desk-voice/shots/20260926T143829523648Z-ca031801.png  PNG image data, 3024 x 1964, 8-bit/color RGBA, non-interlaced
+state/desk-voice/shots/20260926T143828476205Z-15f52c79.png  PNG image data, 3024 x 1964, 8-bit/color RGBA, non-interlaced
+total 0
+drwx------@ 2 larsmusic  staff   64 Sep 26 17:38 .
+drwx------@ 5 larsmusic  staff  160 Sep 26 17:38 ..

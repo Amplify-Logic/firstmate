@@ -1,0 +1,18 @@
+## Shots taken by the target, then auto-sent the way the floater sends them (fm-desk-voice.sh send --source desk-floater --image ...)
+## Lab home has no live primary lock, so send falls back to the mailbox
+fm-desk-voice: the primary's chat pane is not reachable; saving to the mailbox instead
+mailbox: $LAB/state/desk-voice/inbox/20260926T144412Z-4b578ffa.json
+exit=0
+
+## pending mailbox entries
+$LAB/state/desk-voice/inbox/20260926T144412Z-4b578ffa.json
+
+## drained message the primary would read
+Screenshots: $LAB/state/desk-voice/shots/20260926T143828476205Z-15f52c79.png $LAB/state/desk-voice/shots/20260926T143829523648Z-ca031801.png
+
+## wake queued for the primary
+desk-voice
+--- state/.wake-queue.seq
+1
+--- state/.wake-queue
+1790433852	1	check	desk-voice	desk-voice: $LAB/state/desk-voice/inbox/20260926T144412Z-4b578ffa.json
