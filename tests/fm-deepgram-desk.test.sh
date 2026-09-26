@@ -1210,6 +1210,25 @@ test_desk_voice_send_goes_past_a_claude_draft() {
   pass "fm-desk-voice send: a Claude draft is set aside, the message sent alone, and the draft put back"
 }
 
+test_desk_voice_send_goes_past_a_pasted_text_draft() {
+  local home out
+  home=$(desk_send_fixture send-draft-paste) || { desk_send_skip send-draft-paste; return 0; }
+  cp "$HERDR_CLAUDE_SCREEN" "$home/fixture/screen"
+  printf 'claude' > "$home/fixture/agent"
+  # A multi-line paste collapsed by Claude: the whole draft is its placeholder.
+  printf '[Pasted text #1 +42 lines]' > "$home/fixture/draft"
+  out=$(desk_send "$home" "and ship it") || fail "send failed: $out"
+  assert_contains "$out" "sent: herdr fm-desk-send-test:w7:p3" "a restored paste placeholder is not the message"
+  [ "$(cat "$home/fixture/submitted")" = "and ship it" ] \
+    || fail "only the message may be submitted, got: $(cat "$home/fixture/submitted")"
+  [ "$(cat "$home/fixture/draft")" = "[Pasted text #1 +42 lines]" ] || fail "the pasted draft must be back in the chat box"
+  [ "$(herdr_calls "$home" pane send-keys w7:p3 enter | wc -l | tr -d ' ')" = 1 ] \
+    || fail "Enter must be pressed exactly once"
+  [ "$(inbox_count "$home")" = 0 ] || fail "a pane delivery must not also land in the mailbox"
+  desk_send_done "$home"
+  pass "fm-desk-voice send: a draft that is only a pasted-text placeholder is put back and the send confirmed"
+}
+
 test_desk_voice_send_keeps_a_draft_it_cannot_set_aside() {
   local home out case
   for case in stashed no-stash; do
@@ -1703,6 +1722,7 @@ test_desk_voice_send_never_doubles_an_unconfirmed_submit
 test_desk_voice_send_falls_back_when_the_pane_shows_a_dialog
 test_desk_voice_send_ignores_a_suggested_prompt
 test_desk_voice_send_goes_past_a_claude_draft
+test_desk_voice_send_goes_past_a_pasted_text_draft
 test_desk_voice_send_keeps_a_draft_it_cannot_set_aside
 test_desk_voice_send_proves_a_long_message_past_a_claude_draft
 test_desk_voice_send_clears_a_refused_message_and_restores_the_draft

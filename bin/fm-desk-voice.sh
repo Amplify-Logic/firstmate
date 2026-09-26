@@ -325,6 +325,15 @@ composer_text() {  # <backend> <target> [rows]
   fm_composer_extract_selected_content styled=0 "$cap"
 }
 
+# <text> with its spaces normalized and all whitespace removed, so two readings
+# of the same words compare equal however they wrap.
+squeezed() {  # <text>
+  local text=$1
+  fm_composer_normalize_spaces_var text
+  text=${text//[$' \t\r\n\v\f']/}
+  printf '%s' "${text//$'\xE2\x81\xA3'/}"
+}
+
 # True when Claude's footer shows a stashed draft (`› stashed`). An unreadable
 # screen counts, so a stash the captain already keeps is never replaced.
 shows_stash() {  # <backend> <target>
@@ -374,6 +383,9 @@ unstash_draft() {  # <backend> <target>
 # message, never again: a second Enter after Claude restored the draft would
 # submit the draft. The proof reads, and the Ctrl+U presses that clear a
 # refused message, are sized by the message, which wraps (fm_composer_proof_lines).
+# After Enter the message has left the box once the box reads neither the
+# proven text nor the message, so a restored draft that is only a pasted-text
+# placeholder is not taken for the message.
 # The one deliberate exception where text in the box still sends the message
 # to the mailbox: a footer that already shows `› stashed`, because a second
 # stash would replace the one the captain keeps, and an existing Claude stash
@@ -381,7 +393,7 @@ unstash_draft() {  # <backend> <target>
 # send-failed (not submitted; the draft is back in the box or a note says it
 # is stashed), unknown (typed, and the box could not be proven empty again).
 send_past_draft() {  # <backend> <target> <line>
-  local backend=$1 target=$2 line=$3 draft after rows i
+  local backend=$1 target=$2 line=$3 draft after shown rows i
   if shows_stash "$backend" "$target" \
     || ! draft=$(composer_text "$backend" "$target") || [ -z "$draft" ]; then
     printf 'send-failed'
@@ -413,6 +425,7 @@ send_past_draft() {  # <backend> <target> <line>
     i=0
     while ! await_composer "$backend" "$target" empty 1; do
       if [ "$i" -ge "$rows" ] || ! fm_backend_send_key "$backend" "$target" C-u >/dev/null 2>&1; then
+        note "the captain's draft is stashed; Ctrl+S in the chat brings it back once the box is empty"
         printf 'unknown'
         return 0
       fi
@@ -422,13 +435,17 @@ send_past_draft() {  # <backend> <target> <line>
     printf 'send-failed'
     return 0
   fi
+  shown=$(squeezed "$after")
   fm_backend_send_key "$backend" "$target" Enter >/dev/null 2>&1 || { printf 'unknown'; return 0; }
   i=0
   while :; do
     sleep 0.2
-    if after=$(composer_text "$backend" "$target" "$rows") && ! fm_composer_payload_shown "$line" "$after"; then
-      printf 'empty'
-      return 0
+    if after=$(composer_text "$backend" "$target" "$rows"); then
+      after=$(squeezed "$after")
+      if [ "$after" != "$shown" ] && [ "$after" != "$(squeezed "$line")" ]; then
+        printf 'empty'
+        return 0
+      fi
     fi
     i=$((i + 1))
     [ "$i" -lt 15 ] || { printf 'unknown'; return 0; }
