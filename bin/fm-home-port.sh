@@ -191,11 +191,13 @@ portable_data_files() {
   [ -z "$all" ] || printf '%s' "$all" | LC_ALL=C sort -u
 }
 
-# Remove every charter file the declared data entries select under ROOT, so a
-# push stops carrying a charter the source no longer selects.
+# Remove every charter under ROOT whenever any data entry is declared, so a push
+# stops carrying a charter the source no longer selects, including one an
+# earlier push under a wider entry carried.
 prune_portable_data() {
   local root=$1 files rel
-  files=$(portable_data_files "$root") || exit 1
+  [ "${#PORTABLE_DATA_ENTRIES[@]}" -gt 0 ] || return 0
+  files=$(data_entry_files "$root" data/goals/) || exit 1
   while IFS= read -r rel; do
     [ -n "$rel" ] || continue
     rm -f -- "$root/$rel"

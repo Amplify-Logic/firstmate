@@ -100,7 +100,7 @@ This fork declares the directory entry, so every charter in the pushing home tra
 To send only chosen charters, push from a pruned staging home that holds just those charters, or declare per-file entries in place of the directory entry.
 `bin/fm-fork-surface.sh check` requires the declared entries to match the home-port fallback and to be entries `bin/fm-home-port.sh portable-data-entry` accepts, so no other private data can be declared portable this way.
 When you change the `data` entries in `fork-surface.conf`, change `FALLBACK_PORTABLE_DATA_ENTRIES` in `bin/fm-home-port.sh` in the same edit, or that check fails.
-Each push first removes from the transport every charter the declared entries cover (the directory entry's `*.md`, or each listed per-file path), then copies the charters the pushing home selects, so a charter that is deleted or no longer selected stops travelling; the removal is a commit in the transport's own history, so it stays recoverable there.
+Each push first removes every `data/goals/*.md` charter from the transport, whichever kind of entry is declared, then copies the charters the pushing home selects, so a charter that is deleted or no longer selected stops travelling; the removal is a commit in the transport's own history, so it stays recoverable there.
 Pull and import never delete anything on the receiving home: a later pull replaces each destination charter that shares a name with a travelling one and keeps charters that exist only on the destination.
 The chart room's code already travels with the tracked repo; only the charters themselves need the transport.
 

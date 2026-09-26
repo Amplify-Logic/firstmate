@@ -508,6 +508,46 @@ SH
   pass "push removes a charter the source no longer selects from the transport"
 }
 
+test_per_file_push_prunes_charters_a_directory_push_carried() {
+  local home="$TMP_ROOT/charter-switch-home"
+  local bare="$TMP_ROOT/charter-switch-remote.git"
+  local manifest="$TMP_ROOT/charter-switch.conf"
+  local fakebin out files
+  seed_home "$home"
+  seed_charters "$home"
+  write_data_manifest "$manifest" 'data = data/goals/alpha.md'
+  git init -q --bare "$bare" || fail "could not create bare transport"
+  fakebin=$(fm_fakebin "$TMP_ROOT/charter-switch")
+  cat > "$fakebin/gh" <<'SH'
+#!/usr/bin/env bash
+case "$*" in
+  *--jq\ .visibility*) printf 'private\n' ;;
+  *--jq\ .private*) printf 'true\n' ;;
+esac
+SH
+  chmod +x "$fakebin/gh"
+
+  push_switch() {
+    PATH="$fakebin:$PATH" TMPDIR="$TMP_ROOT" GIT_CONFIG_COUNT=1 \
+      GIT_CONFIG_KEY_0="url.file://$bare.insteadOf" \
+      GIT_CONFIG_VALUE_0=https://github.com/captain/portable.git \
+      "$@" "$PORT" push --remote captain/portable --home "$home" 2>&1
+  }
+
+  out=$(push_switch env) || fail "directory-entry push failed: $out"
+  files=$(git -C "$bare" ls-tree -r --name-only main)
+  assert_contains "$files" 'data/goals/beta.md' "directory-entry push must carry beta"
+
+  out=$(push_switch env FM_FORK_SURFACE_MANIFEST="$manifest") \
+    || fail "per-file push failed: $out"
+  files=$(git -C "$bare" ls-tree -r --name-only main)
+  assert_contains "$files" 'data/goals/alpha.md' "per-file push must keep the chosen charter"
+  case "$files" in
+    *data/goals/beta.md*) fail "an unchosen charter must leave the transport after a per-file push: $files" ;;
+  esac
+  pass "a per-file push removes charters an earlier directory-entry push carried"
+}
+
 test_manifest_data_entry_outside_goals_is_refused() {
   local home="$TMP_ROOT/charter-bad-entry-home"
   local dest="$TMP_ROOT/charter-bad-entry-dest"
@@ -548,6 +588,7 @@ test_import_refuses_symlinked_charter_before_writing
 test_per_file_entry_carries_only_the_chosen_charter
 test_per_file_entry_refuses_symlinked_goals_dir
 test_push_prunes_charters_no_longer_selected
+test_per_file_push_prunes_charters_a_directory_push_carried
 test_manifest_data_entry_outside_goals_is_refused
 test_help_mentions_secrets_policy
 test_scan_warn_machine_local_is_advisory
