@@ -1,0 +1,14 @@
+### bin/fm-deck.sh --once at pre-fix-branch-tip 86a8dd66 ()
+ UNDER WAY ───────────────────────────────────────────────────────────────────────────────────────────────────
+  🟡 WAITING     Pause ended by its own key                                Alpha              heard 2s ago
+  🟡 WAITING     Pause behind another key's resolve                        Alpha              heard 2s ago
+  🟡 WAITING     Pause still open                                          Alpha              heard 2s ago
+
+ JUST IN ─────────────────────────────────────────────────────────────────────────────────────────────────────
+### bin/fm-deck.sh --once at target 1754d51e ()
+ UNDER WAY ───────────────────────────────────────────────────────────────────────────────────────────────────
+  🟡 WAITING     Pause ended by its own key                                Alpha              heard 3s ago
+  🟡 WAITING     Pause behind another key's resolve                        Alpha              heard 3s ago
+  🟡 WAITING     Pause still open                                          Alpha              heard 3s ago
+
+ JUST IN ─────────────────────────────────────────────────────────────────────────────────────────────────────

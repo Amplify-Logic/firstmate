@@ -1,0 +1,9 @@
+### adversarial: tracked file with a personal email, a vendor bot noreply, and a non-bot vendor address
+Contact jane.doe@gmail.com for access
+bot: noreply@anthropic.com
+also someone@anthropic.com
+--- bin/fm-leak-guard.sh docs/probe/leak-probe.md
+LEAK_HIT: email: docs/probe/leak-probe.md: 1:Contact jane.doe@gmail.com for access
+LEAK_HIT: email: docs/probe/leak-probe.md: 3:also someone@anthropic.com
+fm-leak-guard.sh: FAIL - tracked files contain email, /Users/<name>, or live-token shapes (see LEAK_HIT lines above)
+exit=1

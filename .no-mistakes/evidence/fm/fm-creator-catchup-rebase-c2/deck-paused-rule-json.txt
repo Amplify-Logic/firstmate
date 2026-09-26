@@ -1,0 +1,8 @@
+### pre-fix 86a8dd66 top keys: ['schema', 'now', 'home', 'limits', 'counts', 'staged', 'needs_you', 'loose_ends', 'under_way', 'just_in']
+   {'id': 'ci-ended', 'outcome': 'Pause ended by its own key', 'state': 'paused'}
+   {'id': 'other-key', 'outcome': "Pause behind another key's resolve", 'state': 'paused'}
+   {'id': 'still-paused', 'outcome': 'Pause still open', 'state': 'paused'}
+### target 1754d51e top keys: ['schema', 'now', 'home', 'limits', 'counts', 'staged', 'needs_you', 'loose_ends', 'under_way', 'just_in']
+   {'id': 'ci-ended', 'outcome': 'Pause ended by its own key', 'state': 'paused'}
+   {'id': 'other-key', 'outcome': "Pause behind another key's resolve", 'state': 'paused'}
+   {'id': 'still-paused', 'outcome': 'Pause still open', 'state': 'paused'}

@@ -1,0 +1,19 @@
+### real git commit in a task worktree with the spawn-installed hooks (GIT_CONFIG_COUNT core.hooksPath=/tmp/fm-drift.wJkBHK/hooks)
+--- message typed:
+feat: add a
+
+Body line.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Co-authored-by: Cursor Agent <cursoragent@cursor.com>
+Co-Authored-By: Jane Human <jane@example.com>
+Signed-off-by: Dev <dev@example.com>
+commit exit=0
+--- commit object message (git log -1 --format=%B):
+feat: add a
+
+Body line.
+
+Co-Authored-By: Jane Human <jane@example.com>
+Signed-off-by: Dev <dev@example.com>
+

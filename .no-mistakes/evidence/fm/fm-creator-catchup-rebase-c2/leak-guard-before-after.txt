@@ -1,0 +1,8 @@
+### parent 0ce92385 (before final fix): bin/fm-leak-guard.sh
+LEAK_HIT: email: bin/fm-git-strip-ai-trailers.sh: 101:  noreply@anthropic.com | cursoragent@* | noreply@openai.com | copilot@github.com)
+fm-leak-guard.sh: FAIL - tracked files contain email, /Users/<name>, or live-token shapes (see LEAK_HIT lines above)
+exit=
+
+### target 1754d51e: bin/fm-leak-guard.sh
+fm-leak-guard.sh: PASS - no email, /Users/<name>, or live-token shapes in scanned tracked files
+exit=

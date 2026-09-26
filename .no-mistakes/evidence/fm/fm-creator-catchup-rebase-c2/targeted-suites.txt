@@ -1,0 +1,43 @@
+Targeted suites at 1754d51e (each: bash tests/<suite>.test.sh)
+fm-control-relaunch exit=1
+fm-cursor-adapter exit=0
+fm-decision-hold-lifecycle exit=0
+fm-deck exit=0
+fm-fleet-ledger exit=1
+fm-fork-surface exit=0
+fm-git-strip-ai-trailers exit=0
+fm-install-herdr exit=0
+fm-prime-agent-adapter exit=0
+fm-spawn-agent-up exit=0
+fm-spawn-compact-adviser-disable exit=0
+fm-spawn-compact-adviser-disable-remote exit=0
+fm-upstream exit=0
+fm-upstream-ledger exit=0
+no-mistakes-required-workflow exit=0
+
+fm-control-relaunch and fm-fleet-ledger failed only in the 15-way parallel batch; re-run serially 3x each: all exit=0
+
+--- fm-control-relaunch
+ok - fm-control relaunch: a prefixed recorded harness can switch adapters transactionally
+ok - fm-control relaunch: a prefixed command requires an explicit replacement harness
+ok - native Ultra relaunch preserves its profile and rejects an unsupported model before stopping
+ok - fm-control relaunch: a signed-out worker account pin refuses before the old agent stops
+ok - fm-control relaunch: the replacement follows the home's current worker account pin
+ok - fm-control relaunch: a removed worker pin's value is never read back as a registry account
+ok - fm-control-lib: one owner resolves each harness's turn-end registry entry, and refuses a malformed token
+ok - fm-control relaunch: a secondmate relaunch re-resolves its durable configured harness pin
+ok - fm-spawn --relaunch: wiring armed under a prefixed harness name is still retired
+ok - fm-control relaunch: an unaccountable local copy refuses before the agent is touched
+ok - fm-control relaunch: checkpoint inspection failures refuse before stopping
+ok - fm-control relaunch: a secondmate's child work is accounted for and its charter is left alone
+--- fm-spawn-agent-up
+ok - the re-spawn command carries a ship's registered branch prefix
+--- fm-deck
+ok - the state projection reads past a trailing resolve and maps every known verb
+ok - a resolved decision projects the waiting state and sorts with the waiting workers
+--- fm-git-strip-ai-trailers
+ok - a Cursor --trailer commit object has no AI co-author and keeps the captain identity
+ok - a human Co-authored-by trailer survives next to a stripped Cursor trailer
+ok - a human co-author at a vendor domain survives; only the exact bot address is stripped
+ok - install chains the previous commit-msg hook after stripping
+ok - commit-msg file mode strips the trailer and keeps the subject
