@@ -46,8 +46,9 @@
 # cost in bin/fm-lint-costs.tsv orders the queue. A root the table does not list
 # has no trustworthy cost, so it is queued ahead of every measured root and only
 # size-estimated among its unlisted peers; an unlisted canonical root also warns
-# once on stderr without failing the run. Because a free worker always takes the
-# next root, adding or resizing files cannot unbalance the workers.
+# once on stderr without failing the run. Because a free worker takes the next
+# root it may run rather than a fixed shard, adding or resizing files cannot
+# unbalance the workers beyond what the memory classes below require.
 # ShellCheck's peak memory grows with a root's cost: on Linux the costliest
 # root alone peaks near 16 GB and the next near 11 GB, so two costly roots side
 # by side exhaust the 16 GB CI runner. Each root therefore gets a memory class
@@ -180,7 +181,7 @@ fm_lint_worker() {  # <queue> <output-dir> <worker-index>
   trap 'fm_lint_worker_stop; exit 130' INT
   trap 'fm_lint_worker_stop; exit 143' TERM
   # Every worker walks the same cost-ordered queue and claims each root with an
-  # atomic mkdir, so whichever worker is free takes the next most expensive root.
+  # atomic mkdir, so a free worker takes the next most expensive root it may run.
   # Memory classes (see the header) bound what can run side by side: only the
   # first worker takes heavy, huge, and alone roots, and while it runs a huge
   # root the other workers take only small roots, and while it runs an alone
