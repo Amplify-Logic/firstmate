@@ -2951,13 +2951,22 @@ esac
 # resolved above) outranks the named-account registry: the registry, its
 # default, and a relaunch's recorded account all stand down, and an explicit
 # --account refuses rather than launching on two competing selections.
-if [ "$RELAUNCH" -eq 1 ] && [ "$ACCOUNT_SET" -eq 0 ] && [ "$RAW_LAUNCH" -eq 0 ] \
-  && [ "$HARNESS" = "$RELAUNCH_PRIOR_HARNESS" ] && [ -z "$WORKER_ACCOUNT" ] \
+# A relaunch and a secondmate respawn over its existing record (the liveness
+# recovery path) both come back on the recorded account while they keep the
+# recorded harness.
+ACCOUNT_PRIOR_META=
+if [ "$RELAUNCH" -eq 1 ]; then
+  ACCOUNT_PRIOR_META=$RELAUNCH_META
+elif [ "$KIND" = secondmate ] && fm_backlog_record_present "$STATE/$ID.meta" "task record" "$STATE"; then
+  ACCOUNT_PRIOR_META="$STATE/$ID.meta"
+fi
+if [ -n "$ACCOUNT_PRIOR_META" ] && [ "$ACCOUNT_SET" -eq 0 ] && [ "$RAW_LAUNCH" -eq 0 ] \
+  && [ "$HARNESS" = "$(fm_meta_get "$ACCOUNT_PRIOR_META" harness)" ] && [ -z "$WORKER_ACCOUNT" ] \
   && command -v fm_account_recorded_name >/dev/null 2>&1; then
   # Inherit only a registry-written account (fm_account_recorded_name owns
   # the rule), never the worker account pin's own account= value.
-  ACCOUNT=$(fm_account_recorded_name "$(fm_meta_get "$RELAUNCH_META" account_source)" \
-    "$(fm_meta_get "$RELAUNCH_META" account)")
+  ACCOUNT=$(fm_account_recorded_name "$(fm_meta_get "$ACCOUNT_PRIOR_META" account_source)" \
+    "$(fm_meta_get "$ACCOUNT_PRIOR_META" account)")
   [ -z "$ACCOUNT" ] || ACCOUNT_SET=1
 fi
 ACCOUNT_NAME=

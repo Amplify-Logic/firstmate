@@ -27,10 +27,7 @@
 # remote route is never replaced by a local endpoint.
 #
 # Relaunch goes through `bin/fm-spawn.sh <id> --secondmate` with
-# FM_SPAWN_NO_GUARD=1, the same guarded path every recovery uses, plus
-# --account <name> when the meta records a registry-written vendor account
-# (bin/fm-account-lib.sh's fm_account_recorded_name) and the respawn resolves
-# the same harness the meta records. That path
+# FM_SPAWN_NO_GUARD=1, the same guarded path every recovery uses. That path
 # re-resolves placement from the task's own metadata and registry route, so a
 # remote mate is relaunched on its recorded remote host through bin/fm-on.sh -
 # never as a local replacement - behind fm-spawn's own readiness gate and
@@ -61,9 +58,6 @@ FM_SM_LIVE_LIB_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 . "$FM_SM_LIVE_LIB_DIR/fm-remote-readiness-lib.sh"
 # shellcheck source=bin/fm-timeout-lib.sh
 . "$FM_SM_LIVE_LIB_DIR/fm-timeout-lib.sh"
-# Vendor account pinning is fork-owned; an absent library pins nothing.
-# shellcheck source=bin/fm-account-lib.sh disable=SC1091
-[ ! -r "$FM_SM_LIVE_LIB_DIR/fm-account-lib.sh" ] || . "$FM_SM_LIVE_LIB_DIR/fm-account-lib.sh"
 
 # Per-task probe+kill+relaunch serialization. A busy lock means another
 # supervisor (the other sweep, or a racing tick) is mid-episode on this mate;
@@ -295,28 +289,11 @@ fm_secondmate_liveness_relaunch() {  # <meta> <id> [timeout-secs]
     fi
     [ -z "$target" ] || fm_backend_kill "$backend" "$target" 2>/dev/null || true
   fi
-  # A pinned secondmate comes back on the SAME login it died on: which vendor
-  # account a worker runs on is the captain's explicit spend and data-boundary
-  # decision, so the recorded registry account is passed back as --account
-  # rather than re-resolved to the vendor default. An account the spawn can no
-  # longer apply refuses the relaunch instead of moving the mate to another
-  # login. No recorded registry account passes no flag, and neither does a
-  # respawn that config/secondmate-harness now moves onto a different harness:
-  # that account names another vendor's login, so it resolves afresh, as
-  # `bin/fm-spawn.sh --relaunch` does.
-  local rc=0 account=
-  local -a spawn_args=(--secondmate)
-  if command -v fm_account_recorded_name >/dev/null 2>&1; then
-    account=$(fm_account_recorded_name "$(fm_meta_get "$meta" account_source)" "$(fm_meta_get "$meta" account)")
-  fi
-  if [ -n "$account" ] \
-    && [ "$(fm_meta_get "$meta" harness)" = "$("$FM_ROOT/bin/fm-harness.sh" secondmate 2>/dev/null)" ]; then
-    spawn_args+=(--account "$account")
-  fi
+  local rc=0
   if [ -n "$timeout" ]; then
-    FM_SM_LIVE_OUT=$(FM_SPAWN_NO_GUARD=1 fm_run_timed "$timeout" "$FM_ROOT/bin/fm-spawn.sh" "$id" "${spawn_args[@]}" 2>&1) || rc=$?
+    FM_SM_LIVE_OUT=$(FM_SPAWN_NO_GUARD=1 fm_run_timed "$timeout" "$FM_ROOT/bin/fm-spawn.sh" "$id" --secondmate 2>&1) || rc=$?
   else
-    FM_SM_LIVE_OUT=$(FM_SPAWN_NO_GUARD=1 "$FM_ROOT/bin/fm-spawn.sh" "$id" "${spawn_args[@]}" 2>&1) || rc=$?
+    FM_SM_LIVE_OUT=$(FM_SPAWN_NO_GUARD=1 "$FM_ROOT/bin/fm-spawn.sh" "$id" --secondmate 2>&1) || rc=$?
   fi
   FM_SM_LIVE_RC=$rc
   if [ "$rc" -eq 0 ]; then
