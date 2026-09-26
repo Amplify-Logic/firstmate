@@ -2178,6 +2178,54 @@ test_merged_poll_reregistration_after_notification_is_absorbed() {
   pass "a repeat identical merged poll for an already-notified task is absorbed, never queued as a main-blocking row"
 }
 
+# A merged PR is reported once per task and PR identity. A poll still armed for
+# that same identity afterwards - re-armed mid-task, or left behind by a
+# retirement that could not complete - must neither wake nor query the forge
+# again on any later check interval, until the task is re-pointed at another PR
+# or cleaned up.
+test_merged_poll_stays_silent_after_first_notification() {
+  local dir state rc url cycle
+  url=https://github.com/o/r/pull/1
+  dir=$(make_case merged-silent-after-first)
+  state="$dir/home/state"
+  write_poll_meta "$state" task-a "$url"
+  seed_canonical_poll "$dir" task-a "$url"
+  add_stop_custom_check "$dir"
+
+  set +e
+  FM_TEST_GH_LOG="$dir/gh.log" FM_TEST_GH_STATE=MERGED \
+    run_watcher_bounded "$dir/home" "$dir/fakebin" > "$dir/watch-1.out" 2> "$dir/watch-1.err"
+  rc=$?
+  set -e
+  [ "$rc" -eq 0 ] || fail "first merged watcher cycle failed: $(cat "$dir/watch-1.err")"
+  case "$(cat "$dir/watch-1.out")" in check:*task-a.check.sh:*merged) ;; *) fail "first merged wake was not delivered: $(cat "$dir/watch-1.out")" ;; esac
+  grep -F "pr view $url --json state" "$dir/gh.log" >/dev/null \
+    || fail "first merged cycle did not read the forge"
+  ack_watcher_cycle "$state" || fail "first merged wake acknowledgement failed"
+
+  for cycle in 2 3; do
+    seed_canonical_poll "$dir" task-a "$url"
+    rm -f "$state/.last-check" "$dir/gh.log"
+    set +e
+    FM_TEST_GH_LOG="$dir/gh.log" FM_TEST_GH_STATE=MERGED \
+      run_watcher_bounded "$dir/home" "$dir/fakebin" > "$dir/watch-$cycle.out" 2> "$dir/watch-$cycle.err"
+    rc=$?
+    set -e
+    [ "$rc" -eq 0 ] || fail "merged poll cycle $cycle failed: $(cat "$dir/watch-$cycle.err")"
+    case "$(cat "$dir/watch-$cycle.out")" in
+      check:*z-stop.check.sh:*stop-cycle) ;;
+      *) fail "merged poll cycle $cycle woke for an already-reported merge: $(cat "$dir/watch-$cycle.out")" ;;
+    esac
+    assert_no_grep "task-a" "$state/.wake-queue" \
+      "merged poll cycle $cycle queued a row for an already-reported merge"
+    ! grep -F "pr view $url --json state" "$dir/gh.log" >/dev/null 2>&1 \
+      || fail "merged poll cycle $cycle queried the forge again for an already-reported merge"
+    assert_poll_absent "$state" task-a
+    ack_watcher_cycle "$state" || fail "merged poll cycle $cycle acknowledgement failed"
+  done
+  pass "a merged PR wakes once per task and identity, and later polls stay silent without querying the forge"
+}
+
 # The captain merging a PR himself on the forge is the same outcome as a merge
 # this home performed: bin/fm-merge-outcome-lib.sh carries both to the parent on
 # the one reply channel, so no second watch path exists for the captain's case.
@@ -3396,6 +3444,7 @@ test_gerrit_ready_gate_reads_the_published_tree
 test_gerrit_nm_ready_gate_requires_recovered_custody
 test_merged_poll_retires_once
 test_merged_poll_reregistration_after_notification_is_absorbed
+test_merged_poll_stays_silent_after_first_notification
 test_merged_poll_retries_a_failed_upward_report
 test_self_merge_and_poll_publish_one_outcome
 test_merged_poll_row_carries_the_merge_authority
