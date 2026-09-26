@@ -871,6 +871,7 @@ test_desk_voice_deliver_pending_drain() {
 # submitted log, then restores a stash into the box. Knob files bend it: wrap
 # draws the box 40 columns wide, where Ctrl+U deletes one wrapped row;
 # drop-head loses the first typed character; no-marker hides `› stashed`;
+# narrow draws `› stashed` on a footer row of its own, as a narrow pane wraps it;
 # pop-fails refuses the Ctrl+S that pops a stash; refold makes Enter redraw
 # the box as a pasted-text placeholder plus the typed tail without submitting;
 # late-paste holds sent text back from the box for the number of screen reads
@@ -952,9 +953,11 @@ case "${1:-} ${2:-}" in
     fi
     stash=0
     [ ! -e "$dir/stash" ] || [ -e "$dir/no-marker" ] || stash=1
+    [ "$stash" = 0 ] || [ ! -e "$dir/narrow" ] || stash=2
     last=$(grep -n '❯' "$screen" | tail -n 1 | cut -d: -f1)
     awk -v n="$last" -v row="$row" -v stash="$stash" -v rows="$(wc -l < "$screen")" '
       NR == n { print row "\r"; next }
+      NR == rows && stash == 2 { print; print "                    › stashed\r"; next }
       NR == rows && stash == 1 { sub(/\r$/, ""); print $0 "    › stashed\r"; next }
       { print }
     ' "$screen" > "$dir/screen.now"
@@ -1274,6 +1277,29 @@ test_desk_voice_send_goes_past_a_claude_draft() {
   [ "$(inbox_count "$home")" = 0 ] || fail "a pane delivery must not also land in the mailbox"
   desk_send_done "$home"
   pass "fm-desk-voice send: a Claude draft is set aside, the message sent alone, and the draft put back"
+}
+
+test_desk_voice_send_goes_past_a_draft_in_a_narrow_pane() {
+  local home out
+  home=$(desk_send_fixture send-draft-narrow) || { desk_send_skip send-draft-narrow; return 0; }
+  cp "$HERDR_CLAUDE_SCREEN" "$home/fixture/screen"
+  printf 'claude' > "$home/fixture/agent"
+  # A narrow or busy pane wraps Claude's `› stashed` onto a footer row of its
+  # own (verified live on claude 2.1.283, herdr and tmux): that marker is not
+  # text in the box, so the emptied box still takes the message.
+  : > "$home/fixture/narrow"
+  printf 'CURLEW draft typed while busy' > "$home/fixture/draft"
+  out=$(desk_send "$home" "and ship it") || fail "send failed: $out"
+  assert_contains "$out" "sent: herdr fm-desk-send-test:w7:p3" "a wrapped stash marker does not block the message"
+  [ "$(cat "$home/fixture/submitted")" = "and ship it" ] \
+    || fail "only the message may be submitted, got: $(cat "$home/fixture/submitted" 2>/dev/null)"
+  [ "$(cat "$home/fixture/draft")" = "CURLEW draft typed while busy" ] || fail "the draft must be back in the chat box"
+  [ ! -e "$home/fixture/stash" ] || fail "the draft must not stay stashed"
+  [ "$(herdr_calls "$home" pane send-keys w7:p3 enter | wc -l | tr -d ' ')" = 1 ] \
+    || fail "Enter must be pressed exactly once"
+  [ "$(inbox_count "$home")" = 0 ] || fail "a pane delivery must not also land in the mailbox"
+  desk_send_done "$home"
+  pass "fm-desk-voice send: a stash marker wrapped onto its own footer row is not read as text in the box"
 }
 
 test_desk_voice_send_goes_past_a_pasted_text_draft() {
@@ -1860,6 +1886,7 @@ test_desk_voice_send_never_doubles_an_unconfirmed_submit
 test_desk_voice_send_falls_back_when_the_pane_shows_a_dialog
 test_desk_voice_send_ignores_a_suggested_prompt
 test_desk_voice_send_goes_past_a_claude_draft
+test_desk_voice_send_goes_past_a_draft_in_a_narrow_pane
 test_desk_voice_send_goes_past_a_pasted_text_draft
 test_desk_voice_send_keeps_a_draft_it_cannot_set_aside
 test_desk_voice_send_proves_a_long_message_past_a_claude_draft

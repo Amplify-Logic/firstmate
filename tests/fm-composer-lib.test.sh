@@ -824,6 +824,34 @@ test_matrix_claude_suggested_prompt_and_draft() {
   pass "matrix: claude's suggested prompt reads empty wherever styling survives, its typed draft pending"
 }
 
+test_matrix_claude_wrapped_stash_marker() {
+  # A narrow or busy Claude pane wraps `› stashed` onto a footer row of its
+  # own (claude 2.1.283, captured live at 54 columns on tmux and about 53 on
+  # herdr 0.7.4). It is furniture under the `❯` box, not a lower composer: the
+  # box Ctrl+S emptied reads empty, and a typed draft above it still pending.
+  local rule='──────────────────────────────────────────────────────'
+  local screen typed codex
+  screen="  39."$'\n\n'"$rule"$'\n❯'"$NBSP"$'\n'"$rule"
+  screen+=$'\n  ⏵⏵ auto mode on (shift+tab to cycle) · esc to int…'
+  screen+=$'\n                                           › stashed'
+  assert_screen "claude wrapped stash marker on tmux" empty "$CAPS_TMUX" "$screen" 3 probe-absent
+  assert_screen "claude wrapped stash marker on herdr" empty "$CAPS_STYLED" "$screen" '' probe-absent
+  assert_screen "claude wrapped stash marker on cmux/orca" empty "$CAPS_PLAIN" "$screen"
+  [ -z "$(fm_composer_extract_selected_content "$CAPS_PLAIN" "$screen")" ] \
+    || fail "the wrapped stash marker must not read as text in the box"
+  # Herdr's lab pane adds a notice row between the rules and the footer.
+  screen=${screen/$'\n  ⏵⏵'/$'\n  ⚠ Transcript saving is off — inherited CLAUDE_CO…\n  ⏵⏵'}
+  assert_screen "claude wrapped stash marker under a notice on herdr" empty "$CAPS_STYLED" "$screen" '' probe-absent
+  typed=${screen/❯$NBSP/❯ CURLEW draft typed while busy}
+  assert_screen "claude typed draft over a wrapped stash marker on tmux" pending "$CAPS_TMUX" "$typed" 3 probe-absent
+  [ "$(fm_composer_extract_selected_content "$CAPS_PLAIN" "$typed")" = "CURLEW draft typed while busy" ] \
+    || fail "the box above a wrapped stash marker must read its own draft"
+  # Codex's own `›` composer holding the word `stashed` is still a composer.
+  codex=$'history\n› stashed'
+  assert_screen "codex composer holding the word stashed" pending "$CAPS_TMUX" "$codex" 1 probe-absent
+  pass "matrix: claude's stash marker wrapped onto its own footer row is furniture, not a composer"
+}
+
 test_selection_dialog_survives_ghost_stripped_option() {
   # The highlighted option's number and label drawn in a dark truecolor that
   # ghost stripping removes, leaving the glyph alone on its row - which reads
@@ -1110,6 +1138,7 @@ test_matrix_kimi_bordered_shell_glyph_box
 test_matrix_claude_inside_zellij_ansi_dump
 test_matrix_claude_selection_dialogs_are_unknown
 test_matrix_claude_suggested_prompt_and_draft
+test_matrix_claude_wrapped_stash_marker
 test_selection_dialog_survives_ghost_stripped_option
 test_selection_dialog_rule_is_bounded
 test_strict_blank_row_divergence

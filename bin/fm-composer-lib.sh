@@ -832,7 +832,7 @@ _fm_composer_scan_screen() {  # <plain-screen> <cursor-or-empty> [extract-wrap]
   FM_COMPOSER_SCAN_LEFTBAR_GLYPH_ROW=-1
   FM_COMPOSER_SCAN_LEFTBAR_GLYPH=
   local leftbar_start=-1 pi_open=-1 pi_lines=0 pi_max
-  local probe row_glyph row_glyph_row
+  local probe row_glyph row_glyph_row bare_glyph=''
   local box_glyph_row=-1 box_glyph='' pi_glyph_row=-1 pi_glyph=''
   pi_max=$FM_COMPOSER_PI_MAX_LINES
   case "$pi_max" in ''|*[!0-9]*|0) pi_max=8 ;; esac
@@ -927,11 +927,18 @@ _fm_composer_scan_screen() {  # <plain-screen> <cursor-or-empty> [extract-wrap]
     # shell glyphs are deliberately not candidates (dead-shell rule). Keep
     # lower shell prompts as staleness evidence for cursorless selection.
     # Pi's cost footer can open with `$0.000`; that is furniture, not a prompt.
+    # So is Claude's `› stashed` footer marker when a narrow or busy pane wraps
+    # it onto a row of its own, below a rule under a bare row another glyph
+    # leads (verified live on claude 2.1.283, herdr 0.7.4 and tmux).
     if [ "$top" -lt 0 ] && fm_composer_leading_shell_glyph_var glyph "$trimmed" \
        && ! _fm_composer_row_is_pi_status "$trimmed"; then
       FM_COMPOSER_SCAN_SHELL_ROW=$row
-    elif fm_composer_leading_agent_glyph_var glyph "$trimmed"; then
+    elif fm_composer_leading_agent_glyph_var glyph "$trimmed" \
+       && ! { [[ $trimmed =~ ^›[[:space:]]*stashed$ ]] \
+              && [ "$FM_COMPOSER_SCAN_BARE_ROW" -ge 0 ] && [ "$bare_glyph" != "$glyph" ] \
+              && [ "$FM_COMPOSER_SCAN_PI_LAST_SEPARATOR" -gt "$FM_COMPOSER_SCAN_BARE_ROW" ]; }; then
       FM_COMPOSER_SCAN_BARE_ROW=$row
+      bare_glyph=$glyph
     fi
     # Cursor safety: a cursor sitting on a structural edge row is never an
     # input row.
