@@ -1,0 +1,144 @@
+code root: copy of 866254e2 at /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.4st1Bf/code
+
+===== 0. arm a shift: fm-shift.sh start =====
+Shift loop armed.
+  power: ok - on mains power, system sleep held off (keep the lid open)
+  keep-awake: ok - com.firstmate.glasses-keepawake is running
+  mailbox: ok - the service is running and answering its health check
+  voice out: ok - firstmate can speak into the glasses
+  phone route: ok - Tailscale Serve maps :8443 to the mailbox
+  supervision: ok - a firstmate session is live and watching
+  host sentinel: ok - launchd completed a scheduled check 3s ago
+  away mode: ok - firstmate answers while you are out
+  outage self-check: ok - an outage wakes firstmate and is spoken when the loop returns
+  supervision alarm: ok - the host sentinel speaks a watcher outage into the glasses within minutes
+
+Stand it down with: fm-shift.sh stop
+[exit 0]
+
+===== config/wedge-alarm as written by start (the alarm route) =====
+# >>> fm-shift.sh - removed by: fm-shift.sh stop
+command:/private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.4st1Bf/code/bin/fm-shift.sh alarm "$1"
+# auto keeps this home reachable if this block ever outlives its shift.
+auto
+# <<< fm-shift.sh
+-rw-r--r--@ 1 larsmusic  staff   0 Sep 26 11:44 /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.4st1Bf/state/.afk
+-rw-------@ 1 larsmusic  staff  58 Sep 26 11:44 /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.4st1Bf/state/.shift
+
+===== 1a. ARMED: fm-shift.sh status =====
+shift: armed since 11:44
+  power: ok - on mains power, system sleep held off (keep the lid open)
+  keep-awake: ok - com.firstmate.glasses-keepawake is running
+  mailbox: ok - the service is running and answering its health check
+  voice out: ok - firstmate can speak into the glasses
+  phone route: ok - Tailscale Serve maps :8443 to the mailbox
+  supervision: ok - a firstmate session is live and watching
+  away mode: ok - firstmate keeps answering while you are out
+  outage self-check: ok - registered, watching the mailbox every sweep
+  supervision alarm: ok - the host sentinel is live and speaks a watcher outage into the glasses
+[exit 0]
+
+===== 1b. ARMED: host sentinel check (no watcher running in lab) =====
+SUPERVISION DOWN: glasses shift armed, no crew task in flight; last watcher beat: 5s ago (grace 300s). No automatic restart was attempted; see /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.4st1Bf/state/.supervision-outage-alarm
+supervision sentinel: this mode is marker-only; external alert delivery is PENDING and owned by the scheduled host check
+[exit 1]
+
+===== 1c. ARMED: registered self-check with mailbox down (health 000) =====
+glasses voice loop is down: health answered 000
+[exit 0]
+--- glasses heard:
+--- desktop banner:
+
+===== 1d. ARMED: alarm through the real alarm owner (as the sentinel raises it) =====
+[exit 0]
+--- glasses heard:
+SPOKEN Firstmate stopped watching. Your questions are not being picked up until that is fixed.
+--- desktop banner:
+BANNER -e on run argv -e display notification (item 1 of argv) with title (item 2 of argv) sound name "Basso" -e end run SUPERVISION DOWN: glasses shift armed, no crew task in flight firstmate: away-mode escalations WEDGED
+
+===== 2. CAPTAIN GETS HOME: away mode ends by the ordinary route (state/.afk removed), shift record left behind =====
+-rw-------@ 1 larsmusic  staff  58 Sep 26 11:44 /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.4st1Bf/state/.shift
+wedge-alarm still has:
+# >>> fm-shift.sh - removed by: fm-shift.sh stop
+command:/private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.4st1Bf/code/bin/fm-shift.sh alarm "$1"
+# auto keeps this home reachable if this block ever outlives its shift.
+auto
+# <<< fm-shift.sh
+
+===== 2a. STALE: fm-shift.sh status =====
+shift: STALE - armed at 11:44 but away mode has ended
+      fix: fm-shift.sh stop - the shift record, its self-check and its alarm route are still in place
+  power: ok - on mains power, system sleep held off (keep the lid open)
+  keep-awake: ok - com.firstmate.glasses-keepawake is running
+  mailbox: ok - the service is running and answering its health check
+  voice out: ok - firstmate can speak into the glasses
+  phone route: ok - Tailscale Serve maps :8443 to the mailbox
+  supervision: ok - a firstmate session is live and watching
+  away mode: DOWN - firstmate is not in away mode
+      fix: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.4st1Bf/afk-launch start
+  outage self-check: ok - registered, watching the mailbox every sweep
+  supervision alarm: ok - the host sentinel is live and speaks a watcher outage into the glasses
+[exit 0]
+
+===== 2b. STALE: host sentinel check (no watcher, no tasks) =====
+supervision sentinel: OK - no task metadata in flight and no glasses shift armed for this home; nothing to supervise
+[exit 0]
+
+===== 2c. STALE: registered self-check with mailbox down =====
+[exit 0]
+--- glasses heard:
+--- desktop banner:
+
+===== 2d. STALE: fm-shift.sh alarm directly (spoken half) =====
+[exit 1]
+--- glasses heard:
+--- desktop banner:
+
+===== 2e. STALE: a real crew-task outage alarm through the alarm owner with the leftover block =====
+[exit 0]
+--- glasses heard:
+--- desktop banner:
+BANNER -e on run argv -e display notification (item 1 of argv) with title (item 2 of argv) sound name "Basso" -e end run SUPERVISION DOWN: 1 task(s) in flight firstmate: away-mode escalations WEDGED
+
+===== 3. ADVERSARIAL: record gone but block left behind =====
+[exit 0]
+--- glasses heard:
+--- desktop banner:
+BANNER -e on run argv -e display notification (item 1 of argv) with title (item 2 of argv) sound name "Basso" -e end run SUPERVISION DOWN: 1 task(s) in flight firstmate: away-mode escalations WEDGED
+shift: not armed
+  power: ok - on mains power, system sleep held off (keep the lid open)
+  keep-awake: ok - com.firstmate.glasses-keepawake is running
+  mailbox: ok - the service is running and answering its health check
+  voice out: ok - firstmate can speak into the glasses
+  phone route: ok - Tailscale Serve maps :8443 to the mailbox
+  supervision: ok - a firstmate session is live and watching
+  away mode: DOWN - firstmate is not in away mode
+      fix: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.4st1Bf/afk-launch start
+  outage self-check: ok - registered, watching the mailbox every sweep
+  supervision alarm: ok - the host sentinel is live and speaks a watcher outage into the glasses
+[exit 0]
+
+===== 4. ADVERSARIAL: away mode still active but no shift record (away without shift) =====
+supervision sentinel: OK - no task metadata in flight and no glasses shift armed for this home; nothing to supervise
+[exit 0]
+[exit 1]
+--- glasses heard:
+--- desktop banner:
+
+===== 5. teardown-only via fm-shift.sh stop clears the leftover (unchanged behaviour) =====
+Shift stood down.
+  ran: 0m (11:44 to 11:44)
+  questions asked: unknown (no mailbox database)
+  interruptions: none
+  away mode: stopped
+  left running: the mailbox, the keep-awake agent and the phone route (you use those at your desk too)
+
+Away-mode return output (afk-return, exit 0) - the only copy of what was drained while you were out:
+  away mode stopped
+[exit 0]
+--- wedge-alarm after stop:
+(absent)
+ls: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.4st1Bf/state/.shift: No such file or directory
+/Users/larsmusic/.no-mistakes/evidence/01M3EDV5DGGNP2JJ61SWQNXZQ6/drive-shift-standdown.sh: line 129: 62963 Terminated: 15          sleep 300 > /dev/null 2>&1
+
+lab removed: yes

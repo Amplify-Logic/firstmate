@@ -1,0 +1,9 @@
+Focused run of the two new/rewritten tests from tests/fm-shift.test.sh (temp harness removed afterwards)
+== unmutated
+ok - alarm route: speaks and raises the banner while armed, and falls back to the banner alone once the shift is over
+ok - armed: the rendered check tests the same two conditions the library owns
+== bin/fm-shift.sh WEDGE_AUTO=auto -> WEDGE_AUTO= (the auto directive dropped from the shift's wedge-alarm block)
+not ok - an armed shift did not also raise the desktop banner
+== bin/fm-supervision-lib.sh fm_sup_shift_armed tests the record only (away-mode condition dropped)
+not ok - record-without-away-mode: the leftover shift spoke: Firstmate stopped watching. Your questions are not being picked up until that is fixed.
+(both mutations reverted with git checkout; worktree clean)
