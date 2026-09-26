@@ -1,0 +1,72 @@
+
+=== [base-34f164c9] arm: fm-pr-check.sh task-a https://github.com/Amplify-Logic/firstmate/pull/205
+●  watcher supervision needs Stop-owned automatic recovery; inspect the hook registration and startup status before ending the turn.
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+armed: state/task-a.check.sh
+arm exit=0
+
+=== [base-34f164c9] watcher cycle 1 exit=0
+watcher stdout: check: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.TZAeLi/state/task-a.check.sh: merged
+forge state reads (gh pr view <url> --json state): 1
+  gh: api repos/Amplify-Logic/firstmate/pulls/205
+  gh: api repos/Amplify-Logic/firstmate/pulls/205/reviews?per_page=100 --paginate --slurp
+  gh: api repos/Amplify-Logic/firstmate/commits/3a6375fca0a0227a9734863f1efbcb5b4a9684f7/check-runs?filter=all&per_page=100 --paginate --slurp
+  gh: api repos/Amplify-Logic/firstmate/issues/205/comments?per_page=100 --paginate --slurp
+  gh: api repos/Amplify-Logic/firstmate/pulls/205/comments?per_page=100 --paginate --slurp
+  gh: api repos/Amplify-Logic/firstmate
+  gh: api repos/Amplify-Logic/firstmate/commits/3a6375fca0a0227a9734863f1efbcb5b4a9684f7/statuses?per_page=100 --paginate --slurp
+  gh: pr view https://github.com/Amplify-Logic/firstmate/pull/205 --json headRefOid,reviewDecision
+  gh: pr view https://github.com/Amplify-Logic/firstmate/pull/205 --json state -q .state
+wake-queue task-a check rows: 0
+drained wakes: 1790428933	1	check	merged-task-a-https://github.com/Amplify-Logic/firstmate/pull/205	check: merge landed: task-a https://github.com/Amplify-Logic/firstmate/pull/205 external 
+poll artifacts left: task-a.pr-poll-merge-notified 
+merge-notified marker: fm-pr-poll-merge-notified-v1 github github.com Amplify-Logic/firstmate 205 
+
+=== [base-34f164c9] arm: fm-pr-check.sh task-a https://github.com/Amplify-Logic/firstmate/pull/205
+armed: state/task-a.check.sh
+arm exit=0
+
+=== [base-34f164c9] watcher cycle 2 exit=0
+watcher stdout: check: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.TZAeLi/state/z-stop.check.sh: stop-cycle
+forge state reads (gh pr view <url> --json state): 1
+  gh: pr view https://github.com/Amplify-Logic/firstmate/pull/205 --json state -q .state
+wake-queue task-a check rows: 0
+drained wakes: 1790428942	2	check	/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.TZAeLi/state/z-stop.check.sh	check: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.TZAeLi/state/z-stop.check.sh: stop-cycle 
+poll artifacts left: task-a.pr-poll-merge-notified 
+merge-notified marker: fm-pr-poll-merge-notified-v1 github github.com Amplify-Logic/firstmate 205 
+
+=== [base-34f164c9] arm: fm-pr-check.sh task-a https://github.com/Amplify-Logic/firstmate/pull/205
+armed: state/task-a.check.sh
+arm exit=0
+
+=== [base-34f164c9] watcher cycle 3 exit=0
+watcher stdout: check: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.TZAeLi/state/z-stop.check.sh: stop-cycle
+forge state reads (gh pr view <url> --json state): 1
+  gh: pr view https://github.com/Amplify-Logic/firstmate/pull/205 --json state -q .state
+wake-queue task-a check rows: 0
+drained wakes: 1790428950	3	check	/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.TZAeLi/state/z-stop.check.sh	check: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.TZAeLi/state/z-stop.check.sh: stop-cycle 
+poll artifacts left: task-a.pr-poll-merge-notified 
+merge-notified marker: fm-pr-poll-merge-notified-v1 github github.com Amplify-Logic/firstmate 205 
+
+=== [base-34f164c9] arm: fm-pr-check.sh task-a https://github.com/Amplify-Logic/firstmate/pull/204
+armed: state/task-a.check.sh
+arm exit=0
+
+=== [base-34f164c9] watcher cycle 4 exit=0
+watcher stdout: check: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.TZAeLi/state/task-a.check.sh: merged
+forge state reads (gh pr view <url> --json state): 1
+  gh: api repos/Amplify-Logic/firstmate/pulls/204
+  gh: api repos/Amplify-Logic/firstmate/pulls/204/reviews?per_page=100 --paginate --slurp
+  gh: api repos/Amplify-Logic/firstmate/issues/204/comments?per_page=100 --paginate --slurp
+  gh: api repos/Amplify-Logic/firstmate/commits/84599b2c951021f86263e969e1b0c255b7bcd9d1/check-runs?filter=all&per_page=100 --paginate --slurp
+  gh: api repos/Amplify-Logic/firstmate/pulls/204/comments?per_page=100 --paginate --slurp
+  gh: api repos/Amplify-Logic/firstmate/commits/84599b2c951021f86263e969e1b0c255b7bcd9d1/statuses?per_page=100 --paginate --slurp
+  gh: api repos/Amplify-Logic/firstmate
+  gh: pr view https://github.com/Amplify-Logic/firstmate/pull/204 --json headRefOid,reviewDecision
+  gh: pr view https://github.com/Amplify-Logic/firstmate/pull/204 --json state -q .state
+wake-queue task-a check rows: 0
+drained wakes: 1790428959	4	check	merged-task-a-https://github.com/Amplify-Logic/firstmate/pull/204	check: merge landed: task-a https://github.com/Amplify-Logic/firstmate/pull/204 external 
+poll artifacts left: task-a.pr-poll-merge-notified 
+merge-notified marker: fm-pr-poll-merge-notified-v1 github github.com Amplify-Logic/firstmate 204 
+
+=== [base-34f164c9] lab removed: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.TZAeLi

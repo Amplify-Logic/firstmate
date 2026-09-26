@@ -1,0 +1,5 @@
+ok - validated merged polls notify once and retire before the next watcher cycle
+ok - a repeat identical merged poll for an already-notified task is absorbed without a forge read, never queued as a main-blocking row
+ok - a different merged PR for the same task gets its own first notification
+ok - a failed upward merge report keeps its poll armed for repair and retry
+ok - a merge detected by the poll is reported upward from a secondmate home exactly once
