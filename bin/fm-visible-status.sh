@@ -14,8 +14,9 @@
 #     (default 15) and the whole pass by FM_VISIBLE_PASS_TIMEOUT seconds
 #     (default 120). A task the pass did not reach keeps its previous published
 #     label and is published by the next pass.
-#   - A task whose computed label equals the one last published for it is
-#     skipped without any backend call. The last published label lives in
+#   - A task whose computed label equals the one last published for it skips
+#     the tab and label calls, keeping only the primary-role clear and its
+#     fm_state restore (see update_task). The last published label lives in
 #     state/<id>.visible-label, a workspace's in state/.visible-workspace-<id>;
 #     both are pure presentation caches, safe to delete (that forces one full
 #     republish). --republish ignores them, which is what a recovery pass after
