@@ -1,0 +1,53 @@
+### [HEAD] bash: GNU bash, version 3.2.57(1)-release (arm64-apple-darwin25)
+### [HEAD] lab home: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.bRUih9
+### wake queue before:
+1790428404	1	signal	live-task.status	signal: live wake for unwritable-stdout proof
+### run 1: fm-afk-return.sh begin with stdout opened READ-ONLY
+rc=3
+--- stderr:
+cat: stdout: Bad file descriptor
+fm-afk-return: recovery evidence could not be published; catch-up remains pending
+--- gate file present? yes
+--- lock left? no
+--- orphan pending/stdout temp files: 
+--- wake queue still holds the wake? yes
+### run 2: fm-afk-return.sh check with a writable stdout (retry)
+rc=0
+  | === Return brief ===
+  | Supervisor health:
+  |   - GAP: watcher downtime was detected during the away window (recovery marker present)
+  |   - GAP: the watcher beat was 999999s old at return (grace 300s)
+  | Your instructions:
+  |   (no away-posture record for this window; legacy away flag only)
+  | Waiting on you:
+  |   (nothing)
+  | Tried and failed, or could not be fixed:
+  |   (nothing)
+  | Landed, cleanup due:
+  |   (nothing)
+  | Handled while away:
+  |   0 outcome(s) handled by the away session (0 routine, 0 escalated above)
+  |   (no routine outcomes recorded in the store for this window)
+  | Cost: 0 supervision outcome(s) recorded (0 routine, 0 captain); 0 task(s) live at return.
+  | catch-up health: GAP: watcher downtime was detected during the away window (recovery marker present)
+  | catch-up health: GAP: the watcher beat was 999999s old at return (grace 300s)
+  | catch-up wake: 1790428404 1 signal live-task.status signal: live wake for unwritable-stdout proof
+  | catch-up lifecycle: recovery evidence publication failed; retry catch-up before ordinary work
+  | WAKE_ACK_REQUIRED: after handling completes run bin/fm-wake-drain.sh --ack-through 1 --recovery-generation 26747.1790428404.gHMbNE
+  | fm-afk-return: catch-up clear; ordinary captain work may proceed
+--- gate file present after retry? no
+### run 3: WAKE_ACK_REQUIRED written to READ-ONLY stderr
+rc=3
+--- gate content:
+  | schema	fm-afk-return.v1
+  | started	1790428409
+  | phase	blocked
+  | evidence	health	GAP: watcher downtime was detected during the away window (recovery marker present)
+  | evidence	health	GAP: the watcher beat was 999999s old at return (grace 300s)
+  | evidence	wake	1790428404 1 signal live-task.status signal: live wake for unwritable-stdout proof
+  | evidence	wake	1790428408 2 signal live-task2.status signal: second live wake for stderr proof
+  | evidence	lifecycle	durable wake acknowledgement command publication failed; retry catch-up before ordinary work
+--- gate contains WAKE_ACK_REQUIRED? 0
+--- lock left? no
+--- orphan pending files: 
+### lab removed

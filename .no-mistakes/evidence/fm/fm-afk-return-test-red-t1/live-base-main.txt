@@ -1,0 +1,93 @@
+### [BASE] bash: GNU bash, version 3.2.57(1)-release (arm64-apple-darwin25)
+### [BASE] lab home: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.RljHAh
+### wake queue before:
+1790428415	1	signal	live-task.status	signal: live wake for unwritable-stdout proof
+### run 1: fm-afk-return.sh begin with stdout opened READ-ONLY
+rc=1
+--- stderr:
+/tmp/afk-base.K1MKMe/bin/fm-afk-return.sh: line 463: printf: write error: Bad file descriptor
+/tmp/afk-base.K1MKMe/bin/fm-afk-return.sh: line 466: printf: write error: Bad file descriptor
+awk: i/o error occurred while closing /dev/stdout
+ input record number 3, file /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.RljHAh/state/.afk-return-evidence.ZGgGWN
+ source line number 1
+/tmp/afk-base.K1MKMe/bin/fm-afk-return.sh: line 470: printf: write error: Bad file descriptor
+/tmp/afk-base.K1MKMe/bin/fm-afk-return.sh: line 488: printf: write error: Bad file descriptor
+/tmp/afk-base.K1MKMe/bin/fm-afk-return.sh: line 492: printf: write error: Bad file descriptor
+/tmp/afk-base.K1MKMe/bin/fm-afk-return.sh: line 509: printf: write error: Bad file descriptor
+/tmp/afk-base.K1MKMe/bin/fm-afk-return.sh: line 527: printf: write error: Bad file descriptor
+sed: stdout: Bad file descriptor
+/tmp/afk-base.K1MKMe/bin/fm-afk-return.sh: line 533: printf: write error: Bad file descriptor
+/tmp/afk-base.K1MKMe/bin/fm-afk-return.sh: line 550: printf: write error: Bad file descriptor
+/tmp/afk-base.K1MKMe/bin/fm-afk-return.sh: line 555: printf: write error: Bad file descriptor
+/tmp/afk-base.K1MKMe/bin/fm-afk-return.sh: line 564: printf: write error: Bad file descriptor
+/tmp/afk-base.K1MKMe/bin/fm-afk-return.sh: line 571: printf: write error: Bad file descriptor
+/tmp/afk-base.K1MKMe/bin/fm-afk-return.sh: line 574: 0
+=== Return brief ===
+Supervisor health:
+Your instructions:
+  (no away-posture record for this window; legacy away flag only)
+Waiting on you:
+  held listing unavailable: === Return brief ===
+  escalated by the away session:
+Tried and failed, or could not be fixed:
+  (nothing)
+Landed, cleanup due:
+  (nothing)
+Handled while away:: syntax error: operand expected (error token is "= Return brief ===
+Supervisor health:
+Your instructions:
+  (no away-posture record for this window; legacy away flag only)
+Waiting on you:
+  held listing unavailable: === Return brief ===
+  escalated by the away session:
+Tried and failed, or could not be fixed:
+  (nothing)
+Landed, cleanup due:
+  (nothing)
+Handled while away:")
+--- gate file present? yes
+--- lock left? YES
+--- orphan pending/stdout temp files: .afk-return-blockers.jpGkZV .afk-return-drain.xXNHJA .afk-return-evidence.ZGgGWN 
+--- wake queue still holds the wake? yes
+### run 2: fm-afk-return.sh check with a writable stdout (retry)
+rc=0
+  | === Return brief ===
+  | Supervisor health:
+  |   - GAP: watcher downtime was detected during the away window (recovery marker present)
+  |   - GAP: the watcher beat was 999999s old at return (grace 300s)
+  | Your instructions:
+  |   (no away-posture record for this window; legacy away flag only)
+  | Waiting on you:
+  |   (nothing)
+  | Tried and failed, or could not be fixed:
+  |   (nothing)
+  | Landed, cleanup due:
+  |   (nothing)
+  | Handled while away:
+  |   0 outcome(s) handled by the away session (0 routine, 0 escalated above)
+  |   (no routine outcomes recorded in the store for this window)
+  | Cost: 0 supervision outcome(s) recorded (0 routine, 0 captain); 0 task(s) live at return.
+  | catch-up health: GAP: watcher downtime was detected during the away window (recovery marker present)
+  | catch-up health: GAP: the watcher beat was 999999s old at return (grace 300s)
+  | catch-up wake: 1790428415 1 signal live-task.status signal: live wake for unwritable-stdout proof
+  | WAKE_ACK_REQUIRED: after handling completes run bin/fm-wake-drain.sh --ack-through 1 --recovery-generation 33663.1790428415.LSlXPH
+  | fm-afk-return: catch-up clear; ordinary captain work may proceed
+--- gate file present after retry? no
+### run 3: WAKE_ACK_REQUIRED written to READ-ONLY stderr
+rc=3
+--- gate content:
+  | schema	fm-afk-return.v1
+  | started	1790428419
+  | phase	blocked
+  | evidence	health	GAP: watcher downtime was detected during the away window (recovery marker present)
+  | evidence	health	GAP: the watcher beat was 999999s old at return (grace 300s)
+  | evidence	wake	1790428415 1 signal live-task.status signal: live wake for unwritable-stdout proof
+  | evidence	wake	1790428418 2 signal live-task2.status signal: second live wake for stderr proof
+  | WAKE_ACK_REQUIRED: after handling completes run bin/fm-wake-drain.sh --ack-through 2 --recovery-generation 33663.1790428415.LSlXPH
+  | WAKE_ACK_REQUIRED: after handling completes run bin/fm-wake-drain.sh --ack-through 2 --recovery-generation 33663.1790428415.LSlXPH
+  | evidence	lifecycle	WAKE_ACK_REQUIRED: after handling completes run bin/fm-wake-drain.sh --ack-through 2 --recovery-generation 33663.1790428415.LSlXPH durable wake acknowledgement command publication failed; retry catch-up before ordinary workWAKE_ACK_REQUIRED: after handling completes run bin/fm-wake-drain.sh --ack-through 2 --recovery-generation 33663.1790428415.LSlXPH
+  | WAKE_ACK_REQUIRED: after handling completes run bin/fm-wake-drain.sh --ack-through 2 --recovery-generation 33663.1790428415.LSlXPH
+--- gate contains WAKE_ACK_REQUIRED? 4
+--- lock left? no
+--- orphan pending files: 
+### lab removed

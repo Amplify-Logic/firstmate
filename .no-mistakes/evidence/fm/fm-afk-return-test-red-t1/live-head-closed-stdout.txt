@@ -1,0 +1,15 @@
+queued: 1790428441	1	signal	closed-task.status	signal: closed-stdout wake
+### HEAD: begin with stdout CLOSED (>&-)
+rc=3
+cat: stdout: Bad file descriptor
+fm-afk-return: recovery evidence could not be published; catch-up remains pending
+gate: retained
+lock: released
+temp files: 
+wake still queued: yes
+retry check rc=0
+catch-up wake: 1790428441 1 signal closed-task.status signal: closed-stdout wake
+WAKE_ACK_REQUIRED: after handling completes run bin/fm-wake-drain.sh --ack-through 1 --recovery-generation 47436.1790428441.H63xfN
+fm-afk-return: catch-up clear; ordinary captain work may proceed
+gate after retry: cleared
+lab removed
