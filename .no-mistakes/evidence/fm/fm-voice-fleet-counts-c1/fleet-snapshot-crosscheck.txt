@@ -1,0 +1,5 @@
+# bin/fm-fleet-snapshot.sh --json on the same lab copy: independent reading of the backlog
+sections: {None: 128}
+captain holds (hold_bucket non-null): 45 {'live': 22, 'dated': 4, 'aged': 18, 'blocked': 1}
+captain_actionable true: 22
+queued rows total: 0 queued rows that are captain holds: 0

@@ -1,0 +1,62 @@
+# Boundary fixture (today=2026-09-27): expect queued=2, awaiting_captain=5 (due-today, due-yday, bad-short, bad-word, bad-empty), deferred_for_captain=2 (due-tmrw, kind-cap-later)
+# Backlog
+
+## In flight
+- [ ] run-one - Ship it (repo: a) (kind: ship)
+
+## Queued
+- [ ] pick-me - Plain queued work (repo: a) (kind: ship)
+- [ ] future-nocap - Future non-captain hold (repo: a) (kind: ship) (hold-kind: future) (hold-until: 2026-09-28)
+- [ ] due-today - Captain hold due today (repo: a) (kind: ship) (hold-kind: captain) (hold-until: 2026-09-27)
+- [ ] due-yday - Captain hold due yesterday (repo: a) (kind: ship) (hold-kind: captain) (hold-until: 2026-09-26)
+- [ ] due-tmrw - Captain hold due tomorrow (repo: a) (kind: ship) (hold-kind: captain) (hold-until: 2026-09-28)
+- [ ] bad-short - Captain hold malformed date (repo: a) (kind: ship) (hold-kind: captain) (hold-until: 2999-1-1)
+- [ ] bad-word - Captain hold word date (repo: a) (kind: ship) (hold-kind: captain) (hold-until: next week)
+- [ ] bad-empty - Captain hold empty date (repo: a) (kind: ship) (hold-kind: captain) (hold-until: )
+- [ ] kind-cap-later - Captain decision deferred (repo: a) (kind: captain) (hold-until: 2026-09-28)
+- [x] done-cap - Done captain hold (repo: a) (kind: ship) (hold-kind: captain)
+## status --scope full
+{
+  "awaiting_captain": 5,
+  "awaiting_captain_detail": [
+    {
+      "id": "due-today",
+      "title": "Captain hold due today"
+    },
+    {
+      "id": "due-yday",
+      "title": "Captain hold due yesterday"
+    },
+    {
+      "id": "bad-short",
+      "title": "Captain hold malformed date"
+    },
+    {
+      "id": "bad-word",
+      "title": "Captain hold word date"
+    },
+    {
+      "id": "bad-empty",
+      "title": "Captain hold empty date"
+    }
+  ],
+  "basis": "Last recorded event, which is history and not a live check.",
+  "captain_notes_waiting": 0,
+  "deferred_for_captain": 2,
+  "detail": "The lists name at most 5 items each; the counts above are the whole picture. Give the captain the counts and a couple of names, not every row.",
+  "in_flight": 1,
+  "in_flight_detail": [
+    {
+      "id": "run-one",
+      "state": "not started",
+      "title": "Ship it"
+    }
+  ],
+  "open_pull_requests": 0,
+  "pull_request_detail": [],
+  "queued": 2,
+  "scope": "full",
+  "withheld_as_confidential": 0,
+  "worker_states": {},
+  "workers_on_deck": 0
+}
