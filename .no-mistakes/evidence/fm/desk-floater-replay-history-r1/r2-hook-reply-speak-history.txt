@@ -1,0 +1,18 @@
+# Stop 1: plain reply -> hook speaks it
+newest: 1	Captain, turn one is done.
+# Turn 2: the model speaks its own line through fm-speak.sh, then Stop
+newest: 2	Captain, model spoke turn two.   <- hook stayed silent
+# Stop 3: nothing spoken this turn -> hook speaks again
+newest: 3	Captain, turn three is done.
+# Turn 4: captain replays reply 1 from the floater during the turn, then Stop
+newest: 4	Captain, turn four is done.   <- replay did not silence the hook
+--- lines handed to TTS/player, in order:
+TTS Captain, turn one is done.
+PLAY ID3-fake-audio:Captain, turn one is done.
+TTS Captain, model spoke turn two.
+PLAY ID3-fake-audio:Captain, model spoke turn two.
+TTS Captain, turn three is done.
+PLAY ID3-fake-audio:Captain, turn three is done.
+PLAY ID3-fake-audio:Captain, turn one is done.
+TTS Captain, turn four is done.
+PLAY ID3-fake-audio:Captain, turn four is done.

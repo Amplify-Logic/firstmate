@@ -1,0 +1,74 @@
+$ fm-speak.sh --replay
+fm-speak: --replay needs a reply number from --history
+exit=1
+$ fm-speak.sh --replay 0
+fm-speak: --replay needs a reply number from --history: 0
+exit=1
+$ fm-speak.sh --replay 07
+fm-speak: --replay needs a reply number from --history: 07
+exit=1
+$ fm-speak.sh --replay abc
+fm-speak: --replay needs a reply number from --history: abc
+exit=1
+$ fm-speak.sh --replay -1
+fm-speak: --replay needs a reply number from --history: -1
+exit=1
+$ fm-speak.sh --replay 99
+fm-speak: no reply numbered 99 is kept; see fm-speak.sh --history
+exit=1
+$ fm-speak.sh --replay 2 extra
+fm-speak: --replay takes no other text and no --dry-run
+exit=1
+$ fm-speak.sh --history --repeat
+fm-speak: only one of --stop, --repeat, --history, --replay, --mute, --unmute, --muted
+exit=1
+$ fm-speak.sh --dry-run --replay 2
+fm-speak: --replay takes no other text and no --dry-run
+exit=1
+$ fm-speak.sh "Captain, Shall I merge it?"   # refused by register
+refused: asks the captain to decide
+fm-speak: refused by the spoken register; nothing was spoken
+exit=2
+$ fm-speak.sh --history | head -1   # refused line was not kept
+3	Captain, the docs deploy finished.
+# speak 9 more lines (12 total) to force pruning
+$ fm-speak.sh --history   (number, text)
+12	Captain, update number 12.
+11	Captain, update number 11.
+10	Captain, update number 10.
+9	Captain, update number 9.
+8	Captain, update number 8.
+7	Captain, update number 7.
+6	Captain, update number 6.
+5	Captain, update number 5.
+4	Captain, update number 4.
+3	Captain, the docs deploy finished.
+$ ls state/speak-history
+3 4 5 6 7 8 9 10 11 12 
+$ fm-speak.sh --replay 1   # pruned
+fm-speak: no reply numbered 1 is kept; see fm-speak.sh --history
+exit=1
+$ fm-speak.sh --replay 3   # oldest still kept
+Captain, the docs deploy finished.
+exit=0
+# permissions of the reply history
+700 state/speak-history
+700 state/speak-history/12
+600 state/speak-history/12/audio.mp3
+600 state/speak-history/12/text
+600 state/speak-history/12/time
+$ fm-speak.sh --mute
+$ fm-speak.sh --replay 5   # muted
+fm-speak: voice is muted; nothing was spoken (fm-speak.sh --unmute)
+exit=0
+$ fm-speak.sh --repeat   # muted
+fm-speak: voice is muted; nothing was spoken (fm-speak.sh --unmute)
+exit=0
+$ fm-speak.sh "Captain, muted line."
+fm-speak: voice is muted; nothing was spoken (fm-speak.sh --unmute)
+exit=0
+$ fm-speak.sh --history | head -1   # muted line not kept
+12	Captain, update number 12.
+TTS/player calls while muted: 0
+$ fm-speak.sh --unmute; fm-speak.sh --muted
+unmuted

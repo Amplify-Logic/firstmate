@@ -1,0 +1,15 @@
+# Live DeskFloater (swift build, debug) launched with FM_HOME=isolated home and
+# FM_DESK_FLOATER_ROOT=this worktree; driven with cliclick, bounds read from
+# CGWindowListCopyWindowInfo (x y w h, top-left origin, points).
+closed:                                  1346 480 142x71
+click dropdown arrow:                    1246 480 242x263   (top-right corner fixed at 1488,480)
+click 3rd row (history #12):             player log -> "PLAY ID3-fake-audio:Captain, update number 12."  (no TTS call)
+fm-speak --mute, wait for 10 s poll, click row 1: 0 speaker/TTS calls
+fm-speak --unmute, click row 1 (#14):    "PLAY ID3-fake-audio:Captain, model spoke turn three."
+click arrow again:                       1346 480 142x71    (closed, same corner)
+System Events moves window to 600,300:   600 300 142x71
+click arrow:                             500 300 242x263    (anchored to NEW top-right 742,300 - no stale anchor)
+click arrow:                             600 300 142x71
+moved to 1360,860 (near bottom), open:   1260 663 242x263   (clamped up to stay on the visible screen)
+Screenshots: screencapture failed ("could not create image from window/display") -
+this agent process lacks macOS Screen Recording permission.

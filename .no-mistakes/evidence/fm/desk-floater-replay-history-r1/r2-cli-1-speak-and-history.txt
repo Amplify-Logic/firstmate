@@ -1,0 +1,19 @@
+$ fm-speak.sh --history   # empty home
+exit=0
+$ fm-speak.sh --repeat    # nothing spoken yet
+fm-speak: nothing has been spoken here yet; nothing to repeat
+exit=1
+$ fm-speak.sh "Captain, the build for PR 196 is green."
+Captain, the build for PR 196 is green.
+exit=0
+$ fm-speak.sh "Captain, the lint job needs a look."
+Captain, the lint job needs a look.
+exit=0
+$ fm-speak.sh "Captain, the docs deploy finished."
+Captain, the docs deploy finished.
+exit=0
+$ fm-speak.sh --history
+3	1790403898	Captain, the docs deploy finished.
+2	1790403894	Captain, the lint job needs a look.
+1	1790403889	Captain, the build for PR 196 is green.
+exit=0

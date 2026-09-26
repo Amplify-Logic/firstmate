@@ -1,0 +1,17 @@
+# 1) line spoken by say (no Deepgram key): no audio kept
+Captain, spoken by say.
+newest=13; entry files: text time 
+# 2) replay it with a Deepgram key: synthesized once, then kept
+Captain, spoken by say.
+entry files: audio.mp3 text time 
+# 3) replay again: straight from kept audio
+Captain, spoken by say.
+--- call log:
+09:26:17 SAY -f /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-speak-text.opq2zs
+09:26:18 TTS Captain, spoken by say.
+09:26:18 PLAY ID3-fake-audio:Captain, spoken by say.
+09:26:19 PLAY ID3-fake-audio:Captain, spoken by say.
+# 4) home with a named voice: kept Deepgram audio is not played; say speaks it in that voice
+Captain, update number 12.
+--- call log:
+09:26:20 SAY -v Samantha -f /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-speak-text.0u6FtC

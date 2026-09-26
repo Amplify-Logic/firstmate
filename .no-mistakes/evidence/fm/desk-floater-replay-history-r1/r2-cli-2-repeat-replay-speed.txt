@@ -1,0 +1,26 @@
+# BASE (fbadc232) for contrast
+$ fm-speak.sh "Captain, the docs deploy finished."
+Captain, the docs deploy finished.
+$ fm-speak.sh --repeat
+Captain, the docs deploy finished.
+exit=0  elapsed=1.753s
+--- call log:
+09:25:16 TTS Captain, the docs deploy finished.
+09:25:18 PLAY ID3-fake-audio:Captain, the docs deploy finished.
+09:25:20 TTS Captain, the docs deploy finished.
+09:25:22 PLAY ID3-fake-audio:Captain, the docs deploy finished.
+
+# THIS CHANGE (62fb5384)
+$ fm-speak.sh --repeat   # newest, from kept audio
+Captain, the docs deploy finished.
+exit=0  elapsed=.104s
+$ fm-speak.sh --replay 1  # the oldest missed one
+Captain, the build for PR 196 is green.
+exit=0  elapsed=.069s
+$ fm-speak.sh --replay 2
+Captain, the lint job needs a look.
+exit=0  elapsed=.068s
+--- speaker/tts call log during the replays:
+09:25:06 PLAY ID3-fake-audio:Captain, the docs deploy finished.
+09:25:07 PLAY ID3-fake-audio:Captain, the build for PR 196 is green.
+09:25:08 PLAY ID3-fake-audio:Captain, the lint job needs a look.
