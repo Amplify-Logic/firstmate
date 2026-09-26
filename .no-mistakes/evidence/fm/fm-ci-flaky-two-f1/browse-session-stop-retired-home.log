@@ -1,0 +1,12 @@
+[base] retired home exists before stop? no
+fm-browse-session: stopped and purged session=fm-lab-retired-18606
+[base] stop rc=0 (real chrome-devtools-axi 0.1.35, session=fm-lab-retired-18606)
+[base] retired home RECREATED:
+<tmp>/retired-home-base
+<tmp>/retired-home-base/state
+<tmp>/retired-home-base/state/parent-route
+<tmp>/retired-home-base/state/parent-route/browse
+[head] retired home exists before stop? no
+fm-browse-session: stopped and purged session=fm-lab-retired-8516
+[head] stop rc=0 (real chrome-devtools-axi 0.1.35, session=fm-lab-retired-8516)
+[head] retired home still absent

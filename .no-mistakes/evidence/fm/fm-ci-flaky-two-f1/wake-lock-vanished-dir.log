@@ -1,0 +1,8 @@
+probe:1: no matches found: /tmp/fm-locklive.3IkbEH/state/gone*
+[base] fm_lock_acquire_wait on lock inside a removed dir -> rc=142 after 8s (142 = killed by 8s alarm); dir recreated? no
+[base] fm_lock_try_acquire -> rc=142
+[base] lock in an existing dir acquired rc=0
+probe:1: no matches found: /tmp/fm-locklive.3IkbEH/state/gone*
+[head] fm_lock_acquire_wait on lock inside a removed dir -> rc=1 after 0s (142 = killed by 8s alarm); dir recreated? no
+[head] fm_lock_try_acquire -> rc=1
+[head] lock in an existing dir acquired rc=0

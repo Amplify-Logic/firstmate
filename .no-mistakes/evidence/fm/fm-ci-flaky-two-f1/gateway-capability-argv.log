@@ -1,0 +1,8 @@
+== base 34f164c9 gateway ==
+drive:2: no matches found: /tmp/fm-gwlive.D0QitG/rt/*
+[base] issued=640 option-like(leading '-')=11
+[base] runner with option-like token -> rc=2: fm-action-runner-v2.py run: error: argument --capability: expected one argument
+== HEAD cb8c906c gateway ==
+[head] issued=640 option-like(leading '-')=0
+sample HEAD capability: fdc1a763d33187637e1e63da54aa134067068b002e67e69ae49dc4beed8a2cec (len 64)
+runner with HEAD token -> rc=1 : fm-action-runner-v2: execution channel unreachable: [Errno 2] No such file or directory

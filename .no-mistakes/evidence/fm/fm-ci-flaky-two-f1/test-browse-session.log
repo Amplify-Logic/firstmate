@@ -1,0 +1,9 @@
+ok - fm-browse-session --help exits 0
+ok - fm-browse-session refuses path-unsafe task ids
+ok - start forces headed mode and isolates the named task profile
+ok - start and stop always strip both captain-Chrome attach inputs
+ok - two tasks get distinct profile dirs and both appear in list
+ok - stop retains profile; --purge removes the browse root
+ok - stop closes the session without recreating a removed state directory
+ok - teardown source includes additive browse purge hook
+ok - fm-browse-session refuses when chrome-devtools-axi is absent

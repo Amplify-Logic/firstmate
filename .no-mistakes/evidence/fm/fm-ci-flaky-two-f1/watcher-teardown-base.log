@@ -1,0 +1,32 @@
+[base #01] removed state pid=94551 exited_in=7.15s OUTLIVED teardown (>3s) | 
+[base #02] removed home  pid=4858 exited_in=.50s ok | watcher: exiting - home no longer exists: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.4C3roy
+[base #03] removed state pid=10261 exited_in=.54s ok | watcher: exiting - state directory no longer exists: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.plG035/state
+[base #04] removed home  pid=13922 exited_in=1.60s ok | watcher: exiting - state directory was torn down (singleton lock removed): /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.CGvP52/state
+[base #05] removed state pid=19367 exited_in=1.80s ok | watcher: exiting - state directory was torn down (singleton lock removed): /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.igXAJZ/state
+[base #06] removed home  pid=23959 exited_in=.78s ok | watcher: exiting - home no longer exists: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.JpBurW
+[base #07] removed state pid=27977 exited_in=.47s ok | watcher: exiting - state directory no longer exists: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.Yp3TsW/state
+[base #08] removed home  pid=30507 exited_in=1.58s ok | watcher: exiting - state directory was torn down (singleton lock removed): /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.LELimc/state
+[base #09] removed state pid=36098 exited_in=1.29s ok | watcher: exiting - state directory no longer exists: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.S1g4Zm/state
+[base #10] removed home  pid=39567 exited_in=.55s ok | watcher: exiting - home no longer exists: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.Erigzm
+[base #11] removed state pid=42786 exited_in=1.02s ok | watcher: exiting - state directory no longer exists: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.5KUTgr/state
+[base #12] removed home  pid=45335 exited_in=.52s ok | watcher: exiting - home no longer exists: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.JKkAMu
+rm: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.YsQLBK/state: Directory not empty
+[base #13] removed state pid=46972 exited_in=2.00s ok | watcher: exiting - state directory was torn down (singleton lock removed): /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.YsQLBK/state
+[base #14] removed home  pid=52471 exited_in=.55s ok | watcher: exiting - home no longer exists: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.s6sPE8
+[base #15] removed state pid=55958 exited_in=1.05s ok | watcher: exiting - state directory no longer exists: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.ASlbQP/state
+[base #16] removed home  pid=60301 exited_in=.34s ok | watcher: exiting - home no longer exists: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.yAn8PZ
+[base #17] removed state pid=65090 exited_in=1.01s ok | watcher: exiting - state directory no longer exists: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.wLtG25/state
+[base #18] removed home  pid=68991 exited_in=.77s ok | watcher: exiting - home no longer exists: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.R2qkVE
+[base #19] removed state pid=73219 exited_in=1.04s ok | watcher: exiting - state directory no longer exists: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.B94CgI/state
+[base #20] removed home  pid=77271 exited_in=.23s exited with NO logged reason | 
+[base #21] removed state pid=81595 exited_in=1.75s ok | watcher: exiting - state directory was torn down (singleton lock removed): /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.5pKorL/state
+[base #22] removed home  pid=88356 exited_in=.39s ok | watcher: exiting - home no longer exists: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.rhgHqT
+[base #23] removed state pid=95638 exited_in=7.25s OUTLIVED teardown (>3s) | 
+[base #24] removed home  pid=12823 exited_in=1.03s ok | watcher: exiting - home no longer exists: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.vqRqFs
+[base #25] removed state pid=20039 exited_in=1.26s ok | watcher: exiting - state directory no longer exists: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.OnGECM/state
+[base #26] removed home  pid=25985 exited_in=1.49s ok | watcher: exiting - state directory was torn down (singleton lock removed): /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.MSFnFP/state
+[base #27] removed state pid=30793 exited_in=7.07s OUTLIVED teardown (>3s) | 
+[base #28] removed home  pid=45880 exited_in=.54s ok | watcher: exiting - home no longer exists: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.ac8plX
+[base #29] removed state pid=49784 exited_in=.80s ok | watcher: exiting - state directory no longer exists: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.Qm8XZM/state
+[base #30] removed home  pid=54291 exited_in=.80s ok | watcher: exiting - home no longer exists: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.0vSb11
+[base] summary: 30 teardowns -> ok=26 outlived=3 silent-exit=1

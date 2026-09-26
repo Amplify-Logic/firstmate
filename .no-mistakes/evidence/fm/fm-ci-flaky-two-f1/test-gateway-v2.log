@@ -1,0 +1,22 @@
+rm: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-remote-secondmate-e2e.XFmoCT/watch-liveness-unreachable: Directory not empty
+rm: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-remote-secondmate-e2e.XFmoCT: Directory not empty
+ok - gateway v2 is a program separate from the landed broker
+ok - strict parser rejects duplicate, unknown, noncanonical numeric, ambiguous money, depth, size, and Unicode hazards
+ok - canonicalization matches the RFC 8785 UTF-16 sorting sample and binds the digest
+ok - server resolves every closed-plan field and ignores caller authority, nonce, and expiry
+ok - SQLite transactions enforce concurrent uniqueness and durable tombstones survive audit rotation
+ok - every issued capability is a plain argv word the runner can never read as an option
+ok - restart recovery durably changes executing to unknown and requires reconciliation
+ok - prepare, approval, and execution schemas are socket-separated and bound to peer UID plus per-job capabilities
+ok - gateway v2 satisfies the Step 1 malformed, replay, oversized, flooded, and restart expectations
+ok - production refuses the direct test adapter and has no caller-selected trust-state root
+ok - a device action resolves a closed plan that preserves the exact wire value, confirmed encoding, and honest eligibility
+ok - approval requires a signature that verifies over the exact challenged transcript, and records how much it proves
+ok - execution is claimed under a one-shot lease and settled from the sink rather than from the executor's report
+ok - the runner drives exactly one effect and a repeat produces no second one
+ok - an expired execution lease becomes unknown, and neither a late settle nor a retry can leave that state
+ok - a plan too large to hand an executor is refused at prepare and again before any state moves
+ok - an executor whose bytes the plan does not bind is refused before it runs anything
+ok - a receipt store the broker cannot read settles unknown rather than inventing an outcome
+ok - an expired lease is committed as unknown before the refusal is raised, on both the claim and settle paths
+ok - an executor swapped after approval cannot run under the old consent
