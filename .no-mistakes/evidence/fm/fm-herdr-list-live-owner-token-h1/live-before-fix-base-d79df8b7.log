@@ -1,0 +1,19 @@
+lab session: fm-lab-adopt-before-32739-30043   code root: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-base.mFeV5u
+captain=w1(w1:p1) foreign=w2(w2:p1) sibling=w3(w3:p1)
+spawn created-task from launcher '<none>': rc=0 pane=w4:p2 workspace=w4
+spawn adopted-task from launcher 'w1:p1': rc=0 pane=w1:p2 workspace=w1
+spawn foreign-placed-task from launcher 'w2:p1': rc=0 pane=w2:p2 workspace=w2
+spawn sibling-placed-task from launcher 'w3:p1': rc=0 pane=w3:p2 workspace=w3
+spawn created-again-task from launcher '<none>': rc=0 pane=w4:p3 workspace=w4
+== workspace list (label + tokens) ==
+w1	Scratch Project · 🟡 1 WAITING	null
+w2	Scratch Project · 🟡 1 WAITING	{"fm_owner":"path-v1:8f6e5609b19edb71a54c1edf9a81109e5a1255b4"}
+w3	Scratch Project · 🟡 1 WAITING	null
+w4	Scratch Project · 🟡 2 WAITING	{"fm_owner":"path-v1:f82e1d5216dea19011b52992e9b996149da67727","fm_project":"path-v1:53bab19d2c4fba864d73484058e9319092e9ee45"}
+== home owner token: path-v1:f82e1d5216dea19011b52992e9b996149da67727
+== fm_backend_herdr_list_live fm-lab-adopt-before-32739-30043 (FM_HOME=primary-home) ==
+fm-lab-adopt-before-32739-30043:w4:p2	fm-created-task
+fm-lab-adopt-before-32739-30043:w4:p3	fm-created-again-task
+== end list_live ==
+== teardown ==
+teardown rc=0

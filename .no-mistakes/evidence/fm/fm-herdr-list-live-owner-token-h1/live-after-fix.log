@@ -1,0 +1,30 @@
+lab session: fm-lab-adopt-after-9406-4778   code root: /Users/larsmusic/.no-mistakes/worktrees/f569cc43ac96/01M3FHQC7WM337C2ZENX6639PD
+captain=w1(w1:p1) foreign=w2(w2:p1) sibling=w3(w3:p1)
+spawn created-task from launcher '<none>': rc=0 pane=w4:p2 workspace=w4
+    stderr: warning: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-live-adopt.CJ1Dxj/primary-home/data/created-task/launch-brief.md records no ship branch; defaulting to legacy branch fm/created-task
+    stderr: warning: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-live-adopt.CJ1Dxj/primary-home/data/created-task/launch-brief.md records no delivery contract line (scaffolded before ship briefs recorded one); launching on the explicit --mode local-only - confirm its definition of done matches
+spawn adopted-task from launcher 'w1:p1': rc=0 pane=w1:p2 workspace=w1
+    stderr: warning: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-live-adopt.CJ1Dxj/primary-home/data/adopted-task/launch-brief.md records no ship branch; defaulting to legacy branch fm/adopted-task
+    stderr: warning: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-live-adopt.CJ1Dxj/primary-home/data/adopted-task/launch-brief.md records no delivery contract line (scaffolded before ship briefs recorded one); launching on the explicit --mode local-only - confirm its definition of done matches
+spawn foreign-placed-task from launcher 'w2:p1': rc=0 pane=w2:p2 workspace=w2
+    stderr: warning: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-live-adopt.CJ1Dxj/primary-home/data/foreign-placed-task/launch-brief.md records no ship branch; defaulting to legacy branch fm/foreign-placed-task
+    stderr: warning: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-live-adopt.CJ1Dxj/primary-home/data/foreign-placed-task/launch-brief.md records no delivery contract line (scaffolded before ship briefs recorded one); launching on the explicit --mode local-only - confirm its definition of done matches
+spawn sibling-placed-task from launcher 'w3:p1': rc=0 pane=w3:p2 workspace=w3
+    stderr: warning: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-live-adopt.CJ1Dxj/primary-home/data/sibling-placed-task/launch-brief.md records no ship branch; defaulting to legacy branch fm/sibling-placed-task
+    stderr: warning: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-live-adopt.CJ1Dxj/primary-home/data/sibling-placed-task/launch-brief.md records no delivery contract line (scaffolded before ship briefs recorded one); launching on the explicit --mode local-only - confirm its definition of done matches
+spawn created-again-task from launcher '<none>': rc=0 pane=w4:p3 workspace=w4
+    stderr: warning: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-live-adopt.CJ1Dxj/primary-home/data/created-again-task/launch-brief.md records no ship branch; defaulting to legacy branch fm/created-again-task
+    stderr: warning: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-live-adopt.CJ1Dxj/primary-home/data/created-again-task/launch-brief.md records no delivery contract line (scaffolded before ship briefs recorded one); launching on the explicit --mode local-only - confirm its definition of done matches
+== workspace list (label + tokens) ==
+w1	Scratch Project · 🟡 1 WAITING	{"fm_owner":"path-v1:48082891302ea580742fce58916e4dcbd1c2ae71"}
+w2	Scratch Project · 🟡 1 WAITING	{"fm_owner":"path-v1:c2266cfdcd8c7da7c8b167395f5406b75c0543b8"}
+w3	Scratch Project · 🟡 1 WAITING	null
+w4	Scratch Project · 🟡 2 WAITING	{"fm_owner":"path-v1:48082891302ea580742fce58916e4dcbd1c2ae71","fm_project":"path-v1:2dc1fbdde515094e1cb8e86049d27c625264e18c"}
+== home owner token: path-v1:48082891302ea580742fce58916e4dcbd1c2ae71
+== fm_backend_herdr_list_live fm-lab-adopt-after-9406-4778 (FM_HOME=primary-home) ==
+fm-lab-adopt-after-9406-4778:w1:p2	fm-adopted-task
+fm-lab-adopt-after-9406-4778:w4:p2	fm-created-task
+fm-lab-adopt-after-9406-4778:w4:p3	fm-created-again-task
+== end list_live ==
+== teardown ==
+teardown rc=0

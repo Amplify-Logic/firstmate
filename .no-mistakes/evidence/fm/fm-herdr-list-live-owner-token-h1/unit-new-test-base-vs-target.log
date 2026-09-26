@@ -1,0 +1,8 @@
+== new test against bin/backends/herdr.sh at d79df8b7 ==
+not ok - list_live lost the worker in the launcher's adopted workspace (missing: 'fm-adopted-task')
+--- output ---
+lab:w1:p3	fm-created-task
+rc=
+== new test against bin/backends/herdr.sh at 814330b4 ==
+ok - list_live sees workers in both created and launcher-adopted workspaces without claiming another home workspace
+rc=
