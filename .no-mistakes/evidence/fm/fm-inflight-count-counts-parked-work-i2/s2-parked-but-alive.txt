@@ -1,0 +1,55 @@
+# Scenario 2 (adversarial): incident fleet, but park-b.meta window=fleet:livewin where a real claude process is running; watcher down
+live pane: livewin cmd=2.1.283
+real liveness read for fleet:livewin: alive
+===== [TARGET a3a6439f: park-b secretly alive] root=a3a6439f =====
+--- fm_supervision_status (shared counter) ---
+FM_SUP_IN_FLIGHT=1 IDS=park-b NEEDED=true CHECKS=0
+--- bin/fm-guard.sh (guard banner, read-only) ---
+exit=0 output:
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+●  WATCHER DOWN - SUPERVISION IS OFF
+●  1 task(s) in flight, but no watcher has a fresh beacon (last beat: never, grace 300s).
+●  This read-only session should report the lapse, not repair it.
+●  This is a supervision warning only; the guarded operation WILL still run.
+●  Watcher repair belongs to the session holding the fleet lock; do not drain, arm, or repair from this read-only session.
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+--- bin/fm-turnend-guard.sh (turn-end backstop) ---
+exit=2 output:
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+●  TURN WOULD END BLIND - SUPERVISION IS OFF
+●  1 task(s) in flight, but no live watcher holds this home lock (last beat: never).
+●  repair missing watcher supervision according to the session-start block for this harness; do not use shell &.
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+--- bin/fm-continuity-pretool-check.sh (pre-tool gate, command: bin/fm-teardown.sh task --force) ---
+exit=2 output:
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny"},"systemMessage":"[watcher-continuity] SUPERVISION OUTAGE: down for unknown duration (unknown since when; watcher beat file missing or unreadable); 1 task(s) in flight: park-b. No live watcher holds this home lock. Durin
+--- bin/fm-supervision-sentinel.sh check (host sentinel, marker-only) ---
+exit=1 output:
+SUPERVISION DOWN: 1 task(s) in flight; last watcher beat: never (grace 300s). No automatic restart was attempted; see /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.gT59mX/state/.supervision-outage-alarm
+supervision sentinel: this mode is marker-only; external alert delivery is PENDING and owned by the scheduled host check
+===== [TARGET a3a6439f: park-b AND held-c secretly alive] root=a3a6439f =====
+--- fm_supervision_status (shared counter) ---
+FM_SUP_IN_FLIGHT=2 IDS=held-c, park-b NEEDED=true CHECKS=0
+--- bin/fm-guard.sh (guard banner, read-only) ---
+exit=0 output:
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+●  WATCHER DOWN - SUPERVISION IS OFF
+●  2 task(s) in flight, but no watcher has a fresh beacon (last beat: never, grace 300s).
+●  This read-only session should report the lapse, not repair it.
+●  This is a supervision warning only; the guarded operation WILL still run.
+●  Watcher repair belongs to the session holding the fleet lock; do not drain, arm, or repair from this read-only session.
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+--- bin/fm-turnend-guard.sh (turn-end backstop) ---
+exit=2 output:
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+●  TURN WOULD END BLIND - SUPERVISION IS OFF
+●  2 task(s) in flight, but no live watcher holds this home lock (last beat: never).
+●  repair missing watcher supervision according to the session-start block for this harness; do not use shell &.
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+--- bin/fm-continuity-pretool-check.sh (pre-tool gate, command: bin/fm-teardown.sh task --force) ---
+exit=2 output:
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny"},"systemMessage":"[watcher-continuity] SUPERVISION OUTAGE: down for unknown duration (unknown since when; watcher beat file missing or unreadable); 2 task(s) in flight: held-c, park-b. No live watcher holds this home loc
+--- bin/fm-supervision-sentinel.sh check (host sentinel, marker-only) ---
+exit=1 output:
+SUPERVISION DOWN: 2 task(s) in flight; last watcher beat: never (grace 300s). No automatic restart was attempted; see /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.gT59mX/state/.supervision-outage-alarm
+supervision sentinel: this mode is marker-only; external alert delivery is PENDING and owned by the scheduled host check

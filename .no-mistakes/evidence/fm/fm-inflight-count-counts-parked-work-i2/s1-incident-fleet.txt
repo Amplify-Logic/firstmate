@@ -1,0 +1,71 @@
+# Scenario 1: the 2026-09-11 incident fleet (2 standing services, 2 parked dead workers, 1 captain-held), watcher down
+## held-c.meta
+window=fleet:gone2
+kind=scout
+project=/p
+## park-a.meta
+window=fleet:gone1
+kind=ship
+project=/p
+## park-b.meta
+window=fleet:shellwin
+kind=ship
+project=/p
+## svc-digest.meta
+project=/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.gT59mX/projects/digest
+kind=ship
+standing=nightly-digest
+## svc-inbox.meta
+project=/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.gT59mX/projects/mail
+kind=ship
+standing=inbox-poll
+## held-c.status
+working: reading
+captain-held: awaiting the captain decision (since 2026-09-05)
+## park-a.status
+working: build
+paused: parked by firstmate for the overnight memory-pressure episode; worker exited
+## park-b.status
+working: tests
+paused: parked by firstmate; worker exited to its shell
+===== [BASE e8d934b2 (before)] root=e8d934b2 =====
+--- fm_supervision_status (shared counter) ---
+FM_SUP_IN_FLIGHT=5 IDS=held-c, park-a, park-b, svc-digest, svc-inbox NEEDED=true CHECKS=0
+--- bin/fm-guard.sh (guard banner, read-only) ---
+exit=0 output:
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+●  WATCHER DOWN - SUPERVISION IS OFF
+●  5 task(s) in flight, but no watcher has a fresh beacon (last beat: never, grace 300s).
+●  This read-only session should report the lapse, not repair it.
+●  This is a supervision warning only; the guarded operation WILL still run.
+●  Watcher repair belongs to the session holding the fleet lock; do not drain, arm, or repair from this read-only session.
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+--- bin/fm-turnend-guard.sh (turn-end backstop) ---
+exit=2 output:
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+●  TURN WOULD END BLIND - SUPERVISION IS OFF
+●  5 task(s) in flight, but no live watcher holds this home lock (last beat: never).
+●  repair missing watcher supervision according to the session-start block for this harness; do not use shell &.
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+--- bin/fm-continuity-pretool-check.sh (pre-tool gate, command: bin/fm-teardown.sh task --force) ---
+exit=2 output:
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny"},"systemMessage":"[watcher-continuity] SUPERVISION OUTAGE: down for unknown duration (unknown since when; watcher beat file missing or unreadable); 5 task(s) in flight: held-c, park-a, park-b, svc-digest, svc-inbox. No l
+--- bin/fm-supervision-sentinel.sh check (host sentinel, marker-only) ---
+exit=1 output:
+SUPERVISION DOWN: 5 task(s) in flight; last watcher beat: never (grace 300s). No automatic restart was attempted; see /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.gT59mX/state/.supervision-outage-alarm
+supervision sentinel: this mode is marker-only; external alert delivery is PENDING and owned by the scheduled host check
+===== [TARGET a3a6439f (after)] root=a3a6439f =====
+--- fm_supervision_status (shared counter) ---
+FM_SUP_IN_FLIGHT=0 IDS=(none) NEEDED=false CHECKS=0
+--- bin/fm-guard.sh (guard banner, read-only) ---
+exit=0 output:
+<silent>
+--- bin/fm-turnend-guard.sh (turn-end backstop) ---
+exit=0 output:
+<silent>
+--- bin/fm-continuity-pretool-check.sh (pre-tool gate, command: bin/fm-teardown.sh task --force) ---
+exit=0 output:
+<silent>
+--- bin/fm-supervision-sentinel.sh check (host sentinel, marker-only) ---
+exit=0 output:
+supervision sentinel: OK - no task metadata in flight and no glasses shift armed for this home; nothing to supervise

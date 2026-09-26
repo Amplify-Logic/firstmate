@@ -1,0 +1,29 @@
+# Scenario 4: pre-tool gate pays no liveness probes while the watcher is healthy (review round 1 fix), and still probes once it is down
+fresh lab home; state: svc-inbox(standing, no window) park-a(window=fleet:gone1,paused) park-b(window=fleet:shellwin,paused) held-c(window=fleet:gone2,captain-held)
+FM_SUP_LIVENESS_PROBE seam = a wrapper that logs each call, then runs the real fm_backend_agent_alive against the lab tmux socket
+real watcher: pid=24272 cmd=bash /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab-roots.IIy6Gv/a3a6439f/bin/fm-watch.sh
+## watcher HEALTHY
+health before: HEALTHY
+health after:  HEALTHY
+pre-tool exit=0 output=<silent> liveness probe calls=0
+shipped probe path, healthy: avg 0.178s per pre-tool call over 5 calls
+health after timing: HEALTHY
+## stop the real watcher -> outage
+health: UNHEALTHY
+pre-tool exit=2 output={"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny"},"systemMessage":"[watcher-continuity] SUPERVISION OUTAGE: down for at least 10s since the last watcher beat; 3 task(s) in flight: held-c, park-a, park-b. No live watcher holds this home lock. During recovery only the ordinary literal bin/fm-teardown.sh is allowed, so drop --force and any shell-expanded arguments and retry the literal invocation (blocked: fm-teardown.sh)"} liveness probe calls=6
+  probed state/held-c.meta
+  probed state/park-a.meta
+  probed state/park-b.meta
+  probed state/held-c.meta
+  probed state/park-a.meta
+  probed state/park-b.meta
+(all three parked records read dead via the real tmux backend and svc-inbox is standing with no window, so nothing is in flight and the gate allows)
+## NOTE: the outage run above used a mis-escaped logging wrapper that printed 'unknown'; the fail-safe correctly kept all three in flight. Corrected wrapper re-run:
+wrapper check: park-a -> dead
+pre-tool (watcher down) exit=0 output=<silent> liveness probe calls=3
+  probed state/held-c.meta
+  probed state/park-a.meta
+  probed state/park-b.meta
+pre-tool (watcher down, shipped probe, no seam) exit=0 output=<silent>
+## adversarial: park-b re-pointed at fleet:livewin (a real running claude) while the watcher is down
+pre-tool (shipped probe) exit=2 output={"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny"},"systemMessage":"[watcher-continuity] SUPERVISION OUTAGE: down for at least 32s since the last watcher beat; 1 task(s) in flight: park-b. No live wat
