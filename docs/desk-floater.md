@@ -69,7 +69,12 @@ Firstmate's text replies stay the authoritative ones, and nothing about how Firs
 You can talk while a reply is being spoken.
 The reply keeps playing, and it stays out of your message: the floater records with macOS voice processing, which removes the Mac's own playback from the microphone.
 macOS always lowers other audio a little while voice processing records; the floater sets that to the minimum, applied only while you are actually speaking, so a reply may dip briefly but is never paused or stopped.
+Recording starts the moment you press: the floater gets the microphone ready when it opens, so your first words are kept.
+After you release, it keeps listening for a moment, so a last word still being spoken is not cut off.
 `desk-floater/Sources/VoiceCapture.swift` owns the capture.
+
+The last 10 recordings, each with Deepgram's raw reply, are kept in this home's private `state/desk-voice/recordings/`, readable only by your own account on the Mac, so when words go missing from a message the audio shows whether they were recorded; older ones are removed as new ones arrive.
+`bin/fm-deepgram-stt.sh --keep` keeps them and its header owns that limit.
 
 ## Hotkeys
 
