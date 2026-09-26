@@ -49,6 +49,7 @@ There are two halves, and only one of them is here.
   VoiceLoop keeps the recording in its own on-disk outbox under the same request id and sends it again later.
   Today it sends again when the app opens, returns to the foreground, or passes its connection test, and it signals the failure with a chime and a red banner rather than saying "Saved, waiting for the desk".
   Speaking that line, and sending again while the app stays in the background, are changes to VoiceLoop in the glasses-voice project, not to firstmate.
+  That VoiceLoop work is tracked as its own separate glasses-voice follow-up item.
 - **The Mac is awake but Artevo is not reachable.**
   The Artevo Inbox folder is missing, Artevo's command is not installed, or its import fails.
   Firstmate holds the recording, says "Saved, waiting for the desk.", tries again on every check, and announces the receipt once it lands.

@@ -102,6 +102,7 @@ PY
 #!/usr/bin/env bash
 [ -n "${GLASSES_RELAY_TOKEN:-}" ] || { echo "announce: no token" >&2; exit 1; }
 printf '%s\n' "$1" >> "$FAKE_LOG_DIR/announces.log"
+[ "${FAKE_ANNOUNCE_RC:-0}" != 2 ] || echo "announce: refused: reads as a yes/no question" >&2
 exit "${FAKE_ANNOUNCE_RC:-0}"
 SH
 
@@ -232,31 +233,40 @@ run_check() {
 # ---------------------------------------------------------------------------
 # Recognition: song name first, then the idea
 # ---------------------------------------------------------------------------
+status_field() {
+  "$IDEA" status --json | python3 -c 'import json,sys; rows={r["capture_id"]: r for r in json.load(sys.stdin)}; print(rows[sys.argv[1]][sys.argv[2]])' "$1" "$2"
+}
+
 test_recognises_song_first_then_the_idea() {
-  local out rc
+  local id
   make_world
-  out=$("$IDEA" match "What a life bridge idea hmm hmm hmm"); rc=$?
-  expect_code 0 "$rc" "song first then idea"
-  assert_contains "$out" '"song": "What a Life"' "the catalogue title is the song"
-  assert_contains "$out" '"note": "bridge idea hmm hmm hmm"' "the words after the song are the note"
+  make_wav "$W/audio/one.wav" 20
+  make_wav "$W/audio/two.wav" 21
+  add_question "$ID1" "What a life bridge idea hmm hmm hmm" "$W/audio/one.wav"
+  add_question "$ID2" "File this idea for Blue Hour, the chorus" "$W/audio/two.wav"
+  add_question 44444444-4444-4444-8444-444444444444 "What a Life, any ideas what to do next?" none
+  add_question 55555555-5555-4555-8555-555555555555 "What's on this week?" none
+  add_question 66666666-6666-4666-8666-666666666666 "Idea for What a Life, the bridge" none
+  add_question 77777777-7777-4777-8777-777777777777 "What a Life" none
+  run_check
+  assert_contains "$(cat "$W/log/answers.log")" "$ID1	Filed to What a Life." "song first then idea is taken and answered"
+  assert_equals "What a Life" "$(status_field "$ID1" song)" "the catalogue title is the song"
+  assert_equals "bridge idea hmm hmm hmm" "$(status_field "$ID1" note)" "the words after the song are the note"
+  assert_contains "$(cat "$W/log/answers.log")" "$ID2	Filed to Blue Hour." "an explicit lead-in needs no idea word"
+  for id in 44444444-4444-4444-8444-444444444444 55555555-5555-4555-8555-555555555555 \
+            66666666-6666-4666-8666-666666666666 77777777-7777-4777-8777-777777777777; do
+    assert_equals pending "$(question_state "$id")" "not an idea stays pending: $id"
+    assert_absent "$FM_HOME/data/voice-ideas/captures/$id" "not an idea is not held: $id"
+  done
+  assert_equals 2 "$(wc -l < "$W/log/answers.log" | tr -d ' ')" "a question about a song, an ordinary question, a song name not first, and a bare song name are not answered"
 
-  out=$("$IDEA" match "File this idea for Blue Hour, the chorus"); rc=$?
-  expect_code 0 "$rc" "an explicit lead-in needs no idea word"
-  assert_contains "$out" '"song": "Blue Hour"' "lead-in then song"
-
-  "$IDEA" match "What a Life, any ideas what to do next?" >/dev/null; rc=$?
-  expect_code 3 "$rc" "a question about a song is not an idea"
-  "$IDEA" match "What's on this week?" >/dev/null; rc=$?
-  expect_code 3 "$rc" "an ordinary question is not an idea"
-  "$IDEA" match "Idea for What a Life, the bridge" >/dev/null; rc=$?
-  expect_code 3 "$rc" "the song name must come first"
-  "$IDEA" match "What a Life" >/dev/null; rc=$?
-  expect_code 3 "$rc" "a bare song name is not an idea"
-
+  make_world
+  make_wav "$W/audio/three.wav" 22
+  set_catalogue "What a Life" "What a Life (Acoustic)"
   write_songs_json "What a Life" "What a Life (Acoustic)"
-  out=$("$IDEA" match "What a life acoustic, verse idea"); rc=$?
-  expect_code 0 "$rc" "longest title"
-  assert_contains "$out" '"song": "What a Life (Acoustic)"' "the longest leading title wins, as in Artevo"
+  add_question "$ID3" "What a life acoustic, verse idea" "$W/audio/three.wav"
+  "$IDEA" take "$ID3" >/dev/null || fail "take files the longest title"
+  assert_equals "$ID3	Filed to What a Life (Acoustic)." "$(cat "$W/log/answers.log")" "the longest leading title wins, as in Artevo"
   pass "recognises song name first, then the idea, and nothing else"
 }
 
@@ -419,12 +429,30 @@ test_a_question_answered_elsewhere_gets_the_receipt_announced() {
   make_world
   make_wav "$W/audio/hum.wav" 10
   add_question "$ID1" "" "$W/audio/hum.wav" audio/wav answered
-  out=$("$IDEA" take "$ID1" --song "what a life" --text "what a life, the bridge"); rc=$?
+  out=$("$IDEA" take "$ID1" --song "what a life"); rc=$?
   expect_code 0 "$rc" "take with the song the caller heard"
   assert_contains "$out" "filed: What a Life: Filed to What a Life." "take reports the receipt"
   assert_equals "" "$(cat "$W/log/answers.log")" "an answered question is not answered again"
   assert_equals "Filed to What a Life." "$(cat "$W/log/announces.log")" "the receipt is announced instead"
   pass "a question already answered gets its receipt as an announcement"
+}
+
+test_a_refused_receipt_wakes_firstmate_and_is_not_marked_spoken() {
+  local err
+  make_world
+  make_wav "$W/audio/hum.wav" 16
+  add_question "$ID1" "What a Life bridge idea" "$W/audio/hum.wav" audio/wav answered
+  export FAKE_ANNOUNCE_RC=2
+  err=$("$IDEA" take "$ID1" 2>&1 >/dev/null) || fail "take files the idea"
+  assert_equals "Filed to What a Life." "$(cat "$W/log/announces.log")" "the receipt was offered to the glasses"
+  assert_contains "$err" "receipt for What a Life could not be spoken: announce: refused" "firstmate is told the receipt was refused"
+  assert_contains "$("$IDEA" status)" "filed: Filed to What a Life. (receipt not spoken yet)" "status does not call a refused receipt spoken"
+  assert_equals False "$(status_field "$ID1" spoken)" "nor does status --json"
+  run_check
+  assert_equals "" "$CHECK_OUT" "told once"
+  assert_equals 1 "$(wc -l < "$W/log/announces.log" | tr -d ' ')" "a refusal is not offered again"
+  unset FAKE_ANNOUNCE_RC
+  pass "a refused receipt wakes firstmate once and status says it was not spoken"
 }
 
 test_take_refuses_words_that_are_not_an_idea() {
@@ -583,6 +611,7 @@ test_sending_it_twice_makes_one_capture
 test_a_duplicate_while_the_first_waits_is_said_once
 test_honest_failures_are_spoken
 test_a_question_answered_elsewhere_gets_the_receipt_announced
+test_a_refused_receipt_wakes_firstmate_and_is_not_marked_spoken
 test_take_refuses_words_that_are_not_an_idea
 test_an_unspoken_receipt_is_retried_and_reported_once
 test_arm_registers_a_check_the_watcher_can_run

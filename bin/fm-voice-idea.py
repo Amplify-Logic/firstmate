@@ -40,14 +40,11 @@ Boundaries:
     belongs to VoiceLoop in the glasses-voice project, not to this script.
 
 Usage:
-  fm-voice-idea.py match [--songs PATH] TEXT...
-      Say whether TEXT is an idea for a song. Prints one JSON object.
-      Exit 0 an idea, 3 not an idea, 1 no song list to match against.
-  fm-voice-idea.py take REQUEST_ID [--song TITLE] [--text TEXT]
+  fm-voice-idea.py take REQUEST_ID [--song TITLE]
       Hold that mailbox question as an idea capture, hand it to Artevo when
       it can, and answer it with the receipt or the waiting line. --song
       names the song when the words alone were not recognised (the caller
-      heard the song); --text replaces the mailbox transcript. Idempotent.
+      heard the song). Idempotent.
       Exit 0 held or filed, 3 not an idea, 1 error.
   fm-voice-idea.py deliver
       Try every held capture again and speak each new receipt.
@@ -87,7 +84,7 @@ State (private, per home, 0700): data/voice-ideas/
     outcome.json              the receipt, a duplicate verdict, or a failure (final)
     attempt.json              the last reason the desk could not be reached
     answered, answer-lost     whether the mailbox question got this script's answer
-    said-final                the final line reached the glasses
+    said-final                how the final line ended: answer, announce, or refused
     woke-*                    a wake line already printed for that problem
 
 Exit codes: 0 ok, 1 error, 2 usage, 3 not an idea.
@@ -918,13 +915,15 @@ def advance(ctx: Context, ident: str, wakes: list) -> dict:
             write_once(folder / "said-final", "announce\n")
         elif verdict == "refused":
             write_once(folder / "said-final", f"refused: {why}\n")
+            _wake_once(paths, ident, "announce",
+                       f"glasses idea receipt for {song} could not be spoken: {why}", wakes)
         elif why != NO_TIME:
             _wake_once(paths, ident, "announce",
                        f"glasses idea receipt for {song} could not be spoken: {why}", wakes)
     return {"capture": meta, "outcome": outcome}
 
 
-def take(ctx: Context, ident: str, song: str | None, text: str | None, wakes: list) -> dict | None:
+def take(ctx: Context, ident: str, song: str | None, wakes: list) -> dict | None:
     """Hold one mailbox question as an idea and move it forward. None when not an idea."""
     paths = ctx.paths
     if not (paths.captures / ident).is_dir():
@@ -936,7 +935,7 @@ def take(ctx: Context, ident: str, song: str | None, text: str | None, wakes: li
         if row is None:
             raise Failure(f"no question {ident} in the glasses mailbox")
         question = parse_question(row)
-        words = question["transcript"] if text is None else text
+        words = question["transcript"]
         if song:
             idea = recognise_named(song, words, ctx.songs())
         else:
@@ -955,24 +954,6 @@ def take(ctx: Context, ident: str, song: str | None, text: str | None, wakes: li
 # -- commands --------------------------------------------------------------------
 
 
-def cmd_match(args: argparse.Namespace, paths: Paths) -> int:
-    text = " ".join(args.text)
-    if args.songs:
-        try:
-            songs = parse_songs(json.loads(Path(args.songs).read_text(encoding="utf-8")))
-        except (OSError, ValueError) as exc:
-            print(json.dumps({"idea": False, "reason": f"song list unreadable: {exc}"}))
-            return EXIT_ERROR
-    else:
-        songs = load_songs(paths, cache=False)
-        if songs is None:
-            print(json.dumps({"idea": False, "reason": "no Artevo song list"}))
-            return EXIT_ERROR
-    verdict = recognise(text, songs)
-    print(json.dumps(verdict, ensure_ascii=False, sort_keys=True))
-    return EXIT_OK if verdict["idea"] else EXIT_NOT_IDEA
-
-
 def _report(result: dict) -> str:
     meta, outcome = result["capture"], result["outcome"]
     song = meta.get("song")
@@ -988,7 +969,7 @@ def cmd_take(args: argparse.Namespace, paths: Paths) -> int:
     with SpoolLock(paths, wait=True) as lock:
         if lock is None:
             raise Failure("another fm-voice-idea run holds the spool lock")
-        result = take(ctx, ident, args.song, args.text, wakes)
+        result = take(ctx, ident, args.song, wakes)
     if result is None:
         print("not an idea: the words do not start with a song name followed by an idea")
         return EXIT_NOT_IDEA
@@ -1046,7 +1027,7 @@ def cmd_check(_args: argparse.Namespace, paths: Paths) -> int:
                 if not REQUEST_ID_RE.match(ident):
                     continue
                 try:
-                    if take(ctx, ident, None, None, wakes) is not None:
+                    if take(ctx, ident, None, wakes) is not None:
                         moved.add(ident)
                 except (Failure, sqlite3.Error):
                     continue
@@ -1067,6 +1048,13 @@ def cmd_check(_args: argparse.Namespace, paths: Paths) -> int:
     return EXIT_OK
 
 
+def _said_final(folder: Path) -> str:
+    try:
+        return (folder / "said-final").read_text(encoding="utf-8").strip()
+    except OSError:
+        return ""
+
+
 def _status_row(paths: Paths, meta: dict) -> dict:
     folder = paths.captures / meta["capture_id"]
     outcome = read_json(folder / "outcome.json")
@@ -1082,7 +1070,7 @@ def _status_row(paths: Paths, meta: dict) -> dict:
         "note": meta.get("note"),
         "state": state,
         "detail": detail,
-        "spoken": (folder / "said-final").exists(),
+        "spoken": _said_final(folder) in ("answer", "announce"),
     }
 
 
@@ -1184,13 +1172,9 @@ def build_parser() -> argparse.ArgumentParser:
         description="File an idea spoken into the glasses on its Artevo song (see this script's header).",
     )
     sub = parser.add_subparsers(dest="cmd")
-    match = sub.add_parser("match", help="Say whether words are an idea for a song")
-    match.add_argument("--songs", help="An Artevo songs.json to match against")
-    match.add_argument("text", nargs="+")
     take_p = sub.add_parser("take", help="Hold one mailbox question as an idea and file it")
     take_p.add_argument("request_id")
     take_p.add_argument("--song", help="The song, when the caller heard it and the words were not recognised")
-    take_p.add_argument("--text", help="Words to use instead of the mailbox transcript")
     sub.add_parser("deliver", help="Try every held idea again and speak new receipts")
     sub.add_parser("check", help="Watcher check: take pending ideas, deliver, wake only on a problem")
     status = sub.add_parser("status", help="One line per held idea")
@@ -1201,7 +1185,6 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 COMMANDS = {
-    "match": cmd_match,
     "take": cmd_take,
     "deliver": cmd_deliver,
     "check": cmd_check,
