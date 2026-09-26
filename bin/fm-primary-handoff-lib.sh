@@ -152,7 +152,8 @@ fm_handoff_profile_cli() {
 # quota axis. cursor-grok runs on the cursor account, whose plan windows
 # bound every model it routes to. A provider whose general window ids the
 # producer stops reporting degrades to `na`, the same as an unmonitored
-# profile, rather than reading a narrower window as an account bound.
+# profile, rather than reading a narrower window as an account bound; only
+# the profile's own model window (fm_handoff_profile_model_window) still reads.
 fm_handoff_profile_provider() {
   case "$1" in
     claude|claude-fable|claude-opus|opus) printf 'claude\n' ;;
