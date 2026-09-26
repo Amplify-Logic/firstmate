@@ -1,0 +1,67 @@
+## S3  primary session start: primary pane marked, then --all --republish (target)
+$ d22419d5 fm-visible-status.sh --all --republish
+exit=0
+{"pane_id":"w1:p1","title":"FIRSTMATE · WAITING","display_agent":"FIRSTMATE · WAITING","idle":"WAITING","tokens":{"fm_role":"FIRSTMATE","fm_state":"WAITING"}}
+{"pane_id":"w1:p2","title":"WORKER · Use the opus profile for the primary · 🟡 WAITING","display_agent":"codex/gpt-5.6 · fm/fm-primary-opus-profile-o1","idle":"🟡 WAITING","tokens":{"fm_branch":"fm/fm-primary-opus-profile-o1","fm_runtime":"codex/gpt-5.6","fm_state":"WAITING","fm_task_id":"fm-primary-opus-profile-o1"}}
+{"pane_id":"w1:p3","title":"WORKER · Scout the fresh worker label · 🟡 WAITING","display_agent":"claude/opus · detached","idle":"🟡 WAITING","tokens":{"fm_branch":"detached","fm_runtime":"claude/opus","fm_state":"WAITING","fm_task_id":"fm-worker-fresh-k2"}}
+{"pane_id":"w1:p4","title":null,"display_agent":null,"idle":null,"tokens":null}
+tabs: [{"tab_id":"w1:t1","label":"1"},{"tab_id":"w1:t2","label":"WORKER · Use the opus profile for the primary · 🟡 WAITING"},{"tab_id":"w1:t3","label":"WORKER · Scout the fresh worker label · 🟡 WAITING"},{"tab_id":"w1:t4","label":"sm"}]
+cached labels: fm-primary-opus-profile-o1.visible-label fm-worker-fresh-k2.visible-label 
+
+## S4  non-regression: ordinary cached --all pass keeps worker metadata incl. fm_state (target)
+$ d22419d5 fm-visible-status.sh --all
+exit=0
+{"pane_id":"w1:p2","title":"WORKER · Use the opus profile for the primary · 🟡 WAITING","display_agent":"codex/gpt-5.6 · fm/fm-primary-opus-profile-o1","idle":"🟡 WAITING","tokens":{"fm_branch":"fm/fm-primary-opus-profile-o1","fm_runtime":"codex/gpt-5.6","fm_state":"WAITING","fm_task_id":"fm-primary-opus-profile-o1"}}
+{"pane_id":"w1:p3","title":"WORKER · Scout the fresh worker label · 🟡 WAITING","display_agent":"claude/opus · detached","idle":"🟡 WAITING","tokens":{"fm_branch":"detached","fm_runtime":"claude/opus","fm_state":"WAITING","fm_task_id":"fm-worker-fresh-k2"}}
+-- contrast, previous round b83198a1 on the same cached panes:
+$ b83198a1 fm-visible-status.sh --all
+exit=0
+{"pane_id":"w1:p2","title":"WORKER · Use the opus profile for the primary · 🟡 WAITING","display_agent":"codex/gpt-5.6 · fm/fm-primary-opus-profile-o1","idle":"🟡 WAITING","tokens":{"fm_branch":"fm/fm-primary-opus-profile-o1","fm_runtime":"codex/gpt-5.6","fm_task_id":"fm-primary-opus-profile-o1"}}
+{"pane_id":"w1:p3","title":"WORKER · Scout the fresh worker label · 🟡 WAITING","display_agent":"claude/opus · detached","idle":"🟡 WAITING","tokens":{"fm_branch":"detached","fm_runtime":"claude/opus","fm_task_id":"fm-worker-fresh-k2"}}
+-- next target pass restores it:
+$ d22419d5 fm-visible-status.sh --all
+exit=0
+{"pane_id":"w1:p2","title":"WORKER · Use the opus profile for the primary · 🟡 WAITING","display_agent":"codex/gpt-5.6 · fm/fm-primary-opus-profile-o1","idle":"🟡 WAITING","tokens":{"fm_branch":"fm/fm-primary-opus-profile-o1","fm_runtime":"codex/gpt-5.6","fm_state":"WAITING","fm_task_id":"fm-primary-opus-profile-o1"}}
+{"pane_id":"w1:p3","title":"WORKER · Scout the fresh worker label · 🟡 WAITING","display_agent":"claude/opus · detached","idle":"🟡 WAITING","tokens":{"fm_branch":"detached","fm_runtime":"claude/opus","fm_state":"WAITING","fm_task_id":"fm-worker-fresh-k2"}}
+
+## S5  ADVERSARIAL: worker w1:p2 runs the primary launcher AFTER its label was cached (state from fm-crew-state)
+-- after primary mark on worker pane:
+{"pane_id":"w1:p2","title":"FIRSTMATE · WAITING","display_agent":"FIRSTMATE · WAITING","idle":"WAITING","tokens":{"fm_branch":"fm/fm-primary-opus-profile-o1","fm_role":"FIRSTMATE","fm_runtime":"codex/gpt-5.6","fm_state":"WAITING","fm_task_id":"fm-primary-opus-profile-o1"}}
+$ d22419d5 fm-visible-status.sh --all
+exit=0
+{"pane_id":"w1:p1","title":"FIRSTMATE · WAITING","display_agent":"FIRSTMATE · WAITING","idle":"WAITING","tokens":{"fm_role":"FIRSTMATE","fm_state":"WAITING"}}
+{"pane_id":"w1:p2","title":"WORKER · Use the opus profile for the primary · 🟡 WAITING","display_agent":"codex/gpt-5.6 · fm/fm-primary-opus-profile-o1","idle":"🟡 WAITING","tokens":{"fm_branch":"fm/fm-primary-opus-profile-o1","fm_runtime":"codex/gpt-5.6","fm_state":"WAITING","fm_task_id":"fm-primary-opus-profile-o1"}}
+
+## S6  ADVERSARIAL with distinct worker state: ship pinned to 'working', label cached, then marker lands
+$ d22419d5 fm-visible-status.sh --all   [FM_VISIBLE_STATE_FILE pins ship=working]
+exit=0
+{"pane_id":"w1:p2","title":"WORKER · Use the opus profile for the primary · 🔵 WORKING","display_agent":"codex/gpt-5.6 · fm/fm-primary-opus-profile-o1","idle":"🔵 WORKING","tokens":{"fm_branch":"fm/fm-primary-opus-profile-o1","fm_runtime":"codex/gpt-5.6","fm_state":"WORKING","fm_task_id":"fm-primary-opus-profile-o1"}}
+$ d22419d5 fm-visible-status.sh --all   [FM_VISIBLE_STATE_FILE pins ship=working]
+exit=0
+{"pane_id":"w1:p2","title":"WORKER · Use the opus profile for the primary · 🔵 WORKING","display_agent":"codex/gpt-5.6 · fm/fm-primary-opus-profile-o1","idle":"🔵 WORKING","tokens":{"fm_branch":"fm/fm-primary-opus-profile-o1","fm_runtime":"codex/gpt-5.6","fm_state":"WORKING","fm_task_id":"fm-primary-opus-profile-o1"}}
+-- after primary mark on worker pane (marker fm_state=WAITING overwrote WORKING):
+{"pane_id":"w1:p2","title":"FIRSTMATE · WAITING","display_agent":"FIRSTMATE · WAITING","idle":"WAITING","tokens":{"fm_branch":"fm/fm-primary-opus-profile-o1","fm_role":"FIRSTMATE","fm_runtime":"codex/gpt-5.6","fm_state":"WAITING","fm_task_id":"fm-primary-opus-profile-o1"}}
+$ d22419d5 fm-visible-status.sh --all   [FM_VISIBLE_STATE_FILE pins ship=working]
+exit=0
+{"pane_id":"w1:p2","title":"WORKER · Use the opus profile for the primary · 🔵 WORKING","display_agent":"codex/gpt-5.6 · fm/fm-primary-opus-profile-o1","idle":"🔵 WORKING","tokens":{"fm_branch":"fm/fm-primary-opus-profile-o1","fm_runtime":"codex/gpt-5.6","fm_state":"WORKING","fm_task_id":"fm-primary-opus-profile-o1"}}
+-- a second cached pass is stable:
+$ d22419d5 fm-visible-status.sh --all   [FM_VISIBLE_STATE_FILE pins ship=working]
+exit=0
+{"pane_id":"w1:p2","title":"WORKER · Use the opus profile for the primary · 🔵 WORKING","display_agent":"codex/gpt-5.6 · fm/fm-primary-opus-profile-o1","idle":"🔵 WORKING","tokens":{"fm_branch":"fm/fm-primary-opus-profile-o1","fm_runtime":"codex/gpt-5.6","fm_state":"WORKING","fm_task_id":"fm-primary-opus-profile-o1"}}
+cached label record: WORKER · Use the opus profile for the primary · 🔵 WORKING	codex/gpt-5.6 · fm/fm-primary-opus-profile-o1	🔵 WORKING
+
+## S7  state change after caching republishes the new state (ship -> blocked)
+$ d22419d5 fm-visible-status.sh --all   [FM_VISIBLE_STATE_FILE pins ship=working]
+exit=0
+{"pane_id":"w1:p2","title":"WORKER · Use the opus profile for the primary · 🟠 BLOCKED","display_agent":"codex/gpt-5.6 · fm/fm-primary-opus-profile-o1","idle":"🟠 BLOCKED","tokens":{"fm_branch":"fm/fm-primary-opus-profile-o1","fm_runtime":"codex/gpt-5.6","fm_state":"BLOCKED","fm_task_id":"fm-primary-opus-profile-o1"}}
+
+## S8  boundary: primary pane w1:p1 and secondmate pane w1:p4 keep what they had
+$ d22419d5 fm-visible-status.sh --all
+exit=0
+$ d22419d5 fm-visible-status.sh --all --republish
+exit=0
+{"pane_id":"w1:p1","title":"FIRSTMATE · WAITING","display_agent":"FIRSTMATE · WAITING","idle":"WAITING","tokens":{"fm_role":"FIRSTMATE","fm_state":"WAITING"}}
+{"pane_id":"w1:p4","title":"FIRSTMATE · WAITING","display_agent":"FIRSTMATE · WAITING","idle":"WAITING","tokens":{"fm_role":"FIRSTMATE","fm_state":"WAITING"}}
+tabs: [{"tab_id":"w1:t1","label":"1"},{"tab_id":"w1:t2","label":"WORKER · Use the opus profile for the primary · 🟡 WAITING"},{"tab_id":"w1:t3","label":"WORKER · Scout the fresh worker label · 🟡 WAITING"},{"tab_id":"w1:t4","label":"sm"}]
+
+Note: in S7 the bracketed "[FM_VISIBLE_STATE_FILE pins ship=working]" tag is static driver text; the pin file held ship=blocked for that pass.

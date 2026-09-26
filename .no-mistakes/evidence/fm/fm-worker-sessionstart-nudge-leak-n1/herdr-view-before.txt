@@ -1,0 +1,30 @@
+00| spaces                  │ 1        fm-worker-1     fm-worker-2    +
+01|                         │(base) larsmusic@Larss-MacBook-Pro fix %
+02| ○ firstmate             │
+03|   fm/fm-primary-opus-pr…│
+04|                         │
+05|                         │
+06|                         │
+07|                         │
+08|                         │
+09|                         │
+10|                         │
+11|                         │
+12|                         │
+13|                         │
+14| new               ● menu│
+15|─────────────────────────│
+16| agents           grouped│
+17|                         │
+18| ✓ firstmate · fm-worker…│
+19|   FIRSTMATE · WAITING   │
+20| ✓ firstmate · fm-worker…│
+21|   FIRSTMATE · WAITING   │
+22|                         │
+23|                         │
+24|                         │
+25|                         │
+26|                         │
+27|                         │
+28|                         │
+29|                        «│

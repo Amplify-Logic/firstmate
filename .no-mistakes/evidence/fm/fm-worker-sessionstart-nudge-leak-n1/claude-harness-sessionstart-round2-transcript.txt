@@ -1,0 +1,20 @@
+Real Claude CLI (claude -p --model haiku, existing login) launched as the session command on the private fm-lab tmux socket.
+cwd = plain (primary-shaped) checkout of the target tree b83198a1; FM_HOME = a marked disposable lab home from bin/fm-lab-home.sh create.
+The tracked .claude/settings.json SessionStart hook (bin/fm-sessionstart-run.sh) fired as the harness runs it.
+Prompt: did session-start context contain FIRSTMATE_OP or SESSION START? YES/NO.
+
+== target-worker [FM_TASK_ID=fm-primary-opus-profile-o1]
+claude answer (captured pane):
+  NO
+  Pane is dead (status 0, Sat Sep 26 18:22:58 2026)
+state/.lock: absent (helm not taken)
+state/.session-start-complete: absent
+
+== target-primary [no FM_TASK_ID, genuine primary]
+claude answer (captured pane):
+  YES
+  "===============================================================================
+  ="
+  Pane is dead (status 0, Sat Sep 26 18:24:09 2026)
+state/.lock: present (helm taken)
+state/.session-start-complete: present

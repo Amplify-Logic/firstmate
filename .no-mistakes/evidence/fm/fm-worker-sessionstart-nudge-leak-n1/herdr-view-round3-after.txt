@@ -1,0 +1,30 @@
+00| spaces                  │ <  1        WORKER · Use the opus profile for the primary · 🟡 WAITING     WORKER · Scout the fresh worker… >  +
+01|                         │┌ WORKER · Use the opus profile for the primary · 🟡 W… ┐┌ WORKER · Use the opus profile for the primary · 🟡 W… ┐
+02| ○ Firstmate · 🟡 2 WAIT…││(base) larsmusic@Larss-MacBook-Pro fm-lab.E9VslD %     ││                                                       │
+03|                         ││                                                       ││  Update available · 0.157.0 → 0.157.1                 │
+04|                         ││                                                       ││  Release notes:                                       │
+05|                         ││                                                       ││  https://github.com/openai/codex/releases/latest      │
+06|                         ││                                                       ││                                                       │
+07|                         ││                                                       ││› 1. Update now (runs `npm install -g @openai/codex`)  │
+08|                         ││                                                       ││  2. Skip                                              │
+09|                         ││                                                       ││  3. Skip until next version                           │
+10|                         ││                                                       ││                                                       │
+11|                         ││                                                       ││  enter continue · esc skip                            │
+12|                         ││                                                       ││                                                       │
+13|                         ││                                                       ││                                                       │
+14| new               ● menu││                                                       ││                                                       │
+15|─────────────────────────││                                                       ││                                                       │
+16| agents           grouped││                                                       ││                                                       │
+17|                         ││                                                       ││                                                       │
+18| ✓ Firstmate… · WORKER ·…││                                                       ││                                                       │
+19|   codex/gpt-5.6 · fm/fm…││                                                       ││                                                       │
+20|                         ││                                                       ││                                                       │
+21|                         ││                                                       ││                                                       │
+22|                         ││                                                       ││                                                       │
+23|                         ││                                                       ││                                                       │
+24|                         ││                                                       ││                                                       │
+25|                         ││                                                       ││                                                       │
+26|                         ││                                                       ││                                                       │
+27|                         ││                                                       ││                                                       │
+28|                         ││                                                       ││                                                       │
+29|                        «│└───────────────────────────────────────────────────────┘└───────────────────────────────────────────────────────┘

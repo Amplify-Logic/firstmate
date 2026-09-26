@@ -1,0 +1,52 @@
+$ FM_HOME=vs-base  base(e8d934b2)/bin/fm-visible-status.sh fm-primary-opus-profile-o1   # worker pane w1:p6
+exit=0
+$ FM_HOME=vs-fix   fix(ffe98730)/bin/fm-visible-status.sh fm-primary-opus-profile-o1   # worker pane w1:p7
+exit=0
+
+$ fm-herdr-lab.sh run <lab> pane list --workspace w1   (worker panes after the refresh)
+{
+  "pane_id": "w1:p6",
+  "which": "BASE e8d934b2",
+  "title": "WORKER · fm primary opus profile o1 · 🟡 WAITING",
+  "display_agent": "codex/gpt-5.6 · fm/fm-primary-opus-profile-o1",
+  "tokens": {
+    "fm_branch": "fm/fm-primary-opus-profile-o1",
+    "fm_role": "FIRSTMATE",
+    "fm_runtime": "codex/gpt-5.6",
+    "fm_state": "WAITING",
+    "fm_task_id": "fm-primary-opus-profile-o1"
+  },
+  "state_labels": {
+    "blocked": "🟡 WAITING",
+    "done": "🟡 WAITING",
+    "idle": "🟡 WAITING",
+    "working": "🟡 WAITING"
+  }
+}
+{
+  "pane_id": "w1:p7",
+  "which": "FIX ffe98730",
+  "title": "WORKER · fm primary opus profile o1 · 🟡 WAITING",
+  "display_agent": "codex/gpt-5.6 · fm/fm-primary-opus-profile-o1",
+  "tokens": {
+    "fm_branch": "fm/fm-primary-opus-profile-o1",
+    "fm_runtime": "codex/gpt-5.6",
+    "fm_state": "WAITING",
+    "fm_task_id": "fm-primary-opus-profile-o1"
+  },
+  "state_labels": {
+    "blocked": "🟡 WAITING",
+    "done": "🟡 WAITING",
+    "idle": "🟡 WAITING",
+    "working": "🟡 WAITING"
+  }
+}
+
+$ fm-herdr-lab.sh run <lab> tab list --workspace w1
+jq: error: syntax error, unexpected '}', expecting ':' (Unix shell quoting issues?) at <top-level>, line 1:
+.result.tabs[]|{tab_id,label}                            
+jq: 1 compile error
+
+thread 'main' (497398902) panicked at /rustc/31fca3adb283cc9dfd56b49cdee9a96eb9c96ffd/library/std/src/io/stdio.rs:1165:9:
+failed printing to stdout: Broken pipe (os error 32)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace

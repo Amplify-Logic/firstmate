@@ -1,0 +1,18 @@
+Real Claude CLI (claude -p --model haiku) launched on the private fm-lab tmux socket, cwd = plain clone of the named commit,
+FM_HOME = a marked disposable lab home (bin/fm-lab-home.sh create). The tracked .claude/settings.json SessionStart hook ran as the harness fires it.
+Prompt: YES/NO whether session-start context contains FIRSTMATE_OP or SESSION START; quote it.
+
+== base-worker  [base e8d934b2, FM_TASK_ID=fm-primary-opus-profile-o1 (worker)]
+claude answer: YES SESSION START - /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.C3pw8O/home-base-worker 
+state/.lock holder pid: 81533
+state/.session-start-complete: present
+
+== fix-worker  [fix ffe98730, FM_TASK_ID=fm-primary-opus-profile-o1 (worker)]
+claude answer: NO 
+state/.lock holder pid: none (helm not taken)
+state/.session-start-complete: absent
+
+== fix-primary  [fix ffe98730, no FM_TASK_ID (genuine primary)]
+claude answer: YES SESSION START - /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.C3pw8O/home-fix-primary 
+state/.lock holder pid: 81522
+state/.session-start-complete: present

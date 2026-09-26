@@ -1,0 +1,59 @@
+## BEFORE the fix (base e8d934b2): a marked worker still gets the nudge
+=== base / codex worker resume
+    checkout=base (aa35838 )  harness=codex  source=resume  env=[FM_TASK_ID=fm-primary-opus-profile-o1]
+    exit=0  lock_taken=no
+    stdout: ⁣FIRSTMATE_OP: v1 session-start: Run `bin/fm-session-start.sh` now, exactly once, before executing any other instructions.
+=== base / claude worker resume
+    checkout=base (aa35838 )  harness=claude  source=resume  env=[FM_TASK_ID=fm-primary-opus-profile-o1]
+    exit=0  lock_taken=no
+    stdout: ⁣FIRSTMATE_OP: v1 session-start: Run `bin/fm-session-start.sh` now, exactly once, before executing any other instructions.
+
+## AFTER the fix (target b83198a1): a marked worker is silent on every source, no lock taken
+=== fix / codex worker startup
+    checkout=fix (6ac51d7 )  harness=codex  source=startup  env=[FM_TASK_ID=fm-primary-opus-profile-o1]
+    exit=0  lock_taken=no
+    stdout: <silent>
+=== fix / codex worker resume
+    checkout=fix (6ac51d7 )  harness=codex  source=resume  env=[FM_TASK_ID=fm-primary-opus-profile-o1]
+    exit=0  lock_taken=no
+    stdout: <silent>
+=== fix / codex worker clear
+    checkout=fix (6ac51d7 )  harness=codex  source=clear  env=[FM_TASK_ID=fm-primary-opus-profile-o1]
+    exit=0  lock_taken=no
+    stdout: <silent>
+=== fix / codex worker compact
+    checkout=fix (6ac51d7 )  harness=codex  source=compact  env=[FM_TASK_ID=fm-primary-opus-profile-o1]
+    exit=0  lock_taken=no
+    stdout: <silent>
+=== fix / claude worker startup
+    checkout=fix (6ac51d7 )  harness=claude  source=startup  env=[FM_TASK_ID=fm-primary-opus-profile-o1]
+    exit=0  lock_taken=no
+    stdout: <silent>
+=== fix / claude worker resume
+    checkout=fix (6ac51d7 )  harness=claude  source=resume  env=[FM_TASK_ID=fm-primary-opus-profile-o1]
+    exit=0  lock_taken=no
+    stdout: <silent>
+=== fix / claude worker clear
+    checkout=fix (6ac51d7 )  harness=claude  source=clear  env=[FM_TASK_ID=fm-primary-opus-profile-o1]
+    exit=0  lock_taken=no
+    stdout: <silent>
+=== fix / claude worker compact
+    checkout=fix (6ac51d7 )  harness=claude  source=compact  env=[FM_TASK_ID=fm-primary-opus-profile-o1]
+    exit=0  lock_taken=no
+    stdout: <silent>
+
+## AFTER the fix: the genuine primary (no FM_TASK_ID) still gets its nudge
+=== fix / codex primary resume
+    checkout=fix (6ac51d7 )  harness=codex  source=resume  env=[]
+    exit=0  lock_taken=no
+    stdout: ⁣FIRSTMATE_OP: v1 session-start: Run `bin/fm-session-start.sh` now, exactly once, before executing any other instructions.
+=== fix / claude primary resume
+    checkout=fix (6ac51d7 )  harness=claude  source=resume  env=[]
+    exit=0  lock_taken=no
+    stdout: ⁣FIRSTMATE_OP: v1 session-start: Run `bin/fm-session-start.sh` now, exactly once, before executing any other instructions.
+
+## Direct nudge wrapper call
+base  <primary, no FM_TASK_ID>                 exit=0 stdout=⁣FIRSTMATE_OP: v1 session-start: Run `bin/fm-session-start.sh` now, exactly once, before executing any other instructions.
+base  FM_TASK_ID=fm-primary-opus-profile-o1    exit=0 stdout=⁣FIRSTMATE_OP: v1 session-start: Run `bin/fm-session-start.sh` now, exactly once, before executing any other instructions.
+fix   <primary, no FM_TASK_ID>                 exit=0 stdout=⁣FIRSTMATE_OP: v1 session-start: Run `bin/fm-session-start.sh` now, exactly once, before executing any other instructions.
+fix   FM_TASK_ID=fm-primary-opus-profile-o1    exit=0 stdout=<silent>

@@ -1,0 +1,60 @@
+## S1  primary session start: primary pane marked, then fm-visible-status.sh --all --republish (target)
+exit=0
+{"pane_id":"w1:p1","title":"FIRSTMATE · WAITING","display_agent":"FIRSTMATE · WAITING","fm_role":"FIRSTMATE","fm_state":"WAITING","fm_task_id":null,"idle":"WAITING"}
+{"pane_id":"w1:p2","title":"WORKER · Use the opus profile for the primary · 🟡 WAITING","display_agent":"codex/gpt-5.6 · fm/fm-primary-opus-profile-o1","fm_role":null,"fm_state":"WAITING","fm_task_id":"fm-primary-opus-profile-o1","idle":"🟡 WAITING"}
+{"pane_id":"w1:p3","title":null,"display_agent":null,"fm_role":null,"fm_state":null,"fm_task_id":null,"idle":null}
+{"pane_id":"w1:p4","title":null,"display_agent":null,"fm_role":null,"fm_state":null,"fm_task_id":null,"idle":null}
+jq: error: syntax error, unexpected '}', expecting ':' (Unix shell quoting issues?) at <top-level>, line 1:
+[.result.tabs[] | {tab_id, label}]                                
+jq: 1 compile error
+
+thread 'main' (502035033) panicked at /rustc/31fca3adb283cc9dfd56b49cdee9a96eb9c96ffd/library/std/src/io/stdio.rs:1165:9:
+failed printing to stdout: Broken pipe (os error 32)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+cached labels: fm-primary-opus-profile-o1.visible-label 
+
+## S2  ADVERSARIAL: worker w1:p2 runs the primary launcher AFTER its label was cached
+-- after primary mark on worker pane:
+{"pane_id":"w1:p2","title":"FIRSTMATE · WAITING","display_agent":"FIRSTMATE · WAITING","fm_role":"FIRSTMATE","fm_state":"WAITING","fm_task_id":"fm-primary-opus-profile-o1","idle":"WAITING"}
+jq: error: syntax error, unexpected '}', expecting ':' (Unix shell quoting issues?) at <top-level>, line 1:
+[.result.tabs[] | {tab_id, label}]                                
+jq: 1 compile error
+
+thread 'main' (502037639) panicked at /rustc/31fca3adb283cc9dfd56b49cdee9a96eb9c96ffd/library/std/src/io/stdio.rs:1165:9:
+failed printing to stdout: Broken pipe (os error 32)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+-- tab list before ordinary pass: 
+$ fm-visible-status.sh --all      # ordinary watcher pass, cache unchanged (target b83198a1)
+exit=0
+{"pane_id":"w1:p1","title":"FIRSTMATE · WAITING","display_agent":"FIRSTMATE · WAITING","fm_role":"FIRSTMATE","fm_state":"WAITING","fm_task_id":null,"idle":"WAITING"}
+{"pane_id":"w1:p2","title":"WORKER · Use the opus profile for the primary · 🟡 WAITING","display_agent":"codex/gpt-5.6 · fm/fm-primary-opus-profile-o1","fm_role":null,"fm_state":null,"fm_task_id":"fm-primary-opus-profile-o1","idle":"🟡 WAITING"}
+{"pane_id":"w1:p3","title":"WORKER · Scout the fresh worker label · 🟡 WAITING","display_agent":"opus · detached","fm_role":null,"fm_state":"WAITING","fm_task_id":"fm-worker-fresh-k2","idle":"🟡 WAITING"}
+{"pane_id":"w1:p4","title":null,"display_agent":null,"fm_role":null,"fm_state":null,"fm_task_id":null,"idle":null}
+jq: error: syntax error, unexpected '}', expecting ':' (Unix shell quoting issues?) at <top-level>, line 1:
+[.result.tabs[] | {tab_id, label}]                                
+jq: 1 compile error
+
+thread 'main' (502140741) panicked at /rustc/31fca3adb283cc9dfd56b49cdee9a96eb9c96ffd/library/std/src/io/stdio.rs:1165:9:
+failed printing to stdout: Broken pipe (os error 32)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+-- tab list after ordinary pass:  
+
+## S2-contrast  same adversarial sequence with the previous commit (ffe98730)
+$ ffe98730 fm-visible-status.sh --all
+exit=0
+{"pane_id":"w1:p2","title":"FIRSTMATE · WAITING","display_agent":"FIRSTMATE · WAITING","fm_role":"FIRSTMATE","fm_state":"WAITING","fm_task_id":"fm-primary-opus-profile-o1","idle":"WAITING"}
+$ target b83198a1 fm-visible-status.sh --all   (next ordinary pass after upgrade)
+exit=0
+{"pane_id":"w1:p2","title":"WORKER · Use the opus profile for the primary · 🟡 WAITING","display_agent":"codex/gpt-5.6 · fm/fm-primary-opus-profile-o1","fm_role":null,"fm_state":null,"fm_task_id":"fm-primary-opus-profile-o1","idle":"🟡 WAITING"}
+
+## S3  single-task refresh (spawn/push-transition path) clears a marker on w1:p3
+{"pane_id":"w1:p3","title":"FIRSTMATE · WAITING","display_agent":"FIRSTMATE · WAITING","fm_role":"FIRSTMATE","fm_state":"WAITING","fm_task_id":"fm-worker-fresh-k2","idle":"WAITING"}
+$ fm-visible-status.sh fm-worker-fresh-k2
+exit=0
+{"pane_id":"w1:p3","title":"WORKER · Scout the fresh worker label · 🟡 WAITING","display_agent":"opus · detached","fm_role":null,"fm_state":"WAITING","fm_task_id":"fm-worker-fresh-k2","idle":"🟡 WAITING"}
+
+## S4  boundary: primary pane w1:p1 and secondmate pane w1:p4 keep what they had
+exit=0
+exit=0
+{"pane_id":"w1:p1","title":"FIRSTMATE · WAITING","display_agent":"FIRSTMATE · WAITING","fm_role":"FIRSTMATE","fm_state":"WAITING","fm_task_id":null,"idle":"WAITING"}
+{"pane_id":"w1:p4","title":"FIRSTMATE · WAITING","display_agent":"FIRSTMATE · WAITING","fm_role":"FIRSTMATE","fm_state":"WAITING","fm_task_id":null,"idle":"WAITING"}

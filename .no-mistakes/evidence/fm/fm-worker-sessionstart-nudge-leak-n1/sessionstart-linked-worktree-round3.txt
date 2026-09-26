@@ -1,0 +1,5 @@
+## Adversarial: codex/claude worker in a LINKED task worktree of the fixed tree, no FM_TASK_ID exported
+codex  cwd=linked worktree  FM_HOME=linked exit=0 stdout=<silent> lock=no
+codex  cwd=linked worktree  FM_HOME=fix    exit=0 stdout=<silent> lock=no
+claude cwd=linked worktree  FM_HOME=linked exit=0 stdout=<silent> lock=no
+claude cwd=linked worktree  FM_HOME=fix    exit=0 stdout=<silent> lock=no

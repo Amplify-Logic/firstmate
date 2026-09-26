@@ -1,0 +1,34 @@
+Real Claude CLI (claude -p --model haiku --max-turns 1 --output-format stream-json --verbose --include-hook-events, existing login),
+launched as the session command on the private fm-lab tmux socket (TMUX_TMPDIR=$LAB/tmux tmux -L fm-lab new-session ... -e FM_HOME=$LAB).
+cwd = plain (primary-shaped) clone of target d22419d5; FM_HOME = marked disposable lab home from bin/fm-lab-home.sh create.
+The tracked .claude/settings.json SessionStart hook (bin/fm-sessionstart-run.sh) runs as the harness runs it; its output is read
+from Claude's own SessionStart hook_response/hook_progress events. Other SessionStart rows are the operator's unrelated global hooks.
+
+== worker  [-e FM_TASK_ID=fm-primary-opus-profile-o1]
+  {"subtype":"hook_response","hook_name":"SessionStart:startup","exit_code":127,"carries_FIRSTMATE_OP":false,"carries_SESSION_START_digest":false,"output_head":"/bin/sh: ${CLAUDE_PLUGIN_ROOT}/hooks/run-hook.cmd: No such file or directory\n"}
+  {"subtype":"hook_response","hook_name":"SessionStart:startup","exit_code":0,"carries_FIRSTMATE_OP":false,"carries_SESSION_START_digest":false,"output_head":""}
+  {"subtype":"hook_response","hook_name":"SessionStart:startup","exit_code":0,"carries_FIRSTMATE_OP":false,"carries_SESSION_START_digest":false,"output_head":""}
+  {"subtype":"hook_response","hook_name":"SessionStart:startup","exit_code":0,"carries_FIRSTMATE_OP":false,"carries_SESSION_START_digest":false,"output_head":"bin: ~/.nvm/versions/node/v22.23.1/bin/chrome-devtools-axi\ndescription: Agent ergonomic interface fo
+  {"subtype":"hook_response","hook_name":"SessionStart:startup","exit_code":0,"carries_FIRSTMATE_OP":false,"carries_SESSION_START_digest":false,"output_head":"bin: ~/.nvm/versions/node/v22.23.1/bin/gh-axi\ndescription: Agent ergonomic wrapper around Github CLI
+  {"subtype":"hook_progress","hook_name":"SessionStart:startup","exit_code":null,"carries_FIRSTMATE_OP":false,"carries_SESSION_START_digest":false,"output_head":"bin: ~/.nvm/versions/node/v22.23.1/bin/lavish-axi\ndescription: \"Lavish Editor helps agents turn 
+  {"subtype":"hook_response","hook_name":"SessionStart:startup","exit_code":0,"carries_FIRSTMATE_OP":false,"carries_SESSION_START_digest":false,"output_head":"bin: ~/.nvm/versions/node/v22.23.1/bin/lavish-axi\ndescription: \"Lavish Editor helps agents turn ric
+  state/.lock: absent (helm not taken)
+  state/.session-start-complete: absent
+== primary  []
+  {"subtype":"hook_response","hook_name":"SessionStart:startup","exit_code":127,"carries_FIRSTMATE_OP":false,"carries_SESSION_START_digest":false,"output_head":"/bin/sh: ${CLAUDE_PLUGIN_ROOT}/hooks/run-hook.cmd: No such file or directory\n"}
+  {"subtype":"hook_response","hook_name":"SessionStart:startup","exit_code":0,"carries_FIRSTMATE_OP":false,"carries_SESSION_START_digest":false,"output_head":""}
+  {"subtype":"hook_response","hook_name":"SessionStart:startup","exit_code":0,"carries_FIRSTMATE_OP":false,"carries_SESSION_START_digest":false,"output_head":"bin: ~/.nvm/versions/node/v22.23.1/bin/chrome-devtools-axi\ndescription: Agent ergonomic interface fo
+  {"subtype":"hook_response","hook_name":"SessionStart:startup","exit_code":0,"carries_FIRSTMATE_OP":false,"carries_SESSION_START_digest":false,"output_head":"bin: ~/.nvm/versions/node/v22.23.1/bin/gh-axi\ndescription: Agent ergonomic wrapper around Github CLI
+  {"subtype":"hook_progress","hook_name":"SessionStart:startup","exit_code":null,"carries_FIRSTMATE_OP":false,"carries_SESSION_START_digest":true,"output_head":"\n================================================================================\nSESSION START -
+  {"subtype":"hook_progress","hook_name":"SessionStart:startup","exit_code":null,"carries_FIRSTMATE_OP":false,"carries_SESSION_START_digest":false,"output_head":"bin: ~/.nvm/versions/node/v22.23.1/bin/lavish-axi\ndescription: \"Lavish Editor helps agents turn 
+  {"subtype":"hook_response","hook_name":"SessionStart:startup","exit_code":0,"carries_FIRSTMATE_OP":false,"carries_SESSION_START_digest":false,"output_head":"bin: ~/.nvm/versions/node/v22.23.1/bin/lavish-axi\ndescription: \"Lavish Editor helps agents turn ric
+  {"subtype":"hook_progress","hook_name":"SessionStart:startup","exit_code":null,"carries_FIRSTMATE_OP":false,"carries_SESSION_START_digest":true,"output_head":"\n================================================================================\nSESSION START -
+  {"subtype":"hook_progress","hook_name":"SessionStart:startup","exit_code":null,"carries_FIRSTMATE_OP":false,"carries_SESSION_START_digest":true,"output_head":"\n================================================================================\nSESSION START -
+  {"subtype":"hook_progress","hook_name":"SessionStart:startup","exit_code":null,"carries_FIRSTMATE_OP":false,"carries_SESSION_START_digest":true,"output_head":"\n================================================================================\nSESSION START -
+  {"subtype":"hook_progress","hook_name":"SessionStart:startup","exit_code":null,"carries_FIRSTMATE_OP":false,"carries_SESSION_START_digest":true,"output_head":"\n================================================================================\nSESSION START -
+  {"subtype":"hook_progress","hook_name":"SessionStart:startup","exit_code":null,"carries_FIRSTMATE_OP":false,"carries_SESSION_START_digest":true,"output_head":"\n================================================================================\nSESSION START -
+  {"subtype":"hook_response","hook_name":"SessionStart:startup","exit_code":0,"carries_FIRSTMATE_OP":false,"carries_SESSION_START_digest":true,"output_head":"\n================================================================================\nSESSION START - /v
+  state/.lock: present (helm taken)
+  state/.session-start-complete: present
+
+Note: an earlier attempt asking haiku to answer YES/NO was discarded; the model ran tools instead of answering, so its reply was not reliable evidence.

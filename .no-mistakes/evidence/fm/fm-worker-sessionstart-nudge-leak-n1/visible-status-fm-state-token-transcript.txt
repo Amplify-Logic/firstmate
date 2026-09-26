@@ -1,0 +1,19 @@
+## Side effect: the per-pass primary-source clear also removes the worker source's own fm_state token (Herdr token clears are not source-scoped)
+$ target b83198a1 fm-visible-status.sh --all --republish
+exit=0
+{"pane_id":"w1:p2","title":"WORKER · Use the opus profile for the primary · 🟡 WAITING","tokens":{"fm_branch":"fm/fm-primary-opus-profile-o1","fm_runtime":"codex/gpt-5.6","fm_state":"WAITING","fm_task_id":"fm-primary-opus-profile-o1"}}
+{"pane_id":"w1:p3","title":"WORKER · Scout the fresh worker label · 🟡 WAITING","tokens":{"fm_branch":"detached","fm_runtime":"opus","fm_state":"WAITING","fm_task_id":"fm-worker-fresh-k2"}}
+$ target b83198a1 fm-visible-status.sh --all     # ordinary watcher pass, no primary marker on any worker pane
+exit=0
+{"pane_id":"w1:p2","title":"WORKER · Use the opus profile for the primary · 🟡 WAITING","tokens":{"fm_branch":"fm/fm-primary-opus-profile-o1","fm_runtime":"codex/gpt-5.6","fm_task_id":"fm-primary-opus-profile-o1"}}
+{"pane_id":"w1:p3","title":"WORKER · Scout the fresh worker label · 🟡 WAITING","tokens":{"fm_branch":"detached","fm_runtime":"opus","fm_task_id":"fm-worker-fresh-k2"}}
+
+## Contrast: previous commit ffe98730 on the same panes
+$ ffe98730 fm-visible-status.sh --all --republish
+exit=0
+{"pane_id":"w1:p2","title":"WORKER · Use the opus profile for the primary · 🟡 WAITING","tokens":{"fm_branch":"fm/fm-primary-opus-profile-o1","fm_runtime":"codex/gpt-5.6","fm_state":"WAITING","fm_task_id":"fm-primary-opus-profile-o1"}}
+{"pane_id":"w1:p3","title":"WORKER · Scout the fresh worker label · 🟡 WAITING","tokens":{"fm_branch":"detached","fm_runtime":"opus","fm_state":"WAITING","fm_task_id":"fm-worker-fresh-k2"}}
+$ ffe98730 fm-visible-status.sh --all
+exit=0
+{"pane_id":"w1:p2","title":"WORKER · Use the opus profile for the primary · 🟡 WAITING","tokens":{"fm_branch":"fm/fm-primary-opus-profile-o1","fm_runtime":"codex/gpt-5.6","fm_state":"WAITING","fm_task_id":"fm-primary-opus-profile-o1"}}
+{"pane_id":"w1:p3","title":"WORKER · Scout the fresh worker label · 🟡 WAITING","tokens":{"fm_branch":"detached","fm_runtime":"opus","fm_state":"WAITING","fm_task_id":"fm-worker-fresh-k2"}}

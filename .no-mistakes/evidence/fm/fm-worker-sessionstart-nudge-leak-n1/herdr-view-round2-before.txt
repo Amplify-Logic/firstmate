@@ -1,0 +1,30 @@
+00| spaces                  │ <  1        WORKER · Use the opus profile for the primary · 🟡 WAITING     WORKER · Sc… >  +
+01|                         │┌ WORKER · Use the opus profile for the prim… ┐┌ FIRSTMATE · WAITING ────────────────────────┐
+02| · firstmate · 🟡 3 WAIT…││(base) larsmusic@Larss-MacBook-Pro fm-lab.bB ││                                             │
+03|                         ││(base) larsmusic@Larss-MacBook-Pro fm-lab.bB ││                                             │
+04|                         ││fT9P %                                       ││                                             │
+05|                         ││                                             ││                                             │
+06|                         ││                                             ││                                             │
+07|                         ││                                             ││                                             │
+08|                         ││                                             ││                                             │
+09|                         ││                                             ││                                             │
+10|                         ││                                             ││                                             │
+11|                         ││                                             ││                                             │
+12|                         ││                                             ││                                             │
+13|                         ││                                             ││                                             │
+14| new               ● menu││                                             ││                                             │
+15|─────────────────────────││                                             ││                                             │
+16| agents           grouped││                                             ││                                             │
+17|                         ││                                             ││                                             │
+18| ○ firstmate… · WORKER ·…││                                             ││                                             │
+19|   FIRSTMATE · WAITING   ││                                             ││                                             │
+20|                         ││                                             ││                                             │
+21|                         ││                                             ││                                             │
+22|                         ││                                             ││                                             │
+23|                         ││                                             ││                                             │
+24|                         ││                                             ││                                             │
+25|                         ││                                             ││                                             │
+26|                         ││                                             ││                                             │
+27|                         ││                                             ││                                             │
+28|                         ││                                             ││                                             │
+29|                        «│└─────────────────────────────────────────────┘└─────────────────────────────────────────────┘

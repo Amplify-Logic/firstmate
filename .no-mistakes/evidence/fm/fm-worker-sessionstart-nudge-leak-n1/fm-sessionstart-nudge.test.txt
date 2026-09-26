@@ -1,0 +1,2 @@
+ok - session start: a marked ship or scout worker never gets the nudge or the digest
+exit=0

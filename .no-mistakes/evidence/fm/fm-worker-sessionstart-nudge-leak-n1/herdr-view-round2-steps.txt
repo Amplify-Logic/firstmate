@@ -1,0 +1,9 @@
+## Rendered Herdr lab (real client via bin/fm-herdr-lab.sh view): worker agent pane w1:p5 = task fm-primary-opus-profile-o1
+$ fm-visible-status.sh --all --republish   (worker label published and cached)
+exit=0
+{"pane_id":"w1:p5","title":"WORKER · Use the opus profile for the primary · 🟡 WAITING","display_agent":"codex/gpt-5.6 · fm/fm-primary-opus-profile-o1","tokens":{"fm_branch":"fm/fm-primary-opus-profile-o1","fm_runtime":"codex/gpt-5.6","fm_state":"WAITING","fm_task_id":"fm-primary-opus-profile-o1"}}
+$ primary launcher marker lands on worker pane w1:p5 AFTER caching (exact bin/fm-primary.sh mark_current_surface argv)
+{"pane_id":"w1:p5","title":"FIRSTMATE · WAITING","display_agent":"FIRSTMATE · WAITING","tokens":{"fm_branch":"fm/fm-primary-opus-profile-o1","fm_role":"FIRSTMATE","fm_runtime":"codex/gpt-5.6","fm_state":"WAITING","fm_task_id":"fm-primary-opus-profile-o1"}}
+$ fm-visible-status.sh --all   (ordinary watcher pass; label cache unchanged)
+exit=0
+{"pane_id":"w1:p5","title":"WORKER · Use the opus profile for the primary · 🟡 WAITING","display_agent":"codex/gpt-5.6 · fm/fm-primary-opus-profile-o1","tokens":{"fm_branch":"fm/fm-primary-opus-profile-o1","fm_runtime":"codex/gpt-5.6","fm_task_id":"fm-primary-opus-profile-o1"}}

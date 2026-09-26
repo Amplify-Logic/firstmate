@@ -1,0 +1,10 @@
+## Adversarial: primary marker lands on worker pane w1:p7 AFTER its worker label was published and cached
+fm-primary-opus-profile-o1.visible-label
+after primary mark:
+{"title":"FIRSTMATE · WAITING","display_agent":"FIRSTMATE · WAITING","fm_role":"FIRSTMATE","fm_state":"WAITING","idle":"WAITING"}
+$ fix fm-visible-status.sh --all   (ordinary watcher pass, label cache unchanged)
+exit=0
+{"title":"FIRSTMATE · WAITING","display_agent":"FIRSTMATE · WAITING","fm_role":"FIRSTMATE","fm_state":"WAITING","idle":"WAITING"}
+$ fix fm-visible-status.sh --all --republish
+exit=0
+{"title":"WORKER · fm primary opus profile o1 · 🟡 WAITING","display_agent":"codex/gpt-5.6 · fm/fm-primary-opus-profile-o1","fm_role":null,"fm_state":null,"idle":"🟡 WAITING"}
