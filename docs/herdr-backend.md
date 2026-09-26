@@ -583,6 +583,7 @@ The adapter binds a newly created workspace once with hidden `fm_owner` and `fm_
 Each token is a versioned Git object hash of the complete physical path, keeping the immutable identity below Herdr's metadata value limit without storing a truncatable raw path.
 Workspace lookup exact-matches both tokens and never identifies or adopts managed work by its visible label.
 The human project label is mutable presentation and may include prioritized aggregate state without weakening ownership.
+A managed workspace holding tasks from several projects is labeled neutrally over all of them rather than after any one project; `bin/fm-visible-status.sh`'s header owns the exact label.
 
 This container shape is what [`docs/herdr-layout-preview.md`](herdr-layout-preview.md) proposes replacing with upstream's one-workspace-per-worker unit.
 That preview is unapproved and changes nothing here until the captain accepts it.
