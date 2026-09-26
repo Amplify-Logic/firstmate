@@ -1,0 +1,9 @@
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.CKcyTe/base-absent/home
+warning: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.CKcyTe/base-absent/home/data/concise-live-x/launch-brief.md records no ship branch; defaulting to legacy branch fm/concise-live-x
+warning: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.CKcyTe/base-absent/home/data/concise-live-x/launch-brief.md records no delivery contract line (scaffolded before ship briefs recorded one); launching on the explicit --mode no-mistakes - confirm its definition of done matches
+warning: concise-live-x: this spawn could not confirm that claude actually owns the tmux pane before the launch command was delivered, so it may have gone into a shell; the brief itself was not pasted and remains untouched.
+The tmux pane could not be read for the claude harness; delivery proceeded UNVERIFIED.
+If the brief does not land, peek with: FM_HOME='/private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.CKcyTe/base-absent/home' '/private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.CKcyTe/base-root/bin/fm-peek.sh' 'concise-live-x'
+If it is sitting at a shell rather than an agent, close out endpoint firstmate:fm-concise-live-x and re-spawn the task:
+       FM_HOME='/private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.CKcyTe/base-absent/home' '/private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.CKcyTe/base-root/bin/fm-spawn.sh' 'concise-live-x' '/private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.CKcyTe/base-absent/project' --harness 'claude' --backend 'tmux' --mode 'no-mistakes' --yolo 'off'
+spawned concise-live-x harness=claude kind=ship mode=no-mistakes yolo=off window=firstmate:fm-concise-live-x worktree=/private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.CKcyTe/base-absent/wt

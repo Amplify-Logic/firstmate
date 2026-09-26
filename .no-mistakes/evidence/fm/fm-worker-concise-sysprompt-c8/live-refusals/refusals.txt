@@ -1,0 +1,37 @@
+$ config/claude-concise-prompt=yes; fm-spawn.sh (invalid-yes) -> exit 1
+error: config/claude-concise-prompt holds 'yes'; accepted values are: on (append docs/worker-prompts/claude-concise.md to claude worker launches), off (the default when the file is absent)
+  state/concise-live-x.meta exists: no
+  launch typed into pane: no
+  fake windows created: 0
+$ config/claude-concise-prompt=ON; fm-spawn.sh (invalid-ON) -> exit 1
+error: config/claude-concise-prompt holds 'ON'; accepted values are: on (append docs/worker-prompts/claude-concise.md to claude worker launches), off (the default when the file is absent)
+  state/concise-live-x.meta exists: no
+  launch typed into pane: no
+  fake windows created: 0
+$ config/claude-concise-prompt=on; fm-spawn.sh (missing-prompt) -> exit 1
+error: config/claude-concise-prompt is on but the prompt file /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.CKcyTe/noprompt-root/docs/worker-prompts/claude-concise.md is missing or unreadable
+  state/concise-live-x.meta exists: no
+  launch typed into pane: no
+  fake windows created: 0
+$ config/claude-concise-prompt=off; fm-spawn.sh (missing-prompt-off) -> exit 0
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.CKcyTe/missing-prompt-off/home
+The tmux pane could not be read for the claude harness; delivery proceeded UNVERIFIED.
+If the brief does not land, peek with: FM_HOME='/private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.CKcyTe/missing-prompt-off/home' '/private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.CKcyTe/noprompt-root/bin/fm-peek.sh' 'concise-live-x'
+  state/concise-live-x.meta exists: yes
+  launch typed into pane: yes
+  fake windows created: 1
+$ config/claude-concise-prompt=absent; fm-spawn.sh (base-absent) -> exit 0
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.CKcyTe/base-absent/home
+The tmux pane could not be read for the claude harness; delivery proceeded UNVERIFIED.
+If the brief does not land, peek with: FM_HOME='/private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.CKcyTe/base-absent/home' '/private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.CKcyTe/base-root/bin/fm-peek.sh' 'concise-live-x'
+  state/concise-live-x.meta exists: yes
+  launch typed into pane: yes
+  fake windows created: 1
+$ config/claude-concise-prompt=absent; fm-spawn.sh (target-absent) -> exit 0
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.CKcyTe/target-absent/home
+The tmux pane could not be read for the claude harness; delivery proceeded UNVERIFIED.
+If the brief does not land, peek with: FM_HOME='/private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.CKcyTe/target-absent/home' '/Users/larsmusic/.no-mistakes/worktrees/f569cc43ac96/01M3FFQDSY84KX1ZR6WPRJSWFS/bin/fm-peek.sh' 'concise-live-x'
+  state/concise-live-x.meta exists: yes
+  launch typed into pane: yes
+  fake windows created: 1
+base d72944f2 vs target: absent-file claude launch IDENTICAL (lab path/root normalized)

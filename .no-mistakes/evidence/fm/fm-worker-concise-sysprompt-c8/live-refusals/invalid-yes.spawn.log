@@ -1,0 +1,1 @@
+error: config/claude-concise-prompt holds 'yes'; accepted values are: on (append docs/worker-prompts/claude-concise.md to claude worker launches), off (the default when the file is absent)

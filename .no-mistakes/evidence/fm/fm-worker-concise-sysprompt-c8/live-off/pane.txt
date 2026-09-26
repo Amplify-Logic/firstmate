@@ -1,0 +1,50 @@
+  create answer.txt containing only the sum of 12345 and 67890. Do no other work, do not commit, do not run any status or report scripts, then stop.
+
+  Firstmate spec
+
+  Exercise the spawn behavior under test.
+
+  Current no-mistakes intent contract
+
+  This section supersedes every earlier brief instruction about constructing --intent, but not later clarifications actually supplied by the captain.
+  Use everything under ## Captain intent authorized for --intent through the end of this brief, including any nested subheadings but excluding that heading,
+  plus any later words the captain actually supplied as --intent; never include Firstmate specification or other mixed Task content.
+  Preserve those words without adding speaker labels or direct address.
+  Firstmate-authored constraints, acceptance criteria, implementation details, decisions, and tradeoffs are specification, not captain intent.
+  The Definition of done's rule that --intent must be self-sufficient still governs the string you pass: resolve any report, decision, or PR the intent below
+  refers to into its substance rather than passing the pointer.
+
+  Captain intent authorized for --intent
+
+  Runtime verification only. Step 1: create overlay.txt in your current directory containing exactly the first markdown heading line (the line starting with '#
+  ') of any communication-style overlay that appears in your system prompt, or the single word NONE if your system prompt contains no such overlay. Step 2:
+  create answer.txt containing only the sum of 12345 and 67890. Do no other work, do not commit, do not run any status or report scripts, then stop.
+
+⏺ Bash(cat /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.7u8O6i/home/state/concise-live-off.inbox 2>/dev/null; echo "---"; pwd)
+  ⎿  ---
+     /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.7u8O6i/wt
+
+⏺ Bash(printf 'NONE\n' > overlay.txt && printf '80235\n' > answer.txt && cat overlay.txt answer.txt)
+  ⎿  NONE
+     80235
+  ⎿  Created answer.txt (+1 -0)
+      1 +80235
+  ⎿  Created overlay.txt (+1 -0)
+      1 +NONE
+  ⎿  (what this command changed; a convenience view, not a review or audit of the command)
+
+⏺ I created both files in the worktree.
+
+  - overlay.txt says NONE. My system prompt has no communication-style overlay.
+  - answer.txt says 80235, which is 12345 + 67890.
+
+  The steering inbox was empty. I made no commits, ran no status or report scripts, and did no other work.
+
+✻ Worked for 13s · done 9:43 PM
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏵⏵ bypass permissions on (shift+tab to cycle) · ← 2 agents
+                                                          tmux focus-events off · add 'set -g focus-events on' to ~/.tmux.conf and reattach for focus tracking
+
