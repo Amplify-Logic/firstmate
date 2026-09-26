@@ -39,13 +39,14 @@ install_hook_scripts() {
 # A stand-in for bin/fm-speak.sh with its observable contract: a refused line
 # exits 2, reports the register's reason on stderr, and is not kept; an accepted
 # line is recorded and kept as the next numbered entry in state/speak-history/.
+# Like the installed register, it refuses an approval word even inside news.
 install_speak_stub() {
   local dir=$1
   cat > "$dir/speak-stub" <<'EOF'
 #!/usr/bin/env bash
 text=$*
 case "$text" in
-  *"Shall I"*)
+  *"Shall I"*|*approved*)
     printf 'refused: %s\n' "$text" >> "$FM_HOME/refused.log"
     printf 'refused: asks the captain to decide; announcements carry news, not decisions\n' >&2
     exit 2 ;;
@@ -146,6 +147,20 @@ test_non_decision_refusal_never_claims_a_decision() {
   pass "a refusal that is not a decision speaks the plain on-screen notice"
 }
 
+test_decision_refusal_of_news_never_claims_a_decision() {
+  local dir
+  dir=$(make_primary_dir "$TMP_ROOT/approved-news")
+  run_hook "$dir" "Captain, Derya approved the draft and it went out."
+  assert_grep 'Derya approved the draft' "$dir/refused.log" "the news must reach the register first"
+  assert_equals "Captain, my reply is on screen." "$(spoken "$dir")" \
+    "news the register mistakes for a decision must not be announced as one"
+  rm -f "$dir/spoken.log"
+  run_hook "$dir" "Captain, the review is closed. Derya approved the draft."
+  assert_equals "Captain, the review is closed. More on screen." "$(spoken "$dir")" \
+    "the fallback for mistaken news must point at more, not at a choice"
+  pass "a decision refusal of plain news never claims a decision"
+}
+
 test_markdown_reply_speaks_first_paragraph() {
   local dir reply
   dir=$(make_primary_dir "$TMP_ROOT/markdown")
@@ -167,8 +182,8 @@ Second paragraph is not spoken.
 EOF
 )
   run_hook "$dir" "$reply"
-  assert_equals "Captain, the fix is in main and the review found nothing. It is live now." \
-    "$(spoken "$dir")" "only the first plain paragraph, cleaned of markdown, must be spoken"
+  assert_equals "Captain, the fix is in main and the review found nothing. It is live now. More on screen." \
+    "$(spoken "$dir")" "only the first plain paragraph, cleaned of markdown, must be spoken, pointing at the rest"
   pass "markdown reply speaks only the first plain paragraph"
 }
 
@@ -293,8 +308,8 @@ test_trailing_list_lead_in_is_dropped() {
     "a closing list lead-in must be dropped and the rest pointed at"
   rm -f "$dir/spoken.log"
   run_hook "$dir" "$(printf '%s\n' "Captain, three things landed:" "" "- the fix" "- the docs")"
-  assert_equals "Captain, three things landed." "$(spoken "$dir")" \
-    "a lead-in that is the only sentence must end with a full stop instead"
+  assert_equals "Captain, three things landed. More on screen." "$(spoken "$dir")" \
+    "a lead-in that is the only sentence must end with a full stop instead, pointing at the list"
   pass "a trailing list lead-in is dropped, or closed when it is the whole lead"
 }
 
@@ -328,12 +343,50 @@ test_pointer_names_what_waits_on_screen() {
   rm -f "$dir/spoken.log"
   run_hook "$dir" "$(printf '%s\n' "Captain, the fix merged." "" "Details follow here.")"
   assert_equals "Captain, the fix merged." "$(spoken "$dir")" \
-    "a complete lead with nothing waiting must get no pointer"
+    "a complete lead followed only by a one-line sign-off must get no pointer"
+  rm -f "$dir/spoken.log"
+  run_hook "$dir" "$(printf '%s\n' "Captain, the fix merged." "" "The cause was a stale cache." "" "The retry now clears it.")"
+  assert_equals "Captain, the fix merged. More on screen." "$(spoken "$dir")" \
+    "further paragraphs after the lead must point at the rest"
+  rm -f "$dir/spoken.log"
+  run_hook "$dir" "$(printf '%s\n' "Captain, the fix merged." "" "- the cache" "- the retry")"
+  assert_equals "Captain, the fix merged. More on screen." "$(spoken "$dir")" \
+    "a bulleted list after the lead must point at the rest"
+  rm -f "$dir/spoken.log"
+  run_hook "$dir" "$(printf '%s\n' "Captain, the fix merged." "" "PR: https://example.invalid/pr/1")"
+  assert_equals "Captain, the fix merged. More on screen." "$(spoken "$dir")" \
+    "a link after the lead must point at the rest"
   rm -f "$dir/spoken.log"
   run_hook "$dir" "$(printf '%s\n' "Captain, the emails are drafted; the drafts are below." "" "1. one" "2. two")"
   assert_equals "Captain, the emails are drafted; the drafts are below." "$(spoken "$dir")" \
     "a lead that already points at the screen must get no second pointer"
-  pass "the pointer names a choice, a question, steps, or nothing"
+  rm -f "$dir/spoken.log"
+  run_hook "$dir" "$(printf '%s\n' "Captain, CPU stayed below half all night." "" "**A.** Keep it" "**B.** Scale down")"
+  assert_equals "Captain, CPU stayed below half all night. The choice is on screen." "$(spoken "$dir")" \
+    "the word below in news must not hide the choice pointer"
+  pass "the pointer names a choice, a question, steps, more, or nothing"
+}
+
+test_pointer_fits_the_spoken_budget() {
+  local dir first second out
+  dir=$(make_primary_dir "$TMP_ROOT/budget")
+  first="Captain, $(printf 'alpha %.0s' $(seq 1 18))done."
+  second="Then $(printf 'beta %.0s' $(seq 1 13))end."
+  run_hook "$dir" "$(printf '%s\n' "$first $second" "" "**A.** One" "**B.** Two")"
+  assert_equals "$first $second The choice is on screen." "$(spoken "$dir")" \
+    "a 35-word lead and the choice pointer fit the budget whole"
+  rm -f "$dir/spoken.log"
+  run_hook "$dir" "$(printf '%s\n' "$first $second" "" "Should it ship tonight?")"
+  out=$(spoken "$dir")
+  assert_equals "$first There's a question for you on screen." "$out" \
+    "a 35-word lead must be cut back so the question pointer is still spoken"
+  rm -f "$dir/spoken.log"
+  run_hook "$dir" "$(printf '%s\n' "$first $second gamma gamma done." "" "**A.** One" "**B.** Two")"
+  out=$(spoken "$dir")
+  assert_equals "$first The choice is on screen." "$out" \
+    "a 38-word lead must be cut back so the choice pointer is still spoken"
+  [ "$(printf '%s' "$out" | wc -w | tr -d ' ')" -le 41 ] || fail "the spoken line must fit 41 words"
+  pass "the lead leaves room for its pointer inside the spoken budget"
 }
 
 test_model_already_spoke_is_silent_then_next_turn_speaks() {
@@ -511,6 +564,7 @@ test_plain_reply_is_spoken
 test_decision_reply_falls_back_to_first_sentence
 test_decision_only_reply_speaks_notice
 test_non_decision_refusal_never_claims_a_decision
+test_decision_refusal_of_news_never_claims_a_decision
 test_markdown_reply_speaks_first_paragraph
 test_list_paragraph_is_joined
 test_empty_and_tool_only_turns_are_silent
@@ -525,6 +579,7 @@ test_lead_keeps_at_most_three_sentences
 test_numbers_do_not_split_sentences
 test_trailing_list_lead_in_is_dropped
 test_pointer_names_what_waits_on_screen
+test_pointer_fits_the_spoken_budget
 test_model_already_spoke_is_silent_then_next_turn_speaks
 test_superseded_stop_is_dropped
 test_worker_worktree_is_inert

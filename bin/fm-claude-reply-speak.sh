@@ -25,24 +25,27 @@
 #     a first sentence longer than that is kept whole for the register to cut;
 #   - ended with "." when it does not already end in . ! or ?;
 #   - followed by one voice-only pointer, first match wins, unless the lead
-#     already says "on screen" or "below": "The choice is on screen." when the
-#     rest of the reply offers lettered options (a line opening "A." or
-#     "**A.**"), says "Say A, B ..." or "you choose", or asks for a quoted reply
-#     such as Say "land it"; "There's a question for you on screen." when a
-#     later paragraph ends with "?"; "The steps are on screen." when the rest
-#     holds a numbered list; "More on screen." when the cuts above dropped
-#     anything. The desk budget (docs/examples/desk-speak-register.toml) holds
-#     a 35-word lead plus that pointer; past it the register drops the pointer
-#     sentence and keeps the lead.
+#     already says "on screen", "see below", "is below", or "are below": "The
+#     choice is on screen." when the rest of the reply offers lettered options
+#     (a line opening "A." or "**A.**"), says "Say A, B ..." or "you choose", or
+#     asks for a quoted reply such as Say "land it"; "There's a question for you
+#     on screen." when a later paragraph ends with "?"; "The steps are on
+#     screen." when the rest holds a numbered list; "More on screen." when the
+#     rest holds more than a one-line sign-off of at most 15 words (another
+#     paragraph or line, a list, a table, code, or a link) or the cuts above
+#     dropped anything. The desk budget (docs/examples/desk-speak-register.toml)
+#     is 41 words, and the lead is cut back further so that it and the pointer
+#     fit, because past the budget the register drops the pointer sentence.
 # When the register refuses the line (bin/fm-speak.sh exit 2), the hook speaks
 # only the lead's first sentence plus the pointer, or plus "The choice is on
-# screen." or "More on screen." when there was none, depending on whether the
-# register's reason said the line asked the captain to decide. When that is
-# refused too, or the lead was a single sentence, it speaks "Captain, a decision
-# is waiting for you on screen." only when a refusal reason said the line asked
-# the captain to decide, and "Captain, my reply is on screen." otherwise. The
-# reason is the register's own "refused: <reason>" line, which bin/fm-speak.sh
-# passes to stderr. No path ever puts a choice to the captain by voice.
+# screen." or "More on screen." when there was none. When that is refused too,
+# or the lead was a single sentence, it speaks "Captain, a decision is waiting
+# for you on screen." or "Captain, my reply is on screen." A decision is named
+# only when a refusal reason said the line asked the captain to decide AND the
+# reply itself agrees: the rest offers a choice, a question, or steps, or the
+# lead asks a question. The reason is the register's own "refused: <reason>"
+# line, which bin/fm-speak.sh passes to stderr. No path ever puts a choice to
+# the captain by voice.
 #
 # What stays silent:
 #   - an empty or missing `last_assistant_message`, such as a turn that ended on
@@ -99,6 +102,9 @@ ROUTINE_LINE="Captain, shipshape."
 # words of slack so a lead written to that rule is never cut mid-thought.
 MAX_WORDS=38
 MAX_SENTENCES=3
+# Words the desk register speaks: 16s at 2.6 words a second
+# (docs/examples/desk-speak-register.toml).
+SPOKEN_WORDS=41
 
 SETTLE_MS=${FM_REPLY_SPEAK_SETTLE_MS:-2000}
 case "$SETTLE_MS" in ''|*[!0-9]*) SETTLE_MS=2000 ;; esac
@@ -174,13 +180,18 @@ esac
 
 # --- spoken lead: first plain paragraph ---------------------------------------
 # One pass prints two lines: the pointer cue found in the rest of the reply
-# (choice, question, steps, or none; first match wins in that order), then the
-# first plain paragraph, joined onto one line.
+# (choice, question, steps, more, or none; first match wins in that order), then
+# the first plain paragraph, joined onto one line.
 SCAN=$(printf '%s\n' "$MSG" | awk '
-  function cue_line(line,   t) {
-    if (line ~ /^[[:space:]]*(```|~~~)/) { rfence = !rfence; end_para(); return }
+  function cue_line(line,   t, ws) {
+    if (line ~ /^[[:space:]]*(```|~~~)/) { rfence = !rfence; rich = 1; end_para(); return }
     if (rfence) return
-    if (line ~ /^[[:space:]]*$/ || line ~ /^[[:space:]]*[|#]/) { end_para(); return }
+    if (line ~ /^[[:space:]]*$/ || line ~ /^[[:space:]]*([-*_][[:space:]]*){3,}$/) { end_para(); return }
+    rlines++
+    rwords += split(line, ws)
+    if (line ~ /^[[:space:]]*\|/ || line ~ /\]\(|https?:\/\//) rich = 1
+    if (line ~ /^[[:space:]]*[|#]/) { end_para(); return }
+    if (line ~ /^[[:space:]]*([-*+]|[0-9]+[.)])[[:space:]]/) rich = 1
     if (line ~ /^[[:space:]]*[0-9]+[.)][[:space:]]/) steps = 1
     t = line
     sub(/^[[:space:]]*(>[[:space:]]*)?([-*+][[:space:]]+)?/, "", t)
@@ -215,7 +226,8 @@ SCAN=$(printf '%s\n' "$MSG" | awk '
   }
   END {
     end_para()
-    print (choice ? "choice" : question ? "question" : steps ? "steps" : "none")
+    more = rich || rlines > 1 || rwords > 15
+    print (choice ? "choice" : question ? "question" : steps ? "steps" : more ? "more" : "none")
     print para
   }
 ')
@@ -224,9 +236,12 @@ PARA=
 case "$SCAN" in *$'\n'*) PARA=${SCAN#*$'\n'} ;; esac
 PARA=$(printf '%s\n' "$PARA" | sed -E 's/\[([^]]*)\]\([^)]*\)/\1/g; s/(\*\*|__|`)//g')
 
-# Shape the lead and print three lines: the lead, its first sentence, and the
-# voice-only pointer (empty when none applies).
-SHAPED=$(printf '%s\n' "$PARA" | awk -v max_words="$MAX_WORDS" -v max_sentences="$MAX_SENTENCES" -v cue="$CUE" '
+# Shape the lead and print five lines: the lead, its first sentence, the
+# voice-only pointer (empty when none applies), 1 when the first sentence already
+# points at the screen, and 1 when the reply itself holds a choice, a question,
+# or steps for the captain.
+SHAPED=$(printf '%s\n' "$PARA" | awk -v max_words="$MAX_WORDS" -v max_sentences="$MAX_SENTENCES" \
+  -v budget="$SPOKEN_WORDS" -v cue="$CUE" '
   function closed(word) { return word ~ /[.!?]["\047)\]]*$/ }
   function finish(word) {
     if (closed(word)) return word
@@ -238,7 +253,16 @@ SHAPED=$(printf '%s\n' "$PARA" | awk -v max_words="$MAX_WORDS" -v max_sentences=
     for (i = from; i < to; i++) out = out w[i] " "
     return out finish(w[to])
   }
-  function onscreen(text) { text = tolower(text); return text ~ /on screen/ || text ~ /below/ }
+  function onscreen(text) { text = tolower(text); return text ~ /on screen|see below|(is|are) below/ }
+  function words(text,   ws) { return split(text, ws, " ") }
+  function keep(limit,   s, k) {
+    k = 1
+    for (s = 2; s <= count && s <= max_sentences; s++) {
+      if (end_at[s] > limit) break
+      k = s
+    }
+    return k
+  }
   {
     for (i = 1; i <= NF; i++) w[++total] = $i
   }
@@ -256,29 +280,34 @@ SHAPED=$(printf '%s\n' "$PARA" | awk -v max_words="$MAX_WORDS" -v max_sentences=
       if (count > 1) { count--; cut = 1 }
       else sub(/:$/, ".", w[end_at[count]])
     }
-    kept = 1
-    for (s = 2; s <= count && s <= max_sentences; s++) {
-      if (end_at[s] > max_words) break
-      kept = s
+    asks = 0
+    for (s = 1; s <= count; s++) if (w[end_at[s]] ~ /\?["\047)\]]*$/) asks = 1
+    pointer = ""
+    if (cue == "choice") pointer = "The choice is on screen."
+    else if (cue == "question") pointer = "There\047s a question for you on screen."
+    else if (cue == "steps") pointer = "The steps are on screen."
+    else if (cue == "more") pointer = "More on screen."
+    kept = keep(max_words)
+    if (onscreen(join(1, end_at[kept]))) pointer = ""
+    else {
+      if (pointer == "" && (cut || kept < count)) pointer = "More on screen."
+      # Leave room in the register budget for the pointer, so it is always heard.
+      if (budget - words(pointer) < max_words) kept = keep(budget - words(pointer))
     }
-    if (kept < count) cut = 1
     lead = join(1, end_at[kept])
     first = join(1, end_at[1])
-    pointer = ""
-    if (!onscreen(lead)) {
-      if (cue == "choice") pointer = "The choice is on screen."
-      else if (cue == "question") pointer = "There\047s a question for you on screen."
-      else if (cue == "steps") pointer = "The steps are on screen."
-      else if (cut) pointer = "More on screen."
-    }
     print lead
     print first
     print pointer
+    print (onscreen(first) ? 1 : 0)
+    print ((cue ~ /^(choice|question|steps)$/ || asks) ? 1 : 0)
   }
 ')
 LEAD=$(printf '%s\n' "$SHAPED" | sed -n 1p)
 FIRST=$(printf '%s\n' "$SHAPED" | sed -n 2p)
 POINTER=$(printf '%s\n' "$SHAPED" | sed -n 3p)
+FIRST_POINTS=$(printf '%s\n' "$SHAPED" | sed -n 4p)
+ASKS_CAPTAIN=$(printf '%s\n' "$SHAPED" | sed -n 5p)
 case "$LEAD" in
   *[![:space:]]*) ;;
   *) exit 0 ;;
@@ -297,12 +326,14 @@ still_latest || exit 0
 # --- speak, falling back when the register refuses ---------------------------
 # bin/fm-speak.sh exits 2 when the register refuses and passes the register's
 # own "refused: <reason>" line to stderr, which says whether the line asked the
-# captain to decide.
+# captain to decide. The register matches approval words in plain news too, so
+# a decision counts only when the reply itself asks the captain something.
 REFUSED_DECISION=0
 speak_line() {  # <line>; returns bin/fm-speak.sh's exit status
   local err rc=0
   err=$("$SPEAK" "$1" 2>&1 >/dev/null </dev/null) || rc=$?
-  if [ "$rc" -eq 2 ] && printf '%s\n' "$err" | grep -Eq '^refused:.*(decide|spoken yes)'; then
+  if [ "$rc" -eq 2 ] && [ "$ASKS_CAPTAIN" = 1 ] \
+    && printf '%s\n' "$err" | grep -Eq '^refused:.*(decide|spoken yes)'; then
     REFUSED_DECISION=1
   fi
   return "$rc"
@@ -316,9 +347,7 @@ if [ "$rc" -eq 2 ] && [ "$FIRST" != "$LEAD" ] && still_latest; then
   if [ -z "$FALLBACK_POINTER" ]; then
     if [ "$REFUSED_DECISION" -eq 1 ]; then FALLBACK_POINTER="The choice is on screen."; else FALLBACK_POINTER="More on screen."; fi
   fi
-  case "$(printf '%s' "$FIRST" | tr '[:upper:]' '[:lower:]')" in
-    *"on screen"*|*below*) FALLBACK_POINTER= ;;
-  esac
+  [ "$FIRST_POINTS" != 1 ] || FALLBACK_POINTER=
   rc=0
   speak_line "$FIRST${FALLBACK_POINTER:+ $FALLBACK_POINTER}" || rc=$?
 fi

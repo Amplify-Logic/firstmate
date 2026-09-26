@@ -74,8 +74,8 @@
 # whichever speaker ends up playing the line: the same 16 seconds applies to
 # Deepgram Aura and to macOS `say`. That example keeps the same URL/path/id and
 # decision refusals and changes the budget only: 16 seconds and four sentences /
-# about 41 words at 2.6 wps, which holds a 35-word spoken lead plus a short
-# pointer to the screen (bin/fm-claude-reply-speak.sh). Two opt-outs remain.
+# about 41 words at 2.6 wps, into which bin/fm-claude-reply-speak.sh fits its
+# spoken lead plus a short pointer to the screen. Two opt-outs remain.
 # An already-set GLASSES_ANNOUNCE_CONFIG is never overridden, and
 # FM_SPEAK_DEEPGRAM_REGISTER= (empty) keeps the glasses eight-second cut. That variable keeps its historical name because it is the
 # published opt-out; it is not a Deepgram gate and never was one.

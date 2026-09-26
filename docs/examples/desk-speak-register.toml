@@ -3,9 +3,9 @@
 # Same safety floor as the glasses announce defaults (strip URLs/paths/ids,
 # refuse decision-seeking lines). The spoken time budget is raised from ~8s,
 # which is tuned for the glasses and cuts an ordinary desk outcome mid-message,
-# to 16s and four sentences: about 41 words at 2.6 words a second, which holds
-# a 35-word spoken lead plus one short pointer to the screen
-# (bin/fm-claude-reply-speak.sh).
+# to 16s and four sentences: about 41 words at 2.6 words a second.
+# bin/fm-claude-reply-speak.sh cuts its spoken lead back to leave room for its
+# one short pointer to the screen, so keep its SPOKEN_WORDS in step with this.
 #
 # on_request and decision_pointer are for a register that drops a sentence
 # asking the captain to decide and keeps the news, pointing at the screen
