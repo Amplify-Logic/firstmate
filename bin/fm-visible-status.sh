@@ -447,6 +447,11 @@ update_task() {  # <task-id>
   record=$(task_label_record "$id")
   if skip_unchanged \
     && [ "$(cat "$record" 2>/dev/null || true)" = "$title"$'\t'"$detail"$'\t'"$icon $state" ]; then
+    # Herdr tokens are keyed by name, not source, so the clear above also
+    # dropped this worker's own fm_state; put it back.
+    herdr_call "$session" pane report-metadata "$pane" \
+      --source "$SOURCE" \
+      --token "fm_state=$state" >/dev/null 2>&1 || true
     TASK_START=
     return 0
   fi
