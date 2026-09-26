@@ -78,7 +78,7 @@ The alarm owner counts a zero exit as delivered and advances the sentinel's back
 - It does not hook the ordinary away-mode return, so ending away mode by any other route does not stand a shift down.
   Away-mode code is deliberately untouched: `stop` calls the away-mode return owner, so having that owner call `stop` would deadlock the captain's return on a lock it already holds.
   `state/.shift` and its artifacts therefore stay behind, but nothing treats them as a live shift: a shift counts as armed only while away mode is also active, so the host alarm stops supervising, the self-check goes quiet, and the spoken alarm refuses rather than speaking into a headset on a charger.
-  That leftover is reported as a stale shift by `status` and at session start, naming `fm-shift.sh stop`, because the record and the alarm-route block are still on disk until it runs.
+  That leftover is reported as a stale shift by `status`, naming `fm-shift.sh stop`, because the record and the alarm-route block are still on disk until it runs.
   A `start` over that leftover begins a fresh shift with its own start time and log line, so the next `stop` report never spans the gap since the earlier one; only a `start` while away mode is still active keeps the original start time.
 - `stop` captures the return owner's output so the report reads as one block, and then prints it in full under its own label, on a clean return as much as on a failed one.
   The owner prints each drained catch-up wake once and then deletes the evidence, so that output is the only copy and nothing it printed is dropped.

@@ -236,6 +236,32 @@ arm_shift() {  # <tmp>
   run_shift "$1" start
 }
 
+# Raise one supervision alarm through the real alarm owner, exactly as the host
+# sentinel does, against the fixture's config/wedge-alarm. The platform banner
+# is faked: osascript records a line instead of posting, and uname reports
+# Darwin so `auto` resolves the same way on any CI host. env -i leaves the
+# notifier override seam unset, so every configured channel really runs.
+run_alarm_owner() {  # <tmp> <summary>
+  local tmp=$1 fakebin="$1/fakebin"
+  cat > "$fakebin/osascript" <<'SH'
+#!/usr/bin/env bash
+printf 'banner\n' >> "${BANNER_LOG:?}"
+SH
+  printf '#!/usr/bin/env bash\nprintf "Darwin\\n"\n' > "$fakebin/uname"
+  chmod +x "$fakebin/osascript" "$fakebin/uname"
+  env -i \
+    PATH="$fakebin:/usr/bin:/bin:/usr/sbin:/sbin" \
+    HOME="${HOME:-/tmp}" TMPDIR="${TMPDIR:-/tmp}" \
+    FM_HOME="$tmp/home" \
+    FM_STATE_OVERRIDE="$tmp/home/state" \
+    FM_CONFIG_OVERRIDE="$tmp/home/config" \
+    FM_SHIFT_ANNOUNCE="$tmp/home/announce" \
+    FM_WEDGE_ALARM_TIMEOUT_SECS=10 \
+    ANNOUNCE_LOG="$tmp/announce.log" \
+    BANNER_LOG="$tmp/banner.log" \
+    bash "$ROOT/bin/fm-supervise-daemon.sh" --active-alert "$2" "$tmp/home/state/.supervision-outage-alarm"
+}
+
 # ---------------------------------------------------------------------------
 # start refuses, by name, before arming anything.
 # ---------------------------------------------------------------------------
@@ -705,6 +731,35 @@ test_alarm_route_keeps_the_platform_default_channel() {
   pass 'alarm route: the shift block carries the platform default beside its own channel'
 }
 
+# The route end to end, through the real alarm owner: while a shift is armed an
+# outage is spoken into the glasses AND raised as the desktop banner. Once the
+# shift is over - away mode ended with the record left behind, or the record gone
+# with the block left behind - the glasses stay silent and the banner alone
+# still delivers, so a leftover block can never swallow an alarm.
+test_alarm_route_delivers_through_the_real_alarm_owner() {
+  local tmp rc leftover
+  tmp=$(make_shift_home)
+  arm_shift "$tmp" >/dev/null 2>&1
+  : > "$tmp/announce.log"
+  rc=0; run_alarm_owner "$tmp" 'SUPERVISION DOWN: glasses shift armed, no crew task in flight' || rc=$?
+  expect_code 0 "$rc" 'an armed shift alarm is delivered'
+  assert_grep 'stopped watching' "$tmp/announce.log" 'an armed shift speaks the outage'
+  [ "$(cat "$tmp/banner.log" 2>/dev/null | wc -l | tr -d " ")" -eq 1 ] || fail 'an armed shift did not also raise the desktop banner'
+
+  for leftover in record-without-away-mode block-without-record; do
+    tmp=$(make_shift_home)
+    arm_shift "$tmp" >/dev/null 2>&1
+    rm -f "$tmp/home/state/.afk"
+    [ "$leftover" = record-without-away-mode ] || rm -f "$tmp/home/state/.shift"
+    : > "$tmp/announce.log"
+    rc=0; run_alarm_owner "$tmp" 'SUPERVISION DOWN: 1 task(s) in flight' || rc=$?
+    expect_code 0 "$rc" "$leftover: the alarm is still delivered"
+    [ ! -s "$tmp/announce.log" ] || fail "$leftover: the leftover shift spoke: $(cat "$tmp/announce.log")"
+    [ "$(cat "$tmp/banner.log" 2>/dev/null | wc -l | tr -d " ")" -eq 1 ] || fail "$leftover: the desktop banner did not carry the alarm"
+  done
+  pass 'alarm route: speaks and raises the banner while armed, and falls back to the banner alone once the shift is over'
+}
+
 # A begin sentinel over a block a hand edit emptied delivers nothing, so
 # presence alone must never read as a route to the captain's ear.
 # ---------------------------------------------------------------------------
@@ -758,17 +813,33 @@ test_stale_shift_silences_the_self_check() {
   pass 'armed: the registered check goes quiet once away mode has ended'
 }
 
+# The check is rendered from a snapshot that cannot source the library, so it
+# inlines the two conditions. Drive every combination of record and away flag
+# through both and require the same answer: an outage reported means armed.
 test_generated_check_armed_test_matches_the_library_predicate() {
-  local tmp check
+  local tmp state record afk lib check_says armed_cases=0
   tmp=$(make_shift_home)
   arm_shift "$tmp" >/dev/null 2>&1
-  check="$tmp/home/state/fm-shift.check.sh"
-  # The check is rendered from a snapshot that cannot source the library, so the
-  # two conditions are inlined. This is what catches drift between them.
-  grep -q 'ARMED' "$check" || fail 'the check no longer tests the shift record'
-  grep -q 'AFK' "$check" || fail 'the check no longer tests the away-mode flag'
-  grep -Fq 'fm_sup_shift_armed' "$ROOT/bin/fm-supervision-lib.sh" \
-    || fail 'the library no longer defines fm_sup_shift_armed'
+  state="$tmp/home/state"
+  for record in present absent; do
+    for afk in present absent; do
+      rm -f "$state/.shift" "$state/.afk" "$state/.shift-mailbox-outage"
+      [ "$record" = absent ] || printf 'started_epoch=0\n' > "$state/.shift"
+      [ "$afk" = absent ] || : > "$state/.afk"
+      # shellcheck disable=SC2016  # $1/$2 expand in the child shell.
+      if bash -c '. "$1"; fm_sup_shift_armed "$2"' _ "$ROOT/bin/fm-supervision-lib.sh" "$state"; then
+        lib=armed
+      else
+        lib=not-armed
+      fi
+      check_says=not-armed
+      [ -z "$(FAKE_HEALTH_CODE=000 run_registered_check "$tmp")" ] || check_says=armed
+      [ "$check_says" = "$lib" ] \
+        || fail "record $record, away mode $afk: the library says $lib but the check behaved as $check_says"
+      [ "$lib" = not-armed ] || armed_cases=$((armed_cases + 1))
+    done
+  done
+  [ "$armed_cases" -eq 1 ] || fail "expected exactly one armed combination, got $armed_cases"
   pass 'armed: the rendered check tests the same two conditions the library owns'
 }
 
@@ -1063,6 +1134,7 @@ test_self_check_is_a_plain_registered_check_file
 test_supervision_alarm_speaks_without_relaying_internal_detail
 test_supervision_alarm_fails_rather_than_consuming_an_alarm_it_cannot_speak
 test_alarm_route_keeps_the_platform_default_channel
+test_alarm_route_delivers_through_the_real_alarm_owner
 test_alarm_route_reports_a_gutted_block_as_down
 test_a_record_outliving_away_mode_is_stale_not_armed
 test_stale_shift_silences_the_spoken_alarm
