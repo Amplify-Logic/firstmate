@@ -788,6 +788,37 @@ test_matrix_claude_selection_dialogs_are_unknown() {
   pass "matrix: claude's permission prompt, AskUserQuestion and /model picker read unknown on every profile"
 }
 
+test_matrix_claude_suggested_prompt_and_draft() {
+  # Claude's dim suggested prompt (`❯` NBSP, then SGR 2 text) is not typed
+  # input: the desk floater sends only into a box that reads empty or pending,
+  # so a suggestion must read empty wherever styling survives the capture.
+  # A capture without styling cannot tell it from typed text and stays unknown.
+  # The same session's typed draft reads pending, and a stashed draft's footer
+  # (`› stashed`, codex's glyph mid-row) is never taken for a composer.
+  local screen plain
+  screen=$(cat "$DIALOGS/claude-2.1.283-ghost-suggestion.ansi")
+  plain=$(printf '%s\n' "$screen" | fm_composer_strip_ansi)
+  assert_screen "claude suggested prompt on tmux" empty "$CAPS_TMUX" "$screen" 26 probe-absent
+  assert_screen "claude suggested prompt on herdr" empty "$CAPS_STYLED" "$screen" '' probe-absent
+  assert_screen "claude suggested prompt on zellij" empty "$CAPS_STYLED_NOID" "$screen"
+  assert_screen "claude suggested prompt on cmux/orca" unknown "$CAPS_PLAIN" "$plain"
+  screen=$(cat "$DIALOGS/claude-2.1.283-stashed-draft.ansi")
+  assert_screen "claude stashed draft under a suggestion on tmux" empty "$CAPS_TMUX" "$screen" 26 probe-absent
+  assert_screen "claude stashed draft under a suggestion on herdr" empty "$CAPS_STYLED" "$screen" '' probe-absent
+  screen=$(cat "$DIALOGS/claude-2.1.283-draft.ansi")
+  assert_screen "claude typed draft on tmux" pending "$CAPS_TMUX" "$screen" 26 probe-absent
+  assert_screen "claude typed draft on herdr" pending "$CAPS_STYLED" "$screen" '' probe-absent
+  assert_screen "claude typed draft on zellij" pending "$CAPS_STYLED_NOID" "$screen"
+  # Herdr's ansi read of the same suggestion (claude 2.1.283 on herdr 0.7.4):
+  # every run reset first, a truecolor glyph, and a titled top rule.
+  screen="${ESC}[0m${ESC}[38;2;136;136;136m────────────────────────── FIRSTMATE ─${ESC}[0m"
+  screen+=$'\n'"${ESC}[0m${ESC}[38;2;153;153;153m❯${NBSP}${ESC}[0m${ESC}[2mYes, land both changes${ESC}[0m"
+  screen+=$'\n'"${ESC}[0m${ESC}[38;2;136;136;136m─────────────────────────────────────${ESC}[0m"
+  screen+=$'\n'"  ${ESC}[0m${ESC}[38;2;255;107;128m⏵⏵ bypass permissions on${ESC}[0m${ESC}[38;2;153;153;153m (shift+tab to cycle)${ESC}[0m"
+  assert_screen "claude suggested prompt in herdr's ansi read" empty "$CAPS_STYLED" "$screen" '' probe-absent
+  pass "matrix: claude's suggested prompt reads empty wherever styling survives, its typed draft pending"
+}
+
 test_selection_dialog_survives_ghost_stripped_option() {
   # The highlighted option's number and label drawn in a dark truecolor that
   # ghost stripping removes, leaving the glyph alone on its row - which reads
@@ -1073,6 +1104,7 @@ test_matrix_grok_titled_bottom_border
 test_matrix_kimi_bordered_shell_glyph_box
 test_matrix_claude_inside_zellij_ansi_dump
 test_matrix_claude_selection_dialogs_are_unknown
+test_matrix_claude_suggested_prompt_and_draft
 test_selection_dialog_survives_ghost_stripped_option
 test_selection_dialog_rule_is_bounded
 test_strict_blank_row_divergence

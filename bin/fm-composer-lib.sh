@@ -1862,6 +1862,38 @@ fm_composer_submit_retry_core() {  # <send-key-fn> <state-fn> <target> <retries>
   done
 }
 
+# fm_composer_payload_shown: 0 when <after>, a composer's visible text read
+# back after typing <text> into it, shows exactly <text>. The submit paths
+# press Enter only on this proof (bin/backends/herdr.sh for Claude, and
+# bin/fm-desk-voice.sh when it sends past the captain's draft).
+# Literal equality ignores whitespace, the same comparison zellij uses, so a
+# wrapped payload still matches. It also ignores U+2063, the invisible mark
+# that starts operational inputs and separates the from-firstmate label:
+# Claude's composer read-back on Herdr never shows it (verified live), and it
+# carries no instruction text of its own. A composer that holds only
+# `[Pasted text #N]` or `[Pasted text #N +M lines]` placeholders (the
+# multi-line form, verified live on Claude 2.1.278), with no literal remainder,
+# is the same proof for one fast burst: Claude collapses that burst into the
+# placeholder and expands it on submit. A shorter literal suffix, or a
+# placeholder followed by a literal remainder, is the head-truncation shape and
+# is not proof.
+fm_composer_payload_shown() {  # <text> <after>
+  local text=$1 after=$2 literal
+  fm_composer_normalize_spaces_var text
+  fm_composer_normalize_spaces_var after
+  text=${text//[$' \t\r\n\v\f']/}
+  text=${text//$'\xE2\x81\xA3'/}
+  after=${after//[$' \t\r\n\v\f']/}
+  after=${after//$'\xE2\x81\xA3'/}
+  [ -n "$text" ] && [ -n "$after" ] || return 1
+  [ "$after" = "$text" ] && return 0
+  literal=$after
+  while [[ $literal =~ \[Pastedtext#[0-9]+(\+[0-9]+lines?)?\] ]]; do
+    literal=${literal/"${BASH_REMATCH[0]}"/}
+  done
+  [ -z "$literal" ]
+}
+
 # fm_composer_queued_enter_verdict: the ONE busy-queued-Enter policy.
 # After Enter retries are spent, convert a structurally proven pending
 # composer given a delivery-busy signal from the adapter:

@@ -839,6 +839,25 @@ The current pending-composer ring contract is owned by `bin/fm-task-inbox-lib.sh
 Kimi was not installed on the verification machine; its receive path is the same one-line-plus-shell contract, and the portable ladder and enqueue regressions in `tests/fm-task-inbox.test.sh` and `tests/fm-send-inbox.test.sh` cover every harness-independent half.
 This guard is the refresh command after any harness upgrade; it spends a small number of real tokens per installed harness, reports an absent harness explicitly, and refuses a run that verified nothing.
 
+## Desk floater send past a draft
+
+`bin/fm-desk-voice.sh` sends a floater message past the captain's unsent draft in a Claude primary's chat box by stashing the draft with Ctrl+S, reading Claude's `› stashed` footer, and relying on Claude to restore the draft when the message is submitted.
+Verified on 2026-09-26 against Claude Code 2.1.283 on tmux 3.6a, macOS arm64, on an isolated private socket, driving the real `bin/fm-desk-voice.sh send` against a real Claude process holding a fixture home's session lock:
+
+```sh
+FM_DESK_VOICE_CLAUDE_DRAFT_LIVE=1 tests/fm-desk-voice-claude-draft-live-e2e.test.sh
+```
+
+Observed output:
+
+```text
+ok - desk floater: real Claude 2.1.283 (Claude Code) submits the message alone and puts the unsent draft back
+```
+
+The same session also showed, by hand, that a message submitted mid-turn is queued and the draft is still restored (`Draft restored` in the footer), that a second Ctrl+S on a typed draft replaces an earlier stash (so the script refuses a screen already showing `› stashed`), and that Claude's dim suggested prompt, including the one it redraws after a stash, reads `empty`; `tests/fixtures/composer-claude-dialogs/` holds those captures.
+The Herdr path uses the same keys through `pane send-keys ctrl+s` and was not driven live against a real Herdr pane in this run; `tests/fm-deepgram-desk.test.sh` pins its sequence with a stand-in Herdr.
+This guard submits one short prompt; rerun it after a Claude upgrade.
+
 ## Gemini
 
 The Gemini crewmate adapter was verified on 2026-09-04 with gemini-cli 0.58.0 on Linux, Node v24.20.0, tmux 3.4.

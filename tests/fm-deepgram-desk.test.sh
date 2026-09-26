@@ -840,20 +840,37 @@ test_desk_voice_deliver_pending_drain() {
 # --- desk-voice send: straight into the primary's chat pane ------------------
 #
 # A stand-in primary: a live process whose command line names a harness (a
-# python script under a claude/ directory, which the session-lock identity
-# accepts) and whose environment names a Herdr pane (or a tmux pane). It holds
-# the fixture home's session lock, and runs beneath a stand-in multiplexer
-# server. The herdr and tmux on PATH are fakes that log every call, so no real
-# pane ever receives text or keys.
+# python script under a claude/ directory, or another harness's, which the
+# session-lock identity accepts) and whose environment names a Herdr pane (or
+# a tmux pane). It holds the fixture home's session lock, and runs beneath a
+# stand-in multiplexer server. The herdr and tmux on PATH are fakes that log
+# every call, so no real pane ever receives text or keys.
+#
+# The herdr fake draws Claude's chat box between two rules: the draft file is
+# typed text, the ghost file a dim suggested prompt shown while nothing is
+# typed, and the stash file a draft set aside with Ctrl+S, shown as
+# `› stashed` in the footer. Its keys behave as Claude's do: Ctrl+S stashes a
+# typed draft or pops the stash into an empty box, Ctrl+U clears the box, and
+# Enter submits the box (the suggestion when nothing is typed) to the
+# submitted log, then restores a stash into the box.
 
-desk_send_fixture() {  # <name> [tmux] -> home; starts the stand-in primary
-  local name=$1 backend=${2:-herdr} home dir fb pid i envs marker
+desk_send_fixture() {  # <name> [tmux|herdr] [harness] -> home; starts the stand-in primary
+  local name=$1 backend=${2:-herdr} harness=${3:-claude} home dir fb pid i envs marker
   local -a pane_env
   home=$(new_home "$name")
   dir="$home/fixture"
   fb="$dir/bin"
-  mkdir -p "$fb" "$dir/claude"
-  printf 'import time\ntime.sleep(60)\n' > "$dir/claude/holder.py"
+  mkdir -p "$fb" "$dir/$harness"
+  # A node linked under the harness's own name is a process whose name the
+  # session-lock identity reads as that harness, as a real `claude` is.
+  # Without node, a python script under the harness's directory stands in.
+  if command -v node >/dev/null 2>&1; then
+    ln -s "$(command -v node)" "$dir/$harness/$harness"
+    set -- "$dir/$harness/$harness" -e 'setTimeout(() => {}, 60000)'
+  else
+    printf 'import time\ntime.sleep(60)\n' > "$dir/$harness/holder.py"
+    set -- python3 "$dir/$harness/holder.py"
+  fi
   cat > "$fb/herdr" <<'SH'
 #!/usr/bin/env bash
 set -u
@@ -869,20 +886,59 @@ case "${1:-} ${2:-}" in
     printf '{"result":{"type":"pane_process_info","process_info":{"pane_id":"%s","shell_pid":%s,"foreground_processes":[]}}}\n' \
       "$4" "$(cat "$dir/shell-pid")" ;;
   "pane read")
+    case " $* " in *' ansi '*) ansi=1 ;; *) ansi=0 ;; esac
     if [ -e "$dir/modal" ]; then
-      cat "$dir/modal"
+      if [ "$ansi" = 1 ]; then cat "$dir/modal"; else sed $'s/\033\\[[0-9;:]*m//g' "$dir/modal"; fi
+      exit 0
+    fi
+    draft=$(cat "$dir/draft" 2>/dev/null)
+    rule='────────────────────────────────────────'
+    printf '%s\n' "$rule"
+    if [ -n "$draft" ] || [ ! -e "$dir/ghost" ]; then
+      printf '❯\302\240%s\n' "$draft"
+    elif [ "$ansi" = 1 ]; then
+      printf '❯\302\240\033[2m%s\033[0m\n' "$(cat "$dir/ghost")"
     else
-      printf '❯ %s\n' "$(cat "$dir/draft" 2>/dev/null)"
+      printf '❯\302\240%s\n' "$(cat "$dir/ghost")"
+    fi
+    printf '%s\n' "$rule"
+    if [ -e "$dir/stash" ]; then
+      printf '  ⏵⏵ auto mode on                    › stashed\n'
+    else
+      printf '  ⏵⏵ auto mode on\n'
     fi ;;
   "pane send-text")
     [ ! -e "$dir/send-text-fails" ] || exit 1
     printf '%s' "$4" >> "$dir/draft" ;;
   "pane send-keys")
-    : > "$dir/entered"
-    [ -e "$dir/never-works" ] || : > "$dir/draft" ;;
+    case "$4" in
+      ctrl+s)
+        [ ! -e "$dir/no-stash" ] || exit 0
+        if [ -s "$dir/draft" ]; then
+          mv "$dir/draft" "$dir/stash"
+          : > "$dir/draft"
+        elif [ -e "$dir/stash" ]; then
+          mv "$dir/stash" "$dir/draft"
+        fi ;;
+      ctrl+u) : > "$dir/draft" ;;
+      *)
+        : > "$dir/entered"
+        [ ! -e "$dir/never-works" ] || exit 0
+        if [ -s "$dir/draft" ]; then
+          { cat "$dir/draft"; printf '\n'; } >> "$dir/submitted"
+        elif [ -e "$dir/ghost" ]; then
+          { cat "$dir/ghost"; printf '\n'; } >> "$dir/submitted"
+        fi
+        : > "$dir/draft"
+        [ ! -e "$dir/stash" ] || mv "$dir/stash" "$dir/draft" ;;
+    esac ;;
   "agent get")
     if [ -e "$dir/entered" ] && [ ! -e "$dir/never-works" ]; then s=working; else s=idle; fi
-    printf '{"result":{"agent":{"agent_status":"%s"}}}\n' "$s" ;;
+    if [ -e "$dir/agent" ]; then
+      printf '{"result":{"agent":{"agent":"%s","agent_status":"%s"}}}\n' "$(cat "$dir/agent")" "$s"
+    else
+      printf '{"result":{"agent":{"agent_status":"%s"}}}\n' "$s"
+    fi ;;
 esac
 exit 0
 SH
@@ -918,8 +974,8 @@ SH
   # server is the parent of the pane that hosts a real primary.
   # shellcheck disable=SC2016  # expanded by the inner shell
   env "${pane_env[@]}" bash -c \
-    'python3 "$1" >/dev/null 2>&1 & printf "%s\n" "$!" > "$2.tmp"; mv "$2.tmp" "$2"; wait' \
-    _ "$dir/claude/holder.py" "$dir/holder-pid" >/dev/null 2>&1 &
+    'out=$1; shift; "$@" >/dev/null 2>&1 & printf "%s\n" "$!" > "$out.tmp"; mv "$out.tmp" "$out"; wait' \
+    _ "$dir/holder-pid" "$@" >/dev/null 2>&1 &
   printf '%s\n' "$!" > "$dir/server-pid"
   for i in $(seq 1 50); do
     [ -s "$dir/holder-pid" ] && break
@@ -1052,7 +1108,10 @@ test_desk_voice_send_falls_back_when_the_pane_shows_a_dialog() {
   for screen in \
     $' Bash command\n\n   gh pr merge 42\n\n Do you want to proceed?\n ❯ 1. Yes\n   2. Yes, and don\'t ask again for gh commands\n   3. No, and tell Claude what to do differently (esc)\n' \
     $' Which branch should I merge?\n\n   main\n   release\n\n Enter to select · ↑/↓ to navigate · Esc to cancel\n' \
-    $' Pick a model\n  > 1. Opus\n    2. Sonnet\n'; do
+    $' Pick a model\n  > 1. Opus\n    2. Sonnet\n' \
+    "$(cat "$ROOT/tests/fixtures/composer-claude-dialogs/claude-2.1.283-permission-prompt.ansi")" \
+    "$(cat "$ROOT/tests/fixtures/composer-claude-dialogs/claude-2.1.283-ask-user-question.ansi")" \
+    "$(cat "$ROOT/tests/fixtures/composer-claude-dialogs/claude-2.1.283-model-picker.ansi")"; do
     n=$((n + 1))
     home=$(desk_send_fixture "send-modal-$n") || { desk_send_skip "send-modal-$n"; return 0; }
     printf '%s' "$screen" > "$home/fixture/modal"
@@ -1066,16 +1125,93 @@ test_desk_voice_send_falls_back_when_the_pane_shows_a_dialog() {
   pass "fm-desk-voice send: a pane showing a dialog instead of its chat input gets nothing"
 }
 
-test_desk_voice_send_joins_a_pending_draft() {
+# The line number of the first herdr call matching <words...>, or nothing.
+herdr_call_line() {  # <home> <subcommand words...>
+  local home=$1 pattern
+  shift
+  pattern=$(printf '\x1f%s' "$@")
+  grep -n -F -- "$pattern" "$home/fixture/herdr.log" | head -n 1 | cut -d: -f1
+}
+
+test_desk_voice_send_ignores_a_suggested_prompt() {
   local home out
-  home=$(desk_send_fixture send-draft) || { desk_send_skip send-draft; return 0; }
-  printf 'half typed ' > "$home/fixture/draft"
-  out=$(desk_send "$home" "and ship it") || fail "send failed: $out"
-  assert_contains "$out" "sent: herdr fm-desk-send-test:w7:p3" "a pending draft still takes the transcript"
+  home=$(desk_send_fixture send-ghost) || { desk_send_skip send-ghost; return 0; }
+  printf 'claude' > "$home/fixture/agent"
+  printf 'Yes, land both glasses changes' > "$home/fixture/ghost"
+  out=$(desk_send "$home" "Check the second screenshot") || fail "send failed: $out"
+  assert_contains "$out" "sent: herdr fm-desk-send-test:w7:p3" "a suggested prompt does not block the message"
+  [ "$(cat "$home/fixture/submitted")" = "Check the second screenshot" ] \
+    || fail "only the message may be submitted, got: $(cat "$home/fixture/submitted")"
   [ "$(herdr_calls "$home" pane send-text | wc -l | tr -d ' ')" = 1 ] || fail "text must be typed exactly once"
   [ "$(inbox_count "$home")" = 0 ] || fail "a pane delivery must not also land in the mailbox"
   desk_send_done "$home"
-  pass "fm-desk-voice send: a half-typed draft is joined and submitted"
+  pass "fm-desk-voice send: Claude's dim suggested prompt counts as an empty chat box"
+}
+
+test_desk_voice_send_goes_past_a_claude_draft() {
+  local home out stash typed
+  home=$(desk_send_fixture send-draft) || { desk_send_skip send-draft; return 0; }
+  printf 'claude' > "$home/fixture/agent"
+  printf 'half typed thought' > "$home/fixture/draft"
+  out=$(desk_send "$home" "and ship it") || fail "send failed: $out"
+  assert_contains "$out" "sent: herdr fm-desk-send-test:w7:p3" "a draft does not block the message"
+  [ "$(cat "$home/fixture/submitted")" = "and ship it" ] \
+    || fail "only the message may be submitted, got: $(cat "$home/fixture/submitted")"
+  [ "$(cat "$home/fixture/draft")" = "half typed thought" ] \
+    || fail "the draft must be back in the chat box, got: $(cat "$home/fixture/draft")"
+  [ ! -e "$home/fixture/stash" ] || fail "the draft must not stay stashed"
+  stash=$(herdr_call_line "$home" pane send-keys w7:p3 ctrl+s)
+  typed=$(herdr_call_line "$home" pane send-text)
+  [ -n "$stash" ] && [ -n "$typed" ] && [ "$stash" -lt "$typed" ] \
+    || fail "the draft must be set aside before the message is typed"
+  [ "$(herdr_calls "$home" pane send-keys w7:p3 ctrl+s | wc -l | tr -d ' ')" = 1 ] \
+    || fail "the draft is set aside once and restored by the chat itself"
+  [ "$(herdr_calls "$home" pane send-keys w7:p3 enter | wc -l | tr -d ' ')" = 1 ] \
+    || fail "Enter must be pressed exactly once"
+  [ "$(inbox_count "$home")" = 0 ] || fail "a pane delivery must not also land in the mailbox"
+  desk_send_done "$home"
+  pass "fm-desk-voice send: a Claude draft is set aside, the message sent alone, and the draft put back"
+}
+
+test_desk_voice_send_keeps_a_draft_it_cannot_set_aside() {
+  local home out case
+  for case in stashed no-stash; do
+    home=$(desk_send_fixture "send-draft-$case") || { desk_send_skip "send-draft-$case"; return 0; }
+    printf 'claude' > "$home/fixture/agent"
+    printf 'half typed thought' > "$home/fixture/draft"
+    if [ "$case" = stashed ]; then
+      printf 'an earlier stash' > "$home/fixture/stash"
+    else
+      : > "$home/fixture/no-stash"
+    fi
+    out=$(desk_send "$home" "and ship it") || fail "send failed: $out"
+    case "$out" in mailbox:\ *) ;; *) fail "$case: expected a mailbox delivery, got: $out" ;; esac
+    [ -z "$(herdr_calls "$home" pane send-text)" ] || fail "$case: nothing may be typed"
+    [ -z "$(herdr_calls "$home" pane send-keys w7:p3 enter)" ] || fail "$case: no Enter may be pressed"
+    [ ! -e "$home/fixture/submitted" ] || fail "$case: nothing may be submitted"
+    [ "$(cat "$home/fixture/draft")" = "half typed thought" ] || fail "$case: the draft must stay in the box"
+    if [ "$case" = stashed ]; then
+      [ "$(cat "$home/fixture/stash")" = "an earlier stash" ] || fail "an earlier stash must be kept"
+      [ -z "$(herdr_calls "$home" pane send-keys w7:p3 ctrl+s)" ] || fail "an earlier stash must not be replaced"
+    fi
+    [ "$(inbox_count "$home")" = 1 ] || fail "$case: the message must land in the mailbox once"
+    desk_send_done "$home"
+  done
+  pass "fm-desk-voice send: a draft that cannot be set aside safely stays put and the message goes to the mailbox"
+}
+
+test_desk_voice_send_joins_another_harness_draft() {
+  local home out
+  home=$(desk_send_fixture send-draft-codex herdr codex) || { desk_send_skip send-draft-codex; return 0; }
+  printf 'half typed ' > "$home/fixture/draft"
+  out=$(desk_send "$home" "and ship it") || fail "send failed: $out"
+  assert_contains "$out" "sent: herdr fm-desk-send-test:w7:p3" "a pending draft still takes the transcript"
+  [ "$(cat "$home/fixture/submitted")" = "half typed and ship it" ] \
+    || fail "the draft and message must be submitted together, got: $(cat "$home/fixture/submitted")"
+  [ -z "$(herdr_calls "$home" pane send-keys w7:p3 ctrl+s)" ] || fail "only Claude's draft is stashed"
+  [ "$(inbox_count "$home")" = 0 ] || fail "a pane delivery must not also land in the mailbox"
+  desk_send_done "$home"
+  pass "fm-desk-voice send: another harness's half-typed draft is joined and submitted"
 }
 
 test_desk_voice_send_types_screenshots_into_the_primary_pane() {
@@ -1463,7 +1599,10 @@ test_desk_voice_send_refuses_a_pane_not_hosting_the_primary
 test_desk_voice_send_falls_back_when_the_pane_refuses_text
 test_desk_voice_send_never_doubles_an_unconfirmed_submit
 test_desk_voice_send_falls_back_when_the_pane_shows_a_dialog
-test_desk_voice_send_joins_a_pending_draft
+test_desk_voice_send_ignores_a_suggested_prompt
+test_desk_voice_send_goes_past_a_claude_draft
+test_desk_voice_send_keeps_a_draft_it_cannot_set_aside
+test_desk_voice_send_joins_another_harness_draft
 test_desk_voice_send_types_screenshots_into_the_primary_pane
 test_desk_voice_send_screenshots_fall_back_to_the_mailbox
 test_desk_voice_dictation_sends_when_the_chat_is_in_front

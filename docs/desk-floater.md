@@ -189,7 +189,11 @@ So does a pane showing a selection dialog, such as a permission prompt, a questi
 The transcript is sent as the captain's plain words, with no label or marker.
 Line breaks and control characters become spaces, so a transcript cannot submit early or press keys.
 
-A voice message that lands while a half-typed draft sits in the Firstmate chat joins that draft and is submitted with it.
+Claude's grey suggested prompt is not typed text, so a chat box showing only that counts as empty and the message goes straight in.
+When you have a half-typed draft in a Claude chat box, the message goes past it: the draft is set aside with Claude's own Ctrl+S stash, the message is sent on its own, and Claude puts your draft back in the box, pasted text and images included.
+Your draft is never sent, cleared, or retyped.
+If Claude's footer already shows `› stashed`, a draft you set aside yourself, the message goes to the mailbox instead, because stashing again would replace yours.
+With another harness as the primary, the message joins the draft and is submitted with it.
 
 When the chat pane cannot be reached, is not showing its chat input, or refuses the text, the transcript goes to the mailbox instead:
 
