@@ -1,0 +1,58 @@
+NOTE: the first (b)-(e) blocks below were a setup error: zsh`s echo turned "-" into an empty line and the later blocks ran with a stale/empty config; the re-driven (b)-(d) blocks at the end are the valid results.
+
+== (a) configured identity that is not in the keychain
+$ cat $FM_HOME/config/desk-floater-signing-identity -> Nonexistent Signing Identity
+$ bin/fm-desk-floater.sh
+fm-desk-floater: signing identity 'Nonexistent Signing Identity' from /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-floater-lab.iaPjFE/home/config/desk-floater-signing-identity is not a valid codesigning identity in the keychain; signing with Apple Development: Lars Tolhurst (9L6MQ3GM6S) instead
+fm-desk-floater: building DeskFloater (release)
+Build of product 'DeskFloater' complete! (0.17s)
+fm-desk-floater: signed as com.firstmate.desk-floater with Apple Development: Lars Tolhurst (9L6MQ3GM6S)
+fm-desk-floater: launching floater for FM_HOME=/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-floater-lab.iaPjFE/home
+exit=
+Identifier=com.firstmate.desk-floater Authority=Apple Development: Lars Tolhurst (9L6MQ3GM6S) 
+
+== (b) configured "-" means ad-hoc (no recompile; existing app re-assembled)
+$ bin/fm-desk-floater.sh
+fm-desk-floater: launching floater for FM_HOME=/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-floater-lab.iaPjFE/home
+exit=
+Identifier=com.firstmate.desk-floater Authority=Apple Development: Lars Tolhurst (9L6MQ3GM6S) 
+
+== (c) configured identity given by SHA-1 hash
+$ bin/fm-desk-floater.sh
+fm-desk-floater: launching floater for FM_HOME=/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-floater-lab.iaPjFE/home
+exit=
+Identifier=com.firstmate.desk-floater Authority=Apple Development: Lars Tolhurst (9L6MQ3GM6S) 
+
+== (d) configured identity given by name substring
+$ bin/fm-desk-floater.sh   (already signed with it -> no re-sign)
+fm-desk-floater: launching floater for FM_HOME=/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-floater-lab.iaPjFE/home
+exit=
+Identifier=com.firstmate.desk-floater Authority=Apple Development: Lars Tolhurst (9L6MQ3GM6S) 
+
+== (e) config removed -> keychain default
+$ bin/fm-desk-floater.sh
+fm-desk-floater: launching floater for FM_HOME=/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-floater-lab.iaPjFE/home
+exit=
+Identifier=com.firstmate.desk-floater Authority=Apple Development: Lars Tolhurst (9L6MQ3GM6S) 
+
+== (b, re-driven) configured "-" means ad-hoc (no recompile; existing Apple-Development-signed app re-assembled ad-hoc)
+$ cat config/desk-floater-signing-identity -> -
+$ bin/fm-desk-floater.sh
+fm-desk-floater: launching floater for FM_HOME=/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-floater-lab.iaPjFE/home
+exit=0
+Identifier=DeskFloater Signature=adhoc 
+
+== (c, re-driven) configured identity by SHA-1 hash after ad-hoc -> re-signed without recompiling
+$ cat config/desk-floater-signing-identity -> F05B8811FBB2FAB3CA43FE1449D17F02ABB73DEA
+$ bin/fm-desk-floater.sh
+fm-desk-floater: signed as com.firstmate.desk-floater with Apple Development: Lars Tolhurst (9L6MQ3GM6S)
+fm-desk-floater: launching floater for FM_HOME=/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-floater-lab.iaPjFE/home
+exit=0
+Identifier=com.firstmate.desk-floater Authority=Apple Development: Lars Tolhurst (9L6MQ3GM6S) 
+
+== (d, re-driven) configured by name substring, already signed with it -> nothing re-signed
+$ cat config/desk-floater-signing-identity -> Apple Development
+$ bin/fm-desk-floater.sh
+fm-desk-floater: launching floater for FM_HOME=/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-floater-lab.iaPjFE/home
+exit=0
+Identifier=com.firstmate.desk-floater Authority=Apple Development: Lars Tolhurst (9L6MQ3GM6S) 

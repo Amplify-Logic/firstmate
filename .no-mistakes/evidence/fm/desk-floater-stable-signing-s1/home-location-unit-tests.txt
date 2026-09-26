@@ -1,0 +1,13 @@
+Test Case '-[DeskFloaterTests.HomeLocationTests testEmptyEnvironmentValuesCountAsUnset]' started.
+Test Case '-[DeskFloaterTests.HomeLocationTests testEmptyEnvironmentValuesCountAsUnset]' passed (0.001 seconds).
+Test Case '-[DeskFloaterTests.HomeLocationTests testLauncherEnvironmentWins]' started.
+Test Case '-[DeskFloaterTests.HomeLocationTests testLauncherEnvironmentWins]' passed (0.000 seconds).
+Test Case '-[DeskFloaterTests.HomeLocationTests testNeverFallsBackToSlash]' started.
+Test Case '-[DeskFloaterTests.HomeLocationTests testNeverFallsBackToSlash]' passed (0.000 seconds).
+Test Case '-[DeskFloaterTests.HomeLocationTests testReopenWithoutEnvironmentFindsRootFromBundle]' started.
+Test Case '-[DeskFloaterTests.HomeLocationTests testReopenWithoutEnvironmentFindsRootFromBundle]' passed (0.000 seconds).
+Test Case '-[DeskFloaterTests.HomeLocationTests testWorkingDirectoryCountsOnlyWhenItIsACodeRoot]' started.
+Test Case '-[DeskFloaterTests.HomeLocationTests testWorkingDirectoryCountsOnlyWhenItIsACodeRoot]' passed (0.000 seconds).
+	 Executed 5 tests, with 0 failures (0 unexpected) in 0.003 (0.003) seconds
+	 Executed 5 tests, with 0 failures (0 unexpected) in 0.003 (0.003) seconds
+	 Executed 5 tests, with 0 failures (0 unexpected) in 0.003 (0.005) seconds

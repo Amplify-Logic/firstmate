@@ -1,0 +1,47 @@
+launched app before: CDHash=4c29ab55df7c9fba62fdd48d771b98e972302fae mtime=1790424799 plist-md5=e5c4888f36acb8018bc4606bf5b34a98
+$ touch desk-floater/Sources/DeskFloater.swift && bin/fm-desk-floater.sh --build-only   (codesign/security traced)
+fm-desk-floater: building DeskFloater (release)
+stdout: [0/1] Planning build
+Building for production...
+[0/3] Write sources
+[1/3] Write swift-version--58304C5D6DBC2206.txt
+[3/4] Compiling DeskFloater DeskFloater.swift
+Build of product 'DeskFloater' complete! (8.96s)
+/Users/larsmusic/.no-mistakes/worktrees/f569cc43ac96/01M3ERXN24XYB2E62H779JHE3V/desk-floater/.build/DeskFloater-build-only.app
+exit=0
+
+--- codesign/security calls by --build-only:
+(none)
+--- lsregister calls:
+(none)
+--- open calls:
+(none)
+
+$ codesign -dvv [0/1] Planning build
+Building for production...
+[0/3] Write sources
+[1/3] Write swift-version--58304C5D6DBC2206.txt
+[3/4] Compiling DeskFloater DeskFloater.swift
+Build of product 'DeskFloater' complete! (8.96s)
+/Users/larsmusic/.no-mistakes/worktrees/f569cc43ac96/01M3ERXN24XYB2E62H779JHE3V/desk-floater/.build/DeskFloater-build-only.app
+Print: Entry, ":CFBundleIdentifier", Does Not Exist
+Info.plist CFBundleIdentifier: File Doesn't Exist, Will Create: [0/1] Planning build
+Building for production...
+[0/3] Write sources
+[1/3] Write swift-version--58304C5D6DBC2206.txt
+[3/4] Compiling DeskFloater DeskFloater.swift
+Build of product 'DeskFloater' complete! (8.96s)
+/Users/larsmusic/.no-mistakes/worktrees/f569cc43ac96/01M3ERXN24XYB2E62H779JHE3V/desk-floater/.build/DeskFloater-build-only.app/Contents/Info.plist
+
+launched app after: CDHash=4c29ab55df7c9fba62fdd48d771b98e972302fae mtime=1790424799 plist-md5=e5c4888f36acb8018bc4606bf5b34a98
+Identifier=com.firstmate.desk-floater
+Authority=Apple Development: Lars Tolhurst (9L6MQ3GM6S)
+RESULT: launched DeskFloater.app untouched by --build-only
+(stdout of --build-only ends with the bundle path; swift build's own progress precedes it on stdout, as on the base commit)
+$ codesign -dvv desk-floater/.build/DeskFloater-build-only.app
+Identifier=DeskFloater
+Signature=adhoc
+TeamIdentifier=not set
+Info.plist CFBundleIdentifier: com.firstmate.desk-floater.build-only
+$ codesign -d -r- desk-floater/.build/DeskFloater-build-only.app
+# designated => cdhash H"b2ac0bb261fe6d88e0a3c9f71d1ef6c5476ce669"

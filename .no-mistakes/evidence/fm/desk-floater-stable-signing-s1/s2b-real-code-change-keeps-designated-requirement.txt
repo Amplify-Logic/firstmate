@@ -1,0 +1,21 @@
+BEFORE: CDHash=697687c5d5e62b1b17d02aacc1df7edc4f9ace07
+$ (temporarily change a string literal in DeskFloater.swift so the binary really differs) && bin/fm-desk-floater.sh
+fm-desk-floater: building DeskFloater (release)
+Build of product 'DeskFloater' complete! (6.20s)
+fm-desk-floater: signed as com.firstmate.desk-floater with Apple Development: Lars Tolhurst (9L6MQ3GM6S)
+fm-desk-floater: launching floater for FM_HOME=/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-floater-lab.iaPjFE/home
+AFTER:  CDHash=a60c4b87faf688a14db3604c5eede1d1d527c8b7
+designated => identifier "com.firstmate.desk-floater" and anchor apple generic and certificate leaf[subject.CN] = "Apple Development: Lars Tolhurst (9L6MQ3GM6S)" and certificate 1[field.1.2.840.113635.100.6.2.1] /* exists */
+RESULT: code changed (new CDHash)
+RESULT: designated requirement unchanged, so a TCC grant recorded for the old build still matches
+rebuilt app satisfies the pre-rebuild designated requirement
+
+$ git checkout -- desk-floater/Sources/DeskFloater.swift && bin/fm-desk-floater.sh   # restore
+fm-desk-floater: building DeskFloater (release)
+Build of product 'DeskFloater' complete! (6.59s)
+fm-desk-floater: signed as com.firstmate.desk-floater with Apple Development: Lars Tolhurst (9L6MQ3GM6S)
+fm-desk-floater: launching floater for FM_HOME=/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-floater-lab.iaPjFE/home
+CDHash=4c29ab55df7c9fba62fdd48d771b98e972302fae
+
+== read-only cross-check: does the captain's installed floater bundle satisfy the same designated requirement as this run's build?
+yes: both are 'identifier com.firstmate.desk-floater + Apple Development leaf', so a grant held by one matches the other

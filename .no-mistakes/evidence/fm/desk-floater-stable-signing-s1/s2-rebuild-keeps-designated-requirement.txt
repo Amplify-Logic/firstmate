@@ -1,0 +1,22 @@
+BEFORE rebuild:
+CDHash=697687c5d5e62b1b17d02aacc1df7edc4f9ace07
+designated => identifier "com.firstmate.desk-floater" and anchor apple generic and certificate leaf[subject.CN] = "Apple Development: Lars Tolhurst (9L6MQ3GM6S)" and certificate 1[field.1.2.840.113635.100.6.2.1] /* exists */
+
+$ bin/fm-desk-floater.sh   # relaunch with nothing changed
+fm-desk-floater: launching floater for FM_HOME=/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-floater-lab.iaPjFE/home
+
+$ touch desk-floater/Sources/DeskFloater.swift && bin/fm-desk-floater.sh   # rebuild
+fm-desk-floater: building DeskFloater (release)
+Building for production...
+Build of product 'DeskFloater' complete! (4.61s)
+fm-desk-floater: signed as com.firstmate.desk-floater with Apple Development: Lars Tolhurst (9L6MQ3GM6S)
+fm-desk-floater: launching floater for FM_HOME=/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-floater-lab.iaPjFE/home
+
+AFTER rebuild:
+CDHash=697687c5d5e62b1b17d02aacc1df7edc4f9ace07
+designated => identifier "com.firstmate.desk-floater" and anchor apple generic and certificate leaf[subject.CN] = "Apple Development: Lars Tolhurst (9L6MQ3GM6S)" and certificate 1[field.1.2.840.113635.100.6.2.1] /* exists */
+
+RESULT: designated requirement identical across the rebuild (the thing TCC keys the Accessibility/Screen Recording grant on)
+
+$ codesign --verify -R="<pre-rebuild designated requirement>" rebuilt app
+rebuilt app satisfies the pre-rebuild requirement
