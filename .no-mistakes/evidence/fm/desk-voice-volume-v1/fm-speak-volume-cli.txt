@@ -1,0 +1,103 @@
+== system output volume before: 19
+== S1 default level, set, read back, persisted
+$ fm-speak.sh --volume
+100
+  exit=0
+$ fm-speak.sh --volume 40
+  exit=0
+$ fm-speak.sh --volume
+40
+  exit=0
+state/speak-volume = 40
+== S2 out-of-range / junk refused, level unchanged
+$ fm-speak.sh --volume 201
+fm-speak: --volume needs a whole percentage from 0 to 200: 201
+  exit=1
+$ fm-speak.sh --volume -5
+fm-speak: --volume needs a whole percentage from 0 to 200: -5
+  exit=1
+$ fm-speak.sh --volume abc
+fm-speak: --volume needs a whole percentage from 0 to 200: abc
+  exit=1
+$ fm-speak.sh --volume 1000
+fm-speak: --volume needs a whole percentage from 0 to 200: 1000
+  exit=1
+$ fm-speak.sh --volume 
+fm-speak: --volume needs a whole percentage from 0 to 200: 
+  exit=1
+$ fm-speak.sh --volume 0999
+fm-speak: --volume needs a whole percentage from 0 to 200: 0999
+  exit=1
+$ fm-speak.sh --volume
+40
+  exit=0
+== S2b damaged state file falls back to 100
+$ fm-speak.sh --volume
+100
+  exit=0
+$ fm-speak.sh --volume
+100
+  exit=0
+== S3 spoken line at 40%: say renders audio, afplay plays at gain 0.40
+$ fm-speak.sh --volume 40
+  exit=0
+$ fm-speak.sh Captain, the build finished and all tests passed.
+Captain, the build finished and all tests passed.
+  exit=0
+afplay argv: -v 0.40 /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-speak-say.bivzCO.aiff
+    File type ID:   AIFC
+    estimated duration: 2.841361 sec
+== S4 spoken line at 150% (louder than system)
+$ fm-speak.sh --volume 150
+  exit=0
+$ fm-speak.sh Captain, the deploy is live.
+Captain, the deploy is live.
+  exit=0
+afplay argv: -v 1.50 /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-speak-say.WELFGv.aiff
+    File type ID:   AIFC
+    estimated duration: 2.167982 sec
+== S5 --repeat honours the level
+$ fm-speak.sh --volume 25
+  exit=0
+$ fm-speak.sh --repeat
+Captain, the deploy is live.
+  exit=0
+afplay argv: -v 0.25 /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-speak-say.Pv9CJG.aiff
+    File type ID:   AIFC
+    estimated duration: 2.167982 sec
+== system output volume after: 19
+== S6 default 100%: say speaks directly, afplay not involved (unchanged behaviour)
+$ fm-speak.sh --volume 100
+  exit=0
+$ fm-speak.sh Captain, nothing changed at the default level.
+Captain, nothing changed at the default level.
+  exit=0
+afplay calls: 0
+== S7 Deepgram path (offline synthesizer stand-in) at 60%: afplay gets -v 0.60
+$ fm-speak.sh --volume 60
+  exit=0
+Captain, the audio path is quieter now.
+  exit=0
+afplay argv: -v 0.60 /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-speak-dg.Yi4Ifh.mp3
+== S7b Deepgram path at 100%: no -v passed
+$ fm-speak.sh --volume 100
+  exit=0
+Captain, back to the system level.
+  exit=0
+afplay argv: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-speak-dg.JWrzRm.mp3
+== S8 no afplay on the machine, level 40: say line still spoken, with a note
+$ fm-speak.sh --volume 40
+  exit=0
+$ fm-speak.sh Captain, one more line.
+fm-speak: no afplay at /nonexistent/afplay; this line plays at the system volume, not at 40%
+Captain, one more line.
+  exit=0
+== system output volume after: 19
+== S-GUI-E2E: level set by dragging the floater slider (120) reaches the next spoken line
+Captain, the voice is a little louder now.
+afplay argv: -v 1.20 /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-speak-say.5ltjj1.aiff
+    File type ID:   AIFC
+    estimated duration: 2.617642 sec
+== Reset button in the floater
+state/speak-volume after Reset: 100
+system output volume: 19
