@@ -295,7 +295,7 @@ test_legacy_local_time_identity_still_matches() {
 }
 
 test_deny_names_the_failed_watcher_check() {
-  local holder rc=0 actual expected
+  local holder rc=0 actual expected teardown_actual
   sleep 300 &
   holder=$!
   mkdir -p "$STATE/.watch.lock"
@@ -305,6 +305,8 @@ test_deny_names_the_failed_watcher_check() {
   printf '%s\n' 'Mon Jan  1 00:00:00 2001 sleep 300' > "$STATE/.watch.lock/pid-identity"
   touch "$STATE/.last-watcher-beat"
 
+  run_command 'bin/fm-teardown.sh task --force' || true
+  teardown_actual=$(jq -r '.systemMessage' "$ERR")
   run_command 'bin/fm-crew-state.sh task' || rc=$?
   kill "$holder" 2>/dev/null || true
   wait "$holder" 2>/dev/null || true
@@ -313,6 +315,8 @@ test_deny_names_the_failed_watcher_check() {
   actual=$(jq -r '.systemMessage' "$ERR")
   expected="[watcher-continuity] The watcher is running with a fresh beat but its identity check failed: pid-identity-mismatch - watcher pid $holder is running but its live process identity differs from the identity the lock recorded. Fleet commands stay gated until it is restarted. Drain wakes with bin/fm-wake-drain.sh, the safe mid-session action; run the once-per-session bin/fm-session-start.sh instead only if you have not already run it earlier this session; use fail-closed bin/fm-teardown.sh for completed tasks when needed, then restart it with bin/fm-watch-arm.sh --restart as a tracked Claude background task before running other fleet commands (blocked: fm-crew-state.sh)"
   [ "$actual" = "$expected" ] || fail "live-watcher identity-mismatch denial must name the check without outage framing: $actual"
+  expected="[watcher-continuity] The watcher is running with a fresh beat but its identity check failed: pid-identity-mismatch - watcher pid $holder is running but its live process identity differs from the identity the lock recorded. Fleet commands stay gated until it is restarted. During recovery only the ordinary literal bin/fm-teardown.sh is allowed, so drop --force and any shell-expanded arguments and retry the literal invocation; restart the watcher with bin/fm-watch-arm.sh --restart as a tracked Claude background task (blocked: fm-teardown.sh)"
+  [ "$teardown_actual" = "$expected" ] || fail "live-watcher unsafe-teardown denial must point to the restart: $teardown_actual"
   pass "continuity denial names the failed check of a live watcher without calling it an outage"
 }
 

@@ -119,10 +119,12 @@ if [ "$LIVE_WATCHER" = true ]; then
   LEAD="The watcher is running with a fresh beat but its identity check failed: $FAILED_CHECK. Fleet commands stay gated until it is restarted."
   HOLDER_SENTENCE=""
   REARM="restart it with bin/fm-watch-arm.sh --restart"
+  RESTART_SENTENCE="; restart the watcher with bin/fm-watch-arm.sh --restart as a tracked Claude background task"
 else
   LEAD="$FM_SUP_OUTAGE_SUMMARY Failed watcher check: $FAILED_CHECK."
   HOLDER_SENTENCE=" No live watcher holds this home lock."
   REARM="re-arm with bin/fm-watch-arm.sh"
+  RESTART_SENTENCE=""
 fi
 
 # This hook can be the first surviving process to observe the outage, so it
@@ -151,10 +153,10 @@ REASON_CODE=${REST#*"$TAB"}
 [ "$REASON_CODE" != "$REST" ] || REASON_CODE=""
 case "$REASON_CODE" in
   unsafe-teardown)
-    REASON="[watcher-continuity] $LEAD$HOLDER_SENTENCE During recovery only the ordinary literal bin/fm-teardown.sh is allowed, so drop --force and any shell-expanded arguments and retry the literal invocation (blocked: $BLOCKED_SCRIPT)"
+    REASON="[watcher-continuity] $LEAD$HOLDER_SENTENCE During recovery only the ordinary literal bin/fm-teardown.sh is allowed, so drop --force and any shell-expanded arguments and retry the literal invocation$RESTART_SENTENCE (blocked: $BLOCKED_SCRIPT)"
     ;;
   unsafe-sentinel)
-    REASON="[watcher-continuity] $LEAD During recovery only the literal bin/fm-supervision-sentinel.sh enable is allowed; arm, disarm, check, and every other host-sentinel invocation stays blocked until supervision is healthy (blocked: $BLOCKED_SCRIPT)"
+    REASON="[watcher-continuity] $LEAD During recovery only the literal bin/fm-supervision-sentinel.sh enable is allowed; arm, disarm, check, and every other host-sentinel invocation stays blocked until supervision is healthy$RESTART_SENTENCE (blocked: $BLOCKED_SCRIPT)"
     ;;
   midsession-session-start)
     if [ "$LOCK_RELATION" = ancestry ]; then
