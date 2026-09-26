@@ -891,22 +891,31 @@ case "${1:-} ${2:-}" in
       if [ "$ansi" = 1 ]; then cat "$dir/modal"; else sed $'s/\033\\[[0-9;:]*m//g' "$dir/modal"; fi
       exit 0
     fi
-    draft=$(cat "$dir/draft" 2>/dev/null)
-    rule='────────────────────────────────────────'
-    printf '%s\n' "$rule"
-    if [ -n "$draft" ] || [ ! -e "$dir/ghost" ]; then
-      printf '❯\302\240%s\n' "$draft"
-    elif [ "$ansi" = 1 ]; then
-      printf '❯\302\240\033[2m%s\033[0m\n' "$(cat "$dir/ghost")"
-    else
-      printf '❯\302\240%s\n' "$(cat "$dir/ghost")"
+    # The screen is the case's capture, or a bare chat box, with its last
+    # prompt row redrawn from the box's state the way Claude draws it.
+    screen="$dir/screen"
+    if [ ! -e "$screen" ]; then
+      screen="$dir/screen.default"
+      printf '%s\n' '────────────────────────────────────────' '❯' \
+        '────────────────────────────────────────' '  ⏵⏵ auto mode on' > "$screen"
     fi
-    printf '%s\n' "$rule"
-    if [ -e "$dir/stash" ]; then
-      printf '  ⏵⏵ auto mode on                    › stashed\n'
-    else
-      printf '  ⏵⏵ auto mode on\n'
-    fi ;;
+    esc=$'\033'
+    draft=$(cat "$dir/draft" 2>/dev/null)
+    row="❯"$'\302\240'"${esc}[0m"
+    if [ -n "$draft" ]; then
+      row+="${esc}[38;2;255;255;255m${draft}${esc}[0m"
+    elif [ -e "$dir/ghost" ]; then
+      row+="${esc}[2m$(cat "$dir/ghost")${esc}[0m"
+    fi
+    stash=0
+    [ ! -e "$dir/stash" ] || stash=1
+    last=$(grep -n '❯' "$screen" | tail -n 1 | cut -d: -f1)
+    awk -v n="$last" -v row="$row" -v stash="$stash" -v rows="$(wc -l < "$screen")" '
+      NR == n { print row "\r"; next }
+      NR == rows && stash == 1 { sub(/\r$/, ""); print $0 "    › stashed\r"; next }
+      { print }
+    ' "$screen" > "$dir/screen.now"
+    if [ "$ansi" = 1 ]; then cat "$dir/screen.now"; else sed $'s/\033\\[[0-9;:]*m//g' "$dir/screen.now"; fi ;;
   "pane send-text")
     [ ! -e "$dir/send-text-fails" ] || exit 1
     printf '%s' "$4" >> "$dir/draft" ;;
@@ -1125,6 +1134,11 @@ test_desk_voice_send_falls_back_when_the_pane_shows_a_dialog() {
   pass "fm-desk-voice send: a pane showing a dialog instead of its chat input gets nothing"
 }
 
+# Claude 2.1.283's idle chat in Herdr 0.7.4, read from the primary's own pane
+# with the transcript text replaced: titled rules, a status line, a new
+# message pill, and a dim suggested prompt in the box.
+HERDR_CLAUDE_SCREEN="$ROOT/tests/fixtures/composer-claude-dialogs/claude-2.1.283-herdr-suggested-prompt.ansi"
+
 # The line number of the first herdr call matching <words...>, or nothing.
 herdr_call_line() {  # <home> <subcommand words...>
   local home=$1 pattern
@@ -1136,6 +1150,7 @@ herdr_call_line() {  # <home> <subcommand words...>
 test_desk_voice_send_ignores_a_suggested_prompt() {
   local home out
   home=$(desk_send_fixture send-ghost) || { desk_send_skip send-ghost; return 0; }
+  cp "$HERDR_CLAUDE_SCREEN" "$home/fixture/screen"
   printf 'claude' > "$home/fixture/agent"
   printf 'Yes, land both glasses changes' > "$home/fixture/ghost"
   out=$(desk_send "$home" "Check the second screenshot") || fail "send failed: $out"
@@ -1151,13 +1166,16 @@ test_desk_voice_send_ignores_a_suggested_prompt() {
 test_desk_voice_send_goes_past_a_claude_draft() {
   local home out stash typed
   home=$(desk_send_fixture send-draft) || { desk_send_skip send-draft; return 0; }
+  cp "$HERDR_CLAUDE_SCREEN" "$home/fixture/screen"
   printf 'claude' > "$home/fixture/agent"
-  printf 'half typed thought' > "$home/fixture/draft"
+  # Normal-intensity text in the box, as a suggestion accepted with Tab or a
+  # typed draft reads: the pre-send check Herdr runs for Claude refused it.
+  printf 'Yes, land both glasses changes' > "$home/fixture/draft"
   out=$(desk_send "$home" "and ship it") || fail "send failed: $out"
   assert_contains "$out" "sent: herdr fm-desk-send-test:w7:p3" "a draft does not block the message"
   [ "$(cat "$home/fixture/submitted")" = "and ship it" ] \
     || fail "only the message may be submitted, got: $(cat "$home/fixture/submitted")"
-  [ "$(cat "$home/fixture/draft")" = "half typed thought" ] \
+  [ "$(cat "$home/fixture/draft")" = "Yes, land both glasses changes" ] \
     || fail "the draft must be back in the chat box, got: $(cat "$home/fixture/draft")"
   [ ! -e "$home/fixture/stash" ] || fail "the draft must not stay stashed"
   stash=$(herdr_call_line "$home" pane send-keys w7:p3 ctrl+s)
@@ -1177,6 +1195,7 @@ test_desk_voice_send_keeps_a_draft_it_cannot_set_aside() {
   local home out case
   for case in stashed no-stash; do
     home=$(desk_send_fixture "send-draft-$case") || { desk_send_skip "send-draft-$case"; return 0; }
+    cp "$HERDR_CLAUDE_SCREEN" "$home/fixture/screen"
     printf 'claude' > "$home/fixture/agent"
     printf 'half typed thought' > "$home/fixture/draft"
     if [ "$case" = stashed ]; then

@@ -816,6 +816,11 @@ test_matrix_claude_suggested_prompt_and_draft() {
   screen+=$'\n'"${ESC}[0m${ESC}[38;2;136;136;136m─────────────────────────────────────${ESC}[0m"
   screen+=$'\n'"  ${ESC}[0m${ESC}[38;2;255;107;128m⏵⏵ bypass permissions on${ESC}[0m${ESC}[38;2;153;153;153m (shift+tab to cycle)${ESC}[0m"
   assert_screen "claude suggested prompt in herdr's ansi read" empty "$CAPS_STYLED" "$screen" '' probe-absent
+  # The same read of a real Firstmate primary pane (transcript text replaced).
+  screen=$(cat "$DIALOGS/claude-2.1.283-herdr-suggested-prompt.ansi")
+  assert_screen "claude suggested prompt in a real herdr primary pane" empty "$CAPS_STYLED" "$screen" '' probe-absent
+  screen=${screen//"${ESC}[2myes do it in chrome"/"${ESC}[38;2;255;255;255myes do it in chrome"}
+  assert_screen "the same suggestion accepted into the box as text" pending "$CAPS_STYLED" "$screen" '' probe-absent
   pass "matrix: claude's suggested prompt reads empty wherever styling survives, its typed draft pending"
 }
 

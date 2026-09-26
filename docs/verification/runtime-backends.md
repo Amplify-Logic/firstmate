@@ -855,7 +855,10 @@ ok - desk floater: real Claude 2.1.283 (Claude Code) submits the message alone a
 ```
 
 The same session also showed, by hand, that a message submitted mid-turn is queued and the draft is still restored (`Draft restored` in the footer), that a second Ctrl+S on a typed draft replaces an earlier stash (so the script refuses a screen already showing `› stashed`), and that Claude's dim suggested prompt, including the one it redraws after a stash, reads `empty`; `tests/fixtures/composer-claude-dialogs/` holds those captures.
-The Herdr path uses the same keys through `pane send-keys ctrl+s` and was not driven live against a real Herdr pane in this run; `tests/fm-deepgram-desk.test.sh` pins its sequence with a stand-in Herdr.
+On Herdr 0.7.4 the same day, the real Firstmate primary pane (Claude 2.1.283) was read, never typed into: `fm-desk-voice.sh send` run against it through a herdr wrapper that passed reads to the server and refused every write reached the text send, so resolution, the composer read and the selection-dialog check all pass on that pane, with or without a dim suggested prompt.
+Replaying that pane's captured screen with normal-intensity text in the box sent the previous script to the mailbox (`the primary's chat pane refused the text`), because Herdr's Claude submit path types only into an empty box; the current script sent the message and left the text in the box.
+A suggested prompt accepted with Tab reads as that kind of text: on the tmux run above, Tab turned the dim `yes, go ahead` suggestion into plain text and the verdict from `empty` into `pending`.
+`pane send-keys ctrl+s` itself was not pressed in a real Herdr pane; `tests/fm-deepgram-desk.test.sh` pins the sequence against the captured screen (`tests/fixtures/composer-claude-dialogs/claude-2.1.283-herdr-suggested-prompt.ansi`, transcript text replaced).
 This guard submits one short prompt; rerun it after a Claude upgrade.
 
 ## Gemini
