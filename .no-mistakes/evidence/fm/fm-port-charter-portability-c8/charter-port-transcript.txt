@@ -1,0 +1,243 @@
+=== S1: manifest declares charters and fork-surface check agrees
+
+$ bin/fm-fork-surface.sh port-data-allowlist
+data/goals/
+[exit 0]
+
+$ bin/fm-home-port.sh portable-data-entries
+data/goals/
+[exit 0]
+
+$ bin/fm-fork-surface.sh check
+FORK_SURFACE OK capabilities=77 owned_paths=243
+[exit 0]
+
+=== S2: push source home with alpha+beta to private transport
+--- /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.DN9JAP/src
+data/backlog.md
+data/captain.md
+data/goals/alpha.md
+data/goals/beta.md
+data/goals/notes.txt
+data/learnings.md
+
+$ bin/fm-home-port.sh push --remote captain/portable --home /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.DN9JAP/src
+REFUSED: state/ - machine-local runtime (sessions, panes, watcher internals); never port
+REFUSED: projects/ - machine-local clones; re-clone on the destination via project-management
+PRIVATE_OK: captain/portable (visibility=private)
+warning: You appear to have cloned an empty repository.
+PORTABLE: data/captain.md
+PORTABLE: data/learnings.md
+PORTABLE: data/backlog.md
+PORTABLE: data/goals/alpha.md
+PORTABLE: data/goals/beta.md
+To file:///var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.DN9JAP/portable.git
+ * [new branch]      main -> main
+PUSH_OK: captain/portable
+[exit 0]
+--- transport tree (main):
+.gitignore
+README.md
+data/backlog.md
+data/captain.md
+data/goals/alpha.md
+data/goals/beta.md
+data/learnings.md
+
+=== S3: pull on the work hub (dest has stale alpha + dest-only gamma)
+
+$ bin/fm-home-port.sh pull --remote captain/portable --home /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.DN9JAP/dst
+PRIVATE_OK: captain/portable (visibility=private)
+IMPORTED: data/captain.md
+IMPORTED: data/learnings.md
+IMPORTED: data/backlog.md
+IMPORTED: data/goals/alpha.md
+IMPORTED: data/goals/beta.md
+IMPORT_OK: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.DN9JAP/dst
+PULL_OK: captain/portable -> /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.DN9JAP/dst
+[exit 0]
+--- /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.DN9JAP/dst
+data/backlog.md
+data/captain.md
+data/goals/alpha.md
+data/goals/beta.md
+data/goals/gamma.md
+data/learnings.md
+alpha on dest: source alpha v1
+gamma on dest: destination-only gamma
+
+=== S4: source deletes beta, pushes again -> beta leaves transport, stays in history
+
+$ bin/fm-home-port.sh push --remote captain/portable --home /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.DN9JAP/src
+REFUSED: state/ - machine-local runtime (sessions, panes, watcher internals); never port
+REFUSED: projects/ - machine-local clones; re-clone on the destination via project-management
+PRIVATE_OK: captain/portable (visibility=private)
+PORTABLE: data/captain.md
+PORTABLE: data/learnings.md
+PORTABLE: data/backlog.md
+PORTABLE: data/goals/alpha.md
+To file:///var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.DN9JAP/portable.git
+   5608103..2b0a16e  main -> main
+PUSH_OK: captain/portable
+[exit 0]
+--- transport tree (main):
+.gitignore
+README.md
+data/backlog.md
+data/captain.md
+data/goals/alpha.md
+data/learnings.md
+--- transport log:
+2b0a16e Portable Firstmate home sync 2026-09-26T16:10Z
+ data/goals/beta.md | 3 ---
+ 1 file changed, 3 deletions(-)
+5608103 Portable Firstmate home sync 2026-09-26T16:10Z
+ data/goals/alpha.md | 3 +++
+ data/goals/beta.md  | 3 +++
+ 2 files changed, 6 insertions(+)
+beta recoverable at main~1: yes
+--- pull again: dest keeps its copy of beta (pull never deletes)
+
+$ bin/fm-home-port.sh pull --remote captain/portable --home /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.DN9JAP/dst
+PRIVATE_OK: captain/portable (visibility=private)
+IMPORTED: data/captain.md
+IMPORTED: data/learnings.md
+IMPORTED: data/backlog.md
+IMPORTED: data/goals/alpha.md
+IMPORT_OK: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.DN9JAP/dst
+PULL_OK: captain/portable -> /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.DN9JAP/dst
+[exit 0]
+--- /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.DN9JAP/dst
+data/backlog.md
+data/captain.md
+data/goals/alpha.md
+data/goals/beta.md
+data/goals/gamma.md
+data/learnings.md
+
+=== S5: per-file manifest selects only alpha (captain-chosen charter)
+
+$ env FM_FORK_SURFACE_MANIFEST=/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.DN9JAP/perfile.conf bin/fm-home-port.sh export --home /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.DN9JAP/src --dest /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.DN9JAP/export-perfile
+REFUSED: state/ - machine-local runtime (sessions, panes, watcher internals); never port
+REFUSED: projects/ - machine-local clones; re-clone on the destination via project-management
+PORTABLE: data/captain.md
+PORTABLE: data/learnings.md
+PORTABLE: data/backlog.md
+PORTABLE: data/goals/alpha.md
+EXPORT_OK: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.DN9JAP/export-perfile
+[exit 0]
+--- /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.DN9JAP/export-perfile
+data/backlog.md
+data/captain.md
+data/goals/alpha.md
+data/learnings.md
+--- push with per-file manifest after a directory-entry push that had beta
+
+$ bin/fm-home-port.sh push --remote captain/portable --home /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.DN9JAP/src
+REFUSED: state/ - machine-local runtime (sessions, panes, watcher internals); never port
+REFUSED: projects/ - machine-local clones; re-clone on the destination via project-management
+PRIVATE_OK: captain/portable (visibility=private)
+PORTABLE: data/captain.md
+PORTABLE: data/learnings.md
+PORTABLE: data/backlog.md
+PORTABLE: data/goals/alpha.md
+PORTABLE: data/goals/beta.md
+To file:///var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.DN9JAP/portable.git
+   2b0a16e..b83e0c7  main -> main
+PUSH_OK: captain/portable
+[exit 0]
+transport after dir push:
+data/goals/alpha.md
+data/goals/beta.md
+
+$ env FM_FORK_SURFACE_MANIFEST=/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.DN9JAP/perfile.conf bin/fm-home-port.sh push --remote captain/portable --home /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.DN9JAP/src
+REFUSED: state/ - machine-local runtime (sessions, panes, watcher internals); never port
+REFUSED: projects/ - machine-local clones; re-clone on the destination via project-management
+PRIVATE_OK: captain/portable (visibility=private)
+PORTABLE: data/captain.md
+PORTABLE: data/learnings.md
+PORTABLE: data/backlog.md
+PORTABLE: data/goals/alpha.md
+error: nothing to push (captain/portable main already matches local portable material)
+STAGE LEFT: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.DN9JAP/fm-home-port-push.DQfmME (captain-private staging dir; inspect then remove)
+[exit 1]
+transport after per-file push:
+data/goals/alpha.md
+data/goals/beta.md
+
+=== S6 (adversarial): symlinked charter is refused on export and push
+
+$ bin/fm-home-port.sh export --home /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.DN9JAP/src --dest /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.DN9JAP/export-sym
+REFUSED: state/ - machine-local runtime (sessions, panes, watcher internals); never port
+REFUSED: projects/ - machine-local clones; re-clone on the destination via project-management
+PORTABLE: data/captain.md
+PORTABLE: data/learnings.md
+PORTABLE: data/backlog.md
+error: portable data path is not a regular file: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.DN9JAP/src/data/goals/linked.md
+[exit 1]
+--- /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.DN9JAP/export-sym
+data/backlog.md
+data/captain.md
+data/learnings.md
+
+$ bin/fm-home-port.sh push --remote captain/portable --home /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.DN9JAP/src
+REFUSED: state/ - machine-local runtime (sessions, panes, watcher internals); never port
+REFUSED: projects/ - machine-local clones; re-clone on the destination via project-management
+PRIVATE_OK: captain/portable (visibility=private)
+PORTABLE: data/captain.md
+PORTABLE: data/learnings.md
+PORTABLE: data/backlog.md
+error: portable data path is not a regular file: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.DN9JAP/src/data/goals/linked.md
+STAGE LEFT: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.DN9JAP/fm-home-port-push.rHJdB6 (captain-private staging dir; inspect then remove)
+[exit 1]
+transport head unchanged: yes
+
+=== S7 (adversarial): symlinked data/goals directory refused with dir and per-file entries
+
+$ bin/fm-home-port.sh export --home /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.DN9JAP/src2 --dest /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.DN9JAP/export-symdir
+REFUSED: state/ - machine-local runtime (sessions, panes, watcher internals); never port
+REFUSED: projects/ - machine-local clones; re-clone on the destination via project-management
+PORTABLE: data/captain.md
+error: portable data directory is a symlink: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.DN9JAP/src2/data/goals
+[exit 1]
+
+$ env FM_FORK_SURFACE_MANIFEST=/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.DN9JAP/perfile.conf bin/fm-home-port.sh export --home /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.DN9JAP/src2 --dest /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.DN9JAP/export-symdir
+REFUSED: state/ - machine-local runtime (sessions, panes, watcher internals); never port
+REFUSED: projects/ - machine-local clones; re-clone on the destination via project-management
+PORTABLE: data/captain.md
+error: portable data directory is a symlink: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.DN9JAP/src2/data/goals
+[exit 1]
+no charter exported through symlinked dir: yes
+
+=== S8 (adversarial): misnamed charter stops export; manifest declaring non-goal data refused
+
+$ bin/fm-home-port.sh export --home /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.DN9JAP/src --dest /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.DN9JAP/export-misnamed
+REFUSED: state/ - machine-local runtime (sessions, panes, watcher internals); never port
+REFUSED: projects/ - machine-local clones; re-clone on the destination via project-management
+PORTABLE: data/captain.md
+PORTABLE: data/learnings.md
+PORTABLE: data/backlog.md
+PORTABLE: data/goals/alpha.md
+PORTABLE: data/goals/beta.md
+EXPORT_OK: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.DN9JAP/export-misnamed
+[exit 0]
+
+$ env FM_FORK_SURFACE_MANIFEST=/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.DN9JAP/bad.conf bin/fm-home-port.sh export --home /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.DN9JAP/src --dest /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.DN9JAP/export-bad
+error: fork-surface declares a data entry that is not portable: data/accounts/
+[exit 1]
+data/accounts not exported: yes
+portable-data-entry data/goals/ -> accept
+portable-data-entry data/goals/alpha.md -> accept
+portable-data-entry data/goals -> reject
+portable-data-entry data/goals/sub/x.md -> reject
+portable-data-entry data/goals/../projects.md -> reject
+portable-data-entry data/captain.md -> reject
+
+=== S9 (adversarial): import of a bundle with a symlinked charter writes nothing
+
+$ bin/fm-home-port.sh import --source /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.DN9JAP/badbundle --home /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.DN9JAP/dst3
+error: portable data path is not a regular file: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.DN9JAP/badbundle/data/goals/evil.md
+[exit 1]
+--- /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.DN9JAP/dst3
+
+lab removed: yes

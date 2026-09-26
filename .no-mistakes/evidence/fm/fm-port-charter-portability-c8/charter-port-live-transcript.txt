@@ -1,0 +1,185 @@
+
+===== S1 manifest declares the directory entry; fork-surface check agrees with fallback =====
+$ /Users/larsmusic/.no-mistakes/worktrees/f569cc43ac96/01M3F7390G1A4AC6D8VT49S0A3/bin/fm-fork-surface.sh port-data-allowlist
+data/goals/
+[exit 0]
+$ /Users/larsmusic/.no-mistakes/worktrees/f569cc43ac96/01M3F7390G1A4AC6D8VT49S0A3/bin/fm-home-port.sh portable-data-entries
+data/goals/
+[exit 0]
+$ bin/fm-fork-surface.sh check
+FORK_SURFACE OK capabilities=77 owned_paths=243
+[exit 0]
+
+===== S2 directory-entry push carries every charter, not notes.txt =====
+$ port push --remote captain/portable --home /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-charter-live.NdPaLc/ship-home
+REFUSED: (none present) .env, state/, projects/, secret config - standing policy still applies
+PRIVATE_OK: captain/portable (visibility=private)
+warning: You appear to have cloned an empty repository.
+PORTABLE: data/captain.md
+PORTABLE: data/learnings.md
+PORTABLE: data/backlog.md
+PORTABLE: data/goals/alpha.md
+PORTABLE: data/goals/beta.md
+To file:///var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-charter-live.NdPaLc/transport.git
+ * [new branch]      main -> main
+PUSH_OK: captain/portable
+[exit 0]
+transport main: data/goals/alpha.md data/goals/beta.md 
+
+===== S3 pull onto work hub: charters arrive, hub-only gamma kept =====
+$ port pull --remote captain/portable --home /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-charter-live.NdPaLc/work-hub
+PRIVATE_OK: captain/portable (visibility=private)
+IMPORTED: data/captain.md
+IMPORTED: data/learnings.md
+IMPORTED: data/backlog.md
+IMPORTED: data/goals/alpha.md
+IMPORTED: data/goals/beta.md
+IMPORT_OK: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-charter-live.NdPaLc/work-hub
+PULL_OK: captain/portable -> /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-charter-live.NdPaLc/work-hub
+[exit 0]
+hub alpha.md: source alpha
+hub beta.md: source beta
+hub gamma.md: hub-only gamma
+alpha.md
+beta.md
+gamma.md
+
+===== S4 delete beta at source, push again: beta leaves transport, recoverable from history =====
+$ port push --remote captain/portable --home /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-charter-live.NdPaLc/ship-home
+REFUSED: (none present) .env, state/, projects/, secret config - standing policy still applies
+PRIVATE_OK: captain/portable (visibility=private)
+PORTABLE: data/captain.md
+PORTABLE: data/learnings.md
+PORTABLE: data/backlog.md
+PORTABLE: data/goals/alpha.md
+To file:///var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-charter-live.NdPaLc/transport.git
+   c2a194e..7b7aa57  main -> main
+PUSH_OK: captain/portable
+[exit 0]
+transport main: data/goals/alpha.md 
+main~1:data/goals/beta.md -> source beta
+
+===== S4b pull again: hub keeps its beta (pull never deletes) =====
+$ port pull --remote captain/portable --home /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-charter-live.NdPaLc/work-hub
+PRIVATE_OK: captain/portable (visibility=private)
+IMPORTED: data/captain.md
+IMPORTED: data/learnings.md
+IMPORTED: data/backlog.md
+IMPORTED: data/goals/alpha.md
+IMPORT_OK: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-charter-live.NdPaLc/work-hub
+PULL_OK: captain/portable -> /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-charter-live.NdPaLc/work-hub
+[exit 0]
+alpha.md
+beta.md
+gamma.md
+
+===== S5 switch to per-file entry (alpha only) after a directory push: beta leaves transport =====
+$ port push --remote captain/portable --home /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-charter-live.NdPaLc/ship-home
+REFUSED: (none present) .env, state/, projects/, secret config - standing policy still applies
+PRIVATE_OK: captain/portable (visibility=private)
+PORTABLE: data/captain.md
+PORTABLE: data/learnings.md
+PORTABLE: data/backlog.md
+PORTABLE: data/goals/alpha.md
+PORTABLE: data/goals/beta.md
+To file:///var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-charter-live.NdPaLc/transport.git
+   7b7aa57..644a06c  main -> main
+PUSH_OK: captain/portable
+[exit 0]
+transport main: data/goals/alpha.md data/goals/beta.md 
+$ port push --remote captain/portable --home /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-charter-live.NdPaLc/ship-home
+REFUSED: (none present) .env, state/, projects/, secret config - standing policy still applies
+PRIVATE_OK: captain/portable (visibility=private)
+PORTABLE: data/captain.md
+PORTABLE: data/learnings.md
+PORTABLE: data/backlog.md
+PORTABLE: data/goals/alpha.md
+To file:///var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-charter-live.NdPaLc/transport.git
+   644a06c..561e047  main -> main
+PUSH_OK: captain/portable
+[exit 0]
+transport main: data/goals/alpha.md 
+
+===== S5b per-file export carries only alpha =====
+$ /Users/larsmusic/.no-mistakes/worktrees/f569cc43ac96/01M3F7390G1A4AC6D8VT49S0A3/bin/fm-home-port.sh export --home /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-charter-live.NdPaLc/ship-home --dest /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-charter-live.NdPaLc/exp-perfile
+REFUSED: (none present) .env, state/, projects/, secret config - standing policy still applies
+PORTABLE: data/captain.md
+PORTABLE: data/learnings.md
+PORTABLE: data/backlog.md
+PORTABLE: data/goals/alpha.md
+EXPORT_OK: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-charter-live.NdPaLc/exp-perfile
+[exit 0]
+exp-perfile/data/goals/alpha.md
+
+===== S6 adversarial: symlinked charter in directory entry stops export/push =====
+$ /Users/larsmusic/.no-mistakes/worktrees/f569cc43ac96/01M3F7390G1A4AC6D8VT49S0A3/bin/fm-home-port.sh export --home /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-charter-live.NdPaLc/evil --dest /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-charter-live.NdPaLc/exp-evil
+REFUSED: (none present) .env, state/, projects/, secret config - standing policy still applies
+PORTABLE: data/captain.md
+PORTABLE: data/learnings.md
+PORTABLE: data/backlog.md
+error: portable data path is not a regular file: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-charter-live.NdPaLc/evil/data/goals/linked.md
+[exit 1]
+ls: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-charter-live.NdPaLc/exp-evil/data/goals: No such file or directory
+$ port push --remote captain/portable --home /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-charter-live.NdPaLc/evil
+REFUSED: (none present) .env, state/, projects/, secret config - standing policy still applies
+PRIVATE_OK: captain/portable (visibility=private)
+PORTABLE: data/captain.md
+PORTABLE: data/learnings.md
+PORTABLE: data/backlog.md
+error: portable data path is not a regular file: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-charter-live.NdPaLc/evil/data/goals/linked.md
+STAGE LEFT: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-charter-live.NdPaLc/fm-home-port-push.ET89me (captain-private staging dir; inspect then remove)
+[exit 1]
+transport main: data/goals/alpha.md 
+
+===== S6b adversarial: symlinked data/goals dir with per-file entry stops export =====
+$ /Users/larsmusic/.no-mistakes/worktrees/f569cc43ac96/01M3F7390G1A4AC6D8VT49S0A3/bin/fm-home-port.sh export --home /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-charter-live.NdPaLc/evil2 --dest /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-charter-live.NdPaLc/exp-evil2
+REFUSED: (none present) .env, state/, projects/, secret config - standing policy still applies
+PORTABLE: data/captain.md
+PORTABLE: data/learnings.md
+PORTABLE: data/backlog.md
+error: portable data directory is a symlink: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-charter-live.NdPaLc/evil2/data/goals
+[exit 1]
+ls: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-charter-live.NdPaLc/exp-evil2/data/goals: No such file or directory
+
+===== S6c adversarial: misnamed charter in directory stops export =====
+$ /Users/larsmusic/.no-mistakes/worktrees/f569cc43ac96/01M3F7390G1A4AC6D8VT49S0A3/bin/fm-home-port.sh export --home /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-charter-live.NdPaLc/evil3 --dest /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-charter-live.NdPaLc/exp-evil3
+REFUSED: (none present) .env, state/, projects/, secret config - standing policy still applies
+PORTABLE: data/captain.md
+PORTABLE: data/learnings.md
+PORTABLE: data/backlog.md
+error: portable data file name is not portable: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-charter-live.NdPaLc/evil3/data/goals/-dash.md
+[exit 1]
+
+===== S6d adversarial: pulled transport with symlinked charter refused before writes =====
+$ port pull --remote captain/portable --home /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-charter-live.NdPaLc/fresh
+PRIVATE_OK: captain/portable (visibility=private)
+error: portable data path is not a regular file: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-charter-live.NdPaLc/fm-home-port-pull.19ObZc/repo/data/goals/hosts.md
+STAGE LEFT: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-charter-live.NdPaLc/fm-home-port-pull.19ObZc (captain-private staging dir; inspect then remove)
+[exit 1]
+
+===== S7 adversarial: manifest declares non-charter data entries =====
+$ /Users/larsmusic/.no-mistakes/worktrees/f569cc43ac96/01M3F7390G1A4AC6D8VT49S0A3/bin/fm-home-port.sh export --home /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-charter-live.NdPaLc/ship-home --dest /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-charter-live.NdPaLc/exp-bad
+error: fork-surface declares a data entry that is not portable: data/accounts/
+[exit 1]
+$ /Users/larsmusic/.no-mistakes/worktrees/f569cc43ac96/01M3F7390G1A4AC6D8VT49S0A3/bin/fm-home-port.sh export --home /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-charter-live.NdPaLc/ship-home --dest /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-charter-live.NdPaLc/exp-bad
+error: fork-surface declares a data entry that is not portable: data/projects.md
+[exit 1]
+$ /Users/larsmusic/.no-mistakes/worktrees/f569cc43ac96/01M3F7390G1A4AC6D8VT49S0A3/bin/fm-home-port.sh export --home /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-charter-live.NdPaLc/ship-home --dest /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-charter-live.NdPaLc/exp-bad
+error: fork-surface declares a data entry that is not portable: data/goals/../secondmates.md
+[exit 1]
+ls: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-charter-live.NdPaLc/exp-bad: No such file or directory
+
+===== S8 adversarial: fork-surface check fails when manifest data entry changes without the fallback =====
+$ bin/fm-fork-surface.sh check
+fm-fork-surface: portable data declarations disagree with bin/fm-home-port.sh fallback data entries; update both in the same change
+	data/goals/
+data/goals/alpha.md
+FORK_SURFACE FAIL failures=1
+[exit 1]
+$ bin/fm-fork-surface.sh check
+fm-fork-surface: portable data declarations disagree with bin/fm-home-port.sh fallback data entries; update both in the same change
+data/accounts/
+	data/goals/
+fm-fork-surface: second-machine-porting: data entry at line 331 is not portable: data/accounts/; declare only an entry bin/fm-home-port.sh portable-data-entry accepts
+FORK_SURFACE FAIL failures=2
+[exit 1]

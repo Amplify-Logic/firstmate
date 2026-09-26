@@ -1,0 +1,34 @@
+ok - export copies portable allowlist and loudly refuses machine-local/secrets
+ok - export skips absent optional upstream-watch
+ok - export refuses explicit .env include with non-zero exit
+ok - scan fails loudly on embedded GitHub token
+ok - scan fails loudly on token without leading whitespace
+ok - export aborts when allowlisted file embeds a credential
+ok - import round-trips portable files and refuses contaminated source
+ok - goal charters travel through export and import without deleting local charters
+ok - export stops on a symlinked charter instead of following it
+ok - import stops on a symlinked charter before writing into the home
+ok - a per-file data entry carries only the chosen charter
+ok - a per-file data entry refuses a symlinked data/goals directory
+ok - push removes a charter the source no longer selects from the transport
+ok - only goal-charter directory and file entries are portable data entries
+ok - help points at porting doc and states secrets policy
+ok - scan --warn-machine-local reports machine-local hits without failing
+ok - scan --warn-machine-local keeps credential failures hard
+ok - verify fails when portable files are missing
+ok - verify fails on unknown backend and unverified crew-harness
+ok - verify passes a ready destination home
+ok - verify accepts prime-agent and checks its launch binary
+ok - verify completes for every FM_PORT_VERIFIED_HARNESSES name
+# all fm-home-port tests passed
+[exit 0]
+ok - current fork surface passes every declaration assertion
+ok - list, topology, config, and port queries expose declared data
+ok - a declared data entry must match the home-port fallback data entries
+ok - a declared data entry outside the goal charters fails
+ok - required core surface deletion fails and names the capability and path
+ok - declared personal capability may be omitted without weakening core and team checks
+ok - a pre-merge entry still passes after its branch is squash-merged
+ok - a branch commit orphaned by a squash fails even while the local clone still holds it
+# all fm-fork-surface tests passed
+[exit 0]

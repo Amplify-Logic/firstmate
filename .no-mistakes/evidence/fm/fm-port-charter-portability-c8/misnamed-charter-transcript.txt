@@ -1,0 +1,19 @@
+$ export with misnamed charter '-dash.md'
+PORTABLE: data/captain.md
+error: portable data file name is not portable: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.5JBGUA/src/data/goals/-dash.md
+[exit ]
+exported goals: 
+
+$ export with misnamed charter 'has space.md'
+PORTABLE: data/captain.md
+error: portable data file name is not portable: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.5JBGUA/src/data/goals/has space.md
+[exit ]
+exported goals: 
+
+$ export with misnamed charter '.hidden.md'
+PORTABLE: data/captain.md
+PORTABLE: data/goals/alpha.md
+EXPORT_OK: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.5JBGUA/x.hw8B
+[exit ]
+exported goals: alpha.md 
+
