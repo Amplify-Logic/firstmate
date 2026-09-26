@@ -1,0 +1,21 @@
+ok - fm-deepgram-stt: a Deepgram failure exits 1 with the status
+ok - fm-desk-floater: --help exits 0 and unknown options are refused
+ok - fm-desk-floater: every launched build is signed with one stable identity, and only the launched copy can be reopened
+ok - fm-desk-floater: --build-only assembles its own ad-hoc bundle and never touches the launched one
+ok - fm-desk-floater: a configured identity wins, and an unusable one falls back to Apple Development, then ad-hoc, without stopping the launch
+ok - fm-speak: a say that fails is not re-spoken through Deepgram
+ok - fm-speak: Deepgram failure falls back to say
+ok - fm-desk-voice: a failed capture exits 1 and leaves no screenshot
+ok - desk floater: Swift tests pass
+Test Case '-[DeskFloaterTests.HomeLocationTests testWorkingDirectoryCountsOnlyWhenItIsACodeRoot]' started.
+Test Case '-[DeskFloaterTests.HomeLocationTests testWorkingDirectoryCountsOnlyWhenItIsACodeRoot]' passed (0.000 seconds).
+Test Suite 'HomeLocationTests' passed at 2026-09-26 15:32:18.560.
+	 Executed 5 tests, with 0 failures (0 unexpected) in 0.002 (0.003) seconds
+Test Suite 'DeskFloaterPackageTests.xctest' passed at 2026-09-26 15:32:18.560.
+	 Executed 5 tests, with 0 failures (0 unexpected) in 0.002 (0.003) seconds
+Test Suite 'Selected tests' passed at 2026-09-26 15:32:18.560.
+	 Executed 5 tests, with 0 failures (0 unexpected) in 0.002 (0.005) seconds
+◇ Test run started.
+↳ Testing Library Version: 1501
+↳ Target Platform: arm64e-apple-macos14.0
+✔ Test run with 0 tests in 0 suites passed after 0.001 seconds.

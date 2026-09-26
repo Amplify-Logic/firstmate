@@ -1,0 +1,22 @@
+NOTE: open is a lab stand-in and lsregister -u is guarded so paths outside the lab are logged, not unregistered
+--- before rebuild
+designated => identifier "com.firstmate.desk-floater" and anchor apple generic and certificate leaf[subject.CN] = "Apple Development: Lars Tolhurst (9L6MQ3GM6S)" and certificate 1[field.1.2.840.113635.100.6.2.1] /* exists */
+Sep 26 15:33
+$ echo "// rebuild marker" >> desk-floater/Sources/DeskFloater.swift  (source change forces a real recompile; reverted after)
+$ FM_HOME=$LAB/home bin/fm-desk-floater.sh    # rebuild + launch
+fm-desk-floater: building DeskFloater (release)
+Build of product 'DeskFloater' complete! (4.33s)
+fm-desk-floater: signed as com.firstmate.desk-floater with Apple Development: Lars Tolhurst (9L6MQ3GM6S)
+fm-desk-floater: launching floater for FM_HOME=/tmp/fm-floater-lab.chCHIo/home
+fm-desk-floater: macOS will no longer reopen the other copy at /Users/larsmusic/.no-mistakes/worktrees/f569cc43ac96/01M3CFJHTYHV3FHQJCBKB7Z4ZP/desk-floater/.build/DeskFloater.app
+fm-desk-floater: macOS will no longer reopen the other copy at /Users/larsmusic/starship/desk-floater/.build/DeskFloater.app
+fm-desk-floater: macOS will no longer reopen the other copy at /Users/larsmusic/.treehouse/starship-4af6c9/13/starship/desk-floater/.build/DeskFloater.app
+--- after rebuild
+designated => identifier "com.firstmate.desk-floater" and anchor apple generic and certificate leaf[subject.CN] = "Apple Development: Lars Tolhurst (9L6MQ3GM6S)" and certificate 1[field.1.2.840.113635.100.6.2.1] /* exists */
+RESULT: designated requirement identical across the rebuild (TCC grants key on it)
+--- a grant-shaped check: the rebuilt app satisfies the requirement recorded before the rebuild
+rebuilt app satisfies pre-rebuild requirement
+--- contrast: the linker ad-hoc signature (what every build had before this change) pins the requirement to one exact build
+Identifier=DeskFloater
+Signature=adhoc
+# designated => cdhash H"66e1f732bf66057b52dc5174a1d99095ec31ef4d"

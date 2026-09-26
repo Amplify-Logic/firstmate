@@ -1,0 +1,24 @@
+$ lsregister -f "<lab>/stray worker/desk-floater/.build/DeskFloater.app"   # a stray worker copy LaunchServices knows about
+--- LaunchServices registrations BEFORE launch
+  com.firstmate.desk-floater  /Users/larsmusic/.no-mistakes/worktrees/f569cc43ac96/01M3CFJHTYHV3FHQJCBKB7Z4ZP/desk-floater/.build/DeskFloater.app
+  com.firstmate.desk-floater  /Users/larsmusic/starship/desk-floater/.build/DeskFloater.app
+  com.firstmate.desk-floater  /Users/larsmusic/.treehouse/starship-4af6c9/13/starship/desk-floater/.build/DeskFloater.app
+  com.firstmate.desk-floater  /private/tmp/fm-floater-lab.chCHIo/stray worker/desk-floater/.build/DeskFloater.app
+  com.firstmate.desk-floater.build-only  /Users/larsmusic/.no-mistakes/worktrees/f569cc43ac96/01M3ERXN24XYB2E62H779JHE3V/desk-floater/.build/DeskFloater-build-only.app
+$ FM_HOME=$LAB/home bin/fm-desk-floater.sh
+fm-desk-floater: launching floater for FM_HOME=/tmp/fm-floater-lab.chCHIo/home
+fm-desk-floater: macOS will no longer reopen the other copy at /Users/larsmusic/.no-mistakes/worktrees/f569cc43ac96/01M3CFJHTYHV3FHQJCBKB7Z4ZP/desk-floater/.build/DeskFloater.app
+fm-desk-floater: macOS will no longer reopen the other copy at /Users/larsmusic/starship/desk-floater/.build/DeskFloater.app
+fm-desk-floater: macOS will no longer reopen the other copy at /Users/larsmusic/.treehouse/starship-4af6c9/13/starship/desk-floater/.build/DeskFloater.app
+fm-desk-floater: macOS will no longer reopen the other copy at /private/tmp/fm-floater-lab.chCHIo/stray worker/desk-floater/.build/DeskFloater.app
+--- lsregister -u calls (lab guard executes only lab/worktree paths; others logged as PROTECTED)
+lsregister -u /Users/larsmusic/.no-mistakes/worktrees/f569cc43ac96/01M3CFJHTYHV3FHQJCBKB7Z4ZP/desk-floater/.build/DeskFloater.app (PROTECTED, skipped)
+lsregister -u /Users/larsmusic/starship/desk-floater/.build/DeskFloater.app (PROTECTED, skipped)
+lsregister -u /Users/larsmusic/.treehouse/starship-4af6c9/13/starship/desk-floater/.build/DeskFloater.app (PROTECTED, skipped)
+lsregister -u /private/tmp/fm-floater-lab.chCHIo/stray worker/desk-floater/.build/DeskFloater.app (executed)
+--- LaunchServices registrations AFTER launch
+  com.firstmate.desk-floater  /Users/larsmusic/.no-mistakes/worktrees/f569cc43ac96/01M3CFJHTYHV3FHQJCBKB7Z4ZP/desk-floater/.build/DeskFloater.app
+  com.firstmate.desk-floater  /Users/larsmusic/starship/desk-floater/.build/DeskFloater.app
+  com.firstmate.desk-floater  /Users/larsmusic/.treehouse/starship-4af6c9/13/starship/desk-floater/.build/DeskFloater.app
+  com.firstmate.desk-floater.build-only  /Users/larsmusic/.no-mistakes/worktrees/f569cc43ac96/01M3ERXN24XYB2E62H779JHE3V/desk-floater/.build/DeskFloater-build-only.app
+RESULT: stray worker copy no longer registered; files still on disk: yes

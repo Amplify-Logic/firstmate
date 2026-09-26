@@ -1,0 +1,44 @@
+### config names an identity that is not in the keychain
+$ cat config/desk-floater-signing-identity -> Nobody Identity: Missing (ZZZZ)
+fm-desk-floater: signing identity 'Nobody Identity: Missing (ZZZZ)' from /tmp/fm-floater-lab.chCHIo/home/config/desk-floater-signing-identity is not a valid codesigning identity in the keychain; signing with Apple Development: Lars Tolhurst (9L6MQ3GM6S) instead
+fm-desk-floater: building DeskFloater (release)
+fm-desk-floater: signed as com.firstmate.desk-floater with Apple Development: Lars Tolhurst (9L6MQ3GM6S)
+fm-desk-floater: launching floater for FM_HOME=/tmp/fm-floater-lab.chCHIo/home
+  exit=  launched=1
+  => Authority=Apple Development: Lars Tolhurst (…)  Identifier=com.firstmate.desk-floater
+
+### config names a different real identity (config wins; re-signed, no recompile)
+$ cat config/desk-floater-signing-identity -> iPhone Distribution
+fm-desk-floater: signed as com.firstmate.desk-floater with iPhone Distribution: Lars Tolhurst (3WLJ3CT2H3)
+fm-desk-floater: launching floater for FM_HOME=/tmp/fm-floater-lab.chCHIo/home
+  exit=  launched=1
+  => Authority=iPhone Distribution: Lars Tolhurst (…)  Identifier=com.firstmate.desk-floater
+
+### config "-" means ad-hoc
+$ cat config/desk-floater-signing-identity -> 
+fm-desk-floater: signed as com.firstmate.desk-floater with Apple Development: Lars Tolhurst (9L6MQ3GM6S)
+fm-desk-floater: launching floater for FM_HOME=/tmp/fm-floater-lab.chCHIo/home
+  exit=  launched=1
+  => Authority=Apple Development: Lars Tolhurst (…)  Identifier=com.firstmate.desk-floater
+
+### config removed: back to the keychain Apple Development identity
+fm-desk-floater: launching floater for FM_HOME=/tmp/fm-floater-lab.chCHIo/home
+  exit=  launched=1
+  => Authority=Apple Development: Lars Tolhurst (…)  Identifier=com.firstmate.desk-floater
+
+### launch again with nothing changed: no rebuild, no re-sign
+fm-desk-floater: launching floater for FM_HOME=/tmp/fm-floater-lab.chCHIo/home
+  exit=  launched=1
+  => Authority=Apple Development: Lars Tolhurst (…)  Identifier=com.firstmate.desk-floater
+
+### (re-run) config "-" means ad-hoc  [earlier "-" case above was a harness error: zsh echo wrote an empty file]
+$ cat config/desk-floater-signing-identity -> -
+fm-desk-floater: launching floater for FM_HOME=/tmp/fm-floater-lab.chCHIo/home
+  launched=1
+  => Signature=adhoc  com.firstmate.desk-floater
+
+### config removed again: re-signed with Apple Development, no recompile
+fm-desk-floater: signed as com.firstmate.desk-floater with Apple Development: Lars Tolhurst (9L6MQ3GM6S)
+fm-desk-floater: launching floater for FM_HOME=/tmp/fm-floater-lab.chCHIo/home
+  launched=1
+  => Authority=Apple Development: Lars Tolhurst (…)  com.firstmate.desk-floater

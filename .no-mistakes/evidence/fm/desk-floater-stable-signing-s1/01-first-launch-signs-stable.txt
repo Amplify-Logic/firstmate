@@ -1,0 +1,27 @@
+$ FM_HOME=$LAB/home bin/fm-desk-floater.sh    # first launch (open stubbed)
+fm-desk-floater: building DeskFloater (release)
+Build of product 'DeskFloater' complete! (28.29s)
+fm-desk-floater: signed as com.firstmate.desk-floater with Apple Development: Lars Tolhurst (9L6MQ3GM6S)
+fm-desk-floater: launching floater for FM_HOME=/tmp/fm-floater-lab.chCHIo/home
+fm-desk-floater: macOS will no longer reopen the other copy at /Users/larsmusic/.no-mistakes/worktrees/f569cc43ac96/01M3CFJHTYHV3FHQJCBKB7Z4ZP/desk-floater/.build/DeskFloater.app
+fm-desk-floater: macOS will no longer reopen the other copy at /Users/larsmusic/starship/desk-floater/.build/DeskFloater.app
+fm-desk-floater: macOS will no longer reopen the other copy at /Users/larsmusic/.treehouse/starship-4af6c9/13/starship/desk-floater/.build/DeskFloater.app
+exit=
+--- open calls
+open --env FM_HOME=/tmp/fm-floater-lab.chCHIo/home --env FM_DESK_FLOATER_ROOT=/Users/larsmusic/.no-mistakes/worktrees/f569cc43ac96/01M3ERXN24XYB2E62H779JHE3V /Users/larsmusic/.no-mistakes/worktrees/f569cc43ac96/01M3ERXN24XYB2E62H779JHE3V/desk-floater/.build/DeskFloater.app
+--- lsregister -u calls
+lsregister -u /Users/larsmusic/.no-mistakes/worktrees/f569cc43ac96/01M3CFJHTYHV3FHQJCBKB7Z4ZP/desk-floater/.build/DeskFloater.app (PROTECTED, skipped)
+lsregister -u /Users/larsmusic/starship/desk-floater/.build/DeskFloater.app (PROTECTED, skipped)
+lsregister -u /Users/larsmusic/.treehouse/starship-4af6c9/13/starship/desk-floater/.build/DeskFloater.app (PROTECTED, skipped)
+--- codesign -dvv
+Identifier=com.firstmate.desk-floater
+Authority=Apple Development: Lars Tolhurst (…)
+Authority=Apple Worldwide Developer Relations Certification Authority
+Authority=Apple Root CA
+TeamIdentifier=3WLJ3CT2H3
+--- designated requirement
+designated => identifier "com.firstmate.desk-floater" and anchor apple generic and certificate leaf[subject.CN] = "Apple Development: Lars Tolhurst (9L6MQ3GM6S)" and certificate 1[field.1.2.840.113635.100.6.2.1] /* exists */
+--- Info.plist CFBundleIdentifier
+com.firstmate.desk-floater
+--- codesign --verify
+valid

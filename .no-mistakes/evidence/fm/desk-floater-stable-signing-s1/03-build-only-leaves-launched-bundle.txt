@@ -1,0 +1,25 @@
+--- launched DeskFloater.app BEFORE --build-only
+sha256(binary)=ea97bb0dee5ae121…  plist-id=com.firstmate.desk-floater  mtime=1790426010
+designated => identifier "com.firstmate.desk-floater" and anchor apple generic and certificate leaf[subject.CN] = "Apple Development: Lars Tolhurst (9L6MQ3GM6S)" and certificate 1[field.1.2.840.113635.100.6.2.1] /* exists */
+$ bin/fm-desk-floater.sh --build-only   (security/codesign wrapped with call-logging spies)
+[0/1] Planning build
+Building for production...
+[0/3] Write sources
+[1/3] Write swift-version--58304C5D6DBC2206.txt
+[3/4] Compiling DeskFloater DeskFloater.swift
+Build of product 'DeskFloater' complete! (4.98s)
+/Users/larsmusic/.no-mistakes/worktrees/f569cc43ac96/01M3ERXN24XYB2E62H779JHE3V/desk-floater/.build/DeskFloater-build-only.app
+exit=0
+fm-desk-floater: building DeskFloater (release)
+--- security/codesign calls made by --build-only:
+(none)
+--- open calls made by --build-only:
+(none)
+--- build-only bundle
+Identifier=DeskFloater
+Signature=adhoc
+plist-id=com.firstmate.desk-floater.build-only
+--- launched DeskFloater.app AFTER --build-only
+sha256(binary)=ea97bb0dee5ae121…  plist-id=com.firstmate.desk-floater  mtime=1790426010
+designated => identifier "com.firstmate.desk-floater" and anchor apple generic and certificate leaf[subject.CN] = "Apple Development: Lars Tolhurst (9L6MQ3GM6S)" and certificate 1[field.1.2.840.113635.100.6.2.1] /* exists */
+RESULT: launched bundle untouched (same binary hash, mtime, identifier, requirement)
