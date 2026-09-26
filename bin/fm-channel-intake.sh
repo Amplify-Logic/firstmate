@@ -1844,7 +1844,7 @@ EOF
 }
 
 notify_sent() {
-  local keys='' epoch day key path sent lastday skipped='' stamped=0
+  local keys='' epoch day key path sent lastday skipped='' stamped_count=0
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --keys) [ "$#" -ge 2 ] || die '--keys requires a value'; keys=$2; shift 2 ;;
@@ -1863,7 +1863,7 @@ notify_sent() {
       skipped="$skipped $key"
       continue
     fi
-    stamped=$((stamped + 1))
+    stamped_count=$((stamped_count + 1))
     save_item "$path" "$(item_body "$key" "$(record_field "$path" source)" \
       "$(record_field "$path" kind)" "$(record_field "$path" ref)" \
       "$(record_field "$path" link)" "$(record_field "$path" class)" \
@@ -1880,7 +1880,7 @@ notify_sent() {
   [ "$lastday" = "$day" ] || sent=0
   save_notify "$epoch" "$day" "$((sent + 1))"
   log_event "notification delivered for: $keys"
-  printf 'CHANNEL_INTAKE: notification recorded for %s item(s)\n' "$stamped"
+  printf 'CHANNEL_INTAKE: notification recorded for %s item(s)\n' "$stamped_count"
   [ -z "$skipped" ] || printf 'skipped (already resolved):%s\n' "$skipped"
 }
 
