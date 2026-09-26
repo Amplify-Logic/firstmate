@@ -772,7 +772,7 @@ EOF
     return 3
   fi
 
-  if [ -n "$wake_ack_line" ] && ! printf '%s\n' "$wake_ack_line" >&2; then
+  if [ -n "$wake_ack_line" ] && ! publish_stdout printf '%s\n' "$wake_ack_line" >&2; then
     append_evidence lifecycle 'durable wake acknowledgement command publication failed; retry catch-up before ordinary work' "$evidence"
     write_gate "$evidence" "$blockers" || { rm -f "$evidence" "$blockers" "$drain_err"; return 1; }
     rm -f "$evidence" "$blockers" "$drain_err"
