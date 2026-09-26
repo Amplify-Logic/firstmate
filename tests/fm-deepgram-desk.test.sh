@@ -603,6 +603,369 @@ test_desk_voice_deliver_pending_drain() {
   pass "fm-desk-voice: deliver, wake, pending, drain"
 }
 
+# --- desk-voice send: straight into the primary's chat pane ------------------
+#
+# A stand-in primary: a live process whose command line names a harness (a
+# python script under a claude/ directory, which the session-lock identity
+# accepts) and whose environment names a Herdr pane. It holds the fixture
+# home's session lock. The herdr on PATH is a fake that logs every call, so no
+# real pane ever receives text or keys.
+
+desk_send_fixture() {  # <name> -> home; starts the stand-in primary
+  local name=$1 home dir fb pid i envs
+  home=$(new_home "$name")
+  dir="$home/fixture"
+  fb="$dir/bin"
+  mkdir -p "$fb" "$dir/claude"
+  printf 'import time\ntime.sleep(60)\n' > "$dir/claude/holder.py"
+  cat > "$fb/herdr" <<'SH'
+#!/usr/bin/env bash
+set -u
+dir=${FM_FAKE_HERDR_DIR:?}
+{ printf 'call'; for a in "$@"; do printf '\x1f%s' "$a"; done; printf '\n'; } >> "$dir/herdr.log"
+case "${1:-} ${2:-}" in
+  "status --json")
+    printf '{"client":{"version":"0.7.4","protocol":14},"server":{"running":true}}\n' ;;
+  "pane get")
+    printf '{"result":{"pane":{"pane_id":"%s"}}}\n' "$3" ;;
+  "pane process-info")
+    printf '{"result":{"type":"pane_process_info","process_info":{"pane_id":"%s","shell_pid":%s,"foreground_processes":[]}}}\n' \
+      "$4" "$(cat "$dir/shell-pid")" ;;
+  "pane read")
+    if [ -e "$dir/modal" ]; then
+      cat "$dir/modal"
+    else
+      printf '❯ %s\n' "$(cat "$dir/draft" 2>/dev/null)"
+    fi ;;
+  "pane send-text")
+    [ ! -e "$dir/send-text-fails" ] || exit 1
+    printf '%s' "$4" >> "$dir/draft" ;;
+  "pane send-keys")
+    : > "$dir/entered"
+    [ -e "$dir/never-works" ] || : > "$dir/draft" ;;
+  "agent get")
+    if [ -e "$dir/entered" ] && [ ! -e "$dir/never-works" ]; then s=working; else s=idle; fi
+    printf '{"result":{"agent":{"agent_status":"%s"}}}\n' "$s" ;;
+esac
+exit 0
+SH
+  printf '#!/bin/sh\nexit 0\n' > "$fb/osascript"
+  chmod +x "$fb/herdr" "$fb/osascript"
+  : > "$dir/herdr.log"
+  env HERDR_ENV=1 HERDR_PANE_ID=w7:p3 HERDR_SESSION=fm-desk-send-test \
+    HERDR_SOCKET_PATH="$dir/herdr.sock" \
+    python3 "$dir/claude/holder.py" >/dev/null 2>&1 &
+  pid=$!
+  printf '%s\n' "$pid" > "$dir/holder-pid"
+  printf '%s\n' "$pid" > "$home/state/.lock"
+  # The pane's root process is the stand-in itself unless a case says otherwise.
+  printf '%s\n' "$pid" > "$dir/shell-pid"
+  : > "$dir/draft"
+  for i in $(seq 1 50); do
+    if [ -r "/proc/$pid/environ" ]; then
+      envs=$(tr '\0' '\n' < "/proc/$pid/environ")
+    else
+      envs=$(ps -E -ww -o command= -p "$pid" 2>/dev/null | tr ' ' '\n')
+    fi
+    case "$envs" in *HERDR_PANE_ID=w7:p3*) break ;; esac
+    sleep 0.1
+  done
+  case "$envs" in
+    *HERDR_PANE_ID=w7:p3*) ;;
+    *) kill "$pid" 2>/dev/null; return 1 ;;
+  esac
+  printf '%s\n' "$home"
+}
+
+# Each case starts its own stand-in; stop it when the case is done.
+desk_send_done() {  # <home>
+  kill "$(cat "$1/fixture/holder-pid")" 2>/dev/null || true
+}
+
+desk_send_skip() {  # <case>
+  printf 'skip: %s: this host does not expose the stand-in primary environment\n' "$1"
+}
+
+desk_send() {  # <home> [--image <png>]... <text> -> stdout of fm-desk-voice.sh send
+  local home=$1 dir="$1/fixture"
+  shift
+  (
+    unset TMUX TMUX_PANE HERDR_ENV HERDR_PANE_ID HERDR_SESSION HERDR_SOCKET_PATH \
+      FM_BACKEND_HERDR_BIN FM_SUPERVISOR_TARGET FM_SUPERVISOR_BACKEND
+    PATH="$dir/bin:$PATH" FM_FAKE_HERDR_DIR="$dir" FM_HOME="$home" \
+      FM_STATE_OVERRIDE="$home/state" FM_BACKEND_HERDR_SUBMIT_MIN_SLEEP=0.1 \
+      "$DESK" send --source test-suite "$@"
+  )
+}
+
+herdr_calls() {  # <home> <subcommand words...> -> matching log lines, readable
+  local home=$1 pattern
+  shift
+  pattern=$(printf '\x1f%s' "$@")
+  grep -F -- "$pattern" "$home/fixture/herdr.log" | tr '\037' ' '
+}
+
+inbox_count() {  # <home>
+  find "$home/state/desk-voice/inbox" -name '*.json' 2>/dev/null | wc -l | tr -d ' '
+}
+
+test_desk_voice_send_types_into_the_primary_pane() {
+  local home out typed
+  home=$(desk_send_fixture send-direct) || { desk_send_skip send-direct; return 0; }
+  out=$(desk_send "$home" $'Merge the\nfinances PR\r when green\033[201~ please\t') \
+    || fail "send failed: $out"
+  assert_contains "$out" "sent: herdr fm-desk-send-test:w7:p3" "send reports the primary pane"
+  typed=$(herdr_calls "$home" pane send-text)
+  assert_contains "$typed" "pane send-text w7:p3 Merge the finances PR when green [201~ please --session fm-desk-send-test" \
+    "the transcript is typed as one plain line"
+  [ "$(herdr_calls "$home" pane send-text | wc -l | tr -d ' ')" = 1 ] || fail "text typed more than once"
+  assert_contains "$(herdr_calls "$home" pane send-keys)" "pane send-keys w7:p3 enter" "Enter submits it"
+  [ "$(inbox_count "$home")" = 0 ] || fail "a pane delivery must not also land in the mailbox"
+  [ ! -s "$home/state/.wake-queue" ] || fail "a pane delivery must not queue a mailbox wake"
+  desk_send_done "$home"
+  pass "fm-desk-voice send: types the transcript into the primary's own pane and submits it"
+}
+
+test_desk_voice_send_falls_back_without_a_live_primary() {
+  local home out path
+  home=$(desk_send_fixture send-no-lock) || { desk_send_skip send-no-lock; return 0; }
+  rm -f "$home/state/.lock"
+  out=$(desk_send "$home" "Check the backlog") || fail "send failed: $out"
+  case "$out" in mailbox:\ *) ;; *) fail "expected a mailbox delivery, got: $out" ;; esac
+  path=${out#mailbox: }
+  [ -f "$path" ] || fail "mailbox file missing: $path"
+  assert_contains "$(cat "$path")" "Check the backlog" "mailbox keeps the transcript"
+  assert_contains "$(cat "$home/state/.wake-queue")" "desk-voice" "mailbox delivery queues a wake"
+  [ -z "$(herdr_calls "$home" pane send-text)" ] || fail "nothing may be typed without a lock holder"
+  desk_send_done "$home"
+  pass "fm-desk-voice send: no live primary falls back to the mailbox"
+}
+
+test_desk_voice_send_refuses_a_pane_not_hosting_the_primary() {
+  local home out
+  home=$(desk_send_fixture send-foreign-pane) || { desk_send_skip send-foreign-pane; return 0; }
+  # A root pid that is neither the stand-in nor any of its ancestors.
+  printf '%s\n' 99999999 > "$home/fixture/shell-pid"
+  out=$(desk_send "$home" "Status please") || fail "send failed: $out"
+  case "$out" in mailbox:\ *) ;; *) fail "expected a mailbox delivery, got: $out" ;; esac
+  [ -z "$(herdr_calls "$home" pane send-text)" ] || fail "a pane that does not host the primary must not be typed into"
+  [ "$(inbox_count "$home")" = 1 ] || fail "the transcript must land in the mailbox once"
+  desk_send_done "$home"
+  pass "fm-desk-voice send: a pane that does not host the primary gets nothing"
+}
+
+test_desk_voice_send_falls_back_when_the_pane_refuses_text() {
+  local home out
+  home=$(desk_send_fixture send-refused) || { desk_send_skip send-refused; return 0; }
+  : > "$home/fixture/send-text-fails"
+  out=$(desk_send "$home" "Ship it") || fail "send failed: $out"
+  case "$out" in mailbox:\ *) ;; *) fail "expected a mailbox delivery, got: $out" ;; esac
+  [ -z "$(herdr_calls "$home" pane send-keys)" ] || fail "no Enter may follow refused text"
+  [ "$(inbox_count "$home")" = 1 ] || fail "the refused transcript must land in the mailbox once"
+  desk_send_done "$home"
+  pass "fm-desk-voice send: a refused send falls back to the mailbox"
+}
+
+test_desk_voice_send_never_doubles_an_unconfirmed_submit() {
+  local home out
+  home=$(desk_send_fixture send-unconfirmed) || { desk_send_skip send-unconfirmed; return 0; }
+  : > "$home/fixture/never-works"
+  out=$(desk_send "$home" "Pause the scout") || fail "send failed: $out"
+  case "$out" in sent-unconfirmed:\ *) ;; *) fail "expected an unconfirmed pane delivery, got: $out" ;; esac
+  [ "$(herdr_calls "$home" pane send-text | wc -l | tr -d ' ')" = 1 ] || fail "text must be typed exactly once"
+  [ "$(inbox_count "$home")" = 0 ] || fail "typed text must not also land in the mailbox"
+  desk_send_done "$home"
+  pass "fm-desk-voice send: typed text whose submit is unproven is never re-sent to the mailbox"
+}
+
+test_desk_voice_send_falls_back_when_the_pane_shows_a_dialog() {
+  local home out screen n=0
+  for screen in \
+    $' Bash command\n\n   gh pr merge 42\n\n Do you want to proceed?\n ❯ 1. Yes\n   2. Yes, and don\'t ask again for gh commands\n   3. No, and tell Claude what to do differently (esc)\n' \
+    $' Which branch should I merge?\n\n   main\n   release\n\n Enter to select · ↑/↓ to navigate · Esc to cancel\n' \
+    $' Pick a model\n  > 1. Opus\n    2. Sonnet\n'; do
+    n=$((n + 1))
+    home=$(desk_send_fixture "send-modal-$n") || { desk_send_skip "send-modal-$n"; return 0; }
+    printf '%s' "$screen" > "$home/fixture/modal"
+    out=$(desk_send "$home" "2 and then merge it") || fail "send failed: $out"
+    case "$out" in mailbox:\ *) ;; *) fail "expected a mailbox delivery, got: $out" ;; esac
+    [ -z "$(herdr_calls "$home" pane send-text)" ] || fail "nothing may be typed into a dialog"
+    [ -z "$(herdr_calls "$home" pane send-keys)" ] || fail "no Enter may reach a dialog"
+    [ "$(inbox_count "$home")" = 1 ] || fail "the transcript must land in the mailbox once"
+    desk_send_done "$home"
+  done
+  pass "fm-desk-voice send: a pane showing a dialog instead of its chat input gets nothing"
+}
+
+test_desk_voice_send_joins_a_pending_draft() {
+  local home out
+  home=$(desk_send_fixture send-draft) || { desk_send_skip send-draft; return 0; }
+  printf 'half typed ' > "$home/fixture/draft"
+  out=$(desk_send "$home" "and ship it") || fail "send failed: $out"
+  assert_contains "$out" "sent: herdr fm-desk-send-test:w7:p3" "a pending draft still takes the transcript"
+  [ "$(herdr_calls "$home" pane send-text | wc -l | tr -d ' ')" = 1 ] || fail "text must be typed exactly once"
+  [ "$(inbox_count "$home")" = 0 ] || fail "a pane delivery must not also land in the mailbox"
+  desk_send_done "$home"
+  pass "fm-desk-voice send: a half-typed draft is joined and submitted"
+}
+
+test_desk_voice_send_types_screenshots_into_the_primary_pane() {
+  local home out shot1 shot2
+  home=$(desk_send_fixture send-shots) || { desk_send_skip send-shots; return 0; }
+  shot1="$home/one.png"
+  shot2="$home/two.png"
+  printf PNG > "$shot1"
+  printf PNG > "$shot2"
+  out=$(desk_send "$home" --image "$shot1" --image "$shot2" -- "Why is this red") \
+    || fail "send with screenshots failed: $out"
+  assert_contains "$out" "sent: herdr fm-desk-send-test:w7:p3" "screenshots go into the primary pane"
+  assert_contains "$(herdr_calls "$home" pane send-text)" \
+    "pane send-text w7:p3 Why is this red Screenshots: $shot1 $shot2 --session fm-desk-send-test" \
+    "the words and the image paths are typed as one plain line"
+  [ "$(inbox_count "$home")" = 0 ] || fail "a pane delivery must not also land in the mailbox"
+  : > "$home/fixture/herdr.log"
+  out=$(desk_send "$home" --image "$shot1" --) || fail "send of screenshots alone failed: $out"
+  assert_contains "$(herdr_calls "$home" pane send-text)" "pane send-text w7:p3 Screenshots: $shot1 --session" \
+    "screenshots alone are typed too"
+  desk_send_done "$home"
+  pass "fm-desk-voice send: screenshots, alone or with words, are typed into the primary's pane"
+}
+
+test_desk_voice_send_screenshots_fall_back_to_the_mailbox() {
+  local home out shot path drained
+  home=$(desk_send_fixture send-shots-refused) || { desk_send_skip send-shots-refused; return 0; }
+  shot="$home/one.png"
+  printf PNG > "$shot"
+  : > "$home/fixture/send-text-fails"
+  out=$(desk_send "$home" --image "$shot" -- "Look at this") || fail "send failed: $out"
+  case "$out" in mailbox:\ *) ;; *) fail "expected a mailbox delivery, got: $out" ;; esac
+  path=${out#mailbox: }
+  assert_contains "$(cat "$path")" "$shot" "the mailbox record lists the image"
+  drained=$(FM_HOME="$home" FM_STATE_OVERRIDE="$home/state" "$DESK" drain) || fail "drain failed"
+  [ "$drained" = "Look at this
+Screenshots: $shot" ] || fail "unexpected mailbox message: $drained"
+  desk_send_done "$home"
+  pass "fm-desk-voice send: screenshots the pane refuses land in the mailbox with the words"
+}
+
+# The floater's screenshots are captured by a stand-in here: a test must never
+# photograph the real screen.
+install_capture() {  # <home> [fail|empty]
+  local home=$1 mode=${2:-ok}
+  cat > "$home/capture" <<EOF
+#!/usr/bin/env bash
+printf '%s\\n' "\$*" >> "$home/capture.log"
+for a in "\$@"; do out=\$a; done
+case "$mode" in
+  fail) exit 1 ;;
+  empty) : > "\$out" ;;
+  *) printf 'PNG' > "\$out" ;;
+esac
+EOF
+  chmod +x "$home/capture"
+}
+
+shoot_in() {  # <home> [args...]
+  local home=$1
+  shift
+  FM_HOME="$home" FM_STATE_OVERRIDE="$home/state" FM_DESK_SHOT_CAPTURE="$home/capture" \
+    "$DESK" shot "$@"
+}
+
+test_desk_voice_shot_captures_the_named_display() {
+  local home path perms
+  home=$(new_home shot)
+  install_capture "$home"
+  path=$(shoot_in "$home" --display 2) || fail "shot failed: $path"
+  case "$path" in
+    "$home/state/desk-voice/shots/"*.png) ;;
+    *) fail "shot path is not in the home's screenshot folder: $path" ;;
+  esac
+  [ "$(cat "$path")" = PNG ] || fail "shot did not keep the captured image"
+  assert_contains "$(cat "$home/capture.log")" "-x -t png -D 2" "the display under the pointer is captured, silently"
+  if [ "$(uname)" = Darwin ]; then perms=$(stat -f %Lp "$path"); else perms=$(stat -c %a "$path"); fi
+  [ "$perms" = 600 ] || fail "screenshot should be private (600), got $perms"
+  path=$(shoot_in "$home") || fail "shot without a display failed: $path"
+  case "$(tail -n 1 "$home/capture.log")" in
+    *-D*) fail "no --display must leave the display choice to the capture tool" ;;
+  esac
+  [ ! -d "$home/state/desk-voice/inbox" ] || [ -z "$(ls "$home/state/desk-voice/inbox")" ] \
+    || fail "a shot on its own must not send anything"
+  pass "fm-desk-voice: shot captures the named display into the home's screenshot folder"
+}
+
+test_desk_voice_shot_keeps_only_the_newest() {
+  local home first second third left
+  home=$(new_home shot-prune)
+  install_capture "$home"
+  first=$(FM_DESK_SHOTS_KEEP=2 shoot_in "$home") || fail "first shot failed"
+  second=$(FM_DESK_SHOTS_KEEP=2 shoot_in "$home") || fail "second shot failed"
+  third=$(FM_DESK_SHOTS_KEEP=2 shoot_in "$home") || fail "third shot failed"
+  left=$(find "$home/state/desk-voice/shots" -name '*.png' | wc -l | tr -d ' ')
+  [ "$left" -eq 2 ] || fail "expected 2 screenshots kept, got $left"
+  [ ! -f "$first" ] || fail "the oldest screenshot should have been pruned"
+  [ -f "$second" ] && [ -f "$third" ] || fail "the newest screenshots must be kept"
+  pass "fm-desk-voice: the screenshot folder keeps only the newest images"
+}
+
+test_desk_voice_shot_failure_leaves_nothing() {
+  local home out status=0 left
+  home=$(new_home shot-fail)
+  install_capture "$home" fail
+  out=$(shoot_in "$home" 2>&1) || status=$?
+  [ "$status" -eq 1 ] || fail "expected exit 1 for a failed capture, got $status: $out"
+  install_capture "$home" empty
+  status=0
+  out=$(shoot_in "$home" 2>&1) || status=$?
+  [ "$status" -eq 1 ] || fail "expected exit 1 for an empty capture, got $status: $out"
+  left=$(find "$home/state/desk-voice/shots" -type f | wc -l | tr -d ' ')
+  [ "$left" -eq 0 ] || fail "a failed capture left $left file(s) behind"
+  status=0
+  out=$(shoot_in "$home" --display 0 2>&1) || status=$?
+  [ "$status" -eq 2 ] || fail "expected exit 2 for display 0, got $status: $out"
+  pass "fm-desk-voice: a failed capture exits 1 and leaves no screenshot"
+}
+
+test_desk_voice_deliver_with_screenshots() {
+  local home shot1 shot2 path drained json out status=0
+  home=$(new_home mailbox-shots)
+  install_capture "$home"
+  shot1=$(shoot_in "$home") || fail "shot failed"
+  shot2=$(shoot_in "$home") || fail "shot failed"
+  path=$(FM_HOME="$home" FM_STATE_OVERRIDE="$home/state" \
+    "$DESK" deliver --source test-suite --image "$shot1" --image "$shot2" -- "Why is this red") \
+    || fail "deliver with screenshots failed"
+  json=$(cat "$path")
+  assert_contains "$json" "$shot1" "the message record lists the first image"
+  drained=$(FM_HOME="$home" FM_STATE_OVERRIDE="$home/state" "$DESK" drain) || fail "drain failed"
+  [ "$drained" = "Why is this red
+Screenshots: $shot1 $shot2" ] || fail "unexpected combined message: $drained"
+  path=$(FM_HOME="$home" FM_STATE_OVERRIDE="$home/state" "$DESK" deliver --image "$shot1" --) \
+    || fail "deliver of screenshots alone failed"
+  drained=$(FM_HOME="$home" FM_STATE_OVERRIDE="$home/state" "$DESK" drain) || fail "drain failed"
+  [ "$drained" = "Screenshots: $shot1" ] || fail "unexpected screenshots-only message: $drained"
+  out=$(FM_HOME="$home" FM_STATE_OVERRIDE="$home/state" "$DESK" deliver --image shot.png 2>&1) || status=$?
+  [ "$status" -eq 2 ] || fail "expected exit 2 for a relative image path, got $status: $out"
+  status=0
+  out=$(FM_HOME="$home" FM_STATE_OVERRIDE="$home/state" "$DESK" deliver --image "$home/missing.png" 2>&1) || status=$?
+  [ "$status" -eq 2 ] || fail "expected exit 2 for a missing image, got $status: $out"
+  status=0
+  out=$(FM_HOME="$home" FM_STATE_OVERRIDE="$home/state" "$DESK" deliver -- 2>&1) || status=$?
+  [ "$status" -eq 2 ] || fail "expected exit 2 with neither words nor images, got $status: $out"
+  pass "fm-desk-voice: screenshots are delivered by path, alone or with the transcript, as one message"
+}
+
+# The floater's screenshot-stacking rules are Swift, so they need macOS and swift.
+test_floater_swift_tests() {
+  local out
+  if [ "$(uname)" != Darwin ] || ! command -v swift >/dev/null 2>&1; then
+    pass "desk floater: Swift tests skipped (need macOS and swift)"
+    return
+  fi
+  out=$(swift test --package-path "$ROOT/desk-floater" 2>&1) || fail "desk floater Swift tests failed: $out"
+  pass "desk floater: screenshot stack Swift tests pass"
+}
+
 test_deepgram_lib_reads_dotenv_without_logging_key() {
   local home out
   home=$(new_home dotenv)
@@ -638,4 +1001,18 @@ test_speak_leaves_no_voice_list_behind_when_the_register_refuses
 test_speak_does_not_swap_to_deepgram_when_say_fails
 test_speak_falls_back_to_say_when_deepgram_fails
 test_desk_voice_deliver_pending_drain
+test_desk_voice_send_types_into_the_primary_pane
+test_desk_voice_send_falls_back_without_a_live_primary
+test_desk_voice_send_refuses_a_pane_not_hosting_the_primary
+test_desk_voice_send_falls_back_when_the_pane_refuses_text
+test_desk_voice_send_never_doubles_an_unconfirmed_submit
+test_desk_voice_send_falls_back_when_the_pane_shows_a_dialog
+test_desk_voice_send_joins_a_pending_draft
+test_desk_voice_send_types_screenshots_into_the_primary_pane
+test_desk_voice_send_screenshots_fall_back_to_the_mailbox
+test_desk_voice_shot_captures_the_named_display
+test_desk_voice_shot_keeps_only_the_newest
+test_desk_voice_shot_failure_leaves_nothing
+test_desk_voice_deliver_with_screenshots
+test_floater_swift_tests
 test_deepgram_lib_reads_dotenv_without_logging_key
