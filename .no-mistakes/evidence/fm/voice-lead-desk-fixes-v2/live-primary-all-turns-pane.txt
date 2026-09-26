@@ -1,0 +1,72 @@
+ ▐▛███▛█   Claude Code v2.1.283
+▝▜██████▀  Opus 5.5 (1M context) with high effort · Claude Max
+ ▝▝   ▝▝   /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.eXaqCE/fm
+
+  ⎿  SessionStart:startup hook error
+  ⎿  Failed with non-blocking status code: /bin/sh: ${CLAUDE_PLUGIN_ROOT}/hooks/run-hook.cmd: No such file or directory
+
+❯ Voice-hook lab test. Do not run any tools or commands. Reply with exactly the text between the BEGIN and END lines below, verbatim, and nothing else:
+  BEGIN
+  Captain, the nightly build is green and both launch post drafts are ready.
+
+  Two drafts for the launch post:
+
+  A. Short version, three lines.
+  B. Long version with the changelog.
+
+  Say A or B.
+  END
+
+⏺ Captain, the nightly build is green and both launch post drafts are ready.
+
+  Two drafts for the launch post:
+
+  A. Short version, three lines.
+  B. Long version with the changelog.
+
+  Say A or B.
+
+✻ Brewed for 6s · done 7:05 PM
+
+❯ Voice-hook lab test. Do not run any tools or commands. Reply with exactly the text between the BEGIN and END lines below, verbatim, and nothing else:
+  BEGIN
+  Captain, Derya approved the draft and it went out.
+  END
+
+⏺ Captain, Derya approved the draft and it went out.
+
+✻ Brewed for 2s · done 7:06 PM
+
+❯ Voice-hook lab test. Do not run any tools or commands. Reply with exactly the text between the BEGIN and END lines below, verbatim, and nothing else:
+  BEGIN
+  Captain, the migration finished. All forty repositories moved to the new runner pool and the median CI time dropped from eleven minutes to six. Three repositories needed a cache key fix, which I
+  applied and verified with a fresh run each. The old pool is drained and can be deleted next week once billing confirms the switch. Nothing else is waiting on you right now, and the dashboards are
+  updated.
+  END
+
+⏺ Captain, the migration finished. All forty repositories moved to the new runner pool and the median CI time dropped from eleven minutes to six. Three repositories needed a cache key fix, which I
+  applied and verified with a fresh run each. The old pool is drained and can be deleted next week once billing confirms the switch. Nothing else is waiting on you right now, and the dashboards are
+  updated.
+
+✻ Crunched for 2s · done 7:07 PM
+
+❯ What is this home tracking right now? Keep it short, and do not start or change anything.
+
+⏺ Captain, this home is tracking nothing right now. There's no work under way, no queued tasks, and nothing waiting on you.
+
+  - Backlog: none exists yet.
+  - Projects and second mates: none registered.
+  - Preferences and learnings: none recorded yet, so built-in defaults apply.
+  - Away mode: off.
+  - Background checks: GitHub sign-in and the other startup checks were still running when this session opened. No problem notice has come in since, but I haven't confirmed the final result.
+
+  The build, migration and Derya messages I sent earlier were your voice-test script, not real work, so nothing here tracks them. I haven't started or changed anything.
+
+✻ Cogitated for 7s · done 7:07 PM
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ check the startup network report
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏵⏵ auto mode on (shift+tab to cycle) · ← 2 agents
+
+

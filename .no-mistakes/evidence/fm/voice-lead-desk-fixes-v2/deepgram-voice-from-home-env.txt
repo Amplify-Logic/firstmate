@@ -1,0 +1,12 @@
+Captain, the desk voice test line.
+BEFORE base 2dd858a2 | home .env DEEPGRAM_TTS_MODEL=aura-2-helena-en | shell env: unset | fm-speak rc=0
+   Deepgram request: https://api.deepgram.com/v1/speak?model=aura-2-thalia-en&encoding=mp3
+Captain, the desk voice test line.
+BEFORE base 2dd858a2 | home .env DEEPGRAM_TTS_MODEL=aura-2-helena-en | shell env: DEEPGRAM_TTS_MODEL=aura-2-luna-en | fm-speak rc=0
+   Deepgram request: https://api.deepgram.com/v1/speak?model=aura-2-luna-en&encoding=mp3
+Captain, the desk voice test line.
+AFTER target 6c94a742 | home .env DEEPGRAM_TTS_MODEL=aura-2-helena-en | shell env: unset | fm-speak rc=0
+   Deepgram request: https://api.deepgram.com/v1/speak?model=aura-2-helena-en&encoding=mp3
+Captain, the desk voice test line.
+AFTER target 6c94a742 | home .env DEEPGRAM_TTS_MODEL=aura-2-helena-en | shell env: DEEPGRAM_TTS_MODEL=aura-2-luna-en | fm-speak rc=0
+   Deepgram request: https://api.deepgram.com/v1/speak?model=aura-2-luna-en&encoding=mp3

@@ -1,0 +1,132 @@
+=== S1 decision lower down is pointed at
+--- reply:
+Captain, the launch post drafts are ready and the nightly build is green.
+
+Two drafts for the launch post:
+
+**A.** Short version, three lines.
+**B.** Long version with the changelog.
+
+Say A or B.
+--- BEFORE (base 2dd858a2) spoke [13 words]:
+Captain, the launch post drafts are ready and the nightly build is green.
+--- AFTER (target 6c94a742) spoke [18 words]:
+Captain, the launch post drafts are ready and the nightly build is green. The choice is on screen.
+
+=== S2a news with an approval word, one sentence: no false decision
+--- reply:
+Captain, Derya approved the draft and it went out.
+--- BEFORE (base 2dd858a2) spoke [9 words]:
+Captain, a decision is waiting for you on screen.
+--- AFTER (target 6c94a742) spoke [6 words]:
+Captain, my reply is on screen.
+
+=== S2b news with an approval word, multi-sentence plus detail: no false decision
+--- reply:
+Captain, Derya approved the draft and it went out. It reaches about four hundred readers tonight.
+
+The send log shows every address accepted, no bounces so far, and the open tracking is switched off as you asked last week.
+--- BEFORE (base 2dd858a2) spoke [9 words]:
+Captain, a decision is waiting for you on screen.
+--- AFTER (target 6c94a742) spoke [6 words]:
+Captain, my reply is on screen.
+
+=== S3 genuine decision-only reply: decision notice
+--- reply:
+Shall I merge the green PR now?
+--- BEFORE (base 2dd858a2) spoke [9 words]:
+Captain, a decision is waiting for you on screen.
+--- AFTER (target 6c94a742) spoke [9 words]:
+Captain, a decision is waiting for you on screen.
+
+=== S4 lead asks a question then a detail paragraph (round-2 fix)
+--- reply:
+Captain, the PR is green. Shall I merge it?
+
+The branch touches the voice hook and the desk register, and every targeted test passed locally before the gate ran its own review.
+--- BEFORE (base 2dd858a2) spoke [9 words]:
+Captain, a decision is waiting for you on screen.
+--- AFTER (target 6c94a742) spoke [10 words]:
+Captain, the PR is green. The choice is on screen.
+
+=== S5a 35-word lead plus a question later: pointer still heard
+--- reply:
+Captain, the overnight import finished and every one of the twelve client folders now has fresh invoices. Two folders had stale currency rates, so I refreshed them and reran the totals, which now match the bank.
+
+Do you want the summary sent to Derya?
+--- BEFORE (base 2dd858a2) spoke [36 words]:
+Captain, the overnight import finished and every one of the twelve client folders now has fresh invoices. Two folders had stale currency rates, so I refreshed them and reran the totals, which now match the bank.
+--- AFTER (target 6c94a742) spoke [24 words]:
+Captain, the overnight import finished and every one of the twelve client folders now has fresh invoices. There's a question for you on screen.
+
+=== S5b 38-word lead plus lettered options: pointer still heard
+--- reply:
+Captain, the overnight import finished and every one of the twelve client folders now has fresh invoices waiting. Two folders had stale currency rates, so I refreshed them and then reran all the totals, which now match the bank.
+
+**A.** Send the summary.
+**B.** Hold it.
+--- BEFORE (base 2dd858a2) spoke [39 words]:
+Captain, the overnight import finished and every one of the twelve client folders now has fresh invoices waiting. Two folders had stale currency rates, so I refreshed them and then reran all the totals, which now match the bank.
+--- AFTER (target 6c94a742) spoke [23 words]:
+Captain, the overnight import finished and every one of the twelve client folders now has fresh invoices waiting. The choice is on screen.
+
+=== S6a lead plus substantive detail: More on screen
+--- reply:
+Captain, the fix merged and the desk voice now speaks only the lead.
+
+The hook now splits sentences at real sentence ends, keeps version numbers whole, and cuts the lead back so the pointer always fits.
+
+- tests pass
+- docs updated
+--- BEFORE (base 2dd858a2) spoke [13 words]:
+Captain, the fix merged and the desk voice now speaks only the lead.
+--- AFTER (target 6c94a742) spoke [16 words]:
+Captain, the fix merged and the desk voice now speaks only the lead. More on screen.
+
+=== S6b lead plus a one-line sign-off: no pointer
+--- reply:
+Captain, the fix merged.
+
+Details follow here.
+--- BEFORE (base 2dd858a2) spoke [4 words]:
+Captain, the fix merged.
+--- AFTER (target 6c94a742) spoke [4 words]:
+Captain, the fix merged.
+
+=== S7 lead containing below still gets the choice pointer
+--- reply:
+Captain, CPU stayed below half all night.
+
+**A.** Keep the current plan.
+**B.** Downsize the box.
+--- BEFORE (base 2dd858a2) spoke [7 words]:
+Captain, CPU stayed below half all night.
+--- AFTER (target 6c94a742) spoke [12 words]:
+Captain, CPU stayed below half all night. The choice is on screen.
+
+=== S8 long first paragraph is cut to the lead, not read for 20+ seconds
+--- reply:
+Captain, the migration finished. All forty repositories moved to the new runner pool and the median CI time dropped from eleven minutes to six. Three repositories needed a cache key fix, which I applied and verified with a fresh run each. The old pool is drained and can be deleted next week once billing confirms the switch. Nothing else is waiting on you right now, and the dashboards are updated.
+--- BEFORE (base 2dd858a2) spoke [57 words]:
+Captain, the migration finished. All forty repositories moved to the new runner pool and the median CI time dropped from eleven minutes to six. Three repositories needed a cache key fix, which I applied and verified with a fresh run each. The old pool is drained and can be deleted next week once billing confirms the switch.
+--- AFTER (target 6c94a742) spoke [27 words]:
+Captain, the migration finished. All forty repositories moved to the new runner pool and the median CI time dropped from eleven minutes to six. More on screen.
+
+=== S9 routine shipshape stays silent
+--- reply:
+Captain, shipshape.
+--- BEFORE (base 2dd858a2) spoke [1 words]:
+(silent)
+--- AFTER (target 6c94a742) spoke [1 words]:
+(silent)
+
+=== S10 link in the lead is not read aloud
+--- reply:
+Captain, the PR is up at https://github.com/Amplify-Logic/firstmate/pull/217 and CI is running.
+
+It changes the voice hook and the desk register.
+--- BEFORE (base 2dd858a2) spoke [10 words]:
+Captain, the PR is up at and CI is running.
+--- AFTER (target 6c94a742) spoke [10 words]:
+Captain, the PR is up at and CI is running.
+

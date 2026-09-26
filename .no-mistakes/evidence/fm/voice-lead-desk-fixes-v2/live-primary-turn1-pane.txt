@@ -1,0 +1,60 @@
+ ▐▛███▛█   Claude Code v2.1.283
+▝▜██████▀  Opus 5.5 (1M context) with high effort · Claude Max
+ ▝▝   ▝▝   /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.eXaqCE/fm
+
+  ⎿  SessionStart:startup hook error
+  ⎿  Failed with non-blocking status code: /bin/sh: ${CLAUDE_PLUGIN_ROOT}/hooks/run-hook.cmd: No such file or directory
+
+❯ Voice-hook lab test. Do not run any tools or commands. Reply with exactly the text between the BEGIN and END lines below, verbatim, and nothing else:
+  BEGIN
+  Captain, the nightly build is green and both launch post drafts are ready.
+
+  Two drafts for the launch post:
+
+  A. Short version, three lines.
+  B. Long version with the changelog.
+
+  Say A or B.
+  END
+
+⏺ Captain, the nightly build is green and both launch post drafts are ready.
+
+  Two drafts for the launch post:
+
+  A. Short version, three lines.
+  B. Long version with the changelog.
+
+  Say A or B.
+
+✻ Brewed for 6s · done 7:05 PM
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏵⏵ auto mode on (shift+tab to cycle) · ← 2 agents
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
