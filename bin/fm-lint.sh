@@ -47,8 +47,19 @@
 # has no trustworthy cost, so it is queued ahead of every measured root and only
 # size-estimated among its unlisted peers; an unlisted canonical root also warns
 # once on stderr without failing the run. Because a free worker always takes the
-# next root, adding or resizing files cannot unbalance the workers. Each
-# root writes separate diagnostics, and the parent replays them in root order
+# next root, adding or resizing files cannot unbalance the workers.
+# ShellCheck's peak memory grows with a root's cost: on Linux the costliest
+# root alone peaks near 16 GB and the next near 11 GB, so two costly roots side
+# by side exhaust the 16 GB CI runner. Each root therefore gets a memory class
+# from its measured cost as a share of the costliest measured root, so the
+# classes survive regenerating the table on faster or slower hardware: small
+# (below SMALL_COST_PERMILLE), light (below HEAVY_COST_PERMILLE), heavy (below
+# HUGE_COST_PERMILLE), or huge; an unmeasured root has unknown memory and counts
+# as huge. Only the first worker takes heavy and huge roots, so no two of them
+# ever run side by side, and while it runs a huge root the other worker takes
+# only small roots, waiting for a light one to finish before the huge root
+# starts.
+# Each root writes separate diagnostics, and the parent replays them in root order
 # after every worker finishes, so FM_LINT_JOBS=1 gives byte-identical diagnostics
 # and exit selection. --record-costs rewrites the cost table from a full run.
 #
@@ -78,6 +89,13 @@ COST_TABLE="$SELF_DIR/fm-lint-costs.tsv"
 # Byte-size estimate for a root the cost table does not list, near the canonical
 # set's measured average.
 COST_ESTIMATE_BYTES_PER_CS=50
+# Memory class boundaries, in thousandths of the costliest measured root's cost
+# (see the header). With the committed table, the pinned ShellCheck on Linux
+# peaked under 1 GB for small roots, under 3.5 GB for light roots, under 7.5 GB
+# for heavy roots, and at 9 to 16 GB for huge roots.
+SMALL_COST_PERMILLE=15
+HEAVY_COST_PERMILLE=120
+HUGE_COST_PERMILLE=500
 ROOT="$(cd "$SELF_DIR/.." && pwd -P)"
 cd "$ROOT" || exit 1
 
@@ -105,8 +123,43 @@ fm_lint_worker_children_cpu() {  # <times-file>
   }' "$1"
 }
 
+# fm_lint_worker_mark publishes this worker's pid in <marker> with an atomic
+# rename, so a reader never sees a partly written marker.
+fm_lint_worker_mark() {  # <marker>
+  printf '%s\n' "$$" > "$1.tmp.$$" && mv -f "$1.tmp.$$" "$1"
+}
+
+# fm_lint_worker_live_marker succeeds while <marker> names a live worker.
+fm_lint_worker_live_marker() {  # <marker>
+  local pid=
+  { read -r pid < "$1"; } 2>/dev/null || return 1
+  case "$pid" in ''|*[!0-9]*) return 1 ;; esac
+  kill -0 "$pid" 2>/dev/null
+}
+
+fm_lint_worker_run_root() {  # <output-dir> <worker-index> <index> <path>
+  local output_dir=$1 worker_index=$2 index=$3 path=$4 output rc cpu_before cpu_after
+  output="$output_dir/root.$index"
+  rc=0
+  if [ -n "${FM_LINT_INTERNAL_COSTS:-}" ]; then
+    times > "$output_dir/times.$worker_index"
+    cpu_before=$(fm_lint_worker_children_cpu "$output_dir/times.$worker_index")
+  fi
+  "$FM_LINT_SHELLCHECK" "${shellcheck_args[@]}" -- "$path" > "$output.out" 2>&1 &
+  FM_LINT_WORKER_SHELLCHECK_PID=$!
+  wait "$FM_LINT_WORKER_SHELLCHECK_PID" || rc=$?
+  FM_LINT_WORKER_SHELLCHECK_PID=
+  if [ -n "${FM_LINT_INTERNAL_COSTS:-}" ]; then
+    times > "$output_dir/times.$worker_index"
+    cpu_after=$(fm_lint_worker_children_cpu "$output_dir/times.$worker_index")
+    printf '%s\t%s\n' "$path" "$((cpu_after - cpu_before))" >> "$output_dir/costs.$worker_index"
+  fi
+  printf '%s\n' "$rc" > "$output.rc"
+}
+
 fm_lint_worker() {  # <queue> <output-dir> <worker-index>
-  local queue=$1 output_dir=$2 worker_index=$3 tab index path output rc cpu_before cpu_after
+  local queue=$1 output_dir=$2 worker_index=$3 tab index class path deferred marker
+  local huge_flag="$output_dir/huge-running"
   local -a shellcheck_args
   tab=$(printf '\t')
   shellcheck_args=(--norc)
@@ -124,26 +177,54 @@ fm_lint_worker() {  # <queue> <output-dir> <worker-index>
   trap 'fm_lint_worker_stop; exit 143' TERM
   # Every worker walks the same cost-ordered queue and claims each root with an
   # atomic mkdir, so whichever worker is free takes the next most expensive root.
-  while IFS="$tab" read -r index path || [ -n "${index:-}${path:-}" ]; do
-    [ -n "${index:-}" ] || continue
-    mkdir "$output_dir/claim.$index" 2>/dev/null || continue
-    output="$output_dir/root.$index"
-    rc=0
-    if [ -n "${FM_LINT_INTERNAL_COSTS:-}" ]; then
-      times > "$output_dir/times.$worker_index"
-      cpu_before=$(fm_lint_worker_children_cpu "$output_dir/times.$worker_index")
-    fi
-    "$FM_LINT_SHELLCHECK" "${shellcheck_args[@]}" -- "$path" > "$output.out" 2>&1 &
-    FM_LINT_WORKER_SHELLCHECK_PID=$!
-    wait "$FM_LINT_WORKER_SHELLCHECK_PID" || rc=$?
-    FM_LINT_WORKER_SHELLCHECK_PID=
-    if [ -n "${FM_LINT_INTERNAL_COSTS:-}" ]; then
-      times > "$output_dir/times.$worker_index"
-      cpu_after=$(fm_lint_worker_children_cpu "$output_dir/times.$worker_index")
-      printf '%s\t%s\n' "$path" "$((cpu_after - cpu_before))" >> "$output_dir/costs.$worker_index"
-    fi
-    printf '%s\n' "$rc" > "$output.rc"
-  done < "$queue"
+  # Memory classes (see the header) bound what can run side by side: only the
+  # first worker takes heavy and huge roots, and while it runs a huge root the
+  # other workers take only small roots. Each side announces itself before it
+  # checks the other (the huge flag, a light marker), so at least one of them
+  # always sees the other and they never overlap.
+  if [ "$worker_index" -eq 0 ]; then
+    while IFS="$tab" read -r index class path || [ -n "${index:-}${path:-}" ]; do
+      [ -n "${index:-}" ] || continue
+      mkdir "$output_dir/claim.$index" 2>/dev/null || continue
+      if [ "$class" -ge 3 ]; then
+        fm_lint_worker_mark "$huge_flag"
+        for marker in "$output_dir"/light.*; do
+          while fm_lint_worker_live_marker "$marker"; do sleep 1; done
+        done
+      fi
+      fm_lint_worker_run_root "$output_dir" "$worker_index" "$index" "$path"
+      [ "$class" -lt 3 ] || rm -f "$huge_flag"
+    done < "$queue"
+  else
+    marker="$output_dir/light.$worker_index"
+    while :; do
+      deferred=0
+      while IFS="$tab" read -r index class path || [ -n "${index:-}${path:-}" ]; do
+        [ -n "${index:-}" ] || continue
+        [ "$class" -lt 2 ] || continue
+        [ ! -d "$output_dir/claim.$index" ] || continue
+        if [ "$class" -eq 1 ]; then
+          # A cheap look first keeps a waiting worker from rewriting its marker.
+          if fm_lint_worker_live_marker "$huge_flag"; then
+            deferred=1
+            continue
+          fi
+          fm_lint_worker_mark "$marker"
+          if fm_lint_worker_live_marker "$huge_flag"; then
+            rm -f "$marker"
+            deferred=1
+            continue
+          fi
+        fi
+        if mkdir "$output_dir/claim.$index" 2>/dev/null; then
+          fm_lint_worker_run_root "$output_dir" "$worker_index" "$index" "$path"
+        fi
+        [ "$class" -eq 0 ] || rm -f "$marker"
+      done < "$queue"
+      [ "$deferred" -eq 1 ] || break
+      sleep 1
+    done
+  fi
   trap - HUP INT TERM
   return 0
 }
@@ -664,24 +745,32 @@ done
 # bytes model poorly, so it leads the queue ahead of every measured root and its
 # byte estimate only orders it against the other unlisted roots. That way the
 # worst case for a stale table is starting an expensive root too early, never
-# too late. The order only affects wall time: every root is linted exactly once
-# and diagnostics replay in root order, so results never depend on the table.
+# too late. Each queue entry also carries the root's memory class, and an
+# unmeasured root is huge because its memory is unknown. The order and classes
+# only affect wall time and memory: every root is linted exactly once and
+# diagnostics replay in root order, so results never depend on the table.
 UNMEASURED="$TMP_ROOT/unmeasured"
 : > "$UNMEASURED"
 awk -F "$TAB" -v OFS="$TAB" -v table="$COST_TABLE" -v per_cs="$COST_ESTIMATE_BYTES_PER_CS" \
+  -v small_pm="$SMALL_COST_PERMILLE" -v heavy_pm="$HEAVY_COST_PERMILLE" -v huge_pm="$HUGE_COST_PERMILLE" \
   -v unmeasured="$UNMEASURED" '
   BEGIN {
+    max_cost = 0
     while ((getline line < table) > 0) {
       if (line ~ /^#/ || split(line, field, "\t") < 2 || field[2] !~ /^[0-9]+$/) continue
-      measured[field[1]] = field[2]
+      measured[field[1]] = field[2] + 0
+      if (field[2] + 0 > max_cost) max_cost = field[2] + 0
     }
     close(table)
   }
   {
     if ($3 in measured) {
-      print 0, measured[$3], $1, $3
+      share = measured[$3] * 1000
+      class = (share >= huge_pm * max_cost) ? 3 : (share >= heavy_pm * max_cost) ? 2 \
+        : (share >= small_pm * max_cost) ? 1 : 0
+      print 0, measured[$3], $1, class, $3
     } else {
-      print 1, int($2 / per_cs) + 1, $1, $3
+      print 1, int($2 / per_cs) + 1, $1, 3, $3
       if ($4 == 1) print $3 >> unmeasured
     }
   }
@@ -771,7 +860,7 @@ fm_lint_write_costs() {
   local costs_tmp="$TMP_ROOT/costs.tsv"
   {
     printf '# fm-lint.sh root cost table: <root path> TAB <ShellCheck CPU centiseconds>.\n'
-    printf '# Only orders the lint work queue; regenerate with: CI=true bin/fm-lint.sh --record-costs bin/fm-lint-costs.tsv\n'
+    printf '# Orders the lint work queue and sets the memory class of each root; regenerate with: CI=true bin/fm-lint.sh --record-costs bin/fm-lint-costs.tsv\n'
     cat "$OUTPUT_DIR"/costs.* 2>/dev/null | LC_ALL=C sort -t "$TAB" -k1,1
   } > "$costs_tmp" || return 1
   [ "$(grep -vc '^#' "$costs_tmp")" -eq "$ROOT_COUNT" ] || return 1
