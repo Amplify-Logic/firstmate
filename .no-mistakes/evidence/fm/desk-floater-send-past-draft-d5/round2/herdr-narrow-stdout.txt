@@ -1,0 +1,7 @@
+session=fm-lab-desk-r2n-38245-13835 pane=w1:p1 claude=2.1.283 (Claude Code) herdr=herdr 0.7.4
+shell_pid=38673 claude_pid=41819 (claude) worktree HEAD=cb805eb0 pane-width=159
+G send -> sent: herdr fm-lab-desk-r2n-38245-13835:w1:p1
+G replied=1 mailbox-used=0
+RESULT G-herdr-suggested-prompt: pass
+no claude session log found
+teardown ok: fm-lab-desk-r2n-38245-13835

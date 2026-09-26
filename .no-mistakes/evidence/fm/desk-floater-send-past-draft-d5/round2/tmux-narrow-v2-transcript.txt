@@ -1,0 +1,266 @@
+claude: 2.1.283 (Claude Code)  tmux: tmux 3.6a  worktree HEAD: cb805eb0 width=54
+N1 footer-esc-seen=1 busy-before-send=0 state=pending
+----- screen: N1 before send (state=pending) -----
+           Claude Code v2.1.283
+ ▐▛███▛█   Opus 5.5 (1M context) with high effort
+▝▜██████▀  Claude Max
+ ▝▝   ▝▝   /…/T/fm-lab.OALrgj/project
+
+  ⎿  SessionStart:startup hook error
+  ⎿  Failed with non-blocking status code: /bin/sh:
+     ${CLAUDE_PLUGIN_ROOT}/hooks/run-hook.cmd: No such
+     file or directory
+
+❯ Write a numbered list of 80 different bird species,
+  one per line, with a two-sentence fact about each.
+  Run 1.
+
+✶ Beaming…
+
+──────────────────────────────────────────────────────
+❯ CURLEW1 draft
+──────────────────────────────────────────────────────
+  ⏵⏵ auto mode on (shift+tab to cycle)
+                                    ● high · /effort
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+----- end -----
+N1 send -> sent: tmux %0
+N1 frames sampled=14 frames-with-stashed-on-own-row=0
+----- screen: N1 right after send (state=pending) -----
+           Claude Code v2.1.283
+ ▐▛███▛█   Opus 5.5 (1M context) with high effort
+▝▜██████▀  Claude Max
+ ▝▝   ▝▝   /…/T/fm-lab.OALrgj/project
+
+  ⎿  SessionStart:startup hook error
+  ⎿  Failed with non-blocking status code: /bin/sh:
+     ${CLAUDE_PLUGIN_ROOT}/hooks/run-hook.cmd: No such
+     file or directory
+
+❯ Write a numbered list of 80 different bird species,
+  one per line, with a two-sentence fact about each.
+  Run 1.
+
+⏺ 1. Bald Eagle: The bald eagle is the national bird
+     of the United States and lives near large bodies
+     of open water. Its nests can weigh more than a
+     ton, and a pair often reuses and adds to the same
+     nest for years.
+  2. Peregrine Falcon: In a hunting dive, called a
+     stoop, the peregrine falcon can go faster than
+     320 km/h (200 mph), making it the fastest animal
+     on Earth. It is found on every continent except
+     Antarctica.
+  3. Emperor Penguin: Emperor penguins are the largest
+     penguin species and breed during the harsh
+     Antarctic winter. The males keep the egg warm on
+     their feet for about two months without eating.
+  4. Ruby-throated Hummingbird: This small hummingbird
+
+❯ Reply with only the word ROBIN1
+  ctrl+x ctrl+s to send now
+
+──────────────────────────────────────────────────────
+❯ CURLEW1 draft
+──────────────────────────────────────────────────────
+  ⏵⏵ auto mode on (shift+tab to cycle)
+                                    ● high · /effort
+
+
+----- end -----
+----- screen: N1 after the queued message ran (state=pending) -----
+      and digs out rectangular holes to find carpenter
+      ants. Its old nest holes are later used by
+      owls, ducks and other animals.
+  76. Acorn Woodpecker: Acorn woodpeckers store
+      thousands of acorns in holes drilled into
+      "granary" trees. They live in cooperative family
+      groups that share and guard these stores.
+  77. Satin Bowerbird: Male satin bowerbirds build
+      stick structures called bowers and decorate them
+      with blue objects to attract females. These can
+      include flowers, feathers and bottle caps.
+  78. Greater Bird-of-Paradise: Male greater
+      birds-of-paradise have long, lacy plumes that
+      they show off in group displays called leks. The
+      first skins traded to Europe had no feet, which
+      led to the false belief that these birds never
+      landed.
+  79. Hoatzin: Hoatzin chicks have claws on their
+      wings, which help them climb back up to branches
+      after dropping into water. Adults digest leaves
+      by fermenting them in their gut, which gives
+      the bird a strong smell.
+  80. Dodo: The dodo was a flightless pigeon found
+      only on the island of Mauritius. It went extinct
+      in the late 1600s, less than a century after
+      sailors first recorded it.
+
+✻ Crunched for 54s · done 1:02 AM
+
+❯ Reply with only the word ROBIN1
+
+⏺ ROBIN1
+
+✻ Crunched for 1s · done 1:02 AM
+
+──────────────────────────────────────────────────────
+❯ CURLEW1 draft
+──────────────────────────────────────────────────────
+  ⏵⏵ auto mode on (shift+tab to cycle)
+
+----- end -----
+N1 after: replied=1 state=pending draft-in-box=1
+RESULT N1-narrow-busy-past-draft: fail (busy=0)
+N2 footer-esc-seen=1 busy-before-send=0 state=pending
+----- screen: N2 before send (state=pending) -----
+      stick structures called bowers and decorate them
+      with blue objects to attract females. These can
+      include flowers, feathers and bottle caps.
+  78. Greater Bird-of-Paradise: Male greater
+      birds-of-paradise have long, lacy plumes that
+      they show off in group displays called leks. The
+      first skins traded to Europe had no feet, which
+      led to the false belief that these birds never
+      landed.
+  79. Hoatzin: Hoatzin chicks have claws on their
+      wings, which help them climb back up to branches
+      after dropping into water. Adults digest leaves
+      by fermenting them in their gut, which gives
+      the bird a strong smell.
+  80. Dodo: The dodo was a flightless pigeon found
+      only on the island of Mauritius. It went extinct
+      in the late 1600s, less than a century after
+      sailors first recorded it.
+
+✻ Crunched for 54s · done 1:02 AM
+
+❯ Reply with only the word ROBIN1
+
+⏺ ROBIN1
+
+✻ Crunched for 1s · done 1:02 AM
+
+❯ Write a numbered list of 80 different bird species,
+  one per line, with a two-sentence fact about each.
+  Run 2.
+
+✶ Catapulting… (2s · thinking with high effort)
+  ⎿  Tip: Control this session from the Claude mobile
+     app · run /remote-control
+
+──────────────────────────────────────────────────────
+❯ CURLEW2 draft
+──────────────────────────────────────────────────────
+  ⏵⏵ auto mode on (shift+tab to cycle)
+
+----- end -----
+N2 send -> sent: tmux %0
+N2 frames sampled=13 frames-with-stashed-on-own-row=2
+----- screen: N2 right after send (state=pending) -----
+      birds-of-paradise have long, lacy plumes that
+      they show off in group displays called leks. The
+      first skins traded to Europe had no feet, which
+      led to the false belief that these birds never
+      landed.
+  79. Hoatzin: Hoatzin chicks have claws on their
+      wings, which help them climb back up to branches
+      after dropping into water. Adults digest leaves
+      by fermenting them in their gut, which gives
+      the bird a strong smell.
+  80. Dodo: The dodo was a flightless pigeon found
+      only on the island of Mauritius. It went extinct
+      in the late 1600s, less than a century after
+      sailors first recorded it.
+
+✻ Crunched for 54s · done 1:02 AM
+
+❯ Reply with only the word ROBIN1
+
+⏺ ROBIN1
+
+✻ Crunched for 1s · done 1:02 AM
+
+❯ Write a numbered list of 80 different bird species,
+  one per line, with a two-sentence fact about each.
+  Run 2.
+
+❯ Reply with only the word ROBIN2
+  ctrl+x ctrl+s to send now
+
+✻ Catapulting… (5s · thinking with high effort)
+  ⎿  Tip: Control this session from the Claude mobile
+     app · run /remote-control
+
+──────────────────────────────────────────────────────
+❯ CURLEW2 draft
+──────────────────────────────────────────────────────
+  ⏵⏵ auto mode on (shift+tab to cycle)
+                                      Draft restored
+
+----- end -----
+----- screen: N2 after the queued message ran (state=pending) -----
+  75. Snow Bunting: The snow bunting breeds farther
+      north than almost any other songbird. Males
+      arrive in the Arctic in early spring, weeks
+      before the snow melts.
+  76. Rock Ptarmigan: The rock ptarmigan turns white
+      in winter, and its feathered feet work like
+      snowshoes. It is the official territorial bird
+      of Nunavut, Canada.
+  77. Greater Sage-Grouse: Male greater sage-grouse
+      gather at display grounds called leks, where
+      they puff out yellow air sacs on their chests.
+      The sacs make loud popping sounds that carry
+      across the sagebrush.
+  78. Ruffed Grouse: The male ruffed grouse "drums" by
+      beating its wings rapidly in the air, making a
+      deep thumping sound that can be heard far away.
+      It is the state bird of Pennsylvania.
+  79. Common Pheasant: The common pheasant is native
+      to Asia but has been introduced to many parts of
+      the world for hunting. It is the state bird of
+      South Dakota.
+  80. Red Junglefowl: The red junglefowl of Southeast
+      Asia is the main wild ancestor of the domestic
+      chicken. There are now more than 20 billion
+      chickens, making them the most numerous bird on
+      Earth.
+
+✻ Brewed for 1m 58s · done 1:04 AM
+
+❯ Reply with only the word ROBIN2
+
+⏺ ROBIN2
+
+✻ Cogitated for 1s · done 1:04 AM
+
+──────────────────────────────────────────────────────
+❯ CURLEW2 draft
+──────────────────────────────────────────────────────
+  ⏵⏵ auto mode on (shift+tab to cycle)
+
+----- end -----
+N2 after: replied=1 state=pending draft-in-box=1
+RESULT N2-narrow-busy-past-draft: fail (busy=0)
+==== SUMMARY
+N1-narrow-busy-past-draft: fail (busy=0)
+N2-narrow-busy-past-draft: fail (busy=0)

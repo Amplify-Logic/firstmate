@@ -1,0 +1,9 @@
+claude: 2.1.283 (Claude Code)
+G1 box (styled): ^[[39mâM-^]¯Â 
+G1 composer state: empty
+G1 send -> sent: tmux %0
+C1 state before=empty len=1300
+C1 send (empty box) -> sent: tmux %0
+C2 state before=pending len=1300
+C2 send (past draft) -> sent: tmux %0
+C2 state after=pending

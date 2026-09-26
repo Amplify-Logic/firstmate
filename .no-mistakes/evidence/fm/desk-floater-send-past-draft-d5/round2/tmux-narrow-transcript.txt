@@ -1,0 +1,88 @@
+claude: 2.1.283 (Claude Code)  tmux: tmux 3.6a  worktree HEAD: cb805eb0 width=54
+N1 footer-esc-seen=0 busy-before-send=0 state=pending
+----- screen: N1 before send (state=pending) -----
+           Claude Code v2.1.283
+ ▐▛███▛█   Opus 5.5 (1M context) with high effort
+▝▜██████▀  Claude Max
+ ▝▝   ▝▝   /…/T/fm-lab.qkzYMR/project
+
+  ⎿  SessionStart:startup hook error
+  ⎿  Failed with non-blocking status code: /bin/sh:
+     ${CLAUDE_PLUGIN_ROOT}/hooks/run-hook.cmd: No such
+     file or directory
+
+❯ Write a numbered list of 80 different bird species,
+  one per line, with a two-sentence fact about each.
+  Run 1.
+
+✻ Actioning… (25s · thinking more with high effort)
+
+──────────────────────────────────────────────────────
+❯ CURLEW1 draft
+──────────────────────────────────────────────────────
+  ⏵⏵ auto mode on (shift+tab to cycle)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+----- end -----
+N1 send -> sent: tmux %0
+N1 frames sampled=16 frames-with-stashed-on-own-row=0
+----- screen: N1 right after send (state=pending) -----
+           Claude Code v2.1.283
+ ▐▛███▛█   Opus 5.5 (1M context) with high effort
+▝▜██████▀  Claude Max
+ ▝▝   ▝▝   /…/T/fm-lab.qkzYMR/project
+
+  ⎿  SessionStart:startup hook error
+  ⎿  Failed with non-blocking status code: /bin/sh:
+     ${CLAUDE_PLUGIN_ROOT}/hooks/run-hook.cmd: No such
+     file or directory
+
+❯ Write a numbered list of 80 different bird species,
+  one per line, with a two-sentence fact about each.
+  Run 1.
+
+❯ Reply with only the word ROBIN1
+  ctrl+x ctrl+s to send now
+
+✽ Actioning… (28s · thinking more with high effort)
+
+──────────────────────────────────────────────────────
+❯ CURLEW1 draft
+──────────────────────────────────────────────────────
+  ⏵⏵ auto mode on (shift+tab to cycle)
+                                      Draft restored
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+----- end -----

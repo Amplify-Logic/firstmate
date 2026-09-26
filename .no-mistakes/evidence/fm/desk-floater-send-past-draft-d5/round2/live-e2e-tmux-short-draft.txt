@@ -1,0 +1,1 @@
+ok - desk floater: real Claude 2.1.283 (Claude Code) submits the message alone and puts the unsent draft back

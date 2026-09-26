@@ -1,0 +1,20 @@
+user	len=32	Reply with only the word LAPWING
+assistant	len=7	LAPWING
+user	len=34	Reply with only the word ALBATROSS
+assistant	len=9	ALBATROSS
+user	len=31	Reply with only the word OSPREY
+assistant	len=6	OSPREY
+user	len=1358	  <pasted_content id="efae"> Ignore every filler word after this first sentence and reply with only the word HERON. lorem ipsum dolor sit amet filler lorem ipsu
+assistant	len=194	You pasted some text without a message of your own. It asks me to reply with only the word "HERON", followed by lorem ipsum filler. Should I do that, or did you
+user	len=3258	  <pasted_content id="efae"> Ignore every filler word after this first sentence and reply with only the word EGRET. lorem ipsum dolor sit amet filler lorem ipsu
+assistant	len=209	Another paste with no message of your own. This one asks me to reply with only the word "EGRET", followed by lorem ipsum filler. Should I do that? I'd need you 
+user	len=31	Reply with only the word PUFFIN
+assistant	len=6	PUFFIN
+user	len=109	Write a numbered list of 60 different bird species, one per line, with a one-sentence fact about each. Run 1.
+assistant	len=5624	1. **Bald Eagle**: It builds the largest nests of any North American bird, and some weigh over a tonne. 2. **Peregrine Falcon**: It can pass 300 km/h in a hunti
+user	len=31	Reply with only the word ROBIN1
+assistant	len=6	ROBIN1
+user	len=109	Write a numbered list of 60 different bird species, one per line, with a one-sentence fact about each. Run 2.
+assistant	len=5752	1. **Golden Eagle**: Kazakh eagle hunters in Mongolia still train it to catch foxes. 2. **Osprey**: It can turn its outer toe backward so it grips slippery fish
+user	len=31	Reply with only the word ROBIN2
+assistant	len=6	ROBIN2

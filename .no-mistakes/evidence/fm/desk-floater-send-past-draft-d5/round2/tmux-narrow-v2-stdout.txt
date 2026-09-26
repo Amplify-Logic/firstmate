@@ -1,0 +1,14 @@
+claude: 2.1.283 (Claude Code)  tmux: tmux 3.6a  worktree HEAD: cb805eb0 width=54
+N1 footer-esc-seen=1 busy-before-send=0 state=pending
+N1 send -> sent: tmux %0
+N1 frames sampled=14 frames-with-stashed-on-own-row=0
+N1 after: replied=1 state=pending draft-in-box=1
+RESULT N1-narrow-busy-past-draft: fail (busy=0)
+N2 footer-esc-seen=1 busy-before-send=0 state=pending
+N2 send -> sent: tmux %0
+N2 frames sampled=13 frames-with-stashed-on-own-row=2
+N2 after: replied=1 state=pending draft-in-box=1
+RESULT N2-narrow-busy-past-draft: fail (busy=0)
+==== SUMMARY
+N1-narrow-busy-past-draft: fail (busy=0)
+N2-narrow-busy-past-draft: fail (busy=0)

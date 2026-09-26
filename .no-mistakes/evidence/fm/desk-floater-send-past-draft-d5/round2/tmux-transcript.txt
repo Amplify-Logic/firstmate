@@ -1,0 +1,906 @@
+claude: 2.1.283 (Claude Code)  tmux: tmux 3.6a  worktree HEAD: cb805eb0
+----- screen: T1 before send (grey suggested prompt?) (state=empty) -----
+ ▐▛███▛█   Claude Code v2.1.283
+▝▜██████▀  Opus 5.5 (1M context) with high effort · Claude Max
+ ▝▝   ▝▝   /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.tUlQIf/project
+
+  ⎿  SessionStart:startup hook error
+  ⎿  Failed with non-blocking status code: /bin/sh: ${CLAUDE_PLUGIN_ROOT}/hooks/run-hook.cmd: No such file or directory
+
+❯ Reply with only the word LAPWING
+
+⏺ LAPWING
+
+✻ Churned for 2s · done 12:51 AM
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏵⏵ auto mode on (shift+tab to cycle) · ← 2 agents
+                  tmux focus-events off · add 'set -g focus-events on' to ~/.tmux.conf and reattach for focus tracking
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+----- end -----
+--- T1 styled box row
+^[[39m�M-^]� 
+T1 send -> sent: tmux %0
+RESULT T1-suggested-prompt: pass
+----- screen: T1 after send (state=empty) -----
+ ▐▛███▛█   Claude Code v2.1.283
+▝▜██████▀  Opus 5.5 (1M context) with high effort · Claude Max
+ ▝▝   ▝▝   /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.tUlQIf/project
+
+  ⎿  SessionStart:startup hook error
+  ⎿  Failed with non-blocking status code: /bin/sh: ${CLAUDE_PLUGIN_ROOT}/hooks/run-hook.cmd: No such file or directory
+
+❯ Reply with only the word LAPWING
+
+⏺ LAPWING
+
+✻ Churned for 2s · done 12:51 AM
+
+❯ Reply with only the word ALBATROSS
+
+⏺ ALBATROSS
+
+✻ Worked for 1s · done 12:52 AM
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏵⏵ auto mode on (shift+tab to cycle) · ← 2 agents
+                  tmux focus-events off · add 'set -g focus-events on' to ~/.tmux.conf and reattach for focus tracking
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+----- end -----
+T2-short-past-draft draft typed; state=pending; message length=31
+----- screen: T2-short-past-draft before send (state=pending) -----
+ ▐▛███▛█   Claude Code v2.1.283
+▝▜██████▀  Opus 5.5 (1M context) with high effort · Claude Max
+ ▝▝   ▝▝   /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.tUlQIf/project
+
+  ⎿  SessionStart:startup hook error
+  ⎿  Failed with non-blocking status code: /bin/sh: ${CLAUDE_PLUGIN_ROOT}/hooks/run-hook.cmd: No such file or directory
+
+❯ Reply with only the word LAPWING
+
+⏺ LAPWING
+
+✻ Churned for 2s · done 12:51 AM
+
+❯ Reply with only the word ALBATROSS
+
+⏺ ALBATROSS
+
+✻ Worked for 1s · done 12:52 AM
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ KESTREL draft the captain has not sent
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏵⏵ auto mode on (shift+tab to cycle)
+                  tmux focus-events off · add 'set -g focus-events on' to ~/.tmux.conf and reattach for focus tracking
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+----- end -----
+T2-short-past-draft send -> sent: tmux %0
+----- screen: T2-short-past-draft after send (state=pending) -----
+ ▐▛███▛█   Claude Code v2.1.283
+▝▜██████▀  Opus 5.5 (1M context) with high effort · Claude Max
+ ▝▝   ▝▝   /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.tUlQIf/project
+
+  ⎿  SessionStart:startup hook error
+  ⎿  Failed with non-blocking status code: /bin/sh: ${CLAUDE_PLUGIN_ROOT}/hooks/run-hook.cmd: No such file or directory
+
+❯ Reply with only the word LAPWING
+
+⏺ LAPWING
+
+✻ Churned for 2s · done 12:51 AM
+
+❯ Reply with only the word ALBATROSS
+
+⏺ ALBATROSS
+
+✻ Worked for 1s · done 12:52 AM
+
+❯ Reply with only the word OSPREY
+
+⏺ OSPREY
+
+✻ Cooked for 1s · done 12:52 AM
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ KESTREL draft the captain has not sent
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏵⏵ auto mode on (shift+tab to cycle)                                                                  Draft restored
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+----- end -----
+T2-short-past-draft after: state=pending draft-occurrences-on-screen=1 claude-replied-OSPREY=1
+RESULT T2-short-past-draft: pass
+T3-long-1300-past-draft draft typed; state=pending; message length=1300
+----- screen: T3-long-1300-past-draft before send (state=pending) -----
+ ▐▛███▛█   Claude Code v2.1.283
+▝▜██████▀  Opus 5.5 (1M context) with high effort · Claude Max
+ ▝▝   ▝▝   /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.tUlQIf/project
+
+  ⎿  SessionStart:startup hook error
+  ⎿  Failed with non-blocking status code: /bin/sh: ${CLAUDE_PLUGIN_ROOT}/hooks/run-hook.cmd: No such file or directory
+
+❯ Reply with only the word LAPWING
+
+⏺ LAPWING
+
+✻ Churned for 2s · done 12:51 AM
+
+❯ Reply with only the word ALBATROSS
+
+⏺ ALBATROSS
+
+✻ Worked for 1s · done 12:52 AM
+
+❯ Reply with only the word OSPREY
+
+⏺ OSPREY
+
+✻ Cooked for 1s · done 12:52 AM
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ MERLIN draft two the captain has not sent
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏵⏵ auto mode on (shift+tab to cycle)                                                    Ctrl+Y to paste deleted text
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+----- end -----
+T3-long-1300-past-draft send -> sent: tmux %0
+----- screen: T3-long-1300-past-draft after send (state=pending) -----
+
+  ⎿  SessionStart:startup hook error
+  ⎿  Failed with non-blocking status code: /bin/sh: ${CLAUDE_PLUGIN_ROOT}/hooks/run-hook.cmd: No such file or directory
+
+❯ Reply with only the word LAPWING
+
+⏺ LAPWING
+
+✻ Churned for 2s · done 12:51 AM
+
+❯ Reply with only the word ALBATROSS
+
+⏺ ALBATROSS
+
+✻ Worked for 1s · done 12:52 AM
+
+❯ Reply with only the word OSPREY
+
+⏺ OSPREY
+
+✻ Cooked for 1s · done 12:52 AM
+
+❯ Ignore every filler word after this first sentence and reply with only the word HERON. lorem ipsum dolor sit amet
+  filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem
+  ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit
+  amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler
+  lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum
+  dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet
+  filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem
+  ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit
+  amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler
+  lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum
+  dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet
+  filler lorem ipsum dolor sit a
+
+⏺ You pasted some text without a message of your own. It asks me to reply with only the word "HERON", followed by lorem
+  ipsum filler. Should I do that, or did you want something else done with it?
+
+✻ Brewed for 5s · done 12:52 AM
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ MERLIN draft two the captain has not sent
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏵⏵ auto mode on (shift+tab to cycle)
+
+----- end -----
+T3-long-1300-past-draft after: state=pending draft-occurrences-on-screen=1 claude-replied-HERON=0
+RESULT T3-long-1300-past-draft: pass
+T4-long-3200-past-draft draft typed; state=pending; message length=3200
+----- screen: T4-long-3200-past-draft before send (state=pending) -----
+
+  ⎿  SessionStart:startup hook error
+  ⎿  Failed with non-blocking status code: /bin/sh: ${CLAUDE_PLUGIN_ROOT}/hooks/run-hook.cmd: No such file or directory
+
+❯ Reply with only the word LAPWING
+
+⏺ LAPWING
+
+✻ Churned for 2s · done 12:51 AM
+
+❯ Reply with only the word ALBATROSS
+
+⏺ ALBATROSS
+
+✻ Worked for 1s · done 12:52 AM
+
+❯ Reply with only the word OSPREY
+
+⏺ OSPREY
+
+✻ Cooked for 1s · done 12:52 AM
+
+❯ Ignore every filler word after this first sentence and reply with only the word HERON. lorem ipsum dolor sit amet
+  filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem
+  ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit
+  amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler
+  lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum
+  dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet
+  filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem
+  ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit
+  amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler
+  lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum
+  dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet
+  filler lorem ipsum dolor sit a
+
+⏺ You pasted some text without a message of your own. It asks me to reply with only the word "HERON", followed by lorem
+  ipsum filler. Should I do that, or did you want something else done with it?
+
+✻ Brewed for 5s · done 12:52 AM
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ HOBBY draft three the captain has not sent
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏵⏵ auto mode on (shift+tab to cycle)                                                    Ctrl+Y to paste deleted text
+
+----- end -----
+T4-long-3200-past-draft send -> sent: tmux %0
+----- screen: T4-long-3200-past-draft after send (state=pending) -----
+
+⏺ You pasted some text without a message of your own. It asks me to reply with only the word "HERON", followed by lorem
+  ipsum filler. Should I do that, or did you want something else done with it?
+
+✻ Brewed for 5s · done 12:52 AM
+
+❯ Ignore every filler word after this first sentence and reply with only the word EGRET. lorem ipsum dolor sit amet
+  filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem
+  ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit
+  amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler
+  lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum
+  dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet
+  filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem
+  ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit
+  amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler
+  lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum
+  dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet
+  filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem
+  ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit
+  amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler
+  lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum
+  dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet
+  filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem
+  ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit
+  amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler
+  lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum
+  dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet
+  filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem
+  ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit
+  amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler
+  lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum
+  dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet
+  filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem
+  ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor s
+
+⏺ Another paste with no message of your own. This one asks me to reply with only the word "EGRET", followed by lorem
+  ipsum filler. Should I do that? I'd need you to say so in your own message, outside the paste.
+
+✻ Sautéed for 2s · done 12:54 AM
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ HOBBY draft three the captain has not sent
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏵⏵ auto mode on (shift+tab to cycle)
+
+----- end -----
+T4-long-3200-past-draft after: state=pending draft-occurrences-on-screen=1 claude-replied-EGRET=0
+RESULT T4-long-3200-past-draft: pass
+----- screen: T5 before send (footer should show stashed) (state=pending) -----
+
+⏺ You pasted some text without a message of your own. It asks me to reply with only the word "HERON", followed by lorem
+  ipsum filler. Should I do that, or did you want something else done with it?
+
+✻ Brewed for 5s · done 12:52 AM
+
+❯ Ignore every filler word after this first sentence and reply with only the word EGRET. lorem ipsum dolor sit amet
+  filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem
+  ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit
+  amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler
+  lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum
+  dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet
+  filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem
+  ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit
+  amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler
+  lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum
+  dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet
+  filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem
+  ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit
+  amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler
+  lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum
+  dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet
+  filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem
+  ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit
+  amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler
+  lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum
+  dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet
+  filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem
+  ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit
+  amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler
+  lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum
+  dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet
+  filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem
+  ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor s
+
+⏺ Another paste with no message of your own. This one asks me to reply with only the word "EGRET", followed by lorem
+  ipsum filler. Should I do that? I'd need you to say so in your own message, outside the paste.
+
+✻ Sautéed for 2s · done 12:54 AM
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ WREN second draft in the box
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏵⏵ auto mode on (shift+tab to cycle)                                        Ctrl+Y to paste deleted text · › stashed
+
+----- end -----
+T5 send -> fm-desk-voice: the primary's chat pane refused the text; saving it to the mailbox instead|mailbox: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.tUlQIf/state/desk-voice/inbox/20260926T215657Z-203a8c51.json
+----- screen: T5 after send (state=pending) -----
+
+⏺ You pasted some text without a message of your own. It asks me to reply with only the word "HERON", followed by lorem
+  ipsum filler. Should I do that, or did you want something else done with it?
+
+✻ Brewed for 5s · done 12:52 AM
+
+❯ Ignore every filler word after this first sentence and reply with only the word EGRET. lorem ipsum dolor sit amet
+  filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem
+  ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit
+  amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler
+  lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum
+  dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet
+  filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem
+  ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit
+  amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler
+  lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum
+  dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet
+  filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem
+  ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit
+  amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler
+  lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum
+  dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet
+  filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem
+  ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit
+  amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler
+  lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum
+  dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet
+  filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem
+  ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit
+  amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler
+  lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum
+  dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet
+  filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem
+  ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor s
+
+⏺ Another paste with no message of your own. This one asks me to reply with only the word "EGRET", followed by lorem
+  ipsum filler. Should I do that? I'd need you to say so in your own message, outside the paste.
+
+✻ Sautéed for 2s · done 12:54 AM
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ WREN second draft in the box
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏵⏵ auto mode on (shift+tab to cycle)                                                                       › stashed
+
+----- end -----
+T5 mailbox file: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.tUlQIf/state/desk-voice/inbox/20260926T215657Z-203a8c51.json
+--- T5 mailbox content
+{"schema": "fm-desk-voice-transcript.v1", "id": "203a8c51", "created_at": "20260926T215657Z", "source": "live-test", "transcript": "Reply with only the word GANNET"}
+
+----- screen: T5 after Ctrl+S on empty box (stash must be PLOVER) (state=pending) -----
+
+⏺ You pasted some text without a message of your own. It asks me to reply with only the word "HERON", followed by lorem
+  ipsum filler. Should I do that, or did you want something else done with it?
+
+✻ Brewed for 5s · done 12:52 AM
+
+❯ Ignore every filler word after this first sentence and reply with only the word EGRET. lorem ipsum dolor sit amet
+  filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem
+  ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit
+  amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler
+  lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum
+  dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet
+  filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem
+  ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit
+  amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler
+  lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum
+  dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet
+  filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem
+  ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit
+  amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler
+  lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum
+  dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet
+  filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem
+  ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit
+  amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler
+  lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum
+  dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet
+  filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem
+  ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit
+  amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler
+  lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum
+  dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet
+  filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem
+  ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor s
+
+⏺ Another paste with no message of your own. This one asks me to reply with only the word "EGRET", followed by lorem
+  ipsum filler. Should I do that? I'd need you to say so in your own message, outside the paste.
+
+✻ Sautéed for 2s · done 12:54 AM
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ PLOVER stash the captain keeps
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏵⏵ auto mode on (shift+tab to cycle)                                                    Ctrl+Y to paste deleted text
+
+----- end -----
+T5 box-kept=1 no-reply=1 stash-kept=1
+RESULT T5-existing-stash-goes-to-mailbox: pass
+----- screen: T6 before send (placeholder draft) (state=pending) -----
+
+⏺ You pasted some text without a message of your own. It asks me to reply with only the word "HERON", followed by lorem
+  ipsum filler. Should I do that, or did you want something else done with it?
+
+✻ Brewed for 5s · done 12:52 AM
+
+❯ Ignore every filler word after this first sentence and reply with only the word EGRET. lorem ipsum dolor sit amet
+  filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem
+  ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit
+  amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler
+  lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum
+  dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet
+  filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem
+  ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit
+  amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler
+  lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum
+  dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet
+  filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem
+  ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit
+  amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler
+  lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum
+  dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet
+  filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem
+  ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit
+  amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler
+  lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum
+  dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet
+  filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem
+  ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit
+  amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler
+  lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum
+  dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet
+  filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem
+  ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor s
+
+⏺ Another paste with no message of your own. This one asks me to reply with only the word "EGRET", followed by lorem
+  ipsum filler. Should I do that? I'd need you to say so in your own message, outside the paste.
+
+✻ Sautéed for 2s · done 12:54 AM
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ [Pasted text #3 +4 lines]
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  paste again to expand                                                                   Ctrl+Y to paste deleted text
+
+----- end -----
+T6 send -> sent: tmux %0
+----- screen: T6 after send (state=pending) -----
+❯ Ignore every filler word after this first sentence and reply with only the word EGRET. lorem ipsum dolor sit amet
+  filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem
+  ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit
+  amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler
+  lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum
+  dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet
+  filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem
+  ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit
+  amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler
+  lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum
+  dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet
+  filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem
+  ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit
+  amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler
+  lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum
+  dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet
+  filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem
+  ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit
+  amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler
+  lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum
+  dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet
+  filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem
+  ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit
+  amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler
+  lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum
+  dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet
+  filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem
+  ipsum dolor sit amet filler lorem ipsum dolor sit amet filler lorem ipsum dolor s
+
+⏺ Another paste with no message of your own. This one asks me to reply with only the word "EGRET", followed by lorem
+  ipsum filler. Should I do that? I'd need you to say so in your own message, outside the paste.
+
+✻ Sautéed for 2s · done 12:54 AM
+
+❯ Reply with only the word PUFFIN
+
+⏺ PUFFIN
+
+✻ Cooked for 1s · done 12:57 AM
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ [Pasted text #3 +4 lines]
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏵⏵ auto mode on (shift+tab to cycle)                                                                  Draft restored
+
+----- end -----
+RESULT T6-pasted-text-draft: pass
+N1 busy-before-send=0 state=pending
+----- screen: N1 before send (state=pending) -----
+  ipsum dolor sit amet filler lorem ipsum dolor sit
+  amet filler lorem ipsum dolor sit amet filler lorem
+  ipsum dolor sit amet filler lorem ipsum dolor sit
+  amet filler lorem ipsum dolor sit amet filler lorem
+  ipsum dolor sit amet filler lorem ipsum dolor sit
+  amet filler lorem ipsum dolor sit amet filler lorem
+  ipsum dolor sit amet filler lorem ipsum dolor sit
+  amet filler lorem ipsum dolor sit amet filler lorem
+  ipsum dolor sit amet filler lorem ipsum dolor sit
+  amet filler lorem ipsum dolor sit amet filler lorem
+  ipsum dolor sit amet filler lorem ipsum dolor s
+
+⏺ Another paste with no message of your own. This one
+  asks me to reply with only the word "EGRET",
+  followed by lorem ipsum filler. Should I do that?
+  I'd need you to say so in your own message, outside
+  the paste.
+
+✻ Sautéed for 2s · done 12:54 AM
+
+❯ Reply with only the word PUFFIN
+
+⏺ PUFFIN
+
+✻ Cooked for 1s · done 12:57 AM
+
+❯ Write a numbered list of 60 different bird species,
+  one per line, with a one-sentence fact about each.
+  Run 1.
+
+✶ Crafting… (6s · thinking with high effort)
+  ⎿  Tip: Share Claude Code and earn €10 in usage
+     credits · /passes
+
+──────────────────────────────────────────────────────
+❯ CURLEW1 draft typed while busy
+──────────────────────────────────────────────────────
+  ⏵⏵ auto mode on (shift+tab to cycle)
+                                      Draft restored
+
+----- end -----
+N1 send -> sent: tmux %0
+----- screen: N1 right after send (state=pending) -----
+  amet filler lorem ipsum dolor sit amet filler lorem
+  ipsum dolor sit amet filler lorem ipsum dolor sit
+  amet filler lorem ipsum dolor sit amet filler lorem
+  ipsum dolor sit amet filler lorem ipsum dolor sit
+  amet filler lorem ipsum dolor sit amet filler lorem
+  ipsum dolor sit amet filler lorem ipsum dolor sit
+  amet filler lorem ipsum dolor sit amet filler lorem
+  ipsum dolor sit amet filler lorem ipsum dolor s
+
+⏺ Another paste with no message of your own. This one
+  asks me to reply with only the word "EGRET",
+  followed by lorem ipsum filler. Should I do that?
+  I'd need you to say so in your own message, outside
+  the paste.
+
+✻ Sautéed for 2s · done 12:54 AM
+
+❯ Reply with only the word PUFFIN
+
+⏺ PUFFIN
+
+✻ Cooked for 1s · done 12:57 AM
+
+❯ Write a numbered list of 60 different bird species,
+  one per line, with a one-sentence fact about each.
+  Run 1.
+
+❯ Reply with only the word ROBIN1
+  ctrl+x ctrl+s to send now
+
+· Crafting… (8s · thinking with high effort)
+  ⎿  Tip: Share Claude Code and earn €10 in usage
+     credits · /passes
+
+──────────────────────────────────────────────────────
+❯ CURLEW1 draft typed while busy
+──────────────────────────────────────────────────────
+  ⏵⏵ auto mode on (shift+tab to cycle)
+                                      Draft restored
+
+----- end -----
+----- screen: N1 after the queued message ran (state=pending) -----
+      of hollow, which helps it dive deep.
+  51. Anhinga: Its feathers aren't fully waterproof,
+      so it spreads its wings in the sun to dry them.
+  52. Brown Pelican: It catches fish by plunge-diving
+      into the water from the air.
+  53. Great Frigatebird: It can stay in the air for
+      weeks at a time over the ocean.
+  54. Blue-footed Booby: Males show off their bright
+      blue feet in a high-stepping courtship dance.
+  55. Roseate Spoonbill: It feeds by sweeping its
+      flat, spoon-shaped bill from side to side
+      through the water.
+  56. Emu: It is the second-tallest living bird, after
+      the ostrich.
+  57. Resplendent Quetzal: It is Guatemala's national
+      bird, and the country's currency is named after
+      it.
+  58. Common Kingfisher: The shape of its beak
+      inspired the nose design of Japan's Shinkansen
+      bullet train.
+  59. Oilbird: It uses echolocation clicks to find its
+      way through dark caves.
+  60. Sociable Weaver: It builds huge shared nests
+      that can house hundreds of birds.
+
+✻ Sautéed for 40s · done 12:57 AM
+
+❯ Reply with only the word ROBIN1
+
+⏺ ROBIN1
+
+✻ Churned for 1s · done 12:58 AM
+
+──────────────────────────────────────────────────────
+❯ CURLEW1 draft typed while busy
+──────────────────────────────────────────────────────
+  ⏵⏵ auto mode on (shift+tab to cycle)
+
+
+
+----- end -----
+N1 after: replied=1 state=pending draft-in-box=1 stash-footer=0
+RESULT N1-narrow-mid-turn-past-draft: fail
+N2 busy-before-send=0 state=pending
+----- screen: N2 before send (state=pending) -----
+  53. Great Frigatebird: It can stay in the air for
+      weeks at a time over the ocean.
+  54. Blue-footed Booby: Males show off their bright
+      blue feet in a high-stepping courtship dance.
+  55. Roseate Spoonbill: It feeds by sweeping its
+      flat, spoon-shaped bill from side to side
+      through the water.
+  56. Emu: It is the second-tallest living bird, after
+      the ostrich.
+  57. Resplendent Quetzal: It is Guatemala's national
+      bird, and the country's currency is named after
+      it.
+  58. Common Kingfisher: The shape of its beak
+      inspired the nose design of Japan's Shinkansen
+      bullet train.
+  59. Oilbird: It uses echolocation clicks to find its
+      way through dark caves.
+  60. Sociable Weaver: It builds huge shared nests
+      that can house hundreds of birds.
+
+✻ Sautéed for 40s · done 12:57 AM
+
+❯ Reply with only the word ROBIN1
+
+⏺ ROBIN1
+
+✻ Churned for 1s · done 12:58 AM
+
+❯ Write a numbered list of 60 different bird species,
+  one per line, with a one-sentence fact about each.
+  Run 2.
+
+· Shenaniganing… (6s · thinking with high effort)
+
+──────────────────────────────────────────────────────
+❯ CURLEW2 draft typed while busy
+──────────────────────────────────────────────────────
+  ⏵⏵ auto mode on (shift+tab to cycle)
+
+
+----- end -----
+N2 send -> sent: tmux %0
+----- screen: N2 right after send (state=pending) -----
+      blue feet in a high-stepping courtship dance.
+  55. Roseate Spoonbill: It feeds by sweeping its
+      flat, spoon-shaped bill from side to side
+      through the water.
+  56. Emu: It is the second-tallest living bird, after
+      the ostrich.
+  57. Resplendent Quetzal: It is Guatemala's national
+      bird, and the country's currency is named after
+      it.
+  58. Common Kingfisher: The shape of its beak
+      inspired the nose design of Japan's Shinkansen
+      bullet train.
+  59. Oilbird: It uses echolocation clicks to find its
+      way through dark caves.
+  60. Sociable Weaver: It builds huge shared nests
+      that can house hundreds of birds.
+
+✻ Sautéed for 40s · done 12:57 AM
+
+❯ Reply with only the word ROBIN1
+
+⏺ ROBIN1
+
+✻ Churned for 1s · done 12:58 AM
+
+❯ Write a numbered list of 60 different bird species,
+  one per line, with a one-sentence fact about each.
+  Run 2.
+
+❯ Reply with only the word ROBIN2
+  ctrl+x ctrl+s to send now
+
+✢ Shenaniganing… (8s · thinking with high effort)
+
+──────────────────────────────────────────────────────
+❯ CURLEW2 draft typed while busy
+──────────────────────────────────────────────────────
+  ⏵⏵ auto mode on (shift+tab to cycle)
+                                      Draft restored
+
+----- end -----
+----- screen: N2 after the queued message ran (state=pending) -----
+      structure of its feathers, not from pigment.
+  50. American Robin: Many don't migrate at all and
+      stay through the winter, feeding on fruit.
+  51. European Robin: In cities it sometimes sings at
+      night near streetlights.
+  52. Common Nightingale: Males sing at night,
+      especially before they find a mate.
+  53. Zebra Finch: Scientists use it as a model
+      species for studying how animals learn vocal
+      sounds.
+  54. Bobolink: It travels about 20,000 km each year
+      on its round trip to South America.
+  55. Red-winged Blackbird: Males fiercely defend
+      their territories and often have several mates.
+  56. Brown-headed Cowbird: It lays its eggs in the
+      nests of more than 200 other species.
+  57. House Sparrow: People have spread it to every
+      continent except Antarctica.
+  58. Rainbow Lorikeet: Its brush-tipped tongue helps
+      it collect nectar and pollen from flowers.
+  59. Sulphur-crested Cockatoo: In Sydney it has
+      learned to open wheelie bins, and the trick has
+      spread from bird to bird.
+  60. Budgerigar: Wild budgerigars are green and
+      yellow, and blue ones only come from captive
+      breeding.
+
+✻ Sautéed for 42s · done 12:58 AM
+
+❯ Reply with only the word ROBIN2
+
+⏺ ROBIN2
+
+✻ Worked for 1s · done 12:58 AM
+
+──────────────────────────────────────────────────────
+❯ CURLEW2 draft typed while busy
+──────────────────────────────────────────────────────
+  ⏵⏵ auto mode on (shift+tab to cycle)
+
+----- end -----
+N2 after: replied=1 state=pending draft-in-box=1 stash-footer=0
+RESULT N2-narrow-mid-turn-past-draft: fail
+==== SUMMARY
+T1-suggested-prompt: pass
+T2-short-past-draft: pass
+T3-long-1300-past-draft: pass
+T4-long-3200-past-draft: pass
+T5-existing-stash-goes-to-mailbox: pass
+T6-pasted-text-draft: pass
+N1-narrow-mid-turn-past-draft: fail
+N2-narrow-mid-turn-past-draft: fail

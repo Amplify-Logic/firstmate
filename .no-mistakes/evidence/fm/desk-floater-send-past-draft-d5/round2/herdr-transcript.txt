@@ -1,0 +1,387 @@
+session=fm-lab-desk-r2-90954-6412 pane=w1:p1 claude=2.1.283 (Claude Code) herdr=herdr 0.7.4
+shell_pid=91074 claude_pid=92185 (claude) worktree HEAD=cb805eb0 pane-width=159
+H1-short-past-draft draft typed; state=pending; message length=31
+----- screen: H1-short-past-draft before send -----
+           Claude Code v2.1.283
+ ▐▛███▛█   Opus 5.5 (1M context) with high effort
+▝▜██████▀  Claude Max
+ ▝▝   ▝▝   /…/T/fm-lab.mvW2G3/project
+
+  ⎿  SessionStart:startup hook error
+  ⎿  Failed with non-blocking status code: /bin/sh:
+     ${CLAUDE_PLUGIN_ROOT}/hooks/run-hook.cmd: No
+     such file or directory
+
+─────────────────────────────────────────────────────
+❯ KESTREL draft the captain has not sent
+─────────────────────────────────────────────────────
+  ⚠ Transcript saving is off — inherited CLAUDE_CO…
+  ⏵⏵ auto mode on (shift+tab to cycle)
+                                   ● high · /effort
+----- end -----
+H1-short-past-draft send -> sent: herdr fm-lab-desk-r2-90954-6412:w1:p1
+----- screen: H1-short-past-draft after send -----
+           Claude Code v2.1.283
+ ▐▛███▛█   Opus 5.5 (1M context) with high effort
+▝▜██████▀  Claude Max
+ ▝▝   ▝▝   /…/T/fm-lab.mvW2G3/project
+
+  ⎿  SessionStart:startup hook error
+  ⎿  Failed with non-blocking status code: /bin/sh:
+     ${CLAUDE_PLUGIN_ROOT}/hooks/run-hook.cmd: No
+     such file or directory
+
+❯ Reply with only the word OSPREY
+
+⏺ OSPREY
+
+✻ Baked for 2s · done 12:52 AM
+
+─────────────────────────────────────────────────────
+❯ KESTREL draft the captain has not sent
+─────────────────────────────────────────────────────
+  ⚠ Transcript saving is off — inherited CLAUDE_CO…
+  ⏵⏵ auto mode on (shift+tab to cycle)
+                                     Draft restored
+----- end -----
+H1-short-past-draft after: state=pending draft-occurrences-on-screen=1 claude-replied-OSPREY=1
+RESULT H1-short-past-draft: pass
+H2-long-1300-past-draft draft typed; state=pending; message length=1300
+----- screen: H2-long-1300-past-draft before send -----
+           Claude Code v2.1.283
+ ▐▛███▛█   Opus 5.5 (1M context) with high effort
+▝▜██████▀  Claude Max
+ ▝▝   ▝▝   /…/T/fm-lab.mvW2G3/project
+
+  ⎿  SessionStart:startup hook error
+  ⎿  Failed with non-blocking status code: /bin/sh:
+     ${CLAUDE_PLUGIN_ROOT}/hooks/run-hook.cmd: No
+     such file or directory
+
+❯ Reply with only the word OSPREY
+
+⏺ OSPREY
+
+✻ Baked for 2s · done 12:52 AM
+
+─────────────────────────────────────────────────────
+❯ MERLIN draft two
+─────────────────────────────────────────────────────
+  ⚠ Transcript saving is off — inherited CLAUDE_CO…
+  ⏵⏵ auto mode on (shift+tab to cycle)
+                       Ctrl+Y to paste deleted text
+----- end -----
+H2-long-1300-past-draft send -> sent: herdr fm-lab-desk-r2-90954-6412:w1:p1
+----- screen: H2-long-1300-past-draft after send -----
+  amet filler lorem ipsum dolor sit amet filler
+  lorem ipsum dolor sit amet filler lorem ipsum
+  dolor sit amet filler lorem ipsum dolor sit amet
+  filler lorem ipsum dolor sit amet filler lorem
+  ipsum dolor sit amet filler lorem ipsum dolor sit
+  amet filler lorem ipsum dolor sit amet filler
+  lorem ipsum dolor sit amet filler lorem ipsum
+  dolor sit a
+
+⏺ The text you pasted says to reply with only the
+  word "HERON", followed by lorem ipsum filler. You
+  didn't add a request of your own, so should I
+  follow that instruction, or do you want something
+  else done with the text?
+
+✻ Brewed for 5s · done 12:52 AM
+
+─────────────────────────────────────────────────────
+❯ MERLIN draft two
+─────────────────────────────────────────────────────
+  ⚠ Transcript saving is off — inherited CLAUDE_CO…
+  ⏵⏵ auto mode on (shift+tab to cycle)
+----- end -----
+H2-long-1300-past-draft after: state=pending draft-occurrences-on-screen=1 claude-replied-HERON=0
+RESULT H2-long-1300-past-draft: pass
+H3-long-3200-past-draft draft typed; state=pending; message length=3200
+----- screen: H3-long-3200-past-draft before send -----
+  lorem ipsum dolor sit amet filler lorem ipsum
+  dolor sit amet filler lorem ipsum dolor sit amet
+  filler lorem ipsum dolor sit amet filler lorem
+  ipsum dolor sit amet filler lorem ipsum dolor sit
+  amet filler lorem ipsum dolor sit amet filler
+  lorem ipsum dolor sit amet filler lorem ipsum
+  dolor sit a
+
+⏺ The text you pasted says to reply with only the
+  word "HERON", followed by lorem ipsum filler. You
+  didn't add a request of your own, so should I
+  follow that instruction, or do you want something
+  else done with the text?
+
+✻ Brewed for 5s · done 12:52 AM
+
+─────────────────────────────────────────────────────
+❯ HOBBY draft three
+─────────────────────────────────────────────────────
+  ⚠ Transcript saving is off — inherited CLAUDE_CO…
+  ⏵⏵ auto mode on (shift+tab to cycle)
+                       Ctrl+Y to paste deleted text
+----- end -----
+H3-long-3200-past-draft send -> sent: herdr fm-lab-desk-r2-90954-6412:w1:p1
+----- screen: H3-long-3200-past-draft after send -----
+  amet filler lorem ipsum dolor sit amet filler
+  lorem ipsum dolor sit amet filler lorem ipsum
+  dolor sit amet filler lorem ipsum dolor sit amet
+  filler lorem ipsum dolor sit amet filler lorem
+  ipsum dolor sit amet filler lorem ipsum dolor sit
+  amet filler lorem ipsum dolor sit amet filler
+  lorem ipsum dolor sit amet filler lorem ipsum
+  dolor s
+
+⏺ This paste is like the last one. It tells me to
+  reply with only "EGRET", and the rest is lorem
+  ipsum filler. You haven't asked me to act on it
+  yet. If you want me to follow it, just say so, or
+  tell me what else to do with the text.
+
+✻ Brewed for 2s · done 12:54 AM
+
+─────────────────────────────────────────────────────
+❯ HOBBY draft three
+─────────────────────────────────────────────────────
+  ⚠ Transcript saving is off — inherited CLAUDE_CO…
+  ⏵⏵ auto mode on (shift+tab to cycle)
+----- end -----
+H3-long-3200-past-draft after: state=pending draft-occurrences-on-screen=1 claude-replied-EGRET=0
+RESULT H3-long-3200-past-draft: pass
+----- screen: H4 before send -----
+  lorem ipsum dolor sit amet filler lorem ipsum
+  dolor sit amet filler lorem ipsum dolor sit amet
+  filler lorem ipsum dolor sit amet filler lorem
+  ipsum dolor sit amet filler lorem ipsum dolor sit
+  amet filler lorem ipsum dolor sit amet filler
+  lorem ipsum dolor sit amet filler lorem ipsum
+  dolor s
+
+⏺ This paste is like the last one. It tells me to
+  reply with only "EGRET", and the rest is lorem
+  ipsum filler. You haven't asked me to act on it
+  yet. If you want me to follow it, just say so, or
+  tell me what else to do with the text.
+
+✻ Brewed for 2s · done 12:54 AM
+
+─────────────────────────────────────────────────────
+❯ WREN second draft
+─────────────────────────────────────────────────────
+  ⚠ Transcript saving is off — inherited CLAUDE_CO…
+  ⏵⏵ auto mode on (shift+tab to cycle)
+           Ctrl+Y to paste deleted text · › stashed
+----- end -----
+H4 send -> fm-desk-voice: the primary's chat pane refused the text; saving it to the mailbox instead|mailbox: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.mvW2G3/state/desk-voice/inbox/20260926T215654Z-46ef9103.json
+----- screen: H4 after send -----
+  lorem ipsum dolor sit amet filler lorem ipsum
+  dolor sit amet filler lorem ipsum dolor sit amet
+  filler lorem ipsum dolor sit amet filler lorem
+  ipsum dolor sit amet filler lorem ipsum dolor sit
+  amet filler lorem ipsum dolor sit amet filler
+  lorem ipsum dolor sit amet filler lorem ipsum
+  dolor s
+
+⏺ This paste is like the last one. It tells me to
+  reply with only "EGRET", and the rest is lorem
+  ipsum filler. You haven't asked me to act on it
+  yet. If you want me to follow it, just say so, or
+  tell me what else to do with the text.
+
+✻ Brewed for 2s · done 12:54 AM
+
+─────────────────────────────────────────────────────
+❯ WREN second draft
+─────────────────────────────────────────────────────
+  ⚠ Transcript saving is off — inherited CLAUDE_CO…
+  ⏵⏵ auto mode on (shift+tab to cycle)    › stashed
+----- end -----
+H4 mailbox file: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.mvW2G3/state/desk-voice/inbox/20260926T215654Z-46ef9103.json
+----- screen: H4 after Ctrl+S on empty box -----
+  lorem ipsum dolor sit amet filler lorem ipsum
+  dolor sit amet filler lorem ipsum dolor sit amet
+  filler lorem ipsum dolor sit amet filler lorem
+  ipsum dolor sit amet filler lorem ipsum dolor sit
+  amet filler lorem ipsum dolor sit amet filler
+  lorem ipsum dolor sit amet filler lorem ipsum
+  dolor s
+
+⏺ This paste is like the last one. It tells me to
+  reply with only "EGRET", and the rest is lorem
+  ipsum filler. You haven't asked me to act on it
+  yet. If you want me to follow it, just say so, or
+  tell me what else to do with the text.
+
+✻ Brewed for 2s · done 12:54 AM
+
+─────────────────────────────────────────────────────
+❯ PLOVER stash the captain keeps
+─────────────────────────────────────────────────────
+  ⚠ Transcript saving is off — inherited CLAUDE_CO…
+  ⏵⏵ auto mode on (shift+tab to cycle)
+                       Ctrl+Y to paste deleted text
+----- end -----
+H4 box-kept=1 no-reply=1 stash-kept=1
+RESULT H4-existing-stash-goes-to-mailbox: pass
+H5.1 busy-before-send=0 state=pending
+----- screen: H5.1 before send -----
+     tonnes.
+  5. Peregrine Falcon: In a hunting dive it can go
+     faster than 320 km/h, which makes it the fastest
+     animal on Earth.
+  6. Ruby-throated Hummingbird: It flies nonstop
+     across the Gulf of Mexico during migration, a
+     trip of about 800 km.
+  7. Emperor Penguin: The males keep eggs warm on
+     their feet through the Antarctic winter and go
+     without food for about two months.
+  8. Common Ostrich: It lays the largest egg of any
+     living bird, around 1.4 kg.
+  9. Arctic Tern: It has the longest known migration
+     of any animal and flies from the Arctic to the
+     Antarctic and back every year.
+  10. Snowy Owl: Unlike most owls, it hunts in
+
+─────────────────────────────────────────────────────
+❯ CURLEW1 draft
+─────────────────────────────────────────────────────
+  ⚠ Transcript saving is off — inherited CLAUDE_CO…
+  ⏵⏵ auto mode on (shift+tab to cycle)
+----- end -----
+H5.1 send -> sent: herdr fm-lab-desk-r2-90954-6412:w1:p1
+----- screen: H5.1 right after send -----
+      tip of its bill, which it uses to sniff out
+      worms underground.
+  18. Kakapo: This flightless parrot from New Zealand
+      is the heaviest parrot in the world and can
+      live for over 90 years.
+  19. Kea: This alpine parrot is famously curious and
+      is known for pulling rubber strips off parked
+      cars.
+  20. African Grey Parrot: It can learn hundreds of
+      words and seems to understand some concepts
+      like colour and number.
+  21.
+
+❯ Reply with only the word ROBIN1
+  ctrl+enter to send now
+
+─────────────────────────────────────────────────────
+❯ CURLEW1 draft
+─────────────────────────────────────────────────────
+  ⚠ Transcript saving is off — inherited CLAUDE_CO…
+  ⏵⏵ auto mode on (shift+tab to cycle)
+                                     Draft restored
+----- end -----
+----- screen: H5.1 after the queued message ran -----
+      claw up to 12 cm long and is considered one of
+      the most dangerous birds.
+  59. Laughing Kookaburra: Its loud call, which
+      sounds like human laughter, is used to mark
+      territory.
+  60. Bar-tailed Godwit: One tagged bird flew about
+      13,500 km nonstop from Alaska to Tasmania, a
+      record for any land bird.
+
+✻ Brewed for 25s · done 12:57 AM
+
+❯ Reply with only the word ROBIN1
+
+⏺ ROBIN1
+
+✻ Cogitated for 2s · done 12:57 AM
+
+─────────────────────────────────────────────────────
+❯ CURLEW1 draft
+─────────────────────────────────────────────────────
+  ⚠ Transcript saving is off — inherited CLAUDE_CO…
+  ⏵⏵ auto mode on (shift+tab to cycle)
+----- end -----
+H5.1 after: replied=1 state=pending draft-in-box=1 stash-footer=0
+RESULT H5.1-narrow-mid-turn-past-draft: fail
+H5.2 busy-before-send=0 state=pending
+----- screen: H5.2 before send -----
+      record for any land bird.
+
+✻ Brewed for 25s · done 12:57 AM
+
+❯ Reply with only the word ROBIN1
+
+⏺ ROBIN1
+
+✻ Cogitated for 2s · done 12:57 AM
+
+❯ Write a numbered list of 60 different bird
+  species, one per line, with a one-sentence fact
+  about each. Run 2.
+
+✢ Thundering… (6s · thinking with high effort)
+
+─────────────────────────────────────────────────────
+❯ CURLEW2 draft
+─────────────────────────────────────────────────────
+  ⚠ Transcript saving is off — inherited CLAUDE_CO…
+  ⏵⏵ auto mode on (shift+tab to cycle)
+----- end -----
+H5.2 send -> sent: herdr fm-lab-desk-r2-90954-6412:w1:p1
+----- screen: H5.2 right after send -----
+
+❯ Reply with only the word ROBIN1
+
+⏺ ROBIN1
+
+✻ Cogitated for 2s · done 12:57 AM
+
+❯ Write a numbered list of 60 different bird
+  species, one per line, with a one-sentence fact
+  about each. Run 2.
+
+❯ Reply with only the word ROBIN2
+  ctrl+enter to send now
+
+✻ Thundering… (9s · thinking with high effort)
+
+─────────────────────────────────────────────────────
+❯ CURLEW2 draft
+─────────────────────────────────────────────────────
+  ⚠ Transcript saving is off — inherited CLAUDE_CO…
+  ⏵⏵ auto mode on (shift+tab to cycle)
+                                     Draft restored
+----- end -----
+----- screen: H5.2 after the queued message ran -----
+      ultraviolet light, which may help it find voles
+      by the UV-reflecting urine trails they leave.
+  59. Bearded Vulture: Most of what it eats is bone,
+      and it drops large bones from a height to smash
+      them open.
+  60. Egyptian Vulture: It throws stones at ostrich
+      eggs to crack them open, one of the few known
+      cases of tool use in birds of prey.
+
+✻ Cogitated for 48s · done 12:58 AM
+
+❯ Reply with only the word ROBIN2
+
+⏺ ROBIN2
+
+✻ Cooked for 2s · done 12:58 AM
+
+─────────────────────────────────────────────────────
+❯ CURLEW2 draft
+─────────────────────────────────────────────────────
+  ⚠ Transcript saving is off — inherited CLAUDE_CO…
+  ⏵⏵ auto mode on (shift+tab to cycle)
+----- end -----
+H5.2 after: replied=1 state=pending draft-in-box=1 stash-footer=0
+RESULT H5.2-narrow-mid-turn-past-draft: fail
+==== SUMMARY
+H1-short-past-draft: pass
+H2-long-1300-past-draft: pass
+H3-long-3200-past-draft: pass
+H4-existing-stash-goes-to-mailbox: pass
+H5.1-narrow-mid-turn-past-draft: fail
+H5.2-narrow-mid-turn-past-draft: fail
+no claude session log found
+teardown ok: fm-lab-desk-r2-90954-6412

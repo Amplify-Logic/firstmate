@@ -1,0 +1,31 @@
+session=fm-lab-desk-draft-52328-8933 pane=w1:p1 claude=2.1.283 (Claude Code) herdr=herdr 0.7.4
+shell_pid=55098 claude_pid=61693 (claude)
+H1-short-past-draft draft typed; state=pending; message length=31
+H1-short-past-draft send -> sent: herdr fm-lab-desk-draft-52328-8933:w1:p1
+H1-short-past-draft after: state=pending draft-occurrences=1
+RESULT H1-short-past-draft: pass
+H2-long-1300-past-draft draft typed; state=pending; message length=1300
+H2-long-1300-past-draft send -> sent: herdr fm-lab-desk-draft-52328-8933:w1:p1
+H2-long-1300-past-draft after: state=pending draft-occurrences=1
+RESULT H2-long-1300-past-draft: fail
+H3-long-3200-past-draft draft typed; state=pending; message length=3200
+H3-long-3200-past-draft send -> sent: herdr fm-lab-desk-draft-52328-8933:w1:p1
+H3-long-3200-past-draft after: state=pending draft-occurrences=1
+RESULT H3-long-3200-past-draft: fail
+H4 send -> fm-desk-voice: the primary's chat pane refused the text; saving it to the mailbox instead
+mailbox: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.kLEXRK/state/desk-voice/inbox/20260926T212659Z-4f911a7b.json
+H4 mailbox file: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.kLEXRK/state/desk-voice/inbox/20260926T212659Z-4f911a7b.json
+H4 box-kept=1 no-reply=1 stash-kept=1
+RESULT H4-existing-stash-goes-to-mailbox: pass
+H5 busy-before-send=1 state=pending
+H5 send -> fm-desk-voice: the chat box did not set the captain's draft aside
+fm-desk-voice: the primary's chat pane refused the text; saving it to the mailbox instead
+mailbox: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.kLEXRK/state/desk-voice/inbox/20260926T212720Z-ebb6d9ff.json
+RESULT H5-mid-turn-past-draft: fail
+==== SUMMARY
+H1-short-past-draft: pass
+H2-long-1300-past-draft: fail
+H3-long-3200-past-draft: fail
+H4-existing-stash-goes-to-mailbox: pass
+H5-mid-turn-past-draft: fail
+teardown ok: fm-lab-desk-draft-52328-8933

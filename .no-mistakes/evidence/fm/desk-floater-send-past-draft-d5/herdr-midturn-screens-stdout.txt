@@ -1,0 +1,4 @@
+session=fm-lab-desk-mt-40465-30577 pane=w1:p1 claude=2.1.283 (Claude Code) herdr=herdr 0.7.4
+shell_pid=40629 claude_pid=41580 (claude)
+M2 send -> fm-desk-voice: the chat box did not set the captain's draft aside|fm-desk-voice: the primary's chat pane refused the text; saving it to the mailbox instead|mailbox: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.XcPdpp/state/desk-voice/inbox/20260926T213615Z-e765156f.json
+teardown ok: fm-lab-desk-mt-40465-30577

@@ -1,0 +1,12 @@
+claude: 2.1.283 (Claude Code)  worktree HEAD: cb805eb0
+G1 state-before=empty
+G1 send -> sent: tmux %0
+G1 replied=1 mailbox-used=0
+RESULT G1-suggested-prompt: pass
+G2 state-before=empty
+G2 send -> sent: tmux %0
+G2 replied=1 mailbox-used=0
+RESULT G2-suggested-prompt: pass
+==== SUMMARY
+G1-suggested-prompt: pass
+G2-suggested-prompt: pass

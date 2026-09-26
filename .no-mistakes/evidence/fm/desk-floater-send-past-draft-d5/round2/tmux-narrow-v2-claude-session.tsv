@@ -1,0 +1,8 @@
+user	len=109	Write a numbered list of 80 different bird species, one per line, with a two-sentence fact about each. Run 1.
+assistant	len=15301	1. **Bald Eagle**: The bald eagle is the national bird of the United States and lives near large bodies of open water. Its nests can weigh more than a ton, and 
+user	len=31	Reply with only the word ROBIN1
+assistant	len=6	ROBIN1
+user	len=109	Write a numbered list of 80 different bird species, one per line, with a two-sentence fact about each. Run 2.
+assistant	len=15829	1. **Great Grey Owl**: The great grey owl is the tallest owl in North America, but most of its size is feathers. It can hear voles moving under deep snow and th
+user	len=31	Reply with only the word ROBIN2
+assistant	len=6	ROBIN2

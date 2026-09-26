@@ -1,0 +1,3 @@
+claude: 2.1.283 (Claude Code)
+G send -> sent: tmux %0
+N send -> fm-desk-voice: the chat box did not set the captain's draft aside|fm-desk-voice: the primary's chat pane refused the text; saving it to the mailbox instead|mailbox: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.n60CLt/state/desk-voice/inbox/20260926T213754Z-234f8c3c.json

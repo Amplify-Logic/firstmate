@@ -1,0 +1,161 @@
+session=fm-lab-desk-r2v-62939-3472 pane=w1:p1 claude=2.1.283 (Claude Code) herdr=herdr 0.7.4
+shell_pid=63196 claude_pid=64286 (claude) worktree HEAD=cb805eb0 pane-width=159
+H1 footer-esc-seen=1 busy-before-send=0 state=pending
+----- screen: H1 before send -----
+           Claude Code v2.1.283
+ ▐▛███▛█   Opus 5.5 (1M context) with high effort
+▝▜██████▀  Claude Max
+ ▝▝   ▝▝   /…/T/fm-lab.8GSFDP/project
+
+  ⎿  SessionStart:startup hook error
+  ⎿  Failed with non-blocking status code: /bin/sh:
+     ${CLAUDE_PLUGIN_ROOT}/hooks/run-hook.cmd: No
+     such file or directory
+
+❯ Write a numbered list of 80 different bird
+  species, one per line, with a two-sentence fact
+  about each. Run 1.
+
+✶ Harmonizing…
+
+─────────────────────────────────────────────────────
+❯ CURLEW1 draft
+─────────────────────────────────────────────────────
+  ⚠ Transcript saving is off — inherited CLAUDE_CO…
+  ⏵⏵ auto mode on (shift+tab to cycle)
+                                   ● high · /effort
+----- end -----
+H1 send -> sent: herdr fm-lab-desk-r2v-62939-3472:w1:p1
+H1 frames sampled=16 frames-with-stashed-on-own-row=0
+----- screen: H1 right after send -----
+ ▝▝   ▝▝   /…/T/fm-lab.8GSFDP/project
+
+  ⎿  SessionStart:startup hook error
+  ⎿  Failed with non-blocking status code: /bin/sh:
+     ${CLAUDE_PLUGIN_ROOT}/hooks/run-hook.cmd: No
+     such file or directory
+
+❯ Write a numbered list of 80 different bird
+  species, one per line, with a two-sentence fact
+  about each. Run 1.
+
+❯ Reply with only the word ROBIN1
+  ctrl+enter to send now
+
+✻ Sublimating… (4s · thinking with high effort)
+
+─────────────────────────────────────────────────────
+❯ CURLEW1 draft
+─────────────────────────────────────────────────────
+  ⚠ Transcript saving is off — inherited CLAUDE_CO…
+  ⏵⏵ auto mode on (shift+tab to cycle)
+                                   ● high · /effort
+----- end -----
+----- screen: H1 after the queued message ran -----
+      hooked tools from twigs and cut probing tools
+      from leaves. In experiments they have solved
+      puzzles that take several steps in a row.
+  80. Wood Duck: Wood Ducks nest in tree cavities,
+      and the day after hatching the ducklings jump
+      out, sometimes from more than 15 meters up.
+      They usually land unharmed and follow their
+      mother to water.
+
+✻ Worked for 1m 57s · done 1:03 AM
+
+❯ Reply with only the word ROBIN1
+
+⏺ ROBIN1
+
+✻ Baked for 1s · done 1:03 AM
+
+─────────────────────────────────────────────────────
+❯ CURLEW1 draft
+─────────────────────────────────────────────────────
+  ⚠ Transcript saving is off — inherited CLAUDE_CO…
+  ⏵⏵ auto mode on (shift+tab to cycle)
+----- end -----
+H1 after: replied=1 state=pending draft-in-box=1
+RESULT H1-narrow-busy-past-draft: fail (busy=0)
+H2 footer-esc-seen=1 busy-before-send=0 state=pending
+----- screen: H2 before send -----
+✻ Worked for 1m 57s · done 1:03 AM
+
+❯ Reply with only the word ROBIN1
+
+⏺ ROBIN1
+
+✻ Baked for 1s · done 1:03 AM
+
+❯ Write a numbered list of 80 different bird
+  species, one per line, with a two-sentence fact
+  about each. Run 2.
+
+· Incubating… (1s · thinking with high effort)
+  ⎿  Tip: Run /ultrareview for a cloud-based
+     multi-agent review that finds and verifies bugs
+     in your branch — 3 free reviews left
+
+─────────────────────────────────────────────────────
+❯ CURLEW2 draft
+─────────────────────────────────────────────────────
+  ⚠ Transcript saving is off — inherited CLAUDE_CO…
+  ⏵⏵ auto mode on (shift+tab to cycle)
+----- end -----
+H2 send -> sent: herdr fm-lab-desk-r2v-62939-3472:w1:p1
+H2 frames sampled=13 frames-with-stashed-on-own-row=2
+----- screen: H2 right after send -----
+⏺ ROBIN1
+
+✻ Baked for 1s · done 1:03 AM
+
+❯ Write a numbered list of 80 different bird
+  species, one per line, with a two-sentence fact
+  about each. Run 2.
+
+❯ Reply with only the word ROBIN2
+  ctrl+enter to send now
+
+✽ Incubating… (4s · thinking with high effort)
+  ⎿  Tip: Run /ultrareview for a cloud-based
+     multi-agent review that finds and verifies bugs
+     in your branch — 3 free reviews left
+
+─────────────────────────────────────────────────────
+❯ CURLEW2 draft
+─────────────────────────────────────────────────────
+  ⚠ Transcript saving is off — inherited CLAUDE_CO…
+  ⏵⏵ auto mode on (shift+tab to cycle)
+                                     Draft restored
+----- end -----
+----- screen: H2 after the queued message ran -----
+      bird. It weaves a pouch-shaped nest that hangs
+      from the tip of a branch.
+  63. Indigo Bunting: The Indigo Bunting has no blue
+      pigment, and its color comes from the structure
+      of its feathers scattering light. Planetarium
+      experiments showed that it navigates at night
+      by the stars.
+  64. Black-capped Chickadee: The more "dee" notes a
+      chickadee adds to its alarm call, the more
+      dangerous the predator it has spotted. In fall,
+      it grows new neurons in the brain region that
+      helps it remember where it has cached food.
+  65.
+
+❯ Reply with only the word ROBIN2
+  ctrl+enter to send now
+
+─────────────────────────────────────────────────────
+❯ CURLEW2 draft
+─────────────────────────────────────────────────────
+  ⚠ Transcript saving is off — inherited CLAUDE_CO…
+  ⏵⏵ auto mode on (shift+tab to cycle)
+----- end -----
+H2 after: replied=0 state=pending draft-in-box=1
+RESULT H2-narrow-busy-past-draft: fail (busy=0)
+==== SUMMARY
+H1-narrow-busy-past-draft: fail (busy=0)
+H2-narrow-busy-past-draft: fail (busy=0)
+no claude session log found
+teardown ok: fm-lab-desk-r2v-62939-3472

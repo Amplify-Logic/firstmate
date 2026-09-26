@@ -1,0 +1,4 @@
+claude: 2.1.283 (Claude Code)  tmux: tmux 3.6a  worktree HEAD: cb805eb0 width=54
+N1 footer-esc-seen=0 busy-before-send=0 state=pending
+N1 send -> sent: tmux %0
+N1 frames sampled=16 frames-with-stashed-on-own-row=0

@@ -1,0 +1,35 @@
+session=fm-lab-desk-r2-90954-6412 pane=w1:p1 claude=2.1.283 (Claude Code) herdr=herdr 0.7.4
+shell_pid=91074 claude_pid=92185 (claude) worktree HEAD=cb805eb0 pane-width=159
+H1-short-past-draft draft typed; state=pending; message length=31
+H1-short-past-draft send -> sent: herdr fm-lab-desk-r2-90954-6412:w1:p1
+H1-short-past-draft after: state=pending draft-occurrences-on-screen=1 claude-replied-OSPREY=1
+RESULT H1-short-past-draft: pass
+H2-long-1300-past-draft draft typed; state=pending; message length=1300
+H2-long-1300-past-draft send -> sent: herdr fm-lab-desk-r2-90954-6412:w1:p1
+H2-long-1300-past-draft after: state=pending draft-occurrences-on-screen=1 claude-replied-HERON=0
+RESULT H2-long-1300-past-draft: pass
+H3-long-3200-past-draft draft typed; state=pending; message length=3200
+H3-long-3200-past-draft send -> sent: herdr fm-lab-desk-r2-90954-6412:w1:p1
+H3-long-3200-past-draft after: state=pending draft-occurrences-on-screen=1 claude-replied-EGRET=0
+RESULT H3-long-3200-past-draft: pass
+H4 send -> fm-desk-voice: the primary's chat pane refused the text; saving it to the mailbox instead|mailbox: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.mvW2G3/state/desk-voice/inbox/20260926T215654Z-46ef9103.json
+H4 mailbox file: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.mvW2G3/state/desk-voice/inbox/20260926T215654Z-46ef9103.json
+H4 box-kept=1 no-reply=1 stash-kept=1
+RESULT H4-existing-stash-goes-to-mailbox: pass
+H5.1 busy-before-send=0 state=pending
+H5.1 send -> sent: herdr fm-lab-desk-r2-90954-6412:w1:p1
+H5.1 after: replied=1 state=pending draft-in-box=1 stash-footer=0
+RESULT H5.1-narrow-mid-turn-past-draft: fail
+H5.2 busy-before-send=0 state=pending
+H5.2 send -> sent: herdr fm-lab-desk-r2-90954-6412:w1:p1
+H5.2 after: replied=1 state=pending draft-in-box=1 stash-footer=0
+RESULT H5.2-narrow-mid-turn-past-draft: fail
+==== SUMMARY
+H1-short-past-draft: pass
+H2-long-1300-past-draft: pass
+H3-long-3200-past-draft: pass
+H4-existing-stash-goes-to-mailbox: pass
+H5.1-narrow-mid-turn-past-draft: fail
+H5.2-narrow-mid-turn-past-draft: fail
+no claude session log found
+teardown ok: fm-lab-desk-r2-90954-6412

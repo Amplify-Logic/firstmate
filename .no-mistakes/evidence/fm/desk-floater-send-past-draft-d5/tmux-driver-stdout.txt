@@ -1,0 +1,35 @@
+claude: 2.1.283 (Claude Code)
+S1 box line with styles: $'\E[39mâ\235¯Â '
+S1 composer state: empty
+S1 send -> sent: tmux %0
+RESULT S1-suggested-prompt: pass
+S2-long-1300-past-draft draft typed; state=pending; message length=1300
+S2-long-1300-past-draft send -> sent: tmux %0
+S2-long-1300-past-draft after: state=pending draft-occurrences=1
+RESULT S2-long-1300-past-draft: fail
+S3-long-3200-past-draft draft typed; state=pending; message length=3200
+S3-long-3200-past-draft send -> sent: tmux %0
+S3-long-3200-past-draft after: state=pending draft-occurrences=1
+RESULT S3-long-3200-past-draft: fail
+S3b-short-past-draft draft typed; state=pending; message length=40
+S3b-short-past-draft send -> sent: tmux %0
+S3b-short-past-draft after: state=pending draft-occurrences=1
+RESULT S3b-short-past-draft: fail
+S4 send -> fm-desk-voice: the primary's chat pane refused the text; saving it to the mailbox instead
+mailbox: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.RGBDMk/state/desk-voice/inbox/20260926T211927Z-644ecdbf.json
+S4 mailbox file: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.RGBDMk/state/desk-voice/inbox/20260926T211927Z-644ecdbf.json
+S4 box-kept=1 no-reply=1 stash-kept=1
+RESULT S4-existing-stash-goes-to-mailbox: pass
+S5 send -> sent: tmux %0
+RESULT S5-pasted-text-draft: pass
+S6 busy-before-send=0 state=pending
+S6 send -> sent: tmux %0
+RESULT S6-mid-turn-past-draft: fail
+==== SUMMARY
+S1-suggested-prompt: pass
+S2-long-1300-past-draft: fail
+S3-long-3200-past-draft: fail
+S3b-short-past-draft: fail
+S4-existing-stash-goes-to-mailbox: pass
+S5-pasted-text-draft: pass
+S6-mid-turn-past-draft: fail

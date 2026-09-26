@@ -1,0 +1,44 @@
+session=fm-lab-desk-h5-71722-17358 pane=w1:p1 claude=2.1.283 (Claude Code) herdr=herdr 0.7.4
+shell_pid=71925 claude_pid=72930 (claude)
+R1 before send 00:32:46 state=pending
+R1 00:32:59 send -> fm-desk-voice: the chat box did not set the captain's draft aside|fm-desk-voice: the primary's chat pane refused the text; saving it to the mailbox instead|mailbox: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.iocu0F/state/desk-voice/inbox/20260926T213258Z-ec37ff8f.json
+R1 after 00:33:00 state=pending read=0.63s footer= ⏵⏵ auto mode on (shift+tab to cycle) · esc to in…| › stashed|
+R1 after 00:33:01 state=pending read=0.39s footer= ⏵⏵ auto mode on (shift+tab to cycle) · esc to in…| › stashed|
+R1 after 00:33:02 state=pending read=0.31s footer= ⏵⏵ auto mode on (shift+tab to cycle) · esc to in…| › stashed|
+R1 after 00:33:02 state=pending read=0.41s footer= ⏵⏵ auto mode on (shift+tab to cycle) · esc to in…| › stashed|
+R1 after 00:33:03 state=pending read=0.23s footer= ⏵⏵ auto mode on (shift+tab to cycle) · esc to in…| › stashed|
+R1 after 00:33:04 state=pending read=0.22s footer= ⏵⏵ auto mode on (shift+tab to cycle) · esc to in…| › stashed|
+R1 after 00:33:04 state=pending read=0.23s footer= ⏵⏵ auto mode on (shift+tab to cycle) · esc to in…| › stashed|
+R1 after 00:33:05 state=pending read=0.22s footer= ⏵⏵ auto mode on (shift+tab to cycle) · esc to in…| › stashed|
+R1 after 00:33:06 state=pending read=0.25s footer= ⏵⏵ auto mode on (shift+tab to cycle) · esc to in…| › stashed|
+R1 after 00:33:07 state=pending read=0.26s footer= ⏵⏵ auto mode on (shift+tab to cycle) · esc to in…| › stashed|
+R1 after 00:33:07 state=pending read=0.21s footer= ⏵⏵ auto mode on (shift+tab to cycle) · esc to in…| › stashed|
+R1 after 00:33:08 state=pending read=0.2s footer= ⏵⏵ auto mode on (shift+tab to cycle) · esc to in…| › stashed|
+R1 after 00:33:09 state=pending read=0.21s footer= ⏵⏵ auto mode on (shift+tab to cycle) · esc to in…| › stashed|
+R1 after 00:33:09 state=empty read=0.29s footer= ⚠ Transcript saving is off — inherited CLAUDE_CO…| ⏵⏵ auto mode on (shift+tab to cycle) › stashed|
+R1 after 00:33:10 state=empty read=0.27s footer= ⚠ Transcript saving is off — inherited CLAUDE_CO…| ⏵⏵ auto mode on (shift+tab to cycle) › stashed|
+R1 after 00:33:11 state=empty read=0.27s footer= ⚠ Transcript saving is off — inherited CLAUDE_CO…| ⏵⏵ auto mode on (shift+tab to cycle) › stashed|
+R1 end state=empty box has draft: 0 stash-footer: 1
+R1 after ctrl+s: draft-in-box=1
+R2 before send 00:33:25 state=pending
+R2 00:33:34 send -> fm-desk-voice: the chat box did not set the captain's draft aside|fm-desk-voice: the primary's chat pane refused the text; saving it to the mailbox instead|mailbox: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.iocu0F/state/desk-voice/inbox/20260926T213334Z-67883aae.json
+R2 after 00:33:34 state=pending read=0.34s footer= ⏵⏵ auto mode on (shift+tab to cycle) · esc to in…| › stashed|
+R2 after 00:33:35 state=pending read=0.34s footer= ⏵⏵ auto mode on (shift+tab to cycle) · esc to in…| › stashed|
+R2 after 00:33:36 state=pending read=0.32s footer= ⏵⏵ auto mode on (shift+tab to cycle) · esc to in…| › stashed|
+R2 after 00:33:37 state=pending read=0.25s footer= ⏵⏵ auto mode on (shift+tab to cycle) · esc to in…| › stashed|
+R2 after 00:33:37 state=pending read=0.29s footer= ⏵⏵ auto mode on (shift+tab to cycle) · esc to in…| › stashed|
+R2 after 00:33:38 state=pending read=0.29s footer= ⏵⏵ auto mode on (shift+tab to cycle) · esc to in…| › stashed|
+R2 after 00:33:39 state=pending read=0.21s footer= ⏵⏵ auto mode on (shift+tab to cycle) · esc to in…| › stashed|
+R2 after 00:33:39 state=pending read=0.21s footer= ⏵⏵ auto mode on (shift+tab to cycle) · esc to in…| › stashed|
+R2 after 00:33:40 state=pending read=0.23s footer= ⏵⏵ auto mode on (shift+tab to cycle) · esc to in…| › stashed|
+R2 after 00:33:41 state=pending read=0.21s footer= ⏵⏵ auto mode on (shift+tab to cycle) · esc to in…| › stashed|
+R2 after 00:33:41 state=pending read=0.23s footer= ⏵⏵ auto mode on (shift+tab to cycle) · esc to in…| › stashed|
+R2 after 00:33:42 state=pending read=0.23s footer= ⏵⏵ auto mode on (shift+tab to cycle) · esc to in…| › stashed|
+R2 after 00:33:43 state=pending read=0.31s footer= ⏵⏵ auto mode on (shift+tab to cycle) · esc to in…| › stashed|
+R2 after 00:33:44 state=pending read=0.2s footer= ⏵⏵ auto mode on (shift+tab to cycle) · esc to in…| › stashed|
+R2 after 00:33:44 state=pending read=0.2s footer= ⏵⏵ auto mode on (shift+tab to cycle) · esc to in…| › stashed|
+R2 after 00:33:45 state=pending read=0.21s footer= ⏵⏵ auto mode on (shift+tab to cycle) · esc to in…| › stashed|
+R2 after 00:33:46 state=pending read=0.23s footer= ⏵⏵ auto mode on (shift+tab to cycle) · esc to in…| › stashed|
+R2 end state=pending box has draft: 0 stash-footer: 1
+R2 after ctrl+s: draft-in-box=1
+teardown ok: fm-lab-desk-h5-71722-17358

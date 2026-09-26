@@ -1,0 +1,235 @@
+session=fm-lab-desk-h5-71722-17358 pane=w1:p1 claude=2.1.283 (Claude Code) herdr=herdr 0.7.4
+shell_pid=71925 claude_pid=72930 (claude)
+R1 before send 00:32:46 state=pending
+----- screen: R1 before send -----
+     miles) each year between the Arctic and
+     Antarctic.
+  7. Kiwi: Unlike almost all other birds, its
+     nostrils sit at the tip of its beak, which it
+     uses to sniff out food.
+  8. Snowy Owl: Unlike most owls, it hunts during the
+     day, which suits the constant daylight of the
+     Arctic summer.
+  9. African Grey Parrot: It can learn hundreds of
+     words, and studies suggest it understands
+     concepts such as colour, shape and number.
+  10. Common Raven: It can solve multi-step puzzles
+      and has been seen planning ahead in lab
+      experiments.
+  11.
+
+─────────────────────────────────────────────────────
+❯ CURLEW1 draft typed while busy
+─────────────────────────────────────────────────────
+  ⚠ Transcript saving is off — inherited CLAUDE_CO…
+  ⏵⏵ auto mode on (shift+tab to cycle)
+                                   ● high · /effort
+----- end -----
+R1 00:32:59 send -> fm-desk-voice: the chat box did not set the captain's draft aside|fm-desk-voice: the primary's chat pane refused the text; saving it to the mailbox instead|mailbox: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.iocu0F/state/desk-voice/inbox/20260926T213258Z-ec37ff8f.json
+R1 after 00:33:00 state=pending read=0.63s footer= ⏵⏵ auto mode on (shift+tab to cycle) · esc to in…| › stashed|
+R1 after 00:33:01 state=pending read=0.39s footer= ⏵⏵ auto mode on (shift+tab to cycle) · esc to in…| › stashed|
+R1 after 00:33:02 state=pending read=0.31s footer= ⏵⏵ auto mode on (shift+tab to cycle) · esc to in…| › stashed|
+R1 after 00:33:02 state=pending read=0.41s footer= ⏵⏵ auto mode on (shift+tab to cycle) · esc to in…| › stashed|
+R1 after 00:33:03 state=pending read=0.23s footer= ⏵⏵ auto mode on (shift+tab to cycle) · esc to in…| › stashed|
+R1 after 00:33:04 state=pending read=0.22s footer= ⏵⏵ auto mode on (shift+tab to cycle) · esc to in…| › stashed|
+R1 after 00:33:04 state=pending read=0.23s footer= ⏵⏵ auto mode on (shift+tab to cycle) · esc to in…| › stashed|
+R1 after 00:33:05 state=pending read=0.22s footer= ⏵⏵ auto mode on (shift+tab to cycle) · esc to in…| › stashed|
+R1 after 00:33:06 state=pending read=0.25s footer= ⏵⏵ auto mode on (shift+tab to cycle) · esc to in…| › stashed|
+R1 after 00:33:07 state=pending read=0.26s footer= ⏵⏵ auto mode on (shift+tab to cycle) · esc to in…| › stashed|
+R1 after 00:33:07 state=pending read=0.21s footer= ⏵⏵ auto mode on (shift+tab to cycle) · esc to in…| › stashed|
+R1 after 00:33:08 state=pending read=0.2s footer= ⏵⏵ auto mode on (shift+tab to cycle) · esc to in…| › stashed|
+R1 after 00:33:09 state=pending read=0.21s footer= ⏵⏵ auto mode on (shift+tab to cycle) · esc to in…| › stashed|
+R1 after 00:33:09 state=empty read=0.29s footer= ⚠ Transcript saving is off — inherited CLAUDE_CO…| ⏵⏵ auto mode on (shift+tab to cycle) › stashed|
+R1 after 00:33:10 state=empty read=0.27s footer= ⚠ Transcript saving is off — inherited CLAUDE_CO…| ⏵⏵ auto mode on (shift+tab to cycle) › stashed|
+R1 after 00:33:11 state=empty read=0.27s footer= ⚠ Transcript saving is off — inherited CLAUDE_CO…| ⏵⏵ auto mode on (shift+tab to cycle) › stashed|
+----- screen: R1 12s after send -----
+  56. Oilbird: It lives in caves and uses clicking
+      sounds for echolocation, much like bats.
+  57. Pileated Woodpecker: It digs rectangular holes
+      in trees that are big enough to make small
+      trees break in half.
+  58. Clark's Nutcracker: It stores thousands of pine
+      seeds each autumn and can remember where most
+      of them are months later.
+  59. California Condor: By 1987 only 27 were left,
+      and a captive breeding program has since
+      brought the population back to over 500.
+  60. Dodo: This flightless pigeon from Mauritius was
+      extinct by the late 1600s, less than a century
+      after humans first described it.
+
+✻ Brewed for 28s · done 12:33 AM
+
+─────────────────────────────────────────────────────
+❯
+─────────────────────────────────────────────────────
+  ⚠ Transcript saving is off — inherited CLAUDE_CO…
+  ⏵⏵ auto mode on (shift+tab to cycle)    › stashed
+----- end -----
+----- screen: R1 after turn ended -----
+  56. Oilbird: It lives in caves and uses clicking
+      sounds for echolocation, much like bats.
+  57. Pileated Woodpecker: It digs rectangular holes
+      in trees that are big enough to make small
+      trees break in half.
+  58. Clark's Nutcracker: It stores thousands of pine
+      seeds each autumn and can remember where most
+      of them are months later.
+  59. California Condor: By 1987 only 27 were left,
+      and a captive breeding program has since
+      brought the population back to over 500.
+  60. Dodo: This flightless pigeon from Mauritius was
+      extinct by the late 1600s, less than a century
+      after humans first described it.
+
+✻ Brewed for 28s · done 12:33 AM
+
+─────────────────────────────────────────────────────
+❯
+─────────────────────────────────────────────────────
+  ⚠ Transcript saving is off — inherited CLAUDE_CO…
+  ⏵⏵ auto mode on (shift+tab to cycle)    › stashed
+----- end -----
+R1 end state=empty box has draft: 0 stash-footer: 1
+----- screen: R1 after Ctrl+S on empty box (does the draft come back?) -----
+  56. Oilbird: It lives in caves and uses clicking
+      sounds for echolocation, much like bats.
+  57. Pileated Woodpecker: It digs rectangular holes
+      in trees that are big enough to make small
+      trees break in half.
+  58. Clark's Nutcracker: It stores thousands of pine
+      seeds each autumn and can remember where most
+      of them are months later.
+  59. California Condor: By 1987 only 27 were left,
+      and a captive breeding program has since
+      brought the population back to over 500.
+  60. Dodo: This flightless pigeon from Mauritius was
+      extinct by the late 1600s, less than a century
+      after humans first described it.
+
+✻ Brewed for 28s · done 12:33 AM
+
+─────────────────────────────────────────────────────
+❯ CURLEW1 draft typed while busy
+─────────────────────────────────────────────────────
+  ⚠ Transcript saving is off — inherited CLAUDE_CO…
+  ⏵⏵ auto mode on (shift+tab to cycle)
+----- end -----
+R1 after ctrl+s: draft-in-box=1
+R2 before send 00:33:25 state=pending
+----- screen: R2 before send -----
+      of them are months later.
+  59. California Condor: By 1987 only 27 were left,
+      and a captive breeding program has since
+      brought the population back to over 500.
+  60. Dodo: This flightless pigeon from Mauritius was
+      extinct by the late 1600s, less than a century
+      after humans first described it.
+
+✻ Brewed for 28s · done 12:33 AM
+
+❯ Write a numbered list of 60 different bird
+  species, one per line, with a one-sentence fact
+  about each. Run 2.
+
+✻ Canoodling… (6s · thinking with high effort)
+
+─────────────────────────────────────────────────────
+❯ CURLEW2 draft typed while busy
+─────────────────────────────────────────────────────
+  ⚠ Transcript saving is off — inherited CLAUDE_CO…
+  ⏵⏵ auto mode on (shift+tab to cycle)
+----- end -----
+R2 00:33:34 send -> fm-desk-voice: the chat box did not set the captain's draft aside|fm-desk-voice: the primary's chat pane refused the text; saving it to the mailbox instead|mailbox: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.iocu0F/state/desk-voice/inbox/20260926T213334Z-67883aae.json
+R2 after 00:33:34 state=pending read=0.34s footer= ⏵⏵ auto mode on (shift+tab to cycle) · esc to in…| › stashed|
+R2 after 00:33:35 state=pending read=0.34s footer= ⏵⏵ auto mode on (shift+tab to cycle) · esc to in…| › stashed|
+R2 after 00:33:36 state=pending read=0.32s footer= ⏵⏵ auto mode on (shift+tab to cycle) · esc to in…| › stashed|
+R2 after 00:33:37 state=pending read=0.25s footer= ⏵⏵ auto mode on (shift+tab to cycle) · esc to in…| › stashed|
+R2 after 00:33:37 state=pending read=0.29s footer= ⏵⏵ auto mode on (shift+tab to cycle) · esc to in…| › stashed|
+R2 after 00:33:38 state=pending read=0.29s footer= ⏵⏵ auto mode on (shift+tab to cycle) · esc to in…| › stashed|
+R2 after 00:33:39 state=pending read=0.21s footer= ⏵⏵ auto mode on (shift+tab to cycle) · esc to in…| › stashed|
+R2 after 00:33:39 state=pending read=0.21s footer= ⏵⏵ auto mode on (shift+tab to cycle) · esc to in…| › stashed|
+R2 after 00:33:40 state=pending read=0.23s footer= ⏵⏵ auto mode on (shift+tab to cycle) · esc to in…| › stashed|
+R2 after 00:33:41 state=pending read=0.21s footer= ⏵⏵ auto mode on (shift+tab to cycle) · esc to in…| › stashed|
+R2 after 00:33:41 state=pending read=0.23s footer= ⏵⏵ auto mode on (shift+tab to cycle) · esc to in…| › stashed|
+R2 after 00:33:42 state=pending read=0.23s footer= ⏵⏵ auto mode on (shift+tab to cycle) · esc to in…| › stashed|
+R2 after 00:33:43 state=pending read=0.31s footer= ⏵⏵ auto mode on (shift+tab to cycle) · esc to in…| › stashed|
+R2 after 00:33:44 state=pending read=0.2s footer= ⏵⏵ auto mode on (shift+tab to cycle) · esc to in…| › stashed|
+R2 after 00:33:44 state=pending read=0.2s footer= ⏵⏵ auto mode on (shift+tab to cycle) · esc to in…| › stashed|
+R2 after 00:33:45 state=pending read=0.21s footer= ⏵⏵ auto mode on (shift+tab to cycle) · esc to in…| › stashed|
+R2 after 00:33:46 state=pending read=0.23s footer= ⏵⏵ auto mode on (shift+tab to cycle) · esc to in…| › stashed|
+----- screen: R2 12s after send -----
+      of them are months later.
+  59. California Condor: By 1987 only 27 were left,
+      and a captive breeding program has since
+      brought the population back to over 500.
+  60. Dodo: This flightless pigeon from Mauritius was
+      extinct by the late 1600s, less than a century
+      after humans first described it.
+
+✻ Brewed for 28s · done 12:33 AM
+
+❯ Write a numbered list of 60 different bird
+  species, one per line, with a one-sentence fact
+  about each. Run 2.
+
+✢ Canoodling… (thinking more with high effort)
+
+─────────────────────────────────────────────────────
+❯
+─────────────────────────────────────────────────────
+  ⚠ Transcript saving is off — inherited CLAUDE_CO…
+  ⏵⏵ auto mode on (shift+tab to cycle) · esc to in…
+                                          › stashed
+----- end -----
+----- screen: R2 after turn ended -----
+      of them are months later.
+  59. California Condor: By 1987 only 27 were left,
+      and a captive breeding program has since
+      brought the population back to over 500.
+  60. Dodo: This flightless pigeon from Mauritius was
+      extinct by the late 1600s, less than a century
+      after humans first described it.
+
+✻ Brewed for 28s · done 12:33 AM
+
+❯ Write a numbered list of 60 different bird
+  species, one per line, with a one-sentence fact
+  about each. Run 2.
+
+✻ Canoodling… (thinking more with high effort)
+
+─────────────────────────────────────────────────────
+❯
+─────────────────────────────────────────────────────
+  ⚠ Transcript saving is off — inherited CLAUDE_CO…
+  ⏵⏵ auto mode on (shift+tab to cycle) · esc to in…
+                                          › stashed
+----- end -----
+R2 end state=pending box has draft: 0 stash-footer: 1
+----- screen: R2 after Ctrl+S on empty box (does the draft come back?) -----
+  14. Little Penguin: At about 33 cm (13 in) tall, it
+      is the smallest penguin species.
+  15. Emu: The male incubates the eggs for about
+      eight weeks and barely eats or drinks during
+      that time.
+  16. Greater Rhea: The male incubates eggs laid by
+      several females in a single nest, sometimes
+      more than 50 at once.
+  17. Common Nighthawk: It isn't a hawk at all; it's
+      a nightjar that catches insects in flight at
+      dusk.
+  18. Common Poorwill: It was the first bird known to
+      hibernate and can stay in a torpid state for
+      weeks.
+  19. Great Grey Owl: It can hear voles moving under
+      deep snow and plunge through the snow to catch
+
+─────────────────────────────────────────────────────
+❯ CURLEW2 draft typed while busy
+─────────────────────────────────────────────────────
+  ⚠ Transcript saving is off — inherited CLAUDE_CO…
+  ⏵⏵ auto mode on (shift+tab to cycle)
+----- end -----
+R2 after ctrl+s: draft-in-box=1
+teardown ok: fm-lab-desk-h5-71722-17358

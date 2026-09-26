@@ -1,0 +1,17 @@
+session=fm-lab-desk-r2v-62939-3472 pane=w1:p1 claude=2.1.283 (Claude Code) herdr=herdr 0.7.4
+shell_pid=63196 claude_pid=64286 (claude) worktree HEAD=cb805eb0 pane-width=159
+H1 footer-esc-seen=1 busy-before-send=0 state=pending
+H1 send -> sent: herdr fm-lab-desk-r2v-62939-3472:w1:p1
+H1 frames sampled=16 frames-with-stashed-on-own-row=0
+H1 after: replied=1 state=pending draft-in-box=1
+RESULT H1-narrow-busy-past-draft: fail (busy=0)
+H2 footer-esc-seen=1 busy-before-send=0 state=pending
+H2 send -> sent: herdr fm-lab-desk-r2v-62939-3472:w1:p1
+H2 frames sampled=13 frames-with-stashed-on-own-row=2
+H2 after: replied=0 state=pending draft-in-box=1
+RESULT H2-narrow-busy-past-draft: fail (busy=0)
+==== SUMMARY
+H1-narrow-busy-past-draft: fail (busy=0)
+H2-narrow-busy-past-draft: fail (busy=0)
+no claude session log found
+teardown ok: fm-lab-desk-r2v-62939-3472

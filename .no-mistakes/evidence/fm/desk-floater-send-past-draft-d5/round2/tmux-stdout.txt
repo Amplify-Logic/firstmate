@@ -1,0 +1,38 @@
+claude: 2.1.283 (Claude Code)  tmux: tmux 3.6a  worktree HEAD: cb805eb0
+T1 send -> sent: tmux %0
+RESULT T1-suggested-prompt: pass
+T2-short-past-draft draft typed; state=pending; message length=31
+T2-short-past-draft send -> sent: tmux %0
+T2-short-past-draft after: state=pending draft-occurrences-on-screen=1 claude-replied-OSPREY=1
+RESULT T2-short-past-draft: pass
+T3-long-1300-past-draft draft typed; state=pending; message length=1300
+T3-long-1300-past-draft send -> sent: tmux %0
+T3-long-1300-past-draft after: state=pending draft-occurrences-on-screen=1 claude-replied-HERON=0
+RESULT T3-long-1300-past-draft: pass
+T4-long-3200-past-draft draft typed; state=pending; message length=3200
+T4-long-3200-past-draft send -> sent: tmux %0
+T4-long-3200-past-draft after: state=pending draft-occurrences-on-screen=1 claude-replied-EGRET=0
+RESULT T4-long-3200-past-draft: pass
+T5 send -> fm-desk-voice: the primary's chat pane refused the text; saving it to the mailbox instead|mailbox: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.tUlQIf/state/desk-voice/inbox/20260926T215657Z-203a8c51.json
+T5 mailbox file: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.tUlQIf/state/desk-voice/inbox/20260926T215657Z-203a8c51.json
+T5 box-kept=1 no-reply=1 stash-kept=1
+RESULT T5-existing-stash-goes-to-mailbox: pass
+T6 send -> sent: tmux %0
+RESULT T6-pasted-text-draft: pass
+N1 busy-before-send=0 state=pending
+N1 send -> sent: tmux %0
+N1 after: replied=1 state=pending draft-in-box=1 stash-footer=0
+RESULT N1-narrow-mid-turn-past-draft: fail
+N2 busy-before-send=0 state=pending
+N2 send -> sent: tmux %0
+N2 after: replied=1 state=pending draft-in-box=1 stash-footer=0
+RESULT N2-narrow-mid-turn-past-draft: fail
+==== SUMMARY
+T1-suggested-prompt: pass
+T2-short-past-draft: pass
+T3-long-1300-past-draft: pass
+T4-long-3200-past-draft: pass
+T5-existing-stash-goes-to-mailbox: pass
+T6-pasted-text-draft: pass
+N1-narrow-mid-turn-past-draft: fail
+N2-narrow-mid-turn-past-draft: fail

@@ -1,0 +1,107 @@
+claude: 2.1.283 (Claude Code)
+--- G styled box rows
+^[[38;5;239m^[[48;5;237m�M-^]� ^[[38;5;231mReply with only the word LAPWING^[[39m
+^[[39m�M-^]� 
+----- 00:37:22 G after reply state=empty -----
+
+
+
+
+
+
+
+
+
+
+
+
+----- end -----
+G send -> sent: tmux %0
+----- 00:37:36 G after send state=empty -----
+
+
+
+
+
+
+
+
+
+
+
+
+----- end -----
+--- G styled box rows after
+^[[38;5;239m^[[48;5;237m�M-^]� ^[[38;5;231mReply with only the word ALBATROSS^[[39m
+^[[39m�M-^]� 
+----- 00:37:45 N busy, draft typed state=pending -----
+  8. Atlantic Puffin – It can hold a dozen or more
+     small fish crosswise in its bill at once.
+  9. Kiwi (North Island Brown) – Its nostrils sit at
+     the tip of its bill, which is unusual among
+     birds, and it finds food mostly by smell.
+  10. Common Raven – In lab tests it plans ahead and
+
+──────────────────────────────────────────────────────
+❯ CURLEW draft typed while busy
+──────────────────────────────────────────────────────
+  ⏵⏵ auto mode on (shift+tab to cycle)
+
+----- end -----
+N send -> fm-desk-voice: the chat box did not set the captain's draft aside|fm-desk-voice: the primary's chat pane refused the text; saving it to the mailbox instead|mailbox: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.n60CLt/state/desk-voice/inbox/20260926T213754Z-234f8c3c.json
+----- 00:37:56 N 1 after send state=unknown -----
+  37. Great Blue Heron – It swallows fish whole and
+      sometimes chokes on prey that is too big.
+  38. Common Kingfisher – Its bill shape inspired the
+      nose of Japan's Shinkansen bullet train.
+  39.
+
+──────────────────────────────────────────────────────
+❯ 
+──────────────────────────────────────────────────────
+  ⏵⏵ auto mode on (shift+tab to cycle) · esc to int…
+                                           › stashed
+
+----- end -----
+----- 00:37:58 N 2 after send state=unknown -----
+      eggs.
+  42. Barn Owl – Its heart-shaped face directs sound
+      to its ears, so it can catch prey in total
+      darkness.
+  43.
+
+──────────────────────────────────────────────────────
+❯ 
+──────────────────────────────────────────────────────
+  ⏵⏵ auto mode on (shift+tab to cycle) · esc to int…
+                                           › stashed
+
+----- end -----
+----- 00:37:59 N 3 after send state=unknown -----
+  47. Indian Peafowl – The male's "tail" is actually a
+      train of long upper tail feathers.
+  48. Red Junglefowl – It is the wild ancestor of the
+      domestic chicken.
+  49.
+
+──────────────────────────────────────────────────────
+❯ 
+──────────────────────────────────────────────────────
+  ⏵⏵ auto mode on (shift+tab to cycle) · esc to int…
+                                           › stashed
+
+----- end -----
+----- 00:40:48 N end state=unknown -----
+  60. Great Tit – In parts of Europe it has learned to
+      peck through the foil lids of milk bottles to
+      get the cream.
+
+✻ Churned for 25s · done 12:38 AM
+
+──────────────────────────────────────────────────────
+❯ 
+──────────────────────────────────────────────────────
+  ⏵⏵ auto mode on (shift+tab to cycle) · ← 2 agents
+                                           › stashed
+
+----- end -----
