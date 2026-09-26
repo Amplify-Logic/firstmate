@@ -810,10 +810,15 @@ test_selection_dialog_rule_is_bounded() {
   box=$'╭──────────────────────────╮\n│ Do you want to proceed?  │\n│ ❯ 1. Yes                 │\n│   2. No                  │\n╰──────────────────────────╯'
   assert_screen "boxed selection dialog on tmux" unknown "$CAPS_TMUX" "$box" 2 probe-absent
   assert_screen "boxed selection dialog cursorless" unknown "$CAPS_STYLED_NOID" "$box"
-  # A draft that opens with a numbered item is refused too: a deferred
-  # delivery, never a keystroke into a dialog.
-  assert_screen "draft opening with a numbered item" unknown "$CAPS_STYLED_NOID" \
-    $'────────────────────────\n❯ 1. fix the tests\n────────────────────────'
+  # The highlighted option may be the last one, its siblings all above it.
+  box=$'╭──────────────────────────╮\n│ Do you want to proceed?  │\n│   1. Yes                 │\n│ ❯ 2. No                  │\n╰──────────────────────────╯'
+  assert_screen "boxed dialog highlighting its last option" unknown "$CAPS_TMUX" "$box" 3 probe-absent
+  # A single-line draft that opens with a numbered item is no dialog: every
+  # dialog offers two options, so it keeps pending and its Enter retry.
+  local draft=$'────────────────────────\n❯ 1. fix the tests\n────────────────────────'
+  assert_screen "draft opening with a numbered item on tmux" pending "$CAPS_TMUX" "$draft" 1 probe-absent
+  assert_screen "draft opening with a numbered item on herdr" pending "$CAPS_STYLED" "$draft" '' probe-absent
+  assert_screen "draft opening with a numbered item on zellij" pending "$CAPS_STYLED_NOID" "$draft"
   # Numbers elsewhere in a draft keep it pending.
   assert_screen "draft with a version number" pending "$CAPS_STYLED_NOID" \
     $'────────────────────────\n❯ 3.5 release notes\n────────────────────────'
@@ -825,7 +830,7 @@ test_selection_dialog_rule_is_bounded() {
   # A selection option in the transcript above the live composer is history.
   assert_screen "earlier dialog echoed above an idle composer" empty "$CAPS_STYLED_NOID" \
     $'❯ 1. Yes\n\n────────────────────────\n❯'"$NBSP"$'\n────────────────────────'
-  pass "selection dialog: the rule refuses only a glyph-led numbered option inside the composer region"
+  pass "selection dialog: the rule refuses only a glyph-led numbered option with a sibling option, inside the composer region"
 }
 
 test_strict_blank_row_divergence() {

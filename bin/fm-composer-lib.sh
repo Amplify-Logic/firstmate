@@ -127,10 +127,17 @@
 # would type into the dialog and its Enter would confirm the highlighted
 # option. So an agent-glyph row whose content opens with a numbered option
 # (`<digits>.` then a space or the row's end) anywhere in the composer region
-# a verdict is about to be read from makes that verdict `unknown`. The test
-# runs on the PLAIN row, so no styling can hide it, and it only ever refuses:
-# a real draft that opens with `1. ` also reads `unknown`, which costs a
-# deferred delivery, never a keystroke into the wrong place.
+# a verdict is about to be read from makes that verdict `unknown` - but only
+# when another numbered option row (glyph or not) sits within
+# FM_COMPOSER_DIALOG_OPTION_REACH rows above or below it, because every
+# dialog offers at least two options and the highlighted one may be the last.
+# The test runs on the PLAIN rows, so no styling can hide it. A single-line
+# draft opening with `1. ` keeps its old verdict and its Enter retry; only a
+# draft opening with a numbered item that has another numbered row beside it
+# (its own numbered list, or one just above the composer) is refused, and
+# since the submit cores retry Enter only on `pending`, that refusal costs a
+# deferred delivery or a typed draft left unsubmitted - never a keystroke into
+# a dialog.
 #
 # THE SAFETY RULE for glyphs: a bare shell prompt glyph (`>` `$` `%` `#`) -
 # what a pane shows once its agent has exited to a plain login shell - is a
@@ -588,6 +595,12 @@ FM_COMPOSER_PI_MAX_LINES=${FM_COMPOSER_PI_MAX_LINES:-8}
 # Grok install since; may need to change if a future Grok release renders a
 # different overhang or scales it with title/model-name length.
 FM_COMPOSER_GROK_TITLE_OVERHANG=3
+
+# Rows above or below a highlighted selection-dialog option searched for a
+# second numbered option (THE SELECTION DIALOG RULE). claude 2.1.283's
+# AskUserQuestion puts a description row between options, so the nearest
+# other option can be two rows away; the slack covers a wrapped description.
+FM_COMPOSER_DIALOG_OPTION_REACH=4
 
 # 0 when <content> is exactly one glyph drawn from <glyph-list>.
 _fm_composer_is_prompt_glyph() {  # <content> <glyph-list>
@@ -1645,12 +1658,14 @@ EOF
   printf '%s\n' "$joined" | LC_ALL=C awk '{$1=$1; printf "%s", $0}'
 }
 
-# _fm_composer_row_is_selection_option: 0 when the plain row is the
-# HIGHLIGHTED option of a selection dialog - an agent prompt glyph followed by
-# a numbered option (`❯ 1. Yes`), once side borders are stripped (see THE
-# SELECTION DIALOG RULE in this file's header).
-_fm_composer_row_is_selection_option() {  # <plain-row>
+# _fm_composer_row_option: 0 when the plain row, side borders and one leading
+# agent prompt glyph stripped, opens with a numbered option (`1. Yes`), with
+# FM_COMPOSER_ROW_OPTION set to `glyph` when that glyph led it (the
+# highlighted option) and `plain` otherwise (see THE SELECTION DIALOG RULE in
+# this file's header).
+_fm_composer_row_option() {  # <plain-row>
   local row=$1 glyph=''
+  FM_COMPOSER_ROW_OPTION=''
   fm_composer_normalize_trim_var row
   case "$row" in
     '│'*'│') row=${row#│}; row=${row%│} ;;
@@ -1659,28 +1674,48 @@ _fm_composer_row_is_selection_option() {  # <plain-row>
     '|'*'|') row=${row#|}; row=${row%|} ;;
   esac
   fm_composer_normalize_trim_var row
-  fm_composer_leading_agent_glyph_var glyph "$row" || return 1
-  row=${row#*"$glyph"}
-  fm_composer_normalize_trim_var row
-  printf '%s' "$row" | LC_ALL=C grep -qE '^[0-9]+\.([[:space:]]|$)'
+  if fm_composer_leading_agent_glyph_var glyph "$row"; then
+    row=${row#*"$glyph"}
+    fm_composer_normalize_trim_var row
+  fi
+  case "$row" in [0-9]*) ;; *) return 1 ;; esac
+  printf '%s' "$row" | LC_ALL=C grep -qE '^[0-9]+\.([[:space:]]|$)' || return 1
+  FM_COMPOSER_ROW_OPTION=plain
+  [ -z "$glyph" ] || FM_COMPOSER_ROW_OPTION=glyph
 }
 
 # _fm_composer_refuse_selection_dialog: print `unknown` and return 0 when any
 # row of <plain> from <first> through <last> is a highlighted selection-dialog
-# option; return 1 (printing nothing) otherwise. Every verdict path of the
+# option with another numbered option within FM_COMPOSER_DIALOG_OPTION_REACH
+# rows of it; return 1 (printing nothing) otherwise. Every verdict path of the
 # screen classifier passes its composer region through this first, so the rule
 # cannot be skipped by whichever shape the dialog happens to resemble.
 _fm_composer_refuse_selection_dialog() {  # <plain> <first> <last>
-  local plain=$1 first=$2 last=$3 line
+  local plain=$1 first=$2 last=$3 line i=0 j stop
+  local -a rows=()
   [ "$first" -ge 0 ] && [ "$last" -ge "$first" ] || return 1
   while IFS= read -r line; do
-    if _fm_composer_row_is_selection_option "$line"; then
-      printf 'unknown'
-      return 0
-    fi
+    rows[i]=$line
+    i=$((i + 1))
   done <<EOF
-$(printf '%s\n' "$plain" | sed -n "$((first + 1)),$((last + 1))p")
+$plain
 EOF
+  i=$first
+  while [ "$i" -le "$last" ] && [ "$i" -lt "${#rows[@]}" ]; do
+    if _fm_composer_row_option "${rows[i]}" && [ "$FM_COMPOSER_ROW_OPTION" = glyph ]; then
+      j=$((i - FM_COMPOSER_DIALOG_OPTION_REACH))
+      [ "$j" -ge 0 ] || j=0
+      stop=$((i + FM_COMPOSER_DIALOG_OPTION_REACH))
+      while [ "$j" -le "$stop" ] && [ "$j" -lt "${#rows[@]}" ]; do
+        if [ "$j" -ne "$i" ] && _fm_composer_row_option "${rows[j]}"; then
+          printf 'unknown'
+          return 0
+        fi
+        j=$((j + 1))
+      done
+    fi
+    i=$((i + 1))
+  done
   return 1
 }
 
