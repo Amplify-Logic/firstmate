@@ -107,7 +107,7 @@ The floater treats the cursor as being in the Firstmate chat only when all of th
 - That session shows the primary Firstmate's pane as its focused pane.
 
 Terminal is the only app the floater can ask which tab is in front, so dictation into a Firstmate chat shown in any other terminal app is only pasted.
-Asking Terminal needs the Automation permission (see [Permissions](#permissions)); without it, dictation into the Firstmate chat is pasted and the status line reads "Typed, not sent - allow Terminal".
+Asking Terminal needs the Automation permission (see [Permissions](#permissions)); without it, the floater cannot tell which tab is in front, so any dictation with Terminal in front is only pasted and the status line reads "Typed, not sent - allow Terminal", even in a tab that is not the Firstmate chat.
 `bin/fm-desk-voice.sh`'s header owns how the chat is recognised.
 
 ## Screenshots
