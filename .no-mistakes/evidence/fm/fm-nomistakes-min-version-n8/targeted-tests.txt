@@ -1,0 +1,18 @@
+== tests/fm-bootstrap.test.sh
+fatal: not a git repository (or any of the parent directories): .git
+fatal: not a git repository (or any of the parent directories): .git
+fatal: not a git repository (or any of the parent directories): .git
+ok - bootstrap gates resolver fields and additive harnesses on the typed key
+[exit=]
+== tests/fm-home-port.test.sh
+ok - verify passes a ready destination home
+ok - verify accepts prime-agent and checks its launch binary
+ok - verify completes for every FM_PORT_VERIFIED_HARNESSES name
+# all fm-home-port tests passed
+[exit=]
+== tests/fm-startup-memory-budget.test.sh
+ok - budget parser accepts one exact positive value and rejects malformed or unsafe inputs
+ok - budget accounting sums the three startup files and reports safe failures
+ok - budget propagation converges through config push with exact rereads, absence, and safe rejection
+# all fm-startup-memory-budget tests passed
+[exit=]

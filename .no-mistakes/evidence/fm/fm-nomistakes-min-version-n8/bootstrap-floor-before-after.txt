@@ -1,0 +1,6 @@
+base 4a27ef4c      | no-mistakes version v1.46.0 (abc)    | (no no-mistakes diagnostic: accepted)
+base 4a27ef4c      | no-mistakes version v1.59.1 (abc)    | (no no-mistakes diagnostic: accepted)
+base 4a27ef4c      | no-mistakes version v1.59.2 (abc)    | (no no-mistakes diagnostic: accepted)
+change e6941526    | no-mistakes version v1.46.0 (abc)    | MISSING: no-mistakes (install: curl -fsSL https://raw.githubusercontent.com/kunchenguid/no-mistakes/main/docs/install.sh | sh)
+change e6941526    | no-mistakes version v1.59.1 (abc)    | MISSING: no-mistakes (install: curl -fsSL https://raw.githubusercontent.com/kunchenguid/no-mistakes/main/docs/install.sh | sh)
+change e6941526    | no-mistakes version v1.59.2 (abc)    | (no no-mistakes diagnostic: accepted)
