@@ -1,0 +1,19 @@
+Live composer verdicts, real claude 2.1.283 (Haiku 4.5), tmux 3.6a, macOS arm64, private socket fm-lab-dialogs, 110x32 pane.
+Each screen classified by HEAD 56a2c440 and BASE 34f164c9 bin/fm-tmux-lib.sh:
+ cursor = fm_tmux_composer_state; cursorless = fm_composer_classify_screen (styled=1 cursor=0 identity=1);
+ injector_guard = fm_pane_input_pending (defer when not proven empty).
+Plain captures: screen-<label>.txt ; styled captures: screen-<label>.ansi ; driver: live-driver.sh
+
+label                              HEAD cursor/cursorless   BASE cursor/cursorless
+idle-composer                      empty / empty            empty / empty
+model-picker (❯ 5. Haiku 4.5)      unknown / unknown        pending / pending
+idle-after-model-escape            empty / empty            empty / empty
+permission-prompt (❯ 1. Yes)       unknown / unknown        pending / pending
+permission-prompt-last (❯ 3. No)   unknown / unknown        pending / pending
+ask-user-question (❯ 1., 4-row wrapped description)  unknown / unknown   pending / pending
+ask-user-question-option3          unknown / unknown        pending / pending
+ask-user-question-option4 (below rule)  unknown / unknown   unknown / pending
+draft '❯ 1. fix the tests'         pending / pending        pending / pending
+draft under transcript '1. Patch the parser / 2. Rewrite the lexer'  pending / pending   pending / pending
+draft two numbered lines (documented refusal cost)  unknown / unknown   pending / pending
+trust-dialog (un-numbered '❯ No, exit' / 'Yes, I trust this folder')  pending / pending   pending / pending  <- outside the numbered rule
