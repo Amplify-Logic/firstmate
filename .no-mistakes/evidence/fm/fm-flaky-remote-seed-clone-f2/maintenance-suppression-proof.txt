@@ -1,0 +1,10 @@
+git: git version 2.50.1 (Apple Git-155)
+--- without fm_git_no_auto_maintenance: loose objects after add = 648
+    maintenance.auto = <unset>
+    auto-maintenance child spawned by commit: "argv":["/Applications/Xcode.app/Contents/Developer/usr/libexec/git-core/git","maintenance","run","--auto","--quiet","--detach"]
+"argv":["git","maintenance","run","--auto","--quiet","--detach"]
+    local clone of fixture: ok
+--- with fm_git_no_auto_maintenance: loose objects after add = 648
+    maintenance.auto = false
+    auto-maintenance child spawned by commit: none
+    local clone of fixture: ok

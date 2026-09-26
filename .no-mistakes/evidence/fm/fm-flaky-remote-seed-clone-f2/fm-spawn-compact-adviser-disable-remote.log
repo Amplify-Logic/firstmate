@@ -1,0 +1,2 @@
+not ok - allowlist absent: the remote second-mate launch failed
+env -u NO_MISTAKES_GATE bash tests/$t.test.sh  3.03s user 7.38s system 42% cpu 24.473 total

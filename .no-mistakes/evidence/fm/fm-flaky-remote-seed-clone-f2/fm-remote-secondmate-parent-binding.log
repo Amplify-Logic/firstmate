@@ -1,0 +1,28 @@
+ok - remote provisioning publishes durable parent state before its completion marker
+ok - a remote secondmate's finished worker cleans up when the remote code root's own .env looked relay-active
+ok - a remote secondmate's finished worker cleans up when only an ambient exported token looked relay-active
+ok - a remote secondmate's finished worker cleans up with no relay signal anywhere
+ok - a remote secondmate's own committed relay token still refuses cleanup
+ok - remote secondmate publication refuses targets outside its home
+ALL TESTS PASSED
+rm: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-remote-parent-binding.0J3VuT/remote-home/state/parent-route/ios.git-hooks/pre-rebase: Permission denied
+rm: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-remote-parent-binding.0J3VuT/remote-home/state/parent-route/ios.git-hooks/pre-applypatch: Permission denied
+rm: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-remote-parent-binding.0J3VuT/remote-home/state/parent-route/ios.git-hooks/pre-auto-gc: Permission denied
+rm: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-remote-parent-binding.0J3VuT/remote-home/state/parent-route/ios.git-hooks/pre-merge-commit: Permission denied
+rm: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-remote-parent-binding.0J3VuT/remote-home/state/parent-route/ios.git-hooks/post-commit: Permission denied
+rm: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-remote-parent-binding.0J3VuT/remote-home/state/parent-route/ios.git-hooks/sendemail-validate: Permission denied
+rm: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-remote-parent-binding.0J3VuT/remote-home/state/parent-route/ios.git-hooks/applypatch-msg: Permission denied
+rm: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-remote-parent-binding.0J3VuT/remote-home/state/parent-route/ios.git-hooks/prepare-commit-msg: Permission denied
+rm: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-remote-parent-binding.0J3VuT/remote-home/state/parent-route/ios.git-hooks/post-checkout: Permission denied
+rm: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-remote-parent-binding.0J3VuT/remote-home/state/parent-route/ios.git-hooks/post-applypatch: Permission denied
+rm: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-remote-parent-binding.0J3VuT/remote-home/state/parent-route/ios.git-hooks/post-rewrite: Permission denied
+rm: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-remote-parent-binding.0J3VuT/remote-home/state/parent-route/ios.git-hooks/commit-msg: Permission denied
+rm: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-remote-parent-binding.0J3VuT/remote-home/state/parent-route/ios.git-hooks/pre-push: Permission denied
+rm: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-remote-parent-binding.0J3VuT/remote-home/state/parent-route/ios.git-hooks/post-merge: Permission denied
+rm: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-remote-parent-binding.0J3VuT/remote-home/state/parent-route/ios.git-hooks/pre-commit: Permission denied
+rm: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-remote-parent-binding.0J3VuT/remote-home/state/parent-route/ios.git-hooks: Directory not empty
+rm: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-remote-parent-binding.0J3VuT/remote-home/state/parent-route: Directory not empty
+rm: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-remote-parent-binding.0J3VuT/remote-home/state: Directory not empty
+rm: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-remote-parent-binding.0J3VuT/remote-home: Directory not empty
+rm: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-remote-parent-binding.0J3VuT: Directory not empty
+env -u NO_MISTAKES_GATE bash tests/$t.test.sh  19.28s user 32.57s system 49% cpu 1:45.17 total
