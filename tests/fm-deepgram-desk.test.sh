@@ -872,7 +872,9 @@ test_desk_voice_deliver_pending_drain() {
 # draws the box 40 columns wide, where Ctrl+U deletes one wrapped row;
 # drop-head loses the first typed character; no-marker hides `› stashed`;
 # pop-fails refuses the Ctrl+S that pops a stash; refold makes Enter redraw
-# the box as a pasted-text placeholder plus the typed tail without submitting.
+# the box as a pasted-text placeholder plus the typed tail without submitting;
+# late-paste holds sent text back from the box for the number of screen reads
+# it names, as a busy Claude draws input late, yet handles it before any key.
 # Text over 800 characters folds as Claude folds it (verified live on claude
 # 2.1.283): a bracketed paste into one `[Pasted text #N]` placeholder, a typed
 # burst into a placeholder plus its literal tail. Enter expands a placeholder
@@ -900,6 +902,11 @@ desk_send_fixture() {  # <name> [tmux|herdr] [harness] -> home; starts the stand
 set -u
 dir=${FM_FAKE_HERDR_DIR:?}
 { printf 'call'; for a in "$@"; do printf '\x1f%s' "$a"; done; printf '\n'; } >> "$dir/herdr.log"
+draw_queued() {
+  [ -e "$dir/queued" ] || return 0
+  cat "$dir/queued" >> "$dir/draft"
+  rm -f "$dir/queued" "$dir/queued-reads"
+}
 case "${1:-} ${2:-}" in
   "status --json")
     printf '{"client":{"version":"0.7.4","protocol":14},"server":{"running":true}}\n' ;;
@@ -910,6 +917,10 @@ case "${1:-} ${2:-}" in
     printf '{"result":{"type":"pane_process_info","process_info":{"pane_id":"%s","shell_pid":%s,"foreground_processes":[]}}}\n' \
       "$4" "$(cat "$dir/shell-pid")" ;;
   "pane read")
+    if [ -e "$dir/queued" ]; then
+      left=$(( $(cat "$dir/queued-reads") - 1 ))
+      if [ "$left" -le 0 ]; then draw_queued; else printf '%s' "$left" > "$dir/queued-reads"; fi
+    fi
     case " $* " in *' ansi '*) ansi=1 ;; *) ansi=0 ;; esac
     if [ -e "$dir/modal" ]; then
       if [ "$ansi" = 1 ]; then cat "$dir/modal"; else sed $'s/\033\\[[0-9;:]*m//g' "$dir/modal"; fi
@@ -969,8 +980,14 @@ case "${1:-} ${2:-}" in
         text="[Pasted text #$n]${text: -40}"
       fi
     fi
-    printf '%s' "$text" >> "$dir/draft" ;;
+    if [ -e "$dir/late-paste" ]; then
+      printf '%s' "$text" >> "$dir/queued"
+      cp "$dir/late-paste" "$dir/queued-reads"
+    else
+      printf '%s' "$text" >> "$dir/draft"
+    fi ;;
   "pane send-keys")
+    draw_queued
     case "$4" in
       ctrl+s)
         [ ! -e "$dir/no-stash" ] || exit 0
@@ -1349,6 +1366,31 @@ test_desk_voice_send_pastes_a_voice_length_message_past_a_claude_draft() {
     desk_send_done "$home"
   done
   pass "fm-desk-voice send: a voice-length message is pasted past a Claude draft, shown as one placeholder, and sent"
+}
+
+test_desk_voice_send_waits_for_a_late_drawn_message_past_a_claude_draft() {
+  local home out
+  home=$(desk_send_fixture send-draft-late) || { desk_send_skip send-draft-late; return 0; }
+  cp "$HERDR_CLAUDE_SCREEN" "$home/fixture/screen"
+  printf 'claude' > "$home/fixture/agent"
+  printf 'half typed thought' > "$home/fixture/draft"
+  # A busy chat that has not drawn the paste yet reads empty; a Ctrl+S then
+  # would stash the message over the captain's draft.
+  printf '6' > "$home/fixture/late-paste"
+  out=$(desk_send "$home" "and ship it") || fail "send failed: $out"
+  assert_contains "$out" "sent: herdr fm-desk-send-test:w7:p3" "a message drawn late still goes past the draft"
+  [ "$(cat "$home/fixture/submitted")" = "and ship it" ] \
+    || fail "only the message may be submitted, got: $(cat "$home/fixture/submitted" 2>/dev/null)"
+  [ "$(cat "$home/fixture/draft")" = "half typed thought" ] \
+    || fail "the draft must be back in the chat box, got: $(cat "$home/fixture/draft")"
+  [ ! -e "$home/fixture/stash" ] || fail "the draft must not stay stashed"
+  [ "$(herdr_calls "$home" pane send-keys w7:p3 ctrl+s | wc -l | tr -d ' ')" = 1 ] \
+    || fail "Ctrl+S must not be pressed again while the message may still arrive"
+  [ "$(herdr_calls "$home" pane send-keys w7:p3 enter | wc -l | tr -d ' ')" = 1 ] \
+    || fail "Enter must be pressed exactly once"
+  [ "$(inbox_count "$home")" = 0 ] || fail "a pane delivery must not also land in the mailbox"
+  desk_send_done "$home"
+  pass "fm-desk-voice send: a message the chat draws late is waited for, not stashed over the draft"
 }
 
 test_desk_voice_send_never_confirms_a_redrawn_message_past_a_draft() {
@@ -1823,6 +1865,7 @@ test_desk_voice_send_keeps_a_draft_it_cannot_set_aside
 test_desk_voice_send_proves_a_long_message_past_a_claude_draft
 test_desk_voice_send_pastes_a_voice_length_message_past_a_claude_draft
 test_desk_voice_send_clears_a_refused_message_and_restores_the_draft
+test_desk_voice_send_waits_for_a_late_drawn_message_past_a_claude_draft
 test_desk_voice_send_never_confirms_a_redrawn_message_past_a_draft
 test_desk_voice_send_restores_a_draft_stashed_without_a_marker
 test_desk_voice_send_joins_another_harness_draft

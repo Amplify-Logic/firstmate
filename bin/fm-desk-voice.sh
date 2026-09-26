@@ -393,6 +393,10 @@ unstash_draft() {  # <backend> <target>
 # again: a second Enter after Claude restored the draft would
 # submit the draft. The proof reads, and the Ctrl+U presses that clear a
 # refused message, are sized by the message, which wraps (fm_composer_proof_lines).
+# The proof is read for up to 3s before it is refused: a busy chat draws a
+# paste late but handles it before any later key, so a box that still reads
+# empty early on may yet show the message, and a Ctrl+S then would stash it
+# over the draft.
 # After Enter the message was submitted only once the box reads empty or
 # shows the captain's draft again: Claude can redraw a long message it has not
 # submitted as pasted-text placeholders plus its tail, which is neither the
@@ -430,9 +434,14 @@ send_past_draft() {  # <backend> <target> <line>
     printf 'send-failed'
     return 0
   fi
-  sleep 0.5
   rows=$(fm_composer_proof_lines "$line")
-  if ! after=$(composer_text "$backend" "$target" "$rows") || ! fm_composer_payload_shown "$line" "$after"; then
+  i=0
+  while sleep 0.2; ! after=$(composer_text "$backend" "$target" "$rows") \
+    || ! fm_composer_payload_shown "$line" "$after"; do
+    i=$((i + 1))
+    [ "$i" -lt 15 ] || break
+  done
+  if [ "$i" -ge 15 ]; then
     i=0
     while ! await_composer "$backend" "$target" empty 1; do
       if [ "$i" -ge "$rows" ] || ! fm_backend_send_key "$backend" "$target" C-u >/dev/null 2>&1; then
