@@ -1,0 +1,35 @@
+lab session: fm-lab-shared-ws-29955-19343
+=== BEFORE FIX (base ffaef9fdb7ea97633c48131a29bc21da3755e56f) ===
+--- base: --all pass
+shared  w1: Your Magical Journey · 🟣 1 NEEDS LARS · 🔵 1 WORKING
+single  w2: Artevo · 🔵 1 WORKING
+--- base: single-task refresh of voice-a (Glasses Voice relabelled last)
+shared  w1: Glasses Voice · 🔵 1 WORKING
+single  w2: Artevo · 🔵 1 WORKING
+--- base: single-task refresh of ymj-scout (YMJ scout started, relabelled last)
+shared  w1: Your Magical Journey · 🟣 1 NEEDS LARS · 🔵 1 WORKING
+single  w2: Artevo · 🔵 1 WORKING
+=== AFTER FIX (target) ===
+--- target: --all pass
+shared  w1: Firstmate · 🟣 1 NEEDS LARS · 🔵 3 WORKING
+single  w2: Artevo · 🔵 1 WORKING
+--- target: single-task refresh of voice-a
+shared  w1: Firstmate · 🟣 1 NEEDS LARS · 🔵 3 WORKING
+single  w2: Artevo · 🔵 1 WORKING
+--- target: single-task refresh of ymj-scout
+shared  w1: Firstmate · 🟣 1 NEEDS LARS · 🔵 3 WORKING
+single  w2: Artevo · 🔵 1 WORKING
+--- target: worker rows keep their own project/branch detail
+voice-a: title=WORKER · voice a · 🔵 WORKING detail=pi · fm/voice-a
+ymj-scout: title=WORKER · ymj scout · 🟣 NEEDS LARS detail=pi · fm/ymj-scout
+ymj-ship: title=WORKER · ymj ship · 🔵 WORKING detail=pi · fm/ymj-ship
+fm-self: title=WORKER · fm self · 🔵 WORKING detail=pi · fm/fm-self
+=== ADVERSARIAL: other projects leave the shared workspace ===
+--- target: --all after only Glasses Voice remains (cached mixed label must not stick)
+shared  w1: Glasses Voice · 🔵 1 WORKING
+single  w2: Artevo · 🔵 1 WORKING
+=== ADVERSARIAL: state change in shared ws updates neutral counts ===
+--- target: --all after a YMJ worker rejoins and voice-a fails
+shared  w1: Firstmate · 🔴 1 FAILED · 🔵 1 WORKING
+single  w2: Artevo · 🔵 1 WORKING
+teardown ok (default-session tripwire unchanged)
