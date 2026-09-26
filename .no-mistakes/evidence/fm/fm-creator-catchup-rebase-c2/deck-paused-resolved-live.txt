@@ -1,0 +1,13 @@
+# fm-deck.sh --json / --once on an isolated home; ci1.status = working / paused [key=ci] / resolved [key=ci]; vend1.status = working / paused [key=vendor]
+== base fm-deck.sh --json under_way
+{"id": "ci1", "state": "paused", "label": "WAITING"}
+{"id": "vend1", "state": "paused", "label": "WAITING"}
+== head fm-deck.sh --json under_way
+{"id": "ci1", "state": "paused", "label": "WAITING"}
+{"id": "vend1", "state": "paused", "label": "WAITING"}
+--- head pane (--once)
+ UNDER WAY ─────────────────────────────────────────────────────────────────────────────────────────
+  🟡 WAITING     wait for CI then merge                          -                  heard 8s ago
+  🟡 WAITING     vendor release                                  -                  heard 8s ago
+
+ JUST IN ───────────────────────────────────────────────────────────────────────────────────────────

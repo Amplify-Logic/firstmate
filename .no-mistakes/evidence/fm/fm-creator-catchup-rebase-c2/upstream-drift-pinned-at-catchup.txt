@@ -1,0 +1,6 @@
+# fm_upstream_check with upstream remote pinned to the creator's catch-up commit 8d2ee291 (local bare repo)
+== base (upstream pinned at creator 8d2ee291)
+UPSTREAM: 341 commits behind pinned/main (/tmp/fmdrift.cW3M/pinned) - 569 upstream commits, 228 already delivered here - fix(bin): refuse merges with unreported required checks (#5534); fix(bin): treat Pi's dollar-first cost footer as furniture (#5683); fix(bin): strip AI co-author trailers from fleet-launched commits (#5...; fix(bin): classify shell stdin payloads after -s operands (#5546); fix(bin): match whole multi-word project names in the registry lookup...; fix(bin): stand down the Claude Stop auto-arm on pi-code-delivered pa...; fix(bin): report the failing item when remote inheritance fails (#5658); fix(bin): surface unrecognized status prefixes instead of reading the...
+[exit 0]
+== head (upstream pinned at creator 8d2ee291)
+[exit 0]

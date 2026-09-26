@@ -1,0 +1,8 @@
+# fm-git-strip-ai-trailers.sh install <hooks> <repo>; real 'git commit' with GIT_CONFIG_COUNT core.hooksPath=<hooks>
+# input trailers: Co-Authored-By: Claude Opus 5.5 / Co-authored-by: Cursor Agent / Co-Authored-By: Jane Human
+feat: add a
+
+Body line.
+
+Co-Authored-By: Jane Human <jane@example.com>
+

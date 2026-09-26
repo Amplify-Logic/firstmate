@@ -1,0 +1,119 @@
+FM_TEST_BEGIN 2026-09-26T06:24:57Z tests/fm-upstream-ledger.test.sh family=session-bootstrap expected_gate_skip=none
+FM_TEST_BEGIN 2026-09-26T06:24:57Z tests/fm-upstream.test.sh family=session-bootstrap expected_gate_skip=none
+ok - reports N commits behind with subjects
+ok - silent when no upstream remote is configured
+ok - silent when upstream is unreachable
+ok - silent when origin and upstream share a URL
+ok - silent when HEAD already contains the upstream tip
+ok - silent for secondmate homes
+ok - bootstrap wires the UPSTREAM diagnostic
+ok - skill and AGENTS.md trigger mention UPSTREAM
+FM_TEST_END 2026-09-26T06:25:05Z tests/fm-upstream.test.sh exit=0 duration_ms=7435 gate_skip=false
+ok - reports the raw count when no port evidence exists
+ok - a quoted upstream subject subtracts that commit
+ok - a quoted upstream sha subtracts that commit
+ok - an explicit ported override subtracts an untraceable hand-integration
+ok - a not-ported override retires a derived false positive
+ok - the reported figure falls as batches land
+ok - silent when every unmerged upstream commit is already delivered
+ok - a fork PR number colliding with an upstream one subtracts nothing
+ok - the tracked ledger parses and holds records, not a stored total
+FM_TEST_END 2026-09-26T06:25:07Z tests/fm-upstream-ledger.test.sh exit=0 duration_ms=9419 gate_skip=false
+FM_TEST_BEGIN 2026-09-26T06:25:07Z tests/fm-no-mistakes-required.test.sh family=standalone expected_gate_skip=none
+ok - shared action accepts a matching head_sha with completed required steps
+ok - shared action rejects a mismatched head_sha and names both SHAs
+ok - shared action rejects an attestation with no head_sha
+FM_TEST_END 2026-09-26T06:25:07Z tests/fm-no-mistakes-required.test.sh exit=0 duration_ms=540 gate_skip=false
+FM_TEST_BEGIN 2026-09-26T06:25:07Z tests/fm-deck.test.sh family=unclassified expected_gate_skip=none
+ok - fm-deck --help exits 0 and states the read-only boundary
+ok - an empty home renders honest empty sections, never an error wall
+ok - a home with no readable sources still renders the frame
+ok - staged actions group by standing order with the age headline and expiry countdown
+ok - needs-you distinguishes answer, unblock, review and decide, with full PR URLs
+ok - worker status notes never reach the captain's pane
+ok - the pane carries no internal vocabulary
+ok - under way gives one outcome line per worker, most urgent first
+ok - every rendered line fits the width it was drawn for, wide state dots and all
+ok - the state projection reads past a trailing resolve and maps every known verb
+ok - a resolved decision projects the waiting state and sorts with the waiting workers
+ok - needs you withholds a failed worker's pull request and asks once per task
+ok - a finished worker's ready pull request still reaches needs you once
+ok - a recorded pull request survives every way this home's backlog can go unreadable
+ok - a readable backlog still carries the review row, with nothing added
+ok - an unreadable backlog with no recorded pull request invents no ask
+ok - one pull request asks for one look however many records carry it
+ok - a dead record claims a pull request without silencing the live one
+ok - several records of one pull request collapse into its strongest ask
+ok - the unconfirmed-record caveat is cut with the row it describes
+ok - both source-availability lines survive the clip at the minimum width
+ok - bin/fm-deck-render.py turns the deck's payload into the pane
+ok - no worker-authored control character reaches the captain's terminal
+ok - a crafted sweep line cannot forge or hide what needs him
+ok - a Unicode line separator drops neither a backlog row nor a worker
+ok - just in shows recent completions and findings with their artifact
+ok - loose ends shows a headline count and the top urgent and waiting items
+ok - a sweep with nothing urgent or waiting renders an honest line
+ok - the counts strip summarizes every section above the fold
+ok - a hand-edited backlog degrades the backlog-fed rows without breaking the pane
+ok - the pane refuses acting verbs and writes nothing
+ok - --json emits the whole pane as one fm-deck.v1 model with the pane's own selection rules
+ok - --json degrades to honest empties, names an unreadable backlog, and scrubs control characters
+ok - --interval refuses anything but a positive whole number of seconds
+ok - the refresh loop redraws on its interval and re-reads records each frame
+ok - each staging state renders in the section that already owns it
+ok - a pending staging run reports the age its record actually carries
+ok - an explicit acknowledgement removes a settled alert from the ask list
+ok - a run nothing ever queued is an ask, not work under way
+ok - the model's staged count describes only the rows its consumer renders
+ok - a staged run shows unverified eligibility on the pane
+ok - a payload with no staging section renders unchanged
+ok - an unreadable staging section is skipped rather than guessed at
+FM_TEST_END 2026-09-26T06:25:32Z tests/fm-deck.test.sh exit=0 duration_ms=24234 gate_skip=false
+FM_TEST_BEGIN 2026-09-26T06:25:32Z tests/fm-git-strip-ai-trailers.test.sh family=backend-dispatch expected_gate_skip=none
+ok - a Cursor --trailer commit object has no AI co-author and keeps the captain identity
+ok - a human Co-authored-by trailer survives next to a stripped Cursor trailer
+ok - a human co-author at a vendor domain survives; only the exact bot address is stripped
+ok - a hook manager resolving the pane hooks dir fails instead of displacing the strip
+ok - a relaunch reinstall replaces the read-only strip dir and still strips
+ok - install chains the previous commit-msg hook after stripping
+ok - a relative project core.hooksPath resolves against the worktree and still runs
+ok - an inherited GIT_CONFIG hooksPath does not become the chained previous hooks
+ok - a project hook that appears after install still runs for the rest of the task
+ok - a pane GIT_CONFIG hooksPath still chains the repository git is actually in
+ok - commit-msg file mode strips the trailer and keeps the subject
+# all fm-git-strip-ai-trailers tests passed
+FM_TEST_END 2026-09-26T06:25:50Z tests/fm-git-strip-ai-trailers.test.sh exit=0 duration_ms=18436 gate_skip=false
+FM_TEST_BEGIN 2026-09-26T06:25:50Z tests/no-mistakes-required-workflow.test.sh family=unclassified expected_gate_skip=none
+ok - the gate verifies through the shared action pinned at an immutable commit SHA
+ok - body event groups are distinct while head changes remain coalesced
+ok - run names expose monotonic numbers and immutable IDs
+ok - fork, permission, check-name, and bot-exemption contracts are preserved
+FM_TEST_END 2026-09-26T06:25:51Z tests/no-mistakes-required-workflow.test.sh exit=0 duration_ms=415 gate_skip=false
+FM_TEST_BEGIN 2026-09-26T06:25:51Z tests/fm-spawn-agent-up.test.sh family=unclassified expected_gate_skip=none
+ok - kimi's post-launch brief is typed only after the agent is proven up
+ok - a bare shell refuses loudly at the bound instead of receiving the brief
+ok - a kimi refusal reports its own launch line and hands back the exact re-spawn
+ok - a refusal names what survived, rolls the record back, and hands back the exact re-spawn
+ok - the healthy launch path is unchanged and still names the brief file on the launch line
+ok - an unreadable liveness answer warns without refusing or waiting out the bound
+ok - malformed agent-up bound knobs are refused before anything is typed into the pane
+ok - an unsupported non-kimi liveness check warns and proceeds
+ok - a structurally gone endpoint refuses on the first read and asks for a re-spawn
+ok - the re-spawn command carries this task's own kind and resolved axes
+ok - the re-spawn command carries a ship's registered branch prefix
+ok - a raw launch command skips the agent-up gate instead of being refused by it
+ok - a refused relaunch keeps the record and hands back the same --relaunch
+# all fm-spawn-agent-up tests passed
+FM_TEST_END 2026-09-26T06:27:10Z tests/fm-spawn-agent-up.test.sh exit=0 duration_ms=79194 gate_skip=false
+FM_TEST_SUMMARY total=7 failed=0 skipped_gate=0 duration_ms=133119
+FM_TEST_SUMMARY_FAMILY family=backend-dispatch count=1 duration_ms=18436 failed=0
+FM_TEST_SUMMARY_FAMILY family=session-bootstrap count=2 duration_ms=16854 failed=0
+FM_TEST_SUMMARY_FAMILY family=standalone count=1 duration_ms=540 failed=0
+FM_TEST_SUMMARY_FAMILY family=unclassified count=3 duration_ms=103843 failed=0
+FM_TEST_SLOWEST rank=1 script=tests/fm-spawn-agent-up.test.sh duration_ms=79194
+FM_TEST_SLOWEST rank=2 script=tests/fm-deck.test.sh duration_ms=24234
+FM_TEST_SLOWEST rank=3 script=tests/fm-git-strip-ai-trailers.test.sh duration_ms=18436
+FM_TEST_SLOWEST rank=4 script=tests/fm-upstream-ledger.test.sh duration_ms=9419
+FM_TEST_SLOWEST rank=5 script=tests/fm-upstream.test.sh duration_ms=7435
+FM_TEST_SLOWEST rank=6 script=tests/fm-no-mistakes-required.test.sh duration_ms=540
+FM_TEST_SLOWEST rank=7 script=tests/no-mistakes-required-workflow.test.sh duration_ms=415
