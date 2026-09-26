@@ -221,6 +221,8 @@ test_live_lock_with_stale_beacon_still_denies_fleet_command() {
   assert_contains "$actual" 'since the last watcher beat' "stale-beacon denial omitted the outage age evidence"
   assert_contains "$actual" '1 task(s) in flight: task' "stale-beacon denial omitted the in-flight task identity"
   assert_contains "$actual" 'Failed watcher check: watcher-beat-fresh - ' "stale-beacon denial did not name the failed check"
+  assert_contains "$actual" 'No live watcher holds this home lock.' "stale-beacon denial dropped the outage holder sentence"
+  assert_contains "$actual" 're-arm with bin/fm-watch-arm.sh as a tracked' "stale-beacon denial dropped the plain re-arm guidance"
   pass "continuity gate requires both the identity-matched live lock and a fresh beacon"
 }
 
@@ -257,8 +259,43 @@ test_live_watcher_identity_is_timezone_stable() {
   pass "continuity gate accepts a healthy watcher whose identity was recorded under another time zone"
 }
 
+# A watcher still running across the upgrade that pinned lstart to UTC recorded
+# its identity in local time; the gate and every other lock consumer sharing
+# fm_pid_identity_matches must keep accepting it rather than evict it as reused.
+test_legacy_local_time_identity_still_matches() {
+  local holder legacy utc rc=0 daemon_rc=0
+  sleep 300 &
+  holder=$!
+  legacy=$(TZ=AAA+5 COLUMNS=10000 LC_ALL=C ps -p "$holder" -o lstart= -o command= | sed 's/^[[:space:]]*//')
+  utc=$(FM_PROC_ROOT_OVERRIDE="$TMP_ROOT/no-proc" FM_STATE_OVERRIDE="$STATE" \
+    bash -c '. "$1"; fm_pid_identity "$2"' _ "$ROOT/bin/fm-wake-lib.sh" "$holder") || utc=
+  mkdir -p "$STATE/.watch.lock" "$STATE/.supervise-daemon.lock"
+  printf '%s\n' "$holder" > "$STATE/.watch.lock/pid"
+  printf '%s\n' "$PRIMARY" > "$STATE/.watch.lock/fm-home"
+  printf '%s\n' "$WATCH" > "$STATE/.watch.lock/watcher-path"
+  printf '%s\n' "$legacy" > "$STATE/.watch.lock/pid-identity"
+  printf '%s\n' "$holder" > "$STATE/.supervise-daemon.lock/pid"
+  printf '%s\n' "$legacy" > "$STATE/.supervise-daemon.lock/pid-identity"
+  touch "$STATE/.last-watcher-beat" "$STATE/.afk"
+
+  export TZ=AAA+5 FM_PROC_ROOT_OVERRIDE="$TMP_ROOT/no-proc"
+  run_command 'bin/fm-crew-state.sh task' || rc=$?
+  FM_STATE_OVERRIDE="$STATE" bash -c '. "$1"; fm_afk_daemon_owns_supervision "$2"' \
+    _ "$ROOT/bin/fm-wake-lib.sh" "$STATE" || daemon_rc=$?
+  unset TZ FM_PROC_ROOT_OVERRIDE
+  kill "$holder" 2>/dev/null || true
+  wait "$holder" 2>/dev/null || true
+  rm -rf "$STATE/.watch.lock" "$STATE/.supervise-daemon.lock" "$STATE/.last-watcher-beat" "$STATE/.afk"
+  [ -n "$legacy" ] && [ -n "$utc" ] && [ "$legacy" != "$utc" ] \
+    || fail "fixture must render the legacy local-time identity differently from UTC: '$legacy' vs '$utc'"
+  [ "$rc" -eq 0 ] || fail "healthy watcher with a legacy local-time identity must allow, got exit $rc: $(cat "$ERR")"
+  [ ! -s "$OUT" ] && [ ! -s "$ERR" ] || fail "legacy identity allow wrote output: $(cat "$OUT" "$ERR")"
+  [ "$daemon_rc" -eq 0 ] || fail "supervise-daemon lock with a legacy local-time identity must still own supervision"
+  pass "legacy local-time lock identities still match their live process after the UTC pin"
+}
+
 test_deny_names_the_failed_watcher_check() {
-  local holder rc=0 actual
+  local holder rc=0 actual expected
   sleep 300 &
   holder=$!
   mkdir -p "$STATE/.watch.lock"
@@ -274,9 +311,9 @@ test_deny_names_the_failed_watcher_check() {
   rm -rf "$STATE/.watch.lock" "$STATE/.last-watcher-beat"
   [ "$rc" -eq 2 ] || fail "a live watcher with a mismatched lock identity must deny fleet work, got $rc"
   actual=$(jq -r '.systemMessage' "$ERR")
-  assert_contains "$actual" "Failed watcher check: pid-identity-mismatch - watcher pid $holder is running but its live process identity differs from the identity the lock recorded." \
-    "identity-mismatch denial did not name the failed check"
-  pass "continuity denial names the failed watcher check"
+  expected="[watcher-continuity] The watcher is running with a fresh beat but its identity check failed: pid-identity-mismatch - watcher pid $holder is running but its live process identity differs from the identity the lock recorded. Fleet commands stay gated until it is restarted. Drain wakes with bin/fm-wake-drain.sh, the safe mid-session action; run the once-per-session bin/fm-session-start.sh instead only if you have not already run it earlier this session; use fail-closed bin/fm-teardown.sh for completed tasks when needed, then restart it with bin/fm-watch-arm.sh --restart as a tracked Claude background task before running other fleet commands (blocked: fm-crew-state.sh)"
+  [ "$actual" = "$expected" ] || fail "live-watcher identity-mismatch denial must name the check without outage framing: $actual"
+  pass "continuity denial names the failed check of a live watcher without calling it an outage"
 }
 
 test_child_worktree_and_malformed_input_fail_open() {
@@ -322,6 +359,7 @@ test_dead_lock_holder_first_run_allowed
 test_deny_quantifies_stale_outage_and_names_every_task
 test_live_lock_with_stale_beacon_still_denies_fleet_command
 test_live_watcher_identity_is_timezone_stable
+test_legacy_local_time_identity_still_matches
 test_deny_names_the_failed_watcher_check
 test_child_worktree_and_malformed_input_fail_open
 test_claude_hook_registration_preserves_stop_backstop

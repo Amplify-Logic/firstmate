@@ -94,9 +94,33 @@ fm_pid_identity() {
   # launched with different TZ (or across a DST change) would otherwise record the
   # same start second hours apart and reject a live watcher. bin/fm-extension.mjs
   # pidIdentity pins the same zone because it compares against this identity.
-  out=$(COLUMNS=10000 LC_ALL=C TZ=UTC0 ps -p "$pid" -o lstart= -o command= 2>/dev/null) || return 1
+  TZ=UTC0 _fm_ps_pid_identity "$pid"
+}
+
+_fm_ps_pid_identity() {  # <pid>
+  local out
+  out=$(COLUMNS=10000 LC_ALL=C ps -p "$1" -o lstart= -o command= 2>/dev/null) || return 1
   [ -n "$out" ] || return 1
   printf '%s\n' "$out" | sed 's/^[[:space:]]*//'
+}
+
+# fm_pid_identity_matches <pid> <recorded-identity>
+# 0 when the live process answers to the recorded identity, 1 when it does not,
+# 2 when its live identity cannot be read. A ps identity recorded before lstart
+# was pinned to UTC rendered in the writer's local zone, so the caller's local
+# rendering of the same process is accepted too; otherwise every durable lock
+# written by a process still running across that upgrade would read as reused.
+fm_pid_identity_matches() {
+  local pid=$1 recorded=$2 current legacy
+  current=$(fm_pid_identity "$pid") || return 2
+  [ -n "$current" ] || return 2
+  [ -n "$recorded" ] || return 1
+  [ "$current" = "$recorded" ] && return 0
+  case "$current" in
+    proc-starttime=*|linux-starttime=*) return 1 ;;
+  esac
+  legacy=$(_fm_ps_pid_identity "$pid") || return 1
+  [ "$legacy" = "$recorded" ]
 }
 
 fm_path_mtime() {
@@ -178,7 +202,7 @@ fm_watcher_lock_unheld() {
 FM_WATCHER_MATCHED_IDENTITY=
 FM_WATCHER_MATCH_FAILURE=
 fm_watcher_lock_matches_pid() {
-  local state=$1 watch_path=$2 pid=$3 home=${4:-$FM_HOME} lockdir lock_home lock_path lock_identity current_identity
+  local state=$1 watch_path=$2 pid=$3 home=${4:-$FM_HOME} lockdir lock_home lock_path lock_identity
   FM_WATCHER_MATCHED_IDENTITY=
   FM_WATCHER_MATCH_FAILURE=
   lockdir="$state/.watch.lock"
@@ -197,14 +221,18 @@ fm_watcher_lock_matches_pid() {
     FM_WATCHER_MATCH_FAILURE="lock-identity-missing - the watcher lock records no process identity"
     return 1
   }
-  current_identity=$(fm_pid_identity "$pid") || {
-    FM_WATCHER_MATCH_FAILURE="pid-identity-unreadable - cannot read the live process identity of watcher pid $pid"
-    return 1
-  }
-  [ "$current_identity" = "$lock_identity" ] || {
-    FM_WATCHER_MATCH_FAILURE="pid-identity-mismatch - watcher pid $pid is running but its live process identity differs from the identity the lock recorded"
-    return 1
-  }
+  fm_pid_identity_matches "$pid" "$lock_identity"
+  case $? in
+    0) ;;
+    2)
+      FM_WATCHER_MATCH_FAILURE="pid-identity-unreadable - cannot read the live process identity of watcher pid $pid"
+      return 1
+      ;;
+    *)
+      FM_WATCHER_MATCH_FAILURE="pid-identity-mismatch - watcher pid $pid is running but its live process identity differs from the identity the lock recorded"
+      return 1
+      ;;
+  esac
   FM_WATCHER_MATCHED_IDENTITY=$lock_identity
 }
 
@@ -235,6 +263,7 @@ fm_watcher_healthy() {
   identity=$FM_WATCHER_MATCHED_IDENTITY
   age=$(fm_path_age "$beat")
   [ "$age" -lt "$grace" ] || {
+    # shellcheck disable=SC2034 # Read by callers after fm_watcher_healthy returns.
     FM_WATCHER_UNHEALTHY_CHECK="watcher-beat-fresh - the watcher beat is missing or not newer than the ${grace}s grace"
     return 1
   }
@@ -405,16 +434,14 @@ fm_extension_pair_owns_supervision() {  # <state> <extension-dir> <source:marker
 # a daemon that stops restarting its watcher still fails supervision once the
 # beacon passes grace.
 fm_afk_daemon_owns_supervision() {
-  local state=$1 lockdir pid recorded current
+  local state=$1 lockdir pid recorded
   [ -e "$state/.afk" ] || return 1
   lockdir="$state/.supervise-daemon.lock"
   pid=$(cat "$lockdir/pid" 2>/dev/null) || return 1
   fm_pid_alive "$pid" || return 1
   recorded=$(cat "$lockdir/pid-identity" 2>/dev/null) || return 1
   [ -n "$recorded" ] || return 1
-  current=$(fm_pid_identity "$pid" 2>/dev/null) || return 1
-  [ -n "$current" ] || return 1
-  [ "$current" = "$recorded" ]
+  fm_pid_identity_matches "$pid" "$recorded" || return 1
 }
 
 # fm_afk_mode <state>
@@ -1614,7 +1641,7 @@ fm_autoarm_ledger_read() {  # <state-dir>
 # build's entry gets its deference from its held role-carrying lock through
 # the legacy shim, and anything else must not defer.
 fm_autoarm_claim_open() {  # <state-dir> [grace]
-  local state=$1 grace=${2:-${FM_GUARD_GRACE:-300}} epoch current
+  local state=$1 grace=${2:-${FM_GUARD_GRACE:-300}} epoch
   epoch="$state/.claude-autoarm-epoch"
   case "$grace" in
     ''|*[!0-9]*|0) grace=300 ;;
@@ -1623,9 +1650,7 @@ fm_autoarm_claim_open() {  # <state-dir> [grace]
   [ "$FM_AUTOARM_OUTCOME" = arming ] || return 1
   fm_pid_alive "$FM_AUTOARM_OWNER" || return 1
   [ -n "$FM_AUTOARM_IDENTITY" ] || return 1
-  current=$(fm_pid_identity "$FM_AUTOARM_OWNER" 2>/dev/null) || return 1
-  [ -n "$current" ] || return 1
-  [ "$current" = "$FM_AUTOARM_IDENTITY" ] || return 1
+  fm_pid_identity_matches "$FM_AUTOARM_OWNER" "$FM_AUTOARM_IDENTITY" || return 1
   if [ "$(fm_path_age "$epoch")" -ge "$grace" ] \
     && [ "$(fm_path_age "$state/.last-watcher-beat")" -ge "$grace" ]; then
     return 1
@@ -1796,7 +1821,7 @@ fm_autoarm_reset_owned() {  # <state-dir> <gen>
 #      and the watcher beacon are older than the guard grace (the same stuck
 #      proof as fm_autoarm_claim_open).
 fm_autoarm_claim_abandoned() {  # <state-dir> [grace]
-  local state=$1 grace=${2:-${FM_GUARD_GRACE:-300}} epoch lock role pid owner outcome recorded current
+  local state=$1 grace=${2:-${FM_GUARD_GRACE:-300}} epoch lock role pid owner outcome recorded
   lock="$state/.claude-autoarm.lock"
   epoch="$state/.claude-autoarm-epoch"
   case "$grace" in
@@ -1810,9 +1835,9 @@ fm_autoarm_claim_abandoned() {  # <state-dir> [grace]
     ''|*[!0-9]*) return 1 ;;
   esac
   recorded=$(cat "$lock/pid-identity" 2>/dev/null || true)
-  if [ -n "$recorded" ] && current=$(fm_pid_identity "$pid" 2>/dev/null) \
-    && [ -n "$current" ] && [ "$current" != "$recorded" ]; then
-    return 0
+  if [ -n "$recorded" ]; then
+    fm_pid_identity_matches "$pid" "$recorded"
+    [ "$?" -ne 1 ] || return 0
   fi
   owner=$(_fm_autoarm_epoch_field "$epoch" owner_pid) || return 1
   [ "$owner" = "$pid" ] || return 1
@@ -1847,7 +1872,7 @@ fm_autoarm_claim_abandoned() {  # <state-dir> [grace]
 # TERM and the ledger graft below, keeping the documented bounded
 # upgrade-window residual instead of the deadlock.
 fm_autoarm_release_abandoned() {  # <state-dir> [grace]
-  local state=$1 grace=${2:-${FM_GUARD_GRACE:-300}} lock steal epoch lock_pid recorded current owner line1 tmp i
+  local state=$1 grace=${2:-${FM_GUARD_GRACE:-300}} lock steal epoch lock_pid recorded owner line1 tmp i
   lock="$state/.claude-autoarm.lock"
   steal="$lock.steal"
   epoch="$state/.claude-autoarm-epoch"
@@ -1860,8 +1885,7 @@ fm_autoarm_release_abandoned() {  # <state-dir> [grace]
   lock_pid=$(cat "$lock/pid" 2>/dev/null || true)
   recorded=$(cat "$lock/pid-identity" 2>/dev/null || true)
   if [ -n "$recorded" ] && fm_pid_alive "$lock_pid" \
-    && current=$(fm_pid_identity "$lock_pid" 2>/dev/null) \
-    && [ -n "$current" ] && [ "$current" = "$recorded" ]; then
+    && fm_pid_identity_matches "$lock_pid" "$recorded"; then
     # A live pid still answering to the recorded identity IS the genuine
     # legacy owner (proven stuck or blocked after a terminal write): retire it
     # before removing its lock, because old-build code cannot re-check
@@ -2155,7 +2179,7 @@ fm_wake_grant_rows_valid() {  # <rows-file>
 # not a match, so uncertainty reads as "no live owner".
 fm_wake_branch_owner_matches() {  # <owner-file> [<pid>] [<generation>]
   local file=$1 expected_pid=${2:-} expected_generation=${3:-}
-  local version pid identity generation current extra
+  local version pid identity generation extra
   [ -f "$file" ] && [ ! -L "$file" ] || return 1
   exec 8< "$file" || return 1
   IFS= read -r version <&8 || { exec 8<&-; return 1; }
@@ -2169,8 +2193,7 @@ fm_wake_branch_owner_matches() {  # <owner-file> [<pid>] [<generation>]
   case "$generation" in ''|*[!A-Za-z0-9._-]*) return 1 ;; esac
   [ -z "$expected_pid" ] || [ "$pid" = "$expected_pid" ] || return 1
   [ -z "$expected_generation" ] || [ "$generation" = "$expected_generation" ] || return 1
-  current=$(fm_pid_identity "$pid" 2>/dev/null) || return 1
-  [ -n "$current" ] && [ "$current" = "$identity" ]
+  fm_pid_identity_matches "$pid" "$identity" || return 1
 }
 
 # 0 when a branch grant is currently reserving rows: a valid row snapshot whose
