@@ -289,7 +289,8 @@ final class HotkeyMonitor {
         _ = AXIsProcessTrustedWithOptions(options)
     }
 
-    /// Identifies this exact build, so a rebuild is asked about once more.
+    /// Identifies this exact build, so a rebuild macOS does not trust yet is
+    /// asked about once more.
     static func buildStamp() -> String {
         let path = Bundle.main.executablePath ?? CommandLine.arguments[0]
         let attrs = (try? FileManager.default.attributesOfItem(atPath: path)) ?? [:]
