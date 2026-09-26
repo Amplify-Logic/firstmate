@@ -122,6 +122,11 @@ test_decision_reply_falls_back_to_first_sentence() {
   assert_grep 'Shall I merge it' "$dir/refused.log" "the reply itself must reach the register first"
   assert_equals "Captain, the PR is green. The choice is on screen." "$(spoken "$dir")" \
     "a refused decision reply must fall back to its first sentence and point at the choice"
+  rm -f "$dir/spoken.log"
+  run_hook "$dir" "$(printf '%s\n' "Captain, the PR is green. Shall I merge it?" "" \
+    "The checks ran twice on both platforms and the reviewers left no comments on any of the changed files.")"
+  assert_equals "Captain, the PR is green. The choice is on screen." "$(spoken "$dir")" \
+    "a refused decision with more to read must still point at the choice, not at more"
   pass "decision reply falls back to its first sentence plus the choice pointer"
 }
 

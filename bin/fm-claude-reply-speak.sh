@@ -37,10 +37,11 @@
 #     is 41 words, and the lead is cut back further so that it and the pointer
 #     fit, because past the budget the register drops the pointer sentence.
 # When the register refuses the line (bin/fm-speak.sh exit 2), the hook speaks
-# only the lead's first sentence plus the pointer, or plus "The choice is on
-# screen." or "More on screen." when there was none. When that is refused too,
-# or the lead was a single sentence, it speaks "Captain, a decision is waiting
-# for you on screen." or "Captain, my reply is on screen." A decision is named
+# only the lead's first sentence plus the pointer, or plus "More on screen." when
+# there was none; when the refusal names a decision, as below, "The choice is on
+# screen." replaces a missing pointer or "More on screen.". When that is refused
+# too, or the lead was a single sentence, it speaks "Captain, a decision is
+# waiting for you on screen." or "Captain, my reply is on screen." A decision is named
 # only when a refusal reason said the line asked the captain to decide AND the
 # reply itself agrees: the rest offers a choice, a question, or steps, or the
 # lead asks a question. The reason is the register's own "refused: <reason>"
@@ -344,9 +345,10 @@ speak_line "$LINE" || rc=$?
 if [ "$rc" -eq 2 ] && [ "$FIRST" != "$LEAD" ] && still_latest; then
   # Only the first sentence, plus a pointer to what the voice left out.
   FALLBACK_POINTER=$POINTER
-  if [ -z "$FALLBACK_POINTER" ]; then
-    if [ "$REFUSED_DECISION" -eq 1 ]; then FALLBACK_POINTER="The choice is on screen."; else FALLBACK_POINTER="More on screen."; fi
-  fi
+  case "$REFUSED_DECISION:$FALLBACK_POINTER" in
+    1:|"1:More on screen.") FALLBACK_POINTER="The choice is on screen." ;;
+    0:) FALLBACK_POINTER="More on screen." ;;
+  esac
   [ "$FIRST_POINTS" != 1 ] || FALLBACK_POINTER=
   rc=0
   speak_line "$FIRST${FALLBACK_POINTER:+ $FALLBACK_POINTER}" || rc=$?
