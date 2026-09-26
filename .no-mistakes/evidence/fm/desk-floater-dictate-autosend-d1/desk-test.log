@@ -1,0 +1,47 @@
+ok - fm-deepgram-tts: refuses when the key is absent
+ok - fm-deepgram-tts: dry-run succeeds when a key is present
+ok - fm-deepgram-stt: refuses when the key or the audio file is absent
+ok - fm-deepgram-stt: mocked Deepgram transcript is printed and the key stays out of argv
+ok - fm-deepgram-stt: a Deepgram failure exits 1 with the status
+ok - fm-desk-floater: --help exits 0 and unknown options are refused
+ok - fm-speak: key absent uses say
+ok - fm-speak: key present prefers Deepgram
+ok - fm-speak: a configured voice is spoken by say, not by Deepgram
+ok - fm-speak: a voice this machine does not have is reported, not substituted
+ok - fm-speak: a spelling say resolves is spoken, not refused
+ok - fm-speak: an incomplete voice list never refuses a voice
+ok - fm-speak: a confirmed voice is asked about once, a renamed one is asked again
+ok - fm-speak: a refused line leaves no voice list or watchdog marker behind
+ok - fm-speak: a say that fails is not re-spoken through Deepgram
+ok - fm-speak: Deepgram failure falls back to say
+ok - fm-desk-voice: deliver, wake, pending, drain
+ok - fm-desk-voice send: types the transcript into the primary's own pane and submits it
+fm-desk-voice: the primary's chat pane is not reachable; saving to the mailbox instead
+ok - fm-desk-voice send: no live primary falls back to the mailbox
+fm-desk-voice: the primary's chat pane is not reachable; saving to the mailbox instead
+ok - fm-desk-voice send: a pane that does not host the primary gets nothing
+fm-desk-voice: the primary's chat pane refused the text; saving it to the mailbox instead
+ok - fm-desk-voice send: a refused send falls back to the mailbox
+fm-desk-voice: typed into the primary's chat pane but the submit was not confirmed (pending)
+ok - fm-desk-voice send: typed text whose submit is unproven is never re-sent to the mailbox
+fm-desk-voice: the primary's chat pane is not reachable; saving to the mailbox instead
+fm-desk-voice: the primary's chat pane is not reachable; saving to the mailbox instead
+fm-desk-voice: the primary's chat pane is not reachable; saving to the mailbox instead
+ok - fm-desk-voice send: a pane showing a dialog instead of its chat input gets nothing
+ok - fm-desk-voice send: a half-typed draft is joined and submitted
+ok - fm-desk-voice send: screenshots, alone or with words, are typed into the primary's pane
+fm-desk-voice: the primary's chat pane refused the text; saving it to the mailbox instead
+ok - fm-desk-voice send: screenshots the pane refuses land in the mailbox with the words
+ok - fm-desk-voice send: dictation into the Firstmate chat in front is typed and submitted
+ok - fm-desk-voice send: dictation anywhere but the Firstmate chat in front sends nothing
+fm-desk-voice: the primary's chat pane is not reachable; saving to the mailbox instead
+ok - fm-desk-voice send: dictation into a chat showing a dialog goes to the mailbox
+fm-desk-voice: the primary's chat pane is not reachable; saving to the mailbox instead
+ok - fm-desk-voice send: on tmux, only the active pane shown on the front terminal is in front
+ok - fm-desk-voice send: malformed front arguments are refused
+ok - fm-desk-voice: shot captures the named display into the home's screenshot folder
+ok - fm-desk-voice: the screenshot folder keeps only the newest images
+ok - fm-desk-voice: a failed capture exits 1 and leaves no screenshot
+ok - fm-desk-voice: screenshots are delivered by path, alone or with the transcript, as one message
+ok - desk floater: screenshot stack Swift tests pass
+ok - fm-deepgram-lib: loads .env key without printing it

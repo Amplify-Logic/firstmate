@@ -1,0 +1,14 @@
+❯ Run bin/fm-lock.sh once and then reply with just the word DONE. Do nothing
+  else.
+⏺ Bash(bin/fm-lock.sh)
+  ⎿  lock acquired: harness pid 75947
+  ⎿  Allowed by auto mode classifier
+⏺ DONE
+✻ Baked for 8s · done 12:15 PM
+❯ Reply with just the word PINEAPPLE.
+⏺ PINEAPPLE
+✻ Sautéed for 2s · done 12:15 PM
+────────────────────────────────────────────────────────────────────────────────
+❯ 
+────────────────────────────────────────────────────────────────────────────────
+  ⏵⏵ auto mode on (shift+tab to cycle) · ← 2 agents

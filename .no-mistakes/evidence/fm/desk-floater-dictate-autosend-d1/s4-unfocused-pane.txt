@@ -1,0 +1,6 @@
+# primary pane %0 not the active pane (a sibling pane %1 has focus)
+%0 active=0 2.1.283
+%1 active=1 cat
+$ fm-desk-voice.sh send --front-app 92014 --front-tty /dev/ttys023 -- 'Reply with just the word KIWI.'
+not-in-front
+exit=0

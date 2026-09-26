@@ -1,0 +1,3 @@
+$ FM_HOME=$LAB bin/fm-desk-voice.sh send --front-app 92014 --front-tty /dev/ttys023 --source desk-floater-dictation -- 'Reply with just the word PINEAPPLE.'
+sent: tmux %0
+exit=0

@@ -1,0 +1,8 @@
+# other terminal tab (tty of a different tab)
+$ fm-desk-voice.sh send --front-app 92014 --front-tty /dev/ttys099 -- 'Reply with just the word MANGO.'
+not-in-front
+exit=0
+# other app in front (pid of this shell, not the terminal hosting the client)
+$ fm-desk-voice.sh send --front-app 58784 --front-tty /dev/ttys023 -- 'Reply with just the word MANGO.'
+not-in-front
+exit=0

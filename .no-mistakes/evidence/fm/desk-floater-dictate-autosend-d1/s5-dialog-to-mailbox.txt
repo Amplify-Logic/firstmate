@@ -1,0 +1,21 @@
+# chat in front but showing the /model picker
+$ fm-desk-voice.sh send --front-app 92014 --front-tty /dev/ttys023 -- '1 and merge'
+fm-desk-voice: the primary's chat pane is not reachable; saving to the mailbox instead
+mailbox: $LAB/state/desk-voice/inbox/20260926T091653Z-5572844a.json
+exit=0
+# mailbox:
+{"source":"desk-floater-dictation","text":null}
+# pane after:
+❯ /model
+────────────────────────────────────────────────────────────────────────────────
+  Select model
+  Switch between Claude models. Your pick becomes the default for new
+  sessions. For other/previous model names, specify with --model.
+    1.  Default (recommended)  Opus 5.5 · Best for everyday, complex tasks
+  ❯ 2.  Opus 5.5 ✔             Most capable for ambitious work
+  ↓ 3.  Fable 5.1              For your toughest challenges
+     … +8 models
+  ● High effort ←/→ to adjust
+  Use /fast to turn on Fast mode (Opus 5.5).
+  Enter to set as default · s to use this session only · Esc to cancel
+# mailbox file content: {"schema": "fm-desk-voice-transcript.v1", "source": "desk-floater-dictation", "transcript": "1 and merge"} (the jq line above read a wrong key name "text")

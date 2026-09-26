@@ -1,0 +1,11 @@
+# the terminal tab showing the session is closed (tmux client detached)
+can't find client: primary
+clients:        0
+$ fm-desk-voice.sh send --front-app 92014 --front-tty /dev/ttys023 -- 'Reply with just the word PLUM.'
+not-in-front
+exit=0
+# the primary is gone (tmux server stopped, lock holder dead)
+$ fm-desk-voice.sh send --front-app 92014 --front-tty /dev/ttys023 -- 'Reply with just the word PLUM.'
+not-in-front
+exit=0
+mailbox entries:        1 (the one from the dialog case only)

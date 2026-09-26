@@ -1,0 +1,10 @@
+fm-desk-floater: building DeskFloater (release)
+Building for production...
+[0/4] Write sources
+[1/4] Write swift-version--58304C5D6DBC2206.txt
+[3/5] Compiling DeskFloater DeskFloater.swift
+[3/5] Write Objects.LinkFileList
+[4/5] Linking DeskFloater
+Build of product 'DeskFloater' complete! (10.50s)
+/Users/larsmusic/.no-mistakes/worktrees/f569cc43ac96/01M3EF9PYTVR592VC8XNJVW0ZF/desk-floater/.build/DeskFloater.app
+Desk floater asks Terminal which tab is in front, so dictation into the Firstmate chat is sent rather than only pasted.
