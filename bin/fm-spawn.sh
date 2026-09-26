@@ -107,8 +107,9 @@
 #   gitignored config/accounts.json (docs/configuration.md owns that schema).
 #   The resolved name is recorded in meta as account= with account_source=registry,
 #   and only when a pin actually applies, so an unpinned spawn's meta is
-#   unchanged; the source tag keeps a relaunch from reading the worker account
-#   pin's own account= value (`ordinary` or a path) back as a registry name. Without the flag
+#   unchanged; the source tag keeps a relaunch or secondmate respawn from reading
+#   the worker account pin's own account= value (`ordinary` or a path) back as a
+#   registry name. Without the flag
 #   the vendor default in that file applies; with NO such file there is no
 #   pinning at all and every spawn behaves exactly as it did before. --account on
 #   a harness with no vendor account concept, or on a raw launch command whose
