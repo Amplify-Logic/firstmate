@@ -819,6 +819,18 @@ test_selection_dialog_rule_is_bounded() {
   assert_screen "draft opening with a numbered item on tmux" pending "$CAPS_TMUX" "$draft" 1 probe-absent
   assert_screen "draft opening with a numbered item on herdr" pending "$CAPS_STYLED" "$draft" '' probe-absent
   assert_screen "draft opening with a numbered item on zellij" pending "$CAPS_STYLED_NOID" "$draft"
+  # A transcript ending in a numbered list sits above the composer's blank
+  # row, outside the draft's block, so the draft still keeps pending.
+  draft=$'⏺ Two ways forward:\n 1. Patch the parser\n 2. Rewrite the lexer\n\n────────────────────────\n❯ 1. fix the tests\n────────────────────────'
+  assert_screen "numbered draft under a numbered transcript list on tmux" pending "$CAPS_TMUX" "$draft" 5 probe-absent
+  assert_screen "numbered draft under a numbered transcript list on herdr" pending "$CAPS_STYLED" "$draft" '' probe-absent
+  assert_screen "numbered draft under a numbered transcript list on zellij" pending "$CAPS_STYLED_NOID" "$draft"
+  # An AskUserQuestion option description wrapped over four rows keeps the
+  # next option in the dialog's block.
+  local wrapped=$'────────────────────────\n ☐ Approach\n\nWhich way?\n\n❯ 1. Patch the parser\n     Keep the grammar and fix the\n     precedence table in place so\n     the existing tests keep their\n     current expectations intact\n  2. Rewrite the lexer\n     Start over\n\nEnter to select · ↑/↓ to navigate · Esc to cancel'
+  assert_screen "AskUserQuestion with a wrapped description on tmux" unknown "$CAPS_TMUX" "$wrapped" 5 probe-absent
+  assert_screen "AskUserQuestion with a wrapped description on herdr" unknown "$CAPS_STYLED" "$wrapped" '' probe-absent
+  assert_screen "AskUserQuestion with a wrapped description on zellij" unknown "$CAPS_STYLED_NOID" "$wrapped"
   # Numbers elsewhere in a draft keep it pending.
   assert_screen "draft with a version number" pending "$CAPS_STYLED_NOID" \
     $'────────────────────────\n❯ 3.5 release notes\n────────────────────────'
@@ -830,7 +842,7 @@ test_selection_dialog_rule_is_bounded() {
   # A selection option in the transcript above the live composer is history.
   assert_screen "earlier dialog echoed above an idle composer" empty "$CAPS_STYLED_NOID" \
     $'❯ 1. Yes\n\n────────────────────────\n❯'"$NBSP"$'\n────────────────────────'
-  pass "selection dialog: the rule refuses only a glyph-led numbered option with a sibling option, inside the composer region"
+  pass "selection dialog: the rule refuses only a glyph-led numbered option with a sibling option in its own block, inside the composer region"
 }
 
 test_strict_blank_row_divergence() {
