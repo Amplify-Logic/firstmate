@@ -159,9 +159,10 @@ macOS may only notice a new Screen Recording grant after the floater restarts, s
 
 ### Keeping the permissions across rebuilds
 
-macOS keeps both grants for as long as the floater keeps the same signature, so `bin/fm-desk-floater.sh` signs every build it makes with the same identity.
+macOS keeps both grants for as long as the floater keeps the same signature, so `bin/fm-desk-floater.sh` signs every floater it launches with the same identity.
 It uses the first "Apple Development" certificate in your keychain, the one Xcode creates when you sign in with an Apple ID, so a rebuilt floater keeps its grants and the badges stay away.
 To use another certificate, put its name or SHA-1 hash on one line in this home's private `config/desk-floater-signing-identity` (see [configuration](configuration.md#desk-floater-signing-identity-configdesk-floater-signing-identity)).
+If that certificate is missing, expired or fails to sign, the launcher says so and falls back to the "Apple Development" one, then to ad-hoc, and the floater still starts.
 Without a certificate the floater stays ad-hoc signed and the launcher says so: macOS then ties each grant to that one build, every rebuild (after any change to its code) asks again, and the badges come back.
 The first signed build is new to macOS too, so it is asked about once more.
 When a build is asked about while DeskFloater already shows as switched on in that list, switch it off and on again, or remove it with the minus button and click the badge to add it back.
@@ -173,7 +174,7 @@ The floater then finds its home from where it is: the Firstmate folder holding `
 If it is not inside a Firstmate folder, it says so and quits rather than guessing.
 
 macOS can reopen any copy it knows under the app's identifier, so only the floater `bin/fm-desk-floater.sh` launches carries that identifier.
-A copy built with `--build-only`, such as one a worker builds to check a change, has an identifier of its own, so macOS never reopens it in place of this home's floater.
+A copy built with `--build-only`, such as one a worker builds to check a change, goes to its own `desk-floater/.build/DeskFloater-build-only.app` with an identifier of its own and stays ad-hoc signed, so it never changes the floater you launched and macOS never reopens it in place of this home's floater.
 Each launch also makes macOS forget any other copy it knows under the floater's identifier, such as one built by an older version of the launcher, which takes a few seconds after the floater is already up.
 
 ## How transcripts reach Firstmate

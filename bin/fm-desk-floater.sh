@@ -17,23 +17,26 @@
 # so TCC microphone prompts have an NSMicrophoneUsageDescription.
 #
 # Signing: macOS keeps the Accessibility and Screen Recording grants only for
-# the same signing identity and bundle identifier. Each assembled app is signed
+# the same signing identity and bundle identifier. The launched app is signed
 # with the identity in this home's private config/desk-floater-signing-identity
 # (a SHA-1 hash or a name as codesign accepts it, or "-" for ad-hoc), else with
 # the first valid "Apple Development" codesigning identity in the keychain, so
-# a rebuild keeps its grants. With neither, the linker's ad-hoc signature stays
-# and macOS asks again after every rebuild. A configured identity that is
-# missing or fails to sign stops the run; a keychain one that fails to sign
-# falls back to ad-hoc with a note. An existing app whose bundle identifier or
-# signature differs from what this run wants is reassembled without recompiling.
+# a rebuild keeps its grants. A configured identity that is missing, expired or
+# fails to sign falls back to that Apple Development identity, and one of those
+# that fails falls back to the linker's ad-hoc signature, each with a note; an
+# ad-hoc floater is asked about again after every rebuild. An existing launched
+# app whose signature differs from what this run wants is re-signed without
+# recompiling.
 #
-# Only a launched build carries the identifier macOS reopens by,
-# com.firstmate.desk-floater. A --build-only copy, such as a verification build
-# in a task worktree, is com.firstmate.desk-floater.build-only, so "Quit &
-# Reopen", Finder and login items never start it in place of this home's
-# floater. Launching also drops LaunchServices' record of every other copy
-# registered under the launched identifier (a few seconds, after the floater
-# is already up); the files themselves are never touched.
+# Only the launched app, com.firstmate.desk-floater, carries the identifier
+# macOS reopens by. --build-only, such as a verification build in a task
+# worktree, assembles desk-floater/.build/DeskFloater-build-only.app instead,
+# as com.firstmate.desk-floater.build-only with the linker's ad-hoc signature
+# and no keychain lookup, and prints its path; it never touches the launched
+# app, so "Quit & Reopen", Finder and login items never start it in place of
+# this home's floater. Launching also drops LaunchServices' record of every
+# other copy registered under the launched identifier (a few seconds, after
+# the floater is already up); the files themselves are never touched.
 #
 # Environment: FM_HOME selects the home whose config/ is read and that the
 # floater serves (default: this code root). FM_DESK_FLOATER_LSREGISTER overrides
@@ -46,6 +49,7 @@ FM_HOME="${FM_HOME:-$ROOT}"
 PKG="$ROOT/desk-floater"
 RELEASE_BIN="$PKG/.build/release/DeskFloater"
 APP_DIR="$PKG/.build/DeskFloater.app"
+BUILD_ONLY_APP_DIR="$PKG/.build/DeskFloater-build-only.app"
 APP_MACOS="$APP_DIR/Contents/MacOS"
 APP_BIN="$APP_MACOS/DeskFloater"
 LAUNCH_ID="com.firstmate.desk-floater"
@@ -54,10 +58,10 @@ IDENTITY_FILE="$FM_HOME/config/desk-floater-signing-identity"
 LSREGISTER="${FM_DESK_FLOATER_LSREGISTER:-/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister}"
 
 # Chosen signing identity: SIGN_HASH is "-" for ad-hoc; SIGN_SOURCE is
-# config, keychain, or none.
+# config or keychain.
 SIGN_HASH="-"
 SIGN_NAME=""
-SIGN_SOURCE="none"
+SIGN_SOURCE=""
 
 usage() {
   awk '
@@ -106,18 +110,11 @@ write_info_plist() {
 PLIST
 }
 
-# Picks the signing identity from config/desk-floater-signing-identity, else
-# the keychain's first valid "Apple Development" identity, else ad-hoc.
-choose_identity() {
-  local configured="" found
-  if [ -f "$IDENTITY_FILE" ]; then
-    configured=$(sed -n '1{s/^[[:space:]]*//;s/[[:space:]]*$//;p;}' "$IDENTITY_FILE")
-  fi
-  if [ "$configured" = "-" ]; then
-    SIGN_SOURCE=config
-    return 0
-  fi
-  found=$(security find-identity -v -p codesigning 2>/dev/null | awk -v want="$configured" '
+# Prints "<hash>\t<name>" for the first valid codesigning identity matching
+# <want> by hash or name, or the first "Apple Development" one when <want> is
+# empty.
+find_identity() {  # <want>
+  security find-identity -v -p codesigning 2>/dev/null | awk -v want="$1" '
     $2 ~ /^[0-9A-Fa-f]+$/ && length($2) == 40 && index($0, "\"") > 0 {
       name = $0
       sub(/^[^"]*"/, "", name)
@@ -127,29 +124,68 @@ choose_identity() {
         exit
       }
     }
-  ') || found=""
-  if [ -n "$found" ]; then
-    SIGN_HASH="${found%%	*}"
-    SIGN_NAME="${found#*	}"
-    if [ -n "$configured" ]; then SIGN_SOURCE=config; else SIGN_SOURCE=keychain; fi
-    return 0
-  fi
-  [ -z "$configured" ] || die "signing identity '$configured' from $IDENTITY_FILE is not a valid codesigning identity in the keychain"
+  ' || true
 }
 
-# True when the assembled app already has this bundle identifier and the
-# chosen signature, so nothing needs reassembling.
+use_identity() {  # <source> <hash\tname>
+  SIGN_SOURCE="$1"
+  SIGN_HASH="${2%%	*}"
+  SIGN_NAME="${2#*	}"
+}
+
+# Moves on from an unusable configured identity to the first valid
+# "Apple Development" one, and from anything else to ad-hoc.
+fall_back() {  # <what happened>
+  local found=""
+  [ "$SIGN_SOURCE" != config ] || found=$(find_identity "")
+  if [ -n "$found" ] && [ "${found%%	*}" != "$SIGN_HASH" ]; then
+    note "$1; signing with ${found#*	} instead"
+    use_identity keychain "$found"
+    return 0
+  fi
+  note "$1; keeping the ad-hoc signature, so macOS asks for Accessibility and Screen Recording again after every rebuild"
+  SIGN_HASH="-"
+  SIGN_NAME=""
+}
+
+# Picks the signing identity from config/desk-floater-signing-identity, else
+# the keychain's first valid "Apple Development" identity, else ad-hoc.
+choose_identity() {
+  local configured="" found
+  if [ -f "$IDENTITY_FILE" ]; then
+    configured=$(sed -n '1{s/^[[:space:]]*//;s/[[:space:]]*$//;p;}' "$IDENTITY_FILE")
+  fi
+  [ "$configured" != "-" ] || return 0
+  if [ -n "$configured" ]; then
+    SIGN_SOURCE=config
+    found=$(find_identity "$configured")
+    if [ -n "$found" ]; then
+      use_identity config "$found"
+    else
+      fall_back "signing identity '$configured' from $IDENTITY_FILE is not a valid codesigning identity in the keychain"
+    fi
+    return 0
+  fi
+  found=$(find_identity "")
+  if [ -n "$found" ]; then
+    use_identity keychain "$found"
+  else
+    note "no Apple Development signing identity found; keeping the ad-hoc signature, so macOS asks for Accessibility and Screen Recording again after every rebuild"
+  fi
+}
+
+# True when the launched app already has the chosen signature, so nothing
+# needs reassembling.
 app_is_current() {
-  local bundle_id="$1" details authority
+  local details authority
   [ -x "$APP_BIN" ] || return 1
-  [ "$(plutil -extract CFBundleIdentifier raw -o - "$APP_DIR/Contents/Info.plist" 2>/dev/null)" = "$bundle_id" ] || return 1
   details=$(codesign -dvv "$APP_DIR" 2>&1) || return 1
   if [ "$SIGN_HASH" = "-" ]; then
     printf '%s\n' "$details" | grep -qx 'Signature=adhoc'
     return
   fi
   authority=$(printf '%s\n' "$details" | awk '/^Authority=/ { sub(/^Authority=/, ""); print; exit }')
-  printf '%s\n' "$details" | grep -qxF "Identifier=$bundle_id" && [ "$authority" = "$SIGN_NAME" ]
+  printf '%s\n' "$details" | grep -qxF "Identifier=$LAUNCH_ID" && [ "$authority" = "$SIGN_NAME" ]
 }
 
 # Replaces the binary by rename rather than writing over it in place, which
@@ -167,20 +203,14 @@ assemble_app() {
   local bundle_id="$1"
   [ -x "$RELEASE_BIN" ] || die "expected binary missing: $RELEASE_BIN"
   copy_app_files "$bundle_id"
-  if [ "$SIGN_HASH" = "-" ]; then
-    if [ "$SIGN_SOURCE" = none ]; then
-      note "no Apple Development signing identity found; keeping the ad-hoc signature, so macOS asks for Accessibility and Screen Recording again after every rebuild"
+  while [ "$SIGN_HASH" != "-" ]; do
+    if codesign --force --sign "$SIGN_HASH" --identifier "$bundle_id" --timestamp=none "$APP_DIR" >/dev/null 2>&1; then
+      note "signed as $bundle_id with $SIGN_NAME"
+      return 0
     fi
-    return 0
-  fi
-  if codesign --force --sign "$SIGN_HASH" --identifier "$bundle_id" --timestamp=none "$APP_DIR" >/dev/null 2>&1; then
-    note "signed as $bundle_id with $SIGN_NAME"
-    return 0
-  fi
-  [ "$SIGN_SOURCE" = keychain ] || die "codesign failed with the configured identity $SIGN_NAME"
-  note "codesign failed with $SIGN_NAME; keeping the ad-hoc signature, so macOS asks for Accessibility and Screen Recording again after this rebuild"
-  SIGN_HASH="-"
-  copy_app_files "$bundle_id"
+    fall_back "codesign failed with $SIGN_NAME"
+    copy_app_files "$bundle_id"
+  done
 }
 
 build() {
@@ -223,7 +253,7 @@ forget_other_copies() {
 }
 
 main() {
-  local build_only=false bundle_id
+  local build_only=false
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --help|-h) usage; exit 0 ;;
@@ -233,20 +263,24 @@ main() {
     esac
   done
 
-  bundle_id="$LAUNCH_ID"
-  [ "$build_only" = false ] || bundle_id="$BUILD_ONLY_ID"
-  choose_identity
-
-  if needs_build; then
-    build
-    assemble_app "$bundle_id"
-  elif ! app_is_current "$bundle_id"; then
-    assemble_app "$bundle_id"
-  fi
-
   if [ "$build_only" = true ]; then
+    APP_DIR="$BUILD_ONLY_APP_DIR"
+    APP_MACOS="$APP_DIR/Contents/MacOS"
+    APP_BIN="$APP_MACOS/DeskFloater"
+    if needs_build; then
+      build
+      assemble_app "$BUILD_ONLY_ID"
+    fi
     printf '%s\n' "$APP_DIR"
     exit 0
+  fi
+
+  choose_identity
+  if needs_build; then
+    build
+    assemble_app "$LAUNCH_ID"
+  elif ! app_is_current; then
+    assemble_app "$LAUNCH_ID"
   fi
 
   export FM_HOME

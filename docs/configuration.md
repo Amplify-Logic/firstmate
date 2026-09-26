@@ -2558,7 +2558,8 @@ Optional, private, gitignored, and not inherited by secondmate homes.
 One line naming the codesigning identity `bin/fm-desk-floater.sh` signs the desk floater with, as a SHA-1 hash or a name `codesign` accepts, or `-` to keep the linker's ad-hoc signature.
 Absent, the launcher uses the first valid "Apple Development" identity in the keychain, and stays ad-hoc with a note when there is none.
 A stable identity is what lets the floater keep its Accessibility and Screen Recording grants across rebuilds.
-A named identity the keychain does not hold, or one that fails to sign, stops the launcher rather than falling back.
+A named identity the keychain does not hold, one that has expired, or one that fails to sign never stops the launcher: it falls back to the first valid "Apple Development" identity, then to ad-hoc, with a note naming what happened.
+Only the launched floater is signed; a `--build-only` copy stays ad-hoc and never looks in the keychain.
 The script's header owns the mechanics, and [`desk-floater.md`](desk-floater.md#keeping-the-permissions-across-rebuilds) describes the effect.
 
 ## Supervision active alert channels (config/wedge-alarm)

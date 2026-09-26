@@ -43,7 +43,10 @@ final class HomeLocationTests: XCTestCase {
     }
 
     func testWorkingDirectoryCountsOnlyWhenItIsACodeRoot() {
-        let location = resolve([:], bundle: "/Users/me/other/desk-floater/.build/release", cwd: "/Users/me/other")
+        let location = resolve([:], bundle: "/tmp/x/DeskFloater", cwd: "/Users/me/other")
         XCTAssertEqual(location?.root, "/Users/me/other")
+        XCTAssertEqual(location?.home, "/Users/me/other")
+        XCTAssertNil(resolve([:], bundle: "/tmp/x/DeskFloater", cwd: "/Users/me/nowhere"),
+                     "a working directory that is not a code root is not trusted")
     }
 }

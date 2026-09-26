@@ -266,7 +266,9 @@ DIST_NAME="iPhone Distribution: Test Person (TEAM456)"
 # A copy of the launcher in its own code root, with fake swift, security,
 # codesign, open and lsregister recording what the launcher asked of them.
 # The fake codesign writes its signature into the app binary, so copying a
-# fresh binary over it drops the signature as a real one would.
+# fresh binary over it drops the signature as a real one would, and fails to
+# sign with any hash listed in codesign.fail. Every security and codesign call
+# lands in tools.log.
 new_floater_root() {  # <name> <identities-listing>
   local fx="$TMP_ROOT/$1"
   mkdir -p "$fx/root/bin" "$fx/root/desk-floater/Sources" "$fx/fake" "$fx/root/config"
@@ -284,10 +286,12 @@ chmod +x .build/release/DeskFloater
 EOF
   cat > "$fx/fake/security" <<EOF
 #!/usr/bin/env bash
+printf 'security %s\n' "\$*" >> "$fx/tools.log"
 cat "$fx/identities"
 EOF
   cat > "$fx/fake/codesign" <<EOF
 #!/usr/bin/env bash
+printf 'codesign %s\n' "\$*" >> "$fx/tools.log"
 app=\${!#}
 bin="\$app/Contents/MacOS/DeskFloater"
 if [ "\$1" = -dvv ]; then
@@ -305,7 +309,11 @@ if [ "\$1" = -dvv ]; then
   exit 0
 fi
 printf '%s\n' "\$*" >> "$fx/codesign.log"
-[ ! -f "$fx/codesign.fail" ] || exit 1
+if [ -f "$fx/codesign.fail" ]; then
+  while IFS= read -r bad; do
+    case " \$* " in *" --sign \$bad "*) exit 1 ;; esac
+  done < "$fx/codesign.fail"
+fi
 while [ "\$#" -gt 1 ]; do
   case "\$1" in
     --sign) hash=\$2; shift ;;
@@ -333,7 +341,7 @@ path:                       $fx/stray copy/desk-floater/.build/DeskFloater.app (
 identifier:                 com.firstmate.desk-floater
 --------------------------------------------------------------------------------
 bundle id:                  DeskFloater (0x30)
-path:                       $fx/checked/desk-floater/.build/DeskFloater.app (0x31)
+path:                       $fx/checked/desk-floater/.build/DeskFloater-build-only.app (0x31)
 identifier:                 com.firstmate.desk-floater.build-only
 --------------------------------------------------------------------------------
 bundle id:                  Other (0x40)
@@ -345,7 +353,7 @@ fi
 printf '%s\n' "\$*" >> "$fx/lsregister.log"
 EOF
   chmod +x "$fx/fake/"*
-  touch "$fx/swift.log" "$fx/codesign.log" "$fx/open.log" "$fx/lsregister.log"
+  touch "$fx/swift.log" "$fx/codesign.log" "$fx/open.log" "$fx/lsregister.log" "$fx/tools.log"
   printf '%s\n' "$fx"
 }
 
@@ -356,8 +364,8 @@ run_floater() {  # <fixture> [args...]
     "$fx/root/bin/fm-desk-floater.sh" "$@" 2>&1
 }
 
-bundle_id_of() {
-  plutil -extract CFBundleIdentifier raw -o - "$1/root/desk-floater/.build/DeskFloater.app/Contents/Info.plist"
+bundle_id_of() {  # <fixture> [app-name]
+  plutil -extract CFBundleIdentifier raw -o - "$1/root/desk-floater/.build/${2:-DeskFloater}.app/Contents/Info.plist"
 }
 
 floater_listing() {
@@ -372,18 +380,9 @@ test_floater_signs_with_a_stable_identity() {
   fi
   fx=$(new_floater_root floater-sign "$(floater_listing)")
 
-  out=$(run_floater "$fx" --build-only) || fail "--build-only failed: $out"
-  assert_contains "$out" "$fx/root/desk-floater/.build/DeskFloater.app" "--build-only prints the app"
-  assert_equals "com.firstmate.desk-floater.build-only" "$(bundle_id_of "$fx")" "a build-only copy never carries the identifier macOS reopens"
-  assert_grep "--sign $DEV_HASH --identifier com.firstmate.desk-floater.build-only" "$fx/codesign.log" "signed with the first Apple Development identity"
-  [ ! -s "$fx/open.log" ] || fail "--build-only launched the app"
-  [ ! -s "$fx/lsregister.log" ] || fail "--build-only touched LaunchServices"
-
-  : > "$fx/codesign.log"
   out=$(run_floater "$fx") || fail "launch failed: $out"
-  assert_equals 1 "$(grep -c build "$fx/swift.log")" "switching to a launch reassembles without recompiling"
   assert_equals "com.firstmate.desk-floater" "$(bundle_id_of "$fx")" "the launched build carries the reopen identifier"
-  assert_grep "--sign $DEV_HASH --identifier com.firstmate.desk-floater --timestamp=none" "$fx/codesign.log" "the launched build is re-signed with the same identity"
+  assert_grep "--sign $DEV_HASH --identifier com.firstmate.desk-floater --timestamp=none" "$fx/codesign.log" "the launched build is signed with the first Apple Development identity"
   assert_grep "--env FM_HOME=$fx/root --env FM_DESK_FLOATER_ROOT=$fx/root $fx/root/desk-floater/.build/DeskFloater.app" "$fx/open.log" "the home build is opened with its home"
   assert_grep "-u $fx/stray copy/desk-floater/.build/DeskFloater.app" "$fx/lsregister.log" "another registered copy is forgotten"
   assert_no_grep "$fx/root/" "$fx/lsregister.log" "the launched copy stays registered"
@@ -400,11 +399,42 @@ test_floater_signs_with_a_stable_identity() {
   out=$(run_floater "$fx") || fail "rebuild launch failed: $out"
   assert_equals 2 "$(grep -c build "$fx/swift.log")" "a source change rebuilds"
   assert_grep "--sign $DEV_HASH --identifier com.firstmate.desk-floater --timestamp=none" "$fx/codesign.log" "a rebuild is signed with the same identity, so its grants carry over"
-  pass "fm-desk-floater: every build is signed with one stable identity, and only the launched copy can be reopened"
+  pass "fm-desk-floater: every launched build is signed with one stable identity, and only the launched copy can be reopened"
+}
+
+test_floater_build_only_leaves_the_launched_app_alone() {
+  local fx out launched
+  if [ "$(uname)" != Darwin ]; then
+    pass "fm-desk-floater: build-only tests skipped (need macOS)"
+    return
+  fi
+  fx=$(new_floater_root floater-build-only "$(floater_listing)")
+  launched="$fx/root/desk-floater/.build/DeskFloater.app"
+  out=$(run_floater "$fx") || fail "launch failed: $out"
+  cp "$launched/Contents/MacOS/DeskFloater" "$fx/launched.bin"
+  cp "$launched/Contents/Info.plist" "$fx/launched.plist"
+  : > "$fx/open.log"
+  : > "$fx/lsregister.log"
+  : > "$fx/tools.log"
+
+  touch "$fx/root/desk-floater/Sources/DeskFloater.swift"
+  sleep 1
+  touch "$fx/root/desk-floater/Sources/DeskFloater.swift"
+  out=$(run_floater "$fx" --build-only) || fail "--build-only failed: $out"
+  assert_equals "$fx/root/desk-floater/.build/DeskFloater-build-only.app" "$(printf '%s\n' "$out" | tail -n 1)" "--build-only prints its own bundle"
+  assert_equals 2 "$(grep -c build "$fx/swift.log")" "--build-only compiles the changed source"
+  assert_equals "com.firstmate.desk-floater.build-only" "$(bundle_id_of "$fx" DeskFloater-build-only)" "a build-only copy never carries the identifier macOS reopens"
+  assert_no_grep "fake-sig" "$fx/root/desk-floater/.build/DeskFloater-build-only.app/Contents/MacOS/DeskFloater" "a build-only copy keeps the linker's ad-hoc signature"
+  [ ! -s "$fx/tools.log" ] || fail "--build-only ran codesign or looked in the keychain: $(cat "$fx/tools.log")"
+  cmp -s "$launched/Contents/MacOS/DeskFloater" "$fx/launched.bin" || fail "--build-only rewrote the launched binary or its signature"
+  cmp -s "$launched/Contents/Info.plist" "$fx/launched.plist" || fail "--build-only rewrote the launched bundle's Info.plist"
+  [ ! -s "$fx/open.log" ] || fail "--build-only launched the app"
+  [ ! -s "$fx/lsregister.log" ] || fail "--build-only touched LaunchServices"
+  pass "fm-desk-floater: --build-only assembles its own ad-hoc bundle and never touches the launched one"
 }
 
 test_floater_signing_identity_config_and_fallbacks() {
-  local fx out status=0
+  local fx out
   if [ "$(uname)" != Darwin ]; then
     pass "fm-desk-floater: signing fallback tests skipped (need macOS)"
     return
@@ -427,18 +457,39 @@ test_floater_signing_identity_config_and_fallbacks() {
   assert_not_contains "$out" "keeping the ad-hoc signature" "a chosen ad-hoc signature needs no warning"
 
   printf 'Nobody\n' > "$fx/root/config/desk-floater-signing-identity"
+  : > "$fx/codesign.log"
   : > "$fx/open.log"
-  out=$(run_floater "$fx") || status=$?
-  [ "$status" -eq 1 ] || fail "expected exit 1 for a missing configured identity, got $status: $out"
-  assert_contains "$out" "Nobody" "the missing identity is named"
-  [ ! -s "$fx/open.log" ] || fail "launched despite a missing configured identity"
+  out=$(run_floater "$fx") || fail "a missing configured identity stopped the launch: $out"
+  assert_contains "$out" "'Nobody'" "the missing identity is named"
+  assert_contains "$out" "signing with $DEV_NAME instead" "the fallback identity is named"
+  assert_grep "--sign $DEV_HASH --identifier com.firstmate.desk-floater" "$fx/codesign.log" "a missing configured identity falls back to Apple Development"
+  assert_grep "DeskFloater.app" "$fx/open.log" "still launches with the fallback identity"
+
+  fx=$(new_floater_root floater-config-alone "$(printf '  1) %s "%s"\n     1 valid identities found\n' "$DIST_HASH" "$DIST_NAME")")
+  printf 'Nobody\n' > "$fx/root/config/desk-floater-signing-identity"
+  out=$(run_floater "$fx") || fail "a missing configured identity without Apple Development stopped the launch: $out"
+  assert_contains "$out" "'Nobody'" "the missing identity is named"
+  assert_contains "$out" "keeping the ad-hoc signature" "the ad-hoc fallback is explained"
+  [ ! -s "$fx/codesign.log" ] || fail "signed with an identity nobody chose: $(cat "$fx/codesign.log")"
+  assert_grep "DeskFloater.app" "$fx/open.log" "still launches ad-hoc"
+
+  fx=$(new_floater_root floater-config-signfail "$(floater_listing)")
+  printf 'iPhone Distribution\n' > "$fx/root/config/desk-floater-signing-identity"
+  printf '%s\n' "$DIST_HASH" > "$fx/codesign.fail"
+  out=$(run_floater "$fx") || fail "a configured identity that fails to sign stopped the launch: $out"
+  assert_contains "$out" "codesign failed with $DIST_NAME; signing with $DEV_NAME instead" "the signing failure and the fallback are named"
+  assert_grep "--sign $DEV_HASH --identifier com.firstmate.desk-floater" "$fx/codesign.log" "falls back to Apple Development"
+  assert_contains "$(tail -n 1 "$fx/root/desk-floater/.build/DeskFloater.app/Contents/MacOS/DeskFloater")" "$DEV_HASH" "the launched app carries the fallback signature"
+  assert_grep "DeskFloater.app" "$fx/open.log" "still launches with the fallback identity"
 
   fx=$(new_floater_root floater-signfail "$(floater_listing)")
-  touch "$fx/codesign.fail"
-  out=$(run_floater "$fx") || fail "a keychain signing failure should fall back to ad-hoc: $out"
-  assert_contains "$out" "codesign failed" "the signing failure is explained"
+  printf '%s\n' "$DIST_HASH" "$DEV_HASH" > "$fx/codesign.fail"
+  printf 'iPhone Distribution\n' > "$fx/root/config/desk-floater-signing-identity"
+  out=$(run_floater "$fx") || fail "a signing failure should fall back to ad-hoc: $out"
+  assert_contains "$out" "codesign failed with $DEV_NAME; keeping the ad-hoc signature" "the last signing failure is explained"
+  assert_no_grep "fake-sig" "$fx/root/desk-floater/.build/DeskFloater.app/Contents/MacOS/DeskFloater" "the fallback app is ad-hoc"
   assert_grep "DeskFloater.app" "$fx/open.log" "still launches after the fallback"
-  pass "fm-desk-floater: a configured identity wins, ad-hoc is kept with a note when none is usable"
+  pass "fm-desk-floater: a configured identity wins, and an unusable one falls back to Apple Development, then ad-hoc, without stopping the launch"
 }
 
 # --- fm-speak Deepgram preference ------------------------------------------
@@ -1354,6 +1405,7 @@ test_stt_prints_transcript_from_mocked_deepgram
 test_stt_reports_http_failure
 test_floater_help_and_option_refusal
 test_floater_signs_with_a_stable_identity
+test_floater_build_only_leaves_the_launched_app_alone
 test_floater_signing_identity_config_and_fallbacks
 test_speak_uses_say_when_key_absent
 test_speak_prefers_deepgram_when_key_present
