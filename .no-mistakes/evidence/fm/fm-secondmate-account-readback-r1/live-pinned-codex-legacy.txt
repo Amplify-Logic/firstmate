@@ -1,0 +1,26 @@
+### scenario: pinned-codex-legacy   (code under test: 12434261 no-mistakes(review): Move secondmate account read-back into fm-spawn respawn)
+### meta before sweep:
+window=firstmate:fm-sm1
+kind=secondmate
+harness=codex
+home=$SMROOT/sm1home
+account=derya
+### config/accounts.json:
+{"codex":{"default":"lars","accounts":{"lars":{},"derya":{}}}}
+### config/secondmate-harness: codex
+### sweep transcript (SECONDMATE_LIVENESS lines + exit):
+SECONDMATE_LIVENESS: secondmate sm1: respawn failed after confirmed agent absence on existing endpoint: fm-gate-refuse: gate agent lifecycle permitted only against lab home $LAB
+SECONDMATE_SYNC: secondmate sm1: skipped: primary default-branch commit cannot be resolved
+bootstrap rc=0
+### full output of the recovery command (FM_SPAWN_NO_GUARD=1 bin/fm-spawn.sh sm1 --secondmate):
+fm-gate-refuse: gate agent lifecycle permitted only against lab home $LAB
+error: codex account 'derya' is not logged in at $LAB/data/accounts/codex/derya; log in with: CODEX_HOME=$LAB/data/accounts/codex/derya codex login (no credential is ever copied from another account)
+fm-spawn rc=1
+### relaunch ledger:
+	attempt
+	failed
+### meta after sweep (account/harness lines):
+harness=codex
+account=derya
+### endpoint firstmate:fm-sm1 after sweep:
+can't find window: fm-sm1

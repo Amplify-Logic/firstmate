@@ -1,0 +1,51 @@
+### scenario: harness-switch   (code under test: 12434261 no-mistakes(review): Move secondmate account read-back into fm-spawn respawn)
+### meta before sweep:
+window=firstmate:fm-sm1
+kind=secondmate
+harness=codex
+home=$SMROOT/sm1home
+account=derya
+account_source=registry
+### config/accounts.json:
+{"codex":{"default":"lars","accounts":{"lars":{},"derya":{}}}}
+### config/secondmate-harness: claude
+### sweep transcript (SECONDMATE_LIVENESS lines + exit):
+SECONDMATE_SYNC: secondmate sm1: skipped: primary default-branch commit cannot be resolved
+bootstrap rc=0
+### relaunch ledger:
+	attempt
+	relaunched
+### meta after sweep (account/harness lines):
+harness=claude
+### endpoint firstmate:fm-sm1 after sweep:
+pane_current_command=2.1.283 pane_dead=0
+(base) larsmusic@Larss-MacBook-Pro sm1home % . '/tmp/fm-sm1+d380d3c8ce40ab7b38d5
+32cd611e58a43707c591f00c47747ad303ffde808892/launch.s1790423918.36237.3541.sh'
+ ▐▛███▛█   Claude Code v2.1.283
+▝▜██████▀  Opus 5.5 (1M context) with high effort · Claude Max
+ ▝▝   ▝▝   /…/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab-sm.RvYRJs/sm1home
+⏺ agents-md: no CLAUDE.md found; AGENTS.md loaded: /private/var/folders/
+  1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab-sm.RvYRJs/sm1home/AGENTS.md
+❯ FIRSTMATE_OP: v1 launch-brief: charter
+  Listing 1 directory… (ctrl+o to expand)
+  ⎿  $ ls -la && cat AGENTS.md .gitignore && ls -la .fm-secondmate-home && find
+     .fm-secondmate-home -maxdepth 3 | head -50
+✽ Philosophizing… (8s · ↓ 260 tokens)
+rm: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.rvLazV/state/sm1.git-hooks/pre-rebase: Permission denied
+rm: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.rvLazV/state/sm1.git-hooks/pre-applypatch: Permission denied
+rm: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.rvLazV/state/sm1.git-hooks/pre-auto-gc: Permission denied
+rm: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.rvLazV/state/sm1.git-hooks/pre-merge-commit: Permission denied
+rm: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.rvLazV/state/sm1.git-hooks/post-commit: Permission denied
+rm: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.rvLazV/state/sm1.git-hooks/sendemail-validate: Permission denied
+rm: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.rvLazV/state/sm1.git-hooks/applypatch-msg: Permission denied
+rm: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.rvLazV/state/sm1.git-hooks/prepare-commit-msg: Permission denied
+rm: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.rvLazV/state/sm1.git-hooks/post-checkout: Permission denied
+rm: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.rvLazV/state/sm1.git-hooks/post-applypatch: Permission denied
+rm: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.rvLazV/state/sm1.git-hooks/post-rewrite: Permission denied
+rm: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.rvLazV/state/sm1.git-hooks/commit-msg: Permission denied
+rm: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.rvLazV/state/sm1.git-hooks/pre-push: Permission denied
+rm: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.rvLazV/state/sm1.git-hooks/post-merge: Permission denied
+rm: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.rvLazV/state/sm1.git-hooks/pre-commit: Permission denied
+rm: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.rvLazV/state/sm1.git-hooks: Directory not empty
+rm: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.rvLazV/state: Directory not empty
+rm: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.rvLazV: Directory not empty

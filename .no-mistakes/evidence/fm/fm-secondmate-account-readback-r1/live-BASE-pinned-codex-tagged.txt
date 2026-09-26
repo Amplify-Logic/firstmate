@@ -1,0 +1,27 @@
+### scenario: pinned-codex-tagged   (code under test: BASE d231f065, before this change)
+### meta before sweep:
+window=firstmate:fm-sm1
+kind=secondmate
+harness=codex
+home=$LAB/sm1home
+account=derya
+account_source=registry
+### config/accounts.json:
+{"codex":{"default":"lars","accounts":{"lars":{},"derya":{}}}}
+### config/secondmate-harness: codex
+### sweep transcript (SECONDMATE_LIVENESS lines + exit):
+SECONDMATE_LIVENESS: secondmate sm1: respawn failed after confirmed agent absence on existing endpoint: error: codex account 'lars' is not logged in at $LAB/data/accounts/codex/lars; log in with: CODEX_HOME=$LAB/data/accounts/codex/lars codex login (no credential is ever copied from another account)
+SECONDMATE_SYNC: secondmate sm1: skipped: unsafe home: secondmate home cannot be inside the active firstmate home
+bootstrap rc=0
+### full output of the recovery command (FM_SPAWN_NO_GUARD=1 bin/fm-spawn.sh sm1 --secondmate):
+error: codex account 'lars' is not logged in at $LAB/data/accounts/codex/lars; log in with: CODEX_HOME=$LAB/data/accounts/codex/lars codex login (no credential is ever copied from another account)
+fm-spawn rc=1
+### relaunch ledger:
+	attempt
+	failed
+### meta after sweep (account/harness lines):
+harness=codex
+account=derya
+account_source=registry
+### endpoint firstmate:fm-sm1 after sweep:
+can't find window: fm-sm1

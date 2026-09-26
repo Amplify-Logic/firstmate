@@ -1,0 +1,15 @@
+== BASE d231f065: test_sweep_respawn_preserves_the_pinned_account
+not ok - the tagged respawn dropped the pinned account and fell back to the vendor default
+rc=
+== BASE d231f065: test_sweep_respawn_never_passes_a_worker_pin_value_as_account
+ok - sweep: a worker account pin value is never passed back as a registry account
+rc=
+== BASE d231f065: test_sweep_respawn_onto_a_switched_harness_resolves_its_account_afresh
+ok - sweep: a respawn onto a switched harness resolves its account afresh
+rc=
+== BASE d231f065: test_sweep_respawn_under_a_worker_account_pin_follows_the_pin
+ok - sweep: a worker account pin outranks the recorded account on respawn
+rc=
+== BASE d231f065: test_sweep_respawn_without_a_pin_records_no_account
+ok - sweep: an unpinned secondmate respawns with no account flag and no account in its meta
+rc=

@@ -1,0 +1,62 @@
+ok - fm-control relaunch: durable task metadata survives replacement launch publication
+ok - fm-control relaunch: a signed-out worker account pin refuses before the old agent stops
+ok - fm-control relaunch: the replacement follows the home's current worker account pin
+ok - fm-control relaunch: a removed worker pin's value is never read back as a registry account
+rm: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-control-relaunch.e7uk18/acct-reg-31407/home/state/rl-acct-reg.git-hooks/pre-rebase: Permission denied
+rm: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-control-relaunch.e7uk18/acct-reg-31407/home/state/rl-acct-reg.git-hooks/pre-applypatch: Permission denied
+rm: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-control-relaunch.e7uk18/acct-reg-31407/home/state/rl-acct-reg.git-hooks/pre-auto-gc: Permission denied
+rm: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-control-relaunch.e7uk18/acct-reg-31407/home/state/rl-acct-reg.git-hooks/pre-merge-commit: Permission denied
+rm: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-control-relaunch.e7uk18/acct-reg-31407/home/state/rl-acct-reg.git-hooks/post-commit: Permission denied
+rm: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-control-relaunch.e7uk18/acct-reg-31407/home/state/rl-acct-reg.git-hooks/sendemail-validate: Permission denied
+rm: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-control-relaunch.e7uk18/acct-reg-31407/home/state/rl-acct-reg.git-hooks/applypatch-msg: Permission denied
+rm: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-control-relaunch.e7uk18/acct-reg-31407/home/state/rl-acct-reg.git-hooks/prepare-commit-msg: Permission denied
+rm: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-control-relaunch.e7uk18/acct-reg-31407/home/state/rl-acct-reg.git-hooks/post-checkout: Permission denied
+rm: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-control-relaunch.e7uk18/acct-reg-31407/home/state/rl-acct-reg.git-hooks/post-applypatch: Permission denied
+rm: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-control-relaunch.e7uk18/acct-reg-31407/home/state/rl-acct-reg.git-hooks/post-rewrite: Permission denied
+rm: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-control-relaunch.e7uk18/acct-reg-31407/home/state/rl-acct-reg.git-hooks/commit-msg: Permission denied
+rm: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-control-relaunch.e7uk18/acct-reg-31407/home/state/rl-acct-reg.git-hooks/pre-push: Permission denied
+rm: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-control-relaunch.e7uk18/acct-reg-31407/home/state/rl-acct-reg.git-hooks/post-merge: Permission denied
+rm: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-control-relaunch.e7uk18/acct-reg-31407/home/state/rl-acct-reg.git-hooks/pre-commit: Permission denied
+rm: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-control-relaunch.e7uk18/acct-reg-31407/home/state/rl-acct-reg.git-hooks: Directory not empty
+rm: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-control-relaunch.e7uk18/acct-reg-31407/home/state: Directory not empty
+rm: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-control-relaunch.e7uk18/acct-reg-31407/home: Directory not empty
+rm: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-control-relaunch.e7uk18/acct-reg-31407: Directory not empty
+rm: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-control-relaunch.e7uk18/durable-meta-11448/home/state/rl19.git-hooks/pre-rebase: Permission denied
+rm: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-control-relaunch.e7uk18/durable-meta-11448/home/state/rl19.git-hooks/pre-applypatch: Permission denied
+rm: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-control-relaunch.e7uk18/durable-meta-11448/home/state/rl19.git-hooks/pre-auto-gc: Permission denied
+rm: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-control-relaunch.e7uk18/durable-meta-11448/home/state/rl19.git-hooks/pre-merge-commit: Permission denied
+rm: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-control-relaunch.e7uk18/durable-meta-11448/home/state/rl19.git-hooks/post-commit: Permission denied
+rm: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-control-relaunch.e7uk18/durable-meta-11448/home/state/rl19.git-hooks/sendemail-validate: Permission denied
+rm: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-control-relaunch.e7uk18/durable-meta-11448/home/state/rl19.git-hooks/applypatch-msg: Permission denied
+rm: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-control-relaunch.e7uk18/durable-meta-11448/home/state/rl19.git-hooks/prepare-commit-msg: Permission denied
+rm: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-control-relaunch.e7uk18/durable-meta-11448/home/state/rl19.git-hooks/post-checkout: Permission denied
+rm: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-control-relaunch.e7uk18/durable-meta-11448/home/state/rl19.git-hooks/post-applypatch: Permission denied
+rm: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-control-relaunch.e7uk18/durable-meta-11448/home/state/rl19.git-hooks/post-rewrite: Permission denied
+rm: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-control-relaunch.e7uk18/durable-meta-11448/home/state/rl19.git-hooks/commit-msg: Permission denied
+rm: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-control-relaunch.e7uk18/durable-meta-11448/home/state/rl19.git-hooks/pre-push: Permission denied
+rm: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-control-relaunch.e7uk18/durable-meta-11448/home/state/rl19.git-hooks/post-merge: Permission denied
+rm: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-control-relaunch.e7uk18/durable-meta-11448/home/state/rl19.git-hooks/pre-commit: Permission denied
+rm: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-control-relaunch.e7uk18/durable-meta-11448/home/state/rl19.git-hooks: Directory not empty
+rm: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-control-relaunch.e7uk18/durable-meta-11448/home/state: Directory not empty
+rm: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-control-relaunch.e7uk18/durable-meta-11448/home: Directory not empty
+rm: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-control-relaunch.e7uk18/durable-meta-11448: Directory not empty
+rm: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-control-relaunch.e7uk18/acct-14765/home/state/rl-acct.git-hooks/pre-rebase: Permission denied
+rm: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-control-relaunch.e7uk18/acct-14765/home/state/rl-acct.git-hooks/pre-applypatch: Permission denied
+rm: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-control-relaunch.e7uk18/acct-14765/home/state/rl-acct.git-hooks/pre-auto-gc: Permission denied
+rm: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-control-relaunch.e7uk18/acct-14765/home/state/rl-acct.git-hooks/pre-merge-commit: Permission denied
+rm: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-control-relaunch.e7uk18/acct-14765/home/state/rl-acct.git-hooks/post-commit: Permission denied
+rm: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-control-relaunch.e7uk18/acct-14765/home/state/rl-acct.git-hooks/sendemail-validate: Permission denied
+rm: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-control-relaunch.e7uk18/acct-14765/home/state/rl-acct.git-hooks/applypatch-msg: Permission denied
+rm: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-control-relaunch.e7uk18/acct-14765/home/state/rl-acct.git-hooks/prepare-commit-msg: Permission denied
+rm: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-control-relaunch.e7uk18/acct-14765/home/state/rl-acct.git-hooks/post-checkout: Permission denied
+rm: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-control-relaunch.e7uk18/acct-14765/home/state/rl-acct.git-hooks/post-applypatch: Permission denied
+rm: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-control-relaunch.e7uk18/acct-14765/home/state/rl-acct.git-hooks/post-rewrite: Permission denied
+rm: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-control-relaunch.e7uk18/acct-14765/home/state/rl-acct.git-hooks/commit-msg: Permission denied
+rm: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-control-relaunch.e7uk18/acct-14765/home/state/rl-acct.git-hooks/pre-push: Permission denied
+rm: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-control-relaunch.e7uk18/acct-14765/home/state/rl-acct.git-hooks/post-merge: Permission denied
+rm: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-control-relaunch.e7uk18/acct-14765/home/state/rl-acct.git-hooks/pre-commit: Permission denied
+rm: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-control-relaunch.e7uk18/acct-14765/home/state/rl-acct.git-hooks: Directory not empty
+rm: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-control-relaunch.e7uk18/acct-14765/home/state: Directory not empty
+rm: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-control-relaunch.e7uk18/acct-14765/home: Directory not empty
+rm: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-control-relaunch.e7uk18/acct-14765: Directory not empty
+rm: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-control-relaunch.e7uk18: Directory not empty

@@ -1,0 +1,9 @@
+ok - fm-spawn: an absent config/accounts.json leaves the launch and meta unchanged
+ok - fm-spawn: an absent bin/fm-account-lib.sh degrades silently and refuses an explicit --account
+ok - fm-spawn: --account exports the derived Claude home and records account= in meta
+ok - fm-spawn: the vendor default account applies when --account is omitted
+ok - fm-spawn: an unknown account refuses and names the defined accounts
+ok - fm-spawn: --account on a harness with no account concept refuses instead of being ignored
+ok - fm-spawn: a missing or logged-out account home refuses before any endpoint exists
+ok - fm-spawn: a declared expect identity is verified against the pinned home before launch
+bash tests/fm-spawn-account.test.sh  9.43s user 11.44s system 42% cpu 48.807 total
