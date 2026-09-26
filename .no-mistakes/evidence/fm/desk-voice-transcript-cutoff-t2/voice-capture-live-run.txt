@@ -1,0 +1,21 @@
+mic authorization: 0 (3=authorized)
+
+== Scenario A: warm at launch, then press-to-record starts at once ==
+  built engine #1 in 1.393 s, setup=AudioSetup(format: <AVAudioFormat 0xc34921360:  9 ch,  48000 Hz, Float32, deinterleaved>, input: 142, output: 135)
+warm() took 1.394 s (happens at floater launch, before any press)
+engines built after warm + 2s idle: 1
+press 1: start() returned in 0.063 s; first mic buffer 0.165 s after press; held 1.50 s; file closed 0.433 s after release; WAV 1.990 s long (held + tail = 1.90); rms=0.00000; engines built so far=1
+press 2: start() returned in 0.105 s; first mic buffer 0.207 s after press; held 1.50 s; file closed 0.501 s after release; WAV 1.888 s long (held + tail = 1.90); rms=0.00000; engines built so far=1
+press 3: start() returned in 0.077 s; first mic buffer 0.184 s after press; held 1.50 s; file closed 0.499 s after release; WAV 1.888 s long (held + tail = 1.90); rms=0.00000; engines built so far=1
+
+== Scenario B (baseline for comparison): building the engine on the press, as before the fix ==
+cold press: start() returned 0.235 s after press; first mic buffer 0.342 s after press
+
+== Scenario C: rebuild storm guard - a new engine replacing a torn-down one gets a no-op notification ==
+  [second capture] built engine #2
+tearing down the other voice-processing engines (first capture + baseline)...
+  [engine #99] AVAudioEngineConfigurationChange received; setup now=AudioSetup(format: <AVAudioFormat 0xc34921fe0:  9 ch,  48000 Hz, Float32, deinterleaved>, input: 142, output: 135)
+  [engine #2] AVAudioEngineConfigurationChange received; setup now=AudioSetup(format: <AVAudioFormat 0xc34921f90:  9 ch,  48000 Hz, Float32, deinterleaved>, input: 142, output: 135)
+engines built by second capture over 5 s idle after teardown: 1 (1 = no rebuild storm)
+press after teardown notification: start() returned in 0.068 s; engines built by second capture: 1
+WAV 1.496 s rms=0.00000

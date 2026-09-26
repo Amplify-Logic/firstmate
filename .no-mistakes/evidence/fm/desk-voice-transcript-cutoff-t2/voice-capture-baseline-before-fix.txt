@@ -1,0 +1,3 @@
+OLD press 1: start() returned 1.130 s after press; key held 1.50 s; WAV 0.391 s long -> 1.109 s of the held time never recorded
+OLD press 2: start() returned 0.438 s after press; key held 1.50 s; WAV 0.986 s long -> 0.514 s of the held time never recorded
+OLD press 3: start() returned 0.427 s after press; key held 1.50 s; WAV 0.986 s long -> 0.514 s of the held time never recorded
