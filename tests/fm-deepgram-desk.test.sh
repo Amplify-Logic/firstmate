@@ -17,6 +17,19 @@ TMP_ROOT=$(fm_test_tmproot fm-deepgram-desk)
 unset DEEPGRAM_API_KEY || true
 export FM_DEEPGRAM_ENV_FILE=/dev/null
 
+# Every mailbox delivery raises a macOS notification. A stand-in osascript
+# records it instead, so a test never pops "Desk voice transcript ready" on the
+# captain's screen for a message that is not in his real mailbox.
+NOTIFY_BIN="$TMP_ROOT/notify-bin"
+NOTIFY_LOG="$TMP_ROOT/osascript.log"
+mkdir -p "$NOTIFY_BIN"
+cat > "$NOTIFY_BIN/osascript" <<EOF
+#!/bin/sh
+printf '%s\n' "\$*" >> "$NOTIFY_LOG"
+EOF
+chmod +x "$NOTIFY_BIN/osascript"
+export PATH="$NOTIFY_BIN:$PATH"
+
 new_home() {  # <name> [config-lines...]
   local name=$1
   shift
@@ -819,6 +832,7 @@ test_speak_falls_back_to_say_when_deepgram_fails() {
 test_desk_voice_deliver_pending_drain() {
   local home path pending drained wake
   home=$(new_home mailbox)
+  : > "$NOTIFY_LOG"
   path=$(
     FM_HOME="$home" FM_STATE_OVERRIDE="$home/state" \
       "$DESK" deliver --source test-suite "Merge the finances PR when green"
@@ -830,6 +844,8 @@ test_desk_voice_deliver_pending_drain() {
   [ -f "$home/state/.wake-queue" ] || fail "wake queue missing"
   wake=$(cat "$home/state/.wake-queue")
   assert_contains "$wake" "desk-voice" "wake names desk-voice"
+  assert_contains "$(cat "$NOTIFY_LOG")" "Desk voice transcript ready" \
+    "the delivery notification reached the stand-in, never the real one"
   drained=$(FM_HOME="$home" FM_STATE_OVERRIDE="$home/state" "$DESK" drain) \
     || fail "drain failed"
   assert_contains "$drained" "Merge the finances PR when green" "drain prints transcript"

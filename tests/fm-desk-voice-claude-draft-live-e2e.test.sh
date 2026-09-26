@@ -65,8 +65,13 @@ sleep 1
 [ "$(composer_state)" = pending ] || fail "Claude $VERSION's typed draft did not read pending"
 
 t display-message -p -t fm:0.0 '#{pane_pid}' > "$LAB/home/state/.lock"
+# A send that falls back to the mailbox raises a macOS notification; a
+# stand-in osascript keeps it off the captain's screen for a lab message.
+mkdir -p "$LAB/notify-bin"
+printf '#!/bin/sh\nexit 0\n' > "$LAB/notify-bin/osascript"
+chmod +x "$LAB/notify-bin/osascript"
 out=$(env -u TMUX -u TMUX_PANE -u HERDR_ENV -u HERDR_PANE_ID -u HERDR_SOCKET_PATH \
-  FM_HOME="$LAB/home" FM_STATE_OVERRIDE="$LAB/home/state" \
+  PATH="$LAB/notify-bin:$PATH" FM_HOME="$LAB/home" FM_STATE_OVERRIDE="$LAB/home/state" \
   "$DESK" send --source live-test 'Reply with only the word OSPREY') \
   || fail "send failed: $out"
 case "$out" in
