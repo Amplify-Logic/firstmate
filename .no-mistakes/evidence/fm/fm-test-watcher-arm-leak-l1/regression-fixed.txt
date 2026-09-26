@@ -1,0 +1,5 @@
+### Same test with the real fm_test_run_reaped (fixed)
+ok - OpenCode fixture arm children do not outlive the plugin process
+exit=0
+### leftover fixture arm processes right after the test:
+none

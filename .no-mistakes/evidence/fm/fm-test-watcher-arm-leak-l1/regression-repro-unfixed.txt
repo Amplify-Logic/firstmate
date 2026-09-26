@@ -1,0 +1,5 @@
+### Reproduction: test_opencode_arm_children_do_not_outlive_the_plugin_process with fm_test_run_reaped replaced by a plain pass-through (pre-fix behavior)
+not ok - fixture arm processes outlived the plugin process: successor=98689 survivors=[98689]
+exit=1
+### leftover fixture arm processes right after the test:
+none

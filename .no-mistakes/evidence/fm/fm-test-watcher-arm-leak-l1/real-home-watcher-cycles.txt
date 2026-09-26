@@ -1,0 +1,6 @@
+Real home watcher cycle exits during the test window (16:11:25-16:15:36, epoch 1790428285-1790428536), read-only from the live home's state/.watch-cycle-exits.log:
+arm_pid=48371	watcher_pid=29058	origin=attached	started_at=1790428194	ended_at=1790428243	exit_code=unknown	signal=unknown	reason=attached-delivered-wake
+arm_pid=5794	watcher_pid=5880	origin=started	started_at=1790428243	ended_at=1790428371	exit_code=0	signal=none	reason=actionable-signal
+arm_pid=43832	watcher_pid=5880	origin=attached	started_at=1790428289	ended_at=1790428382	exit_code=unknown	signal=unknown	reason=attached-delivered-wake
+arm_pid=9992	watcher_pid=10060	origin=started	started_at=1790428382	ended_at=1790428514	exit_code=0	signal=none	reason=actionable-signal
+arm_pid=28260	watcher_pid=10060	origin=attached	started_at=1790428407	ended_at=1790428525	exit_code=unknown	signal=unknown	reason=attached-delivered-wake
