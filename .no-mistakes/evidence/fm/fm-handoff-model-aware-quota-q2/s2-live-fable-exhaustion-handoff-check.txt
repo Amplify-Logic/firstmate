@@ -1,0 +1,5 @@
+handoff: threshold crossed profile=claude-fable min_remaining=10 threshold=15
+lock released: stale holder pid 11321
+fm-primary-handoff: handed off primary claude-fable -> claude-opus (reason=quota:min_remaining=10 trigger=quota)
+handed_off: claude-fable -> claude-opus
+rc=0

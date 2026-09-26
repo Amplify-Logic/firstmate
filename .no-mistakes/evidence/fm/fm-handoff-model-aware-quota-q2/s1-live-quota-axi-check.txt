@@ -1,0 +1,13 @@
+## live quota-axi claude windows
+{"id":"five_hour","kind":"session","percentRemaining":65}
+{"id":"seven_day","kind":"weekly","percentRemaining":62}
+{"id":"model:fable","kind":"model","percentRemaining":93}
+## lib min-remaining against live quota-axi (no JSON seam)
+claude-fable -> 62
+claude-opus -> 62
+## check against live quota-axi, active=claude-fable
+handoff: ok profile=claude-fable min_remaining=62 context_used=na quota_threshold=15 context_threshold=disabled
+rc=0
+## check against live quota-axi, active=claude-opus
+handoff: ok profile=claude-opus min_remaining=62 context_used=na quota_threshold=15 context_threshold=disabled
+rc=0

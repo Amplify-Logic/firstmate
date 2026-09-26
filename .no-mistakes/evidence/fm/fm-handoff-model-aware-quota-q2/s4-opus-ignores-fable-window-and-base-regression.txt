@@ -1,0 +1,11 @@
+## active=claude-opus after handoff, same Fable-exhausted snapshot, past cooldown
+handoff: ok profile=claude-opus min_remaining=62 context_used=7 quota_threshold=15 context_threshold=disabled
+rc=0
+## lock after (incoming opus has not taken lock; outgoing gone)
+lock: free
+## base commit 7cbc611b lib, same Fable-exhausted snapshot
+base claude-fable -> 62
+base claude-opus -> 62
+## target commit lib, same snapshot
+head claude-fable -> 10
+head claude-opus -> 62

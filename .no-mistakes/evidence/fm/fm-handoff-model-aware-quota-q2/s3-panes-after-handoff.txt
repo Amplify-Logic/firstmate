@@ -1,0 +1,42 @@
+## outgoing window (was claude-fable)
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── FIRSTMATE ─
+❯ Lab test only: run exactly bin/fm-lock.sh again and reply with its output
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⚓ Fable 5.1·xhigh │ 🧠7% ⚡36% │ 🚢0 🧪0 ⏸0 ⚠0 🪦0 📋0 │ 👁 NO-WATCH -- │ $1.50 │ 💤--
+  ⏵⏵ bypass permissions on (shift+tab to cycle) · ← 2 agents
+Resume this session with:
+claude --resume "FIRSTMATE"
+EXITED rc=143
+## incoming window launched by handoff
+fm-primary: launching model claude-opus-5-5 at effort xhigh
+ ▐▛███▛█   Claude Code v2.1.283
+▝▜██████▀  Opus 5.5 with xhigh effort · Claude Max
+ ▝▝   ▝▝   ~/.no-mistakes/worktrees/f569cc43ac96/01M3F01PJZTBFKT63ENZ4FE2KN
+  ⎿  SessionStart:startup hook error
+  ⎿  Failed with non-blocking status code: /bin/sh: ${CLAUDE_PLUGIN_ROOT}/hooks/run-hook.cmd: No such file or directory
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── FIRSTMATE ─
+❯ Try "refactor fm-wake-queue.test.sh"
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⚓ Opus 5.5·xhigh │ 🧠-- ⚡-- │ 🚢0 🧪0 ⏸0 ⚠0 🪦0 📋0 │ 👁 NO-WATCH -- │ $0.00 │ 💤--
+  ⏵⏵ bypass permissions on (shift+tab to cycle) · ← 2 agents
+## state/.primary-active
+schema=fm-primary-active.v1
+profile=claude-opus
+pid=
+started_at=1790431449
+updated_at=1790431449
+## state/.primary-handoff
+schema=fm-primary-handoff.v1
+phase=complete
+from=claude-fable
+to=claude-opus
+reason=quota:min_remaining=10
+trigger=quota
+token=1790431446-11321
+outgoing_pid=11321
+incoming_pid=0
+started_at=1790431446
+updated_at=1790431449
+error=
+completed_at=1790431449
+cooldown_until=1790431749
