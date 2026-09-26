@@ -1,0 +1,18 @@
+=== full floater cycle during a reply: new echo-cancelled capture, then send ===
+CAPTURE_STARTED new
+FILE_FORMAT sampleRate=16000.0 channels=1 common=16bit frames=49519 seconds=3.0949375
+RMS_DBFS -120.0
+afplay still playing after capture: yes
+sent: tmux %0
+afplay still playing after send: yes
+afplay exit=0 elapsed=11.94s (reply length 10.4s)
+--- lab primary pane ---
+❯ Lab check: reply with exactly the word ACK and nothing else.
+⏺ ACK
+✻ Sautéed for 5s · done 12:24 PM
+❯ Lab check two: reply with exactly the word SECOND and nothing else.
+⏺ SECOND
+✻ Sautéed for 2s · done 12:25 PM
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ Lab check three: reply with exactly the word THIRD and nothing else.
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────

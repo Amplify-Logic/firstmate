@@ -1,0 +1,5 @@
+=== reply starts playing on the speakers (afplay, 10.4s) ===
+--- captain sends a desk-voice message mid-reply ---
+sent: tmux %0
+afplay still playing after send: yes
+afplay exit=0 elapsed=12.04s (reply length 10.4s)

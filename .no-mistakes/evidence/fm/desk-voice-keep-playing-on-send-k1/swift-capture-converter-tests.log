@@ -1,0 +1,12 @@
+Test Case '-[DeskFloaterTests.CaptureConverterTests testOnlyTheProcessedVoiceChannelIsKept]' started.
+Test Case '-[DeskFloaterTests.CaptureConverterTests testOnlyTheProcessedVoiceChannelIsKept]' passed (0.092 seconds).
+Test Suite 'CaptureConverterTests' passed at 2026-09-26 12:23:16.744.
+	 Executed 3 tests, with 0 failures (0 unexpected) in 0.221 (0.222) seconds
+Test Suite 'DeskFloaterPackageTests.xctest' passed at 2026-09-26 12:23:16.744.
+	 Executed 3 tests, with 0 failures (0 unexpected) in 0.221 (0.222) seconds
+Test Suite 'Selected tests' passed at 2026-09-26 12:23:16.744.
+	 Executed 3 tests, with 0 failures (0 unexpected) in 0.221 (0.223) seconds
+◇ Test run started.
+↳ Testing Library Version: 1501
+↳ Target Platform: arm64e-apple-macos14.0
+✔ Test run with 0 tests in 0 suites passed after 0.001 seconds.

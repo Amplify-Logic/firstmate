@@ -1,0 +1,20 @@
+=== reply playback with new VoiceCapture recording in the middle ===
+afplay pid 69425 alive before capture: yes
+CAPTURE_STARTED new
+FILE_FORMAT sampleRate=16000.0 channels=1 common=16bit frames=63960 seconds=3.9975
+RMS_DBFS -120.0
+afplay alive right after capture stopped: yes
+afplay exit=0 elapsed=12.60s
+
+=== same, with the old AVAudioRecorder (base behaviour) ===
+afplay pid 87938 alive before capture: yes
+CAPTURE_STARTED old
+FILE_FORMAT sampleRate=16000.0 channels=1 common=16bit frames=65530 seconds=4.095625
+RMS_DBFS -120.0
+afplay alive right after capture stopped: yes
+afplay exit=0 elapsed=11.67s
+
+=== room baseline, new capture, no playback ===
+CAPTURE_STARTED new
+FILE_FORMAT sampleRate=16000.0 channels=1 common=16bit frames=63940 seconds=3.99625
+RMS_DBFS -120.0
