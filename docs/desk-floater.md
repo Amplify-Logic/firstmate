@@ -10,7 +10,7 @@ Exactly one fleet brain remains: the primary already running in this home.
 
 ## What you get
 
-- Always-on-top, draggable floating control (SwiftUI): a small talk button with five smaller controls beside it, and a dropdown arrow for recent replies.
+- Always-on-top, draggable floating control (SwiftUI): a small talk button with four smaller controls beside it, and a dropdown arrow for recent replies.
 - Push-to-talk (hold or click-to-toggle), or hold Right Option anywhere. Not always-listening. No wake word.
 - Speech-to-text via Deepgram (`bin/fm-deepgram-stt.sh`).
 - Transcripts typed straight into the primary Firstmate chat and submitted, with a durable mailbox under the home (`state/desk-voice/inbox/`) as the fallback.
