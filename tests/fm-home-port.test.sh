@@ -354,6 +354,128 @@ test_verify_completes_for_every_verified_harness() {
   pass "verify completes for every FM_PORT_VERIFIED_HARNESSES name"
 }
 
+seed_charters() {
+  local home=$1
+  mkdir -p "$home/data/goals"
+  printf '# Alpha\n\n## Port of arrival\nsource alpha\n' > "$home/data/goals/alpha.md"
+  printf '# Beta\n\n## Port of arrival\nsource beta\n' > "$home/data/goals/beta.md"
+  printf 'scratch note\n' > "$home/data/goals/notes.txt"
+}
+
+test_goal_charters_travel_and_import_keeps_local_ones() {
+  local home="$TMP_ROOT/charter-home"
+  local stage="$TMP_ROOT/charter-stage"
+  local dest_home="$TMP_ROOT/charter-dest-home"
+  local out
+  seed_home "$home"
+  seed_charters "$home"
+  mkdir -p "$stage" "$dest_home/data/goals"
+  printf 'destination alpha\n' > "$dest_home/data/goals/alpha.md"
+  printf 'destination only\n' > "$dest_home/data/goals/gamma.md"
+
+  out=$("$PORT" export --home "$home" --dest "$stage" 2>&1) || fail "export with charters failed: $out"
+  assert_contains "$out" 'PORTABLE: data/goals/alpha.md' "export missed the alpha charter"
+  assert_contains "$out" 'PORTABLE: data/goals/beta.md' "export missed the beta charter"
+  assert_present "$stage/data/goals/alpha.md" "alpha charter not exported"
+  assert_present "$stage/data/goals/beta.md" "beta charter not exported"
+  assert_absent "$stage/data/goals/notes.txt" "a non-charter file in data/goals/ must not travel"
+
+  out=$("$PORT" import --source "$stage" --home "$dest_home" 2>&1) || fail "import with charters failed: $out"
+  assert_contains "$out" 'IMPORTED: data/goals/beta.md' "import missed the beta charter"
+  assert_equals "$(cat "$home/data/goals/alpha.md")" "$(cat "$dest_home/data/goals/alpha.md")" \
+    "import must replace the destination copy of a charter that travelled"
+  assert_equals 'destination only' "$(cat "$dest_home/data/goals/gamma.md")" \
+    "import must keep a destination-only charter"
+  pass "goal charters travel through export and import without deleting local charters"
+}
+
+test_export_refuses_symlinked_charter() {
+  local home="$TMP_ROOT/charter-symlink-home"
+  local dest="$TMP_ROOT/charter-symlink-dest"
+  local out rc=0
+  seed_home "$home"
+  seed_charters "$home"
+  printf 'outside the home\n' > "$TMP_ROOT/charter-symlink-target"
+  ln -s "$TMP_ROOT/charter-symlink-target" "$home/data/goals/linked.md"
+  mkdir -p "$dest"
+
+  out=$("$PORT" export --home "$home" --dest "$dest" 2>&1) || rc=$?
+  [ "$rc" -ne 0 ] || fail "export must stop on a symlinked charter, got: $out"
+  assert_contains "$out" 'not a regular file' "symlinked charter refusal must say why"
+  assert_absent "$dest/data/goals/linked.md" "a symlinked charter must not be exported"
+  pass "export stops on a symlinked charter instead of following it"
+}
+
+test_import_refuses_symlinked_charter_before_writing() {
+  local stage="$TMP_ROOT/charter-bad-stage"
+  local dest_home="$TMP_ROOT/charter-bad-dest"
+  local out rc=0
+  mkdir -p "$stage/data/goals" "$dest_home"
+  printf '# Captain\n- staged\n' > "$stage/data/captain.md"
+  printf 'outside the bundle\n' > "$TMP_ROOT/charter-bad-target"
+  ln -s "$TMP_ROOT/charter-bad-target" "$stage/data/goals/linked.md"
+
+  out=$("$PORT" import --source "$stage" --home "$dest_home" 2>&1) || rc=$?
+  [ "$rc" -ne 0 ] || fail "import must stop on a symlinked charter, got: $out"
+  assert_absent "$dest_home/data/goals/linked.md" "a symlinked charter must not be imported"
+  assert_absent "$dest_home/data/captain.md" "a refused import must leave the home untouched"
+  pass "import stops on a symlinked charter before writing into the home"
+}
+
+# write_data_manifest <file> <data-line>: copy the live manifest with its
+# goal-charter data entry replaced, so a per-file or invalid entry is exercised
+# without touching the tracked manifest.
+write_data_manifest() {
+  local file=$1 line=$2
+  DATA_LINE="$line" awk '$0 == "data = data/goals/" { print ENVIRON["DATA_LINE"]; next } { print }' \
+    "$ROOT/fork-surface.conf" > "$file" || fail "could not write fixture manifest"
+  grep -qxF "$line" "$file" || fail "fixture manifest did not take data line: $line"
+}
+
+test_per_file_entry_carries_only_the_chosen_charter() {
+  local home="$TMP_ROOT/charter-chosen-home"
+  local dest="$TMP_ROOT/charter-chosen-dest"
+  local manifest="$TMP_ROOT/charter-chosen.conf"
+  local out
+  seed_home "$home"
+  seed_charters "$home"
+  write_data_manifest "$manifest" 'data = data/goals/alpha.md'
+  mkdir -p "$dest"
+
+  out=$(FM_FORK_SURFACE_MANIFEST="$manifest" "$PORT" export --home "$home" --dest "$dest" 2>&1) \
+    || fail "export with a per-file charter entry failed: $out"
+  assert_present "$dest/data/goals/alpha.md" "the chosen charter must travel"
+  assert_absent "$dest/data/goals/beta.md" "an unchosen charter must stay behind"
+  pass "a per-file data entry carries only the chosen charter"
+}
+
+test_manifest_data_entry_outside_goals_is_refused() {
+  local home="$TMP_ROOT/charter-bad-entry-home"
+  local dest="$TMP_ROOT/charter-bad-entry-dest"
+  local manifest="$TMP_ROOT/charter-bad-entry.conf"
+  local out rc=0 entry
+  seed_home "$home"
+  mkdir -p "$home/data/accounts" "$dest"
+  printf 'account home\n' > "$home/data/accounts/marker.md"
+  write_data_manifest "$manifest" 'data = data/accounts/'
+
+  out=$(FM_FORK_SURFACE_MANIFEST="$manifest" "$PORT" export --home "$home" --dest "$dest" 2>&1) || rc=$?
+  [ "$rc" -ne 0 ] || fail "export must refuse a non-charter data entry, got: $out"
+  assert_contains "$out" 'data/accounts/' "refusal must name the declared entry"
+  assert_absent "$dest/data/accounts" "a non-charter data entry must not travel"
+
+  for entry in data/goals/ data/goals/alpha.md data/goals/my-project_2.md; do
+    "$PORT" portable-data-entry "$entry" || fail "portable-data-entry must accept $entry"
+  done
+  for entry in data/goals data/goals/sub/x.md data/goals/.hidden.md data/goals/alpha.txt \
+    data/accounts/ data/captain.md data/goals/../projects.md; do
+    if "$PORT" portable-data-entry "$entry"; then
+      fail "portable-data-entry must reject $entry"
+    fi
+  done
+  pass "only goal-charter directory and file entries are portable data entries"
+}
+
 test_export_copies_portable_only
 test_export_skips_absent_upstream_watch
 test_export_refuses_explicit_env_include
@@ -361,6 +483,11 @@ test_scan_detects_embedded_secret
 test_scan_detects_secret_without_leading_space
 test_export_aborts_when_portable_file_contains_secret
 test_import_round_trip_and_refuses_contaminated_source
+test_goal_charters_travel_and_import_keeps_local_ones
+test_export_refuses_symlinked_charter
+test_import_refuses_symlinked_charter_before_writing
+test_per_file_entry_carries_only_the_chosen_charter
+test_manifest_data_entry_outside_goals_is_refused
 test_help_mentions_secrets_policy
 test_scan_warn_machine_local_is_advisory
 test_scan_warn_machine_local_does_not_mask_secrets
