@@ -1,0 +1,50 @@
+== target: --list-scheduled --lane portable-parallel-1
+tests/fm-lint.test.sh
+tests/fm-arm-pretool-check.test.sh
+tests/fm-backend-herdr.test.sh
+tests/fm-x-mode.test.sh
+tests/fm-herdr-lab.test.sh
+tests/fm-crew-state.test.sh
+tests/fm-composer-lib.test.sh
+tests/fm-brief.test.sh
+tests/fm-pi-primary-types.test.sh
+tests/fm-spawn-batch.test.sh
+tests/fm-send-settle.test.sh
+tests/fm-ensure-agents-md.test.sh
+tests/fm-transition-lib.test.sh
+== target: --list-scheduled --lane portable-parallel-2
+tests/fm-pr-merge.test.sh
+tests/fm-test-run.test.sh
+tests/fm-cd-pretool-check.test.sh
+tests/fm-grok-harness.test.sh
+tests/fm-send-popup-settle.test.sh
+tests/fm-send-strict.test.sh
+tests/fm-review-diff.test.sh
+tests/fm-composer-ghost.test.sh
+tests/fm-tmux-submit-busy.test.sh
+tests/fm-supervision-instructions.test.sh
+== target: which lane holds captain-hold-lifecycle
+  portable-serial
+  portable-serial-2of5
+== target: union of all lanes vs --all
+  union=     526 unique=     283 all=     283
+  identical
+== base --list --all vs target --list --all
+  identical script set
+== target: fm-test-isolation-proof.sh --list-exclusions (captain-hold row)
+fm-captain-hold-lifecycle.test.sh	isolated in the 2026-08-20 proof, but its CI duration alone would fill most of a parallel job cap; serial CI shards carry it
+== target: isolation-proof --list count
+      23
+== base lane 1 membership scored with refreshed hints (ms)
+  tests/fm-lint.test.sh 227743
+  tests/fm-pr-merge.test.sh 185115
+  tests/fm-test-run.test.sh 150795
+  tests/fm-cd-pretool-check.test.sh 18749
+  tests/fm-pi-primary-types.test.sh 4604
+  tests/fm-grok-harness.test.sh 10801
+  tests/fm-composer-lib.test.sh 6688
+  tests/fm-review-diff.test.sh 4268
+  tests/fm-tmux-submit-busy.test.sh 2608
+  tests/fm-composer-ghost.test.sh 3502
+  tests/fm-brief.test.sh 6667
+  SUM 621540
