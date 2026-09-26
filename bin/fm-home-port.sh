@@ -169,6 +169,8 @@ data_entry_files() {
       done
       ;;
     *)
+      dir="$root/${rel%/*}"
+      [ -L "$dir" ] && die "portable data directory is a symlink: $dir"
       path="$root/$rel"
       [ -e "$path" ] || [ -L "$path" ] || return 0
       [ ! -L "$path" ] && [ -f "$path" ] \
@@ -187,6 +189,17 @@ portable_data_files() {
     [ -z "$files" ] || all="$all$files"$'\n'
   done
   [ -z "$all" ] || printf '%s' "$all" | LC_ALL=C sort -u
+}
+
+# Remove every charter file the declared data entries select under ROOT, so a
+# push stops carrying a charter the source no longer selects.
+prune_portable_data() {
+  local root=$1 files rel
+  files=$(portable_data_files "$root") || exit 1
+  while IFS= read -r rel; do
+    [ -n "$rel" ] || continue
+    rm -f -- "$root/$rel"
+  done <<<"$files"
 }
 
 load_manifest_portable_data_entries() {
@@ -853,6 +866,7 @@ cmd_push() {
   fi
 
   write_portable_scaffold "$repo"
+  prune_portable_data "$repo"
   copy_portable_tree "$home" "$repo"
   scan_path "$repo" || die "push aborted: secret scan failed before writing the bundle"
 

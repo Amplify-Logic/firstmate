@@ -449,6 +449,65 @@ test_per_file_entry_carries_only_the_chosen_charter() {
   pass "a per-file data entry carries only the chosen charter"
 }
 
+test_per_file_entry_refuses_symlinked_goals_dir() {
+  local home="$TMP_ROOT/charter-linkdir-home"
+  local dest="$TMP_ROOT/charter-linkdir-dest"
+  local manifest="$TMP_ROOT/charter-linkdir.conf"
+  local out rc=0
+  seed_home "$home"
+  mkdir -p "$TMP_ROOT/charter-linkdir-target" "$dest"
+  printf 'outside the home\n' > "$TMP_ROOT/charter-linkdir-target/alpha.md"
+  ln -s "$TMP_ROOT/charter-linkdir-target" "$home/data/goals"
+  write_data_manifest "$manifest" 'data = data/goals/alpha.md'
+
+  out=$(FM_FORK_SURFACE_MANIFEST="$manifest" "$PORT" export --home "$home" --dest "$dest" 2>&1) || rc=$?
+  [ "$rc" -ne 0 ] || fail "export must stop on a symlinked data/goals with a per-file entry, got: $out"
+  assert_contains "$out" 'is a symlink' "symlinked data/goals refusal must say why"
+  assert_absent "$dest/data/goals/alpha.md" "a charter behind a symlinked data/goals must not be exported"
+  pass "a per-file data entry refuses a symlinked data/goals directory"
+}
+
+test_push_prunes_charters_no_longer_selected() {
+  local home="$TMP_ROOT/charter-push-home"
+  local bare="$TMP_ROOT/charter-push-remote.git"
+  local fakebin out files
+  seed_home "$home"
+  seed_charters "$home"
+  git init -q --bare "$bare" || fail "could not create bare transport"
+  fakebin=$(fm_fakebin "$TMP_ROOT/charter-push")
+  cat > "$fakebin/gh" <<'SH'
+#!/usr/bin/env bash
+case "$*" in
+  *--jq\ .visibility*) printf 'private\n' ;;
+  *--jq\ .private*) printf 'true\n' ;;
+esac
+SH
+  chmod +x "$fakebin/gh"
+
+  push_charters() {
+    PATH="$fakebin:$PATH" TMPDIR="$TMP_ROOT" GIT_CONFIG_COUNT=1 \
+      GIT_CONFIG_KEY_0="url.file://$bare.insteadOf" \
+      GIT_CONFIG_VALUE_0=https://github.com/captain/portable.git \
+      "$PORT" push --remote captain/portable --home "$home" 2>&1
+  }
+
+  out=$(push_charters) || fail "first push failed: $out"
+  files=$(git -C "$bare" ls-tree -r --name-only main)
+  assert_contains "$files" 'data/goals/alpha.md' "first push must carry alpha"
+  assert_contains "$files" 'data/goals/beta.md' "first push must carry beta"
+
+  rm "$home/data/goals/beta.md"
+  out=$(push_charters) || fail "second push failed: $out"
+  files=$(git -C "$bare" ls-tree -r --name-only main)
+  assert_contains "$files" 'data/goals/alpha.md' "second push must keep alpha"
+  case "$files" in
+    *data/goals/beta.md*) fail "a charter no longer selected must leave the transport: $files" ;;
+  esac
+  git -C "$bare" cat-file -e main~1:data/goals/beta.md \
+    || fail "the removed charter must stay recoverable from transport history"
+  pass "push removes a charter the source no longer selects from the transport"
+}
+
 test_manifest_data_entry_outside_goals_is_refused() {
   local home="$TMP_ROOT/charter-bad-entry-home"
   local dest="$TMP_ROOT/charter-bad-entry-dest"
@@ -487,6 +546,8 @@ test_goal_charters_travel_and_import_keeps_local_ones
 test_export_refuses_symlinked_charter
 test_import_refuses_symlinked_charter_before_writing
 test_per_file_entry_carries_only_the_chosen_charter
+test_per_file_entry_refuses_symlinked_goals_dir
+test_push_prunes_charters_no_longer_selected
 test_manifest_data_entry_outside_goals_is_refused
 test_help_mentions_secrets_policy
 test_scan_warn_machine_local_is_advisory
