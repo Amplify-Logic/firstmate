@@ -427,6 +427,20 @@ update_task() {  # <task-id>
   # worker is spawned with and the tab this refresh renames it to cannot drift.
   title=$("$SCRIPT_DIR/fm-visible-title.sh" "$outcome" "$icon $state")
   detail="$runtime · $branch"
+  # A worker pane is never the primary, so drop any role the primary launcher
+  # marked onto it. Herdr keeps each source's fields until that source clears
+  # them, so without this a worker that once ran bin/fm-primary.sh in its own
+  # pane would keep the FIRSTMATE role token beside its worker label. The
+  # label record below cannot see that marker, so this clear runs even on a
+  # pass that skips an unchanged label: a marker landing after the label was
+  # cached is gone by the next ordinary pass, not only after a --republish.
+  herdr_call "$session" pane report-metadata "$pane" \
+    --source "$PRIMARY_SOURCE" \
+    --clear-title \
+    --clear-display-agent \
+    --clear-state-labels \
+    --clear-token fm_role \
+    --clear-token fm_state >/dev/null 2>&1 || published=0
   # Everything the tab and the pane display is derived from these three
   # values, so an identical triple means the backend already shows this label
   # and the two round trips below would change nothing.
@@ -437,17 +451,6 @@ update_task() {  # <task-id>
     return 0
   fi
   herdr_call "$session" tab rename "$tab" "$title" >/dev/null 2>&1 || published=0
-  # A worker pane is never the primary, so drop any role the primary launcher
-  # marked onto it. Herdr keeps each source's fields until that source clears
-  # them, so without this a worker that once ran bin/fm-primary.sh in its own
-  # pane would keep the FIRSTMATE role token beside its worker label.
-  herdr_call "$session" pane report-metadata "$pane" \
-    --source "$PRIMARY_SOURCE" \
-    --clear-title \
-    --clear-display-agent \
-    --clear-state-labels \
-    --clear-token fm_role \
-    --clear-token fm_state >/dev/null 2>&1 || published=0
   herdr_call "$session" pane report-metadata "$pane" \
     --source "$SOURCE" \
     --title "$title" \

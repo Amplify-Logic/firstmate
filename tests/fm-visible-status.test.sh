@@ -171,6 +171,21 @@ test_worker_pane_sheds_a_primary_role() {
   pass 'visible status: publishing a worker pane clears any primary role left on it'
 }
 
+# The primary marker can land on a worker pane after that worker's label was
+# published and cached. The ordinary watcher pass skips the unchanged label, but
+# must still clear the marker rather than leave FIRSTMATE until a --republish.
+test_cached_worker_label_still_sheds_a_primary_role() {
+  local clear
+  run_all --republish
+  run_all
+  clear='pane report-metadata w1:p1 --source firstmate-primary-visible-v1 --clear-title --clear-display-agent --clear-state-labels --clear-token fm_role --clear-token fm_state'
+  assert_contains "$(cat "$LOG")" "$clear" \
+    'an ordinary pass over a cached worker label left a later primary marker in place'
+  assert_not_contains "$(cat "$LOG")" 'tab rename t1 ' \
+    'an ordinary pass republished a worker label that had not changed'
+  pass 'visible status: an ordinary pass clears a primary role from a cached worker pane'
+}
+
 test_secondmate_keeps_legacy_presentation() {
   local out
   run_all --republish
@@ -299,6 +314,7 @@ EOF
 test_tasks_projects_axes_and_states
 test_legacy_refresh_and_primary_boundary
 test_worker_pane_sheds_a_primary_role
+test_cached_worker_label_still_sheds_a_primary_role
 test_secondmate_keeps_legacy_presentation
 test_incapable_build_projects_nothing
 test_cleanup_keeps_stable_target_fallback
@@ -311,7 +327,7 @@ test_cursor_busy_pane_keeps_meta_model
 # The captain's fleet reached 24 concurrent task records with a dozen live
 # panes, where the refresh ran for over five minutes and starved the watcher's
 # liveness beacon. These cases pin the four properties that bound it: a pass
-# reads and renames each thing once, an unchanged label costs no backend call,
+# reads and renames each thing once, an unchanged label is not republished,
 # a slow backend cannot outlast the pass deadline, and two passes never run at
 # once.
 
@@ -394,8 +410,10 @@ test_unchanged_labels_cost_no_backend_call() {
   run_big --republish || fail 'the priming pass failed'
   : > "$BIG_LOG"
   run_big || fail 'the unchanged pass failed'
-  [ ! -s "$BIG_LOG" ] \
-    || fail "a pass that changed no label still made backend calls: $(head -3 "$BIG_LOG")"
+  # Only the per-pane primary-role clear runs; it is what sheds a marker the
+  # cache cannot see.
+  ! grep -v -- '--source firstmate-primary-visible-v1 ' "$BIG_LOG" | grep -q . \
+    || fail "a pass that changed no label still republished: $(grep -v -- '--source firstmate-primary-visible-v1 ' "$BIG_LOG" | head -3)"
   # A single changed state republishes that task and its project, nothing else.
   before=$(count_calls 'tab rename')
   [ "$before" -eq 0 ] || fail 'the unchanged pass was not silent'
@@ -410,7 +428,7 @@ test_unchanged_labels_cost_no_backend_call() {
     || fail 'only the changed task project workspace should have been renamed'
   printf 'big-4=working\n' >> "$BIG_STATES"
   run_big >/dev/null 2>&1 || true
-  pass 'visible status: a label that did not change costs no backend call'
+  pass 'visible status: a label that did not change is not republished'
 }
 
 test_pass_deadline_bounds_a_slow_backend() {
