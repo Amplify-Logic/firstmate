@@ -1,0 +1,101 @@
+herdr herdr 0.7.4, claude 2.1.283 (Claude Code), session fm-lab-desk-draft-77074-14649 pane w1:p1
+lock holder claude pid 79437
+== H0: empty box
+  send -> sent: herdr fm-lab-desk-draft-77074-14649:w1:p1
+  answered=1
+== H1: after a reply (suggested prompt if Claude offers one)
+  state before: empty
+  [screen H1-before]
+    | ─────────────────────────────────────────────────────
+    | ❯
+    | ─────────────────────────────────────────────────────
+    |   ⚠ Transcript saving is off — inherited CLAUDE_CO…
+    |   ⏸ manual mode on · ? for shortcuts
+  send -> sent: herdr fm-lab-desk-draft-77074-14649:w1:p1
+  answered=1
+  [screen H1-after]
+    | ─────────────────────────────────────────────────────
+    | ❯
+    | ─────────────────────────────────────────────────────
+    |   ⚠ Transcript saving is off — inherited CLAUDE_CO…
+    |   ⏸ manual mode on · ? for shortcuts
+== H2: typed draft in the box
+  state before: pending
+  [screen H2-before]
+    | ─────────────────────────────────────────────────────
+    | ❯ KESTREL draft the captain has not sent
+    | ─────────────────────────────────────────────────────
+    |   ⚠ Transcript saving is off — inherited CLAUDE_CO…
+    |   ⏸ manual mode on
+  send -> sent: herdr fm-lab-desk-draft-77074-14649:w1:p1
+  answered=1 state after: pending
+  [screen H2-after]
+    | ─────────────────────────────────────────────────────
+    | ❯ KESTREL draft the captain has not sent
+    | ─────────────────────────────────────────────────────
+    |   ⚠ Transcript saving is off — inherited CLAUDE_CO…
+    |   ⏸ manual mode on                   Draft restored
+  draft occurrences=1 draft-in-submitted=0
+== H3: footer already shows a stash, plus a new draft
+  state before: pending
+  [screen H3-before]
+    | ❯ WREN second draft
+    | ─────────────────────────────────────────────────────
+    |   ⚠ Transcript saving is off — inherited CLAUDE_CO…
+    |   ⏸ manual mode on
+    |            Ctrl+Y to paste deleted text · › stashed
+  send -> mailbox: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.PSnZK4/state/desk-voice/inbox/20260926T191624Z-7bbe63d5.json
+fm-desk-voice: the primary's chat pane refused the text; saving it to the mailbox instead
+  [screen H3-after]
+    | ─────────────────────────────────────────────────────
+    | ❯ WREN second draft
+    | ─────────────────────────────────────────────────────
+    |   ⚠ Transcript saving is off — inherited CLAUDE_CO…
+    |   ⏸ manual mode on       Draft restored · › stashed
+  mailbox file holds: {"schema": "fm-desk-voice-transcript.v1", "id": "7bbe63d5", "created_at": "20260926T191624Z", "source": "herdr-live-driver", "transcript": "Reply with only the word PLOVER"}
+  box: WREN second draft
+  [screen H3-unstash]
+    | ─────────────────────────────────────────────────────
+    | ❯ FALCON stash the captain set aside
+    | ─────────────────────────────────────────────────────
+    |   ⚠ Transcript saving is off — inherited CLAUDE_CO…
+    |   ⏸ manual mode on     Ctrl+Y to paste deleted text
+== H4: long message past a typed draft
+  message length 5835; state before: pending
+  [screen H4-before]
+    | ─────────────────────────────────────────────────────
+    | ❯ SWIFT draft kept aside
+    | ─────────────────────────────────────────────────────
+    |   ⚠ Transcript saving is off — inherited CLAUDE_CO…
+    |   ⏸ manual mode on     Ctrl+Y to paste deleted text
+  send -> mailbox: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.PSnZK4/state/desk-voice/inbox/20260926T191644Z-e48db35d.json
+fm-desk-voice: the primary's chat pane refused the text; saving it to the mailbox instead
+  [screen H4-after]
+    | ❯ SWIFT draft kept aside
+    | ─────────────────────────────────────────────────────
+    |   ⚠ Transcript saving is off — inherited CLAUDE_CO…
+    |   ⏸ manual mode on
+  answered=0 box: SWIFT draft kept aside
+== H5: medium message past a typed draft
+  message length 851; state before: pending
+  [screen H5-before]
+    | ❯ SWIFT draft kept aside
+    | ─────────────────────────────────────────────────────
+    |   ⚠ Transcript saving is off — inherited CLAUDE_CO…
+    |   ⏸ manual mode on     Ctrl+Y to paste deleted text
+  send -> sent: herdr fm-lab-desk-draft-77074-14649:w1:p1
+  [screen H5-after]
+    | ─────────────────────────────────────────────────────
+    | ❯ SWIFT draft kept aside
+    | ─────────────────────────────────────────────────────
+    |   ⚠ Transcript saving is off — inherited CLAUDE_CO…
+    |   paste again to expand              Draft restored
+  answered=1 box: SWIFT draft kept aside
+== summary
+H0 pass
+H1 pass
+H2 pass
+H3 pass
+H4 pass (mailbox, draft restored)
+H5 pass (sent+submitted, draft back)
+teardown fm-lab-desk-draft-77074-14649 ok

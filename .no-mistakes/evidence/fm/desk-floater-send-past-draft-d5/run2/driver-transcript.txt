@@ -1,0 +1,110 @@
+claude 2.1.283 (Claude Code), lab /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.LdPpvX, lock pid 21083
+== A: typed draft in the Claude box
+  state before: pending
+  [screen A-before] box/footer:
+    |   ⎿  Failed with non-blocking status code: /bin/sh: ${CLAUDE_PLUGIN_ROOT}/hooks/run-hook.cmd: No such file or directory
+    | ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+    | ❯ KESTREL draft the captain has not sent
+    | ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+    |   ⏸ manual mode on
+    |                   tmux focus-events off · add 'set -g focus-events on' to ~/.tmux.conf and reattach for focus tracking
+  fm-desk-voice send -> sent: tmux %0
+  answered=1 state after: pending
+  [screen A-after] box/footer:
+    | ⏺ OSPREY
+    | ✻ Cooked for 1s · done 9:29 PM
+    | ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+    | ❯ KESTREL draft the captain has not sent
+    | ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+    |   ⏸ manual mode on                                                                                      Draft restored
+RESULT A: pass
+== B: box shows only Claude's dim suggestion
+  state before: empty
+  [screen B-before] box/footer:
+    | ⏺ OSPREY
+    | ✻ Cooked for 1s · done 9:29 PM
+    | ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+    | ❯ 
+    | ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+    |   ⏸ manual mode on · ? for shortcuts · ← 2 agents                                         Ctrl+Y to paste deleted text
+  prompt row (ANSI via cat -v): ^[[39m�M-^]� 
+  fm-desk-voice send -> sent: tmux %0
+  [screen B-after] box/footer:
+    | ⏺ HERON
+    | ✻ Cogitated for 1s · done 9:30 PM
+    | ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+    | ❯ 
+    | ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+    |   ⏸ manual mode on · ? for shortcuts · ← 2 agents                                                       Draft restored
+RESULT B: pass
+== C: captain already keeps a stash, and has a new draft
+  state before: pending
+  [screen C-before] box/footer:
+    | ⏺ HERON
+    | ✻ Cogitated for 1s · done 9:30 PM
+    | ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+    | ❯ WREN second draft
+    | ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+    |   ⏸ manual mode on                                                                                           › stashed
+  fm-desk-voice send -> mailbox: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.LdPpvX/state/desk-voice/inbox/20260926T183013Z-a698ecbb.json
+  stderr: fm-desk-voice: the primary's chat pane refused the text; saving it to the mailbox instead
+  [screen C-after] box/footer:
+    | ⏺ HERON
+    | ✻ Cogitated for 1s · done 9:30 PM
+    | ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+    | ❯ WREN second draft
+    | ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+    |   ⏸ manual mode on                                                                                           › stashed
+  mailbox file: {"schema": "fm-desk-voice-transcript.v1", "id": "a698ecbb", "created_at": "20260926T183013Z", "source": "live-driver", "transcript": "Reply with only the word PLOVER"}
+  [screen C-unstash] box/footer:
+    | ⏺ HERON
+    | ✻ Cogitated for 1s · done 9:30 PM
+    | ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+    | ❯ FALCON stash the captain set aside
+    | ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+    |   ⏸ manual mode on                                                                        Ctrl+Y to paste deleted text
+RESULT C: pass
+== D: the draft is only a [Pasted text] placeholder
+  state before: pending
+  [screen D-before] box/footer:
+    | ⏺ HERON
+    | ✻ Cogitated for 1s · done 9:30 PM
+    | ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+    | ❯ [Pasted text #1 +5 lines]
+    | ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+    |   paste again to expand                                                                   Ctrl+Y to paste deleted text
+  fm-desk-voice send -> sent: tmux %0
+  [screen D-after] box/footer:
+    | ⏺ EGRET
+    | ✻ Churned for 1s · done 9:30 PM
+    | ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+    | ❯ [Pasted text #1 +5 lines]
+    | ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+    |   paste again to expand                                                                                 Draft restored
+RESULT D: pass
+== E: a long voice message past a draft
+  message length 3223 chars
+  state before: pending
+  [screen E-before] box/footer:
+    | ⏺ EGRET
+    | ✻ Churned for 1s · done 9:30 PM
+    | ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+    | ❯ SWIFT draft kept aside
+    | ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+    |   ⏸ manual mode on                                                                        Ctrl+Y to paste deleted text
+  fm-desk-voice send -> mailbox: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.LdPpvX/state/desk-voice/inbox/20260926T183034Z-9683a514.json
+  stderr: fm-desk-voice: the primary's chat pane refused the text; saving it to the mailbox instead
+  [screen E-after] box/footer:
+    | ⏺ EGRET
+    | ✻ Churned for 1s · done 9:30 PM
+    | ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+    | ❯ SWIFT draft kept aside
+    | ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+    |   ⏸ manual mode on
+RESULT E: FAIL (out=mailbox: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.LdPpvX/state/desk-voice/inbox/20260926T183034Z-9683a514.json ans=0 draft=1)
+== summary
+A: pass
+B: pass
+C: pass
+D: pass
+E: FAIL (out=mailbox: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.LdPpvX/state/desk-voice/inbox/20260926T183034Z-9683a514.json ans=0 draft=1)

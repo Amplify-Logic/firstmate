@@ -1,0 +1,18 @@
+## Herdr H2: captain's typed draft in the Claude box
+─────────────────────────────────────────────────────
+❯ KESTREL draft the captain has not sent
+─────────────────────────────────────────────────────
+  ⏸ manual mode on
+composer state: pending
+fm-desk-voice send -> sent: herdr fm-lab-deskdbg-16515-17754:w1:p1
+✻ Sautéed for 3s · done 9:42 PM
+❯ Reply with only the word EGRET
+⏺ EGRET
+✻ Crunched for 1s · done 9:42 PM
+─────────────────────────────────────────────────────
+❯ KESTREL draft the captain has not sent
+─────────────────────────────────────────────────────
+  ⏸ manual mode on
+composer state after: pending
+draft occurrences on screen: 1
+submitted prompts containing the draft: 0

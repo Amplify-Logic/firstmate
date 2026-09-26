@@ -1,0 +1,20 @@
+⏺ OSPREY
+
+✻ Cooked for 1s · done 10:40 PM
+
+❯ HEADH2 Captain's dictated note, no reply needed
+  beyond a short acknowledgement. Sentence 1: the
+  calibration log for the lab bench was reviewed and
+  the numbers look steady. Sentence 0: the
+  calibration log for the lab bench was reviewed and
+  the numbers look steady. TAILH2
+
+⏺ Acknowledged. Calibration log reviewed and steady.
+
+✻ Cogitated for 2s · done 10:40 PM
+
+─────────────────────────────────────────────────────
+❯ SWIFT draft H4-m850 kept aside
+─────────────────────────────────────────────────────
+  ⚠ Transcript saving is off — inherited CLAUDE_CO…
+  ⏸ manual mode on     Ctrl+Y to paste deleted text

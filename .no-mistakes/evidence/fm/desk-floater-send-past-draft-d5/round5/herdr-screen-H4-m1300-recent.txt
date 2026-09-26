@@ -1,0 +1,90 @@
+cd '/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.lPpE0r/project' && claude --model haiku
+(base) larsmusic@Larss-MacBook-Pro project % cd '/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.lPpE0r/project' && claude --model haiku
+ ▐▛███▛█   Claude Code v2.1.283
+▝▜██████▀  Haiku 4.5 · Claude Max
+ ▝▝   ▝▝   /…/T/fm-lab.lPpE0r/project
+
+  ⎿  SessionStart:startup hook error
+  ⎿  Failed with non-blocking status code: /bin/sh:
+     ${CLAUDE_PLUGIN_ROOT}/hooks/run-hook.cmd: No
+     such file or directory
+
+❯ Reply with only the word OSPREY
+
+⏺ OSPREY
+
+✻ Cooked for 1s · done 10:40 PM
+
+❯ HEADH2 Captain's dictated note, no reply needed
+  beyond a short acknowledgement. Sentence 1: the
+  calibration log for the lab bench was reviewed and
+  the numbers look steady. Sentence 0: the
+  calibration log for the lab bench was reviewed and
+  the numbers look steady. TAILH2
+
+⏺ Acknowledged. Calibration log reviewed and steady.
+
+✻ Cogitated for 2s · done 10:40 PM
+
+❯ HEADH4m850 Captain's dictated note, no reply
+  needed beyond a short acknowledgement. Sentence 1:
+  the calibration log for the lab bench was
+  reviewed and the numbers look steady. Sentence 2:
+  the calibration log for the lab bench was reviewed
+  and the numbers look steady. Sentence 3: the
+  calibration log for the lab bench was reviewed and
+  the numbers look steady. Sentence 4: the
+  calibration log for the lab bench was reviewed and
+  the numbers look steady. Sentence 5: the
+  calibration log for the lab bench was reviewed and
+  the numbers look steady. Sentence 6: the
+  calibration log for the lab bench was reviewed and
+  the numbers look steady. Sentence 7: the
+  calibration log for the lab bench was reviewed and
+  the numbers look steady. TAILH4m850
+
+⏺ Acknowledged. Calibration log steady across all
+  readings.
+
+✻ Crunched for 1s · done 10:40 PM
+
+❯ HEADH4m1300 Captain's dictated note, no reply
+  needed beyond a short acknowledgement. Sentence 1:
+  the calibration log for the lab bench was
+  reviewed and the numbers look steady. Sentence 2:
+  the calibration log for the lab bench was reviewed
+  and the numbers look steady. Sentence 3: the
+  calibration log for the lab bench was reviewed and
+  the numbers look steady. Sentence 4: the
+  calibration log for the lab bench was reviewed and
+  the numbers look steady. Sentence 5: the
+  calibration log for the lab bench was reviewed and
+  the numbers look steady. Sentence 6: the
+  calibration log for the lab bench was reviewed and
+  the numbers look steady. Sentence 7: the
+  calibration log for the lab bench was reviewed and
+  calibration log for the lab bench was reviewed and
+  the numbers look steady. Sentence 8: the
+  calibration log for the lab bench was reviewed and
+  the numbers look steady. Sentence 9: the
+  calibration log for the lab bench was reviewed and
+  the numbers look steady. Sentence 10: the
+  calibration log for the lab bench was reviewed and
+  the numbers look steady. Sentence 11: the
+  calibration log for the lab bench was reviewed and
+  the numbers look steady. Sentence 12: the
+  calibration log for the lab bench was reviewed and
+  the numbers look steady. Sentence 13: the
+  calibration log for the lab bench was reviewed and
+  the numbers look steady. TAILH4m1300
+
+⏺ Acknowledged. Lab bench calibration confirmed
+  stable.
+
+✻ Sautéed for 1s · done 10:41 PM
+
+─────────────────────────────────────────────────────
+❯ SWIFT draft H4-m1300 kept aside
+─────────────────────────────────────────────────────
+  ⚠ Transcript saving is off — inherited CLAUDE_CO…
+  paste again to expand              Draft restored

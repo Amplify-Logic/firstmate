@@ -1,0 +1,33 @@
+cd '/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.lPpE0r/project' && claude --model haiku
+(base) larsmusic@Larss-MacBook-Pro project % cd '/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.lPpE0r/project' && claude --model haiku
+ ▐▛███▛█   Claude Code v2.1.283
+▝▜██████▀  Haiku 4.5 · Claude Max
+ ▝▝   ▝▝   /…/T/fm-lab.lPpE0r/project
+
+  ⎿  SessionStart:startup hook error
+  ⎿  Failed with non-blocking status code: /bin/sh:
+     ${CLAUDE_PLUGIN_ROOT}/hooks/run-hook.cmd: No
+     such file or directory
+
+❯ Reply with only the word OSPREY
+
+⏺ OSPREY
+
+✻ Cooked for 1s · done 10:40 PM
+
+❯ HEADH2 Captain's dictated note, no reply needed
+  beyond a short acknowledgement. Sentence 1: the
+  calibration log for the lab bench was reviewed and
+  the numbers look steady. Sentence 0: the
+  calibration log for the lab bench was reviewed and
+  the numbers look steady. TAILH2
+
+⏺ Acknowledged. Calibration log reviewed and steady.
+
+✻ Cogitated for 2s · done 10:40 PM
+
+─────────────────────────────────────────────────────
+❯ SWIFT draft H2 kept aside
+─────────────────────────────────────────────────────
+  ⚠ Transcript saving is off — inherited CLAUDE_CO…
+  ⏸ manual mode on                   Draft restored

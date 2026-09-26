@@ -1,0 +1,196 @@
+claude 2.1.283 (Claude Code), lab /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.aVq1kf, lock pid 79622
+== A: typed draft in the Claude box
+  state before: pending
+  [screen A-before] box/footer:
+    |   ⎿  Failed with non-blocking status code: /bin/sh: ${CLAUDE_PLUGIN_ROOT}/hooks/run-hook.cmd: No such file or directory
+    | ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+    | ❯ KESTREL draft the captain has not sent
+    | ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+    |   ⏸ manual mode on
+    |                   tmux focus-events off · add 'set -g focus-events on' to ~/.tmux.conf and reattach for focus tracking
+  fm-desk-voice send -> sent: tmux %0
+  answered=1 state after: pending
+  [screen A-after] box/footer:
+    | ⏺ OSPREY
+    | ✻ Sautéed for 1s · done 10:15 PM
+    | ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+    | ❯ KESTREL draft the captain has not sent
+    | ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+    |   ⏸ manual mode on                                                                                      Draft restored
+RESULT A: pass
+== B: box shows only Claude's dim suggestion
+  state before: empty
+  [screen B-before] box/footer:
+    | ⏺ OSPREY
+    | ✻ Sautéed for 1s · done 10:15 PM
+    | ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+    | ❯ 
+    | ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+    |   ⏸ manual mode on · ? for shortcuts · ← 2 agents                                         Ctrl+Y to paste deleted text
+  prompt row (ANSI via cat -v): ^[[39m�M-^]� 
+  fm-desk-voice send -> sent: tmux %0
+  [screen B-after] box/footer:
+    | ⏺ HERON
+    | ✻ Cooked for 0s · done 10:16 PM
+    | ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+    | ❯ 
+    | ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+    |   ⏸ manual mode on · ? for shortcuts · ← 2 agents                                                       Draft restored
+RESULT B: pass
+== C: captain already keeps a stash, and has a new draft
+  state before: pending
+  [screen C-before] box/footer:
+    | ⏺ HERON
+    | ✻ Cooked for 0s · done 10:16 PM
+    | ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+    | ❯ WREN second draft
+    | ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+    |   ⏸ manual mode on                                                                                           › stashed
+  fm-desk-voice send -> mailbox: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.aVq1kf/state/desk-voice/inbox/20260926T191612Z-0b7b8cc2.json
+  stderr: fm-desk-voice: the primary's chat pane refused the text; saving it to the mailbox instead
+  [screen C-after] box/footer:
+    | ⏺ HERON
+    | ✻ Cooked for 0s · done 10:16 PM
+    | ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+    | ❯ WREN second draft
+    | ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+    |   ⏸ manual mode on                                                                                           › stashed
+  mailbox file: {"schema": "fm-desk-voice-transcript.v1", "id": "0b7b8cc2", "created_at": "20260926T191612Z", "source": "live-driver", "transcript": "Reply with only the word PLOVER"}
+  [screen C-unstash] box/footer:
+    | ⏺ HERON
+    | ✻ Cooked for 0s · done 10:16 PM
+    | ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+    | ❯ FALCON stash the captain set aside
+    | ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+    |   ⏸ manual mode on                                                                        Ctrl+Y to paste deleted text
+RESULT C: pass
+== D: the draft is only a [Pasted text] placeholder
+  state before: pending
+  [screen D-before] box/footer:
+    | ⏺ HERON
+    | ✻ Cooked for 0s · done 10:16 PM
+    | ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+    | ❯ [Pasted text #1 +5 lines]
+    | ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+    |   paste again to expand                                                                   Ctrl+Y to paste deleted text
+  fm-desk-voice send -> sent: tmux %0
+  [screen D-after] box/footer:
+    | ⏺ EGRET
+    | ✻ Churned for 0s · done 10:16 PM
+    | ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+    | ❯ [Pasted text #1 +5 lines]
+    | ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+    |   paste again to expand                                                                                 Draft restored
+RESULT D: pass
+== E-m560: 524-char message past a typed draft
+  state before: pending
+  [screen E-m560-before] box/footer:
+    | ⏺ EGRET
+    | ✻ Churned for 0s · done 10:16 PM
+    | ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+    | ❯ SWIFT draft kept aside
+    | ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+    |   ⏸ manual mode on                                                                        Ctrl+Y to paste deleted text
+  fm-desk-voice send -> sent: tmux %0
+  [screen E-m560-after] box/footer:
+    | ⏺ IBISm560
+    | ✻ Cogitated for 1s · done 10:16 PM
+    | ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+    | ❯ SWIFT draft kept aside
+    | ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+    |   ⏸ manual mode on                                                                                      Draft restored
+  box now: SWIFT draft kept aside
+  answered=1 draft-visible=1 message-left-in-box=0 draft-submitted=0 state=pending
+RESULT E-m560: pass (sent, submitted, draft back)
+== E-m960: 939-char message past a typed draft
+  state before: pending
+  [screen E-m960-before] box/footer:
+    | ⏺ IBISm560
+    | ✻ Cogitated for 1s · done 10:16 PM
+    | ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+    | ❯ SWIFT draft kept aside
+    | ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+    |   ⏸ manual mode on                                                                        Ctrl+Y to paste deleted text
+  fm-desk-voice send -> sent: tmux %0
+  [screen E-m960-after] box/footer:
+    | ⏺ IBISm960
+    | ✻ Baked for 7s · done 10:16 PM
+    | ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+    | ❯ SWIFT draft kept aside
+    | ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+    |   ⏸ manual mode on
+  box now: SWIFT draft kept aside
+  answered=1 draft-visible=1 message-left-in-box=0 draft-submitted=0 state=pending
+RESULT E-m960: pass (sent, submitted, draft back)
+== E-m960p: 940-char message past a paste draft
+  state before: pending
+  [screen E-m960p-before] box/footer:
+    | ⏺ IBISm960
+    | ✻ Baked for 7s · done 10:16 PM
+    | ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+    | ❯ [Pasted text #3 +5 lines]
+    | ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+    |   paste again to expand                                                                   Ctrl+Y to paste deleted text
+  fm-desk-voice send -> sent: tmux %0
+  [screen E-m960p-after] box/footer:
+    |   Is there something specific I can help you with?
+    | ✻ Cooked for 5s · done 10:16 PM
+    | ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+    | ❯ [Pasted text #3 +5 lines]
+    | ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+    |   ⏸ manual mode on
+  box now: [Pasted text #3 +5 lines]
+  answered=0 draft-visible=1 message-left-in-box=0 draft-submitted=0 state=pending
+RESULT E-m960p: FAIL (reported sent but ans=0 left=0 draft=1 sub=0)
+== E-m1300: 1252-char message past a typed draft
+  state before: pending
+  [screen E-m1300-before] box/footer:
+    |   Is there something specific I can help you with?
+    | ✻ Cooked for 5s · done 10:16 PM
+    | ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+    | ❯ SWIFT draft kept aside
+    | ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+    |   ⏸ manual mode on                                                                        Ctrl+Y to paste deleted text
+  fm-desk-voice send -> mailbox: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.aVq1kf/state/desk-voice/inbox/20260926T191746Z-ac8fd697.json
+  stderr: fm-desk-voice: the primary's chat pane refused the text; saving it to the mailbox instead
+  [screen E-m1300-after] box/footer:
+    |   Is there something specific I can help you with?
+    | ✻ Cooked for 5s · done 10:16 PM
+    | ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+    | ❯ SWIFT draft kept aside
+    | ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+    |   ⏸ manual mode on
+  box now: SWIFT draft kept aside
+  answered=0 draft-visible=1 message-left-in-box=0 draft-submitted=0 state=pending
+RESULT E-m1300: pass (mailbox, draft restored)
+== E-m3200: 5839-char message past a typed draft
+  state before: pending
+  [screen E-m3200-before] box/footer:
+    |   Is there something specific I can help you with?
+    | ✻ Cooked for 5s · done 10:16 PM
+    | ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+    | ❯ SWIFT draft kept aside
+    | ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+    |   ⏸ manual mode on                                                                        Ctrl+Y to paste deleted text
+  fm-desk-voice send -> mailbox: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.aVq1kf/state/desk-voice/inbox/20260926T191855Z-77fbc5bb.json
+  stderr: fm-desk-voice: the primary's chat pane refused the text; saving it to the mailbox instead
+  [screen E-m3200-after] box/footer:
+    |   Is there something specific I can help you with?
+    | ✻ Cooked for 5s · done 10:16 PM
+    | ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+    | ❯ SWIFT draft kept aside
+    | ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+    |   ⏸ manual mode on
+  box now: SWIFT draft kept aside
+  answered=0 draft-visible=1 message-left-in-box=0 draft-submitted=0 state=pending
+RESULT E-m3200: pass (mailbox, draft restored)
+== summary
+A: pass
+B: pass
+C: pass
+D: pass
+E-m560: pass (sent, submitted, draft back)
+E-m960: pass (sent, submitted, draft back)
+E-m960p: FAIL (reported sent but ans=0 left=0 draft=1 sub=0)
+E-m1300: pass (mailbox, draft restored)
+E-m3200: pass (mailbox, draft restored)

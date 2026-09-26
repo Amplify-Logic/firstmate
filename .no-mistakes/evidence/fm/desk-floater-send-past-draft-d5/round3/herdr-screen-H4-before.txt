@@ -1,0 +1,21 @@
+⏺ OSPREY
+
+✻ Sautéed for 1s · done 10:15 PM
+
+❯ Reply with only the word HERON
+
+⏺ HERON
+
+✻ Crunched for 1s · done 10:16 PM
+
+❯ Reply with only the word EGRET
+
+⏺ EGRET
+
+✻ Sautéed for 0s · done 10:16 PM
+
+─────────────────────────────────────────────────────
+❯ SWIFT draft kept aside
+─────────────────────────────────────────────────────
+  ⚠ Transcript saving is off — inherited CLAUDE_CO…
+  ⏸ manual mode on     Ctrl+Y to paste deleted text

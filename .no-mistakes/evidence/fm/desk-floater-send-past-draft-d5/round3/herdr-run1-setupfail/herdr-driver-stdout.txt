@@ -1,0 +1,89 @@
+herdr herdr 0.7.4, claude 2.1.283 (Claude Code), session fm-lab-desk-draft-9933-32346 pane w1:p1
+lock holder claude pid 13911
+== H0: empty box
+  send -> mailbox: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.URhFrj/state/desk-voice/inbox/20260926T190459Z-036e3bc6.json
+fm-desk-voice: the primary's chat pane is not reachable; saving to the mailbox instead
+  answered=0
+== H1: after a reply (suggested prompt if Claude offers one)
+  state before: pending
+  [screen H1-before]
+    |  files here.
+    |  Security guide
+    |  ❯ No, exit
+    |    Yes, I trust this folder
+    |  Enter to confirm · Esc to cancel
+  send -> mailbox: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.URhFrj/state/desk-voice/inbox/20260926T190615Z-5f19413a.json
+fm-desk-voice: the primary's chat pane is not reachable; saving to the mailbox instead
+  answered=0
+  [screen H1-after]
+    |  files here.
+    |  Security guide
+    |  ❯ No, exit
+    |    Yes, I trust this folder
+    |  Enter to confirm · Esc to cancel
+== H2: typed draft in the box
+  state before: pending
+  [screen H2-before]
+    |  files here.
+    |  Security guide
+    |  ❯ No, exit
+    |    Yes, I trust this folder
+    |  Enter to confirm · Esc to cancel
+  send -> mailbox: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.URhFrj/state/desk-voice/inbox/20260926T190735Z-2af21867.json
+fm-desk-voice: the primary's chat pane is not reachable; saving to the mailbox instead
+  answered=0 state after: pending
+  [screen H2-after]
+    |  files here.
+    |  Security guide
+    |  ❯ No, exit
+    |    Yes, I trust this folder
+    |  Enter to confirm · Esc to cancel
+  draft occurrences=0 draft-in-submitted=0
+== H3: footer already shows a stash, plus a new draft
+  state before: pending
+  [screen H3-before]
+    |  files here.
+    |  Security guide
+    |  ❯ No, exit
+    |    Yes, I trust this folder
+    |  Enter to confirm · Esc to cancel
+  send -> mailbox: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.URhFrj/state/desk-voice/inbox/20260926T190913Z-84612245.json
+fm-desk-voice: the primary's chat pane is not reachable; saving to the mailbox instead
+  [screen H3-after]
+    |  files here.
+    |  Security guide
+    |  ❯ No, exit
+    |    Yes, I trust this folder
+    |  Enter to confirm · Esc to cancel
+  mailbox file holds: {"schema": "fm-desk-voice-transcript.v1", "id": "84612245", "created_at": "20260926T190913Z", "source": "herdr-live-driver", "transcript": "Reply with only the word PLOVER"}
+  box: No, exit Yes, I trust this folder
+  [screen H3-unstash]
+    |  files here.
+    |  Security guide
+    |  ❯ No, exit
+    |    Yes, I trust this folder
+    |  Enter to confirm · Esc to cancel
+== H4: long message past a typed draft
+  message length 5835; state before: pending
+  [screen H4-before]
+    |  files here.
+    |  Security guide
+    |  ❯ No, exit
+    |    Yes, I trust this folder
+    |  Enter to confirm · Esc to cancel
+  send -> mailbox: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.URhFrj/state/desk-voice/inbox/20260926T191025Z-df78392d.json
+fm-desk-voice: the primary's chat pane is not reachable; saving to the mailbox instead
+  [screen H4-after]
+    |  files here.
+    |  Security guide
+    |  ❯ No, exit
+    |    Yes, I trust this folder
+    |  Enter to confirm · Esc to cancel
+  answered=0 box: No, exit Yes, I trust this folder
+== summary
+H0 FAIL (mailbox: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.URhFrj/state/desk-voice/inbox/20260926T190459Z-036e3bc6.json)
+H1 FAIL (mailbox: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.URhFrj/state/desk-voice/inbox/20260926T190615Z-5f19413a.json)
+H2 FAIL (mailbox: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.URhFrj/state/desk-voice/inbox/20260926T190735Z-2af21867.json n=0 sub=0)
+H3 FAIL (mailbox: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.URhFrj/state/desk-voice/inbox/20260926T190913Z-84612245.json box=No, exit Yes, I trust this folder stashed=0 sub=0 falcon=0)
+H4 FAIL (mailbox a=0 left=0 draft=0)
+teardown fm-lab-desk-draft-9933-32346 ok

@@ -1,0 +1,94 @@
+claude 2.1.283 (Claude Code), tmux tmux 3.6a, lab /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.9fRBY4
+== A: 268-char message past a typed draft
+  state before: pending box before: SWIFT draft A kept aside
+  [screen A-before]
+    | ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+    | ❯ SWIFT draft A kept aside
+    | ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+    |   ⏸ manual mode on
+    |                   tmux focus-events off · add 'set -g focus-events on' to ~/.tmux.conf and reattach for focus tracking
+  fm-desk-voice send -> sent: tmux %0
+  [screen A-after]
+    | ✻ Worked for 1s · done 10:34 PM
+    | ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+    | ❯ SWIFT draft A kept aside
+    | ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+    |   ⏸ manual mode on                                                                                      Draft restored
+  box now: SWIFT draft A kept aside
+  submitted-whole=1 message-left-in-box=0 draft-lines-in-transcript=0 state=pending
+RESULT A: FAIL (sent but subm=1 left=0 dsub=0 box=SWIFT draft A kept aside)
+== E-m1300: 1294-char message past a typed draft
+  state before: pending box before: SWIFT draft E-m1300 kept aside
+  [screen E-m1300-before]
+    | ✻ Worked for 1s · done 10:34 PM
+    | ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+    | ❯ SWIFT draft E-m1300 kept aside
+    | ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+    |   ⏸ manual mode on                                                                        Ctrl+Y to paste deleted text
+  fm-desk-voice send -> sent: tmux %0
+  [screen E-m1300-after]
+    | ✻ Churned for 1s · done 10:34 PM
+    | ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+    | ❯ SWIFT draft E-m1300 kept aside
+    | ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+    |   paste again to expand                                                                                 Draft restored
+  box now: SWIFT draft E-m1300 kept aside
+  submitted-whole=1 message-left-in-box=0 draft-lines-in-transcript=0 state=pending
+RESULT E-m1300: FAIL (sent but subm=1 left=0 dsub=0 box=SWIFT draft E-m1300 kept aside)
+== E-m3200: 3154-char message past a typed draft
+  state before: pending box before: SWIFT draft E-m3200 kept aside
+  [screen E-m3200-before]
+    | ✻ Churned for 1s · done 10:34 PM
+    | ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+    | ❯ SWIFT draft E-m3200 kept aside
+    | ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+    |   ⏸ manual mode on                                                                        Ctrl+Y to paste deleted text
+  fm-desk-voice send -> sent: tmux %0
+  [screen E-m3200-after]
+    | ✻ Brewed for 1s · done 10:34 PM
+    | ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+    | ❯ SWIFT draft E-m3200 kept aside
+    | ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+    |   paste again to expand
+  box now: SWIFT draft E-m3200 kept aside
+  submitted-whole=1 message-left-in-box=0 draft-lines-in-transcript=0 state=pending
+RESULT E-m3200: FAIL (sent but subm=1 left=0 dsub=0 box=SWIFT draft E-m3200 kept aside)
+== E-m3200p: 3156-char message past a paste draft
+  state before: pending box before: [Pasted text #3 +5 lines]
+  [screen E-m3200p-before]
+    | ✻ Brewed for 1s · done 10:34 PM
+    | ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+    | ❯ [Pasted text #3 +5 lines]
+    | ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+    |   paste again to expand                                                                   Ctrl+Y to paste deleted text
+  fm-desk-voice send -> sent: tmux %0
+  [screen E-m3200p-after]
+    | ✻ Baked for 1s · done 10:34 PM
+    | ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+    | ❯ [Pasted text #3 +5 lines]
+    | ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+    |   paste again to expand                                                                                 Draft restored
+  box now: [Pasted text #3 +5 lines]
+  submitted-whole=1 message-left-in-box=0 draft-lines-in-transcript=0 state=pending
+RESULT E-m3200p: pass (sent, submitted whole, draft back)
+== C: captain already keeps a stash, and has a new draft
+  [screen C-before]
+    | ✻ Baked for 1s · done 10:34 PM
+    | ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+    | ❯ WREN second draft
+    | ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+    |   ⏸ manual mode on                                                            Ctrl+Y to paste deleted text · › stashed
+  fm-desk-voice send -> mailbox: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.9fRBY4/state/desk-voice/inbox/20260926T193453Z-a9da6cb9.json
+  [screen C-after]
+    | ✻ Baked for 1s · done 10:34 PM
+    | ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+    | ❯ WREN second draft
+    | ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+    |   ⏸ manual mode on                                                                                           › stashed
+RESULT C: pass
+== summary
+A: FAIL (sent but subm=1 left=0 dsub=0 box=SWIFT draft A kept aside)
+E-m1300: FAIL (sent but subm=1 left=0 dsub=0 box=SWIFT draft E-m1300 kept aside)
+E-m3200: FAIL (sent but subm=1 left=0 dsub=0 box=SWIFT draft E-m3200 kept aside)
+E-m3200p: pass (sent, submitted whole, draft back)
+C: pass

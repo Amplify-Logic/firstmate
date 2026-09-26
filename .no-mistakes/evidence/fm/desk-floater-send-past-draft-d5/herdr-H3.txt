@@ -1,0 +1,19 @@
+## Herdr H3: captain already keeps a stash (KESTREL) and has a new draft (WREN)
+─────────────────────────────────────────────────────
+❯ WREN second draft
+─────────────────────────────────────────────────────
+  ⏸ manual mode on                        › stashed
+composer state: pending
+fm-desk-voice send -> fm-desk-voice: the primary's chat pane refused the text; saving it to the mailbox instead
+mailbox: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.MwEG9h/state/desk-voice/inbox/20260926T184309Z-29c38c92.json
+mailbox file: {"schema": "fm-desk-voice-transcript.v1", "id": "29c38c92", "created_at": "20260926T184309Z", "source": "herdr-live", "transcript": "Reply with only the word PLOVER"}
+─────────────────────────────────────────────────────
+❯ WREN second draft
+─────────────────────────────────────────────────────
+  ⏸ manual mode on                        › stashed
+PLOVER submitted: 0
+after clearing WREN and pressing Ctrl+S (the captain's own stash comes back):
+─────────────────────────────────────────────────────
+❯ KESTREL draft the captain has not sent
+─────────────────────────────────────────────────────
+  ⏸ manual mode on     Ctrl+Y to paste deleted text

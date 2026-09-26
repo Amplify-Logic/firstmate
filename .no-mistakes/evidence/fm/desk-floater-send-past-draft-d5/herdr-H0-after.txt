@@ -1,0 +1,23 @@
+claude --model haiku
+(base) larsmusic@Larss-MacBook-Pro project % claude -
+-model haiku
+ ▐▛███▛█   Claude Code v2.1.283
+▝▜██████▀  Haiku 4.5 · Claude Max
+ ▝▝   ▝▝   /…/T/fm-lab.MwEG9h/project
+
+  ⎿  SessionStart:startup hook error
+  ⎿  Failed with non-blocking status code: /bin/sh:
+     ${CLAUDE_PLUGIN_ROOT}/hooks/run-hook.cmd: No
+     such file or directory
+
+❯ Reply with only the word OSPREY
+
+⏺ OSPREY
+
+✻ Cogitated for 1s · done 9:41 PM
+
+─────────────────────────────────────────────────────
+❯
+─────────────────────────────────────────────────────
+  ⚠ Transcript saving is off — inherited CLAUDE_CO…
+  ⏸ manual mode on · ? for shortcuts

@@ -1,0 +1,15 @@
+## Herdr H0: box shows only Claude's dim 'Try ...' placeholder
+─────────────────────────────────────────────────────
+❯ Try "write a test for <filepath>"
+─────────────────────────────────────────────────────
+  ⏸ manual mode on · ? for shortcuts · ← 2 agents
+composer state: empty
+fm-desk-voice send -> sent: herdr fm-lab-deskdbg-16515-17754:w1:p1
+  you about birds. Keep your answer to one sentence.
+⏺ What adaptations do migratory birds have that allow
+  them to fly thousands of miles without stopping?
+✻ Sautéed for 3s · done 9:42 PM
+─────────────────────────────────────────────────────
+❯
+─────────────────────────────────────────────────────
+  ⏸ manual mode on · ? for shortcuts · ← 2 agents

@@ -1,0 +1,103 @@
+claude 2.1.283 (Claude Code), lab /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.Su5oXp, lock pid 69172
+== A: typed draft in the Claude box
+  state before: pending
+  [screen A-before] box/footer:
+    |   ⎿  Failed with non-blocking status code: /bin/sh: ${CLAUDE_PLUGIN_ROOT}/hooks/run-hook.cmd: No such file or directory
+    | ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+    | ❯ KESTREL draft the captain has not sent
+    | ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+    |   ⏸ manual mode on
+    |                   tmux focus-events off · add 'set -g focus-events on' to ~/.tmux.conf and reattach for focus tracking
+  fm-desk-voice send -> sent: tmux %0
+  answered=1 state after: pending
+  [screen A-after] box/footer:
+    | ⏺ OSPREY
+    | ✻ Sautéed for 1s · done 9:11 PM
+    | ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+    | ❯ KESTREL draft the captain has not sent
+    | ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+    |   ⏸ manual mode on
+RESULT A: pass
+== B: box shows only Claude's dim suggestion
+  state before: empty
+  [screen B-before] box/footer:
+    | ⏺ OSPREY
+    | ✻ Sautéed for 1s · done 9:11 PM
+    | ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+    | ❯ 
+    | ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+    |   ⏸ manual mode on · ? for shortcuts · ← 2 agents                                         Ctrl+Y to paste deleted text
+  prompt row (ANSI via cat -v): ^[[39m�M-^]� 
+  fm-desk-voice send -> sent: tmux %0
+  [screen B-after] box/footer:
+    | ⏺ HERON
+    | ✻ Crunched for 2s · done 9:12 PM
+    | ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+    | ❯ 
+    | ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+    |   ⏸ manual mode on · ? for shortcuts · ← 2 agents
+RESULT B: pass
+== C: captain already keeps a stash, and has a new draft
+  state before: pending
+  [screen C-before] box/footer:
+    | ⏺ HERON
+    | ✻ Crunched for 2s · done 9:12 PM
+    | ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+    | ❯ WREN second draft
+    | ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+    |   ⏸ manual mode on                                                                                           › stashed
+  fm-desk-voice send -> mailbox: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.Su5oXp/state/desk-voice/inbox/20260926T181312Z-cf39fe88.json
+  stderr: fm-desk-voice: the primary's chat pane refused the text; saving it to the mailbox instead
+  [screen C-after] box/footer:
+    | ⏺ HERON
+    | ✻ Crunched for 2s · done 9:12 PM
+    | ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+    | ❯ WREN second draft
+    | ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+    |   ⏸ manual mode on                                                                                           › stashed
+  mailbox file: {"schema": "fm-desk-voice-transcript.v1", "id": "cf39fe88", "created_at": "20260926T181312Z", "source": "live-driver", "transcript": "Reply with only the word PLOVER"}
+  [screen C-unstash] box/footer:
+    | ⏺ HERON
+    | ✻ Crunched for 2s · done 9:12 PM
+    | ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+    | ❯ FALCON stash the captain set aside
+    | ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+    |   ⏸ manual mode on                                                                        Ctrl+Y to paste deleted text
+RESULT C: pass
+== D: the draft is only a [Pasted text] placeholder
+  state before: pending
+  [screen D-before] box/footer:
+    | ⏺ HERON
+    | ✻ Crunched for 2s · done 9:12 PM
+    | ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+    | ❯ [Pasted text #1 +5 lines]
+    | ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+    |   paste again to expand                                                                   Ctrl+Y to paste deleted text
+  fm-desk-voice send -> mailbox: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.Su5oXp/state/desk-voice/inbox/20260926T181408Z-e275ca1a.json
+  stderr: fm-desk-voice: the chat box did not set the captain's draft aside
+  stderr: fm-desk-voice: the primary's chat pane refused the text; saving it to the mailbox instead
+  [screen D-after] box/footer:
+    | ⏺ HERON
+    | ✻ Crunched for 2s · done 9:12 PM
+    | ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+    | ❯ 
+    | ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+    |   ⏸ manual mode on · ? for shortcuts · ← 2 agents                                                            › stashed
+RESULT D: FAIL (out=mailbox: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.Su5oXp/state/desk-voice/inbox/20260926T181408Z-e275ca1a.json ans=0 placeholder=0)
+== E: a long voice message past a draft
+  message length 3223 chars
+  fm-desk-voice send -> sent: tmux %0
+  [screen E-after] box/footer:
+    | ✻ Crunched for 2s · done 9:12 PM
+    | ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+    | ❯ ctated floater message, words number 58 of a long dictated floater message, words number 59 of a long dictated
+    |   floater message, words number 60 of a long dictated floater message,
+    | ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+    |   ⏸ manual mode on                                                                                           › stashed
+RESULT E: FAIL (out=sent: tmux %0 ans=0 draft=0)
+== summary
+A: pass
+B: pass
+C: pass
+D: FAIL (out=mailbox: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.Su5oXp/state/desk-voice/inbox/20260926T181408Z-e275ca1a.json ans=0 placeholder=0)
+E: FAIL (out=sent: tmux %0 ans=0 draft=0)

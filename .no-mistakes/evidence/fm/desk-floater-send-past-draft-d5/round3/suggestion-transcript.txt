@@ -1,0 +1,7 @@
+after 'I have two glasses changes ready. Ask me, in one short sentence, whether I want you to land both.': prompt row text=[❯ ] state=empty
+prompt row (cat -v): ^[[39m�M-^]� 
+state with suggestion shown: empty
+send -> sent: tmux %0
+answered=1 submitted-prompt-lines-with-MARTIN=1
+❯ Reply with only the word MARTIN
+RESULT: pass

@@ -1,0 +1,6 @@
+len=298 -> sent answered=0 box=[❯ SWIFT draft kept aside]
+len=484 -> sent answered=0 box=[❯ SWIFT draft kept aside]
+len=669 -> sent answered=0 box=[❯ SWIFT draft kept aside]
+len=980 -> sent answered=0 box=[❯ SWIFT draft kept aside]
+len=1445 -> mailbox answered=0 box=[❯ SWIFT draft kept aside]
+(submitted prompts containing SWIFT: 0 expected)

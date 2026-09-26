@@ -1,0 +1,45 @@
+ ▐▛███▛█   Claude Code v2.1.283
+▝▜██████▀  Haiku 4.5 · Claude Max
+ ▝▝   ▝▝   /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.sRUG6F/project
+
+  ⎿  SessionStart:startup hook error
+  ⎿  Failed with non-blocking status code: /bin/sh: ${CLAUDE_PLUGIN_ROOT}/hooks/run-hook.cmd: No such file or directory
+
+❯ I have two glasses changes ready. Ask me, in one short sentence, whether I want you to land both.
+
+⏺ Should I land both glasses changes?
+
+✻ Worked for 2s · done 10:20 PM
+
+❯ Reply with only the word MARTIN
+
+⏺ MARTIN
+
+✻ Churned for 1s · done 10:20 PM
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏸ manual mode on · ? for shortcuts · ← 2 agents
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

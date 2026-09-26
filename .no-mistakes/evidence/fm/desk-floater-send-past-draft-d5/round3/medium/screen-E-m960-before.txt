@@ -1,0 +1,45 @@
+ ▐▛███▛█   Claude Code v2.1.283
+▝▜██████▀  Haiku 4.5 · Claude Max
+ ▝▝   ▝▝   /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.aVq1kf/project
+
+  ⎿  SessionStart:startup hook error
+  ⎿  Failed with non-blocking status code: /bin/sh: ${CLAUDE_PLUGIN_ROOT}/hooks/run-hook.cmd: No such file or directory
+
+❯ Reply with only the word OSPREY
+
+⏺ OSPREY
+
+✻ Sautéed for 1s · done 10:15 PM
+
+❯ Reply with only the word HERON
+
+⏺ HERON
+
+✻ Cooked for 0s · done 10:16 PM
+
+❯ Reply with only the word EGRET
+
+⏺ EGRET
+
+✻ Churned for 0s · done 10:16 PM
+
+❯ Reply with only the word IBISm560 and nothing else. Ignore this filler, which stands in for a long voice transcript:
+  words number 1 of a long dictated floater message, words number 2 of a long dictated floater message, words number 3
+  of a long dictated floater message, words number 4 of a long dictated floater message, words number 5 of a long
+  dictated floater message, words number 6 of a long dictated floater message, words number 7 of a long dictated
+  floater message, words number 8 of a long dictated floater message,
+
+⏺ IBISm560
+
+✻ Cogitated for 1s · done 10:16 PM
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ SWIFT draft kept aside
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏸ manual mode on                                                                        Ctrl+Y to paste deleted text
+
+
+
+
+
+
