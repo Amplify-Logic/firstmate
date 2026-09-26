@@ -1,0 +1,16 @@
+## Scenario 1: healthy watcher armed under TZ=Europe/Amsterdam, hook runs under TZ=Europe/London (1h apart, like the Aquablu incident)
+host /etc/localtime -> /var/db/timezone/zoneinfo/Europe/Athens
+watcher pid: 21778
+recorded .watch.lock/pid-identity: Sat Sep 26 16:13:18 2026     bash /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-tz-lab.Xsb9Iy/new/bin/fm-watch.sh
+ps lstart as seen by TZ=Europe/Amsterdam writer: Sat Sep 26 18:13:18 2026    
+ps lstart as seen by TZ=Europe/London checker:  Sat Sep 26 17:13:18 2026    
+beat age: 4s; task in flight: tzlab.meta
+
+### NEW code (0dd67090) hook under TZ=Europe/London, command bin/fm-crew-state.sh tzlab:
+exit=0
+
+### NEW code hook under TZ=America/New_York:
+exit=0
+
+### NEW code hook under TZ=Europe/Amsterdam (same zone as writer):
+exit=0

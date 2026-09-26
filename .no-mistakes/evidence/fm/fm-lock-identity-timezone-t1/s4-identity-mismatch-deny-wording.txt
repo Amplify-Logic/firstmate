@@ -1,0 +1,22 @@
+## Scenario 4 (adversarial): live watcher pid 70321 with a fresh beat, but the lock's identity names a different process (pid reuse / genuine mismatch)
+tampered .watch.lock/pid-identity: Sat Sep 26 03:03:03 2026     bash /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-tz-lab.Xsb9Iy/base/bin/fm-watch.sh
+live ps (UTC): Sat Sep 26 16:15:56 2026    
+beat age: 3s
+
+### command: bin/fm-crew-state.sh tzlab
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny"},"systemMessage":"[watcher-continuity] The watcher is running with a fresh beat but its identity check failed: pid-identity-mismatch - watcher pid 70321 is running but its live process identity differs from the identity the lock recorded. Fleet commands stay gated until it is restarted. Drain wakes with bin/fm-wake-drain.sh, the safe mid-session action; run the once-per-session bin/fm-session-start.sh instead only if you have not already run it earlier this session; use fail-closed bin/fm-teardown.sh for completed tasks when needed, then restart it with bin/fm-watch-arm.sh --restart as a tracked Claude background task before running other fleet commands (blocked: fm-crew-state.sh)"}
+exit=2
+
+### command: bin/fm-teardown.sh tzlab --force
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny"},"systemMessage":"[watcher-continuity] The watcher is running with a fresh beat but its identity check failed: pid-identity-mismatch - watcher pid 70321 is running but its live process identity differs from the identity the lock recorded. Fleet commands stay gated until it is restarted. During recovery only the ordinary literal bin/fm-teardown.sh is allowed, so drop --force and any shell-expanded arguments and retry the literal invocation; restart the watcher with bin/fm-watch-arm.sh --restart as a tracked Claude background task (blocked: fm-teardown.sh)"}
+exit=2
+
+### command: bin/fm-supervision-sentinel.sh disarm
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny"},"systemMessage":"[watcher-continuity] The watcher is running with a fresh beat but its identity check failed: pid-identity-mismatch - watcher pid 70321 is running but its live process identity differs from the identity the lock recorded. Fleet commands stay gated until it is restarted. During recovery only the literal bin/fm-supervision-sentinel.sh enable is allowed; arm, disarm, check, and every other host-sentinel invocation stays blocked until supervision is healthy; restart the watcher with bin/fm-watch-arm.sh --restart as a tracked Claude background task (blocked: fm-supervision-sentinel.sh)"}
+exit=2
+
+### command: bin/fm-wake-drain.sh
+exit=0
+
+### identity restored -> command: bin/fm-crew-state.sh tzlab
+exit=0

@@ -1,0 +1,6 @@
+## Scenario 6A: real Claude primary (claude -p, 2.1.283 (Claude Code)) in the upgraded lab clone, TZ=America/New_York, watcher pid 70321 armed under host zone Europe/Athens
+recorded identity: Sat Sep 26 16:15:56 2026     bash /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-tz-lab.Xsb9Iy/base/bin/fm-watch.sh
+Claude Bash tool calls and results (PreToolUse registers bin/fm-continuity-pretool-check.sh from .claude/settings.json):
+{"type":"tool_use","input":{"command":"bin/fm-crew-state.sh tzlab","description":"Read current crew state for tzlab"}}
+{"type":"tool_result","content":"state: unknown · source: none · worktree gone (torn down?)"}
+{"type":"text","text":"ALLOWED state: unknown · source: none · worktree gone (torn down?)"}

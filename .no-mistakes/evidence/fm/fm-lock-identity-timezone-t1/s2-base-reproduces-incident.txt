@@ -1,0 +1,12 @@
+## Scenario 2: reproduce the incident on BASE code (2dd858a2), then Scenario 3: upgrade in place to 0dd67090 with the same watcher still running
+watcher pid 4806 started by BASE fm-watch-arm.sh under TZ=Europe/Amsterdam
+recorded .watch.lock/pid-identity (legacy local-time form): Sat Sep 26 18:14:52 2026     bash /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-tz-lab.Xsb9Iy/base/bin/fm-watch.sh
+live ps lstart under TZ=Europe/London: Sat Sep 26 17:14:52 2026    
+beat age: 3s
+
+### BASE code hook, TZ=Europe/Amsterdam (same zone as writer):
+exit=0
+
+### BASE code hook, TZ=Europe/London (1h off -> the reported bug):
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny"},"systemMessage":"[watcher-continuity] SUPERVISION OUTAGE: down for at least 3s since the last watcher beat; 1 task(s) in flight: tzlab. No live watcher holds this home lock. Drain wakes with bin/fm-wake-drain.sh, the safe mid-session action; run the once-per-session bin/fm-session-start.sh instead only if you have not already run it earlier this session; use fail-closed bin/fm-teardown.sh for completed tasks when needed, then re-arm with bin/fm-watch-arm.sh as a tracked Claude background task before running other fleet commands (blocked: fm-crew-state.sh)"}
+exit=2

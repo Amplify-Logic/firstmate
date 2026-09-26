@@ -1,0 +1,12 @@
+ok - continuity gate allows exact recovery and ordinary commands, denies other fleet execution, and leaves external alerts to the host
+ok - continuity gate refuses a mid-session session-start re-run and keeps every other allowance for the lock-holding session
+ok - continuity gate refuses session start when a live foreign session holds the home lock
+ok - continuity gate treats a live non-harness holder pid as stale
+ok - continuity gate allows the genuine first session start over a dead lock holder
+ok - continuity denial quantifies a stale outage and names every task in flight
+ok - continuity gate requires both the identity-matched live lock and a fresh beacon
+ok - continuity gate accepts a healthy watcher whose identity was recorded under another time zone
+ok - legacy local-time lock identities still match their live process after the UTC pin
+ok - continuity denial names the failed check of a live watcher without calling it an outage
+ok - continuity gate excludes child worktrees and fails open on opaque input
+ok - Claude wires the continuity gate while preserving the existing Stop backstop byte-for-byte

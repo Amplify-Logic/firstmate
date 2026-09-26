@@ -1,0 +1,11 @@
+## Scenario 3: checkout upgraded in place to 0dd67090 no-mistakes(review): Share legacy identity matching with supervision host; add restart pointers while BASE-started watcher pid 4806 keeps running
+watcher still alive:  4806 bash /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-tz-lab.Xsb9Iy/base/bin/fm-watch.sh
+recorded .watch.lock/pid-identity (legacy local-time, unchanged): Sat Sep 26 18:14:52 2026     bash /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-tz-lab.Xsb9Iy/base/bin/fm-watch.sh
+beat age: 14s
+
+### UPGRADED hook, TZ=Europe/Amsterdam (the zone the legacy identity was written in) -> legacy compat path:
+exit=0
+
+### UPGRADED hook, no TZ override (host zone Europe/Athens, legacy identity written in Amsterdam):
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny"},"systemMessage":"[watcher-continuity] The watcher is running with a fresh beat but its identity check failed: pid-identity-mismatch - watcher pid 4806 is running but its live process identity differs from the identity the lock recorded. Fleet commands stay gated until it is restarted. Drain wakes with bin/fm-wake-drain.sh, the safe mid-session action; run the once-per-session bin/fm-session-start.sh instead only if you have not already run it earlier this session; use fail-closed bin/fm-teardown.sh for completed tasks when needed, then restart it with bin/fm-watch-arm.sh --restart as a tracked Claude background task before running other fleet commands (blocked: fm-crew-state.sh)"}
+exit=2

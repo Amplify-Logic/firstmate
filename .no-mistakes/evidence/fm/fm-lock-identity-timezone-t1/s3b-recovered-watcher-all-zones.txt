@@ -1,0 +1,14 @@
+## Scenario 3b: after the deny's --restart guidance (and the normal drain/ack of the recovery wake), the upgraded checkout's watcher records a UTC identity and passes from every zone
+arm output: watcher: started pid=70321 (beacon fresh)
+recorded .watch.lock/pid-identity (UTC form): Sat Sep 26 16:15:56 2026     bash /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-tz-lab.Xsb9Iy/base/bin/fm-watch.sh
+ps lstart host zone: Sat Sep 26 19:15:56 2026    
+### UPGRADED hook TZ='host Europe/Athens':
+exit=0
+### UPGRADED hook TZ='Europe/London':
+exit=0
+### UPGRADED hook TZ='Europe/Amsterdam':
+exit=0
+### UPGRADED hook TZ='America/New_York':
+exit=0
+### UPGRADED hook TZ='Asia/Tokyo':
+exit=0
