@@ -2952,18 +2952,13 @@ esac
 # default, and a relaunch's recorded account all stand down, and an explicit
 # --account refuses rather than launching on two competing selections.
 if [ "$RELAUNCH" -eq 1 ] && [ "$ACCOUNT_SET" -eq 0 ] && [ "$RAW_LAUNCH" -eq 0 ] \
-  && [ "$HARNESS" = "$RELAUNCH_PRIOR_HARNESS" ] && [ -z "$WORKER_ACCOUNT" ]; then
-  # Inherit only a registry-written account. The worker account pin records
-  # its own account= (`ordinary` or an absolute path), which is never a registry
-  # name; a record from before the source tag existed can only hold a registry
-  # name, which never starts with `/`.
-  ACCOUNT=$(fm_meta_get "$RELAUNCH_META" account)
-  case "$(fm_meta_get "$RELAUNCH_META" account_source):$ACCOUNT" in
-    registry:?*) ACCOUNT_SET=1 ;;
-    :ordinary | :/* | *:) ACCOUNT= ;;
-    :*) ACCOUNT_SET=1 ;;
-    *) ACCOUNT= ;;
-  esac
+  && [ "$HARNESS" = "$RELAUNCH_PRIOR_HARNESS" ] && [ -z "$WORKER_ACCOUNT" ] \
+  && command -v fm_account_recorded_name >/dev/null 2>&1; then
+  # Inherit only a registry-written account (fm_account_recorded_name owns
+  # the rule), never the worker account pin's own account= value.
+  ACCOUNT=$(fm_account_recorded_name "$(fm_meta_get "$RELAUNCH_META" account_source)" \
+    "$(fm_meta_get "$RELAUNCH_META" account)")
+  [ -z "$ACCOUNT" ] || ACCOUNT_SET=1
 fi
 ACCOUNT_NAME=
 ACCOUNT_HOME=
