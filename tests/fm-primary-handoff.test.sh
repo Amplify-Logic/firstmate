@@ -762,13 +762,13 @@ test_check_context_refresh_when_chain_exhausted() {
 test_claude_opus_chain_profile() {
   local next opus_alias
   next=$(
-    # shellcheck source=bin/fm-primary-handoff-lib.sh
+    # shellcheck source=/dev/null
     . "$ROOT/bin/fm-primary-handoff-lib.sh"
     FM_HANDOFF_SKIP_CLI_CHECK=1 fm_handoff_next_profile claude-fable '["claude-fable","claude-opus"]'
   )
   [ "$next" = claude-opus ] || fail "handoff chain did not accept claude-opus after claude-fable"
   opus_alias=$(
-    # shellcheck source=bin/fm-primary-handoff-lib.sh
+    # shellcheck source=/dev/null
     . "$ROOT/bin/fm-primary-handoff-lib.sh"
     fm_handoff_normalize_profile opus
   )
@@ -781,39 +781,39 @@ test_astra_registered_profile() {
   mkdir -p "$default_config"
   printf '{"enabled":true}\n' > "$default_config/primary-handoff"
   norm=$(
-    # shellcheck source=bin/fm-primary-handoff-lib.sh
+    # shellcheck source=/dev/null
     . "$ROOT/bin/fm-primary-handoff-lib.sh"
     fm_handoff_normalize_profile astra
   )
   [ "$norm" = astra ] || fail "handoff did not accept astra as a launcher profile"
   cli=$(
-    # shellcheck source=bin/fm-primary-handoff-lib.sh
+    # shellcheck source=/dev/null
     . "$ROOT/bin/fm-primary-handoff-lib.sh"
     fm_handoff_profile_cli astra
   )
   [ "$cli" = codex ] || fail "handoff did not map astra to the codex CLI"
   provider=$(
-    # shellcheck source=bin/fm-primary-handoff-lib.sh
+    # shellcheck source=/dev/null
     . "$ROOT/bin/fm-primary-handoff-lib.sh"
     fm_handoff_profile_provider astra
   )
   [ "$provider" = codex ] || fail "handoff did not map astra to the codex quota provider"
   write_quota "$TMP_ROOT/quota-astra.json" 10
   remaining=$(
-    # shellcheck source=bin/fm-primary-handoff-lib.sh
+    # shellcheck source=/dev/null
     . "$ROOT/bin/fm-primary-handoff-lib.sh"
     FM_HANDOFF_QUOTA_JSON="$TMP_ROOT/quota-astra.json" \
       fm_handoff_min_remaining_for_profile astra
   )
   [ "$remaining" = 90 ] || fail "astra did not read the codex quota windows: $remaining"
   next=$(
-    # shellcheck source=bin/fm-primary-handoff-lib.sh
+    # shellcheck source=/dev/null
     . "$ROOT/bin/fm-primary-handoff-lib.sh"
     FM_HANDOFF_SKIP_CLI_CHECK=1 fm_handoff_next_profile claude-fable '["claude-fable","astra"]'
   )
   [ "$next" = astra ] || fail "handoff chain did not accept an explicitly configured astra successor"
   chain=$(
-    # shellcheck source=bin/fm-primary-handoff-lib.sh
+    # shellcheck source=/dev/null
     . "$ROOT/bin/fm-primary-handoff-lib.sh"
     FM_CONFIG_OVERRIDE="$default_config" fm_handoff_load_config >/dev/null 2>&1
     printf '%s\n' "$FM_HANDOFF_CHAIN_JSON"
@@ -826,19 +826,19 @@ test_astra_registered_profile() {
 test_cursor_grok_quota_monitored() {
   local norm cli provider remaining unmonitored
   norm=$(
-    # shellcheck source=bin/fm-primary-handoff-lib.sh
+    # shellcheck source=/dev/null
     . "$ROOT/bin/fm-primary-handoff-lib.sh"
     fm_handoff_normalize_profile cursor
   )
   [ "$norm" = cursor-grok ] || fail "handoff did not normalize the cursor launcher alias"
   cli=$(
-    # shellcheck source=bin/fm-primary-handoff-lib.sh
+    # shellcheck source=/dev/null
     . "$ROOT/bin/fm-primary-handoff-lib.sh"
     fm_handoff_profile_cli cursor-grok
   )
   [ "$cli" = agent ] || fail "handoff did not map cursor-grok to the agent CLI"
   provider=$(
-    # shellcheck source=bin/fm-primary-handoff-lib.sh
+    # shellcheck source=/dev/null
     . "$ROOT/bin/fm-primary-handoff-lib.sh"
     fm_handoff_profile_provider cursor-grok
   )
@@ -860,7 +860,7 @@ test_cursor_grok_quota_monitored() {
 }
 JSON
   remaining=$(
-    # shellcheck source=bin/fm-primary-handoff-lib.sh
+    # shellcheck source=/dev/null
     . "$ROOT/bin/fm-primary-handoff-lib.sh"
     FM_HANDOFF_QUOTA_JSON="$TMP_ROOT/quota-cursor.json" \
       fm_handoff_min_remaining_for_profile cursor-grok
@@ -868,19 +868,19 @@ JSON
   [ "$remaining" = 24 ] || \
     fail "cursor-grok did not read only the general cursor plan windows: $remaining"
   (
-    # shellcheck source=bin/fm-primary-handoff-lib.sh
+    # shellcheck source=/dev/null
     . "$ROOT/bin/fm-primary-handoff-lib.sh"
     FM_HANDOFF_QUOTA_JSON="$TMP_ROOT/quota-cursor.json" \
       fm_handoff_over_threshold cursor-grok 30
   ) || fail "cursor-grok did not trip the quota threshold from its plan windows"
   (
-    # shellcheck source=bin/fm-primary-handoff-lib.sh
+    # shellcheck source=/dev/null
     . "$ROOT/bin/fm-primary-handoff-lib.sh"
     FM_HANDOFF_QUOTA_JSON="$TMP_ROOT/quota-cursor.json" \
       fm_handoff_over_threshold cursor-grok 10
   ) && fail "cursor-grok tripped the quota threshold while it still had headroom"
   unmonitored=$(
-    # shellcheck source=bin/fm-primary-handoff-lib.sh
+    # shellcheck source=/dev/null
     . "$ROOT/bin/fm-primary-handoff-lib.sh"
     FM_HANDOFF_QUOTA_JSON="$TMP_ROOT/quota-cursor.json" \
       fm_handoff_min_remaining_for_profile pi
@@ -910,13 +910,13 @@ test_fable_model_window_rotates_to_opus() {
 }
 JSON
   fable=$(
-    # shellcheck source=bin/fm-primary-handoff-lib.sh
+    # shellcheck source=/dev/null
     . "$ROOT/bin/fm-primary-handoff-lib.sh"
     FM_HANDOFF_QUOTA_JSON="$TMP_ROOT/quota.json" fm_handoff_min_remaining_for_profile claude-fable
   )
   [ "$fable" = 10 ] || fail "claude-fable did not read its Fable model window: $fable"
   opus=$(
-    # shellcheck source=bin/fm-primary-handoff-lib.sh
+    # shellcheck source=/dev/null
     . "$ROOT/bin/fm-primary-handoff-lib.sh"
     FM_HANDOFF_QUOTA_JSON="$TMP_ROOT/quota.json" fm_handoff_min_remaining_for_profile claude-opus
   )
