@@ -2,15 +2,29 @@ import AVFoundation
 import XCTest
 @testable import DeskFloater
 
+/// Stands in for the Mac's default audio devices.
+private final class FakeSystem {
+    var input: AudioDeviceID = 1
+    var output: AudioDeviceID = 2
+}
+
 /// Stands in for the microphone: the test feeds audio through the tap by hand.
 private final class FakeEngine: CaptureEngine {
     let inputFormat = AVAudioFormat(
         commonFormat: .pcmFormatFloat32, sampleRate: 48000, channels: 1, interleaved: false)!
-    var isStale = false
+    private let system: FakeSystem
     var onChange: (() -> Void)?
     var failNextStart = false
     private(set) var running = false
     private var tap: ((AVAudioPCMBuffer) -> Void)?
+
+    init(system: FakeSystem) {
+        self.system = system
+    }
+
+    var setup: AudioSetup {
+        AudioSetup(format: inputFormat, input: system.input, output: system.output)
+    }
 
     func installTap(_ block: @escaping (AVAudioPCMBuffer) -> Void) {
         tap = block
@@ -32,10 +46,9 @@ private final class FakeEngine: CaptureEngine {
         running = false
     }
 
-    /// What the audio system does when headphones connect or the default
-    /// input changes.
-    func changeDevices() {
-        isStale = true
+    /// The configuration-change notification, whether or not anything the
+    /// engine was built for actually changed.
+    func reportChange() {
         onChange?()
     }
 
@@ -60,6 +73,7 @@ private final class FakeEngine: CaptureEngine {
 }
 
 final class VoiceCaptureTests: XCTestCase {
+    private let system = FakeSystem()
     private var built: [FakeEngine] = []
     private var files: [URL] = []
 
@@ -72,7 +86,7 @@ final class VoiceCaptureTests: XCTestCase {
 
     private func makeCapture() -> VoiceCapture {
         VoiceCapture(makeEngine: { [unowned self] in
-            let engine = FakeEngine()
+            let engine = FakeEngine(system: system)
             built.append(engine)
             return engine
         })
@@ -113,9 +127,13 @@ final class VoiceCaptureTests: XCTestCase {
     func testADeviceChangeBetweenCapturesRebuildsTheEngineBeforeTheNextPress() throws {
         let capture = makeCapture()
         try capture.warm()
-        built[0].changeDevices()
+        system.input = 3
+        built[0].reportChange()
         drainMainQueue()
         XCTAssertEqual(built.count, 2, "the engine is rebuilt while the captain is not talking")
+        built[1].reportChange()
+        drainMainQueue()
+        XCTAssertEqual(built.count, 2, "the rebuilt engine's own notification leaves it alone")
 
         let url = newFile()
         try capture.start(writingTo: url)
@@ -125,12 +143,23 @@ final class VoiceCaptureTests: XCTestCase {
         XCTAssertEqual(try seconds(in: url), 1.0, accuracy: 0.05)
     }
 
+    func testANotificationThatChangesNothingKeepsTheEngine() throws {
+        let capture = makeCapture()
+        try capture.warm()
+        built[0].reportChange()
+        drainMainQueue()
+        try capture.start(writingTo: newFile())
+        capture.stop()
+        XCTAssertEqual(built.count, 1, "an unchanged setup is never rebuilt")
+    }
+
     func testADeviceChangeDuringACaptureLeavesTheRecordingAlone() throws {
         let capture = makeCapture()
         let url = newFile()
         try capture.start(writingTo: url)
         built[0].speak(0.5)
-        built[0].changeDevices()
+        system.output = 4
+        built[0].reportChange()
         drainMainQueue()
         XCTAssertEqual(built.count, 1, "the running capture keeps its engine")
         built[0].speak(0.5)
@@ -171,7 +200,7 @@ final class VoiceCaptureTests: XCTestCase {
         capture.stop()
         XCTAssertEqual(try seconds(in: first), 0.5, accuracy: 0.05)
 
-        built[1].isStale = true
+        system.input = 3
         let second = newFile()
         try capture.start(writingTo: second)
         XCTAssertEqual(built.count, 3, "an engine whose devices changed is rebuilt")

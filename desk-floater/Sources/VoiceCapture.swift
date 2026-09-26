@@ -1,4 +1,5 @@
 import AVFoundation
+import CoreAudio
 import Foundation
 
 /// Records the microphone to a 16 kHz mono 16-bit WAV for transcription, with
@@ -22,10 +23,13 @@ import Foundation
 /// captain's first words. One engine is therefore built ahead of the first
 /// press (warm) and kept; a capture then only starts it, in well under a tenth
 /// of a second. A built engine that is not started does not run the
-/// microphone. An engine whose audio devices change (headphones connected, a
-/// new default input) is rebuilt as soon as no capture is running, so the next
-/// press is quick again; one that stops working, or whose devices change
-/// during a capture, is rebuilt on the next capture.
+/// microphone. An engine whose audio setup changes (headphones connected, a
+/// new default input or output, a new input format) is rebuilt as soon as no
+/// capture is running, so the next press is quick again; one that stops
+/// working, or whose setup changes during a capture, is rebuilt on the next
+/// capture. A change notification that leaves the setup as it was, such as
+/// the one a new engine receives when the engine it replaced is torn down, is
+/// ignored.
 ///
 /// Audio still on its way in when the key comes up (up to one tap buffer, a
 /// tenth of a second) would be lost by stopping at once, and a release often
@@ -41,6 +45,7 @@ final class VoiceCapture {
 
     private let makeEngine: () throws -> CaptureEngine
     private var engine: CaptureEngine?
+    private var builtFor: AudioSetup?
     private let lock = NSLock()
     private var file: AVAudioFile?
     private var converter: CaptureConverter?
@@ -52,7 +57,7 @@ final class VoiceCapture {
     /// Builds the engine now, so the next capture starts at once; a no-op
     /// while a working engine is already built.
     func warm() throws {
-        if let engine, !engine.isStale {
+        if let engine, engine.setup == builtFor {
             return
         }
         engine = nil
@@ -61,6 +66,7 @@ final class VoiceCapture {
             DispatchQueue.main.async { self?.rebuildIfIdle() }
         }
         self.engine = engine
+        builtFor = engine.setup
     }
 
     private func rebuildIfIdle() {
@@ -135,9 +141,9 @@ final class VoiceCapture {
 protocol CaptureEngine: AnyObject {
     /// The format of the buffers handed to the tap.
     var inputFormat: AVAudioFormat { get }
-    /// True once the engine can no longer be trusted to start as built.
-    var isStale: Bool { get }
-    /// Called, on any thread, when the engine becomes stale.
+    /// The audio devices and input format as they are now.
+    var setup: AudioSetup { get }
+    /// Called, on any thread, when the audio configuration may have changed.
     var onChange: (() -> Void)? { get set }
     func installTap(_ block: @escaping (AVAudioPCMBuffer) -> Void)
     func removeTap()
@@ -149,8 +155,6 @@ protocol CaptureEngine: AnyObject {
 /// part; starting and stopping it are quick.
 final class VoiceEngine: CaptureEngine {
     private let engine = AVAudioEngine()
-    private let lock = NSLock()
-    private var changed = false
     private var observer: NSObjectProtocol?
     var onChange: (() -> Void)?
 
@@ -164,7 +168,6 @@ final class VoiceEngine: CaptureEngine {
         observer = NotificationCenter.default.addObserver(
             forName: .AVAudioEngineConfigurationChange, object: engine, queue: nil
         ) { [weak self] _ in
-            self?.lock.withLock { self?.changed = true }
             self?.onChange?()
         }
     }
@@ -179,7 +182,23 @@ final class VoiceEngine: CaptureEngine {
 
     var inputFormat: AVAudioFormat { engine.inputNode.outputFormat(forBus: 0) }
 
-    var isStale: Bool { lock.withLock { changed } }
+    var setup: AudioSetup {
+        AudioSetup(
+            format: inputFormat,
+            input: Self.defaultDevice(kAudioHardwarePropertyDefaultInputDevice),
+            output: Self.defaultDevice(kAudioHardwarePropertyDefaultOutputDevice))
+    }
+
+    private static func defaultDevice(_ selector: AudioObjectPropertySelector) -> AudioDeviceID {
+        var address = AudioObjectPropertyAddress(
+            mSelector: selector, mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain)
+        var device = AudioDeviceID(kAudioObjectUnknown)
+        var size = UInt32(MemoryLayout<AudioDeviceID>.size)
+        AudioObjectGetPropertyData(
+            AudioObjectID(kAudioObjectSystemObject), &address, 0, nil, &size, &device)
+        return device
+    }
 
     func installTap(_ block: @escaping (AVAudioPCMBuffer) -> Void) {
         let input = engine.inputNode
@@ -199,6 +218,14 @@ final class VoiceEngine: CaptureEngine {
     func stop() {
         engine.stop()
     }
+}
+
+/// What an engine is built for: the system's default input and output devices
+/// and the format the input delivers.
+struct AudioSetup: Equatable {
+    var format: AVAudioFormat
+    var input: AudioDeviceID
+    var output: AudioDeviceID
 }
 
 /// Turns the voice-processed input into the transcription format. Voice
