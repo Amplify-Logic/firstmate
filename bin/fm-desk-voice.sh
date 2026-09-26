@@ -383,9 +383,10 @@ unstash_draft() {  # <backend> <target>
 # message, never again: a second Enter after Claude restored the draft would
 # submit the draft. The proof reads, and the Ctrl+U presses that clear a
 # refused message, are sized by the message, which wraps (fm_composer_proof_lines).
-# After Enter the message has left the box once the box reads neither the
-# proven text nor the message, so a restored draft that is only a pasted-text
-# placeholder is not taken for the message.
+# After Enter the message was submitted only once the box reads empty or
+# shows the captain's draft again: Claude can redraw a long message it has not
+# submitted as pasted-text placeholders plus its tail, which is neither the
+# proven text nor the message.
 # The one deliberate exception where text in the box still sends the message
 # to the mailbox: a footer that already shows `› stashed`, because a second
 # stash would replace the one the captain keeps, and an existing Claude stash
@@ -436,16 +437,16 @@ send_past_draft() {  # <backend> <target> <line>
     return 0
   fi
   shown=$(squeezed "$after")
+  draft=$(squeezed "$draft")
   fm_backend_send_key "$backend" "$target" Enter >/dev/null 2>&1 || { printf 'unknown'; return 0; }
   i=0
   while :; do
     sleep 0.2
-    if after=$(composer_text "$backend" "$target" "$rows"); then
-      after=$(squeezed "$after")
-      if [ "$after" != "$shown" ] && [ "$after" != "$(squeezed "$line")" ]; then
-        printf 'empty'
-        return 0
-      fi
+    if [ "$(fm_backend_composer_state "$backend" "$target" 2>/dev/null)" = empty ] \
+      || { [ "$draft" != "$shown" ] && after=$(composer_text "$backend" "$target") \
+        && [ "$(squeezed "$after")" = "$draft" ]; }; then
+      printf 'empty'
+      return 0
     fi
     i=$((i + 1))
     [ "$i" -lt 15 ] || { printf 'unknown'; return 0; }

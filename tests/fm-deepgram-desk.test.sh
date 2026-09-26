@@ -855,7 +855,8 @@ test_desk_voice_deliver_pending_drain() {
 # submitted log, then restores a stash into the box. Knob files bend it: wrap
 # draws the box 40 columns wide, where Ctrl+U deletes one wrapped row;
 # drop-head loses the first typed character; no-marker hides `› stashed`;
-# pop-fails refuses the Ctrl+S that pops a stash.
+# pop-fails refuses the Ctrl+S that pops a stash; refold makes Enter redraw
+# the box as a pasted-text placeholder plus the typed tail without submitting.
 
 desk_send_fixture() {  # <name> [tmux|herdr] [harness] -> home; starts the stand-in primary
   local name=$1 backend=${2:-herdr} harness=${3:-claude} home dir fb pid i envs marker
@@ -952,6 +953,11 @@ case "${1:-} ${2:-}" in
       *)
         : > "$dir/entered"
         [ ! -e "$dir/never-works" ] || exit 0
+        if [ -e "$dir/refold" ]; then
+          draft=$(cat "$dir/draft")
+          printf '[Pasted text #2 +3 lines]%s' "${draft: -40}" > "$dir/draft"
+          exit 0
+        fi
         if [ -s "$dir/draft" ]; then
           { cat "$dir/draft"; printf '\n'; } >> "$dir/submitted"
         elif [ -e "$dir/ghost" ]; then
@@ -1274,6 +1280,27 @@ test_desk_voice_send_proves_a_long_message_past_a_claude_draft() {
   [ "$(inbox_count "$home")" = 0 ] || fail "a pane delivery must not also land in the mailbox"
   desk_send_done "$home"
   pass "fm-desk-voice send: a message that wraps past a 20-row read still goes past a Claude draft"
+}
+
+test_desk_voice_send_never_confirms_a_redrawn_message_past_a_draft() {
+  local home out long
+  home=$(desk_send_fixture send-draft-refold) || { desk_send_skip send-draft-refold; return 0; }
+  cp "$HERDR_CLAUDE_SCREEN" "$home/fixture/screen"
+  printf 'claude' > "$home/fixture/agent"
+  : > "$home/fixture/refold"
+  printf 'half typed thought' > "$home/fixture/draft"
+  long=$(printf 'word%03d ' $(seq 1 60))
+  long=${long% }
+  out=$(desk_send "$home" "$long") || fail "send failed: $out"
+  case "$out" in
+    sent-unconfirmed:\ *) ;;
+    *) fail "a message redrawn in the box but never submitted must not read as sent, got: $out" ;;
+  esac
+  [ ! -e "$home/fixture/submitted" ] || fail "nothing was submitted"
+  [ "$(herdr_calls "$home" pane send-keys w7:p3 enter | wc -l | tr -d ' ')" = 1 ] \
+    || fail "Enter must be pressed exactly once"
+  desk_send_done "$home"
+  pass "fm-desk-voice send: a message Claude redraws instead of submitting is not reported as sent"
 }
 
 test_desk_voice_send_clears_a_refused_message_and_restores_the_draft() {
@@ -1726,6 +1753,7 @@ test_desk_voice_send_goes_past_a_pasted_text_draft
 test_desk_voice_send_keeps_a_draft_it_cannot_set_aside
 test_desk_voice_send_proves_a_long_message_past_a_claude_draft
 test_desk_voice_send_clears_a_refused_message_and_restores_the_draft
+test_desk_voice_send_never_confirms_a_redrawn_message_past_a_draft
 test_desk_voice_send_restores_a_draft_stashed_without_a_marker
 test_desk_voice_send_joins_another_harness_draft
 test_desk_voice_send_types_screenshots_into_the_primary_pane

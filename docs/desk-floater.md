@@ -195,6 +195,7 @@ Your draft is never sent, cleared, or retyped.
 That has one deliberate exception, where text in the box still sends the message to the mailbox: Claude's footer already shows `› stashed`, a draft you set aside yourself.
 Stashing again would replace yours, and an existing Claude stash is never overwritten.
 If the message cannot be proven in the box before Enter, it is cleared, your draft is put back, and the message goes to the mailbox; if your draft cannot be put back, the send notes that Ctrl+S in the chat brings it back.
+After Enter the send counts as confirmed only once the box is empty or shows your draft again; otherwise it reports that the submit was not confirmed.
 With another harness as the primary, the message joins the draft and is submitted with it.
 
 When the chat pane cannot be reached, is not showing its chat input, or refuses the text, the transcript goes to the mailbox instead:

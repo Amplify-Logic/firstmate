@@ -43,14 +43,14 @@ git -C "$LAB/project" init -q
 t new-session -d -s fm -x 120 -y 40 -c "$LAB/project" "claude --model haiku" \
   || fail "could not start claude in a private tmux server"
 
+# Enter is pressed only once the pointer is seen on the trust option: a Down
+# sent while the dialog is still drawing is dropped, and Enter would then pick
+# "No, exit" and end Claude.
 ready=0
 for _ in $(seq 1 60); do
   case "$(screen)" in
-    *'Yes, I trust this folder'*)
-      t send-keys -t fm:0.0 Down
-      sleep 0.3
-      t send-keys -t fm:0.0 Enter
-      ;;
+    *'❯ Yes, I trust this folder'*) t send-keys -t fm:0.0 Enter ;;
+    *'Yes, I trust this folder'*) t send-keys -t fm:0.0 Down ;;
   esac
   if [ "$(composer_state)" = empty ]; then
     ready=1
