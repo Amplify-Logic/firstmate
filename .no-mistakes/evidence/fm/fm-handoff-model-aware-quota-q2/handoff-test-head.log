@@ -1,0 +1,30 @@
+ok - disabled config is a no-op and leaves the live session lock alone
+ok - handoff registers astra on the codex CLI and quota pool without joining the default chain
+ok - handoff reads cursor-grok quota from the general cursor plan windows only
+ok - happy-path handoff flushes, releases outgoing, launches incoming, one live holder
+ok - flush failure aborts without releasing lock or launching incoming
+ok - signal failure aborts with outgoing still the sole live holder
+ok - wait_dead failure never launches and never dual-holds
+ok - fm-lock release-stale refuses while a live harness holds the lock
+ok - fm-lock release-stale fails closed when bin/fm-primary-handoff-lib.sh is absent
+ok - pre_launch failure leaves zero live holders and never dual-holds
+ok - launch failure never creates two live holders
+ok - check hands off when quota is at or below threshold
+ok - check is a no-op when remaining quota is above threshold
+ok - fm-primary behavior unchanged when handoff is disabled; marker only when enabled
+ok - coordination lock serializes supervisors without dual session-lock holders
+ok - context threshold detection triggers same-runtime rotation
+ok - check is a no-op when context used is below threshold
+ok - same-runtime execute rotates claude -> claude with one live holder
+ok - away mode refuses automated rotation
+ok - cooldown prevents busy-loop rotation when already over threshold
+ok - workers live before rotation remain live and owned after it
+ok - incoming primary re-arms supervision beacon after handoff
+ok - durable wakes arriving before/during rotation are not lost
+ok - status bar persists context sample while displaying used percent
+ok - absent context threshold leaves quota-only behavior
+ok - handoff accepts claude-opus and the opus alias as launcher profiles
+ok - check stays put quietly when the chain has no distinct successor
+ok - exhausted chain still allows a same-profile context refresh
+ok - Fable model-window exhaustion rotates claude-fable to claude-opus
+All primary-handoff tests passed.

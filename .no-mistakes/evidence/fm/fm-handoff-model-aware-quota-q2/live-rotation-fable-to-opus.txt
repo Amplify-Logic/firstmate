@@ -1,0 +1,64 @@
+# Live rotation in disposable lab FM_HOME (private tmux socket fm-lab), gate worktree /Users/larsmusic/.no-mistakes/worktrees/f569cc43ac96/01M3F6VG3DGEXACFHFC3SP2312
+## lab primary window 0 (original claude-fable primary) before check: acquired lock via bin/fm-lock.sh -> harness pid 32448
+## before: primary-active + lock
+schema=fm-primary-active.v1
+profile=claude-fable
+pid=
+started_at=1790438391
+updated_at=1790438391
+lock: held by live harness pid 32448
+## quota fed to check (real quota-axi, model:fable forced to 10):
+["five_hour=82","seven_day=57","model:fable=10"]
+## bin/fm-primary-handoff.sh check
+handoff: threshold crossed profile=claude-fable min_remaining=10 threshold=15
+lock released: stale holder pid 32448
+fm-primary-handoff: incoming did not acquire the session lock
+check exit=1
+
+## tmux windows after check
+0: FIRSTMATE · WAITING
+1: handoff
+2: FIRSTMATE · WAITING
+
+## outgoing pid 32448 alive?
+gone (signalled by handoff)
+
+## incoming window 2 pane capture
+fm-primary: launching model claude-opus-5-5 at effort low
+ ▐▛███▛█   Claude Code v2.1.283
+▝▜██████▀  Opus 5.5 with low effort · Claude Max
+ ▝▝   ▝▝   ~/.no-mistakes/worktrees/f569cc43ac96/01M3F6VG3DGEXACFHFC3SP2312
+  ⎿  SessionStart:startup hook error
+  ⎿  Failed with non-blocking status code: /bin/sh: ${CLAUDE_PLUGIN_ROOT}/hooks/run-hook.cmd: No such file or directory
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── FIRSTMATE ─
+❯ Try "refactor fm-wake-queue.test.sh"
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⚓ Opus 5.5·low │ 🧠-- ⚡-- │ 🚢0 🧪0 ⏸0 ⚠0 🪦0 📋0 │ 👁 NO-WATCH -- │ $0.00 │ 💤--
+  ⏵⏵ bypass permissions on (shift+tab to cycle) · ← 2 agents
+
+## state/.primary-active after
+schema=fm-primary-active.v1
+profile=claude-opus
+pid=
+started_at=1790438520
+updated_at=1790438520
+
+## state/.primary-handoff record
+schema=fm-primary-handoff.v1
+phase=failed
+from=claude-fable
+to=claude-opus
+reason=quota:min_remaining=10
+trigger=quota
+token=1790438519-32448
+outgoing_pid=32448
+incoming_pid=
+started_at=1790438519
+updated_at=1790438520
+error=incoming did not acquire the session lock
+completed_at=
+cooldown_until=
+
+## post-rotation check, same quota (model:fable=10), active now claude-opus
+handoff: ok profile=claude-opus min_remaining=57 context_used=7 quota_threshold=15 context_threshold=disabled
+exit=0

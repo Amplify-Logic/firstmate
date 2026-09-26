@@ -1,0 +1,43 @@
+Lab FM_HOME, chain [claude-fable, claude-opus], threshold 15, no live primary holding the lock (execute refuses after the decision).
+
+### A: Fable model window exhausted (10), general windows healthy
+transform: .providers |= map(if .provider=="claude" then .windows |= map(if .id=="model:fable" then .percentRemaining=10 else . end) else . end)
+["five_hour=82","seven_day=57","model:fable=10"]
+claude-fable -> handoff: threshold crossed profile=claude-fable min_remaining=10 threshold=15 fm-primary-handoff: session lock is not held by a live harness; refusing handoff 
+claude-opus -> handoff: ok profile=claude-opus min_remaining=57 context_used=na quota_threshold=15 context_threshold=disabled 
+
+### B: adversarial - an unrelated model window low (model:other=2), Fable healthy
+transform: .providers |= map(if .provider=="claude" then .windows |= (. + [{"id":"model:other","kind":"model","percentRemaining":2}]) else . end)
+["five_hour=82","seven_day=57","model:fable=93","model:other=2"]
+claude-fable -> handoff: ok profile=claude-fable min_remaining=57 context_used=na quota_threshold=15 context_threshold=disabled 
+claude-opus -> handoff: ok profile=claude-opus min_remaining=57 context_used=na quota_threshold=15 context_threshold=disabled 
+
+### C: adversarial - producer omits model:fable entirely
+transform: .providers |= map(if .provider=="claude" then .windows |= map(select(.id!="model:fable")) else . end)
+["five_hour=82","seven_day=57"]
+claude-fable -> handoff: ok profile=claude-fable min_remaining=57 context_used=na quota_threshold=15 context_threshold=disabled 
+claude-opus -> handoff: ok profile=claude-opus min_remaining=57 context_used=na quota_threshold=15 context_threshold=disabled 
+
+### D: producer reports only model:fable=12 (general ids dropped)
+transform: .providers |= map(if .provider=="claude" then .windows |= map(select(.id=="model:fable") | .percentRemaining=12) else . end)
+["model:fable=12"]
+claude-fable -> handoff: threshold crossed profile=claude-fable min_remaining=12 threshold=15 fm-primary-handoff: session lock is not held by a live harness; refusing handoff 
+claude-opus -> handoff: ok profile=claude-opus min_remaining=na context_used=na quota_threshold=15 context_threshold=disabled 
+
+### E: adversarial - model:fable non-numeric percentRemaining
+transform: .providers |= map(if .provider=="claude" then .windows |= map(if .id=="model:fable" then .percentRemaining="low" else . end) else . end)
+["five_hour=82","seven_day=57","model:fable=low"]
+claude-fable -> handoff: ok profile=claude-fable min_remaining=57 context_used=na quota_threshold=15 context_threshold=disabled 
+claude-opus -> handoff: ok profile=claude-opus min_remaining=57 context_used=na quota_threshold=15 context_threshold=disabled 
+
+### F: boundary - Fable window exactly at threshold (15)
+transform: .providers |= map(if .provider=="claude" then .windows |= map(if .id=="model:fable" then .percentRemaining=15 else . end) else . end)
+["five_hour=82","seven_day=57","model:fable=15"]
+claude-fable -> handoff: threshold crossed profile=claude-fable min_remaining=15 threshold=15 fm-primary-handoff: session lock is not held by a live harness; refusing handoff 
+claude-opus -> handoff: ok profile=claude-opus min_remaining=57 context_used=na quota_threshold=15 context_threshold=disabled 
+
+### G: boundary - Fable window just above threshold (16)
+transform: .providers |= map(if .provider=="claude" then .windows |= map(if .id=="model:fable" then .percentRemaining=16 else . end) else . end)
+["five_hour=82","seven_day=57","model:fable=16"]
+claude-fable -> handoff: ok profile=claude-fable min_remaining=16 context_used=na quota_threshold=15 context_threshold=disabled 
+claude-opus -> handoff: ok profile=claude-opus min_remaining=57 context_used=na quota_threshold=15 context_threshold=disabled 

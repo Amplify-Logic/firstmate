@@ -1,0 +1,12 @@
+## Live producer snapshot (quota-axi --json, claude provider)
+{"id":"five_hour","kind":"session","percentRemaining":82}
+{"id":"seven_day","kind":"weekly","percentRemaining":57}
+{"id":"model:fable","kind":"model","percentRemaining":93}
+
+## FM_HOME=lab active=claude-fable threshold=15: bin/fm-primary-handoff.sh check (real quota-axi)
+handoff: ok profile=claude-fable min_remaining=57 context_used=na quota_threshold=15 context_threshold=disabled
+exit=0
+
+## FM_HOME=lab active=claude-opus threshold=15: bin/fm-primary-handoff.sh check (real quota-axi)
+handoff: ok profile=claude-opus min_remaining=57 context_used=na quota_threshold=15 context_threshold=disabled
+exit=0
