@@ -1,0 +1,11 @@
+AXWindow desc="" title="" value="" help="" x=1346 y=480 w=142 h=71
+  AXGroup desc="" title="" value="" help="" x=1346 y=480 w=142 h=71
+    AXImage desc="Desk push to talk" title="" value="" help="Hold to talk to Firstmate, or click to start and click again to send (or hold Right Option)" x=1352 y=490 w=36 h=36
+    AXButton desc="Stop talking" title="" value="" help="Stop talking" x=1394 y=486 w=20 h=20
+    AXButton desc="Repeat the last reply" title="" value="" help="Repeat the last reply" x=1418 y=486 w=20 h=20
+    AXStaticText desc="" title="" value="!" help="" x=1459 y=496 w=3 h=10
+    AXButton desc="Screenshots are off: macOS has not allowed this build Screen Recording. Click to allow it." title="" value="" help="Screenshots are off: macOS has not allowed this build Screen Recording. Click to allow it." x=1444 y=498 w=20 h=20
+    AXButton desc="Mute voice" title="" value="" help="Mute voice" x=1394 y=510 w=20 h=20
+    AXButton desc="Dictate into the text box with the cursor (or tap Right Command)" title="" value="" help="Dictate into the text box with the cursor (or tap Right Command)" x=1418 y=510 w=20 h=20
+    AXButton desc="Show recent replies" title="" value="" help="Recent replies - click one to hear it again" x=1470 y=486 w=12 h=44
+    AXStaticText desc="" title="" value="Hold to talk" help="" x=1391 y=534 w=52 h=11
