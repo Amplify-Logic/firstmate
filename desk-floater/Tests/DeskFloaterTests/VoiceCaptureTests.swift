@@ -7,6 +7,7 @@ private final class FakeEngine: CaptureEngine {
     let inputFormat = AVAudioFormat(
         commonFormat: .pcmFormatFloat32, sampleRate: 48000, channels: 1, interleaved: false)!
     var isStale = false
+    var onChange: (() -> Void)?
     var failNextStart = false
     private(set) var running = false
     private var tap: ((AVAudioPCMBuffer) -> Void)?
@@ -29,6 +30,13 @@ private final class FakeEngine: CaptureEngine {
 
     func stop() {
         running = false
+    }
+
+    /// What the audio system does when headphones connect or the default
+    /// input changes.
+    func changeDevices() {
+        isStale = true
+        onChange?()
     }
 
     /// Delivers `seconds` of a spoken-level tone in capture-sized buffers,
@@ -94,6 +102,44 @@ final class VoiceCaptureTests: XCTestCase {
             XCTAssertEqual(try seconds(in: url), 1.5, accuracy: 0.05, "every word from the press on is kept")
         }
         XCTAssertEqual(built.count, 1, "no press waits for the engine to be built again")
+    }
+
+    private func drainMainQueue() {
+        let drained = expectation(description: "main queue drained")
+        DispatchQueue.main.async { drained.fulfill() }
+        wait(for: [drained], timeout: 2)
+    }
+
+    func testADeviceChangeBetweenCapturesRebuildsTheEngineBeforeTheNextPress() throws {
+        let capture = makeCapture()
+        try capture.warm()
+        built[0].changeDevices()
+        drainMainQueue()
+        XCTAssertEqual(built.count, 2, "the engine is rebuilt while the captain is not talking")
+
+        let url = newFile()
+        try capture.start(writingTo: url)
+        XCTAssertEqual(built.count, 2, "the next press does not wait for a rebuild")
+        built[1].speak(1.0)
+        capture.stop()
+        XCTAssertEqual(try seconds(in: url), 1.0, accuracy: 0.05)
+    }
+
+    func testADeviceChangeDuringACaptureLeavesTheRecordingAlone() throws {
+        let capture = makeCapture()
+        let url = newFile()
+        try capture.start(writingTo: url)
+        built[0].speak(0.5)
+        built[0].changeDevices()
+        drainMainQueue()
+        XCTAssertEqual(built.count, 1, "the running capture keeps its engine")
+        built[0].speak(0.5)
+        capture.stop()
+        XCTAssertEqual(try seconds(in: url), 1.0, accuracy: 0.05)
+
+        try capture.start(writingTo: newFile())
+        XCTAssertEqual(built.count, 2, "the next capture rebuilds the changed engine")
+        capture.stop()
     }
 
     func testAudioArrivingAfterReleaseIsKeptUntilTheTailEnds() throws {

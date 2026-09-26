@@ -1138,9 +1138,7 @@ final class FloaterModel: ObservableObject {
 
     nonisolated private static func transcribe(repoRoot: String, fmHome: String, audio: URL) -> String? {
         let bin = (repoRoot as NSString).appendingPathComponent("bin/fm-deepgram-stt.sh")
-        // A copy of the last few recordings stays in this home's private state,
-        // so a report of lost words can be checked against the audio.
-        return run(bin: bin, args: ["--keep", audio.path], env: ["FM_HOME": fmHome])
+        return run(bin: bin, args: [audio.path], env: ["FM_HOME": fmHome])
     }
 
     /// Sends one message to Firstmate: the transcript, the screenshots, or both,

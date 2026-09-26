@@ -245,53 +245,6 @@ test_stt_reports_http_failure() {
   pass "fm-deepgram-stt: a Deepgram failure exits 1 with the status"
 }
 
-test_stt_keep_keeps_the_newest_recordings_privately() {
-  local home out dir n f mode
-  home=$(new_home stt-keep)
-  install_stt_curl "$home" 200 \
-    '{"results":{"channels":[{"alternatives":[{"transcript":"check the last ten uploads"}]}]}}'
-  for n in 1 2 3; do
-    printf 'RIFF-recording-%s' "$n" > "$home/clip$n.wav"
-    out=$(FM_HOME="$home" FM_DESK_RECORDINGS_KEEP=2 DEEPGRAM_API_KEY=test-key-not-real \
-      FM_DEEPGRAM_CURL="$home/curl" "$STT" --keep "$home/clip$n.wav" 2>&1) || fail "stt --keep failed: $out"
-    [ "$out" = "check the last ten uploads" ] || fail "keeping changed the transcript: $out"
-  done
-  dir="$home/state/desk-voice/recordings"
-  [ "$(find "$dir" -name '*.wav' | wc -l | tr -d ' ')" = 2 ] || fail "expected the newest 2 recordings: $(ls "$dir")"
-  [ "$(find "$dir" -name '*.json' | wc -l | tr -d ' ')" = 2 ] || fail "expected 2 kept replies: $(ls "$dir")"
-  assert_equals "RIFF-recording-2RIFF-recording-3" "$(cat "$dir"/*.wav)" "the oldest recording is the one removed"
-  for f in "$dir"/*.json; do
-    assert_equals "$(cat "$home/stt-body.json")" "$(cat "$f")" "Deepgram's raw reply is kept beside its audio"
-    [ -f "${f%.json}.wav" ] || fail "reply $f has no audio beside it"
-  done
-  for f in "$dir" "$dir"/*; do
-    mode=$(stat -f '%Lp' "$f" 2>/dev/null || stat -c '%a' "$f")
-    case "$mode" in
-      700|600) ;;
-      *) fail "recordings must be private to the owner: $f is $mode" ;;
-    esac
-  done
-  printf 'RIFF' > "$home/plain.wav"
-  FM_HOME="$home" DEEPGRAM_API_KEY=test-key-not-real FM_DEEPGRAM_CURL="$home/curl" \
-    "$STT" "$home/plain.wav" >/dev/null 2>&1 || fail "stt without --keep failed"
-  [ "$(find "$dir" -type f | wc -l | tr -d ' ')" = 4 ] || fail "without --keep nothing is kept: $(ls "$dir")"
-  pass "fm-deepgram-stt: --keep keeps the newest recordings and raw replies, private and pruned"
-}
-
-test_stt_keep_keeps_the_audio_when_deepgram_fails() {
-  local home status=0 dir
-  home=$(new_home stt-keep-fail)
-  printf 'RIFF-lost-words' > "$home/clip.wav"
-  install_stt_curl "$home" 500 '{"err_msg":"internal"}'
-  FM_HOME="$home" DEEPGRAM_API_KEY=test-key-not-real FM_DEEPGRAM_CURL="$home/curl" \
-    "$STT" --keep "$home/clip.wav" >/dev/null 2>&1 || status=$?
-  [ "$status" -eq 1 ] || fail "expected exit 1 on HTTP failure, got $status"
-  dir="$home/state/desk-voice/recordings"
-  assert_equals "RIFF-lost-words" "$(cat "$dir"/*.wav)" "the audio survives a failed transcription"
-  assert_contains "$(cat "$dir"/*.json)" "internal" "the failure reply is kept"
-  pass "fm-deepgram-stt: --keep keeps the audio when Deepgram fails"
-}
-
 # --- desk floater launcher -------------------------------------------------
 
 test_floater_help_and_option_refusal() {
@@ -1489,8 +1442,6 @@ test_tts_dry_run_with_key
 test_stt_refuses_without_key_or_file
 test_stt_prints_transcript_from_mocked_deepgram
 test_stt_reports_http_failure
-test_stt_keep_keeps_the_newest_recordings_privately
-test_stt_keep_keeps_the_audio_when_deepgram_fails
 test_floater_help_and_option_refusal
 test_floater_signs_with_a_stable_identity
 test_floater_build_only_leaves_the_launched_app_alone

@@ -22,8 +22,10 @@ import Foundation
 /// captain's first words. One engine is therefore built ahead of the first
 /// press (warm) and kept; a capture then only starts it, in well under a tenth
 /// of a second. A built engine that is not started does not run the
-/// microphone. An engine that stops working, or whose audio devices change, is
-/// rebuilt on the next capture.
+/// microphone. An engine whose audio devices change (headphones connected, a
+/// new default input) is rebuilt as soon as no capture is running, so the next
+/// press is quick again; one that stops working, or whose devices change
+/// during a capture, is rebuilt on the next capture.
 ///
 /// Audio still on its way in when the key comes up (up to one tap buffer, a
 /// tenth of a second) would be lost by stopping at once, and a release often
@@ -54,7 +56,16 @@ final class VoiceCapture {
             return
         }
         engine = nil
-        engine = try makeEngine()
+        let engine = try makeEngine()
+        engine.onChange = { [weak self] in
+            DispatchQueue.main.async { self?.rebuildIfIdle() }
+        }
+        self.engine = engine
+    }
+
+    private func rebuildIfIdle() {
+        guard lock.withLock({ file == nil }) else { return }
+        try? warm()
     }
 
     /// Starts recording into a new file at `url`.
@@ -126,6 +137,8 @@ protocol CaptureEngine: AnyObject {
     var inputFormat: AVAudioFormat { get }
     /// True once the engine can no longer be trusted to start as built.
     var isStale: Bool { get }
+    /// Called, on any thread, when the engine becomes stale.
+    var onChange: (() -> Void)? { get set }
     func installTap(_ block: @escaping (AVAudioPCMBuffer) -> Void)
     func removeTap()
     func start() throws
@@ -139,6 +152,7 @@ final class VoiceEngine: CaptureEngine {
     private let lock = NSLock()
     private var changed = false
     private var observer: NSObjectProtocol?
+    var onChange: (() -> Void)?
 
     init() throws {
         let input = engine.inputNode
@@ -151,6 +165,7 @@ final class VoiceEngine: CaptureEngine {
             forName: .AVAudioEngineConfigurationChange, object: engine, queue: nil
         ) { [weak self] _ in
             self?.lock.withLock { self?.changed = true }
+            self?.onChange?()
         }
     }
 
