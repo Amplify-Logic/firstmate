@@ -1,0 +1,78 @@
+
+### Artevo: a temp career root with the songs 'What a Life' and 'Hey! Do You Remember?'
+wrote /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fmvi-live.uLvoKO/userhome/Artevo Inbox/songs.json (2 songs)
+
+### arm the watcher check in the lab home
+armed: state/fm-glasses-idea.check.sh
+fm-glasses-idea.check-trust
+fm-glasses-idea.check.sh
+
+### Scenario A: desk away (Artevo's command unavailable). Captain says 'What a Life, bridge idea' and hums
+  relay accepted a1111111-1111-4111-8111-111111111111 -> None
+  relay accepted a3333333-3333-4333-8333-333333333333 -> None
+  relay accepted a4444444-4444-4444-8444-444444444444 -> None
+  check rc=0 stdout=[glasses idea for What a Life is saved but waiting for the desk: Artevo's command is not at /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fmvi-live.uLvoKO/bin/tartevo; see bin/fm-voice-idea.py status]
+  answer  a1111111 answered  Saved, waiting for the desk.
+  answer  a3333333 pending   -
+  answer  a4444444 pending   -
+2026-09-26T11:00:00Z  What a Life  waiting for the desk: Artevo's command is not at /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fmvi-live.uLvoKO/bin/tartevo  [a1111111-1111-4111-8111-111111111111]
+
+### Scenario B: VoiceLoop re-sends the same request while the desk is still away
+  relay accepted a1111111-1111-4111-8111-111111111111 -> None
+  check rc=0 stdout=[]
+  answer  a1111111 answered  Saved, waiting for the desk.
+  answer  a3333333 pending   -
+  answer  a4444444 pending   -
+
+### Scenario C: the desk is back
+  check rc=0 stdout=[]
+  answer  a1111111 answered  Saved, waiting for the desk.
+  answer  a3333333 pending   -
+  answer  a4444444 pending   -
+  announce Filed to What a Life.
+2026-09-26T11:00:00Z  What a Life  filed: Filed to What a Life.  [a1111111-1111-4111-8111-111111111111]
+
+### Artevo's view: captures filed to What a Life, and the audio in the career root
+Artevo  ·  Captures  ·  What a Life
+  cpt_62ce565f-1677-46b0-8d2d-2a42a373741a  2026-09-26 11:00  What a Life - glasses idea - 20260926 110000 - a1111111.wav  0s  → What a Life (named)  “bridge idea”
+  asset: career/captures/audio/41471d9fa4d3a98694a822c8dffdf4bb83e287e5e553ca7cc5f6e09aeb033041.wav
+  asset bytes == the hum captured on the glasses
+Artevo  ·  Transcripts
+  done: 0  pending: 0  failed: 0  not queued: 1
+  Transcripts are a search aid made by a local tool; the audio is the record. Nothing is filed or decided from them.
+
+### Scenario D: the same hum sent again under a new request id
+  relay accepted a2222222-2222-4222-8222-222222222222 -> None
+  check rc=0 stdout=[]
+  answer  a1111111 answered  Saved, waiting for the desk.
+  answer  a2222222 answered  Already filed to What a Life.
+  answer  a3333333 pending   -
+  answer  a4444444 pending   -
+  announce Filed to What a Life.
+  Artevo captures in store: (1, 'named')
+  wav files in inbox: 1
+
+### Scenario E (adversarial): 'Hey! Do You Remember?' idea while the desk is away; the real announce refuses the receipt
+  relay accepted a5555555-5555-4555-8555-555555555555 -> None
+  check rc=0 stdout=[glasses idea for Hey! Do You Remember? is saved but waiting for the desk: Artevo's command is not at /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fmvi-live.uLvoKO/bin/tartevo; see bin/fm-voice-idea.py status]
+  check rc=0 stdout=[glasses idea receipt for Hey! Do You Remember? could not be spoken: refused: asks a question expecting a spoken yes; see bin/fm-voice-idea.py status]
+  answer  a1111111 answered  Saved, waiting for the desk.
+  answer  a2222222 answered  Already filed to What a Life.
+  answer  a3333333 pending   -
+  answer  a4444444 pending   -
+  answer  a5555555 answered  Saved, waiting for the desk.
+  announce Filed to What a Life.
+2026-09-26T11:00:00Z  What a Life  filed: Filed to What a Life.  [a1111111-1111-4111-8111-111111111111]
+2026-09-26T11:00:00Z  What a Life  duplicate: Already filed to What a Life.  [a2222222-2222-4222-8222-222222222222]
+2026-09-26T11:00:00Z  Hey! Do You Remember?  filed: Filed to Hey! Do You Remember?. (receipt not spoken yet)  [a5555555-5555-4555-8555-555555555555]
+  spoken= True What a Life
+  spoken= True What a Life
+  spoken= False Hey! Do You Remember?
+  said-final: refused: refused: asks a question expecting a spoken yes
+  check rc=0 stdout=[]
+
+### disarm keeps the ideas
+disarmed: state/fm-glasses-idea.check.sh (held ideas are kept in data/voice-ideas)
+0
+       3
+lab removed: yes

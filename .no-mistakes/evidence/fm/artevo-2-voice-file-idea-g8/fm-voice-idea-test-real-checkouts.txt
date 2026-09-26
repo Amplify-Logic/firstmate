@@ -1,0 +1,14 @@
+ok - recognises song name first, then the idea, and nothing else
+ok - journey 1: held under its capture id, filed through the Artevo Inbox, receipt spoken once
+ok - an ordinary question is left pending for firstmate
+ok - an unreachable desk: saved and waiting, then filed and announced once
+ok - a missing inbox still recognises the song from the kept list and files later
+ok - sending it twice makes one capture
+ok - a duplicate of a waiting capture produces one receipt
+ok - no recording, a format Artevo cannot take, and an unfiled capture are each said plainly
+ok - a question already answered gets its receipt as an announcement
+ok - a refused receipt wakes firstmate once and status says it was not spoken
+ok - take refuses words that are not an idea and ids that are not request ids
+ok - an answer that fails is retried and reported once
+ok - arm registers a check the watcher can run; disarm retires it and keeps the ideas
+not ok - the real import files it on the song (expected '11111111-1111-4111-8111-111111111111	Filed to What a Life.', got '11111111-1111-4111-8111-111111111111	Saved, waiting for the desk.')
