@@ -889,6 +889,51 @@ JSON
   pass "handoff reads cursor-grok quota from the general cursor plan windows only"
 }
 
+test_fable_model_window_rotates_to_opus() {
+  local out status=0 fable opus
+  : > "$LAUNCH_LOG"
+  : > "$SIGNAL_LOG"
+  cat > "$TMP_ROOT/quota.json" <<'JSON'
+{
+  "providers": [
+    {
+      "provider": "claude",
+      "state": { "status": "fresh" },
+      "windows": [
+        { "id": "five_hour", "kind": "session", "percentRemaining": 80 },
+        { "id": "seven_day", "kind": "weekly", "percentRemaining": 70 },
+        { "id": "model:fable", "kind": "model", "percentRemaining": 10 },
+        { "id": "model:other", "kind": "model", "percentRemaining": 2 }
+      ]
+    }
+  ]
+}
+JSON
+  fable=$(
+    # shellcheck source=bin/fm-primary-handoff-lib.sh
+    . "$ROOT/bin/fm-primary-handoff-lib.sh"
+    FM_HANDOFF_QUOTA_JSON="$TMP_ROOT/quota.json" fm_handoff_min_remaining_for_profile claude-fable
+  )
+  [ "$fable" = 10 ] || fail "claude-fable did not read its Fable model window: $fable"
+  opus=$(
+    # shellcheck source=bin/fm-primary-handoff-lib.sh
+    . "$ROOT/bin/fm-primary-handoff-lib.sh"
+    FM_HANDOFF_QUOTA_JSON="$TMP_ROOT/quota.json" fm_handoff_min_remaining_for_profile claude-opus
+  )
+  [ "$opus" = 70 ] || fail "claude-opus did not read only the general claude windows: $opus"
+  write_exhausted_chain_config
+  write_context_sample 80
+  write_active claude-fable
+  start_fake_holder
+  out=$(run_execute "$ROOT/bin/fm-primary-handoff.sh" check 2>&1) || status=$?
+  expect_code 0 "$status" "Fable model-window check should succeed: $out"
+  assert_contains "$out" 'threshold crossed profile=claude-fable min_remaining=10' "Fable window should cross the threshold"
+  assert_contains "$out" 'handed_off: claude-fable -> claude-opus' "Fable exhaustion should hand off to claude-opus"
+  assert_never_two
+  cleanup_holders
+  pass "Fable model-window exhaustion rotates claude-fable to claude-opus"
+}
+
 test_disabled_is_noop
 test_astra_registered_profile
 test_cursor_grok_quota_monitored
@@ -917,5 +962,6 @@ test_context_axis_absent_is_quota_only
 test_claude_opus_chain_profile
 test_check_stays_put_when_chain_exhausted
 test_check_context_refresh_when_chain_exhausted
+test_fable_model_window_rotates_to_opus
 
 printf 'All primary-handoff tests passed.\n'

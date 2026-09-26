@@ -163,6 +163,17 @@ fm_handoff_profile_provider() {
   esac
 }
 
+# Map a primary profile onto the one quota-axi model window that bounds it
+# beyond its provider's general windows. An empty result means only the
+# general windows apply. claude-fable is additionally bounded by the Fable
+# weekly window, so its exhaustion rotates to claude-opus, which is not.
+fm_handoff_profile_model_window() {
+  case "$1" in
+    claude-fable) printf 'model:fable\n' ;;
+    *) printf '\n' ;;
+  esac
+}
+
 # Write path from `key=value` arguments (never relies on caller locals).
 fm_handoff_write_kv_file() {
   local path=$1
@@ -395,14 +406,16 @@ fm_handoff_quota_json() {
   "$quota_cmd" --json
 }
 
-# Print min general-window percentRemaining for a primary profile, or "na".
+# Print min percentRemaining over a primary profile's general windows and its
+# own model window, or "na".
 fm_handoff_min_remaining_for_profile() {
-  local profile=$1 provider quota
+  local profile=$1 provider model_window quota
   profile=$(fm_handoff_normalize_profile "$profile") || { printf 'na\n'; return 0; }
   provider=$(fm_handoff_profile_provider "$profile")
   [ -n "$provider" ] || { printf 'na\n'; return 0; }
+  model_window=$(fm_handoff_profile_model_window "$profile")
   quota=$(fm_handoff_quota_json) || { printf 'na\n'; return 0; }
-  printf '%s\n' "$quota" | jq -r --arg p "$provider" '
+  printf '%s\n' "$quota" | jq -r --arg p "$provider" --arg m "$model_window" '
     def general_ids:
       if $p == "claude" then ["five_hour","seven_day"]
       elif $p == "codex" then ["five_hour","weekly"]
@@ -411,8 +424,9 @@ fm_handoff_min_remaining_for_profile() {
       else []
       end;
     ([.providers[]? | select(.provider == $p) | .windows[]? as $window
-      | select(((general_ids | index($window.id)) != null)
-        and (($window.kind? // "") != "model")
+      | select(((((general_ids | index($window.id)) != null)
+          and (($window.kind? // "") != "model"))
+        or ($m != "" and $window.id == $m))
         and (($window.percentRemaining? | type) == "number"))
       | $window.percentRemaining] | if length == 0 then "na" else min end)
   ' 2>/dev/null || printf 'na\n'
