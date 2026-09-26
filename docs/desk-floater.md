@@ -192,7 +192,9 @@ Line breaks and control characters become spaces, so a transcript cannot submit 
 Claude's grey suggested prompt is not typed text, so a chat box showing only that counts as empty and the message goes straight in.
 When you have a half-typed draft in a Claude chat box, the message goes past it: the draft is set aside with Claude's own Ctrl+S stash, the message is sent on its own, and Claude puts your draft back in the box, pasted text and images included.
 Your draft is never sent, cleared, or retyped.
-If Claude's footer already shows `› stashed`, a draft you set aside yourself, the message goes to the mailbox instead, because stashing again would replace yours.
+That has one deliberate exception, where text in the box still sends the message to the mailbox: Claude's footer already shows `› stashed`, a draft you set aside yourself.
+Stashing again would replace yours, and an existing Claude stash is never overwritten.
+If the message cannot be proven in the box before Enter, it is cleared, your draft is put back, and the message goes to the mailbox; if your draft cannot be put back, the send notes that Ctrl+S in the chat brings it back.
 With another harness as the primary, the message joins the draft and is submitted with it.
 
 When the chat pane cannot be reached, is not showing its chat input, or refuses the text, the transcript goes to the mailbox instead:

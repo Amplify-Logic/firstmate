@@ -316,23 +316,13 @@ shows_selection_dialog() {  # <backend> <target>
   printf '%s\n' "$screen" | grep -Eiq '(❯|›)[[:space:]]*[0-9]+\.|enter to select|esc to cancel'
 }
 
-# The text in <target>'s chat box as the screen shows it, or fail when no box
-# can be read. A dim suggested prompt reads as text here, so ask
-# fm_backend_composer_state whether the box is empty.
-composer_text() {  # <backend> <target>
+# The text in <target>'s chat box as the last [rows] screen rows show it, or
+# fail when no box can be read. A dim suggested prompt reads as text here, so
+# ask fm_backend_composer_state whether the box is empty.
+composer_text() {  # <backend> <target> [rows]
   local cap
-  cap=$(fm_backend_capture "$1" "$2" "${FM_COMPOSER_CAPTURE_LINES:-20}" 2>/dev/null) || return 1
+  cap=$(fm_backend_capture "$1" "$2" "${3:-${FM_COMPOSER_CAPTURE_LINES:-20}}" 2>/dev/null) || return 1
   fm_composer_extract_selected_content styled=0 "$cap"
-}
-
-# True when two chat box readings hold the same words, however they wrap.
-same_text() {  # <a> <b>
-  local a=$1 b=$2
-  fm_composer_normalize_spaces_var a
-  fm_composer_normalize_spaces_var b
-  a=${a//[$' \t\r\n\v\f']/}
-  b=${b//[$' \t\r\n\v\f']/}
-  [ -n "$a" ] && [ "$a" = "$b" ]
 }
 
 # True when Claude's footer shows a stashed draft (`› stashed`). An unreadable
@@ -364,12 +354,14 @@ await_composer() {  # <backend> <target> <want> <tries>
   return 1
 }
 
-# Put a draft this script stashed back into an emptied box: Ctrl+S on an
-# empty box with a stash pops it. Pressed only on that proof, because on a box
-# holding text Ctrl+S would stash that text over the draft.
+# Put a draft this script stashed back into the box: Ctrl+S on an empty box
+# pops the stash. Pressed only while the box reads empty, because on a box
+# holding text Ctrl+S would stash that text over the draft. 0 when the draft
+# is back in the box.
 unstash_draft() {  # <backend> <target>
-  await_composer "$1" "$2" empty 5 && shows_stash "$1" "$2" || return 1
-  fm_backend_send_key "$1" "$2" C-s >/dev/null 2>&1
+  await_composer "$1" "$2" empty 5 || return 1
+  fm_backend_send_key "$1" "$2" C-s >/dev/null 2>&1 || return 1
+  await_composer "$1" "$2" pending 10
 }
 
 # Send <line> past the captain's unsent draft in a Claude primary's chat box.
@@ -380,20 +372,33 @@ unstash_draft() {  # <backend> <target>
 # past a draft"). So the message is typed only into a box the stash has
 # emptied, and Enter is pressed once, only while the box shows exactly the
 # message, never again: a second Enter after Claude restored the draft would
-# submit the draft. A stash the captain already keeps would be replaced by a
-# second one, so that screen is refused. Prints the submit vocabulary: empty
-# (submitted), send-failed (nothing typed or submitted, and the draft is back
-# in the box or still stashed), unknown (typed, submit not proven).
+# submit the draft. The proof reads, and the Ctrl+U presses that clear a
+# refused message, are sized by the message, which wraps (fm_composer_proof_lines).
+# The one deliberate exception where text in the box still sends the message
+# to the mailbox: a footer that already shows `› stashed`, because a second
+# stash would replace the one the captain keeps, and an existing Claude stash
+# is never overwritten. Prints the submit vocabulary: empty (submitted),
+# send-failed (not submitted; the draft is back in the box or a note says it
+# is stashed), unknown (typed, and the box could not be proven empty again).
 send_past_draft() {  # <backend> <target> <line>
-  local backend=$1 target=$2 line=$3 draft after i
+  local backend=$1 target=$2 line=$3 draft after rows i
   if shows_stash "$backend" "$target" \
     || ! draft=$(composer_text "$backend" "$target") || [ -z "$draft" ]; then
     printf 'send-failed'
     return 0
   fi
   fm_backend_send_key "$backend" "$target" C-s >/dev/null 2>&1 || { printf 'send-failed'; return 0; }
-  if ! await_composer "$backend" "$target" empty 10 || ! shows_stash "$backend" "$target"; then
+  if ! await_composer "$backend" "$target" empty 10; then
     note "the chat box did not set the captain's draft aside"
+    printf 'send-failed'
+    return 0
+  fi
+  if ! shows_stash "$backend" "$target"; then
+    if unstash_draft "$backend" "$target"; then
+      note "the chat box did not show the captain's draft as stashed, so it was put back"
+    else
+      note "the captain's draft may be stashed; Ctrl+S in the chat brings it back"
+    fi
     printf 'send-failed'
     return 0
   fi
@@ -403,40 +408,31 @@ send_past_draft() {  # <backend> <target> <line>
     return 0
   fi
   sleep 0.5
-  if ! after=$(composer_text "$backend" "$target") || ! fm_composer_payload_shown "$line" "$after"; then
+  rows=$(fm_composer_proof_lines "$line")
+  if ! after=$(composer_text "$backend" "$target" "$rows") || ! fm_composer_payload_shown "$line" "$after"; then
     i=0
-    while [ "$i" -lt 8 ] && ! await_composer "$backend" "$target" empty 1; do
-      fm_backend_send_key "$backend" "$target" C-u >/dev/null 2>&1 || break
+    while ! await_composer "$backend" "$target" empty 1; do
+      if [ "$i" -ge "$rows" ] || ! fm_backend_send_key "$backend" "$target" C-u >/dev/null 2>&1; then
+        printf 'unknown'
+        return 0
+      fi
       i=$((i + 1))
     done
-    if unstash_draft "$backend" "$target"; then
-      printf 'send-failed'
-    else
-      printf 'unknown'
-    fi
+    unstash_draft "$backend" "$target" || note "the captain's draft is stashed; Ctrl+S in the chat brings it back"
+    printf 'send-failed'
     return 0
   fi
   fm_backend_send_key "$backend" "$target" Enter >/dev/null 2>&1 || { printf 'unknown'; return 0; }
   i=0
   while :; do
     sleep 0.2
-    if after=$(composer_text "$backend" "$target") && ! fm_composer_payload_shown "$line" "$after"; then
-      break
+    if after=$(composer_text "$backend" "$target" "$rows") && ! fm_composer_payload_shown "$line" "$after"; then
+      printf 'empty'
+      return 0
     fi
     i=$((i + 1))
     [ "$i" -lt 15 ] || { printf 'unknown'; return 0; }
   done
-  i=0
-  while ! same_text "$after" "$draft"; do
-    i=$((i + 1))
-    if [ "$i" -ge 10 ]; then
-      note "sent, but the captain's draft is still stashed; Ctrl+S in the chat brings it back"
-      break
-    fi
-    sleep 0.2
-    after=$(composer_text "$backend" "$target") || after=
-  done
-  printf 'empty'
 }
 
 # The pids of the herdr clients attached to the server that owns <socket> (the

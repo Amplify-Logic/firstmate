@@ -852,7 +852,10 @@ test_desk_voice_deliver_pending_drain() {
 # `› stashed` in the footer. Its keys behave as Claude's do: Ctrl+S stashes a
 # typed draft or pops the stash into an empty box, Ctrl+U clears the box, and
 # Enter submits the box (the suggestion when nothing is typed) to the
-# submitted log, then restores a stash into the box.
+# submitted log, then restores a stash into the box. Knob files bend it: wrap
+# draws the box 40 columns wide, where Ctrl+U deletes one wrapped row;
+# drop-head loses the first typed character; no-marker hides `› stashed`;
+# pop-fails refuses the Ctrl+S that pops a stash.
 
 desk_send_fixture() {  # <name> [tmux|herdr] [harness] -> home; starts the stand-in primary
   local name=$1 backend=${2:-herdr} harness=${3:-claude} home dir fb pid i envs marker
@@ -902,13 +905,21 @@ case "${1:-} ${2:-}" in
     esc=$'\033'
     draft=$(cat "$dir/draft" 2>/dev/null)
     row="❯"$'\302\240'"${esc}[0m"
-    if [ -n "$draft" ]; then
+    if [ -n "$draft" ] && [ -e "$dir/wrap" ]; then
+      row+="${esc}[38;2;255;255;255m${draft:0:40}"
+      rest=${draft:40}
+      while [ -n "$rest" ]; do
+        row+='\n  '"${rest:0:40}"
+        rest=${rest:40}
+      done
+      row+="${esc}[0m"
+    elif [ -n "$draft" ]; then
       row+="${esc}[38;2;255;255;255m${draft}${esc}[0m"
     elif [ -e "$dir/ghost" ]; then
       row+="${esc}[2m$(cat "$dir/ghost")${esc}[0m"
     fi
     stash=0
-    [ ! -e "$dir/stash" ] || stash=1
+    [ ! -e "$dir/stash" ] || [ -e "$dir/no-marker" ] || stash=1
     last=$(grep -n '❯' "$screen" | tail -n 1 | cut -d: -f1)
     awk -v n="$last" -v row="$row" -v stash="$stash" -v rows="$(wc -l < "$screen")" '
       NR == n { print row "\r"; next }
@@ -918,7 +929,8 @@ case "${1:-} ${2:-}" in
     if [ "$ansi" = 1 ]; then cat "$dir/screen.now"; else sed $'s/\033\\[[0-9;:]*m//g' "$dir/screen.now"; fi ;;
   "pane send-text")
     [ ! -e "$dir/send-text-fails" ] || exit 1
-    printf '%s' "$4" >> "$dir/draft" ;;
+    if [ -e "$dir/drop-head" ]; then text=${4:1}; else text=$4; fi
+    printf '%s' "$text" >> "$dir/draft" ;;
   "pane send-keys")
     case "$4" in
       ctrl+s)
@@ -927,9 +939,16 @@ case "${1:-} ${2:-}" in
           mv "$dir/draft" "$dir/stash"
           : > "$dir/draft"
         elif [ -e "$dir/stash" ]; then
+          [ ! -e "$dir/pop-fails" ] || exit 1
           mv "$dir/stash" "$dir/draft"
         fi ;;
-      ctrl+u) : > "$dir/draft" ;;
+      ctrl+u)
+        draft=$(cat "$dir/draft" 2>/dev/null)
+        if [ -e "$dir/wrap" ] && [ "${#draft}" -gt 40 ]; then
+          printf '%s' "${draft:0:$(( (${#draft} - 1) / 40 * 40 ))}" > "$dir/draft"
+        else
+          : > "$dir/draft"
+        fi ;;
       *)
         : > "$dir/entered"
         [ ! -e "$dir/never-works" ] || exit 0
@@ -1217,6 +1236,70 @@ test_desk_voice_send_keeps_a_draft_it_cannot_set_aside() {
     desk_send_done "$home"
   done
   pass "fm-desk-voice send: a draft that cannot be set aside safely stays put and the message goes to the mailbox"
+}
+
+test_desk_voice_send_proves_a_long_message_past_a_claude_draft() {
+  local home out long
+  home=$(desk_send_fixture send-draft-long) || { desk_send_skip send-draft-long; return 0; }
+  cp "$HERDR_CLAUDE_SCREEN" "$home/fixture/screen"
+  printf 'claude' > "$home/fixture/agent"
+  : > "$home/fixture/wrap"
+  printf 'half typed thought' > "$home/fixture/draft"
+  # 1000 characters wrap to 25 box rows, more than a 20-row read can hold.
+  long=$(printf 'word%03d ' $(seq 1 125))
+  long=${long% }
+  out=$(desk_send "$home" "$long") || fail "send failed: $out"
+  assert_contains "$out" "sent: herdr fm-desk-send-test:w7:p3" "a long message is proven whole and sent"
+  [ "$(cat "$home/fixture/submitted")" = "$long" ] || fail "only the whole message may be submitted"
+  [ "$(cat "$home/fixture/draft")" = "half typed thought" ] || fail "the draft must be back in the chat box"
+  [ "$(inbox_count "$home")" = 0 ] || fail "a pane delivery must not also land in the mailbox"
+  desk_send_done "$home"
+  pass "fm-desk-voice send: a message that wraps past a 20-row read still goes past a Claude draft"
+}
+
+test_desk_voice_send_clears_a_refused_message_and_restores_the_draft() {
+  local home out long case
+  long=$(printf 'word%03d ' $(seq 1 125))
+  long=${long% }
+  for case in restored pop-fails; do
+    home=$(desk_send_fixture "send-draft-refused-$case") || { desk_send_skip "send-draft-refused-$case"; return 0; }
+    cp "$HERDR_CLAUDE_SCREEN" "$home/fixture/screen"
+    printf 'claude' > "$home/fixture/agent"
+    : > "$home/fixture/wrap"
+    : > "$home/fixture/drop-head"
+    [ "$case" = restored ] || : > "$home/fixture/pop-fails"
+    printf 'half typed thought' > "$home/fixture/draft"
+    out=$(desk_send "$home" "$long") || fail "send failed: $out"
+    case "$out" in mailbox:\ *) ;; *) fail "$case: a message not proven in the box must go to the mailbox, got: $out" ;; esac
+    [ -z "$(herdr_calls "$home" pane send-keys w7:p3 enter)" ] || fail "$case: no Enter may be pressed"
+    [ ! -e "$home/fixture/submitted" ] || fail "$case: nothing may be submitted"
+    if [ "$case" = restored ]; then
+      [ "$(cat "$home/fixture/draft")" = "half typed thought" ] || fail "the draft must be back in the chat box"
+    else
+      [ "$(cat "$home/fixture/stash")" = "half typed thought" ] || fail "the draft must stay stashed"
+      [ -z "$(cat "$home/fixture/draft")" ] || fail "the refused message must be cleared"
+    fi
+    [ "$(inbox_count "$home")" = 1 ] || fail "$case: the message must land in the mailbox once"
+    desk_send_done "$home"
+  done
+  pass "fm-desk-voice send: a long message refused before Enter is cleared and sent to the mailbox"
+}
+
+test_desk_voice_send_restores_a_draft_stashed_without_a_marker() {
+  local home out
+  home=$(desk_send_fixture send-draft-no-marker) || { desk_send_skip send-draft-no-marker; return 0; }
+  cp "$HERDR_CLAUDE_SCREEN" "$home/fixture/screen"
+  printf 'claude' > "$home/fixture/agent"
+  : > "$home/fixture/no-marker"
+  printf 'half typed thought' > "$home/fixture/draft"
+  out=$(desk_send "$home" "and ship it") || fail "send failed: $out"
+  case "$out" in mailbox:\ *) ;; *) fail "expected a mailbox delivery, got: $out" ;; esac
+  [ -z "$(herdr_calls "$home" pane send-text)" ] || fail "nothing may be typed"
+  [ "$(cat "$home/fixture/draft")" = "half typed thought" ] || fail "the draft must be put back in the chat box"
+  [ ! -e "$home/fixture/stash" ] || fail "the draft must not stay stashed"
+  [ "$(inbox_count "$home")" = 1 ] || fail "the message must land in the mailbox once"
+  desk_send_done "$home"
+  pass "fm-desk-voice send: a draft stashed without a readable marker is put back before the mailbox"
 }
 
 test_desk_voice_send_joins_another_harness_draft() {
@@ -1621,6 +1704,9 @@ test_desk_voice_send_falls_back_when_the_pane_shows_a_dialog
 test_desk_voice_send_ignores_a_suggested_prompt
 test_desk_voice_send_goes_past_a_claude_draft
 test_desk_voice_send_keeps_a_draft_it_cannot_set_aside
+test_desk_voice_send_proves_a_long_message_past_a_claude_draft
+test_desk_voice_send_clears_a_refused_message_and_restores_the_draft
+test_desk_voice_send_restores_a_draft_stashed_without_a_marker
 test_desk_voice_send_joins_another_harness_draft
 test_desk_voice_send_types_screenshots_into_the_primary_pane
 test_desk_voice_send_screenshots_fall_back_to_the_mailbox

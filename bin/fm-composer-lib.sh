@@ -1862,6 +1862,24 @@ fm_composer_submit_retry_core() {  # <send-key-fn> <state-fn> <target> <retries>
   done
 }
 
+# fm_composer_proof_lines: how many tail rows a pre-Enter payload proof
+# captures, and how many Ctrl+U presses clear a refused payload (Claude deletes
+# one wrapped row per press). A literal payload wraps, and a tail-only capture
+# of a complete wrap would look like the truncation the proof exists to refuse.
+# The bound stays inside the selected composer extraction; it is not a
+# whole-pane search.
+fm_composer_proof_lines() {  # <text>
+  local text=$1 lines
+  lines=$(( (${#text} / 40) + 8 ))
+  if [ "$lines" -lt "$FM_COMPOSER_CAPTURE_LINES" ]; then
+    lines=$FM_COMPOSER_CAPTURE_LINES
+  fi
+  if [ "$lines" -gt 200 ]; then
+    lines=200
+  fi
+  printf '%s' "$lines"
+}
+
 # fm_composer_payload_shown: 0 when <after>, a composer's visible text read
 # back after typing <text> into it, shows exactly <text>. The submit paths
 # press Enter only on this proof (bin/backends/herdr.sh for Claude, and
