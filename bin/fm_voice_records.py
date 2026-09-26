@@ -396,9 +396,9 @@ def fleet_status(home=None, scope=None):
     queued = [i for i in open_items
               if i["section"] == "queued" and i["id"] not in captain_ids]
     # A hold deferred to a later date is not waiting on the captain today. The
-    # hold is inactive on and after its date, the same reading
-    # bin/fm-fleet-snapshot.sh gives it; a malformed date stays waiting, so a
-    # typo can never hide a decision.
+    # deferral lapses on its date, so the hold is waiting again from that day,
+    # the same reading bin/fm-fleet-snapshot.sh gives it; a malformed date stays
+    # waiting, so a typo can never hide a decision.
     today = datetime.date.today().isoformat()
     deferred_for_captain = [
         i for i in held_for_captain
