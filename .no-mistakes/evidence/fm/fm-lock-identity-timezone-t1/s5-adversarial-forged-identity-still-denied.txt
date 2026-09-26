@@ -1,0 +1,21 @@
+# Scenario 5 (adversarial): the lock names the live watcher pid but records an identity that belongs to no rendering of it - compat path must not widen the match
+watcher pid=62558 live; genuine UTC identity: Sat Sep 26 16:46:57 2026     bash /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HDyZeJ/code/bin/fm-watch.sh
+
+recorded pid-identity forged to: Sat Sep 26 16:46:58 2026     bash /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HDyZeJ/code/bin/fm-watch.sh
+$ (host zone) bin/fm-continuity-pretool-check.sh --command 'bin/fm-crew-state.sh task'
+exit=2
+[watcher-continuity] The watcher is running with a fresh beat but its identity check failed: pid-identity-mismatch - watcher pid 62558 is running but its live process identity differs from the identity the lock recorded. Fleet commands stay gated until it is restarted. Drain wakes with bin/fm-wake-drain.sh, the safe mid-session action; run the once-per-session bin/fm-session-start.sh instead only if you have not already run it earlier this session; use fail-closed bin/fm-teardown.sh for completed tasks when needed, then restart it with bin/fm-watch-arm.sh --restart as a tracked Claude background task before running other fleet commands (blocked: fm-crew-state.sh)
+
+recorded pid-identity forged to: Sun Sep 27 01:46:57 2026     bash /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HDyZeJ/code/bin/fm-watch.sh
+$ (host zone) bin/fm-continuity-pretool-check.sh --command 'bin/fm-crew-state.sh task'
+exit=2
+[watcher-continuity] The watcher is running with a fresh beat but its identity check failed: pid-identity-mismatch - watcher pid 62558 is running but its live process identity differs from the identity the lock recorded. Fleet commands stay gated until it is restarted. Drain wakes with bin/fm-wake-drain.sh, the safe mid-session action; run the once-per-session bin/fm-session-start.sh instead only if you have not already run it earlier this session; use fail-closed bin/fm-teardown.sh for completed tasks when needed, then restart it with bin/fm-watch-arm.sh --restart as a tracked Claude background task before running other fleet commands (blocked: fm-crew-state.sh)
+
+recorded pid-identity forged to: Sat Sep 26 19:46:57 2026     bash /some/other/home/bin/fm-watch.sh
+$ (host zone) bin/fm-continuity-pretool-check.sh --command 'bin/fm-crew-state.sh task'
+exit=2
+[watcher-continuity] The watcher is running with a fresh beat but its identity check failed: pid-identity-mismatch - watcher pid 62558 is running but its live process identity differs from the identity the lock recorded. Fleet commands stay gated until it is restarted. Drain wakes with bin/fm-wake-drain.sh, the safe mid-session action; run the once-per-session bin/fm-session-start.sh instead only if you have not already run it earlier this session; use fail-closed bin/fm-teardown.sh for completed tasks when needed, then restart it with bin/fm-watch-arm.sh --restart as a tracked Claude background task before running other fleet commands (blocked: fm-crew-state.sh)
+
+restored genuine identity:
+$ (host zone) bin/fm-continuity-pretool-check.sh --command 'bin/fm-crew-state.sh task'
+exit=0

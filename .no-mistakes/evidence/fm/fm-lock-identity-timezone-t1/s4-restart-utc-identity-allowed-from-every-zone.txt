@@ -1,0 +1,27 @@
+# Scenario 4: after 'bin/fm-watch-arm.sh --restart' (upgraded code), a watcher armed under TZ=America/New_York records a UTC identity and the gate accepts it from every zone
+arm output: watcher: started pid=62558 (beacon fresh)
+watcher pid=62558: bash /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HDyZeJ/code/bin/fm-watch.sh
+recorded pid-identity: Sat Sep 26 16:46:57 2026     bash /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HDyZeJ/code/bin/fm-watch.sh
+live lstart  NY(writer): Sat Sep 26 12:46:57 2026     | UTC: Sat Sep 26 16:46:57 2026     | Athens: Sat Sep 26 19:46:57 2026    
+beat age: 2s; in-flight: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.HDyZeJ/state/task.meta
+
+$ TZ=host-local bin/fm-continuity-pretool-check.sh --command 'bin/fm-crew-state.sh task'
+exit=0
+
+$ TZ=America/New_York bin/fm-continuity-pretool-check.sh --command 'bin/fm-crew-state.sh task'
+exit=0
+
+$ TZ=Europe/Berlin bin/fm-continuity-pretool-check.sh --command 'bin/fm-crew-state.sh task'
+exit=0
+
+$ TZ=Europe/London bin/fm-continuity-pretool-check.sh --command 'bin/fm-crew-state.sh task'
+exit=0
+
+$ TZ=UTC0 bin/fm-continuity-pretool-check.sh --command 'bin/fm-crew-state.sh task'
+exit=0
+
+$ TZ=Asia/Tokyo bin/fm-continuity-pretool-check.sh --command 'bin/fm-crew-state.sh task'
+exit=0
+
+$ TZ=Australia/Lord_Howe bin/fm-continuity-pretool-check.sh --command 'bin/fm-crew-state.sh task'
+exit=0

@@ -1,0 +1,13 @@
+# Scenario 0 (baseline reproduction, BASE commit ffaef9fd code): real watcher armed from a primary checkout under the host's local zone (Europe/Athens, EEST)
+code at: 0b495b4 base (tree = ffaef9fd)
+watcher pid=9120 alive: bash /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HDyZeJ/code/bin/fm-watch.sh
+recorded .watch.lock/pid-identity: Sat Sep 26 19:45:33 2026     bash /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HDyZeJ/code/bin/fm-watch.sh
+live lstart  Athens: Sat Sep 26 19:45:33 2026     | Berlin: Sat Sep 26 18:45:33 2026    
+beat age: 6s
+
+$ (host zone) bin/fm-continuity-pretool-check.sh --command 'bin/fm-crew-state.sh task'
+exit=0
+
+$ TZ=Europe/Berlin bin/fm-continuity-pretool-check.sh --command 'bin/fm-crew-state.sh task'   # checker 1h off, like the hub incident
+exit=2
+[watcher-continuity] SUPERVISION OUTAGE: down for at least 6s since the last watcher beat; 1 task(s) in flight: task. No live watcher holds this home lock. Drain wakes with bin/fm-wake-drain.sh, the safe mid-session action; run the once-per-session bin/fm-session-start.sh instead only if you have not already run it earlier this session; use fail-closed bin/fm-teardown.sh for completed tasks when needed, then re-arm with bin/fm-watch-arm.sh as a tracked Claude background task before running other fleet commands (blocked: fm-crew-state.sh)

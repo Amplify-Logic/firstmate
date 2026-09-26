@@ -1,0 +1,10 @@
+# Scenario 2: upgrade transition - watcher started by pre-fix code keeps running; code upgraded in place to 9b63bef no-mistakes(document): Point session-start deny wording at continuity gate doc
+watcher pid=9120 still the pre-upgrade process: Sat Sep 26 19:45:33 2026     bash /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HDyZeJ/code/bin/fm-watch.sh
+recorded (legacy local-time) pid-identity: Sat Sep 26 19:45:33 2026     bash /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HDyZeJ/code/bin/fm-watch.sh
+new UTC rendering of same pid: Sat Sep 26 16:45:33 2026    
+beat age: 15s
+
+$ (host zone) bin/fm-continuity-pretool-check.sh --command 'bin/fm-crew-state.sh task'
+exit=0
+$ (host zone) bin/fm-continuity-pretool-check.sh --command 'bin/fm-teardown.sh task --force'
+exit=0

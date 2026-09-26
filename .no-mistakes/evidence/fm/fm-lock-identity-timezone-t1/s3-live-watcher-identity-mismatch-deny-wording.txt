@@ -1,0 +1,17 @@
+# Scenario 3: live watcher with fresh beat but identity check fails (legacy local-time lock checked from a shell in another zone, TZ=Europe/Berlin) - new deny wording
+watcher pid=9120 alive; beat age: 3s
+
+$ TZ=Europe/Berlin bin/fm-continuity-pretool-check.sh --command 'bin/fm-crew-state.sh task'
+exit=2
+[watcher-continuity] The watcher is running with a fresh beat but its identity check failed: pid-identity-mismatch - watcher pid 9120 is running but its live process identity differs from the identity the lock recorded. Fleet commands stay gated until it is restarted. Drain wakes with bin/fm-wake-drain.sh, the safe mid-session action; run the once-per-session bin/fm-session-start.sh instead only if you have not already run it earlier this session; use fail-closed bin/fm-teardown.sh for completed tasks when needed, then restart it with bin/fm-watch-arm.sh --restart as a tracked Claude background task before running other fleet commands (blocked: fm-crew-state.sh)
+
+$ TZ=Europe/Berlin bin/fm-continuity-pretool-check.sh --command 'bin/fm-teardown.sh task --force'
+exit=2
+[watcher-continuity] The watcher is running with a fresh beat but its identity check failed: pid-identity-mismatch - watcher pid 9120 is running but its live process identity differs from the identity the lock recorded. Fleet commands stay gated until it is restarted. During recovery only the ordinary literal bin/fm-teardown.sh is allowed, so drop --force and any shell-expanded arguments and retry the literal invocation; restart the watcher with bin/fm-watch-arm.sh --restart as a tracked Claude background task (blocked: fm-teardown.sh)
+
+$ TZ=Europe/Berlin bin/fm-continuity-pretool-check.sh --command 'bin/fm-supervision-sentinel.sh arm'
+exit=2
+[watcher-continuity] The watcher is running with a fresh beat but its identity check failed: pid-identity-mismatch - watcher pid 9120 is running but its live process identity differs from the identity the lock recorded. Fleet commands stay gated until it is restarted. During recovery only the literal bin/fm-supervision-sentinel.sh enable is allowed; arm, disarm, check, and every other host-sentinel invocation stays blocked until supervision is healthy; restart the watcher with bin/fm-watch-arm.sh --restart as a tracked Claude background task (blocked: fm-supervision-sentinel.sh)
+
+$ TZ=Europe/Berlin bin/fm-continuity-pretool-check.sh --command 'bin/fm-wake-drain.sh'   # recovery action stays allowed
+exit=0

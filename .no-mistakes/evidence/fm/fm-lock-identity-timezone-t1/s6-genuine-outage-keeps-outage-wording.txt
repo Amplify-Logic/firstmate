@@ -1,0 +1,20 @@
+# Scenario 6: genuine outages keep the SUPERVISION OUTAGE framing and now name the failed check
+## 6a: live watcher pid 62558, beat forced stale (touch -t 202001010000)
+$ bin/fm-continuity-pretool-check.sh --command 'bin/fm-crew-state.sh task'
+exit=2
+[watcher-continuity] SUPERVISION OUTAGE: down for at least 2460d 18h 47m 40s since the last watcher beat; 1 task(s) in flight: task. Failed watcher check: watcher-beat-fresh - the watcher beat is missing or not newer than the 300s grace. No live watcher holds this home lock. Drain wakes with bin/fm-wake-drain.sh, the safe mid-session action; run the once-per-session bin/fm-session-start.sh instead only if you have not already run it earlier this session; use fail-closed bin/fm-teardown.sh for completed tasks when needed, then re-arm with bin/fm-watch-arm.sh as a tracked Claude background task before running other fleet commands (blocked: fm-crew-state.sh)
+
+## 6b: watcher stopped with bin/fm-watch-arm.sh --stop
+watcher: stopped pid=62558
+pid 62558 alive? no; lock dir: ls: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.HDyZeJ/state/.watch.lock: No such file or directory
+$ bin/fm-continuity-pretool-check.sh --command 'bin/fm-crew-state.sh task'
+exit=2
+[watcher-continuity] SUPERVISION OUTAGE: down for at least 2460d 18h 47m 41s since the last watcher beat; 1 task(s) in flight: task. Failed watcher check: watcher-pid-alive - no watcher lock pid is recorded. No live watcher holds this home lock. Drain wakes with bin/fm-wake-drain.sh, the safe mid-session action; run the once-per-session bin/fm-session-start.sh instead only if you have not already run it earlier this session; use fail-closed bin/fm-teardown.sh for completed tasks when needed, then re-arm with bin/fm-watch-arm.sh as a tracked Claude background task before running other fleet commands (blocked: fm-crew-state.sh)
+$ bin/fm-continuity-pretool-check.sh --command 'bin/fm-teardown.sh task --force'
+exit=2
+[watcher-continuity] SUPERVISION OUTAGE: down for at least 2460d 18h 47m 41s since the last watcher beat; 1 task(s) in flight: task. Failed watcher check: watcher-pid-alive - no watcher lock pid is recorded. No live watcher holds this home lock. During recovery only the ordinary literal bin/fm-teardown.sh is allowed, so drop --force and any shell-expanded arguments and retry the literal invocation (blocked: fm-teardown.sh)
+
+## 6c: lock left behind naming a dead pid
+$ bin/fm-continuity-pretool-check.sh --command 'bin/fm-crew-state.sh task'
+exit=2
+[watcher-continuity] SUPERVISION OUTAGE: down for at least 2460d 18h 47m 42s since the last watcher beat; 1 task(s) in flight: task. Failed watcher check: watcher-pid-alive - the watcher lock's recorded pid 62558 is not running. No live watcher holds this home lock. Drain wakes with bin/fm-wake-drain.sh, the safe mid-session action; run the once-per-session bin/fm-session-start.sh instead only if you have not already run it earlier this session; use fail-closed bin/fm-teardown.sh for completed tasks when needed, then re-arm with bin/fm-watch-arm.sh as a tracked Claude background task before running other fleet commands (blocked: fm-crew-state.sh)
