@@ -110,7 +110,7 @@ SH
   # dedupe, and filing by the sidecar's song against the fake catalogue.
   cat > "$tmp/fakes/tartevo" <<'PY'
 #!/usr/bin/env python3
-import hashlib, json, os, re, sys
+import hashlib, json, os, re, sys, time
 from pathlib import Path
 with open(os.path.join(os.environ["FAKE_LOG_DIR"], "imports.log"), "a") as log:
     log.write(" ".join(sys.argv[1:]) + "\n")
@@ -118,6 +118,8 @@ mode = os.environ.get("FAKE_TARTEVO_MODE", "")
 if mode == "fail":
     print("Traceback: store is locked", file=sys.stderr); sys.exit(1)
 args = sys.argv[1:]
+if mode == "sort-waits" and "--no-sort" not in args:
+    time.sleep(30)  # hearing a long recording already waiting to be sorted
 assert args[:2] == ["captures", "import"], args
 inbox = Path(args[args.index("--inbox") + 1])
 root = Path(os.environ["TARTEVO_CAREER_ROOT"])
@@ -384,6 +386,17 @@ test_sending_it_twice_makes_one_capture() {
   pass "sending it twice makes one capture"
 }
 
+test_a_waiting_sort_does_not_hold_the_import() {
+  make_world
+  make_wav "$W/audio/hum.wav" 8
+  add_question "$ID1" "What a Life bridge idea" "$W/audio/hum.wav"
+  export FAKE_TARTEVO_MODE=sort-waits FM_VOICE_IDEA_IMPORT_TIMEOUT=5
+  run_check
+  unset FAKE_TARTEVO_MODE FM_VOICE_IDEA_IMPORT_TIMEOUT
+  assert_equals "$ID1	Filed to What a Life." "$(cat "$W/log/answers.log")" "filed within the import's time limit"
+  pass "a long recording waiting to be sorted does not hold the import"
+}
+
 test_a_duplicate_while_the_first_waits_is_said_once() {
   make_world
   make_wav "$W/audio/hum.wav" 7
@@ -608,6 +621,7 @@ test_an_ordinary_question_is_left_for_firstmate
 test_unreachable_desk_holds_the_capture_and_files_it_later
 test_a_missing_inbox_uses_the_last_song_list
 test_sending_it_twice_makes_one_capture
+test_a_waiting_sort_does_not_hold_the_import
 test_a_duplicate_while_the_first_waits_is_said_once
 test_honest_failures_are_spoken
 test_a_question_answered_elsewhere_gets_the_receipt_announced
