@@ -1,0 +1,34 @@
+$ fm-inbox.sh progress 1790470255-86Sozn "On it, checking now."
+progress 1790470255-86Sozn
+exit=0
+$ fm-inbox.sh progress 1790470255-86Sozn "Found the cause, writing it up."
+progress 1790470255-86Sozn
+exit=0
+$ fm-inbox.sh reply 1790470255-86Sozn "Done: the watcher now surfaces new notes."
+replied 1790470255-86Sozn
+exit=0
+$ fm-inbox.sh progress 1790470255-86Sozn "late line"
+fm-inbox: reply already recorded for 1790470255-86Sozn; progress lines come before it
+exit=1
+$ fm-inbox.sh progress 1790470255-86Sozn "   "
+fm-inbox: refusing to record an empty progress line
+exit=1
+$ fm-inbox.sh receipts (that note)
+{
+ "progress": [
+  {
+   "at": "2026-09-27T00:51:07Z",
+   "body": "On it, checking now."
+  },
+  {
+   "at": "2026-09-27T00:51:07Z",
+   "body": "Found the cause, writing it up."
+  }
+ ],
+ "reply": {
+  "id": "1790470255-86Sozn",
+  "at": "2026-09-27T00:51:07Z",
+  "body": "Done: the watcher now surfaces new notes.",
+  "cursor": "000000000006"
+ }
+}

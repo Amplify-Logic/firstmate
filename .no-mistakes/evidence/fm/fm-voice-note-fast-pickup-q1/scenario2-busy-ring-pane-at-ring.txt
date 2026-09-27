@@ -1,0 +1,14 @@
+  ⎿  Allowed by auto mode classifier
+⏺ Captain, your connection test from Starship Voice came through, and the voice link is working.
+  I sent it a short progress note, then posted a reply saying the connection is confirmed. The note is marked handled and the notification is cleared, so nothing from it is still waiting.
+✻ Brewed for 23s · done 3:43 AM
+❯ Live test step: run this exact bash command in the foreground with a 120000ms timeout: python3 -c "import time; time.sleep(70); print(\"work finished\")" ; then report its output.
+⏺ Bash(python3 -c "import time; time.sleep(70); print(\"work finished\")")
+  ⎿  Running… (9s · timeout 2m)
+     (ctrl+b ctrl+b (twice) to run in background)
+✻ Architecting… (15s · ↓ 133 tokens)
+  ⎿  Tip: Run /install-github-app to tag @claude right from your Github issues and PRs
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏵⏵ auto mode on (shift+tab to cycle) · ← 2 agents

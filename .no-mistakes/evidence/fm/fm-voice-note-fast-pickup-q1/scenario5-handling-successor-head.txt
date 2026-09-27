@@ -1,0 +1,6 @@
+== head watcher (handling successor), .watcher-down=announced:handling:9998.1790470247.labtst
+watcher pid 27965 blocking after 8s
+queue note at 1790470255 (base fm-inbox, so no ring - watcher path only)
+queued 1790470255-86Sozn
+RESULT: exited 1s after the note with:
+check: captain inbox note 1790470255-86Sozn - voice ping during handling (head)

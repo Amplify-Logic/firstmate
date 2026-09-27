@@ -1,0 +1,8 @@
+BASE COMMIT bb5df01d watcher:
+watcher pid 3700 blocking after 10s (cycle open)
+queue note at 1790470157 (base fm-inbox, no ring)
+queued 1790470157-0P1iYu
+  base comparison ping
+  firstmate will pick this up at its next check.
+base watcher exited 4s after the note with:
+check: rearm-resurface

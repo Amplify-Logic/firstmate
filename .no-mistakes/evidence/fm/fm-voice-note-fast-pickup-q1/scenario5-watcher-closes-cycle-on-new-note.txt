@@ -1,0 +1,9 @@
+watcher pid 85731 blocking after 10s (cycle open)
+seq baseline: 4
+queue note at 1790470096
+queued 1790470096-wR3rY8
+  second voice ping while the watcher cycle is open
+  firstmate will pick this up at its next check.
+(eval):wait:9: pid 85731 is not a child of this shell
+watcher exited rc=127 3s after the note with:
+check: captain inbox note 1790470096-wR3rY8 - second voice ping while the watcher cycle is open

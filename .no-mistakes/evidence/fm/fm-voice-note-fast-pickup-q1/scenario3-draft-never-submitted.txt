@@ -1,0 +1,22 @@
+### pane before
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ captain half-typed draft do not send
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏵⏵ auto mode on (shift+tab to cycle)
+### direct ring:
+not-rung
+exit=0
+### note while draft pending:
+queued 1790469953-QQQPCp
+  voice note while captain is drafting
+  firstmate will pick this up at its next check.
+### pane after 8s
+✻ Churned for 1m 38s · done 3:45 AM
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ captain half-typed draft do not send
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏵⏵ auto mode on (shift+tab to cycle)
+### pending receipts
+[('1790469953-QQQPCp', 'voice note while captain is drafting', False)]
+### queued wakes
+1790469953	3	check	inbox:1790469953-QQQPCp	check: captain inbox note 1790469953-QQQPCp - voice note while captain is drafting

@@ -1,0 +1,6 @@
+== base watcher (handling successor), .watcher-down=announced:handling:9999.1790470202.labtst
+watcher pid 13557 blocking after 8s
+queue note at 1790470210 (base fm-inbox, so no ring - watcher path only)
+queued 1790470210-ostvLC
+RESULT: still blocking 30s after the note - note NOT surfaced
+output: ''

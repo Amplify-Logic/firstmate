@@ -1,0 +1,31 @@
+❯ Live test step: run this exact bash command in the foreground with a 120000ms timeout: python3 -c "import time; time.sleep(70); print(\"work finished\")" ; then report its output.
+⏺ Bash(python3 -c "import time; time.sleep(70); print(\"work finished\")")
+  ⎿  work finished
+  ⎿  (timeout 2m)
+  ⎿  Allowed by auto mode classifier
+❯ [firstmate inbox] captain inbox note 1790469851-qsdotg is queued. Run bin/fm-wake-drain.sh now to pick it up; it stays queued until handled and acknowledged.
+⏺ Bash(bin/fm-wake-drain.sh; bin/fm-inbox.sh drain)
+  ⎿  1790469851 2       check   inbox:1790469851-qsdotg check: captain inbox note 1790469851-qsdotg - voice: are you there? quick status please
+     WAKE_ACK_REQUIRED: after handling completes run bin/fm-wake-drain.sh --ack-through 2 --recovery-generation 42293.1790469851.8lYWOP
+     1790469851-qsdotg
+     … +3 lines (ctrl+o to expand)
+  ⎿  Allowed by auto mode classifier
+⏺ Bash(bin/fm-inbox.sh status 2>&1 | head -20)
+  ⎿  === firstmate status (read-only, no wake sent) ===
+     home     /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.5tQxvp
+     time     2026-09-27T00:45:24Z
+     … +7 lines (ctrl+o to expand)
+  ⎿  Allowed by auto mode classifier
+⏺ Bash(bin/fm-inbox.sh progress 1790469851-qsdotg "Here, pulling status now." && bin/fm-inbox.sh reply 1790469851-qsdotg "Here. No workers running and nothing queued;…)
+  ⎿  progress 1790469851-qsdotg
+     replied 1790469851-qsdotg
+     acked 1790469851-qsdotg
+  ⎿  Allowed by auto mode classifier
+⏺ Captain, the 70-second test step finished and printed "work finished". I also answered your voice question from mid-run.
+  The voice question was "are you there? quick status please". I sent a progress note, then a reply saying I'm here, no workers are running, nothing is queued, and the test step completed normally.
+  The note is marked handled and its notification is cleared.
+✻ Churned for 1m 38s · done 3:45 AM
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏵⏵ auto mode on (shift+tab to cycle) · ← 2 agents
