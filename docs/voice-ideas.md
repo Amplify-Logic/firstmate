@@ -31,7 +31,8 @@ The recording is held under its capture id, which is the request id VoiceLoop ga
 Firstmate then writes a sidecar naming the song as your own word, and the recording beside it, into the Artevo Inbox, under a name that leads with the song's title.
 It runs Artevo's own `captures import` on that same inbox, which copies the audio into the career root, verifies it by hash, and records the receipt that is spoken back.
 It uses the real inbox rather than a folder of its own because Artevo remembers the inbox it last wrote `songs.json` into, and an import against any other folder would move the shortcut's song list.
-That import also takes in anything else already waiting in the inbox, exactly as running it by hand would, and it never moves or deletes a source.
+That import also takes in anything else already waiting in the inbox, and it never moves or deletes a source.
+It skips Artevo's hearing and sorting of recordings on no song, which Artevo's own sort does later, so a long recording waiting to be heard cannot hold the receipt past the import's time limit.
 Firstmate never edits the Artevo checkout or the career root itself.
 
 ## Sending it twice makes one capture
