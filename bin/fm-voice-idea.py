@@ -29,7 +29,9 @@ second time; Artevo's importer also dedupes by content hash.
 
 Boundaries:
   - It writes into the Artevo Inbox only (a sidecar, then the audio, each via a
-    hidden temporary name), and runs Artevo's own `captures import` command.
+    hidden temporary name), and runs Artevo's own `captures import` command
+    with --no-sort, so a long recording already waiting to be heard and sorted
+    never holds this import past its time limit.
     It never edits the Artevo checkout, the career root, or any file it did
     not write, and never deletes anything from the inbox.
   - It reads the glasses mailbox database read-only. Answers go through the
@@ -682,7 +684,7 @@ def run_import(ctx: Context) -> tuple[dict | None, str | None]:
     timeout = ctx.timeout(paths.import_timeout)
     if timeout is None:
         return None, NO_TIME
-    cmd = [str(paths.tartevo), "captures", "import", "--inbox", str(paths.inbox), "--json", "--no-lyrics"]
+    cmd = [str(paths.tartevo), "captures", "import", "--inbox", str(paths.inbox), "--json", "--no-lyrics", "--no-sort"]
     try:
         done = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, stdin=subprocess.DEVNULL)
     except subprocess.TimeoutExpired:
