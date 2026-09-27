@@ -2069,7 +2069,7 @@ captain_input_baseline_read() {
 }
 
 captain_input_surface_queued() {
-  local rows count first
+  local rows first
   [ -s "$FM_WAKE_QUEUE" ] || return 0
   fm_lock_acquire_wait "$FM_WAKE_QUEUE_LOCK"
   rows=$(awk -F '\t' -v base="$CAPTAIN_INPUT_BASELINE" '
@@ -2078,11 +2078,7 @@ captain_input_surface_queued() {
   ' "$FM_WAKE_QUEUE" 2>/dev/null || true)
   fm_lock_release "$FM_WAKE_QUEUE_LOCK"
   [ -n "$rows" ] || return 0
-  count=$(printf '%s\n' "$rows" | awk 'END { print NR }')
   first=$(printf '%s\n' "$rows" | head -n 1)
-  if [ "$count" -gt 1 ]; then
-    wake "check: $first (+$((count - 1)) more captain input queued)"
-  fi
   wake "check: $first"
 }
 

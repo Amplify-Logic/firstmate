@@ -381,10 +381,9 @@ announce_note() {  # <id> <summary>
 # on it with a timeout) is never held by a slow pane. The queued wake above
 # stays the durable delivery; a ring that cannot be typed changes nothing. Away
 # and quiet mode own supervision through their own path, so they are never
-# rung. FM_INBOX_RING=0 turns it off.
+# rung.
 ring_primary() {  # <id>
   local id=$1
-  [ "${FM_INBOX_RING:-1}" != 0 ] || return 0
   [ ! -e "$STATE/.afk" ] || return 0
   [ -x "$FM_ROOT/bin/fm-desk-voice.sh" ] || return 0
   FM_HOME="$FM_HOME" FM_STATE_OVERRIDE="$STATE" nohup "$FM_ROOT/bin/fm-desk-voice.sh" ring \

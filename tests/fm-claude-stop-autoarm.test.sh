@@ -1518,7 +1518,7 @@ test_note_queued_mid_turn_is_presented_at_turn_end() {
     i=$((i + 1))
   done
   grep -q '^watcher: started' "$succ_out" || fail "the handling successor did not start: $(cat "$succ_out")"
-  id=$(FM_HOME="$dir" FM_INBOX_RING=0 "$dir/bin/fm-inbox.sh" note "connection test ping" | sed -n 's/^queued //p')
+  id=$(FM_HOME="$dir" "$dir/bin/fm-inbox.sh" note "connection test ping" | sed -n 's/^queued //p')
   [ -n "$id" ] || fail "the captain note was not queued"
   out="$dir/hook.out"
   printf '%s\n' '{"session_id":"sess-autoarm","stop_hook_active":false}' \

@@ -265,7 +265,7 @@ test_handling_successor_surfaces_a_captain_note_queued_mid_handling() {
   if ! is_live_non_zombie "$child"; then
     fail "a row queued before the successor started woke it again: $(cat "$out")"
   fi
-  id=$(FM_HOME="$dir/home" FM_STATE_OVERRIDE="$state" FM_INBOX_RING=0 \
+  id=$(FM_HOME="$dir/home" FM_STATE_OVERRIDE="$state" \
     "$ROOT/bin/fm-inbox.sh" note "connection test ping" | sed -n 's/^queued //p')
   [ -n "$id" ] || { kill -TERM "$child" 2>/dev/null || true; fail "the note was not queued"; }
   rc=0
@@ -300,7 +300,7 @@ test_handling_cycle_names_new_captain_input() {
   rc=0
   wait_for_exit "$child" 60 || rc=$?
   [ "$rc" -ne 124 ] || fail "new captain input while an episode is handled never woke the watcher: $(cat "$out")"
-  grep -F "check: desk-voice: $state/desk-voice/inbox/fixture.json (+1 more captain input queued)" "$out" >/dev/null \
+  grep -Fx "check: desk-voice: $state/desk-voice/inbox/fixture.json" "$out" >/dev/null \
     || fail "the wake did not name the new captain input: $(cat "$out")"
   ! grep -F 'rearm-resurface' "$out" >/dev/null || fail "the wake reported generic recovery instead of the captain input: $(cat "$out")"
   pass "captain input queued while an episode is handled wakes the watcher under its own name"
