@@ -1503,13 +1503,14 @@ test_note_queued_mid_turn_is_presented_at_turn_end() {
   local dir out status succ_out succ_pid id drained i hook_pid child
   local -a knobs=(FM_POLL=1 FM_HEARTBEAT=600 FM_CHECK_INTERVAL=999999
     FM_SECONDMATE_LIVENESS_SECS=99999999 FM_SUPERVISION_SENTINEL_MODE=off FM_ARM_ATTACH_POLL=0.2)
+  local -a no_pane=(-u TMUX -u TMUX_PANE -u HERDR_ENV -u HERDR_PANE_ID -u HERDR_SESSION -u HERDR_SOCKET_PATH)
   dir=$(make_primary_dir "$TMP_ROOT/note-mid-turn")
   rm -rf "${dir:?}/bin"
   cp -R "$ROOT/bin" "$dir/bin"
   : > "$dir/state/task.meta"
   fm_test_track_watcher_state "$dir/state"
   succ_out="$dir/successor.out"
-  env "${knobs[@]}" FM_HOME="$dir" FM_WATCH_PREDECESSOR_ARM_PID=$$ \
+  env "${no_pane[@]}" "${knobs[@]}" FM_HOME="$dir" FM_WATCH_PREDECESSOR_ARM_PID=$$ \
     "$dir/bin/fm-watch-arm.sh" > "$succ_out" 2>&1 &
   succ_pid=$!
   i=0
@@ -1518,11 +1519,11 @@ test_note_queued_mid_turn_is_presented_at_turn_end() {
     i=$((i + 1))
   done
   grep -q '^watcher: started' "$succ_out" || fail "the handling successor did not start: $(cat "$succ_out")"
-  id=$(FM_HOME="$dir" "$dir/bin/fm-inbox.sh" note "connection test ping" | sed -n 's/^queued //p')
+  id=$(env "${no_pane[@]}" FM_HOME="$dir" "$dir/bin/fm-inbox.sh" note "connection test ping" | sed -n 's/^queued //p')
   [ -n "$id" ] || fail "the captain note was not queued"
   out="$dir/hook.out"
   printf '%s\n' '{"session_id":"sess-autoarm","stop_hook_active":false}' \
-    | env "${knobs[@]}" FM_HOME="$dir" "$FAKE_CLAUDE" -c '
+    | env "${no_pane[@]}" "${knobs[@]}" FM_HOME="$dir" "$FAKE_CLAUDE" -c '
         printf "%s\n" "$$" > "$FM_HOME/state/.lock"
         "$FM_HOME/bin/fm-claude-stop-autoarm.sh"
       ' > "$out" 2>&1 &
