@@ -217,7 +217,7 @@ It mints a fresh generation so buried decisions still resurface once.
 
 Captain input is outside this rule.
 A captain inbox note or desk-voice mailbox row queued after a watcher took its lock closes that cycle with its own reason, whether the watcher is a handling successor or the episode is announced (`captain_input_surface_queued` in `bin/fm-watch.sh`).
-Before, such a note waited for an unrelated event, and a Claude turn end that attached to the same cycle ended silently.
+Without it, such a note waits for an unrelated event, and a Claude turn end that attached to the same cycle ends silently.
 
 ### Generation reuse
 
