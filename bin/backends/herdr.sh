@@ -1710,30 +1710,100 @@ fm_backend_herdr_projection_order_best_effort() {  # <session> <created-workspac
   return 0
 }
 
+# fm_backend_herdr_server_running: whether <session>'s server positively reports
+# running. One `status --json` read, which never starts a server; anything else
+# (not running, unreadable, CLI absent) is "not running". Never blocks on a
+# server and never creates one, so every read path can afford it.
+fm_backend_herdr_server_running() {  # <session>
+  local running
+  running=$(fm_backend_herdr_cli "$1" status --json 2>/dev/null | jq -r '.server.running // false' 2>/dev/null)
+  [ "$running" = "true" ]
+}
+
+# fm_backend_herdr_server_start_detached: the ONE place Firstmate launches a
+# local herdr server (docs/herdr-backend.md "Server ownership"). The server
+# outlives whichever process happened to need it and every pane inherits its
+# startup environment, so it must belong to none of them:
+#   - its own session and process group (fork, setsid, fork again, so it is
+#     neither in the caller's group nor a session leader that could acquire a
+#     controlling terminal), so a job kill such as `launchctl kickstart -k`
+#     aimed at the caller cannot take the server and every pane with it;
+#   - stdin, stdout, and stderr on /dev/null and every other inherited
+#     descriptor closed, so no caller's command substitution, pipe, or lock
+#     is held open for the server's lifetime;
+#   - an environment scrubbed of harness identity (CLAUDE*, CODEX_*, PI_*,
+#     OPENCODE*, GEMINI_CLI*, GROK_*, KIMI_*, CURSOR_AGENT, CURSOR_INVOKED_AS),
+#     every FM_* home and task marker, the caller's own multiplexer pane
+#     identity (HERDR_ENV and the pane, tab, workspace, session, socket, and
+#     binary variables herdr injects, TMUX, TMUX_PANE, ZELLIJ*, CMUX_*), trace context,
+#     and per-task Git config and temp root, so no pane ever starts with a dead
+#     agent's session, effort, or task wiring;
+#   - its working directory at $HOME, never a task worktree that cleanup may
+#     later remove.
+# Herdr 0.7.4 has no detach or no-autostart option of its own (its status
+# reports capability detached_server_daemon=false), so Perl's POSIX::setsid
+# provides the detach on both macOS and Linux. Returns as soon as the launch is
+# handed off; it never waits on the server itself.
+fm_backend_herdr_server_start_detached() {  # <session>
+  local session=$1 bin name
+  local -a scrub=()
+  command -v perl >/dev/null 2>&1 || {
+    echo "error: cannot start the herdr server for session '$session': perl is required to detach it from this process" >&2
+    return 1
+  }
+  bin=$(command -v "$(fm_backend_herdr_bin)" 2>/dev/null) || bin=
+  [ -n "$bin" ] || { echo "error: cannot start the herdr server for session '$session': the herdr CLI did not resolve" >&2; return 1; }
+  while IFS= read -r name; do
+    case "$name" in
+      FM_*|CLAUDE*|CODEX_*|PI_*|OPENCODE*|GEMINI_CLI*|GROK_*|KIMI_*|CURSOR_AGENT|CURSOR_INVOKED_AS \
+        |HERDR_ENV|HERDR_PANE_ID|HERDR_TAB_ID|HERDR_WORKSPACE_ID|HERDR_SESSION|HERDR_SOCKET_PATH \
+        |HERDR_CLIENT_SOCKET_PATH|HERDR_BIN_PATH|TMUX|TMUX_PANE|ZELLIJ*|CMUX_* \
+        |TRACEPARENT|TRACESTATE|GIT_CONFIG_COUNT|GIT_CONFIG_KEY_*|GIT_CONFIG_VALUE_*|GIT_CONFIG_PARAMETERS|GOTMPDIR)
+        scrub+=(-u "$name") ;;
+    esac
+  done < <(compgen -e)
+  perl -MPOSIX -e '
+    my $pid = fork;
+    exit 1 unless defined $pid;
+    exit 0 if $pid;
+    exit 1 if POSIX::setsid() < 0;
+    $pid = fork;
+    exit 1 unless defined $pid;
+    POSIX::_exit(0) if $pid;
+    my $home = $ENV{HOME};
+    chdir((defined $home && -d $home) ? $home : "/");
+    open(STDIN, "<", "/dev/null");
+    open(STDOUT, ">", "/dev/null");
+    open(STDERR, ">", "/dev/null");
+    my $max = POSIX::sysconf(POSIX::_SC_OPEN_MAX());
+    $max = 1024 unless defined $max && $max > 0;
+    $max = 65536 if $max > 65536;
+    POSIX::close($_) for 3 .. $max - 1;
+    exec { $ARGV[0] } @ARGV;
+    POSIX::_exit(127);
+  ' /usr/bin/env ${scrub[@]+"${scrub[@]}"} HERDR_SESSION="$session" "$bin" server --session "$session" \
+    </dev/null >/dev/null 2>&1
+}
+
 # fm_backend_herdr_server_ensure: start the herdr server for <session>
 # headless (no TUI client) if not already running, mirroring tmux's `tmux
 # has-session || tmux new-session -d`. Verified: a bare socket CLI call does
-# NOT auto-start the server, so this must run before any workspace/tab/pane
-# call. The server outlives its launcher and passes its startup environment to
-# every later pane, so remove home, harness identity, and supervision selection
-# inherited from whichever agent happened to start it. Bounded poll for the
-# server to report running.
+# NOT auto-start the server, so a path that is about to CREATE something
+# (spawn, relaunch, the away daemon launch) must run this first. Only those
+# deliberate launch paths call it; a read goes through
+# fm_backend_herdr_target_ready, which never starts a server. The launch itself
+# is fm_backend_herdr_server_start_detached's, followed by a bounded poll for
+# the server to report running.
 fm_backend_herdr_server_ensure() {  # <session>
-  local session=$1 running out i
+  local session=$1 i
   # Validate before the background launch so a missing CLI cannot enter the
   # bounded readiness poll and cost ten seconds per live task;
   # tests/fm-backend-herdr.test.sh covers this guard.
   fm_backend_herdr_tool_check || return 1
-  running=$(fm_backend_herdr_cli "$session" status --json 2>/dev/null | jq -r '.server.running // false' 2>/dev/null)
-  [ "$running" = "true" ] && return 0
-  (
-    unset FM_HOME FM_ROOT_OVERRIDE FM_STATE_OVERRIDE FM_DATA_OVERRIDE FM_PROJECTS_OVERRIDE FM_CONFIG_OVERRIDE \
-      CURSOR_AGENT CURSOR_INVOKED_AS CLAUDECODE PI_CODING_AGENT FM_PI_HARNESS GROK_AGENT FM_SUPERVISION_MODEL
-    fm_backend_herdr_cli "$session" server >/dev/null 2>&1 &
-  ) || return 1
+  fm_backend_herdr_server_running "$session" && return 0
+  fm_backend_herdr_server_start_detached "$session" || return 1
   for i in $(seq 1 20); do
-    running=$(fm_backend_herdr_cli "$session" status --json 2>/dev/null | jq -r '.server.running // false' 2>/dev/null)
-    [ "$running" = "true" ] && return 0
+    fm_backend_herdr_server_running "$session" && return 0
     sleep 0.5
   done
   echo "error: herdr server for session '$session' did not report running within 10s" >&2
@@ -3131,9 +3201,17 @@ fm_backend_herdr_parse_target() {  # <target>
   [ -n "$FM_BACKEND_HERDR_SESSION" ] && [ -n "$FM_BACKEND_HERDR_PANE" ] && [ "$FM_BACKEND_HERDR_PANE" != "$target" ]
 }
 
+# fm_backend_herdr_target_ready: parse <target> and require its session's
+# server to be running already. It NEVER starts one: every capture, send, key,
+# kill, and busy read goes through here, including the watcher's and phone
+# bridge's state reads, and a server started from inside one of those jobs
+# would live and die with that job. No server means no pane to read or send to,
+# so this reports it on stderr and fails at once instead.
 fm_backend_herdr_target_ready() {  # <target>
   fm_backend_herdr_parse_target "$1" || return 1
-  fm_backend_herdr_server_ensure "$FM_BACKEND_HERDR_SESSION" || return 1
+  fm_backend_herdr_server_running "$FM_BACKEND_HERDR_SESSION" && return 0
+  echo "error: the herdr server for session '$FM_BACKEND_HERDR_SESSION' is not running; a read or send does not start it" >&2
+  return 1
 }
 
 # fm_backend_herdr_current_path: the live FOREGROUND process's cwd, or empty on
@@ -3679,7 +3757,7 @@ fm_backend_herdr_classify_submit_agent_status() {  # <raw-agent_status>
 
 # fm_backend_herdr_agent_status_raw: one `agent get` read, echoing the raw
 # agent_status string (working/idle/done/blocked/...), or empty on any
-# failure. Deliberately skips fm_backend_herdr_target_ready's server-ensure
+# failure. Deliberately skips fm_backend_herdr_target_ready's server-running
 # round trip (an extra `status --json` call) that fm_backend_herdr_busy_state
 # pays on every call: fm_backend_herdr_wait_for_working polls this in a tight
 # loop right after a caller has already parsed the target and confirmed the
