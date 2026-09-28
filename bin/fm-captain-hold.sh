@@ -83,9 +83,10 @@
 # refuses a stale expectation, including a replay of an answer that already
 # landed; a task confirmed absent refuses the same way, while a backlog read
 # that fails keeps the ordinary failure exit. A live call re-held with a
-# reworded reason records the new reason and then starts a new lifecycle
-# stamp, so a tap on the old wording is refused too, while a re-hold with an
-# identical reason keeps the stamp and the identity the captain was shown.
+# reworded reason starts a new lifecycle stamp both before and after it records
+# the new reason, so a tap on the old wording is refused too, even when the
+# hold stops between the two, while a re-hold with an identical reason keeps
+# the stamp and the identity the captain was shown.
 # Without the option the answer behaves exactly as described above.
 #
 # ONE KEYED-ANSWER INTAKE, FED BY EVERY CHANNEL.
@@ -936,7 +937,7 @@ command_hold() {
   # Publish the timestamp before the captain-hold annotation. A concurrent
   # snapshot may see the harmless stamp by itself, but can never see a newly
   # held task without the timestamp that defines this hold lifecycle's age.
-  [ "$reword" = 1 ] || stamp_hold_set "$id" "$hold_set" "$preserve_hold_set"
+  stamp_hold_set "$id" "$hold_set" "$preserve_hold_set"
   if [ -n "$until" ]; then
     tasks_axi hold "$id" --reason "$reason" --kind captain --until "$until" >/dev/null \
       || fail "could not hold task $id for the captain"

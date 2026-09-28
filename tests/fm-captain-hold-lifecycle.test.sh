@@ -4138,8 +4138,8 @@ test_answer_expect_identity_follows_rewording() {
   assert_not_contains "$show" "Resolution recorded by" "a tap on the old wording recorded an answer"
 
   # A second reword in the same clock second moves the stamp on again rather
-  # than falling back to the first card's stamp, and the new words land while
-  # the row still carries the previous stamp.
+  # than falling back to the first card's stamp, and the new words land on a
+  # stamp no earlier card carries.
   cat > "$home/fakebin/tasks-axi" <<'SH'
 #!/usr/bin/env bash
 if [ "${1:-}" = hold ] && [ "${2:-}" = reword-card ]; then
@@ -4151,8 +4151,12 @@ SH
   FM_CAPTAIN_HOLD_NOW=2026-06-01T12:00:00Z run_captain "$home" hold reword-card \
     --reason "ship the third draft" >/dev/null || fail "could not reword the card a second time"
   rm -f -- "$home/fakebin/tasks-axi"
-  assert_grep "Captain hold set: ${reworded%#*}" "$home/at-hold.txt" \
-    "the second reword advanced the stamp before storing its new words"
+  assert_grep "Captain hold set: " "$home/at-hold.txt" \
+    "the second reword stored its new words on a row without a hold-set stamp"
+  assert_no_grep "Captain hold set: ${shown%#*}" "$home/at-hold.txt" \
+    "the second reword stored its new words under the first card's stamp"
+  assert_no_grep "Captain hold set: ${reworded%#*}" "$home/at-hold.txt" \
+    "the second reword stored its new words under the previous card's stamp"
   again=$(run_captain "$home" open reword-card --identity) \
     || fail "the second reword did not report an open identity"
   [ "$again" != "$shown" ] || fail "a second reword brought back the first card's identity: $again"
@@ -4162,8 +4166,40 @@ SH
     --expect-identity "$shown" > "$home/stale2.out" 2> "$home/stale2.err" || rc=$?
   [ "$rc" = 3 ] || fail "a tap on the first wording answered the third (rc=$rc)"
 
+  # A reword whose stamp write fails after the new words land still leaves the
+  # row past the card that showed the older words, and its retry keeps it so.
+  cat > "$home/fakebin/tasks-axi" <<'SH'
+#!/usr/bin/env bash
+if [ "${1:-}" = hold ] && [ "${2:-}" = reword-card ]; then
+  : > "$FM_HOME/reword-held"
+fi
+if [ "${1:-}" = update ] && [ "${2:-}" = reword-card ] && [ -e "$FM_HOME/reword-held" ]; then
+  exit 92
+fi
+exec "$REAL_TASKS_AXI" "$@"
+SH
+  chmod +x "$home/fakebin/tasks-axi"
+  rc=0
+  FM_CAPTAIN_HOLD_NOW=2026-06-01T12:00:00Z run_captain "$home" hold reword-card \
+    --reason "ship the fourth draft" > "$home/torn.out" 2> "$home/torn.err" || rc=$?
+  rm -f -- "$home/fakebin/tasks-axi"
+  [ "$rc" != 0 ] || fail "the forced stamp failure after the reword reported success"
+  same=$(run_captain "$home" open reword-card --identity) \
+    || fail "the interrupted reword did not report an open identity"
+  [ "$same" != "$again" ] || fail "an interrupted reword kept the third wording's identity: $same"
+  FM_CAPTAIN_HOLD_NOW=2026-06-01T12:00:00Z run_captain "$home" hold reword-card \
+    --reason "ship the fourth draft" >/dev/null || fail "could not retry the interrupted reword"
+  same=$(run_captain "$home" open reword-card --identity) \
+    || fail "the retried reword did not report an open identity"
+  [ "$same" != "$again" ] || fail "a retried reword brought back the third wording's identity: $same"
+  rc=0
+  run_captain "$home" answer reword-card --decision-file "$home/go.txt" --release \
+    --expect-identity "$again" > "$home/stale3.out" 2> "$home/stale3.err" || rc=$?
+  [ "$rc" = 3 ] || fail "a tap on the third wording answered the fourth (rc=$rc)"
+  again=$same
+
   FM_CAPTAIN_HOLD_NOW=2026-06-01T12:10:00Z run_captain "$home" hold reword-card \
-    --reason "ship the third draft" >/dev/null || fail "could not repeat the reworded hold"
+    --reason "ship the fourth draft" >/dev/null || fail "could not repeat the reworded hold"
   same=$(run_captain "$home" open reword-card --identity) \
     || fail "the repeated reworded hold did not report an open identity"
   [ "$same" = "$again" ] || fail "a same-worded re-hold changed the identity: $again -> $same"
