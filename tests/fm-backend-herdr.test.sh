@@ -165,6 +165,7 @@ case "${1:-}" in
         CLAUDE_EFFORT CLAUDE_CODE_SESSION_ID CODEX_THREAD_ID PI_CODING_AGENT FM_PI_HARNESS GROK_AGENT \
         FM_SUPERVISION_MODEL HERDR_ENV HERDR_PANE_ID HERDR_SOCKET_PATH GIT_CONFIG_COUNT GIT_CONFIG_KEY_0 \
         GIT_CONFIG_VALUE_0 TRACEPARENT GOTMPDIR HERDR_TEST_SENTINEL FM_REMOTE_JOB_ACTIVE CODEX_HOME \
+        PRIME_AGENT_BUILD_ID PRIME_AGENT_CODING_AGENT_DIR GROK_WORKSPACE_ROOT AGENT \
         CLAUDE_CODE_OAUTH_TOKEN PI_CODING_AGENT_DIR HERDR_SESSION; do
         eval 'value=${'"$name"'-<unset>}'
         printf '%s=%s\n' "$name" "$value"
@@ -1314,6 +1315,7 @@ test_server_ensure_scrubs_home_and_harness_identity() {
     CURSOR_AGENT=1 CURSOR_INVOKED_AS=cursor-agent CLAUDECODE=1 CLAUDE_CODE_CHILD_SESSION=1 CLAUDE_EFFORT=medium \
     CLAUDE_CODE_SESSION_ID=dead-session CODEX_THREAD_ID=t1 CODEX_HOME=/tmp/codex-home CLAUDE_CODE_OAUTH_TOKEN=oauth-token \
     PI_CODING_AGENT_DIR=/tmp/pi-agent PI_CODING_AGENT=true FM_PI_HARNESS=pi-signed GROK_AGENT=1 \
+    PRIME_AGENT_BUILD_ID=b1 PRIME_AGENT_CODING_AGENT_DIR=/tmp/prime-agent GROK_WORKSPACE_ROOT=/tmp/grok-ws AGENT=rovodev_cli \
     FM_SUPERVISION_MODEL=autoarm HERDR_ENV=1 HERDR_PANE_ID=w1:p1 HERDR_SOCKET_PATH=/tmp/caller.sock \
     GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.hooksPath GIT_CONFIG_VALUE_0=/tmp/task-hooks TRACEPARENT=00-x GOTMPDIR=/tmp/task-go \
     bash -c '. "$0/bin/backends/herdr.sh"; fm_backend_herdr_server_ensure fmtest || exit 1; python3 -c "import os; print(os.getpgrp(), os.getsid(0))"' "$ROOT")
@@ -1327,7 +1329,8 @@ test_server_ensure_scrubs_home_and_harness_identity() {
   for name in FM_HOME FM_ROOT_OVERRIDE FM_STATE_OVERRIDE FM_DATA_OVERRIDE FM_PROJECTS_OVERRIDE FM_CONFIG_OVERRIDE \
     FM_TASK_ID FM_HERDR_PROJECT_KEY CURSOR_AGENT CURSOR_INVOKED_AS CLAUDECODE CLAUDE_CODE_CHILD_SESSION CLAUDE_EFFORT \
     CLAUDE_CODE_SESSION_ID CODEX_THREAD_ID PI_CODING_AGENT FM_PI_HARNESS GROK_AGENT FM_SUPERVISION_MODEL HERDR_ENV \
-    HERDR_PANE_ID HERDR_SOCKET_PATH GIT_CONFIG_COUNT GIT_CONFIG_KEY_0 GIT_CONFIG_VALUE_0 TRACEPARENT GOTMPDIR; do
+    HERDR_PANE_ID HERDR_SOCKET_PATH GIT_CONFIG_COUNT GIT_CONFIG_KEY_0 GIT_CONFIG_VALUE_0 TRACEPARENT GOTMPDIR \
+    PRIME_AGENT_BUILD_ID GROK_WORKSPACE_ROOT AGENT; do
     assert_contains "$output" "$name=<unset>" "server_ensure leaked $name into the long-lived Herdr server"
   done
   assert_contains "$output" "HERDR_TEST_SENTINEL=kept" "server_ensure removed an unrelated environment variable"
@@ -1335,6 +1338,7 @@ test_server_ensure_scrubs_home_and_harness_identity() {
   assert_contains "$output" "CODEX_HOME=/tmp/codex-home" "server_ensure removed the user's Codex config root"
   assert_contains "$output" "CLAUDE_CODE_OAUTH_TOKEN=oauth-token" "server_ensure removed the user's Claude credential"
   assert_contains "$output" "PI_CODING_AGENT_DIR=/tmp/pi-agent" "server_ensure removed the user's Pi account root"
+  assert_contains "$output" "PRIME_AGENT_CODING_AGENT_DIR=/tmp/prime-agent" "server_ensure removed the prime-agent state root"
   assert_contains "$output" "HERDR_SESSION=fmtest" "server_ensure lost explicit Herdr session routing"
   assert_contains "$output" "args=server --session fmtest" "server_ensure lost the trailing Herdr session flag"
   assert_contains "$output" "cwd=$(cd "$dir/home" && pwd -P)" "the server should run from \$HOME, not its caller's directory"
