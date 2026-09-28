@@ -1,0 +1,135 @@
+=== [NEW] bin root: /Users/larsmusic/.no-mistakes/worktrees/f569cc43ac96/01M3MWE1T2J9ZZEVHJYQYGKVXZ   lab session: fm-lab-srvown-NEW-12537-8975
+lab session provisioned then stopped via helper; running=false
+--- read paths with the server stopped (the watcher / voice-bridge path)
+  fm-crew-state.sh rp -> rc=0 in .52s: state: unknown · source: none · backend target gone: fm-lab-srvown-NEW-12537-8975:w1:p1
+  after fm-crew-state.sh: session running=false server_pid=
+  fm_backend_capture herdr fm-lab-srvown-NEW-12537-8975:w1:p1 -> error: the herdr server for session 'fm-lab-srvown-NEW-12537-8975' is not running; a read or send does not start it capture rc=1
+  fm_backend_busy_state herdr fm-lab-srvown-NEW-12537-8975:w1:p1 -> error: the herdr server for session 'fm-lab-srvown-NEW-12537-8975' is not running; a read or send does not start it unknownbusy rc=0
+  after capture+busy reads: session running=false server_pid=
+--- deliberate start from a caller in its own process group
+  caller report: rc=0 start=1790631448.51 end=1790631449.21 pid=13518 pgid=13518 out=
+  running=true
+  caller: pid=13518 pgid=13518 sid=12476
+  server ps: 13570     1 13569 ??       /Users/larsmusic/.local/bin/herdr server --session fm-lab-srvown-NEW-12537-8975
+  server sid=13569  (server is session leader: no)
+  server cwd: /Users/larsmusic   (caller cwd: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.zhoQgW/task-worktree)
+  server fd 0/1/2: /dev/null /dev/null /dev/null 
+  server process environment (watched names only):
+    CLAUDECODE                 <absent>
+    CLAUDE_CODE_ENTRYPOINT     <absent>
+    CLAUDE_CODE_CHILD_SESSION  <absent>
+    CLAUDE_EFFORT              <absent>
+    CLAUDE_CODE_SESSION_ID     <absent>
+    CLAUDE_PID                 <absent>
+    FM_HOME                    <absent>
+    FM_SUPERVISION_MODEL       <absent>
+    FM_REMOTE_JOB_ACTIVE       1
+    AGENT                      <absent>
+    PRIME_AGENT_BUILD_ID       <absent>
+    GROK_WORKSPACE_ROOT        <absent>
+    TRACEPARENT                <absent>
+    GIT_CONFIG_COUNT           <absent>
+    GOTMPDIR                   <absent>
+    CODEX_HOME                 /tmp/kept-codex-home
+    CLAUDE_CODE_OAUTH_TOKEN    kept-synthetic-token
+    CLAUDE_CONFIG_DIR          /tmp/kept-claude-config
+    PI_CODING_AGENT_DIR        /tmp/kept-pi-dir
+  new pane w1:p1 environment (watched names only):
+    CLAUDECODE                 <absent>
+    CLAUDE_CODE_ENTRYPOINT     <absent>
+    CLAUDE_CODE_CHILD_SESSION  <absent>
+    CLAUDE_EFFORT              <absent>
+    CLAUDE_CODE_SESSION_ID     <absent>
+    CLAUDE_PID                 <absent>
+    FM_HOME                    <absent>
+    FM_SUPERVISION_MODEL       <absent>
+    FM_REMOTE_JOB_ACTIVE       1
+    AGENT                      <absent>
+    PRIME_AGENT_BUILD_ID       <absent>
+    GROK_WORKSPACE_ROOT        <absent>
+    TRACEPARENT                <absent>
+    GIT_CONFIG_COUNT           <absent>
+    GOTMPDIR                   <absent>
+    CODEX_HOME                 /tmp/kept-codex-home
+    CLAUDE_CODE_OAUTH_TOKEN    kept-synthetic-token
+    CLAUDE_CONFIG_DIR          /tmp/kept-claude-config
+    PI_CODING_AGENT_DIR        /tmp/kept-pi-dir
+--- kill -KILL the caller's whole process group (what launchctl kickstart -k does)
+  caller alive: no
+  server pid 13570 alive: yes
+  session running=true
+  panes after kill: ["w1:p1"]
+  pane command after kill wrote: pane-still-alive
+--- server_ensure again while running (idempotent: no second server)
+  ensure rc=0
+  took .08s; server processes for fm-lab-srvown-NEW-12537-8975: 13570 (first was 13570)
+--- teardown
+  teardown ok (default-session tripwire verified)
+
+=== [BASE] bin root: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.zhoQgW/base   lab session: fm-lab-srvown-BASE-15441-7083
+lab session provisioned then stopped via helper; running=false
+--- read paths with the server stopped (the watcher / voice-bridge path)
+  fm-crew-state.sh rp -> rc=0 in 404.62s: state: unknown · source: none · backend target gone: fm-lab-srvown-BASE-15441-7083:w1:p1
+  after fm-crew-state.sh: session running=false server_pid=
+  fm_backend_capture herdr fm-lab-srvown-BASE-15441-7083:w1:p1 -> capture rc=1
+  fm_backend_busy_state herdr fm-lab-srvown-BASE-15441-7083:w1:p1 -> unknownbusy rc=0
+  after capture+busy reads: session running=true server_pid=56475
+  read-started server ps: 56475 56473 12476 herdr server --session fm-lab-srvown-BASE-15441-7083
+  (stopped the read-started server via helper; running=false)
+--- deliberate start from a caller in its own process group
+  caller report: rc=0 start=1790631866.88 end=1790631866.92 pid=56838 pgid=56838 out=
+  running=true
+  caller: pid=56838 pgid=56838 sid=12476
+  server ps: 56867 56865 56838 ??       herdr server --session fm-lab-srvown-BASE-15441-7083
+  server sid=12476  (server is session leader: no)
+  server cwd: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.zhoQgW/task-worktree   (caller cwd: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.zhoQgW/task-worktree)
+  server fd 0/1/2: /dev/null /dev/null /dev/null 
+  server process environment (watched names only):
+    CLAUDECODE                 <absent>
+    CLAUDE_CODE_ENTRYPOINT     cli
+    CLAUDE_CODE_CHILD_SESSION  1
+    CLAUDE_EFFORT              medium
+    CLAUDE_CODE_SESSION_ID     dead-session-20260928
+    CLAUDE_PID                 99999
+    FM_HOME                    <absent>
+    FM_SUPERVISION_MODEL       <absent>
+    FM_REMOTE_JOB_ACTIVE       1
+    AGENT                      rovodev_cli
+    PRIME_AGENT_BUILD_ID       synthetic-build
+    GROK_WORKSPACE_ROOT        /tmp/synthetic-grok
+    TRACEPARENT                00-synthetic
+    GIT_CONFIG_COUNT           1
+    GOTMPDIR                   /tmp/synthetic-gotmp
+    CODEX_HOME                 /tmp/kept-codex-home
+    CLAUDE_CODE_OAUTH_TOKEN    kept-synthetic-token
+    CLAUDE_CONFIG_DIR          /tmp/kept-claude-config
+    PI_CODING_AGENT_DIR        /tmp/kept-pi-dir
+  new pane w1:p1 environment (watched names only):
+    CLAUDECODE                 <absent>
+    CLAUDE_CODE_ENTRYPOINT     cli
+    CLAUDE_CODE_CHILD_SESSION  1
+    CLAUDE_EFFORT              medium
+    CLAUDE_CODE_SESSION_ID     dead-session-20260928
+    CLAUDE_PID                 99999
+    FM_HOME                    <absent>
+    FM_SUPERVISION_MODEL       <absent>
+    FM_REMOTE_JOB_ACTIVE       1
+    AGENT                      rovodev_cli
+    PRIME_AGENT_BUILD_ID       synthetic-build
+    GROK_WORKSPACE_ROOT        /tmp/synthetic-grok
+    TRACEPARENT                00-synthetic
+    GIT_CONFIG_COUNT           1
+    GOTMPDIR                   /tmp/synthetic-gotmp
+    CODEX_HOME                 /tmp/kept-codex-home
+    CLAUDE_CODE_OAUTH_TOKEN    kept-synthetic-token
+    CLAUDE_CONFIG_DIR          /tmp/kept-claude-config
+    PI_CODING_AGENT_DIR        /tmp/kept-pi-dir
+--- kill -KILL the caller's whole process group (what launchctl kickstart -k does)
+  caller alive: no
+  server pid 56867 alive: no
+  session running=false
+  panes after kill: <none: server unreachable>
+--- teardown
+  teardown ok (default-session tripwire verified)
+
+lab dir removed: yes

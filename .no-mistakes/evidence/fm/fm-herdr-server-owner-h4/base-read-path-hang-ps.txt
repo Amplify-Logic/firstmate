@@ -1,0 +1,6 @@
+# BASE code (7cf26db4) read path against a stopped lab session: process table snapshot 2026-09-29 00:44:24 EEST
+# driver (the 'watcher' stand-in) is pgid 12476; the read-started server is a child of fm-crew-state.sh in that same group
+  PID  PPID  PGID ELAPSED COMMAND
+12494 12476 12476   07:00 bash ./drive-server-ownership.sh /Users/larsmusic/.no-mistakes/worktrees/f569cc43ac96/01M3MWE1T2J9ZZEVHJYQYGKVXZ /Users/larsmusic/.no-mistakes/evidence/01M3MWE1T2J9ZZEVHJYQYGKVXZ
+15887     1 12476   06:43 bash /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.zhoQgW/base/bin/fm-crew-state.sh rp
+15889 15887 12476   06:43 herdr server --session fm-lab-srvown-BASE-15441-7083
