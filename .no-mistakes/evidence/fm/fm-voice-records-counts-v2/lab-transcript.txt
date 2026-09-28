@@ -1,0 +1,255 @@
+=================== BASE bc7349c4 ===================
+--- voice status --scope counts
+{
+  "awaiting_captain": 40,
+  "basis": "Last recorded event, which is history and not a live check.",
+  "captain_notes_waiting": 0,
+  "deferred_for_captain": 5,
+  "detail": "Identifiers, titles and pull request links are withheld at this read scope. Say that the detail is not available by voice rather than guessing at it.",
+  "in_flight": 2,
+  "open_pull_requests": 4,
+  "queued": 2,
+  "scope": "counts",
+  "worker_states": {
+    "blocked": 1,
+    "done": 1,
+    "no events yet": 1,
+    "note": 2,
+    "working": 1
+  },
+  "workers_on_deck": 6
+}
+--- voice status --scope full (selected fields)
+{
+  "workers_on_deck": 6,
+  "worker_states": {
+    "blocked": 1,
+    "done": 1,
+    "no events yet": 1,
+    "note": 2,
+    "working": 1
+  },
+  "in_flight": 2,
+  "in_flight_held": null,
+  "awaiting_captain": 40,
+  "deferred_for_captain": 5,
+  "queued": 2,
+  "open_pull_requests": 4,
+  "in_flight_detail": [
+    {
+      "id": "live-ship",
+      "state": "working",
+      "title": "Ship the importer"
+    },
+    {
+      "id": "held-run",
+      "state": "blocked",
+      "title": "Ship the exporter"
+    }
+  ],
+  "pull_request_ids": [
+    "call-desk-trigger-wake-t1",
+    "held-run",
+    "krisp-call-notes-inbox-k1",
+    "live-ship"
+  ],
+  "awaiting_captain_named": [
+    "held-run",
+    "call-01",
+    "call-02",
+    "call-03",
+    "call-04"
+  ]
+}
+--- bearings --json (selected fields)
+{
+  "in_flight_ids": [
+    "call-desk-trigger-wake-t1",
+    "finished-ship",
+    "krisp-call-notes-inbox-k1",
+    "live-ship",
+    "unlisted-task"
+  ],
+  "decisions_open_shown": 20,
+  "decisions_open_total": null,
+  "omitted": [
+    {
+      "surface": "backlog item bodies",
+      "reveal": "--fields bodies"
+    },
+    {
+      "surface": "task paths",
+      "reveal": "--fields paths"
+    },
+    {
+      "surface": "watch/steer actions",
+      "reveal": "--fields actions"
+    },
+    {
+      "surface": "healthy endpoint detail",
+      "reveal": "--fields endpoints"
+    },
+    {
+      "surface": "full scout-report inventory",
+      "reveal": "--all-reports"
+    },
+    {
+      "surface": "decisions_open showing 20 of 23",
+      "reveal": "--all-decisions"
+    },
+    {
+      "surface": "captain holds bucketed blocked, dated, or aged: 12",
+      "reveal": "--all-decisions"
+    },
+    {
+      "surface": "gates showing 20 of 24",
+      "reveal": "--all-queued"
+    },
+    {
+      "surface": "live PR discovery + checks",
+      "reveal": "--include-prs"
+    }
+  ],
+  "queued_gate_ids_present": [
+    "call-desk-trigger-wake-t1",
+    "krisp-call-notes-inbox-k1"
+  ]
+}
+=================== TARGET 3c6d2a07 ===================
+--- voice status --scope counts
+{
+  "awaiting_captain": 23,
+  "basis": "Last recorded event, which is history and not a live check.",
+  "captain_notes_waiting": 0,
+  "deferred_for_captain": 12,
+  "detail": "Identifiers, titles and pull request links are withheld at this read scope. Say that the detail is not available by voice rather than guessing at it.",
+  "in_flight": 2,
+  "in_flight_held": 1,
+  "open_pull_requests": 2,
+  "queued": 2,
+  "scope": "counts",
+  "worker_states": {
+    "blocked": 1,
+    "no events yet": 1,
+    "working": 1
+  },
+  "workers_on_deck": 3
+}
+--- voice status --scope full (selected fields)
+{
+  "workers_on_deck": 3,
+  "worker_states": {
+    "blocked": 1,
+    "no events yet": 1,
+    "working": 1
+  },
+  "in_flight": 2,
+  "in_flight_held": 1,
+  "awaiting_captain": 23,
+  "deferred_for_captain": 12,
+  "queued": 2,
+  "open_pull_requests": 2,
+  "in_flight_detail": [
+    {
+      "held": false,
+      "id": "live-ship",
+      "state": "working",
+      "title": "Ship the importer"
+    },
+    {
+      "held": true,
+      "id": "held-run",
+      "state": "blocked",
+      "title": "Ship the exporter"
+    }
+  ],
+  "pull_request_ids": [
+    "held-run",
+    "live-ship"
+  ],
+  "awaiting_captain_named": [
+    "held-run",
+    "call-01",
+    "call-02",
+    "call-03",
+    "call-04"
+  ]
+}
+--- bearings --json (selected fields)
+{
+  "in_flight_ids": [
+    "live-ship",
+    "unlisted-task"
+  ],
+  "decisions_open_shown": 20,
+  "decisions_open_total": 23,
+  "omitted": [
+    {
+      "surface": "backlog item bodies",
+      "reveal": "--fields bodies"
+    },
+    {
+      "surface": "task paths",
+      "reveal": "--fields paths"
+    },
+    {
+      "surface": "watch/steer actions",
+      "reveal": "--fields actions"
+    },
+    {
+      "surface": "healthy endpoint detail",
+      "reveal": "--fields endpoints"
+    },
+    {
+      "surface": "full scout-report inventory",
+      "reveal": "--all-reports"
+    },
+    {
+      "surface": "decisions_open showing 20 of 23",
+      "reveal": "--all-decisions"
+    },
+    {
+      "surface": "captain holds bucketed blocked, dated, or aged: 12",
+      "reveal": "--all-decisions"
+    },
+    {
+      "surface": "gates showing 20 of 24",
+      "reveal": "--all-queued"
+    },
+    {
+      "surface": "live PR discovery + checks",
+      "reveal": "--include-prs"
+    }
+  ],
+  "queued_gate_ids_present": [
+    "call-desk-trigger-wake-t1",
+    "krisp-call-notes-inbox-k1"
+  ]
+}
+=================== ADVERSARIAL: classifier failure (TARGET) ===================
+Traceback (most recent call last):
+  File "/Users/larsmusic/.no-mistakes/worktrees/f569cc43ac96/01M3M0G04ZGSZ6JHBBGYG7RKQD/bin/fm_voice_records.py", line 661, in <module>
+    sys.exit(main(sys.argv[1:]))
+             ^^^^^^^^^^^^^^^^^^
+  File "/Users/larsmusic/.no-mistakes/worktrees/f569cc43ac96/01M3M0G04ZGSZ6JHBBGYG7RKQD/bin/fm_voice_records.py", line 649, in main
+    result = fleet_status(home=args.home, scope=args.scope)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/larsmusic/.no-mistakes/worktrees/f569cc43ac96/01M3M0G04ZGSZ6JHBBGYG7RKQD/bin/fm_voice_records.py", line 443, in fleet_status
+    items = _parse_backlog(os.path.join(data_dir(home), "backlog.md"))
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/larsmusic/.no-mistakes/worktrees/f569cc43ac96/01M3M0G04ZGSZ6JHBBGYG7RKQD/bin/fm_voice_records.py", line 304, in _parse_backlog
+    with open(path, encoding="utf-8") as handle:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+PermissionError: [Errno 13] Permission denied: '/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.u2pIMr/data/backlog.md'
+exit=1
+--- fm-fleet-snapshot.sh --backlog (TARGET) record count / sample
+{
+  "n": 49,
+  "live": 23,
+  "sample": {
+    "id": "live-ship",
+    "state": "in_flight",
+    "current_role": "worker",
+    "hold_bucket": null
+  }
+}

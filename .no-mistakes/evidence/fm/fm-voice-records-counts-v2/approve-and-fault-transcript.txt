@@ -1,0 +1,18 @@
+=== backlog after three holds and one kind:captain to-do ===
+- [ ] call-spend - Approve the spend (repo: firstmate) (kind: captain) (since 2026-09-28) (hold: approve the spend?) (hold-kind: captain)
+- [ ] call-pricing - Approve the pricing (repo: firstmate) (kind: captain) (since 2026-09-28) (hold: approve the pricing?) (hold-kind: captain)
+- [ ] call-launch - Approve the launch (repo: firstmate) (kind: captain) (since 2026-09-28) (hold: approve the launch?) (hold-kind: captain)
+- [ ] todo-captain - Captain's own to-do (repo: firstmate) (kind: captain) (since 2026-09-28)
+--- voice status --scope full
+{"awaiting_captain":3,"deferred_for_captain":0,"queued":0,"named":["call-spend","call-pricing","call-launch"]}
+--- bearings --json
+{"decisions_open_total":3,"decision_ids":["call-spend","call-pricing","call-launch"]}
+=== captain approves call-spend (fm-captain-hold.sh answer) ===
+answer ok
+--- voice status --scope full
+{"awaiting_captain":2,"deferred_for_captain":0,"queued":0,"named":["call-pricing","call-launch"]}
+--- bearings --json
+{"decisions_open_total":2,"decision_ids":["call-pricing","call-launch"]}
+=== FAULT: canonical classifier (fm-fleet-snapshot.sh --backlog) fails ===
+fm_voice_records: fm-fleet-snapshot.sh --backlog failed: simulated classifier failure
+exit=2
