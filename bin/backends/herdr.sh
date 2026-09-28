@@ -1768,7 +1768,7 @@ fm_backend_herdr_server_start_detached() {  # <session>
   while IFS= read -r name; do
     case "$name" in
       FM_REMOTE_JOB_ACTIVE) ;;
-      AGENT) [ "$AGENT" != rovodev_cli ] || scrub+=(-u "$name") ;;
+      AGENT) [ "${!name}" != rovodev_cli ] || scrub+=(-u "$name") ;;
       FM_*|CLAUDECODE|CLAUDE_CODE_ENTRYPOINT|CLAUDE_CODE_CHILD_SESSION|CLAUDE_CODE_SESSION_ID \
         |CLAUDE_CODE_SESSION_ATTENDED|CLAUDE_CODE_MESSAGING_*|CLAUDE_PID|CLAUDE_EFFORT|AI_AGENT \
         |CODEX_THREAD_ID|CODEX_SANDBOX*|PI_CODING_AGENT|GEMINI_CLI|GROK_AGENT|GROK_SESSION_ID|GROK_HOOK_* \
