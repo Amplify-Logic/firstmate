@@ -1,0 +1,97 @@
+lab home: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.XejR2z
+
+### S1 matching identity answers the card
+$ fm-captain-hold.sh hold card-a --reason ship build 33 to TestFlight?
+card-a
+[exit 0]
+card shows identity: 2026-09-28T15:23:52Z#0
+$ fm-captain-hold.sh answer card-a --decision-file /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.XejR2z/go.txt --release --expect-identity 2026-09-28T15:23:52Z#0
+released: card-a
+[exit 0]
+  body: "Resolution recorded by fm-captain-hold.\nDecision digest: c48cb036011bfeb22c4c44c420aac3b3e88c1a2d9f0b127c97fcfecf004f2558\nResolution mode: released\n\nCaptain decision:\nGo."
+
+### S2 mismatched identity is refused and records nothing
+$ fm-captain-hold.sh hold card-b --reason merge the voice PR?
+card-b
+[exit 0]
+real identity: 2026-09-28T15:23:55Z#0
+$ fm-captain-hold.sh answer card-b --decision-file /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.XejR2z/go.txt --release --expect-identity 2026-09-28T15:23:55Z#7
+fm-captain-hold: captain call card-b changed since it was shown (expected 2026-09-28T15:23:55Z#7, now 2026-09-28T15:23:55Z#0); nothing recorded
+[exit 3]
+0
+
+### S3 same-worded re-hold of released work: old card refused, new card accepted
+$ fm-captain-hold.sh hold card-a --reason ship build 33 to TestFlight?
+card-a
+[exit 0]
+old card: 2026-09-28T15:23:52Z#0  new card: 2026-09-28T15:23:57Z#1
+$ fm-captain-hold.sh answer card-a --decision-file /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.XejR2z/go.txt --release --expect-identity 2026-09-28T15:23:52Z#0
+fm-captain-hold: captain call card-a changed since it was shown (expected 2026-09-28T15:23:52Z#0, now 2026-09-28T15:23:57Z#1); nothing recorded
+[exit 3]
+$ fm-captain-hold.sh answer card-a --decision-file /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.XejR2z/go.txt --release --expect-identity 2026-09-28T15:23:57Z#1
+released: card-a
+[exit 0]
+
+### S4 replaying the landed tap is refused (call not open)
+$ fm-captain-hold.sh answer card-a --decision-file /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.XejR2z/go.txt --release --expect-identity 2026-09-28T15:23:57Z#1
+fm-captain-hold: captain call card-a changed since it was shown (expected 2026-09-28T15:23:57Z#1, now not open); nothing recorded
+[exit 3]
+resolutions recorded: 1
+
+### S5 reworded live call (same clock second, twice) never reuses an earlier identity
+$ fm-captain-hold.sh hold card-c --reason wording A
+card-c
+[exit 0]
+$ fm-captain-hold.sh hold card-c --reason wording B
+card-c
+[exit 0]
+$ fm-captain-hold.sh hold card-c --reason wording C
+card-c
+[exit 0]
+A=2026-09-28T12:00:00Z#0 B=2026-09-28T12:00:02Z#0 C=2026-09-28T12:00:04Z#0
+identities all distinct: yes
+$ fm-captain-hold.sh answer card-c --decision-file /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.XejR2z/go.txt --expect-identity 2026-09-28T12:00:00Z#0
+fm-captain-hold: captain call card-c changed since it was shown (expected 2026-09-28T12:00:00Z#0, now 2026-09-28T12:00:04Z#0); nothing recorded
+[exit 3]
+$ fm-captain-hold.sh answer card-c --decision-file /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.XejR2z/go.txt --expect-identity 2026-09-28T12:00:02Z#0
+fm-captain-hold: captain call card-c changed since it was shown (expected 2026-09-28T12:00:02Z#0, now 2026-09-28T12:00:04Z#0); nothing recorded
+[exit 3]
+
+### S6 identical-reason re-hold (new --until only) keeps the identity, tap still lands
+$ fm-captain-hold.sh hold card-c --reason wording C --until 2099-01-01
+card-c
+[exit 0]
+before=2026-09-28T12:00:04Z#0 after=2026-09-28T12:00:04Z#0
+$ fm-captain-hold.sh answer card-c --decision-file /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.XejR2z/go.txt --expect-identity 2026-09-28T12:00:04Z#0
+answered: card-c
+[exit 0]
+  body: "Resolution recorded by fm-captain-hold.\nDecision digest: c48cb036011bfeb22c4c44c420aac3b3e88c1a2d9f0b127c97fcfecf004f2558\nResolution mode: answered\n\nCaptain decision:\nGo."
+
+### S7 absent task with an expectation is refused with exit 3
+$ fm-captain-hold.sh answer no-such-card --decision-file /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.XejR2z/go.txt --expect-identity 2026-09-28T12:00:04Z#0
+fm-captain-hold: captain call no-such-card changed since it was shown (expected 2026-09-28T12:00:04Z#0, now absent); nothing recorded
+[exit 3]
+
+### S8 without --expect-identity the answer behaves as before
+$ fm-captain-hold.sh answer card-b --decision-file /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.XejR2z/go.txt
+answered: card-b
+[exit 0]
+  body: "Resolution recorded by fm-captain-hold.\nDecision digest: c48cb036011bfeb22c4c44c420aac3b3e88c1a2d9f0b127c97fcfecf004f2558\nResolution mode: answered\n\nCaptain decision:\nGo."
+$ fm-captain-hold.sh answer card-b --decision-file /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.XejR2z/go.txt
+answered: card-b
+[exit 0]
+
+### S8b empty --expect-identity is rejected as usage
+$ fm-captain-hold.sh answer card-b --decision-file /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.XejR2z/go.txt --expect-identity 
+fm-captain-hold: expect-identity must not be empty
+[exit 1]
+
+### S9 read failure with expectation keeps the ordinary failure exit (not 3)
+$ fm-captain-hold.sh hold card-d --reason read failure probe
+card-d
+[exit 0]
+$ fm-captain-hold.sh answer card-d --decision-file /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.XejR2z/go.txt --expect-identity 2026-09-28T15:24:13Z#0
+fm-captain-hold: captain-held task card-d is absent from this home's configured backlog (data directory /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.XejR2z/data)
+[exit 1]
+
+RACE_LAB=/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.XejR2z

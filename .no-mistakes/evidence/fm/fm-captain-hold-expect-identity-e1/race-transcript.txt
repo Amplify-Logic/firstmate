@@ -1,0 +1,25 @@
+== answer (closes the call) ==
+iter  1: hold rc=0 tap rc=3 answers=0 final_reason=question B shown=2026-09-28T15:28:37Z#0 now=2026-09-28T15:28:39Z#0 -> ok
+iter  2: hold rc=1 tap rc=0 answers=1 final_reason=question A shown=2026-09-28T15:28:41Z#0 now=closed -> ok
+iter  3: hold rc=0 tap rc=3 answers=0 final_reason=question B shown=2026-09-28T15:28:45Z#0 now=2026-09-28T15:28:48Z#0 -> ok
+iter  4: hold rc=1 tap rc=0 answers=1 final_reason=question A shown=2026-09-28T15:28:50Z#0 now=closed -> ok
+iter  5: hold rc=0 tap rc=3 answers=0 final_reason=question B shown=2026-09-28T15:28:54Z#0 now=2026-09-28T15:28:56Z#0 -> ok
+iter  6: hold rc=1 tap rc=0 answers=1 final_reason=question A shown=2026-09-28T15:28:58Z#0 now=closed -> ok
+iter  7: hold rc=0 tap rc=3 answers=0 final_reason=question B shown=2026-09-28T15:29:02Z#0 now=2026-09-28T15:29:05Z#0 -> ok
+iter  8: hold rc=1 tap rc=0 answers=1 final_reason=question A shown=2026-09-28T15:29:06Z#0 now=closed -> ok
+
+taps landed on the shown question: 4, taps refused as changed: 4, wrong-question answers: 0
+exit 0
+
+== answer --release (call stays re-holdable) ==
+iter  1: hold rc=0 tap rc=3 answers=0 final_reason=question B shown=2026-09-28T15:29:10Z#0 now=2026-09-28T15:29:13Z#0 -> ok
+iter  2: hold rc=0 tap rc=0 answers=1 final_reason=question B shown=2026-09-28T15:29:15Z#0 now=2026-09-28T15:29:18Z#1 -> ok
+iter  3: hold rc=0 tap rc=3 answers=0 final_reason=question B shown=2026-09-28T15:29:21Z#0 now=2026-09-28T15:29:24Z#0 -> ok
+iter  4: hold rc=0 tap rc=0 answers=1 final_reason=question B shown=2026-09-28T15:29:26Z#0 now=2026-09-28T15:29:29Z#1 -> ok
+iter  5: hold rc=0 tap rc=3 answers=0 final_reason=question B shown=2026-09-28T15:29:31Z#0 now=2026-09-28T15:29:34Z#0 -> ok
+iter  6: hold rc=0 tap rc=0 answers=1 final_reason=question B shown=2026-09-28T15:29:37Z#0 now=2026-09-28T15:29:39Z#1 -> ok
+iter  7: hold rc=0 tap rc=3 answers=0 final_reason=question B shown=2026-09-28T15:29:42Z#0 now=2026-09-28T15:29:45Z#0 -> ok
+iter  8: hold rc=0 tap rc=0 answers=1 final_reason=question B shown=2026-09-28T15:29:47Z#0 now=2026-09-28T15:29:49Z#1 -> ok
+
+taps landed on the shown question: 4, taps refused as changed: 4, wrong-question answers: 0
+exit 0
