@@ -4103,6 +4103,52 @@ test_answer_expect_identity_answers_only_the_call_shown() {
   pass "--expect-identity answers only the exact captain call that was shown"
 }
 
+# A live call re-held with new words is a new question: its identity changes
+# even within the same second, so a tap on the old wording records nothing,
+# while a re-hold with the very same words keeps the identity that was shown.
+test_answer_expect_identity_follows_rewording() {
+  local home show shown same reworded rc
+  home=$(make_home expect-identity-reword)
+  tasks_in "$home" add reword-card "Approve the reword card" --kind ship --repo sample >/dev/null \
+    || fail "could not create the card work item"
+  FM_CAPTAIN_HOLD_NOW=2026-06-01T12:00:00Z run_captain "$home" hold reword-card \
+    --reason "ship the first draft" >/dev/null || fail "could not hold the card work item"
+  shown=$(run_captain "$home" open reword-card --identity) \
+    || fail "the held card did not report an open identity"
+  printf 'Go.\n' > "$home/go.txt"
+
+  FM_CAPTAIN_HOLD_NOW=2026-06-01T12:05:00Z run_captain "$home" hold reword-card \
+    --reason "ship the first draft" --until 2099-01-01 >/dev/null \
+    || fail "could not re-hold the card with the same words"
+  same=$(run_captain "$home" open reword-card --identity) \
+    || fail "the same-worded re-hold did not report an open identity"
+  [ "$same" = "$shown" ] || fail "a same-worded re-hold changed the identity: $shown -> $same"
+
+  FM_CAPTAIN_HOLD_NOW=2026-06-01T12:00:00Z run_captain "$home" hold reword-card \
+    --reason "ship the second draft" >/dev/null || fail "could not re-hold the card with new words"
+  reworded=$(run_captain "$home" open reword-card --identity) \
+    || fail "the reworded re-hold did not report an open identity"
+  [ "$reworded" != "$shown" ] || fail "a reworded re-hold kept the identity: $reworded"
+  rc=0
+  run_captain "$home" answer reword-card --decision-file "$home/go.txt" --release \
+    --expect-identity "$shown" > "$home/stale.out" 2> "$home/stale.err" || rc=$?
+  [ "$rc" = 3 ] || fail "a tap on the old wording did not exit 3 (rc=$rc)"
+  show=$(tasks_in "$home" show reword-card --full)
+  assert_contains "$show" "held: yes" "a tap on the old wording released the hold"
+  assert_not_contains "$show" "Resolution recorded by" "a tap on the old wording recorded an answer"
+
+  FM_CAPTAIN_HOLD_NOW=2026-06-01T12:10:00Z run_captain "$home" hold reword-card \
+    --reason "ship the second draft" >/dev/null || fail "could not repeat the reworded hold"
+  same=$(run_captain "$home" open reword-card --identity) \
+    || fail "the repeated reworded hold did not report an open identity"
+  [ "$same" = "$reworded" ] || fail "a same-worded re-hold changed the identity: $reworded -> $same"
+  run_captain "$home" answer reword-card --decision-file "$home/go.txt" --release \
+    --expect-identity "$reworded" >/dev/null || fail "the same-worded identity did not answer"
+  show=$(tasks_in "$home" show reword-card --full)
+  assert_contains "$show" "held: no" "the same-worded identity did not release the hold"
+  pass "--expect-identity follows a reworded re-hold and survives a same-worded one"
+}
+
 test_uninventoried_report_decision_refuses_completion
 test_hold_decodes_a_bare_scalar_body_without_the_nonref_default
 test_retained_body_keeps_its_utf8_bytes
@@ -4110,6 +4156,7 @@ test_completion_gate_attests_and_transfers
 test_answer_records_and_closes
 test_release_frees_held_work
 test_answer_expect_identity_answers_only_the_call_shown
+test_answer_expect_identity_follows_rewording
 test_hold_stamp_precedes_hold_visibility
 test_interrupted_answer_preserves_hold_age
 test_deferral_leaves_captains_call_until_due

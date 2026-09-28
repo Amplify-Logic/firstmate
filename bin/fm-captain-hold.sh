@@ -47,8 +47,10 @@
 # Beads `due.required` through `BD_DUE_REQUIRED` rather than inventing a due
 # date or registering a `types.custom` captain issue type. The command records
 # a UTC `Captain hold set:` timestamp in the task body: repeating an active
-# hold preserves the existing timestamp, while re-holding released work starts
-# a new lifecycle. A task already closed is refused rather than reopened.
+# hold with an identical reason preserves the existing timestamp (a changed
+# `--until` alone keeps it), while re-holding it with a reworded reason, or
+# re-holding released work, starts a new lifecycle stamp, one second past the
+# old stamp when the clock has not moved on. A body-only edit keeps the stamp. A task already closed is refused rather than reopened.
 # `--until` records the captain's own deferral date through `tasks-axi hold
 # --until`, so a "revisit later" answer is stored as a date instead of a live
 # card.
@@ -77,7 +79,10 @@
 # and records nothing. A call that is no longer open has no identity, so a
 # closed, released, or re-held task (even one re-held with the same words)
 # refuses a stale expectation, including a replay of an answer that already
-# landed; an absent task refuses the same way. Without the option the answer
+# landed; an absent task refuses the same way. A live call re-held with a
+# reworded reason starts a new lifecycle stamp, so a tap on the old wording is
+# refused too, while a re-hold with an identical reason keeps the stamp and
+# the identity the captain was shown. Without the option the answer
 # behaves exactly as described above.
 #
 # ONE KEYED-ANSWER INTAKE, FED BY EVERY CHANNEL.
@@ -778,6 +783,14 @@ captain_call_identity() {  # <shown-task-body>
     "$(resolution_record_count "$1")"
 }
 
+next_hold_set_second() {  # <YYYY-MM-DDTHH:MM:SSZ>
+  local epoch
+  epoch=$(fm_utc_iso_to_epoch "$1") || return 1
+  epoch=$((epoch + 1))
+  date -u -r "$epoch" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null \
+    || date -u -d "@$epoch" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null
+}
+
 write_hold_set_stamp() {  # <task-id> <shown-body> <timestamp> <preserve-existing-0-or-1>
   local id=$1 body=$2 hold_set=$3 preserve=$4 existing new_body tmp
   body=$(decode_shown_value "$body") \
@@ -785,6 +798,10 @@ write_hold_set_stamp() {  # <task-id> <shown-body> <timestamp> <preserve-existin
   existing=$(body_hold_set_timestamp "$body")
   if [ "$preserve" = 1 ] && [ -n "$existing" ]; then
     return 0
+  fi
+  if [ "$existing" = "$hold_set" ]; then
+    hold_set=$(next_hold_set_second "$hold_set") \
+      || fail "could not advance the hold-set stamp on $id"
   fi
   if [ -n "$existing" ]; then
     body=${body#"Captain hold set: $existing"}
@@ -870,7 +887,8 @@ command_hold() {
       || fail "task $id is already closed; a new captain call needs its own task"
     existing_hold_kind=$(show_field_value "$show" hold_kind)
     existing_held=$(show_field_value "$show" held)
-    if [ "$existing_hold_kind" = captain ] && [ "$existing_held" = yes ]; then
+    if [ "$existing_hold_kind" = captain ] && [ "$existing_held" = yes ] \
+      && [ "$(show_field_value "$show" hold_reason)" = "$reason" ]; then
       preserve_hold_set=1
     fi
     if [ -n "$title" ]; then
