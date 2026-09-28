@@ -49,8 +49,10 @@
 # a UTC `Captain hold set:` timestamp in the task body: repeating an active
 # hold with an identical reason preserves the existing timestamp (a changed
 # `--until` alone keeps it), while re-holding it with a reworded reason, or
-# re-holding released work, starts a new lifecycle stamp, one second past the
-# old stamp when the clock has not moved on. A body-only edit keeps the stamp. A task already closed is refused rather than reopened.
+# re-holding released work, starts a new lifecycle stamp that is always later
+# than the old one: one second past it whenever the clock is not already past
+# it, so an earlier stamp never recurs. A body-only edit keeps the stamp. A
+# task already closed is refused rather than reopened.
 # `--until` records the captain's own deferral date through `tasks-axi hold
 # --until`, so a "revisit later" answer is stored as a date instead of a live
 # card.
@@ -79,11 +81,12 @@
 # and records nothing. A call that is no longer open has no identity, so a
 # closed, released, or re-held task (even one re-held with the same words)
 # refuses a stale expectation, including a replay of an answer that already
-# landed; an absent task refuses the same way. A live call re-held with a
-# reworded reason starts a new lifecycle stamp, so a tap on the old wording is
-# refused too, while a re-hold with an identical reason keeps the stamp and
-# the identity the captain was shown. Without the option the answer
-# behaves exactly as described above.
+# landed; a task confirmed absent refuses the same way, while a backlog read
+# that fails keeps the ordinary failure exit. A live call re-held with a
+# reworded reason records the new reason and then starts a new lifecycle
+# stamp, so a tap on the old wording is refused too, while a re-hold with an
+# identical reason keeps the stamp and the identity the captain was shown.
+# Without the option the answer behaves exactly as described above.
 #
 # ONE KEYED-ANSWER INTAKE, FED BY EVERY CHANNEL.
 # "A keyed answer resolves its matching captain-held task" is a single
@@ -792,15 +795,16 @@ next_hold_set_second() {  # <YYYY-MM-DDTHH:MM:SSZ>
 }
 
 write_hold_set_stamp() {  # <task-id> <shown-body> <timestamp> <preserve-existing-0-or-1>
-  local id=$1 body=$2 hold_set=$3 preserve=$4 existing new_body tmp
+  local id=$1 body=$2 hold_set=$3 preserve=$4 existing existing_epoch new_body tmp
   body=$(decode_shown_value "$body") \
     || fail "could not decode the existing body for $id"
   existing=$(body_hold_set_timestamp "$body")
   if [ "$preserve" = 1 ] && [ -n "$existing" ]; then
     return 0
   fi
-  if [ "$existing" = "$hold_set" ]; then
-    hold_set=$(next_hold_set_second "$hold_set") \
+  if existing_epoch=$(fm_utc_iso_to_epoch "$existing") \
+    && [ "$(fm_utc_iso_to_epoch "$hold_set")" -le "$existing_epoch" ]; then
+    hold_set=$(next_hold_set_second "$existing") \
       || fail "could not advance the hold-set stamp on $id"
   fi
   if [ -n "$existing" ]; then
@@ -845,9 +849,18 @@ verify_entry_durable() {  # <origin-or-empty> <entry>; prints "<id> <how>"
   verify_hold_durable "${resolved%% *}"
 }
 
+stamp_hold_set() {  # <task-id> <timestamp> <preserve-existing-0-or-1>
+  local id=$1 show
+  task_show_or_fail "$id" "task $id disappeared before recording its hold-set stamp"
+  write_hold_set_stamp "$id" "$(show_field "$show" body)" "$2" "$3"
+  task_show_or_fail "$id" "task $id disappeared while recording its hold-set stamp"
+  [ -n "$(body_hold_set_timestamp "$(show_field_value "$show" body)")" ] \
+    || fail "task $id did not retain its hold-set stamp"
+}
+
 command_hold() {
   local id=${1:-} title='' reason='' repo='' origin='' until='' show state existing_title body='' hold_kind hold_set occurrence
-  local existing_hold_kind='' existing_held='' preserve_hold_set=0
+  local existing_hold_kind='' existing_held='' preserve_hold_set=0 reword=0
   [ "$#" -ge 1 ] || { usage >&2; exit 2; }
   shift
   while [ "$#" -gt 0 ]; do
@@ -887,9 +900,12 @@ command_hold() {
       || fail "task $id is already closed; a new captain call needs its own task"
     existing_hold_kind=$(show_field_value "$show" hold_kind)
     existing_held=$(show_field_value "$show" held)
-    if [ "$existing_hold_kind" = captain ] && [ "$existing_held" = yes ] \
-      && [ "$(show_field_value "$show" hold_reason)" = "$reason" ]; then
-      preserve_hold_set=1
+    if [ "$existing_hold_kind" = captain ] && [ "$existing_held" = yes ]; then
+      if [ "$(show_field_value "$show" hold_reason)" = "$reason" ]; then
+        preserve_hold_set=1
+      else
+        reword=1
+      fi
     fi
     if [ -n "$title" ]; then
       existing_title=$(show_field_value "$show" title)
@@ -920,11 +936,7 @@ command_hold() {
   # Publish the timestamp before the captain-hold annotation. A concurrent
   # snapshot may see the harmless stamp by itself, but can never see a newly
   # held task without the timestamp that defines this hold lifecycle's age.
-  task_show_or_fail "$id" "task $id disappeared before recording its hold-set stamp"
-  write_hold_set_stamp "$id" "$(show_field "$show" body)" "$hold_set" "$preserve_hold_set"
-  task_show_or_fail "$id" "task $id disappeared while recording its hold-set stamp"
-  [ -n "$(body_hold_set_timestamp "$(show_field_value "$show" body)")" ] \
-    || fail "task $id did not retain its hold-set stamp"
+  [ "$reword" = 1 ] || stamp_hold_set "$id" "$hold_set" "$preserve_hold_set"
   if [ -n "$until" ]; then
     tasks_axi hold "$id" --reason "$reason" --kind captain --until "$until" >/dev/null \
       || fail "could not hold task $id for the captain"
@@ -932,6 +944,7 @@ command_hold() {
     tasks_axi hold "$id" --reason "$reason" --kind captain >/dev/null \
       || fail "could not hold task $id for the captain"
   fi
+  [ "$reword" = 0 ] || stamp_hold_set "$id" "$hold_set" "$preserve_hold_set"
   task_show "$id" || fail "task $id disappeared while holding it"
   show=$TASK_SHOW_OUTPUT
   hold_kind=$(show_field_value "$show" hold_kind)
@@ -1050,7 +1063,9 @@ command_answer() {
   acquire_task_control_lock "$id"
   require_tasks_axi
   if ! task_show "$id"; then
-    if [ "$expect_given" = 1 ]; then
+    if [ "$expect_given" = 1 ] \
+      && ! fm_backlog_row_probe "$(fm_backlog_data_absolute "$DATA")" "$id" \
+      && [ "$FM_BACKLOG_ROW_RESULT" = not_found ]; then
       printf 'fm-captain-hold: captain call %s changed since it was shown (expected %s, now absent); nothing recorded\n' \
         "$id" "$expect_identity" >&2
       exit 3

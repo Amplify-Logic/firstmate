@@ -4107,7 +4107,7 @@ test_answer_expect_identity_answers_only_the_call_shown() {
 # even within the same second, so a tap on the old wording records nothing,
 # while a re-hold with the very same words keeps the identity that was shown.
 test_answer_expect_identity_follows_rewording() {
-  local home show shown same reworded rc
+  local home show shown same reworded again rc
   home=$(make_home expect-identity-reword)
   tasks_in "$home" add reword-card "Approve the reword card" --kind ship --repo sample >/dev/null \
     || fail "could not create the card work item"
@@ -4137,16 +4137,75 @@ test_answer_expect_identity_follows_rewording() {
   assert_contains "$show" "held: yes" "a tap on the old wording released the hold"
   assert_not_contains "$show" "Resolution recorded by" "a tap on the old wording recorded an answer"
 
+  # A second reword in the same clock second moves the stamp on again rather
+  # than falling back to the first card's stamp, and the new words land while
+  # the row still carries the previous stamp.
+  cat > "$home/fakebin/tasks-axi" <<'SH'
+#!/usr/bin/env bash
+if [ "${1:-}" = hold ] && [ "${2:-}" = reword-card ]; then
+  "$REAL_TASKS_AXI" show reword-card --full > "$FM_HOME/at-hold.txt"
+fi
+exec "$REAL_TASKS_AXI" "$@"
+SH
+  chmod +x "$home/fakebin/tasks-axi"
+  FM_CAPTAIN_HOLD_NOW=2026-06-01T12:00:00Z run_captain "$home" hold reword-card \
+    --reason "ship the third draft" >/dev/null || fail "could not reword the card a second time"
+  rm -f -- "$home/fakebin/tasks-axi"
+  assert_grep "Captain hold set: ${reworded%#*}" "$home/at-hold.txt" \
+    "the second reword advanced the stamp before storing its new words"
+  again=$(run_captain "$home" open reword-card --identity) \
+    || fail "the second reword did not report an open identity"
+  [ "$again" != "$shown" ] || fail "a second reword brought back the first card's identity: $again"
+  [ "$again" != "$reworded" ] || fail "a second reword kept the previous identity: $again"
+  rc=0
+  run_captain "$home" answer reword-card --decision-file "$home/go.txt" --release \
+    --expect-identity "$shown" > "$home/stale2.out" 2> "$home/stale2.err" || rc=$?
+  [ "$rc" = 3 ] || fail "a tap on the first wording answered the third (rc=$rc)"
+
   FM_CAPTAIN_HOLD_NOW=2026-06-01T12:10:00Z run_captain "$home" hold reword-card \
-    --reason "ship the second draft" >/dev/null || fail "could not repeat the reworded hold"
+    --reason "ship the third draft" >/dev/null || fail "could not repeat the reworded hold"
   same=$(run_captain "$home" open reword-card --identity) \
     || fail "the repeated reworded hold did not report an open identity"
-  [ "$same" = "$reworded" ] || fail "a same-worded re-hold changed the identity: $reworded -> $same"
+  [ "$same" = "$again" ] || fail "a same-worded re-hold changed the identity: $again -> $same"
   run_captain "$home" answer reword-card --decision-file "$home/go.txt" --release \
-    --expect-identity "$reworded" >/dev/null || fail "the same-worded identity did not answer"
+    --expect-identity "$again" >/dev/null || fail "the same-worded identity did not answer"
   show=$(tasks_in "$home" show reword-card --full)
   assert_contains "$show" "held: no" "the same-worded identity did not release the hold"
   pass "--expect-identity follows a reworded re-hold and survives a same-worded one"
+}
+
+# A backlog read that fails is not proof the call changed: the compare-and-
+# answer keeps the ordinary failure rather than the "changed" exit, and
+# records nothing.
+test_answer_expect_identity_read_error_is_not_a_change() {
+  local home show identity rc
+  home=$(make_home expect-identity-read-error)
+  tasks_in "$home" add unread-card "Approve the unread card" --kind ship --repo sample >/dev/null \
+    || fail "could not create the card work item"
+  run_captain "$home" hold unread-card --reason "captain go needed" >/dev/null \
+    || fail "could not hold the card work item"
+  identity=$(run_captain "$home" open unread-card --identity) \
+    || fail "the held card did not report an open identity"
+  printf 'Go.\n' > "$home/go.txt"
+  cat > "$home/fakebin/tasks-axi" <<'SH'
+#!/usr/bin/env bash
+if [ "${1:-}" = show ] && [ "${2:-}" = unread-card ]; then
+  printf 'error: temporary backlog read failure\n' >&2
+  exit 75
+fi
+exec "${REAL_TASKS_AXI:?}" "$@"
+SH
+  chmod +x "$home/fakebin/tasks-axi"
+  rc=0
+  run_captain "$home" answer unread-card --decision-file "$home/go.txt" --release \
+    --expect-identity "$identity" > "$home/unread.out" 2> "$home/unread.err" || rc=$?
+  rm -f -- "$home/fakebin/tasks-axi"
+  [ "$rc" != 0 ] || fail "an unreadable call was answered"
+  [ "$rc" != 3 ] || fail "a backlog read failure was reported as a changed call"
+  show=$(tasks_in "$home" show unread-card --full)
+  assert_contains "$show" "held: yes" "an unreadable call was released"
+  assert_not_contains "$show" "Resolution recorded by" "an unreadable call recorded an answer"
+  pass "--expect-identity reports a backlog read failure as a failure, not a changed call"
 }
 
 test_uninventoried_report_decision_refuses_completion
@@ -4157,6 +4216,7 @@ test_answer_records_and_closes
 test_release_frees_held_work
 test_answer_expect_identity_answers_only_the_call_shown
 test_answer_expect_identity_follows_rewording
+test_answer_expect_identity_read_error_is_not_a_change
 test_hold_stamp_precedes_hold_visibility
 test_interrupted_answer_preserves_hold_age
 test_deferral_leaves_captains_call_until_due
