@@ -3370,10 +3370,9 @@ rm -f "$HOME_FIXTURE/config/voice-read-deny"
 # Both items below sit in all three lists, and each is matched on a field only
 # one of those lists reads.
 #
-# The third item is the one an in-flight-only fixture cannot catch: a QUEUED item
-# that nothing holds for the captain, so no list iterates it, while its pull
-# request link still reaches the answer through the worker records. Assembling its
-# fields only where some list walks past it misses a match on its own title.
+# The third item is a QUEUED item that nothing holds for the captain, with a
+# runtime record and pull request left behind. It is not a worker on deck, so it
+# reaches no list at all: it is left out by construction, never withheld.
 LEAK_HOME="$TMP_ROOT/deny-every-list"
 TITLE_TOKEN=LEAKSBYTITLE
 HOLD_TOKEN=LEAKSBYHOLD
@@ -3409,8 +3408,8 @@ assert_contains "$reachable" 'sigma-ten' "fixture: the held item should be named
 assert_contains "$reachable" 'pull/12' "fixture: its pull request should be reachable"
 assert_contains "$reachable" '"awaiting_captain": 2' \
   "fixture: both in-flight items should be waiting on the captain"
-assert_contains "$reachable" 'pull/99' \
-  "fixture: the queued item should reach the answer through its pull request"
+assert_not_contains "$reachable" 'pull/99' \
+  "fixture: a queued item's leftover pull request is not open work on deck"
 assert_contains "$reachable" '"queued": 1' "fixture: the queued item should be counted"
 
 # Matched on its title, which only the in-flight list reads.
@@ -3426,8 +3425,7 @@ assert_contains "$by_title" '"withheld_as_confidential": 1' \
 # The other items are untouched, so this is a substring list and not a switch.
 assert_contains "$by_title" 'sigma-ten' "the deny list must not suppress everything"
 assert_contains "$by_title" 'pull/12' "the other pull requests should still be named"
-assert_contains "$by_title" 'pull/99' "the other pull requests should still be named"
-assert_contains "$by_title" '"open_pull_requests": 3' \
+assert_contains "$by_title" '"open_pull_requests": 2' \
   "denying an item must not change the count of open pull requests"
 
 # Matched on its hold text, which only the captain list reads. The mirror of the
@@ -3445,9 +3443,8 @@ assert_contains "$by_hold" 'pull/11' "the other pull request should still be nam
 assert_contains "$by_hold" '"in_flight": 2' \
   "denying an item must not change the count of in-flight work"
 
-# Matched on the title of a QUEUED item that no list iterates. Its only way into
-# the answer is its pull request link, and the pull request list knows nothing
-# about titles, so a field set assembled per list never sees the match at all.
+# Matched on the title of a QUEUED item that no list iterates. With no way into
+# any list, it is not named and not counted as withheld either.
 printf '%s\n' "$QUEUED_TOKEN" > "$LEAK_HOME/config/voice-read-deny"
 by_queued=$(leak_status) || fail "deny by queued title failed"
 assert_not_contains "$by_queued" "$QUEUED_TOKEN" \
@@ -3456,8 +3453,8 @@ assert_not_contains "$by_queued" 'zeta-eight' \
   "a denied queued item must not be named"
 assert_not_contains "$by_queued" 'pull/99' \
   "a denied queued item must not surface through its pull request link"
-assert_contains "$by_queued" '"withheld_as_confidential": 1' \
-  "a denied queued item must be counted, so nothing is hidden silently"
+assert_contains "$by_queued" '"withheld_as_confidential": 0' \
+  "a queued item no list could name is left out, not counted as withheld"
 assert_contains "$by_queued" '"queued": 1' \
   "denying it must not change the count of queued work"
 assert_contains "$by_queued" 'pull/11' "the other pull requests should still be named"
@@ -3671,12 +3668,59 @@ assert_not_contains "$open_only" "$FINISHED_TOKEN" \
 # finished work back in and leaned on the deny list to hide it would fail here.
 assert_contains "$open_only" '"withheld_as_confidential": 0' \
   "finished work is left out rather than counted as withheld"
-# The worker count is deliberately NOT open-only: a task keeps its runtime record
-# until teardown removes it, and that record is what "on deck" counts. Asserted in
-# the same case as the pull request count so the two cannot quietly converge.
-assert_contains "$open_only" '"workers_on_deck": 3' \
-  "every live runtime record is still on deck, finished or not"
+# The worker count follows the backlog role, as Bearings Underway does, not the
+# open-only rule: a ticked row still under In flight keeps its worker role and
+# is on deck, while an item under Done is not. Asserted in the same case as the
+# pull request count so the two cannot quietly converge.
+assert_contains "$open_only" '"workers_on_deck": 2' \
+  "a ticked in-flight row is still on deck and an item under Done is not"
 pass "a finished task's pull request is neither counted nor named"
+
+# --- leftover runtime records ------------------------------------------------
+#
+# A task whose backlog item went back to Queued, or on to Done, can keep its
+# state/<id>.meta until teardown removes it. Bearings leaves such a task out of
+# Underway, so the voice answer must not count it as a worker on deck, give its
+# last event a place in the state histogram, or count its pull request. A meta
+# with no backlog row at all is still counted, as Bearings still lists it.
+STALE_HOME="$TMP_ROOT/leftover-runtime-records"
+mkdir -p "$STALE_HOME/data" "$STALE_HOME/state" "$STALE_HOME/config"
+cat > "$STALE_HOME/data/backlog.md" <<'EOF'
+# Backlog
+
+## In flight
+- [ ] live-one - Ship the importer (repo: a) (kind: ship)
+
+## Queued
+- [ ] requeued-two - Wake the call desk (repo: a) (kind: ship)
+
+## Done
+- [x] finished-three - Read the call notes (repo: a) (kind: ship) (done 2026-09-01)
+EOF
+fm_write_meta "$STALE_HOME/state/live-one.meta" \
+  kind=ship pr=https://github.com/example/a/pull/1
+fm_write_meta "$STALE_HOME/state/requeued-two.meta" \
+  kind=ship pr=https://github.com/example/a/pull/2
+fm_write_meta "$STALE_HOME/state/finished-three.meta" \
+  kind=ship pr=https://github.com/example/a/pull/3
+fm_write_meta "$STALE_HOME/state/unlisted-four.meta" kind=ship
+printf '%s\n' 'working: importing' > "$STALE_HOME/state/live-one.status"
+printf '%s\n' 'blocked: worktree gone' > "$STALE_HOME/state/requeued-two.status"
+printf '%s\n' 'done: shipped' > "$STALE_HOME/state/finished-three.status"
+for scope in counts full; do
+  stale=$(python3 "$ROOT/bin/fm_voice_records.py" status --home "$STALE_HOME" --scope "$scope") \
+    || fail "the leftover-runtime-record fixture failed at $scope scope"
+  python3 - "$stale" <<'PY_STALE' || fail "leftover runtime records must not count as workers at $scope scope"
+import json, sys
+answer = json.loads(sys.argv[1])
+assert answer["workers_on_deck"] == 2, answer
+assert answer["worker_states"] == {"working": 1, "no events yet": 1}, answer
+assert answer["open_pull_requests"] == 1, answer
+if answer["scope"] == "full":
+    assert [row["id"] for row in answer["pull_request_detail"]] == ["live-one"], answer
+PY_STALE
+done
+pass "a queued or finished item's leftover runtime record is not counted as a worker"
 
 # The deny list, observed doing its job on the one list that still carries links.
 # A substring matching an OPEN task's title takes that task out of the pull

@@ -36,12 +36,13 @@ Two readings here treat that differently, on purpose.
   it out of reach of the deny list, which has no title to match without an open
   item to take it from.
 
-  The worker count and the state histogram cover every live runtime record,
-  finished ids included, because a task with a meta file still on disk is still
-  on deck and still needs tearing down. That is the question those two figures
-  answer, and it is the same meaning bin/fm-inbox.sh gives "workers" in the human
-  rendering. Neither can carry record free text: one is an integer, and the
-  other's keys are the state verb folded through the closed set below.
+  The worker count and the state histogram cover the same tasks Bearings lists
+  as Underway: a runtime record whose backlog row is in flight (worker, held or
+  program), or that has no backlog row at all. A meta file left behind by an
+  item that is back in Queued or already under Done is not a worker on deck,
+  so it is not counted, even before teardown removes it. Neither figure can
+  carry record free text: one is an integer, and the other's keys are the state
+  verb folded through the closed set below.
 
 READ SCOPE. config/voice-read-scope selects what a status answer may contain:
 
@@ -327,7 +328,7 @@ def _parse_backlog(path):
 
 
 def _canonical_backlog(home, root=None):
-    """Return {id: {role, bucket}} for open rows from the canonical backlog parse.
+    """Return {id: {role, bucket}} for backlog rows from the canonical parse.
 
     bin/fm-fleet-snapshot.sh owns the held role and the hold_bucket rule, so
     this reader asks it rather than keeping a second copy that would drift from
@@ -354,7 +355,9 @@ def _canonical_backlog(home, root=None):
     for record in records:
         if not isinstance(record, dict) or not record.get("structured"):
             continue
-        if record.get("state") not in ("in_flight", "queued"):
+        if record.get("state") not in ("in_flight", "queued", "done"):
+            continue
+        if record.get("state") == "done" and record.get("id") in out:
             continue
         out[record.get("id")] = {
             "role": record.get("current_role"),
@@ -437,10 +440,12 @@ def fleet_status(home=None, scope=None):
     denies = deny_list(home)
 
     state = state_dir(home)
-    workers = _workers(state)
     items = _parse_backlog(os.path.join(data_dir(home), "backlog.md"))
 
     canonical = _canonical_backlog(home)
+    workers = [w for w in _workers(state)
+               if w["id"] not in canonical
+               or canonical[w["id"]]["role"] in ("worker", "held", "program")]
 
     def role(item):
         return canonical.get(item["id"], {}).get("role")
@@ -466,14 +471,15 @@ def fleet_status(home=None, scope=None):
         or i["tags"].get("kind") == "captain"}
     queued = [i for i in open_items
               if i["section"] == "queued" and i["id"] not in captain_ids]
-    # OPEN work only. _workers lists every state/*.meta in the home, and a task
-    # keeps its meta after it is marked done until teardown removes it, so taking
-    # every worker with a pull request would count and name finished tasks. That
-    # breaks the promise at the top of this file twice over: it reads finished
-    # work, and the deny decision below cannot reach those items, because their
-    # ids have no open item to supply a title, so a captain substring matching a
-    # title would silently fail for exactly them. Losing the count of a pull
-    # request on a task already marked done is the accepted cost.
+    # OPEN work only. A task keeps its meta after it is marked done until
+    # teardown removes it, and a ticked row still under In flight keeps its
+    # worker role, so taking every worker with a pull request would count and
+    # name finished tasks. That breaks the promise at the top of this file twice
+    # over: it reads finished work, and the deny decision below cannot reach
+    # those items, because their ids have no open item to supply a title, so a
+    # captain substring matching a title would silently fail for exactly them.
+    # Losing the count of a pull request on a task already marked done is the
+    # accepted cost.
     open_ids = {i["id"] for i in open_items}
     with_pr = [w for w in workers if w["pr"] and w["id"] in open_ids]
 
@@ -518,12 +524,12 @@ def fleet_status(home=None, scope=None):
     # reassuring count beside it. It also makes the count what it says it is,
     # distinct items rather than refusals.
     #
-    # The fields come from every OPEN item, not only the ones a list iterates. A
-    # queued item that is not held for the captain still reaches the answer
-    # through its pull request link, and assembling its fields only where a list
-    # walks past it is how a title match gets missed on exactly that item. What
-    # is COUNTED is narrower: an item that no list could have named is not
-    # something the captain is having withheld.
+    # The fields come from every OPEN item, not only the ones a list iterates.
+    # An item reaches the pull request list through its worker record, and that
+    # list reads no titles, so assembling fields only where a list walks past
+    # an item is how a title match gets missed. What is COUNTED is narrower: an
+    # item that no list could have named is not something the captain is
+    # having withheld.
     known = {}
     for item in open_items:
         known.setdefault(item["id"], item)
