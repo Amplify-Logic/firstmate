@@ -1024,9 +1024,9 @@ When it is not, the read reports that on stderr and fails at once instead of sta
 Herdr 0.7.4 has no detach or no-autostart option of its own, and its status reports `detached_server_daemon` as false, so the owner detaches the server itself with Perl's `POSIX::setsid`:
 
 - The server runs in its own session and process group, so killing the job that needed it, for example `launchctl kickstart -k` on a launch agent, cannot take the server and every pane with it.
-- Its stdin, stdout, and stderr are `/dev/null` and every other inherited descriptor is closed, so it never holds a caller's pipe or lock open, and the caller returns as soon as the launch is handed off.
+- Its stdin, stdout, and stderr are `/dev/null` and every other inherited descriptor is closed, so it never holds a caller's pipe or lock open, and the caller returns as soon as the server has left its session, with a failed detach reported to the caller.
 - Its working directory is `$HOME`, never a task worktree that cleanup may later remove.
-- Its environment drops harness identity (`CLAUDE*`, `CODEX_*`, `PI_*`, `OPENCODE*`, `GEMINI_CLI*`, `GROK_*`, `KIMI_*`, and the Cursor markers), every `FM_*` home and task marker, the caller's own multiplexer pane identity (Herdr, tmux, Zellij, and cmux), trace context, and per-task Git config and Go temp root.
+- Its environment drops harness identity (`CLAUDE*`, `CODEX_*`, `PI_*`, `OPENCODE*`, `GEMINI_CLI*`, `GROK_*`, `KIMI_*`, and the Cursor markers), every `FM_*` home and task marker except `FM_REMOTE_JOB_ACTIVE`, which the remote owner-birth check reads to prove a worker-started server, the caller's own multiplexer pane identity (Herdr, tmux, Zellij, and cmux), trace context, and per-task Git config and Go temp root.
 
 Herdr passes its server startup environment to every later pane, so retaining those values would give every pane a dead agent's session, effort, or task wiring.
 An already-running server is reused without restart or environment changes.

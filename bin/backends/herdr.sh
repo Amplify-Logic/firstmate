@@ -443,7 +443,7 @@ fm_backend_herdr_workspace_label() {
 # fm_backend_herdr_version_check, which is intentionally session-independent
 # (reads only .client.* fields).
 fm_backend_herdr_cli() {  # <session> <herdr-subcommand-and-args...>
-  local session=$1 rc=0 err failed_bin selected_bin client_bin=herdr
+  local session=$1 rc=0 err failed_bin selected_bin client_bin
   shift
   # An absent herdr CLI is refused HERE, silently, before anything downstream
   # reaches its bounded readiness poll: without this a scrubbed PATH costs ten
@@ -452,9 +452,7 @@ fm_backend_herdr_cli() {  # <session> <herdr-subcommand-and-args...>
   # question with one answer, and kept to a single self-contained statement so
   # the regression's mutation proof can strip exactly this guard.
   command -v herdr >/dev/null 2>&1 || return 1
-  if [ "${FM_BACKEND_HERDR_CLIENT_SESSION:-}" = "$session" ]; then
-    client_bin=$(fm_backend_herdr_bin)
-  fi
+  client_bin=$(fm_backend_herdr_session_client "$session")
   # stderr is buffered (stdout streams untouched) so a protocol_mismatch
   # refusal can be recognized and retried once on a compatible client; see
   # "client selection" below. A failed command's stderr is replayed verbatim.
@@ -510,6 +508,16 @@ fm_backend_herdr_cli() {  # <session> <herdr-subcommand-and-args...>
 # PATH-first client.
 fm_backend_herdr_bin() {
   printf '%s' "${FM_BACKEND_HERDR_BIN:-herdr}"
+}
+
+# fm_backend_herdr_session_client: the client for <session> - the selected one
+# only when it was selected for this same session, otherwise herdr on PATH.
+fm_backend_herdr_session_client() {  # <session>
+  if [ "${FM_BACKEND_HERDR_CLIENT_SESSION:-}" = "$1" ]; then
+    fm_backend_herdr_bin
+  else
+    printf 'herdr'
+  fi
 }
 
 # fm_backend_herdr_client_candidates: every distinct executable named herdr on
@@ -1715,9 +1723,7 @@ fm_backend_herdr_projection_order_best_effort() {  # <session> <created-workspac
 # (not running, unreadable, CLI absent) is "not running". Never blocks on a
 # server and never creates one, so every read path can afford it.
 fm_backend_herdr_server_running() {  # <session>
-  local running
-  running=$(fm_backend_herdr_cli "$1" status --json 2>/dev/null | jq -r '.server.running // false' 2>/dev/null)
-  [ "$running" = "true" ]
+  [ "$(fm_backend_herdr_server_running_state "$1")" = running ]
 }
 
 # fm_backend_herdr_server_start_detached: the ONE place Firstmate launches a
@@ -1733,7 +1739,8 @@ fm_backend_herdr_server_running() {  # <session>
 #     is held open for the server's lifetime;
 #   - an environment scrubbed of harness identity (CLAUDE*, CODEX_*, PI_*,
 #     OPENCODE*, GEMINI_CLI*, GROK_*, KIMI_*, CURSOR_AGENT, CURSOR_INVOKED_AS),
-#     every FM_* home and task marker, the caller's own multiplexer pane
+#     every FM_* home and task marker except FM_REMOTE_JOB_ACTIVE (the remote
+#     owner-birth proof reads it from the server), the caller's own multiplexer pane
 #     identity (HERDR_ENV and the pane, tab, workspace, session, socket, and
 #     binary variables herdr injects, TMUX, TMUX_PANE, ZELLIJ*, CMUX_*), trace context,
 #     and per-task Git config and temp root, so no pane ever starts with a dead
@@ -1742,8 +1749,9 @@ fm_backend_herdr_server_running() {  # <session>
 #     later remove.
 # Herdr 0.7.4 has no detach or no-autostart option of its own (its status
 # reports capability detached_server_daemon=false), so Perl's POSIX::setsid
-# provides the detach on both macOS and Linux. Returns as soon as the launch is
-# handed off; it never waits on the server itself.
+# provides the detach on both macOS and Linux. Returns once the server process
+# has left the caller's session (failing if the detach itself failed); it never
+# waits on the server itself.
 fm_backend_herdr_server_start_detached() {  # <session>
   local session=$1 bin name
   local -a scrub=()
@@ -1751,10 +1759,11 @@ fm_backend_herdr_server_start_detached() {  # <session>
     echo "error: cannot start the herdr server for session '$session': perl is required to detach it from this process" >&2
     return 1
   }
-  bin=$(command -v "$(fm_backend_herdr_bin)" 2>/dev/null) || bin=
+  bin=$(command -v "$(fm_backend_herdr_session_client "$session")" 2>/dev/null) || bin=
   [ -n "$bin" ] || { echo "error: cannot start the herdr server for session '$session': the herdr CLI did not resolve" >&2; return 1; }
   while IFS= read -r name; do
     case "$name" in
+      FM_REMOTE_JOB_ACTIVE) ;;
       FM_*|CLAUDE*|CODEX_*|PI_*|OPENCODE*|GEMINI_CLI*|GROK_*|KIMI_*|CURSOR_AGENT|CURSOR_INVOKED_AS \
         |HERDR_ENV|HERDR_PANE_ID|HERDR_TAB_ID|HERDR_WORKSPACE_ID|HERDR_SESSION|HERDR_SOCKET_PATH \
         |HERDR_CLIENT_SOCKET_PATH|HERDR_BIN_PATH|TMUX|TMUX_PANE|ZELLIJ*|CMUX_* \
@@ -1765,10 +1774,10 @@ fm_backend_herdr_server_start_detached() {  # <session>
   perl -MPOSIX -e '
     my $pid = fork;
     exit 1 unless defined $pid;
-    exit 0 if $pid;
-    exit 1 if POSIX::setsid() < 0;
+    if ($pid) { waitpid($pid, 0); exit($? >> 8); }
+    POSIX::_exit(1) if POSIX::setsid() < 0;
     $pid = fork;
-    exit 1 unless defined $pid;
+    POSIX::_exit(1) unless defined $pid;
     POSIX::_exit(0) if $pid;
     my $home = $ENV{HOME};
     chdir((defined $home && -d $home) ? $home : "/");

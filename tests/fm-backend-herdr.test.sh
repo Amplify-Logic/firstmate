@@ -164,7 +164,7 @@ case "${1:-}" in
         FM_TASK_ID FM_HERDR_PROJECT_KEY CURSOR_AGENT CURSOR_INVOKED_AS CLAUDECODE CLAUDE_CODE_CHILD_SESSION \
         CLAUDE_EFFORT CLAUDE_CODE_SESSION_ID CODEX_THREAD_ID PI_CODING_AGENT FM_PI_HARNESS GROK_AGENT \
         FM_SUPERVISION_MODEL HERDR_ENV HERDR_PANE_ID HERDR_SOCKET_PATH GIT_CONFIG_COUNT GIT_CONFIG_KEY_0 \
-        GIT_CONFIG_VALUE_0 TRACEPARENT GOTMPDIR HERDR_TEST_SENTINEL HERDR_SESSION; do
+        GIT_CONFIG_VALUE_0 TRACEPARENT GOTMPDIR HERDR_TEST_SENTINEL FM_REMOTE_JOB_ACTIVE HERDR_SESSION; do
         eval 'value=${'"$name"'-<unset>}'
         printf '%s=%s\n' "$name" "$value"
       done
@@ -1306,7 +1306,7 @@ test_server_ensure_scrubs_home_and_harness_identity() {
   callers=$(cd "$dir/caller-cwd" && exec 7>&1 && PATH="$fb:$PATH" HOME="$dir/home" HERDR_TEST_SENTINEL=kept \
     FM_HOME=/tmp/wrong-home FM_ROOT_OVERRIDE=/tmp/wrong-root FM_STATE_OVERRIDE=/tmp/wrong-state \
     FM_DATA_OVERRIDE=/tmp/wrong-data FM_PROJECTS_OVERRIDE=/tmp/wrong-projects FM_CONFIG_OVERRIDE=/tmp/wrong-config \
-    FM_TASK_ID=some-task FM_HERDR_PROJECT_KEY=/tmp/project \
+    FM_TASK_ID=some-task FM_HERDR_PROJECT_KEY=/tmp/project FM_REMOTE_JOB_ACTIVE=1 \
     CURSOR_AGENT=1 CURSOR_INVOKED_AS=cursor-agent CLAUDECODE=1 CLAUDE_CODE_CHILD_SESSION=1 CLAUDE_EFFORT=medium \
     CLAUDE_CODE_SESSION_ID=dead-session CODEX_THREAD_ID=t1 PI_CODING_AGENT=true FM_PI_HARNESS=pi-signed GROK_AGENT=1 \
     FM_SUPERVISION_MODEL=autoarm HERDR_ENV=1 HERDR_PANE_ID=w1:p1 HERDR_SOCKET_PATH=/tmp/caller.sock \
@@ -1326,6 +1326,7 @@ test_server_ensure_scrubs_home_and_harness_identity() {
     assert_contains "$output" "$name=<unset>" "server_ensure leaked $name into the long-lived Herdr server"
   done
   assert_contains "$output" "HERDR_TEST_SENTINEL=kept" "server_ensure removed an unrelated environment variable"
+  assert_contains "$output" "FM_REMOTE_JOB_ACTIVE=1" "server_ensure removed the remote worker birth marker the owner check reads"
   assert_contains "$output" "HERDR_SESSION=fmtest" "server_ensure lost explicit Herdr session routing"
   assert_contains "$output" "args=server --session fmtest" "server_ensure lost the trailing Herdr session flag"
   assert_contains "$output" "cwd=$(cd "$dir/home" && pwd -P)" "the server should run from \$HOME, not its caller's directory"
