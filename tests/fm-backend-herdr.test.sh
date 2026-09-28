@@ -943,7 +943,8 @@ test_cli_scopes_the_selected_client_to_its_session() {
   cat > "$dir/stale/herdr" <<'SH'
 #!/usr/bin/env bash
 session=${!#}
-printf '%s\n' "$*" >> "${FM_HERDR_PAIR_DIR:?}/stale.log"
+FM_HERDR_PAIR_DIR=${FM_HERDR_PAIR_DIR:-$(cd "$(dirname "$0")/.." && pwd)}
+printf '%s\n' "$*" >> "$FM_HERDR_PAIR_DIR/stale.log"
 if [ "${1:-} ${2:-}" = "status --json" ]; then
   if [ "$session" = fresh ]; then
     printf '{"client":{"version":"0.8.2","protocol":20},"server":{"running":false}}\n'
@@ -964,7 +965,8 @@ SH
   cat > "$dir/current/herdr" <<'SH'
 #!/usr/bin/env bash
 session=${!#}
-printf '%s\n' "$*" >> "${FM_HERDR_PAIR_DIR:?}/current.log"
+FM_HERDR_PAIR_DIR=${FM_HERDR_PAIR_DIR:-$(cd "$(dirname "$0")/.." && pwd)}
+printf '%s\n' "$*" >> "$FM_HERDR_PAIR_DIR/current.log"
 if [ "${1:-} ${2:-}" = "status --json" ]; then
   if [ "$session" = fresh ]; then
     printf '{"client":{"version":"0.9.0","protocol":22},"server":{"running":false}}\n'
@@ -986,11 +988,12 @@ SH
   out=$(run_with_clients "$dir" "$dir/stale:$dir/current" \
     'fm_backend_herdr_cli modern pane get w1:p1 > "$FM_HERDR_PAIR_DIR/modern.out" || exit 1
      fm_backend_herdr_cli fresh status --json > "$FM_HERDR_PAIR_DIR/fresh-status.out" || exit 1
-     fm_backend_herdr_cli fresh server > "$FM_HERDR_PAIR_DIR/server.out" || exit 1
+     fm_backend_herdr_server_start_detached fresh || exit 1
+     for _ in $(seq 1 50); do grep -q "server --session fresh" "$FM_HERDR_PAIR_DIR/stale.log" "$FM_HERDR_PAIR_DIR/current.log" 2>/dev/null && break; sleep 0.1; done
      touch "$FM_HERDR_PAIR_DIR/switched"
      fm_backend_herdr_cli modern pane get w1:p1 > "$FM_HERDR_PAIR_DIR/legacy.out" || exit 1
-     printf "%s|%s|%s|%s|%s" "$(cat "$FM_HERDR_PAIR_DIR/modern.out")" "$(jq -r .server.running "$FM_HERDR_PAIR_DIR/fresh-status.out")" "$(cat "$FM_HERDR_PAIR_DIR/server.out")" "$(cat "$FM_HERDR_PAIR_DIR/legacy.out")" "${FM_BACKEND_HERDR_BIN:-PATH-default}"')
-  [ "$out" = 'modern|false|path-default-server|legacy|PATH-default' ] \
+     printf "%s|%s|%s|%s" "$(cat "$FM_HERDR_PAIR_DIR/modern.out")" "$(jq -r .server.running "$FM_HERDR_PAIR_DIR/fresh-status.out")" "$(cat "$FM_HERDR_PAIR_DIR/legacy.out")" "${FM_BACKEND_HERDR_BIN:-PATH-default}"')
+  [ "$out" = 'modern|false|legacy|PATH-default' ] \
     || fail "a selected client should stay scoped to its session while forced reselection still returns to the PATH default, got: $out"
   assert_contains "$(cat "$dir/stale.log")" 'server --session fresh' "a stopped second session should start with the PATH-default client"
   assert_not_contains "$(cat "$dir/current.log")" 'server --session fresh' "another session's selected client must not start the stopped session"
@@ -1334,8 +1337,8 @@ test_server_ensure_scrubs_home_and_harness_identity() {
     assert_contains "$output" "$name=null" "the server's $name should be /dev/null"
   done
   assert_contains "$output" "fd7=closed" "the server inherited its caller's open descriptor"
-  assert_not_contains "$output" "pgid=${callers%% *}" "the server joined its caller's process group, so killing that job would kill it"
-  assert_not_contains "$output" "sid=${callers##* }" "the server stayed in its caller's session"
+  assert_not_equals "${callers%% *}" "$(printf '%s\n' "$output" | sed -n 's/^pgid=//p')" "the server joined its caller's process group, so killing that job would kill it"
+  assert_not_equals "${callers##* }" "$(printf '%s\n' "$output" | sed -n 's/^sid=//p')" "the server stayed in its caller's session"
   [ -z "$pid" ] || kill "$pid" 2>/dev/null || true
   pass "fm_backend_herdr_server_ensure: starts a detached server in its own group and session, scrubbed of harness, home, task, and pane identity, without holding its caller"
 }
