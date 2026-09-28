@@ -22,7 +22,7 @@
 # Usage:
 #   fm-captain-hold.sh hold <task-id> --reason <reason> \
 #     [--title <title>] [--repo <repo>] [--origin <origin-id>] [--until YYYY-MM-DD]
-#   fm-captain-hold.sh answer <task-id> --decision-file <path> [--release]
+#   fm-captain-hold.sh answer <task-id> --decision-file <path> [--release] [--expect-identity <identity>]
 #   fm-captain-hold.sh answers [<legacy-origin> | --any-origin] --source <provenance>   (keyed answers on stdin)
 #   fm-captain-hold.sh reconcile-requests --source-id <source-id> --source <provenance>   (task ids on stdin)
 #   fm-captain-hold.sh bind <source-id> [<legacy-origin> | --any-origin]
@@ -70,6 +70,15 @@
 # answered captain call. A hold that expired by date (`--until` in the past) is
 # still answerable: the surviving hold annotations, not tasks-axi's live
 # `held:` bit, prove the captain owned it.
+# `--expect-identity` makes the answer a compare-and-answer for a caller that
+# showed the captain one exact question, such as a phone approval card: under
+# the same task lock the answer takes, the task's current `open --identity`
+# value must equal the given one, or `answer` exits 3, prints why on stderr,
+# and records nothing. A call that is no longer open has no identity, so a
+# closed, released, or re-held task (even one re-held with the same words)
+# refuses a stale expectation, including a replay of an answer that already
+# landed; an absent task refuses the same way. Without the option the answer
+# behaves exactly as described above.
 #
 # ONE KEYED-ANSWER INTAKE, FED BY EVERY CHANNEL.
 # "A keyed answer resolves its matching captain-held task" is a single
@@ -171,7 +180,8 @@
 # hold-set stamp and the count of recorded answers - is what distinguishes two
 # successive calls on one task id: re-holding released work starts a new
 # lifecycle without necessarily touching the task's status log, so a consumer
-# that bounds repeated work per call cannot use the task id alone.
+# that bounds repeated work per call cannot use the task id alone, and
+# `answer --expect-identity` compares against the same value.
 # bin/fm-teardown.sh asks it before its automatic
 # backlog close and, on 0, returns the row to Queued with its deliverable
 # recorded instead (bin/fm-backlog-transition-lib.sh owns that transition), so
@@ -760,6 +770,14 @@ body_hold_set_timestamp() {  # <decoded-task-body>
     | head -1
 }
 
+# The lifecycle identity `open --identity` prints and `answer --expect-identity`
+# compares: the hold-set stamp and the count of recorded answers.
+captain_call_identity() {  # <shown-task-body>
+  printf '%s#%s\n' \
+    "$(body_hold_set_timestamp "$(decode_shown_value "$1")")" \
+    "$(resolution_record_count "$1")"
+}
+
 write_hold_set_stamp() {  # <task-id> <shown-body> <timestamp> <preserve-existing-0-or-1>
   local id=$1 body=$2 hold_set=$3 preserve=$4 existing new_body tmp
   body=$(decode_shown_value "$body") \
@@ -996,25 +1014,48 @@ remove_interrupted_answer_stamp() {  # <task-id>
 
 command_answer() {
   local id=${1:-} decision_file='' release=0 show state hold_kind body outcome recorded_mode occurrence
+  local expect_identity='' expect_given=0 current_identity
   [ "$#" -ge 1 ] || { usage >&2; exit 2; }
   shift
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --decision-file) shift; decision_file=${1:-} ;;
       --release) release=1 ;;
+      --expect-identity) shift; expect_identity=${1:-}; expect_given=1 ;;
       *) usage >&2; exit 2 ;;
     esac
     shift
   done
   validate_slug task-id "$id"
+  [ "$expect_given" = 0 ] || validate_one_line expect-identity "$expect_identity"
   load_decision "$decision_file"
   acquire_task_control_lock "$id"
   require_tasks_axi
-  task_show "$id" || fail "captain-held task $id is absent from this home's configured backlog (data directory $DATA)"
+  if ! task_show "$id"; then
+    if [ "$expect_given" = 1 ]; then
+      printf 'fm-captain-hold: captain call %s changed since it was shown (expected %s, now absent); nothing recorded\n' \
+        "$id" "$expect_identity" >&2
+      exit 3
+    fi
+    fail "captain-held task $id is absent from this home's configured backlog (data directory $DATA)"
+  fi
   show=$TASK_SHOW_OUTPUT
   state=$(show_field "$show" state)
   hold_kind=$(show_field_value "$show" hold_kind)
   body=$(show_field "$show" body)
+  if [ "$expect_given" = 1 ]; then
+    # Compare-and-answer: the same test `open --identity` applies, read under
+    # this answer's own task lock so no hold or answer can land in between.
+    current_identity=''
+    if [ "$state" != "done" ] && [ "$hold_kind" = captain ]; then
+      current_identity=$(captain_call_identity "$body")
+    fi
+    if [ "$current_identity" != "$expect_identity" ]; then
+      printf 'fm-captain-hold: captain call %s changed since it was shown (expected %s, now %s); nothing recorded\n' \
+        "$id" "$expect_identity" "${current_identity:-not open}" >&2
+      exit 3
+    fi
+  fi
   if [ "$release" = 1 ]; then outcome=released; else outcome=answered; fi
   # The occurrence the parent line names: the record about to be written is
   # one past those already in the body, and a retry names the newest one.
@@ -1935,9 +1976,7 @@ command_open() {  # <task-id> [--identity] [--distinguish-absent]
         }
         show=$TASK_SHOW_OUTPUT
         shown_body=$(show_field "$show" body)
-        printf '%s#%s\n' \
-          "$(body_hold_set_timestamp "$(decode_shown_value "$shown_body")")" \
-          "$(resolution_record_count "$shown_body")"
+        captain_call_identity "$shown_body"
       fi
       return 0
     fi

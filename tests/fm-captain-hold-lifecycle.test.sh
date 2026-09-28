@@ -4034,12 +4034,82 @@ test_retained_body_keeps_its_utf8_bytes() {
   pass "cleanup preserves every byte of a retained body's non-ASCII characters"
 }
 
+# --expect-identity turns an answer into a compare-and-answer against the
+# exact call the captain was shown: a stale identity records nothing, even when
+# the task was re-held with the very same words, and without the option the
+# answer is unchanged.
+test_answer_expect_identity_answers_only_the_call_shown() {
+  local home show identity stale rc
+  home=$(make_home expect-identity)
+  tasks_in "$home" add sample-card "Approve the sample card" --kind ship --repo sample >/dev/null \
+    || fail "could not create the card work item"
+  FM_CAPTAIN_HOLD_NOW=2026-06-01T12:00:00Z run_captain "$home" hold sample-card \
+    --reason "captain go needed" >/dev/null || fail "could not hold the card work item"
+  identity=$(run_captain "$home" open sample-card --identity) \
+    || fail "the held card did not report an open identity"
+  printf 'Go.\n' > "$home/go.txt"
+
+  rc=0
+  run_captain "$home" answer sample-card --decision-file "$home/go.txt" --release \
+    --expect-identity "2026-06-01T12:00:00Z#9" > "$home/mismatch.out" 2> "$home/mismatch.err" || rc=$?
+  [ "$rc" = 3 ] || fail "a mismatched identity did not exit 3 (rc=$rc)"
+  assert_grep "changed since it was shown" "$home/mismatch.err" \
+    "the mismatch refusal did not say the call changed"
+  show=$(tasks_in "$home" show sample-card --full)
+  assert_contains "$show" "held: yes" "a mismatched identity released the hold"
+  assert_not_contains "$show" "Resolution recorded by" "a mismatched identity recorded an answer"
+
+  run_captain "$home" answer sample-card --decision-file "$home/go.txt" --release \
+    --expect-identity "$identity" >/dev/null || fail "the matching identity did not answer"
+  show=$(tasks_in "$home" show sample-card --full)
+  assert_contains "$show" "held: no" "the matching identity did not release the hold"
+  assert_contains "$show" "Resolution mode: released" "the matching identity recorded the wrong mode"
+
+  # The same question asked again: same words, same stamp second, new call.
+  stale=$identity
+  FM_CAPTAIN_HOLD_NOW=2026-06-01T12:00:00Z run_captain "$home" hold sample-card \
+    --reason "captain go needed" >/dev/null || fail "could not re-hold the card work item"
+  identity=$(run_captain "$home" open sample-card --identity) \
+    || fail "the re-held card did not report an open identity"
+  [ "$identity" != "$stale" ] || fail "a same-worded re-hold kept the old identity: $identity"
+  rc=0
+  run_captain "$home" answer sample-card --decision-file "$home/go.txt" --release \
+    --expect-identity "$stale" > "$home/stale.out" 2> "$home/stale.err" || rc=$?
+  [ "$rc" = 3 ] || fail "a tap on the earlier same-worded call did not exit 3 (rc=$rc)"
+  show=$(tasks_in "$home" show sample-card --full)
+  assert_contains "$show" "held: yes" "a stale tap released the re-held call"
+  [ "$(printf '%s\n' "$show" | grep -c 'Resolution recorded by fm-captain-hold')" = 1 ] \
+    || fail "a stale tap recorded a second answer: $show"
+
+  run_captain "$home" answer sample-card --decision-file "$home/go.txt" --release \
+    --expect-identity "$identity" >/dev/null || fail "the current identity did not answer the re-held call"
+  rc=0
+  run_captain "$home" answer sample-card --decision-file "$home/go.txt" --release \
+    --expect-identity "$identity" > "$home/replay.out" 2> "$home/replay.err" || rc=$?
+  [ "$rc" = 3 ] || fail "an expectation on a call no longer open did not exit 3 (rc=$rc)"
+  assert_grep "not open" "$home/replay.err" "the refusal did not say the call is no longer open"
+  rc=0
+  run_captain "$home" answer sample-card-absent --decision-file "$home/go.txt" \
+    --expect-identity "$identity" > "$home/absent.out" 2> "$home/absent.err" || rc=$?
+  [ "$rc" = 3 ] || fail "an expectation on an absent task did not exit 3 (rc=$rc)"
+
+  # Without the option the answer is unchanged: the exact release replays.
+  run_captain "$home" answer sample-card --decision-file "$home/go.txt" --release >/dev/null \
+    || fail "an answer without --expect-identity changed behaviour"
+  if run_captain "$home" answer sample-card --decision-file "$home/go.txt" --expect-identity \
+    > "$home/empty.out" 2> "$home/empty.err"; then
+    fail "an empty --expect-identity was accepted"
+  fi
+  pass "--expect-identity answers only the exact captain call that was shown"
+}
+
 test_uninventoried_report_decision_refuses_completion
 test_hold_decodes_a_bare_scalar_body_without_the_nonref_default
 test_retained_body_keeps_its_utf8_bytes
 test_completion_gate_attests_and_transfers
 test_answer_records_and_closes
 test_release_frees_held_work
+test_answer_expect_identity_answers_only_the_call_shown
 test_hold_stamp_precedes_hold_visibility
 test_interrupted_answer_preserves_hold_age
 test_deferral_leaves_captains_call_until_due
