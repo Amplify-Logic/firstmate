@@ -17,7 +17,7 @@ not filtered at the end:
 
 Only open task lines and this home's own runtime records are ever assembled.
 The one outside read, the hold classification described under "WHAT WAITS ON
-THE CAPTAIN", contributes two closed words per open id and no text.
+THE CAPTAIN", contributes two closed words per backlog id and no text.
 That is a confidentiality boundary as much as a brevity one. Verified on the
 captain's live records on 2026-08-21: every occurrence of the one engagement
 identifier those records contain sits in Done history or a note body, so
