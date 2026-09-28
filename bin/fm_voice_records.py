@@ -16,6 +16,8 @@ not filtered at the end:
   commercial detail gets quoted.
 
 Only open task lines and this home's own runtime records are ever assembled.
+The one outside read, the hold classification described under "WHAT WAITS ON
+THE CAPTAIN", contributes two closed words per open id and no text.
 That is a confidentiality boundary as much as a brevity one. Verified on the
 captain's live records on 2026-08-21: every occurrence of the one engagement
 identifier those records contain sits in Done history or a note body, so
@@ -71,6 +73,26 @@ file is optional and an absent file means an empty list; it exists so that a
 future open task carrying a customer name can be excluded in one line rather
 than by turning the whole feature down.
 
+WHAT WAITS ON THE CAPTAIN. awaiting_captain counts the captain holds that are
+live calls today, which is the rule the Captain's Call and the captain's
+decision cards use: bin/fm-fleet-snapshot.sh's hold_bucket, "live" only. A hold
+that is blocked by unfinished work, deferred to a later date or aged out is not
+a call the captain can make now, so it is counted in deferred_for_captain
+instead, and a to-do merely filed with kind captain is not a hold at all. This
+module does not restate that classification: it runs
+`bin/fm-fleet-snapshot.sh --backlog` and takes only each open id's role and
+bucket from it. That canonical parse does read Done rows and the machine-written
+hold stamp to classify a hold; none of what it reads is assembled here beyond
+those two words. Only this home's own holds are counted; a second mate's calls
+reach the cards through Bearings and are not part of this answer.
+
+A held row can sit In flight, and it is then both on the in-flight list and,
+when its hold is a live captain call, waiting on the captain. in_flight stays
+the length of the in-flight list, which is what in_flight_detail is a window
+onto; in_flight_held says how many of those rows are held, and each detail row
+carries a held flag, so a reader can say how much is running without counting a
+held row twice.
+
 WORKER STATE. This module reports the last recorded event verb, which is
 history rather than a live check, and labels it that way in its own output so
 the model cannot present it as current truth. bin/fm-crew-state.sh remains the
@@ -92,7 +114,6 @@ as a tool result, so the shell form is the same interface the relay uses.
 """
 
 import argparse
-import datetime
 import json
 import os
 import re
@@ -106,6 +127,10 @@ SCOPE_DEFAULT = SCOPE_COUNTS
 
 BASIS = "Last recorded event, which is history and not a live check."
 
+# The canonical backlog classifier. A spoken answer should not wait long for it,
+# and a status answer that cannot classify holds refuses rather than guessing.
+CLASSIFY_TIMEOUT_SECONDS = 20
+
 # A spoken answer names a few things and gives a count for the rest. Every row
 # sent is input tokens the model reads before it starts speaking, and this whole
 # build exists to keep that delay honest, so the lists are capped rather than
@@ -118,7 +143,6 @@ TAG = re.compile(r"\((?P<key>[a-z-]+): (?P<value>[^)]*)\)")
 # leaves them in the title. A date read aloud in the middle of a sentence is
 # noise, so they come out too.
 DATE_TAG = re.compile(r"\((?:since|done) [0-9-]+\)")
-HOLD_DATE = re.compile(r"^[0-9]{4}-[0-9]{2}-[0-9]{2}$")
 
 # The only backlog sections this module will parse. Done history is skipped
 # before a line is even split, so widening the answer cannot reach it by
@@ -302,6 +326,43 @@ def _parse_backlog(path):
     return items
 
 
+def _canonical_backlog(home, root=None):
+    """Return {id: {role, bucket}} for open rows from the canonical backlog parse.
+
+    bin/fm-fleet-snapshot.sh owns the held role and the hold_bucket rule, so
+    this reader asks it rather than keeping a second copy that would drift from
+    the captain's cards. Only the role and the bucket are kept.
+    """
+    root = root or os.path.dirname(os.path.abspath(__file__))
+    snapshot = os.path.join(root, "fm-fleet-snapshot.sh")
+    env = dict(os.environ, FM_HOME=home)
+    try:
+        done = subprocess.run(
+            [snapshot, "--backlog"], stdin=subprocess.DEVNULL, env=env,
+            capture_output=True, text=True, timeout=CLASSIFY_TIMEOUT_SECONDS,
+            check=False)
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise RecordError("cannot classify the backlog: {}".format(exc))
+    if done.returncode != 0:
+        raise RecordError("fm-fleet-snapshot.sh --backlog failed: {}".format(
+            (done.stderr or done.stdout).strip()))
+    try:
+        records = json.loads(done.stdout).get("records") or []
+    except (ValueError, AttributeError) as exc:
+        raise RecordError("fm-fleet-snapshot.sh --backlog printed no JSON: {}".format(exc))
+    out = {}
+    for record in records:
+        if not isinstance(record, dict) or not record.get("structured"):
+            continue
+        if record.get("state") not in ("in_flight", "queued"):
+            continue
+        out[record.get("id")] = {
+            "role": record.get("current_role"),
+            "bucket": record.get("hold_bucket"),
+        }
+    return out
+
+
 def _last_event(state_dir, task_id):
     """Return (verb, line) from the last status event, or (None, None).
 
@@ -379,34 +440,32 @@ def fleet_status(home=None, scope=None):
     workers = _workers(state)
     items = _parse_backlog(os.path.join(data_dir(home), "backlog.md"))
 
+    canonical = _canonical_backlog(home)
+
+    def role(item):
+        return canonical.get(item["id"], {}).get("role")
+
+    def bucket(item):
+        return canonical.get(item["id"], {}).get("bucket")
+
     open_items = [i for i in items if not i["done"]]
     in_flight = [i for i in open_items if i["section"] == "in flight"]
-    # "What is waiting on me" is the union of decisions filed for the captain
-    # and anything explicitly held for them. The two overlap but neither
-    # contains the other, because a decision can be filed before it is held.
-    held_for_captain = [
-        i for i in open_items
+    held_ids = {i["id"] for i in in_flight if role(i) == "held"}
+    # Every captain hold lands in exactly one bucket. "live" is a call the
+    # captain can make now, the one the cards show; blocked, dated and aged
+    # holds are deferred. See "WHAT WAITS ON THE CAPTAIN" above.
+    captain_holds = [i for i in open_items if bucket(i) is not None]
+    awaiting_captain = [i for i in captain_holds if bucket(i) == "live"]
+    deferred_for_captain = [i for i in captain_holds if bucket(i) != "live"]
+    # Queued means work the fleet could pick up. A queued captain hold is a
+    # decision, and a kind-captain row is the captain's own to-do, so neither is
+    # counted here; counting them made the queue look about twice its real size.
+    captain_ids = {i["id"] for i in captain_holds} | {
+        i["id"] for i in open_items
         if i["tags"].get("hold-kind") == "captain"
-        or i["tags"].get("kind") == "captain"
-    ]
-    captain_ids = {i["id"] for i in held_for_captain}
-    # Queued means work the fleet could pick up. A queued row held for the
-    # captain is a decision, already counted as waiting on the captain, and
-    # counting it here too made the queue look about twice its real size.
+        or i["tags"].get("kind") == "captain"}
     queued = [i for i in open_items
               if i["section"] == "queued" and i["id"] not in captain_ids]
-    # A hold deferred to a later date is not waiting on the captain today. The
-    # deferral lapses on its date, so the hold is waiting again from that day,
-    # the same reading bin/fm-fleet-snapshot.sh gives it; a malformed date stays
-    # waiting, so a typo can never hide a decision.
-    today = datetime.date.today().isoformat()
-    deferred_for_captain = [
-        i for i in held_for_captain
-        if HOLD_DATE.match(i["tags"].get("hold-until", ""))
-        and i["tags"]["hold-until"] > today
-    ]
-    deferred_ids = {i["id"] for i in deferred_for_captain}
-    awaiting_captain = [i for i in held_for_captain if i["id"] not in deferred_ids]
     # OPEN work only. _workers lists every state/*.meta in the home, and a task
     # keeps its meta after it is marked done until teardown removes it, so taking
     # every worker with a pull request would count and name finished tasks. That
@@ -434,6 +493,7 @@ def fleet_status(home=None, scope=None):
         "workers_on_deck": len(workers),
         "worker_states": states,
         "in_flight": len(in_flight),
+        "in_flight_held": len(held_ids),
         "queued": len(queued),
         "awaiting_captain": len(awaiting_captain),
         "deferred_for_captain": len(deferred_for_captain),
@@ -497,6 +557,7 @@ def fleet_status(home=None, scope=None):
             # The state word only, never the raw event line. The agent speaks to
             # the captain and must not read internal record text aloud.
             "state": worker["verb"] if worker else "not started",
+            "held": item["id"] in held_ids,
         })
 
     detail_captain = []
