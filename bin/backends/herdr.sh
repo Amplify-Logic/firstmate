@@ -1731,14 +1731,22 @@ fm_backend_herdr_server_running() {  # <session>
 #   - stdin, stdout, and stderr on /dev/null and every other inherited
 #     descriptor closed, so no caller's command substitution, pipe, or lock
 #     is held open for the server's lifetime;
-#   - an environment scrubbed of harness identity (CLAUDE*, CODEX_*, PI_*,
-#     OPENCODE*, GEMINI_CLI*, GROK_*, KIMI_*, CURSOR_AGENT, CURSOR_INVOKED_AS),
+#   - an environment scrubbed of per-session harness identity (CLAUDECODE,
+#     CLAUDE_CODE_ENTRYPOINT, CLAUDE_CODE_CHILD_SESSION, CLAUDE_CODE_SESSION_ID,
+#     CLAUDE_CODE_SESSION_ATTENDED, CLAUDE_CODE_MESSAGING_*, CLAUDE_PID,
+#     CLAUDE_EFFORT, AI_AGENT, CODEX_THREAD_ID, CODEX_SANDBOX*, PI_CODING_AGENT,
+#     GEMINI_CLI, GROK_AGENT, GROK_SESSION_ID, GROK_HOOK_*, OPENCODE,
+#     CURSOR_AGENT, CURSOR_INVOKED_AS, ATLASSIAN_AGENT_TYPE, ROVODEV_CLI),
 #     every FM_* home and task marker except FM_REMOTE_JOB_ACTIVE (the remote
 #     owner-birth proof reads it from the server), the caller's own multiplexer pane
 #     identity (HERDR_ENV and the pane, tab, workspace, session, socket, and
 #     binary variables herdr injects, TMUX, TMUX_PANE, ZELLIJ*, CMUX_*), trace context,
 #     and per-task Git config and temp root, so no pane ever starts with a dead
-#     agent's session, effort, or task wiring;
+#     agent's session, effort, or task wiring. User configuration and
+#     credential roots (CODEX_HOME, PI_CODING_AGENT_DIR, GROK_HOME,
+#     GEMINI_CLI_HOME, OPENCODE_CONFIG*, CLAUDE_CONFIG_DIR,
+#     CLAUDE_CODE_USE_BEDROCK, CLAUDE_CODE_USE_VERTEX, CLAUDE_CODE_OAUTH_TOKEN)
+#     are kept, since every pane's harness relies on them;
 #   - its working directory at $HOME, never a task worktree that cleanup may
 #     later remove.
 # Herdr 0.7.4 has no detach or no-autostart option of its own (its status
@@ -1758,7 +1766,10 @@ fm_backend_herdr_server_start_detached() {  # <session>
   while IFS= read -r name; do
     case "$name" in
       FM_REMOTE_JOB_ACTIVE) ;;
-      FM_*|CLAUDE*|CODEX_*|PI_*|OPENCODE*|GEMINI_CLI*|GROK_*|KIMI_*|CURSOR_AGENT|CURSOR_INVOKED_AS \
+      FM_*|CLAUDECODE|CLAUDE_CODE_ENTRYPOINT|CLAUDE_CODE_CHILD_SESSION|CLAUDE_CODE_SESSION_ID \
+        |CLAUDE_CODE_SESSION_ATTENDED|CLAUDE_CODE_MESSAGING_*|CLAUDE_PID|CLAUDE_EFFORT|AI_AGENT \
+        |CODEX_THREAD_ID|CODEX_SANDBOX*|PI_CODING_AGENT|GEMINI_CLI|GROK_AGENT|GROK_SESSION_ID|GROK_HOOK_* \
+        |OPENCODE|CURSOR_AGENT|CURSOR_INVOKED_AS|ATLASSIAN_AGENT_TYPE|ROVODEV_CLI \
         |HERDR_ENV|HERDR_PANE_ID|HERDR_TAB_ID|HERDR_WORKSPACE_ID|HERDR_SESSION|HERDR_SOCKET_PATH \
         |HERDR_CLIENT_SOCKET_PATH|HERDR_BIN_PATH|TMUX|TMUX_PANE|ZELLIJ*|CMUX_* \
         |TRACEPARENT|TRACESTATE|GIT_CONFIG_COUNT|GIT_CONFIG_KEY_*|GIT_CONFIG_VALUE_*|GIT_CONFIG_PARAMETERS|GOTMPDIR)
