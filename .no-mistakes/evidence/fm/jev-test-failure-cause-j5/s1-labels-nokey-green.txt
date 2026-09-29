@@ -1,0 +1,45 @@
+$ FM_HOME=<disposable home> FM_TEST_FAILURE_CAUSE_RESPONSE=labels.json bin/fm-test-run.sh --jobs 1 code.test.sh pass.test.sh env.test.sh
+# recorded answer: {"answers":{"f1__cause":{"choice":"code_bug","confidence":0.91},"f2__cause":{"choice":"environment","confidence":0.43}}}
+FM_TEST_BEGIN 2026-09-29T16:29:30Z <W>/t/code.test.sh family=unclassified expected_gate_skip=none
+not ok - expected 3 lines, got 2
+FM_TEST_END 2026-09-29T16:29:30Z <W>/t/code.test.sh exit=1 duration_ms=115 gate_skip=false
+FM_TEST_BEGIN 2026-09-29T16:29:30Z <W>/t/pass.test.sh family=unclassified expected_gate_skip=none
+ok - pass
+FM_TEST_END 2026-09-29T16:29:30Z <W>/t/pass.test.sh exit=0 duration_ms=33 gate_skip=false
+FM_TEST_BEGIN 2026-09-29T16:29:30Z <W>/t/env.test.sh family=unclassified expected_gate_skip=none
+not ok - jq: command not found
+FM_TEST_END 2026-09-29T16:29:31Z <W>/t/env.test.sh exit=1 duration_ms=44 gate_skip=false
+FM_TEST_SUMMARY total=3 failed=2 skipped_gate=0 duration_ms=848
+FM_TEST_SUMMARY_FAMILY family=unclassified count=3 duration_ms=192 failed=2
+FM_TEST_SLOWEST rank=1 script=<W>/t/code.test.sh duration_ms=115
+FM_TEST_SLOWEST rank=2 script=<W>/t/env.test.sh duration_ms=44
+FM_TEST_SLOWEST rank=3 script=<W>/t/pass.test.sh duration_ms=33
+FM_TEST_FAILURE_CAUSE script=<W>/t/code.test.sh cause=code-bug confidence=0.91
+FM_TEST_FAILURE_CAUSE script=<W>/t/env.test.sh cause=unclear confidence=0.43
+exit=1
+
+$ (no key anywhere) FM_HOME=<empty disposable home> bin/fm-test-run.sh --jobs 1 code.test.sh pass.test.sh env.test.sh
+FM_TEST_BEGIN 2026-09-29T16:29:31Z <W>/t/code.test.sh family=unclassified expected_gate_skip=none
+not ok - expected 3 lines, got 2
+FM_TEST_END 2026-09-29T16:29:31Z <W>/t/code.test.sh exit=1 duration_ms=30 gate_skip=false
+FM_TEST_BEGIN 2026-09-29T16:29:31Z <W>/t/pass.test.sh family=unclassified expected_gate_skip=none
+ok - pass
+FM_TEST_END 2026-09-29T16:29:31Z <W>/t/pass.test.sh exit=0 duration_ms=105 gate_skip=false
+FM_TEST_BEGIN 2026-09-29T16:29:32Z <W>/t/env.test.sh family=unclassified expected_gate_skip=none
+not ok - jq: command not found
+FM_TEST_END 2026-09-29T16:29:32Z <W>/t/env.test.sh exit=1 duration_ms=41 gate_skip=false
+FM_TEST_SUMMARY total=3 failed=2 skipped_gate=0 duration_ms=723
+FM_TEST_SUMMARY_FAMILY family=unclassified count=3 duration_ms=176 failed=2
+FM_TEST_SLOWEST rank=1 script=<W>/t/pass.test.sh duration_ms=105
+FM_TEST_SLOWEST rank=2 script=<W>/t/env.test.sh duration_ms=41
+FM_TEST_SLOWEST rank=3 script=<W>/t/code.test.sh duration_ms=30
+exit=1
+
+$ green run with recorded answer: bin/fm-test-run.sh --jobs 1 pass.test.sh
+FM_TEST_BEGIN 2026-09-29T16:29:32Z <W>/t/pass.test.sh family=unclassified expected_gate_skip=none
+ok - pass
+FM_TEST_END 2026-09-29T16:29:33Z <W>/t/pass.test.sh exit=0 duration_ms=96 gate_skip=false
+FM_TEST_SUMMARY total=1 failed=0 skipped_gate=0 duration_ms=614
+FM_TEST_SUMMARY_FAMILY family=unclassified count=1 duration_ms=96 failed=0
+FM_TEST_SLOWEST rank=1 script=<W>/t/pass.test.sh duration_ms=96
+exit=0
