@@ -532,6 +532,14 @@ assert_contains "$out" '  status: error' "a quota failure after the answer is st
 assert_not_contains "$out" '  scope:' "an error after a valid answer prints no scope line"
 
 reset_log
+write_response "$RESPONSE" rule_9 0.9
+jq '.answers.scope = {"type":"noul","noul":0.98}' "$RESPONSE" > "$TMP_ROOT/scoped.json"
+mv "$TMP_ROOT/scoped.json" "$RESPONSE"
+TYPESAFE_API_KEY=$KEY run code out err "$SCAFFOLD_BRIEF"
+assert_contains "$out" '  reason: rule rule_9 is not in the rules file' "an unknown rule id beside a scope answer is still an error outcome"
+assert_not_contains "$out" '  scope:' "a resolution error prints no scope line"
+
+reset_log
 with_scope '{"type":"noul","noul":0.98}'
 TYPESAFE_API_KEY=$KEY FAKE_CURL_HTTP=504 run code out err "$SCAFFOLD_BRIEF"
 assert_contains "$out" '  reason: http 504 after' "a timeout-shaped API failure is the usual error outcome"
