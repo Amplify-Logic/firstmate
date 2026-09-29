@@ -127,6 +127,44 @@ test_outcome_derivation_from_runs_rows() {
   pass "run-table derivation yields first-try green, fixed, failed, or unknown"
 }
 
+test_outcome_derivation_from_follow_ups() {
+  local got moves
+  # Branch reflog times in any order: creation, then the delivered commit.
+  moves=$'1700000050\n1700000000'
+  got=$(fm_capability_outcome_from_followups 1700000100 "$moves")
+  [ "$got" = 'merged|0' ] || fail "no branch move after the ready report should be merged|0, got: $got"
+
+  got=$(fm_capability_outcome_from_followups 1700000100 "$moves"$'\n1700000200\n1700000300')
+  [ "$got" = 'revised|2' ] || fail "two moves after the ready report should be revised|2, got: $got"
+
+  got=$(fm_capability_outcome_from_followups 1700000050 "$moves")
+  [ "$got" = 'merged|0' ] || fail "a move in the ready report's own second is not a follow-up, got: $got"
+
+  got=$(fm_capability_outcome_from_followups '' "$moves")
+  [ "$got" = 'unknown|' ] || fail "an unknown ready time must stay unknown, got: $got"
+  got=$(fm_capability_outcome_from_followups 1700000100 '1700000000')
+  [ "$got" = 'unknown|' ] || fail "a branch that never moved past its creation must stay unknown, got: $got"
+  got=$(fm_capability_outcome_from_followups 1700000100 '')
+  [ "$got" = 'unknown|' ] || fail "an unreadable branch history must stay unknown, got: $got"
+  pass "follow-up derivation yields merged, revised, or unknown"
+}
+
+test_lane_outcomes_are_recorded() {
+  rm -f "$FM_CAPABILITY_LOG"
+  fm_capability_record_teardown ship '' claude opus high implementation merged 0 0
+  fm_capability_record_teardown ship '' claude opus high implementation revised 2 1
+  fm_capability_record_teardown scout '' claude opus high planning reported '' 0
+  local body
+  body=$(cat "$FM_CAPABILITY_LOG")
+  assert_contains "$body" '|implementation|claude|opus|high|merged|0|0' \
+    "merged without follow-up should log with its counts"
+  assert_contains "$body" '|implementation|claude|opus|high|revised|2|1' \
+    "revised should log its follow-up and steer counts"
+  assert_contains "$body" '|planning|claude|opus|high|reported||0' \
+    "a reported scout should log its zero steer count"
+  pass "lane outcomes merged, revised, and reported are recorded"
+}
+
 test_reader_handles_old_and_new_lines() {
   rm -f "$FM_CAPABILITY_LOG"
   FM_CAPABILITY_NOW=1700000000
@@ -262,6 +300,8 @@ test_log_append_and_recent_window
 test_summarize_green_density
 test_record_teardown_outcomes
 test_outcome_derivation_from_runs_rows
+test_outcome_derivation_from_follow_ups
+test_lane_outcomes_are_recorded
 test_reader_handles_old_and_new_lines
 test_capability_recent_select_and_scout_tax_advisory
 test_first_profile_unchanged_without_capability_select

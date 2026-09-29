@@ -2895,9 +2895,12 @@ Each append-only line is:
 `green` means validation passed on the first try: exactly one pipeline attempt is recorded for the task branch.
 `fixed` means validation passed only after earlier recorded attempts, and its `fix-rounds` field counts those earlier attempts.
 `failed` means validation ran but its newest recorded attempt never completed.
-`unknown` means no validation result was derivable (scout reports, direct-PR or local-only delivery, or unavailable run records).
+`merged` means direct-PR or local-only work landed with no follow-up: its branch never moved after the worker's first `done:` report.
+`revised` means such work landed only after follow-up commits, and its `fix-rounds` field counts the branch moves after that first report.
+`reported` means a scout left a non-empty report.
+`unknown` means no result was derivable (no pipeline record, an untimed first `done:` report, a branch that never moved, or no scout report).
 `discarded` records an approved `--force` teardown.
-The trailing counts are written only when derivable: `steers` counts confirmed supervisor sends recorded per task by `bin/fm-send.sh`, and an empty `fix-rounds` slot is retained when only `steers` is known.
+The trailing counts are written only when derivable: `steers` counts confirmed supervisor sends recorded per task by `bin/fm-send.sh` into a counter `bin/fm-spawn.sh` starts empty, so an unsteered task records 0, and an empty `fix-rounds` slot is retained when only `steers` is known.
 Older six-field lines without trailing counts stay valid, and readers treat missing counts as absent rather than guessing them.
 `task-type` comes from meta `task_type=` when `fm-spawn.sh --task-type <slug>` recorded it, otherwise from `kind` (`ship` or `scout`).
 Fields never contain `|` or newlines.

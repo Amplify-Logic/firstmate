@@ -5680,6 +5680,11 @@ if [ "$RELAUNCH" -eq 0 ]; then
     exit 1
   fi
   SPAWN_META_TMP=
+  # Start the steer counter bin/fm-send.sh appends to, so a task nobody had to
+  # steer records 0 in the capability outcome log instead of no count at all.
+  # Appending never resets a count, and a counter that cannot be created only
+  # costs that one record its count.
+  [ "$KIND" = secondmate ] || : >>"$STATE/$ID.steers" 2>/dev/null || true
 fi
 
 # Fuse the backlog In-flight transition into the publication that just created

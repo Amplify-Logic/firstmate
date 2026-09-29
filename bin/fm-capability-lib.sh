@@ -10,8 +10,10 @@
 #     Fields never contain '|' or newlines; invalid fields refuse the append.
 #     The trailing counts are written only when derivable, each as one
 #     non-negative integer: fix-rounds is the number of earlier recorded
-#     pipeline attempts for the task's branch before its final attempt, and
-#     steers is the confirmed supervisor send count from state/<id>.steers.
+#     pipeline attempts for the task's branch before its final attempt (for
+#     merged and revised, the branch moves after the first ready report), and
+#     steers is the confirmed supervisor send count from state/<id>.steers,
+#     which fm-spawn creates empty so a task nobody steered records 0.
 #     An absent fix-rounds count retains an empty field when steers is present;
 #     otherwise absent trailing counts are omitted, never guessed. Older
 #     six-field lines without them stay valid forever.
@@ -21,9 +23,15 @@
 #       fixed     validation passed only after earlier recorded attempts
 #       failed    validation ran but its newest recorded attempt never
 #                 completed
-#       unknown   no validation result was derivable at teardown (scout
-#                 reports, direct-PR/local-only delivery, or unavailable run
-#                 records)
+#       merged    direct-PR or local-only work landed with no follow-up: its
+#                 branch never moved after the worker's first done: report
+#                 (fix-rounds 0)
+#       revised   direct-PR or local-only work landed only after follow-up
+#                 commits; fix-rounds counts the branch moves after that
+#                 first done: report
+#       reported  a scout left a non-empty data/<id>/report.md
+#       unknown   no result was derivable at teardown (no pipeline record, no
+#                 ready report or branch history, or no scout report)
 #       discarded work was discarded by an approved --force teardown
 #   - Secondmate teardowns are not recorded (not a worker capability sample).
 #   - task-type is a free-form slug from meta task_type= when present, else kind
@@ -95,7 +103,7 @@ fm_capability_log_append() {
   local fix_rounds=${6:-} steers=${7:-}
   local log_path ts dir line
   case "$outcome" in
-    green|fixed|failed|unknown|discarded) ;;
+    green|fixed|failed|merged|revised|reported|unknown|discarded) ;;
     *) return 1 ;;
   esac
   fm_capability_field_ok "$task_type" || return 1
@@ -150,6 +158,33 @@ fm_capability_outcome_from_runs() {
   '
 }
 
+# Derive a direct-PR or local-only ship's outcome from when its worker first
+# reported it ready and when its branch moved. Teardown records only work whose
+# landing it proved, so a branch that stayed put after that report merged as
+# first delivered. Args: ready-epoch (the first done: event's time, empty when
+# unknown) and the branch's reflog times, one unix epoch per line in any order.
+# Prints "<outcome>|<fix-rounds>":
+#   - no ready time, or no branch move after its creation -> unknown|
+#   - no branch move after the ready time                 -> merged|0
+#   - n branch moves after the ready time                 -> revised|<n>
+fm_capability_outcome_from_followups() {
+  local ready=$1 moves=$2
+  case "$ready" in
+    ''|*[!0-9]*) printf 'unknown|\n'; return 0 ;;
+  esac
+  printf '%s\n' "$moves" | awk -v ready="$ready" '
+    $1 ~ /^[0-9]+$/ {
+      total++
+      if (($1 + 0) > (ready + 0)) after++
+    }
+    END {
+      if (total < 2) { printf "unknown|\n"; exit }
+      if (after == 0) { printf "merged|0\n" }
+      else { printf "revised|%d\n", after }
+    }
+  '
+}
+
 # Record teardown evidence from already-loaded meta fields plus the derived
 # validation outcome. Args: kind force_flag harness model effort task_type
 #   outcome fix_rounds steers
@@ -170,7 +205,7 @@ fm_capability_record_teardown() {
     steers=
   fi
   case "$outcome" in
-    green|fixed|failed|unknown|discarded) ;;
+    green|fixed|failed|merged|revised|reported|unknown|discarded) ;;
     *) return 0 ;;
   esac
   case "$fix_rounds" in ''|*[!0-9]*) fix_rounds= ;; esac

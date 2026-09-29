@@ -1246,6 +1246,30 @@ if command -v fm_capability_outcome_from_runs >/dev/null 2>&1 \
       *) CAP_OUTCOME=$CAP_EVIDENCE ;;
     esac
   fi
+  # Lanes with no pipeline record still have evidence: a scout's report, and a
+  # direct-PR or local-only branch that did or did not move after the worker's
+  # first done: report. The first done: line alone is the ready point, so an
+  # untimed one leaves the outcome unknown rather than borrowing a later time.
+  if [ "$CAP_OUTCOME" = unknown ]; then
+    if [ "$KIND" = scout ]; then
+      [ ! -s "$DATA/$ID/report.md" ] || CAP_OUTCOME=reported
+    elif [ -n "$CAP_BRANCH" ] && { [ "$MODE" = direct-PR ] || [ "$MODE" = local-only ]; }; then
+      CAP_READY=
+      if [ -f "$STATE/$ID.status" ]; then
+        while IFS= read -r cap_line || [ -n "$cap_line" ]; do
+          [ "$(status_line_verb "$cap_line")" = "done" ] || continue
+          CAP_READY=$(status_line_at_epoch "$cap_line" || true)
+          break
+        done < "$STATE/$ID.status"
+      fi
+      CAP_MOVES=$(git -C "$WT" reflog show --date=unix --format=%gd "refs/heads/$CAP_BRANCH" 2>/dev/null \
+        | sed -n 's/.*@{\([0-9][0-9]*\)}$/\1/p')
+      CAP_EVIDENCE=$(fm_capability_outcome_from_followups "$CAP_READY" "$CAP_MOVES")
+      CAP_OUTCOME=${CAP_EVIDENCE%%|*}
+      CAP_FIX_ROUNDS=${CAP_EVIDENCE#*|}
+      case "$CAP_FIX_ROUNDS" in ''|*[!0-9]*) CAP_FIX_ROUNDS= ;; esac
+    fi
+  fi
 fi
 
 # A record accepted as a legacy incarnation (no spawn_gen, and either
