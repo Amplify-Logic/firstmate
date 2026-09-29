@@ -104,9 +104,10 @@
 #   0.6 floor) labels each failing script code-bug, test-out-of-date,
 #   environment, or unclear below the floor. It sends each failure's output
 #   tail and this repository's tracked branch diff against --base's merge base,
-#   trimmed to fit: the failures share one output budget, so each tail shrinks
-#   as the count grows, and a failure past what the budget can describe gets
-#   the not-labelled marker instead. It never changes the exit status. It is
+#   trimmed so the whole request fits: the failures and their questions share
+#   one budget, so each tail shrinks as the count grows, and a failure past
+#   what the budget can describe gets the not-labelled marker instead. It
+#   never changes the exit status. It is
 #   silent - no marker, no log line - with no TYPESAFE_API_KEY in the
 #   environment or in $FM_HOME/.env (FM_HOME defaults to this repository's
 #   root), without python3, on timeout (a 30s hard bound), or on an answer it

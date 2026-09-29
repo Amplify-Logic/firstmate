@@ -17,7 +17,8 @@
 #                 <cause> is code-bug, test-out-of-date, environment or unclear.
 #                 A failure the size limit left out of the request instead
 #                 prints <script> TAB not-labelled TAB over-size-limit.
-#                 --dry-run prints the request instead and makes no network call.
+#                 --dry-run prints the exact request body instead and makes no
+#                 network call.
 # stderr          diagnostics only, never the API key and never any content sent.
 #
 # Exit 0 when labels were reached, 2 on any failure - no key, timeout, HTTP
@@ -33,10 +34,11 @@
 # output, and the tracked diff of the repository against the merge base with
 # <base> (committed and uncommitted), with the captain-private paths excluded
 # even if a fork tracks them. The runner only ever passes Firstmate's own
-# repository root, so this is Firstmate's own public code. The whole state is
-# trimmed to fit the model's 32k-token window: every failure shares one output
-# budget, so the tails shrink as the failure count grows, and only a run with
-# more failures than that budget can describe leaves its last ones unlabelled.
+# repository root, so this is Firstmate's own public code. The whole request,
+# state and every question, is trimmed to fit the model's 32k-token window:
+# every failure's question and output tail share one budget, so the tails
+# shrink as the failure count grows, and only a run with more failures than
+# that budget can describe leaves its last ones unlabelled.
 #
 # The API key is read from the environment, else from $FM_HOME/.env (the runner
 # passes FM_HOME, defaulting to its own root), exactly as the status second look
@@ -63,8 +65,10 @@ import urllib.request
 
 ENDPOINT = os.environ.get("FM_TEST_FAILURE_CAUSE_ENDPOINT",
                           "https://api.typesafe.ai/v1/systemone")
-# Pinned, never an alias: the floor below was measured against this exact
-# version and the vendor's own docs warn that an alias moves underneath you.
+# Pinned, never an alias: the 0.6 floor below was checked against this exact
+# version on six probe cases and one real failing run
+# (docs/verification/test-failure-cause.md), and the vendor's own docs warn that
+# an alias moves underneath you.
 MODEL = "jev-1.13.0"
 
 # A label is shown only at this confidence; below it the runner says "unclear".
@@ -77,16 +81,17 @@ CAUSES = {
     "environment": "environment",
 }
 
-# Size bounds. The state plus the longest question must fit in 32k tokens; at a
-# conservative three characters a token for code and test output, 80,000
-# characters of serialized state leaves room for the questions. Every failure
-# shares TAIL_CHAR_BUDGET equally, up to MAX_TAIL_CHARS each; a run whose share
+# Size bounds. The whole request - the state and every question - must fit in
+# 32k tokens; at a conservative three characters a token for code and test
+# output, that is 80,000 characters of serialized request. Every failure's
+# question and output tail share FAILURE_CHAR_BUDGET, each tail getting an equal
+# share of what the questions leave, up to MAX_TAIL_CHARS; a run whose share
 # would fall under MIN_TAIL_CHARS labels the first ones in run order and
-# reports the rest as over the size limit.
+# reports the rest as over the size limit. The diff gets whatever remains.
 MAX_TAIL_CHARS = 4000
 MIN_TAIL_CHARS = 400
-TAIL_CHAR_BUDGET = 40000
-STATE_CHAR_BUDGET = 80000
+FAILURE_CHAR_BUDGET = 40000
+REQUEST_CHAR_BUDGET = 80000
 
 # Captain-private paths (AGENTS.md section 1), excluded from the diff even when
 # a fork tracks one of them.
@@ -168,9 +173,14 @@ def read_failures(path):
 
 
 def fit_failures(failures):
-    """(tag, script, tail) records sharing TAIL_CHAR_BUDGET, and the scripts left over."""
-    count = min(len(failures), TAIL_CHAR_BUDGET // MIN_TAIL_CHARS)
-    share = min(MAX_TAIL_CHARS, TAIL_CHAR_BUDGET // count) if count else 0
+    """(tag, script, tail) records sharing FAILURE_CHAR_BUDGET, and the scripts left over."""
+    count = min(len(failures), FAILURE_CHAR_BUDGET // MIN_TAIL_CHARS)
+    while count:
+        share = (FAILURE_CHAR_BUDGET - len(json.dumps(questions_for(count)))) // count
+        if share >= MIN_TAIL_CHARS:
+            break
+        count -= 1
+    share = min(MAX_TAIL_CHARS, share) if count else 0
     records = [("f%d" % (i + 1), script, tail[-share:])
                for i, (script, tail) in enumerate(failures[:count])]
     return records, [script for script, _tail in failures[count:]]
@@ -249,20 +259,24 @@ def question_for(tag):
     }
 
 
+def questions_for(count):
+    return {"f%d__cause" % i: question_for("f%d" % i) for i in range(1, count + 1)}
+
+
 def build_request(records, diff):
-    """One request for every failure, with the diff trimmed to fit the window."""
-    state = build_state(records, "")
-    room = STATE_CHAR_BUDGET - len(json.dumps(state))
+    """One request for every failure, with the diff trimmed so the whole request fits the window."""
+    questions = questions_for(len(records))
+
+    def request(fitted):
+        return {"model": MODEL, "state": build_state(records, fitted), "questions": questions}
+
+    room = REQUEST_CHAR_BUDGET - len(json.dumps(request("")))
     fitted = fit_diff(diff, room)
-    # JSON escaping grows code; shrink until the serialized state really fits.
-    while fitted and len(json.dumps(build_state(records, fitted))) > STATE_CHAR_BUDGET:
+    # JSON escaping grows code; shrink until the serialized request really fits.
+    while fitted and len(json.dumps(request(fitted))) > REQUEST_CHAR_BUDGET:
         room = int(room * 0.9)
         fitted = fit_diff(diff, room)
-    return {
-        "model": MODEL,
-        "state": build_state(records, fitted),
-        "questions": {"%s__cause" % tag: question_for(tag) for tag, _s, _t in records},
-    }
+    return request(fitted)
 
 
 def redact(value, key):
@@ -340,7 +354,7 @@ def main():
         return 2
     payload["state"] = redact(payload["state"], key)
     if dry_run:
-        json.dump(payload, sys.stdout, indent=2, sort_keys=True)
+        json.dump(payload, sys.stdout)
         sys.stdout.write("\n")
         return 0
 

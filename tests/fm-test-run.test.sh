@@ -1049,12 +1049,13 @@ PY
   pass "failure-cause request fits the window and excludes captain-private paths"
 }
 
-# The failures share one output budget: a run past the old cap of ten labels
-# every failure with a shorter tail each, and only a run past what the budget
-# can describe leaves its last failure unlabelled - with a visible marker, not
-# a silent gap.
+# The failures and their questions share one size budget with the diff: a run
+# past the old cap of ten labels every failure with a shorter tail each, the
+# whole request - state and every question - fits the window, and only a run
+# past what the budget can describe leaves failures unlabelled, each with a
+# visible marker rather than a silent gap. --dry-run prints the exact body.
 test_failure_cause_shares_the_size_budget() {
-  local tmp i name scripts=() out
+  local tmp repo base i name scripts=() labelled over
   tmp=$(mktemp -d "${TMPDIR:-/tmp}/fm-test-run-cause-many.XXXXXX")
   mkdir -p "$tmp/home"
   cat >"$tmp/fixture" <<'SH'
@@ -1070,18 +1071,28 @@ SH
     cp "$tmp/fixture" "$name"
     scripts+=("$name")
   done
-  python3 -c 'import json; print(json.dumps({"answers": {"f%d__cause" % i: {"choice": "code_bug", "confidence": 0.9} for i in range(1, 101)}}))' >"$tmp/labels.json"
+  python3 -c 'import json; print(json.dumps({"answers": {"f%d__cause" % i: {"choice": "code_bug", "confidence": 0.9} for i in range(1, 102)}}))' >"$tmp/labels.json"
   set +e
   env -u TYPESAFE_API_KEY FM_HOME="$tmp/home" FM_TEST_FAILURE_CAUSE_RESPONSE="$tmp/labels.json" \
     "$RUNNER" --jobs 1 "${scripts[@]}" >"$tmp/out" 2>"$tmp/err"
   expect_code 1 $? "labels must not change the failing run's exit status"
   set -e
-  [ "$(grep -c '^FM_TEST_FAILURE_CAUSE script=.* cause=code-bug confidence=0.90$' "$tmp/out")" -eq 100 ] \
-    || fail "every failure the budget can describe is labelled: $(grep FM_TEST_FAILURE_CAUSE "$tmp/out")"
-  out=$(grep '^FM_TEST_FAILURE_CAUSE .*cause=not-labelled' "$tmp/out")
-  [ "$(printf '%s\n' "$out" | wc -l | tr -d ' ')" -eq 1 ] || fail "one failure is over the size limit: $out"
-  assert_contains "$out" "cause=not-labelled reason=over-size-limit" "the over-limit failure is reported, not dropped"
+  labelled=$(grep -c '^FM_TEST_FAILURE_CAUSE script=.* cause=code-bug confidence=0.90$' "$tmp/out" || true)
+  over=$(grep -c '^FM_TEST_FAILURE_CAUSE script=.* cause=not-labelled reason=over-size-limit$' "$tmp/out" || true)
+  [ "$labelled" -ge 14 ] || fail "more failures than the old cap of ten are labelled: $labelled"
+  [ "$over" -ge 1 ] || fail "a run past the budget reports its over-limit failures: $(grep FM_TEST_FAILURE_CAUSE "$tmp/out")"
+  [ $((labelled + over)) -eq 101 ] || fail "every failure gets a label or an over-limit marker: $labelled + $over"
+  for name in "${scripts[@]}"; do
+    [ "$(grep -c "^FM_TEST_FAILURE_CAUSE script=$name cause=" "$tmp/out")" -eq 1 ] || fail "one marker per failure: $name"
+  done
 
+  repo="$tmp/repo"
+  fm_git_init_commit "$repo"
+  base=$(git -C "$repo" rev-parse HEAD)
+  mkdir -p "$repo/bin"
+  python3 -c 'import sys; open(sys.argv[1], "w").write("".join("line %d of a very large generated change\n" % i for i in range(6000)))' "$repo/bin/big.sh"
+  git -C "$repo" add bin/big.sh
+  git -C "$repo" -c user.name=t -c user.email=t@example.invalid commit -qm change
   for i in 14 101; do
     : >"$tmp/failures.tsv"
     for name in "${scripts[@]:0:$i}"; do
@@ -1089,23 +1100,32 @@ SH
       printf '%s\t%s\n' "$name" "$name.out" >>"$tmp/failures.tsv"
     done
     env -u TYPESAFE_API_KEY FM_HOME="$tmp/home" python3 "$ROOT/bin/fm-test-failure-cause.py" \
-      --dry-run --root "$ROOT" --base HEAD "$tmp/failures.tsv" >"$tmp/request.json" \
+      --dry-run --root "$repo" --base "$base" "$tmp/failures.tsv" >"$tmp/request.json" \
       || fail "dry run must print the request"
-    python3 - "$tmp/request.json" "$i" <<'PY' || fail "$i failures: the request does not share the budget"
+    python3 - "$tmp/request.json" "$i" <<'PY' || fail "$i failures: the request does not fit the shared budget"
 import json, sys
-request, count = json.load(open(sys.argv[1])), int(sys.argv[2])
+raw = open(sys.argv[1]).read().rstrip("\n")
+count = int(sys.argv[2])
+request = json.loads(raw)
+assert json.dumps(request) == raw, "the dry run prints the exact body that is sent"
+assert len(raw) <= 80000, len(raw)
 failures = request["state"]["failures"]
-assert len(json.dumps(request["state"])) <= 80000, len(json.dumps(request["state"]))
-assert len(failures) == min(count, 100), len(failures)
-assert sorted(request["questions"]) == sorted("%s__cause" % tag for tag in failures)
-share = 40000 // len(failures)
+tags = ["f%d" % n for n in range(1, len(failures) + 1)]
+assert list(failures) == tags, list(failures)
+assert list(request["questions"]) == ["%s__cause" % tag for tag in tags]
+if count == 14:
+    assert len(failures) == 14, len(failures)
+else:
+    assert 14 <= len(failures) < count, len(failures)
+assert "bin/big.sh" in request["state"]["diff"] and "[trimmed]" in request["state"]["diff"]
+tails = {len(failure["output_tail"]) for failure in failures.values()}
+assert len(tails) == 1 and min(tails) >= 400, tails
 for tag, failure in failures.items():
-    assert len(failure["output_tail"]) == share, (tag, len(failure["output_tail"]), share)
     assert failure["output_tail"].rstrip().endswith("not ok - failure f%03d" % int(tag[1:])), tag
 PY
   done
   rm -rf "$tmp"
-  pass "failure-cause labels share the size budget and report any failure over it"
+  pass "failure-cause request fits the window with every question and reports any failure over it"
 }
 
 test_gate_skip_accounting() {
