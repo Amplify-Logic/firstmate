@@ -94,6 +94,20 @@
 #   FM_TEST_SUMMARY_FAMILY family=<name> count=<n> duration_ms=<n> failed=<n>
 #   FM_TEST_SLOWEST rank=<k> script=<path> duration_ms=<n>
 #   FM_TEST_BUDGET max_wall_ms=<n> duration_ms=<n>   (only with --max-wall-ms)
+#   FM_TEST_FAILURE_CAUSE script=<path> cause=<cause> confidence=<0..1>
+#                   (only after failures, and only when a TypeSafe key is found)
+#
+# Failure cause (advisory):
+#   After a run with failures, one batched request to TypeSafe's Jev model
+#   (bin/fm-test-failure-cause.py owns the request, the pinned model and the
+#   0.6 floor) labels each failing script code-bug, test-out-of-date,
+#   environment, or unclear below the floor. It sends each failure's output
+#   tail and this repository's tracked branch diff against --base's merge base,
+#   trimmed to fit. It never changes the exit status. It is silent - no marker,
+#   no log line - with no TYPESAFE_API_KEY in the environment or in
+#   $FM_HOME/.env (FM_HOME defaults to this repository's root), without
+#   python3, on timeout (a 30s hard bound), or on an answer it cannot read.
+#   CI holds no key, so it runs only locally.
 #
 # Placement refusal:
 #   A task worker is assigned an isolated worktree, and that placement is
@@ -2407,6 +2421,7 @@ fi
 
 RUN_TMP=$(mktemp -d "${TMPDIR:-/tmp}/fm-test-run.XXXXXX")
 RECORDS="$RUN_TMP/records.tsv"
+FAILURES_TSV="$RUN_TMP/failures.tsv"
 FAMILIES_TSV="$RUN_TMP/families.tsv"
 : >"$RECORDS"
 declare -a WORKER_PIDS=()
@@ -2489,6 +2504,7 @@ record_script_result() {
     FAILED=$((FAILED + 1))
     fail_delta=1
     AGG_RC=1
+    printf '%s\t%s\n' "$script" "$out" >>"$FAILURES_TSV"
   fi
 
   printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
@@ -2731,6 +2747,28 @@ if [ -s "$RECORDS" ]; then
     rank=$((rank + 1))
   done
 fi
+
+# Advisory labels only (header "Failure cause"): every way this can fail
+# returns 0 and prints nothing, and nothing here touches AGG_RC.
+FAILURE_CAUSE_BOUND=30
+print_failure_causes() {
+  local engine="$ROOT/bin/fm-test-failure-cause.py" labels script cause confidence
+  [ -s "$FAILURES_TSV" ] || return 0
+  [ -r "$engine" ] && [ -r "$ROOT/bin/fm-timeout-lib.sh" ] || return 0
+  command -v python3 >/dev/null 2>&1 || return 0
+  if ! command -v fm_run_timed >/dev/null 2>&1; then
+    # shellcheck source=bin/fm-timeout-lib.sh
+    . "$ROOT/bin/fm-timeout-lib.sh" || return 0
+  fi
+  labels=$(FM_HOME="${FM_HOME:-$ROOT}" fm_run_timed "$FAILURE_CAUSE_BOUND" \
+    python3 "$engine" --root "$ROOT" --base "$BASE_REF" "$FAILURES_TSV" 2>/dev/null) || return 0
+  while IFS=$'\t' read -r script cause confidence; do
+    [ -n "$script" ] && [ -n "$confidence" ] || continue
+    printf 'FM_TEST_FAILURE_CAUSE script=%s cause=%s confidence=%s\n' \
+      "$script" "$cause" "$confidence"
+  done <<<"$labels"
+}
+print_failure_causes || true
 
 if [ -n "$JSON_PATH" ]; then
   mkdir -p "$(dirname "$JSON_PATH")"
