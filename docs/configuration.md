@@ -2899,7 +2899,7 @@ Each append-only line is:
 Teardown keeps `merged` or `revised` only when it proves the landing before removing the worktree: a merged PR for direct-PR, or for local-only a head on the local default branch or content already in it; unproven work records `unknown`.
 `revised` means such work landed only after follow-up commits: the patch-ids of its branch-only commits at the ready-time head and at the final head differ, and its `fix-rounds` field counts the branch moves after that first report; when they cannot be compared the outcome is `unknown`.
 `reported` means a scout left a non-empty report.
-`unknown` means no result was derivable (no pipeline record, an untimed first `done:` report, a branch that never moved, an unproven landing, or no scout report).
+`unknown` means no result was derivable (no pipeline record, an untimed first `done:` report, a branch that never moved, an unproven landing, or no scout report); a ship whose worktree slot teardown finds reassigned to another task also records `unknown` with no `fix-rounds`, since that slot's branch history is no longer the task's.
 `discarded` records an approved `--force` teardown.
 Density counts `green` and `merged` as first-try successes, counts `revised` and every other outcome toward the total only, and leaves `reported` out of both.
 The trailing counts are written only when derivable: `steers` counts confirmed supervisor sends recorded per task by `bin/fm-send.sh` into a counter `bin/fm-spawn.sh` starts empty, so an unsteered task records 0, and an empty `fix-rounds` slot is retained when only `steers` is known.

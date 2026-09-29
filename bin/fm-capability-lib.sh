@@ -31,8 +31,8 @@
 #                 counts the branch moves after that first done: report
 #       reported  a scout left a non-empty data/<id>/report.md
 #       unknown   no result was derivable at teardown (no pipeline record, no
-#                 ready report or branch history, no proven landing, or no
-#                 scout report)
+#                 ready report or branch history, no proven landing, no
+#                 scout report, or a worktree slot reassigned to another task)
 #       discarded work was discarded by an approved --force teardown
 #   - Secondmate teardowns are not recorded (not a worker capability sample).
 #   - task-type is a free-form slug from meta task_type= when present, else kind
