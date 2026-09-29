@@ -178,22 +178,40 @@ test_redaction() {
   printf 'TYPESAFE_API_KEY=ts-fixture-key-0001\nDEPLOY_HOOK=https://hooks.example/abc123secretpath\n' > "$home/.env"
   reset_server "$FIX/response-git-status.json"
   cmd=$(printf '%s\n' \
-    'STRIPE=sk_live_plainvalue curl -H "Authorization: Bearer abcdefgh12345678" https://ops:hunter22@db.example/x' \
+    'STRIPE_KEY=sk_live_plainvalue BUILD_ID=Qx7Lm2Pz9Wk4Rt8V curl -H "Authorization: Bearer abcdefgh12345678" https://ops:hunter22@db.example/x' \
     'gh api -H "token ghp_abcdefghijklmnopqrstuvwxyz0123" --password pa55word99 user' \
     'echo AbCdEfGh1234567890AbCdEfGh1234567890 inline-env-value-777 https://hooks.example/abc123secretpath' \
     "cat > .env <<'EOF'" 'API_KEY=realvalue123' 'EOF')
   MY_SERVICE_TOKEN=inline-env-value-777 run_hook "$home" "$cmd" >/dev/null
   body=$(cat "$SRV/requests.jsonl")
-  for secret in sk_live_plainvalue abcdefgh12345678 hunter22 ghp_abcdefghijklmnopqrstuvwxyz0123 pa55word99 \
+  for secret in sk_live_plainvalue Qx7Lm2Pz9Wk4Rt8V abcdefgh12345678 hunter22 ghp_abcdefghijklmnopqrstuvwxyz0123 pa55word99 \
     AbCdEfGh1234567890AbCdEfGh1234567890 inline-env-value-777 abc123secretpath realvalue123 ts-fixture-key-0001; do
     assert_not_contains "$body" "$secret" "the request body must not carry $secret"
   done
   assert_contains "$body" "cat > .env" "the heredoc command itself must still be judged"
   assert_contains "$body" "API_KEY=<redacted>" "a heredoc assignment must keep its name and lose its value"
+  assert_contains "$body" "BUILD_ID=<redacted>" "a random-looking value must be redacted whatever its name"
   assert_equals "Bearer ts-fixture-key-0001" "$(cat "$SRV/auth")" "the key must travel only in the header"
   assert_not_contains "$(cat "$home/state/command-guard.log")" "ts-fixture-key-0001" "the log must never carry the key"
   assert_not_contains "$(cat "$home/state/command-guard.log")" "realvalue123" "the log must carry only the redacted command"
-  pass "assignments, .env values, secret-looking environment values and key shapes never leave the machine"
+  pass "secret-named or random assignments, .env values, secret-looking environment values and key shapes never leave the machine"
+}
+
+test_plain_assignments_stay_visible() {
+  local home body wipe
+  home=$(new_home plain 'enabled = true\n')
+  # shellcheck disable=SC2016 # the command is sent literally, $T and all
+  wipe='T=../sibling-copy; rm -rf "$T"'
+  reset_server "$FIX/response-git-status.json"
+  run_hook "$home" "$wipe" >/dev/null
+  body=$(jq -r '.state.command' "$SRV/requests.jsonl")
+  assert_equals "$wipe" "$body" "a plain assignment must keep the delete target visible"
+  reset_server "$FIX/response-git-status.json"
+  run_hook "$home" 'FM_HOME=/work/home dd if=/dev/zero of=/dev/disk2 bs=1m && terraform destroy -var env=prod' >/dev/null
+  body=$(jq -r '.state.command' "$SRV/requests.jsonl")
+  assert_equals 'FM_HOME=/work/home dd if=/dev/zero of=/dev/disk2 bs=1m && terraform destroy -var env=prod' "$body" \
+    "plain paths and ordinary values must reach the judge unchanged"
+  pass "plain assignments and arguments such as a delete target, a disk or an environment name stay visible"
 }
 
 # --- a long command is judged whole, in parts ---------------------------------
@@ -395,6 +413,7 @@ test_recorded_block_and_allow
 test_thresholds
 test_non_bash_tool_ignored
 test_redaction
+test_plain_assignments_stay_visible
 test_long_command_judged_in_parts
 test_parts_failure_falls_back_to_head_and_tail
 test_over_cap_command_allowed_and_logged

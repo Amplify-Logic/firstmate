@@ -36,11 +36,13 @@
 # answer ends the episode. The guard never stops work because Jev is down.
 #
 # NEVER SENDS SECRETS. Only the command text leaves the machine, never the
-# working directory, the task or the environment. Before it is sent, shell
-# assignments lose their values, every value of this home's .env and every
-# secret-looking environment variable is removed wherever it appears, and
-# anything shaped like a known key, token, password argument, credentialed URL
-# or private-key block is replaced.
+# working directory, the task or the environment. Before it is sent, every
+# value of this home's .env and every secret-looking environment variable is
+# removed wherever it appears, anything shaped like a known key, token,
+# password argument, credentialed URL or private-key block is replaced, and a
+# NAME=value assignment loses its value when the name looks secret or the value
+# looks random. Plain values such as paths stay visible, so the judge can see
+# what `T=../sibling-copy; rm -rf "$T"` removes.
 #
 # ONE SIGNAL AMONG SEVERAL. The video this borrows from saw an agent route
 # around a write-only gate by writing the same file with a shell heredoc, so
@@ -228,8 +230,9 @@ NAMED_VALUE = re.compile(
     r"--(?:api[_-]?key|token|password|passwd|secret|auth)[ =][\"']?)"
     r"([^\s\"';&|]+)")
 URL_CREDENTIAL = re.compile(r"(://)[^/\s:@]+:[^/\s@]+@")
-# NAME=value where a shell would read it as an assignment: at the start, after
-# whitespace or an operator, or on its own line inside a heredoc body.
+# NAME=value at the start, after whitespace or an operator, or on its own line
+# inside a heredoc body. Only a secret-looking name or a random-looking value
+# loses its value.
 ASSIGNMENT = re.compile(r"(^|[\s;&|(`])([A-Za-z_][A-Za-z0-9_]*)=(\"[^\"]*\"|'[^']*'|[^\s;&|)`]*)")
 # A long random-looking run: mixed case AND digits. Git SHAs and task ids are
 # single-case, so they survive; most generated keys do not.
@@ -239,6 +242,15 @@ LONG_RUN = re.compile(r"[A-Za-z0-9_+=-]{32,}")
 def _random_looking(token):
     return (re.search(r"[a-z]", token) and re.search(r"[A-Z]", token)
             and re.search(r"[0-9]", token))
+
+
+def _assignment(match):
+    lead, name, value = match.groups()
+    bare = value[1:-1] if value[:1] in "'\"" else value
+    if ((SECRET_NAME.search(name) and name not in NOT_SECRET_NAMES)
+            or (re.fullmatch(r"[A-Za-z0-9_+=-]{12,}", bare) and _random_looking(bare))):
+        value = REDACTED
+    return "%s%s=%s" % (lead, name, value)
 
 
 def literal_secrets(home):
@@ -259,7 +271,7 @@ def redact(command, secrets):
         text = pattern.sub(REDACTED, text)
     text = NAMED_VALUE.sub(lambda m: m.group(1) + REDACTED, text)
     text = URL_CREDENTIAL.sub(r"\1%s@" % REDACTED, text)
-    text = ASSIGNMENT.sub(lambda m: "%s%s=%s" % (m.group(1), m.group(2), REDACTED), text)
+    text = ASSIGNMENT.sub(_assignment, text)
     text = LONG_RUN.sub(lambda m: REDACTED if _random_looking(m.group(0)) else m.group(0), text)
     return text
 

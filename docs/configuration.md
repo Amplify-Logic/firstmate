@@ -658,7 +658,8 @@ A block reaches the worker as a denied tool call whose reason names the conditio
 To let one blocked command through, switch the gate off, have the worker run it, then switch the gate back on.
 
 **What leaves the machine.** Only the command text, never the working directory, the task or the environment.
-Before it is sent, shell assignments lose their values, every value in this home's `.env` and every secret-looking environment variable is removed wherever it appears, and anything shaped like a known key, token, password argument, credentialed URL or private-key block is replaced.
+Before it is sent, every value in this home's `.env` and every secret-looking environment variable is removed wherever it appears, anything shaped like a known key, token, password argument, credentialed URL or private-key block is replaced, and a `NAME=value` assignment loses its value when the name looks secret (key, token, secret, password, auth and the like) or the value looks random.
+Plain values such as paths, `env=prod` or `of=/dev/disk2` stay visible, so the judge can see what `T=../sibling-copy; rm -rf "$T"` removes.
 
 **Steps aside on failure.** No key, a timeout, an HTTP error, an unreadable answer or a crash all allow the command, a multi-part command only once its head-and-tail request has failed too.
 A single-part request is bounded at 4 seconds (`FM_COMMAND_GUARD_TIMEOUT`) and a multi-part one at 6 seconds (`FM_COMMAND_GUARD_MULTIPART_TIMEOUT`), and the whole hook at the sum of both plus 3 seconds.
@@ -667,6 +668,8 @@ The first failure of an episode is written once to `state/command-guard.log` and
 
 **One signal among several.** The guard judges the whole command, heredoc bodies and redirections included, up to the 8-part cap, because the design it borrows from saw an agent route around a write-only file gate by writing the same file through a shell heredoc.
 Known limit: only the Bash tool is judged, so a script written with the Write or Edit tool and then run as `bash x.sh` is judged only by that short command, not by the script's contents.
+Known limit: the judge sees only the command text, so a target held in a secret-named variable, set by an earlier command, or read from a file or another program's output is judged by its name alone.
+The guard is a best-effort advisory layer and does not try to close every way of hiding intent from the judge.
 It is still an extra check on a worker that already runs in a disposable copy under supervision, not a sandbox.
 
 **Log and benchmark.** Every decision is one JSON line in `state/command-guard.log` with the redacted command, the answers, the outcome and the `path` that decided it (`whole`, `parts` or `head-and-tail`), rotated at 2 MB.
