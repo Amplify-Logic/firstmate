@@ -1,0 +1,30 @@
+{
+  "model": "jev-1.13.0",
+  "state": {
+    "task": {
+      "project": "voice",
+      "brief": "## Captain's intent\nThe voice assistant reads the weather answer twice when the user asks about tomorrow. Make it answer once.\n\n## Firstmate spec\nRoot cause is the duplicate `speak()` call in `answer.ts` after the forecast fetch resolves. Remove the second call, add a unit test that asserts one utterance per question, and note the fix in CHANGELOG. Then bump the iOS build number and upload the build to TestFlight.\n### Out of scope\nAny other assistant behaviour.\n"
+    }
+  },
+  "questions": {
+    "rule": {
+      "type": "choice",
+      "instructions": "Which ONE dispatch rule best fits `task` (read `task.brief` and `task.project`)? Each option is the rule's own matching condition; pick `default` when no rule's condition is met, including when a rule's own exemption text excludes this task.",
+      "criteria": {
+        "rule_1": "New feature work on the app.",
+        "rule_2": "The task generates images.",
+        "rule_3": "Genuinely very difficult design or planning work.",
+        "rule_4": "A simple bug fix with a stated root cause.",
+        "default": "No listed rule applies to this task."
+      }
+    },
+    "scope": {
+      "type": "noul",
+      "instructions": "Do the build instructions under `## Firstmate spec` in `task.brief` add a change the ask under `## Captain's intent` did not need?",
+      "criteria": {
+        "true": "The build instructions add a change nothing in the ask calls for, such as an unrequested redesign, an extra feature, a version or build bump, an upload or release, or a cleanup sweep.",
+        "false": "Every change in the build instructions serves the ask, or a report or plan the ask points to; tests, documentation, verification and out-of-scope limits count as serving it."
+      }
+    }
+  }
+}

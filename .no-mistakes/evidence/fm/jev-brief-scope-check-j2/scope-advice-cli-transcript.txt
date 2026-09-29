@@ -1,0 +1,310 @@
+# Scope advice: shipped bin/fm-dispatch-resolve.sh driven end to end (commit 760b8f16)
+# Setup: a throwaway FM_HOME holding a four-rule config/crew-dispatch.json, and a dummy key.
+# A curl wrapper sent the fixed https://api.typesafe.ai endpoint to a local HTTP stand-in
+# for Jev and ran the real /usr/bin/curl, so the 5 s timeout was real. The stand-in logged
+# each request and answered with the listed scope answer. A quota-axi shim served a schema-5
+# snapshot. The real Jev model was NOT called, because the operator's TYPESAFE_API_KEY was
+# out of reach. Lines marked [request] summarise the JSON body the resolver actually sent.
+==================================================================
+### S1 baseline: real brief, no scope answer
+$ fm-dispatch-resolve.sh briefs/real.md --project voice    # Jev stand-in answer mode: {}
+dispatch-resolve:
+  status: clear
+  model: jev-1.13.0   latency_ms: 0   tokens: 900/70
+  rule: rule_4 (A simple bug fix with a stated root cause.)   confidence: 0.9
+  probabilities: rule_1=0.01 rule_2=0.01 rule_3=0.01 rule_4=0.96 default=0.01
+  note: rule matched
+  note: 1 eligible candidate(s) unranked (kimi)
+  candidate: claude:sonnet  provider=claude  scope=all_models  remaining=79%  spendPriority=-0.4627  runway=projected_exhaustion  -> eligible
+  candidate: cursor:cursor-grok-4.6-medium  provider=cursor  scope=all_models  remaining=91%  spendPriority=0.7597  runway=through_reset  -> eligible
+  candidate: kimi:kimi-code/k3  provider=kimi  -> eligible, unranked: provider kimi unmeasured (unknown): disclosed uncertainty
+  profile: --harness 'cursor' --model 'cursor-grok-4.6-medium'
+[exit 0]
+[request] model=jev-1.13.0 questions=["rule","scope"] state_keys=["brief","project"]
+==================================================================
+### S2 real brief, scope 0.16 (below floor)
+$ fm-dispatch-resolve.sh briefs/real.md --project voice    # Jev stand-in answer mode: {"scope":{"type":"noul","noul":0.16}}
+dispatch-resolve:
+  status: clear
+  model: jev-1.13.0   latency_ms: 0   tokens: 900/70
+  rule: rule_4 (A simple bug fix with a stated root cause.)   confidence: 0.9
+  probabilities: rule_1=0.01 rule_2=0.01 rule_3=0.01 rule_4=0.96 default=0.01
+  note: rule matched
+  note: 1 eligible candidate(s) unranked (kimi)
+  candidate: claude:sonnet  provider=claude  scope=all_models  remaining=79%  spendPriority=-0.4627  runway=projected_exhaustion  -> eligible
+  candidate: cursor:cursor-grok-4.6-medium  provider=cursor  scope=all_models  remaining=91%  spendPriority=0.7597  runway=through_reset  -> eligible
+  candidate: kimi:kimi-code/k3  provider=kimi  -> eligible, unranked: provider kimi unmeasured (unknown): disclosed uncertainty
+  profile: --harness 'cursor' --model 'cursor-grok-4.6-medium'
+[exit 0]
+[request] model=jev-1.13.0 questions=["rule","scope"] state_keys=["brief","project"]
+==================================================================
+### S3 widened settings redesign, scope 0.85
+$ fm-dispatch-resolve.sh briefs/widened-settings.md --project voice    # Jev stand-in answer mode: {"scope":{"type":"noul","noul":0.85}}
+dispatch-resolve:
+  status: clear
+  model: jev-1.13.0   latency_ms: 0   tokens: 900/70
+  rule: rule_4 (A simple bug fix with a stated root cause.)   confidence: 0.9
+  probabilities: rule_1=0.01 rule_2=0.01 rule_3=0.01 rule_4=0.96 default=0.01
+  scope: probability 0.85 that the build instructions add a change the ask did not need (advice only)
+  note: rule matched
+  note: 1 eligible candidate(s) unranked (kimi)
+  candidate: claude:sonnet  provider=claude  scope=all_models  remaining=79%  spendPriority=-0.4627  runway=projected_exhaustion  -> eligible
+  candidate: cursor:cursor-grok-4.6-medium  provider=cursor  scope=all_models  remaining=91%  spendPriority=0.7597  runway=through_reset  -> eligible
+  candidate: kimi:kimi-code/k3  provider=kimi  -> eligible, unranked: provider kimi unmeasured (unknown): disclosed uncertainty
+  profile: --harness 'cursor' --model 'cursor-grok-4.6-medium'
+[exit 0]
+[request] model=jev-1.13.0 questions=["rule","scope"] state_keys=["brief","project"]
+==================================================================
+### S3 widened build bump + upload, scope 0.83
+$ fm-dispatch-resolve.sh briefs/widened-upload.md --project voice    # Jev stand-in answer mode: {"scope":{"type":"noul","noul":0.83}}
+dispatch-resolve:
+  status: clear
+  model: jev-1.13.0   latency_ms: 0   tokens: 900/70
+  rule: rule_4 (A simple bug fix with a stated root cause.)   confidence: 0.9
+  probabilities: rule_1=0.01 rule_2=0.01 rule_3=0.01 rule_4=0.96 default=0.01
+  scope: probability 0.83 that the build instructions add a change the ask did not need (advice only)
+  note: rule matched
+  note: 1 eligible candidate(s) unranked (kimi)
+  candidate: claude:sonnet  provider=claude  scope=all_models  remaining=79%  spendPriority=-0.4627  runway=projected_exhaustion  -> eligible
+  candidate: cursor:cursor-grok-4.6-medium  provider=cursor  scope=all_models  remaining=91%  spendPriority=0.7597  runway=through_reset  -> eligible
+  candidate: kimi:kimi-code/k3  provider=kimi  -> eligible, unranked: provider kimi unmeasured (unknown): disclosed uncertainty
+  profile: --harness 'cursor' --model 'cursor-grok-4.6-medium'
+[exit 0]
+[request] model=jev-1.13.0 questions=["rule","scope"] state_keys=["brief","project"]
+==================================================================
+### S4 boundary: scope exactly 0.5
+$ fm-dispatch-resolve.sh briefs/real.md --project voice    # Jev stand-in answer mode: {"scope":{"type":"noul","noul":0.5}}
+dispatch-resolve:
+  status: clear
+  model: jev-1.13.0   latency_ms: 0   tokens: 900/70
+  rule: rule_4 (A simple bug fix with a stated root cause.)   confidence: 0.9
+  probabilities: rule_1=0.01 rule_2=0.01 rule_3=0.01 rule_4=0.96 default=0.01
+  scope: probability 0.5 that the build instructions add a change the ask did not need (advice only)
+  note: rule matched
+  note: 1 eligible candidate(s) unranked (kimi)
+  candidate: claude:sonnet  provider=claude  scope=all_models  remaining=79%  spendPriority=-0.4627  runway=projected_exhaustion  -> eligible
+  candidate: cursor:cursor-grok-4.6-medium  provider=cursor  scope=all_models  remaining=91%  spendPriority=0.7597  runway=through_reset  -> eligible
+  candidate: kimi:kimi-code/k3  provider=kimi  -> eligible, unranked: provider kimi unmeasured (unknown): disclosed uncertainty
+  profile: --harness 'cursor' --model 'cursor-grok-4.6-medium'
+[exit 0]
+[request] model=jev-1.13.0 questions=["rule","scope"] state_keys=["brief","project"]
+==================================================================
+### S4 boundary: scope 0.49
+$ fm-dispatch-resolve.sh briefs/real.md --project voice    # Jev stand-in answer mode: {"scope":{"type":"noul","noul":0.49}}
+dispatch-resolve:
+  status: clear
+  model: jev-1.13.0   latency_ms: 0   tokens: 900/70
+  rule: rule_4 (A simple bug fix with a stated root cause.)   confidence: 0.9
+  probabilities: rule_1=0.01 rule_2=0.01 rule_3=0.01 rule_4=0.96 default=0.01
+  note: rule matched
+  note: 1 eligible candidate(s) unranked (kimi)
+  candidate: claude:sonnet  provider=claude  scope=all_models  remaining=79%  spendPriority=-0.4627  runway=projected_exhaustion  -> eligible
+  candidate: cursor:cursor-grok-4.6-medium  provider=cursor  scope=all_models  remaining=91%  spendPriority=0.7597  runway=through_reset  -> eligible
+  candidate: kimi:kimi-code/k3  provider=kimi  -> eligible, unranked: provider kimi unmeasured (unknown): disclosed uncertainty
+  profile: --harness 'cursor' --model 'cursor-grok-4.6-medium'
+[exit 0]
+[request] model=jev-1.13.0 questions=["rule","scope"] state_keys=["brief","project"]
+==================================================================
+### S5 malformed scope: string
+$ fm-dispatch-resolve.sh briefs/real.md --project voice    # Jev stand-in answer mode: {"scope":{"type":"noul","noul":"high"}}
+dispatch-resolve:
+  status: clear
+  model: jev-1.13.0   latency_ms: 1000   tokens: 900/70
+  rule: rule_4 (A simple bug fix with a stated root cause.)   confidence: 0.9
+  probabilities: rule_1=0.01 rule_2=0.01 rule_3=0.01 rule_4=0.96 default=0.01
+  note: rule matched
+  note: 1 eligible candidate(s) unranked (kimi)
+  candidate: claude:sonnet  provider=claude  scope=all_models  remaining=79%  spendPriority=-0.4627  runway=projected_exhaustion  -> eligible
+  candidate: cursor:cursor-grok-4.6-medium  provider=cursor  scope=all_models  remaining=91%  spendPriority=0.7597  runway=through_reset  -> eligible
+  candidate: kimi:kimi-code/k3  provider=kimi  -> eligible, unranked: provider kimi unmeasured (unknown): disclosed uncertainty
+  profile: --harness 'cursor' --model 'cursor-grok-4.6-medium'
+[exit 0]
+[request] model=jev-1.13.0 questions=["rule","scope"] state_keys=["brief","project"]
+==================================================================
+### S5 malformed scope: out of range 1.5
+$ fm-dispatch-resolve.sh briefs/real.md --project voice    # Jev stand-in answer mode: {"scope":{"type":"noul","noul":1.5}}
+dispatch-resolve:
+  status: clear
+  model: jev-1.13.0   latency_ms: 0   tokens: 900/70
+  rule: rule_4 (A simple bug fix with a stated root cause.)   confidence: 0.9
+  probabilities: rule_1=0.01 rule_2=0.01 rule_3=0.01 rule_4=0.96 default=0.01
+  note: rule matched
+  note: 1 eligible candidate(s) unranked (kimi)
+  candidate: claude:sonnet  provider=claude  scope=all_models  remaining=79%  spendPriority=-0.4627  runway=projected_exhaustion  -> eligible
+  candidate: cursor:cursor-grok-4.6-medium  provider=cursor  scope=all_models  remaining=91%  spendPriority=0.7597  runway=through_reset  -> eligible
+  candidate: kimi:kimi-code/k3  provider=kimi  -> eligible, unranked: provider kimi unmeasured (unknown): disclosed uncertainty
+  profile: --harness 'cursor' --model 'cursor-grok-4.6-medium'
+[exit 0]
+[request] model=jev-1.13.0 questions=["rule","scope"] state_keys=["brief","project"]
+==================================================================
+### S5 malformed scope: garbled
+$ fm-dispatch-resolve.sh briefs/real.md --project voice    # Jev stand-in answer mode: {"scope":"garbled"}
+dispatch-resolve:
+  status: clear
+  model: jev-1.13.0   latency_ms: 0   tokens: 900/70
+  rule: rule_4 (A simple bug fix with a stated root cause.)   confidence: 0.9
+  probabilities: rule_1=0.01 rule_2=0.01 rule_3=0.01 rule_4=0.96 default=0.01
+  note: rule matched
+  note: 1 eligible candidate(s) unranked (kimi)
+  candidate: claude:sonnet  provider=claude  scope=all_models  remaining=79%  spendPriority=-0.4627  runway=projected_exhaustion  -> eligible
+  candidate: cursor:cursor-grok-4.6-medium  provider=cursor  scope=all_models  remaining=91%  spendPriority=0.7597  runway=through_reset  -> eligible
+  candidate: kimi:kimi-code/k3  provider=kimi  -> eligible, unranked: provider kimi unmeasured (unknown): disclosed uncertainty
+  profile: --harness 'cursor' --model 'cursor-grok-4.6-medium'
+[exit 0]
+[request] model=jev-1.13.0 questions=["rule","scope"] state_keys=["brief","project"]
+==================================================================
+### S6 spec-only brief (scope 0.98 would be offered)
+$ fm-dispatch-resolve.sh briefs/spec-only.md --project voice    # Jev stand-in answer mode: {"scope":{"type":"noul","noul":0.98}}
+dispatch-resolve:
+  status: clear
+  model: jev-1.13.0   latency_ms: 0   tokens: 900/70
+  rule: rule_4 (A simple bug fix with a stated root cause.)   confidence: 0.9
+  probabilities: rule_1=0.01 rule_2=0.01 rule_3=0.01 rule_4=0.96 default=0.01
+  note: rule matched
+  note: 1 eligible candidate(s) unranked (kimi)
+  candidate: claude:sonnet  provider=claude  scope=all_models  remaining=79%  spendPriority=-0.4627  runway=projected_exhaustion  -> eligible
+  candidate: cursor:cursor-grok-4.6-medium  provider=cursor  scope=all_models  remaining=91%  spendPriority=0.7597  runway=through_reset  -> eligible
+  candidate: kimi:kimi-code/k3  provider=kimi  -> eligible, unranked: provider kimi unmeasured (unknown): disclosed uncertainty
+  profile: --harness 'cursor' --model 'cursor-grok-4.6-medium'
+[exit 0]
+[request] model=jev-1.13.0 questions=["rule"] state_keys=["brief","project"]
+==================================================================
+### S6 intent-only brief
+$ fm-dispatch-resolve.sh briefs/intent-only.md --project voice    # Jev stand-in answer mode: {"scope":{"type":"noul","noul":0.98}}
+dispatch-resolve:
+  status: clear
+  model: jev-1.13.0   latency_ms: 0   tokens: 900/70
+  rule: rule_4 (A simple bug fix with a stated root cause.)   confidence: 0.9
+  probabilities: rule_1=0.01 rule_2=0.01 rule_3=0.01 rule_4=0.96 default=0.01
+  note: rule matched
+  note: 1 eligible candidate(s) unranked (kimi)
+  candidate: claude:sonnet  provider=claude  scope=all_models  remaining=79%  spendPriority=-0.4627  runway=projected_exhaustion  -> eligible
+  candidate: cursor:cursor-grok-4.6-medium  provider=cursor  scope=all_models  remaining=91%  spendPriority=0.7597  runway=through_reset  -> eligible
+  candidate: kimi:kimi-code/k3  provider=kimi  -> eligible, unranked: provider kimi unmeasured (unknown): disclosed uncertainty
+  profile: --harness 'cursor' --model 'cursor-grok-4.6-medium'
+[exit 0]
+[request] model=jev-1.13.0 questions=["rule"] state_keys=["brief","project"]
+==================================================================
+### S6 free-form brief
+$ fm-dispatch-resolve.sh briefs/freeform.md --project voice    # Jev stand-in answer mode: {"scope":{"type":"noul","noul":0.98}}
+dispatch-resolve:
+  status: clear
+  model: jev-1.13.0   latency_ms: 1000   tokens: 900/70
+  rule: rule_4 (A simple bug fix with a stated root cause.)   confidence: 0.9
+  probabilities: rule_1=0.01 rule_2=0.01 rule_3=0.01 rule_4=0.96 default=0.01
+  note: rule matched
+  note: 1 eligible candidate(s) unranked (kimi)
+  candidate: claude:sonnet  provider=claude  scope=all_models  remaining=79%  spendPriority=-0.4627  runway=projected_exhaustion  -> eligible
+  candidate: cursor:cursor-grok-4.6-medium  provider=cursor  scope=all_models  remaining=91%  spendPriority=0.7597  runway=through_reset  -> eligible
+  candidate: kimi:kimi-code/k3  provider=kimi  -> eligible, unranked: provider kimi unmeasured (unknown): disclosed uncertainty
+  profile: --harness 'cursor' --model 'cursor-grok-4.6-medium'
+[exit 0]
+[request] model=jev-1.13.0 questions=["rule"] state_keys=["brief","project"]
+==================================================================
+### S7 outcome invariance: ambiguous (confidence 0.4) + scope 0.98
+$ fm-dispatch-resolve.sh briefs/widened-settings.md --project voice    # Jev stand-in answer mode: {"confidence":0.4,"scope":{"type":"noul","noul":0.98}}
+dispatch-resolve:
+  status: ambiguous
+  model: jev-1.13.0   latency_ms: 0   tokens: 900/70
+  rule: rule_4 (A simple bug fix with a stated root cause.)   confidence: 0.4
+  probabilities: rule_1=0.01 rule_2=0.01 rule_3=0.01 rule_4=0.96 default=0.01
+  scope: probability 0.98 that the build instructions add a change the ask did not need (advice only)
+  reason: confidence 0.4 below floor 0.6
+  candidate: claude:sonnet  provider=claude  scope=all_models  remaining=79%  spendPriority=-0.4627  runway=projected_exhaustion  -> eligible
+  candidate: cursor:cursor-grok-4.6-medium  provider=cursor  scope=all_models  remaining=91%  spendPriority=0.7597  runway=through_reset  -> eligible
+  candidate: kimi:kimi-code/k3  provider=kimi  -> eligible, unranked: provider kimi unmeasured (unknown): disclosed uncertainty
+[exit 0]
+[request] model=jev-1.13.0 questions=["rule","scope"] state_keys=["brief","project"]
+==================================================================
+### S7 outcome invariance: ambiguous (confidence 0.4), no scope
+$ fm-dispatch-resolve.sh briefs/widened-settings.md --project voice    # Jev stand-in answer mode: {"confidence":0.4}
+dispatch-resolve:
+  status: ambiguous
+  model: jev-1.13.0   latency_ms: 0   tokens: 900/70
+  rule: rule_4 (A simple bug fix with a stated root cause.)   confidence: 0.4
+  probabilities: rule_1=0.01 rule_2=0.01 rule_3=0.01 rule_4=0.96 default=0.01
+  reason: confidence 0.4 below floor 0.6
+  candidate: claude:sonnet  provider=claude  scope=all_models  remaining=79%  spendPriority=-0.4627  runway=projected_exhaustion  -> eligible
+  candidate: cursor:cursor-grok-4.6-medium  provider=cursor  scope=all_models  remaining=91%  spendPriority=0.7597  runway=through_reset  -> eligible
+  candidate: kimi:kimi-code/k3  provider=kimi  -> eligible, unranked: provider kimi unmeasured (unknown): disclosed uncertainty
+[exit 0]
+[request] model=jev-1.13.0 questions=["rule","scope"] state_keys=["brief","project"]
+==================================================================
+### S7 outcome invariance: escalate (captain approval rule_3) + scope 0.98
+$ fm-dispatch-resolve.sh briefs/widened-settings.md --project voice    # Jev stand-in answer mode: {"choice":"rule_3","scope":{"type":"noul","noul":0.98}}
+dispatch-resolve:
+  status: escalate
+  model: jev-1.13.0   latency_ms: 0   tokens: 900/70
+  rule: rule_3 (Genuinely very difficult design or planning work.)   confidence: 0.9
+  probabilities: rule_1=0.01 rule_2=0.01 rule_3=0.96 rule_4=0.01 default=0.01
+  scope: probability 0.98 that the build instructions add a change the ask did not need (advice only)
+  reason: rule requires the captain's explicit approval before dispatch
+  candidate: claude:fable  provider=claude  scope=model:fable  remaining=15%  spendPriority=-0.79  runway=projected_exhaustion  bounds=all_models:79%/projected_exhaustion,model:fable:15%/projected_exhaustion  -> eligible
+[exit 0]
+[request] model=jev-1.13.0 questions=["rule","scope"] state_keys=["brief","project"]
+==================================================================
+### S8 error: real 5 s timeout (stand-in sleeps 7 s) + scope 0.98
+$ fm-dispatch-resolve.sh briefs/widened-settings.md --project voice    # Jev stand-in answer mode: {"sleep":7,"scope":{"type":"noul","noul":0.98}}
+dispatch-resolve:
+  status: error
+  reason: http 000 after 5000 ms: 
+[exit 0]
+[stderr] dispatch-resolve: error (http 000 after 5000 ms: )
+[request] model=jev-1.13.0 questions=["rule","scope"] state_keys=["brief","project"]
+==================================================================
+### S8 error: HTTP 500
+$ fm-dispatch-resolve.sh briefs/widened-settings.md --project voice    # Jev stand-in answer mode: {"http":500,"scope":{"type":"noul","noul":0.98}}
+dispatch-resolve:
+  status: error
+  reason: http 500 after 1000 ms: upstream failure
+[exit 0]
+[stderr] dispatch-resolve: error (http 500 after 1000 ms: upstream failure)
+[request] model=jev-1.13.0 questions=["rule","scope"] state_keys=["brief","project"]
+==================================================================
+### S8 error: unknown rule id rule_9 + scope 0.98
+$ fm-dispatch-resolve.sh briefs/widened-settings.md --project voice    # Jev stand-in answer mode: {"choice":"rule_9","scope":{"type":"noul","noul":0.98}}
+dispatch-resolve:
+  status: error
+  reason: response is not a rule Choice answer
+[exit 0]
+[stderr] dispatch-resolve: error (response is not a rule Choice answer)
+[request] model=jev-1.13.0 questions=["rule","scope"] state_keys=["brief","project"]
+==================================================================
+### S8 error: quota-axi fails after a valid 0.98 scope answer
+$ fm-dispatch-resolve.sh briefs/widened-settings.md --project voice    # Jev stand-in answer mode: {"scope":{"type":"noul","noul":0.98}}
+dispatch-resolve:
+  status: error
+  reason: quota-axi --json failed
+[exit 0]
+[stderr] dispatch-resolve: error (quota-axi --json failed)
+[request] model=jev-1.13.0 questions=["rule","scope"] state_keys=["brief","project"]
+==================================================================
+### S8 error: resolution error - rule_9 chosen with valid probabilities + scope 0.98 (round-2 fix path)
+# Jev stand-in answer mode: {"choice":"rule_9","probs":{"rule_1":0.01,"rule_2":0.01,"rule_3":0.01,"rule_4":0.96,"default":0.01},"scope":{"type":"noul","noul":0.98}}
+dispatch-resolve:
+  status: error
+  rule: rule_9 (No listed rule applies to this task.)   confidence: 0.9
+  probabilities: rule_1=0.01 rule_2=0.01 rule_3=0.01 rule_4=0.96 default=0.01
+  reason: rule rule_9 is not in the rules file
+==================================================================
+### S7 diff (sequential runs, latency line dropped): widened brief, clear outcome, no scope answer vs scope 0.98
+4a5
+>   scope: probability 0.98 that the build instructions add a change the ask did not need (advice only)
+[diff exit 1]
+### S7 diff: escalate outcome (rule_3 captain approval), no scope vs scope 0.98
+4a5
+>   scope: probability 0.98 that the build instructions add a change the ask did not need (advice only)
+[diff exit 1]
+### S7 diff: ambiguous outcome (confidence 0.4), no scope vs scope 0.98
+4a5
+>   scope: probability 0.98 that the build instructions add a change the ask did not need (advice only)
+[diff exit 1]
+### S5 diff: below-floor/malformed scope answers vs no scope answer (must be byte-identical)
+identical: {"scope":{"type":"noul","noul":0.16}}
+identical: {"scope":{"type":"noul","noul":0.49}}
+identical: {"scope":{"type":"noul","noul":"high"}}
+identical: {"scope":{"type":"noul","noul":1.5}}
+identical: {"scope":{"type":"noul","noul":-0.2}}
+identical: {"scope":{"type":"noul"}}
+identical: {"scope":null}
+identical: {"scope":"garbled"}
