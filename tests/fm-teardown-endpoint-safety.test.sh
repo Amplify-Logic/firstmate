@@ -1049,8 +1049,6 @@ test_reassigned_pool_slot_finishes_own_cleanup_without_touching_the_slot() {
   pass "fm-teardown: a pool slot claimed by another task is left alone while the task's own cleanup finishes"
 }
 
-# The two states that must never become a false refusal: the task's own claim,
-# and no claim at all (a slot taken before claims existed, or already returned).
 # A reassigned slot's branch history belongs to the task now holding it, so it
 # is never capability evidence for the task being torn down: a landed branch
 # that never moved after this task's ready report would otherwise be logged as
@@ -1092,6 +1090,8 @@ test_reassigned_pool_slot_records_no_capability_evidence() {
   pass "fm-teardown: a reassigned pool slot yields no capability evidence for the stale task"
 }
 
+# The two states that must never become a false refusal: the task's own claim,
+# and no claim at all (a slot taken before claims existed, or already returned).
 test_own_and_absent_slot_claims_still_tear_down() {
   local dir id=owned-task
 
