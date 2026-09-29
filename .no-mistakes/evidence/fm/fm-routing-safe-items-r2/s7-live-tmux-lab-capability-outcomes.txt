@@ -1,0 +1,110 @@
+# Live tmux lab at HEAD 64898d11: real Claude (haiku) workers, FM_HOME=$LAB (fm-lab-home marked, disposable), private tmux socket fm-lab
+lbx1: landed as delivered | lby1: steered to rebase only | lbz1: steered to add a follow-up commit (and rebase twice) | lbw1: landed as delivered | lbs1: scout
+
+## spawn
+$LAB/spawn-lbx1.out:spawned lbx1 harness=claude kind=ship mode=local-only yolo=on window=primary:fm-lbx1 worktree=$LAB/pool/.treehouse/demo-a28d85/1/demo
+$LAB/spawn-lbx1.out:lbx1 EXIT=0
+$LAB/spawn-lbz1.out:spawned lbz1 harness=claude kind=ship mode=local-only yolo=on window=primary:fm-lbz1 worktree=$LAB/pool/.treehouse/demo-a28d85/3/demo
+$LAB/spawn-lbz1.out:lbz1 EXIT=0
+$LAB/spawn-lby1.out:spawned lby1 harness=claude kind=ship mode=local-only yolo=on window=primary:fm-lby1 worktree=$LAB/pool/.treehouse/demo-a28d85/2/demo
+$LAB/spawn-lby1.out:lby1 EXIT=0
+$LAB/spawn-lbw1.out:spawned lbw1 harness=claude kind=ship mode=local-only yolo=on window=primary:fm-lbw1 worktree=$LAB/pool/.treehouse/demo-a28d85/1/demo
+$LAB/spawn-lbs1.out:spawned lbs1 harness=claude kind=scout window=primary:fm-lbs1 worktree=$LAB/pool/.treehouse/demo-a28d85/1/demo
+
+## steer counters created by fm-spawn (0 bytes each at spawn), line counts at teardown time: lbx1=0 lby1=1 lbz1=2
+
+## landing and steering sequence
+$LAB/step3.out:$ fm-merge-local.sh lbz1
+$LAB/step3.out:merged fm/lbz1 into local main (a3fdcf6 -> 3709c30) in $LAB/projects/demo
+$LAB/step3.out:EXIT=0
+$LAB/step1.out:$ fm-merge-local.sh lbx1
+$LAB/step1.out:merged fm/lbx1 into local main (7ad1ad8 -> b6b2532) in $LAB/projects/demo
+$LAB/step1.out:EXIT=0
+$LAB/step1.out:$ fm-merge-local.sh lby1
+$LAB/step1.out:REFUSED: fm/lby1 is not a fast-forward of main (it has diverged).
+$LAB/step1.out:Have the crewmate rebase fm/lby1 onto main, then retry.
+$LAB/step1.out:EXIT=1
+$LAB/step1.out:$ fm-send.sh lby1 <rebase only>
+$LAB/step1.out:EXIT=0
+$LAB/step1.out:$ fm-send.sh lbz1 <follow-up change + rebase>
+$LAB/step1.out:EXIT=0
+$LAB/step2.out:$ fm-merge-local.sh lby1
+$LAB/step2.out:merged fm/lby1 into local main (b6b2532 -> a3fdcf6) in $LAB/projects/demo
+$LAB/step2.out:EXIT=0
+$LAB/step2.out:$ fm-merge-local.sh lbz1
+$LAB/step2.out:REFUSED: fm/lbz1 is not a fast-forward of main (it has diverged).
+$LAB/step2.out:Have the crewmate rebase fm/lbz1 onto main, then retry.
+$LAB/step2.out:EXIT=1
+$LAB/step2.out:$ fm-send.sh lbz1 <rebase again>
+$LAB/step2.out:EXIT=0
+
+## worker status files (ready reports)
+lbx1: done [at=1790720806]
+lby1: done [at=1790720812], done [at=1790720834] (rebased)
+lbz1: done [at=1790720819], done [at=1790720846], done [at=1790720867]
+
+## branch reflogs in the shared repo
+fm/lbx1:
+  b6b2532 fm/lbx1@{1790720803}: commit: add alpha
+  7ad1ad8 fm/lbx1@{1790720799}: branch: Created from HEAD
+fm/lby1:
+  a3fdcf6 fm/lby1@{1790720832}: rebase (finish): refs/heads/fm/lby1 onto b6b253266aecf3c7cda5a0b51687d2cf97096853
+  3f0424f fm/lby1@{1790720809}: commit: add beta
+  7ad1ad8 fm/lby1@{1790720805}: branch: Created from HEAD
+fm/lbz1:
+  3709c30 fm/lbz1@{1790720866}: rebase (finish): refs/heads/fm/lbz1 onto a3fdcf643e97be0e09e18d03b8268613a465a216
+  3b3e800 fm/lbz1@{1790720841}: rebase (finish): refs/heads/fm/lbz1 onto b6b253266aecf3c7cda5a0b51687d2cf97096853
+  71b1031 fm/lbz1@{1790720839}: commit: gamma follow-up
+  7d566b8 fm/lbz1@{1790720816}: commit: add gamma
+  7ad1ad8 fm/lbz1@{1790720812}: branch: Created from HEAD
+
+## local main
+  bc9934b add delta
+  3709c30 gamma follow-up
+  f76ddaf add gamma
+  a3fdcf6 add beta
+  b6b2532 add alpha
+  7ad1ad8 init
+
+## teardowns
+$LAB/td-lbx1.out:$ fm-teardown.sh lbx1
+$LAB/td-lbx1.out:
+$LAB/td-lbx1.out:🌳 Worktree returned to pool.
+$LAB/td-lbx1.out:teardown lbx1 complete (window primary:fm-lbx1, worktree $LAB/pool/.treehouse/demo-a28d85/1/demo)
+$LAB/td-lbx1.out:EXIT=0
+$LAB/td-lby1.out:$ fm-teardown.sh lby1
+$LAB/td-lby1.out:
+$LAB/td-lby1.out:🌳 Worktree returned to pool.
+$LAB/td-lby1.out:teardown lby1 complete (window primary:fm-lby1, worktree $LAB/pool/.treehouse/demo-a28d85/2/demo)
+$LAB/td-lby1.out:EXIT=0
+$LAB/td-lbz1.out:$ fm-teardown.sh lbz1
+$LAB/td-lbz1.out:
+$LAB/td-lbz1.out:🌳 Worktree returned to pool.
+$LAB/td-lbz1.out:teardown lbz1 complete (window primary:fm-lbz1, worktree $LAB/pool/.treehouse/demo-a28d85/3/demo)
+$LAB/td-lbz1.out:EXIT=0
+$ fm-captain-hold.sh complete lbs1 --none
+complete: lbs1 captain-call inventory reviewed
+EXIT=0
+$ fm-teardown.sh lbs1
+fm-gate-refuse: gate agent lifecycle permitted only against lab home $LAB
+teardown: reaping leaked worktree process(es) for lbs1: 6803 7993 8070
+teardown: force-killing leaked worktree process(es) for lbs1: 6803
+🌳 Worktree returned to pool.
+teardown lbs1 complete (window primary:fm-lbs1, worktree $LAB/pool/.treehouse/demo-a28d85/1/demo)
+EXIT=0
+
+## data/capability-outcomes.log  (<epoch>|<task-type>|<harness>|<model>|<effort>|<outcome>|<fix-rounds>|<steers>)
+(rows: lbx1, lby1, lbz1, lbw1, lbs1)
+1790720886|ship|claude|haiku|default|merged|0|0
+1790720893|ship|claude|haiku|default|merged|0|1
+1790720900|ship|claude|haiku|default|revised|3|2
+1790720963|ship|claude|haiku|default|merged|0|0
+1790721059|scout|claude|haiku|default|reported||0
+
+## density over this log (fm_capability_summarize ship): harness|model|effort|first-try|total|density%
+claude|haiku|default|3|4|75
+scout rows: none counted (reported is neutral)
+
+## fm-dispatch-select capability-recent over this log
+CAPABILITY_EVIDENCE: task-type=ship claude|haiku|default|3|4|75
+{"harness":"claude","model":"haiku"}

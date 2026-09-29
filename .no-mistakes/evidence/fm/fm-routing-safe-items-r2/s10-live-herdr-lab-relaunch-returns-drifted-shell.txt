@@ -1,0 +1,32 @@
+# Live Herdr lab at HEAD 64898d11: named non-default session fm-lab-relaunch-95012-11772 via bin/fm-herdr-lab.sh, disposable FM_HOME=$LAB, real Claude haiku worker hr1 (#5916)
+
+## spawn
+fm-gate-refuse: gate agent lifecycle permitted only against lab home $LAB
+notice: hr1 ships mode=local-only while the standing posture for demo is no-mistakes - less rigor than the captain's standing posture; proceed only on a current explicit captain instruction or an intake judgment you can state
+warning: herdr server version 0.7.4 (protocol 16) is older than the 0.8.0 floor for presentation spaces, where projected cleanup can steal the active workspace; using the ordinary flat layout instead. Upgrade herdr to 0.8.0 or newer (herdr update) to restore the projection, or write "on" into config/herdr-presentation-spaces to force it on this release.
+spawned hr1 harness=claude kind=ship mode=local-only yolo=on window=fm-lab-relaunch-95012-11772:w1:p2 worktree=$LAB/pool/.treehouse/demo-6a9d9d/1/demo
+EXIT=0
+
+## worker reported: done [at=1790721974]: ready in branch fm/hr1
+done [at=1790722044]: ready in branch fm/hr1
+## worker stopped with /exit; its shell then cd'd to the PRIMARY checkout (drift):
+{"agent_status":"idle","cwd":"$LAB/projects/demo","foreground_cwd":"$LAB/projects/demo"}  foreground process: zsh cwd=$LAB/projects/demo
+
+## fm-spawn.sh hr1 --relaunch --harness claude --model haiku
+fm-gate-refuse: gate agent lifecycle permitted only against lab home $LAB
+notice: hr1 ships mode=local-only while the standing posture for demo is no-mistakes - less rigor than the captain's standing posture; proceed only on a current explicit captain instruction or an intake judgment you can state
+spawned hr1 harness=claude kind=ship mode=local-only yolo=on window=fm-lab-relaunch-95012-11772:w1:p2 worktree=$LAB/pool/.treehouse/demo-6a9d9d/1/demo
+EXIT=0
+
+## pane scrollback (Herdr pane read): drift, the one-time return cd, the explicit pre-launch cd, then the launch script
+(base) larsmusic@Larss-MacBook-Pro demo % cd $LAB/projects/demo
+(base) larsmusic@Larss-MacBook-Pro demo % cd -- '$LAB/pool/.treehouse/demo-6a9d9d/1/demo'
+(base) larsmusic@Larss-MacBook-Pro demo % cd -- '$LAB/pool/.treehouse/demo-6a9d9d/1/demo'
+(base) larsmusic@Larss-MacBook-Pro demo % . '/tmp/fm-hr1+77a29285da9050f68ea31f6fc0121dfa52067675f1cb523fb2ba96739d3d2e96/launch.s1790722015.20279.27002.sh'
+
+## after relaunch (herdr pane get / process-info)
+{"agent":"claude","agent_status":"working","cwd":"$LAB/projects/demo","foreground_cwd":"$LAB/pool/.treehouse/demo-6a9d9d/1/demo"}
+{"name":"caffeinate","cwd":"$LAB/pool/.treehouse/demo-6a9d9d/1/demo"}
+{"name":"Python","cwd":"$LAB/pool/.treehouse/demo-6a9d9d/1/demo"}
+{"name":"2.1.285","cwd":"$LAB/pool/.treehouse/demo-6a9d9d/1/demo"}
+(2.1.285 is the claude binary)

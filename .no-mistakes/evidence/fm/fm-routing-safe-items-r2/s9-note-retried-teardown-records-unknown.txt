@@ -1,0 +1,13 @@
+# Observation (info): a teardown retried after a failed `treehouse return` records unknown
+First lab (discarded): the pool root in treehouse.toml used the /var symlink path while firstmate recorded
+/private/var paths, so the first `fm-teardown.sh` for laba1/labb1/labc1 failed at `treehouse return`
+("worktree ... is not managed by treehouse ... teardown aborted"). Before that return, teardown had already
+run `git checkout --detach` in the worktree (bin/fm-teardown.sh, the "drop the local task branch" block).
+After the lab config was fixed, the retried teardowns completed but logged:
+  ship|claude|haiku|default|unknown||0   (laba1: expected merged|0|0)
+  ship|claude|haiku|default|unknown||1   (labb1: expected merged|0|1)
+  ship|claude|haiku|default|unknown||2   (labc1: expected revised|3|2)
+because the retry reads CAP_BRANCH from the now-detached worktree HEAD. Re-deriving from the surviving
+branch reflogs with fm_capability_outcome_from_followups gave merged|0, revised|1, revised|3 as expected.
+In the clean lab, the same flows recorded merged|0|0, merged|0|1, and revised|3|2.
+The fallback is conservative (never a wrong label), so the only effect is a lost sample after an aborted teardown.

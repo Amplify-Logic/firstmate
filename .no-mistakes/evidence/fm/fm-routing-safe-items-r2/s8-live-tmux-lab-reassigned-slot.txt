@@ -1,0 +1,21 @@
+# Live tmux lab at HEAD 64898d11: reassigned pool slot (R5-1)
+lbr1 (home $LAB, real Claude haiku) reported: done [at=1790721761]: ready in branch fm/lbr1
+Its worker then exited its treehouse subshell, returning pool slot 1.
+lbo1 (second lab home $LAB2, real Claude haiku) was spawned into slot 1, committed, reported done, and was landed with fm-merge-local.sh:
+merged fm/lbo1 into local main (bc9934b -> 7b75e9b) in $LAB/projects/demo
+
+slot 1 owner before lbr1 teardown:
+task=lbo1
+home=$LAB2
+
+$ fm-teardown.sh lbr1
+fm-gate-refuse: gate agent lifecycle permitted only against lab home $LAB
+warning: task lbr1's recorded worktree $LAB/pool/.treehouse/demo-a28d85/1/demo was reassigned to task lbo1 (home $LAB2), which claimed that pool slot after this record was written; that slot is no longer lbr1's, so its processes, copy, and claim are left untouched and only lbr1's own cleanup runs.
+teardown lbr1 complete (window primary:fm-lbr1; pool slot $LAB/pool/.treehouse/demo-a28d85/1/demo left to task lbo1 (home $LAB2), which it was reassigned to)
+EXIT=0
+
+## last line of $LAB/data/capability-outcomes.log (lbr1)
+1790721832|ship|claude|haiku|default|unknown||0
+(the slot's branch is now fm/lbo1; lbr1's ready time against fm/lbo1's reflog derives 'revised|2', and lbo1's head is on local main; the reassigned-slot guard discarded that foreign evidence and recorded unknown)
+
+slot 1 HEAD after lbr1 teardown (lbo1's copy untouched): fm/lbo1

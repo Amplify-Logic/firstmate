@@ -1,0 +1,16 @@
+ok - a missing teardown startup source refuses before cleanup
+ok - an unreadable teardown startup source refuses before cleanup
+ok - a missing adapter sibling refuses before cleanup
+ok - a forced descendant with a missing adapter sibling refuses before cleanup
+ok - a forced secondmate with a missing own adapter sibling refuses before child cleanup
+ok - present required sources still reach the ordinary teardown refusal
+ok - landed local-only work with no follow-up records merged and a zero steer count
+ok - landed local-only work with a follow-up commit records revised with its counts
+ok - local-only work landed, revised, and landed again records revised
+ok - local-only work only rebased after its ready report records merged
+ok - direct-PR work whose PR merged with no follow-up records merged
+ok - pushed but unlanded direct-PR and local-only work records unknown instead of merged
+ok - an untimed first ready report leaves the outcome unknown instead of guessing
+fm-captain-hold: compatible tasks-axi is required
+not ok - capability-reported: the report's captain-call review could not be attested
+[exit=1]

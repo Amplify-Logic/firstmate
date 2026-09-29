@@ -1,0 +1,35 @@
+Lab: sentinel quota-axi on PATH logs every call to $QLOG.
+=== 1. Existing config rule with retired select: quota-balanced (claude first, cursor second) ===
+
+$ bin/fm-dispatch-select.sh {"select":"quota-balanced","use":[{"harness":"claude","model":"sonnet","effort":"high"},{"harness":"cursor","model":"cursor-grok-4.6-medium"}]}
+fm-dispatch-select: quota-balanced ranking is retired; rank a quota-sensitive profile array by spendPriority through the quota-array-dispatch skill; using first profile
+{"harness":"claude","model":"sonnet","effort":"high"}
+[exit=0] [quota-axi calls: 0]
+=== 2. Same array with cursor first (Cursor profile passes through intact) ===
+
+$ bin/fm-dispatch-select.sh {"select":"quota-balanced","use":[{"harness":"cursor","model":"cursor-grok-4.6-medium"},{"harness":"claude","model":"sonnet"}]}
+fm-dispatch-select: quota-balanced ranking is retired; rank a quota-sensitive profile array by spendPriority through the quota-array-dispatch skill; using first profile
+{"harness":"cursor","model":"cursor-grok-4.6-medium"}
+[exit=0] [quota-axi calls: 0]
+=== 3. --select quota-balanced override on a bare array ===
+
+$ bin/fm-dispatch-select.sh --select quota-balanced [{"harness":"cursor","model":"cursor-grok-4.6-high"},{"harness":"codex","model":"gpt-5.6-sol"}]
+fm-dispatch-select: quota-balanced ranking is retired; rank a quota-sensitive profile array by spendPriority through the quota-array-dispatch skill; using first profile
+{"harness":"cursor","model":"cursor-grok-4.6-high"}
+[exit=0] [quota-axi calls: 0]
+=== 4. Removed --quota-json flag is now refused as unknown ===
+
+$ bin/fm-dispatch-select.sh --quota-json /dev/null [{"harness":"claude"}]
+error: unknown option --quota-json
+[exit=2] [quota-axi calls: 0]
+=== 5. No select: first profile, no note ===
+
+$ bin/fm-dispatch-select.sh {"use":[{"harness":"claude","model":"opus"},{"harness":"cursor"}]}
+{"harness":"claude","model":"opus"}
+[exit=0] [quota-axi calls: 0]
+=== 6. Unknown select token ===
+
+$ bin/fm-dispatch-select.sh {"select":"bogus","use":[{"harness":"claude","model":"opus"}]}
+fm-dispatch-select: unknown select strategy 'bogus'; using first profile
+{"harness":"claude","model":"opus"}
+[exit=0] [quota-axi calls: 0]

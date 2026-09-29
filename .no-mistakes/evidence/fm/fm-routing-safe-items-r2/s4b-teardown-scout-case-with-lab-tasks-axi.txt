@@ -1,0 +1,10 @@
+ok - a missing teardown startup source refuses before cleanup
+ok - an unreadable teardown startup source refuses before cleanup
+ok - a missing adapter sibling refuses before cleanup
+ok - a forced descendant with a missing adapter sibling refuses before cleanup
+ok - a forced secondmate with a missing own adapter sibling refuses before child cleanup
+ok - present required sources still reach the ordinary teardown refusal
+ok - a scout that left its report records reported and a zero steer count
+ok - local-only work only rebased after its ready report records merged
+ok - local-only work landed, revised, and landed again records revised
+[exit=0]

@@ -1,0 +1,47 @@
+Lab: disposable FM_HOME with config/crew-dispatch.json; real curl is redirected from api.typesafe.ai to a local python listener that logs every POST.
+Brief '## Captain's intent' says: 'Fix the pager for the Acme-Ledger<newline>account 4417-2290.'
+
+=== 1. No never-send list: request reaches the resolver endpoint ===
+$ FM_HOME=$LAB/home TYPESAFE_API_KEY=<dummy> bin/fm-dispatch-resolve.sh brief.md --project pager
+dispatch-resolve:
+  status: clear
+  model: jev-1.13.0   latency_ms: 0   tokens: 10/5
+  rule: rule_1 (A simple bug fix.)   confidence: 0.95
+  probabilities: rule_1=0.95 default=0.05
+  note: rule matched
+  candidate: claude:sonnet  provider=claude  scope=all_models  remaining=80%  spendPriority=0.5  runway=through_reset  -> eligible
+  profile: --harness 'claude' --model 'sonnet' --effort 'high'
+[exit=0]
+[POSTs received by local resolver listener: 1] [quota-axi calls: 1]
+
+=== 2. List with only a non-matching value: request still sent ===
+$ FM_HOME=$LAB/home TYPESAFE_API_KEY=<dummy> bin/fm-dispatch-resolve.sh brief.md --project pager
+dispatch-resolve:
+  status: clear
+  model: jev-1.13.0   latency_ms: 0   tokens: 10/5
+  rule: rule_1 (A simple bug fix.)   confidence: 0.95
+  probabilities: rule_1=0.95 default=0.05
+  note: rule matched
+  candidate: claude:sonnet  provider=claude  scope=all_models  remaining=80%  spendPriority=0.5  runway=through_reset  -> eligible
+  profile: --harness 'claude' --model 'sonnet' --effort 'high'
+[exit=0]
+[POSTs received by local resolver listener: 1] [quota-axi calls: 1]
+
+=== 3. List line 3 '  acme-ledger  ACCOUNT ' (other case, extra spaces; brief wraps it across a line): withheld ===
+$ FM_HOME=$LAB/home TYPESAFE_API_KEY=<dummy> bin/fm-dispatch-resolve.sh brief.md --project pager
+dispatch-resolve: off (brief text matches $LAB/home/config/dispatch-never-send line 3; nothing sent)
+[exit=0]
+[POSTs received by local resolver listener: 0] [quota-axi calls: 0]
+
+=== 4. List line 1 'PAGER' matches the --project name: withheld ===
+$ FM_HOME=$LAB/home TYPESAFE_API_KEY=<dummy> bin/fm-dispatch-resolve.sh brief.md --project pager
+dispatch-resolve: off (brief text matches $LAB/home/config/dispatch-never-send line 1; nothing sent)
+[exit=0]
+[POSTs received by local resolver listener: 0] [quota-axi calls: 0]
+
+=== 5. List path is a directory (bad list): withheld, fails closed ===
+$ FM_HOME=$LAB/home TYPESAFE_API_KEY=<dummy> bin/fm-dispatch-resolve.sh brief.md --project pager
+dispatch-resolve: off ($LAB/home/config/dispatch-never-send is not a readable regular file; nothing sent)
+[exit=0]
+[POSTs received by local resolver listener: 0] [quota-axi calls: 0]
+

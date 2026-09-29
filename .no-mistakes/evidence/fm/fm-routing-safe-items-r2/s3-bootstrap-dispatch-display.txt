@@ -1,0 +1,13 @@
+$ FM_HOME=$LAB FM_BOOTSTRAP_VERBOSE_FACTS=1 bin/fm-bootstrap.sh   (disposable lab home with config/crew-dispatch.json)
+MISSING: gh-axi (install: npm install -g gh-axi && gh-axi setup hooks)
+MISSING: chrome-devtools-axi (install: npm install -g chrome-devtools-axi && chrome-devtools-axi setup hooks)
+MISSING: tasks-axi (install: npm install -g tasks-axi)
+MISSING: quota-axi (install: npm install -g quota-axi)
+PRESENTATION_UNAVAILABLE: lavish-axi (requires >=0.1.77; install: npm install -g lavish-axi && lavish-axi setup hooks) - nonvisual work may proceed with plain-text decisions and reports; install or upgrade before using Lavish
+BOOTSTRAP_INFO: crew dispatch active config/crew-dispatch.json
+BOOTSTRAP_INFO: crew dispatch rule: simple bug fix -> spendPriority[claude/sonnet/high, cursor/cursor-grok-4.6-medium]
+BOOTSTRAP_INFO: crew dispatch rule: legacy feature -> quota-balanced[claude, cursor]
+BOOTSTRAP_INFO: crew dispatch default: spendPriority[claude/opus, cursor/cursor-grok-4.6-high]
+TOOLCHAIN_DRIFT: claude installed 2.1.285, certified 2.1.217 (docs/subagent-guard.md) - Claude Code is the default crewmate harness and self-updates on the latest channel; the subagent-guard deny keys and turn-end continuity were certified here
+TOOLCHAIN_DRIFT: cursor installed 2026.09.28-64d2043, certified 2026.08.11-e8db854 (docs/cursor-harness.md) - PRIMARY is certified on this build with all mechanisms verified, including the Stop turn-end hook that failed on 2026.07.20-8cc9c0b; WORKER has six of eight harness-exam probes passing, with exit and resume confirmed only by direct hand-verification, so it is not a full eight-point re-verification
+[exit=0]

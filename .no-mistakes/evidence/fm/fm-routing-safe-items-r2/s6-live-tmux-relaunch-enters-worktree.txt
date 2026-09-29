@@ -1,0 +1,25 @@
+# Live tmux lab (fm-lab socket, disposable FM_HOME=$LAB): real Claude haiku worker laba1, tmux backend, fm-spawn --relaunch (#5916)
+
+## 1. worker stopped with /exit; pane shell still in its worktree subshell; relaunch
+$ fm-spawn.sh laba1 --relaunch --harness claude --model haiku
+fm-gate-refuse: gate agent lifecycle permitted only against lab home $LAB
+notice: laba1 ships mode=local-only while the standing posture for demo is no-mistakes - less rigor than the captain's standing posture; proceed only on a current explicit captain instruction or an intake judgment you can state
+spawned laba1 harness=claude kind=ship mode=local-only yolo=on window=primary:fm-laba1 worktree=$LAB/pool/.treehouse/demo-4430d2/1/demo
+EXIT=0
+
+## pane scrollback: explicit cd into the recorded worktree immediately before the launch script
+(base) % cd -- '$LAB/pool/.treehouse/demo-4430d2/1/demo'
+(base) % . '/tmp/fm-laba1+<hash>/launch.s1790720612.60058.17191.sh'
+
+## processes on the laba1 pane tty after relaunch (pid comm cwd)
+6418 /bin/zsh  cwd=$LAB/pool/.treehouse/demo-4430d2/1/demo
+63588 claude  cwd=$LAB/pool/.treehouse/demo-4430d2/1/demo   <- relaunched worker
+
+## 2. adversarial: worker stopped again, pane shell cd'd to the PRIMARY checkout, relaunch
+pane cwd before relaunch: $LAB/projects/demo
+$ fm-spawn.sh laba1 --relaunch --harness claude --model haiku   (shell drifted to primary checkout)
+fm-gate-refuse: gate agent lifecycle permitted only against lab home $LAB
+notice: laba1 ships mode=local-only while the standing posture for demo is no-mistakes - less rigor than the captain's standing posture; proceed only on a current explicit captain instruction or an intake judgment you can state
+error: task laba1's endpoint is in '$LAB/projects/demo', not its recorded worktree '$LAB/pool/.treehouse/demo-4430d2/1/demo'; refusing to relaunch an agent outside the copy holding its work
+EXIT=1
+claude processes on laba1 tty after refused relaunch: 0
