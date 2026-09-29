@@ -1,0 +1,109 @@
+# Round 2 re-drive at HEAD ebfbcb54. Live lab: real fm-spawn -> worker deliveries -> real fm-send steer -> real fm-teardown
+# lab FM_HOME /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.lGKAjw (marked by bin/fm-lab-home.sh), private tmux socket -L fm-lab, treehouse pool inside the lab, local bare origin
+# workers are a raw-launch-command stand-in (harness=env) that records its start directory; forge (gh / gh-axi) is a lab stand-in on the lab PATH
+## spawns
+spawned r2-a1 harness=env kind=ship mode=local-only yolo=off window=primary:fm-r2-a1 worktree=/private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.lGKAjw/pool/.treehouse/demo-6a7ad6/1/demo
+EXIT r2-a1=0
+spawned r2-b2 harness=env kind=ship mode=local-only yolo=off window=primary:fm-r2-b2 worktree=/private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.lGKAjw/pool/.treehouse/demo-6a7ad6/2/demo
+EXIT r2-b2=0
+spawned r2-c3 harness=env kind=scout window=primary:fm-r2-c3 worktree=/private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.lGKAjw/pool/.treehouse/demo-6a7ad6/6/demo
+EXIT r2-c3=0
+spawned r2-d4 harness=env kind=ship mode=direct-PR yolo=off window=primary:fm-r2-d4 worktree=/private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.lGKAjw/pool/.treehouse/demo-6a7ad6/3/demo
+EXIT r2-d4=0
+spawned r2-e5 harness=env kind=ship mode=direct-PR yolo=off window=primary:fm-r2-e5 worktree=/private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.lGKAjw/pool/.treehouse/demo-6a7ad6/4/demo
+EXIT r2-e5=0
+spawned r2-f6 harness=env kind=ship mode=direct-PR yolo=off window=primary:fm-r2-f6 worktree=/private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.lGKAjw/pool/.treehouse/demo-6a7ad6/5/demo
+EXIT r2-f6=0
+## worker-recorded start directories (fresh spawn)
+r2-b2: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.lGKAjw/pool/.treehouse/demo-6a7ad6/2/demo
+r2-c3: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.lGKAjw/pool/.treehouse/demo-6a7ad6/6/demo
+r2-d4: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.lGKAjw/pool/.treehouse/demo-6a7ad6/3/demo
+r2-e5: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.lGKAjw/pool/.treehouse/demo-6a7ad6/4/demo
+r2-f6: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.lGKAjw/pool/.treehouse/demo-6a7ad6/5/demo
+## deliveries
+## real steer: bin/fm-send.sh r2-b2 ...
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.lGKAjw
+state/r2-b2.steers: 1 line(s)
+## firstmate merges approved local-only work into local main
+6d6d02b Merge branch 'fm/r2-b2'
+3b8383e r2-b2: follow-up after review
+5784a87 r2-a1: change
+c82a08f r2-b2: change
+b744b06 init
+## teardowns
+### teardown r2-a1 (local-only, merged into local main, no follow-up)
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.lGKAjw
+teardown: reaping leaked worktree process(es) for r2-a1: 48122 62830 95696
+teardown: force-killing leaked worktree process(es) for r2-a1: 95696
+🌳 Worktree returned to pool.
+teardown r2-a1 complete (window primary:fm-r2-a1, worktree /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.lGKAjw/pool/.treehouse/demo-6a7ad6/1/demo)
+EXIT r2-a1=0 secs=7
+log line: 1790701544|ship|env|default|default|merged|0|0
+### teardown r2-b2 (local-only, steered once, follow-up commit after done, merged into local main)
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.lGKAjw
+teardown: reaping leaked worktree process(es) for r2-b2: 1629 73714 99341
+teardown: force-killing leaked worktree process(es) for r2-b2: 99341
+🌳 Worktree returned to pool.
+teardown r2-b2 complete (window primary:fm-r2-b2, worktree /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.lGKAjw/pool/.treehouse/demo-6a7ad6/2/demo)
+EXIT r2-b2=0 secs=7
+log line: 1790701551|ship|env|default|default|revised|1|1
+### teardown r2-d4 (direct-PR pushed, forge says PR 11 OPEN (not merged))
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.lGKAjw
+teardown: reaping leaked worktree process(es) for r2-d4: 3838 5828 79110
+teardown: force-killing leaked worktree process(es) for r2-d4: 3838
+🌳 Worktree returned to pool.
+demo: skipped: local-only project
+teardown r2-d4 complete (window primary:fm-r2-d4, worktree /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.lGKAjw/pool/.treehouse/demo-6a7ad6/3/demo)
+EXIT r2-d4=0 secs=7
+log line: 1790701558|ship|env|default|default|unknown||0
+### teardown r2-e5 (direct-PR pushed, forge stand-in hangs 120s)
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.lGKAjw
+teardown: reaping leaked worktree process(es) for r2-e5: 7711 12239 87941
+teardown: force-killing leaked worktree process(es) for r2-e5: 7711
+🌳 Worktree returned to pool.
+demo: skipped: local-only project
+teardown r2-e5 complete (window primary:fm-r2-e5, worktree /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.lGKAjw/pool/.treehouse/demo-6a7ad6/4/demo)
+EXIT r2-e5=0 secs=26
+log line: 1790701585|ship|env|default|default|unknown||0
+### teardown r2-f6 (direct-PR pushed, forge says PR 12 MERGED at worktree head)
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.lGKAjw
+teardown: reaping leaked worktree process(es) for r2-f6: 14066 16525 91641
+teardown: force-killing leaked worktree process(es) for r2-f6: 14066
+🌳 Worktree returned to pool.
+demo: skipped: local-only project
+teardown r2-f6 complete (window primary:fm-r2-f6, worktree /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.lGKAjw/pool/.treehouse/demo-6a7ad6/5/demo)
+EXIT r2-f6=0 secs=7
+log line: 1790701592|ship|env|default|default|merged|0|0
+### teardown r2-c3 (scout with report.md)
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.lGKAjw
+teardown: reaping leaked worktree process(es) for r2-c3: 18326 20972
+teardown: force-killing leaked worktree process(es) for r2-c3: 18326
+🌳 Worktree returned to pool.
+teardown r2-c3 complete (window primary:fm-r2-c3, worktree /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.lGKAjw/pool/.treehouse/demo-6a7ad6/6/demo)
+EXIT r2-c3=0 secs=6
+log line: 1790701598|scout|env|default|default|reported||0
+## forge stand-in calls made by teardown (e5 hung 120s; teardown finished in 26s)
+1790701554 gh-axi pr list --state all --head fm/r2-d4 --limit 1
+1790701554 gh pr view 11 --json state,headRefOid,url -q .state + "\t" + .headRefOid + "\t" + .url
+1790701561 gh-axi pr list --state all --head fm/r2-e5 --limit 1
+1790701588 gh-axi pr list --state all --head fm/r2-f6 --limit 1
+1790701588 gh pr view 12 --json state,headRefOid,url -q .state + "\t" + .headRefOid + "\t" + .url
+
+$ cat $FM_HOME/data/capability-outcomes.log   (written by the six real teardowns above)
+1790701544|ship|env|default|default|merged|0|0
+1790701551|ship|env|default|default|revised|1|1
+1790701558|ship|env|default|default|unknown||0
+1790701585|ship|env|default|default|unknown||0
+1790701592|ship|env|default|default|merged|0|0
+1790701598|scout|env|default|default|reported||0
+
+$ fm-dispatch-select.sh --task-type ship '{"select":"capability-recent","use":[claude opus high, env default default]}'
+CAPABILITY_EVIDENCE: task-type=ship env|default|default|2|5|40
+{"harness":"env","model":"default","effort":"default"}
+exit=0
+
+$ fm-dispatch-select.sh --task-type scout '{"select":"capability-recent","use":[claude opus high, env default default]}'
+CAPABILITY_EVIDENCE: task-type=scout no samples in 604800s window
+CAPABILITY_SCOUT_TAX: task-type=scout consider {"harness":"env","model":"default","effort":"default"} (advisory; cost rules still govern)
+{"harness":"claude","model":"opus","effort":"high"}
+exit=0

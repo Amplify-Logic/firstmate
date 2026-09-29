@@ -1,0 +1,5 @@
+== pane drifted to the primary checkout, then relaunch:
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.NCioEK
+notice: live-a1 ships mode=local-only while the standing posture for demo is no-mistakes - less rigor than the captain's standing posture; proceed only on a current explicit captain instruction or an intake judgment you can state
+error: task live-a1's endpoint is in '/private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.NCioEK/projects/demo', not its recorded worktree '/private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.NCioEK/pool/.treehouse/demo-b408ca/1/demo'; refusing to relaunch an agent outside the copy holding its work
+worker started: no

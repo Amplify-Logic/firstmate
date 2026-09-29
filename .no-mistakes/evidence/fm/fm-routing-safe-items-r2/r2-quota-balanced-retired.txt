@@ -1,0 +1,20 @@
+# Round 2 re-drive at HEAD ebfbcb54: retired quota-balanced ranker; quota-axi stand-in on PATH counts invocations
+$ fm-dispatch-select.sh (rule select=quota-balanced, use=[claude opus high, cursor grok-4, codex])  -- quota-axi stand-in on PATH
+fm-dispatch-select: quota-balanced ranking is retired; rank a quota-sensitive profile array by spendPriority through the quota-array-dispatch skill; using first profile
+{"harness":"claude","model":"opus","effort":"high"}
+exit=
+
+$ fm-dispatch-select.sh --select quota-balanced <cursor-first array>
+fm-dispatch-select: quota-balanced ranking is retired; rank a quota-sensitive profile array by spendPriority through the quota-array-dispatch skill; using first profile
+{"harness":"cursor","model":"grok-4"}
+exit=
+
+$ fm-dispatch-select.sh --select quota-balanced --quota-json q.json <array>   (retired flag)
+error: unknown option --quota-json
+exit=
+
+quota-axi invocations: 0
+rule exit=0
+flag exit=0
+retired exit=2
+quota-axi invocations after re-run: 0

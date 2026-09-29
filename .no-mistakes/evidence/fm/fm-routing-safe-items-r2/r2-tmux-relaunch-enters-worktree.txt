@@ -1,0 +1,25 @@
+# Round 2 re-drive at HEAD ebfbcb54: tmux backend, real fm-spawn --relaunch in the lab (#5916)
+== relaunch r2-a1 (worker stopped, pane still in its worktree subshell)
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.lGKAjw
+spawned r2-a1 harness=env kind=ship mode=local-only yolo=off window=primary:fm-r2-a1 worktree=/private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.lGKAjw/pool/.treehouse/demo-6a7ad6/1/demo
+RELAUNCH EXIT=0
+worker-recorded cwd after relaunch: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.lGKAjw/pool/.treehouse/demo-6a7ad6/1/demo
+== pane tail
+^C
+(base) larsmusic@Larss-MacBook-Pro demo % cd -- '/private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.lGKAjw/pool/.treehouse/demo-6a7ad6/1/demo'
+(base) larsmusic@Larss-MacBook-Pro demo % export GOTMPDIR=/tmp/fm-r2-a1/gotmp
+(base) larsmusic@Larss-MacBook-Pro demo % unset FM_HERDR_PROJECT_KEY FM_HERDR_PROJECT_LABEL
+(base) larsmusic@Larss-MacBook-Pro demo % export COMPACT_ADVISER_DISABLE=1
+(base) larsmusic@Larss-MacBook-Pro demo % export FM_TASK_ID=r2-a1
+(base) larsmusic@Larss-MacBook-Pro demo % . '/tmp/fm-r2-a1+e5e33502c423968c9bac73d3a27e1071b8597c9b9ec69e5a6d93655e292a9fac/launch.s1790701483.33177.27054.sh'
+stand-in worker started in /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.lGKAjw/pool/.treehouse/demo-6a7ad6/1/demo
+
+== drifted case: stop worker, cd pane to PRIMARY checkout, relaunch
+pane cwd: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.lGKAjw/projects/demo
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.lGKAjw
+error: task r2-a1's endpoint is in '/private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.lGKAjw/projects/demo', not its recorded worktree '/private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.lGKAjw/pool/.treehouse/demo-6a7ad6/1/demo'; refusing to relaunch an agent outside the copy holding its work
+RELAUNCH EXIT=1
+worker started: no
+== return pane to worktree and relaunch again
+spawned r2-a1 harness=env kind=ship mode=local-only yolo=off window=primary:fm-r2-a1 worktree=/private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.lGKAjw/pool/.treehouse/demo-6a7ad6/1/demo
+worker-recorded cwd: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.lGKAjw/pool/.treehouse/demo-6a7ad6/1/demo

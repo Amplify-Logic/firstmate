@@ -1,0 +1,16 @@
+$ fm-dispatch-select.sh (rule: select=quota-balanced, use=[claude opus, cursor grok, codex]) with a quota-axi on PATH that favours codex
+{"harness":"claude","model":"opus","effort":"high"}
+exit=0
+stderr:
+fm-dispatch-select: quota-balanced ranking is retired; rank a quota-sensitive profile array by spendPriority through the quota-array-dispatch skill; using first profile
+quota-axi invocations: 0
+
+$ fm-dispatch-select.sh --select quota-balanced --quota-json quota.json <cursor-first array>  (retired flag)
+error: unknown option --quota-json
+exit=2
+
+$ fm-dispatch-select.sh --select quota-balanced <cursor-first array>
+fm-dispatch-select: quota-balanced ranking is retired; rank a quota-sensitive profile array by spendPriority through the quota-array-dispatch skill; using first profile
+{"harness":"cursor","model":"grok-4"}
+exit=0
+quota-axi invocations: 0

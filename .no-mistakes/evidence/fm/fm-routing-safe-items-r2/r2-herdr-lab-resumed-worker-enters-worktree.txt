@@ -1,0 +1,13 @@
+# Round 2 re-drive at HEAD ebfbcb54: Herdr lab session fm-lab-relaunch-33811-14070 via bin/fm-herdr-lab.sh (#5916), lab FM_HOME /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.lGKAjw
+## fresh spawn --backend herdr
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.lGKAjw
+warning: herdr server version 0.7.4 (protocol 16) is older than the 0.8.0 floor for presentation spaces, where projected cleanup can steal the active workspace; using the ordinary flat layout instead. Upgrade herdr to 0.8.0 or newer (herdr update) to restore the projection, or write "on" into config/herdr-presentation-spaces to force it on this release.
+spawned hrd-h1 harness=env kind=ship mode=local-only yolo=off window=fm-lab-relaunch-33811-14070:w1:p2 worktree=/private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.lGKAjw/pool/.treehouse/demo-6a7ad6/1/demo
+## after lab session stop + provision (host restart): restored pane
+{"pane_id":"w1:p2","cwd":"/private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.lGKAjw/projects/demo","foreground_cwd":"/private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.lGKAjw/projects/demo"}   <- restored into the PRIMARY checkout
+## fm-spawn.sh hrd-h1 --relaunch
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.lGKAjw
+spawned hrd-h1 harness=env kind=ship mode=local-only yolo=off window=fm-lab-relaunch-33811-14070:w1:p2 worktree=/private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.lGKAjw/pool/.treehouse/demo-6a7ad6/1/demo
+worker-recorded start directory: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.lGKAjw/pool/.treehouse/demo-6a7ad6/1/demo
+## after a second stop + provision: restored pane
+{"pane_id":"w1:p2","cwd":"/private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.lGKAjw/pool/.treehouse/demo-6a7ad6/1/demo","foreground_cwd":"/private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.lGKAjw/pool/.treehouse/demo-6a7ad6/1/demo"}

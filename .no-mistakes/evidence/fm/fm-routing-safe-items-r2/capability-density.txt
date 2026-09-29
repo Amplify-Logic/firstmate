@@ -1,0 +1,26 @@
+$ cat $FM_HOME/data/capability-outcomes.log
+1790699149|ship|claude|opus|high|merged|0|0
+1790699159|ship|claude|opus|high|merged|0|1
+1790699169|ship|claude|opus|high|revised|2|3
+1790699179|ship|cursor|grok-4||green|0|0
+1790699189|ship|cursor|grok-4||unknown||0
+1790699194|ship|cursor|grok-4||unknown||0
+1790699199|ship|cursor|grok-4||unknown||0
+1790699209|scout|cursor|grok-4||reported||0
+1790699210|scout|cursor|grok-4||reported||0
+1790699211|scout|cursor|grok-4||green|0|0
+1790699212|scout|claude|opus|high|reported||0
+1790699213|scout|claude|opus|high|failed|1|0
+
+$ fm-dispatch-select.sh --task-type ship '{"select":"capability-recent","use":[cursor grok-4, claude opus high]}'
+CAPABILITY_EVIDENCE: task-type=ship claude|opus|high|2|3|66
+CAPABILITY_EVIDENCE: task-type=ship cursor|grok-4||1|4|25
+{"harness":"claude","model":"opus","effort":"high"}
+exit=0
+
+$ fm-dispatch-select.sh --task-type scout '{"select":"capability-recent","use":[cursor grok-4, claude opus high]}'
+CAPABILITY_EVIDENCE: task-type=scout cursor|grok-4||1|1|100
+CAPABILITY_EVIDENCE: task-type=scout claude|opus|high|0|1|0
+{"harness":"cursor","model":"grok-4"}
+exit=0
+

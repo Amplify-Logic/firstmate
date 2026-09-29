@@ -1,0 +1,46 @@
+== no never-send list: request goes out (curl shim returns 503)
+exit=0
+stdout: dispatch-resolve:
+  status: error
+  reason: http 503 after 0 ms: 
+stderr: dispatch-resolve: error (http 503 after 0 ms: )
+network calls: 1
+
+== list with a case-different value: '  ACME-ledger  '
+exit=0
+stdout: 
+stderr: dispatch-resolve: off (brief text matches /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.lTGBgJ/config/dispatch-never-send line 3; nothing sent)
+network calls: 0
+
+== list with a value the brief wraps across lines/spaces: 'example client ltd'
+exit=0
+stdout: 
+stderr: dispatch-resolve: off (brief text matches /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.lTGBgJ/config/dispatch-never-send line 1; nothing sent)
+network calls: 0
+
+== list matching the project name: 'PAGER'
+exit=0
+stdout: 
+stderr: dispatch-resolve: off (brief text matches /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.lTGBgJ/config/dispatch-never-send line 1; nothing sent)
+network calls: 0
+
+== list matching nothing: 'unrelated-secret'
+exit=0
+stdout: dispatch-resolve:
+  status: error
+  reason: http 503 after 0 ms: 
+stderr: dispatch-resolve: error (http 503 after 0 ms: )
+network calls: 1
+body carries brief: 1
+
+== list path is a directory (unreadable list fails closed)
+exit=0
+stdout: 
+stderr: dispatch-resolve: off (/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.lTGBgJ/config/dispatch-never-send is not a readable regular file; nothing sent)
+network calls: 0
+
+== list is a mode-000 file
+exit=0
+stdout: 
+stderr: dispatch-resolve: off (/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.lTGBgJ/config/dispatch-never-send is not a readable regular file; nothing sent)
+network calls: 0

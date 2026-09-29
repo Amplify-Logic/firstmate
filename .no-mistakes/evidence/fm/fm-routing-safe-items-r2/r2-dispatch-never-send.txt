@@ -1,0 +1,37 @@
+# Round 2 re-drive at HEAD ebfbcb54: fm-dispatch-resolve never-send list (#5744); curl is a lab network stand-in answering 503 and counting calls; TYPESAFE_API_KEY is a dummy
+== no never-send list: request goes out
+exit=0
+stdout: dispatch-resolve:   status: error   reason: http 503 after 0 ms:  
+stderr: dispatch-resolve: error (http 503 after 0 ms: )
+network calls: 1
+body carries brief text: 1
+
+== list with case/whitespace-different value '  LAB   Task R2-A1  '
+exit=0
+stdout:  
+stderr: dispatch-resolve: off (brief text matches /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.lGKAjw/config/dispatch-never-send line 3; nothing sent)
+network calls: 0
+
+== list matching the project name 'DEMO'
+exit=0
+stdout:  
+stderr: dispatch-resolve: off (brief text matches /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.lGKAjw/config/dispatch-never-send line 1; nothing sent)
+network calls: 0
+
+== list matching nothing: 'unrelated-secret'
+exit=0
+stdout: dispatch-resolve:   status: error   reason: http 503 after 0 ms:  
+stderr: dispatch-resolve: error (http 503 after 0 ms: )
+network calls: 1
+
+== list path is a directory (fails closed)
+exit=0
+stdout:  
+stderr: dispatch-resolve: off (/private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.lGKAjw/config/dispatch-never-send is not a readable regular file; nothing sent)
+network calls: 0
+
+== list is a mode-000 file (fails closed)
+exit=0
+stdout:  
+stderr: dispatch-resolve: off (/private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.lGKAjw/config/dispatch-never-send is not a readable regular file; nothing sent)
+network calls: 0

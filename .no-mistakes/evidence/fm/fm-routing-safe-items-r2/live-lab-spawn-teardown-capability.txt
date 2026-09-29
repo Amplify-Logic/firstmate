@@ -1,0 +1,113 @@
+# Live lab: real fm-spawn -> worker deliveries -> real fm-teardown, one lab FM_HOME, private tmux socket, treehouse pool inside the lab
+## spawns
+/private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.O9jRRl/spawn-2.log:spawned live-e5 harness=env kind=ship mode=direct-PR yolo=off window=primary:fm-live-e5 worktree=/private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.O9jRRl/pool/.treehouse/demo-96acde/1/demo
+/private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.O9jRRl/spawn-2.log:EXIT live-e5=0
+/private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.O9jRRl/spawn-2.log:spawned live-f6 harness=env kind=ship mode=direct-PR yolo=off window=primary:fm-live-f6 worktree=/private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.O9jRRl/pool/.treehouse/demo-96acde/2/demo
+/private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.O9jRRl/spawn-2.log:EXIT live-f6=0
+/private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.O9jRRl/spawn-all.log:spawned live-a1 harness=env kind=ship mode=local-only yolo=off window=primary:fm-live-a1 worktree=/private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.O9jRRl/pool/.treehouse/demo-96acde/1/demo
+/private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.O9jRRl/spawn-all.log:EXIT live-a1=0
+/private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.O9jRRl/spawn-all.log:spawned live-b2 harness=env kind=ship mode=local-only yolo=off window=primary:fm-live-b2 worktree=/private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.O9jRRl/pool/.treehouse/demo-96acde/2/demo
+/private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.O9jRRl/spawn-all.log:EXIT live-b2=0
+/private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.O9jRRl/spawn-all.log:spawned live-d4 harness=env kind=ship mode=direct-PR yolo=off window=primary:fm-live-d4 worktree=/private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.O9jRRl/pool/.treehouse/demo-96acde/3/demo
+/private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.O9jRRl/spawn-all.log:EXIT live-d4=0
+/private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.O9jRRl/spawn-all.log:spawned live-c3 harness=env kind=scout window=primary:fm-live-c3 worktree=/private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.O9jRRl/pool/.treehouse/demo-96acde/4/demo
+/private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.O9jRRl/spawn-all.log:EXIT live-c3=0
+## worker-recorded start directories
+worker-cwd-live-a1.txt: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.O9jRRl/pool/.treehouse/demo-96acde/1/demo
+worker-cwd-live-b2.txt: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.O9jRRl/pool/.treehouse/demo-96acde/2/demo
+worker-cwd-live-c3.txt: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.O9jRRl/pool/.treehouse/demo-96acde/4/demo
+worker-cwd-live-d4.txt: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.O9jRRl/pool/.treehouse/demo-96acde/3/demo
+worker-cwd-live-e5.txt: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.O9jRRl/pool/.treehouse/demo-96acde/1/demo
+worker-cwd-live-f6.txt: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.O9jRRl/pool/.treehouse/demo-96acde/2/demo
+## real steer (bin/fm-send.sh live-b2 ...)
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.O9jRRl
+SEND_EXIT=0
+## teardowns (a1 local-only landed as delivered, b2 local-only follow-up after steer, d4 direct-PR pushed/unmerged)
+### teardown live-a1
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.O9jRRl
+teardown: reaping leaked worktree process(es) for live-a1: 18996 48014 54236
+teardown: force-killing leaked worktree process(es) for live-a1: 48014
+🌳 Worktree returned to pool.
+teardown live-a1 complete (window primary:fm-live-a1, worktree /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.O9jRRl/pool/.treehouse/demo-96acde/1/demo)
+Backlog: live-a1 just finished (config/backlog-backend selects manual editing). Update /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.O9jRRl/data/backlog.md - move live-a1 to Done, keep Done to the 10 most recent, then re-scan Queued and dispatch only work whose blockers are gone and date is due.
+EXIT live-a1=0 secs=20
+1790699762|ship|env|default|default|merged|0|0
+### teardown live-b2
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.O9jRRl
+teardown: reaping leaked worktree process(es) for live-b2: 31119 59813 63972
+teardown: force-killing leaked worktree process(es) for live-b2: 59813
+🌳 Worktree returned to pool.
+teardown live-b2 complete (window primary:fm-live-b2, worktree /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.O9jRRl/pool/.treehouse/demo-96acde/2/demo)
+Backlog: live-b2 just finished (config/backlog-backend selects manual editing). Update /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.O9jRRl/data/backlog.md - move live-b2 to Done, keep Done to the 10 most recent, then re-scan Queued and dispatch only work whose blockers are gone and date is due.
+EXIT live-b2=0 secs=8
+1790699774|ship|env|default|default|revised|1|1
+### teardown live-d4 (direct-PR, pushed, PR not merged; forge hangs)
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.O9jRRl
+teardown: reaping leaked worktree process(es) for live-d4: 35165 67994 74024
+teardown: force-killing leaked worktree process(es) for live-d4: 67994
+🌳 Worktree returned to pool.
+demo: STUCK: on diverged main, 0 commits behind origin/main - needs attention
+teardown live-d4 complete (window primary:fm-live-d4, worktree /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.O9jRRl/pool/.treehouse/demo-96acde/3/demo)
+Backlog: live-d4 just finished (config/backlog-backend selects manual editing). Update /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.O9jRRl/data/backlog.md - move live-d4 to Done, keep Done to the 10 most recent, then re-scan Queued and dispatch only work whose blockers are gone and date is due.
+EXIT live-d4=0 secs=9
+1790699782|ship|env|default|default|unknown||0
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.O9jRRl
+1790699782|ship|env|default|default|unknown||0
+ALLDONE
+## teardowns (e5 direct-PR, forge stand-in hangs 120s; f6 direct-PR, forge stand-in says PR merged at head; c3 scout with report)
+### teardown live-e5 (direct-PR pushed; forge hangs 120s)
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.O9jRRl
+teardown: reaping leaked worktree process(es) for live-e5: 849 67000 70784
+teardown: force-killing leaked worktree process(es) for live-e5: 67000
+
+🌳 Worktree returned to pool.
+WARNING: watcher still down (same stale episode; last beat: 347s ago, grace 300s) - full banner already printed this episode.
+demo: STUCK: on diverged main, 0 commits behind origin/main - needs attention
+teardown live-e5 complete (window primary:fm-live-e5, worktree /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.O9jRRl/pool/.treehouse/demo-96acde/1/demo)
+Backlog: live-e5 just finished (config/backlog-backend selects manual editing). Update /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.O9jRRl/data/backlog.md - move live-e5 to Done, keep Done to the 10 most recent, then re-scan Queued and dispatch only work whose blockers are gone and date is due.
+EXIT live-e5=0 secs=28
+1790699880|ship|env|default|default|unknown||0
+### teardown live-f6 (direct-PR; forge reports PR merged at worktree head)
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.O9jRRl
+WARNING: watcher still down (same stale episode; last beat: 349s ago, grace 300s) - full banner already printed this episode.
+teardown: reaping leaked worktree process(es) for live-f6: 3931 75053 80388
+teardown: force-killing leaked worktree process(es) for live-f6: 75053
+
+🌳 Worktree returned to pool.
+WARNING: watcher still down (same stale episode; last beat: 355s ago, grace 300s) - full banner already printed this episode.
+demo: STUCK: on diverged main, 0 commits behind origin/main - needs attention
+teardown live-f6 complete (window primary:fm-live-f6, worktree /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.O9jRRl/pool/.treehouse/demo-96acde/2/demo)
+Backlog: live-f6 just finished (config/backlog-backend selects manual editing). Update /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.O9jRRl/data/backlog.md - move live-f6 to Done, keep Done to the 10 most recent, then re-scan Queued and dispatch only work whose blockers are gone and date is due.
+EXIT live-f6=0 secs=7
+1790699887|ship|env|default|default|merged|0|0
+### teardown live-c3 (scout with report)
+complete: live-c3 captain-call inventory reviewed
+hold-exit=0
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.O9jRRl
+WARNING: watcher still down (same stale episode; last beat: 357s ago, grace 300s) - full banner already printed this episode.
+teardown: reaping leaked worktree process(es) for live-c3: 78921 85067
+teardown: force-killing leaked worktree process(es) for live-c3: 78921
+
+🌳 Worktree returned to pool.
+teardown live-c3 complete (window primary:fm-live-c3, worktree /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.O9jRRl/pool/.treehouse/demo-96acde/4/demo)
+Backlog: live-c3 just finished (config/backlog-backend selects manual editing). Update /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.O9jRRl/data/backlog.md - move live-c3 to Done, keep Done to the 10 most recent, then re-scan Queued and dispatch only work whose blockers are gone and date is due.
+EXIT live-c3=0 secs=6
+1790699894|scout|env|default|default|reported||0
+ALLDONE
+## forge stand-in calls
+1790699856 gh-axi pr list --state all --head fm/live-e5 --limit 1
+gh-axi pr list --state all --head fm/live-f6 --limit 1
+gh pr view 12 --json state,headRefOid,url -q .state + "\t" + .headRefOid + "\t" + .url
+## data/capability-outcomes.log
+1790699762|ship|env|default|default|merged|0|0
+1790699774|ship|env|default|default|revised|1|1
+1790699782|ship|env|default|default|unknown||0
+1790699880|ship|env|default|default|unknown||0
+1790699887|ship|env|default|default|merged|0|0
+1790699894|scout|env|default|default|reported||0
+## fm-dispatch-select.sh --task-type ship capability-recent over [claude, env] using that log
+CAPABILITY_EVIDENCE: task-type=ship env|default|default|2|5|40
+{"harness":"env","model":"default","effort":"default"}
+## fm-dispatch-select.sh --task-type scout capability-recent over [claude, env] using that log
+CAPABILITY_EVIDENCE: task-type=scout no samples in 604800s window
+{"harness":"claude"}

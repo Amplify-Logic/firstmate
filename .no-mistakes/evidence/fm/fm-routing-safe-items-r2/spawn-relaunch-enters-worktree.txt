@@ -1,0 +1,33 @@
+== fresh spawn log
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.NCioEK
+notice: live-a1 ships mode=local-only while the standing posture for demo is no-mistakes - less rigor than the captain's standing posture; proceed only on a current explicit captain instruction or an intake judgment you can state
+spawned live-a1 harness=env kind=ship mode=local-only yolo=off window=primary:fm-live-a1 worktree=/private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.NCioEK/pool/.treehouse/demo-b408ca/1/demo
+== relaunch log
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.NCioEK
+notice: live-a1 ships mode=local-only while the standing posture for demo is no-mistakes - less rigor than the captain's standing posture; proceed only on a current explicit captain instruction or an intake judgment you can state
+spawned live-a1 harness=env kind=ship mode=local-only yolo=off window=primary:fm-live-a1 worktree=/private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.NCioEK/pool/.treehouse/demo-b408ca/1/demo
+== worker pane (primary:fm-live-a1) after fresh spawn and relaunch
+treehouse get
+(base) larsmusic@Larss-MacBook-Pro demo % treehouse get
+A new version of treehouse is available: v2.0.0 → v3.1.0
+Run "treehouse update" to update
+🌳 Setting up worktree...
+🌳 Entered worktree at /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.NCioEK/pool/.treehouse/demo-b408ca/1/demo. Type 'exit' to return.
+(base) larsmusic@Larss-MacBook-Pro demo % cd -- '/private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.NCioEK/pool/.treehouse/demo-b408ca/1/demo'
+(base) larsmusic@Larss-MacBook-Pro demo % export GOTMPDIR=/tmp/fm-live-a1/gotmp
+(base) larsmusic@Larss-MacBook-Pro demo % unset FM_HERDR_PROJECT_KEY FM_HERDR_PROJECT_LABEL
+(base) larsmusic@Larss-MacBook-Pro demo % export COMPACT_ADVISER_DISABLE=1
+(base) larsmusic@Larss-MacBook-Pro demo % export FM_TASK_ID=live-a1
+(base) larsmusic@Larss-MacBook-Pro demo % . '/tmp/fm-live-a1+9902bdbf14533da92e0d27bbe8f0d2750b243a3db78ea82356014d999640cb5d/launch.s1790699315.21964.28694.sh'
+stand-in worker started in /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.NCioEK/pool/.treehouse/demo-b408ca/1/demo
+^C
+(base) larsmusic@Larss-MacBook-Pro demo % cd -- '/private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.NCioEK/pool/.treehouse/demo-b408ca/1/demo'
+(base) larsmusic@Larss-MacBook-Pro demo % export GOTMPDIR=/tmp/fm-live-a1/gotmp
+(base) larsmusic@Larss-MacBook-Pro demo % unset FM_HERDR_PROJECT_KEY FM_HERDR_PROJECT_LABEL
+(base) larsmusic@Larss-MacBook-Pro demo % export COMPACT_ADVISER_DISABLE=1
+(base) larsmusic@Larss-MacBook-Pro demo % export FM_TASK_ID=live-a1
+(base) larsmusic@Larss-MacBook-Pro demo % . '/tmp/fm-live-a1+9902bdbf14533da92e0d27bbe8f0d2750b243a3db78ea82356014d999640cb5d/launch.s1790699384.48408.20175.sh'
+stand-in worker started in /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.NCioEK/pool/.treehouse/demo-b408ca/1/demo
+== worker-recorded cwd after relaunch
+/private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.NCioEK/pool/.treehouse/demo-b408ca/1/demo
+== state/live-a1.steers size after spawn:        0 bytes
