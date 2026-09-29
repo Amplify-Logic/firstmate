@@ -837,6 +837,27 @@ test_local_only_landed_after_follow_up_records_revised() {
   pass "landed local-only work with a follow-up commit records revised with its counts"
 }
 
+test_direct_pr_merged_as_delivered_records_merged() {
+  local case_dir now line
+  case_dir=$(make_case capability-direct-pr-merged)
+  write_meta "$case_dir" direct-PR ship
+  printf '%s\n' harness=claude model=opus effort=high >> "$case_dir/state/task-x1.meta"
+  : > "$case_dir/state/task-x1.steers"
+  wt_commit_file "$case_dir" delivered.txt "merged through its PR" "first delivery"
+  now=$(date +%s)
+  printf 'done [at=%s]: PR https://github.com/example/repo/pull/7\n' "$((now + 100))" >> "$case_dir/state/task-x1.status"
+  add_fork_with_pushed_branch "$case_dir"
+  add_gh_pr_merged_for_head "$case_dir" "$(git -C "$case_dir/wt" rev-parse HEAD)"
+  run_teardown "$case_dir" > "$case_dir/stdout" 2> "$case_dir/stderr" \
+    || fail "capability-direct-pr-merged: teardown failed: $(cat "$case_dir/stderr")"
+  line=$(capability_line "$case_dir")
+  case "$line" in
+    *'|ship|claude|opus|high|merged|0|0') ;;
+    *) fail "direct-PR work whose PR merged as delivered should record merged|0, got: $line" ;;
+  esac
+  pass "direct-PR work whose PR merged with no follow-up records merged"
+}
+
 test_pushed_but_unlanded_work_keeps_outcome_unknown() {
   local mode case_dir now line
   for mode in local-only direct-PR; do
@@ -4501,6 +4522,7 @@ test_local_only_truly_unpushed_refuses
 test_local_only_merged_to_local_main_allows
 test_local_only_landed_as_delivered_records_merged
 test_local_only_landed_after_follow_up_records_revised
+test_direct_pr_merged_as_delivered_records_merged
 test_pushed_but_unlanded_work_keeps_outcome_unknown
 test_untimed_ready_report_keeps_outcome_unknown
 test_scout_with_report_records_reported

@@ -3681,21 +3681,25 @@ fi
 
 # A merged or revised capability outcome stands only when the work's landing
 # is proven while the worktree still exists: a merged PR for direct-PR, and for
-# local-only a head on the local default branch or content already in it.
+# local-only a head on the local default branch or content already in it. The
+# proof runs bounded like the rest of the capability evidence, so a slow or
+# unreachable forge leaves the outcome unknown instead of delaying teardown.
+capability_landing_proven() {
+  local name
+  [ -d "$WT" ] || return 1
+  if [ "$MODE" = direct-PR ]; then
+    pr_is_merged "$CAP_BRANCH"
+    return
+  fi
+  if name=$(default_branch) \
+    && git -C "$WT" merge-base --is-ancestor HEAD "refs/heads/$name" 2>/dev/null; then
+    return 0
+  fi
+  content_in_default
+}
 case "$CAP_OUTCOME" in
   merged|revised)
-    CAP_LANDED=0
-    if [ ! -d "$WT" ]; then
-      :
-    elif [ "$MODE" = direct-PR ]; then
-      if pr_is_merged "$CAP_BRANCH"; then CAP_LANDED=1; fi
-    elif CAP_DEFAULT=$(default_branch) \
-      && git -C "$WT" merge-base --is-ancestor HEAD "refs/heads/$CAP_DEFAULT" 2>/dev/null; then
-      CAP_LANDED=1
-    elif content_in_default; then
-      CAP_LANDED=1
-    fi
-    if [ "$CAP_LANDED" != 1 ]; then
+    if ! fm_run_bash_timeout 20 capability_landing_proven >/dev/null 2>&1; then
       CAP_OUTCOME=unknown
       CAP_FIX_ROUNDS=
     fi
