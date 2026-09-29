@@ -31,7 +31,8 @@
 #                 first done: report
 #       reported  a scout left a non-empty data/<id>/report.md
 #       unknown   no result was derivable at teardown (no pipeline record, no
-#                 ready report or branch history, or no scout report)
+#                 ready report or branch history, no proven landing, or no
+#                 scout report)
 #       discarded work was discarded by an approved --force teardown
 #   - Secondmate teardowns are not recorded (not a worker capability sample).
 #   - task-type is a free-form slug from meta task_type= when present, else kind
@@ -162,9 +163,10 @@ fm_capability_outcome_from_runs() {
 }
 
 # Derive a direct-PR or local-only ship's outcome from when its worker first
-# reported it ready and when its branch moved. Teardown records only work whose
-# landing it proved, so a branch that stayed put after that report merged as
-# first delivered. Args: ready-epoch (the first done: event's time, empty when
+# reported it ready and when its branch moved. A branch that stayed put after
+# that report is merged as first delivered; teardown keeps merged or revised
+# only once it proves the work landed (a merged PR for direct-PR, the local
+# default branch for local-only) and records unknown otherwise. Args: ready-epoch (the first done: event's time, empty when
 # unknown) and the branch's reflog times, one unix epoch per line in any order.
 # Prints "<outcome>|<fix-rounds>":
 #   - no ready time, or no branch move after its creation -> unknown|

@@ -837,6 +837,28 @@ test_local_only_landed_after_follow_up_records_revised() {
   pass "landed local-only work with a follow-up commit records revised with its counts"
 }
 
+test_pushed_but_unlanded_work_keeps_outcome_unknown() {
+  local mode case_dir now line
+  for mode in local-only direct-PR; do
+    case_dir=$(make_case "capability-unlanded-$mode")
+    write_meta "$case_dir" "$mode" ship
+    printf '%s\n' harness=claude model=opus effort=high >> "$case_dir/state/task-x1.meta"
+    : > "$case_dir/state/task-x1.steers"
+    wt_commit_file "$case_dir" delivered.txt "not in main" "first delivery"
+    now=$(date +%s)
+    printf 'done [at=%s]: branch fm/task-x1 ready\n' "$((now + 100))" >> "$case_dir/state/task-x1.status"
+    add_fork_with_pushed_branch "$case_dir"
+    run_teardown "$case_dir" > "$case_dir/stdout" 2> "$case_dir/stderr" \
+      || fail "capability-unlanded-$mode: teardown failed: $(cat "$case_dir/stderr")"
+    line=$(capability_line "$case_dir")
+    case "$line" in
+      *'|ship|claude|opus|high|unknown||0') ;;
+      *) fail "$mode work pushed but never landed must record unknown, got: $line" ;;
+    esac
+  done
+  pass "pushed but unlanded direct-PR and local-only work records unknown instead of merged"
+}
+
 test_untimed_ready_report_keeps_outcome_unknown() {
   local case_dir line
   case_dir=$(make_case capability-untimed)
@@ -4479,6 +4501,7 @@ test_local_only_truly_unpushed_refuses
 test_local_only_merged_to_local_main_allows
 test_local_only_landed_as_delivered_records_merged
 test_local_only_landed_after_follow_up_records_revised
+test_pushed_but_unlanded_work_keeps_outcome_unknown
 test_untimed_ready_report_keeps_outcome_unknown
 test_scout_with_report_records_reported
 test_no_mistakes_origin_remote_allows

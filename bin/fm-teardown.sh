@@ -3679,6 +3679,29 @@ if teardown_owns_worktree && [ -d "$WT" ] && [ "$FORCE" != "--force" ]; then
   fi
 fi
 
+# A merged or revised capability outcome stands only when the work's landing
+# is proven while the worktree still exists: a merged PR for direct-PR, and for
+# local-only a head on the local default branch or content already in it.
+case "$CAP_OUTCOME" in
+  merged|revised)
+    CAP_LANDED=0
+    if [ ! -d "$WT" ]; then
+      :
+    elif [ "$MODE" = direct-PR ]; then
+      if pr_is_merged "$CAP_BRANCH"; then CAP_LANDED=1; fi
+    elif CAP_DEFAULT=$(default_branch) \
+      && git -C "$WT" merge-base --is-ancestor HEAD "refs/heads/$CAP_DEFAULT" 2>/dev/null; then
+      CAP_LANDED=1
+    elif content_in_default; then
+      CAP_LANDED=1
+    fi
+    if [ "$CAP_LANDED" != 1 ]; then
+      CAP_OUTCOME=unknown
+      CAP_FIX_ROUNDS=
+    fi
+    ;;
+esac
+
 # A Herdr close may reposition shared workspace order, so the whole
 # destructive sequence below (worktree return, pane close, record removal)
 # runs under the named-session presentation lock, acquired BEFORE anything is

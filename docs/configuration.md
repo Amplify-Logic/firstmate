@@ -2896,9 +2896,10 @@ Each append-only line is:
 `fixed` means validation passed only after earlier recorded attempts, and its `fix-rounds` field counts those earlier attempts.
 `failed` means validation ran but its newest recorded attempt never completed.
 `merged` means direct-PR or local-only work landed with no follow-up: its branch never moved after the worker's first `done:` report.
+Teardown keeps `merged` or `revised` only when it proves the landing before removing the worktree: a merged PR for direct-PR, or for local-only a head on the local default branch or content already in it; unproven work records `unknown`.
 `revised` means such work landed only after follow-up commits, and its `fix-rounds` field counts the branch moves after that first report.
 `reported` means a scout left a non-empty report.
-`unknown` means no result was derivable (no pipeline record, an untimed first `done:` report, a branch that never moved, or no scout report).
+`unknown` means no result was derivable (no pipeline record, an untimed first `done:` report, a branch that never moved, an unproven landing, or no scout report).
 `discarded` records an approved `--force` teardown.
 Density counts `green` and `merged` as first-try successes, counts `revised` and every other outcome toward the total only, and leaves `reported` out of both.
 The trailing counts are written only when derivable: `steers` counts confirmed supervisor sends recorded per task by `bin/fm-send.sh` into a counter `bin/fm-spawn.sh` starts empty, so an unsteered task records 0, and an empty `fix-rounds` slot is retained when only `steers` is known.
@@ -2909,5 +2910,5 @@ Fields never contain `|` or newlines.
 Cost rules in `config/crew-dispatch.json` always win: evidence only ranks or advises within the already cost-filtered `use` array and never bypasses the third-party-model guard.
 With `--task-type`, dispatch-select prints `CAPABILITY_EVIDENCE:` lines on stderr for firstmate.
 About 10% of those dispatches may also print one `CAPABILITY_SCOUT_TAX:` suggestion naming a different allowed profile; that suggestion is advisory and never changes the selected stdout profile.
-`select: capability-recent` makes ranking choose the best recent green density inside the allowed array, where green strictly means first-try passes; a sampled profile outranks an earlier unsampled one only when density is greater than 0, and absent or all-zero evidence keeps configured input order.
+`select: capability-recent` makes ranking choose the best recent density inside the allowed array, where density counts first-try successes (`green`, or `merged` with zero follow-ups) over counted samples; a sampled profile outranks an earlier unsampled one only when density is greater than 0, and absent or all-zero evidence keeps configured input order.
 Overrides for tests and ops live under Environment variables (`FM_CAPABILITY_*`).
