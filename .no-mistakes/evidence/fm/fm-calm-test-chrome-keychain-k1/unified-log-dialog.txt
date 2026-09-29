@@ -1,0 +1,2 @@
+Timestamp               Ty Process[PID:TID]
+2026-09-29 22:40:43.677 Df log[49431:24775e6] [com.apple.log:] log run noninteractively, parent: 48957 (zsh), args: '/usr/bin/log' 'show' '--start' '2026-09-29 22:39:48' '--style' 'compact' '--predicate' 'process == "SecurityAgent" OR eventMessage CONTAINS[c] "Keychain Not Found" OR eventMessage CONTAINS[c] "Chrome S

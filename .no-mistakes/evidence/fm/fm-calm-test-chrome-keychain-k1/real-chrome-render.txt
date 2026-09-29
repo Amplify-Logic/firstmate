@@ -1,0 +1,21 @@
+chrome=/Applications/Google Chrome.app/Contents/MacOS/Google Chrome
+Google Chrome 154.0.8037.92 
+render_export_dom: success
+elapsed=2s
+--- browser argv observed while running ---
+--user-data-dir=/private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-calm-pi-extension.WugDbU/chrome-home-1
+--headless=new
+--use-mock-keychain
+--password-store=basic
+--disable-gpu
+--no-sandbox
+--disable-dev-shm-usage
+--disable-background-networking
+--virtual-time-budget=2000
+--dump-dom
+--- rendered DOM ---
+<!DOCTYPE html>
+<html><head><title>t</title></head><body><div id="messages"><div class="user-message">KEYCHAIN_PROBE</div></div><script>document.body.insertAdjacentHTML("beforeend","<p id=js>JS_RENDERED</p>")</script><p id="js">JS_RENDERED</p>
+</body></html>
+--- profile keychain/secret files ---
+ls: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-calm-pi-extension.WugDbU/chrome-home-1/Library/Keychains: No such file or directory

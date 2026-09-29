@@ -1,0 +1,3 @@
+=== base (pre-fix, 17424487) render_export_dom + target test_export_dom_render_guard ===
+not ok - render_export_dom launched Chrome without --use-mock-keychain, so macOS asks the login keychain to store its Safe Storage key
+exit=1
