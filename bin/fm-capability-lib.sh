@@ -24,11 +24,11 @@
 #       failed    validation ran but its newest recorded attempt never
 #                 completed
 #       merged    direct-PR or local-only work landed with no follow-up: its
-#                 branch never moved after the worker's first done: report
-#                 (fix-rounds 0)
+#                 branch's content never changed after the worker's first
+#                 done: report, so a pure rebase still counts (fix-rounds 0)
 #       revised   direct-PR or local-only work landed only after follow-up
-#                 commits; fix-rounds counts the branch moves after that
-#                 first done: report
+#                 commits that changed the branch-only patch-ids; fix-rounds
+#                 counts the branch moves after that first done: report
 #       reported  a scout left a non-empty data/<id>/report.md
 #       unknown   no result was derivable at teardown (no pipeline record, no
 #                 ready report or branch history, no proven landing, or no
@@ -166,8 +166,11 @@ fm_capability_outcome_from_runs() {
 # reported it ready and when its branch moved. A branch that stayed put after
 # that report is merged as first delivered; teardown keeps merged or revised
 # only once it proves the work landed (a merged PR for direct-PR, the local
-# default branch for local-only) and records unknown otherwise. Args: ready-epoch (the first done: event's time, empty when
-# unknown) and the branch's reflog times, one unix epoch per line in any order.
+# default branch for local-only) and records unknown otherwise. Teardown also
+# turns revised back into merged when the moves left the branch-only patch-ids
+# unchanged (a pure rebase), and into unknown when they cannot be compared.
+# Args: ready-epoch (the first done: event's time, empty when unknown) and the
+# branch's reflog times, one unix epoch per line in any order.
 # Prints "<outcome>|<fix-rounds>":
 #   - no ready time, or no branch move after its creation -> unknown|
 #   - no branch move after the ready time                 -> merged|0

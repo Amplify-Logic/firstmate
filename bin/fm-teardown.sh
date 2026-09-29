@@ -1262,8 +1262,9 @@ if command -v fm_capability_outcome_from_runs >/dev/null 2>&1 \
           break
         done < "$STATE/$ID.status"
       fi
-      CAP_MOVES=$(git -C "$WT" reflog show --date=unix --format=%gd "refs/heads/$CAP_BRANCH" 2>/dev/null \
-        | sed -n 's/.*@{\([0-9][0-9]*\)}$/\1/p')
+      CAP_REFLOG=$(git -C "$WT" reflog show --date=unix --format='%gd %H' "refs/heads/$CAP_BRANCH" 2>/dev/null \
+        | sed -n 's/.*@{\([0-9][0-9]*\)} \([0-9a-f][0-9a-f]*\)$/\1 \2/p')
+      CAP_MOVES=$(printf '%s\n' "$CAP_REFLOG" | awk 'NF == 2 { print $1 }')
       CAP_EVIDENCE=$(fm_capability_outcome_from_followups "$CAP_READY" "$CAP_MOVES")
       CAP_OUTCOME=${CAP_EVIDENCE%%|*}
       CAP_FIX_ROUNDS=${CAP_EVIDENCE#*|}
@@ -3705,6 +3706,54 @@ case "$CAP_OUTCOME" in
     fi
     ;;
 esac
+
+# A branch that moved after the ready report was revised only when those moves
+# changed its content: the patch-ids of its branch-only commits at the ready-time
+# head and at the final head are compared, so a pure rebase stays merged. Branch-
+# only means not on the default branch as it stood before the work landed there.
+# Returns 0 when the content is unchanged, 1 when it changed, and 2 when either
+# side cannot be derived.
+capability_default_positions_before() {  # <head>
+  local name ref entry
+  name=$(default_branch) || return 1
+  for ref in "refs/heads/$name" "refs/remotes/origin/$name"; do
+    git -C "$WT" rev-parse --quiet --verify "$ref" >/dev/null 2>&1 || continue
+    for entry in $( { git -C "$WT" rev-parse "$ref"; git -C "$WT" reflog show --format=%H "$ref"; } 2>/dev/null ); do
+      if ! git -C "$WT" merge-base --is-ancestor "$1" "$entry" 2>/dev/null; then
+        printf '%s\n' "$entry"
+        break
+      fi
+    done
+  done
+}
+capability_branch_patch_ids() {  # <head> <excluded-commits>
+  printf '%s\n' "$2" | sed -n 's/^\([0-9a-f][0-9a-f]*\)$/^\1/p' \
+    | git -C "$WT" log --no-merges -p --format='commit %H' --stdin "$1" 2>/dev/null \
+    | git patch-id --stable 2>/dev/null | awk '{ print $1 }' | sort -u
+}
+capability_followups_kept_content() {
+  local ready_head final_head excluded ready_ids final_ids
+  [ -d "$WT" ] || return 2
+  ready_head=$(printf '%s\n' "$CAP_REFLOG" | awk -v ready="$CAP_READY" \
+    'NF == 2 && ($1 + 0) <= (ready + 0) { print $2; exit }')
+  [ -n "$ready_head" ] || return 2
+  final_head=$(git -C "$WT" rev-parse --quiet --verify "refs/heads/$CAP_BRANCH^{commit}" 2>/dev/null) || return 2
+  excluded=$(capability_default_positions_before "$final_head") || return 2
+  [ -n "$excluded" ] || return 2
+  ready_ids=$(capability_branch_patch_ids "$ready_head" "$excluded")
+  final_ids=$(capability_branch_patch_ids "$final_head" "$excluded")
+  [ -n "$ready_ids" ] && [ -n "$final_ids" ] || return 2
+  [ "$ready_ids" = "$final_ids" ] || return 1
+}
+if [ "$CAP_OUTCOME" = revised ]; then
+  cap_content_rc=0
+  capability_followups_kept_content || cap_content_rc=$?
+  case "$cap_content_rc" in
+    0) CAP_OUTCOME=merged; CAP_FIX_ROUNDS=0 ;;
+    1) ;;
+    *) CAP_OUTCOME=unknown; CAP_FIX_ROUNDS= ;;
+  esac
+fi
 
 # A Herdr close may reposition shared workspace order, so the whole
 # destructive sequence below (worktree return, pane close, record removal)
