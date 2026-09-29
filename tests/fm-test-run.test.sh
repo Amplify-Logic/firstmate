@@ -1022,7 +1022,9 @@ test_failure_cause_request_fits_and_excludes_private_paths() {
   base=$(git -C "$repo" rev-parse HEAD)
   mkdir -p "$repo/bin" "$repo/tests" "$repo/data"
   python3 -c 'import sys; open(sys.argv[1], "w").write("".join("line %d of a very large generated change\n" % i for i in range(6000)))' "$repo/bin/big.sh"
-  printf 'assert_equals "new name" "$got"\n' >"$repo/tests/small.test.sh"
+  cat >"$repo/tests/small.test.sh" <<'SH'
+assert_equals "new name" "$got"
+SH
   printf 'private captain note\n' >"$repo/data/private.md"
   git -C "$repo" add bin/big.sh tests/small.test.sh
   git -C "$repo" add -f data/private.md
