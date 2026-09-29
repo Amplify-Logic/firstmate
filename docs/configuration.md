@@ -1173,7 +1173,7 @@ The scaffold's standard setup, rules, and definition-of-done text is the same in
 
 When the brief has both sections, the same request also asks one yes/no scope question over the same state: do the build instructions under `## Firstmate spec` add a change the ask under `## Captain's intent` did not need?
 An answer of 0.5 or above prints one `scope:` line with the probability, as advice only: it never changes the status, rule, fallback, candidates, or profile.
-A brief without both sections is not asked it, and a missing, malformed, or below-0.5 answer prints nothing; an API failure or timeout is the usual `error` outcome with no scope line.
+A brief without both sections is not asked it, and a missing, malformed, or below-0.5 answer prints nothing; an `error` outcome, including an API failure or timeout, never carries a scope line.
 
 **Missing or invalid rules**
 

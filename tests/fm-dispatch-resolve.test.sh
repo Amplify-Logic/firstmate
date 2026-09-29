@@ -529,7 +529,7 @@ reset_log
 with_scope '{"type":"noul","noul":0.98}'
 TYPESAFE_API_KEY=$KEY FAKE_QUOTA_FAIL=1 run code out err "$SCAFFOLD_BRIEF"
 assert_contains "$out" '  status: error' "a quota failure after the answer is still an error outcome"
-assert_contains "$out" "$SCOPE_TEXT" "the scope advice survives an error after a valid answer"
+assert_not_contains "$out" '  scope:' "an error after a valid answer prints no scope line"
 
 reset_log
 with_scope '{"type":"noul","noul":0.98}'

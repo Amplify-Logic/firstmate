@@ -23,8 +23,8 @@
 #   brief has both sections, the same request also asks one yes/no scope
 #   question: do the build instructions add a change the ask did not need?
 #   At 0.5 or above one advisory `scope:` line is printed; the answer never
-#   changes the status or profile, and a missing or malformed scope answer
-#   prints nothing. Everything
+#   changes the status or profile, and a missing or malformed scope answer or
+#   an `error` outcome prints nothing. Everything
 #   after that is jq: the confidence floor (0.6 on the answer confidence, or a
 #   rule's declared `min_confidence` on that rule's probability, falling to the
 #   most probable other option that clears its own floor), the rule's declared
@@ -226,12 +226,10 @@ done < <(jq -r '
 
 RULE_COUNT=$(jq -r '(.rules // []) | length' "$RULES")
 
-SCOPE_LINE=''
 emit_error() {
   local reason=$1
   echo "dispatch-resolve: error ($reason)" >&2
   printf 'dispatch-resolve:\n  status: error\n  reason: %s\n' "$reason"
-  [ -z "$SCOPE_LINE" ] || printf '%s\n' "$SCOPE_LINE"
   exit 0
 }
 
@@ -325,6 +323,7 @@ jq -e --slurpfile rules "$RULES" '
   "$RESP_FILE" >/dev/null 2>&1 || emit_error "response is not a rule Choice answer"
 
 # ---- scope advice: printed at the floor, never an input to the outcome -----------
+SCOPE_LINE=''
 if [ "$SCOPE_CHECK" = true ]; then
   SCOPE_LINE=$(jq -r --argjson floor "$SCOPE_FLOOR" '
     .answers.scope.noul
