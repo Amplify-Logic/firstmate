@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 # fm-command-guard.py - the opt-in worker command guard: before a spawned
 # worker's shell command runs, TypeSafe's Jev judges it, and the command is
-# blocked when it would remove or overwrite something with no way back, when it
-# aims to wipe something, or when it carries text aimed at the judge itself.
+# blocked when it would remove, overwrite or send something with no way back,
+# when it aims to wipe something, or when it carries text aimed at the judge
+# itself.
 #
 # Usage:
 #   fm-command-guard.py hook --config DIR --state DIR --home DIR --task ID --project NAME
