@@ -2417,10 +2417,11 @@ if [ "$JOBS" -gt 1 ]; then
   rm -f "$SCHEDULE_TMP"
 fi
 
-if [ "$PER_SCRIPT_TIMEOUT_SECS" -gt 0 ]; then
-  [ -r "$ROOT/bin/fm-timeout-lib.sh" ] || die "per-script timeout helper not found: bin/fm-timeout-lib.sh"
+if [ -r "$ROOT/bin/fm-timeout-lib.sh" ]; then
   # shellcheck source=bin/fm-timeout-lib.sh
   . "$ROOT/bin/fm-timeout-lib.sh"
+elif [ "$PER_SCRIPT_TIMEOUT_SECS" -gt 0 ]; then
+  die "per-script timeout helper not found: bin/fm-timeout-lib.sh"
 fi
 
 RUN_TMP=$(mktemp -d "${TMPDIR:-/tmp}/fm-test-run.XXXXXX")
@@ -2758,12 +2759,9 @@ FAILURE_CAUSE_BOUND=30
 print_failure_causes() {
   local engine="$ROOT/bin/fm-test-failure-cause.py" labels script cause detail
   [ -s "$FAILURES_TSV" ] || return 0
-  [ -r "$engine" ] && [ -r "$ROOT/bin/fm-timeout-lib.sh" ] || return 0
+  [ -r "$engine" ] || return 0
   command -v python3 >/dev/null 2>&1 || return 0
-  if ! command -v fm_run_timed >/dev/null 2>&1; then
-    # shellcheck source=bin/fm-timeout-lib.sh
-    . "$ROOT/bin/fm-timeout-lib.sh" || return 0
-  fi
+  command -v fm_run_timed >/dev/null 2>&1 || return 0
   labels=$(FM_HOME="${FM_HOME:-$ROOT}" fm_run_timed "$FAILURE_CAUSE_BOUND" \
     python3 "$engine" --root "$ROOT" --base "$BASE_REF" "$FAILURES_TSV" 2>/dev/null) || return 0
   while IFS=$'\t' read -r script cause detail; do
