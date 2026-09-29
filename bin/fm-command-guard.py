@@ -48,9 +48,12 @@
 # included, and any one condition blocks. To keep each state short, a redacted
 # command longer than one part is cut into overlapping parts of at most
 # PART_CHARS characters, all sent in ONE request that asks the three questions
-# of every part, and any part firing any condition blocks. A command needing
-# more than MAX_PARTS parts is not judged: it is allowed, and a warning goes to
-# stderr and the log. Only the Bash tool is judged, so a script written with
+# of every part, and any part firing any condition blocks. If that request
+# fails (timeout, HTTP error, unusable answer), the guard asks once more about
+# the first HEAD_CHARS and last TAIL_CHARS characters alone before it steps
+# aside, and the log's `path` names what decided: whole, parts or
+# head-and-tail. A command needing more than MAX_PARTS parts is not judged: it
+# is allowed, and a warning goes to stderr and the log. Only the Bash tool is judged, so a script written with
 # another tool and then run as `bash x.sh` is judged by that short command
 # alone. It is still an extra check on a worker that already runs in a
 # disposable copy under supervision, not a sandbox.
@@ -64,7 +67,8 @@
 #
 # Env:
 #   FM_COMMAND_GUARD_ENDPOINT   API endpoint (default the TypeSafe System One endpoint)
-#   FM_COMMAND_GUARD_TIMEOUT    per-request bound in seconds (default 4)
+#   FM_COMMAND_GUARD_TIMEOUT    single-part request bound in seconds (default 4)
+#   FM_COMMAND_GUARD_MULTIPART_TIMEOUT  multi-part request bound in seconds (default 6)
 #   FM_COMMAND_GUARD_ENV_FILE   .env holding TYPESAFE_API_KEY (default <home>/.env)
 #   TYPESAFE_API_KEY            wins over the .env; never logged, never in argv
 import json
@@ -96,6 +100,9 @@ BLOCK_NOTICE = (
 PART_CHARS = 2000
 PART_OVERLAP = 200
 MAX_PARTS = 8
+# The fallback when a multi-part request fails: one part of the head and tail.
+HEAD_CHARS = 1500
+TAIL_CHARS = 500
 # Never guarded or sent, whatever config/command-guard says: Compass is local-only.
 ALWAYS_EXCLUDED = frozenset({"happiness-compass"})
 LOG_NAME = "command-guard.log"
@@ -113,6 +120,7 @@ def _bounded_float(name, default, minimum):
 
 
 TIMEOUT_S = _bounded_float("FM_COMMAND_GUARD_TIMEOUT", 4.0, 0.1)
+MULTIPART_TIMEOUT_S = _bounded_float("FM_COMMAND_GUARD_MULTIPART_TIMEOUT", 6.0, 0.1)
 
 
 def note(message):
@@ -262,6 +270,11 @@ def split_parts(text):
             for start in range(0, max(len(text) - PART_OVERLAP, 1), step)]
 
 
+def head_and_tail(text):
+    return "%s\n[... %d characters cut ...]\n%s" % (
+        text[:HEAD_CHARS], len(text) - HEAD_CHARS - TAIL_CHARS, text[-TAIL_CHARS:])
+
+
 def suffixes(count):
     """The per-part suffix of every state field and question id."""
     return [""] if count == 1 else ["_%d" % n for n in range(1, count + 1)]
@@ -346,11 +359,11 @@ def build_request(parts):
     return {"model": MODEL, "state": state, "questions": asked}
 
 
-def call(payload, key):
+def call(payload, key, timeout):
     request = urllib.request.Request(
         ENDPOINT, data=json.dumps(payload).encode("utf-8"),
         headers={"Authorization": "Bearer %s" % key, "Content-Type": "application/json"})
-    with urllib.request.urlopen(request, timeout=TIMEOUT_S) as response:
+    with urllib.request.urlopen(request, timeout=timeout) as response:
         return json.loads(response.read().decode("utf-8", errors="replace"))
 
 
@@ -421,30 +434,47 @@ def decide(answers, count):
     return False, "; ".join(summaries)
 
 
+def ask(parts, key):
+    """(outcome, reason, answers) for one request about these parts."""
+    timeout = MULTIPART_TIMEOUT_S if len(parts) > 1 else TIMEOUT_S
+    try:
+        body = call(build_request(parts), key, timeout)
+    except urllib.error.HTTPError as error:
+        return "error", "HTTP %s" % error.code, {}
+    except Exception as error:  # noqa: BLE001 - every failure steps aside the same way
+        return "error", type(error).__name__, {}
+    answers, unusable = read_answers(body, len(parts))
+    block, reason = decide(answers, len(parts))
+    if block:
+        return "block", reason, answers
+    if unusable:
+        return "error", "unusable answer: %s" % "+".join(unusable), answers
+    return "allow", reason, answers
+
+
 def judge(command, home):
-    """(outcome, reason, answers, sent) where outcome is block, allow, skip or error."""
+    """(outcome, reason, answers, sent, path): outcome is block, allow, skip or error,
+    and path is what decided: whole, parts, head-and-tail, or none."""
     sent = redact(command, literal_secrets(home))
     parts = split_parts(sent)
     if len(parts) > MAX_PARTS:
         return "skip", ("not judged: %d characters need %d parts, over the cap of %d"
-                        % (len(sent), len(parts), MAX_PARTS)), {}, sent
-    payload = build_request(parts)
+                        % (len(sent), len(parts), MAX_PARTS)), {}, sent, "none"
     key = api_key(home)
     if not key:
-        return "error", "no TYPESAFE_API_KEY", {}, sent
-    try:
-        body = call(payload, key)
-    except urllib.error.HTTPError as error:
-        return "error", "HTTP %s" % error.code, {}, sent
-    except Exception as error:  # noqa: BLE001 - every failure steps aside the same way
-        return "error", type(error).__name__, {}, sent
-    answers, unusable = read_answers(body, len(parts))
-    block, reason = decide(answers, len(parts))
-    if block:
-        return "block", reason, answers, sent
-    if unusable:
-        return "error", "unusable answer: %s" % "+".join(unusable), answers, sent
-    return "allow", reason, answers, sent
+        return "error", "no TYPESAFE_API_KEY", {}, sent, "none"
+    outcome, reason, answers = ask(parts, key)
+    if len(parts) == 1:
+        return outcome, reason, answers, sent, "whole"
+    if outcome != "error":
+        return outcome, reason, answers, sent, "parts"
+    failed = reason
+    outcome, reason, answers = ask([head_and_tail(sent)], key)
+    if outcome == "error":
+        reason = "parts: %s; head-and-tail: %s" % (failed, reason)
+    else:
+        reason = "%s, on the head and tail only after the parts request failed (%s)" % (reason, failed)
+    return outcome, reason, answers, sent, "head-and-tail"
 
 
 # ---- log --------------------------------------------------------------------
@@ -534,9 +564,9 @@ def run_hook(opts):
     if not isinstance(command, str) or not command.strip():
         return 0
 
-    outcome, reason, answers, sent = judge(command, opts["home"])
+    outcome, reason, answers, sent, path = judge(command, opts["home"])
     record = dict(base, at=int(time.time()), outcome=outcome, reason=reason,
-                  answers=answers, command=sent)
+                  answers=answers, command=sent, path=path)
     if outcome == "error":
         outage_once(state_dir, record)
         return 0
@@ -557,7 +587,7 @@ def run_bench(path, home):
     misses = []
     for case in cases:
         started = time.time()
-        outcome, reason, answers, sent = judge(case["command"], home)
+        outcome, reason, answers, sent, path = judge(case["command"], home)
         elapsed = time.time() - started
         if outcome == "error":
             note("%s: %s" % (case["id"], reason))
@@ -567,7 +597,7 @@ def run_bench(path, home):
         agree += ok
         if not ok:
             misses.append(case["id"])
-        count = len(split_parts(sent))
+        count = len(split_parts(sent)) if path == "parts" else 1
         columns = "\t".join(
             "injection%s=%.2f\teffect%s=%s(%.2f)\tdestructive%s=%.2f" % (
                 s, answers.get("injection" + s, -1), s, answers.get("effect" + s, "?"),
@@ -580,8 +610,12 @@ def run_bench(path, home):
     return 0
 
 
+class HookBound(BaseException):
+    """The whole-hook bound; a BaseException so no per-request handler swallows it."""
+
+
 def _hook_bound_hit(*_):
-    raise TimeoutError("hook bound")
+    raise HookBound("hook bound")
 
 
 def main():
@@ -601,10 +635,10 @@ def main():
         # name lookup cannot hold a worker's command past the bound. Any
         # failure below allows the command.
         signal.signal(signal.SIGALRM, _hook_bound_hit)
-        signal.alarm(int(TIMEOUT_S) + 3)
+        signal.alarm(int(MULTIPART_TIMEOUT_S + TIMEOUT_S) + 3)
         try:
             return run_hook(opts)
-        except Exception as error:  # noqa: BLE001
+        except (Exception, HookBound) as error:  # noqa: BLE001
             try:
                 outage_once(opts["state"], {"at": int(time.time()), "task": opts["task"],
                                             "project": opts["project"], "outcome": "error",

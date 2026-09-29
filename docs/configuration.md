@@ -652,6 +652,7 @@ The hook reads the same gate again on every command, so switching it off or excl
 Each command is one request of three questions, asked in this order: whether the command contains text addressed to the judge, whether its effect is read-only, reversible or irreversible, and whether it aims to remove or wipe something.
 A redacted command longer than 2,000 characters is cut into overlapping parts of at most 2,000 characters, and the same request carries every part and asks the three questions of each, so every part of the command is judged.
 Any one condition in any part blocks: text aimed at the judge at 0.8, irreversible at 0.6 confidence, or destructive intent at 0.7.
+If that multi-part request fails (a timeout, an HTTP error or an unusable answer), the guard asks once more about the first 1,500 and last 500 characters alone before it steps aside, so a long command is never judged on less than that.
 A command that needs more than 8 parts is not judged: it is allowed, and a warning goes to stderr and to `state/command-guard.log`.
 A block reaches the worker as a denied tool call whose reason names the condition and says the block is final, not to work around it, and to report it to firstmate as a blocked status line.
 To let one blocked command through, switch the gate off, have the worker run it, then switch the gate back on.
@@ -659,7 +660,8 @@ To let one blocked command through, switch the gate off, have the worker run it,
 **What leaves the machine.** Only the command text, never the working directory, the task or the environment.
 Before it is sent, shell assignments lose their values, every value in this home's `.env` and every secret-looking environment variable is removed wherever it appears, and anything shaped like a known key, token, password argument, credentialed URL or private-key block is replaced.
 
-**Steps aside on failure.** No key, a timeout, an HTTP error, an unreadable answer or a crash all allow the command.
+**Steps aside on failure.** No key, a timeout, an HTTP error, an unreadable answer or a crash all allow the command, a multi-part command only once its head-and-tail request has failed too.
+A single-part request is bounded at 4 seconds (`FM_COMMAND_GUARD_TIMEOUT`) and a multi-part one at 6 seconds (`FM_COMMAND_GUARD_MULTIPART_TIMEOUT`), and the whole hook at the sum of both plus 3 seconds.
 The first failure of an episode is written once to `state/command-guard.log` and to stderr, and the next good answer ends the episode.
 `TYPESAFE_API_KEY` is read from the environment, else from this home's `.env`, and never appears in argv, output or the log.
 
@@ -667,7 +669,7 @@ The first failure of an episode is written once to `state/command-guard.log` and
 Known limit: only the Bash tool is judged, so a script written with the Write or Edit tool and then run as `bash x.sh` is judged only by that short command, not by the script's contents.
 It is still an extra check on a worker that already runs in a disposable copy under supervision, not a sandbox.
 
-**Log and benchmark.** Every decision is one JSON line in `state/command-guard.log` with the redacted command, the answers and the outcome, rotated at 2 MB.
+**Log and benchmark.** Every decision is one JSON line in `state/command-guard.log` with the redacted command, the answers, the outcome and the `path` that decided it (`whole`, `parts` or `head-and-tail`), rotated at 2 MB.
 `python3 bin/fm-command-guard.py bench tests/fixtures/command-guard/benchmark.json` runs the labelled command set live, one request per command as the hook sends it, and prints each verdict and the agreement.
 Grow that set when a real block or a real miss teaches something, and rerun it after changing a question, a threshold or the pinned model.
 The engine's header owns the exact invocation, questions, criteria, thresholds and redaction, and dated results are in [`verification/command-guard.md`](verification/command-guard.md).

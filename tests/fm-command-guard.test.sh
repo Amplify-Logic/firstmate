@@ -232,11 +232,40 @@ print(body + "rm -rf ../sibling-copy\ncat > b.md <<\x27EOF\x27\n" + "y" * 600 + 
   reset_server "$(part_answers 2 0)"
   out=$(run_hook "$home" "$long")
   assert_equals "" "$out" "a long command with no part firing must be allowed"
-  reset_server "$(answers 0.02 irreversible 0.9 0.9)"
-  out=$(run_hook "$home" "$long" 2>/dev/null)
-  assert_equals "" "$out" "answers missing a part must be unusable, and allow"
-  grep -q 'unusable answer: injection_1' "$home/state/command-guard.log" || fail "answers without per-part ids must be logged as unusable"
+  grep -q '"path": "parts"' "$home/state/command-guard.log" || fail "the log must name the parts path"
   pass "a long command is sent whole as overlapping parts in one request, and any part firing blocks"
+}
+
+test_parts_failure_falls_back_to_head_and_tail() {
+  local home long out
+  home=$(new_home fallback 'enabled = true\n')
+  long=$(python3 -c 'print("echo " + "a " * 2000 + "&& git push --force origin main")')
+  # Single-part answers leave every per-part id unusable, so only the head-and-tail request can use them.
+  reset_server "$(answers 0.02 irreversible 0.9 0.1)"
+  out=$(run_hook "$home" "$long" 2>/dev/null)
+  assert_contains "$out" '"deny"' "a failed parts request must fall back to a head-and-tail judgement that can block"
+  assert_contains "$out" "after the parts request failed (unusable answer: injection_1" "the deny must say the head and tail decided, and why"
+  assert_equals 2 "$(requests)" "the fallback must be one more request"
+  sed -n 2p "$SRV/requests.jsonl" | jq -e '(.state | keys) == ["command"]
+    and (.state.command | contains("characters cut") and endswith("git push --force origin main"))
+    and (.questions | keys_unsorted) == ["injection","effect","destructive_intent"]' >/dev/null \
+    || fail "the fallback must send the head and tail as one part with the three questions"
+  grep -q '"path": "head-and-tail"' "$home/state/command-guard.log" || fail "the log must name the head-and-tail path"
+
+  reset_server "$(answers 0.02 irreversible 0.9 0.1)" "" 1
+  out=$(FM_COMMAND_GUARD_TIMEOUT=3 FM_COMMAND_GUARD_MULTIPART_TIMEOUT=0.3 run_hook "$home" "$long" 2>/dev/null)
+  assert_contains "$out" '"deny"' "a parts request past its own bound must fall back within the single-part bound"
+
+  reset_server '{"error":"boom"}' 500
+  out=$(run_hook "$home" "$long" 2>"$TMP_ROOT/fallback.err")
+  assert_equals "" "$out" "both requests failing must allow"
+  assert_equals 2 "$(requests)" "both requests must have been tried"
+  run_hook "$home" "$long" >/dev/null 2>&1
+  assert_equals 1 "$(outage_lines "$home")" "both failing must be logged once per episode"
+  grep -q '"reason": "parts: HTTP 500; head-and-tail: HTTP 500"' "$home/state/command-guard.log" \
+    || fail "the outage must name both failures"
+  assert_contains "$(cat "$TMP_ROOT/fallback.err")" "stepping aside" "the step-aside must be reported"
+  pass "a failed parts request falls back to one head-and-tail judgement, and only both failing allows"
 }
 
 test_over_cap_command_allowed_and_logged() {
@@ -367,6 +396,7 @@ test_thresholds
 test_non_bash_tool_ignored
 test_redaction
 test_long_command_judged_in_parts
+test_parts_failure_falls_back_to_head_and_tail
 test_over_cap_command_allowed_and_logged
 test_no_key_allows_and_logs_once
 test_failures_allow
