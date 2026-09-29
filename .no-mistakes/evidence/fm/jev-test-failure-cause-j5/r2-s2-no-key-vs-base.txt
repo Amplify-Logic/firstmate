@@ -1,0 +1,2 @@
+no-key run on this branch vs the same run with the base-commit (88c1c709) runner, timestamps/durations normalised, FM_TEST_SLOWEST (ordering by timing) dropped:
+IDENTICAL output, stderr and exit status

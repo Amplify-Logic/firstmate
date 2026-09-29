@@ -1,0 +1,15 @@
+Request captured by the local stand-in endpoint for the labelled run
+Authorization header: Bearer <lab fake key from $FM_HOME/.env>
+model: jev-1.13.0
+questions: ['f1__cause', 'f2__cause', 'f3__cause', 'f4__cause'] types: {'choice'}
+failures sent (tag -> script):
+   f1 -> code.test.sh | tail: 'ines: expected 3 lines, got 2\nnot ok - fm-count header skip\n'
+   f2 -> stale.test.sh | tail: 'o match (summary now says scripts=4)\nnot ok - summary field\n'
+   f3 -> env.test.sh | tail: 'test.sh: line 12: jq: command not found\nnot ok - meta parse\n'
+   f4 -> net.test.sh | tail: "hub.com/': Could not resolve host: github.com\nnot ok - sync\n"
+fake key appears in body: False | redaction marker present: True
+serialized request bytes: 52518 (budget 80000)
+diff files: ['CONTRIBUTING.md', 'bin/fm-test-failure-cause.py', 'bin/fm-test-run.sh', 'docs/configuration.md', 'docs/documentation-audiences.json', 'docs/verification/test-failure-cause.md', 'fork-surface.conf', 'tests/fm-test-run.test.sh']
+matches git diff --name-only against merge base 88c1c709: True
+captain-private paths in diff: []
+diff trimmed: True | diff chars: 46882

@@ -1,0 +1,18 @@
+Real runner, 14 failing scripts (past the old cap of 10), local stand-in endpoint
+FM_TEST_FAILURE_CAUSE script=$LAB/many/m001.test.sh cause=code-bug confidence=0.90
+FM_TEST_FAILURE_CAUSE script=$LAB/many/m002.test.sh cause=test-out-of-date confidence=0.90
+FM_TEST_FAILURE_CAUSE script=$LAB/many/m003.test.sh cause=environment confidence=0.90
+FM_TEST_FAILURE_CAUSE script=$LAB/many/m004.test.sh cause=unclear confidence=0.45
+FM_TEST_FAILURE_CAUSE script=$LAB/many/m005.test.sh cause=test-out-of-date confidence=0.90
+FM_TEST_FAILURE_CAUSE script=$LAB/many/m006.test.sh cause=environment confidence=0.90
+FM_TEST_FAILURE_CAUSE script=$LAB/many/m007.test.sh cause=code-bug confidence=0.90
+FM_TEST_FAILURE_CAUSE script=$LAB/many/m008.test.sh cause=unclear confidence=0.45
+FM_TEST_FAILURE_CAUSE script=$LAB/many/m009.test.sh cause=environment confidence=0.90
+FM_TEST_FAILURE_CAUSE script=$LAB/many/m010.test.sh cause=code-bug confidence=0.90
+FM_TEST_FAILURE_CAUSE script=$LAB/many/m011.test.sh cause=test-out-of-date confidence=0.90
+FM_TEST_FAILURE_CAUSE script=$LAB/many/m012.test.sh cause=unclear confidence=0.45
+FM_TEST_FAILURE_CAUSE script=$LAB/many/m013.test.sh cause=code-bug confidence=0.90
+FM_TEST_FAILURE_CAUSE script=$LAB/many/m014.test.sh cause=test-out-of-date confidence=0.90
+[exit status: 1]
+[requests received by endpoint: 1]
+request: failures sent = 14 | tail length(s) = {2198} | whole request bytes = 77646

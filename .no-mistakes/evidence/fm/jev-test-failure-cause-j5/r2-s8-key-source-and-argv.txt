@@ -1,0 +1,9 @@
+Env key vs .env key, and argv exposure (engine process captured with ps while its request was in flight)
+Authorization header uses: TYPESAFE_API_KEY from the environment
+engine processes in flight: 2
+84379 perl -e my $t = shift; my $pid = fork; die "fork failed" unless defined $pid; if (!$pid) { setpgrp(0, 0); exec @ARGV } local $SIG{ALRM} = sub { kill "TERM", -$pid; select undef, undef, undef, 0.2; kill "KILL", -$pid; exit 124 }; alarm $t; waitpid $pid, 0; exit($? >> 8) 30 python3 <worktree>/bin/fm-test-failure-cause.py --root <worktree> --base origin/main /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-test-run.rcqvTV/failures.tsv
+84385 /opt/homebrew/Cellar/python@3.12/3.12.5/Frameworks/Python.framework/Versions/3.12/Resources/Python.app/Contents/MacOS/Python <worktree>/bin/fm-test-failure-cause.py --root <worktree> --base origin/main /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-test-run.rcqvTV/failures.tsv
+either key in argv: 0
+either key in runner stdout/stderr: 0
+exit 1
+FM_TEST_FAILURE_CAUSE lines: 0  (4s engine bound, endpoint hung)

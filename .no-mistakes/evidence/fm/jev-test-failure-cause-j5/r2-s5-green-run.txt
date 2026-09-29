@@ -1,0 +1,11 @@
+$ FM_HOME=/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-cause-lab.rLrt3g/home FM_TEST_FAILURE_CAUSE_ENDPOINT=http://127.0.0.1:<port>/v1/systemone bin/fm-test-run.sh --jobs 1 /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-cause-lab.rLrt3g/t/pass.test.sh
+FM_TEST_BEGIN 2026-09-29T18:07:51Z /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-cause-lab.rLrt3g/t/pass.test.sh family=unclassified expected_gate_skip=none
+ok - fine
+FM_TEST_END 2026-09-29T18:07:51Z /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-cause-lab.rLrt3g/t/pass.test.sh exit=0 duration_ms=29 gate_skip=false
+FM_TEST_SUMMARY total=1 failed=0 skipped_gate=0 duration_ms=274
+FM_TEST_SUMMARY_FAMILY family=unclassified count=1 duration_ms=29 failed=0
+FM_TEST_SLOWEST rank=1 script=/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-cause-lab.rLrt3g/t/pass.test.sh duration_ms=29
+[exit status: 0]
+[wall: 0.3s]
+[stderr:]
+[requests received by endpoint: 0]
