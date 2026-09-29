@@ -1,0 +1,3 @@
+ok - a rule naming the retired quota-balanced selector loads, resolves to its first profile, and never ranks by quota
+ok - single-object use and no-select arrays preserve first-profile selection
+# all fm-dispatch-select tests passed

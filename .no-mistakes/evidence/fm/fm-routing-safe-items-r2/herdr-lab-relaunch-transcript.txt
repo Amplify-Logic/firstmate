@@ -1,0 +1,60 @@
+# Herdr lab (session fm-lab-relaunch-*): labt4 spawned on Herdr, agent exited, shell cd'd into the primary checkout, then fm-control.sh relaunch
+
+## pane get before relaunch (after drift)
+{"cwd":"$LAB/projects/demo","fg":"$LAB/projects/demo","agent":"claude","status":"idle"}
+
+## relaunch output
+fm-gate-refuse: gate agent lifecycle permitted only against lab home $LAB
+fm-gate-refuse: gate agent lifecycle permitted only against lab home $LAB
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+relaunched labt4 harness=claude from=claude model=haiku effort=default backend=herdr endpoint=fm-lab-relaunch-70920-21235:w1:p2 worktree=$LAB/pool/.treehouse/demo-a53623/2/demo
+
+## pane get after relaunch
+{"cwd":"$LAB/projects/demo","fg":"$LAB/pool/.treehouse/demo-a53623/2/demo","agent":"claude","status":"idle"}
+
+## pane text around the relaunch (herdr pane read, wrapped at pane width)
+  /pptx                Use this skill any time a
+                       .pptx or .potx file is invol…
+  /usage-credits       Configure usage credits or
+                       request them from your admin…
+  …ator:skill-creator  (skill-creator) Create new
+                       skills, modify and improve e…
+  …ills:skill-creator  Create new skills, modify and
+                       improve existing skills, and…
+(base) larsmusic@Larss-MacBook-Pro demo % cd '/private
+/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-la
+b.CndwgB/projects/demo' && pwd -P
+/private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn
+/T/fm-lab.CndwgB/projects/demo
+(base) larsmusic@Larss-MacBook-Pro demo % cd -- '/priv
+ate/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm
+-lab.CndwgB/pool/.treehouse/demo-a53623/2/demo'
+(base) larsmusic@Larss-MacBook-Pro demo % cd -- '/priv
+ate/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm
+-lab.CndwgB/pool/.treehouse/demo-a53623/2/demo'
+(base) larsmusic@Larss-MacBook-Pro demo % export GOTMP
+DIR=/tmp/fm-labt4/gotmp
+(base) larsmusic@Larss-MacBook-Pro demo % export FM_HE
+RDR_PROJECT_KEY='/private/var/folders/1g/hctp3vpn27b1z
+rlsn4nsfg680000gn/T/fm-lab.CndwgB/projects/demo' FM_HE
+RDR_PROJECT_LABEL='Demo'
+(base) larsmusic@Larss-MacBook-Pro demo % export COMPA
+CT_ADVISER_DISABLE=1
+(base) larsmusic@Larss-MacBook-Pro demo % export FM_TA
+SK_ID=labt4
+(base) larsmusic@Larss-MacBook-Pro demo % . '/tmp/fm-l
+abt4+79d6f43977196b2754ad34fda16045ff432139a66d94b93a2
+1d513611e20c62b/launch.s1790706640.89416.5132.sh'
+ ▐▛███▛█   Claude Code v2.1.284
+▝▜██████▀  Haiku 4.5 · Claude Max
+ ▝▝   ▝▝   /…/pool/.treehouse/demo-a53623/2/demo
+
+
+❯ FIRSTMATE_OP: v1 launch-brief: # Current worker
+  role contract
+  You are a crewmate: an autonomous worker agent
+  managed by firstmate.
+
+## status
+done [at=1790706605]: ready in branch fm/labt4
+done [at=1790706664]: ready in branch fm/labt4

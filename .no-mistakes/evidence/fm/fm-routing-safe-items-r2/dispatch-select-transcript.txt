@@ -1,0 +1,20 @@
+$ fm-dispatch-select.sh '<rule with select: quota-balanced, use: [cursor, claude, codex]>'
+fm-dispatch-select: quota-balanced ranking is retired; rank a quota-sensitive profile array by spendPriority through the quota-array-dispatch skill; using first profile
+{"harness":"cursor","model":"cursor-grok-4.6-high"}
+exit=0
+
+$ fm-dispatch-select.sh --select quota-balanced '<array [claude, cursor]>'
+fm-dispatch-select: quota-balanced ranking is retired; rank a quota-sensitive profile array by spendPriority through the quota-array-dispatch skill; using first profile
+{"harness":"claude","model":"opus"}
+exit=0
+
+$ fm-dispatch-select.sh '<array, no select>'
+{"harness":"cursor","model":"cursor-grok-4.6-medium"}
+exit=0
+
+$ fm-dispatch-select.sh --select bogus '<array>'
+fm-dispatch-select: unknown select strategy 'bogus'; using first profile
+{"harness":"claude","model":"opus"}
+exit=0
+
+quota-axi invocations during all runs: 0

@@ -1,0 +1,45 @@
+00| spaces                  │ WORKER · labt4 · 🔵 WORKING    +
+01|                         │  fast-forward path.                                                                                                                 ▕
+02| ○ Demo · 🔵 1 WORKING   │                                                                                                                                     ▕
+03|   main                  │  ## Progress note (2026-09-29T18:30:31Z)                                                                                            ▕
+04|                         │                                                                                                                                     ▕
+05|                         │  This task was relaunched. Continue from here; the local copy and every                                                             ▕
+06|                         │  uncommitted change are exactly as the previous worker left them.                                                                   ▕
+07|                         │                                                                                                                                     ▕
+08|                         │  First, check your instruction inbox: list                                                                                          ▕
+09|                         │  $LAB/state/labt4.inbox/*.msg, act on                             ▕
+10|                         │  each message in numeric order, then mv each handled file into                                                                      ▕
+11|                         │  $LAB/state/labt4.inbox/handled/. A steer sent before the         ▕
+12|                         │  relaunch survives there.                                                                                                           ▕
+13|                         │                                                                                                                                     ▕
+14|                         │  Lab relaunch: the commit add delta already exists. Run pwd -P, append a new done line, and stop.                                   ▕
+15|                         │                                                                                                                                     ▕
+16|                         │⏺ I'm a crewmate continuing from a relaunch. The commit already exists, so I'll verify isolation, check the inbox, then append a done▕
+17|                         │  line.                                                                                                                              ▕
+18|                         │                                                                                                                                     ▕
+19|                         │⏺ Bash(pwd -P && git rev-parse --show-toplevel)                                                                                      ▕
+20|                         │  ⎿  $LAB/pool/.treehouse/demo-a53623/2/demo                       ▕
+21|                         │     $LAB/pool/.treehouse/demo-a53623/2/demo                       ▕
+22| new               ● menu│                                                                                                                                     ▕
+23|─────────────────────────│  Listed 1 directory (ctrl+o to expand)                                                                                              ▕
+24| agents           grouped│                                                                                                                                     ▕
+25|                         │⏺ Bash(git log --oneline -1 | grep "add delta" && echo "Commit verified")                                                            ▕
+26| ✓ Demo · 🔵… · WORKER ·…│  ⎿  ff03b24 add delta                                                                                                               ▕
+27|   claude/haiku · fm/lab…│     Commit verified                                                                                                                 ▕
+28|                         │                                                                                                                                     ▕
+29|                         │⏺ Now I'll append the done line to the status file:                                                                                  ▕
+30|                         │                                                                                                                                     ▕
+31|                         │⏺ Bash(EPOCH=$(date +%s) && echo "done [at=${EPOCH}]: ready in branch fm/labt4" >>                                                   ▕
+32|                         │      '$LAB/state/labt4.…)                                         ▕
+33|                         │  ⎿  (No output)                                                                                                                     ▕
+34|                         │                                                                                                                                     ▕
+35|                         │⏺ Done. Isolation verified, inbox empty, commit add delta confirmed on fm/labt4, and done status reported.                           ▕
+36|                         │                                                                                                                                     ▕
+37|                         │✻ Baked for 22s · done 8:31 PM                                                                                                       ▕
+38|                         │                                                                                                                                     ▕
+39|                         │─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────▕
+40|                         │❯                                                                                                                                    ▕
+41|                         │─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────▐
+42|                         │  ⚠ Transcript saving is off — inherited CLAUDE_CODE_CHILD_SESSION marker · restart with CLAUDE_CODE_FORCE_SESSION_PERSISTENCE=1 t…  ▐
+43|                         │  ⏵⏵ bypass permissions on (shift+tab to cycle)                                                                                      ▐
+44|                        «│                                                                                                                                     ▐

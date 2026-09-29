@@ -1,0 +1,7 @@
+$ FM_HOME=$LAB2 FM_BOOTSTRAP_VERBOSE_FACTS=1 bin/fm-bootstrap.sh   # config/crew-dispatch.json:
+{"rules":[{"when":"ui work","use":[{"harness":"claude","model":"sonnet","effort":"high"},{"harness":"cursor","model":"cursor-grok-4.6-medium"}]},{"when":"legacy feature","use":[{"harness":"claude"},{"harness":"grok"}],"select":"quota-balanced"}],"default":[{"harness":"claude","model":"opus"},{"harness":"cursor","model":"cursor-grok-4.6-high"}]}
+BOOTSTRAP_INFO: crew dispatch active config/crew-dispatch.json
+BOOTSTRAP_INFO: crew dispatch rule: ui work -> spendPriority[claude/sonnet/high, cursor/cursor-grok-4.6-medium]
+BOOTSTRAP_INFO: crew dispatch rule: legacy feature -> quota-balanced[claude, grok]
+BOOTSTRAP_INFO: crew dispatch default: spendPriority[claude/opus, cursor/cursor-grok-4.6-high]
+exit=0

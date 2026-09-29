@@ -1,0 +1,60 @@
+# Live tmux lab: two real Claude (haiku) local-only crewmates, FM_HOME=$LAB (disposable, fm-lab-home marked)
+
+## spawn
+fm-gate-refuse: gate agent lifecycle permitted only against lab home $LAB
+spawned labt1 harness=claude kind=ship mode=local-only yolo=on window=primary:fm-labt1 worktree=$LAB/pool/.treehouse/demo-a53623/1/demo
+EXIT=0
+fm-gate-refuse: gate agent lifecycle permitted only against lab home $LAB
+spawned labt2 harness=claude kind=ship mode=local-only yolo=on window=primary:fm-labt2 worktree=$LAB/pool/.treehouse/demo-a53623/2/demo
+EXIT=0
+
+## worker panes: explicit cd into recorded worktree before launch script
+(pane scrollback captured before teardown, see earlier run)
+
+## status files
+### labt1
+### labt2
+
+## landing sequence
+$ fm-merge-local.sh (merge1)
+merged fm/labt1 into local main (a9d224b -> c1634c1) in $LAB/projects/demo
+EXIT=0
+$ fm-merge-local.sh (merge2a)
+REFUSED: fm/labt2 is not a fast-forward of main (it has diverged).
+Have the crewmate rebase fm/labt2 onto main, then retry.
+EXIT=1
+$ fm-merge-local.sh (merge2)
+merged fm/labt2 into local main (c1634c1 -> 2771cf0) in $LAB/projects/demo
+EXIT=0
+$ fm-merge-local.sh (merge1b)
+merged fm/labt1 into local main (2771cf0 -> f2f9526) in $LAB/projects/demo
+EXIT=0
+
+## local main
+f2f9526 alpha follow-up
+2771cf0 add beta
+c1634c1 add alpha
+a9d224b init
+
+## teardown
+$LAB/td2.out:fm-gate-refuse: gate agent lifecycle permitted only against lab home $LAB
+$LAB/td2.out:teardown: reaping leaked worktree process(es) for labt2: 13723 70933 74752 75956
+$LAB/td2.out:teardown: force-killing leaked worktree process(es) for labt2: 70933
+$LAB/td2.out:
+$LAB/td2.out:🌳 Worktree returned to pool.
+$LAB/td2.out:teardown labt2 complete (window primary:fm-labt2, worktree $LAB/pool/.treehouse/demo-a53623/2/demo)
+$LAB/td2.out:Backlog: labt2 just finished (this home keeps no markdown backlog at $LAB/data/backlog.md). Update $LAB/data/backlog.md - move labt2 to Done, keep Done to the 10 most recent, then re-scan Queued and dispatch only work whose blockers are gone and date is due.
+$LAB/td2.out:EXIT=0
+$LAB/td1.out:fm-gate-refuse: gate agent lifecycle permitted only against lab home $LAB
+$LAB/td1.out:teardown: reaping leaked worktree process(es) for labt1: 19473 67346 68667 68795 68838
+$LAB/td1.out:teardown: force-killing leaked worktree process(es) for labt1: 67346
+$LAB/td1.out:
+$LAB/td1.out:🌳 Worktree returned to pool.
+$LAB/td1.out:teardown labt1 complete (window primary:fm-labt1, worktree $LAB/pool/.treehouse/demo-a53623/1/demo)
+$LAB/td1.out:Backlog: labt1 just finished (this home keeps no markdown backlog at $LAB/data/backlog.md). Update $LAB/data/backlog.md - move labt1 to Done, keep Done to the 10 most recent, then re-scan Queued and dispatch only work whose blockers are gone and date is due.
+$LAB/td1.out:EXIT=0
+
+## data/capability-outcomes.log  (<epoch>|<task-type>|<harness>|<model>|<effort>|<outcome>|<fix-rounds>|<steers>)
+(line 1 = labt2: landed after a pure rebase; line 2 = labt1: landed, revised, landed again)
+1790706398|ship|claude|haiku|default|merged|0|1
+1790706406|ship|claude|haiku|default|revised|2|2

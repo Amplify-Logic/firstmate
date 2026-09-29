@@ -1,0 +1,24 @@
+# Live tmux lab: reassigned pool slot (review R5-1)
+labt3 (home $LAB) reported done at 1790706466 in pool slot 1, then its worker exited its treehouse subshell, returning slot 1.
+labo6 (second home $LAB2) was spawned into slot 1, committed, and was landed on local main with fm-merge-local.sh.
+
+## slot 1 claim before labt3 teardown
+task=labo6
+home=$LAB2
+
+## fm-teardown.sh labt3
+fm-gate-refuse: gate agent lifecycle permitted only against lab home $LAB
+warning: task labt3's recorded worktree $LAB/pool/.treehouse/demo-a53623/1/demo was reassigned to task labo6 (home $LAB2), which claimed that pool slot after this record was written; that slot is no longer labt3's, so its processes, copy, and claim are left untouched and only labt3's own cleanup runs.
+teardown labt3 complete (window primary:fm-labt3; pool slot $LAB/pool/.treehouse/demo-a53623/1/demo left to task labo6 (home $LAB2), which it was reassigned to)
+Backlog: labt3 just finished (this home keeps no markdown backlog at $LAB/data/backlog.md). Update $LAB/data/backlog.md - move labt3 to Done, keep Done to the 10 most recent, then re-scan Queued and dispatch only work whose blockers are gone and date is due.
+EXIT=0
+
+## line appended to $LAB/data/capability-outcomes.log
+> 1790706866|ship|claude|haiku|default|unknown||0
+
+## (earlier, same-home variant: teardown refused and changed nothing)
+fm-gate-refuse: gate agent lifecycle permitted only against lab home $LAB
+REFUSED: task labt3's recorded worktree $LAB/pool/.treehouse/demo-a53623/1/demo is also task labt5's recorded worktree.
+Returning that pool slot would kill labt5's processes and reset its copy, so nothing was changed - not even with --force.
+Reconcile whichever record is wrong (bin/fm-crew-state.sh labt3; bin/fm-crew-state.sh labt5), then re-run teardown.
+EXIT=1

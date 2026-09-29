@@ -1,0 +1,38 @@
+# Live tmux lab: real Claude (haiku) scout labs1
+
+## status
+
+## data/labs1/report.md
+# README.md Line Count Report
+
+## Findings
+
+The README.md file in this repository contains **2 lines** total. This was determined by running the `wc -l` command on the file, which counted both lines of content. The file is minimal in size, suggesting it may be a newly initialized repository or a placeholder readme awaiting content expansion.
+
+## Method
+
+The line count was obtained using the standard Unix utility `wc -l README.md`, which returned the output "2 README.md". This represents the total number of newline characters in the file.
+
+## first teardown (refused by the captain-call completion gate, before tasks-axi was on PATH)
+fm-gate-refuse: gate agent lifecycle permitted only against lab home $LAB
+fm-captain-hold: compatible tasks-axi is required
+REFUSED: scout task labs1 has not passed the captain-call completion gate.
+Inventory its report and any visual review through bin/fm-captain-hold.sh before teardown.
+EXIT=1
+
+## fm-captain-hold.sh complete labs1 --none
+complete: labs1 captain-call inventory reviewed
+EXIT=0
+
+## fm-teardown.sh labs1
+fm-gate-refuse: gate agent lifecycle permitted only against lab home $LAB
+teardown: reaping leaked worktree process(es) for labs1: 25567 27999 28808 28869
+teardown: force-killing leaked worktree process(es) for labs1: 25567
+
+🌳 Worktree returned to pool.
+teardown labs1 complete (window primary:fm-labs1, worktree $LAB/pool/.treehouse/demo-26482e/1/demo)
+Backlog: labs1 just finished (this home keeps no markdown backlog at $LAB/data/backlog.md). Update $LAB/data/backlog.md - move labs1 to Done, keep Done to the 10 most recent, then re-scan Queued and dispatch only work whose blockers are gone and date is due.
+EXIT=0
+
+## data/capability-outcomes.log  (<epoch>|<task-type>|<harness>|<model>|<effort>|<outcome>|<fix-rounds>|<steers>)
+1790707007|scout|claude|haiku|default|reported||0

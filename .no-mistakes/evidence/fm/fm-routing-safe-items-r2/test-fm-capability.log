@@ -1,0 +1,14 @@
+ok - log append writes wire lines and the reader applies the 7-day window
+ok - summarize reports green density per harness/model/effort
+ok - summarize counts merged as first-try, revised as not, and reported as neutral
+ok - teardown recorder writes derived outcomes with optional counts and skips secondmate
+ok - run-table derivation yields first-try green, fixed, failed, or unknown
+ok - follow-up derivation yields merged, revised, or unknown
+ok - lane outcomes merged, revised, and reported are recorded
+ok - reader handles old and new wire lines side by side
+ok - capability-recent ranks within cost rules and scout tax stays advisory
+ok - absent select keeps first-profile selection with evidence only advisory
+ok - 0%-green sampled keeps configured order over earlier untried
+ok - scout tax rate above 100 clamps to 100
+ok - log append refuses pipe-bearing fields
+# all fm-capability tests passed

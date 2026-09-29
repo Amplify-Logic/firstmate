@@ -1,0 +1,41 @@
+== never-send list present with a matching value (wrapped, different case, extra whitespace) ==
+list: # secrets||acme corp|project   nightjar|
+$ fm-dispatch-resolve.sh brief.md --project demo   # match on line 4
+exit=0
+stdout:
+stderr:
+  dispatch-resolve: off (brief text matches $LAB/home/config/dispatch-never-send line 4; nothing sent)
+network calls: 0
+
+== never-send list present, no match ==
+$ fm-dispatch-resolve.sh brief.md --project demo   # no match
+exit=0
+stdout:
+  dispatch-resolve:
+    status: error
+    reason: http 000 after 0 ms: 
+stderr:
+  dispatch-resolve: error (http 000 after 0 ms: )
+network calls: 1
+  CURL CALLED: -sS --max-time 5 -o /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/tmp.VniBuMEc75 -w %{http_code} -X PO
+
+== never-send path is a directory (unreadable as a list) ==
+$ fm-dispatch-resolve.sh brief.md --project demo   # directory
+exit=0
+stdout:
+stderr:
+  dispatch-resolve: off ($LAB/home/config/dispatch-never-send is not a readable regular file; nothing sent)
+network calls: 0
+
+== no never-send list ==
+$ fm-dispatch-resolve.sh brief.md --project demo   # absent
+exit=0
+stdout:
+  dispatch-resolve:
+    status: error
+    reason: http 000 after 0 ms: 
+stderr:
+  dispatch-resolve: error (http 000 after 0 ms: )
+network calls: 1
+  CURL CALLED: -sS --max-time 5 -o /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/tmp.SSrVqXXphu -w %{http_code} -X PO
+
