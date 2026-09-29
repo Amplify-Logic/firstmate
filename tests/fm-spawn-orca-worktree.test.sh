@@ -78,6 +78,9 @@ esac
 exit 0
 SH
   chmod +x "$fb/orca"
+  # codex is the harness the fresh case spawns, and fm-spawn refuses before
+  # the endpoint exists when its launch binary is absent from PATH.
+  fm_fake_launch_binary "$fb" codex
   printf '%s\n' "$fb"
 }
 
