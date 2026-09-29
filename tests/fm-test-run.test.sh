@@ -1049,6 +1049,65 @@ PY
   pass "failure-cause request fits the window and excludes captain-private paths"
 }
 
+# The failures share one output budget: a run past the old cap of ten labels
+# every failure with a shorter tail each, and only a run past what the budget
+# can describe leaves its last failure unlabelled - with a visible marker, not
+# a silent gap.
+test_failure_cause_shares_the_size_budget() {
+  local tmp i name scripts=() out
+  tmp=$(mktemp -d "${TMPDIR:-/tmp}/fm-test-run-cause-many.XXXXXX")
+  mkdir -p "$tmp/home"
+  cat >"$tmp/fixture" <<'SH'
+#!/usr/bin/env bash
+printf 'noise %.0s' $(seq 1 700)
+name=${0##*/}
+echo "not ok - failure ${name%.test.sh}"
+exit 1
+SH
+  chmod +x "$tmp/fixture"
+  for i in $(seq 1 101); do
+    name=$(printf '%s/f%03d.test.sh' "$tmp" "$i")
+    cp "$tmp/fixture" "$name"
+    scripts+=("$name")
+  done
+  python3 -c 'import json; print(json.dumps({"answers": {"f%d__cause" % i: {"choice": "code_bug", "confidence": 0.9} for i in range(1, 101)}}))' >"$tmp/labels.json"
+  set +e
+  env -u TYPESAFE_API_KEY FM_HOME="$tmp/home" FM_TEST_FAILURE_CAUSE_RESPONSE="$tmp/labels.json" \
+    "$RUNNER" --jobs 1 "${scripts[@]}" >"$tmp/out" 2>"$tmp/err"
+  expect_code 1 $? "labels must not change the failing run's exit status"
+  set -e
+  [ "$(grep -c '^FM_TEST_FAILURE_CAUSE script=.* cause=code-bug confidence=0.90$' "$tmp/out")" -eq 100 ] \
+    || fail "every failure the budget can describe is labelled: $(grep FM_TEST_FAILURE_CAUSE "$tmp/out")"
+  out=$(grep '^FM_TEST_FAILURE_CAUSE .*cause=not-labelled' "$tmp/out")
+  [ "$(printf '%s\n' "$out" | wc -l | tr -d ' ')" -eq 1 ] || fail "one failure is over the size limit: $out"
+  assert_contains "$out" "cause=not-labelled reason=over-size-limit" "the over-limit failure is reported, not dropped"
+
+  for i in 14 101; do
+    : >"$tmp/failures.tsv"
+    for name in "${scripts[@]:0:$i}"; do
+      "$name" >"$name.out" 2>&1 || true
+      printf '%s\t%s\n' "$name" "$name.out" >>"$tmp/failures.tsv"
+    done
+    env -u TYPESAFE_API_KEY FM_HOME="$tmp/home" python3 "$ROOT/bin/fm-test-failure-cause.py" \
+      --dry-run --root "$ROOT" --base HEAD "$tmp/failures.tsv" >"$tmp/request.json" \
+      || fail "dry run must print the request"
+    python3 - "$tmp/request.json" "$i" <<'PY' || fail "$i failures: the request does not share the budget"
+import json, sys
+request, count = json.load(open(sys.argv[1])), int(sys.argv[2])
+failures = request["state"]["failures"]
+assert len(json.dumps(request["state"])) <= 80000, len(json.dumps(request["state"]))
+assert len(failures) == min(count, 100), len(failures)
+assert sorted(request["questions"]) == sorted("%s__cause" % tag for tag in failures)
+share = 40000 // len(failures)
+for tag, failure in failures.items():
+    assert len(failure["output_tail"]) == share, (tag, len(failure["output_tail"]), share)
+    assert failure["output_tail"].rstrip().endswith("not ok - failure f%03d" % int(tag[1:])), tag
+PY
+  done
+  rm -rf "$tmp"
+  pass "failure-cause labels share the size budget and report any failure over it"
+}
+
 test_gate_skip_accounting() {
   local tmp skip_f out json
   tmp=$(mktemp -d "${TMPDIR:-/tmp}/fm-test-run-skip.XXXXXX")
@@ -1953,6 +2012,7 @@ test_aggregate_exit_behavior
 test_failure_cause_labels_are_advisory
 test_failure_cause_request_and_timeout
 test_failure_cause_request_fits_and_excludes_private_paths
+test_failure_cause_shares_the_size_budget
 test_gate_skip_accounting
 test_gate_skip_reason_is_recorded
 test_a_run_that_ran_records_no_skip_reason

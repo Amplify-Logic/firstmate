@@ -95,6 +95,7 @@
 #   FM_TEST_SLOWEST rank=<k> script=<path> duration_ms=<n>
 #   FM_TEST_BUDGET max_wall_ms=<n> duration_ms=<n>   (only with --max-wall-ms)
 #   FM_TEST_FAILURE_CAUSE script=<path> cause=<cause> confidence=<0..1>
+#   FM_TEST_FAILURE_CAUSE script=<path> cause=not-labelled reason=over-size-limit
 #                   (only after failures, and only when a TypeSafe key is found)
 #
 # Failure cause (advisory):
@@ -103,10 +104,13 @@
 #   0.6 floor) labels each failing script code-bug, test-out-of-date,
 #   environment, or unclear below the floor. It sends each failure's output
 #   tail and this repository's tracked branch diff against --base's merge base,
-#   trimmed to fit. It never changes the exit status. It is silent - no marker,
-#   no log line - with no TYPESAFE_API_KEY in the environment or in
-#   $FM_HOME/.env (FM_HOME defaults to this repository's root), without
-#   python3, on timeout (a 30s hard bound), or on an answer it cannot read.
+#   trimmed to fit: the failures share one output budget, so each tail shrinks
+#   as the count grows, and a failure past what the budget can describe gets
+#   the not-labelled marker instead. It never changes the exit status. It is
+#   silent - no marker, no log line - with no TYPESAFE_API_KEY in the
+#   environment or in $FM_HOME/.env (FM_HOME defaults to this repository's
+#   root), without python3, on timeout (a 30s hard bound), or on an answer it
+#   cannot read.
 #   CI holds no key, so it runs only locally.
 #
 # Placement refusal:
@@ -2752,7 +2756,7 @@ fi
 # returns 0 and prints nothing, and nothing here touches AGG_RC.
 FAILURE_CAUSE_BOUND=30
 print_failure_causes() {
-  local engine="$ROOT/bin/fm-test-failure-cause.py" labels script cause confidence
+  local engine="$ROOT/bin/fm-test-failure-cause.py" labels script cause detail
   [ -s "$FAILURES_TSV" ] || return 0
   [ -r "$engine" ] && [ -r "$ROOT/bin/fm-timeout-lib.sh" ] || return 0
   command -v python3 >/dev/null 2>&1 || return 0
@@ -2762,10 +2766,14 @@ print_failure_causes() {
   fi
   labels=$(FM_HOME="${FM_HOME:-$ROOT}" fm_run_timed "$FAILURE_CAUSE_BOUND" \
     python3 "$engine" --root "$ROOT" --base "$BASE_REF" "$FAILURES_TSV" 2>/dev/null) || return 0
-  while IFS=$'\t' read -r script cause confidence; do
-    [ -n "$script" ] && [ -n "$confidence" ] || continue
-    printf 'FM_TEST_FAILURE_CAUSE script=%s cause=%s confidence=%s\n' \
-      "$script" "$cause" "$confidence"
+  while IFS=$'\t' read -r script cause detail; do
+    [ -n "$script" ] && [ -n "$detail" ] || continue
+    if [ "$cause" = not-labelled ]; then
+      printf 'FM_TEST_FAILURE_CAUSE script=%s cause=not-labelled reason=%s\n' "$script" "$detail"
+    else
+      printf 'FM_TEST_FAILURE_CAUSE script=%s cause=%s confidence=%s\n' \
+        "$script" "$cause" "$detail"
+    fi
   done <<<"$labels"
 }
 print_failure_causes || true

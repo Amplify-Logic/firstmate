@@ -1301,6 +1301,8 @@ With no key, no `python3`, a timeout, or an answer it cannot read, it prints not
 CI holds no key, so it only ever runs locally.
 
 What leaves the machine is each failing script's path and output tail and this repository's tracked diff against the `--base` merge base, trimmed to fit the model's window, with the captain-private paths excluded even if a fork tracks them and any copy of the key replaced.
+Every failure in the run is labelled: the failures share one output budget, so each output tail shrinks as the failure count grows.
+Only a run with more failures than that budget can describe, about a hundred, leaves the last ones in run order out of the request, and each of those still gets a visible `FM_TEST_FAILURE_CAUSE script=<path> cause=not-labelled reason=over-size-limit` line beside the labels.
 The runner's header owns when it runs and its marker; [`../bin/fm-test-failure-cause.py`](../bin/fm-test-failure-cause.py) owns the request, the pinned model version, the floor, the size bounds, and its environment overrides, and its `--dry-run` prints the exact request without a network call.
 
 ## Toolchain

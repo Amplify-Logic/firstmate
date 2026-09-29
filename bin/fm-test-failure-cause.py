@@ -15,6 +15,8 @@
 # <failures.tsv>  one record per line: <script> TAB <path to that script's output>
 # stdout          one label per line: <script> TAB <cause> TAB <confidence>
 #                 <cause> is code-bug, test-out-of-date, environment or unclear.
+#                 A failure the size limit left out of the request instead
+#                 prints <script> TAB not-labelled TAB over-size-limit.
 #                 --dry-run prints the request instead and makes no network call.
 # stderr          diagnostics only, never the API key and never any content sent.
 #
@@ -32,7 +34,9 @@
 # <base> (committed and uncommitted), with the captain-private paths excluded
 # even if a fork tracks them. The runner only ever passes Firstmate's own
 # repository root, so this is Firstmate's own public code. The whole state is
-# trimmed to fit the model's 32k-token window.
+# trimmed to fit the model's 32k-token window: every failure shares one output
+# budget, so the tails shrink as the failure count grows, and only a run with
+# more failures than that budget can describe leaves its last ones unlabelled.
 #
 # The API key is read from the environment, else from $FM_HOME/.env (the runner
 # passes FM_HOME, defaulting to its own root), exactly as the status second look
@@ -75,10 +79,13 @@ CAUSES = {
 
 # Size bounds. The state plus the longest question must fit in 32k tokens; at a
 # conservative three characters a token for code and test output, 80,000
-# characters of serialized state leaves room for the questions. A run with more
-# failures than MAX_FAILURES labels the first ones in run order.
-MAX_FAILURES = 10
+# characters of serialized state leaves room for the questions. Every failure
+# shares TAIL_CHAR_BUDGET equally, up to MAX_TAIL_CHARS each; a run whose share
+# would fall under MIN_TAIL_CHARS labels the first ones in run order and
+# reports the rest as over the size limit.
 MAX_TAIL_CHARS = 4000
+MIN_TAIL_CHARS = 400
+TAIL_CHAR_BUDGET = 40000
 STATE_CHAR_BUDGET = 80000
 
 # Captain-private paths (AGENTS.md section 1), excluded from the diff even when
@@ -144,7 +151,7 @@ def output_tail(path):
 
 
 def read_failures(path):
-    """(tag, script, output tail) per failure, bounded to MAX_FAILURES."""
+    """(script, output tail) per failure, in run order."""
     failures = []
     try:
         lines = pathlib.Path(path).read_text(encoding="utf-8", errors="replace").splitlines()
@@ -157,10 +164,16 @@ def read_failures(path):
         script = script.strip()
         if script:
             failures.append((script, output_tail(out)))
-    if len(failures) > MAX_FAILURES:
-        note("run had %d failures; labelling the first %d" % (len(failures), MAX_FAILURES))
-        failures = failures[:MAX_FAILURES]
-    return [("f%d" % (i + 1), script, tail) for i, (script, tail) in enumerate(failures)]
+    return failures
+
+
+def fit_failures(failures):
+    """(tag, script, tail) records sharing TAIL_CHAR_BUDGET, and the scripts left over."""
+    count = min(len(failures), TAIL_CHAR_BUDGET // MIN_TAIL_CHARS)
+    share = min(MAX_TAIL_CHARS, TAIL_CHAR_BUDGET // count) if count else 0
+    records = [("f%d" % (i + 1), script, tail[-share:])
+               for i, (script, tail) in enumerate(failures[:count])]
+    return records, [script for script, _tail in failures[count:]]
 
 
 def git(root, *args):
@@ -309,9 +322,10 @@ def main():
         note("usage: fm-test-failure-cause.py [--dry-run] --root <repo> --base <ref> <failures.tsv>")
         return 2
 
-    records = read_failures(failures_file)
-    if not records:
+    failures = read_failures(failures_file)
+    if not failures:
         return 0
+    records, over_limit = fit_failures(failures)
 
     canned = os.environ.get("FM_TEST_FAILURE_CAUSE_RESPONSE")
     key = "" if canned else api_key(os.environ.get("FM_HOME", root))
@@ -349,6 +363,8 @@ def main():
             note("unreadable answer for one failure; no label")
             continue
         sys.stdout.write("%s\t%s\t%.2f\n" % (script, result[0], result[1]))
+    for script in over_limit:
+        sys.stdout.write("%s\tnot-labelled\tover-size-limit\n" % script)
     return 0
 
 
