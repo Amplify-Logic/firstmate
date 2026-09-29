@@ -9,7 +9,7 @@ Start with the directory layout, then use the setting reference for the behavior
 | --- | --- |
 | Firstmate's code, private files, or project location | [FM_HOME](#fm_home) and [operational home layout](#operational-home-layout-and-state) |
 | Task windows and worker tools | [Runtime backend](#runtime-backend-configbackend--fm_backend) and [harness support](#harness-support) |
-| Worker permissions, accounts, or environment | [Claude permission mode](#claude-permission-mode-configclaude-permission-mode), [Claude concise prompt](#claude-concise-prompt-configclaude-concise-prompt), [worker account pin](#worker-account-pin-configclaude-account-configpi-account), and [worker launch environment](#worker-launch-environment-configlaunch-env-allowlist) |
+| Worker permissions, accounts, or environment | [Claude permission mode](#claude-permission-mode-configclaude-permission-mode), [worker command guard](#worker-command-guard-configcommand-guard), [Claude concise prompt](#claude-concise-prompt-configclaude-concise-prompt), [worker account pin](#worker-account-pin-configclaude-account-configpi-account), and [worker launch environment](#worker-launch-environment-configlaunch-env-allowlist) |
 | Backlog, preferences, and memory | [Backlog backend](#backlog-backend-taskstoml--configbacklog-backend), [captain preferences](#captain-preferences-datacaptainmd--datacaptain-sharedmd), and [startup memory budget](#startup-memory-budget-configstartup-memory-budget) |
 | Supervision and presentation | [Pi supervision branch](#pi-supervision-branch), [supervision host](#supervision-host-configsupervision-host), and [Calm preference](#calm-preference-configcalm) |
 | Persistent secondmates | [Secondmate routes](#secondmate-routes-datasecondmatesmd) |
@@ -625,6 +625,49 @@ The model is pinned to an exact version rather than an alias because the thresho
 The tool reads its batch on stdin as `<task-id>` TAB `<status line>` records, one per line, so feed it one to read the exact request a scan would send:
 `printf 'my-task\tworking: the backfill migration truncated public.users\n' | bin/fm-triage-second-look.sh --dry-run`.
 Dated live evidence is in [`verification/triage-second-look.md`](verification/triage-second-look.md).
+
+## Worker command guard (config/command-guard)
+
+An opt-in, per-home check that runs before each shell command a spawned Claude worker (crewmate or scout) makes.
+TypeSafe's Jev judges the command, and the command is blocked when it would remove, overwrite or send something with no way back, when it aims to wipe something, or when it carries text aimed at the judge itself.
+The primary and secondmates are never guarded, and nor is any other worker harness.
+
+It ships off.
+With no `enabled = true` line in the private gitignored `config/command-guard`, `bin/fm-spawn.sh` installs nothing and no command leaves this machine.
+The gate is not inherited into secondmate homes, so seeding a home or adding a device never starts sending worker commands anywhere.
+
+```
+enabled = true
+exclude = private-client-app, family-notes
+```
+
+`exclude` names project directories whose workers are never guarded and whose commands are never sent, separated by spaces or commas.
+List every project whose code or commands must not reach a third party.
+Any other key or a malformed value leaves the guard off, and the spawn prints why.
+
+**How it runs.** When the gate arms a project, `fm-spawn.sh` adds a Claude Code `PreToolUse` hook on `Bash` to the worker's own `.claude/settings.local.json`, beside its lifecycle hooks.
+The hook reads the same gate again on every command, so switching it off or excluding a project takes effect at once, while switching it on reaches workers spawned or relaunched after the change.
+Each command is one request of three questions, asked in this order: whether the command contains text addressed to the judge, whether its effect is read-only, reversible or irreversible, and whether it aims to remove or wipe something.
+Any one condition blocks: text aimed at the judge at 0.8, irreversible at 0.6 confidence, or destructive intent at 0.7.
+A block reaches the worker as a denied tool call whose reason names the condition and says the block is final, not to work around it, and to report it to firstmate as a blocked status line.
+To let one blocked command through, switch the gate off, have the worker run it, then switch the gate back on.
+
+**What leaves the machine.** Only the command text, never the working directory, the task or the environment.
+Before it is sent, shell assignments lose their values, every value in this home's `.env` and every secret-looking environment variable is removed wherever it appears, and anything shaped like a known key, token, password argument, credentialed URL or private-key block is replaced.
+A long command is cut to a bounded head and tail.
+`python3 bin/fm-command-guard.py request < command.txt` prints the exact request, with no gate, key or network.
+
+**Steps aside on failure.** No key, a timeout, an HTTP error, an unreadable answer or a crash all allow the command.
+The first failure of an episode is written once to `state/command-guard.log` and to stderr, and the next good answer ends the episode.
+`TYPESAFE_API_KEY` is read from the environment, else from this home's `.env`, and never appears in argv, output or the log.
+
+**One signal among several.** The guard judges the whole command, heredoc bodies and redirections included, because the design it borrows from saw an agent route around a write-only file gate by writing the same file through a shell heredoc.
+It is still an extra check on a worker that already runs in a disposable copy under supervision, not a sandbox.
+
+**Log and benchmark.** Every decision is one JSON line in `state/command-guard.log` with the redacted command, the answers and the outcome, rotated at 2 MB.
+`python3 bin/fm-command-guard.py bench tests/fixtures/command-guard/benchmark.json` runs the labelled command set live, one request per command as the hook sends it, and prints each verdict and the agreement.
+Grow that set when a real block or a real miss teaches something, and rerun it after changing a question, a threshold or the pinned model.
+The engine's header owns the exact invocation, questions, criteria, thresholds and redaction, and dated results are in [`verification/command-guard.md`](verification/command-guard.md).
 
 ## Parked-gate wait deferral (config/wedge-defer-parked-gate)
 
