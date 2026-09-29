@@ -57,6 +57,25 @@ test_summarize_green_density() {
   pass "summarize reports green density per harness/model/effort"
 }
 
+test_summarize_lane_outcome_density() {
+  rm -f "$FM_CAPABILITY_LOG"
+  FM_CAPABILITY_NOW=1700000000
+  fm_capability_log_append lanes claude opus high merged 0 0
+  fm_capability_log_append lanes claude opus high revised 2 1
+  fm_capability_log_append lanes claude opus high reported '' 0
+  fm_capability_log_append lanes claude opus high reported '' 0
+  fm_capability_log_append lanes claude sonnet high reported '' 0
+
+  local summary
+  summary=$(fm_capability_summarize lanes)
+  assert_contains "$summary" 'claude|opus|high|1|2|50' \
+    "merged should count as a first-try success, revised toward total only, reported in neither"
+  case "$summary" in
+    *'claude|sonnet|high|'*) fail "a profile with only reported samples should have no density, got: $summary" ;;
+  esac
+  pass "summarize counts merged as first-try, revised as not, and reported as neutral"
+}
+
 test_record_teardown_outcomes() {
   rm -f "$FM_CAPABILITY_LOG"
   # Truegreen contract: the caller derives the outcome from recorded validation
@@ -298,6 +317,7 @@ test_reject_pipe_in_fields() {
 
 test_log_append_and_recent_window
 test_summarize_green_density
+test_summarize_lane_outcome_density
 test_record_teardown_outcomes
 test_outcome_derivation_from_runs_rows
 test_outcome_derivation_from_follow_ups

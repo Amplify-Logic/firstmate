@@ -2900,6 +2900,7 @@ Each append-only line is:
 `reported` means a scout left a non-empty report.
 `unknown` means no result was derivable (no pipeline record, an untimed first `done:` report, a branch that never moved, or no scout report).
 `discarded` records an approved `--force` teardown.
+Density counts `green` and `merged` as first-try successes, counts `revised` and every other outcome toward the total only, and leaves `reported` out of both.
 The trailing counts are written only when derivable: `steers` counts confirmed supervisor sends recorded per task by `bin/fm-send.sh` into a counter `bin/fm-spawn.sh` starts empty, so an unsteered task records 0, and an empty `fix-rounds` slot is retained when only `steers` is known.
 Older six-field lines without trailing counts stay valid, and readers treat missing counts as absent rather than guessing them.
 `task-type` comes from meta `task_type=` when `fm-spawn.sh --task-type <slug>` recorded it, otherwise from `kind` (`ship` or `scout`).

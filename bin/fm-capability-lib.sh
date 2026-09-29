@@ -40,8 +40,11 @@
 #   - Evidence layers ON cost-allowed profiles only: callers pass the already
 #     cost-filtered profile set; this lib never invents a harness outside it and
 #     never bypasses third-party-model / crew-dispatch guards.
+#   - Density is first-try successes over counted samples: green and merged
+#     are first-try successes, reported is neutral (counted in neither), and
+#     every other outcome counts toward the total only.
 #   - select=capability-recent ranks allowed profiles by green density
-#     (first-try greens / all samples) in the window; a sampled profile
+#     (first-try successes / counted samples) in the window; a sampled profile
 #     outranks an earlier unsampled one only when density > 0; all-zero or
 #     absent evidence keeps input (configured) order; no samples for a
 #     task-type keep the first.
@@ -236,16 +239,17 @@ fm_capability_recent_lines() {
 # Summarize green density per harness|model|effort for a task-type.
 # Prints lines: <harness>|<model>|<effort>|<green>|<total>|<density_percent>
 # sorted by density desc, then total desc, then key asc. Density is integer
-# percent (green*100/total); green counts first-try passes only, while fixed,
-# failed, unknown, and discarded samples still count toward total.
+# percent (green*100/total); green counts first-try successes only (green and
+# merged), reported samples are skipped, and fixed, failed, revised, unknown,
+# and discarded samples still count toward total.
 # Args: task-type
 fm_capability_summarize() {
   local task_type=$1
   fm_capability_recent_lines "$task_type" | awk -F'|' '
-    NF >= 6 {
+    NF >= 6 && $6 != "reported" {
       key = $3 "|" $4 "|" $5
       total[key]++
-      if ($6 == "green") green[key]++
+      if ($6 == "green" || $6 == "merged") green[key]++
     }
     END {
       for (key in total) {
