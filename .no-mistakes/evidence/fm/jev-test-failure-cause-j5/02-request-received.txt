@@ -1,0 +1,12 @@
+model: jev-1.13.0
+top-level keys: ['model', 'state', 'questions']
+questions: ['f1__cause', 'f2__cause', 'f3__cause']
+failures sent: {'f1': ('count.test.sh', 74), 'f2': ('summary.test.sh', 64), 'f3': ('net.test.sh', 102)}
+serialized request chars: 51893
+Authorization header carries key: True
+key anywhere in request body: False
+net failure tail as sent: 'debug: using token [redacted] for auth\nfatal: Could not resolve host: github.com\nnot ok - sync failed\n'
+diff contains branch change (CHANGED-ON-BRANCH): True
+diff contains data/ private file: False
+diff contains tracked .env: False
+diff files: ['CONTRIBUTING.md', 'bin/fm-count-lib.sh', 'bin/fm-test-failure-cause.py', 'bin/fm-test-run.sh', 'docs/configuration.md', 'docs/documentation-audiences.json', 'docs/verification/test-failure-cause.md', 'fork-surface.conf', 'tests/fm-test-run.test.sh']

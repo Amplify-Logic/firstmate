@@ -1,0 +1,13 @@
+failing scripts: 150
+FM_TEST_FAILURE_CAUSE markers: 150
+every failure has a marker: True
+labelled: 37  not-labelled: 113  reasons: ['reason=over-size-limit']
+causes: ['cause=code-bug', 'cause=environment', 'cause=unclear']
+labelled are first in run order: True
+questions in request: 37  failures in state: 37
+serialized whole request chars: 77760 (budget 80000) fits: True
+per-failure tail chars min/max: 420 420
+diff chars sent: 31438  diff trimmed marker present: True
+first/last not-labelled line:
+  f038.test.sh cause=not-labelled reason=over-size-limit
+  f150.test.sh cause=not-labelled reason=over-size-limit

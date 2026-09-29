@@ -1,0 +1,8 @@
+$ [03-no-key] endpoint=answer fm-test-run.sh --jobs 1 /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-cause-live.BplUuF/tests/count.test.sh /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-cause-live.BplUuF/tests/green.test.sh /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-cause-live.BplUuF/tests/net.test.sh
+exit=1 elapsed_s=0.5 requests_received=0
+--- stdout (FM_TEST_END/SUMMARY/FAILURE_CAUSE lines) ---
+FM_TEST_END 2026-09-29T21:21:38Z /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-cause-live.BplUuF/tests/count.test.sh exit=1 duration_ms=26 gate_skip=false
+FM_TEST_END 2026-09-29T21:21:38Z /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-cause-live.BplUuF/tests/green.test.sh exit=0 duration_ms=28 gate_skip=false
+FM_TEST_END 2026-09-29T21:21:38Z /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-cause-live.BplUuF/tests/net.test.sh exit=1 duration_ms=28 gate_skip=false
+FM_TEST_SUMMARY total=3 failed=2 skipped_gate=0 duration_ms=367
+--- stderr ---

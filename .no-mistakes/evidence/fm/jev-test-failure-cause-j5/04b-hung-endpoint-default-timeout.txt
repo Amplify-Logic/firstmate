@@ -1,0 +1,6 @@
+$ [04b-hung-endpoint-default-timeout] endpoint=hang fm-test-run.sh --jobs 1 /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-cause-live.BplUuF/tests/count.test.sh
+exit=1 elapsed_s=15.5 requests_received=1
+--- stdout (FM_TEST_END/SUMMARY/FAILURE_CAUSE lines) ---
+FM_TEST_END 2026-09-29T21:21:42Z /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-cause-live.BplUuF/tests/count.test.sh exit=1 duration_ms=27 gate_skip=false
+FM_TEST_SUMMARY total=1 failed=1 skipped_gate=0 duration_ms=248
+--- stderr ---

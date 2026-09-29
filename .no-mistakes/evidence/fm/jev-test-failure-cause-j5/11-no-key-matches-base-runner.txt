@@ -1,0 +1,13 @@
+base e9e6c857 runner vs branch runner, no key, same 3 fixtures (2 fail):
+base exit=1 branch exit=1
+normalized stdout diff (empty = identical):
+15,17c15,17
+< FM_TEST_SLOWEST rank=1 script=/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-cause-live.BplUuF/tests/green.test.sh duration_ms=<n>
+< FM_TEST_SLOWEST rank=2 script=/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-cause-live.BplUuF/tests/count.test.sh duration_ms=<n>
+< FM_TEST_SLOWEST rank=3 script=/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-cause-live.BplUuF/tests/net.test.sh duration_ms=<n>
+---
+> FM_TEST_SLOWEST rank=1 script=/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-cause-live.BplUuF/tests/count.test.sh duration_ms=<n>
+> FM_TEST_SLOWEST rank=2 script=/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-cause-live.BplUuF/tests/net.test.sh duration_ms=<n>
+> FM_TEST_SLOWEST rank=3 script=/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-cause-live.BplUuF/tests/green.test.sh duration_ms=<n>
+stderr diff:
+(end)
