@@ -5107,7 +5107,7 @@ if [ "$KIND" != secondmate ]; then
     # project the gate does not exclude. The hook re-reads the same gate on
     # every command, so switching it off needs no relaunch.
     guard_hook=
-    guard_project=$(basename "$PROJ_ABS_REAL")
+    guard_project=$(basename "$PROJ_ABS")
     if [ -e "$CONFIG/command-guard" ] || [ -L "$CONFIG/command-guard" ]; then
       if ! command -v python3 >/dev/null 2>&1; then
         echo "warning: config/command-guard is present but python3 is not installed; $ID runs without the command guard" >&2

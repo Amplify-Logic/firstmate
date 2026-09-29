@@ -11,20 +11,21 @@ Claude Code: 2.1.284.
 ## Portable suite, network stubbed
 
 `tests/fm-command-guard.test.sh` runs the real gate, redaction, request, HTTP call and rule against a local fake endpoint that records every request.
-It covers the gate (absent, false, excluded projects, malformed value, unknown key, symlink), an unarmed home and an excluded project sending nothing, the two recorded live answers (a force-push to main denied with the final notice, `git status` allowed), each threshold at and just below its value, a partial answer still blocking on the condition that fired, non-Bash payloads ignored, redaction of assignments, `.env` values, secret-looking environment values and key shapes with the key travelling only in the header, the bounded head-and-tail state, every step-aside path (no key, unreadable answer, HTTP 500, timeout) logged once per episode, and the hook `bin/fm-spawn.sh` installs only for an armed, unexcluded home honouring the live gate.
+It covers the gate (absent, false, Compass always off, excluded projects, malformed value, unknown key, symlink), an unarmed home, Compass and an excluded project sending nothing, the two recorded live answers (a force-push to main denied with the final notice, `git status` allowed), each threshold at and just below its value, a partial answer still blocking on the condition that fired, non-Bash payloads ignored, redaction of assignments, `.env` values, secret-looking environment values and key shapes with the key travelling only in the header, a long command sent as overlapping parts in one request with any part blocking, a command over the 8-part cap allowed unjudged and logged, every step-aside path (no key, unreadable answer, HTTP 500, timeout) logged once per episode, and the hook `bin/fm-spawn.sh` installs only for an armed, unexcluded project matched by its logical name, never Compass, honouring the live gate.
 
 ```console
 $ bash tests/fm-command-guard.test.sh
-ok - the gate is off unless enabled = true, excludes listed projects, and treats a malformed file as off
-ok - an unarmed home and an excluded project allow every command and send nothing
+ok - the gate is off unless enabled = true, always excludes Compass, excludes listed projects, and treats a malformed file as off
+ok - an unarmed home, Compass and an excluded project allow every command and send nothing
 ok - recorded live answers deny a force-push to main with the final notice and allow git status
 ok - irreversible blocks at 0.6, destructive at 0.7 and injection at 0.8, and nothing below them does
 ok - only Bash commands are judged
 ok - assignments, .env values, secret-looking environment values and key shapes never leave the machine
-ok - request previews the exact redacted state, and a long command keeps its head and its tail
+ok - a long command is sent whole as overlapping parts in one request, and any part firing blocks
+ok - a command over the part cap is allowed unjudged, with a warning on stderr and in the log
 ok - with no key every command is allowed, and each outage episode is logged once
 ok - an unreadable answer, an HTTP error and a timeout all allow and are logged, and a partial answer still blocks
-ok - fm-spawn installs the Bash guard hook only for an armed, unexcluded home, and the hook honours the live gate
+ok - fm-spawn installs the Bash guard hook only for an armed, unexcluded project by logical name, never Compass, and the hook honours the live gate
 ```
 
 ## Live guard

@@ -82,6 +82,8 @@ test_gate() {
   python3 "$GUARD" armed --config "$home/config" --project demo || fail "enabled = true must arm an unlisted project"
   python3 "$GUARD" armed --config "$home/config" --project private-lab && fail "an excluded project must stay off"
   python3 "$GUARD" armed --config "$home/config" --project other && fail "every excluded project must stay off"
+  printf 'enabled = true\n' > "$home/config/command-guard"
+  python3 "$GUARD" armed --config "$home/config" --project happiness-compass && fail "Compass must stay off with no exclude line"
   printf 'enabled = yes\n' > "$home/config/command-guard"
   out=$(python3 "$GUARD" armed --config "$home/config" --project demo 2>&1) && fail "a malformed value must be off"
   assert_contains "$out" "enabled must be true or false" "a malformed gate must say why"
@@ -91,7 +93,7 @@ test_gate() {
   printf 'enabled = true\n' > "$home/gate-target"
   ln -s "$home/gate-target" "$home/config/command-guard"
   python3 "$GUARD" armed --config "$home/config" --project demo 2>/dev/null && fail "a symlinked gate must be off"
-  pass "the gate is off unless enabled = true, excludes listed projects, and treats a malformed file as off"
+  pass "the gate is off unless enabled = true, always excludes Compass, excludes listed projects, and treats a malformed file as off"
 }
 
 test_unarmed_hook_sends_nothing() {
@@ -105,7 +107,11 @@ test_unarmed_hook_sends_nothing() {
   out=$(run_hook "$home" "git push --force origin main" demo)
   assert_equals "" "$out" "an excluded project must allow without output"
   assert_equals 0 "$(requests)" "an excluded project must never be sent"
-  pass "an unarmed home and an excluded project allow every command and send nothing"
+  home=$(new_home compass 'enabled = true\n')
+  out=$(run_hook "$home" "git push --force origin main" happiness-compass)
+  assert_equals "" "$out" "Compass must allow without output"
+  assert_equals 0 "$(requests)" "Compass must never be sent, whatever the gate says"
+  pass "an unarmed home, Compass and an excluded project allow every command and send nothing"
 }
 
 # --- the rule, on recorded live answers ------------------------------------
@@ -190,16 +196,61 @@ test_redaction() {
   pass "assignments, .env values, secret-looking environment values and key shapes never leave the machine"
 }
 
-test_request_preview_and_bounded_state() {
-  local out long
-  out=$(printf '%s' 'FOO=bar git status' | FM_HOME="$TMP_ROOT/none" python3 "$GUARD" request)
-  printf '%s' "$out" | jq -e '.state.command == "FOO=<redacted> git status"' >/dev/null \
-    || fail "request must preview the redacted state, got: $out"
-  long=$(python3 -c 'print("echo " + "a" * 5000 + " && rm -rf ~/work")')
-  out=$(printf '%s' "$long" | FM_HOME="$TMP_ROOT/none" python3 "$GUARD" request)
-  printf '%s' "$out" | jq -e '(.state.command | length) < 2200 and (.state.command | endswith("rm -rf ~/work"))' >/dev/null \
-    || fail "a long command must be cut to a bounded head and tail that keeps the end"
-  pass "request previews the exact redacted state, and a long command keeps its head and its tail"
+# --- a long command is judged whole, in parts ---------------------------------
+
+part_answers() {  # <part-count> <irreversible-part>: every part benign but one
+  python3 -c '
+import json, sys
+count, hot = int(sys.argv[1]), int(sys.argv[2])
+answers = {}
+for n in range(1, count + 1):
+    answers["injection_%d" % n] = {"type": "noul", "noul": 0.02}
+    answers["effect_%d" % n] = {"type": "choice", "choice": "irreversible" if n == hot else "reversible",
+                                "confidence": 0.9, "probabilities": {}}
+    answers["destructive_intent_%d" % n] = {"type": "noul", "noul": 0.05}
+print(json.dumps({"model": "jev-1.13.0", "answers": answers}))' "$1" "$2"
+}
+
+test_long_command_judged_in_parts() {
+  local home long out
+  home=$(new_home parts 'enabled = true\n')
+  # The rm -rf straddles the first part's end, well past any head a cut would keep.
+  long=$(python3 -c '
+body = "cat > a.md <<\x27EOF\x27\n" + "x" * 1960 + "\nEOF\n"
+print(body + "rm -rf ../sibling-copy\ncat > b.md <<\x27EOF\x27\n" + "y" * 600 + "\nEOF")')
+  reset_server "$(part_answers 2 2)"
+  out=$(run_hook "$home" "$long")
+  assert_equals 1 "$(requests)" "a long command must still be one request"
+  jq -e '(.state | keys) == ["command_1","command_2"]
+    and (.questions | keys_unsorted) == ["injection_1","effect_1","destructive_intent_1","injection_2","effect_2","destructive_intent_2"]
+    and ([.state[] | select(contains("rm -rf ../sibling-copy"))] | length) >= 1
+    and ([.state[] | length] | max) <= 2000' \
+    "$SRV/requests.jsonl" >/dev/null || fail "every part must be sent with its own three questions, injection first"
+  assert_contains "$out" '"deny"' "a condition firing in any part must block"
+  assert_contains "$out" "irreversible (0.90) in part 2 of 2" "the deny must name the condition and the part"
+
+  reset_server "$(part_answers 2 0)"
+  out=$(run_hook "$home" "$long")
+  assert_equals "" "$out" "a long command with no part firing must be allowed"
+  reset_server "$(answers 0.02 irreversible 0.9 0.9)"
+  out=$(run_hook "$home" "$long" 2>/dev/null)
+  assert_equals "" "$out" "answers missing a part must be unusable, and allow"
+  grep -q 'unusable answer: injection_1' "$home/state/command-guard.log" || fail "answers without per-part ids must be logged as unusable"
+  pass "a long command is sent whole as overlapping parts in one request, and any part firing blocks"
+}
+
+test_over_cap_command_allowed_and_logged() {
+  local home long out
+  home=$(new_home overcap 'enabled = true\n')
+  long=$(python3 -c 'print("echo " + "a " * 10000 + "&& rm -rf ~/work")')
+  reset_server "$FIX/response-force-push.json"
+  out=$(run_hook "$home" "$long" 2>"$TMP_ROOT/overcap.err")
+  assert_equals "" "$out" "a command over the part cap must be allowed"
+  assert_equals 0 "$(requests)" "a command over the part cap must not be sent"
+  assert_contains "$(cat "$TMP_ROOT/overcap.err")" "over the cap of 8" "the step-aside must be reported"
+  grep -q '"outcome": "skip"' "$home/state/command-guard.log" || fail "the step-aside must be logged"
+  [ ! -e "$home/state/.command-guard-outage" ] || fail "an over-cap command is not an outage"
+  pass "a command over the part cap is allowed unjudged, with a warning on stderr and in the log"
 }
 
 # --- steps aside, and logs once ---------------------------------------------
@@ -255,7 +306,7 @@ test_failures_allow() {
 
 # --- the hook fm-spawn installs ---------------------------------------------
 
-spawn_claude() {  # <name> <id> [gate-text]
+spawn_claude() {  # <name> <id> [gate-text] [project-link-name]
   local case_dir="$TMP_ROOT/spawn-$1" home proj wt fakebin
   home="$case_dir/home"
   proj="$case_dir/project"
@@ -265,6 +316,10 @@ spawn_claude() {  # <name> <id> [gate-text]
   printf 'TYPESAFE_API_KEY=ts-fixture-key-0001\n' > "$home/.env"
   [ -z "${3:-}" ] || printf '%b' "$3" > "$home/config/command-guard"
   fm_git_worktree "$proj" "$wt" "wt-$1"
+  if [ -n "${4:-}" ]; then
+    ln -s "$proj" "$case_dir/$4"
+    proj="$case_dir/$4"
+  fi
   fm_test_spawn_brief "$home" "$2"
   fm_test_run_spawn "$home" "$wt" "$fakebin" "$2" "$proj" --mode no-mistakes --yolo off >"$case_dir/spawn.out" 2>&1 \
     || fail "claude spawn failed: $(cat "$case_dir/spawn.out")"
@@ -282,6 +337,14 @@ test_spawn_installs_hook_only_when_armed() {
   jq -e '.hooks | has("PreToolUse") | not' "$wt/.claude/settings.local.json" >/dev/null \
     || fail "an excluded project must not get the guard hook"
 
+  wt=$(spawn_claude compass guard-compass 'enabled = true\n' happiness-compass)
+  jq -e '.hooks | has("PreToolUse") | not' "$wt/.claude/settings.local.json" >/dev/null \
+    || fail "Compass, reached through a link to a differently named copy, must not get the guard hook"
+
+  wt=$(spawn_claude linked guard-linked 'enabled = true\nexclude = linked-name\n' linked-name)
+  jq -e '.hooks | has("PreToolUse") | not' "$wt/.claude/settings.local.json" >/dev/null \
+    || fail "an exclude must match the project's logical name, not the link target"
+
   wt=$(spawn_claude on guard-on 'enabled = true\n')
   settings="$wt/.claude/settings.local.json"
   jq -e '.hooks.Stop and .hooks.PreToolUse[0].matcher == "Bash" and .hooks.PreToolUse[0].hooks[0].timeout == 15' \
@@ -294,7 +357,7 @@ test_spawn_installs_hook_only_when_armed() {
   printf 'enabled = false\n' > "$TMP_ROOT/spawn-on/home/config/command-guard"
   out=$(payload "git push --force origin main" | bash -c "$cmd")
   assert_equals "" "$out" "switching the gate off must take effect without a relaunch"
-  pass "fm-spawn installs the Bash guard hook only for an armed, unexcluded home, and the hook honours the live gate"
+  pass "fm-spawn installs the Bash guard hook only for an armed, unexcluded project by logical name, never Compass, and the hook honours the live gate"
 }
 
 test_gate
@@ -303,7 +366,8 @@ test_recorded_block_and_allow
 test_thresholds
 test_non_bash_tool_ignored
 test_redaction
-test_request_preview_and_bounded_state
+test_long_command_judged_in_parts
+test_over_cap_command_allowed_and_logged
 test_no_key_allows_and_logs_once
 test_failures_allow
 test_spawn_installs_hook_only_when_armed
