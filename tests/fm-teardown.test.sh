@@ -837,6 +837,28 @@ test_local_only_landed_after_follow_up_records_revised() {
   pass "landed local-only work with a follow-up commit records revised with its counts"
 }
 
+test_local_only_relanded_after_follow_up_records_revised() {
+  local case_dir now line
+  case_dir=$(make_case capability-relanded)
+  write_meta "$case_dir" local-only ship
+  printf '%s\n' harness=claude model=opus effort=high >> "$case_dir/state/task-x1.meta"
+  : > "$case_dir/state/task-x1.steers"
+  wt_commit_file "$case_dir" delivered.txt "first delivery" "first delivery"
+  now=$(date +%s)
+  printf 'done [at=%s]: branch fm/task-x1 ready\n' "$((now + 100))" >> "$case_dir/state/task-x1.status"
+  git -C "$case_dir/project" update-ref refs/heads/main "$(git -C "$case_dir/wt" rev-parse HEAD)"
+  GIT_COMMITTER_DATE="@$((now + 200)) +0000" wt_commit_file "$case_dir" followup.txt "review follow-up" "review follow-up"
+  git -C "$case_dir/project" update-ref refs/heads/main "$(git -C "$case_dir/wt" rev-parse HEAD)"
+  run_teardown "$case_dir" > "$case_dir/stdout" 2> "$case_dir/stderr" \
+    || fail "capability-relanded: teardown failed: $(cat "$case_dir/stderr")"
+  line=$(capability_line "$case_dir")
+  case "$line" in
+    *'|ship|claude|opus|high|revised|1|0') ;;
+    *) fail "work landed, revised, and landed again should record revised|1, got: $line" ;;
+  esac
+  pass "local-only work landed, revised, and landed again records revised"
+}
+
 test_local_only_rebased_after_ready_records_merged() {
   local case_dir now line
   case_dir=$(make_case capability-rebased)
@@ -4547,6 +4569,7 @@ test_local_only_truly_unpushed_refuses
 test_local_only_merged_to_local_main_allows
 test_local_only_landed_as_delivered_records_merged
 test_local_only_landed_after_follow_up_records_revised
+test_local_only_relanded_after_follow_up_records_revised
 test_local_only_rebased_after_ready_records_merged
 test_direct_pr_merged_as_delivered_records_merged
 test_pushed_but_unlanded_work_keeps_outcome_unknown
