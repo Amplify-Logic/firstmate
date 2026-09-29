@@ -1,0 +1,77 @@
+Pi 0.99.1; stock createCallFallback present: true; removed for this run: false
+
+--- fm_branch_processed({"through":5}) expanded=false Calm off: Pi stock row ---
+
+                                                                                
+ fm_branch_processed through=5                                                  
+ ACKNOWLEDGED_OK                                                                
+                                                                                
+--- fm_branch_processed Firstmate self-rendered row ---
+
+                                                                                
+ fm_branch_processed through=5                                                  
+ ACKNOWLEDGED_OK                                                                
+                                                                                
+PASS: fm_branch_processed expanded=false: self-rendered row is byte-identical to Pi's stock row
+PASS: fm_branch_processed expanded=false: call line shows the 'through' argument like Pi 0.99 stock
+
+--- fm_branch_processed({"through":5}) expanded=true Calm off: Pi stock row ---
+
+                                                                                
+ fm_branch_processed                                                            
+   through: 5                                                                   
+ ACKNOWLEDGED_OK                                                                
+                                                                                
+--- fm_branch_processed Firstmate self-rendered row ---
+
+                                                                                
+ fm_branch_processed                                                            
+   through: 5                                                                   
+ ACKNOWLEDGED_OK                                                                
+                                                                                
+PASS: fm_branch_processed expanded=true: self-rendered row is byte-identical to Pi's stock row
+PASS: fm_branch_processed expanded=true: call line shows the 'through' argument like Pi 0.99 stock
+PASS: fm_branch_processed: Calm on hides the whole row (0 lines)
+PASS: fm_branch_processed: Calm off again restores the stock-identical row
+PASS: fm_branch_processed: HTML export falls through to Pi's structured fallback
+
+--- fm_branch_outcomes({"recent":2}) expanded=false Calm off: Pi stock row ---
+
+                                                                                
+ fm_branch_outcomes recent=2                                                    
+ OUTCOME_ONE                                                                    
+ OUTCOME_TWO                                                                    
+                                                                                
+--- fm_branch_outcomes Firstmate self-rendered row ---
+
+                                                                                
+ fm_branch_outcomes recent=2                                                    
+ OUTCOME_ONE                                                                    
+ OUTCOME_TWO                                                                    
+                                                                                
+PASS: fm_branch_outcomes expanded=false: self-rendered row is byte-identical to Pi's stock row
+PASS: fm_branch_outcomes expanded=false: call line shows the 'recent' argument like Pi 0.99 stock
+
+--- fm_branch_outcomes({"recent":2}) expanded=true Calm off: Pi stock row ---
+
+                                                                                
+ fm_branch_outcomes                                                             
+   recent: 2                                                                    
+ OUTCOME_ONE                                                                    
+ OUTCOME_TWO                                                                    
+                                                                                
+--- fm_branch_outcomes Firstmate self-rendered row ---
+
+                                                                                
+ fm_branch_outcomes                                                             
+   recent: 2                                                                    
+ OUTCOME_ONE                                                                    
+ OUTCOME_TWO                                                                    
+                                                                                
+PASS: fm_branch_outcomes expanded=true: self-rendered row is byte-identical to Pi's stock row
+PASS: fm_branch_outcomes expanded=true: call line shows the 'recent' argument like Pi 0.99 stock
+PASS: fm_branch_outcomes: Calm on hides the whole row (0 lines)
+PASS: fm_branch_outcomes: Calm off again restores the stock-identical row
+PASS: fm_branch_outcomes: HTML export falls through to Pi's structured fallback
+
+ALL PASS
