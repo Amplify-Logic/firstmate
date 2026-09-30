@@ -277,20 +277,20 @@ test_long_reply_is_capped() {
 test_lead_written_to_the_rule_is_kept_whole() {
   local dir lead
   dir=$(make_primary_dir "$TMP_ROOT/whole-lead")
-  lead="Captain, the filming-rights check is done and nobody was contacted. The app already has footage from three places with no written OK, so you and Derya need to decide what to do; the options are on screen."
+  lead="Captain, the filming-rights check is done and nobody was contacted. The app already has footage from three places with no written OK. The oldest clip has been live for a year. Two of the places are partners we still work with. The third has closed. So you and Derya need to decide what to do; the options are on screen."
   run_hook "$dir" "$(printf '%s\n' "$lead" "" "**A.** Ask for permission" "**B.** Remove the footage")"
   assert_equals "$lead" "$(spoken "$dir")" \
-    "a lead of about 35 words must be spoken whole, with no pointer when it already says on screen"
-  pass "a lead written to the about-35-word rule is spoken whole"
+    "a six-sentence lead of about 60 words must be spoken whole, with no pointer when it already says on screen"
+  pass "a lead sized to what matters is spoken whole"
 }
 
-test_lead_keeps_at_most_three_sentences() {
+test_lead_keeps_at_most_six_sentences() {
   local dir
-  dir=$(make_primary_dir "$TMP_ROOT/three")
-  run_hook "$dir" "Captain, one is done. Two is done. Three is done. Four is done."
-  assert_equals "Captain, one is done. Two is done. Three is done. More on screen." "$(spoken "$dir")" \
-    "the lead must stop at three sentences and point at the rest"
-  pass "the lead stops at three sentences"
+  dir=$(make_primary_dir "$TMP_ROOT/six")
+  run_hook "$dir" "Captain, one is done. Two is done. Three is done. Four is done. Five is done. Six is done. Seven is done."
+  assert_equals "Captain, one is done. Two is done. Three is done. Four is done. Five is done. Six is done. More on screen." "$(spoken "$dir")" \
+    "the lead must stop at six sentences and point at the rest"
+  pass "the lead stops at six sentences"
 }
 
 test_numbers_do_not_split_sentences() {
@@ -375,22 +375,22 @@ test_pointer_names_what_waits_on_screen() {
 test_pointer_fits_the_spoken_budget() {
   local dir first second out
   dir=$(make_primary_dir "$TMP_ROOT/budget")
-  first="Captain, $(printf 'alpha %.0s' $(seq 1 18))done."
-  second="Then $(printf 'beta %.0s' $(seq 1 13))end."
+  first="Captain, $(printf 'alpha %.0s' $(seq 1 34))done."
+  second="Then $(printf 'beta %.0s' $(seq 1 34))end."
   run_hook "$dir" "$(printf '%s\n' "$first $second" "" "**A.** One" "**B.** Two")"
   assert_equals "$first $second The choice is on screen." "$(spoken "$dir")" \
-    "a 35-word lead and the choice pointer fit the budget whole"
+    "a 72-word lead and the choice pointer fit the budget whole"
   rm -f "$dir/spoken.log"
   run_hook "$dir" "$(printf '%s\n' "$first $second" "" "Should it ship tonight?")"
   out=$(spoken "$dir")
   assert_equals "$first There's a question for you on screen." "$out" \
-    "a 35-word lead must be cut back so the question pointer is still spoken"
+    "a 72-word lead must be cut back so the question pointer is still spoken"
   rm -f "$dir/spoken.log"
   run_hook "$dir" "$(printf '%s\n' "$first $second gamma gamma done." "" "**A.** One" "**B.** Two")"
   out=$(spoken "$dir")
   assert_equals "$first The choice is on screen." "$out" \
-    "a 38-word lead must be cut back so the choice pointer is still spoken"
-  [ "$(printf '%s' "$out" | wc -w | tr -d ' ')" -le 41 ] || fail "the spoken line must fit 41 words"
+    "a 75-word lead must be cut back so the choice pointer is still spoken"
+  [ "$(printf '%s' "$out" | wc -w | tr -d ' ')" -le 78 ] || fail "the spoken line must fit 78 words"
   pass "the lead leaves room for its pointer inside the spoken budget"
 }
 
@@ -617,7 +617,7 @@ test_shipshape_opener_is_dropped_one_line
 test_shipshape_opener_is_dropped_two_paragraphs
 test_long_reply_is_capped
 test_lead_written_to_the_rule_is_kept_whole
-test_lead_keeps_at_most_three_sentences
+test_lead_keeps_at_most_six_sentences
 test_numbers_do_not_split_sentences
 test_trailing_list_lead_in_is_dropped
 test_pointer_names_what_waits_on_screen

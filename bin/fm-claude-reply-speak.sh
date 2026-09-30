@@ -20,8 +20,9 @@
 #   - a closing sentence ending in ":" introduces a list on screen, so it is
 #     dropped when another sentence precedes it and ended with "." when it is
 #     the only one;
-#   - at most 3 sentences and 38 words (about 35, with slack so a lead written
-#     to AGENTS.md section 9 is never cut), cut back to the last whole sentence;
+#   - at most 6 sentences and 75 words (AGENTS.md section 9's roughly 75-word
+#     lead, leaving the register's seventh sentence for the pointer), cut back
+#     to the last whole sentence;
 #     a first sentence longer than that is kept whole for the register to cut;
 #   - ended with "." when it does not already end in . ! or ?;
 #   - followed by one voice-only pointer, first match wins, unless the lead
@@ -34,7 +35,7 @@
 #     rest holds more than a one-line sign-off of at most 15 words (another
 #     paragraph or line, a list, a table, code, or a link) or the cuts above
 #     dropped anything. The desk budget (docs/examples/desk-speak-register.toml)
-#     is 41 words, and the lead is cut back further so that it and the pointer
+#     is 78 words, and the lead is cut back further so that it and the pointer
 #     fit, because past the budget the register drops the pointer sentence.
 # When the register refuses the line (bin/fm-speak.sh exit 2), the hook speaks
 # only the lead's first sentence plus the pointer, or plus "More on screen." when
@@ -99,13 +100,13 @@ DECISION_NOTICE="Captain, a decision is waiting for you on screen."
 REPLY_NOTICE="Captain, my reply is on screen."
 
 ROUTINE_LINE="Captain, shipshape."
-# AGENTS.md section 9 asks for a lead of about 35 words; the cap leaves a few
-# words of slack so a lead written to that rule is never cut mid-thought.
-MAX_WORDS=38
-MAX_SENTENCES=3
-# Words the desk register speaks: 16s at 2.6 words a second
+# AGENTS.md section 9 sizes the lead to what matters, roughly 75 words at most;
+# one sentence short of the register's seven leaves room for the pointer.
+MAX_WORDS=75
+MAX_SENTENCES=6
+# Words the desk register speaks: 30s at 2.6 words a second
 # (docs/examples/desk-speak-register.toml).
-SPOKEN_WORDS=41
+SPOKEN_WORDS=78
 
 SETTLE_MS=${FM_REPLY_SPEAK_SETTLE_MS:-2000}
 case "$SETTLE_MS" in ''|*[!0-9]*) SETTLE_MS=2000 ;; esac
