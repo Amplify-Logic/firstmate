@@ -35,6 +35,10 @@
 #     pill, and an unrecognised source gets a neutral marker instead of failing.
 #   - A row merged from several inputs marks the source it presents, not the
 #     input that happened to see it first.
+#   - A morning action whose end time has passed closes on render as
+#     superseded by auto-expiry and shows under Closed today; a future or
+#     missing end time stays open, a reopened expired item stays open, and an
+#     end time moved later brings an expired item back.
 # shellcheck disable=SC2016
 set -u
 
@@ -611,6 +615,54 @@ test_a_merged_row_marks_the_source_it_presents() {
   pass 'a row merged from a morning line and a later ledger record marks the source it presents'
 }
 
+test_time_bound_asks_expire_after_their_end() {
+  local h out id code
+  h="$TMP_ROOT/expiry"
+  new_home "$h"
+  # Ends 10:30 CEST, 11:00 CEST, and no end at all.
+  sidecar "$h" 2026-09-10 '{"key":"m1","source":"calendar","ref":"sync","class":"deadline","title":"Enjojj monthly partner sync","ends_at":"2026-09-10T10:30:00+02:00","updated":'"$T_0900"'},{"key":"m2","source":"calendar","ref":"later","class":"deadline","title":"afternoon supplier call","ends_at":"2026-09-10T15:30:00+02:00","updated":'"$T_0900"'},{"key":"m3","source":"hubspot","ref":"t9","class":"urgent","title":"dealer invoice reply","updated":'"$T_0900"'}'
+  render_at "$h" "$T_1000"
+  [ "$(field_of "$h" 'Enjojj' 2)" = open ] || fail 'a meeting closed before its end'
+  render_at "$h" "$T_1100"
+  out=$(page "$h" 2026-09-10)
+  [ "$(field_of "$h" 'Enjojj' 2)" = closed ] || fail 'a meeting past its end stayed open'
+  [ "$(field_of "$h" 'supplier call' 2)" = open ] || fail 'a future end time closed its item'
+  [ "$(field_of "$h" 'dealer invoice' 2)" = open ] || fail 'an item with no end time was expired'
+  assert_not_contains "$(needs_order "$out")" 'Enjojj' 'an ended meeting is still in Needs you now'
+  assert_contains "$out" '<summary>Closed today (1)</summary>' 'the expiry is not under Closed today'
+  assert_contains "$out" 'ended at 2026-09-10 10:30 CEST' 'the expiry evidence does not name the end time'
+  assert_contains "$out" 'superseded by auto-expiry' 'the expiry is not labelled as automatic'
+  # A reopen is deliberate: the same end time never closes it again.
+  id=$(field_of "$h" 'Enjojj' 1)
+  todo_at "$h" "$T_1100" reopen --item "$id" --reason 'still running over' >/dev/null
+  render_at "$h" "$T_1500"
+  [ "$(field_of "$h" 'Enjojj' 2)" = open ] || fail 'a reopened expired item was closed again'
+  [ "$(grep -c '"actor": "auto-expiry"' "$h/data/todo/journal")" = 1 ] \
+    || fail 'expiry closed an item more than once per end time'
+  # A malformed end time refuses the sidecar and changes nothing.
+  sidecar "$h" 2026-09-10 '{"key":"m4","source":"calendar","ref":"bad","class":"deadline","title":"zoneless","ends_at":"2026-09-10T10:30:00","updated":'"$T_0900"'}'
+  render_at "$h" "$T_1500" 2>/dev/null && code=0 || code=$?
+  [ "$code" != 0 ] || fail 'an end time without a zone was accepted'
+  pass 'a time-bound ask closes by auto-expiry after its end, and a reopen or a missing end time stays open'
+}
+
+test_an_expired_item_comes_back_when_its_end_moves_later() {
+  local h
+  h="$TMP_ROOT/expiry-moved"
+  new_home "$h"
+  sidecar "$h" 2026-09-10 '{"key":"m1","source":"calendar","ref":"sync","class":"deadline","title":"Enjojj monthly partner sync","ends_at":"2026-09-10T10:30:00+02:00","updated":'"$T_0900"'}'
+  render_at "$h" "$T_1100"
+  [ "$(field_of "$h" 'Enjojj' 2)" = closed ] || fail 'a meeting past its end stayed open'
+  sidecar "$h" 2026-09-10 '{"key":"m1","source":"calendar","ref":"sync","class":"deadline","title":"Enjojj monthly partner sync","ends_at":"2026-09-10T16:00:00+02:00","updated":'"$T_1100"'}'
+  render_at "$h" "$T_1100"
+  [ "$(field_of "$h" 'Enjojj' 2)" = open ] || fail 'a meeting moved later stayed expired'
+  render_at "$h" "$T_1500"
+  [ "$(field_of "$h" 'Enjojj' 2)" = open ] || fail 'a meeting moved later closed before its new end'
+  pass 'an expired meeting moved later reopens and waits for its new end'
+}
+
+test_time_bound_asks_expire_after_their_end
+test_an_expired_item_comes_back_when_its_end_moves_later
 test_verification_is_never_renewed_by_sync
 test_done_survives_and_a_new_ask_resurfaces_once
 test_edit_after_resolution_reopens_once

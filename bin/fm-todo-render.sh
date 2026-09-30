@@ -83,7 +83,10 @@
 # the only thing that may reopen a closed item) and aliases (extra
 # `source:ref` identities of the SAME ask), partner_awaiting (the JSON boolean
 # true for a partner-facing ask awaiting him) and awaiting_since (epoch second
-# of that ask; an ask with none sorts after every dated partner ask)}.
+# of that ask; an ask with none sorts after every dated partner ask), and
+# ends_at (ISO timestamp with a zone at which the ask stops being one: a
+# calendar event's end, or the end of the day for a "due today" deadline;
+# bin/fm-todo.sh owns what happens once it passes)}.
 # A partner-facing ask awaiting him - flagged here or by the channel intake's
 # timeline assessment - ranks in the page's partner tier, oldest ask first. `updated` is the SAME-DAY
 # verification epoch from daily-todo-freshness. Decisions and waiting-on-you

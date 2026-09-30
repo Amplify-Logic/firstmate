@@ -15,7 +15,8 @@ import time
 RANK = ('outage', 'urgent', 'deadline', 'obligation')
 KINDS = ('decision', 'approval', 'reply', 'info')
 WEEKDAYS = ('monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday')
-SLOT_FIELDS = ('title', 'link', 'class', 'kind', 'ask', 'why', 'label', 'since', 'partner_first', 'awaiting_since')
+SLOT_FIELDS = ('title', 'link', 'class', 'kind', 'ask', 'why', 'label', 'since', 'partner_first', 'awaiting_since',
+               'ends_at')
 RETIRED_TTL = 30 * 86400
 
 
@@ -190,6 +191,15 @@ def morning_observations(doc, day, now):
                 not isinstance(since, int) or isinstance(since, bool) or not 0 < since < 10 ** 11)):
             raise Refusal('morning action partner_awaiting must be a JSON boolean '
                           'and awaiting_since an epoch second')
+        ends_at = 0
+        if raw.get('ends_at') is not None:
+            try:
+                end = datetime.datetime.fromisoformat(raw['ends_at'])
+            except (TypeError, ValueError):
+                end = None
+            if end is None or end.tzinfo is None:
+                raise Refusal('morning action ends_at must be an ISO timestamp with a zone')
+            ends_at = int(end.timestamp())
         ident = f'{raw["source"]}:{raw["ref"]}'
         aliases = [ident, f'ledger:{key}'] + [a for a in raw.get('aliases', []) if isinstance(a, str) and ':' in a]
         obs.append({
@@ -201,6 +211,7 @@ def morning_observations(doc, day, now):
             'ask': raw.get('ask', ''), 'why': raw.get('why', ''), 'label': raw['source'], 'state': 'open',
             'partner_first': awaiting,
             'awaiting_since': number(since),
+            'ends_at': ends_at,
             # The sidecar is the morning sweep's own verification record.
             'verified': {'at': read, 'how': raw.get('verified_how') or 'morning verification sweep'},
         })
@@ -361,6 +372,24 @@ def fold(store, items, observations, now, backlog_seen, ledger_seen):
     return items
 
 
+def expire(store, items, now):
+    """Close each open item whose known end time has passed, once per end time.
+
+    A reopen after expiry stays open until a source moves the end time, and an
+    expired item a source moves into the future comes back on its own.
+    """
+    for rec in items.values():
+        end = number(rec.get('ends_at'))
+        if not end or end == number(rec.get('expired_ends_at')):
+            continue
+        if end <= now and rec['state'] == 'open':
+            transition(store, rec, now, 'closed', 'auto-expiry', 'superseded', f'ended at {when(end)}',
+                       expired_ends_at=end)
+        elif end > now and rec['state'] == 'closed' and (rec.get('closure') or {}).get('actor') == 'auto-expiry':
+            transition(store, rec, now, 'open', 'auto-expiry', 'reopened',
+                       note=f'reopened: now ends at {when(end)}', expired_ends_at=0)
+
+
 # --- commands ---------------------------------------------------------------
 
 def parse_when(text, now):
@@ -470,6 +499,7 @@ def sync(args, store, now):
     held = backlog_observations(args.backlog)
     observations += held or []
     items = fold(store, store.load(), observations, now, held is not None, ledger is not None)
+    expire(store, items, now)
     started = number(doc.get('sweep_started')) if doc else 0
     if started and started <= now and local_day(started) == local_day(now):
         store.add_sweep(started)
