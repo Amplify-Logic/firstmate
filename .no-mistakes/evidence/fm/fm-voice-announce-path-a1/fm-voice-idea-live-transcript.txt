@@ -1,0 +1,27 @@
+### glasses-voice retired: only starship-voice cloned
+$ ls $FM_HOME/projects -> starship-voice    (FM_VOICE_IDEA_ANNOUNCE unset)
+$ fm-voice-idea.py check  (desk unreachable) -> rc=0
+$ fm-voice-idea.py check  (desk back)        -> rc=0
+  real mailbox contents (answer, then announcements):
+    answer: Saved, waiting for the desk.
+    announcement: Filed to What a Life.
+  announce clone(s) that ran: starship-voice 
+
+### both clones present -> starship-voice preferred
+$ ls $FM_HOME/projects -> glasses-voice starship-voice    (FM_VOICE_IDEA_ANNOUNCE unset)
+$ fm-voice-idea.py check  (desk unreachable) -> rc=0
+$ fm-voice-idea.py check  (desk back)        -> rc=0
+  real mailbox contents (answer, then announcements):
+    answer: Saved, waiting for the desk.
+    announcement: Filed to What a Life.
+  announce clone(s) that ran: starship-voice 
+
+### only the retiring glasses-voice clone -> fallback
+$ ls $FM_HOME/projects -> glasses-voice    (FM_VOICE_IDEA_ANNOUNCE unset)
+$ fm-voice-idea.py check  (desk unreachable) -> rc=0
+$ fm-voice-idea.py check  (desk back)        -> rc=0
+  real mailbox contents (answer, then announcements):
+    answer: Saved, waiting for the desk.
+    announcement: Filed to What a Life.
+  announce clone(s) that ran: glasses-voice 
+

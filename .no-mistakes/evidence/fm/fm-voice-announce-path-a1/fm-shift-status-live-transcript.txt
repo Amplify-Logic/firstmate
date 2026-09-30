@@ -1,0 +1,32 @@
+### BEFORE (base b398526): only starship-voice cloned
+$ ls $FM_HOME/projects -> starship-voice 
+$ .fm-shift.base.tmp.sh status   (voice-out line)
+  |   voice out: DOWN - no announce command at /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-voice-lab.gfu6nF/homes/retired/projects/glasses-voice/bin/announce
+  |       fix: the glasses-voice checkout is missing or not built; without it nothing can be spoken into the glasses
+  announce reached: 
+
+### AFTER: only starship-voice cloned
+$ ls $FM_HOME/projects -> starship-voice 
+$ fm-shift.sh status   (voice-out line)
+  |   voice out: ok - firstmate can speak into the glasses
+  announce reached: starship-voice 
+
+### AFTER: both clones -> starship-voice probed
+$ ls $FM_HOME/projects -> glasses-voice starship-voice 
+$ fm-shift.sh status   (voice-out line)
+  |   voice out: ok - firstmate can speak into the glasses
+  announce reached: starship-voice 
+
+### AFTER: only glasses-voice -> fallback probed
+$ ls $FM_HOME/projects -> glasses-voice 
+$ fm-shift.sh status   (voice-out line)
+  |   voice out: ok - firstmate can speak into the glasses
+  announce reached: glasses-voice 
+
+### AFTER: neither clone -> DOWN with fix hint
+$ ls $FM_HOME/projects -> 
+$ fm-shift.sh status   (voice-out line)
+  |   voice out: DOWN - no announce command at /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-voice-lab.gfu6nF/homes/none/projects/glasses-voice/bin/announce
+  |       fix: the starship-voice checkout (or the retiring glasses-voice one) is missing or not built; without it nothing can be spoken into the glasses
+  announce reached: 
+

@@ -1,0 +1,66 @@
+### REPORTED BUG, BEFORE (base b398526): glasses-voice retired, only starship-voice cloned
+$ ls $FM_HOME/projects  ->  starship-voice 
+$ fm-speak.base.sh --dry-run The fix is green.
+  | fm-speak: the spoken register owner is not executable: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-voice-lab.gfu6nF/homes/retired/projects/glasses-voice/bin/announce (set FM_SPEAK_SHAPER)
+  exit=1
+  register owner reached: 
+
+### AFTER (this change): glasses-voice retired, only starship-voice cloned (dry run)
+$ ls $FM_HOME/projects  ->  starship-voice 
+$ fm-speak.sh --dry-run The fix is green.
+  | The fix is green.
+  exit=0
+  register owner reached: starship-voice 
+
+### AFTER: glasses-voice retired, spoken reply reaches the speaker
+$ ls $FM_HOME/projects  ->  starship-voice 
+$ fm-speak.sh PR 241 merged. See https://example.com/pr/241 for detail.
+  | announce note: stripped 1 url
+  | PR 241 merged. See for detail.
+  exit=0
+  register owner reached: starship-voice 
+  speaker got: speaker argv: -f /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-speak-text.ifSX1R
+
+### AFTER: both clones present -> starship-voice preferred
+$ ls $FM_HOME/projects  ->  glasses-voice starship-voice 
+$ fm-speak.sh --dry-run The fix is green.
+  | The fix is green.
+  exit=0
+  register owner reached: starship-voice 
+
+### AFTER: only the retiring glasses-voice clone -> fallback still speaks
+$ ls $FM_HOME/projects  ->  glasses-voice 
+$ fm-speak.sh --dry-run The fix is green.
+  | The fix is green.
+  exit=0
+  register owner reached: glasses-voice 
+
+### AFTER: explicit FM_SPEAK_SHAPER override beats both clones
+$ ls $FM_HOME/projects  ->  glasses-voice starship-voice 
+$ fm-speak.sh --dry-run The fix is green.
+  | The fix is green.
+  exit=0
+  register owner reached: custom-owner 
+
+### ADVERSARIAL: neither clone present -> honest failure, nothing spoken
+$ ls $FM_HOME/projects  ->  
+$ fm-speak.sh The fix is green.
+  | fm-speak: the spoken register owner is not executable: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-voice-lab.gfu6nF/homes/none/projects/glasses-voice/bin/announce (set FM_SPEAK_SHAPER)
+  exit=1
+  register owner reached: 
+
+### ADVERSARIAL: starship-voice register refusal still enforced (exit 2, nothing spoken)
+$ ls $FM_HOME/projects  ->  starship-voice 
+$ fm-speak.sh Shall I merge it? Say yes to go ahead.
+  | refused: asks the captain to decide; announcements carry news, not decisions
+  | fm-speak: refused by the spoken register; nothing was spoken
+  exit=2
+  register owner reached: starship-voice 
+
+### ADVERSARIAL: starship-voice announce present but not executable (both clones)
+$ ls $FM_HOME/projects  ->  glasses-voice starship-voice 
+$ fm-speak.sh --dry-run The fix is green.
+  | fm-speak: the spoken register owner is not executable: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-voice-lab.gfu6nF/homes/dangling/projects/starship-voice/bin/announce (set FM_SPEAK_SHAPER)
+  exit=1
+  register owner reached: 
+
