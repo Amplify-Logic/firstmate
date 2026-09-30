@@ -194,7 +194,7 @@ run_shift() {  # <tmp> <args...>
     FM_SUPERVISION_MODEL=autoarm \
     FM_SENTINEL_PLATFORM="${FM_SENTINEL_PLATFORM:-Darwin}" \
     FM_SENTINEL_LAUNCHCTL="$tmp/fakebin/launchctl" \
-    FM_SHIFT_ANNOUNCE="$tmp/home/announce" \
+    FM_SHIFT_ANNOUNCE="${SHIFT_ANNOUNCE-$tmp/home/announce}" \
     FM_SHIFT_AFK_LAUNCH="$tmp/home/afk-launch" \
     FM_SHIFT_AFK_RETURN="$tmp/home/afk-return" \
     FM_SHIFT_HEALTH_WAIT="${FM_SHIFT_HEALTH_WAIT:-2}" \
@@ -1102,6 +1102,48 @@ test_status_with_no_shift_armed_still_reports_every_component() {
   pass 'status: with nothing armed it reports every component but claims no failure'
 }
 
+# With no override, the announce path is the starship-voice clone when it is
+# there and the retiring glasses-voice clone otherwise. Each fake records which
+# one the status probe's dry run reached.
+install_project_announce() {  # <tmp> <project>
+  mkdir -p "$1/home/projects/$2/bin"
+  printf '#!/usr/bin/env bash\nprintf "%%s\\n" %s >> "%s"\n' "$2" "$1/probed.log" \
+    > "$1/home/projects/$2/bin/announce"
+  chmod +x "$1/home/projects/$2/bin/announce"
+}
+
+test_default_announce_prefers_starship_voice_over_glasses_voice() {
+  local tmp out
+  tmp=$(make_shift_home)
+  install_project_announce "$tmp" glasses-voice
+  install_project_announce "$tmp" starship-voice
+  out=$(SHIFT_ANNOUNCE='' run_shift "$tmp" status 2>&1) || true
+  assert_contains "$out" 'voice out: ok' 'the starship-voice announce answers the probe'
+  assert_equals 'starship-voice' "$(cat "$tmp/probed.log")" 'only the starship-voice announce was probed'
+  pass 'announce default: the starship-voice clone wins when both are present'
+}
+
+test_default_announce_falls_back_to_glasses_voice() {
+  local tmp out
+  tmp=$(make_shift_home)
+  install_project_announce "$tmp" glasses-voice
+  out=$(SHIFT_ANNOUNCE='' run_shift "$tmp" status 2>&1) || true
+  assert_contains "$out" 'voice out: ok' 'the glasses-voice announce answers the probe'
+  assert_equals 'glasses-voice' "$(cat "$tmp/probed.log")" 'the retiring clone is the fallback'
+  pass 'announce default: the glasses-voice clone is used when starship-voice is absent'
+}
+
+test_announce_override_wins_over_both_clones() {
+  local tmp out
+  tmp=$(make_shift_home)
+  install_project_announce "$tmp" glasses-voice
+  install_project_announce "$tmp" starship-voice
+  out=$(run_shift "$tmp" status 2>&1) || true
+  assert_contains "$out" 'voice out: ok' 'the override announce answers the probe'
+  [ ! -e "$tmp/probed.log" ] || fail 'announce override: a project clone was probed despite FM_SHIFT_ANNOUNCE'
+  pass 'announce override: FM_SHIFT_ANNOUNCE still wins over both clones'
+}
+
 test_usage_is_printed_for_an_unknown_command() {
   local tmp out rc=0
   tmp=$(make_shift_home)
@@ -1155,4 +1197,7 @@ test_stop_clears_arming_that_outlived_its_shift_record
 test_status_is_honest_when_a_component_is_down
 test_status_reports_a_self_check_the_watcher_would_reject
 test_status_with_no_shift_armed_still_reports_every_component
+test_default_announce_prefers_starship_voice_over_glasses_voice
+test_default_announce_falls_back_to_glasses_voice
+test_announce_override_wins_over_both_clones
 test_usage_is_printed_for_an_unknown_command

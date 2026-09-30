@@ -69,7 +69,8 @@ Environment (all optional; defaults are this home's glasses and Artevo setup):
   FM_VOICE_IDEA_MAILBOX_DB      mailbox database (data/glasses-voice-runtime/mailbox.db)
   FM_VOICE_IDEA_TOKEN_FILE      relay token file (relay-token beside the database)
   FM_VOICE_IDEA_ANSWER          glasses answer CLI (data/glasses-voice-runtime/.venv/bin/glasses-voice-answer)
-  FM_VOICE_IDEA_ANNOUNCE        glasses announce CLI (projects/glasses-voice/bin/announce)
+  FM_VOICE_IDEA_ANNOUNCE        glasses announce CLI (projects/starship-voice/bin/announce
+                                when it exists, else projects/glasses-voice/bin/announce)
   FM_VOICE_IDEA_TARTEVO         Artevo command (projects/artevo-workspace/bin/tartevo)
   FM_VOICE_IDEA_IMPORT_TIMEOUT  seconds allowed for one Artevo import (15)
   FM_VOICE_IDEA_SPEAK_TIMEOUT   seconds allowed for one answer or announcement (15)
@@ -188,8 +189,14 @@ class Paths:
         self.answer_cli = Path(
             env.get("FM_VOICE_IDEA_ANSWER") or runtime / ".venv" / "bin" / "glasses-voice-answer"
         )
+        starship_announce = projects / "starship-voice" / "bin" / "announce"
         self.announce_cli = Path(
-            env.get("FM_VOICE_IDEA_ANNOUNCE") or projects / "glasses-voice" / "bin" / "announce"
+            env.get("FM_VOICE_IDEA_ANNOUNCE")
+            or (
+                starship_announce
+                if starship_announce.exists()
+                else projects / "glasses-voice" / "bin" / "announce"
+            )
         )
         self.tartevo = Path(
             env.get("FM_VOICE_IDEA_TARTEVO") or projects / "artevo-workspace" / "bin" / "tartevo"
