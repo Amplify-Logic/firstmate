@@ -68,7 +68,8 @@
 # TIME-BOUND ASKS EXPIRE. An item a morning action gave an `ends_at` closes on
 # the first sync after that time, as superseded by actor `auto-expiry` with
 # the end time as evidence, so it moves to the page's closed fold. An item
-# with no end time never expires. Each end time expires an item once: a
+# with no end time never expires, nor does one the captain marked (mine,
+# park, or a pending you/dig). Each end time expires an item once: a
 # `reopen` after expiry stays open, and only a source moving the end time can
 # close it again; an expired item whose end time moves into the future, or
 # that a morning action re-asserts with no end time, reopens.

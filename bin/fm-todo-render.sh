@@ -73,7 +73,9 @@
 # render time separately, so build time and read time are never confused.
 #
 # MORNING COMPOSITION CONTRACT (version 1, or 2 with the optional fields):
-# details-only context such as the calendar goes in today-<date>.morning.html,
+# details-only context that is not time-bound goes in
+# today-<date>.morning.html; a meeting he attends or hosts today is an action
+# with ends_at, never a details line, so it leaves the page once it ends;
 # action metadata in today-<date>.morning.json: {version, date:"YYYY-MM-DD",
 # actions:[{key, source, ref, class, title, link, updated}], and in version 2
 # optionally sweep_started (epoch the day's verification pass began),
@@ -88,7 +90,7 @@
 # calendar event's end, or the end of the day for a "due today" deadline;
 # bin/fm-todo.sh owns what happens once it passes)}. Every calendar-sourced
 # action sets ends_at to the event's end, and a "due today" deadline sets it
-# to the end of that day; an action with no end time never expires.
+# to the end of that local day; an action with no end time never expires.
 # A partner-facing ask awaiting him - flagged here or by the channel intake's
 # timeline assessment - ranks in the page's partner tier, oldest ask first. `updated` is the SAME-DAY
 # verification epoch from daily-todo-freshness. Decisions and waiting-on-you

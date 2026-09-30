@@ -194,7 +194,7 @@ def morning_observations(doc, day, now):
         ends_at = 0
         if raw.get('ends_at') is not None:
             try:
-                end = datetime.datetime.fromisoformat(raw['ends_at'])
+                end = datetime.datetime.fromisoformat(re.sub(r'[Zz]$', '+00:00', raw['ends_at']))
             except (TypeError, ValueError):
                 end = None
             if end is None or end.tzinfo is None:
@@ -375,7 +375,7 @@ def fold(store, items, observations, now, backlog_seen, ledger_seen):
 def expire(store, items, now):
     """Close each open item whose known end time has passed, once per end time.
 
-    A reopen after expiry stays open until a source moves the end time, and an
+    A line the captain marked is his to clear, never the clock's. A reopen after expiry stays open until a source moves the end time, and an
     expired item a source moves into the future or clears the end of comes back
     on its own.
     """
@@ -383,7 +383,8 @@ def expire(store, items, now):
         end = number(rec.get('ends_at'))
         if end == number(rec.get('expired_ends_at')):
             continue
-        if end and end <= now and rec['state'] == 'open':
+        if (end and end <= now and rec['state'] == 'open'
+                and not (rec.get('owner') or rec.get('snoozed_until') or rec.get('pending'))):
             transition(store, rec, now, 'closed', 'auto-expiry', 'superseded', f'ended at {when(end)}',
                        expired_ends_at=end)
         elif ((not end or end > now) and rec['state'] == 'closed'

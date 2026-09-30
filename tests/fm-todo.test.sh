@@ -39,7 +39,8 @@
 #     superseded by auto-expiry and shows under Closed today; a future or
 #     missing end time stays open, a reopened expired item stays open, and an
 #     end time moved later or a re-listing with no end time brings an expired
-#     item back.
+#     item back. A UTC end time written with Z expires the same way, and a
+#     line the captain marked never expires.
 # shellcheck disable=SC2016
 set -u
 
@@ -678,7 +679,25 @@ test_an_expired_item_relisted_without_an_end_comes_back() {
   pass 'an expired ask the next sweep re-lists with no end time reopens'
 }
 
+test_expiry_leaves_marked_lines_to_the_captain() {
+  local h
+  h="$TMP_ROOT/expiry-marked"
+  new_home "$h"
+  # All three end at 10:30 CEST; the last is written in UTC with Z.
+  sidecar "$h" 2026-09-10 '{"key":"m1","source":"calendar","ref":"sync","class":"deadline","title":"Enjojj monthly partner sync","ends_at":"2026-09-10T10:30:00+02:00","updated":'"$T_0900"'},{"key":"m2","source":"calendar","ref":"review","class":"deadline","title":"supplier review","ends_at":"2026-09-10T10:30:00+02:00","updated":'"$T_0900"'},{"key":"m3","source":"calendar","ref":"standup","class":"deadline","title":"ops standup","ends_at":"2026-09-10T08:30:00Z","updated":'"$T_0900"'}'
+  render_at "$h" "$T_1000"
+  todo_at "$h" "$T_1000" command --item "$(field_of "$h" 'Enjojj' 1)" 'you: send the recap' >/dev/null
+  todo_at "$h" "$T_1000" command --item "$(field_of "$h" 'supplier review' 1)" 'mine' >/dev/null
+  render_at "$h" "$T_1100"
+  [ "$(field_of "$h" 'ops standup' 2)" = closed ] || fail 'an end time written with Z did not expire its item'
+  [ "$(field_of "$h" 'Enjojj' 2)" = open ] || fail 'expiry closed an item with a pending handoff'
+  [ "$(field_of "$h" 'supplier review' 2)" = open ] || fail 'expiry closed an item the captain owns'
+  assert_contains "$(page "$h" 2026-09-10)" 'handoff requested' 'the pending handoff left the page at the end time'
+  pass 'a Z end time expires its item, and a line the captain marked is left for him to clear'
+}
+
 test_time_bound_asks_expire_after_their_end
+test_expiry_leaves_marked_lines_to_the_captain
 test_an_expired_item_comes_back_when_its_end_moves_later
 test_an_expired_item_relisted_without_an_end_comes_back
 test_verification_is_never_renewed_by_sync
