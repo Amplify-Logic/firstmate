@@ -1,0 +1,1 @@
+Captain, the docs rewrite is ready for review. It covers the setup guide, the configuration page, and the troubleshooting section. The checks passed on both platforms. The old pages stay reachable through redirects. The choice is on screen.

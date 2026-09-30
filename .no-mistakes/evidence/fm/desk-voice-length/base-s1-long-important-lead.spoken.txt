@@ -1,0 +1,1 @@
+Captain, the payments migration finished and every service is green again. The one thing to know is that refunds were paused for about twenty minutes during the cutover. More on screen.

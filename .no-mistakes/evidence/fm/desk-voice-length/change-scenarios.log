@@ -1,0 +1,62 @@
+hook exit=0 stdout-bytes-above=none
+--- [change] s2-overlong-lead
+reply lead (first paragraph):
+  Captain, the release train shipped version five to every region this morning. The European region went first and took about ten minutes. The American region followed and needed one retry for a slow health check. The Asian region went last and was clean on the first attempt. Error rates stayed flat across all three regions throughout. Customer support reported no new tickets about the release. The mobile apps picked up the new API without any forced update. Marketing has already sent the announcement email to all subscribers. Next week I will start on the search indexing work you asked about.
+SPOKEN: Captain, the release train shipped version five to every region this morning. The European region went first and took about ten minutes. The American region followed and needed one retry for a slow health check. The Asian region went last and was clean on the first attempt. Error rates stayed flat across all three regions throughout. Customer support reported no new tickets about the release. More on screen.
+spoken words: 68
+audio: /Users/larstolhurst/.no-mistakes/evidence/01M3T3S04XWBNE27HYAFNXC1ZD/change-s2-overlong-lead.aiff (22.755601 s)
+speak-history entries: 1 
+hook exit=0 stdout-bytes-above=none
+--- [change] s3-short-lead-signoff
+reply lead (first paragraph):
+  Captain, the fix landed and the checks are green.
+SPOKEN: Captain, the fix landed and the checks are green.
+spoken words: 9
+audio: /Users/larstolhurst/.no-mistakes/evidence/01M3T3S04XWBNE27HYAFNXC1ZD/change-s3-short-lead-signoff.aiff (2.693560 s)
+speak-history entries: 1 
+hook exit=0 stdout-bytes-above=none
+--- [change] s4-routine
+reply lead (first paragraph):
+  Captain, shipshape.
+SPOKEN: <nothing>
+speak-history entries: 
+hook exit=0 stdout-bytes-above=none
+--- [change] s5-decision-in-lead
+reply lead (first paragraph):
+  Captain, the docs rewrite is ready for review. It covers the setup guide, the configuration page, and the troubleshooting section. The checks passed on both platforms. Should I merge it once the reviewers are done? The old pages stay reachable through redirects.
+SPOKEN: Captain, the docs rewrite is ready for review. It covers the setup guide, the configuration page, and the troubleshooting section. The checks passed on both platforms. The old pages stay reachable through redirects. The choice is on screen.
+spoken words: 38
+audio: /Users/larstolhurst/.no-mistakes/evidence/01M3T3S04XWBNE27HYAFNXC1ZD/change-s5-decision-in-lead.aiff (14.535737 s)
+speak-history entries: 1 
+hook exit=0 stdout-bytes-above=none
+--- [change] s7-decision-only
+reply lead (first paragraph):
+  Shall I merge the green PR now? Should I also tag the release?
+SPOKEN: The choice is on screen.
+spoken words: 5
+audio: /Users/larstolhurst/.no-mistakes/evidence/01M3T3S04XWBNE27HYAFNXC1ZD/change-s7-decision-only.aiff (1.370023 s)
+speak-history entries: 1 
+hook exit=0 stdout-bytes-above=none
+--- [change] s8-unspeakable-in-lead
+reply lead (first paragraph):
+  Captain, the deploy finished at https://deploy.example.com/runs/88213 and the service is healthy. The config lives at /etc/app/config.yaml and was left unchanged.
+SPOKEN: Captain, the deploy finished at and the service is healthy. The config lives at and was left unchanged.
+spoken words: 18
+audio: /Users/larstolhurst/.no-mistakes/evidence/01M3T3S04XWBNE27HYAFNXC1ZD/change-s8-unspeakable-in-lead.aiff (5.781814 s)
+speak-history entries: 1 
+hook exit=0 stdout-bytes-above=none
+--- [change] s6-refuse-mode-sentence4
+reply lead (first paragraph):
+  Captain, the docs rewrite is ready for review. It covers the setup guide, the configuration page, and the troubleshooting section. The checks passed on both platforms. Should I merge it once the reviewers are done? The old pages stay reachable through redirects.
+SPOKEN: Captain, the docs rewrite is ready for review. It covers the setup guide, the configuration page, and the troubleshooting section. The checks passed on both platforms. The old pages stay reachable through redirects. The choice is on screen.
+spoken words: 38
+audio: /Users/larstolhurst/.no-mistakes/evidence/01M3T3S04XWBNE27HYAFNXC1ZD/change-s6-refuse-mode-sentence4.aiff (14.535737 s)
+speak-history entries: 1 
+hook exit=0 stdout-bytes-above=none
+--- [change] s7b-refuse-mode-decision-only
+reply lead (first paragraph):
+  Shall I merge the green PR now? Should I also tag the release?
+SPOKEN: Captain, a decision is waiting for you on screen.
+spoken words: 9
+audio: /Users/larstolhurst/.no-mistakes/evidence/01M3T3S04XWBNE27HYAFNXC1ZD/change-s7b-refuse-mode-decision-only.aiff (2.948980 s)
+speak-history entries: 1 

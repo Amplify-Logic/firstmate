@@ -1,0 +1,16 @@
+hook exit=0 stdout-bytes-above=none
+--- [base] s6-refuse-mode-sentence4
+reply lead (first paragraph):
+  Captain, the docs rewrite is ready for review. It covers the setup guide, the configuration page, and the troubleshooting section. The checks passed on both platforms. Should I merge it once the reviewers are done? The old pages stay reachable through redirects.
+SPOKEN: Captain, the docs rewrite is ready for review. It covers the setup guide, the configuration page, and the troubleshooting section. The checks passed on both platforms. The choice is on screen.
+spoken words: 31
+audio: /Users/larstolhurst/.no-mistakes/evidence/01M3T3S04XWBNE27HYAFNXC1ZD/base-s6-refuse-mode-sentence4.aiff (11.726122 s)
+speak-history entries: 1 
+hook exit=0 stdout-bytes-above=none
+--- [base] s7-decision-only
+reply lead (first paragraph):
+  Shall I merge the green PR now? Should I also tag the release?
+SPOKEN: The choice is on screen.
+spoken words: 5
+audio: /Users/larstolhurst/.no-mistakes/evidence/01M3T3S04XWBNE27HYAFNXC1ZD/base-s7-decision-only.aiff (1.370023 s)
+speak-history entries: 1 

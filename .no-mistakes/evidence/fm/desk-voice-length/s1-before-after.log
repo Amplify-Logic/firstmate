@@ -1,0 +1,16 @@
+hook exit=0 stdout-bytes-above=none
+--- [base] s1-long-important-lead
+reply lead (first paragraph):
+  Captain, the payments migration finished and every service is green again. The one thing to know is that refunds were paused for about twenty minutes during the cutover. Three customers saw a failed refund and I have retried all three successfully. The billing dashboard now reads from the new database. Nothing is waiting on you. Tomorrow I will remove the old tables once the nightly backup confirms.
+SPOKEN: Captain, the payments migration finished and every service is green again. The one thing to know is that refunds were paused for about twenty minutes during the cutover. More on screen.
+spoken words: 31
+audio: /Users/larstolhurst/.no-mistakes/evidence/01M3T3S04XWBNE27HYAFNXC1ZD/base-s1-long-important-lead.aiff (9.868526 s)
+speak-history entries: 1 
+hook exit=0 stdout-bytes-above=none
+--- [change] s1-long-important-lead
+reply lead (first paragraph):
+  Captain, the payments migration finished and every service is green again. The one thing to know is that refunds were paused for about twenty minutes during the cutover. Three customers saw a failed refund and I have retried all three successfully. The billing dashboard now reads from the new database. Nothing is waiting on you. Tomorrow I will remove the old tables once the nightly backup confirms.
+SPOKEN: Captain, the payments migration finished and every service is green again. The one thing to know is that refunds were paused for about twenty minutes during the cutover. Three customers saw a failed refund and I have retried all three successfully. The billing dashboard now reads from the new database. Nothing is waiting on you. Tomorrow I will remove the old tables once the nightly backup confirms. More on screen.
+spoken words: 70
+audio: /Users/larstolhurst/.no-mistakes/evidence/01M3T3S04XWBNE27HYAFNXC1ZD/change-s1-long-important-lead.aiff (22.802041 s)
+speak-history entries: 1 
