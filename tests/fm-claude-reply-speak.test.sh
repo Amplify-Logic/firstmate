@@ -40,10 +40,13 @@ install_hook_scripts() {
 # exits 2, reports the register's reason on stderr, and is not kept; an accepted
 # line is recorded and kept as the next numbered entry in state/speak-history/.
 # Like the installed register, it refuses an approval word even inside news.
+# --dry-run prints an accepted line without recording or keeping it.
 install_speak_stub() {
   local dir=$1
   cat > "$dir/speak-stub" <<'EOF'
 #!/usr/bin/env bash
+dry_run=0
+[ "${1-}" != --dry-run ] || { dry_run=1; shift; }
 text=$*
 case "$text" in
   *"Shall I"*|*approved*)
@@ -55,6 +58,7 @@ case "$text" in
     printf 'refused: nothing speakable left after removing URLs, paths, and ids\n' >&2
     exit 2 ;;
 esac
+[ "$dry_run" = 0 ] || { printf '%s\n' "$text"; exit 0; }
 printf '%s\n' "$text" >> "$FM_HOME/spoken.log"
 n=$(ls "$FM_HOME/state/speak-history" 2>/dev/null | sort -n | tail -n 1)
 n=$(( ${n:-0} + 1 ))
@@ -147,9 +151,24 @@ test_non_decision_refusal_never_claims_a_decision() {
     "a refusal that is not a decision must not say a decision is waiting"
   rm -f "$dir/spoken.log"
   run_hook "$dir" "Unspeakable first sentence. The fix merged."
+  assert_equals "The fix merged. More on screen." "$(spoken "$dir")" \
+    "a refused first sentence must be dropped and the rest spoken with a plain pointer"
+  rm -f "$dir/spoken.log"
+  run_hook "$dir" "Unspeakable first sentence. Unspeakable second sentence."
   assert_equals "Captain, my reply is on screen." "$(spoken "$dir")" \
-    "a refused first sentence must fall back to the plain on-screen notice"
+    "a lead refused sentence by sentence must fall back to the plain on-screen notice"
   pass "a refusal that is not a decision speaks the plain on-screen notice"
+}
+
+test_refused_sentence_alone_is_dropped() {
+  local dir
+  dir=$(make_primary_dir "$TMP_ROOT/refused-sentence")
+  run_hook "$dir" "Captain, the release build finished. All twelve checks passed on both platforms. The changelog is updated. Derya approved the draft notes. The tag goes out tonight."
+  assert_grep 'The changelog is updated. Derya approved the draft notes.' "$dir/refused.log" \
+    "the whole lead must reach the register first"
+  assert_equals "Captain, the release build finished. All twelve checks passed on both platforms. The changelog is updated. The tag goes out tonight. More on screen." \
+    "$(spoken "$dir")" "only the refused fourth sentence may be dropped, with a pointer to it"
+  pass "a refused sentence alone is dropped and the rest of the lead is spoken"
 }
 
 test_decision_refusal_of_news_never_claims_a_decision() {
@@ -607,6 +626,7 @@ test_decision_reply_falls_back_to_first_sentence
 test_decision_only_reply_speaks_notice
 test_non_decision_refusal_never_claims_a_decision
 test_decision_refusal_of_news_never_claims_a_decision
+test_refused_sentence_alone_is_dropped
 test_markdown_reply_speaks_first_paragraph
 test_list_paragraph_is_joined
 test_empty_and_tool_only_turns_are_silent
