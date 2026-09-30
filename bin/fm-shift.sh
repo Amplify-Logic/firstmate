@@ -85,6 +85,8 @@
 #   FM_SHIFT_MAILBOX_PORT      loopback port the mailbox serves (default 8765)
 #   FM_SHIFT_SERVE_PORT        Tailscale Serve HTTPS port the phone targets (8443)
 #   FM_SHIFT_ANNOUNCE          absolute path of the glasses announce CLI
+#                              (default: projects/starship-voice/bin/announce
+#                              when it exists, else projects/glasses-voice/bin/announce)
 #   FM_SHIFT_MAILBOX_DB        mailbox database, read read-only for the report
 #   FM_SHIFT_AFK_LAUNCH        away-mode launch owner
 #   FM_SHIFT_AFK_RETURN        away-mode return owner
@@ -127,7 +129,13 @@ KEEPAWAKE_LABEL="${FM_SHIFT_KEEPAWAKE_LABEL:-com.firstmate.glasses-keepawake}"
 MAILBOX_PORT="${FM_SHIFT_MAILBOX_PORT:-8765}"
 SERVE_PORT="${FM_SHIFT_SERVE_PORT:-8443}"
 HEALTH_URL="http://127.0.0.1:$MAILBOX_PORT/health"
-ANNOUNCE="${FM_SHIFT_ANNOUNCE:-$FM_HOME/projects/glasses-voice/bin/announce}"
+if [ -n "${FM_SHIFT_ANNOUNCE:-}" ]; then
+  ANNOUNCE=$FM_SHIFT_ANNOUNCE
+elif [ -e "$FM_HOME/projects/starship-voice/bin/announce" ]; then
+  ANNOUNCE="$FM_HOME/projects/starship-voice/bin/announce"
+else
+  ANNOUNCE="$FM_HOME/projects/glasses-voice/bin/announce"
+fi
 MAILBOX_DB="${FM_SHIFT_MAILBOX_DB:-$FM_HOME/data/glasses-voice-runtime/mailbox.db}"
 AFK_LAUNCH="${FM_SHIFT_AFK_LAUNCH:-$SCRIPT_DIR/fm-afk-launch.sh}"
 AFK_RETURN="${FM_SHIFT_AFK_RETURN:-$SCRIPT_DIR/fm-afk-return.sh}"
@@ -269,7 +277,7 @@ probe_announce() {
   PROBE_FIX=
   if [ ! -x "$ANNOUNCE" ]; then
     PROBE_LINE="voice out: DOWN - no announce command at $ANNOUNCE"
-    PROBE_FIX='the glasses-voice checkout is missing or not built; without it nothing can be spoken into the glasses'
+    PROBE_FIX='the starship-voice checkout (or the retiring glasses-voice one) is missing or not built; without it nothing can be spoken into the glasses'
     return 1
   fi
   if ! "$ANNOUNCE" --dry-run "$ARM_LINE" >/dev/null 2>&1; then

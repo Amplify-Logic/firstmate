@@ -450,6 +450,53 @@ test_a_question_answered_elsewhere_gets_the_receipt_announced() {
   pass "a question already answered gets its receipt as an announcement"
 }
 
+# With no FM_VOICE_IDEA_ANNOUNCE, the receipt goes through the starship-voice
+# clone's announce when it is there and the retiring glasses-voice clone's
+# otherwise. Each project copy of the fake records its own project name.
+install_project_announce() {  # <project>
+  mkdir -p "$FM_HOME/projects/$1/bin"
+  { printf '#!/usr/bin/env bash\nprintf "%%s\\n" %s >> "%s/announcers.log"\n' "$1" "$W/log"
+    tail -n +2 "$W/fakes/announce"; } > "$FM_HOME/projects/$1/bin/announce"
+  chmod +x "$FM_HOME/projects/$1/bin/announce"
+}
+
+announce_receipt_by_default() {
+  make_wav "$W/audio/hum.wav" 10
+  add_question "$ID1" "" "$W/audio/hum.wav" audio/wav answered
+  (unset FM_VOICE_IDEA_ANNOUNCE; "$IDEA" take "$ID1" --song "what a life" >/dev/null) \
+    || fail "take files the idea through the default announce"
+  assert_equals "Filed to What a Life." "$(cat "$W/log/announces.log")" "the receipt is announced"
+}
+
+test_the_default_announce_prefers_starship_voice() {
+  make_world
+  install_project_announce glasses-voice
+  install_project_announce starship-voice
+  announce_receipt_by_default
+  assert_equals starship-voice "$(cat "$W/log/announcers.log")" "the starship-voice clone wins when both are present"
+  pass "the default announce is the starship-voice clone when it exists"
+}
+
+test_the_default_announce_falls_back_to_glasses_voice() {
+  make_world
+  install_project_announce glasses-voice
+  announce_receipt_by_default
+  assert_equals glasses-voice "$(cat "$W/log/announcers.log")" "the retiring clone is the fallback"
+  pass "the default announce falls back to the glasses-voice clone"
+}
+
+test_an_explicit_announce_wins_over_both_clones() {
+  make_world
+  install_project_announce glasses-voice
+  install_project_announce starship-voice
+  make_wav "$W/audio/hum.wav" 10
+  add_question "$ID1" "" "$W/audio/hum.wav" audio/wav answered
+  "$IDEA" take "$ID1" --song "what a life" >/dev/null || fail "take files the idea"
+  assert_equals "Filed to What a Life." "$(cat "$W/log/announces.log")" "the named announce said the receipt"
+  [ ! -e "$W/log/announcers.log" ] || fail "a project clone announced despite FM_VOICE_IDEA_ANNOUNCE"
+  pass "FM_VOICE_IDEA_ANNOUNCE still wins over both project clones"
+}
+
 test_a_refused_receipt_wakes_firstmate_and_is_not_marked_spoken() {
   local err
   make_world
@@ -625,6 +672,9 @@ test_a_waiting_sort_does_not_hold_the_import
 test_a_duplicate_while_the_first_waits_is_said_once
 test_honest_failures_are_spoken
 test_a_question_answered_elsewhere_gets_the_receipt_announced
+test_the_default_announce_prefers_starship_voice
+test_the_default_announce_falls_back_to_glasses_voice
+test_an_explicit_announce_wins_over_both_clones
 test_a_refused_receipt_wakes_firstmate_and_is_not_marked_spoken
 test_take_refuses_words_that_are_not_an_idea
 test_an_unspoken_receipt_is_retried_and_reported_once
