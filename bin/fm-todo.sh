@@ -70,7 +70,8 @@
 # the end time as evidence, so it moves to the page's closed fold. An item
 # with no end time never expires. Each end time expires an item once: a
 # `reopen` after expiry stays open, and only a source moving the end time can
-# close it again; an expired item whose end time moves into the future reopens.
+# close it again; an expired item whose end time moves into the future, or
+# that a morning action re-asserts with no end time, reopens.
 #
 # PAGE COMMANDS. `command` applies the captain's one-line verbs:
 #   drop <words>            closed as dismissed

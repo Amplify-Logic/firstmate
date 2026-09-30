@@ -38,7 +38,8 @@
 #   - A morning action whose end time has passed closes on render as
 #     superseded by auto-expiry and shows under Closed today; a future or
 #     missing end time stays open, a reopened expired item stays open, and an
-#     end time moved later brings an expired item back.
+#     end time moved later or a re-listing with no end time brings an expired
+#     item back.
 # shellcheck disable=SC2016
 set -u
 
@@ -661,8 +662,25 @@ test_an_expired_item_comes_back_when_its_end_moves_later() {
   pass 'an expired meeting moved later reopens and waits for its new end'
 }
 
+test_an_expired_item_relisted_without_an_end_comes_back() {
+  local h
+  h="$TMP_ROOT/expiry-relisted"
+  new_home "$h"
+  sidecar "$h" 2026-09-10 '{"key":"m1","source":"hubspot","ref":"t9","class":"deadline","title":"dealer invoice reply","ends_at":"2026-09-10T23:59:59+02:00","updated":'"$T_0900"'}'
+  render_at "$h" "$T_1000"
+  render_at "$h" "$T_NEXT_0900"
+  [ "$(field_of "$h" 'dealer invoice' 2)" = closed ] || fail 'a deadline past its day stayed open'
+  # The next morning sweep still owes the ask, but it is no longer due today.
+  sidecar "$h" 2026-09-11 '{"key":"m1","source":"hubspot","ref":"t9","class":"urgent","title":"dealer invoice reply","updated":'"$T_NEXT_0900"'}'
+  render_at "$h" "$T_NEXT_1000"
+  [ "$(field_of "$h" 'dealer invoice' 2)" = open ] || fail 'a re-listed ask with no end time stayed expired'
+  assert_contains "$(needs_order "$(page "$h" 2026-09-11)")" 'dealer invoice reply' 'the re-listed ask is not in Needs you now'
+  pass 'an expired ask the next sweep re-lists with no end time reopens'
+}
+
 test_time_bound_asks_expire_after_their_end
 test_an_expired_item_comes_back_when_its_end_moves_later
+test_an_expired_item_relisted_without_an_end_comes_back
 test_verification_is_never_renewed_by_sync
 test_done_survives_and_a_new_ask_resurfaces_once
 test_edit_after_resolution_reopens_once

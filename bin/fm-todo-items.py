@@ -376,18 +376,21 @@ def expire(store, items, now):
     """Close each open item whose known end time has passed, once per end time.
 
     A reopen after expiry stays open until a source moves the end time, and an
-    expired item a source moves into the future comes back on its own.
+    expired item a source moves into the future or clears the end of comes back
+    on its own.
     """
     for rec in items.values():
         end = number(rec.get('ends_at'))
-        if not end or end == number(rec.get('expired_ends_at')):
+        if end == number(rec.get('expired_ends_at')):
             continue
-        if end <= now and rec['state'] == 'open':
+        if end and end <= now and rec['state'] == 'open':
             transition(store, rec, now, 'closed', 'auto-expiry', 'superseded', f'ended at {when(end)}',
                        expired_ends_at=end)
-        elif end > now and rec['state'] == 'closed' and (rec.get('closure') or {}).get('actor') == 'auto-expiry':
+        elif ((not end or end > now) and rec['state'] == 'closed'
+              and (rec.get('closure') or {}).get('actor') == 'auto-expiry'):
             transition(store, rec, now, 'open', 'auto-expiry', 'reopened',
-                       note=f'reopened: now ends at {when(end)}', expired_ends_at=0)
+                       note=f'reopened: now ends at {when(end)}' if end else 'reopened: no longer has an end time',
+                       expired_ends_at=0)
 
 
 # --- commands ---------------------------------------------------------------

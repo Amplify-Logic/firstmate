@@ -86,7 +86,9 @@
 # of that ask; an ask with none sorts after every dated partner ask), and
 # ends_at (ISO timestamp with a zone at which the ask stops being one: a
 # calendar event's end, or the end of the day for a "due today" deadline;
-# bin/fm-todo.sh owns what happens once it passes)}.
+# bin/fm-todo.sh owns what happens once it passes)}. Every calendar-sourced
+# action sets ends_at to the event's end, and a "due today" deadline sets it
+# to the end of that day; an action with no end time never expires.
 # A partner-facing ask awaiting him - flagged here or by the channel intake's
 # timeline assessment - ranks in the page's partner tier, oldest ask first. `updated` is the SAME-DAY
 # verification epoch from daily-todo-freshness. Decisions and waiting-on-you
