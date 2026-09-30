@@ -83,6 +83,7 @@ The HubSpot tool's own help owns object types, filter syntax, and association pa
 2. Read each event's `responseStatus` for the captain's address and write "declined" where it is declined; an event on the calendar is not an event he is attending.
 3. Read event descriptions, because commitments and ticket ids hide there.
 4. Follow any ticket id found in a description back into Stage 1.
+5. Put every meeting the captain attends or hosts today in the morning actions, never in the details fragment, and give every calendar-sourced action an `ends_at`: the event's end, as an ISO timestamp with its zone. A "due today" deadline gets the end of that local day. The to-do page closes the item on its own once that time passes. The details fragment carries only context that is not time-bound.
 
 ## Stage 6 - Telemetry
 

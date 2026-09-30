@@ -18,7 +18,7 @@ Use one header and one short queue of explicitly verified asks, ordered by urgen
 Give each ask an identity that outlives one render, so a later state supersedes the morning version - a resolution, a hand-over, an answered hold - instead of appearing beside it.
 Routine changes belong outside that queue unless classified as a real obligation.
 Keep fleet conditions grouped as conditions, with one summary each and explicitly dated counts rather than accumulated per-read totals.
-Keep ticket detail and calendar below the queue, and show a cleared item once with the evidence that cleared it, so “already handled” is answered rather than resurfacing.
+Keep ticket detail and other context that is not time-bound below the queue, and show a cleared item once with the evidence that cleared it, so “already handled” is answered rather than resurfacing.
 Retain the 15 September typography, colours, provenance vocabulary, and responsive tables.
 
 The renderer cannot verify sources or infer obligations from arbitrary prose.

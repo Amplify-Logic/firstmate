@@ -35,6 +35,12 @@
 #     pill, and an unrecognised source gets a neutral marker instead of failing.
 #   - A row merged from several inputs marks the source it presents, not the
 #     input that happened to see it first.
+#   - A morning action whose end time has passed closes on render as
+#     superseded by auto-expiry and shows under Closed today; a future or
+#     missing end time stays open, a reopened expired item stays open, and an
+#     end time moved later or a re-listing with no end time brings an expired
+#     item back. A UTC end time written with Z expires the same way, and a
+#     line the captain marked never expires until a park on it lapses.
 # shellcheck disable=SC2016
 set -u
 
@@ -611,6 +617,105 @@ test_a_merged_row_marks_the_source_it_presents() {
   pass 'a row merged from a morning line and a later ledger record marks the source it presents'
 }
 
+test_time_bound_asks_expire_after_their_end() {
+  local h out id code
+  h="$TMP_ROOT/expiry"
+  new_home "$h"
+  # Ends 10:30 CEST, 11:00 CEST, and no end at all.
+  sidecar "$h" 2026-09-10 '{"key":"m1","source":"calendar","ref":"sync","class":"deadline","title":"Enjojj monthly partner sync","ends_at":"2026-09-10T10:30:00+02:00","updated":'"$T_0900"'},{"key":"m2","source":"calendar","ref":"later","class":"deadline","title":"afternoon supplier call","ends_at":"2026-09-10T15:30:00+02:00","updated":'"$T_0900"'},{"key":"m3","source":"hubspot","ref":"t9","class":"urgent","title":"dealer invoice reply","updated":'"$T_0900"'}'
+  render_at "$h" "$T_1000"
+  [ "$(field_of "$h" 'Enjojj' 2)" = open ] || fail 'a meeting closed before its end'
+  render_at "$h" "$T_1100"
+  out=$(page "$h" 2026-09-10)
+  [ "$(field_of "$h" 'Enjojj' 2)" = closed ] || fail 'a meeting past its end stayed open'
+  [ "$(field_of "$h" 'supplier call' 2)" = open ] || fail 'a future end time closed its item'
+  [ "$(field_of "$h" 'dealer invoice' 2)" = open ] || fail 'an item with no end time was expired'
+  assert_not_contains "$(needs_order "$out")" 'Enjojj' 'an ended meeting is still in Needs you now'
+  assert_contains "$out" '<summary>Closed today (1)</summary>' 'the expiry is not under Closed today'
+  assert_contains "$out" 'ended at 2026-09-10 10:30 CEST' 'the expiry evidence does not name the end time'
+  assert_contains "$out" 'superseded by auto-expiry' 'the expiry is not labelled as automatic'
+  # A reopen is deliberate: the same end time never closes it again.
+  id=$(field_of "$h" 'Enjojj' 1)
+  todo_at "$h" "$T_1100" reopen --item "$id" --reason 'still running over' >/dev/null
+  render_at "$h" "$T_1500"
+  [ "$(field_of "$h" 'Enjojj' 2)" = open ] || fail 'a reopened expired item was closed again'
+  [ "$(grep -c '"actor": "auto-expiry"' "$h/data/todo/journal")" = 1 ] \
+    || fail 'expiry closed an item more than once per end time'
+  # A malformed end time refuses the sidecar and changes nothing.
+  sidecar "$h" 2026-09-10 '{"key":"m4","source":"calendar","ref":"bad","class":"deadline","title":"zoneless","ends_at":"2026-09-10T10:30:00","updated":'"$T_0900"'}'
+  render_at "$h" "$T_1500" 2>/dev/null && code=0 || code=$?
+  [ "$code" != 0 ] || fail 'an end time without a zone was accepted'
+  pass 'a time-bound ask closes by auto-expiry after its end, and a reopen or a missing end time stays open'
+}
+
+test_an_expired_item_comes_back_when_its_end_moves_later() {
+  local h
+  h="$TMP_ROOT/expiry-moved"
+  new_home "$h"
+  sidecar "$h" 2026-09-10 '{"key":"m1","source":"calendar","ref":"sync","class":"deadline","title":"Enjojj monthly partner sync","ends_at":"2026-09-10T10:30:00+02:00","updated":'"$T_0900"'}'
+  render_at "$h" "$T_1100"
+  [ "$(field_of "$h" 'Enjojj' 2)" = closed ] || fail 'a meeting past its end stayed open'
+  sidecar "$h" 2026-09-10 '{"key":"m1","source":"calendar","ref":"sync","class":"deadline","title":"Enjojj monthly partner sync","ends_at":"2026-09-10T16:00:00+02:00","updated":'"$T_1100"'}'
+  render_at "$h" "$T_1100"
+  [ "$(field_of "$h" 'Enjojj' 2)" = open ] || fail 'a meeting moved later stayed expired'
+  render_at "$h" "$T_1500"
+  [ "$(field_of "$h" 'Enjojj' 2)" = open ] || fail 'a meeting moved later closed before its new end'
+  pass 'an expired meeting moved later reopens and waits for its new end'
+}
+
+test_an_expired_item_relisted_without_an_end_comes_back() {
+  local h
+  h="$TMP_ROOT/expiry-relisted"
+  new_home "$h"
+  sidecar "$h" 2026-09-10 '{"key":"m1","source":"hubspot","ref":"t9","class":"deadline","title":"dealer invoice reply","ends_at":"2026-09-10T23:59:59+02:00","updated":'"$T_0900"'}'
+  render_at "$h" "$T_1000"
+  render_at "$h" "$T_NEXT_0900"
+  [ "$(field_of "$h" 'dealer invoice' 2)" = closed ] || fail 'a deadline past its day stayed open'
+  # The next morning sweep still owes the ask, but it is no longer due today.
+  sidecar "$h" 2026-09-11 '{"key":"m1","source":"hubspot","ref":"t9","class":"urgent","title":"dealer invoice reply","updated":'"$T_NEXT_0900"'}'
+  render_at "$h" "$T_NEXT_1000"
+  [ "$(field_of "$h" 'dealer invoice' 2)" = open ] || fail 'a re-listed ask with no end time stayed expired'
+  assert_contains "$(needs_order "$(page "$h" 2026-09-11)")" 'dealer invoice reply' 'the re-listed ask is not in Needs you now'
+  pass 'an expired ask the next sweep re-lists with no end time reopens'
+}
+
+test_expiry_leaves_marked_lines_to_the_captain() {
+  local h
+  h="$TMP_ROOT/expiry-marked"
+  new_home "$h"
+  # All three end at 10:30 CEST; the last is written in UTC with Z.
+  sidecar "$h" 2026-09-10 '{"key":"m1","source":"calendar","ref":"sync","class":"deadline","title":"Enjojj monthly partner sync","ends_at":"2026-09-10T10:30:00+02:00","updated":'"$T_0900"'},{"key":"m2","source":"calendar","ref":"review","class":"deadline","title":"supplier review","ends_at":"2026-09-10T10:30:00+02:00","updated":'"$T_0900"'},{"key":"m3","source":"calendar","ref":"standup","class":"deadline","title":"ops standup","ends_at":"2026-09-10T08:30:00Z","updated":'"$T_0900"'}'
+  render_at "$h" "$T_1000"
+  todo_at "$h" "$T_1000" command --item "$(field_of "$h" 'Enjojj' 1)" 'you: send the recap' >/dev/null
+  todo_at "$h" "$T_1000" command --item "$(field_of "$h" 'supplier review' 1)" 'mine' >/dev/null
+  render_at "$h" "$T_1100"
+  [ "$(field_of "$h" 'ops standup' 2)" = closed ] || fail 'an end time written with Z did not expire its item'
+  [ "$(field_of "$h" 'Enjojj' 2)" = open ] || fail 'expiry closed an item with a pending handoff'
+  [ "$(field_of "$h" 'supplier review' 2)" = open ] || fail 'expiry closed an item the captain owns'
+  assert_contains "$(page "$h" 2026-09-10)" 'handoff requested' 'the pending handoff left the page at the end time'
+  pass 'a Z end time expires its item, and a line the captain marked is left for him to clear'
+}
+
+test_a_lapsed_park_no_longer_holds_off_expiry() {
+  local h
+  h="$TMP_ROOT/expiry-parked"
+  new_home "$h"
+  sidecar "$h" 2026-09-10 '{"key":"m1","source":"calendar","ref":"sync","class":"deadline","title":"Enjojj monthly partner sync","ends_at":"2026-09-10T10:30:00+02:00","updated":'"$T_0900"'}'
+  render_at "$h" "$T_1000"
+  todo_at "$h" "$T_1000" command --item "$(field_of "$h" 'Enjojj' 1)" 'park til tomorrow' >/dev/null
+  render_at "$h" "$T_1100"
+  [ "$(field_of "$h" 'Enjojj' 2)" = open ] || fail 'expiry closed an item parked until tomorrow'
+  render_at "$h" "$T_NEXT_1000"
+  [ "$(field_of "$h" 'Enjojj' 2)" = closed ] || fail 'a lapsed park kept an ended meeting from expiring'
+  assert_not_contains "$(needs_order "$(page "$h" 2026-09-11)")" 'Enjojj' 'an ended meeting came back when its park lapsed'
+  pass 'a park holds off expiry only until it lapses'
+}
+
+test_time_bound_asks_expire_after_their_end
+test_expiry_leaves_marked_lines_to_the_captain
+test_a_lapsed_park_no_longer_holds_off_expiry
+test_an_expired_item_comes_back_when_its_end_moves_later
+test_an_expired_item_relisted_without_an_end_comes_back
 test_verification_is_never_renewed_by_sync
 test_done_survives_and_a_new_ask_resurfaces_once
 test_edit_after_resolution_reopens_once

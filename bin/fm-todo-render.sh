@@ -36,12 +36,13 @@
 # previous sweep ("Closed today" when that is the start of the day) with its
 # evidence and actor, parked, "mine" and the email agent block; then the live
 # "Your open tickets" section, open with its ticket table and its read time or
-# out-of-date line, the morning detail fragment (calendar, worth knowing) and the intake
-# coverage fold (each enrolled source's last successful read and last
-# failure, which is separate from item freshness). Routine chatter the intake
-# dropped from its ledger was never an ask and is not a closure. Sections with
-# nothing in them are omitted. The closed fold counts as "handled without
-# you" only a fulfilled close with a named actor other than the captain.
+# out-of-date line, the morning detail fragment (worth knowing, only context
+# that is not time-bound) and the intake coverage fold (each enrolled
+# source's last successful read and last failure, which is separate from item
+# freshness). Routine chatter the intake dropped from its ledger was never an
+# ask and is not a closure. Sections with nothing in them are omitted. The
+# closed fold counts as "handled without you" only a fulfilled close with a
+# named actor other than the captain.
 #
 # EACH ROW IS THE CLASS BADGE, THE ASK, AT MOST ONE SHORT CONTEXT LINE (a
 # reopen note, else the why, else the ask's wording), ITS READ TIME, the Open
@@ -73,7 +74,9 @@
 # render time separately, so build time and read time are never confused.
 #
 # MORNING COMPOSITION CONTRACT (version 1, or 2 with the optional fields):
-# details-only context such as the calendar goes in today-<date>.morning.html,
+# details-only context that is not time-bound goes in
+# today-<date>.morning.html; a meeting he attends or hosts today is an action
+# with ends_at, never a details line, so it leaves the page once it ends;
 # action metadata in today-<date>.morning.json: {version, date:"YYYY-MM-DD",
 # actions:[{key, source, ref, class, title, link, updated}], and in version 2
 # optionally sweep_started (epoch the day's verification pass began),
@@ -83,7 +86,12 @@
 # the only thing that may reopen a closed item) and aliases (extra
 # `source:ref` identities of the SAME ask), partner_awaiting (the JSON boolean
 # true for a partner-facing ask awaiting him) and awaiting_since (epoch second
-# of that ask; an ask with none sorts after every dated partner ask)}.
+# of that ask; an ask with none sorts after every dated partner ask), and
+# ends_at (ISO timestamp with a zone at which the ask stops being one: a
+# calendar event's end, or the end of the day for a "due today" deadline;
+# bin/fm-todo.sh owns what happens once it passes)}. Every calendar-sourced
+# action sets ends_at to the event's end, and a "due today" deadline sets it
+# to the end of that local day; an action with no end time never expires.
 # A partner-facing ask awaiting him - flagged here or by the channel intake's
 # timeline assessment - ranks in the page's partner tier, oldest ask first. `updated` is the SAME-DAY
 # verification epoch from daily-todo-freshness. Decisions and waiting-on-you
