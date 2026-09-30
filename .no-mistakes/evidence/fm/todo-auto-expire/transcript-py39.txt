@@ -1,0 +1,211 @@
+python3 used: /tmp/py39shim.24466/python3 Python 3.9.6
+=== S1: the reported case - 11:00 Enjojj sync (ends 11:30) on 2026-09-30
+# morning sidecar today-2026-09-30.morning.json:
+    {
+        "version": 2,
+        "date": "2026-09-30",
+        "sweep_started": 1790751600,
+        "actions": [
+            {
+                "key": "m1",
+                "source": "calendar",
+                "ref": "enjojj-sync",
+                "class": "deadline",
+                "title": "11:00 Enjojj monthly partner sync - you host it",
+                "ends_at": "2026-09-30T11:30:00+02:00",
+                "updated": 1790751600
+            },
+            {
+                "key": "m2",
+                "source": "calendar",
+                "ref": "supplier",
+                "class": "deadline",
+                "title": "16:00 supplier call",
+                "ends_at": "2026-09-30T16:30:00+02:00",
+                "updated": 1790751600
+            },
+            {
+                "key": "m3",
+                "source": "hubspot",
+                "ref": "t9",
+                "class": "urgent",
+                "title": "dealer invoice reply",
+                "updated": 1790751600
+            },
+            {
+                "key": "m4",
+                "source": "hubspot",
+                "ref": "t10",
+                "class": "deadline",
+                "title": "quote due today for Acme",
+                "ends_at": "2026-09-30T23:59:59+02:00",
+                "updated": 1790751600
+            },
+            {
+                "key": "m5",
+                "source": "calendar",
+                "ref": "standup",
+                "class": "deadline",
+                "title": "08:00 ops standup (UTC Z end)",
+                "ends_at": "2026-09-30T06:30:00Z",
+                "updated": 1790751600
+            },
+            {
+                "key": "m6",
+                "source": "calendar",
+                "ref": "review",
+                "class": "deadline",
+                "title": "10:00 design review",
+                "ends_at": "2026-09-30T11:00:00+02:00",
+                "updated": 1790751600
+            },
+            {
+                "key": "m7",
+                "source": "calendar",
+                "ref": "oneonone",
+                "class": "deadline",
+                "title": "10:30 1:1 with Sam",
+                "ends_at": "2026-09-30T11:00:00+02:00",
+                "updated": 1790751600
+            }
+        ]
+    }
+$ fm-todo-render.sh render   # clock 2026-09-30 10:45 CEST
+exit=0
+           
+  open     quote due today for Acme
+  open     dealer invoice reply
+  closed   08:00 ops standup (UTC Z end)
+  open     16:00 supplier call
+  open     10:30 1:1 with Sam
+  open     11:00 Enjojj monthly partner sync - you host it
+  open     10:00 design review
+  needs-you: quote due today for Acme
+  needs-you: 16:00 supplier call
+  needs-you: 10:30 1:1 with Sam
+  needs-you: 11:00 Enjojj monthly partner sync - you host it
+  needs-you: 10:00 design review
+  needs-you: dealer invoice reply
+# captain marks two lines at 10:45: a 'you' handoff and a park until tomorrow
+$ fm-todo.sh command --item t-d54b88885578 you: send the recap
+TODO_CMD: you t-d54b88885578 [calendar:review] 10:00 design review :: send the recap
+$ fm-todo.sh command --item t-942de1ef6231 park til tomorrow
+TODO_CMD: park t-942de1ef6231 [calendar:oneonone] 10:30 1:1 with Sam until 2026-10-01
+$ fm-todo-render.sh render   # clock 2026-09-30 11:45 CEST
+exit=0
+           
+  open     quote due today for Acme
+  open     dealer invoice reply
+  closed   08:00 ops standup (UTC Z end)
+  open     16:00 supplier call
+  open     10:30 1:1 with Sam
+  closed   11:00 Enjojj monthly partner sync - you host it
+  open     10:00 design review
+  needs-you: quote due today for Acme
+  needs-you: 16:00 supplier call
+  needs-you: dealer invoice reply
+  closed-fold:  Closed today (2) 
+  closed-fold:  11:00 Enjojj monthly partner sync - you host it ended at 2026-09-30 11:30 CEST superseded by auto-expiry · 11:45 CEST 
+  closed-fold:  08:00 ops standup (UTC Z end) ended at 2026-09-30 08:30 CEST superseded by auto-expiry · 10:45 CEST 
+  page shows: handoff requested
+# journal entries by auto-expiry:
+   {'actor': 'auto-expiry', 'evidence': 'ended at 2026-09-30 08:30 CEST', 'from': 'open', 'item': 't-782cac5fa1e7', 'reason': 'superseded', 'to': 'closed'}
+   {'actor': 'auto-expiry', 'evidence': 'ended at 2026-09-30 11:30 CEST', 'from': 'open', 'item': 't-cc64c2d6c2da', 'reason': 'superseded', 'to': 'closed'}
+=== S2: repeated sync is idempotent (no second close per end time)
+$ fm-todo-render.sh render   # clock 2026-09-30 15:00 CEST
+exit=0
+  auto-expiry journal lines: 2
+=== S3: deliberate reopen of the expired Enjojj line stays open
+$ fm-todo.sh reopen --item t-cc64c2d6c2da --reason running over
+TODO_ITEMS: reopen t-cc64c2d6c2da -> open
+$ fm-todo-render.sh render   # clock 2026-09-30 15:00 CEST
+exit=0
+  open     11:00 Enjojj monthly partner sync - you host it
+  auto-expiry journal lines: 2
+=== S4: next day - due-today deadline expired, lapsed park expires, handoff still held
+# morning sidecar today-2026-10-01.morning.json:
+    {
+        "version": 2,
+        "date": "2026-10-01",
+        "sweep_started": 1790838000,
+        "actions": [
+            {
+                "key": "m1",
+                "source": "hubspot",
+                "ref": "t9",
+                "class": "urgent",
+                "title": "dealer invoice reply",
+                "updated": 1790838000
+            }
+        ]
+    }
+$ fm-todo-render.sh render   # clock 2026-10-01 09:00 CEST
+exit=0
+           
+  closed   quote due today for Acme
+  open     dealer invoice reply
+  closed   08:00 ops standup (UTC Z end)
+  closed   16:00 supplier call
+  closed   10:30 1:1 with Sam
+  open     11:00 Enjojj monthly partner sync - you host it
+  open     10:00 design review
+=== S5: next-day sweep re-lists the expired Acme quote with no end time -> reopens
+# morning sidecar today-2026-10-01.morning.json:
+    {
+        "version": 2,
+        "date": "2026-10-01",
+        "sweep_started": 1790838000,
+        "actions": [
+            {
+                "key": "m1",
+                "source": "hubspot",
+                "ref": "t9",
+                "class": "urgent",
+                "title": "dealer invoice reply",
+                "updated": 1790838000
+            },
+            {
+                "key": "m4",
+                "source": "hubspot",
+                "ref": "t10",
+                "class": "urgent",
+                "title": "quote due today for Acme",
+                "updated": 1790838000
+            }
+        ]
+    }
+$ fm-todo-render.sh render   # clock 2026-10-01 10:00 CEST
+exit=0
+           
+  open     quote due today for Acme
+  open     dealer invoice reply
+  closed   08:00 ops standup (UTC Z end)
+  closed   16:00 supplier call
+  closed   10:30 1:1 with Sam
+  open     11:00 Enjojj monthly partner sync - you host it
+  open     10:00 design review
+  needs-you: 11:00 Enjojj monthly partner sync - you host it
+  needs-you: quote due today for Acme
+  needs-you: dealer invoice reply
+=== S6: adversarial - zoneless ends_at refuses the sidecar, closes nothing
+# morning sidecar today-2026-10-01.morning.json:
+    {
+        "version": 2,
+        "date": "2026-10-01",
+        "sweep_started": 1790838000,
+        "actions": [
+            {
+                "key": "m9",
+                "source": "calendar",
+                "ref": "bad",
+                "class": "deadline",
+                "title": "zoneless meeting",
+                "ends_at": "2026-10-01T10:30:00",
+                "updated": 1790838000
+            }
+        ]
+    }
+fm-todo: morning action ends_at must be an ISO timestamp with a zone
+fm-todo-render: item sync failed; existing page preserved
+render exit=2
+  store unchanged after refusal
