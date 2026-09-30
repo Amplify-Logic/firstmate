@@ -36,12 +36,13 @@
 # previous sweep ("Closed today" when that is the start of the day) with its
 # evidence and actor, parked, "mine" and the email agent block; then the live
 # "Your open tickets" section, open with its ticket table and its read time or
-# out-of-date line, the morning detail fragment (calendar, worth knowing) and the intake
-# coverage fold (each enrolled source's last successful read and last
-# failure, which is separate from item freshness). Routine chatter the intake
-# dropped from its ledger was never an ask and is not a closure. Sections with
-# nothing in them are omitted. The closed fold counts as "handled without
-# you" only a fulfilled close with a named actor other than the captain.
+# out-of-date line, the morning detail fragment (worth knowing, only context
+# that is not time-bound) and the intake coverage fold (each enrolled
+# source's last successful read and last failure, which is separate from item
+# freshness). Routine chatter the intake dropped from its ledger was never an
+# ask and is not a closure. Sections with nothing in them are omitted. The
+# closed fold counts as "handled without you" only a fulfilled close with a
+# named actor other than the captain.
 #
 # EACH ROW IS THE CLASS BADGE, THE ASK, AT MOST ONE SHORT CONTEXT LINE (a
 # reopen note, else the why, else the ask's wording), ITS READ TIME, the Open

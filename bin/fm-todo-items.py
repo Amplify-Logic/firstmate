@@ -375,16 +375,18 @@ def fold(store, items, observations, now, backlog_seen, ledger_seen):
 def expire(store, items, now):
     """Close each open item whose known end time has passed, once per end time.
 
-    A line the captain marked is his to clear, never the clock's. A reopen after expiry stays open until a source moves the end time, and an
-    expired item a source moves into the future or clears the end of comes back
-    on its own.
+    A line the captain marked is his to clear, never the clock's; a lapsed park
+    no longer marks it. A reopen after expiry stays open until a source moves
+    the end time, and an expired item a source moves into the future or clears
+    the end of comes back on its own.
     """
     for rec in items.values():
         end = number(rec.get('ends_at'))
         if end == number(rec.get('expired_ends_at')):
             continue
         if (end and end <= now and rec['state'] == 'open'
-                and not (rec.get('owner') or rec.get('snoozed_until') or rec.get('pending'))):
+                and not (rec.get('owner') or rec.get('pending')
+                         or (rec.get('snoozed_until') or '') > local_day(now))):
             transition(store, rec, now, 'closed', 'auto-expiry', 'superseded', f'ended at {when(end)}',
                        expired_ends_at=end)
         elif ((not end or end > now) and rec['state'] == 'closed'

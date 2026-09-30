@@ -40,7 +40,7 @@
 #     missing end time stays open, a reopened expired item stays open, and an
 #     end time moved later or a re-listing with no end time brings an expired
 #     item back. A UTC end time written with Z expires the same way, and a
-#     line the captain marked never expires.
+#     line the captain marked never expires until a park on it lapses.
 # shellcheck disable=SC2016
 set -u
 
@@ -696,8 +696,24 @@ test_expiry_leaves_marked_lines_to_the_captain() {
   pass 'a Z end time expires its item, and a line the captain marked is left for him to clear'
 }
 
+test_a_lapsed_park_no_longer_holds_off_expiry() {
+  local h
+  h="$TMP_ROOT/expiry-parked"
+  new_home "$h"
+  sidecar "$h" 2026-09-10 '{"key":"m1","source":"calendar","ref":"sync","class":"deadline","title":"Enjojj monthly partner sync","ends_at":"2026-09-10T10:30:00+02:00","updated":'"$T_0900"'}'
+  render_at "$h" "$T_1000"
+  todo_at "$h" "$T_1000" command --item "$(field_of "$h" 'Enjojj' 1)" 'park til tomorrow' >/dev/null
+  render_at "$h" "$T_1100"
+  [ "$(field_of "$h" 'Enjojj' 2)" = open ] || fail 'expiry closed an item parked until tomorrow'
+  render_at "$h" "$T_NEXT_1000"
+  [ "$(field_of "$h" 'Enjojj' 2)" = closed ] || fail 'a lapsed park kept an ended meeting from expiring'
+  assert_not_contains "$(needs_order "$(page "$h" 2026-09-11)")" 'Enjojj' 'an ended meeting came back when its park lapsed'
+  pass 'a park holds off expiry only until it lapses'
+}
+
 test_time_bound_asks_expire_after_their_end
 test_expiry_leaves_marked_lines_to_the_captain
+test_a_lapsed_park_no_longer_holds_off_expiry
 test_an_expired_item_comes_back_when_its_end_moves_later
 test_an_expired_item_relisted_without_an_end_comes_back
 test_verification_is_never_renewed_by_sync
