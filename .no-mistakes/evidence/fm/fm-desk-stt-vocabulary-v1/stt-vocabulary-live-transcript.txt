@@ -1,0 +1,27 @@
+=== S1: no vocabulary file (baseline, as before the change apart from nova-3) ===
+$ FM_HOME=$LAB bin/fm-deepgram-stt.sh clip.wav
+I'll create two accounts, one on Sam dot Rivers one and then one at S dot Rivers aqua green
+exit=0
+request: {"path": "/v1/listen?model=nova-3&smart_format=true", "content_type": "audio/wav", "auth_scheme": "Token", "body_bytes": 187812, "body_magic": "RIFF"}
+
+=== S2: private vocabulary present, default model ===
+--- $LAB/config/stt-vocabulary ---
+# private desk vocabulary (fictional addresses for evidence)
+sam.rivers1
+s.rivers@aquagreen
+Sam Rivers
+sam dot rivers one => sam.rivers1
+s dot rivers aqua green => s.rivers@aquagreen
+---
+I'll create two accounts, one on sam.rivers1 and then one at s.rivers@aquagreen
+exit=0
+request: {"path": "/v1/listen?model=nova-3&smart_format=true&keyterm=sam.rivers1&keyterm=s.rivers%40aquagreen&keyterm=Sam%20Rivers", "content_type": "audio/wav", "auth_scheme": "Token", "body_bytes": 187812, "body_magic": "RIFF"}
+
+=== S2b: --json keeps Deepgram's raw words ===
+{"results": {"channels": [{"alternatives": [{"transcript": "I'll create two accounts, one on Sam dot Rivers one and then one at S dot Rivers aqua green", "confidence": 0.9}]}]}}
+exit=0
+
+=== S3: DEEPGRAM_STT_MODEL=nova-2 override -> boosted keywords ===
+I'll create two accounts, one on sam.rivers1 and then one at s.rivers@aquagreen
+exit=0
+request: {"path": "/v1/listen?model=nova-2&smart_format=true&keywords=sam.rivers1%3A2&keywords=s.rivers%40aquagreen%3A2&keywords=Sam%20Rivers%3A2", "content_type": "audio/wav", "auth_scheme": "Token", "body_bytes": 187812, "body_magic": "RIFF"}

@@ -1,0 +1,39 @@
+=== A1: vocabulary unreadable (chmod 000) ===
+fm-deepgram-stt: vocabulary skipped: Permission denied
+fm-deepgram-stt: vocabulary skipped: Permission denied
+I'll create two accounts, one on Sam dot Rivers one and then one at S dot Rivers aqua green
+exit=0
+request: {"path": "/v1/listen?model=nova-3&smart_format=true", "content_type": "audio/wav", "auth_scheme": "Token", "body_bytes": 187812, "body_magic": "RIFF"}
+
+=== A2: vocabulary path is a directory ===
+fm-deepgram-stt: vocabulary skipped: Is a directory
+fm-deepgram-stt: vocabulary skipped: Is a directory
+I'll create two accounts, one on Sam dot Rivers one and then one at S dot Rivers aqua green
+exit=0
+request: {"path": "/v1/listen?model=nova-3&smart_format=true", "content_type": "audio/wav", "auth_scheme": "Token", "body_bytes": 187812, "body_magic": "RIFF"}
+
+=== A3: vocabulary is binary garbage with invalid UTF-8 ===
+I'll create two accounts, one on sam.rivers1 and then one at S dot Rivers aqua green
+exit=0
+request path length: 2997
+
+=== A4: whole-word only, case-insensitive, punctuation-adjacent, multi-space, no double rewrite ===
+deepgram said: Write to SAM DOT RIVERS ONE, not samdot rivers one or Sam dot Rivers ones; also s dot   rivers aqua green.
+Write to sam.rivers1, not samdot rivers one or Sam dot Rivers ones; also s.rivers@aquagreen.
+exit=0
+
+=== A5: regex metacharacters in a rewrite are literal ===
+deepgram said: try a+b (c) and aab c and anything
+try PLUS and aab c and anything
+exit=0
+
+=== A6: 400 long key terms are trimmed to the keyterm budget, request still sent ===
+try a+b (c) and aab c and anything
+exit=0
+keyterm params sent: 45 url length: 1607
+nova-2 keywords params sent: 100
+
+=== A7: removed FM_STT_VOCABULARY override is ignored; only $FM_HOME/config/stt-vocabulary counts ===
+one on Sam dot Rivers one
+exit=0
+request: {"path": "/v1/listen?model=nova-3&smart_format=true", "content_type": "audio/wav", "auth_scheme": "Token", "body_bytes": 187812, "body_magic": "RIFF"}
