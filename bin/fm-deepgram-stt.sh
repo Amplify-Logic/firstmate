@@ -11,10 +11,10 @@
 # Prints the transcript text on stdout (or the raw JSON with --json).
 #
 # Vocabulary: an optional private $FM_HOME/config/stt-vocabulary (gitignored;
-# absent changes nothing). Override the path with FM_STT_VOCABULARY.
+# absent changes nothing).
 #   - `#` comment lines and blank lines are ignored.
 #   - A plain line is a key term sent to Deepgram as a recognition hint:
-#     `keyterm=<term>` for nova-3 and flux models, `keywords=<term>:2` for any
+#     `keyterm=<term>` for nova-3 models, `keywords=<term>:2` for any
 #     other model. Terms are URL-encoded and capped at Deepgram's documented
 #     limits (100 keywords; keyterms stop at a conservative estimate of the
 #     500-token budget), so an oversized list is trimmed rather than refused.
@@ -103,7 +103,7 @@ def query(terms, model):
         return ""
     m = model.lower()
     parts = []
-    if m.startswith("nova-3") or m.startswith("flux"):
+    if m.startswith("nova-3"):
         # Deepgram caps keyterms at 500 tokens per request and errors beyond
         # it; budget conservatively (about one token per three characters).
         budget = 450
@@ -187,7 +187,7 @@ main() {
   key=$(fm_deepgram_api_key)
   [ -n "$key" ] || refuse "DEEPGRAM_API_KEY is not set (env or gitignored .env)"
   model=$(fm_deepgram_stt_model)
-  vocab=${FM_STT_VOCABULARY:-$FM_HOME/config/stt-vocabulary}
+  vocab=$FM_HOME/config/stt-vocabulary
   extra=$(vocab_query "$vocab" "$model")
 
   case "$audio" in
