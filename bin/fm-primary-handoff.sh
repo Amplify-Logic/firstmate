@@ -9,7 +9,8 @@
 #   fm-primary-handoff.sh --help
 #
 # Opt-in via local gitignored config/primary-handoff (JSON).
-# Absent or enabled:false is a no-op and does not change primary launch behavior.
+# Absent or enabled:false starts no handoff and does not change primary launch
+# behavior; check/run/execute still reconcile an interrupted nonterminal record.
 # docs/primary-handoff.md owns the atomic-lock protocol and failure modes.
 # This header owns commands, flags, state paths, and test seams.
 #
