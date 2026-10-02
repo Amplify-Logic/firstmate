@@ -1,0 +1,6 @@
+# rerun with a net-zero 1px mouse nudge (cliclick m:+1,+0 m:-1,+0) right before the guard
+# idle before nudge: 12.3s
+# idle after nudge:  0.2s
+$ bin/fm-computer-use.sh guard --app Arc   # default --quiet 3 --wait 8
+allow: Arc in front, idle 4.2s, microphone off
+exit=0 elapsed=4.3s

@@ -1,0 +1,17 @@
+# disposable HOME=/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-cu-home.s0zsfk
+$ HOME=$H PATH=$H/.local/bin:$PATH bin/fm-computer-use.sh check
+peekaboo absent - pinned 4.5.0
+exit=1
+$ HOME=$H bin/fm-computer-use.sh install
+installed peekaboo 4.5.0 at /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-cu-home.s0zsfk/.local/bin/peekaboo -> /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-cu-home.s0zsfk/.local/lib/peekaboo/4.5.0/peekaboo
+HOME=$H bin/fm-computer-use.sh install  0.70s user 0.71s system 0% cpu 3:32.29 total
+exit=0
+$ HOME=$H bin/fm-computer-use.sh install   # again
+peekaboo 4.5.0 already installed at /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-cu-home.s0zsfk/.local/bin/peekaboo
+exit=0
+total 0
+lrwxr-xr-x@ 1 larsmusic  staff  102 Oct  2 19:06 peekaboo -> /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-cu-home.s0zsfk/.local/lib/peekaboo/4.5.0/peekaboo
+$ HOME=$H PATH=$H/.local/bin:$PATH bin/fm-computer-use.sh check
+exit=0
+$ peekaboo --version
+Peekaboo 4.5.0 (main/a1d48b28a, built: 2026-09-22T08:33:35-07:00)

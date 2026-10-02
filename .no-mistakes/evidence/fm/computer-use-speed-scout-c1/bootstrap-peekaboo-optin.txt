@@ -1,0 +1,10 @@
+# lab home $LAB (fm-lab-home.sh create), no config/computer-use flag, no peekaboo on PATH
+$ FM_HOME=$LAB bin/fm-bootstrap.sh | grep -i peekaboo
+(bootstrap exit=0)
+# opted in: touch $LAB/config/computer-use, still no peekaboo on PATH
+$ FM_HOME=$LAB bin/fm-bootstrap.sh | grep -i peekaboo
+MISSING: peekaboo (install: "/Users/larsmusic/.no-mistakes/worktrees/f569cc43ac96/01M3YQTDG3MJF2BM9Z52PTTDKJ/bin/fm-computer-use.sh" install  # pinned 4.5.0, user-level in ~/.local/bin; fm-computer-use.sh check says what is wrong)
+(bootstrap exit=0)
+# opted in, pinned peekaboo 4.5.0 (installed in the disposable HOME) first on PATH
+$ PATH=$H/.local/bin:$PATH FM_HOME=$LAB bin/fm-bootstrap.sh | grep -i peekaboo
+(bootstrap exit=0)

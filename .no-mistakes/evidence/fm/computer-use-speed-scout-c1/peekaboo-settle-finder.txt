@@ -1,0 +1,5 @@
+$ bin/fm-computer-use.sh settle --app Finder --timeout 15   (first 3 lines shown)
+app: Finder | window: Applications | dialog: no | snapshot: ps1_26bcae9b5dc4c2ed40d84b4d0fb02d9f | elements: 200/407
+elem_18 textField 'Ableton Live 12'
+elem_28 textField 'Ableton Live 12 Suite'
+exit=0 elapsed=7.2s

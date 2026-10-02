@@ -1,0 +1,19 @@
+$ bin/fm-computer-use.sh facts
+{"frontmost_app": "Arc", "frontmost_bundle": "company.thebrowser.Browser", "focused_role": null, "focused_label": null, "dialogs": [], "idle_seconds": 530.608, "microphone_in_use": false, "desk_transcription_in_flight": false}
+
+$ bin/fm-computer-use.sh guard --app Finder   # Arc is in front
+refuse: Arc is in front, not Finder
+exit=1
+$ bin/fm-computer-use.sh guard --app Arc
+allow: Arc in front, idle 532.8s, microphone off
+exit=0
+$ bin/fm-computer-use.sh guard --app company.thebrowser.Browser
+allow: Arc in front, idle 533.9s, microphone off
+exit=0
+$ bin/fm-computer-use.sh guard --app Arc --field "Search"   # nothing focused
+refuse: the focused element is 'nothing', not 'Search'
+exit=1
+$ bin/fm-computer-use.sh dialog-kind "Save changes before closing?"
+save
+$ bin/fm-computer-use.sh dialog-kind "Ableton Live 12 would like to access files in your Desktop folder."
+privacy

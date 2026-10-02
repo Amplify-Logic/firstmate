@@ -1,0 +1,10 @@
+# one zero-distance mouse event (cliclick m:+0,+0) resets HIDIdleTime, then the guard runs at once
+# idle now: 6.222s
+$ bin/fm-computer-use.sh guard --app Arc   # quiet 3s, wait 8s
+allow: Arc in front, idle 4.1s, microphone off
+exit=0 elapsed=4.4s
+
+# adversarial: a zero-distance mouse event every second for 12s while the guard waits
+$ bin/fm-computer-use.sh guard --app Arc --wait 5
+refuse: the keyboard or mouse was used 0.9s ago and no 3s quiet window came within 5s
+exit=1 elapsed=4.6s

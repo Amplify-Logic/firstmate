@@ -1,0 +1,49 @@
+# a disposable osascript process (pid 50046) shows a 'Save changes before closing?' dialog
+$ bin/fm-computer-use.sh facts
+{"frontmost_app": "Arc", "frontmost_bundle": "company.thebrowser.Browser", "focused_role": null, "focused_label": null, "dialogs": [], "idle_seconds": 17.651, "microphone_in_use": false, "desk_transcription_in_flight": false}
+$ bin/fm-computer-use.sh guard --app osascript --activate
+refuse: Arc is in front, not osascript
+exit=1
+# now in front: Arc | dialogs: []
+$ bin/fm-computer-use.sh guard --app osascript   # plain guard, dialog not allowed
+refuse: Arc is in front, not osascript
+exit=1
+$ bin/fm-computer-use.sh guard --app osascript --allow-dialog save
+refuse: Arc is in front, not osascript
+exit=1
+$ bin/fm-computer-use.sh guard --app osascript --allow-dialog privacy   # wrong kind allowed
+refuse: Arc is in front, not osascript
+exit=1
+$ bin/fm-computer-use.sh guard --app Arc --activate   # hand the screen back to Arc
+allow: Arc in front, idle 43.9s, microphone off
+exit=0
+# now in front: Arc | dialogs: []
+# (background-only osascript cannot become frontmost: --activate fails closed with the refusal above; dialog closed)
+
+# Finder now hosts a 'Save changes before closing?' dialog behind Arc
+$ bin/fm-computer-use.sh guard --app Finder --activate
+refuse: a save dialog is open in Finder: 'Untitled Set' [Save, Cancel, Don't Save]
+exit=1
+# now in front: Finder | dialogs: [{"app": "Finder", "title": "Untitled Set", "text": ["Save changes before closing?", "Untitled Set"], "buttons": ["Save", "Cancel", "Don't Save"]}]
+$ bin/fm-computer-use.sh guard --app Finder   # plain guard, no dialog kind allowed
+refuse: a save dialog is open in Finder: 'Untitled Set' [Save, Cancel, Don't Save]
+exit=1
+$ bin/fm-computer-use.sh guard --app Finder --allow-dialog privacy   # a different kind allowed
+refuse: a save dialog is open in Finder: 'Untitled Set' [Save, Cancel, Don't Save]
+exit=1
+$ bin/fm-computer-use.sh guard --app Finder --allow-dialog save
+allow: Finder in front, idle 73.5s, microphone off, allowed dialog: save
+exit=0
+# dialog closed (its osascript was killed; nothing was clicked)
+# in front: Finder | dialogs: [{"app": "Finder", "title": "Untitled Set", "text": ["Save changes before closing?", "Untitled Set"], "buttons": ["Save", "Cancel", "Don't Save"]}]
+$ bin/fm-computer-use.sh guard --app Arc --activate   # hand the screen back
+refuse: a save dialog is open in Finder: 'Untitled Set' [Save, Cancel, Don't Save]
+exit=1
+# now in front: Finder | dialogs: [{"app": "Finder", "title": "Untitled Set", "text": ["Save changes before closing?", "Untitled Set"], "buttons": ["Save", "Cancel", "Don't Save"]}]
+# Finder's dialog gave up on its own timeout
+# in front: Finder | dialogs: []
+$ bin/fm-computer-use.sh guard --app Arc --activate   # hand the screen back
+refuse: the keyboard or mouse was used 0.2s ago and no 3s quiet window came within 8s
+exit=1
+# now in front: Arc | dialogs: []
+# note: after the Finder dialog timed out, keyboard/mouse input arrived from the operator during the guard's wait; the guard refused rather than send anything, and Arc was in front afterwards. Foreground scenarios stopped here so as not to interfere with the operator.

@@ -1,0 +1,31 @@
+# front app before: Arc
+$ bin/fm-computer-use.sh elements --app Finder --max 25
+app: Finder | window: Applications | dialog: no | snapshot: ps1_635ff2e5098b6934bedcb061f0a10d60 | elements: 25/407
+elem_18 textField 'Ableton Live 12'
+elem_28 textField 'Ableton Live 12 Suite'
+elem_38 textField 'Aiode'
+elem_48 textField 'Ample Sound'
+elem_59 textField 'Anaconda-Navigator'
+elem_69 textField 'Antares Audio Technologies'
+elem_80 textField 'AnyDesk'
+elem_90 textField 'App Store'
+elem_100 textField 'Apps'
+elem_110 textField 'Arc'
+elem_120 textField 'Arcade'
+elem_130 textField 'Audacity'
+elem_140 textField 'Automator'
+elem_150 textField 'Baby Menu'
+elem_160 textField 'Books'
+elem_170 textField 'Calculator'
+elem_180 textField 'Calendar'
+elem_190 textField 'ChatGPT'
+elem_200 textField 'Chess'
+elem_210 textField 'Claude'
+elem_220 textField 'CleanMyMac X'
+elem_230 textField 'Clock'
+elem_240 textField 'Codex'
+elem_250 textField 'Contacts'
+elem_260 textField 'Cursor'
+HOME=$H PATH=$H/.local/bin:$PATH bin/fm-computer-use.sh elements --app Finder  0.27s user 0.23s system 4% cpu 11.384 total
+exit=0
+# front app after: Arc

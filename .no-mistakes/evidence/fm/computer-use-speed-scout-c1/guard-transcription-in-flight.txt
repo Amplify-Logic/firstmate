@@ -1,0 +1,14 @@
+# disposable stand-in process named fm-deepgram-stt.sh running (pid 98254): 98254 /bin/sh /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-cu-stt.VWCVo1/fm-deepgram-stt.sh
+$ bin/fm-computer-use.sh facts
+{"frontmost_app": "Arc", "frontmost_bundle": "company.thebrowser.Browser", "focused_role": null, "focused_label": null, "dialogs": [], "idle_seconds": 543.58, "microphone_in_use": false, "desk_transcription_in_flight": true}
+$ bin/fm-computer-use.sh guard --app Arc
+refuse: a desk dictation is being transcribed
+exit=1
+$ bin/fm-computer-use.sh guard --app Finder --activate
+refuse: a desk dictation is being transcribed
+exit=1
+# front app after the refused --activate: Arc
+# transcription process stopped
+$ bin/fm-computer-use.sh guard --app Arc
+allow: Arc in front, idle 548.6s, microphone off
+exit=0
