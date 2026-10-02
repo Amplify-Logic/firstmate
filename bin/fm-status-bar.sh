@@ -628,41 +628,45 @@ companion_pane_alive() {
   [ "$resolved" = "$FOLLOW_PANE" ]
 }
 
-# companion_runtime_present: 0 iff a Codex process is behind the followed pane.
-# tmux answers through the metrics supply's own lookup, which already walks the
-# pane shell's descendants. Herdr's lookup reads only the pane's foreground
-# group, so here it is walked from the pane's shell_pid instead: a Codex the
-# captain suspends with Ctrl-Z hands the foreground to the shell but is still
-# the pane's primary, and retiring its bar then would lose it for good after
-# `fg`. The walk and the identity rule are the tmux arm's.
+# companion_runtime_present: 0 iff a Codex process is the followed pane's shell
+# or one of its descendants. The walk is rooted at the shell on both providers,
+# not at Herdr's foreground group: a Codex the captain suspends with Ctrl-Z
+# hands the foreground to the shell but is still the pane's primary, and
+# retiring its bar then would lose it for good after `fg`. The five-level bound
+# and the identity rule are the metrics supply's tmux arm's, but each level is
+# checked as it is found and the walk stops at the first Codex, because this
+# runs on every refresh and only needs to know whether Codex is there.
 companion_runtime_present() {
-  local shell_pid frontier next p c pids
-  if [ "$FOLLOW_BACKEND" != herdr ]; then
-    [ -n "$(_fm_codex_pane_pids "$FOLLOW_PANE" "$FOLLOW_BACKEND" "${FM_STATUS_HERDR_SESSION:-}" 2>/dev/null)" ]
-    return
-  fi
-  shell_pid=$(herdr --session "$FM_STATUS_HERDR_SESSION" pane process-info --pane "$FOLLOW_PANE" 2>/dev/null \
-    | jq -r --arg pane "$FOLLOW_PANE" '
-        select(.result.type == "pane_process_info")
-        | select(.result.process_info.pane_id == $pane)
-        | .result.process_info.shell_pid | select(type == "number" and . > 1) | floor
-      ' 2>/dev/null)
+  local shell_pid frontier next p c
+  case "$FOLLOW_BACKEND" in
+    tmux)
+      shell_pid=$(tmux display-message -p -t "$FOLLOW_PANE" '#{pane_pid}' 2>/dev/null)
+      ;;
+    herdr)
+      shell_pid=$(herdr --session "$FM_STATUS_HERDR_SESSION" pane process-info --pane "$FOLLOW_PANE" 2>/dev/null \
+        | jq -r --arg pane "$FOLLOW_PANE" '
+            select(.result.type == "pane_process_info")
+            | select(.result.process_info.pane_id == $pane)
+            | .result.process_info.shell_pid | select(type == "number" and . > 1) | floor
+          ' 2>/dev/null)
+      ;;
+    *) return 1 ;;
+  esac
   case "$shell_pid" in
     ''|*[!0-9]*) return 1 ;;
   esac
-  pids="$shell_pid"
+  ! _fm_codex_is_codex_pid "$shell_pid" || return 0
   frontier="$shell_pid"
   for _ in 1 2 3 4 5; do
     next=
     for p in $frontier; do
-      for c in $(pgrep -P "$p" 2>/dev/null); do next="$next $c"; done
+      for c in $(pgrep -P "$p" 2>/dev/null); do
+        ! _fm_codex_is_codex_pid "$c" || return 0
+        next="$next $c"
+      done
     done
-    [ -n "$next" ] || break
-    pids="$pids$next"
+    [ -n "$next" ] || return 1
     frontier=$next
-  done
-  for p in $pids; do
-    ! _fm_codex_is_codex_pid "$p" || return 0
   done
   return 1
 }
