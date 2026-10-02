@@ -295,10 +295,6 @@ cmd_execute() (
   done
 
   fm_handoff_load_config || return 1
-  if [ "$FM_HANDOFF_MODE" != enabled ] && [ "$force" -ne 1 ]; then
-    fm_handoff_log "handoff disabled (config/primary-handoff absent or enabled:false)"
-    return 0
-  fi
 
   mkdir -p "$STATE" "$CONFIG" || return 1
   coord=$(fm_handoff_coord_lock)
@@ -317,6 +313,15 @@ cmd_execute() (
   if fm_handoff_rotation_in_progress; then
     recover_record
     return $?
+  fi
+
+  if [ "$FM_HANDOFF_MODE" != enabled ]; then
+    if [ "$force" -ne 1 ]; then
+      fm_handoff_log "handoff disabled (config/primary-handoff absent or enabled:false)"
+      return 0
+    fi
+    # --force with disabled/absent config still needs a chain for next-profile.
+    FM_HANDOFF_CHAIN_JSON='["claude-fable","claude-opus","pi","codex"]'
   fi
 
   if fm_handoff_in_cooldown && [ "$force" -ne 1 ]; then
@@ -403,6 +408,10 @@ cmd_execute() (
 cmd_check() {
   local active remaining ctx_used next
   fm_handoff_load_config || return 1
+  if fm_handoff_rotation_in_progress; then
+    cmd_execute
+    return $?
+  fi
   if [ "$FM_HANDOFF_MODE" != enabled ]; then
     printf 'handoff: disabled\n'
     return 0
@@ -410,10 +419,6 @@ cmd_check() {
   if fm_handoff_afk_active; then
     printf 'handoff: afk\n'
     return 0
-  fi
-  if fm_handoff_rotation_in_progress; then
-    cmd_execute
-    return $?
   fi
   if fm_handoff_in_cooldown; then
     printf 'handoff: cooldown\n'
@@ -457,6 +462,7 @@ cmd_run() {
   local daemon_lock
   fm_handoff_load_config || return 1
   if [ "$FM_HANDOFF_MODE" != enabled ]; then
+    cmd_check || true
     fm_handoff_log "handoff disabled; run loop exits"
     return 0
   fi
@@ -470,12 +476,12 @@ cmd_run() {
   trap 'fm_lock_release "'"$daemon_lock"'" 2>/dev/null || true' EXIT
   fm_handoff_log "run loop started poll=${FM_HANDOFF_POLL_SECONDS}s quota_threshold=${FM_HANDOFF_THRESHOLD} context_threshold=${FM_HANDOFF_CONTEXT_USED_THRESHOLD:-disabled}"
   while :; do
+    cmd_check || true
     fm_handoff_load_config || exit 1
     [ "$FM_HANDOFF_MODE" = enabled ] || {
       fm_handoff_log "handoff disabled; run loop exiting"
       break
     }
-    cmd_check || true
     sleep "$FM_HANDOFF_POLL_SECONDS"
   done
   fm_lock_release "$daemon_lock"

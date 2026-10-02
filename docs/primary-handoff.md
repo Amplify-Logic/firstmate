@@ -142,7 +142,7 @@ Chosen tradeoff:
 
 | Failure | Detection | Response | Lock invariant |
 | --- | --- | --- | --- |
-| Feature disabled / config absent | Config read | No-op exit 0 | Untouched |
+| Feature disabled / config absent | Config read | Reconcile any nonterminal attempt, then no-op exit 0 | Untouched unless reconciling |
 | Quota probe missing or unparseable | `quota-axi` / fixture | No quota handoff; context axis may still fire | Untouched |
 | Quota over threshold, no distinct successor in `chain` | `check` / `run` | `handoff: chain exhausted`, no quota rotation, no failure phase; context axis still evaluated | Untouched unless context axis fires |
 | Context sample missing | No `state/.primary-context` / override | No context handoff | Untouched |

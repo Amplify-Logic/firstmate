@@ -234,6 +234,43 @@ test_disabled_is_noop() {
   pass "disabled config is a no-op and leaves the live session lock alone"
 }
 
+test_disabled_force_uses_default_chain() {
+  local out status=0
+  : > "$LAUNCH_LOG"
+  rm -f "$HOME_FIX/config/primary-handoff"
+  write_active claude-fable
+  start_fake_holder
+  out=$(run_execute "$ROOT/bin/fm-primary-handoff.sh" execute --force 2>&1) || status=$?
+  expect_code 0 "$status" "forced handoff under disabled config should use the default chain: $out"
+  assert_contains "$(cat "$HOME_FIX/state/.primary-handoff")" 'to=claude-opus' "default chain successor not chosen"
+  assert_contains "$(cat "$HOME_FIX/state/.primary-handoff")" 'phase=complete' "forced handoff did not complete"
+  [ "$(cat "$LAUNCH_LOG")" = 'launch claude-opus' ] || fail "expected one claude-opus launch: $(cat "$LAUNCH_LOG")"
+  cleanup_holders
+  pass "execute --force without --to walks the default chain when handoff is disabled"
+}
+
+test_disabled_check_recovers_crashed_force() {
+  local out status=0 i
+  : > "$LAUNCH_LOG"
+  rm -f "$HOME_FIX/config/primary-handoff"
+  write_active claude-fable
+  start_fake_holder
+  out=$(FM_HANDOFF_INJECT_CRASH=launching run_execute \
+    "$ROOT/bin/fm-primary-handoff.sh" execute --force --to pi 2>&1) || status=$?
+  [ "$status" -ne 0 ] || fail "launching crash did not interrupt controller: $out"
+  for i in {1..3}; do
+    out=$(run_execute "$ROOT/bin/fm-primary-handoff.sh" check 2>&1) || true
+    if grep -q '^phase=complete$' "$HOME_FIX/state/.primary-handoff"; then break; fi
+  done
+  assert_contains "$(cat "$HOME_FIX/state/.primary-handoff")" 'phase=complete' "disabled check did not recover: $out"
+  [ "$(cat "$LAUNCH_LOG")" = 'launch pi' ] || fail "expected one pi launch: $(cat "$LAUNCH_LOG")"
+  [ "$(live_holder_count)" = 1 ] || fail "recovery left no live owner"
+  out=$(run_execute "$ROOT/bin/fm-primary-handoff.sh" check 2>&1)
+  assert_contains "$out" 'handoff: disabled' "check should report disabled once reconciled"
+  cleanup_holders
+  pass "check reconciles a crashed forced handoff before reporting disabled"
+}
+
 test_happy_path_atomic_handoff() {
   local out status=0 record
   : > "$SIGNAL_LOG"
@@ -1240,6 +1277,8 @@ test_crash_recovery
 test_unrelated_owner_is_not_acknowledged
 
 test_disabled_is_noop
+test_disabled_force_uses_default_chain
+test_disabled_check_recovers_crashed_force
 test_astra_registered_profile
 test_cursor_grok_quota_monitored
 test_happy_path_atomic_handoff
