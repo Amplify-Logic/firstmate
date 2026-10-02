@@ -282,8 +282,8 @@ test_quoted_search_strings_keep_commands_visible() {
   pass "credential names inside quoted strings, comments and here-documents leave following arguments visible to the judge"
 }
 
-test_multiline_quoted_secrets_are_whole_or_unjudged() {
-  local home cmd body log err text word
+test_multiline_quoted_secrets_are_whole_or_blocked() {
+  local home cmd body log out text word
   home=$(new_home redact-multiline 'enabled = true\n')
   for cmd in \
     $'curl -u me \\\n --password "ink fern moss" https://x.example|curl -u me \\\n --password <redacted> https://x.example' \
@@ -303,20 +303,29 @@ test_multiline_quoted_secrets_are_whole_or_unjudged() {
     done
   done
   for cmd in \
+    'client --password "ink;fern moss" --verbose|client --password <redacted> --verbose' \
+    'rm -rf ~/projects; : --token "a;b"|rm -rf ~/projects; : --token <redacted>'; do
+    reset_server "$FIX/response-git-status.json"
+    run_hook "$home" "${cmd%%|*}" >/dev/null
+    body=$(jq -r '.state.command' "$SRV/requests.jsonl")
+    assert_equals "${cmd#*|}" "$body" "a quoted secret holding shell operators is removed whole and the rest is judged"
+  done
+  for cmd in \
     'x=$((1 + 2)); client --password "ink fern moss" --verbose' \
-    'client --password "ink;fern moss" --verbose' \
+    'rm -rf ~ # ` --password "ink fern moss"' \
     $'cat <<EOF\nx\\\nEOF\n\'\nEOF\nrm \'a token=\' -rf ~ \'b\''; do
     reset_server "$FIX/response-git-status.json"
-    err=$(run_hook "$home" "$cmd" 2>&1 >/dev/null)
-    assert_equals 0 "$(requests)" "a quoted secret whose extent cannot be followed must not be sent in part"
-    assert_contains "$err" "not judged" "the step-aside must be reported"
+    out=$(run_hook "$home" "$cmd")
+    assert_contains "$out" '"deny"' "a quoted secret that cannot be safely redacted must block the command"
+    assert_contains "$out" "could not be safely redacted" "the block must say why"
+    assert_equals 0 "$(requests)" "a quoted secret that cannot be safely redacted must not be sent in part"
     log=$(tail -n 1 "$home/state/command-guard.log")
-    assert_contains "$log" '"outcome": "skip"' "the step-aside must be logged"
+    assert_contains "$log" '"outcome": "block"' "the block must be logged"
     for word in fern moss; do
-      assert_not_contains "$log" "$word" "an unjudged command's secret must not reach the log"
+      assert_not_contains "$log" "$word" "a blocked command's secret must not reach the log"
     done
   done
-  pass "a line-continued command keeps quoted secrets whole, and one whose quotes cannot be followed is allowed unjudged"
+  pass "a line-continued command keeps quoted secrets whole, a quoted secret holding operators is removed whole and judged, and one whose quotes cannot be followed blocks"
 }
 
 # --- a long command is judged whole, in parts ---------------------------------
@@ -520,7 +529,7 @@ test_non_bash_tool_ignored
 test_redaction
 test_quoted_and_short_secrets_are_redacted
 test_quoted_search_strings_keep_commands_visible
-test_multiline_quoted_secrets_are_whole_or_unjudged
+test_multiline_quoted_secrets_are_whole_or_blocked
 test_plain_assignments_stay_visible
 test_long_command_judged_in_parts
 test_parts_failure_falls_back_to_head_and_tail
