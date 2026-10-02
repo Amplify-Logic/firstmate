@@ -719,6 +719,8 @@ SH
 
 # Retiring leaves the primary pane alive, so a zoom the launcher applied would
 # otherwise outlive its only releaser and hide whatever later splits the tab.
+# The arguments are the launcher's own: it zooms the followed pane and names
+# that same pane as the chrome pane.
 # The tab stays at two panes, so the in-loop crowding release never fires and
 # only the retirement itself can turn the zoom off.
 test_retiring_companion_releases_only_the_zoom_it_owns() {
@@ -762,9 +764,9 @@ SH
     FM_CHROME_LOG="$log" FM_TEST_PANE_COUNT="$pane_count" FM_TEST_PS_COUNT="$ps_count" FM_TEST_CODEX_READS=2 \
     "$ROOT/bin/fm-status-bar.sh" --adapter codex --model gpt-6-astra --effort high \
       --follow-pane w9:p9 --follow-backend herdr \
-      --chrome-pane w9:p1 --chrome-role FM --chrome-zoomed >/dev/null
+      --chrome-pane w9:p9 --chrome-role FM --chrome-zoomed >/dev/null
   [ "$(<"$pane_count")" -lt 40 ] || fail "zoomed companion only stopped because its pane finally disappeared"
-  [ "$(grep -c 'pane zoom w9:p1 --off' "$log")" -eq 1 ] \
+  [ "$(grep -c 'pane zoom w9:p9 --off' "$log")" -eq 1 ] \
     || fail "a companion retiring from a live primary pane must release the zoom it owns, exactly once"
   grep -q -- '--on' "$log" && fail "a retiring companion re-applied the zoom"
 
@@ -780,7 +782,7 @@ SH
     FM_CHROME_LOG="$log" FM_TEST_PANE_COUNT="$pane_count" FM_TEST_PS_COUNT="$ps_count" FM_TEST_CODEX_READS=2 \
     "$ROOT/bin/fm-status-bar.sh" --adapter codex --model gpt-6-astra --effort high \
       --follow-pane w9:p9 --follow-backend herdr \
-      --chrome-pane w9:p1 --chrome-role FM >/dev/null
+      --chrome-pane w9:p9 --chrome-role FM >/dev/null
   [ "$(<"$pane_count")" -lt 40 ] || fail "unzoomed companion only stopped because its pane finally disappeared"
   assert_not_contains "$(cat "$log")" 'pane zoom' \
     "a retiring companion released a zoom the launcher never applied"

@@ -743,8 +743,8 @@ if [ -n "$FOLLOW_PANE" ]; then
   # first, or it would go on hiding whatever later splits that tab.
   while companion_pane_alive; do
     if companion_runtime_retired; then
-      if [ -n "$CHROME_PANE" ] && [ "$CHROME_ZOOM_WATCH" = 1 ]; then
-        herdr --session "$FM_STATUS_HERDR_SESSION" pane zoom "$CHROME_PANE" --off >/dev/null 2>&1
+      if [ "$FOLLOW_BACKEND" = herdr ] && [ "$CHROME_ZOOM_WATCH" = 1 ]; then
+        herdr --session "$FM_STATUS_HERDR_SESSION" pane zoom "$FOLLOW_PANE" --off >/dev/null 2>&1
       fi
       break
     fi
