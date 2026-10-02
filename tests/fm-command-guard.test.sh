@@ -197,6 +197,32 @@ test_redaction() {
   pass "secret-named or random assignments, .env values, secret-looking environment values and key shapes never leave the machine"
 }
 
+test_expansions_in_quoted_secrets_are_judged() {
+  local home cmd body out log text word
+  home=$(new_home redact-expansions 'enabled = true\n')
+  for cmd in \
+    'GH_TOKEN="$(gh auth token)" gh pr create --fill|GH_TOKEN="$(gh auth token)" gh pr create --fill' \
+    'mysql --password="$(cat ~/.dbpw)" -e "select 1"|mysql --password="$(cat ~/.dbpw)" -e "select 1"' \
+    'export API_KEY="${API_KEY:-dev}"; npm test|export API_KEY=<redacted>; npm test' \
+    "cd \"\${HOME}/proj\" && client --token 'abc def'|cd \"\${HOME}/proj\" && client --token <redacted>" \
+    "git commit -m \"\$(cat <<'EOF'"$'\n''Redact --password "a b" values whole'$'\n'"EOF"$'\n'")\"|git commit -m \"\$(cat <<'EOF'"$'\n''Redact --password <redacted> values whole'$'\n'"EOF"$'\n'")\"" \
+    'client --password "ink fern $(get --token '"'alpha beta'"') moss" -v|client --password "<redacted>$(get --token <redacted>)<redacted>" -v'; do
+    reset_server "$FIX/response-git-status.json"
+    out=$(run_hook "$home" "${cmd%%|*}")
+    assert_equals "" "$out" "a command whose secret is an expansion must be judged, not denied"
+    assert_equals 1 "$(requests)" "a command whose secret is an expansion must be sent to the judge"
+    body=$(jq -r '.state.command' "$SRV/requests.jsonl")
+    log=$(tail -n 1 "$home/state/command-guard.log")
+    assert_equals "${cmd#*|}" "$body" "an expansion stays visible and every literal secret around it is removed whole"
+    for text in "$body" "$log"; do
+      for word in "abc def" "a b\"" fern moss alpha beta; do
+        assert_not_contains "$text" "$word" "no word of a literal quoted secret may leave the machine or reach the log"
+      done
+    done
+  done
+  pass "a quoted secret holding an expansion keeps the expansion visible to the judge and loses every literal word"
+}
+
 test_plain_assignments_stay_visible() {
   local home body wipe
   home=$(new_home plain 'enabled = true\n')
@@ -262,10 +288,10 @@ test_quoted_search_strings_keep_commands_visible() {
     assert_equals "$cmd" "$body" "a credential name inside a quoted, ANSI-C, escaped or here-document string must not hide what follows"
   done
   for cmd in \
-    'printf "x TOKEN=" ; rm -rf ~ ; echo "y"|printf "x TOKEN="<redacted> ; rm -rf ~ ; echo "y"' \
-    'find . -name "a password=" -delete -o -name "b"|find . -name "a password="<redacted> -delete -o -name "b"' \
-    'rm "x token=" -rf ~/projects "y"|rm "x token="<redacted> -rf ~/projects "y"' \
-    ": # it's done"$'\n'"rm 'a token=' -rf ~ 'b'|: # it's done"$'\n'"rm 'a token='<redacted> -rf ~ 'b'"; do
+    'printf "x TOKEN=" ; rm -rf ~ ; echo "y"|printf "x TOKEN=" ; rm -rf ~ ; echo "y"' \
+    'find . -name "a password=" -delete -o -name "b"|find . -name "a password=" -delete -o -name "b"' \
+    'rm "x token=" -rf ~/projects "y"|rm "x token=" -rf ~/projects "y"' \
+    ": # it's done"$'\n'"rm 'a token=' -rf ~ 'b'|: # it's done"$'\n'"rm 'a token=' -rf ~ 'b'"; do
     reset_server "$FIX/response-git-status.json"
     run_hook "$home" "${cmd%%|*}" >/dev/null
     body=$(jq -r '.state.command' "$SRV/requests.jsonl")
@@ -530,6 +556,7 @@ test_redaction
 test_quoted_and_short_secrets_are_redacted
 test_quoted_search_strings_keep_commands_visible
 test_multiline_quoted_secrets_are_whole_or_blocked
+test_expansions_in_quoted_secrets_are_judged
 test_plain_assignments_stay_visible
 test_long_command_judged_in_parts
 test_parts_failure_falls_back_to_head_and_tail

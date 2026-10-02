@@ -240,6 +240,8 @@ URL_CREDENTIAL = re.compile(r"(://)[^/\s:@]+:[^/\s@]+@")
 # loses its value.
 ASSIGNMENT_NAME = re.compile(r"(?:^|[\s;&|(`])([A-Za-z_][A-Za-z0-9_]*)=")
 ASSIGNMENT_BARE = re.compile(r"[\"']?([^\s\"';&|)`]*)")
+# A ${...} expansion with no quoting or substitution inside it.
+SIMPLE_BRACE = re.compile(r"\$\{[^{}'\"\\`()]*\}")
 # A here-document operator and its delimiter word.
 HEREDOC = re.compile(r"<<(-?)[ \t]*((?:'[^'\n]*'|\"[^\"\n]*\"|\\.|[^\s;&|<>()'\"\\`$])+)")
 # A long random-looking run: mixed case AND digits. Git SHAs and task ids are
@@ -261,16 +263,33 @@ def _assignment(match, value):
     return value
 
 
+class _Unfollowable(Exception):
+    """Shell syntax the quote lexer does not follow."""
+
+
 def _shell_quotes(text):
-    """Map each quote that opens a shell string to the index after its close,
-    or to the end of <text> when it never closes. It follows bash's own rules
-    for escapes, line continuations, $ parameters, $'...' strings, comments
-    and here-document bodies. For a command it cannot follow, such as one with
-    a backtick, arithmetic or an expansion nested inside double quotes, it
-    returns None."""
+    """(quotes, substitutions) for <text>, or None for a command it cannot
+    follow, such as one with a backtick, arithmetic or an unusual expansion.
+    quotes maps each quote that opens a shell string to the index after its
+    close, or to the end of <text> when it never closes; substitutions are the
+    (start, end) spans of each $(...) inside a double-quoted string. It follows
+    bash's own rules for escapes, line continuations, $ parameters, $'...'
+    strings, comments, here-document bodies, and $(...) and ${...} inside
+    double quotes."""
     if any(part in text for part in ("`", "((", "$[")):
         return None
-    quotes, heredocs, i, word_start = {}, [], 0, True
+    quotes, substitutions = {}, []
+    try:
+        _scan_commands(text, 0, quotes, substitutions, False)
+    except _Unfollowable:
+        return None
+    return quotes, substitutions
+
+
+def _scan_commands(text, i, quotes, substitutions, nested):
+    """Scan shell commands from <i>: to the end of <text>, or, when <nested>,
+    to the ) that closes a $( and return the index after it."""
+    heredocs, word_start, depth = [], True, 0
     while i < len(text):
         char = text[i]
         if char == "\\":
@@ -283,10 +302,10 @@ def _shell_quotes(text):
             if i < 0:
                 break
             continue
+        if nested and word_start and re.match(r"case\b", text[i:i + 5]):
+            raise _Unfollowable()
         if char == "\n" and heredocs:
             i = _heredoc_bodies(text, i + 1, heredocs, quotes)
-            if i is None:
-                return None
             heredocs = []
             word_start = True
             continue
@@ -297,42 +316,80 @@ def _shell_quotes(text):
         if text.startswith("<<", i):
             heredoc = HEREDOC.match(text, i)
             if not heredoc or text[heredoc.end():heredoc.end() + 1] not in ("", " ", "\t", "\n", ";", "&", "|", "<", ">", "(", ")"):
-                return None
+                raise _Unfollowable()
             word = heredoc.group(2)
             heredocs.append((re.sub(r"\\(.)|['\"]", r"\1", word), heredoc.group(1) == "-",
                              not re.search(r"['\"\\]", word)))
             i = heredoc.end()
             word_start = False
             continue
-        escapes = char == '"'
+        if nested and char == ")":
+            if depth == 0:
+                if heredocs:
+                    raise _Unfollowable()
+                return i + 1
+            depth -= 1
+        if nested and char == "(":
+            depth += 1
+        ansi = False
         if char == "$":
             if text[i + 1:i + 2] in ("$", "#", "?", "!", "@", "*", "-") or text[i + 1:i + 2].isdigit():
                 i += 2
                 word_start = False
                 continue
+            if text.startswith("$(", i):
+                i = _scan_commands(text, i + 2, quotes, substitutions, True)
+                word_start = False
+                continue
             if text.startswith("$'", i):
                 i += 1
-                escapes = True
+                ansi = True
         if text[i] in "'\"":
-            end = i + 1
-            while end < len(text) and text[end] != text[i]:
-                if text[i] == '"' and text.startswith(("$(", "${"), end):
-                    return None
-                end += 2 if escapes and text[end] == "\\" else 1
+            if text[i] == '"':
+                end = _scan_double(text, i + 1, quotes, substitutions)
+            else:
+                end = i + 1
+                while end < len(text) and text[end] != "'":
+                    end += 2 if ansi and text[end] == "\\" else 1
             if end >= len(text):
+                if nested:
+                    raise _Unfollowable()
                 quotes[i] = len(text)
                 break
             quotes[i] = end + 1
             i = end
         word_start = text[i] in " \t\n;&|()<>"
         i += 1
-    return quotes
+    if nested:
+        raise _Unfollowable()
+    return i
+
+
+def _scan_double(text, i, quotes, substitutions):
+    """The index of the quote that closes a double-quoted string whose
+    contents start at <i>, or the end of <text> when it never closes."""
+    while i < len(text) and text[i] != '"':
+        if text[i] == "\\":
+            i += 2
+        elif text.startswith("$(", i):
+            end = _scan_commands(text, i + 2, quotes, substitutions, True)
+            substitutions.append((i, end))
+            i = end
+        elif text.startswith("${", i):
+            brace = SIMPLE_BRACE.match(text, i)
+            if not brace:
+                raise _Unfollowable()
+            i = brace.end()
+        else:
+            i += 1
+    return min(i, len(text))
 
 
 def _heredoc_bodies(text, i, heredocs, quotes):
-    """Skip the bodies of <heredocs>, which start at <i>; the index after the
-    last one, or None when one never ends or may run a command. A body is
-    data, so only a quoted value within one line of it can open there."""
+    """Skip the bodies of <heredocs>, which start at <i>, and return the index
+    after the last one. A body is data, so only a quoted value within one line
+    of it can open there. A body that never ends or may run a command cannot
+    be followed."""
     for delimiter, strip_tabs, expands in heredocs:
         while True:
             end = text.find("\n", i)
@@ -341,7 +398,7 @@ def _heredoc_bodies(text, i, heredocs, quotes):
                 i = len(text) if end < 0 else end + 1
                 break
             if end < 0 or (expands and ("$(" in line or line.endswith("\\"))):
-                return None
+                raise _Unfollowable()
             for pair in re.finditer(r"'[^']*'|\"[^\"]*\"", line):
                 quotes[i + pair.start()] = i + pair.end()
             i = end + 1
@@ -355,25 +412,44 @@ class Unredactable(Exception):
 def _replace_values(text, names, bare_value, replace):
     """Pass the value after each match of <names> through <replace>: a whole
     shell string that opens right there, else the run <bare_value> captures.
-    Raises Unredactable rather than redact part of a quoted value."""
-    quotes = _shell_quotes(text)
-    out, pos = [], 0
+    A $(...) inside a double-quoted value stays as it is, to be judged; only
+    the text around it is passed. Raises Unredactable rather than redact part
+    of a quoted value."""
+    lexed = _shell_quotes(text)
+    quotes, substitutions = lexed if lexed is not None else (None, [])
+    edits = []
     for name in names.finditer(text):
-        if name.start() < pos:
+        if any(start <= name.start() < end for start, end, _ in edits):
             continue
         start = name.end()
         opener = start + 1 if text.startswith(("$'", '$"'), start) else start
         end = None if quotes is None else quotes.get(opener)
-        uncertain = quotes is None and text[opener:opener + 1] in ("'", '"')
         if end is None:
             bare = bare_value.match(text, start)
             value = bare.group(1) if bare else ""
-            if uncertain and replace(name, value) != value:
+            if quotes is None and text[opener:opener + 1] in ("'", '"') and replace(name, value) != value:
                 raise Unredactable()
             if not bare:
                 continue
             start, end = bare.span(1)
-        out += [text[pos:start], replace(name, text[start:end])]
+        first, last = start, end
+        if quotes is not None and opener in quotes:
+            first = opener + 1
+            last = end - 1 if end - 1 > opener and text[end - 1] == text[opener] else end
+        inner = sorted(span for span in substitutions if first <= span[0] < last)
+        pieces, gap = [], first
+        for sub_start, sub_end in inner:
+            if sub_start >= gap:
+                pieces.append((gap, sub_start))
+                gap = sub_end
+        pieces = pieces + [(gap, last)] if inner else [(start, end)]
+        for piece_start, piece_end in pieces:
+            if piece_start < piece_end and not any(
+                    s < piece_end and piece_start < e for s, e, _ in edits):
+                edits.append((piece_start, piece_end, replace(name, text[piece_start:piece_end])))
+    out, pos = [], 0
+    for start, end, value in sorted(edits):
+        out += [text[pos:start], value]
         pos = end
     return "".join(out) + text[pos:]
 
