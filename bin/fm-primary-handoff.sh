@@ -33,8 +33,8 @@
 # context sample. When neither axis has a usable signal, check never
 # auto-hands-off; use `execute --force`. Accepted limitation.
 #
-# Safety refusals (unless --force): away mode (state/.afk), cooldown, and an
-# already in-progress rotation phase.
+# Safety refusals (unless --force): canonical away posture or legacy quiet
+# flag, and cooldown. Coordination and live-owner gates are never bypassed.
 #
 # State:
 #   state/.primary-active     written by fm-primary.sh on real launches
@@ -42,11 +42,21 @@
 #   state/.primary-handoff    durable phase record for in-flight/completed handoff
 #   state/.primary-handoff.lock          coordination lock (wake-lib portable lock)
 #   state/.primary-handoff-daemon.lock   run-loop singleton
+#   state/.primary-handoff-launch.lock   incoming launcher lifetime lock
+#   state/.lock-handoff                  token/profile/PID/identity acknowledgement
+# The internal `launch TOKEN PROFILE` entry is generation-checked and serialized;
+# runtime routes must enter through it, and custom commands must stay in the
+# foreground for their launch lifetime. FM_HANDOFF_TOKEN/FM_HANDOFF_PROFILE are
+# inherited by the incoming session lock acquisition; neither is a credential.
+# Records retain outgoing_identity to reject PID reuse during recovery.
 #
 # Test seams:
 #   FM_HANDOFF_QUOTA_JSON / FM_HANDOFF_QUOTA_AXI
 #   FM_HANDOFF_CONTEXT_USED (override durable context used_percent)
 #   FM_HANDOFF_SIGNAL_CMD / FM_HANDOFF_WAIT_DEAD_CMD / FM_HANDOFF_LAUNCH_CMD
+#   FM_HANDOFF_PREFLIGHT_CMD (required with a custom launch route)
+#   FM_HANDOFF_STARTUP_SECS (default 60, bounded ownership acknowledgement)
+#   FM_HANDOFF_INJECT_CRASH=planning|flushing|releasing|launching|complete
 #   FM_HANDOFF_INJECT_FAIL=flush|signal|wait_dead|release|pre_launch|launch|post_launch
 #   FM_HANDOFF_WAIT_DEAD_SECS / FM_HANDOFF_NOW / FM_HANDOFF_SKIP_CLI_CHECK
 set -u
@@ -109,25 +119,138 @@ abort_record() {
   return 1
 }
 
-fail_record() {
-  local msg=$1
-  phase=failed
-  error=$msg
-  fm_handoff_write_record
-  fm_handoff_log "$msg"
-  return 1
+# These helpers run under cmd_execute's coordination lock. A failed or timed
+# out launch keeps its durable launching phase so check/run can reconcile it.
+complete_record() {
+  error=
+  completed_at=$(fm_handoff_now)
+  cooldown_until=$((completed_at + FM_HANDOFF_COOLDOWN_SECONDS))
+  fm_handoff_write_active "$to" "$incoming_pid" || return 1
+  phase=complete
+  fm_handoff_write_record || return 1
+  fm_handoff_log "handed off primary $from -> $to (reason=$reason trigger=$trigger)"
+  printf 'handed_off: %s -> %s\n' "$from" "$to"
 }
 
-# Release cmd_execute's coordination lock and clear its EXIT trap; reads the
-# caller's $coord via dynamic scoping.
-release_coord() {
-  fm_lock_release "$coord" 2>/dev/null || true
-  trap - EXIT
+finish_launch() {
+  phase=launching
+  fm_handoff_write_record || return 1
+  if ! fm_handoff_launch_incoming "$to"; then
+    error="incoming launch failed for $to; recovery pending"
+    fm_handoff_write_record
+    fm_handoff_log "$error"
+    return 1
+  fi
+  if [ "${FM_HANDOFF_INJECT_FAIL:-}" = post_launch ] || ! fm_handoff_wait_incoming; then
+    error="incoming ownership acknowledgement pending"
+    fm_handoff_write_record
+    return 1
+  fi
+  complete_record
 }
 
-cmd_execute() {
+release_and_launch() {
+  # A stale controller must never signal a different owner or a reused PID.
+  if ! fm_handoff_session_live_holder \
+    || [ "$FM_HANDOFF_LIVE_HOLDER_PID" != "$outgoing_pid" ] \
+    || ! fm_pid_identity_matches "$outgoing_pid" "$outgoing_identity"; then
+    abort_record "outgoing identity changed before signal; incoming not launched"
+    return 1
+  fi
+  phase=releasing
+  fm_handoff_write_record || return 1
+  if ! fm_handoff_signal_outgoing "$outgoing_pid"; then
+    abort_record "failed to signal outgoing pid $outgoing_pid"
+    return 1
+  fi
+  if ! fm_handoff_wait_outgoing_dead "$outgoing_pid"; then
+    # TERM may finish later. Keep releasing recoverable instead of abandoning
+    # the home if the old process exits after this bounded wait.
+    error="outgoing pid $outgoing_pid did not release; incoming not launched"
+    fm_handoff_write_record
+    fm_handoff_log "$error"
+    return 1
+  fi
+  fm_handoff_release_session_lock_stale || return 1
+  finish_launch
+}
+
+recover_record() {
+  fm_handoff_read_record || return 1
+  [ -n "$token" ] && [ -n "$outgoing_pid" ] \
+    && [ "$(fm_handoff_normalize_profile "$to")" = "$to" ] || {
+    abort_record "incomplete handoff record; refusing recovery"
+    return 1
+  }
+  if fm_handoff_incoming_acknowledged; then
+    complete_record
+    return $?
+  fi
+  if fm_handoff_session_live_holder; then
+    if [ "$FM_HANDOFF_LIVE_HOLDER_PID" != "$outgoing_pid" ] \
+      || [ -z "$outgoing_identity" ] \
+      || ! fm_pid_identity_matches "$outgoing_pid" "$outgoing_identity"; then
+      # Acquisition publishes the PID before its acknowledgement under the
+      # claim mutex. A still-starting replacement gets the same bounded wait
+      # as initial startup before it can be classified as unrelated.
+      if [ "$phase" = launching ] && fm_handoff_wait_incoming; then
+        complete_record
+        return $?
+      fi
+      abort_record "unrelated live owner; refusing recovery"
+      return 1
+    fi
+    case "$phase" in
+      planning|flushing)
+        abort_record "interrupted before release; outgoing owner preserved"
+        return 0
+        ;;
+    esac
+    fm_handoff_preflight "$to" || return 1
+    release_and_launch
+    return $?
+  fi
+  fm_handoff_preflight "$to" || return 1
+  if ! fm_handoff_release_session_lock_stale; then
+    # An asynchronous incoming acquire may win after our no-owner snapshot.
+    # The release refused safely; reconcile its receipt instead of relaunching.
+    fm_handoff_wait_incoming || return 1
+    complete_record
+    return $?
+  fi
+  finish_launch
+}
+
+# Runtime entry point, separate from the controller. The lifetime lock makes
+# re-sending a launch after a controller crash safe even before startup claims
+# the session lock. Exec preserves its PID; stale recovery happens on exit.
+cmd_launch() {
+  local expected_token=${1:-} expected_profile=${2:-} launch_lock
+  [ -n "$expected_token" ] && [ -n "$expected_profile" ] || return 2
+  launch_lock="$STATE/.primary-handoff-launch.lock"
+  fm_lock_try_acquire "$launch_lock" || return 0
+  trap 'fm_lock_release "$STATE/.primary-handoff-launch.lock"' EXIT
+  trap 'exit 1' HUP INT TERM
+  fm_handoff_read_record || return 1
+  [ "$phase" = launching ] && [ "$token" = "$expected_token" ] \
+    && [ "$to" = "$expected_profile" ] || return 1
+  fm_handoff_assert_never_two_live_holders --require-free || return 1
+  export FM_HANDOFF_TOKEN=$token FM_HANDOFF_PROFILE=$to
+  if [ -n "${FM_HANDOFF_LAUNCH_CMD:-}" ]; then
+    # shellcheck disable=SC2086
+    $FM_HANDOFF_LAUNCH_CMD "$to"
+  else
+    exec "$FM_ROOT/bin/fm-primary.sh" "$to"
+  fi
+}
+
+# Subshell trap scope preserves the run loop's independent singleton cleanup.
+cmd_execute() (
+
   local from_arg='' to_arg='' reason_arg='' force=0
   local active next remaining coord
+  local FM_HANDOFF_MODE FM_HANDOFF_THRESHOLD FM_HANDOFF_CONTEXT_USED_THRESHOLD
+  local FM_HANDOFF_COOLDOWN_SECONDS FM_HANDOFF_CHAIN_JSON FM_HANDOFF_POLL_SECONDS
   # Record fields are globals so fm_handoff_write_record can see them.
   phase=''
   from=''
@@ -136,6 +259,7 @@ cmd_execute() {
   trigger=''
   token=''
   outgoing_pid=''
+  outgoing_identity=''
   incoming_pid=''
   started_at=''
   error=''
@@ -175,14 +299,6 @@ cmd_execute() {
     fm_handoff_log "handoff disabled (config/primary-handoff absent or enabled:false)"
     return 0
   fi
-  if [ "$FM_HANDOFF_MODE" != enabled ]; then
-    # --force with disabled/absent config still needs a chain for next-profile.
-    FM_HANDOFF_MODE=enabled
-    FM_HANDOFF_THRESHOLD=${FM_HANDOFF_THRESHOLD:-15}
-    FM_HANDOFF_CONTEXT_USED_THRESHOLD=${FM_HANDOFF_CONTEXT_USED_THRESHOLD:-}
-    FM_HANDOFF_COOLDOWN_SECONDS=${FM_HANDOFF_COOLDOWN_SECONDS:-300}
-    FM_HANDOFF_CHAIN_JSON=${FM_HANDOFF_CHAIN_JSON:-'["claude-fable","claude-opus","pi","codex"]'}
-  fi
 
   mkdir -p "$STATE" "$CONFIG" || return 1
   coord=$(fm_handoff_coord_lock)
@@ -190,36 +306,31 @@ cmd_execute() {
     fm_handoff_log "another handoff supervisor holds the coordination lock"
     return 1
   fi
-  # shellcheck disable=SC2064
-  trap 'fm_lock_release "'"$coord"'" 2>/dev/null || true' EXIT
+  trap 'fm_lock_release "$coord" 2>/dev/null || true' EXIT
+  trap 'exit 1' HUP INT TERM
 
   if fm_handoff_afk_active && [ "$force" -ne 1 ]; then
-    fm_handoff_log "away mode active (state/.afk); refusing handoff"
-    release_coord
+    fm_handoff_log "away or quiet mode active; refusing handoff"
     return 0
   fi
 
-  if fm_handoff_rotation_in_progress && [ "$force" -ne 1 ]; then
-    fm_handoff_log "handoff already in progress; refusing overlapping rotation"
-    release_coord
-    return 1
+  if fm_handoff_rotation_in_progress; then
+    recover_record
+    return $?
   fi
 
   if fm_handoff_in_cooldown && [ "$force" -ne 1 ]; then
     fm_handoff_log "handoff cooldown active; skipping"
-    release_coord
     return 0
   fi
 
   if [ -n "$from_arg" ]; then
     active=$(fm_handoff_normalize_profile "$from_arg") || {
-      release_coord
       fm_handoff_die "invalid --from profile: $from_arg"
       return 1
     }
   else
     active=$(fm_handoff_read_active_profile) || {
-      release_coord
       fm_handoff_die "no state/.primary-active profile; pass --from"
       return 1
     }
@@ -227,24 +338,23 @@ cmd_execute() {
 
   if [ -n "$to_arg" ]; then
     next=$(fm_handoff_normalize_profile "$to_arg") || {
-      release_coord
       fm_handoff_die "invalid --to profile: $to_arg"
       return 1
     }
   else
     next=$(fm_handoff_next_profile "$active") || {
-      release_coord
       fm_handoff_die "no usable next profile after $active in chain"
       return 1
     }
   fi
 
   if ! fm_handoff_session_live_holder; then
-    release_coord
     fm_handoff_die "session lock is not held by a live harness; refusing handoff"
     return 1
   fi
   outgoing_pid=$FM_HANDOFF_LIVE_HOLDER_PID
+  outgoing_identity=$(fm_pid_identity "$outgoing_pid") || return 1
+  fm_handoff_preflight "$next" || return 1
 
   remaining=$(fm_handoff_min_remaining_for_profile "$active")
   if [ -n "$reason_arg" ]; then
@@ -259,7 +369,7 @@ cmd_execute() {
     quota:*) trigger=quota ;;
     *) trigger=manual ;;
   esac
-  token=$(printf '%s-%s' "$(fm_handoff_now)" "$outgoing_pid")
+  token="$(fm_handoff_now)-$$-$RANDOM-$RANDOM"
   started_at=$(fm_handoff_now)
   phase=planning
   from=$active
@@ -269,98 +379,26 @@ cmd_execute() {
   completed_at=
   cooldown_until=
   fm_handoff_write_record || {
-    release_coord
     return 1
   }
   fm_handoff_assert_never_two_live_holders || {
     abort_record "invariant failed at planning"
-    release_coord
     return 1
   }
 
   phase=flushing
-  fm_handoff_write_record
+  fm_handoff_write_record || return 1
   if ! fm_handoff_flush_durable; then
     abort_record "flush failed; outgoing still holds the session lock"
-    release_coord
     return 1
   fi
   fm_handoff_assert_never_two_live_holders || {
     abort_record "invariant failed after flush"
-    release_coord
     return 1
   }
 
-  phase=releasing
-  fm_handoff_write_record
-  if ! fm_handoff_signal_outgoing "$outgoing_pid"; then
-    abort_record "failed to signal outgoing pid $outgoing_pid"
-    release_coord
-    return 1
-  fi
-  if ! fm_handoff_wait_outgoing_dead "$outgoing_pid"; then
-    abort_record "outgoing pid $outgoing_pid did not release; incoming not launched"
-    release_coord
-    return 1
-  fi
-  if ! fm_handoff_release_session_lock_stale; then
-    abort_record "release-stale refused; incoming not launched"
-    release_coord
-    return 1
-  fi
-  if ! fm_handoff_assert_never_two_live_holders --require-free; then
-    abort_record "session lock still live after release; incoming not launched"
-    release_coord
-    return 1
-  fi
-
-  phase=launching
-  fm_handoff_write_record
-  if ! fm_handoff_launch_incoming "$next"; then
-    fail_record "incoming launch failed for $next; session lock left free for recovery"
-    release_coord
-    return 1
-  fi
-  if [ "${FM_HANDOFF_INJECT_FAIL:-}" = post_launch ]; then
-    fail_record "injected failure at post_launch"
-    release_coord
-    return 1
-  fi
-
-  # Launch seams may acquire the lock asynchronously. Prefer observing a new
-  # live holder; otherwise trust a successful launch command in test mode.
-  if fm_handoff_session_live_holder; then
-    if [ "$FM_HANDOFF_LIVE_HOLDER_PID" = "$outgoing_pid" ]; then
-      fail_record "incoming launch left outgoing pid as lock holder"
-      release_coord
-      return 1
-    fi
-    incoming_pid=$FM_HANDOFF_LIVE_HOLDER_PID
-  elif [ -n "${FM_HANDOFF_LAUNCH_CMD:-}" ]; then
-    incoming_pid=${FM_HANDOFF_FAKE_INCOMING_PID:-0}
-  else
-    fail_record "incoming did not acquire the session lock"
-    release_coord
-    return 1
-  fi
-
-  fm_handoff_assert_never_two_live_holders || {
-    fail_record "invariant failed after launch"
-    release_coord
-    return 1
-  }
-
-  phase=complete
-  error=
-  completed_at=$(fm_handoff_now)
-  cooldown_until=$((completed_at + FM_HANDOFF_COOLDOWN_SECONDS))
-  fm_handoff_write_record
-  fm_handoff_write_active "$next" "$incoming_pid"
-  fm_handoff_log "handed off primary $from -> $to (reason=$reason trigger=$trigger)"
-  printf 'handed_off: %s -> %s\n' "$from" "$to"
-  release_coord
-  return 0
-}
+  release_and_launch
+)
 
 cmd_check() {
   local active remaining ctx_used next
@@ -374,8 +412,8 @@ cmd_check() {
     return 0
   fi
   if fm_handoff_rotation_in_progress; then
-    printf 'handoff: in_progress\n'
-    return 0
+    cmd_execute
+    return $?
   fi
   if fm_handoff_in_cooldown; then
     printf 'handoff: cooldown\n'
@@ -451,6 +489,7 @@ case "$CMD" in
   status) shift; cmd_status "$@" ;;
   check) shift; cmd_check "$@" ;;
   execute) shift; cmd_execute "$@" ;;
+  launch) shift; cmd_launch "$@" ;;
   run) shift; cmd_run "$@" ;;
   *)
     fm_handoff_log "unknown command: $CMD"
