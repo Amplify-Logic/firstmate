@@ -1,0 +1,66 @@
+# fm-deepgram-stt.sh live transcript: base b6f475a9 vs head dd756053
+# Real script + real curl -> local Deepgram stand-in on 127.0.0.1 (curl shim rewrites api.deepgram.com host only); disposable lab FM_HOME
+
+### S1 email address keeps its local part (I4)
+Deepgram returned : Email lars.tolhurst@x.com, and ask lars.
+vocabulary        : lars => LARS | 
+base (rc=0) prints : Email LARS.tolhurst@x.com, and ask LARS.
+base request        : /v1/listen?model=nova-3&smart_format=true
+head (rc=0) prints : Email lars.tolhurst@x.com, and ask LARS.
+head request        : /v1/listen?model=nova-3&smart_format=true
+
+### S2 contraction stays intact (I4)
+Deepgram returned : Don't wait, don't ask don.
+vocabulary        : don => Donald | 
+base (rc=0) prints : Donald't wait, Donald't ask Donald.
+base request        : /v1/listen?model=nova-3&smart_format=true
+head (rc=0) prints : Don't wait, don't ask Donald.
+head request        : /v1/listen?model=nova-3&smart_format=true
+
+### S3 possessive names take the rewrite (user decision)
+Deepgram returned : lars's laptop and quillan’s PR, don’t forget lars.tolhurst's note.
+vocabulary        : lars => LARS | quillan => Quillan | don => Donald | 
+base (rc=0) prints : LARS's laptop and Quillan’s PR, Donald’t forget LARS.tolhurst's note.
+base request        : /v1/listen?model=nova-3&smart_format=true
+head (rc=0) prints : LARS's laptop and Quillan’s PR, don’t forget lars.tolhurst's note.
+head request        : /v1/listen?model=nova-3&smart_format=true
+
+### S4 dotted and hyphenated names stay intact, standalone rewrites keep punctuation
+Deepgram returned : robin.gray, robin-gray, robin‑gray and (robin). 'Robin' too!
+vocabulary        : robin => Robyn | 
+base (rc=0) prints : Robyn.gray, Robyn-gray, Robyn‑gray and (Robyn). 'Robyn' too!
+base request        : /v1/listen?model=nova-3&smart_format=true
+head (rc=0) prints : robin.gray, robin-gray, robin‑gray and (Robyn). 'Robyn' too!
+head request        : /v1/listen?model=nova-3&smart_format=true
+
+### S5 documented smart-formatted example rewrites (I2)
+Deepgram returned : I'll make one on Pat dot example 1, and one at p dot example acme corp.
+vocabulary        : pat dot example 1 => pat.example1 | p dot example acme corp => p.example@acmecorp | 
+base (rc=0) prints : I'll make one on pat.example1, and one at p.example@acmecorp.
+base request        : /v1/listen?model=nova-3&smart_format=true
+head (rc=0) prints : I'll make one on pat.example1, and one at p.example@acmecorp.
+head request        : /v1/listen?model=nova-3&smart_format=true
+
+### S5b old spoken-word left side no longer matches formatted text (doc example changed)
+Deepgram returned : I'll make one on Pat dot example 1.
+vocabulary        : pat dot example one => pat.example1 | 
+base (rc=0) prints : I'll make one on Pat dot example 1.
+base request        : /v1/listen?model=nova-3&smart_format=true
+head (rc=0) prints : I'll make one on Pat dot example 1.
+head request        : /v1/listen?model=nova-3&smart_format=true
+
+### S6 whole compound rewrite still works
+Deepgram returned : Ask robin.gray, don't ask robin.gray@example.test.
+vocabulary        : robin.gray => robyn.gray | don't => do not | robin.gray@example.test => robyn.gray@example.test | 
+base (rc=0) prints : Ask robyn.gray, do not ask robyn.gray@example.test.
+base request        : /v1/listen?model=nova-3&smart_format=true
+head (rc=0) prints : Ask robyn.gray, do not ask robyn.gray@example.test.
+head request        : /v1/listen?model=nova-3&smart_format=true
+
+### S7 no vocabulary changes nothing
+Deepgram returned : Call Pat dot example 1.
+base (rc=0) prints : Call Pat dot example 1.
+base request        : /v1/listen?model=nova-3&smart_format=true
+head (rc=0) prints : Call Pat dot example 1.
+head request        : /v1/listen?model=nova-3&smart_format=true
+

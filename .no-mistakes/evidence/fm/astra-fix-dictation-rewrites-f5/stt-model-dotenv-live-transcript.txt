@@ -1,0 +1,47 @@
+# I5: DEEPGRAM_STT_MODEL from the lab home's .env (base b6f475a9 vs head dd756053)
+
+lab .env: export DEEPGRAM_STT_MODEL="nova-2"
+### S8 home .env selects the model (and keyword-style hints for an older model)
+Deepgram returned : Hello Quillan.
+vocabulary        : Quillan | 
+base (rc=0) prints : Hello Quillan.
+base request        : /v1/listen?model=nova-3&smart_format=true&keyterm=Quillan
+head (rc=0) prints : Hello Quillan.
+head request        : /v1/listen?model=nova-2&smart_format=true&keywords=Quillan%3A2
+
+lab .env: export DEEPGRAM_STT_MODEL="nova-2"  + process env DEEPGRAM_STT_MODEL=nova-3
+### S9 environment wins over .env
+Deepgram returned : Hello Quillan.
+vocabulary        : Quillan | 
+base (rc=0) prints : Hello Quillan.
+base request        : /v1/listen?model=nova-3&smart_format=true&keyterm=Quillan
+head (rc=0) prints : Hello Quillan.
+head request        : /v1/listen?model=nova-3&smart_format=true&keyterm=Quillan
+
+lab .env: DEEPGRAM_STT_MODEL=
+### S10a empty .env value falls back to the default
+Deepgram returned : Hello.
+vocabulary        : Quillan | 
+base (rc=0) prints : Hello.
+base request        : /v1/listen?model=nova-3&smart_format=true&keyterm=Quillan
+head (rc=0) prints : Hello.
+head request        : /v1/listen?model=nova-3&smart_format=true&keyterm=Quillan
+
+lab .env: (absent)
+### S10b absent .env falls back to the default
+Deepgram returned : Hello.
+vocabulary        : Quillan | 
+base (rc=0) prints : Hello.
+base request        : /v1/listen?model=nova-3&smart_format=true&keyterm=Quillan
+head (rc=0) prints : Hello.
+head request        : /v1/listen?model=nova-3&smart_format=true&keyterm=Quillan
+
+lab .env: DEEPGRAM_STT_MODEL=nova-2; --json flag
+### S11 --json stays Deepgram's raw response (no rewrite)
+Deepgram returned : Ask lars about don't.
+vocabulary        : lars => LARS | don => Donald | 
+base (rc=0) prints : {"metadata": {"model_info": {}}, "results": {"channels": [{"alternatives": [{"transcript": "Ask lars about don't.", "confidence": 0.99}]}]}}
+base request        : /v1/listen?model=nova-3&smart_format=true
+head (rc=0) prints : {"metadata": {"model_info": {}}, "results": {"channels": [{"alternatives": [{"transcript": "Ask lars about don't.", "confidence": 0.99}]}]}}
+head request        : /v1/listen?model=nova-2&smart_format=true
+

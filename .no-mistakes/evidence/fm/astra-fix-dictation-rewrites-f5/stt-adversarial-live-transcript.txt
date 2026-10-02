@@ -1,0 +1,8 @@
+### S12 adversarial: domain part, plus-addressed email, possessive at sentence end, curly contraction, hyphenated possessive
+Deepgram returned : Mail team@robin.test or a+robin@x.io; it's robin's. Don’t tell robin-gray's boss, robin.
+vocabulary        : robin => Robyn | don => Donald | 
+base (rc=0) prints : Mail team@Robyn.test or a+Robyn@x.io; it's Robyn's. Donald’t tell Robyn-gray's boss, Robyn.
+base request        : /v1/listen?model=nova-3&smart_format=true
+head (rc=0) prints : Mail team@robin.test or a+robin@x.io; it's Robyn's. Don’t tell robin-gray's boss, Robyn.
+head request        : /v1/listen?model=nova-3&smart_format=true
+
