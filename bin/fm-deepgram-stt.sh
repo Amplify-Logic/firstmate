@@ -24,8 +24,10 @@
 #     numbers (e.g. `pat dot example 1 => pat.example1`). Matching ignores case
 #     and accepts any run of whitespace between words. Match whole tokens only:
 #     never a part of an email address, dotted name, contraction or hyphenated
-#     word. Surrounding sentence punctuation is preserved. Try the longest heard
-#     phrase first, each span rewritten at most once. --json stays raw.
+#     word, though a possessive `'s` or `’s` may follow (`lars => LARS` turns
+#     `lars's` into `LARS's`). Surrounding sentence punctuation is preserved.
+#     Try the longest heard phrase first, each span rewritten at most once.
+#     --json stays raw.
 #   - A line with `=>` but an empty side is ignored. A vocabulary that cannot
 #     be read or parsed is skipped with a note on stderr; it never fails the
 #     transcription.
@@ -130,7 +132,8 @@ def rewrite(text, rewrites):
         table.setdefault(heard.lower(), written)
     ordered = sorted(table, key=len, reverse=True)
     # A rewrite may replace a complete compound token, but must never start or
-    # finish inside one. Email local parts allow more punctuation than names.
+    # finish inside one, except just before a trailing possessive 's.
+    # Email local parts allow more punctuation than names.
     compound = re.compile(
         r"[\w.!#$%&'*+/=?^`{|}~\-]+@[\w-]+(?:\.[\w-]+)*"
         r"|\w+(?:[.'’\u2010\u2011-]\w+)+"
@@ -138,6 +141,8 @@ def rewrite(text, rewrites):
     interiors = set()
     for token in compound.finditer(text):
         interiors.update(range(token.start() + 1, token.end()))
+        if token.group().lower().endswith(("'s", "’s")):
+            interiors.discard(token.end() - 2)
     # Check each alternative at a valid start so a longer phrase ending inside
     # a compound cannot hide a shorter, valid rewrite at that same position.
     patterns = [

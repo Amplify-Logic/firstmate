@@ -376,6 +376,16 @@ test_stt_vocabulary_preserves_compound_tokens() {
   pass "fm-deepgram-stt: email addresses, dotted names, contractions and hyphenated words stay intact"
 }
 
+test_stt_vocabulary_rewrites_possessive_names() {
+  local home out
+  home=$(new_home stt-vocab-possessive)
+  out=$(stt_with_vocab "$home" "lars's laptop, quillan’s PR, don't, don’t, lars.tolhurst's, lars@example.test" \
+    'lars => LARS' 'quillan => Quillan' 'don => Donald') || fail "stt failed: $out"
+  [ "$out" = "LARS's laptop, Quillan’s PR, don't, don’t, lars.tolhurst's, lars@example.test" ] \
+    || fail "a possessive must take the rewrite while contractions, dotted names and emails stay intact: $out"
+  pass "fm-deepgram-stt: possessive names take the rewrite"
+}
+
 test_stt_vocabulary_rewrites_complete_compounds_and_valid_shorter_phrases() {
   local home out
   home=$(new_home stt-vocab-complete)
@@ -2110,6 +2120,7 @@ test_stt_vocabulary_rewrites_the_printed_transcript
 test_stt_vocabulary_rewrites_longest_whole_phrase_first
 test_stt_vocabulary_ignores_malformed_lines
 test_stt_vocabulary_preserves_compound_tokens
+test_stt_vocabulary_rewrites_possessive_names
 test_stt_vocabulary_rewrites_complete_compounds_and_valid_shorter_phrases
 test_stt_reads_the_model_from_dotenv
 test_floater_help_and_option_refusal
