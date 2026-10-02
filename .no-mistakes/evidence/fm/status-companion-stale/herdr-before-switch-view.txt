@@ -1,0 +1,30 @@
+00| spaces                  │ 1 Z     +
+01|                         │┌────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+02| ○ retire-lab            ││> You are in /private/var/folders/2c/9sf1hvpn23q336b08gs1np0c0000gn/T/fm-lab.LpmcjQ/work                       ▕│
+03|                         ││                                                                                                               ▕│
+04|                         ││  Do you trust the contents of this directory? Working with untrusted contents comes with higher risk of prompt▐│
+05|                         ││  injection. Trusting the directory allows project-local config, hooks, and exec policies to load.             ▐│
+06|                         ││                                                                                                               ▐│
+07|                         ││› 1. Yes, continue                                                                                             ▐│
+08|                         ││  2. No, quit                                                                                                  ▐│
+09|                         ││                                                                                                               ▐│
+10|                         ││  Press enter to continue                                                                                      ▐│
+11|                         ││                                                                                                               ▐│
+12|                         ││                                                                                                               ▐│
+13|                         ││                                                                                                               ▐│
+14| new               ● menu││                                                                                                               ▐│
+15|─────────────────────────││                                                                                                               ▐│
+16| agents           grouped││                                                                                                               ▐│
+17|                         ││                                                                                                               ▐│
+18| ✓ retire-lab            ││                                                                                                               ▐│
+19|   codex                 ││                                                                                                               ▐│
+20|                         ││                                                                                                               ▐│
+21|                         ││                                                                                                               ▐│
+22|                         ││                                                                                                               ▐│
+23|                         ││                                                                                                               ▐│
+24|                         ││                                                                                                               ▐│
+25|                         ││                                                                                                               ▐│
+26|                         ││                                                                                                               ▐│
+27|                         ││                                                                                                               ▐│
+28|                         ││                                                                                                               ▐│
+29|                        «│└────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘

@@ -1,0 +1,35 @@
+ok - status bar: canonical field order and fleet projection are stable
+ok - status bar: the headline is live agents and stopped records carry their own figure
+ok - status bar: a task record is never counted as a running worker
+ok - status bar: validating work is a separate field from a busy worker
+ok - status bar: an unread fleet shows placeholders and a genuine zero still shows zero
+ok - status bar: threshold colors and unavailable-metric placeholders are canonical
+ok - status bar: missing and stale supervision are loud NO-WATCH alerts
+ok - status bar: Claude payload normalization is guarded to a primary launch
+ok - status bar: tmux companion exits when its exact primary pane is gone
+ok - status bar: Cursor payload normalization is guarded and keeps unknown metrics unknown
+ok - status bar: account role is compact, verified, and never an identifier
+ok - status bar: herdr companion is session-scoped and exits when its pane is gone
+ok - status bar: herdr companion retires once its live pane stops running Codex, and only after seeing Codex
+ok - status bar: tmux companion retires once its live pane stops running Codex
+ok - status bar: a retiring companion releases the zoom it owns and never one it does not
+ok - status bar: the companion clears its pane once and keeps the per-refresh erase
+ok - status bar: the companion never blanks its row while collecting a frame
+ok - status bar: the companion publishes a row on every refresh
+ok - status bar: companion refuses an unverified session provider
+ok - status bar: tracked adapters preserve guarded installation across native and companion surfaces
+ok - status bar: the rollout's rate-limit block is never reported as this primary's quota
+ok - status bar: Codex context tracks the current session across compaction
+ok - status bar: Codex context escalates a bounded tail and selects real token events only
+ok - status bar: an unrefreshable Codex context keeps its last reading only while it is young enough
+ok - status bar: missing, malformed, and stale Codex readings stay unavailable rather than zero
+ok - status bar: a Codex quota figure is reported only with its actual windows named
+ok - status bar: Codex context binds to one open session and never borrows a sibling
+ok - status bar: a tmux pane resolves its Codex primary through a launcher shim and nothing else
+ok - status bar: a Codex provider cache miss renders a complete row instead of waiting on the read
+ok - status bar: the quota window is rendered only by adapters that actually know one
+ok - status bar: chrome mode publishes the border row and keeps the in-pane fallback
+ok - status bar: chrome mode only ever releases the zoom, once, and never re-applies it
+ok - status bar: the renderer only releases a zoom the launcher reported applying
+ok - status bar: an over-long border row loses whole fields visibly and keeps its role marker
+ok - status bar: the border row is measured in codepoints regardless of the ambient locale

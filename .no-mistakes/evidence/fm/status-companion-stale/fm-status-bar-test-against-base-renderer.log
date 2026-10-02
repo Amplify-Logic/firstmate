@@ -1,0 +1,13 @@
+ok - status bar: canonical field order and fleet projection are stable
+ok - status bar: the headline is live agents and stopped records carry their own figure
+ok - status bar: a task record is never counted as a running worker
+ok - status bar: validating work is a separate field from a busy worker
+ok - status bar: an unread fleet shows placeholders and a genuine zero still shows zero
+ok - status bar: threshold colors and unavailable-metric placeholders are canonical
+ok - status bar: missing and stale supervision are loud NO-WATCH alerts
+ok - status bar: Claude payload normalization is guarded to a primary launch
+ok - status bar: tmux companion exits when its exact primary pane is gone
+ok - status bar: Cursor payload normalization is guarded and keeps unknown metrics unknown
+ok - status bar: account role is compact, verified, and never an identifier
+ok - status bar: herdr companion is session-scoped and exits when its pane is gone
+not ok - Herdr companion rendered 40 rows; it must retire three refreshes after Codex left its still-live pane

@@ -1,0 +1,20 @@
+== herdr lab session fm-lab-retire-71941-25328 (herdr 0.7.4); primary w1:p1, companion w1:p2 launched with --chrome-pane w1:p1 --chrome-zoomed
+-- holding 10s with Codex still in w1:p1 (no false retirement)
+11:13:18 panes=[w1:p1 w1:p2] zoomed=true p1_fg=[codex,node]
+11:13:28 panes=[w1:p1 w1:p2] zoomed=true p1_fg=[codex,node]
+-- 11:13:29 C-c Codex, start claude in the SAME pane w1:p1
+11:13:32 panes=[w1:p1] zoomed=false p1_fg=[claude.exe]
+11:13:33 panes=[w1:p1] zoomed=false p1_fg=[claude.exe]
+11:13:34 panes=[w1:p1] zoomed=false p1_fg=[claude.exe]
+11:13:35 panes=[w1:p1] zoomed=false p1_fg=[claude.exe]
+11:13:36 panes=[w1:p1] zoomed=false p1_fg=[claude.exe]
+11:13:37 panes=[w1:p1] zoomed=false p1_fg=[claude.exe]
+11:13:38 panes=[w1:p1] zoomed=false p1_fg=[claude.exe]
+11:13:39 panes=[w1:p1] zoomed=false p1_fg=[claude.exe]
+11:13:40 panes=[w1:p1] zoomed=false p1_fg=[claude.exe]
+11:13:41 panes=[w1:p1] zoomed=false p1_fg=[claude.exe]
+11:13:42 panes=[w1:p1] zoomed=false p1_fg=[claude.exe]
+11:13:43 panes=[w1:p1] zoomed=false p1_fg=[claude.exe]
+-- 11:13:52 later split of the tab (an AFK split / Action Deck stand-in)
+new pane=w1:p3
+{"zoomed":false,"panes":[{"pane_id":"w1:p1","rect":{"height":23,"width":27,"x":26,"y":1}},{"pane_id":"w1:p3","rect":{"height":23,"width":27,"x":53,"y":1}}]}

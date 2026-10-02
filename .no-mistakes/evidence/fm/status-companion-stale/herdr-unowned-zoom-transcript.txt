@@ -1,0 +1,17 @@
+== primary w2:p1 (zoom applied by someone else, renderer NOT told --chrome-zoomed)
+companion=w2:p2
+11:14:24 panes=[w2:p1 w2:p2] zoomed=true fg=[codex,node]
+-- 11:14:24 C-c Codex, start claude in w2:p1
+11:14:27 panes=[w2:p1] zoomed=false fg=[claude.exe]
+11:14:28 panes=[w2:p1] zoomed=false fg=[claude.exe]
+11:14:29 panes=[w2:p1] zoomed=false fg=[claude.exe]
+11:14:31 panes=[w2:p1] zoomed=false fg=[claude.exe]
+11:14:32 panes=[w2:p1] zoomed=false fg=[claude.exe]
+11:14:33 panes=[w2:p1] zoomed=false fg=[claude.exe]
+11:14:34 panes=[w2:p1] zoomed=false fg=[claude.exe]
+11:14:35 panes=[w2:p1] zoomed=false fg=[claude.exe]
+-- later split of the tab
+new pane=w2:p3
+{"zoomed":false,"panes":[{"pane_id":"w2:p1","rect":{"height":23,"width":27,"x":26,"y":1}},{"pane_id":"w2:p3","rect":{"height":23,"width":27,"x":53,"y":1}}]}
+-- cleanup: un-zooming this lab tab by hand
+false

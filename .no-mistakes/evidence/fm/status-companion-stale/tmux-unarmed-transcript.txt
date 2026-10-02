@@ -1,0 +1,8 @@
+== shell-only pane %2 (never ran Codex)
+11:11:36 t+3s panes: %2:zsh %3:bash 
+11:11:40 t+6s panes: %2:zsh %3:bash 
+11:11:43 t+9s panes: %2:zsh %3:bash 
+11:11:46 t+12s panes: %2:zsh %3:bash 
+companion row: ⚓ gpt-6-astra·high │ 🧠-- ⚡24%wk │ 🚢0 🧪0 ⏸0 ⚠0 🪦0 📋0 │ 👁 NO-WATCH -- │ $-- │ 💤--
+== 11:11:46 killing followed pane %2 (pane-gone exit path still works)
+window noc after: can't find window: noc 

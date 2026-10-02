@@ -1,0 +1,30 @@
+00| spaces                  │ 1       +
+01|                         │┌───────────────────────────────────────────────────────┐┌───────────────────────────────────────────────────────┐
+02| ● retire-lab            ││                                                      ▕││larstolhurst@Larss-MacBook-Air work %                  │
+03|                         ││──────────────────────────────────────────────────────▕││                                                       │
+04|                         ││ Accessing workspace:                                 ▐││                                                       │
+05|                         ││                                                      ▐││                                                       │
+06|                         ││ /private/var/folders/2c/9sf1hvpn23q336b08gs1np0c0000 ▐││                                                       │
+07|                         ││ gn/T/fm-lab.LpmcjQ/work                              ▐││                                                       │
+08|                         ││                                                      ▐││                                                       │
+09|                         ││ Quick safety check: Is this a project you created or ▐││                                                       │
+10|                         ││ one you trust? (Like your own code, a well-known     ▐││                                                       │
+11|                         ││ open source project, or work from your team). If     ▐││                                                       │
+12|                         ││ not, take a moment to review what's in this folder   ▐││                                                       │
+13|                         ││ first.                                               ▐││                                                       │
+14| new               ● menu││                                                      ▐││                                                       │
+15|─────────────────────────││ Claude Code'll be able to read, edit, and execute    ▐││                                                       │
+16| agents           grouped││ files here.                                          ▐││                                                       │
+17|                         ││                                                      ▐││                                                       │
+18| ◉ retire-lab            ││ Security guide                                       ▐││                                                       │
+19|   claude                ││                                                      ▐││                                                       │
+20|                         ││ ❯ No, exit                                           ▐││                                                       │
+21|                         ││   Yes, I trust this folder                           ▐││                                                       │
+22|                         ││                                                      ▐││                                                       │
+23|                         ││ Enter to confirm · Esc to cancel                     ▐││                                                       │
+24|                         ││                                                      ▐││                                                       │
+25|                         ││                                                      ▐││                                                       │
+26|                         ││                                                      ▐││                                                       │
+27|                         ││                                                      ▐││                                                       │
+28|                         ││                                                      ▐││                                                       │
+29|                        «│└───────────────────────────────────────────────────────┘└───────────────────────────────────────────────────────┘
