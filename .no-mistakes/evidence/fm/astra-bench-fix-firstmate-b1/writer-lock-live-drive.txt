@@ -1,0 +1,19 @@
+claude 2.1.288 (Claude Code); composer=empty
+== another writer holds /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.bn8EMX/state/desk-voice/.send.lock: yes
+ring verdict while held: not-rung
+send result while held: fm-desk-voice: the primary's chat pane is not reachable; saving to the mailbox instead mailbox: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.bn8EMX/state/desk-voice/inbox/20261002T210733Z-363905b9.json 
+composer=empty  EGRET on screen=0  PLOVER on screen=0
+mailbox files: 1
+{"text":null,"source":"live-test"}
+== writer lock released: yes
+ring verdict after release: rung: tmux %0
+lock left behind after ring: no
+--- final screen
+  ⎿  Failed with non-blocking status code: /bin/sh: ${CLAUDE_PLUGIN_ROOT}/hooks/run-hook.cmd: No such file or directory
+❯ Reply with only the word IBIS
+⏺ IBIS
+✻ Worked for 3s · done 11:07 PM
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏸ manual mode on · ← 2 agents

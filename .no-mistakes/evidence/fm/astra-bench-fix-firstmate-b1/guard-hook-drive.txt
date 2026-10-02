@@ -1,0 +1,62 @@
+COMMAND : mysql --password 'correct horse battery staple' -e "select 1"
+REQUESTS: 1   HOOK-OUT: <empty=allow>
+SENT    : mysql --password <redacted> -e "select 1"
+---
+COMMAND : client --token="violet sea shell" --auth "escaped \"inner quote\" tail"
+REQUESTS: 1   HOOK-OUT: <empty=allow>
+SENT    : client --token=<redacted> --auth <redacted>
+---
+COMMAND : curl -H "Authorization: Bearer abcdefgh12345678" --api-key 'one two three' https://x
+REQUESTS: 1   HOOK-OUT: <empty=allow>
+SENT    : curl -H "Authorization: Bearer <redacted>" --api-key <redacted> https://x
+---
+COMMAND : login q7x 4821 hunter q7x-ok prefixq7x 48210 MODE=dev mode
+REQUESTS: 1   HOOK-OUT: <empty=allow>
+SENT    : login <redacted> <redacted> <redacted> <redacted>-ok prefixq7x 48210 MODE=dev mode
+---
+COMMAND : GH_TOKEN="$(gh auth token)" gh repo delete owner/repo --yes
+REQUESTS: 1   HOOK-OUT: <empty=allow>
+SENT    : GH_TOKEN=<redacted> gh repo delete owner/repo --yes
+---
+COMMAND : export GITHUB_TOKEN="$(gh auth token)"; git push --force origin main
+REQUESTS: 1   HOOK-OUT: <empty=allow>
+SENT    : export GITHUB_TOKEN=<redacted>; git push --force origin main
+---
+COMMAND : DB_PASSWORD="${DB_PASSWORD:-dev}" ./migrate --drop-all
+REQUESTS: 1   HOOK-OUT: <empty=allow>
+SENT    : DB_PASSWORD=<redacted> ./migrate --drop-all
+---
+COMMAND : cd "${HOME}/proj" && rm -rf ~/projects && client --token 'abc def'
+REQUESTS: 1   HOOK-OUT: <empty=allow>
+SENT    : cd "${HOME}/proj" && rm -rf ~/projects && client --token <redacted>
+---
+COMMAND : rm -rf ~/projects; : --token "a;b"
+REQUESTS: 1   HOOK-OUT: <empty=allow>
+SENT    : rm -rf ~/projects; : --token <redacted>
+---
+COMMAND : rm -rf ~ # ` --password "x"
+REQUESTS: 1   HOOK-OUT: <empty=allow>
+SENT    : rm -rf ~ # ` --password <redacted>
+---
+COMMAND : rm -rf ../sibling-copy; T=../sibling-copy; dd if=/dev/zero of=/dev/disk2 env=prod
+REQUESTS: 1   HOOK-OUT: <empty=allow>
+SENT    : rm -rf ../sibling-copy; T=../sibling-copy; dd if=/dev/zero of=/dev/disk2 env=prod
+---
+COMMAND : echo "$("$("$("$("$("$("$("$("$("$("$("$("$("$("$("$("$("$("$("$("$("$("$("$("$("$("$("$("$("$("$("$("$("$("$("$("$("$("$("$("$("$("$("$("$("$("$("$("$("$("$("$
+REQUESTS: 2   HOOK-OUT: <empty=allow>
+SENT    : null
+echo "$("$("$("$("$("$("$("$("$("$("$("$("$("$("$("$("$("$("$("$("$("$("$("$("$("$("$("$("$("$("$("$("$("$("$("$("$("$("$("$("$("$("$("$("$("$("$("$("$("$("$("$("$("$("$("$("$("$("$("$("$("$("$("$("$("$("$("$("$("$("$("$("$("$("$("$("$("$("$("$("$("$("$("$("$("$("$("$("$("$("$("$("$("$("$("$("$
+---
+--- command-guard.log (persisted) ---
+{"outcome":"allow","command":"mysql --password <redacted> -e \"select 1\""}
+{"outcome":"allow","command":"client --token=<redacted> --auth <redacted>"}
+{"outcome":"allow","command":"curl -H \"Authorization: Bearer <redacted>\" --api-key <redacted> https://x"}
+{"outcome":"allow","command":"login <redacted> <redacted> <redacted> <redacted>-ok prefixq7x 48210 MODE=dev mode"}
+{"outcome":"allow","command":"GH_TOKEN=<redacted> gh repo delete owner/repo --yes"}
+{"outcome":"allow","command":"export GITHUB_TOKEN=<redacted>; git push --force origin main"}
+{"outcome":"allow","command":"DB_PASSWORD=<redacted> ./migrate --drop-all"}
+{"outcome":"allow","command":"cd \"${HOME}/proj\" && rm -rf ~/projects && client --token <redacted>"}
+{"outcome":"allow","command":"rm -rf ~/projects; : --token <redacted>"}
+{"outcome":"allow","command":"rm -rf ~ # ` --password <redacted>"}
+{"outcome":"allow","command":"rm -rf ../sibling-copy; T=../sibling-copy; dd if=/dev/zero of=/dev/disk2 env=prod"}
+{"outcome":"allow","command":"echo \"$(\"$(\"$(\"$(\"$(\"$(\"$(\"$(\"$(\"$(\"$(\"$(\"$(\"$(\"$(\"$(\"$(\"$(\"$(\"$(\"$(\"$(\"$(\"$(\"$(\"$(\"$(\"$(\"$(\"$(\"$(\"$(\"$(\"$(\"$(\"$(\"$(\"$(\"$(\"$(\"$(\"$(\"$(\"$(\"$(\"$(\"$(\"$(\"$(\"$(\"$(\"$(\"$(\"$(\"$(\"$(\"$(\"$(\"$(\"$(\"$(\"$(\"$(\"$(\"$("}

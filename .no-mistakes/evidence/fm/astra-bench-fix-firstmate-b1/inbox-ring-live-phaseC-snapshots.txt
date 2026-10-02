@@ -1,0 +1,225 @@
+### t=1s composer=empty
+  ⎿  SessionStart:startup hook error
+  ⎿  Failed with non-blocking status code: /bin/sh: chrome-devtools-axi: command not found
+  ⎿  SessionStart:startup hook error
+  ⎿  Failed with non-blocking status code: /bin/sh: ${CLAUDE_PLUGIN_ROOT}/hooks/run-hook.cmd: No such file or directory
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ Try "fix lint errors"
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏸ manual mode on · ← 2 agents                                                                               Ctrl+Y to paste deleted text
+### t=2s composer=empty
+  ⎿  Failed with non-blocking status code: /bin/sh: ${CLAUDE_PLUGIN_ROOT}/hooks/run-hook.cmd: No such file or directory
+❯ [firstmate inbox] captain inbox note 1790975176-aYa7dw is queued. Run bin/fm-wake-drain.sh now to pick it up; it stays queued until
+  handled and acknowledged.
+✢ Levitating…
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏸ manual mode on · ← 2 agents                                                                               Ctrl+Y to paste deleted text
+### t=3s composer=empty
+  ⎿  Failed with non-blocking status code: /bin/sh: ${CLAUDE_PLUGIN_ROOT}/hooks/run-hook.cmd: No such file or directory
+❯ [firstmate inbox] captain inbox note 1790975176-aYa7dw is queued. Run bin/fm-wake-drain.sh now to pick it up; it stays queued until
+  handled and acknowledged.
+✳ Embellishing… (1s · thinking)
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏸ manual mode on · ← 2 agents                                                                               Ctrl+Y to paste deleted text
+### t=4s composer=empty
+  ⎿  Failed with non-blocking status code: /bin/sh: ${CLAUDE_PLUGIN_ROOT}/hooks/run-hook.cmd: No such file or directory
+❯ [firstmate inbox] captain inbox note 1790975176-aYa7dw is queued. Run bin/fm-wake-drain.sh now to pick it up; it stays queued until
+  handled and acknowledged.
+✽ Embellishing… (3s · thinking)
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏸ manual mode on · ← 2 agents
+### t=5s composer=empty
+❯ [firstmate inbox] captain inbox note 1790975176-aYa7dw is queued. Run bin/fm-wake-drain.sh now to pick it up; it stays queued until
+  handled and acknowledged.
+⏺
+· Embellishing… (4s · ↓ 75 tokens · thought for 3s)
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏸ manual mode on · ← 2 agents
+### t=6s composer=empty
+❯ [firstmate inbox] captain inbox note 1790975176-aYa7dw is queued. Run bin/fm-wake-drain.sh now to pick it up; it stays queued until
+  handled and acknowledged.
+⏺ I see there's a captain inbox note queued. Let me drain the wake queue to see what it is.
+✳ Embellishing… (5s · ↓ 356 tokens · thought for 3s)
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏸ manual mode on · ← 2 agents
+### t=7s composer=empty
+⏺ I see there's a captain inbox note queued. Let me drain the wake queue to see what it is.
+⏺ Bash(bin/fm-wake-drain.sh)
+  ⎿  Waiting…
+✻ Embellishing… (running PreToolUse hooks… 3/4 · 6s · ↓ 389 tokens)
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏸ manual mode on · ← 2 agents
+### t=8s composer=unknown
+ bin/fm-wake-drain.sh
+╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+ This command requires approval
+ Do you want to proceed?
+ ❯ 1. Yes
+   2. Yes, and don’t ask again for: bin/fm-wake-drain.sh *
+   3. No
+ Esc to cancel · Tab to amend
+### t=9s composer=unknown
+ bin/fm-wake-drain.sh
+╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+ This command requires approval
+ Do you want to proceed?
+ ❯ 1. Yes
+   2. Yes, and don’t ask again for: bin/fm-wake-drain.sh *
+   3. No
+ Esc to cancel · Tab to amend
+### t=10s composer=unknown
+ bin/fm-wake-drain.sh
+╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+ This command requires approval
+ Do you want to proceed?
+ ❯ 1. Yes
+   2. Yes, and don’t ask again for: bin/fm-wake-drain.sh *
+   3. No
+ Esc to cancel · Tab to amend
+### t=11s composer=unknown
+ bin/fm-wake-drain.sh
+╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+ This command requires approval
+ Do you want to proceed?
+ ❯ 1. Yes
+   2. Yes, and don’t ask again for: bin/fm-wake-drain.sh *
+   3. No
+ Esc to cancel · Tab to amend
+### t=12s composer=unknown
+ bin/fm-wake-drain.sh
+╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+ This command requires approval
+ Do you want to proceed?
+ ❯ 1. Yes
+   2. Yes, and don’t ask again for: bin/fm-wake-drain.sh *
+   3. No
+ Esc to cancel · Tab to amend
+### t=13s composer=unknown
+ bin/fm-wake-drain.sh
+╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+ This command requires approval
+ Do you want to proceed?
+ ❯ 1. Yes
+   2. Yes, and don’t ask again for: bin/fm-wake-drain.sh *
+   3. No
+ Esc to cancel · Tab to amend
+### t=14s composer=unknown
+ bin/fm-wake-drain.sh
+╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+ This command requires approval
+ Do you want to proceed?
+ ❯ 1. Yes
+   2. Yes, and don’t ask again for: bin/fm-wake-drain.sh *
+   3. No
+ Esc to cancel · Tab to amend
+### t=15s composer=unknown
+ bin/fm-wake-drain.sh
+╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+ This command requires approval
+ Do you want to proceed?
+ ❯ 1. Yes
+   2. Yes, and don’t ask again for: bin/fm-wake-drain.sh *
+   3. No
+ Esc to cancel · Tab to amend
+### t=16s composer=unknown
+ bin/fm-wake-drain.sh
+╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+ This command requires approval
+ Do you want to proceed?
+ ❯ 1. Yes
+   2. Yes, and don’t ask again for: bin/fm-wake-drain.sh *
+   3. No
+ Esc to cancel · Tab to amend
+### t=17s composer=unknown
+ bin/fm-wake-drain.sh
+╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+ This command requires approval
+ Do you want to proceed?
+ ❯ 1. Yes
+   2. Yes, and don’t ask again for: bin/fm-wake-drain.sh *
+   3. No
+ Esc to cancel · Tab to amend
+### t=18s composer=unknown
+ bin/fm-wake-drain.sh
+╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+ This command requires approval
+ Do you want to proceed?
+ ❯ 1. Yes
+   2. Yes, and don’t ask again for: bin/fm-wake-drain.sh *
+   3. No
+ Esc to cancel · Tab to amend
+### t=19s composer=unknown
+ bin/fm-wake-drain.sh
+╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+ This command requires approval
+ Do you want to proceed?
+ ❯ 1. Yes
+   2. Yes, and don’t ask again for: bin/fm-wake-drain.sh *
+   3. No
+ Esc to cancel · Tab to amend
+### t=20s composer=unknown
+ bin/fm-wake-drain.sh
+╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+ This command requires approval
+ Do you want to proceed?
+ ❯ 1. Yes
+   2. Yes, and don’t ask again for: bin/fm-wake-drain.sh *
+   3. No
+ Esc to cancel · Tab to amend
+### t=21s composer=unknown
+ bin/fm-wake-drain.sh
+╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+ This command requires approval
+ Do you want to proceed?
+ ❯ 1. Yes
+   2. Yes, and don’t ask again for: bin/fm-wake-drain.sh *
+   3. No
+ Esc to cancel · Tab to amend
+### t=22s composer=unknown
+ bin/fm-wake-drain.sh
+╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+ This command requires approval
+ Do you want to proceed?
+ ❯ 1. Yes
+   2. Yes, and don’t ask again for: bin/fm-wake-drain.sh *
+   3. No
+ Esc to cancel · Tab to amend
+### t=23s composer=unknown
+ bin/fm-wake-drain.sh
+╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+ This command requires approval
+ Do you want to proceed?
+ ❯ 1. Yes
+   2. Yes, and don’t ask again for: bin/fm-wake-drain.sh *
+   3. No
+ Esc to cancel · Tab to amend
+### t=24s composer=unknown
+ bin/fm-wake-drain.sh
+╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+ This command requires approval
+ Do you want to proceed?
+ ❯ 1. Yes
+   2. Yes, and don’t ask again for: bin/fm-wake-drain.sh *
+   3. No
+ Esc to cancel · Tab to amend
+### t=25s composer=unknown
+ bin/fm-wake-drain.sh
+╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+ This command requires approval
+ Do you want to proceed?
+ ❯ 1. Yes
+   2. Yes, and don’t ask again for: bin/fm-wake-drain.sh *
+   3. No
+ Esc to cancel · Tab to amend

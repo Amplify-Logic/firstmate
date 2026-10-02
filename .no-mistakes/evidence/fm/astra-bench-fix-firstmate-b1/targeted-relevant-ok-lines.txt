@@ -1,0 +1,20 @@
+ok - irreversible blocks at 0.6, destructive at 0.7 and injection at 0.8, and nothing below them does
+ok - whole quoted credentials and short secret-named .env values are removed from requests and logs
+ok - routine commands with expanded or quoted credentials are judged with each value redacted
+ok - a long command is sent whole as overlapping parts in one request, and any part firing blocks
+ok - an unreadable answer, an HTTP error and a timeout all allow and are logged, and a partial answer still blocks
+ok - fm-deepgram-stt: rewrites match whole phrases, longest first, ignoring case
+ok - fm-desk-voice send: a stash marker wrapped onto its own footer row is not read as text in the box
+ok - fm-desk-voice send: a draft that is only a pasted-text placeholder is put back and the send confirmed
+ok - fm-desk-voice send: a voice-length message is pasted past a Claude draft, shown as one placeholder, and sent
+ok - fm-desk-voice send: a message the chat draws late is waited for, not stashed over the draft
+ok - desk send: a paste delayed beyond the proof window never receives recovery Ctrl+S
+ok - desk send: a message sent over a stashed draft presses Enter once, so the restored draft stays unsent
+ok - fm-desk-voice send: a draft stashed without a readable marker is put back before the mailbox
+ok - fm-inbox note: a new captain note rings the busy primary within seconds and stays queued
+ok - fm-inbox note: the ring never submits a draft, never rings away mode, and falls back to the queue
+ok - desk ring: both backends re-read the payload before every Enter, including retries
+ok - desk ring: a late paste is still proven, even under a dim suggestion, a late redraw gets no retry, and a stash is never rung over
+ok - desk ring and send: concurrent writers use one lock and release it after delivery
+ok - fm-inbox: ring uses the same .afk and .afk-contract posture as readiness
+ok - readiness says unknown (or not-receivable) instead of inferring liveness from a lock

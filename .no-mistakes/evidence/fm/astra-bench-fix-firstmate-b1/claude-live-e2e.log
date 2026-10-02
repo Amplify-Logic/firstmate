@@ -1,0 +1,8 @@
+FM_TEST_BEGIN 2026-10-02T20:59:14Z tests/fm-desk-voice-claude-draft-live-e2e.test.sh family=live-harness-optin expected_gate_skip=live-capability
+ok - desk floater: real Claude 2.1.288 (Claude Code) submits the message alone and puts the unsent draft back
+ok - desk ring: real Claude 2.1.288 (Claude Code) refuses an unsent draft and submits the proven ring alone
+FM_TEST_END 2026-10-02T20:59:28Z tests/fm-desk-voice-claude-draft-live-e2e.test.sh exit=0 duration_ms=14263 gate_skip=false
+FM_TEST_SUMMARY total=1 failed=0 skipped_gate=0 duration_ms=14529
+FM_TEST_SUMMARY_FAMILY family=live-harness-optin count=1 duration_ms=14263 failed=0
+FM_TEST_SLOWEST rank=1 script=tests/fm-desk-voice-claude-draft-live-e2e.test.sh duration_ms=14263
+rc=0

@@ -1,0 +1,158 @@
+FM_TEST_BEGIN 2026-10-02T20:59:12Z tests/fm-command-guard.test.sh family=standalone expected_gate_skip=none
+ok - the gate is off unless enabled = true, always excludes Compass, excludes listed projects, and treats a malformed file as off
+ok - an unarmed home, Compass and an excluded project allow every command and send nothing
+ok - recorded live answers deny a force-push to main with the final notice and allow git status
+ok - irreversible blocks at 0.6, destructive at 0.7 and injection at 0.8, and nothing below them does
+ok - only Bash commands are judged
+ok - secret-named or random assignments, .env values, secret-looking environment values and key shapes never leave the machine
+ok - whole quoted credentials and short secret-named .env values are removed from requests and logs
+ok - routine commands with expanded or quoted credentials are judged with each value redacted
+ok - plain assignments and arguments such as a delete target, a disk or an environment name stay visible
+ok - a long command is sent whole as overlapping parts in one request, and any part firing blocks
+ok - a failed parts request falls back to one head-and-tail judgement, and only both failing allows
+ok - a command over the part cap is allowed unjudged, with a warning on stderr and in the log
+ok - with no key every command is allowed, and each outage episode is logged once
+ok - an unreadable answer, an HTTP error and a timeout all allow and are logged, and a partial answer still blocks
+ok - fm-spawn installs the Bash guard hook only for an armed, unexcluded project by logical name, never Compass, and the hook honours the live gate
+FM_TEST_END 2026-10-02T21:00:01Z tests/fm-command-guard.test.sh exit=0 duration_ms=49002 gate_skip=false
+FM_TEST_BEGIN 2026-10-02T21:00:01Z tests/fm-deepgram-desk.test.sh family=unclassified expected_gate_skip=none
+ok - fm-deepgram-tts: refuses when the key is absent
+ok - fm-deepgram-tts: dry-run succeeds when a key is present
+ok - fm-deepgram-stt: refuses when the key or the audio file is absent
+ok - fm-deepgram-stt: mocked Deepgram transcript is printed and the key stays out of argv
+ok - fm-deepgram-stt: a Deepgram failure exits 1 with the status
+ok - fm-deepgram-stt: an absent vocabulary changes nothing
+ok - fm-deepgram-stt: key terms reach Deepgram encoded in the model's hint form
+ok - fm-deepgram-stt: an oversized vocabulary is trimmed, not refused
+ok - fm-deepgram-stt: rewrites turn spoken addresses into written ones
+ok - fm-deepgram-stt: rewrites match whole phrases, longest first, ignoring case
+ok - fm-deepgram-stt: malformed vocabulary lines are ignored
+ok - fm-desk-floater: --help exits 0 and unknown options are refused
+ok - fm-desk-floater: every launched build is signed with one stable identity, and only the launched copy can be reopened
+ok - fm-desk-floater: --build-only assembles its own ad-hoc bundle and never touches the launched one
+ok - fm-desk-floater: a configured identity wins, and an unusable one falls back to Apple Development, then ad-hoc, without stopping the launch
+ok - fm-speak: key absent uses say
+ok - fm-speak: key present prefers Deepgram
+ok - fm-speak: a configured voice is spoken by say, not by Deepgram
+ok - fm-speak: a voice this machine does not have is reported, not substituted
+ok - fm-speak: a spelling say resolves is spoken, not refused
+ok - fm-speak: an incomplete voice list never refuses a voice
+ok - fm-speak: a confirmed voice is asked about once, a renamed one is asked again
+ok - fm-speak: a refused line leaves no voice list or watchdog marker behind
+ok - fm-speak: a say that fails is not re-spoken through Deepgram
+ok - fm-speak: Deepgram failure falls back to say
+ok - fm-desk-voice: deliver, wake, pending, drain
+ok - fm-desk-voice send: types the transcript into the primary's own pane and submits it
+fm-desk-voice: the primary's chat pane is not reachable; saving to the mailbox instead
+ok - fm-desk-voice send: no live primary falls back to the mailbox
+fm-desk-voice: the primary's chat pane is not reachable; saving to the mailbox instead
+ok - fm-desk-voice send: a pane that does not host the primary gets nothing
+fm-desk-voice: the primary's chat pane refused the text; saving it to the mailbox instead
+ok - fm-desk-voice send: a refused send falls back to the mailbox
+fm-desk-voice: typed into the primary's chat pane but the submit was not confirmed (pending)
+ok - fm-desk-voice send: typed text whose submit is unproven is never re-sent to the mailbox
+fm-desk-voice: the primary's chat pane is not reachable; saving to the mailbox instead
+fm-desk-voice: the primary's chat pane is not reachable; saving to the mailbox instead
+fm-desk-voice: the primary's chat pane is not reachable; saving to the mailbox instead
+fm-desk-voice: the primary's chat pane is not reachable; saving to the mailbox instead
+fm-desk-voice: the primary's chat pane is not reachable; saving to the mailbox instead
+fm-desk-voice: the primary's chat pane is not reachable; saving to the mailbox instead
+ok - fm-desk-voice send: a pane showing a dialog instead of its chat input gets nothing
+ok - fm-desk-voice send: Claude's dim suggested prompt counts as an empty chat box
+ok - fm-desk-voice send: a Claude draft is set aside, the message sent alone, and the draft put back
+ok - fm-desk-voice send: a stash marker wrapped onto its own footer row is not read as text in the box
+ok - fm-desk-voice send: a draft that is only a pasted-text placeholder is put back and the send confirmed
+fm-desk-voice: the primary's chat pane refused the text; saving it to the mailbox instead
+fm-desk-voice: the chat box did not set the captain's draft aside
+fm-desk-voice: the primary's chat pane refused the text; saving it to the mailbox instead
+ok - fm-desk-voice send: a draft that cannot be set aside safely stays put and the message goes to the mailbox
+ok - fm-desk-voice send: a message that wraps past a 20-row read still goes past a Claude draft
+ok - fm-desk-voice send: a voice-length message is pasted past a Claude draft, shown as one placeholder, and sent
+fm-desk-voice: the primary's chat pane refused the text; saving it to the mailbox instead
+fm-desk-voice: the captain's draft is stashed; Ctrl+S in the chat brings it back
+fm-desk-voice: the primary's chat pane refused the text; saving it to the mailbox instead
+ok - fm-desk-voice send: a long message refused before Enter is cleared and sent to the mailbox
+ok - fm-desk-voice send: a message the chat draws late is waited for, not stashed over the draft
+fm-desk-voice: the paste has not appeared; the draft remains stashed, and no recovery keys were sent
+fm-desk-voice: typed into the primary's chat pane but the submit was not confirmed (unknown)
+fm-desk-voice: the paste has not appeared; the draft remains stashed, and no recovery keys were sent
+fm-desk-voice: typed into the primary's chat pane but the submit was not confirmed (unknown)
+ok - desk send: a paste delayed beyond the proof window never receives recovery Ctrl+S
+fm-desk-voice: the paste has not appeared; the draft remains stashed, and no recovery keys were sent
+fm-desk-voice: typed into the primary's chat pane but the submit was not confirmed (unknown)
+fm-desk-voice: typed into the primary's chat pane but the submit was not confirmed (pending)
+fm-desk-voice: typed into the primary's chat pane but the submit was not confirmed (pending)
+ok - desk send: a message sent over a stashed draft presses Enter once, so the restored draft stays unsent
+fm-desk-voice: typed into the primary's chat pane but the submit was not confirmed (unknown)
+ok - fm-desk-voice send: a message Claude redraws instead of submitting is not reported as sent
+fm-desk-voice: the chat box did not show the captain's draft as stashed, so it was put back
+fm-desk-voice: the primary's chat pane refused the text; saving it to the mailbox instead
+ok - fm-desk-voice send: a draft stashed without a readable marker is put back before the mailbox
+ok - fm-desk-voice send: another harness's half-typed draft is joined and submitted
+ok - fm-inbox note: a new captain note rings the busy primary within seconds and stays queued
+ok - fm-inbox note: the ring never submits a draft, never rings away mode, and falls back to the queue
+ok - desk ring: both backends re-read the payload before every Enter, including retries
+ok - desk ring: a late paste is still proven, even under a dim suggestion, a late redraw gets no retry, and a stash is never rung over
+fm-desk-voice: the primary's chat pane is not reachable; saving to the mailbox instead
+fm-desk-voice: the primary's chat pane is not reachable; saving to the mailbox instead
+ok - desk ring and send: concurrent writers use one lock and release it after delivery
+ok - fm-inbox: ring uses the same .afk and .afk-contract posture as readiness
+ok - fm-desk-voice send: screenshots, alone or with words, are typed into the primary's pane
+fm-desk-voice: the primary's chat pane refused the text; saving it to the mailbox instead
+ok - fm-desk-voice send: screenshots the pane refuses land in the mailbox with the words
+ok - fm-desk-voice send: dictation into the Firstmate chat in front is typed and submitted
+ok - fm-desk-voice send: dictation anywhere but the Firstmate chat in front sends nothing
+fm-desk-voice: the primary's chat pane is not reachable; saving to the mailbox instead
+ok - fm-desk-voice send: dictation into a chat showing a dialog goes to the mailbox
+fm-desk-voice: the primary's chat pane is not reachable; saving to the mailbox instead
+ok - fm-desk-voice send: on tmux, only the active pane shown on the front terminal is in front
+ok - fm-desk-voice send: malformed front arguments are refused
+ok - fm-desk-voice: shot captures the named display into the home's screenshot folder
+ok - fm-desk-voice: shot works with a capture tool that cannot write dot-prefixed file names
+ok - fm-desk-voice: the screenshot folder keeps only the newest images
+ok - fm-desk-voice: a failed capture exits 1 and leaves no screenshot
+ok - fm-desk-voice: screenshots are delivered by path, alone or with the transcript, as one message
+ok - desk floater: Swift tests pass
+ok - fm-deepgram-lib: loads .env key without printing it
+ok - fm-deepgram-tts: reads the voice from .env, the environment wins, else the default
+FM_TEST_END 2026-10-02T21:04:11Z tests/fm-deepgram-desk.test.sh exit=0 duration_ms=249601 gate_skip=false
+FM_TEST_BEGIN 2026-10-02T21:04:11Z tests/fm-inbox.test.sh family=unclassified expected_gate_skip=none
+ok - plain note, list, and wake stay on the historical human path
+ok - plain note keeps exit 1 for a saved-but-unannounced failure
+ok - the same request id returns the original note as a distinguishable replay
+ok - a crash between recording the request id and publishing the note reuses the original id
+ok - saved-but-unannounced notes are repairable without creating a second note
+ok - repair and replay do not wake firstmate for an already-acknowledged note
+ok - receipts JSON is bounded by fixed bounds and discloses what it omitted
+ok - notes that predate the announcement marker are unknown, not re-announced
+ok - the reply channel is durable and its cursor is a strict order
+ok - the reply cursor never goes backwards when the sequence counter is lost
+ok - a reply without a valid sequence is reported as malformed
+ok - a non-UTF-8 note does not break the receipts view
+ok - readiness says unknown (or not-receivable) instead of inferring liveness from a lock
+ok - empty bodies and unsafe request ids are refused
+ok - a note body that opens with a double dash is queued as text
+ok - drain --ack still moves the note to handled
+ok - progress lines publish in order before the one reply and close with it
+FM_TEST_END 2026-10-02T21:04:25Z tests/fm-inbox.test.sh exit=0 duration_ms=14260 gate_skip=false
+FM_TEST_BEGIN 2026-10-02T21:04:25Z tests/fm-second-opinion.test.sh family=unclassified expected_gate_skip=none
+ok - fm-second-opinion --help exits 0
+ok - fm-second-opinion defaults to fable, writes --out, and strips API keys
+ok - fm-second-opinion enforces the Claude Fable floor and proceeds on no or stale reading
+ok - fm-second-opinion runs grok on Cursor and refuses below the effective-availability floor
+ok - fm-second-opinion refuses grok when the Cursor pool cannot be read or is stale
+ok - fm-second-opinion resolves grok's Cursor CLI through the agent alias in ~/.local/bin
+ok - fm-second-opinion keeps sol on its Codex floor
+ok - fm-second-opinion does not invoke the reviewer with the repo as cwd
+ok - fm-second-opinion refuses unknown reviewer names loudly
+ok - fm-second-opinion refuses with 127 when the reviewer CLI is absent
+ok - fm-second-opinion treats empty reviewer output as a loud failure
+FM_TEST_END 2026-10-02T21:04:29Z tests/fm-second-opinion.test.sh exit=0 duration_ms=3575 gate_skip=false
+FM_TEST_SUMMARY total=4 failed=0 skipped_gate=0 duration_ms=316933
+FM_TEST_SUMMARY_FAMILY family=standalone count=1 duration_ms=49002 failed=0
+FM_TEST_SUMMARY_FAMILY family=unclassified count=3 duration_ms=267436 failed=0
+FM_TEST_SLOWEST rank=1 script=tests/fm-deepgram-desk.test.sh duration_ms=249601
+FM_TEST_SLOWEST rank=2 script=tests/fm-command-guard.test.sh duration_ms=49002
+FM_TEST_SLOWEST rank=3 script=tests/fm-inbox.test.sh duration_ms=14260
+FM_TEST_SLOWEST rank=4 script=tests/fm-second-opinion.test.sh duration_ms=3575
+rc=0
