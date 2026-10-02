@@ -273,9 +273,12 @@ autowrap, clips the canonical line instead of wrapping it, and exits as soon as 
 It also exits once that pane stops running the runtime it was launched for, because a pane outlives its
 primary: the captain can quit Codex and start another harness in the same pane, and a reused pane id can
 belong to new work, so pane liveness alone would leave a stale Astra row under a Claude primary.
-That retirement arms only after the companion has positively seen a Codex process behind the pane, using the
-same identity rule the Codex metrics supply binds with, and then needs Codex absent for three consecutive
-refreshes, so the launch window before `exec` and a single failed process read never retire a working row.
+That retirement arms only after the companion has positively seen a Codex process behind the pane, and then
+needs Codex absent for three consecutive refreshes, so the launch window before `exec` and a single failed
+process read never retire a working row.
+Codex counts as behind the pane when the pane's shell or one of its descendants is the Codex CLI, on both
+providers. On herdr that walk starts from `pane process-info`'s `shell_pid` rather than the foreground group the
+metrics supply reads, so a Codex suspended with Ctrl-Z, which hands the foreground to the shell, keeps its row.
 A provider that cannot report pane processes never arms it and keeps the pane-liveness behavior.
 Exiting is the whole retirement: the renderer is the companion pane's only process on both providers, so the
 provider closes the pane itself and the renderer never closes a pane by id.

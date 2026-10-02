@@ -593,6 +593,31 @@ SH
   pass "status bar: herdr companion is session-scoped and exits when its pane is gone"
 }
 
+# install_retire_herdr_process_tree: fake pgrep and ps for a herdr pane whose
+# shell (pid 500) has one child (pid 501). That child is Codex for the first
+# FM_TEST_CODEX_READS identity reads and a different harness afterwards; the
+# read tally lives in FM_TEST_PS_COUNT.
+install_retire_herdr_process_tree() {  # <bin>
+  cat > "$1/pgrep" <<'SH'
+#!/usr/bin/env bash
+[ "${2:-}" != 500 ] || printf '%s\n' 501
+SH
+  cat > "$1/ps" <<'SH'
+#!/usr/bin/env bash
+case " $* " in
+  *" 501 "*|*" 501")
+    n=0
+    [ ! -f "$FM_TEST_PS_COUNT" ] || n=$(<"$FM_TEST_PS_COUNT")
+    n=$((n + 1))
+    printf '%s\n' "$n" > "$FM_TEST_PS_COUNT"
+    if [ "$n" -le "$FM_TEST_CODEX_READS" ]; then printf '%s\n' /opt/codex/bin/codex; else printf '%s\n' /opt/claude/bin/claude; fi
+    ;;
+  *) printf '%s\n' /bin/zsh ;;
+esac
+SH
+  chmod +x "$1/pgrep" "$1/ps"
+}
+
 # A pane outlives its primary: the captain can quit Codex and start another
 # harness in the same pane, or a reused pane id can belong to new work. The
 # pane stays live in both fakes for far longer than the test needs (the cap only
@@ -600,7 +625,7 @@ SH
 # companion noticing that Codex is no longer behind the pane.
 test_herdr_companion_retires_when_its_pane_stops_running_codex() {
   local out rows pane_count="$TMP_ROOT/retire-herdr-pane" proc_count="$TMP_ROOT/retire-herdr-proc"
-  local bin="$TMP_ROOT/retire-herdr-bin"
+  local ps_count="$TMP_ROOT/retire-herdr-ps" bin="$TMP_ROOT/retire-herdr-bin"
   mkdir -p "$bin"
   cat > "$bin/herdr" <<'SH'
 #!/usr/bin/env bash
@@ -621,17 +646,18 @@ case " $* " in
     printf '{"result":{"pane":{"pane_id":"w9:p9"}}}\n'
     ;;
   *" pane process-info "*)
-    if [ "$(bump "$FM_TEST_PROC_COUNT")" -le "$FM_TEST_CODEX_READS" ]; then
-      name=codex
+    if [ "$(bump "$FM_TEST_PROC_COUNT")" -le "$FM_TEST_FG_CODEX_READS" ]; then
+      fg='{"pid":501,"name":"codex","argv0":"codex"}'
     else
-      name=claude
+      fg='{"pid":500,"name":"zsh","argv0":"-zsh"}'
     fi
-    printf '{"result":{"type":"pane_process_info","process_info":{"pane_id":"w9:p9","shell_pid":500,"foreground_processes":[{"pid":501,"name":"%s","argv0":"%s"}]}}}\n' "$name" "$name"
+    printf '{"result":{"type":"pane_process_info","process_info":{"pane_id":"w9:p9","shell_pid":500,"foreground_processes":[%s]}}}\n' "$fg"
     ;;
   *) exit 1 ;;
 esac
 SH
   chmod +x "$bin/herdr"
+  install_retire_herdr_process_tree "$bin"
 
   out=$(PATH="$bin:$FAKEBIN:$PATH" \
     FM_HOME="$HOME_FIX" \
@@ -640,7 +666,8 @@ SH
     FM_STATUS_BAR_INTERVAL=0 \
     FM_STATUS_HERDR_SESSION=default \
     FM_TEST_PANE_COUNT="$pane_count" FM_TEST_PANE_LIVE=40 \
-    FM_TEST_PROC_COUNT="$proc_count" FM_TEST_CODEX_READS=2 \
+    FM_TEST_PROC_COUNT="$proc_count" FM_TEST_FG_CODEX_READS=2 \
+    FM_TEST_PS_COUNT="$ps_count" FM_TEST_CODEX_READS=2 \
     "$ROOT/bin/fm-status-bar.sh" --adapter codex --model gpt-6-astra --effort high \
       --follow-pane w9:p9 --follow-backend herdr | strip_ansi)
   rows=$(printf '%s' "$out" | grep -o '⚓' | grep -c .)
@@ -650,10 +677,29 @@ SH
     || fail "Herdr companion rendered $rows rows; it must retire three refreshes after Codex left its still-live pane"
   [ "$(<"$pane_count")" -lt 40 ] || fail "Herdr companion only stopped because its pane finally disappeared"
 
+  # A Codex suspended with Ctrl-Z hands the foreground to the shell but is
+  # still the shell's child and still the pane's primary, so its row stays
+  # until the pane itself goes.
+  rm -f "$pane_count" "$proc_count" "$ps_count"
+  out=$(PATH="$bin:$FAKEBIN:$PATH" \
+    FM_HOME="$HOME_FIX" \
+    FM_PRIMARY_HARNESS=codex \
+    FM_CODEX_METRICS_ROLLOUT="$TMP_ROOT/no-rollout" \
+    FM_STATUS_BAR_INTERVAL=0 \
+    FM_STATUS_HERDR_SESSION=default \
+    FM_TEST_PANE_COUNT="$pane_count" FM_TEST_PANE_LIVE=8 \
+    FM_TEST_PROC_COUNT="$proc_count" FM_TEST_FG_CODEX_READS=2 \
+    FM_TEST_PS_COUNT="$ps_count" FM_TEST_CODEX_READS=1000 \
+    "$ROOT/bin/fm-status-bar.sh" --adapter codex --model gpt-6-astra --effort high \
+      --follow-pane w9:p9 --follow-backend herdr | strip_ansi)
+  rows=$(printf '%s' "$out" | grep -o '⚓' | grep -c .)
+  [ "$rows" -eq 8 ] \
+    || fail "Herdr companion rendered $rows rows for a suspended Codex; a Codex still behind the pane must keep its row"
+
   # A pane that never showed Codex - the launch window, or a provider that
   # cannot report processes - never arms retirement, so the pane-liveness rule
   # alone still decides when the row goes.
-  rm -f "$pane_count" "$proc_count"
+  rm -f "$pane_count" "$proc_count" "$ps_count"
   out=$(PATH="$bin:$FAKEBIN:$PATH" \
     FM_HOME="$HOME_FIX" \
     FM_PRIMARY_HARNESS=codex \
@@ -661,13 +707,14 @@ SH
     FM_STATUS_BAR_INTERVAL=0 \
     FM_STATUS_HERDR_SESSION=default \
     FM_TEST_PANE_COUNT="$pane_count" FM_TEST_PANE_LIVE=6 \
-    FM_TEST_PROC_COUNT="$proc_count" FM_TEST_CODEX_READS=0 \
+    FM_TEST_PROC_COUNT="$proc_count" FM_TEST_FG_CODEX_READS=0 \
+    FM_TEST_PS_COUNT="$ps_count" FM_TEST_CODEX_READS=0 \
     "$ROOT/bin/fm-status-bar.sh" --adapter codex --model gpt-6-astra --effort high \
       --follow-pane w9:p9 --follow-backend herdr | strip_ansi)
   rows=$(printf '%s' "$out" | grep -o '⚓' | grep -c .)
   [ "$rows" -eq 6 ] \
     || fail "Herdr companion rendered $rows rows for a pane that never showed Codex; retirement must stay unarmed"
-  pass "status bar: herdr companion retires once its live pane stops running Codex, and only after seeing Codex"
+  pass "status bar: herdr companion retires once its live pane stops running Codex, keeps a suspended Codex's row, and arms only after seeing Codex"
 }
 
 # Retiring leaves the primary pane alive, so a zoom the launcher applied would
@@ -676,7 +723,7 @@ SH
 # only the retirement itself can turn the zoom off.
 test_retiring_companion_releases_only_the_zoom_it_owns() {
   local log="$TMP_ROOT/retire-zoom-log" pane_count="$TMP_ROOT/retire-zoom-pane"
-  local proc_count="$TMP_ROOT/retire-zoom-proc" bin="$TMP_ROOT/retire-zoom-bin"
+  local ps_count="$TMP_ROOT/retire-zoom-ps" bin="$TMP_ROOT/retire-zoom-bin"
   mkdir -p "$bin"
   cat > "$bin/herdr" <<'SH'
 #!/usr/bin/env bash
@@ -694,8 +741,7 @@ case " $* " in
     printf '{"result":{"pane":{"pane_id":"w9:p9"}}}\n'
     ;;
   *" pane process-info "*)
-    if [ "$(bump "$FM_TEST_PROC_COUNT")" -le 2 ]; then name=codex; else name=claude; fi
-    printf '{"result":{"type":"pane_process_info","process_info":{"pane_id":"w9:p9","shell_pid":500,"foreground_processes":[{"pid":501,"name":"%s","argv0":"%s"}]}}}\n' "$name" "$name"
+    printf '{"result":{"type":"pane_process_info","process_info":{"pane_id":"w9:p9","shell_pid":500,"foreground_processes":[{"pid":501}]}}}\n'
     ;;
   *" pane layout "*) printf '{"result":{"layout":{"panes":[{},{}]}}}\n' ;;
   *) printf '{}\n' ;;
@@ -703,6 +749,7 @@ esac
 exit 0
 SH
   chmod +x "$bin/herdr"
+  install_retire_herdr_process_tree "$bin"
 
   : > "$log"
   PATH="$bin:$FAKEBIN:$PATH" \
@@ -712,7 +759,7 @@ SH
     FM_STATUS_BAR_INTERVAL=0 \
     FM_STATUS_CHROME_ZOOM_EVERY=1 \
     FM_STATUS_HERDR_SESSION=default \
-    FM_CHROME_LOG="$log" FM_TEST_PANE_COUNT="$pane_count" FM_TEST_PROC_COUNT="$proc_count" \
+    FM_CHROME_LOG="$log" FM_TEST_PANE_COUNT="$pane_count" FM_TEST_PS_COUNT="$ps_count" FM_TEST_CODEX_READS=2 \
     "$ROOT/bin/fm-status-bar.sh" --adapter codex --model gpt-6-astra --effort high \
       --follow-pane w9:p9 --follow-backend herdr \
       --chrome-pane w9:p1 --chrome-role FM --chrome-zoomed >/dev/null
@@ -721,7 +768,7 @@ SH
     || fail "a companion retiring from a live primary pane must release the zoom it owns, exactly once"
   grep -q -- '--on' "$log" && fail "a retiring companion re-applied the zoom"
 
-  rm -f "$pane_count" "$proc_count"
+  rm -f "$pane_count" "$ps_count"
   : > "$log"
   PATH="$bin:$FAKEBIN:$PATH" \
     FM_HOME="$HOME_FIX" \
@@ -730,7 +777,7 @@ SH
     FM_STATUS_BAR_INTERVAL=0 \
     FM_STATUS_CHROME_ZOOM_EVERY=1 \
     FM_STATUS_HERDR_SESSION=default \
-    FM_CHROME_LOG="$log" FM_TEST_PANE_COUNT="$pane_count" FM_TEST_PROC_COUNT="$proc_count" \
+    FM_CHROME_LOG="$log" FM_TEST_PANE_COUNT="$pane_count" FM_TEST_PS_COUNT="$ps_count" FM_TEST_CODEX_READS=2 \
     "$ROOT/bin/fm-status-bar.sh" --adapter codex --model gpt-6-astra --effort high \
       --follow-pane w9:p9 --follow-backend herdr \
       --chrome-pane w9:p1 --chrome-role FM >/dev/null
