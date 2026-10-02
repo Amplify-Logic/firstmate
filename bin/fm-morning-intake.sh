@@ -47,7 +47,8 @@
 #   bin/fm-check-register.sh, so the running watcher executes it on its own slow
 #   cadence and wakes the live primary through the established check path. The
 #   shim runs `check`, which prints one line only while an intake is actually
-#   owed and stays silent once that state has been surfaced. `arm-check` is
+#   owed and stays silent once that state has been surfaced, apart from the
+#   12-hour backstop owned by check_signal below. `arm-check` is
 #   idempotent: re-running it converges on the same registered state, and it
 #   rebinds a shim whose bytes drifted away from the recorded binding. Nothing
 #   re-creates that shim by itself, so `pending` reports it as lost while an
@@ -512,10 +513,13 @@ disarm_check() {
 
 # The watcher contract: print exactly one line when firstmate should wake, print
 # nothing otherwise, and finish well inside FM_CHECK_TIMEOUT. Suppression is by
-# state signature, so a still-owed intake wakes the primary once rather than on
-# every poll; any real state change re-arms the signal.
+# state signature, so a still-owed intake wakes the primary once per state and
+# any real state change re-arms the signal. An unchanged state wakes again at
+# most every CHECK_BACKSTOP seconds, which bounds a wake lost before delivery.
+CHECK_BACKSTOP=43200
+
 check_signal() {
-  local epoch day signature line=
+  local epoch day signature seen line=
   [ "$#" -eq 0 ] || die 'check takes no arguments'
   enabled || return 0
   epoch=$(now_epoch)
@@ -539,8 +543,13 @@ check_signal() {
     *) unlock_state; return 0 ;;
   esac
   signature="$ST_PHASE:$ST_ATTEMPTS:$ST_REARMS:$ST_UPDATED"
-  [ "$ST_SURFACED" != "$signature" ] || { unlock_state; return 0; }
-  ST_SURFACED=$signature
+  seen=${ST_SURFACED##*|}
+  case "$seen" in ''|*[!0-9]*) seen=0 ;; esac
+  if [ "$ST_SURFACED" = "$signature|$seen" ] && [ "$epoch" -ge "$seen" ] && [ $((epoch - seen)) -lt "$CHECK_BACKSTOP" ]; then
+    unlock_state
+    return 0
+  fi
+  ST_SURFACED="$signature|$epoch"
   save_state
   unlock_state
   printf '%s\n' "$line"

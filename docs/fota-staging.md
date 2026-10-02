@@ -86,10 +86,11 @@ Operation identity is therefore computed separately, over what makes two request
 No timestamp, no uuid.
 A deliberate retry raises an explicit **attempt ordinal**, which is part of the key, so an intended retry is a new identity by construction while an accidental repeat is not.
 
-`fm-fota-stage-run.sh start` refuses a second run for an operation that already has a prepared, live, or ready one, naming the existing run.
+`fm-fota-stage-run.sh start` refuses a second run for an operation that already has a recorded attempt, including a settled `unknown`, naming the existing run.
 The guard covers the queue step, so a first attempt that did not land is never quietly enqueued again; a deliberate retry raises the attempt ordinal.
 
-Run ids are claimed with `O_EXCL`, so two starts in one wall-clock second cannot share an id.
+Operation reservation is serialized and durably published before queueing; run ids are also claimed with `O_EXCL`, so overlapping starts cannot enqueue the same attempt or share an id.
+A start that died after claiming its run id but before publishing its record leaves an empty claim; that claim keeps reserving its own operation until it is reconciled, and never blocks another one.
 A settled record is never written over, and a run never adopts an id whose result file already exists - a stale result read as a new run's readback is exactly the evidence loss `unknown` exists to prevent.
 
 ## Delivery: four facts, never collapsed
@@ -188,7 +189,7 @@ Acknowledgement lives on the run record rather than through `bin/fm-decision-hol
 Records and requests are written `0600` under `0700` directories, and settle rewrites a record whole and moves it into place, so a crash cannot leave a half-written record that quietly drops a run off the pane.
 
 **Rollback** is deleting the adapter definition: with no adapter, nothing can be staged.
-Run records live under `state/fota-staging/` and may be removed freely - they are evidence, not state anything depends on.
+Run records live under `state/fota-staging/` and are evidence, and each one is also the reservation that refuses a repeat start of its operation, so removing a record, settled `unknown` included, permits that operation to be queued again.
 Nothing in this capability writes to a device, a production database, or the gateway's audit log.
 
 ## What this is not

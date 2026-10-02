@@ -60,7 +60,8 @@ make_world() {
   export FM_VOICE_IDEA_ANSWER="$tmp/fakes/answer"
   export FM_VOICE_IDEA_ANNOUNCE="$tmp/fakes/announce"
   export FM_VOICE_IDEA_TARTEVO="$tmp/fakes/tartevo"
-  unset FAKE_TARTEVO_MODE FAKE_ANNOUNCE_RC FAKE_ANSWER_FAIL
+  unset FAKE_TARTEVO_MODE FAKE_ANNOUNCE_RC FAKE_ANSWER_FAIL FAKE_ANNOUNCE_MODE
+  unset FM_VOICE_IDEA_SPEAK_TIMEOUT
   : > "$tmp/log/answers.log"
   : > "$tmp/log/announces.log"
   : > "$tmp/log/imports.log"
@@ -102,6 +103,10 @@ PY
 #!/usr/bin/env bash
 [ -n "${GLASSES_RELAY_TOKEN:-}" ] || { echo "announce: no token" >&2; exit 1; }
 printf '%s\n' "$1" >> "$FAKE_LOG_DIR/announces.log"
+case "${FAKE_ANNOUNCE_MODE:-}" in
+  timeout) exec sleep 5 ;;
+  killed) kill -KILL "$PPID"; exit 0 ;;
+esac
 [ "${FAKE_ANNOUNCE_RC:-0}" != 2 ] || echo "announce: refused: reads as a yes/no question" >&2
 exit "${FAKE_ANNOUNCE_RC:-0}"
 SH
@@ -515,6 +520,75 @@ test_a_refused_receipt_wakes_firstmate_and_is_not_marked_spoken() {
   pass "a refused receipt wakes firstmate once and status says it was not spoken"
 }
 
+test_ambiguous_announcement_is_never_replayed() {
+  local mode rc
+  for mode in timeout killed error; do
+    make_world
+    make_wav "$W/audio/hum.wav" 17
+    add_question "$ID1" "What a Life bridge idea" "$W/audio/hum.wav" audio/wav answered
+    export FAKE_ANNOUNCE_MODE="$mode" FM_VOICE_IDEA_SPEAK_TIMEOUT=15
+    [ "$mode" != timeout ] || export FM_VOICE_IDEA_SPEAK_TIMEOUT=1
+    [ "$mode" != error ] || export FAKE_ANNOUNCE_RC=3
+    "$IDEA" take "$ID1" >"$W/log/take.out" 2>"$W/log/take.err" && rc=0 || rc=$?
+    if [ "$mode" = killed ]; then
+      [ "$rc" -ne 0 ] || fail "speech interruption did not fire: $(cat "$W/log/take.out" "$W/log/take.err")"
+    fi
+    unset FAKE_ANNOUNCE_MODE FAKE_ANNOUNCE_RC
+    run_check
+    "$IDEA" deliver >/dev/null 2>&1 || fail 'delivery reconciliation failed'
+    assert_equals 1 "$(wc -l < "$W/log/announces.log" | tr -d ' ')" "$mode must not repeat speech"
+    assert_equals None "$(status_field "$ID1" spoken)" 'unknown speech is neither delivered nor definitely unspoken'
+    assert_contains "$("$IDEA" status)" 'receipt delivery unknown; reconciliation required' 'status names the recovery requirement'
+    assert_contains "$(cat "$FM_HOME/data/voice-ideas/captures/$ID1/said-final")" unknown 'ambiguity remains explicit'
+  done
+  pass 'timeout, nonzero exit, and death after accepted speech never replay it'
+}
+
+# age_markers <capture id>: make every alert marker of a capture 13 hours old.
+age_markers() {
+  python3 - "$FM_HOME/data/voice-ideas/captures/$1" <<'PY'
+import os, sys, time
+from pathlib import Path
+old = time.time() - 13 * 3600
+for marker in Path(sys.argv[1]).glob("*"):
+    if marker.name.startswith(("woke-", "alerted-")):
+        os.utime(marker, (old, old))
+PY
+}
+
+test_a_terminal_alert_is_told_once_and_backfilled_on_upgrade() {
+  local folder
+  make_world
+  make_wav "$W/audio/hum.wav" 18
+  add_question "$ID1" "What a Life bridge idea" "$W/audio/hum.wav"
+  FAKE_TARTEVO_MODE=fail "$IDEA" take "$ID1" >/dev/null 2>&1 || fail 'capture was not held'
+  folder="$FM_HOME/data/voice-ideas/captures/$ID1"
+  export FAKE_ANNOUNCE_RC=2
+  run_check
+  assert_contains "$CHECK_OUT" 'could not be spoken: announce: refused' 'firstmate is told the receipt was refused'
+  age_markers "$ID1"
+  run_check
+  assert_equals "" "$CHECK_OUT" 'a terminal alert is never repeated, even past the backstop'
+  unset FAKE_ANNOUNCE_RC
+
+  # Death after recording the refusal but before its alert marker still tells.
+  rm "$folder/alerted-refused"
+  run_check
+  assert_contains "$CHECK_OUT" 'could not be spoken' 'a terminal state with no alert marker is told'
+  run_check
+  assert_equals "" "$CHECK_OUT" 'and told once'
+
+  # A home from before alerted-* markers: its old refusals are not told again.
+  rm "$folder/alerted-refused" "$FM_HOME/data/voice-ideas/terminal-alerts-backfilled"
+  printf 'glasses idea receipt for What a Life could not be spoken: announce: refused\n' >"$folder/woke-announce"
+  run_check
+  assert_equals "" "$CHECK_OUT" 'the upgrade re-announced a capture already told'
+  assert_present "$folder/alerted-refused" 'the backfill records the old refusal as told'
+  assert_absent "$folder/woke-announce" 'the superseded marker is retired'
+  assert_equals 1 "$(wc -l < "$W/log/announces.log" | tr -d ' ')" 'alerting never retries speech'
+  pass 'a terminal alert is told once per state, and an upgrade does not re-announce old ones'
+}
+
 test_take_refuses_words_that_are_not_an_idea() {
   local rc
   make_world
@@ -537,6 +611,11 @@ test_an_unspoken_receipt_is_retried_and_reported_once() {
   assert_contains "$CHECK_OUT" "receipt for What a Life could not be spoken" "firstmate is told the receipt did not land"
   run_check
   assert_equals "" "$CHECK_OUT" "told once"
+  age_markers "$ID1"
+  run_check
+  assert_contains "$CHECK_OUT" "receipt for What a Life could not be spoken" "a standing problem is re-told after the 12-hour backstop"
+  run_check
+  assert_equals "" "$CHECK_OUT" "and not on every sweep"
   unset FAKE_ANSWER_FAIL
   run_check
   assert_equals answered "$(question_state "$ID1")" "the receipt lands when the mailbox answers again"
@@ -677,6 +756,8 @@ test_the_default_announce_falls_back_to_glasses_voice
 test_an_explicit_announce_wins_over_both_clones
 test_a_refused_receipt_wakes_firstmate_and_is_not_marked_spoken
 test_take_refuses_words_that_are_not_an_idea
+test_ambiguous_announcement_is_never_replayed
+test_a_terminal_alert_is_told_once_and_backfilled_on_upgrade
 test_an_unspoken_receipt_is_retried_and_reported_once
 test_arm_registers_a_check_the_watcher_can_run
 test_real_artevo_import_files_once

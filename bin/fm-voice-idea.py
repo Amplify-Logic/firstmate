@@ -82,13 +82,16 @@ Environment (all optional; defaults are this home's glasses and Artevo setup):
 State (private, per home, 0700): data/voice-ideas/
   songs.json                  last Artevo song list read, used when the inbox is away
   by-hash/<sha256>            the first capture id that held these bytes
+  terminal-alerts-backfilled  terminal captures held before alerted-* were recorded as told
   captures/<capture id>/      capture.json, the audio, then as they happen:
     delivered.json            the inbox file name this capture was handed over as
     outcome.json              the receipt, a duplicate verdict, or a failure (final)
     attempt.json              the last reason the desk could not be reached
     answered, answer-lost     whether the mailbox question got this script's answer
-    said-final                how the final line ended: answer, announce, or refused
-    woke-*                    a wake line already printed for that problem
+    said-final                how the final line ended: answer, announce, refused, unknown
+    announce-attempt.json     durable intent before speech; unknown is never replayed
+    woke-*                    an unresolved problem's wake line, repeated at most every 12 hours
+    alerted-<state>           a terminal alert (failed, refused, unknown) already printed, once
 
 Exit codes: 0 ok, 1 error, 2 usage, 3 not an idea.
 """
@@ -256,13 +259,22 @@ def ensure_private_dir(path: Path) -> None:
         pass
 
 
-def write_atomic(path: Path, text: str, mode: int = 0o600) -> None:
+def write_atomic(path: Path, text: str, mode: int = 0o600, *, durable: bool = False) -> None:
     fd, tmp = tempfile.mkstemp(prefix=f".{path.name}.", dir=str(path.parent))
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as handle:
             handle.write(text)
+            if durable:
+                handle.flush()
+                os.fsync(handle.fileno())
         os.chmod(tmp, mode)
         os.replace(tmp, path)
+        if durable:
+            directory = os.open(path.parent, os.O_RDONLY)
+            try:
+                os.fsync(directory)
+            finally:
+                os.close(directory)
     except BaseException:
         try:
             os.unlink(tmp)
@@ -309,6 +321,7 @@ class SpoolLock:
         while True:
             try:
                 fcntl.flock(self.handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                backfill_terminal_alerts(self.paths)
                 return self
             except BlockingIOError:
                 if time.monotonic() >= deadline:
@@ -818,8 +831,17 @@ def answer(ctx: Context, ident: str, line: str) -> tuple[str, str]:
     return "retry", why
 
 
-def announce(ctx: Context, line: str) -> tuple[str, str]:
-    """Speak a later line: ``("spoken" | "refused" | "retry", why)``."""
+def announce(ctx: Context, ident: str, line: str) -> tuple[str, str]:
+    """Reserve speech before invoking a transport with no idempotency receipt.
+
+    Only definite failure to start permits retry. A crash, timeout, or other
+    ambiguous exit leaves an unknown outcome for reconciliation, never replay.
+    """
+    attempt = ctx.paths.captures / ident / "announce-attempt.json"
+    if attempt.exists():
+        prior = read_json(attempt) or {}
+        return str(prior.get("outcome") or "unknown"), str(prior.get("reason") or
+            "announcement delivery is unknown; reconcile before any manual retry")
     paths = ctx.paths
     env = _speak_env(paths)
     if env is None:
@@ -827,21 +849,26 @@ def announce(ctx: Context, line: str) -> tuple[str, str]:
     timeout = ctx.timeout(paths.speak_timeout)
     if timeout is None:
         return "retry", NO_TIME
+    write_atomic(attempt, dump({"line": line, "outcome": "unknown", "at": now_iso()}), durable=True)
     try:
         done = subprocess.run(
             [str(paths.announce_cli), line],
             capture_output=True, text=True, timeout=timeout, env=env, stdin=subprocess.DEVNULL,
         )
     except subprocess.TimeoutExpired:
-        return "retry", "the announcement took too long"
+        return "unknown", "announcement delivery is unknown after timeout; reconcile before any manual retry"
     except OSError as exc:
+        attempt.unlink()
         return "retry", f"the announcement could not start ({exc.strerror or exc})"
     why = _last_line(done)
     if done.returncode == 0:
-        return "spoken", ""
-    if done.returncode == 2:
-        return "refused", why
-    return "retry", why
+        verdict, why = "spoken", ""
+    elif done.returncode == 2:
+        verdict = "refused"
+    else:
+        verdict, why = "unknown", f"announcement delivery is unknown ({why}); reconcile before any manual retry"
+    write_atomic(attempt, dump({"line": line, "outcome": verdict, "reason": why, "at": now_iso()}), durable=True)
+    return verdict, why
 
 
 # -- one capture, moved as far forward as it can go --------------------------------
@@ -851,9 +878,79 @@ def _marker(paths: Paths, ident: str, name: str) -> Path:
     return paths.captures / ident / name
 
 
+WAKE_BACKSTOP_SECONDS = 12 * 60 * 60
+
+
 def _wake_once(paths: Paths, ident: str, kind: str, line: str, wakes: list) -> None:
-    if write_once(_marker(paths, ident, f"woke-{kind}"), line + "\n"):
+    """Wake once per unresolved problem, then at most every WAKE_BACKSTOP_SECONDS.
+
+    The backstop bounds a wake lost before the watcher delivered it without
+    turning a standing problem into a wake on every sweep.
+    """
+    marker = _marker(paths, ident, f"woke-{kind}")
+    try:
+        age = time.time() - marker.stat().st_mtime
+    except FileNotFoundError:
+        age = None
+    if age is not None and 0 <= age < WAKE_BACKSTOP_SECONDS:
+        return
+    write_atomic(marker, line + "\n")
+    wakes.append(line)
+
+
+def _alert_once(paths: Paths, ident: str, state: str, line: str, wakes: list) -> None:
+    """A terminal alert is printed once per capture and terminal state."""
+    if write_once(_marker(paths, ident, f"alerted-{state}"), line + "\n"):
         wakes.append(line)
+
+
+def terminal_alerts(paths: Paths, meta: dict) -> list:
+    """The ``(state, line)`` alerts this capture's terminal states call for."""
+    folder = paths.captures / meta["capture_id"]
+    song = meta.get("song") or "that song"
+    alerts = []
+    outcome = read_json(folder / "outcome.json") or {}
+    if outcome.get("kind") == "failed":
+        alerts.append(("failed", f"glasses idea for {song} could not be filed: {outcome.get('line')}"))
+    state, _, reason = _said_final(folder).partition(":")
+    if state not in ("refused", "unknown"):
+        speech = read_json(folder / "announce-attempt.json") or {}
+        state, reason = str(speech.get("outcome") or ""), str(speech.get("reason") or "")
+    if state in ("refused", "unknown"):
+        reason = reason.strip() or "announcement delivery is unknown; reconciliation required"
+        alerts.append((state, f"glasses idea receipt for {song} could not be spoken: {reason}"))
+    return alerts
+
+
+def backfill_terminal_alerts(paths: Paths) -> None:
+    """Count terminal captures held before alerted-* markers as already told."""
+    done = paths.spool / "terminal-alerts-backfilled"
+    if done.exists():
+        return
+    for meta in all_captures(paths):
+        for state, line in terminal_alerts(paths, meta):
+            write_once(_marker(paths, meta["capture_id"], f"alerted-{state}"), line + "\n")
+    write_once(done, now_iso() + "\n")
+
+
+def pending_wakes(paths: Paths, wakes: list) -> None:
+    """Surface terminal alerts a crash left untold, and re-wake standing problems."""
+    for meta in all_captures(paths):
+        ident = meta["capture_id"]
+        folder = paths.captures / ident
+        for state, line in terminal_alerts(paths, meta):
+            _alert_once(paths, ident, state, line, wakes)
+        for marker in sorted(folder.glob("woke-*")):
+            kind = marker.name[5:]
+            if ((kind == "waiting" and (folder / "outcome.json").exists()) or
+                (kind == "answer" and ((folder / "answered").exists() or (folder / "answer-lost").exists())) or
+                (kind == "announce" and (folder / "said-final").exists()) or
+                kind not in ("waiting", "answer", "announce")):
+                marker.unlink()
+                continue
+            line = marker.read_text(encoding="utf-8").strip()
+            if line:
+                _wake_once(paths, ident, kind, line, wakes)
 
 
 def duplicate_outcome(paths: Paths, meta: dict) -> dict:
@@ -894,7 +991,7 @@ def advance(ctx: Context, ident: str, wakes: list) -> dict:
             _wake_once(paths, ident, "waiting",
                        f"glasses idea for {song} is saved but waiting for the desk: {waiting}", wakes)
     elif outcome.get("kind") == "failed":
-        _wake_once(paths, ident, "failed",
+        _alert_once(paths, ident, "failed",
                    f"glasses idea for {song} could not be filed: {outcome.get('line')}", wakes)
 
     if (folder / "said-final").exists():
@@ -919,12 +1016,12 @@ def advance(ctx: Context, ident: str, wakes: list) -> dict:
                        f"glasses idea receipt for {song} could not be spoken: {why}", wakes)
             return {"capture": meta, "outcome": outcome}
     if final:
-        verdict, why = announce(ctx, line)
+        verdict, why = announce(ctx, ident, line)
         if verdict == "spoken":
             write_once(folder / "said-final", "announce\n")
-        elif verdict == "refused":
-            write_once(folder / "said-final", f"refused: {why}\n")
-            _wake_once(paths, ident, "announce",
+        elif verdict in ("refused", "unknown"):
+            write_once(folder / "said-final", f"{verdict}: {why}\n")
+            _alert_once(paths, ident, verdict,
                        f"glasses idea receipt for {song} could not be spoken: {why}", wakes)
         elif why != NO_TIME:
             _wake_once(paths, ident, "announce",
@@ -1049,6 +1146,7 @@ def cmd_check(_args: argparse.Namespace, paths: Paths) -> int:
                     advance(ctx, ident, wakes)
                 except Failure:
                     continue
+            pending_wakes(paths, wakes)
     except Exception as exc:  # the watcher discards stderr, so a crash must still say so
         wakes.append(f"glasses ideas could not be checked: {exc}")
     if wakes:
@@ -1068,6 +1166,9 @@ def _status_row(paths: Paths, meta: dict) -> dict:
     folder = paths.captures / meta["capture_id"]
     outcome = read_json(folder / "outcome.json")
     attempt = read_json(folder / "attempt.json")
+    final = _said_final(folder)
+    speech = read_json(folder / "announce-attempt.json") or {}
+    delivery_unknown = final.startswith("unknown:") or speech.get("outcome") == "unknown"
     if outcome is None:
         state, detail = "waiting", (attempt or {}).get("reason") or "not tried yet"
     else:
@@ -1079,7 +1180,7 @@ def _status_row(paths: Paths, meta: dict) -> dict:
         "note": meta.get("note"),
         "state": state,
         "detail": detail,
-        "spoken": _said_final(folder) in ("answer", "announce"),
+        "spoken": None if delivery_unknown else final in ("answer", "announce"),
     }
 
 
@@ -1093,7 +1194,10 @@ def cmd_status(args: argparse.Namespace, paths: Paths) -> int:
         return EXIT_OK
     for row in rows:
         label = "waiting for the desk" if row["state"] == "waiting" else row["state"]
-        spoken = "" if row["spoken"] or row["state"] == "waiting" else " (receipt not spoken yet)"
+        if row["spoken"] is None:
+            spoken = " (receipt delivery unknown; reconciliation required)"
+        else:
+            spoken = "" if row["spoken"] or row["state"] == "waiting" else " (receipt not spoken yet)"
         print(f"{row['spoken_at']}  {row['song']}  {label}: {row['detail']}{spoken}  [{row['capture_id']}]")
     return EXIT_OK
 

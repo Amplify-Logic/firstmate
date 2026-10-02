@@ -962,6 +962,46 @@ test_arm_check_leaves_no_unregistered_shim() {
   pass 'arming the live check is all-or-nothing and idempotent, and losing it is reported with its repair'
 }
 
+test_a_held_alert_with_nothing_due_wakes_once_per_state() {
+  local h out offset
+  h="$TMP_ROOT/check-held-idle"
+  new_home "$h"
+  sed -i.bak -e 's/^notify_recipient_verified = true$/notify_recipient_verified = false/' \
+    -e 's/^interval_seconds = 900$/interval_seconds = 86400/' "$h/config/channel-intake"
+  rm -f "$h/config/channel-intake.bak"
+
+  at "$h" "$T_0900" observe --source C_BRIEF --ref out-1 \
+    --digest 'the dispenser at site 12 is down' --class outage \
+    --title 'service outage at site 12' >/dev/null
+  at "$h" "$T_0900" claim >/dev/null
+  at "$h" "$T_0900" complete --source C_BRIEF --checkpoint c-1 >/dev/null
+  at "$h" "$T_0900" complete --source M_ACTION --checkpoint m-1 >/dev/null
+
+  out=$(at "$h" "$T_0900" check)
+  assert_contains "$out" '1 item(s) blocked' 'the held alert did not wake the primary'
+  assert_not_contains "$out" 'due to read' 'an idle due set was reported as due'
+
+  # Watcher sweeps every 300s must not turn an unchanged held alert into a nag.
+  for offset in 300 600 3600 21600 43199; do
+    out=$(at "$h" $((T_0900 + offset)) check)
+    [ -z "$out" ] || fail "an unchanged held alert woke the primary again after ${offset}s: $out"
+  done
+
+  # A wake lost before delivery is bounded by the 12-hour backstop, once.
+  out=$(at "$h" $((T_0900 + 43200)) check)
+  assert_contains "$out" '1 item(s) blocked' 'the backstop did not re-wake an unchanged held alert'
+  out=$(at "$h" $((T_0900 + 43500)) check)
+  [ -z "$out" ] || fail "the backstop became a wake loop: $out"
+
+  # A changed signature wakes at once, inside the backstop window.
+  at "$h" $((T_0900 + 43800)) observe --source M_ACTION --ref m-99 \
+    --digest 'the permit expires on friday' --class deadline \
+    --title 'permit renewal deadline' >/dev/null
+  out=$(at "$h" $((T_0900 + 43800)) check)
+  assert_contains "$out" '2 item(s) blocked' 'a changed held alert was suppressed by the backstop'
+  pass 'a held alert with nothing due wakes once per state, with a 12-hour backstop'
+}
+
 test_check_signals_once_per_state() {
   local h out
   h="$TMP_ROOT/check"
@@ -1864,6 +1904,7 @@ test_no_existing_fleet_is_overridden
 test_local_configuration_stays_private
 test_arm_check_leaves_no_unregistered_shim
 test_check_signals_once_per_state
+test_a_held_alert_with_nothing_due_wakes_once_per_state
 test_a_held_alert_does_not_become_a_wake_loop
 test_a_replaced_alert_still_wakes_the_primary
 test_blocked_notifications_are_visible_rather_than_silent
