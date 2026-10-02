@@ -82,6 +82,7 @@ Environment (all optional; defaults are this home's glasses and Artevo setup):
 State (private, per home, 0700): data/voice-ideas/
   songs.json                  last Artevo song list read, used when the inbox is away
   by-hash/<sha256>            the first capture id that held these bytes
+  terminal-alerts-backfilled  terminal captures held before alerted-* were recorded as told
   captures/<capture id>/      capture.json, the audio, then as they happen:
     delivered.json            the inbox file name this capture was handed over as
     outcome.json              the receipt, a duplicate verdict, or a failure (final)
@@ -89,7 +90,8 @@ State (private, per home, 0700): data/voice-ideas/
     answered, answer-lost     whether the mailbox question got this script's answer
     said-final                how the final line ended: answer, announce, refused, unknown
     announce-attempt.json     durable intent before speech; unknown is never replayed
-    woke-*                    pending alert and last emission time (300-second lease)
+    woke-*                    an unresolved problem's wake line, repeated at most every 12 hours
+    alerted-<state>           a terminal alert (failed, refused, unknown) already printed, once
 
 Exit codes: 0 ok, 1 error, 2 usage, 3 not an idea.
 """
@@ -319,6 +321,7 @@ class SpoolLock:
         while True:
             try:
                 fcntl.flock(self.handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                backfill_terminal_alerts(self.paths)
                 return self
             except BlockingIOError:
                 if time.monotonic() >= deadline:
@@ -875,42 +878,77 @@ def _marker(paths: Paths, ident: str, name: str) -> Path:
     return paths.captures / ident / name
 
 
+WAKE_BACKSTOP_SECONDS = 12 * 60 * 60
+
+
 def _wake_once(paths: Paths, ident: str, kind: str, line: str, wakes: list) -> None:
+    """Wake once per unresolved problem, then at most every WAKE_BACKSTOP_SECONDS.
+
+    The backstop bounds a wake lost before the watcher delivered it without
+    turning a standing problem into a wake on every sweep.
+    """
     marker = _marker(paths, ident, f"woke-{kind}")
-    prior = read_json(marker) or {}
-    now = time.time()
-    emitted = prior.get("emitted_at")
-    if isinstance(emitted, (int, float)) and 0 <= now - emitted < 300:
+    try:
+        age = time.time() - marker.stat().st_mtime
+    except FileNotFoundError:
+        age = None
+    if age is not None and 0 <= age < WAKE_BACKSTOP_SECONDS:
         return
-    # This is a retry lease, not an acknowledgement. Losing stdout or the
-    # watcher's capture cannot suppress an unresolved alert permanently.
-    write_atomic(marker, dump({"line": line, "emitted_at": now}))
+    write_atomic(marker, line + "\n")
     wakes.append(line)
 
 
+def _alert_once(paths: Paths, ident: str, state: str, line: str, wakes: list) -> None:
+    """A terminal alert is printed once per capture and terminal state."""
+    if write_once(_marker(paths, ident, f"alerted-{state}"), line + "\n"):
+        wakes.append(line)
+
+
+def terminal_alerts(paths: Paths, meta: dict) -> list:
+    """The ``(state, line)`` alerts this capture's terminal states call for."""
+    folder = paths.captures / meta["capture_id"]
+    song = meta.get("song") or "that song"
+    alerts = []
+    outcome = read_json(folder / "outcome.json") or {}
+    if outcome.get("kind") == "failed":
+        alerts.append(("failed", f"glasses idea for {song} could not be filed: {outcome.get('line')}"))
+    state, _, reason = _said_final(folder).partition(":")
+    if state not in ("refused", "unknown"):
+        speech = read_json(folder / "announce-attempt.json") or {}
+        state, reason = str(speech.get("outcome") or ""), str(speech.get("reason") or "")
+    if state in ("refused", "unknown"):
+        reason = reason.strip() or "announcement delivery is unknown; reconciliation required"
+        alerts.append((state, f"glasses idea receipt for {song} could not be spoken: {reason}"))
+    return alerts
+
+
+def backfill_terminal_alerts(paths: Paths) -> None:
+    """Count terminal captures held before alerted-* markers as already told."""
+    done = paths.spool / "terminal-alerts-backfilled"
+    if done.exists():
+        return
+    for meta in all_captures(paths):
+        for state, line in terminal_alerts(paths, meta):
+            write_once(_marker(paths, meta["capture_id"], f"alerted-{state}"), line + "\n")
+    write_once(done, now_iso() + "\n")
+
+
 def pending_wakes(paths: Paths, wakes: list) -> None:
-    """Revisit alerts even when speech has reached a terminal outcome."""
+    """Surface terminal alerts a crash left untold, and re-wake standing problems."""
     for meta in all_captures(paths):
         ident = meta["capture_id"]
         folder = paths.captures / ident
-        final = _said_final(folder)
-        speech = read_json(folder / "announce-attempt.json") or {}
-        if final.startswith(("unknown:", "refused:")) or speech.get("outcome") in ("unknown", "refused"):
-            # Death after recording the speech outcome but before its alert
-            # marker (or midway through said-final) must still surface it.
-            reason = final.split(":", 1)[1].strip() if ":" in final else str(speech.get("reason") or
-                "announcement delivery is unknown; reconciliation required")
-            _wake_once(paths, ident, "announce",
-                       f"glasses idea receipt for {meta.get('song') or 'that song'} could not be spoken: {reason}", wakes)
+        for state, line in terminal_alerts(paths, meta):
+            _alert_once(paths, ident, state, line, wakes)
         for marker in sorted(folder.glob("woke-*")):
             kind = marker.name[5:]
             if ((kind == "waiting" and (folder / "outcome.json").exists()) or
                 (kind == "answer" and ((folder / "answered").exists() or (folder / "answer-lost").exists())) or
-                (kind == "announce" and _said_final(folder) in ("answer", "announce"))):
+                (kind == "announce" and (folder / "said-final").exists()) or
+                kind not in ("waiting", "answer", "announce")):
                 marker.unlink()
                 continue
-            prior = read_json(marker)
-            line = str(prior.get("line") or "") if prior else marker.read_text(encoding="utf-8").strip()
+            line = marker.read_text(encoding="utf-8").strip()
             if line:
                 _wake_once(paths, ident, kind, line, wakes)
 
@@ -953,7 +991,7 @@ def advance(ctx: Context, ident: str, wakes: list) -> dict:
             _wake_once(paths, ident, "waiting",
                        f"glasses idea for {song} is saved but waiting for the desk: {waiting}", wakes)
     elif outcome.get("kind") == "failed":
-        _wake_once(paths, ident, "failed",
+        _alert_once(paths, ident, "failed",
                    f"glasses idea for {song} could not be filed: {outcome.get('line')}", wakes)
 
     if (folder / "said-final").exists():
@@ -983,7 +1021,7 @@ def advance(ctx: Context, ident: str, wakes: list) -> dict:
             write_once(folder / "said-final", "announce\n")
         elif verdict in ("refused", "unknown"):
             write_once(folder / "said-final", f"{verdict}: {why}\n")
-            _wake_once(paths, ident, "announce",
+            _alert_once(paths, ident, verdict,
                        f"glasses idea receipt for {song} could not be spoken: {why}", wakes)
         elif why != NO_TIME:
             _wake_once(paths, ident, "announce",

@@ -463,22 +463,26 @@ test_pre_claim_failure_spends_an_attempt() {
   pass 'a failure recorded before any claim spends an attempt, so pre-claim failures cannot re-arm forever'
 }
 
-# An unregistered shim is worse than no shim: bin/fm-watch.sh rejects it and
-# wakes the primary about it on every sweep.
-test_lost_check_output_is_retried_after_lease() {
+test_lost_check_output_is_retried_after_backstop() {
   local h out
   h="$TMP_ROOT/check-lost"
   new_home "$h"
   at "$h" "$T_0700" run >/dev/null
   at "$h" "$T_0700" fail --reason 'fixture failure' >/dev/null
   at "$h" "$T_0700" check >/dev/null
-  out=$(at "$h" $((T_0700 + 60)) check)
-  [ -z "$out" ] || fail 'lease did not bound duplicate warnings'
-  out=$(at "$h" $((T_0700 + 301)) check)
+  out=$(at "$h" $((T_0700 + 300)) check)
+  [ -z "$out" ] || fail "an unchanged failure woke the primary on the next sweep: $out"
+  out=$(at "$h" $((T_0700 + 43199)) check)
+  [ -z "$out" ] || fail "an unchanged failure woke the primary inside the backstop: $out"
+  out=$(at "$h" $((T_0700 + 43200)) check)
   assert_contains "$out" 'fixture failure' 'lost morning wake was permanently suppressed'
-  pass 'an unresolved morning failure is retried after lost watcher output'
+  out=$(at "$h" $((T_0700 + 43500)) check)
+  [ -z "$out" ] || fail "the backstop became a wake loop: $out"
+  pass 'an unresolved morning failure is re-woken only by the 12-hour backstop'
 }
 
+# An unregistered shim is worse than no shim: bin/fm-watch.sh rejects it and
+# wakes the primary about it on every sweep.
 test_arm_check_leaves_no_unregistered_shim() {
   local h out code
   h="$TMP_ROOT/armfail"
@@ -979,7 +983,7 @@ test_no_existing_fleet_is_overridden
 test_state_writes_are_serialized
 test_pre_claim_failure_spends_an_attempt
 test_arm_check_leaves_no_unregistered_shim
-test_lost_check_output_is_retried_after_lease
+test_lost_check_output_is_retried_after_backstop
 test_unresolvable_timezone_is_refused
 test_rearm_starts_a_new_day_with_a_fresh_budget
 test_both_schedules_share_one_launchd_writer

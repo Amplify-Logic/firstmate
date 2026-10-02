@@ -544,35 +544,49 @@ test_ambiguous_announcement_is_never_replayed() {
   pass 'timeout, nonzero exit, and death after accepted speech never replay it'
 }
 
-test_lost_wake_for_terminal_receipt_is_retried() {
+# age_markers <capture id>: make every alert marker of a capture 13 hours old.
+age_markers() {
+  python3 - "$FM_HOME/data/voice-ideas/captures/$1" <<'PY'
+import os, sys, time
+from pathlib import Path
+old = time.time() - 13 * 3600
+for marker in Path(sys.argv[1]).glob("*"):
+    if marker.name.startswith(("woke-", "alerted-")):
+        os.utime(marker, (old, old))
+PY
+}
+
+test_a_terminal_alert_is_told_once_and_backfilled_on_upgrade() {
+  local folder
   make_world
   make_wav "$W/audio/hum.wav" 18
   add_question "$ID1" "What a Life bridge idea" "$W/audio/hum.wav"
   FAKE_TARTEVO_MODE=fail "$IDEA" take "$ID1" >/dev/null 2>&1 || fail 'capture was not held'
+  folder="$FM_HOME/data/voice-ideas/captures/$ID1"
   export FAKE_ANNOUNCE_RC=2
-  # Drop the producer pipe: even though its markers were persisted, no watcher
-  # could have accepted its output. The terminal receipt must still resurface.
-  python3 - "$IDEA" <<'PYDROP'
-import subprocess, sys
-p = subprocess.Popen([sys.argv[1], "check"], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
-p.stdout.close()
-p.wait(timeout=20)
-PYDROP
   run_check
-  assert_equals "" "$CHECK_OUT" 'lease bounds immediate repeat alerts'
-  python3 - "$FM_HOME/data/voice-ideas/captures/$ID1/woke-announce" <<'PYAGE'
-import json, sys
-from pathlib import Path
-p = Path(sys.argv[1]); value = json.loads(p.read_text()); value["emitted_at"] = 0
-p.write_text(json.dumps(value))
-PYAGE
+  assert_contains "$CHECK_OUT" 'could not be spoken: announce: refused' 'firstmate is told the receipt was refused'
+  age_markers "$ID1"
   run_check
-  assert_contains "$CHECK_OUT" 'could not be spoken' 'lost terminal alert is retried'
-  assert_equals 1 "$(wc -l < "$W/log/announces.log" | tr -d ' ')" 'retrying an alert never retries speech'
-  rm "$FM_HOME/data/voice-ideas/captures/$ID1/woke-announce"
+  assert_equals "" "$CHECK_OUT" 'a terminal alert is never repeated, even past the backstop'
+  unset FAKE_ANNOUNCE_RC
+
+  # Death after recording the refusal but before its alert marker still tells.
+  rm "$folder/alerted-refused"
   run_check
-  assert_contains "$CHECK_OUT" 'could not be spoken' 'final speech evidence repairs a missing alert marker'
-  pass 'lost stdout is retried for terminal captures without repeating speech'
+  assert_contains "$CHECK_OUT" 'could not be spoken' 'a terminal state with no alert marker is told'
+  run_check
+  assert_equals "" "$CHECK_OUT" 'and told once'
+
+  # A home from before alerted-* markers: its old refusals are not told again.
+  rm "$folder/alerted-refused" "$FM_HOME/data/voice-ideas/terminal-alerts-backfilled"
+  printf 'glasses idea receipt for What a Life could not be spoken: announce: refused\n' >"$folder/woke-announce"
+  run_check
+  assert_equals "" "$CHECK_OUT" 'the upgrade re-announced a capture already told'
+  assert_present "$folder/alerted-refused" 'the backfill records the old refusal as told'
+  assert_absent "$folder/woke-announce" 'the superseded marker is retired'
+  assert_equals 1 "$(wc -l < "$W/log/announces.log" | tr -d ' ')" 'alerting never retries speech'
+  pass 'a terminal alert is told once per state, and an upgrade does not re-announce old ones'
 }
 
 test_take_refuses_words_that_are_not_an_idea() {
@@ -597,6 +611,11 @@ test_an_unspoken_receipt_is_retried_and_reported_once() {
   assert_contains "$CHECK_OUT" "receipt for What a Life could not be spoken" "firstmate is told the receipt did not land"
   run_check
   assert_equals "" "$CHECK_OUT" "told once"
+  age_markers "$ID1"
+  run_check
+  assert_contains "$CHECK_OUT" "receipt for What a Life could not be spoken" "a standing problem is re-told after the 12-hour backstop"
+  run_check
+  assert_equals "" "$CHECK_OUT" "and not on every sweep"
   unset FAKE_ANSWER_FAIL
   run_check
   assert_equals answered "$(question_state "$ID1")" "the receipt lands when the mailbox answers again"
@@ -738,7 +757,7 @@ test_an_explicit_announce_wins_over_both_clones
 test_a_refused_receipt_wakes_firstmate_and_is_not_marked_spoken
 test_take_refuses_words_that_are_not_an_idea
 test_ambiguous_announcement_is_never_replayed
-test_lost_wake_for_terminal_receipt_is_retried
+test_a_terminal_alert_is_told_once_and_backfilled_on_upgrade
 test_an_unspoken_receipt_is_retried_and_reported_once
 test_arm_registers_a_check_the_watcher_can_run
 test_real_artevo_import_files_once

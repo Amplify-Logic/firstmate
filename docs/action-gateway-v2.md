@@ -116,12 +116,14 @@ The broker opens the safe sink's own receipt store read-only and looks for the r
 | What the broker observes in the sink | Settled state |
 |---|---|
 | The exact expected record | `succeeded` |
-| No committed receipt for this operation | `unknown`, reconciliation required |
+| No record for this operation | `failed` - nothing was applied |
 | A record that does not match this plan | `unknown`, reconciliation required |
 | The store cannot be read | `unknown`, reconciliation required |
 
 The executor's claimed outcome is recorded in the audit event as `executor_claimed_outcome` and never decides the state.
-An executor that reports success without a matching receipt settles `unknown`; absence cannot prove that an interrupted or still-running apply had no effect.
+An executor that reports success it did not achieve settles `failed` or `unknown`, whichever the store actually supports.
+The runner settles only after it has reaped the executor, and the sink commits each effect atomically with its receipt, so an absent receipt at settlement means nothing was applied.
+A runner that dies before reaping its executor never settles; its lease expires and the request records `unknown`, reconciliation required.
 A settle arriving after the lease expired is refused and leaves the recorded `unknown` in place, so a late return can never resurrect a terminal state.
 
 Status reports a `settlement` word alongside the state, because "approved", "queued", "sent" and "applied" are different facts:

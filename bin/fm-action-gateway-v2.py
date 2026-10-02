@@ -1548,8 +1548,10 @@ def observed_sink_record(idempotency_key: str) -> Tuple[str, Optional[str]]:
     try:
         os.stat(path)
     except FileNotFoundError:
-        # Absence is only an observation at this instant. Settlement cannot
-        # infer no effect after an interrupted or still-running executor.
+        # The sink creates its root and its store on first use, so no store
+        # means the sink has never applied anything - including this request.
+        # Reporting that as unreadable would make the very first execution need
+        # reconciliation it does not need.
         return "absent", None
     except OSError:
         # A store this process is not permitted to look at is a different fact
@@ -1690,7 +1692,7 @@ def settle_execution(db: sqlite3.Connection, request_id: str, lease: Any, claime
         if presence == "present" and observed == execution["expected_record_digest"]:
             outcome, reason = "succeeded", "sink holds exactly the record this approved plan resolves to"
         elif presence == "absent":
-            outcome, reason = "unknown", "sink has no committed receipt; an interrupted or still-running apply requires reconciliation"
+            outcome, reason = "failed", "sink holds no record for this operation, so nothing was applied"
         elif presence == "present":
             outcome, reason = "unknown", "sink holds a record that does not match this approved plan"
         else:

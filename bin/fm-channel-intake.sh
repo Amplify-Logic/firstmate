@@ -2146,8 +2146,9 @@ todo_cmd() {
 
 # The watcher contract: one line when firstmate should wake, nothing otherwise,
 # finishing well inside FM_CHECK_TIMEOUT. Suppression is by signature, so an
-# unchanged state is suppressed for at most 300 seconds. Stdout is not a
-# durable watcher acknowledgement; a lost line must become eligible again.
+# unchanged state wakes the primary once rather than on every poll. Stdout is
+# not a durable watcher acknowledgement, so an unchanged state wakes again at
+# most every CHECK_BACKSTOP seconds to bound a wake lost before delivery.
 #
 # Due sources and notifiable items are two independent conditions and each
 # carries its own signature and its own marker. One combined snapshot would
@@ -2165,6 +2166,7 @@ todo_cmd() {
 # forever and the live wake path fires once in the life of the home.
 CHECK_DUE_FILE_NAME='check-surfaced-due'
 CHECK_NOTIFY_FILE_NAME='check-surfaced-notify'
+CHECK_BACKSTOP=43200
 
 check_signal() {
   local epoch due count notify notify_token line='' progress wake=false
@@ -2186,7 +2188,7 @@ check_signal() {
     due_signature="$count:$progress"
     saved=$(read_line_file "$due_file"); seen=${saved##*|}
     case "$seen" in ''|*[!0-9]*) seen=0 ;; esac
-    if [ "$saved" != "$due_signature|$seen" ] || [ "$epoch" -lt "$seen" ] || [ $((epoch - seen)) -ge 300 ]; then
+    if [ "$saved" != "$due_signature|$seen" ] || [ "$epoch" -lt "$seen" ] || [ $((epoch - seen)) -ge "$CHECK_BACKSTOP" ]; then
       wake=true
     fi
     line="$CFG_LABEL: $count source(s) due to read"
@@ -2195,7 +2197,7 @@ check_signal() {
     notify_signature="$notify_token:$notify:$(notify_identity "$epoch")"
     saved=$(read_line_file "$notify_file"); seen=${saved##*|}
     case "$seen" in ''|*[!0-9]*) seen=0 ;; esac
-    if [ "$saved" != "$notify_signature|$seen" ] || [ "$epoch" -lt "$seen" ] || [ $((epoch - seen)) -ge 300 ]; then
+    if [ "$saved" != "$notify_signature|$seen" ] || [ "$epoch" -lt "$seen" ] || [ $((epoch - seen)) -ge "$CHECK_BACKSTOP" ]; then
       wake=true
     fi
     line="${line:-$CFG_LABEL:}${line:+,} $notify item(s) $(notify_state_phrase "$notify_token")"
