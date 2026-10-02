@@ -26,7 +26,9 @@ On a borderline call, the orchestrator offers rather than silently spending or s
 Never set or require `ANTHROPIC_API_KEY` or `OPENAI_API_KEY`; the wrapper strips ambient ones so every reviewer stays on its subscription.
 Before invoking, the wrapper reads the reviewer's pool from `quota-axi --json`, prints one advisory stderr line, and refuses below a floor of 10% remaining unless `FM_SECOND_OPINION_FORCE=1`.
 The pool per reviewer, and how an unavailable reading is handled, are listed in the wrapper's header.
-For `fable` and `sol`, missing or unparseable quota tooling prints a warning and proceeds, so quota tooling trouble never blocks the review by itself.
+For `grok` the reading is quota-axi's all-model effective availability for Cursor, the lowest of the windows bounding a non-Auto run, so one empty sub-pool refuses even while the combined included pool still reads high.
+A reading quota-axi marks stale counts as unavailable.
+For `fable` and `sol`, missing, unparseable, or stale quota readings print a warning and proceed, so quota tooling trouble never blocks the review by itself.
 `grok` is the exception: once Cursor's included pool is empty a run draws the paid API balance, so it refuses on an unavailable reading as well as a low one unless `FM_SECOND_OPINION_FORCE=1`.
 
 ## Neutral working directory (required)

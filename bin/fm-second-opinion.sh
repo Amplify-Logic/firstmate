@@ -35,12 +35,14 @@
 #   quota-axi --json) is below FM_SECOND_OPINION_QUOTA_FLOOR (default 10)
 #   unless FM_SECOND_OPINION_FORCE=1. Pools per reviewer (lowest window wins):
 #     fable -> claude model:fable and seven_day
-#     grok  -> cursor included_usage
+#     grok  -> cursor all_models effective availability (quota-axi's lowest
+#              bounding window: included_usage, auto_usage, api_usage)
 #     sol   -> codex five_hour and weekly
 #     k3    -> none
-#   An unavailable reading warns and proceeds, except for grok, which refuses
-#   without FM_SECOND_OPINION_FORCE=1: once Cursor's included pool is empty a
-#   run draws the paid API balance, so an unknown reading must not spend it.
+#   A reading marked stale counts as unavailable. An unavailable reading warns
+#   and proceeds, except for grok, which refuses without
+#   FM_SECOND_OPINION_FORCE=1: once Cursor's included pool is empty a run draws
+#   the paid API balance, so an unknown reading must not spend it.
 #
 # Exit:
 #   0 on success
@@ -48,6 +50,10 @@
 #   127 when the reviewer binary is absent
 #   otherwise propagates the reviewer process exit code
 set -eu
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=bin/fm-cursor-lib.sh
+. "$SCRIPT_DIR/fm-cursor-lib.sh"
 
 FM_SECOND_OPINION_MAX_PROMPT_BYTES=${FM_SECOND_OPINION_MAX_PROMPT_BYTES:-100000}
 FM_SECOND_OPINION_QUOTA_FLOOR=${FM_SECOND_OPINION_QUOTA_FLOOR:-10}
@@ -85,13 +91,16 @@ EOF
 
 # Resolve a registry name into REVIEWER_LABEL, REVIEWER_BIN_NAME, REVIEWER_ARGS
 # (bash array of argv after the binary; the prompt is appended as the final
-# argv), and the quota pool: QUOTA_PROVIDER and QUOTA_WINDOWS (space-separated
-# quota-axi window ids, lowest percentRemaining wins; empty means no floor),
-# QUOTA_POOL (human label), and QUOTA_UNAVAILABLE (proceed|refuse). Add verified
-# reviewers here only; callers stay unchanged.
+# argv), and the quota pool: QUOTA_PROVIDER and either QUOTA_WINDOWS
+# (space-separated quota-axi window ids, lowest percentRemaining wins) or
+# QUOTA_SCOPE (a quotaSemantics.effectiveAvailability scope whose known
+# effectivePercentRemaining is read), QUOTA_POOL (human label), and
+# QUOTA_UNAVAILABLE (proceed|refuse). No QUOTA_PROVIDER means no floor. Add
+# verified reviewers here only; callers stay unchanged.
 resolve_reviewer() {
   QUOTA_PROVIDER=
   QUOTA_WINDOWS=
+  QUOTA_SCOPE=
   QUOTA_POOL=
   QUOTA_UNAVAILABLE=proceed
   case "$1" in
@@ -111,11 +120,14 @@ resolve_reviewer() {
       ;;
     grok)
       # Cursor agent print mode, read-only ask mode, on Cursor's included pool.
+      # The floor reads quota-axi's all-model effective availability, which is
+      # the lowest of every window bounding a non-Auto run, so an empty sub-pool
+      # refuses even while the combined included pool still reads high.
       REVIEWER_LABEL='grok'
       REVIEWER_BIN_NAME=cursor-agent
       REVIEWER_ARGS=(-p --model grok-4.7-xhigh --mode ask --trust)
       QUOTA_PROVIDER=cursor
-      QUOTA_WINDOWS='included_usage'
+      QUOTA_SCOPE='all_models'
       QUOTA_POOL='Cursor included usage'
       QUOTA_UNAVAILABLE=refuse
       ;;
@@ -141,10 +153,12 @@ resolve_reviewer() {
   esac
 }
 
-# Print the lowest percentRemaining across QUOTA_WINDOWS for QUOTA_PROVIDER, or
-# "na" when tooling is absent or unparseable or no listed window reports a
-# number. Model-kind windows count only under their own model:<name> id, so a
-# per-model window can never stand in for a general one. Never exits non-zero.
+# Print the lowest percentRemaining across QUOTA_WINDOWS, or the lowest known
+# effectivePercentRemaining for QUOTA_SCOPE, for QUOTA_PROVIDER; or "na" when
+# tooling is absent or unparseable, any matching provider row is stale, or
+# nothing listed reports a number. Model-kind windows count only under their own
+# model:<name> id, so a per-model window can never stand in for a general one.
+# Never exits non-zero.
 pool_remaining() {
   local quota_cmd quota_json
   if [ -n "${FM_SECOND_OPINION_QUOTA_JSON:-}" ]; then
@@ -168,14 +182,23 @@ pool_remaining() {
     }
   fi
   printf '%s\n' "$quota_json" | jq -r --arg provider "$QUOTA_PROVIDER" \
-    --arg ids "$QUOTA_WINDOWS" '
+    --arg ids "$QUOTA_WINDOWS" --arg scope "$QUOTA_SCOPE" '
     ($ids | split(" ") | map(select(length > 0))) as $wanted
-    | ([.providers[]? | select(.provider == $provider) | .windows[]? as $window
-      | select(($wanted | index($window.id)) != null
-        and ((($window.kind? // "") != "model")
-          or (($window.id | tostring) | startswith("model:")))
-        and (($window.percentRemaining? | type) == "number"))
-      | $window.percentRemaining] | if length == 0 then "na" else min end)
+    | [.providers[]? | select(.provider == $provider)] as $rows
+    | if any($rows[]; .state.stale? == true) then "na"
+      elif $scope != "" then
+        ([$rows[] | .quotaSemantics.effectiveAvailability[]?
+          | select(.scope == $scope and .status == "known"
+            and ((.effectivePercentRemaining? | type) == "number"))
+          | .effectivePercentRemaining] | if length == 0 then "na" else min end)
+      else
+        ([$rows[] | .windows[]? as $window
+          | select(($wanted | index($window.id)) != null
+            and ((($window.kind? // "") != "model")
+              or (($window.id | tostring) | startswith("model:")))
+            and (($window.percentRemaining? | type) == "number"))
+          | $window.percentRemaining] | if length == 0 then "na" else min end)
+      end
   ' 2>/dev/null || printf 'na\n'
 }
 
@@ -292,7 +315,9 @@ fi
 
 REVIEWER_BIN=${FM_SECOND_OPINION_BIN:-}
 if [ -z "$REVIEWER_BIN" ]; then
-  if ! REVIEWER_BIN=$(command -v "$REVIEWER_BIN_NAME" 2>/dev/null); then
+  if [ "$REVIEWER_BIN_NAME" = cursor-agent ]; then
+    REVIEWER_BIN=$(fm_cursor_resolve_binary) || refuse_missing_cli "$REVIEWER_BIN_NAME"
+  elif ! REVIEWER_BIN=$(command -v "$REVIEWER_BIN_NAME" 2>/dev/null); then
     refuse_missing_cli "$REVIEWER_BIN_NAME"
   fi
 elif [ ! -x "$REVIEWER_BIN" ]; then

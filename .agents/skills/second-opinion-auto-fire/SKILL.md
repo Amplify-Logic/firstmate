@@ -62,6 +62,6 @@ Never hide a spend behind a quiet improvement in the answer.
 
 - Never set or require `ANTHROPIC_API_KEY` or `OPENAI_API_KEY`; the wrapper strips ambient keys and keeps each reviewer on its subscription.
 - The wrapper must run the reviewer from a neutral working directory; never launch a reviewer CLI such as `claude -p` or `cursor-agent -p` from the firstmate checkout or a project clone for this purpose.
-- Grok runs draw Cursor's included pool, and the paid API balance once that pool is empty; the wrapper refuses a Grok run when the included pool is below its floor or unreadable, and that spend is the captain's call, never a bypass to invent.
+- Grok runs draw Cursor's included pool, and the paid API balance once that pool is empty; the wrapper refuses a Grok run when Cursor's effective availability (the lowest window bounding a non-Auto run) is below its floor, unreadable, or stale, and that spend is the captain's call, never a bypass to invent.
 - Second-opinion output is evidence for the decision, not authorization to change code, open a PR, or merge.
 - Quota below the wrapper floor is a loud refusal unless `FM_SECOND_OPINION_FORCE=1`; relay that refusal rather than inventing a bypass.

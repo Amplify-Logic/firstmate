@@ -4,10 +4,12 @@
 # Covers happy-path --out header writes for the default fable reviewer and the
 # grok and sol reviewers, the hostile-review prompt reaching the reviewer,
 # neutral-cwd enforcement, unknown reviewer refusal, per-reviewer quota floors
-# plus FM_SECOND_OPINION_FORCE override, grok's refusal on an unavailable
-# reading, ambient API-key stripping, and empty reviewer output as a loud
-# failure. Every reviewer binary is stubbed so the suite never spends a real
-# model run.
+# plus FM_SECOND_OPINION_FORCE override, grok's floor on Cursor's all-model
+# effective availability, grok's refusal on an unavailable or stale reading,
+# grok resolving the Cursor CLI through its alias and ~/.local/bin fallback,
+# ambient API-key stripping, and empty reviewer output as a loud failure. Every
+# reviewer binary is stubbed and HOME is a per-case directory, so the suite
+# never finds or spends a real model run.
 set -u
 
 # shellcheck source=tests/lib.sh
@@ -18,25 +20,42 @@ TMP=$(fm_test_tmproot fm-second-opinion)
 BASE_PATH=${FM_TEST_BASE_PATH:-/usr/bin:/bin:/usr/sbin:/sbin}
 
 # write_quota_fixture <path> <codex five_hour> <claude model:fable>
-#   <claude seven_day> <cursor included_usage>
-# Pass "-" to omit a window. Cursor api_usage is always 90 and Claude five_hour
-# always 1, so a reviewer reading the wrong window is caught.
+#   <claude seven_day> <cursor included_usage> [cursor api_usage] [stale provider]
+# Pass "-" to omit a window. Cursor api_usage defaults to 90 and Claude
+# five_hour is always 1, so a reviewer reading the wrong window is caught.
+# Cursor's all_models effective availability is the lower of included_usage and
+# api_usage, as quota-axi reports it, and is unknown without included_usage.
+# The named stale provider is served as a stale cached snapshot.
 write_quota_fixture() {
-  local path=$1 codex=$2 fable=$3 week=$4 included=$5
-  local codex_w='' claude_w='' cursor_w=''
+  local path=$1 codex=$2 fable=$3 week=$4 included=$5 api=${6:-90} stale=${7:--}
+  local codex_w='' claude_w='' cursor_w='' cursor_eff
   [ "$codex" = - ] || codex_w=$(printf '{"id":"five_hour","kind":"session","percentRemaining":%s},{"id":"model:sol","kind":"model","percentRemaining":1}' "$codex")
   claude_w='{"id":"five_hour","kind":"session","percentRemaining":1}'
   [ "$fable" = - ] || claude_w+=$(printf ',{"id":"model:fable","kind":"model","percentRemaining":%s}' "$fable")
   [ "$week" = - ] || claude_w+=$(printf ',{"id":"seven_day","kind":"weekly","percentRemaining":%s}' "$week")
-  cursor_w='{"id":"api_usage","kind":"monthly","percentRemaining":90}'
-  [ "$included" = - ] || cursor_w+=$(printf ',{"id":"included_usage","kind":"monthly","percentRemaining":%s}' "$included")
+  cursor_w=$(printf '{"id":"api_usage","kind":"monthly","percentRemaining":%s}' "$api")
+  if [ "$included" = - ]; then
+    cursor_eff='{"scope":"all_models","status":"unknown","boundedBy":["included_usage","api_usage"]}'
+  else
+    cursor_w+=$(printf ',{"id":"included_usage","kind":"monthly","percentRemaining":%s}' "$included")
+    cursor_eff=$(printf '{"scope":"all_models","status":"known","effectivePercentRemaining":%s,"boundedBy":["included_usage","api_usage"]}' \
+      "$(( included < api ? included : api ))")
+  fi
+  state() {
+    if [ "$1" = "$stale" ]; then
+      printf '{ "status": "stale", "stale": true }'
+    else
+      printf '{ "status": "fresh", "stale": false }'
+    fi
+  }
   cat >"$path" <<JSON
 {
-  "schemaVersion": 2,
+  "schemaVersion": 5,
   "providers": [
-    { "provider": "codex", "windows": [${codex_w}], "state": { "status": "fresh" } },
-    { "provider": "claude", "windows": [${claude_w}], "state": { "status": "fresh" } },
-    { "provider": "cursor", "windows": [${cursor_w}], "state": { "status": "fresh" } }
+    { "provider": "codex", "windows": [${codex_w}], "state": $(state codex) },
+    { "provider": "claude", "windows": [${claude_w}], "state": $(state claude) },
+    { "provider": "cursor", "windows": [${cursor_w}], "state": $(state cursor),
+      "quotaSemantics": { "status": "known", "effectiveAvailability": [${cursor_eff}] } }
   ]
 }
 JSON
@@ -73,8 +92,8 @@ SH
 }
 
 # run_so <dir> <quota-json-or-empty> [extra env assignments...] -- <wrapper args...>
-# Runs the wrapper with only the stub fakebin ahead of the base PATH and the
-# per-case argv/cwd logs; sets RUN_OUT and RUN_RC.
+# Runs the wrapper with only the stub fakebin ahead of the base PATH, HOME at
+# <dir>/home, and the per-case argv/cwd logs; sets RUN_OUT and RUN_RC.
 run_so() {
   local dir=$1 quota=$2
   shift 2
@@ -88,6 +107,7 @@ run_so() {
   RUN_OUT=$(
     env -u FM_SECOND_OPINION_BIN -u FM_SECOND_OPINION_FORCE \
       PATH="$dir/fakebin:$BASE_PATH" \
+      HOME="$dir/home" \
       FM_SECOND_OPINION_QUOTA_JSON="$quota" \
       FM_SECOND_OPINION_QUOTA_AXI=quota-axi-absent \
       FM_SECOND_OPINION_TEST_ARGV_LOG="$dir/argv.txt" \
@@ -173,7 +193,15 @@ test_fable_quota_floor() {
   expect_code 0 "$RUN_RC" "fable: unavailable reading proceeds"
   assert_contains "$RUN_OUT" 'Claude Fable week reading unavailable; proceeding' \
     "fable: unavailable reading warns"
-  pass "fm-second-opinion enforces the Claude Fable floor and proceeds on no reading"
+
+  write_quota_fixture "$dir/stale.json" 80 60 60 50 90 claude
+  run_so "$dir" "$dir/stale.json" -- --out "$dir/out-stale.md" -- "stale claude reading"
+  expect_code 0 "$RUN_RC" "fable: stale reading proceeds"
+  assert_contains "$RUN_OUT" 'Claude Fable week reading unavailable; proceeding' \
+    "fable: stale reading counts as unavailable"
+  assert_not_contains "$RUN_OUT" 'percentRemaining=60' \
+    "fable: stale reading is not presented as live"
+  pass "fm-second-opinion enforces the Claude Fable floor and proceeds on no or stale reading"
 }
 
 test_grok_happy_path_and_floor() {
@@ -190,7 +218,7 @@ test_grok_happy_path_and_floor() {
   assert_contains "$(cat "$dir/argv.txt")" 'Check threading, concurrency' \
     "grok: concurrency and retry rule reaches the reviewer"
   assert_contains "$RUN_OUT" 'Cursor included usage percentRemaining=15' \
-    "grok: advisory reads included_usage"
+    "grok: advisory reads the all-model effective availability"
 
   write_quota_fixture "$dir/low.json" 80 89 42 6
   run_so "$dir" "$dir/low.json" -- --reviewer grok --out "$dir/out-low.md" -- "pool nearly empty"
@@ -199,12 +227,19 @@ test_grok_happy_path_and_floor() {
     "grok: included-pool refusal message"
   assert_absent "$dir/out-low.md" "grok: no --out when refusing"
 
+  write_quota_fixture "$dir/low-api.json" 80 89 42 50 4
+  run_so "$dir" "$dir/low-api.json" -- --reviewer grok --out "$dir/out-low-api.md" -- "api sub-pool empty"
+  expect_code 1 "$RUN_RC" "grok: low api_usage refuses despite a high included pool"
+  assert_contains "$RUN_OUT" 'Cursor included usage percentRemaining 4 is below floor 10' \
+    "grok: bounding-window refusal message"
+  assert_absent "$dir/out-low-api.md" "grok: no --out when a bounding window is low"
+
   run_so "$dir" "$dir/low.json" FM_SECOND_OPINION_FORCE=1 -- \
     --reviewer grok --out "$dir/out-force.md" -- "pool nearly empty forced"
   expect_code 0 "$RUN_RC" "grok: FORCE overrides the floor"
   assert_contains "$(cat "$dir/out-force.md")" 'hostile review body' \
     "grok: forced run writes review"
-  pass "fm-second-opinion runs grok on Cursor and refuses below the included-pool floor"
+  pass "fm-second-opinion runs grok on Cursor and refuses below the effective-availability floor"
 }
 
 test_grok_refuses_unavailable_reading() {
@@ -224,12 +259,38 @@ test_grok_refuses_unavailable_reading() {
   expect_code 1 "$RUN_RC" "grok: absent quota tooling refuses"
   assert_absent "$dir/out-tool.md" "grok: no --out without quota tooling"
 
+  write_quota_fixture "$dir/stale.json" 80 89 42 15 90 cursor
+  run_so "$dir" "$dir/stale.json" -- --reviewer grok --out "$dir/out-stale.md" -- "stale cursor reading"
+  expect_code 1 "$RUN_RC" "grok: stale reading refuses"
+  assert_contains "$RUN_OUT" 'Cursor included usage reading unavailable' \
+    "grok: stale reading counts as unavailable"
+  assert_absent "$dir/argv.txt" "grok: reviewer never launched on a stale reading"
+  assert_absent "$dir/out-stale.md" "grok: no --out on a stale reading"
+
   run_so "$dir" "$dir/none.json" FM_SECOND_OPINION_FORCE=1 -- \
     --reviewer grok --out "$dir/out-force.md" -- "no included reading forced"
   expect_code 0 "$RUN_RC" "grok: FORCE overrides an unavailable reading"
   assert_contains "$RUN_OUT" 'reading unavailable but FM_SECOND_OPINION_FORCE=1' \
     "grok: forced unavailable advisory"
-  pass "fm-second-opinion refuses grok when the Cursor included pool cannot be read"
+  pass "fm-second-opinion refuses grok when the Cursor pool cannot be read or is stale"
+}
+
+test_grok_resolves_cursor_alias_in_local_bin() {
+  local dir="$TMP/grok-alias" install
+  fm_fakebin "$dir" >/dev/null
+  install="$dir/home/.local/share/cursor-agent/versions/1.0.0"
+  mkdir -p "$install" "$dir/home/.local/bin"
+  install_reviewer_stub "$install" cursor-agent ok
+  ln -s "$install/cursor-agent" "$dir/home/.local/bin/agent"
+  write_quota_fixture "$dir/quota.json" 80 89 42 50
+
+  run_so "$dir" "$dir/quota.json" -- --reviewer grok --out "$dir/out.md" -- "alias only off PATH"
+  expect_code 0 "$RUN_RC" "grok: agent alias in ~/.local/bin runs"
+  assert_contains "$(cat "$dir/out.md")" 'hostile review body' \
+    "grok: alias-resolved run writes review"
+  assert_contains "$(cat "$dir/argv.txt")" '-p --model grok-4.7-xhigh --mode ask --trust' \
+    "grok: alias receives the cursor-agent invocation"
+  pass "fm-second-opinion resolves grok's Cursor CLI through the agent alias in ~/.local/bin"
 }
 
 test_sol_still_available_with_codex_floor() {
@@ -325,6 +386,7 @@ test_default_fable_happy_path
 test_fable_quota_floor
 test_grok_happy_path_and_floor
 test_grok_refuses_unavailable_reading
+test_grok_resolves_cursor_alias_in_local_bin
 test_sol_still_available_with_codex_floor
 test_neutral_cwd_not_repo
 test_unknown_reviewer_refused
