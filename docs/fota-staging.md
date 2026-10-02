@@ -189,7 +189,7 @@ Acknowledgement lives on the run record rather than through `bin/fm-decision-hol
 Records and requests are written `0600` under `0700` directories, and settle rewrites a record whole and moves it into place, so a crash cannot leave a half-written record that quietly drops a run off the pane.
 
 **Rollback** is deleting the adapter definition: with no adapter, nothing can be staged.
-Run records live under `state/fota-staging/` and may be removed freely - they are evidence, not state anything depends on.
+Run records live under `state/fota-staging/` and are evidence, and each one is also the reservation that refuses a repeat start of its operation, so removing a record, settled `unknown` included, permits that operation to be queued again.
 Nothing in this capability writes to a device, a production database, or the gateway's audit log.
 
 ## What this is not
