@@ -628,6 +628,45 @@ companion_pane_alive() {
   [ "$resolved" = "$FOLLOW_PANE" ]
 }
 
+# companion_runtime_present: 0 iff a Codex process is behind the followed pane.
+# tmux answers through the metrics supply's own lookup, which already walks the
+# pane shell's descendants. Herdr's lookup reads only the pane's foreground
+# group, so here it is walked from the pane's shell_pid instead: a Codex the
+# captain suspends with Ctrl-Z hands the foreground to the shell but is still
+# the pane's primary, and retiring its bar then would lose it for good after
+# `fg`. The walk and the identity rule are the tmux arm's.
+companion_runtime_present() {
+  local shell_pid frontier next p c pids
+  if [ "$FOLLOW_BACKEND" != herdr ]; then
+    [ -n "$(_fm_codex_pane_pids "$FOLLOW_PANE" "$FOLLOW_BACKEND" "${FM_STATUS_HERDR_SESSION:-}" 2>/dev/null)" ]
+    return
+  fi
+  shell_pid=$(herdr --session "$FM_STATUS_HERDR_SESSION" pane process-info --pane "$FOLLOW_PANE" 2>/dev/null \
+    | jq -r --arg pane "$FOLLOW_PANE" '
+        select(.result.type == "pane_process_info")
+        | select(.result.process_info.pane_id == $pane)
+        | .result.process_info.shell_pid | select(type == "number" and . > 1) | floor
+      ' 2>/dev/null)
+  case "$shell_pid" in
+    ''|*[!0-9]*) return 1 ;;
+  esac
+  pids="$shell_pid"
+  frontier="$shell_pid"
+  for _ in 1 2 3 4 5; do
+    next=
+    for p in $frontier; do
+      for c in $(pgrep -P "$p" 2>/dev/null); do next="$next $c"; done
+    done
+    [ -n "$next" ] || break
+    pids="$pids$next"
+    frontier=$next
+  done
+  for p in $pids; do
+    ! _fm_codex_is_codex_pid "$p" || return 0
+  done
+  return 1
+}
+
 # companion_runtime_retired: 0 once the followed pane has stopped running the
 # runtime this companion was launched for, even though the pane itself is
 # still there. A pane outlives its primary: the captain can quit Codex and start
@@ -636,7 +675,7 @@ companion_pane_alive() {
 # under a Claude primary - on screen indefinitely.
 #
 # Retirement is armed only after the runtime has been positively seen behind
-# the pane, through the same Codex identity rule the metrics supply binds with.
+# the pane (companion_runtime_present).
 # Before that the launcher is still on its way to exec'ing the runtime, and a
 # provider that cannot report pane processes at all never arms it, which keeps
 # the pre-existing pane-liveness behavior rather than retiring a working bar.
@@ -648,7 +687,7 @@ RUNTIME_SEEN=0
 RUNTIME_MISSES=0
 companion_runtime_retired() {
   [ "$ADAPTER" = codex ] && [ "$CODEX_METRICS_READY" = 1 ] || return 1
-  if [ -n "$(_fm_codex_pane_pids "$FOLLOW_PANE" "$FOLLOW_BACKEND" "${FM_STATUS_HERDR_SESSION:-}" 2>/dev/null)" ]; then
+  if companion_runtime_present; then
     RUNTIME_SEEN=1
     RUNTIME_MISSES=0
     return 1
