@@ -13,8 +13,6 @@
 #       Detect-only: it never installs, upgrades, or removes anything.
 #   fm-computer-use.sh pin
 #       Print the pinned Peekaboo version.
-#   fm-computer-use.sh install-url
-#       Print the release page of the pinned version.
 #   fm-computer-use.sh install
 #       Download the pinned macOS arm64 release, verify its sha256 against the
 #       digest pinned here, unpack it into ~/.local/lib/peekaboo/<pin>/ and link
@@ -37,18 +35,29 @@
 #   fm-computer-use.sh facts
 #       Print the screen state the guard reads, as one JSON object:
 #       frontmost_app, frontmost_bundle, focused_role, focused_label, dialogs
-#       (app, title, text, buttons), idle_seconds (since the last real keyboard
-#       or mouse input), microphone_in_use.
-#   fm-computer-use.sh guard --app <app> [--field <text>] [--allow-dialog <kind>]... [--quiet <s>] [--facts <file>]
-#       The focus and dialog guard, run immediately before any step that needs
-#       the front window. Prints "allow: ..." and exits 0, or prints
+#       (app, title, text, buttons), idle_seconds (since the last keyboard or
+#       mouse input), microphone_in_use, desk_transcription_in_flight (a
+#       bin/fm-deepgram-stt.sh process is running, so a finished desk dictation
+#       may still be pasted where the cursor is).
+#   fm-computer-use.sh guard --app <app> [--activate] [--field <text>] [--allow-dialog <kind>]... [--quiet <s>] [--wait <s>] [--facts <file>]...
+#       The focus and dialog guard, run immediately before each foreground
+#       batch: one contiguous run of steps that need the front window, sent at
+#       once after the guard. Prints "allow: ..." and exits 0, or prints
 #       "refuse: <reason>" and exits 1. It refuses when the frontmost app is
-#       not <app> (name or bundle id), when real keyboard or mouse input
-#       happened in the last --quiet seconds (default 3), when the microphone
-#       is in use (dictation or a call), when a dialog is open whose kind is not
-#       named by --allow-dialog, or when --field is given and the focused
-#       element does not contain that text. A screen state it cannot read is a
-#       refusal. --facts reads the state from a file instead of the screen.
+#       not <app> (name or bundle id), when the microphone is in use (dictation
+#       or a call), when a desk dictation is being transcribed, when a dialog
+#       is open whose kind is not named by --allow-dialog, or when --field is
+#       given and the focused element does not contain that text. When
+#       keyboard or mouse input happened in the last --quiet seconds (default
+#       3) it waits for that quiet window, for up to --wait whole seconds
+#       (default 8), and refuses only if input keeps arriving.
+#       --activate is the way to bring a running <app> to the front: it first
+#       checks the input quiet window, the microphone, transcription and dialogs
+#       while the current app is still in front, then activates <app>, then
+#       re-checks that <app> is in front, the microphone, transcription,
+#       dialogs and --field. A screen state it cannot read is a refusal.
+#       --facts reads the state from a file instead of the screen; given more
+#       than once, each later read takes the next file and the last repeats.
 #   fm-computer-use.sh dialog-kind <text>
 #       Classify dialog text as one of: privacy, save, replace, destructive,
 #       quit, other. A dialog of any kind but other is answered only when the
@@ -58,17 +67,18 @@
 # timeout, 4 install failure.
 #
 # Facts come from System Events (frontmost app, focused element, dialogs of the
-# frontmost app and of the system prompt hosts), IOHIDSystem's HIDIdleTime, and
-# CoreAudio's "device is running somewhere" flag on the default input device.
+# frontmost app and of the system prompt hosts), IOHIDSystem's HIDIdleTime,
+# CoreAudio's "device is running somewhere" flag on the default input device,
+# and pgrep for the desk floater's transcription process.
 # They need the Accessibility and Automation (System Events) grants the
 # terminal running Firstmate already holds for screen work; nothing here asks
 # for a new permission. Background input that Peekaboo posts to an app's
 # process does not reset HIDIdleTime; input posted to the global event tap
-# (cliclick, osascript keystroke) does.
+# (cliclick, osascript keystroke, a foreground batch) does, so the guard cannot
+# tell the automation's own input from the captain's.
 set -u
 
 PEEKABOO_PIN=4.5.0
-PEEKABOO_RELEASE_URL="https://github.com/openclaw/Peekaboo/releases/tag/v$PEEKABOO_PIN"
 PEEKABOO_TARBALL_URL="https://github.com/openclaw/Peekaboo/releases/download/v$PEEKABOO_PIN/peekaboo-macos-arm64.tar.gz"
 PEEKABOO_TARBALL_SHA256=a65323e5c79a0094c860199c86f99248c60955d9803ac2fa7a62b18494186beb
 
@@ -356,7 +366,7 @@ FACTS_JXA='function run() {
 }'
 
 cmd_facts() {
-  local ui idle mic
+  local ui idle mic stt
   need_python
   command -v osascript >/dev/null 2>&1 || { echo "fm-computer-use.sh: facts need macOS (osascript)" >&2; return 1; }
   ui=$(osascript -l JavaScript -e "$FACTS_JXA" 2>/dev/null) || { echo "fm-computer-use.sh: System Events did not answer" >&2; return 1; }
@@ -385,11 +395,17 @@ except Exception:
     print("null")
 PY
 )
-  python3 - "$ui" "${idle:-}" "$mic" <<'PY'
+  if pgrep -f 'fm-deepgram-stt[.]sh' >/dev/null 2>&1; then
+    stt=true
+  else
+    case $? in 1) stt=false ;; *) stt=null ;; esac
+  fi
+  python3 - "$ui" "${idle:-}" "$mic" "$stt" <<'PY'
 import json, sys
 ui = json.loads(sys.argv[1])
 ui["idle_seconds"] = float(sys.argv[2]) if sys.argv[2] else None
 ui["microphone_in_use"] = {"true": True, "false": False}.get(sys.argv[3])
+ui["desk_transcription_in_flight"] = {"true": True, "false": False}.get(sys.argv[4])
 print(json.dumps(ui))
 PY
 }
@@ -421,33 +437,24 @@ cmd_dialog_kind() {
   classify "$*"
 }
 
-cmd_guard() {
-  local app="" field="" quiet=3 facts_file="" allowed="" facts kind dialog_text
-  while [ $# -gt 0 ]; do
-    case "$1" in
-      --app) app=${2:-}; shift 2 ;;
-      --field) field=${2:-}; shift 2 ;;
-      --quiet) quiet=${2:-}; shift 2 ;;
-      --facts) facts_file=${2:-}; shift 2 ;;
-      --allow-dialog)
-        case "${2:-}" in
-          privacy|save|replace|destructive|quit|other) allowed="$allowed ${2}" ;;
-          *) die_usage "guard: --allow-dialog takes privacy, save, replace, destructive, quit or other" ;;
-        esac
-        shift 2 ;;
-      *) die_usage "guard: unknown argument $1" ;;
-    esac
-  done
-  [ -n "$app" ] || die_usage "guard: --app is required"
-  case "$quiet" in ''|*[!0-9.]*) die_usage "guard: --quiet must be seconds" ;; esac
-  need_python
-  if [ -n "$facts_file" ]; then
-    facts=$(cat "$facts_file" 2>/dev/null) || { echo "refuse: could not read the screen state ($facts_file unreadable)"; return 1; }
-  else
-    facts=$(cmd_facts 2>/dev/null) || { echo "refuse: could not read the screen state"; return 1; }
-  fi
+ACTIVATE_SCRIPT='on run argv
+  set target to item 1 of argv
+  tell application "System Events"
+    set matches to (every process whose name is target or bundle identifier is target)
+    if (count of matches) is 0 then error "no running process " & target
+    set frontmost of item 1 of matches to true
+  end tell
+end run'
+
+# guard_decide <phase> <facts> <app> <field> <quiet> <wait> <allowed>: one
+# decision on one screen read. Phase front: <app> must already be in front.
+# Phase before: the read before --activate, whatever app is in front. Phase
+# after: the read after --activate, where input recency is not checked. Exit 0
+# allow, 1 refuse, 3 wait: the first line is the seconds to wait, the second
+# the refusal to give when waiting runs out.
+guard_decide() {
+  local phase=$1 facts=$2 kinds="" kind dialog_text
   # Each dialog's kind comes from the one classifier above.
-  local kinds=""
   while IFS= read -r dialog_text; do
     [ -n "$dialog_text" ] || continue
     kind=$(classify "$dialog_text")
@@ -464,9 +471,10 @@ for d in dialogs:
         parts = [d.get("title") or ""] + list(d.get("text") or []) + list(d.get("buttons") or [])
         print(" ".join(" ".join(str(p) for p in parts).split()) or "untitled dialog")
 ' <<<"$facts")
-  python3 - "$facts" "$app" "$field" "$quiet" "$allowed" "$kinds" <<'PY'
+  python3 - "$phase" "$facts" "$3" "$4" "$5" "$6" "$7" "$kinds" <<'PY'
 import json, sys
-raw, app, field, quiet, allowed, kinds = sys.argv[1:7]
+phase, raw, app, field, quiet, wait, allowed, kinds = sys.argv[1:9]
+quiet = float(quiet)
 allowed = set(allowed.split())
 kinds = [k for k in kinds.split("\n") if k]
 
@@ -474,6 +482,12 @@ kinds = [k for k in kinds.split("\n") if k]
 def refuse(reason):
     print(f"refuse: {reason}")
     sys.exit(1)
+
+
+def wait_for(seconds, reason):
+    print(f"{max(seconds, 0.1):.2f}")
+    print(f"refuse: {reason}")
+    sys.exit(3)
 
 
 try:
@@ -487,19 +501,24 @@ front = facts.get("frontmost_app")
 bundle = facts.get("frontmost_bundle")
 if not front:
     refuse("could not tell which app is in front")
-want = app.lower()
-if want not in {str(front).lower(), str(bundle or "").lower()}:
+in_front = app.lower() in {str(front).lower(), str(bundle or "").lower()}
+if phase == "front" and not in_front:
     refuse(f"{front} is in front, not {app}")
+if phase == "after" and not in_front:
+    wait_for(0.2, f"{front} is in front, not {app}")
 
 idle = facts.get("idle_seconds")
-if not isinstance(idle, (int, float)):
+idle_known = isinstance(idle, (int, float))
+if phase != "after" and not idle_known:
     refuse("could not tell when the keyboard or mouse was last used")
-if idle < float(quiet):
-    refuse(f"the keyboard or mouse was used {idle:.1f}s ago (the captain may be typing)")
 
 mic = facts.get("microphone_in_use")
 if mic is not False:
     refuse("the microphone is in use (dictation or a call)" if mic else "could not tell whether the microphone is in use")
+
+stt = facts.get("desk_transcription_in_flight")
+if stt is not False:
+    refuse("a desk dictation is being transcribed" if stt else "could not tell whether a desk dictation is being transcribed")
 
 dialogs = [d for d in (facts.get("dialogs") or []) if isinstance(d, dict)]
 for d, kind in zip(dialogs, kinds):
@@ -508,22 +527,82 @@ for d, kind in zip(dialogs, kinds):
         buttons = ", ".join(d.get("buttons") or [])
         refuse(f"a {kind} dialog is open in {d.get('app') or 'an app'}: '{title}' [{buttons}]")
 
-if field:
+if field and phase != "before":
     focused = " ".join(str(x) for x in (facts.get("focused_role"), facts.get("focused_label")) if x)
     if field.lower() not in focused.lower():
         refuse(f"the focused element is '{focused or 'nothing'}', not '{field}'")
 
-summary = f"{front} in front, idle {idle:.1f}s, microphone off"
+if phase != "after" and idle < quiet:
+    wait_for(quiet - idle, f"the keyboard or mouse was used {idle:.1f}s ago and no {quiet:g}s quiet window came within {wait}s")
+
+summary = f"{front} in front"
+if idle_known:
+    summary += f", idle {idle:.1f}s"
+summary += ", microphone off"
 if dialogs:
     summary += ", allowed dialog: " + ", ".join(kinds)
 print(f"allow: {summary}")
 PY
 }
 
+cmd_guard() {
+  local app="" field="" quiet=3 wait=8 activate=0 allowed="" phase deadline facts out rc next=0
+  local facts_files=()
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --app) app=${2:-}; shift 2 ;;
+      --activate) activate=1; shift ;;
+      --field) field=${2:-}; shift 2 ;;
+      --quiet) quiet=${2:-}; shift 2 ;;
+      --wait) wait=${2:-}; shift 2 ;;
+      --facts) facts_files+=("${2:-}"); shift 2 ;;
+      --allow-dialog)
+        case "${2:-}" in
+          privacy|save|replace|destructive|quit|other) allowed="$allowed ${2}" ;;
+          *) die_usage "guard: --allow-dialog takes privacy, save, replace, destructive, quit or other" ;;
+        esac
+        shift 2 ;;
+      *) die_usage "guard: unknown argument $1" ;;
+    esac
+  done
+  [ -n "$app" ] || die_usage "guard: --app is required"
+  case "$quiet" in ''|*[!0-9.]*) die_usage "guard: --quiet must be seconds" ;; esac
+  case "$wait" in ''|*[!0-9]*) die_usage "guard: --wait must be whole seconds" ;; esac
+  need_python
+  phase=front
+  [ "$activate" = 0 ] || phase=before
+  deadline=$(( $(date +%s) + wait ))
+  while :; do
+    if [ "${#facts_files[@]}" -gt 0 ]; then
+      facts=$(cat "${facts_files[$next]}" 2>/dev/null) || { echo "refuse: could not read the screen state (${facts_files[$next]} unreadable)"; return 1; }
+      [ "$next" -ge $(( ${#facts_files[@]} - 1 )) ] || next=$((next + 1))
+    else
+      facts=$(cmd_facts 2>/dev/null) || { echo "refuse: could not read the screen state"; return 1; }
+    fi
+    out=$(guard_decide "$phase" "$facts" "$app" "$field" "$quiet" "$wait" "$allowed")
+    rc=$?
+    if [ "$rc" = 3 ]; then
+      if [ "$(date +%s)" -ge "$deadline" ]; then
+        printf '%s\n' "${out#*$'\n'}"
+        return 1
+      fi
+      sleep "${out%%$'\n'*}"
+      continue
+    fi
+    if [ "$rc" = 0 ] && [ "$phase" = before ]; then
+      osascript -e "$ACTIVATE_SCRIPT" "$app" >/dev/null 2>&1 || { echo "refuse: could not bring $app to the front"; return 1; }
+      phase=after
+      deadline=$(( $(date +%s) + wait ))
+      continue
+    fi
+    printf '%s\n' "$out"
+    return "$rc"
+  done
+}
+
 case "${1:-}" in
   check) shift; cmd_check "$@" ;;
   pin) echo "$PEEKABOO_PIN" ;;
-  install-url) echo "$PEEKABOO_RELEASE_URL" ;;
   install) shift; cmd_install "$@" ;;
   elements) shift; cmd_elements "$@" ;;
   settle) shift; cmd_settle "$@" ;;

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # tests/fm-computer-use.test.sh - bin/fm-computer-use.sh: the pinned Peekaboo
 # check and installer, the compact element list, the settle wait, the dialog
-# classifier, and the focus and dialog guard.
+# classifier, the focus and dialog guard, and its transcription fact.
 #
 # Nothing here reads the real screen or runs a real peekaboo: every peekaboo is
 # a fake on a private PATH, every screen state is a --facts file, and the
@@ -191,7 +191,7 @@ run_guard() {  # <facts-file> [args...] -> "rc|output"
 
 test_guard_decisions() {
   local calm dialog_save dialog_privacy busy mic unknown_mic noidle out
-  calm=$(facts calm.json '{"frontmost_app":"Live","frontmost_bundle":"com.ableton.live","focused_role":"AXTextField","focused_label":"Search (Cmd+F)","dialogs":[],"idle_seconds":12.5,"microphone_in_use":false}')
+  calm=$(facts calm.json '{"frontmost_app":"Live","frontmost_bundle":"com.ableton.live","focused_role":"AXTextField","focused_label":"Search (Cmd+F)","dialogs":[],"idle_seconds":12.5,"microphone_in_use":false,"desk_transcription_in_flight":false}')
   out=$(run_guard "$calm" --app Live)
   assert_equals "0|allow: Live in front, idle 12.5s, microphone off" "$out" "a calm screen with the right app must allow"
   out=$(run_guard "$calm" --app com.ableton.live); assert_equals 0 "${out%%|*}" "a bundle id must match the frontmost app"
@@ -201,21 +201,21 @@ test_guard_decisions() {
   out=$(run_guard "$calm" --app Live --field Tempo)
   assert_equals "1|refuse: the focused element is 'AXTextField Search (Cmd+F)', not 'Tempo'" "$out" "a different focused field must refuse"
 
-  busy=$(facts busy.json '{"frontmost_app":"Live","dialogs":[],"idle_seconds":0.4,"microphone_in_use":false}')
-  assert_equals "1|refuse: the keyboard or mouse was used 0.4s ago (the captain may be typing)" "$(run_guard "$busy" --app Live)" \
-    "recent real input must refuse"
+  busy=$(facts busy.json '{"frontmost_app":"Live","dialogs":[],"idle_seconds":0.4,"microphone_in_use":false,"desk_transcription_in_flight":false}')
+  assert_equals "1|refuse: the keyboard or mouse was used 0.4s ago and no 3s quiet window came within 0s" "$(run_guard "$busy" --app Live --wait 0)" \
+    "recent input must refuse once the wait is spent, without blaming anyone"
   out=$(run_guard "$busy" --app Live --quiet 0); assert_equals 0 "${out%%|*}" "--quiet 0 must accept any idle time"
 
-  mic=$(facts mic.json '{"frontmost_app":"Live","dialogs":[],"idle_seconds":30,"microphone_in_use":true}')
+  mic=$(facts mic.json '{"frontmost_app":"Live","dialogs":[],"idle_seconds":30,"microphone_in_use":true,"desk_transcription_in_flight":false}')
   assert_equals "1|refuse: the microphone is in use (dictation or a call)" "$(run_guard "$mic" --app Live)" "dictation must refuse"
-  unknown_mic=$(facts unknown-mic.json '{"frontmost_app":"Live","dialogs":[],"idle_seconds":30,"microphone_in_use":null}')
+  unknown_mic=$(facts unknown-mic.json '{"frontmost_app":"Live","dialogs":[],"idle_seconds":30,"microphone_in_use":null,"desk_transcription_in_flight":false}')
   assert_equals "1|refuse: could not tell whether the microphone is in use" "$(run_guard "$unknown_mic" --app Live)" \
     "an unreadable microphone state must refuse"
-  noidle=$(facts noidle.json '{"frontmost_app":"Live","dialogs":[],"microphone_in_use":false}')
+  noidle=$(facts noidle.json '{"frontmost_app":"Live","dialogs":[],"microphone_in_use":false,"desk_transcription_in_flight":false}')
   assert_equals "1|refuse: could not tell when the keyboard or mouse was last used" "$(run_guard "$noidle" --app Live)" \
     "an unreadable idle time must refuse"
 
-  dialog_save=$(facts save.json '{"frontmost_app":"Live","dialogs":[{"app":"Live","title":"","text":["Save changes to \"Demo Song\" before closing?"],"buttons":["Don'"'"'t Save","Cancel","Save"]}],"idle_seconds":30,"microphone_in_use":false}')
+  dialog_save=$(facts save.json '{"frontmost_app":"Live","dialogs":[{"app":"Live","title":"","text":["Save changes to \"Demo Song\" before closing?"],"buttons":["Don'"'"'t Save","Cancel","Save"]}],"idle_seconds":30,"microphone_in_use":false,"desk_transcription_in_flight":false}')
   out=$(run_guard "$dialog_save" --app Live)
   assert_equals 1 "${out%%|*}" "an open save dialog must refuse"
   assert_contains "$out" "a save dialog is open in Live" "the refusal must name the dialog kind and app"
@@ -223,7 +223,7 @@ test_guard_decisions() {
   out=$(run_guard "$dialog_save" --app Live --allow-dialog save)
   assert_equals "0|allow: Live in front, idle 30.0s, microphone off, allowed dialog: save" "$out" "an explicitly allowed save dialog must allow"
 
-  dialog_privacy=$(facts privacy.json '{"frontmost_app":"Live","dialogs":[{"app":"UserNotificationCenter","title":"","text":["\"Ableton Live 12\" would like to access files in your Desktop folder."],"buttons":["Don'"'"'t Allow","Allow"]}],"idle_seconds":30,"microphone_in_use":false}')
+  dialog_privacy=$(facts privacy.json '{"frontmost_app":"Live","dialogs":[{"app":"UserNotificationCenter","title":"","text":["\"Ableton Live 12\" would like to access files in your Desktop folder."],"buttons":["Don'"'"'t Allow","Allow"]}],"idle_seconds":30,"microphone_in_use":false,"desk_transcription_in_flight":false}')
   out=$(run_guard "$dialog_privacy" --app Live --allow-dialog save)
   assert_contains "$out" "refuse: a privacy dialog is open in UserNotificationCenter" "allowing one kind must not allow another"
 
@@ -235,9 +235,108 @@ test_guard_decisions() {
   pass "guard allows only the expected app, idle input, a quiet microphone and allowed dialogs, and refuses whatever it cannot read"
 }
 
+test_guard_waits_for_quiet_input() {
+  local busy calm busy_mic out
+  busy=$(facts wait-busy.json '{"frontmost_app":"Live","dialogs":[],"idle_seconds":0.4,"microphone_in_use":false,"desk_transcription_in_flight":false}')
+  calm=$(facts wait-calm.json '{"frontmost_app":"Live","dialogs":[],"idle_seconds":1.2,"microphone_in_use":false,"desk_transcription_in_flight":false}')
+  out=$(run_guard "$busy" --facts "$calm" --app Live --quiet 1)
+  assert_equals "0|allow: Live in front, idle 1.2s, microphone off" "$out" "input that stops within the wait must allow on a later read"
+  out=$(run_guard "$busy" --app Live --quiet 1 --wait 1)
+  assert_equals "1|refuse: the keyboard or mouse was used 0.4s ago and no 1s quiet window came within 1s" "$out" \
+    "input that keeps arriving must refuse once the wait is spent"
+  busy_mic=$(facts wait-mic.json '{"frontmost_app":"Live","dialogs":[],"idle_seconds":0.4,"microphone_in_use":true,"desk_transcription_in_flight":false}')
+  out=$(run_guard "$busy_mic" --facts "$calm" --app Live --quiet 1)
+  assert_equals "1|refuse: the microphone is in use (dictation or a call)" "$out" "a live microphone must refuse at once, not wait"
+  pass "guard waits a bounded time for a quiet input window and refuses only if input keeps arriving"
+}
+
+test_guard_refuses_during_desk_transcription() {
+  local stt unknown out
+  stt=$(facts stt.json '{"frontmost_app":"Live","dialogs":[],"idle_seconds":30,"microphone_in_use":false,"desk_transcription_in_flight":true}')
+  assert_equals "1|refuse: a desk dictation is being transcribed" "$(run_guard "$stt" --app Live)" \
+    "a dictation that is still being transcribed must refuse"
+  unknown=$(facts stt-unknown.json '{"frontmost_app":"Live","dialogs":[],"idle_seconds":30,"microphone_in_use":false}')
+  assert_equals "1|refuse: could not tell whether a desk dictation is being transcribed" "$(run_guard "$unknown" --app Live)" \
+    "an unknown transcription state must refuse"
+  pass "guard refuses while a desk dictation is in flight or when it cannot tell"
+}
+
+# fake_osascript <dir> <exit-code> [stdout]: records its last argument (the app
+# an activation names) and prints <stdout>.
+fake_osascript() {
+  mkdir -p "$1"
+  printf '%s\n' "${3:-}" > "$1/stdout"
+  cat > "$1/osascript" <<SH
+#!/usr/bin/env bash
+printf '%s\n' "\${@: -1}" >> "$1/activated"
+cat "$1/stdout"
+exit $2
+SH
+  chmod 0755 "$1/osascript"
+}
+
+run_activate() {  # <fake-dir> [args...] -> "rc|output"
+  local d=$1 out rc
+  shift
+  out=$(PATH="$d:$BASE_PATH" "$CU" guard --activate "$@" 2>&1)
+  rc=$?
+  printf '%s|%s' "$rc" "$out"
+}
+
+test_guard_activate_checks_before_and_after() {
+  local d notes notes_mic live live_dialog out
+  notes=$(facts act-notes.json '{"frontmost_app":"Notes","focused_role":"AXTextArea","focused_label":"Body","dialogs":[],"idle_seconds":30,"microphone_in_use":false,"desk_transcription_in_flight":false}')
+  notes_mic=$(facts act-notes-mic.json '{"frontmost_app":"Notes","dialogs":[],"idle_seconds":30,"microphone_in_use":true,"desk_transcription_in_flight":false}')
+  live=$(facts act-live.json '{"frontmost_app":"Live","focused_role":"AXTextField","focused_label":"Search","dialogs":[],"idle_seconds":30,"microphone_in_use":false,"desk_transcription_in_flight":false}')
+  live_dialog=$(facts act-live-dialog.json '{"frontmost_app":"Live","dialogs":[{"app":"UserNotificationCenter","title":"","text":["\"Ableton Live 12\" would like to access files in your Desktop folder."],"buttons":["Allow"]}],"idle_seconds":30,"microphone_in_use":false,"desk_transcription_in_flight":false}')
+
+  d="$TMP_ROOT/act-mic"; fake_osascript "$d" 0
+  out=$(run_activate "$d" --app Live --facts "$notes_mic" --facts "$live")
+  assert_equals "1|refuse: the microphone is in use (dictation or a call)" "$out" "dictation in the captain's app must refuse before activation"
+  [ ! -e "$d/activated" ] || fail "a refused pre-check must not activate the app"
+
+  d="$TMP_ROOT/act-ok"; fake_osascript "$d" 0
+  out=$(run_activate "$d" --app Live --field search --facts "$notes" --facts "$live")
+  assert_equals "0|allow: Live in front, idle 30.0s, microphone off" "$out" "a calm screen must activate the app and allow"
+  assert_equals "Live" "$(cat "$d/activated")" "the activation must name the app"
+
+  d="$TMP_ROOT/act-dialog"; fake_osascript "$d" 0
+  out=$(run_activate "$d" --app Live --facts "$notes" --facts "$live_dialog")
+  assert_contains "$out" "1|refuse: a privacy dialog is open in UserNotificationCenter" "a dialog that appears on activation must refuse"
+
+  d="$TMP_ROOT/act-stuck"; fake_osascript "$d" 0
+  out=$(run_activate "$d" --app Live --wait 0 --facts "$notes")
+  assert_equals "1|refuse: Notes is in front, not Live" "$out" "an app that never comes to the front must refuse"
+
+  d="$TMP_ROOT/act-fail"; fake_osascript "$d" 1
+  out=$(run_activate "$d" --app Live --facts "$notes" --facts "$live")
+  assert_equals "1|refuse: could not bring Live to the front" "$out" "a failed activation must refuse"
+  pass "guard --activate checks the captain's screen before activating, then re-checks the front app, dialogs and field"
+}
+
+test_facts_report_desk_transcription() {
+  local d pid out
+  d="$TMP_ROOT/facts"
+  fake_osascript "$d" 0 '{"frontmost_app":"Live","frontmost_bundle":"com.ableton.live","focused_role":null,"focused_label":null,"dialogs":[]}'
+  printf '#!/usr/bin/env bash\nwhile :; do sleep 0.1; done\n' > "$d/fm-deepgram-stt.sh"
+  chmod 0755 "$d/fm-deepgram-stt.sh"
+  "$d/fm-deepgram-stt.sh" &
+  pid=$!
+  out=$(PATH="$d:$BASE_PATH" "$CU" facts)
+  kill "$pid" 2>/dev/null
+  wait "$pid" 2>/dev/null
+  assert_equals "True" "$(printf '%s' "$out" | python3 -c 'import json, sys; print(json.load(sys.stdin).get("desk_transcription_in_flight"))')" \
+    "a running fm-deepgram-stt.sh must show as a transcription in flight"
+  pass "facts report a running desk transcription"
+}
+
 test_check_reports_absent_wrong_and_broken
 test_install_verifies_and_links_user_level
 test_elements_render_compactly
 test_settle_waits_for_two_equal_reads
 test_dialog_kinds
 test_guard_decisions
+test_guard_waits_for_quiet_input
+test_guard_refuses_during_desk_transcription
+test_guard_activate_checks_before_and_after
+test_facts_report_desk_transcription
