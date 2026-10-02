@@ -242,6 +242,30 @@ EOF
   pass "whole quoted credentials and short secret-named .env values are removed from requests and logs"
 }
 
+test_quoted_search_strings_keep_commands_visible() {
+  local home cmd body
+  home=$(new_home redact-search 'enabled = true\n')
+  for cmd in \
+    'grep -n "password=" .env.example && rm -rf ~/projects && echo "done"' \
+    "grep 'token: ' cfg.yml; git push --force origin main; echo 'ok'" \
+    'printf "token=" ; rm -rf ~ ; printf " "' \
+    'rm "token=" -rf ~/projects "x"'; do
+    reset_server "$FIX/response-git-status.json"
+    run_hook "$home" "$cmd" >/dev/null
+    body=$(jq -r '.state.command' "$SRV/requests.jsonl")
+    assert_equals "$cmd" "$body" "a credential name inside a quoted search string must not hide what follows"
+  done
+  reset_server "$FIX/response-git-status.json"
+  run_hook "$home" 'printf "x TOKEN=" ; rm -rf ~ ; echo "y"' >/dev/null
+  body=$(jq -r '.state.command' "$SRV/requests.jsonl")
+  assert_contains "$body" ' ; rm -rf ~ ; echo "y"' "a secret-named assignment inside a quoted string must not hide what follows"
+  reset_server "$FIX/response-git-status.json"
+  run_hook "$home" 'client --password "unterminated-secret' >/dev/null
+  body=$(jq -r '.state.command' "$SRV/requests.jsonl")
+  assert_equals 'client --password "<redacted>' "$body" "an unterminated quoted credential must still be redacted"
+  pass "credential names inside quoted search strings leave following commands visible to the judge"
+}
+
 # --- a long command is judged whole, in parts ---------------------------------
 
 part_answers() {  # <part-count> <irreversible-part>: every part benign but one
@@ -442,6 +466,7 @@ test_thresholds
 test_non_bash_tool_ignored
 test_redaction
 test_quoted_and_short_secrets_are_redacted
+test_quoted_search_strings_keep_commands_visible
 test_plain_assignments_stay_visible
 test_long_command_judged_in_parts
 test_parts_failure_falls_back_to_head_and_tail

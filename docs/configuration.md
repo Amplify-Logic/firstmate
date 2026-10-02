@@ -667,7 +667,7 @@ To let one blocked command through, switch the gate off, have the worker run it,
 
 **What leaves the machine.** Only the command text, never the working directory, the task or the environment.
 Redaction is best-effort: it removes `.env` values and secret-looking environment values of at least six characters, plus shorter nonempty values from secret-named `.env` keys at token boundaries.
-It also replaces known key and token shapes, whole quoted or unquoted credential arguments, credentialed URLs and private-key blocks; a `NAME=value` assignment loses its value when the name looks secret (key, token, secret, password, auth and the like) or the value looks random.
+It also replaces known key and token shapes, whole quoted or unquoted credential arguments, credentialed URLs and private-key blocks; a quoted value that holds a command operator, a substitution or a line break loses only its first word, so the commands after it stay visible to the judge; a `NAME=value` assignment loses its value when the name looks secret (key, token, secret, password, auth and the like) or the value looks random.
 Plain values such as paths, `env=prod` or `of=/dev/disk2` stay visible, so the judge can see what `T=../sibling-copy; rm -rf "$T"` removes.
 
 **Steps aside on failure.** No key, a timeout, an HTTP error, an unreadable answer or a crash all allow the command, a multi-part command only once its head-and-tail request has failed too.

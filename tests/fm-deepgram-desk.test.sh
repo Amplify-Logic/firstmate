@@ -1040,7 +1040,13 @@ case "${1:-} ${2:-}" in
         '────────────────────────────────────────' '  ⏵⏵ auto mode on' > "$screen"
     fi
     esc=$'\033'
-    draft=$(cat "$dir/draft" 2>/dev/null)
+    if [ -e "$dir/stale-left" ]; then
+      draft=$(cat "$dir/stale-draft")
+      left=$(( $(cat "$dir/stale-left") - 1 ))
+      if [ "$left" -le 0 ]; then rm -f "$dir/stale-left"; else printf '%s' "$left" > "$dir/stale-left"; fi
+    else
+      draft=$(cat "$dir/draft" 2>/dev/null)
+    fi
     row="❯"$'\302\240'"${esc}[0m"
     if [ -n "$draft" ] && [ -e "$dir/wrap" ]; then
       row+="${esc}[38;2;255;255;255m${draft:0:40}"
@@ -1140,6 +1146,10 @@ case "${1:-} ${2:-}" in
             draft=${draft//"[Pasted text #${paste##*-}]"/$(cat "$paste")}
           done
           printf '%s\n' "$draft" >> "$dir/submitted"
+          if [ -e "$dir/stale-reads" ]; then
+            printf '%s' "$draft" > "$dir/stale-draft"
+            cp "$dir/stale-reads" "$dir/stale-left"
+          fi
         elif [ -e "$dir/ghost" ]; then
           { cat "$dir/ghost"; printf '\n'; } >> "$dir/submitted"
         fi
@@ -1413,6 +1423,44 @@ test_ring_checks_the_payload_before_each_enter() {
     done
   done
   pass "desk ring: both backends re-read the payload before every Enter, including retries"
+}
+
+test_ring_waits_for_a_late_paste_and_a_late_redraw() {
+  local home out backend when
+  for backend in tmux herdr; do
+    for when in paste redraw stash; do
+      home=$(desk_send_fixture "ring-late-$backend-$when" "$backend") \
+        || { desk_send_skip "ring-late-$backend-$when"; return 0; }
+      : > "$home/fixture/tmux-composer"
+      case "$when" in
+        paste) printf '6' > "$home/fixture/late-paste" ;;
+        redraw) printf '5' > "$home/fixture/stale-reads" ;;
+        stash)
+          printf 'half typed thought' > "$home/fixture/stash"
+          printf '5' > "$home/fixture/stale-reads"
+          ;;
+      esac
+      out=$(desk_ring "$home" '[firstmate inbox] ring') || fail "ring failed: $out"
+      case "$when" in
+        paste|redraw)
+          assert_contains "$out" "rung: $backend" "a late $when must still be proven and submitted"
+          [ "$(cat "$home/fixture/submitted")" = '[firstmate inbox] ring' ] || fail "$backend: only the ring may be submitted"
+          [ "$(herdr_calls "$home" pane send-keys | wc -l | tr -d ' ')" = 1 ] || fail "$backend: a late $when needs exactly one Enter"
+          [ ! -s "$home/fixture/draft" ] || fail "$backend: the ring must not stay in the box"
+          ;;
+        stash)
+          [ "$out" = not-rung ] || fail "$backend: a ring must leave a stashed draft alone: $out"
+          [ -z "$(herdr_calls "$home" pane send-text)" ] || fail "$backend: nothing may be typed over a stash"
+          [ -z "$(herdr_calls "$home" pane send-keys)" ] || fail "$backend: no Enter may restore and submit a stash"
+          [ "$(cat "$home/fixture/stash")" = 'half typed thought' ] || fail "$backend: the stash must be kept"
+          [ ! -e "$home/fixture/submitted" ] || fail "$backend: nothing may be submitted"
+          ;;
+      esac
+      [ "$(inbox_count "$home")" = 0 ] || fail "a ring must not write a duplicate mailbox message"
+      desk_send_done "$home"
+    done
+  done
+  pass "desk ring: a late paste is still proven, a late redraw gets no retry, and a stash is never rung over"
 }
 
 test_ring_and_send_share_one_writer_lock() {
@@ -2245,6 +2293,7 @@ test_desk_voice_send_joins_another_harness_draft
 test_inbox_note_rings_the_busy_primary
 test_inbox_note_ring_never_submits_a_draft_or_rings_away
 test_ring_checks_the_payload_before_each_enter
+test_ring_waits_for_a_late_paste_and_a_late_redraw
 test_ring_and_send_share_one_writer_lock
 test_inbox_ring_respects_contract_only_away_posture
 test_desk_voice_send_types_screenshots_into_the_primary_pane
