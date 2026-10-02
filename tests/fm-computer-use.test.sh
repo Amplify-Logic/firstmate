@@ -226,6 +226,9 @@ test_guard_decisions() {
   dialog_privacy=$(facts privacy.json '{"frontmost_app":"Live","dialogs":[{"app":"UserNotificationCenter","title":"","text":["\"Ableton Live 12\" would like to access files in your Desktop folder."],"buttons":["Don'"'"'t Allow","Allow"]}],"idle_seconds":30,"microphone_in_use":false,"desk_transcription_in_flight":false}')
   out=$(run_guard "$dialog_privacy" --app Live --allow-dialog save)
   assert_contains "$out" "refuse: a privacy dialog is open in UserNotificationCenter" "allowing one kind must not allow another"
+  out=$(run_guard "$(facts two-dialogs.json '{"frontmost_app":"Live","dialogs":[{"app":"Live","title":"","text":[],"buttons":[]},{"app":"Live","title":"Save changes before closing?","text":[],"buttons":["Save"]},{"app":"UserNotificationCenter","title":"","text":["\"Live\" would like to access files in your Desktop folder."],"buttons":["Allow"]}],"idle_seconds":30,"microphone_in_use":false,"desk_transcription_in_flight":false}')" \
+    --app Live --allow-dialog other --allow-dialog save)
+  assert_contains "$out" "1|refuse: a privacy dialog is open in UserNotificationCenter" "every dialog must be classified on its own, an empty one included"
 
   assert_equals "1|refuse: could not read the screen state" "$(run_guard "$(facts bad.json 'not json')" --app Live)" \
     "an unreadable state must refuse"
@@ -284,7 +287,7 @@ run_activate() {  # <fake-dir> [args...] -> "rc|output"
 }
 
 test_guard_activate_checks_before_and_after() {
-  local d notes notes_mic live live_dialog out
+  local d notes notes_mic live live_dialog live_busy out
   notes=$(facts act-notes.json '{"frontmost_app":"Notes","focused_role":"AXTextArea","focused_label":"Body","dialogs":[],"idle_seconds":30,"microphone_in_use":false,"desk_transcription_in_flight":false}')
   notes_mic=$(facts act-notes-mic.json '{"frontmost_app":"Notes","dialogs":[],"idle_seconds":30,"microphone_in_use":true,"desk_transcription_in_flight":false}')
   live=$(facts act-live.json '{"frontmost_app":"Live","focused_role":"AXTextField","focused_label":"Search","dialogs":[],"idle_seconds":30,"microphone_in_use":false,"desk_transcription_in_flight":false}')
@@ -304,6 +307,16 @@ test_guard_activate_checks_before_and_after() {
   out=$(run_activate "$d" --app Live --facts "$notes" --facts "$live_dialog")
   assert_contains "$out" "1|refuse: a privacy dialog is open in UserNotificationCenter" "a dialog that appears on activation must refuse"
 
+  live_busy=$(facts act-live-busy.json '{"frontmost_app":"Live","dialogs":[],"idle_seconds":0.1,"microphone_in_use":false,"desk_transcription_in_flight":false}')
+  d="$TMP_ROOT/act-busy"; fake_osascript "$d" 0
+  out=$(run_activate "$d" --app Live --wait 0 --facts "$notes" --facts "$live_busy")
+  assert_equals "1|refuse: the keyboard or mouse was used 0.1s ago and no 3s quiet window came within 0s" "$out" \
+    "input that arrives during activation must refuse"
+  assert_equals "Live" "$(cat "$d/activated")" "the busy read must be the one taken after activation"
+  d="$TMP_ROOT/act-busy-then-calm"; fake_osascript "$d" 0
+  out=$(run_activate "$d" --app Live --quiet 1 --facts "$notes" --facts "$live_busy" --facts "$live")
+  assert_equals "0|allow: Live in front, idle 30.0s, microphone off" "$out" "input after activation that stops within the wait must allow"
+
   d="$TMP_ROOT/act-stuck"; fake_osascript "$d" 0
   out=$(run_activate "$d" --app Live --wait 0 --facts "$notes")
   assert_equals "1|refuse: Notes is in front, not Live" "$out" "an app that never comes to the front must refuse"
@@ -311,7 +324,7 @@ test_guard_activate_checks_before_and_after() {
   d="$TMP_ROOT/act-fail"; fake_osascript "$d" 1
   out=$(run_activate "$d" --app Live --facts "$notes" --facts "$live")
   assert_equals "1|refuse: could not bring Live to the front" "$out" "a failed activation must refuse"
-  pass "guard --activate checks the captain's screen before activating, then re-checks the front app, dialogs and field"
+  pass "guard --activate checks the captain's screen before activating, then re-checks the front app, input, dialogs and field"
 }
 
 test_facts_report_desk_transcription() {

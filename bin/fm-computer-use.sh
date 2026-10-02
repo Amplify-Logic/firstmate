@@ -54,8 +54,9 @@
 #       --activate is the way to bring a running <app> to the front: it first
 #       checks the input quiet window, the microphone, transcription and dialogs
 #       while the current app is still in front, then activates <app>, then
-#       re-checks that <app> is in front, the microphone, transcription,
-#       dialogs and --field. A screen state it cannot read is a refusal.
+#       re-checks that <app> is in front, the input quiet window (with the same
+#       bounded wait), the microphone, transcription, dialogs and --field. A
+#       screen state it cannot read is a refusal.
 #       --facts reads the state from a file instead of the screen; given more
 #       than once, each later read takes the next file and the last repeats.
 #   fm-computer-use.sh dialog-kind <text>
@@ -410,73 +411,42 @@ print(json.dumps(ui))
 PY
 }
 
-# classify <text>: the single owner of dialog kinds.
-classify() {
-  python3 - "$1" <<'PY'
-import re, sys
-t = " ".join(sys.argv[1].lower().split())
-rules = [
+# guard_py kind <text>
+# guard_py decide <phase> <facts> <app> <field> <quiet> <wait> <allowed>
+# The single owner of dialog kinds, and the guard's decision on one screen
+# read, which classifies each dialog itself. Phase front: <app> must already be
+# in front. Phase before: the read before --activate, whatever app is in front.
+# Phase after: the read after --activate. Decide exits 0 allow, 1 refuse, 3
+# wait: the first line is the seconds to wait, the second the refusal to give
+# when waiting runs out.
+guard_py() {
+  python3 - "$@" <<'PY'
+import json, re, sys
+
+RULES = [
     ("privacy", r"would like to (access|control|record|use|receive|find)|wants? (to )?(access|control)|privacy|allow .{0,40}access|keychain|password|passcode|touch id|administrator"),
     ("save", r"save changes|do you want to save|don.t save|unsaved|before closing\?|save before"),
     ("replace", r"already exists|replace"),
     ("destructive", r"\bdelete\b|\berase\b|\bdiscard\b|move to (the )?(trash|bin)|\bremove\b|permanently"),
     ("quit", r"\bquit\b|close (the )?window|close without|log out|shut down|restart"),
 ]
-for kind, pattern in rules:
-    if re.search(pattern, t):
-        print(kind)
-        break
-else:
-    print("other")
-PY
-}
 
-cmd_dialog_kind() {
-  [ $# -ge 1 ] || die_usage "dialog-kind: text is required"
-  need_python
-  classify "$*"
-}
 
-ACTIVATE_SCRIPT='on run argv
-  set target to item 1 of argv
-  tell application "System Events"
-    set matches to (every process whose name is target or bundle identifier is target)
-    if (count of matches) is 0 then error "no running process " & target
-    set frontmost of item 1 of matches to true
-  end tell
-end run'
+def dialog_kind(text):
+    t = " ".join(text.lower().split())
+    for kind, pattern in RULES:
+        if re.search(pattern, t):
+            return kind
+    return "other"
 
-# guard_decide <phase> <facts> <app> <field> <quiet> <wait> <allowed>: one
-# decision on one screen read. Phase front: <app> must already be in front.
-# Phase before: the read before --activate, whatever app is in front. Phase
-# after: the read after --activate, where input recency is not checked. Exit 0
-# allow, 1 refuse, 3 wait: the first line is the seconds to wait, the second
-# the refusal to give when waiting runs out.
-guard_decide() {
-  local phase=$1 facts=$2 kinds="" kind dialog_text
-  # Each dialog's kind comes from the one classifier above.
-  while IFS= read -r dialog_text; do
-    [ -n "$dialog_text" ] || continue
-    kind=$(classify "$dialog_text")
-    kinds="$kinds$kind"$'\n'
-  done < <(python3 -c '
-import json, sys
-try:
-    facts = json.loads(sys.stdin.read())
-    dialogs = facts.get("dialogs") or []
-except Exception:
+
+if sys.argv[1] == "kind":
+    print(dialog_kind(sys.argv[2]))
     sys.exit(0)
-for d in dialogs:
-    if isinstance(d, dict):
-        parts = [d.get("title") or ""] + list(d.get("text") or []) + list(d.get("buttons") or [])
-        print(" ".join(" ".join(str(p) for p in parts).split()) or "untitled dialog")
-' <<<"$facts")
-  python3 - "$phase" "$facts" "$3" "$4" "$5" "$6" "$7" "$kinds" <<'PY'
-import json, sys
-phase, raw, app, field, quiet, wait, allowed, kinds = sys.argv[1:9]
+
+phase, raw, app, field, quiet, wait, allowed = sys.argv[2:9]
 quiet = float(quiet)
 allowed = set(allowed.split())
-kinds = [k for k in kinds.split("\n") if k]
 
 
 def refuse(reason):
@@ -508,8 +478,7 @@ if phase == "after" and not in_front:
     wait_for(0.2, f"{front} is in front, not {app}")
 
 idle = facts.get("idle_seconds")
-idle_known = isinstance(idle, (int, float))
-if phase != "after" and not idle_known:
+if not isinstance(idle, (int, float)):
     refuse("could not tell when the keyboard or mouse was last used")
 
 mic = facts.get("microphone_in_use")
@@ -521,7 +490,11 @@ if stt is not False:
     refuse("a desk dictation is being transcribed" if stt else "could not tell whether a desk dictation is being transcribed")
 
 dialogs = [d for d in (facts.get("dialogs") or []) if isinstance(d, dict)]
-for d, kind in zip(dialogs, kinds):
+kinds = []
+for d in dialogs:
+    parts = [d.get("title") or ""] + list(d.get("text") or []) + list(d.get("buttons") or [])
+    kind = dialog_kind(" ".join(str(p) for p in parts))
+    kinds.append(kind)
     if kind not in allowed:
         title = d.get("title") or " ".join((d.get("text") or [])[:1]) or "untitled"
         buttons = ", ".join(d.get("buttons") or [])
@@ -532,18 +505,30 @@ if field and phase != "before":
     if field.lower() not in focused.lower():
         refuse(f"the focused element is '{focused or 'nothing'}', not '{field}'")
 
-if phase != "after" and idle < quiet:
+if idle < quiet:
     wait_for(quiet - idle, f"the keyboard or mouse was used {idle:.1f}s ago and no {quiet:g}s quiet window came within {wait}s")
 
-summary = f"{front} in front"
-if idle_known:
-    summary += f", idle {idle:.1f}s"
-summary += ", microphone off"
+summary = f"{front} in front, idle {idle:.1f}s, microphone off"
 if dialogs:
     summary += ", allowed dialog: " + ", ".join(kinds)
 print(f"allow: {summary}")
 PY
 }
+
+cmd_dialog_kind() {
+  [ $# -ge 1 ] || die_usage "dialog-kind: text is required"
+  need_python
+  guard_py kind "$*"
+}
+
+ACTIVATE_SCRIPT='on run argv
+  set target to item 1 of argv
+  tell application "System Events"
+    set matches to (every process whose name is target or bundle identifier is target)
+    if (count of matches) is 0 then error "no running process " & target
+    set frontmost of item 1 of matches to true
+  end tell
+end run'
 
 cmd_guard() {
   local app="" field="" quiet=3 wait=8 activate=0 allowed="" phase deadline facts out rc next=0
@@ -579,7 +564,7 @@ cmd_guard() {
     else
       facts=$(cmd_facts 2>/dev/null) || { echo "refuse: could not read the screen state"; return 1; }
     fi
-    out=$(guard_decide "$phase" "$facts" "$app" "$field" "$quiet" "$wait" "$allowed")
+    out=$(guard_py decide "$phase" "$facts" "$app" "$field" "$quiet" "$wait" "$allowed")
     rc=$?
     if [ "$rc" = 3 ]; then
       if [ "$(date +%s)" -ge "$deadline" ]; then
