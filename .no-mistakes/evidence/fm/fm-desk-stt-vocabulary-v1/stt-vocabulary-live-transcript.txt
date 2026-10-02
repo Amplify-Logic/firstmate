@@ -1,27 +1,51 @@
-=== S1: no vocabulary file (baseline, as before the change apart from nova-3) ===
-$ FM_HOME=$LAB bin/fm-deepgram-stt.sh clip.wav
-I'll create two accounts, one on Sam dot Rivers one and then one at S dot Rivers aqua green
-exit=0
-request: {"path": "/v1/listen?model=nova-3&smart_format=true", "content_type": "audio/wav", "auth_scheme": "Token", "body_bytes": 187812, "body_magic": "RIFF"}
+== S1: the reported mishearing, with a vocabulary of the two addresses ==
+-- vocabulary:
+# captain's addresses (stand-ins with the same shape as the reported ones)
+pat.toast1
+p.toast@acmeblu
+pat dot toast one => pat.toast1
+p dot toast acme blue => p.toast@acmeblu
+-- Deepgram (stand-in) heard: I'll create two accounts, one on pat dot toast one and then one at p dot toast acme blue
+-- fm-deepgram-stt.sh printed (exit 0): I'll create two accounts, one on pat.toast1 and then one at p.toast@acmeblu
+-- request Deepgram received: {"path": "/v1/listen", "raw_query": "model=nova-3&smart_format=true&keyterm=pat.toast1&keyterm=p.toast%40acmeblu", "params": [["model", "nova-3"], ["smart_format", "true"], ["keyterm", "pat.toast1"], ["keyterm", "p.toast@acmeblu"]], "content_type": "audio/wav", "auth_header_present": true, "auth_is_token_scheme": true, "audio_bytes": 203046}
 
-=== S2: private vocabulary present, default model ===
---- $LAB/config/stt-vocabulary ---
-# private desk vocabulary (fictional addresses for evidence)
-sam.rivers1
-s.rivers@aquagreen
-Sam Rivers
-sam dot rivers one => sam.rivers1
-s dot rivers aqua green => s.rivers@aquagreen
----
-I'll create two accounts, one on sam.rivers1 and then one at s.rivers@aquagreen
-exit=0
-request: {"path": "/v1/listen?model=nova-3&smart_format=true&keyterm=sam.rivers1&keyterm=s.rivers%40aquagreen&keyterm=Sam%20Rivers", "content_type": "audio/wav", "auth_scheme": "Token", "body_bytes": 187812, "body_magic": "RIFF"}
+== S2: no vocabulary file ==
+-- printed (exit 0): I'll create two accounts, one on pat dot toast one and then one at p dot toast acme blue
+-- request: {"path": "/v1/listen", "raw_query": "model=nova-3&smart_format=true", "params": [["model", "nova-3"], ["smart_format", "true"]], "content_type": "audio/wav", "auth_header_present": true, "auth_is_token_scheme": true, "audio_bytes": 203046}
 
-=== S2b: --json keeps Deepgram's raw words ===
-{"results": {"channels": [{"alternatives": [{"transcript": "I'll create two accounts, one on Sam dot Rivers one and then one at S dot Rivers aqua green", "confidence": 0.9}]}]}}
-exit=0
+== S3: --json stays Deepgram's raw response even with rewrites ==
+-- printed (exit 0): {"results": {"channels": [{"alternatives": [{"transcript": "I'll create two accounts, one on pat dot toast one and then one at p dot toast acme blue", "confidence": 0.9}]}]}}
 
-=== S3: DEEPGRAM_STT_MODEL=nova-2 override -> boosted keywords ===
-I'll create two accounts, one on sam.rivers1 and then one at s.rivers@aquagreen
-exit=0
-request: {"path": "/v1/listen?model=nova-2&smart_format=true&keywords=sam.rivers1%3A2&keywords=s.rivers%40aquagreen%3A2&keywords=Sam%20Rivers%3A2", "content_type": "audio/wav", "auth_scheme": "Token", "body_bytes": 187812, "body_magic": "RIFF"}
+== S4: rewrites are whole-word, case-insensitive, whitespace-tolerant, longest first ==
+-- vocabulary:
+p dot toast => WRONG-SHORT
+pat dot toast one => pat.toast1
+toast => WRONG-PARTIAL
+p dot toast acme blue => p.toast@acmeblu
+-- heard: Pat  Dot TOAST one is not pattoast or pat dot toaster; p dot toast acme blue, p dot toast
+-- printed (exit 0): pat.toast1 is not pattoast or pat dot toaster; p.toast@acmeblu, WRONG-SHORT
+
+== S5: unreadable / broken vocabulary never fails a transcription ==
+-- unreadable file (chmod 000) printed (exit 0): fm-deepgram-stt: vocabulary skipped: Permission denied
+fm-deepgram-stt: vocabulary skipped: Permission denied
+send it to pat dot toast one
+-- request: {"path": "/v1/listen", "raw_query": "model=nova-3&smart_format=true", "params": [["model", "nova-3"], ["smart_format", "true"]], "content_type": "audio/wav", "auth_header_present": true, "auth_is_token_scheme": true, "audio_bytes": 203046}
+-- vocabulary path is a directory, printed (exit 0): fm-deepgram-stt: vocabulary skipped: Is a directory
+fm-deepgram-stt: vocabulary skipped: Is a directory
+send it to pat dot toast one
+-- request: {"path": "/v1/listen", "raw_query": "model=nova-3&smart_format=true", "params": [["model", "nova-3"], ["smart_format", "true"]], "content_type": "audio/wav", "auth_header_present": true, "auth_is_token_scheme": true, "audio_bytes": 203046}
+-- random binary vocabulary, printed (exit 0): send it to pat dot toast one
+-- request query length: 6360
+-- malformed lines, printed (exit 0): send it to pat.toast1
+-- request: {"path": "/v1/listen", "raw_query": "model=nova-3&smart_format=true&keyterm=Quillan", "params": [["model", "nova-3"], ["smart_format", "true"], ["keyterm", "Quillan"]], "content_type": "audio/wav", "auth_header_present": true, "auth_is_token_scheme": true, "audio_bytes": 203046}
+
+== S6: older model override gets boosted keywords; caps trim an oversized list ==
+-- DEEPGRAM_STT_MODEL=nova-2 printed (exit 0): send it to pat dot toast one
+-- request: {"path": "/v1/listen", "raw_query": "model=nova-2&smart_format=true&keywords=pat.toast1%3A2&keywords=p.toast%40acmeblu%3A2", "params": [["model", "nova-2"], ["smart_format", "true"], ["keywords", "pat.toast1:2"], ["keywords", "p.toast@acmeblu:2"]], "content_type": "audio/wav", "auth_header_present": true, "auth_is_token_scheme": true, "audio_bytes": 203046}
+-- 150 terms, nova-2 (exit 0): keywords sent = 100
+-- 150 terms, nova-3 (exit 0): keyterms sent = 114
+
+== S7: the removed FM_STT_VOCABULARY override has no effect; only $FM_HOME/config/stt-vocabulary is read ==
+-- FM_STT_VOCABULARY set, no home vocabulary, printed (exit 0): send it to pat dot toast one
+-- request: {"path": "/v1/listen", "raw_query": "model=nova-3&smart_format=true", "params": [["model", "nova-3"], ["smart_format", "true"]], "content_type": "audio/wav", "auth_header_present": true, "auth_is_token_scheme": true, "audio_bytes": 203046}
+-- FM_STT_VOCABULARY set, home vocabulary present, printed (exit 0): send it to pat.toast1
