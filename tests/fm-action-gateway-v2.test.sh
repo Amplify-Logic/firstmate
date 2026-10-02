@@ -803,7 +803,7 @@ test_execution_is_leased_and_settled_from_the_sink() {
   # The executor never ran, so the sink holds nothing. The runner claiming
   # success changes nothing: the broker reads the sink itself.
   response=$(rpc "$SOCKET_ROOT/execution.sock" "{\"schema\":\"fm.execution.v2\",\"op\":\"settle\",\"capability\":\"$(issue_cap execution exec-job)\",\"request_id\":\"$request_id\",\"lease\":\"$lease\",\"outcome\":\"succeeded\"}")
-  assert_contains "$response" '"state":"failed"' "a claimed success with nothing in the sink settles from the sink"
+  assert_contains "$response" '"state":"unknown"' "receipt absence cannot prove a terminal failure"
   assert_contains "$response" '"executor_claimed_outcome":"succeeded"' "the claim is recorded, not believed"
   assert_contains "$response" 'broker-read-of-sink-store' "the outcome names its own source"
   stop_server
@@ -1020,18 +1020,36 @@ UNBOUND
   result=$($RUNNER run --socket-root "$SOCKET_ROOT" --capability "$(issue_cap execution bound-job)" --request-id "$request_id" --idempotency-key bound-idem --executor "$unbound" 2>&1)
   rc=$?
   set -e
-  expect_code 2 "$rc" "unbound executor refused"
+  expect_code 3 "$rc" "unbound executor refused with an unobserved settlement"
   assert_contains "$result" 'refused to run an unbound executor' "the executor entry point does not choose the executor"
   assert_contains "$result" 'not the ones this approved plan binds' "the refusal names the bound-hash mismatch"
   assert_absent "$marker" "the unbound program must never receive the approved plan"
-  assert_contains "$result" '"broker_state":"failed"' "the broker settles from its own read, which holds nothing"
+  assert_contains "$result" '"broker_state":"unknown"' "receipt absence cannot prove a terminal no-effect outcome"
   stop_server
 
   store=$(sink_root)
   assert_absent "$store/safe-sink-v2.jsonl" "nothing was applied, so the receipt store stays empty"
   out=$($GW status --digest "$digest")
-  assert_contains "$out" 'state=failed' "a refused executor leaves nothing applied"
+  assert_contains "$out" 'state=unknown' "an absent receipt requires reconciliation"
   pass "an executor whose bytes the plan does not bind is refused before it runs anything"
+}
+
+test_absent_receipt_after_unknown_executor_requires_reconciliation() {
+  local out request_id secret response lease
+  reset_gateway
+  out=$(device_request lost-job lost-idem lost-nonce | run_prepare)
+  request_id=$(kv_get "$out" request_id)
+  secret=$(new_secret)
+  $GW enroll-approver --approver-id test-ui --algorithm hmac-sha256-test --key-material "$secret" >/dev/null
+  start_server lost
+  approve_request lost-job "$request_id" "$secret"
+  response=$(rpc "$SOCKET_ROOT/execution.sock" "{\"schema\":\"fm.execution.v2\",\"op\":\"claim\",\"capability\":\"$(issue_cap execution lost-job)\",\"request_id\":\"$request_id\",\"idempotency_key\":\"lost-idem\"}")
+  lease=$(json_field "$response" 'value["result"]["lease"]')
+  response=$(rpc "$SOCKET_ROOT/execution.sock" "{\"schema\":\"fm.execution.v2\",\"op\":\"settle\",\"capability\":\"$(issue_cap execution lost-job)\",\"request_id\":\"$request_id\",\"lease\":\"$lease\",\"outcome\":\"unknown\"}")
+  assert_contains "$response" '"state":"unknown"' 'absence must not assert no effect'
+  assert_contains "$response" '"reconciliation_required":true' 'interruption remains reconcilable'
+  stop_server
+  pass 'a missing receipt after an uncertain executor never asserts that nothing happened'
 }
 
 test_an_unreadable_sink_store_settles_unknown() {
@@ -1189,5 +1207,6 @@ test_expired_lease_becomes_unknown_and_never_resurrects
 test_a_plan_too_large_to_deliver_is_refused_before_it_is_executable
 test_an_unbound_executor_is_refused_before_it_runs
 test_an_unreadable_sink_store_settles_unknown
+test_absent_receipt_after_unknown_executor_requires_reconciliation
 test_an_expired_lease_is_recorded_before_the_refusal_is_raised
 test_executor_swap_after_approval_is_refused

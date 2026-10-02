@@ -962,6 +962,22 @@ test_arm_check_leaves_no_unregistered_shim() {
   pass 'arming the live check is all-or-nothing and idempotent, and losing it is reported with its repair'
 }
 
+test_lost_check_output_is_retried_after_lease() {
+  local h out
+  h="$TMP_ROOT/check-lost"
+  new_home "$h"
+  at "$h" "$T_0900" check >/dev/null
+  out=$(at "$h" $((T_0900 + 60)) check)
+  [ -z "$out" ] || fail 'lease did not bound duplicate warnings'
+  out=$(at "$h" $((T_0900 + 301)) check)
+  assert_contains "$out" 'source(s) due to read' 'lost wake was permanently suppressed'
+  # A legacy indefinite marker is expired rather than trusted as acceptance.
+  printf 'legacy-condition\n' >"$h/data/channel-intake/check-surfaced-due"
+  out=$(at "$h" $((T_0900 + 302)) check)
+  assert_contains "$out" 'source(s) due to read' 'legacy marker did not recover'
+  pass 'an unresolved channel condition is retried after lost watcher output'
+}
+
 test_check_signals_once_per_state() {
   local h out
   h="$TMP_ROOT/check"
@@ -1864,6 +1880,7 @@ test_no_existing_fleet_is_overridden
 test_local_configuration_stays_private
 test_arm_check_leaves_no_unregistered_shim
 test_check_signals_once_per_state
+test_lost_check_output_is_retried_after_lease
 test_a_held_alert_does_not_become_a_wake_loop
 test_a_replaced_alert_still_wakes_the_primary
 test_blocked_notifications_are_visible_rather_than_silent

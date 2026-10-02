@@ -36,7 +36,7 @@
 #
 # Duplicate protection is by operation identity, not by wall time, and it covers
 # the queue step: a second start for an idempotency key that already has a
-# prepared, live, or ready run is refused with a named reason rather than
+# prepared, live, ready, or settled run is refused with a named reason rather than
 # quietly producing - or enqueueing - a second request.
 #
 # Commands:
@@ -86,9 +86,8 @@ RETURN_DIR="${FM_FOTA_RETURN_DIR:-$FM_HOME/data/desktop-companion}"
 DEADLINE="${FM_FOTA_DEADLINE:-300}"
 QUEUE_CMD="${FM_FOTA_QUEUE_CMD:-codex}"
 QUEUE_TIMEOUT="${FM_FOTA_QUEUE_TIMEOUT:-30}"
-# A live run is one the duplicate guard blocks and the captain cannot yet be
-# finished with. Defined once so the start guard and the acknowledgement refusal
-# can never drift apart.
+# Live outcomes cannot be acknowledged. Operation reservation is independent:
+# every recorded attempt, including unknown and error, blocks a repeat start.
 LIVE_STATES="prepared pending ready"
 
 usage() {
@@ -138,8 +137,8 @@ cmd_start() {
   chmod 700 "$RUNS" "$RETURN_DIR" 2>/dev/null || true
   RUNS="$RUNS" RETURN_DIR="$RETURN_DIR" DEADLINE="$deadline" PLAN="$plan" \
     QUEUE_CMD="$QUEUE_CMD" QUEUE_TIMEOUT="$QUEUE_TIMEOUT" \
-    LIVE_STATES="$LIVE_STATES" py - <<'PYSTART'
-import json, os, re, subprocess, sys, textwrap, time
+    py - <<'PYSTART'
+import fcntl, json, os, re, subprocess, sys, tempfile, textwrap, time
 
 runs, return_dir = os.environ["RUNS"], os.environ["RETURN_DIR"]
 plan = json.load(open(os.environ["PLAN"], encoding="utf-8"))
@@ -195,22 +194,40 @@ if not re.match(
         "that cannot name its scope is not prepared and not queued" % origin
     )
 
-# The duplicate guard covers the queue step too. `prepared` counts as live: its
-# request exists and may already have reached the companion, so re-running it
-# would risk a second delivery of one intent.
-LIVE_STATES = set(os.environ["LIVE_STATES"].split())
+# Serialize reservation, not just run-name allocation. The kernel releases the
+# lock on death; never unlink its inode. No transport runs until the complete
+# attempt record and its directory entry have been synced.
+reservation_lock = open(os.path.join(runs, ".start.lock"), "a", encoding="utf-8")
+fcntl.flock(reservation_lock, fcntl.LOCK_EX)
 
-# Duplicate protection by operation identity. A second start for an operation
-# that already has a live or ready run would produce a second request for the
-# same intent, which is how one click becomes two.
+
+def publish_record(record):
+    fd, temp = tempfile.mkstemp(prefix=".run-", dir=runs)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            json.dump(record, handle, indent=2, sort_keys=True)
+            handle.write("\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temp, record_path)
+        directory = os.open(runs, os.O_RDONLY)
+        try:
+            os.fsync(directory)
+        finally:
+            os.close(directory)
+    finally:
+        if os.path.exists(temp):
+            os.unlink(temp)
+
+
 for name in sorted(os.listdir(runs)):
     if not name.endswith(".json"):
         continue
     try:
         existing = json.load(open(os.path.join(runs, name), encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
-        continue
-    if existing.get("idempotency_key") == key and existing.get("state") in LIVE_STATES:
+        sys.exit("fm-fota-stage-run: unreadable reservation %s; reconcile it before staging" % name)
+    if existing.get("idempotency_key") == key:
         sys.exit(
             "fm-fota-stage-run: operation already has a %s run (%s); "
             "raise the attempt ordinal to stage a deliberate retry"
@@ -224,7 +241,7 @@ for name in sorted(os.listdir(runs)):
 # record file is claimed with O_EXCL, so the id a run holds is the id no other
 # run can hold, and a settled record is never written over.
 base = "%s-%d" % (key, id_clock())
-run_id = record_fd = record_path = None
+run_id = record_path = None
 for ordinal in range(1, 1000):
     candidate = base if ordinal == 1 else "%s-%d" % (base, ordinal)
     path = os.path.join(runs, candidate + ".json")
@@ -239,7 +256,8 @@ for ordinal in range(1, 1000):
         os.close(fd)
         os.unlink(path)
         continue
-    run_id, record_fd, record_path = candidate, fd, path
+    os.close(fd)
+    run_id, record_path = candidate, path
     break
 if run_id is None:
     sys.exit("fm-fota-stage-run: could not claim a free run id for %s" % key)
@@ -247,10 +265,8 @@ if run_id is None:
 result_path = os.path.join(return_dir, run_id + "-result.json")
 request_path = os.path.join(return_dir, run_id + "-request.md")
 
-# Everything below runs against a run id already claimed on disk. If any of it
-# fails, the claim and the request it mirrors are both released rather than left
-# behind - an empty record the deck silently skips over, and a request file
-# carrying the target and the payload for a run that never existed.
+# Pre-publication failures can release their empty claim. Once published, an
+# attempt is retained even if queue delivery or the final publication fails.
 record_written = False
 try:
     # The request is GENERATED from the approved plan, never hand-written prose.
@@ -299,7 +315,14 @@ try:
     fd = os.open(request_path, os.O_CREAT | os.O_TRUNC | os.O_WRONLY, 0o600)
     with os.fdopen(fd, "w", encoding="utf-8") as handle:
         handle.write(request)
+        handle.flush()
+        os.fsync(handle.fileno())
     os.chmod(request_path, 0o600)
+    directory = os.open(return_dir, os.O_RDONLY)
+    try:
+        os.fsync(directory)
+    finally:
+        os.close(directory)
 
 
     def companion_thread():
@@ -371,6 +394,41 @@ try:
     }
 
     if thread:
+        queue.update(attempted=True, outcome="attempting", reason=(
+            "queue attempt reserved; delivery is unobserved until a receipt or result arrives"
+        ))
+    record = {
+        "schema": "fm.fota-staging-run.v1",
+        "run_id": run_id,
+        "idempotency_key": key,
+        "operation_fingerprint": plan["operation"]["operation_fingerprint"],
+        "attempt": plan["operation"]["attempt"],
+        "action_kind": plan["operation"]["action_kind"],
+        "device_id": plan["target"]["device_id"],
+        "expected_payload": plan["payload"],
+        "preview_hash": plan["preview_hash"],
+        "eligibility": plan["eligibility"]["state"],
+        "state": "pending" if thread else "prepared",
+        # The specific queue outcome, on the record's own reason field, so a surface
+        # reading `list` can tell `not-configured` from `not-installed` from a
+        # transport that refused - the whole point of the five-state model.
+        "reason": queue["reason"],
+        "started_at": int(time.time()),
+        "deadline_seconds": int(os.environ["DEADLINE"]),
+        "request_path": request_path,
+        "result_path": result_path,
+        "queue": queue,
+        # Pickup is never inferred from a receipt. Only a result file appearing is
+        # evidence the companion actually began a turn on this request.
+        "pickup_observed": False,
+        "sent": False,
+        "approval": "not-granted; staging does not approve or send",
+    }
+    publish_record(record)
+    record_written = True
+    # Keep the mutex through receipt publication; settle and ack share it.
+
+    if thread:
         queue["attempted"] = True
         try:
             completed = subprocess.run(
@@ -419,38 +477,8 @@ try:
     # means it plainly does not: the request exists and a person has to carry it.
     state = "pending" if queue["outcome"] in {"accepted", "timeout"} else "prepared"
 
-    record = {
-        "schema": "fm.fota-staging-run.v1",
-        "run_id": run_id,
-        "idempotency_key": key,
-        "operation_fingerprint": plan["operation"]["operation_fingerprint"],
-        "attempt": plan["operation"]["attempt"],
-        "action_kind": plan["operation"]["action_kind"],
-        "device_id": plan["target"]["device_id"],
-        "expected_payload": plan["payload"],
-        "preview_hash": plan["preview_hash"],
-        "eligibility": plan["eligibility"]["state"],
-        "state": state,
-        # The specific queue outcome, on the record's own reason field, so a surface
-        # reading `list` can tell `not-configured` from `not-installed` from a
-        # transport that refused - the whole point of the five-state model.
-        "reason": queue["reason"],
-        "started_at": int(time.time()),
-        "deadline_seconds": int(os.environ["DEADLINE"]),
-        "request_path": request_path,
-        "result_path": result_path,
-        "queue": queue,
-        # Pickup is never inferred from a receipt. Only a result file appearing is
-        # evidence the companion actually began a turn on this request.
-        "pickup_observed": False,
-        "sent": False,
-        "approval": "not-granted; staging does not approve or send",
-    }
-    with os.fdopen(record_fd, "w", encoding="utf-8") as handle:
-        json.dump(record, handle, indent=2, sort_keys=True)
-        handle.write("\n")
-    record_written = True
-    os.chmod(record_path, 0o600)
+    record.update(state=state, reason=queue["reason"], queue=queue)
+    publish_record(record)
     print("run_id=%s" % run_id)
     print("state=%s" % state)
     print("queue=%s" % queue["outcome"])
@@ -462,10 +490,6 @@ try:
     print("awaiting=%s" % result_path)
 finally:
     if not record_written:
-        try:
-            os.close(record_fd)
-        except OSError:
-            pass
         for orphan in (record_path, request_path):
             try:
                 os.unlink(orphan)
@@ -480,9 +504,11 @@ cmd_settle() {
   local path="$RUNS/$run_id.json"
   [ -f "$path" ] || die "unknown run: $run_id"
   RECORD="$path" py - <<'PYSETTLE'
-import json, os, tempfile, time
+import fcntl, json, os, tempfile, time
 
 path = os.environ["RECORD"]
+reservation_lock = open(os.path.join(os.path.dirname(path), ".start.lock"), "a", encoding="utf-8")
+fcntl.flock(reservation_lock, fcntl.LOCK_EX)
 record = json.load(open(path, encoding="utf-8"))
 result_path = record["result_path"]
 result_present = os.path.exists(result_path)
@@ -622,14 +648,16 @@ cmd_ack() {
   local path="$RUNS/$run_id.json"
   [ -f "$path" ] || die "unknown run: $run_id"
   RECORD="$path" NOTE="$note" LIVE_STATES="$LIVE_STATES" py - <<'PYACK'
-import json, os, tempfile, time
+import fcntl, json, os, tempfile, time
 
 path = os.environ["RECORD"]
+reservation_lock = open(os.path.join(os.path.dirname(path), ".start.lock"), "a", encoding="utf-8")
+fcntl.flock(reservation_lock, fcntl.LOCK_EX)
 record = json.load(open(path, encoding="utf-8"))
 
 # Acknowledgement is the captain saying "I have seen this", nothing more. It is
-# refused on every live run - the same set the duplicate guard blocks on - because
-# a run that has not settled has no outcome he could be finished with.
+# refused on every live run because a run that has not settled has no outcome
+# he could be finished with. Settled attempts still reserve their operation key.
 if record["state"] in set(os.environ["LIVE_STATES"].split()):
     raise SystemExit(
         "fm-fota-stage-run: run %s is %s; only a settled preparation alert can "

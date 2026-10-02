@@ -2146,7 +2146,8 @@ todo_cmd() {
 
 # The watcher contract: one line when firstmate should wake, nothing otherwise,
 # finishing well inside FM_CHECK_TIMEOUT. Suppression is by signature, so an
-# unchanged state wakes the primary once rather than on every poll.
+# unchanged state is suppressed for at most 300 seconds. Stdout is not a
+# durable watcher acknowledgement; a lost line must become eligible again.
 #
 # Due sources and notifiable items are two independent conditions and each
 # carries its own signature and its own marker. One combined snapshot would
@@ -2167,7 +2168,7 @@ CHECK_NOTIFY_FILE_NAME='check-surfaced-notify'
 
 check_signal() {
   local epoch due count notify notify_token line='' progress wake=false
-  local due_file notify_file due_signature='' notify_signature=''
+  local due_file notify_file due_signature='' notify_signature='' saved seen
   [ "$#" -eq 0 ] || die 'check takes no arguments'
   enabled || return 0
   epoch=$(now_epoch)
@@ -2183,12 +2184,20 @@ check_signal() {
   if [ "$count" -gt 0 ]; then
     progress=$(last_attempt_watermark)
     due_signature="$count:$progress"
-    [ "$(read_line_file "$due_file")" = "$due_signature" ] || wake=true
+    saved=$(read_line_file "$due_file"); seen=${saved##*|}
+    case "$seen" in ''|*[!0-9]*) seen=0 ;; esac
+    if [ "$saved" != "$due_signature|$seen" ] || [ "$epoch" -lt "$seen" ] || [ $((epoch - seen)) -ge 300 ]; then
+      wake=true
+    fi
     line="$CFG_LABEL: $count source(s) due to read"
   fi
   if [ "$notify" -gt 0 ]; then
     notify_signature="$notify_token:$notify:$(notify_identity "$epoch")"
-    [ "$(read_line_file "$notify_file")" = "$notify_signature" ] || wake=true
+    saved=$(read_line_file "$notify_file"); seen=${saved##*|}
+    case "$seen" in ''|*[!0-9]*) seen=0 ;; esac
+    if [ "$saved" != "$notify_signature|$seen" ] || [ "$epoch" -lt "$seen" ] || [ $((epoch - seen)) -ge 300 ]; then
+      wake=true
+    fi
     line="${line:-$CFG_LABEL:}${line:+,} $notify item(s) $(notify_state_phrase "$notify_token")"
   fi
 
@@ -2201,10 +2210,10 @@ check_signal() {
     return 0
   fi
   if [ -n "$due_signature" ]; then
-    write_atomic "$due_file" "$due_signature" || { unlock_state; return 0; }
+    write_atomic "$due_file" "$due_signature|$epoch" || { unlock_state; return 0; }
   fi
   if [ -n "$notify_signature" ]; then
-    write_atomic "$notify_file" "$notify_signature" || { unlock_state; return 0; }
+    write_atomic "$notify_file" "$notify_signature|$epoch" || { unlock_state; return 0; }
   fi
   unlock_state
   printf '%s\n' "$line"

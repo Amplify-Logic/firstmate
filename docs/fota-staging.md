@@ -86,10 +86,10 @@ Operation identity is therefore computed separately, over what makes two request
 No timestamp, no uuid.
 A deliberate retry raises an explicit **attempt ordinal**, which is part of the key, so an intended retry is a new identity by construction while an accidental repeat is not.
 
-`fm-fota-stage-run.sh start` refuses a second run for an operation that already has a prepared, live, or ready one, naming the existing run.
+`fm-fota-stage-run.sh start` refuses a second run for an operation that already has a recorded attempt, including a settled `unknown`, naming the existing run.
 The guard covers the queue step, so a first attempt that did not land is never quietly enqueued again; a deliberate retry raises the attempt ordinal.
 
-Run ids are claimed with `O_EXCL`, so two starts in one wall-clock second cannot share an id.
+Operation reservation is serialized and durably published before queueing; run ids are also claimed with `O_EXCL`, so overlapping starts cannot enqueue the same attempt or share an id.
 A settled record is never written over, and a run never adopts an id whose result file already exists - a stale result read as a new run's readback is exactly the evidence loss `unknown` exists to prevent.
 
 ## Delivery: four facts, never collapsed

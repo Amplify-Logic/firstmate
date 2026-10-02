@@ -55,7 +55,9 @@ There are two halves, and only one of them is here.
   The Artevo Inbox folder is missing, Artevo's command is not installed, or its import fails.
   Firstmate holds the recording, says "Saved, waiting for the desk.", tries again on every check, and announces the receipt once it lands.
 
-Firstmate is woken once per recording that first fails to reach Artevo, cannot be filed at all, or whose receipt could not be spoken, and `bin/fm-voice-idea.py status` lists every held idea with the reason it is waiting.
+Firstmate is woken for recordings that fail to reach Artevo, cannot be filed, or whose receipt could not be spoken; unresolved alerts retry after the bounded suppression lease described in `bin/fm-voice-idea.py`.
+`bin/fm-voice-idea.py status` lists every held idea with the reason it is waiting.
+An announcement whose delivery is uncertain is retained for reconciliation and never automatically spoken again; status names the uncertainty, and JSON status reports `spoken: null`.
 
 ## Turning it on
 

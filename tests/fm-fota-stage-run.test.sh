@@ -341,34 +341,53 @@ test_generated_request_is_not_world_readable() {
 
 test_a_settled_record_is_never_overwritten() {
   reset_runs
-  local plan key clock first second
+  local plan first out rc
   plan=$(make_plan 1)
-  key=$(plan_key "$plan")
-  # The id stem is pinned, so both starts are GUARANTEED to want the same id
-  # rather than racing the wall clock for it. That is the whole point: the
-  # collision branch has to run, not merely be likely to.
-  clock=$(date +%s)
-  export FM_FOTA_RUN_ID_CLOCK="$clock"
-
   first=$(start_run "$plan" --deadline 0)
-  [ "$first" = "$key-$clock" ] || fail "the first run did not take the pinned stem: $first"
   "$RUNNER" settle "$first" >/dev/null
-  assert_contains "$("$RUNNER" status "$first")" 'state=unknown' "first run settled unknown"
+  out=$("$RUNNER" start "$plan" 2>&1) && rc=0 || rc=$?
+  expect_code 1 "$rc" "unknown outcome reserves the attempt"
+  assert_contains "$out" 'already has a unknown run' "unknown is not permission to replay"
+  assert_contains "$("$RUNNER" status "$first")" 'state=unknown' "evidence survives"
+  [ "$(wc -l < "$QUEUE_LOG" | tr -d ' ')" = 1 ] || fail 'unknown was enqueued twice'
+  pass "a settled unknown record permanently reserves its operation identity"
+}
 
-  # The SAME plan, so the same idempotency key and the same pinned stem. The run
-  # has settled, so the duplicate guard lets it through - and the id it wants is
-  # already taken, which is exactly the case that used to overwrite the settled
-  # record and read its result file back as this run's own evidence.
-  second=$(start_run "$plan")
-  [ "$second" = "$key-$clock-2" ] \
-    || fail "the second run did not take the collision branch: $second"
-  unset FM_FOTA_RUN_ID_CLOCK
+test_concurrent_and_interrupted_queue_attempts_are_reserved() {
+  reset_runs
+  local plan first_pid settle_pid run_id out rc i
+  plan=$(make_plan 1)
+  FM_TEST_QUEUE_HANG=2 "$RUNNER" start "$plan" --deadline 0 >"$TMP/first.out" 2>&1 &
+  first_pid=$!
+  for i in $(seq 1 100); do
+    [ ! -s "$QUEUE_LOG" ] || break
+    sleep 0.1
+  done
+  [ -s "$QUEUE_LOG" ] || fail 'first queue never started'
+  run_id=$("$RUNNER" list --json | python3 -c 'import json,sys; print(json.load(sys.stdin)[0]["run_id"])')
+  "$RUNNER" settle "$run_id" >"$TMP/settle.out" 2>&1 &
+  settle_pid=$!
+  out=$("$RUNNER" start "$plan" 2>&1) && rc=0 || rc=$?
+  expect_code 1 "$rc" 'overlapping start refuses'
+  wait "$first_pid" || fail 'first queue did not complete'
+  wait "$settle_pid" || fail 'settlement failed'
+  assert_contains "$("$RUNNER" status "$run_id")" 'state=unknown' 'queue receipt never overwrites concurrent settlement'
+  [ "$(wc -l < "$QUEUE_LOG" | tr -d ' ')" = 1 ] || fail 'concurrent operation was enqueued twice'
 
-  assert_contains "$("$RUNNER" status "$first")" 'state=unknown' \
-    "the settled outcome survived a later run"
-  assert_contains "$("$RUNNER" status "$second")" 'state=pending' \
-    "the second run is its own live run"
-  pass "a settled record is never written over by a later run"
+  reset_runs
+  # Simulate acceptance followed by abrupt death before receipt publication.
+  cat > "$TMP/bin/kill-parent" <<'STUB'
+#!/usr/bin/env bash
+printf 'accepted\n' >> "$FM_TEST_QUEUE_LOG"
+kill -KILL "$PPID"
+STUB
+  chmod +x "$TMP/bin/kill-parent"
+  FM_FOTA_QUEUE_CMD="$TMP/bin/kill-parent" "$RUNNER" start "$plan" >"$TMP/killed.out" 2>&1 && fail 'injected death did not fire'
+  out=$("$RUNNER" start "$plan" 2>&1) && rc=0 || rc=$?
+  expect_code 1 "$rc" 'crashed queue keeps reservation'
+  assert_contains "$("$RUNNER" list --json)" '"queue": "attempting"' 'complete attempt evidence survives'
+  [ "$(wc -l < "$QUEUE_LOG" | tr -d ' ')" = 1 ] || fail 'crashed operation was enqueued twice'
+  pass 'overlap and death after queue acceptance cannot enqueue an operation twice'
 }
 
 test_a_stale_result_is_never_read_as_a_new_runs_readback() {
@@ -443,7 +462,7 @@ refuse_ack() {  # refuse_ack <run-id> <label>
 test_a_live_run_cannot_be_acknowledged() {
   reset_runs
   local run_id
-  # Every live state, which is the same set the duplicate guard blocks on: a run
+  # Every live state refuses acknowledgement: a run
   # that has not settled has no outcome the captain could be finished with.
   run_id=$(start_run "$(make_plan 1)" --deadline 600)
   refuse_ack "$run_id" pending
@@ -701,6 +720,7 @@ test_refused_queue_is_honest_and_never_requeued
 test_queue_timeout_is_pending_and_never_requeued
 test_generated_request_is_not_world_readable
 test_a_settled_record_is_never_overwritten
+test_concurrent_and_interrupted_queue_attempts_are_reserved
 test_a_stale_result_is_never_read_as_a_new_runs_readback
 test_deadline_argument_is_validated
 test_acknowledgement_clears_the_ask_without_losing_the_outcome
