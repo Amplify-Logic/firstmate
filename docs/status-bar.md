@@ -411,8 +411,8 @@ otherwise be releasing a zoom that belongs to someone else. If `pane run` then f
 releases its own zoom before closing the pane it was taken for.
 Likewise, a renderer that retires because the primary pane stopped running Codex releases the zoom it
 owns before exiting, since that pane outlives it; one that does not own the zoom leaves it alone.
-The renderer never re-applies the zoom: it only RELEASES, on a slow cadence, if a third pane later
-appears in that tab, and it stops checking once released.
+The renderer never re-applies the zoom: apart from that retirement, it only RELEASES, on a slow
+cadence, if a third pane later appears in that tab, and it stops checking once released.
 That keeps two properties at the same time - a co-tenant pane's live work is never hidden, and a
 captain who deliberately unzooms is not fought once a second.
 
