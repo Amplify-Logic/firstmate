@@ -640,7 +640,7 @@ companion_pane_alive() {
 # Before that the launcher is still on its way to exec'ing the runtime, and a
 # provider that cannot report pane processes at all never arms it, which keeps
 # the pre-existing pane-liveness behavior rather than retiring a working bar.
-# Once armed, the runtime must be absent for several consecutive ticks, so one
+# Once armed, the runtime must be absent for three consecutive ticks, so one
 # failed or racing process read cannot retire a live primary's companion.
 # Every guarded launch installs its own companion, so a primary relaunched in
 # the same pane is never left without one by this.
@@ -655,7 +655,7 @@ companion_runtime_retired() {
   fi
   [ "$RUNTIME_SEEN" = 1 ] || return 1
   RUNTIME_MISSES=$((RUNTIME_MISSES + 1))
-  [ "$RUNTIME_MISSES" -ge "${FM_STATUS_RUNTIME_GONE_TICKS:-3}" ]
+  [ "$RUNTIME_MISSES" -ge 3 ]
 }
 
 if [ -n "$FOLLOW_PANE" ]; then
@@ -699,8 +699,16 @@ if [ -n "$FOLLOW_PANE" ]; then
   # Exiting is the whole retirement: the renderer is the companion pane's only
   # process on both providers (tmux runs it as the split's command, and the
   # Herdr launch execs it in place of the pane's shell), so the provider closes
-  # that pane itself and no pane is ever closed by id from here.
-  while companion_pane_alive && ! companion_runtime_retired; do
+  # that pane itself and no pane is ever closed by id from here. The primary
+  # pane outlives a retirement, so a zoom this renderer owns is given back
+  # first, or it would go on hiding whatever later splits that tab.
+  while companion_pane_alive; do
+    if companion_runtime_retired; then
+      if [ -n "$CHROME_PANE" ] && [ "$CHROME_ZOOM_WATCH" = 1 ]; then
+        herdr --session "$FM_STATUS_HERDR_SESSION" pane zoom "$CHROME_PANE" --off >/dev/null 2>&1
+      fi
+      break
+    fi
     # Collect the complete frame before any of it reaches the pane, then publish
     # the row erase and the finished frame in a single write. Erasing first left
     # the row visibly blank for the whole length of the collection, which is what
