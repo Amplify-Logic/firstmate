@@ -1158,7 +1158,7 @@ case "${1:-} ${2:-}" in
         [ ! -e "$dir/type-after-enter" ] || mv "$dir/type-after-enter" "$dir/draft" ;;
     esac ;;
   "agent get")
-    if [ -e "$dir/entered" ] && [ ! -e "$dir/never-works" ]; then s=working; else s=idle; fi
+    if [ -e "$dir/entered" ] && [ ! -e "$dir/never-works" ] && [ ! -e "$dir/agent-idle" ]; then s=working; else s=idle; fi
     if [ -e "$dir/agent" ]; then
       printf '{"result":{"agent":{"agent":"%s","agent_status":"%s"}}}\n' "$(cat "$dir/agent")" "$s"
     else
@@ -1428,12 +1428,16 @@ test_ring_checks_the_payload_before_each_enter() {
 test_ring_waits_for_a_late_paste_and_a_late_redraw() {
   local home out backend when
   for backend in tmux herdr; do
-    for when in paste redraw stash; do
+    for when in paste suggestion redraw stash; do
       home=$(desk_send_fixture "ring-late-$backend-$when" "$backend") \
         || { desk_send_skip "ring-late-$backend-$when"; return 0; }
       : > "$home/fixture/tmux-composer"
       case "$when" in
         paste) printf '6' > "$home/fixture/late-paste" ;;
+        suggestion)
+          printf '6' > "$home/fixture/late-paste"
+          printf 'suggested words' > "$home/fixture/ghost"
+          ;;
         redraw) printf '5' > "$home/fixture/stale-reads" ;;
         stash)
           printf 'half typed thought' > "$home/fixture/stash"
@@ -1442,7 +1446,7 @@ test_ring_waits_for_a_late_paste_and_a_late_redraw() {
       esac
       out=$(desk_ring "$home" '[firstmate inbox] ring') || fail "ring failed: $out"
       case "$when" in
-        paste|redraw)
+        paste|suggestion|redraw)
           assert_contains "$out" "rung: $backend" "a late $when must still be proven and submitted"
           [ "$(cat "$home/fixture/submitted")" = '[firstmate inbox] ring' ] || fail "$backend: only the ring may be submitted"
           [ "$(herdr_calls "$home" pane send-keys | wc -l | tr -d ' ')" = 1 ] || fail "$backend: a late $when needs exactly one Enter"
@@ -1460,7 +1464,7 @@ test_ring_waits_for_a_late_paste_and_a_late_redraw() {
       desk_send_done "$home"
     done
   done
-  pass "desk ring: a late paste is still proven, a late redraw gets no retry, and a stash is never rung over"
+  pass "desk ring: a late paste is still proven, even under a dim suggestion, a late redraw gets no retry, and a stash is never rung over"
 }
 
 test_ring_and_send_share_one_writer_lock() {
@@ -1825,6 +1829,33 @@ test_desk_voice_send_keeps_the_stash_when_paste_outlives_proof() {
     desk_send_done "$home"
   done
   pass "desk send: a paste delayed beyond the proof window never receives recovery Ctrl+S"
+}
+
+test_desk_voice_send_never_submits_a_draft_left_stashed() {
+  local home out backend
+  for backend in herdr tmux; do
+    home=$(desk_send_fixture "send-after-stash-$backend" "$backend") \
+      || { desk_send_skip "send-after-stash-$backend"; return 0; }
+    : > "$home/fixture/tmux-composer"
+    : > "$home/fixture/agent-idle"
+    if [ "$backend" = herdr ]; then
+      printf 'half typed thought' > "$home/fixture/draft"
+      printf '200' > "$home/fixture/late-paste"
+      out=$(desk_send "$home" 'delayed message') || fail "send failed: $out"
+      assert_contains "$out" 'sent-unconfirmed:' "the delayed paste leaves the draft stashed"
+      # The delayed paste is lost, so the box is empty over the kept stash.
+      rm -f "$home/fixture/queued" "$home/fixture/queued-reads" "$home/fixture/late-paste"
+    else
+      printf 'half typed thought' > "$home/fixture/stash"
+    fi
+    out=$(desk_send "$home" 'next message') || fail "send failed: $out"
+    assert_contains "$out" "$backend" "the next message still goes to the primary's pane"
+    [ "$(cat "$home/fixture/submitted")" = 'next message' ] || fail "$backend: only the new message may be submitted"
+    [ "$(cat "$home/fixture/draft")" = 'half typed thought' ] || fail "$backend: the restored draft must stay unsent"
+    [ "$(inbox_count "$home")" = 0 ] || fail "$backend: a typed message must not also reach the mailbox"
+    desk_send_done "$home"
+  done
+  pass "desk send: a message sent over a stashed draft presses Enter once, so the restored draft stays unsent"
 }
 
 test_desk_voice_send_clears_a_refused_message_and_restores_the_draft() {
@@ -2287,6 +2318,7 @@ test_desk_voice_send_pastes_a_voice_length_message_past_a_claude_draft
 test_desk_voice_send_clears_a_refused_message_and_restores_the_draft
 test_desk_voice_send_waits_for_a_late_drawn_message_past_a_claude_draft
 test_desk_voice_send_keeps_the_stash_when_paste_outlives_proof
+test_desk_voice_send_never_submits_a_draft_left_stashed
 test_desk_voice_send_never_confirms_a_redrawn_message_past_a_draft
 test_desk_voice_send_restores_a_draft_stashed_without_a_marker
 test_desk_voice_send_joins_another_harness_draft

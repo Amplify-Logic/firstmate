@@ -249,16 +249,23 @@ test_quoted_search_strings_keep_commands_visible() {
     'grep -n "password=" .env.example && rm -rf ~/projects && echo "done"' \
     "grep 'token: ' cfg.yml; git push --force origin main; echo 'ok'" \
     'printf "token=" ; rm -rf ~ ; printf " "' \
-    'rm "token=" -rf ~/projects "x"'; do
+    'rm "token=" -rf ~/projects "x"' \
+    "rm \$'a\\' --password \"' -rf ~ '\"'" \
+    "rm \$'a\\' secret: \"' -rf ~ '\"'"; do
     reset_server "$FIX/response-git-status.json"
     run_hook "$home" "$cmd" >/dev/null
     body=$(jq -r '.state.command' "$SRV/requests.jsonl")
-    assert_equals "$cmd" "$body" "a credential name inside a quoted search string must not hide what follows"
+    assert_equals "$cmd" "$body" "a credential name inside a quoted or ANSI-C string must not hide what follows"
   done
-  reset_server "$FIX/response-git-status.json"
-  run_hook "$home" 'printf "x TOKEN=" ; rm -rf ~ ; echo "y"' >/dev/null
-  body=$(jq -r '.state.command' "$SRV/requests.jsonl")
-  assert_contains "$body" ' ; rm -rf ~ ; echo "y"' "a secret-named assignment inside a quoted string must not hide what follows"
+  for cmd in \
+    'printf "x TOKEN=" ; rm -rf ~ ; echo "y"|rm -rf ~ ; echo "y"' \
+    'find . -name "a password=" -delete -o -name "b"| -delete -o -name "b"' \
+    'rm "x token=" -rf ~/projects "y"| -rf ~/projects "y"'; do
+    reset_server "$FIX/response-git-status.json"
+    run_hook "$home" "${cmd%%|*}" >/dev/null
+    body=$(jq -r '.state.command' "$SRV/requests.jsonl")
+    assert_contains "$body" "${cmd#*|}" "a secret-named assignment inside a quoted string must not hide what follows"
+  done
   reset_server "$FIX/response-git-status.json"
   run_hook "$home" 'client --password "unterminated-secret' >/dev/null
   body=$(jq -r '.state.command' "$SRV/requests.jsonl")

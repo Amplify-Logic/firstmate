@@ -84,9 +84,10 @@
 #   not-rung                              nothing typed; the queued wake stands
 # Ring and send share a per-home pane-writer lock through inspection, typing,
 # submission and recovery. On contention send uses its mailbox and ring leaves
-# its queued wake alone. Ring leaves a Claude stash alone, as one is restored
-# on submission. Before every ring Enter, including retries, the box must
-# still show only the ring's literal payload.
+# its queued wake alone. Ring leaves a Claude stash alone, and send presses
+# Enter only once over one, as a stash is restored on submission. Before every
+# ring Enter, including retries, the box must still show only the ring's
+# literal payload.
 #
 # deliver is the mailbox path. Transcripts land under
 #   $FM_HOME/state/desk-voice/inbox/<utc>-<id>.json
@@ -497,20 +498,24 @@ send_past_draft() {  # <backend> <target> <line>
 
 # Ring input is short literal text. Do not accept a pasted-text placeholder as
 # proof of its contents: it could be a new draft. The proof is read for up to
-# 3s while the box shows nothing or only the start of the ring, as a busy chat
-# draws a paste late, and anything else refuses it at once. After Enter the
-# box gets 3s to read empty before it counts as swallowed; a retry needs the
-# box to still show only the ring and no stash Claude could restore into it.
+# 3s while the box still reads empty, perhaps under a dim suggestion, or shows
+# only the start of the ring, as a busy chat draws a paste late; any other
+# text refuses it at once. After Enter the box gets 3s to read empty before
+# it counts as swallowed; a retry needs the box to still show only the ring
+# and no stash Claude could restore into it.
 # Whitespace normalization is only for the composer's line wrapping.
 submit_ring() {  # <backend> <target> <line>
   local backend=$1 target=$2 line=$3 expected shown after rows i=0 tries=1
   rows=$(fm_composer_proof_lines "$line")
   expected=$(squeezed "$line")
   paste_text "$backend" "$target" "$line" || { printf 'send-failed'; return 0; }
-  while sleep 0.2; after=$(composer_text "$backend" "$target" "$rows") || after=''
-    shown=$(squeezed "$after")
-    [ "$shown" != "$expected" ]; do
-    case $expected in "$shown"*) ;; *) printf 'unknown'; return 0 ;; esac
+  while sleep 0.2; do
+    if [ "$(fm_backend_composer_state "$backend" "$target" 2>/dev/null)" != empty ]; then
+      after=$(composer_text "$backend" "$target" "$rows") || after=''
+      shown=$(squeezed "$after")
+      [ "$shown" != "$expected" ] || break
+      case $expected in "$shown"*) ;; *) printf 'unknown'; return 0 ;; esac
+    fi
     i=$((i + 1))
     [ "$i" -lt 15 ] || { printf 'unknown'; return 0; }
   done
@@ -599,7 +604,7 @@ EOF
 # proven but not showing its chat input, another writer owns it, or a ring
 # finds a stash; nothing was typed either way. Its subshell scopes the pane environment and writer lock.
 primary_submit() (  # <line> [<app> <tty>]
-  local lock="$STATE/.lock" pid envs kv backend target root verdict draft claude composer
+  local lock="$STATE/.lock" pid envs kv backend target root verdict draft claude composer tries
   local writer_lock="$STATE/desk-voice/.send.lock"
   [ -f "$lock" ] && [ ! -L "$lock" ] || return 1
   pid=$(head -n 1 "$lock" 2>/dev/null) || return 1
@@ -644,7 +649,9 @@ EOF
   elif [ "$draft" = 1 ] && [ "$claude" = 1 ]; then
     verdict=$(send_past_draft "$backend" "$target" "$1") || verdict=send-failed
   else
-    verdict=$(fm_backend_send_text_submit "$backend" "$target" "$1" 3 0.4 0.5) || verdict=send-failed
+    tries=3
+    [ "$claude" != 1 ] || ! shows_stash "$backend" "$target" || tries=1
+    verdict=$(fm_backend_send_text_submit "$backend" "$target" "$1" "$tries" 0.4 0.5) || verdict=send-failed
   fi
   printf '%s\t%s\t%s\n' "${verdict:-send-failed}" "$backend" "$target"
 )

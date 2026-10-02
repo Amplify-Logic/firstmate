@@ -238,8 +238,8 @@ URL_CREDENTIAL = re.compile(r"(://)[^/\s:@]+:[^/\s@]+@")
 # NAME=value at the start, after whitespace or an operator, or on its own line
 # inside a heredoc body. Only a secret-looking name or a random-looking value
 # loses its value.
-ASSIGNMENT = re.compile(r"(^|[\s;&|(`])([A-Za-z_][A-Za-z0-9_]*)="
-                        r"(\"(?:[^\"\n;&|<>`$]|\$(?!\())*\"|'(?:[^'\n;&|<>`$]|\$(?!\())*'|[^\s;&|)`]*)")
+ASSIGNMENT_NAME = re.compile(r"(?:^|[\s;&|(`])([A-Za-z_][A-Za-z0-9_]*)=")
+ASSIGNMENT_BARE = re.compile(r"([^\s;&|)`]*)")
 # A long random-looking run: mixed case AND digits. Git SHAs and task ids are
 # single-case, so they survive; most generated keys do not.
 LONG_RUN = re.compile(r"[A-Za-z0-9_+=-]{32,}")
@@ -250,26 +250,31 @@ def _random_looking(token):
             and re.search(r"[0-9]", token))
 
 
-def _assignment(match):
-    lead, name, value = match.groups()
+def _assignment(match, value):
+    name = match.group(1)
     bare = value[1:-1] if value[:1] in "'\"" else value
     if ((SECRET_NAME.search(name) and name not in NOT_SECRET_NAMES)
             or (re.fullmatch(r"[A-Za-z0-9_+=-]{12,}", bare) and _random_looking(bare))):
-        value = REDACTED
-    return "%s%s=%s" % (lead, name, value)
+        return REDACTED
+    return value
 
 
 def _shell_quotes(text):
-    """Map each quote that opens a shell string to the index after its close."""
+    """Map each quote that opens a shell string to the index after its close.
+    A $'...' string, like a double-quoted one, can escape its closing quote."""
     quotes, i = {}, 0
     while i < len(text):
         if text[i] == "\\":
             i += 2
             continue
+        escapes = text[i] == '"'
+        if text.startswith("$'", i):
+            i += 1
+            escapes = True
         if text[i] in "'\"":
             end = i + 1
             while end < len(text) and text[end] != text[i]:
-                end += 2 if text[i] == '"' and text[end] == "\\" else 1
+                end += 2 if escapes and text[end] == "\\" else 1
             if end >= len(text):
                 break
             quotes[i] = end + 1
@@ -278,20 +283,22 @@ def _shell_quotes(text):
     return quotes
 
 
-def _redact_named_values(text):
+def _replace_values(text, names, bare_value, replace):
+    """Pass the value after each match of <names> through <replace>: a whole
+    shell string that opens right there, else the run <bare_value> captures."""
     quotes = _shell_quotes(text)
     out, pos = [], 0
-    for name in CREDENTIAL_NAME.finditer(text):
+    for name in names.finditer(text):
         if name.start() < pos:
             continue
         start = name.end()
         end = quotes.get(start)
         if end is None or UNSAFE_IN_QUOTES.search(text, start, end):
-            bare = BARE_VALUE.match(text, start)
+            bare = bare_value.match(text, start)
             if not bare:
                 continue
             start, end = bare.span(1)
-        out += [text[pos:start], REDACTED]
+        out += [text[pos:start], replace(name, text[start:end])]
         pos = end
     return "".join(out) + text[pos:]
 
@@ -318,9 +325,9 @@ def redact(command, secrets):
             text = text.replace(value, REDACTED)
     for pattern in KEY_PATTERNS:
         text = pattern.sub(REDACTED, text)
-    text = _redact_named_values(text)
+    text = _replace_values(text, CREDENTIAL_NAME, BARE_VALUE, lambda name, value: REDACTED)
     text = URL_CREDENTIAL.sub(r"\1%s@" % REDACTED, text)
-    text = ASSIGNMENT.sub(_assignment, text)
+    text = _replace_values(text, ASSIGNMENT_NAME, ASSIGNMENT_BARE, _assignment)
     text = LONG_RUN.sub(lambda m: REDACTED if _random_looking(m.group(0)) else m.group(0), text)
     return text
 
