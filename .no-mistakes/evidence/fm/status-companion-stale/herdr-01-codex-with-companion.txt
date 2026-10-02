@@ -1,0 +1,30 @@
+00| spaces                  │ 1 Z     +
+01|                         │┌────────────────────────────────────────────────────────────────────────────────────────────┐
+02| ○ stale                 ││> You are in /Users/larstolhurst/.no-mistakes/worktrees/9957e108f4d7/01M3XYJ8V9T3DY7DSKJBQ1▕│
+03|                         ││                                                                                           ▕│
+04|                         ││  Do you trust the contents of this directory? Working with untrusted contents comes with  ▕│
+05|                         ││  higher risk of prompt injection. Trusting the directory allows project-local config,     ▐│
+06|                         ││  hooks, and exec policies to load.                                                        ▐│
+07|                         ││                                                                                           ▐│
+08|                         ││› 1. Yes, continue                                                                         ▐│
+09|                         ││  2. No, quit                                                                              ▐│
+10|                         ││                                                                                           ▐│
+11|                         ││  Press enter to continue                                                                  ▐│
+12|                         ││                                                                                           ▐│
+13|                         ││                                                                                           ▐│
+14| new               ● menu││                                                                                           ▐│
+15|─────────────────────────││                                                                                           ▐│
+16| agents           grouped││                                                                                           ▐│
+17|                         ││                                                                                           ▐│
+18| ✓ stale                 ││                                                                                           ▐│
+19|   codex                 ││                                                                                           ▐│
+20|                         ││                                                                                           ▐│
+21|                         ││                                                                                           ▐│
+22|                         ││                                                                                           ▐│
+23|                         ││                                                                                           ▐│
+24|                         ││                                                                                           ▐│
+25|                         ││                                                                                           ▐│
+26|                         ││                                                                                           ▐│
+27|                         ││                                                                                           ▐│
+28|                         ││                                                                                           ▐│
+29|                        «│└────────────────────────────────────────────────────────────────────────────────────────────┘

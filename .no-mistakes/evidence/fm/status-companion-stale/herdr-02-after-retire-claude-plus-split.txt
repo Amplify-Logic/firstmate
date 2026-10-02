@@ -1,0 +1,30 @@
+00| spaces                  │ 1       +
+01|                         │┌─────────────────────────────────────────────┐┌─────────────────────────────────────────────┐
+02| ● stale                 ││                                            ▕││larstolhurst@Larss-MacBook-Air 01M3XYJ8V9T3D │
+03|                         ││────────────────────────────────────────────▕││Y7DSKJBQ1CZM7 %                              │
+04|                         ││ Accessing workspace:                       ▕││                                             │
+05|                         ││                                            ▕││                                             │
+06|                         ││ /Users/larstolhurst/.no-mistakes/worktrees ▕││                                             │
+07|                         ││ /9957e108f4d7/01M3XYJ8V9T3DY7DSKJBQ1CZM7   ▕││                                             │
+08|                         ││                                            ▕││                                             │
+09|                         ││ Quick safety check: Is this a project you  ▕││                                             │
+10|                         ││ created or one you trust? (Like your own   ▕││                                             │
+11|                         ││ code, a well-known open source project, or ▕││                                             │
+12|                         ││ work from your team). If not, take a       ▕││                                             │
+13|                         ││ moment to review what's in this folder     ▕││                                             │
+14| new               ● menu││ first.                                     ▕││                                             │
+15|─────────────────────────││                                            ▕││                                             │
+16| agents           grouped││ Claude Code'll be able to read, edit, and  ▕││                                             │
+17|                         ││ execute files here.                        ▕││                                             │
+18| ◉ stale                 ││                                            ▕││                                             │
+19|   claude                ││ Security guide                             ▐││                                             │
+20|                         ││                                            ▐││                                             │
+21|                         ││ ❯ No, exit                                 ▐││                                             │
+22|                         ││   Yes, I trust this folder                 ▐││                                             │
+23|                         ││                                            ▐││                                             │
+24|                         ││ Enter to confirm · Esc to cancel           ▐││                                             │
+25|                         ││                                            ▐││                                             │
+26|                         ││                                            ▐││                                             │
+27|                         ││                                            ▐││                                             │
+28|                         ││                                            ▐││                                             │
+29|                        «│└─────────────────────────────────────────────┘└─────────────────────────────────────────────┘

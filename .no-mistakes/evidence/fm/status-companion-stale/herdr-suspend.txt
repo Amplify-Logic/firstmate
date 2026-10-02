@@ -1,0 +1,13 @@
+== herdr: ~9s after ctrl+z suspended Codex in w1:p1
+foreground group:
+{"shell_pid":92019,"fg":[{"pid":92019,"name":"zsh"}]}
+  PID STAT COMM
+93837 T    /Users/larstolhurst/.npm-global/lib/node_modules/@openai/codex/node_modules/@openai/codex-darwin-arm64/vendor/aarch64-apple-darwin/bin/codex
+panes in tab + zoom:
+{"zoomed":true,"panes":["w1:p1","w1:p2"]}
+companion w1:p2 row:
+⚓ gpt-6-astra·high │ 🧠-- ⚡24%wk │ 🚢0 🧪0 ⏸0 ⚠0 🪦-
+== after fg
+{"fg":[{"pid":93837,"name":"codex"},{"pid":93836,"name":"node"}]}
+{"zoomed":true,"panes":["w1:p1","w1:p2"]}
+⚓ gpt-6-astra·high │ 🧠-- ⚡24%wk │ 🚢0 🧪0 ⏸0 ⚠0 🪦-

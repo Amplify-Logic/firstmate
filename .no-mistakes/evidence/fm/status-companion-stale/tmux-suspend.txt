@@ -1,0 +1,17 @@
+== tmux: 8s after Ctrl-Z suspended Codex
+%0 h=38 cmd=bash
+%1 h=1 cmd=bash
+  PID STAT COMM
+65371 T    node
+65389 T    /Users/larstolhurst/.npm-global/lib/node_modules/@openai/codex/node_modules/@openai/codex-darwin-arm64/vendor/aarch64-apple-darwin/bin/codex
+primary screen tail:
+  Press enter to continue
+[1]+  Stopped                 codex
+bash-3.2$
+companion row:
+⚓ gpt-6-astra·high │ 🧠-- ⚡24%wk │ 🚢0 🧪0 ⏸0 ⚠0 🪦0 📋0 │ 👁 NO-WATCH -- │ $-- │ 💤--
+== after fg
+%0 h=38 cmd=node
+%1 h=1 cmd=bash
+companion row:
+⚓ gpt-6-astra·high │ 🧠-- ⚡24%wk │ 🚢0 🧪0 ⏸0 ⚠0 🪦0 📋0 │ 👁 NO-WATCH -- │ $-- │ 💤--

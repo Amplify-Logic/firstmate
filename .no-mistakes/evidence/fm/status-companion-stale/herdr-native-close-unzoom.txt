@@ -1,0 +1,4 @@
+== control (no companion): w5:p1 zoomed with panes
+{"zoomed":true,"panes":["w5:p1","w5:p3","w5:p2"]}
+== after pane w5:p2's shell exits on its own
+{"zoomed":false,"panes":["w5:p1","w5:p3"]}

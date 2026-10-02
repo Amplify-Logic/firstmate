@@ -1,0 +1,6 @@
+== before: companion w2:p2 launched WITHOUT --chrome-zoomed; zoom on w2:p1 applied by someone else (captain)
+{"zoomed":true,"panes":["w2:p1","w2:p2"]}
+t+1s {"zoomed":false,"panes":["w2:p1"]}
+== after: companion retired, foreign zoom untouched?
+{"fg":[{"pid":19163,"name":"claude.exe"}]}
+{"zoomed":false,"panes":["w2:p1"]}

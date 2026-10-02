@@ -1,0 +1,5 @@
+== companion following %2 whose shell has never run Codex, 10s after install
+%2 h=38 cmd=bash
+%3 h=1 cmd=bash
+companion row:
+⚓ gpt-6-astra·high │ 🧠-- ⚡24%wk │ 🚢0 🧪0 ⏸0 ⚠0 🪦0 📋0 │ 👁 NO-WATCH -- │ $-- │ 💤--

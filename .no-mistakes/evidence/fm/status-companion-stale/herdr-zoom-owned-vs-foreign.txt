@@ -1,0 +1,12 @@
+== [owned] companion w3:p2 (flags: --chrome-zoomed); primary w3:p1 zoomed, co-tenant present
+{"zoomed":true,"panes":["w3:p1","w3:p3","w3:p2"]}
+⚓ gpt-6-astra·high │ 🧠-- ⚡24%wk │ 🚢0 🧪0 ⏸0 ⚠0 🪦-
+== [foreign] companion w4:p2 (flags: no --chrome-zoomed); primary w4:p1 zoomed, co-tenant present
+{"zoomed":true,"panes":["w4:p1","w4:p3","w4:p2"]}
+⚓ gpt-6-astra·high │ 🧠-- ⚡24%wk │ 🚢0 🧪0 ⏸0 ⚠0 🪦-
+== [owned] ~7s after Codex replaced by Claude in w3:p1
+["claude.exe"]
+{"zoomed":false,"panes":["w3:p1","w3:p3"]}
+== [foreign] ~7s after Codex replaced by Claude in w4:p1
+["claude.exe"]
+{"zoomed":false,"panes":["w4:p1","w4:p3"]}
