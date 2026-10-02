@@ -304,16 +304,50 @@ test_recovery_preflight_failure_preserves_outgoing() {
   write_enabled_config
   write_active claude-fable
   start_fake_holder
-  run_execute env FM_HANDOFF_SIGNAL_CMD=true FM_HANDOFF_INJECT_FAIL=wait_dead \
-    "$ROOT/bin/fm-primary-handoff.sh" execute --to pi > "$TMP_ROOT/timeout.out" 2>&1 || true
-  assert_contains "$(cat "$HOME_FIX/state/.primary-handoff")" 'phase=releasing' "timeout should retain releasing"
+  FM_HANDOFF_INJECT_CRASH=releasing run_execute \
+    "$ROOT/bin/fm-primary-handoff.sh" execute --to pi > "$TMP_ROOT/crash.out" 2>&1 || true
+  assert_contains "$(cat "$HOME_FIX/state/.primary-handoff")" 'shutdown_requested=no' "pre-signal crash should prove no shutdown request"
   out=$(run_execute env FM_HANDOFF_PREFLIGHT_CMD=false \
     "$ROOT/bin/fm-primary-handoff.sh" check 2>&1) || status=$?
   assert_contains "$(cat "$HOME_FIX/state/.primary-handoff")" 'phase=aborted' "failed recovery preflight left the attempt nonterminal: $out"
   kill -0 "$FAKE_HOLDER_PID" || fail "failed recovery preflight stopped the outgoing primary"
-  [ ! -s "$LAUNCH_LOG" ] || fail "failed recovery preflight launched an incoming primary"
+  [ ! -s "$SIGNAL_LOG" ] && [ ! -s "$LAUNCH_LOG" ] || fail "failed recovery preflight signalled or launched"
   cleanup_holders
-  pass "recovery preflight failure aborts while the outgoing primary stays the owner"
+  pass "recovery preflight failure aborts while the unsignalled outgoing primary stays the owner"
+}
+
+signal_request_only() {
+  printf 'signal %s\n' "$1" >> "$SIGNAL_LOG"
+}
+export -f signal_request_only
+
+test_delayed_shutdown_survives_preflight_outage() {
+  local out status=0 i
+  : > "$SIGNAL_LOG"
+  : > "$LAUNCH_LOG"
+  write_enabled_config
+  write_active claude-fable
+  start_fake_holder
+  out=$(run_execute env FM_HANDOFF_SIGNAL_CMD=signal_request_only FM_HANDOFF_WAIT_DEAD_CMD=false \
+    "$ROOT/bin/fm-primary-handoff.sh" execute --to pi 2>&1) || status=$?
+  [ "$status" -ne 0 ] || fail "shutdown timeout should leave the attempt pending: $out"
+  [ "$(cat "$SIGNAL_LOG")" = "signal $FAKE_HOLDER_PID" ] || fail "outgoing shutdown was not requested once"
+  kill -0 "$FAKE_HOLDER_PID" || fail "outgoing should still be live after the timeout"
+  out=$(run_execute env FM_HANDOFF_PREFLIGHT_CMD=false \
+    "$ROOT/bin/fm-primary-handoff.sh" check 2>&1) || true
+  assert_contains "$(cat "$HOME_FIX/state/.primary-handoff")" 'phase=releasing' "preflight outage abandoned a signalled outgoing: $out"
+  assert_contains "$(cat "$HOME_FIX/state/.primary-handoff")" 'shutdown_requested=yes' "shutdown evidence was lost"
+  [ ! -s "$LAUNCH_LOG" ] || fail "preflight outage launched while the outgoing was live"
+  stop_fake_holder
+  for i in {1..3}; do
+    out=$(run_execute "$ROOT/bin/fm-primary-handoff.sh" check 2>&1) || true
+    if grep -q '^phase=complete$' "$HOME_FIX/state/.primary-handoff"; then break; fi
+  done
+  assert_contains "$(cat "$HOME_FIX/state/.primary-handoff")" 'phase=complete' "restored route did not replace the exited outgoing: $out"
+  [ "$(cat "$LAUNCH_LOG")" = 'launch pi' ] || fail "expected exactly one replacement launch: $(cat "$LAUNCH_LOG")"
+  [ "$(live_holder_count)" = 1 ] || fail "recovery left no single live owner"
+  cleanup_holders
+  pass "a signalled outgoing that exits after a preflight outage is replaced exactly once"
 }
 
 test_record_without_target_is_aborted() {
@@ -1362,6 +1396,7 @@ test_disabled_force_uses_default_chain
 test_disabled_check_recovers_crashed_force
 test_launcher_lock_is_generation_bound
 test_recovery_preflight_failure_preserves_outgoing
+test_delayed_shutdown_survives_preflight_outage
 test_record_without_target_is_aborted
 test_recover_only_never_starts_rotation
 test_astra_registered_profile

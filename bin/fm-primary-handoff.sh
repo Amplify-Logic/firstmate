@@ -48,7 +48,9 @@
 # runtime routes must enter through it, and custom commands must stay in the
 # foreground for their launch lifetime. FM_HANDOFF_TOKEN/FM_HANDOFF_PROFILE are
 # inherited by the incoming session lock acquisition; neither is a credential.
-# Records retain outgoing_identity to reject PID reuse during recovery.
+# Records retain outgoing_identity to reject PID reuse during recovery, and
+# shutdown_requested=no|yes; yes is persisted before any signal and never
+# reverts, so an empty or yes value means the outgoing may be shutting down.
 #
 # Test seams:
 #   FM_HANDOFF_QUOTA_JSON / FM_HANDOFF_QUOTA_AXI
@@ -167,6 +169,8 @@ release_and_launch() {
   fi
   phase=releasing
   fm_handoff_write_record || return 1
+  shutdown_requested=yes
+  fm_handoff_write_record || return 1
   if ! fm_handoff_signal_outgoing "$outgoing_pid"; then
     abort_record "failed to signal outgoing pid $outgoing_pid"
     return 1
@@ -215,6 +219,7 @@ recover_record() {
         ;;
     esac
     fm_handoff_preflight "$to" || {
+      [ "$shutdown_requested" = no ] || return 1
       abort_record "target preflight failed; outgoing owner preserved"
       return 1
     }
@@ -271,6 +276,7 @@ cmd_execute() (
   token=''
   outgoing_pid=''
   outgoing_identity=''
+  shutdown_requested=''
   incoming_pid=''
   started_at=''
   error=''
@@ -396,6 +402,7 @@ cmd_execute() (
   from=$active
   to=$next
   error=
+  shutdown_requested=no
   incoming_pid=
   completed_at=
   cooldown_until=

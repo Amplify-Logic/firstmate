@@ -88,6 +88,8 @@ Phases recorded in `state/.primary-handoff`:
 The coordination lock serializes concurrent supervisors, and obtaining it is required before reconciling an interrupted nonterminal record.
 If the original owner is still live before release, reconciliation aborts that attempt safely so the next check can start afresh.
 A releasing attempt may resume only against the recorded outgoing process identity.
+The record persists `shutdown_requested=yes` before the outgoing is signalled and never clears it.
+A failed target preflight aborts a live-outgoing attempt only when the record proves no shutdown was requested; otherwise the attempt stays pending, so the replacement launches once the outgoing exits.
 With no live owner, recovery resumes the recorded target; an already running launcher is reused, and an already acknowledged replacement is finalized.
 An unrelated live owner aborts recovery without receiving a signal.
 The same generation gate prevents a delayed duplicate runtime dispatch from starting another incoming primary.

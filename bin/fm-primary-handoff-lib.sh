@@ -204,7 +204,7 @@ fm_handoff_read_kv_file() {
         key=${line%%=*}
         value=${line#*=}
         case "$key" in
-          schema|phase|from|to|reason|token|outgoing_pid|outgoing_identity|incoming_pid|identity|started_at|updated_at|error|profile|pid|completed_at|cooldown_until|trigger|remaining_percent|used_percent)
+          schema|phase|from|to|reason|token|outgoing_pid|outgoing_identity|shutdown_requested|incoming_pid|identity|started_at|updated_at|error|profile|pid|completed_at|cooldown_until|trigger|remaining_percent|used_percent)
             printf -v "$key" '%s' "$value"
             ;;
         esac
@@ -248,6 +248,7 @@ fm_handoff_write_record() {
     "token=${token:-}" \
     "outgoing_pid=${outgoing_pid:-}" \
     "outgoing_identity=${outgoing_identity:-}" \
+    "shutdown_requested=${shutdown_requested:-}" \
     "incoming_pid=${incoming_pid:-}" \
     "started_at=${started_at:-}" \
     "updated_at=$updated" \
@@ -272,6 +273,7 @@ fm_handoff_read_record() {
   token=''
   outgoing_pid=''
   outgoing_identity=''
+  shutdown_requested=''
   incoming_pid=''
   started_at=''
   error=''
