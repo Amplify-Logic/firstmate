@@ -1,0 +1,4 @@
+$ PATH=<node>:$PATH bin/fm-second-opinion.sh --out $E/live-fable-review.md -- "<decision>"   (no --reviewer: default)
+fm-second-opinion: quota advisory: Claude Fable week reading unavailable; proceeding
+fm-second-opinion: wrote /Users/larsmusic/.no-mistakes/evidence/01M3YVEZSB8E5XBXAAHH0ZXXNB/live-fable-review.md (reviewer=fable)
+exit=0

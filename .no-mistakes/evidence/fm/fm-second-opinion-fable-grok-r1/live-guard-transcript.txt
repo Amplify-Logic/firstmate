@@ -1,0 +1,61 @@
+
+### grok refuses when quota-axi is not reachable (non-login PATH, no node bin)
+$ PATH=/usr/bin:/bin:/usr/sbin:/sbin:$HOME/.local/bin bin/fm-second-opinion.sh --reviewer grok --out /tmp/fmso-lab.3e6c9N/a.md -- 'Decision: adopt X.'; ls /tmp/fmso-lab.3e6c9N/a.md 2>&1
+fm-second-opinion: Cursor all-model availability (lowest of included, auto and API usage) reading unavailable; grok could draw paid usage, so refusing; set FM_SECOND_OPINION_FORCE=1 to override
+ls: /tmp/fmso-lab.3e6c9N/a.md: No such file or directory
+exit=1
+
+### grok refuses when Cursor reading is stale (live snapshot with cursor state.stale=true)
+$ FM_SECOND_OPINION_QUOTA_JSON=/tmp/fmso-lab.3e6c9N/cursor-stale.json bin/fm-second-opinion.sh --reviewer grok --out /tmp/fmso-lab.3e6c9N/b.md -- 'Decision: adopt X.'; ls /tmp/fmso-lab.3e6c9N/b.md 2>&1
+fm-second-opinion: Cursor all-model availability (lowest of included, auto and API usage) reading unavailable; grok could draw paid usage, so refusing; set FM_SECOND_OPINION_FORCE=1 to override
+ls: /tmp/fmso-lab.3e6c9N/b.md: No such file or directory
+exit=1
+
+### grok refuses when api_usage is 4% though included_usage is 50%
+$ FM_SECOND_OPINION_QUOTA_JSON=/tmp/fmso-lab.3e6c9N/cursor-api-low.json bin/fm-second-opinion.sh --reviewer grok --out /tmp/fmso-lab.3e6c9N/c.md -- 'Decision: adopt X.'; ls /tmp/fmso-lab.3e6c9N/c.md 2>&1
+fm-second-opinion: quota advisory: Cursor all-model availability (lowest of included, auto and API usage) percentRemaining=4 (floor=10)
+fm-second-opinion: Cursor all-model availability (lowest of included, auto and API usage) percentRemaining 4 is below floor 10; set FM_SECOND_OPINION_FORCE=1 to override
+ls: /tmp/fmso-lab.3e6c9N/c.md: No such file or directory
+exit=1
+
+### grok refuses when included_usage is 5%
+$ FM_SECOND_OPINION_QUOTA_JSON=/tmp/fmso-lab.3e6c9N/cursor-included-low.json bin/fm-second-opinion.sh --reviewer grok --out /tmp/fmso-lab.3e6c9N/d.md -- 'Decision: adopt X.'; ls /tmp/fmso-lab.3e6c9N/d.md 2>&1
+fm-second-opinion: quota advisory: Cursor all-model availability (lowest of included, auto and API usage) percentRemaining=5 (floor=10)
+fm-second-opinion: Cursor all-model availability (lowest of included, auto and API usage) percentRemaining 5 is below floor 10; set FM_SECOND_OPINION_FORCE=1 to override
+ls: /tmp/fmso-lab.3e6c9N/d.md: No such file or directory
+exit=1
+
+### grok refuses at live reading 13% when floor is raised to 20
+$ PATH=/Users/larsmusic/.nvm/versions/node/v22.23.1/bin:$PATH FM_SECOND_OPINION_QUOTA_FLOOR=20 bin/fm-second-opinion.sh --reviewer grok --out /tmp/fmso-lab.3e6c9N/e.md -- 'Decision: adopt X.'; ls /tmp/fmso-lab.3e6c9N/e.md 2>&1
+fm-second-opinion: quota advisory: Cursor all-model availability (lowest of included, auto and API usage) percentRemaining=13 (floor=20)
+fm-second-opinion: Cursor all-model availability (lowest of included, auto and API usage) percentRemaining 13 is below floor 20; set FM_SECOND_OPINION_FORCE=1 to override
+ls: /tmp/fmso-lab.3e6c9N/e.md: No such file or directory
+exit=1
+
+### grok exits 127 when no Cursor CLI on PATH or in HOME/.local/bin
+$ HOME=/tmp/fmso-lab.3e6c9N PATH=/usr/bin:/bin:/usr/sbin:/sbin bin/fm-second-opinion.sh --reviewer grok --out /tmp/fmso-lab.3e6c9N/f.md -- 'Decision: adopt X.'
+error: no verified cursor executable found; searched PATH for 'cursor-agent' and 'agent', plus '/tmp/fmso-lab.3e6c9N/.local/bin/cursor-agent' and '/tmp/fmso-lab.3e6c9N/.local/bin/agent'. A file named 'agent' is accepted only when it resolves into Cursor's install tree or its --help identifies the Cursor Agent CLI.
+fm-second-opinion: reviewer binary not found on PATH: cursor-agent
+Install or restore the reviewer CLI (claude for fable, cursor-agent for grok,
+pi for sol, kimi for k3), then retry.
+See docs/second-opinion.md.
+exit=127
+
+### unknown reviewer refuses loudly
+$ bin/fm-second-opinion.sh --reviewer astra --out /tmp/fmso-lab.3e6c9N/g.md -- 'Decision: adopt X.'
+fm-second-opinion: unknown reviewer: astra (verified: fable, grok, sol, k3)
+exit=1
+
+### help names fable as the default and grok as the high-stakes pass
+$ bin/fm-second-opinion.sh --help
+usage: fm-second-opinion.sh --out <path> [--context <file>]... [--reviewer <name>]
+                            [--] <decision-or-design text>
+
+Bounded rival-model second-opinion wrapper. Default reviewer is fable (Claude
+Code + claude-fable-5-1 at effort medium). Use --reviewer grok (Cursor +
+grok-4.7-xhigh) beside it for high-stakes calls. sol (Pi + Codex) and k3
+(Kimi) remain available. Writes the reviewer's verbatim output to --out with a
+small header. Never sets or requires API keys.
+See docs/second-opinion.md for cost policy, quota floors, the neutral-cwd rule,
+and the reviewer registry.
+exit=0

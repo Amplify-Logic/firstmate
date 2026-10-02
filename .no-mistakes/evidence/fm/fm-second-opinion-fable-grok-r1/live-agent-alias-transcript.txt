@@ -1,0 +1,9 @@
+### grok resolves Cursor through the 'agent' alias alone (no cursor-agent anywhere, empty HOME); floor raised so it refuses on quota (exit 1) instead of 127, without spending
+$ HOME=/tmp/fmso-lab.3e6c9N/emptyhome PATH=/tmp/fmso-lab.3e6c9N/aliasbin:/usr/bin:/bin FM_SECOND_OPINION_QUOTA_JSON=/tmp/fmso-lab.3e6c9N/cursor-included-low.json bash -x bin/fm-second-opinion.sh --reviewer grok ... | grep REVIEWER_BIN=
++ REVIEWER_BIN=
++ REVIEWER_BIN=/tmp/fmso-lab.3e6c9N/aliasbin/agent
++ printf 'fm-second-opinion: quota advisory: %s percentRemaining=%s (floor=%s)\n' 'Cursor all-model availability (lowest of included, auto and API usage)' 5 10
+fm-second-opinion: quota advisory: Cursor all-model availability (lowest of included, auto and API usage) percentRemaining=5 (floor=10)
++ printf 'fm-second-opinion: %s\n' 'Cursor all-model availability (lowest of included, auto and API usage) percentRemaining 5 is below floor 10; set FM_SECOND_OPINION_FORCE=1 to override'
+fm-second-opinion: Cursor all-model availability (lowest of included, auto and API usage) percentRemaining 5 is below floor 10; set FM_SECOND_OPINION_FORCE=1 to override
+exit=

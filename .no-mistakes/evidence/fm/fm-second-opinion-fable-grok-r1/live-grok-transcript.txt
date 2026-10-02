@@ -1,0 +1,6 @@
+$ PATH=/Users/larsmusic/.nvm/versions/node/v22.23.1/bin:/usr/bin:/bin:/usr/sbin:/sbin   # no ~/.local/bin; cursor-agent not on PATH
+(cursor-agent/agent not on PATH)
+$ bin/fm-second-opinion.sh --reviewer grok --out $E/live-grok-review.md -- "<decision>"
+fm-second-opinion: quota advisory: Cursor all-model availability (lowest of included, auto and API usage) percentRemaining=13 (floor=10)
+fm-second-opinion: wrote /Users/larsmusic/.no-mistakes/evidence/01M3YVEZSB8E5XBXAAHH0ZXXNB/live-grok-review.md (reviewer=grok)
+exit=0

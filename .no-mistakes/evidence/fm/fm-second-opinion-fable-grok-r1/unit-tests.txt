@@ -1,0 +1,11 @@
+ok - fm-second-opinion --help exits 0
+ok - fm-second-opinion defaults to fable, writes --out, and strips API keys
+ok - fm-second-opinion enforces the Claude Fable floor and proceeds on no or stale reading
+ok - fm-second-opinion runs grok on Cursor and refuses below the effective-availability floor
+ok - fm-second-opinion refuses grok when the Cursor pool cannot be read or is stale
+ok - fm-second-opinion resolves grok's Cursor CLI through the agent alias in ~/.local/bin
+ok - fm-second-opinion keeps sol on its Codex floor
+ok - fm-second-opinion does not invoke the reviewer with the repo as cwd
+ok - fm-second-opinion refuses unknown reviewer names loudly
+ok - fm-second-opinion refuses with 127 when the reviewer CLI is absent
+ok - fm-second-opinion treats empty reviewer output as a loud failure
