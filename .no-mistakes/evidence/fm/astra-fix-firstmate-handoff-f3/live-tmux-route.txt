@@ -1,0 +1,35 @@
+outgoing synthetic primary in lab tmux pane: pid=23344
+$ fm-lock.sh status: lock: held by live harness pid 23344
+
+$ (inside lab tmux pane) fm-primary-handoff.sh execute --force --to pi   [default tmux route]
+    lock released: stale holder pid 23344
+    fm-primary-handoff: handed off primary claude-fable -> pi (reason=quota:min_remaining=na trigger=quota)
+    handed_off: claude-fable -> pi
+    exit=0
+
+--- tmux list-windows (lab socket):
+    primary:0 FIRSTMATE _ WAITING pane_pid=23902 cmd=bash
+    primary:1 ctl pane_pid=23503 cmd=sleep
+--- launch log:
+    launch pi argv=--name FIRSTMATE token=1790971245-23509-27251-9662 profile=pi at 22:00:46
+--- outgoing 23344: dead
+--- fm-lock.sh status: lock: held by live harness pid 23902
+--- state/.primary-handoff:
+    phase=complete
+    from=claude-fable
+    to=pi
+    token=1790971245-23509-27251-9662
+    shutdown_requested=yes
+    incoming_pid=23902
+    error=
+--- state/.lock-handoff:
+    token=1790971245-23509-27251-9662
+    profile=pi
+    pid=23902
+--- state/.primary-active:
+    profile=pi
+    pid=23902
+--- incoming holder 23902 ancestry:
+    23902 23342 /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.V977lK/harness/codex
+    23342     1 /opt/homebrew/bin/tmux
+--- after lab tmux kill-server: lock status: lock: stale (pid 23902 dead or not a harness)

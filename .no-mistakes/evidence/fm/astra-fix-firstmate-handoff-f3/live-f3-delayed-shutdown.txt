@@ -1,0 +1,94 @@
+## F3: signalled outgoing outlives wait, preflight temporarily fails, then exits; one replacement
+outgoing synthetic primary pid=9229 acquired lock: 9229
+
+$ FM_HANDOFF_WAIT_DEAD_SECS=2 fm-primary-handoff.sh execute --force --to pi
+fm-primary-handoff: outgoing harness pid 9229 still live after 2s
+fm-primary-handoff: outgoing pid 9229 did not release; incoming not launched
+exit=1
+TERM received: YES; outgoing 9229: alive
+--- state/.primary-handoff:
+    schema=fm-primary-handoff.v1
+    phase=releasing
+    from=claude-fable
+    to=pi
+    reason=quota:min_remaining=na
+    trigger=quota
+    token=1790971205-9474-13843-6648
+    outgoing_pid=9229
+    outgoing_identity=Fri Oct  2 20:00:04 2026     /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.V977lK/harness/codex -c \012    trap "touch \"$LAB/term-received\"; sleep \"$TERM_DELAY\"; exit 0" TERM\012    "$ROOT/bin/fm-lock.sh" >/dev/null || exit 1\012    while :; do sleep 0.2; done
+    shutdown_requested=yes
+    incoming_pid=
+    started_at=1790971205
+    updated_at=1790971207
+    error=outgoing pid 9229 did not release; incoming not launched
+    completed_at=
+    cooldown_until=
+--- fm-lock.sh status: lock: held by live harness pid 9229
+--- state/.lock-handoff:
+    (absent)
+--- state/.primary-active profile: claude-fable
+--- launches: 0
+
+$ env -u TMUX -u FM_HANDOFF_LAUNCH_CMD fm-primary-handoff.sh check   (route unavailable)
+fm-primary-handoff: no launch route: set FM_HANDOFF_LAUNCH_CMD or run inside tmux
+exit=1
+--- state/.primary-handoff:
+    schema=fm-primary-handoff.v1
+    phase=releasing
+    from=claude-fable
+    to=pi
+    reason=quota:min_remaining=na
+    trigger=quota
+    token=1790971205-9474-13843-6648
+    outgoing_pid=9229
+    outgoing_identity=Fri Oct  2 20:00:04 2026     /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.V977lK/harness/codex -c \012    trap "touch \"$LAB/term-received\"; sleep \"$TERM_DELAY\"; exit 0" TERM\012    "$ROOT/bin/fm-lock.sh" >/dev/null || exit 1\012    while :; do sleep 0.2; done
+    shutdown_requested=yes
+    incoming_pid=
+    started_at=1790971205
+    updated_at=1790971207
+    error=outgoing pid 9229 did not release; incoming not launched
+    completed_at=
+    cooldown_until=
+--- fm-lock.sh status: lock: held by live harness pid 9229
+--- state/.lock-handoff:
+    (absent)
+--- state/.primary-active profile: claude-fable
+--- launches: 0
+waiting for signalled outgoing to exit...
+outgoing 9229: dead
+
+$ fm-primary-handoff.sh check   (route restored)
+lock released: stale holder pid 9229
+fm-primary-handoff: handed off primary claude-fable -> pi (reason=quota:min_remaining=na trigger=quota)
+handed_off: claude-fable -> pi
+exit=0
+--- state/.primary-handoff:
+    schema=fm-primary-handoff.v1
+    phase=complete
+    from=claude-fable
+    to=pi
+    reason=quota:min_remaining=na
+    trigger=quota
+    token=1790971205-9474-13843-6648
+    outgoing_pid=9229
+    outgoing_identity=Fri Oct  2 20:00:04 2026     /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.V977lK/harness/codex -c \012    trap "touch \"$LAB/term-received\"; sleep \"$TERM_DELAY\"; exit 0" TERM\012    "$ROOT/bin/fm-lock.sh" >/dev/null || exit 1\012    while :; do sleep 0.2; done
+    shutdown_requested=yes
+    incoming_pid=14152
+    started_at=1790971205
+    updated_at=1790971212
+    error=
+    completed_at=1790971212
+    cooldown_until=1790971512
+--- fm-lock.sh status: lock: held by live harness pid 14152
+--- state/.lock-handoff:
+    token=1790971205-9474-13843-6648
+    profile=pi
+    pid=14152
+    identity=Fri Oct  2 20:00:12 2026     /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.V977lK/harness/codex -c sleep "${STARTUP_DELAY:-0}"; [ "${NO_ACK:-0}" = 1 ] && { while :; do sleep 1; done; }\012    "$ROOT/bin/fm-lock.sh" >/dev/null || exit 1; while :; do sleep 0.2; done
+--- state/.primary-active profile: pi
+--- launches: 1
+
+$ fm-primary-handoff.sh check   (again)
+handoff: cooldown
+exit=0
+--- launches: 1

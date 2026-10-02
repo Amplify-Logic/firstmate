@@ -1,0 +1,54 @@
+## F4: canonical away contract (state/.afk-contract) blocks automatic handoff
+outgoing synthetic primary pid=14461 acquired lock: 14461
+state/.afk-contract present; state/.afk absent: yes
+
+$ fm-primary-handoff.sh check   (claude quota 5% < 15% threshold)
+handoff: afk
+exit=0
+
+$ fm-primary-handoff.sh execute   (no --force)
+fm-primary-handoff: away or quiet mode active; refusing handoff
+exit=0
+outgoing 14461: alive; TERM received: no
+--- state/.primary-handoff:
+    (absent)
+--- fm-lock.sh status: lock: held by live harness pid 14461
+--- state/.lock-handoff:
+    (absent)
+--- state/.primary-active profile: claude-fable
+--- launches: 0
+
+## F4 control: remove the contract; the same check now hands off automatically
+
+$ fm-primary-handoff.sh check
+handoff: threshold crossed profile=claude-fable min_remaining=5 threshold=15
+lock released: stale holder pid 14461
+fm-primary-handoff: handed off primary claude-fable -> pi (reason=quota:min_remaining=5 trigger=quota)
+handed_off: claude-fable -> pi
+exit=0
+outgoing 14461: dead
+--- state/.primary-handoff:
+    schema=fm-primary-handoff.v1
+    phase=complete
+    from=claude-fable
+    to=pi
+    reason=quota:min_remaining=5
+    trigger=quota
+    token=1790971214-14731-22948-22958
+    outgoing_pid=14461
+    outgoing_identity=Fri Oct  2 20:00:13 2026     /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.V977lK/harness/codex -c \012    trap "touch \"$LAB/term-received\"; sleep \"$TERM_DELAY\"; exit 0" TERM\012    "$ROOT/bin/fm-lock.sh" >/dev/null || exit 1\012    while :; do sleep 0.2; done
+    shutdown_requested=yes
+    incoming_pid=15283
+    started_at=1790971214
+    updated_at=1790971215
+    error=
+    completed_at=1790971215
+    cooldown_until=1790971515
+--- fm-lock.sh status: lock: held by live harness pid 15283
+--- state/.lock-handoff:
+    token=1790971214-14731-22948-22958
+    profile=pi
+    pid=15283
+    identity=Fri Oct  2 20:00:15 2026     /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.V977lK/harness/codex -c sleep "${STARTUP_DELAY:-0}"; [ "${NO_ACK:-0}" = 1 ] && { while :; do sleep 1; done; }\012    "$ROOT/bin/fm-lock.sh" >/dev/null || exit 1; while :; do sleep 0.2; done
+--- state/.primary-active profile: pi
+--- launches: 1

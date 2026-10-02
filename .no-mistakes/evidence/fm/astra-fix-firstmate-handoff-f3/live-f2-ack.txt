@@ -1,0 +1,65 @@
+## F2d: launch command that starts but never acquires the lock is NOT acknowledged
+outgoing synthetic primary pid=94115 acquired lock: 94115
+
+$ NO_ACK=1 FM_HANDOFF_STARTUP_SECS=3 fm-primary-handoff.sh execute --force --to pi
+lock released: stale holder pid 94115
+fm-primary-handoff: incoming has not acknowledged session-lock ownership; recovery pending
+exit=1
+--- state/.primary-handoff:
+    schema=fm-primary-handoff.v1
+    phase=launching
+    from=claude-fable
+    to=pi
+    reason=quota:min_remaining=na
+    trigger=quota
+    token=1790971168-94205-8884-403
+    outgoing_pid=94115
+    outgoing_identity=Fri Oct  2 19:59:28 2026     /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.V977lK/harness/codex -c \012    trap "touch \"$LAB/term-received\"; sleep \"$TERM_DELAY\"; exit 0" TERM\012    "$ROOT/bin/fm-lock.sh" >/dev/null || exit 1\012    while :; do sleep 0.2; done
+    shutdown_requested=yes
+    incoming_pid=
+    started_at=1790971168
+    updated_at=1790971173
+    error=incoming ownership acknowledgement pending
+    completed_at=
+    cooldown_until=
+--- fm-lock.sh status: lock: free
+--- state/.lock-handoff:
+    (absent)
+--- state/.primary-active profile: claude-fable
+--- launches: 1
+
+## F2e: happy path completes only on a bound acquisition receipt
+outgoing synthetic primary pid=95179 acquired lock: 95179
+
+$ STARTUP_DELAY=2 fm-primary-handoff.sh execute --force --to pi
+lock released: stale holder pid 95179
+fm-primary-handoff: handed off primary claude-fable -> pi (reason=quota:min_remaining=na trigger=quota)
+handed_off: claude-fable -> pi
+exit=0
+outgoing 95179: dead
+--- state/.primary-handoff:
+    schema=fm-primary-handoff.v1
+    phase=complete
+    from=claude-fable
+    to=pi
+    reason=quota:min_remaining=na
+    trigger=quota
+    token=1790971173-95269-30499-7966
+    outgoing_pid=95179
+    outgoing_identity=Fri Oct  2 19:59:33 2026     /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.V977lK/harness/codex -c \012    trap "touch \"$LAB/term-received\"; sleep \"$TERM_DELAY\"; exit 0" TERM\012    "$ROOT/bin/fm-lock.sh" >/dev/null || exit 1\012    while :; do sleep 0.2; done
+    shutdown_requested=yes
+    incoming_pid=95760
+    started_at=1790971173
+    updated_at=1790971177
+    error=
+    completed_at=1790971177
+    cooldown_until=1790971477
+--- fm-lock.sh status: lock: held by live harness pid 95760
+--- state/.lock-handoff:
+    token=1790971173-95269-30499-7966
+    profile=pi
+    pid=95760
+    identity=Fri Oct  2 19:59:35 2026     /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.V977lK/harness/codex -c sleep "${STARTUP_DELAY:-0}"; [ "${NO_ACK:-0}" = 1 ] && { while :; do sleep 1; done; }\012    "$ROOT/bin/fm-lock.sh" >/dev/null || exit 1; while :; do sleep 0.2; done
+--- state/.primary-active profile: pi
+--- launches: 1
+incoming holder 95760 comm=/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.V977lK/harness/codex

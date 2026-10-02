@@ -1,0 +1,41 @@
+## F2a: no launch route (outside tmux, no custom route) refuses BEFORE signalling
+outgoing synthetic primary pid=15074 acquired lock: 15074
+
+$ env -u TMUX fm-primary-handoff.sh execute --force --to pi
+fm-primary-handoff: no launch route: set FM_HANDOFF_LAUNCH_CMD or run inside tmux
+exit=1
+outgoing 15074: alive; TERM received: no
+--- state/.primary-handoff:
+    (absent)
+--- fm-lock.sh status: lock: held by live harness pid 15074
+--- state/.lock-handoff:
+    (absent)
+--- state/.primary-active profile: claude-fable
+--- launches: 0
+
+## F2b: explicit --to target whose CLI is missing refuses BEFORE signalling
+
+$ fm-primary-handoff.sh execute --force --to pi   (pi CLI removed from PATH)
+fm-primary: profile 'pi' requires 'pi' on PATH
+exit=1
+outgoing 15074: alive; TERM received: no
+--- state/.primary-handoff:
+    (absent)
+--- fm-lock.sh status: lock: held by live harness pid 15074
+--- state/.lock-handoff:
+    (absent)
+--- state/.primary-active profile: claude-fable
+--- launches: 0
+
+## F2c: custom route whose preflight fails refuses BEFORE signalling
+
+$ FM_HANDOFF_PREFLIGHT_CMD=false fm-primary-handoff.sh execute --force --to pi
+exit=1
+outgoing 15074: alive; TERM received: no
+--- state/.primary-handoff:
+    (absent)
+--- fm-lock.sh status: lock: held by live harness pid 15074
+--- state/.lock-handoff:
+    (absent)
+--- state/.primary-active profile: claude-fable
+--- launches: 0

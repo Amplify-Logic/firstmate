@@ -1,0 +1,19 @@
+## F1: release-stale is serialized with session acquisition (.lock.acquire)
+state/.lock records dead pid 12304 (stale)
+acquirer: holding .lock.acquire at 21:55:39.370500000
+
+$ fm-lock.sh release-stale   (started at 21:55:39 while acquisition in flight)
+acquirer: published live owner 12307, releasing mutex at 21:55:42
+error: refusing to release a live firstmate session lock (pid 12307)
+exit=1 finished at 21:55:42
+state/.lock now: 12307 (live owner 12307 is alive)
+
+$ fm-lock.sh status
+lock: held by live harness pid 12307
+
+## F1b: genuinely stale lock + sidecars are removed under the mutex
+
+$ fm-lock.sh release-stale
+lock released: stale holder pid 12307
+exit=0
+(no .lock, .lock-session, .lock-handoff remain)

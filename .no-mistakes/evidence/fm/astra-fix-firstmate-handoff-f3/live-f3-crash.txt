@@ -1,0 +1,437 @@
+
+## F3: controller SIGKILLed at durable phase 'planning', then plain check recovers
+outgoing synthetic primary pid=99642 acquired lock: 99642
+
+$ FM_HANDOFF_INJECT_CRASH=planning fm-primary-handoff.sh execute --force --to pi
+/Users/larsmusic/.no-mistakes/worktrees/f569cc43ac96/01M3Z0701RGNA86H95AAHAENXT/bin/fm-primary-handoff.sh: line 243: 99896 Killed: 9               ( local from_arg='' to_arg='' reason_arg='' force=0 recover_only=0; local active next remaining coord; local FM_HANDOFF_MODE FM_HANDOFF_THRESHOLD FM_HANDOFF_CONTEXT_USED_THRESHOLD; local FM_HANDOFF_COOLDOWN_SECONDS FM_HANDOFF_CHAIN_JSON FM_HANDOFF_POLL_SECONDS; phase=''; from=''; to=''; reason=''; trigger=''; token=''; outgoing_pid=''; outgoing_identity=''; shutdown_requested=''; incoming_pid=''; started_at=''; error=''; completed_at=''; cooldown_until=''; while [ "$#" -gt 0 ]; do
+    case "$1" in 
+        --from)
+            [ "$#" -ge 2 ] || { fm_handoff_log "--from requires a profile"; return 2; }; from_arg=$2; shift 2
+        ;;
+        --to)
+            [ "$#" -ge 2 ] || { fm_handoff_log "--to requires a profile"; return 2; }; to_arg=$2; shift 2
+        ;;
+        --reason)
+            [ "$#" -ge 2 ] || { fm_handoff_log "--reason requires text"; return 2; }; reason_arg=$2; shift 2
+        ;;
+        --force)
+            force=1; shift
+        ;;
+        --recover-only)
+            recover_only=1; shift
+        ;;
+        *)
+            fm_handoff_log "unknown execute argument: $1"; return 2
+        ;;
+    esac;
+done; fm_handoff_load_config || return 1; mkdir -p "$STATE" "$CONFIG" || return 1; coord=$(fm_handoff_coord_lock); if ! fm_lock_try_acquire "$coord"; then
+    fm_handoff_log "another handoff supervisor holds the coordination lock"; return 1;
+fi; trap 'fm_lock_release "$coord" 2>/dev/null || true' EXIT; trap 'exit 1' HUP INT TERM; if fm_handoff_afk_active && [ "$force" -ne 1 ]; then
+    fm_handoff_log "away or quiet mode active; refusing handoff"; return 0;
+fi; if fm_handoff_rotation_in_progress; then
+    recover_record; return $?;
+fi; [ "$recover_only" -eq 0 ] || return 0; if [ "$FM_HANDOFF_MODE" != enabled ]; then
+    if [ "$force" -ne 1 ]; then
+        fm_handoff_log "handoff disabled (config/primary-handoff absent or enabled:false)"; return 0;
+    fi; FM_HANDOFF_CHAIN_JSON='["claude-fable","claude-opus","pi","codex"]';
+fi; if fm_handoff_in_cooldown && [ "$force" -ne 1 ]; then
+    fm_handoff_log "handoff cooldown active; skipping"; return 0;
+fi; if [ -n "$from_arg" ]; then
+    active=$(fm_handoff_normalize_profile "$from_arg") || { fm_handoff_die "invalid --from profile: $from_arg"; return 1; };
+else
+    active=$(fm_handoff_read_active_profile) || { fm_handoff_die "no state/.primary-active profile; pass --from"; return 1; };
+fi; if [ -n "$to_arg" ]; then
+    next=$(fm_handoff_normalize_profile "$to_arg") || { fm_handoff_die "invalid --to profile: $to_arg"; return 1; };
+else
+    next=$(fm_handoff_next_profile "$active") || { fm_handoff_die "no usable next profile after $active in chain"; return 1; };
+fi; if ! fm_handoff_session_live_holder; then
+    fm_handoff_die "session lock is not held by a live harness; refusing handoff"; return 1;
+fi; outgoing_pid=$FM_HANDOFF_LIVE_HOLDER_PID; outgoing_identity=$(fm_pid_identity "$outgoing_pid") || return 1; fm_handoff_preflight "$next" || return 1; remaining=$(fm_handoff_min_remaining_for_profile "$active"); if [ -n "$reason_arg" ]; then
+    reason=$reason_arg;
+else
+    if [ "$active" = "$next" ]; then
+        reason="context:used=$(fm_handoff_context_used_percent)";
+    else
+        reason="quota:min_remaining=$remaining";
+    fi;
+fi; case "$reason" in 
+    context:*)
+        trigger=context
+    ;;
+    quota:*)
+        trigger=quota
+    ;;
+    *)
+        trigger=manual
+    ;;
+esac; token="$(fm_handoff_now)-$$-$RANDOM-$RANDOM"; started_at=$(fm_handoff_now); phase=planning; from=$active; to=$next; error=; shutdown_requested=no; incoming_pid=; completed_at=; cooldown_until=; fm_handoff_write_record || { return 1; }; fm_handoff_assert_never_two_live_holders || { abort_record "invariant failed at planning"; return 1; }; phase=flushing; fm_handoff_write_record || return 1; if ! fm_handoff_flush_durable; then
+    abort_record "flush failed; outgoing still holds the session lock"; return 1;
+fi; fm_handoff_assert_never_two_live_holders || { abort_record "invariant failed after flush"; return 1; }; release_and_launch )
+exit=137 (killed)
+--- state/.primary-handoff:
+    schema=fm-primary-handoff.v1
+    phase=planning
+    from=claude-fable
+    to=pi
+    reason=quota:min_remaining=na
+    trigger=quota
+    token=1790971183-99863-24421-20382
+    outgoing_pid=99642
+    outgoing_identity=Fri Oct  2 19:59:43 2026     /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.V977lK/harness/codex -c \012    trap "touch \"$LAB/term-received\"; sleep \"$TERM_DELAY\"; exit 0" TERM\012    "$ROOT/bin/fm-lock.sh" >/dev/null || exit 1\012    while :; do sleep 0.2; done
+    shutdown_requested=no
+    incoming_pid=
+    started_at=1790971183
+    updated_at=1790971183
+    error=
+    completed_at=
+    cooldown_until=
+--- fm-lock.sh status: lock: held by live harness pid 99642
+--- state/.lock-handoff:
+    (absent)
+--- state/.primary-active profile: claude-fable
+--- launches: 0
+
+$ fm-primary-handoff.sh check
+fm-primary-handoff: interrupted before release; outgoing owner preserved
+exit=0
+outgoing 99642: alive
+--- state/.primary-handoff:
+    schema=fm-primary-handoff.v1
+    phase=aborted
+    from=claude-fable
+    to=pi
+    reason=quota:min_remaining=na
+    trigger=quota
+    token=1790971183-99863-24421-20382
+    outgoing_pid=99642
+    outgoing_identity=Fri Oct  2 19:59:43 2026     /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.V977lK/harness/codex -c \012    trap "touch \"$LAB/term-received\"; sleep \"$TERM_DELAY\"; exit 0" TERM\012    "$ROOT/bin/fm-lock.sh" >/dev/null || exit 1\012    while :; do sleep 0.2; done
+    shutdown_requested=no
+    incoming_pid=
+    started_at=1790971183
+    updated_at=1790971184
+    error=interrupted before release; outgoing owner preserved
+    completed_at=
+    cooldown_until=
+--- fm-lock.sh status: lock: held by live harness pid 99642
+--- state/.lock-handoff:
+    (absent)
+--- state/.primary-active profile: claude-fable
+--- launches: 0
+/Users/larsmusic/.no-mistakes/evidence/01M3Z0701RGNA86H95AAHAENXT/live-driver.sh: line 28: 99642 Killed: 9               env -u FM_HANDOFF_TOKEN -u FM_HANDOFF_PROFILE TERM_DELAY="$delay" "$HB" -c '
+    trap "touch \"$LAB/term-received\"; sleep \"$TERM_DELAY\"; exit 0" TERM
+    "$ROOT/bin/fm-lock.sh" >/dev/null || exit 1
+    while :; do sleep 0.2; done' > /dev/null 2>&1
+
+## F3: controller SIGKILLed at durable phase 'releasing', then plain check recovers
+outgoing synthetic primary pid=1182 acquired lock: 1182
+
+$ FM_HANDOFF_INJECT_CRASH=releasing fm-primary-handoff.sh execute --force --to pi
+/Users/larsmusic/.no-mistakes/worktrees/f569cc43ac96/01M3Z0701RGNA86H95AAHAENXT/bin/fm-primary-handoff.sh: line 243:  1419 Killed: 9               ( local from_arg='' to_arg='' reason_arg='' force=0 recover_only=0; local active next remaining coord; local FM_HANDOFF_MODE FM_HANDOFF_THRESHOLD FM_HANDOFF_CONTEXT_USED_THRESHOLD; local FM_HANDOFF_COOLDOWN_SECONDS FM_HANDOFF_CHAIN_JSON FM_HANDOFF_POLL_SECONDS; phase=''; from=''; to=''; reason=''; trigger=''; token=''; outgoing_pid=''; outgoing_identity=''; shutdown_requested=''; incoming_pid=''; started_at=''; error=''; completed_at=''; cooldown_until=''; while [ "$#" -gt 0 ]; do
+    case "$1" in 
+        --from)
+            [ "$#" -ge 2 ] || { fm_handoff_log "--from requires a profile"; return 2; }; from_arg=$2; shift 2
+        ;;
+        --to)
+            [ "$#" -ge 2 ] || { fm_handoff_log "--to requires a profile"; return 2; }; to_arg=$2; shift 2
+        ;;
+        --reason)
+            [ "$#" -ge 2 ] || { fm_handoff_log "--reason requires text"; return 2; }; reason_arg=$2; shift 2
+        ;;
+        --force)
+            force=1; shift
+        ;;
+        --recover-only)
+            recover_only=1; shift
+        ;;
+        *)
+            fm_handoff_log "unknown execute argument: $1"; return 2
+        ;;
+    esac;
+done; fm_handoff_load_config || return 1; mkdir -p "$STATE" "$CONFIG" || return 1; coord=$(fm_handoff_coord_lock); if ! fm_lock_try_acquire "$coord"; then
+    fm_handoff_log "another handoff supervisor holds the coordination lock"; return 1;
+fi; trap 'fm_lock_release "$coord" 2>/dev/null || true' EXIT; trap 'exit 1' HUP INT TERM; if fm_handoff_afk_active && [ "$force" -ne 1 ]; then
+    fm_handoff_log "away or quiet mode active; refusing handoff"; return 0;
+fi; if fm_handoff_rotation_in_progress; then
+    recover_record; return $?;
+fi; [ "$recover_only" -eq 0 ] || return 0; if [ "$FM_HANDOFF_MODE" != enabled ]; then
+    if [ "$force" -ne 1 ]; then
+        fm_handoff_log "handoff disabled (config/primary-handoff absent or enabled:false)"; return 0;
+    fi; FM_HANDOFF_CHAIN_JSON='["claude-fable","claude-opus","pi","codex"]';
+fi; if fm_handoff_in_cooldown && [ "$force" -ne 1 ]; then
+    fm_handoff_log "handoff cooldown active; skipping"; return 0;
+fi; if [ -n "$from_arg" ]; then
+    active=$(fm_handoff_normalize_profile "$from_arg") || { fm_handoff_die "invalid --from profile: $from_arg"; return 1; };
+else
+    active=$(fm_handoff_read_active_profile) || { fm_handoff_die "no state/.primary-active profile; pass --from"; return 1; };
+fi; if [ -n "$to_arg" ]; then
+    next=$(fm_handoff_normalize_profile "$to_arg") || { fm_handoff_die "invalid --to profile: $to_arg"; return 1; };
+else
+    next=$(fm_handoff_next_profile "$active") || { fm_handoff_die "no usable next profile after $active in chain"; return 1; };
+fi; if ! fm_handoff_session_live_holder; then
+    fm_handoff_die "session lock is not held by a live harness; refusing handoff"; return 1;
+fi; outgoing_pid=$FM_HANDOFF_LIVE_HOLDER_PID; outgoing_identity=$(fm_pid_identity "$outgoing_pid") || return 1; fm_handoff_preflight "$next" || return 1; remaining=$(fm_handoff_min_remaining_for_profile "$active"); if [ -n "$reason_arg" ]; then
+    reason=$reason_arg;
+else
+    if [ "$active" = "$next" ]; then
+        reason="context:used=$(fm_handoff_context_used_percent)";
+    else
+        reason="quota:min_remaining=$remaining";
+    fi;
+fi; case "$reason" in 
+    context:*)
+        trigger=context
+    ;;
+    quota:*)
+        trigger=quota
+    ;;
+    *)
+        trigger=manual
+    ;;
+esac; token="$(fm_handoff_now)-$$-$RANDOM-$RANDOM"; started_at=$(fm_handoff_now); phase=planning; from=$active; to=$next; error=; shutdown_requested=no; incoming_pid=; completed_at=; cooldown_until=; fm_handoff_write_record || { return 1; }; fm_handoff_assert_never_two_live_holders || { abort_record "invariant failed at planning"; return 1; }; phase=flushing; fm_handoff_write_record || return 1; if ! fm_handoff_flush_durable; then
+    abort_record "flush failed; outgoing still holds the session lock"; return 1;
+fi; fm_handoff_assert_never_two_live_holders || { abort_record "invariant failed after flush"; return 1; }; release_and_launch )
+exit=137 (killed)
+--- state/.primary-handoff:
+    schema=fm-primary-handoff.v1
+    phase=releasing
+    from=claude-fable
+    to=pi
+    reason=quota:min_remaining=na
+    trigger=quota
+    token=1790971184-1372-24774-27049
+    outgoing_pid=1182
+    outgoing_identity=Fri Oct  2 19:59:44 2026     /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.V977lK/harness/codex -c \012    trap "touch \"$LAB/term-received\"; sleep \"$TERM_DELAY\"; exit 0" TERM\012    "$ROOT/bin/fm-lock.sh" >/dev/null || exit 1\012    while :; do sleep 0.2; done
+    shutdown_requested=no
+    incoming_pid=
+    started_at=1790971184
+    updated_at=1790971185
+    error=
+    completed_at=
+    cooldown_until=
+--- fm-lock.sh status: lock: held by live harness pid 1182
+--- state/.lock-handoff:
+    (absent)
+--- state/.primary-active profile: claude-fable
+--- launches: 0
+
+$ fm-primary-handoff.sh check
+lock released: stale holder pid 1182
+fm-primary-handoff: handed off primary claude-fable -> pi (reason=quota:min_remaining=na trigger=quota)
+handed_off: claude-fable -> pi
+exit=0
+outgoing 1182: dead
+--- state/.primary-handoff:
+    schema=fm-primary-handoff.v1
+    phase=complete
+    from=claude-fable
+    to=pi
+    reason=quota:min_remaining=na
+    trigger=quota
+    token=1790971184-1372-24774-27049
+    outgoing_pid=1182
+    outgoing_identity=Fri Oct  2 19:59:44 2026     /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.V977lK/harness/codex -c \012    trap "touch \"$LAB/term-received\"; sleep \"$TERM_DELAY\"; exit 0" TERM\012    "$ROOT/bin/fm-lock.sh" >/dev/null || exit 1\012    while :; do sleep 0.2; done
+    shutdown_requested=yes
+    incoming_pid=3552
+    started_at=1790971184
+    updated_at=1790971187
+    error=
+    completed_at=1790971187
+    cooldown_until=1790971487
+--- fm-lock.sh status: lock: held by live harness pid 3552
+--- state/.lock-handoff:
+    token=1790971184-1372-24774-27049
+    profile=pi
+    pid=3552
+    identity=Fri Oct  2 19:59:46 2026     /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.V977lK/harness/codex -c sleep "${STARTUP_DELAY:-0}"; [ "${NO_ACK:-0}" = 1 ] && { while :; do sleep 1; done; }\012    "$ROOT/bin/fm-lock.sh" >/dev/null || exit 1; while :; do sleep 0.2; done
+--- state/.primary-active profile: pi
+--- launches: 1
+
+## F3: controller SIGKILLed at durable phase 'launching', then plain check recovers
+outgoing synthetic primary pid=3800 acquired lock: 3800
+
+$ FM_HANDOFF_INJECT_CRASH=launching fm-primary-handoff.sh execute --force --to pi
+lock released: stale holder pid 3800
+/Users/larsmusic/.no-mistakes/worktrees/f569cc43ac96/01M3Z0701RGNA86H95AAHAENXT/bin/fm-primary-handoff.sh: line 243:  4125 Killed: 9               ( local from_arg='' to_arg='' reason_arg='' force=0 recover_only=0; local active next remaining coord; local FM_HANDOFF_MODE FM_HANDOFF_THRESHOLD FM_HANDOFF_CONTEXT_USED_THRESHOLD; local FM_HANDOFF_COOLDOWN_SECONDS FM_HANDOFF_CHAIN_JSON FM_HANDOFF_POLL_SECONDS; phase=''; from=''; to=''; reason=''; trigger=''; token=''; outgoing_pid=''; outgoing_identity=''; shutdown_requested=''; incoming_pid=''; started_at=''; error=''; completed_at=''; cooldown_until=''; while [ "$#" -gt 0 ]; do
+    case "$1" in 
+        --from)
+            [ "$#" -ge 2 ] || { fm_handoff_log "--from requires a profile"; return 2; }; from_arg=$2; shift 2
+        ;;
+        --to)
+            [ "$#" -ge 2 ] || { fm_handoff_log "--to requires a profile"; return 2; }; to_arg=$2; shift 2
+        ;;
+        --reason)
+            [ "$#" -ge 2 ] || { fm_handoff_log "--reason requires text"; return 2; }; reason_arg=$2; shift 2
+        ;;
+        --force)
+            force=1; shift
+        ;;
+        --recover-only)
+            recover_only=1; shift
+        ;;
+        *)
+            fm_handoff_log "unknown execute argument: $1"; return 2
+        ;;
+    esac;
+done; fm_handoff_load_config || return 1; mkdir -p "$STATE" "$CONFIG" || return 1; coord=$(fm_handoff_coord_lock); if ! fm_lock_try_acquire "$coord"; then
+    fm_handoff_log "another handoff supervisor holds the coordination lock"; return 1;
+fi; trap 'fm_lock_release "$coord" 2>/dev/null || true' EXIT; trap 'exit 1' HUP INT TERM; if fm_handoff_afk_active && [ "$force" -ne 1 ]; then
+    fm_handoff_log "away or quiet mode active; refusing handoff"; return 0;
+fi; if fm_handoff_rotation_in_progress; then
+    recover_record; return $?;
+fi; [ "$recover_only" -eq 0 ] || return 0; if [ "$FM_HANDOFF_MODE" != enabled ]; then
+    if [ "$force" -ne 1 ]; then
+        fm_handoff_log "handoff disabled (config/primary-handoff absent or enabled:false)"; return 0;
+    fi; FM_HANDOFF_CHAIN_JSON='["claude-fable","claude-opus","pi","codex"]';
+fi; if fm_handoff_in_cooldown && [ "$force" -ne 1 ]; then
+    fm_handoff_log "handoff cooldown active; skipping"; return 0;
+fi; if [ -n "$from_arg" ]; then
+    active=$(fm_handoff_normalize_profile "$from_arg") || { fm_handoff_die "invalid --from profile: $from_arg"; return 1; };
+else
+    active=$(fm_handoff_read_active_profile) || { fm_handoff_die "no state/.primary-active profile; pass --from"; return 1; };
+fi; if [ -n "$to_arg" ]; then
+    next=$(fm_handoff_normalize_profile "$to_arg") || { fm_handoff_die "invalid --to profile: $to_arg"; return 1; };
+else
+    next=$(fm_handoff_next_profile "$active") || { fm_handoff_die "no usable next profile after $active in chain"; return 1; };
+fi; if ! fm_handoff_session_live_holder; then
+    fm_handoff_die "session lock is not held by a live harness; refusing handoff"; return 1;
+fi; outgoing_pid=$FM_HANDOFF_LIVE_HOLDER_PID; outgoing_identity=$(fm_pid_identity "$outgoing_pid") || return 1; fm_handoff_preflight "$next" || return 1; remaining=$(fm_handoff_min_remaining_for_profile "$active"); if [ -n "$reason_arg" ]; then
+    reason=$reason_arg;
+else
+    if [ "$active" = "$next" ]; then
+        reason="context:used=$(fm_handoff_context_used_percent)";
+    else
+        reason="quota:min_remaining=$remaining";
+    fi;
+fi; case "$reason" in 
+    context:*)
+        trigger=context
+    ;;
+    quota:*)
+        trigger=quota
+    ;;
+    *)
+        trigger=manual
+    ;;
+esac; token="$(fm_handoff_now)-$$-$RANDOM-$RANDOM"; started_at=$(fm_handoff_now); phase=planning; from=$active; to=$next; error=; shutdown_requested=no; incoming_pid=; completed_at=; cooldown_until=; fm_handoff_write_record || { return 1; }; fm_handoff_assert_never_two_live_holders || { abort_record "invariant failed at planning"; return 1; }; phase=flushing; fm_handoff_write_record || return 1; if ! fm_handoff_flush_durable; then
+    abort_record "flush failed; outgoing still holds the session lock"; return 1;
+fi; fm_handoff_assert_never_two_live_holders || { abort_record "invariant failed after flush"; return 1; }; release_and_launch )
+exit=137 (killed)
+--- state/.primary-handoff:
+    schema=fm-primary-handoff.v1
+    phase=launching
+    from=claude-fable
+    to=pi
+    reason=quota:min_remaining=na
+    trigger=quota
+    token=1790971187-4095-4842-22302
+    outgoing_pid=3800
+    outgoing_identity=Fri Oct  2 19:59:47 2026     /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.V977lK/harness/codex -c \012    trap "touch \"$LAB/term-received\"; sleep \"$TERM_DELAY\"; exit 0" TERM\012    "$ROOT/bin/fm-lock.sh" >/dev/null || exit 1\012    while :; do sleep 0.2; done
+    shutdown_requested=yes
+    incoming_pid=
+    started_at=1790971187
+    updated_at=1790971189
+    error=
+    completed_at=
+    cooldown_until=
+--- fm-lock.sh status: lock: free
+--- state/.lock-handoff:
+    (absent)
+--- state/.primary-active profile: claude-fable
+--- launches: 0
+
+$ fm-primary-handoff.sh check
+lock: free
+fm-primary-handoff: handed off primary claude-fable -> pi (reason=quota:min_remaining=na trigger=quota)
+handed_off: claude-fable -> pi
+exit=0
+outgoing 3800: dead
+--- state/.primary-handoff:
+    schema=fm-primary-handoff.v1
+    phase=complete
+    from=claude-fable
+    to=pi
+    reason=quota:min_remaining=na
+    trigger=quota
+    token=1790971187-4095-4842-22302
+    outgoing_pid=3800
+    outgoing_identity=Fri Oct  2 19:59:47 2026     /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.V977lK/harness/codex -c \012    trap "touch \"$LAB/term-received\"; sleep \"$TERM_DELAY\"; exit 0" TERM\012    "$ROOT/bin/fm-lock.sh" >/dev/null || exit 1\012    while :; do sleep 0.2; done
+    shutdown_requested=yes
+    incoming_pid=4901
+    started_at=1790971187
+    updated_at=1790971190
+    error=
+    completed_at=1790971190
+    cooldown_until=1790971490
+--- fm-lock.sh status: lock: held by live harness pid 4901
+--- state/.lock-handoff:
+    token=1790971187-4095-4842-22302
+    profile=pi
+    pid=4901
+    identity=Fri Oct  2 19:59:49 2026     /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.V977lK/harness/codex -c sleep "${STARTUP_DELAY:-0}"; [ "${NO_ACK:-0}" = 1 ] && { while :; do sleep 1; done; }\012    "$ROOT/bin/fm-lock.sh" >/dev/null || exit 1; while :; do sleep 0.2; done
+--- state/.primary-active profile: pi
+--- launches: 1
+
+## F3: controller tree SIGKILLed externally while waiting for incoming acknowledgement
+outgoing synthetic primary pid=5164 acquired lock: 5164
+lock released: stale holder pid 5164
+kill -9 controller pid 5261
+kill -9 controller pid 5261
+kill -9 controller pid 5291
+--- state/.primary-handoff:
+    schema=fm-primary-handoff.v1
+    phase=launching
+    from=claude-fable
+    to=pi
+    reason=quota:min_remaining=na
+    trigger=quota
+    token=1790971190-5261-9200-21364
+    outgoing_pid=5164
+    outgoing_identity=Fri Oct  2 19:59:50 2026     /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.V977lK/harness/codex -c \012    trap "touch \"$LAB/term-received\"; sleep \"$TERM_DELAY\"; exit 0" TERM\012    "$ROOT/bin/fm-lock.sh" >/dev/null || exit 1\012    while :; do sleep 0.2; done
+    shutdown_requested=yes
+    incoming_pid=
+    started_at=1790971190
+    updated_at=1790971191
+    error=
+    completed_at=
+    cooldown_until=
+--- fm-lock.sh status: lock: free
+--- state/.lock-handoff:
+    (absent)
+--- state/.primary-active profile: claude-fable
+--- launches: 1
+
+$ fm-primary-handoff.sh check   (launcher from crashed controller still starting)
+lock: free
+fm-primary-handoff: handed off primary claude-fable -> pi (reason=quota:min_remaining=na trigger=quota)
+handed_off: claude-fable -> pi
+exit=0
+--- state/.primary-handoff:
+    schema=fm-primary-handoff.v1
+    phase=complete
+    from=claude-fable
+    to=pi
+    reason=quota:min_remaining=na
+    trigger=quota
+    token=1790971190-5261-9200-21364
+    outgoing_pid=5164
+    outgoing_identity=Fri Oct  2 19:59:50 2026     /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.V977lK/harness/codex -c \012    trap "touch \"$LAB/term-received\"; sleep \"$TERM_DELAY\"; exit 0" TERM\012    "$ROOT/bin/fm-lock.sh" >/dev/null || exit 1\012    while :; do sleep 0.2; done
+    shutdown_requested=yes
+    incoming_pid=5687
+    started_at=1790971190
+    updated_at=1790971197
+    error=
+    completed_at=1790971197
+    cooldown_until=1790971497
+--- fm-lock.sh status: lock: held by live harness pid 5687
+--- state/.lock-handoff:
+    token=1790971190-5261-9200-21364
+    profile=pi
+    pid=5687
+    identity=Fri Oct  2 19:59:51 2026     /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.V977lK/harness/codex -c sleep "${STARTUP_DELAY:-0}"; [ "${NO_ACK:-0}" = 1 ] && { while :; do sleep 1; done; }\012    "$ROOT/bin/fm-lock.sh" >/dev/null || exit 1; while :; do sleep 0.2; done
+--- state/.primary-active profile: pi
+--- launches: 1
+
+$ fm-primary-handoff.sh check   (again; must be a no-op cooldown, no relaunch)
+handoff: cooldown
+exit=0
+--- launches: 1

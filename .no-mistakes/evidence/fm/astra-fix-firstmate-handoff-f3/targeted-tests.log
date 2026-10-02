@@ -1,0 +1,143 @@
+FM_TEST_BEGIN 2026-10-02T19:53:06Z tests/fm-primary-handoff.test.sh family=unclassified expected_gate_skip=none
+ok - recovery waits for an in-flight acquisition receipt without aborting or launching twice
+tests/fm-primary-handoff.test.sh: line 120: 22572 Terminated: 15          bash -c 'while :; do sleep 5; done' claude-primary-handoff-test
+ok - tmux dispatch through the real primary launcher carries a bound acquisition acknowledgement
+tests/fm-primary-handoff.test.sh: line 120: 24688 Terminated: 15          bash -c 'while :; do sleep 5; done' claude-primary-handoff-test
+ok - startup timeout retains recovery and reuses the existing launcher
+ok - recovery checks outgoing process identity even under force
+ok - stale release excludes concurrent acquisition through unlink and identity cleanup
+ok - route, explicit target CLI, configuration, and account fail before outgoing signal
+tests/fm-primary-handoff.test.sh: line 120: 27986 Terminated: 15          bash -c 'while :; do sleep 5; done' claude-primary-handoff-test
+ok - delayed launch waits for a bound live-owner acknowledgement exactly once
+ok - controller death at each durable phase and after dispatch recovers with one launch
+ok - an unrelated live owner cannot satisfy startup acknowledgement or be stopped by recovery
+ok - disabled config is a no-op and leaves the live session lock alone
+tests/fm-primary-handoff.test.sh: line 120: 45857 Terminated: 15          bash -c 'while :; do sleep 5; done' claude-primary-handoff-test
+ok - execute --force without --to walks the default chain when handoff is disabled
+ok - check reconciles a crashed forced handoff before reporting disabled
+ok - incoming launcher reuse and cleanup are bound to the matching generation
+ok - recovery preflight failure aborts while the unsignalled outgoing primary stays the owner
+ok - a signalled outgoing that exits after a preflight outage is replaced exactly once
+ok - a handoff record without a target is aborted rather than retried forever
+ok - recovery-only dispatch never falls through into a fresh rotation
+ok - handoff registers astra on the codex CLI and quota pool without joining the default chain
+ok - handoff reads cursor-grok quota from the general cursor plan windows only
+tests/fm-primary-handoff.test.sh: line 120: 51603 Terminated: 15          bash -c 'while :; do sleep 5; done' claude-primary-handoff-test
+ok - happy-path handoff flushes, releases outgoing, launches incoming, one live holder
+ok - flush failure aborts without releasing lock or launching incoming
+ok - signal failure aborts with outgoing still the sole live holder
+tests/fm-primary-handoff.test.sh: line 120: 54172 Terminated: 15          bash -c 'while :; do sleep 5; done' claude-primary-handoff-test
+ok - wait_dead failure never launches and never dual-holds
+ok - fm-lock release-stale refuses while a live harness holds the lock
+ok - fm-lock release-stale fails closed when bin/fm-primary-handoff-lib.sh is absent
+tests/fm-primary-handoff.test.sh: line 120: 55385 Terminated: 15          bash -c 'while :; do sleep 5; done' claude-primary-handoff-test
+ok - pre_launch failure leaves zero live holders and never dual-holds
+tests/fm-primary-handoff.test.sh: line 120: 56622 Terminated: 15          bash -c 'while :; do sleep 5; done' claude-primary-handoff-test
+ok - launch failure never creates two live holders
+tests/fm-primary-handoff.test.sh: line 120: 57778 Terminated: 15          bash -c 'while :; do sleep 5; done' claude-primary-handoff-test
+ok - check hands off when quota is at or below threshold
+ok - check is a no-op when remaining quota is above threshold
+ok - fm-primary behavior unchanged when handoff is disabled; marker only when enabled
+ok - coordination lock serializes supervisors without dual session-lock holders
+tests/fm-primary-handoff.test.sh: line 120: 61508 Terminated: 15          bash -c 'while :; do sleep 5; done' claude-primary-handoff-test
+ok - context threshold detection triggers same-runtime rotation
+ok - check is a no-op when context used is below threshold
+tests/fm-primary-handoff.test.sh: line 120: 62795 Terminated: 15          bash -c 'while :; do sleep 5; done' claude-primary-handoff-test
+ok - same-runtime execute rotates claude -> claude with one live holder
+ok - canonical away contract and legacy quiet flag refuse check and execute
+ok - cooldown prevents busy-loop rotation when already over threshold
+tests/fm-primary-handoff.test.sh: line 120: 64024 Terminated: 15          bash -c 'while :; do sleep 5; done' claude-primary-handoff-test
+ok - workers live before rotation remain live and owned after it
+tests/fm-primary-handoff.test.sh: line 120: 64808 Terminated: 15          bash -c 'while :; do sleep 5; done' claude-primary-handoff-test
+ok - incoming primary re-arms supervision beacon after handoff
+tests/fm-primary-handoff.test.sh: line 120: 65779 Terminated: 15          bash -c 'while :; do sleep 5; done' claude-primary-handoff-test
+ok - durable wakes arriving before/during rotation are not lost
+ok - status bar persists context sample while displaying used percent
+ok - absent context threshold leaves quota-only behavior
+ok - handoff accepts claude-opus and the opus alias as launcher profiles
+ok - check stays put quietly when the chain has no distinct successor
+tests/fm-primary-handoff.test.sh: line 120: 67888 Terminated: 15          bash -c 'while :; do sleep 5; done' claude-primary-handoff-test
+ok - exhausted chain still allows a same-profile context refresh
+tests/fm-primary-handoff.test.sh: line 120: 69778 Terminated: 15          bash -c 'while :; do sleep 5; done' claude-primary-handoff-test
+ok - Fable model-window exhaustion rotates claude-fable to claude-opus
+All primary-handoff tests passed.
+FM_TEST_END 2026-10-02T19:54:26Z tests/fm-primary-handoff.test.sh exit=0 duration_ms=80171 gate_skip=false
+FM_TEST_BEGIN 2026-10-02T19:54:26Z tests/fm-primary.test.sh family=unclassified expected_gate_skip=none
+ok - fm-primary: preflight checks all profile gates without launch, state, or terminal changes
+fm-primary: launching model claude-fable-5-1 at effort xhigh
+fm-primary: launching model claude-fable-5-1 at effort xhigh
+fm-primary: launching model claude-opus-5-5 at effort xhigh
+fm-primary: launching model claude-opus-5-5 at effort xhigh
+fm-primary: launching model gpt-6-astra at effort xhigh
+fm-primary: Cursor primary is certified on 2026.08.11-e8db854; found 2026.07.20-8cc9c0b (docs/cursor-harness.md) - launching anyway
+fm-primary: Cursor primary is certified on 2026.08.11-e8db854; found 2026.07.20-8cc9c0b (docs/cursor-harness.md) - launching anyway
+fm-primary: Cursor primary is certified on 2026.08.11-e8db854; found 2026.07.20-8cc9c0b (docs/cursor-harness.md) - launching anyway
+ok - fm-primary: profiles expand exact flags and always launch from the tracked root
+fm-primary: launching model claude-fable-5-1 at effort xhigh
+fm-primary: launching model claude-opus-5-5 at effort xhigh
+fm-primary: launching model gpt-6-astra at effort xhigh
+fm-primary: Cursor primary is certified on 2026.08.11-e8db854; found 2026.07.20-8cc9c0b (docs/cursor-harness.md) - launching anyway
+fm-primary: launching model claude-fable-5-1 at effort xhigh
+ok - fm-primary: Claude and Codex launches cap the window at 500k; Pi and Cursor stay bare
+ok - fm-primary: Claude effort applies to Fable and Opus and refuses invalid tokens
+fm-primary: launching model gpt-6-astra at effort xhigh
+ok - fm-primary: astra pins gpt-6-astra, effort, Codex harness, and the Codex login gate
+ok - fm-primary: the Astra context window is selectable, bounded by the installed catalog, and never invented
+fm-primary: launching model claude-fable-5-1 at effort xhigh
+fm-primary: launching model claude-opus-5-5 at effort xhigh
+ok - fm-primary: Claude Fable and Opus disable background-shell pressure reap; other profiles do not
+ok - fm-primary: an absent config/accounts.json leaves every profile byte-identical
+ok - fm-primary: --account selects, defaults, and refuses unknown names, vendorless profiles, and other arguments
+ok - fm-primary: a missing, logged-out, or wrong-identity account home refuses before launch
+ok - fm-primary: dry run previews argv before the account credential gate, and still refuses an unresolvable pin
+ok - fm-primary: an unreadable registry warns and still launches, but refuses an explicit pin
+ok - fm-primary: unknown profiles, missing CLIs, and missing integrations fail closed
+ok - fm-primary: a live Firstmate lock is refused without killing or replacing it
+ok - fm-primary: exec preserves root, stable child marker, role, and CLI exit status
+ok - fm-primary: visible role metadata is scoped to the current pane or window
+fm-primary: Cursor primary is certified on 2026.08.11-e8db854; found 2026.07.20-8cc9c0b (docs/cursor-harness.md) - launching anyway
+ok - fm-primary: opt-in shim is idempotent only for the exact safe symlink
+ok - fm-primary: the removed Kimi primary profile refuses as unknown
+ok - fm-primary: Codex gets a scoped tmux companion without replacing native controls
+ok - fm-primary: the tmux companion command the launcher builds actually renders
+ok - fm-primary: the herdr companion runs in its own new pane and follows the launching session
+ok - fm-primary: the companion is hidden only on proven capability and an uncrowded tab, and the zoom is applied once
+ok - fm-primary: the launcher's own FM_ROOT survives an ambient FM_ROOT_OVERRIDE
+ok - fm-primary: a refused herdr split and an unnamed companion pane are reported apart
+ok - fm-primary: companion cleanup closes only the exact pane the split returned
+ok - fm-primary: LAB role cannot appear as FIRSTMATE or run in default Herdr
+fm-primary: Cursor primary is certified on 2026.08.11-e8db854; found 2026.07.20-8cc9c0b (docs/cursor-harness.md) - launching anyway
+fm-primary: Cursor primary is certified on 2026.08.11-e8db854; found 2026.07.20-8cc9c0b (docs/cursor-harness.md) - launching anyway
+ok - fm-primary: Cursor Grok is pinned, lifecycle-integrated, version-warned, and login-gated
+fm-primary: Cursor primary is certified on 2026.08.11-e8db854; found 2026.07.20-8cc9c0b (docs/cursor-harness.md) - launching anyway
+fm-primary: Cursor primary is certified on 2026.08.11-e8db854; found 2026.07.20-8cc9c0b (docs/cursor-harness.md) - launching anyway
+fm-primary: Cursor primary is certified on 2026.08.11-e8db854; found 2026.07.20-8cc9c0b (docs/cursor-harness.md) - launching anyway
+fm-primary: Cursor primary is certified on 2026.08.11-e8db854; found 2026.07.20-8cc9c0b (docs/cursor-harness.md) - launching anyway
+fm-primary: Cursor primary is certified on 2026.08.11-e8db854; found 2026.07.20-8cc9c0b (docs/cursor-harness.md) - launching anyway
+ok - fm-primary: Cursor Grok 4.5 differs from the certified profile in the model id alone
+FM_TEST_END 2026-10-02T19:54:40Z tests/fm-primary.test.sh exit=0 duration_ms=14110 gate_skip=false
+FM_TEST_BEGIN 2026-10-02T19:54:40Z tests/fm-session-lock-ancestry.test.sh family=watcher-wake-lock expected_gate_skip=none
+ok - session-lock: a version-named Claude Code session is identified from its install path and argv[0]
+ok - session-lock: a harness that is pid 1 of its own namespace is examined, not skipped
+ok - session-lock: ordinary script paths under a harness directory are not harness processes
+ok - session-lock: ownership stops at the first non-harness gap above the contiguous run
+ok - session-lock: a live version-named session holding the lock is not mistaken for a stale owner
+ok - session-lock: a trusted same-session id keeps owning a recycled background chain, and nothing weaker does
+ok - session-lock: a trusted id anchors the lock on the model-loop process, anything else on the outermost pid
+ok - session-lock e2e: a version-named session claims the home and arms supervision
+ok - session-lock e2e: a session parented by a harness-named daemon claims the home and arms supervision
+ok - session-lock e2e: a version-named session under a harness-named daemon keeps its own lock
+ok - session-lock e2e: a background session keeps its lock and its supervision across a recycled helper chain
+ok - session-lock: a same-session confirmation waits for the claim lock and refreshes a re-keyed id
+ok - session-lock: a waiting confirmation does not steal another session's lock
+ok - session-lock: a failed lock write restores the previous sidecar
+ok - session-lock: a failed lock write removes a newly created sidecar
+ok - session-lock: a verified reclaim keeps the new sidecar beside the new pid
+FM_TEST_END 2026-10-02T19:55:17Z tests/fm-session-lock-ancestry.test.sh exit=0 duration_ms=36758 gate_skip=false
+FM_TEST_SUMMARY total=3 failed=0 skipped_gate=0 duration_ms=131592
+FM_TEST_SUMMARY_FAMILY family=unclassified count=2 duration_ms=94281 failed=0
+FM_TEST_SUMMARY_FAMILY family=watcher-wake-lock count=1 duration_ms=36758 failed=0
+FM_TEST_SLOWEST rank=1 script=tests/fm-primary-handoff.test.sh duration_ms=80171
+FM_TEST_SLOWEST rank=2 script=tests/fm-session-lock-ancestry.test.sh duration_ms=36758
+FM_TEST_SLOWEST rank=3 script=tests/fm-primary.test.sh duration_ms=14110
+exit=0

@@ -1,0 +1,66 @@
+## Disabled/absent config: forced handoff crashes mid-launch; check and run still reconcile
+outgoing synthetic primary pid=30478 acquired lock: 30478
+
+$ FM_HANDOFF_INJECT_CRASH=launching fm-primary-handoff.sh execute --force   (config absent, default chain)
+lock released: stale holder pid 30478
+exit=137 (killed)
+--- state/.primary-handoff:
+    schema=fm-primary-handoff.v1
+    phase=launching
+    from=claude-fable
+    to=claude-opus
+    reason=quota:min_remaining=na
+    trigger=quota
+    token=1790971258-30588-1882-15656
+    outgoing_pid=30478
+    outgoing_identity=Fri Oct  2 20:00:58 2026     /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.V977lK/harness/codex -c \012    trap "touch \"$LAB/term-received\"; sleep \"$TERM_DELAY\"; exit 0" TERM\012    "$ROOT/bin/fm-lock.sh" >/dev/null || exit 1\012    while :; do sleep 0.2; done
+    shutdown_requested=yes
+    incoming_pid=
+    started_at=1790971258
+    updated_at=1790971260
+    error=
+    completed_at=
+    cooldown_until=
+--- fm-lock.sh status: lock: free
+--- state/.lock-handoff:
+    (absent)
+--- state/.primary-active profile: claude-fable
+--- launches: 0
+
+$ fm-primary-handoff.sh run   (config absent)
+fm-primary: launching model claude-opus-5-5 at effort xhigh
+lock: free
+fm-primary-handoff: handed off primary claude-fable -> claude-opus (reason=quota:min_remaining=na trigger=quota)
+handed_off: claude-fable -> claude-opus
+fm-primary-handoff: handoff disabled; run loop exits
+exit=0
+--- state/.primary-handoff:
+    schema=fm-primary-handoff.v1
+    phase=complete
+    from=claude-fable
+    to=claude-opus
+    reason=quota:min_remaining=na
+    trigger=quota
+    token=1790971258-30588-1882-15656
+    outgoing_pid=30478
+    outgoing_identity=Fri Oct  2 20:00:58 2026     /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.V977lK/harness/codex -c \012    trap "touch \"$LAB/term-received\"; sleep \"$TERM_DELAY\"; exit 0" TERM\012    "$ROOT/bin/fm-lock.sh" >/dev/null || exit 1\012    while :; do sleep 0.2; done
+    shutdown_requested=yes
+    incoming_pid=31291
+    started_at=1790971258
+    updated_at=1790971261
+    error=
+    completed_at=1790971261
+    cooldown_until=1790971561
+--- fm-lock.sh status: lock: held by live harness pid 31291
+--- state/.lock-handoff:
+    token=1790971258-30588-1882-15656
+    profile=claude-opus
+    pid=31291
+    identity=Fri Oct  2 20:01:00 2026     /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.V977lK/harness/codex -c sleep "${STARTUP_DELAY:-0}"; [ "${NO_ACK:-0}" = 1 ] && { while :; do sleep 1; done; }\012    "$ROOT/bin/fm-lock.sh" >/dev/null || exit 1; while :; do sleep 0.2; done
+--- state/.primary-active profile: claude-opus
+--- launches: 1
+
+$ fm-primary-handoff.sh check
+handoff: disabled
+exit=0
+--- launches: 1
