@@ -593,6 +593,137 @@ SH
   pass "status bar: herdr companion is session-scoped and exits when its pane is gone"
 }
 
+# A pane outlives its primary: the captain can quit Codex and start another
+# harness in the same pane, or a reused pane id can belong to new work. The
+# pane stays live in both fakes for far longer than the test needs (the cap only
+# bounds a regression), so the only thing that can end the loop early is the
+# companion noticing that Codex is no longer behind the pane.
+test_herdr_companion_retires_when_its_pane_stops_running_codex() {
+  local out rows pane_count="$TMP_ROOT/retire-herdr-pane" proc_count="$TMP_ROOT/retire-herdr-proc"
+  local bin="$TMP_ROOT/retire-herdr-bin"
+  mkdir -p "$bin"
+  cat > "$bin/herdr" <<'SH'
+#!/usr/bin/env bash
+case " $* " in
+  *" --session "*) ;;
+  *) exit 1 ;;
+esac
+bump() {  # <file> -> new count
+  local n=0
+  [ ! -f "$1" ] || n=$(<"$1")
+  n=$((n + 1))
+  printf '%s\n' "$n" > "$1"
+  printf '%s' "$n"
+}
+case " $* " in
+  *" pane get "*)
+    [ "$(bump "$FM_TEST_PANE_COUNT")" -le "$FM_TEST_PANE_LIVE" ] || { printf '{"result":{"pane":{}}}\n'; exit 0; }
+    printf '{"result":{"pane":{"pane_id":"w9:p9"}}}\n'
+    ;;
+  *" pane process-info "*)
+    if [ "$(bump "$FM_TEST_PROC_COUNT")" -le "$FM_TEST_CODEX_READS" ]; then
+      name=codex
+    else
+      name=claude
+    fi
+    printf '{"result":{"type":"pane_process_info","process_info":{"pane_id":"w9:p9","shell_pid":500,"foreground_processes":[{"pid":501,"name":"%s","argv0":"%s"}]}}}\n' "$name" "$name"
+    ;;
+  *) exit 1 ;;
+esac
+SH
+  chmod +x "$bin/herdr"
+
+  out=$(PATH="$bin:$FAKEBIN:$PATH" \
+    FM_HOME="$HOME_FIX" \
+    FM_PRIMARY_HARNESS=codex \
+    FM_CODEX_METRICS_ROLLOUT="$TMP_ROOT/no-rollout" \
+    FM_STATUS_BAR_INTERVAL=0 \
+    FM_STATUS_HERDR_SESSION=default \
+    FM_TEST_PANE_COUNT="$pane_count" FM_TEST_PANE_LIVE=40 \
+    FM_TEST_PROC_COUNT="$proc_count" FM_TEST_CODEX_READS=2 \
+    "$ROOT/bin/fm-status-bar.sh" --adapter codex --model gpt-6-astra --effort high \
+      --follow-pane w9:p9 --follow-backend herdr | strip_ansi)
+  rows=$(printf '%s' "$out" | grep -o '⚓' | grep -c .)
+  # Two refreshes with Codex present, then the default three consecutive misses:
+  # the first two misses still render, and the third retires before rendering.
+  [ "$rows" -eq 4 ] \
+    || fail "Herdr companion rendered $rows rows; it must retire three refreshes after Codex left its still-live pane"
+  [ "$(<"$pane_count")" -lt 40 ] || fail "Herdr companion only stopped because its pane finally disappeared"
+
+  # A pane that never showed Codex - the launch window, or a provider that
+  # cannot report processes - never arms retirement, so the pane-liveness rule
+  # alone still decides when the row goes.
+  rm -f "$pane_count" "$proc_count"
+  out=$(PATH="$bin:$FAKEBIN:$PATH" \
+    FM_HOME="$HOME_FIX" \
+    FM_PRIMARY_HARNESS=codex \
+    FM_CODEX_METRICS_ROLLOUT="$TMP_ROOT/no-rollout" \
+    FM_STATUS_BAR_INTERVAL=0 \
+    FM_STATUS_HERDR_SESSION=default \
+    FM_TEST_PANE_COUNT="$pane_count" FM_TEST_PANE_LIVE=6 \
+    FM_TEST_PROC_COUNT="$proc_count" FM_TEST_CODEX_READS=0 \
+    "$ROOT/bin/fm-status-bar.sh" --adapter codex --model gpt-6-astra --effort high \
+      --follow-pane w9:p9 --follow-backend herdr | strip_ansi)
+  rows=$(printf '%s' "$out" | grep -o '⚓' | grep -c .)
+  [ "$rows" -eq 6 ] \
+    || fail "Herdr companion rendered $rows rows for a pane that never showed Codex; retirement must stay unarmed"
+  pass "status bar: herdr companion retires once its live pane stops running Codex, and only after seeing Codex"
+}
+
+test_tmux_companion_retires_when_its_pane_stops_running_codex() {
+  local out rows bin="$TMP_ROOT/retire-tmux-bin" pane_count="$TMP_ROOT/retire-tmux-pane"
+  local ps_count="$TMP_ROOT/retire-tmux-ps"
+  mkdir -p "$bin"
+  cat > "$bin/tmux" <<'SH'
+#!/usr/bin/env bash
+case " $* " in
+  *'#{pane_pid}'*) printf '%s\n' 1000 ;;
+  *'#{pane_id}'*)
+    n=0
+    [ ! -f "$FM_TEST_PANE_COUNT" ] || n=$(<"$FM_TEST_PANE_COUNT")
+    n=$((n + 1))
+    printf '%s\n' "$n" > "$FM_TEST_PANE_COUNT"
+    [ "$n" -le 40 ] || exit 1
+    printf '%s\n' '%42'
+    ;;
+  *) exit 1 ;;
+esac
+SH
+  cat > "$bin/pgrep" <<'SH'
+#!/usr/bin/env bash
+[ "${2:-}" != 1000 ] || printf '%s\n' 1001
+SH
+  # The pane's process tree is a shell whose child is Codex for two refreshes
+  # and then a different harness, exactly the in-place switch the row outlived.
+  cat > "$bin/ps" <<'SH'
+#!/usr/bin/env bash
+case " $* " in
+  *" 1001 "*|*" 1001")
+    n=0
+    [ ! -f "$FM_TEST_PS_COUNT" ] || n=$(<"$FM_TEST_PS_COUNT")
+    n=$((n + 1))
+    printf '%s\n' "$n" > "$FM_TEST_PS_COUNT"
+    if [ "$n" -le 2 ]; then printf '%s\n' /opt/codex/bin/codex; else printf '%s\n' /opt/claude/bin/claude; fi
+    ;;
+  *) printf '%s\n' /bin/zsh ;;
+esac
+SH
+  chmod +x "$bin/tmux" "$bin/pgrep" "$bin/ps"
+  out=$(PATH="$bin:$FAKEBIN:$PATH" \
+    FM_HOME="$HOME_FIX" \
+    FM_PRIMARY_HARNESS=codex \
+    FM_CODEX_METRICS_ROLLOUT="$TMP_ROOT/no-rollout" \
+    FM_STATUS_BAR_INTERVAL=0 \
+    FM_TEST_PANE_COUNT="$pane_count" FM_TEST_PS_COUNT="$ps_count" \
+    "$ROOT/bin/fm-status-bar.sh" --adapter codex --model gpt-6-astra --effort high \
+      --follow-pane %42 | strip_ansi)
+  rows=$(printf '%s' "$out" | grep -o '⚓' | grep -c .)
+  [ "$rows" -eq 4 ] \
+    || fail "tmux companion rendered $rows rows; it must retire three refreshes after Codex left its still-live pane"
+  [ "$(<"$pane_count")" -lt 40 ] || fail "tmux companion only stopped because its pane finally disappeared"
+  pass "status bar: tmux companion retires once its live pane stops running Codex"
+}
+
 test_companion_clears_the_whole_pane_once_at_startup() {
   local out count_file="$TMP_ROOT/clear-count"
   fm_install_fake_tmux_pane "$FAKEBIN" 2
@@ -1448,6 +1579,8 @@ test_follow_mode_exits_when_primary_pane_is_gone
 test_cursor_payload_adapter_and_primary_guard
 test_account_role_label_is_verified_and_compact
 test_herdr_companion_exits_when_primary_pane_is_gone
+test_herdr_companion_retires_when_its_pane_stops_running_codex
+test_tmux_companion_retires_when_its_pane_stops_running_codex
 test_companion_clears_the_whole_pane_once_at_startup
 test_companion_never_leaves_the_row_blank_while_collecting
 test_companion_publishes_every_refresh_to_the_pane

@@ -628,6 +628,36 @@ companion_pane_alive() {
   [ "$resolved" = "$FOLLOW_PANE" ]
 }
 
+# companion_runtime_retired: 0 once the followed pane has stopped running the
+# runtime this companion was launched for, even though the pane itself is
+# still there. A pane outlives its primary: the captain can quit Codex and start
+# a different harness in the same pane, and a provider can hand a reused pane
+# id to new work, so pane liveness alone would keep a stale row - an Astra bar
+# under a Claude primary - on screen indefinitely.
+#
+# Retirement is armed only after the runtime has been positively seen behind
+# the pane, through the same Codex identity rule the metrics supply binds with.
+# Before that the launcher is still on its way to exec'ing the runtime, and a
+# provider that cannot report pane processes at all never arms it, which keeps
+# the pre-existing pane-liveness behavior rather than retiring a working bar.
+# Once armed, the runtime must be absent for several consecutive ticks, so one
+# failed or racing process read cannot retire a live primary's companion.
+# Every guarded launch installs its own companion, so a primary relaunched in
+# the same pane is never left without one by this.
+RUNTIME_SEEN=0
+RUNTIME_MISSES=0
+companion_runtime_retired() {
+  [ "$ADAPTER" = codex ] && [ "$CODEX_METRICS_READY" = 1 ] || return 1
+  if [ -n "$(_fm_codex_pane_pids "$FOLLOW_PANE" "$FOLLOW_BACKEND" "${FM_STATUS_HERDR_SESSION:-}" 2>/dev/null)" ]; then
+    RUNTIME_SEEN=1
+    RUNTIME_MISSES=0
+    return 1
+  fi
+  [ "$RUNTIME_SEEN" = 1 ] || return 1
+  RUNTIME_MISSES=$((RUNTIME_MISSES + 1))
+  [ "$RUNTIME_MISSES" -ge "${FM_STATUS_RUNTIME_GONE_TICKS:-3}" ]
+}
+
 if [ -n "$FOLLOW_PANE" ]; then
   case "$FOLLOW_BACKEND" in
     tmux) command -v tmux >/dev/null 2>&1 || exit 0 ;;
@@ -666,7 +696,11 @@ if [ -n "$FOLLOW_PANE" ]; then
   # this renderer never releases a zoom it does not own. The release path
   # clears it permanently.
   CHROME_ZOOM_WATCH=$CHROME_ZOOMED
-  while companion_pane_alive; do
+  # Exiting is the whole retirement: the renderer is the companion pane's only
+  # process on both providers (tmux runs it as the split's command, and the
+  # Herdr launch execs it in place of the pane's shell), so the provider closes
+  # that pane itself and no pane is ever closed by id from here.
+  while companion_pane_alive && ! companion_runtime_retired; do
     # Collect the complete frame before any of it reaches the pane, then publish
     # the row erase and the finished frame in a single write. Erasing first left
     # the row visibly blank for the whole length of the collection, which is what
