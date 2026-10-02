@@ -47,7 +47,7 @@ The verified reviewers are:
 | Name | Invocation | Pool |
 | ---- | ---------- | ---- |
 | `fable` (default) | `claude -p --model claude-fable-5-1 --effort medium --strict-mcp-config --no-session-persistence` | Claude Fable week and Claude week |
-| `grok` | `cursor-agent -p --model grok-4.7-xhigh --mode ask --trust` | Cursor included usage |
+| `grok` | `cursor-agent -p --model grok-4.7-xhigh --mode ask --trust` | Cursor all-model availability (lowest of included, auto and API usage) |
 | `sol` | `pi --print --model openai-codex/gpt-5.6-sol --thinking xhigh` | Codex general window |
 | `k3` | `kimi --model kimi-code/k3 --prompt` | none checked |
 

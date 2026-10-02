@@ -128,7 +128,7 @@ resolve_reviewer() {
       REVIEWER_ARGS=(-p --model grok-4.7-xhigh --mode ask --trust)
       QUOTA_PROVIDER=cursor
       QUOTA_SCOPE='all_models'
-      QUOTA_POOL='Cursor included usage'
+      QUOTA_POOL='Cursor all-model availability (lowest of included, auto and API usage)'
       QUOTA_UNAVAILABLE=refuse
       ;;
     sol)

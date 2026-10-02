@@ -217,20 +217,20 @@ test_grok_happy_path_and_floor() {
     "grok: cursor-agent read-only print invocation"
   assert_contains "$(cat "$dir/argv.txt")" 'Check threading, concurrency' \
     "grok: concurrency and retry rule reaches the reviewer"
-  assert_contains "$RUN_OUT" 'Cursor included usage percentRemaining=15' \
+  assert_contains "$RUN_OUT" 'Cursor all-model availability (lowest of included, auto and API usage) percentRemaining=15' \
     "grok: advisory reads the all-model effective availability"
 
   write_quota_fixture "$dir/low.json" 80 89 42 6
   run_so "$dir" "$dir/low.json" -- --reviewer grok --out "$dir/out-low.md" -- "pool nearly empty"
   expect_code 1 "$RUN_RC" "grok: low included pool refuses despite API balance"
-  assert_contains "$RUN_OUT" 'Cursor included usage percentRemaining 6 is below floor 10' \
+  assert_contains "$RUN_OUT" 'Cursor all-model availability (lowest of included, auto and API usage) percentRemaining 6 is below floor 10' \
     "grok: included-pool refusal message"
   assert_absent "$dir/out-low.md" "grok: no --out when refusing"
 
   write_quota_fixture "$dir/low-api.json" 80 89 42 50 4
   run_so "$dir" "$dir/low-api.json" -- --reviewer grok --out "$dir/out-low-api.md" -- "api sub-pool empty"
   expect_code 1 "$RUN_RC" "grok: low api_usage refuses despite a high included pool"
-  assert_contains "$RUN_OUT" 'Cursor included usage percentRemaining 4 is below floor 10' \
+  assert_contains "$RUN_OUT" 'Cursor all-model availability (lowest of included, auto and API usage) percentRemaining 4 is below floor 10' \
     "grok: bounding-window refusal message"
   assert_absent "$dir/out-low-api.md" "grok: no --out when a bounding window is low"
 
@@ -250,7 +250,7 @@ test_grok_refuses_unavailable_reading() {
   write_quota_fixture "$dir/none.json" 80 89 42 -
   run_so "$dir" "$dir/none.json" -- --reviewer grok --out "$dir/out.md" -- "no included reading"
   expect_code 1 "$RUN_RC" "grok: missing included_usage refuses"
-  assert_contains "$RUN_OUT" 'Cursor included usage reading unavailable' \
+  assert_contains "$RUN_OUT" 'Cursor all-model availability (lowest of included, auto and API usage) reading unavailable' \
     "grok: unavailable-reading refusal message"
   assert_absent "$dir/argv.txt" "grok: reviewer never launched without a reading"
   assert_absent "$dir/out.md" "grok: no --out without a reading"
@@ -262,7 +262,7 @@ test_grok_refuses_unavailable_reading() {
   write_quota_fixture "$dir/stale.json" 80 89 42 15 90 cursor
   run_so "$dir" "$dir/stale.json" -- --reviewer grok --out "$dir/out-stale.md" -- "stale cursor reading"
   expect_code 1 "$RUN_RC" "grok: stale reading refuses"
-  assert_contains "$RUN_OUT" 'Cursor included usage reading unavailable' \
+  assert_contains "$RUN_OUT" 'Cursor all-model availability (lowest of included, auto and API usage) reading unavailable' \
     "grok: stale reading counts as unavailable"
   assert_absent "$dir/argv.txt" "grok: reviewer never launched on a stale reading"
   assert_absent "$dir/out-stale.md" "grok: no --out on a stale reading"
