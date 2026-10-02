@@ -42,7 +42,7 @@
 #   state/.primary-handoff    durable phase record for in-flight/completed handoff
 #   state/.primary-handoff.lock          coordination lock (wake-lib portable lock)
 #   state/.primary-handoff-daemon.lock   run-loop singleton
-#   state/.primary-handoff-launch.lock   incoming launcher lifetime lock
+#   state/.primary-handoff-launch.TOKEN.lock  per-generation launcher lifetime lock
 #   state/.lock-handoff                  token/profile/PID/identity acknowledgement
 # The internal `launch TOKEN PROFILE` entry is generation-checked and serialized;
 # runtime routes must enter through it, and custom commands must stay in the
@@ -110,11 +110,18 @@ cmd_status() {
   fi
 }
 
+clear_launch_lock() {
+  local launch_lock
+  launch_lock=$(fm_handoff_launch_lock "$token") || return 0
+  fm_lock_remove_path "$launch_lock" || true
+}
+
 abort_record() {
   local msg=$1
   phase=aborted
   error=$msg
   fm_handoff_write_record
+  clear_launch_lock
   fm_handoff_log "$msg"
   return 1
 }
@@ -128,6 +135,7 @@ complete_record() {
   fm_handoff_write_active "$to" "$incoming_pid" || return 1
   phase=complete
   fm_handoff_write_record || return 1
+  clear_launch_lock
   fm_handoff_log "handed off primary $from -> $to (reason=$reason trigger=$trigger)"
   printf 'handed_off: %s -> %s\n' "$from" "$to"
 }
@@ -177,7 +185,7 @@ release_and_launch() {
 
 recover_record() {
   fm_handoff_read_record || return 1
-  [ -n "$token" ] && [ -n "$outgoing_pid" ] \
+  fm_handoff_launch_lock "$token" >/dev/null && [ -n "$outgoing_pid" ] && [ -n "$to" ] \
     && [ "$(fm_handoff_normalize_profile "$to")" = "$to" ] || {
     abort_record "incomplete handoff record; refusing recovery"
     return 1
@@ -206,7 +214,10 @@ recover_record() {
         return 0
         ;;
     esac
-    fm_handoff_preflight "$to" || return 1
+    fm_handoff_preflight "$to" || {
+      abort_record "target preflight failed; outgoing owner preserved"
+      return 1
+    }
     release_and_launch
     return $?
   fi
@@ -225,11 +236,11 @@ recover_record() {
 # re-sending a launch after a controller crash safe even before startup claims
 # the session lock. Exec preserves its PID; stale recovery happens on exit.
 cmd_launch() {
-  local expected_token=${1:-} expected_profile=${2:-} launch_lock
-  [ -n "$expected_token" ] && [ -n "$expected_profile" ] || return 2
-  launch_lock="$STATE/.primary-handoff-launch.lock"
+  local expected_token=${1:-} expected_profile=${2:-}
+  [ -n "$expected_profile" ] || return 2
+  launch_lock=$(fm_handoff_launch_lock "$expected_token") || return 2
   fm_lock_try_acquire "$launch_lock" || return 0
-  trap 'fm_lock_release "$STATE/.primary-handoff-launch.lock"' EXIT
+  trap 'fm_lock_release "$launch_lock"' EXIT
   trap 'exit 1' HUP INT TERM
   fm_handoff_read_record || return 1
   [ "$phase" = launching ] && [ "$token" = "$expected_token" ] \
@@ -247,7 +258,7 @@ cmd_launch() {
 # Subshell trap scope preserves the run loop's independent singleton cleanup.
 cmd_execute() (
 
-  local from_arg='' to_arg='' reason_arg='' force=0
+  local from_arg='' to_arg='' reason_arg='' force=0 recover_only=0
   local active next remaining coord
   local FM_HANDOFF_MODE FM_HANDOFF_THRESHOLD FM_HANDOFF_CONTEXT_USED_THRESHOLD
   local FM_HANDOFF_COOLDOWN_SECONDS FM_HANDOFF_CHAIN_JSON FM_HANDOFF_POLL_SECONDS
@@ -287,6 +298,10 @@ cmd_execute() (
         force=1
         shift
         ;;
+      --recover-only)
+        recover_only=1
+        shift
+        ;;
       *)
         fm_handoff_log "unknown execute argument: $1"
         return 2
@@ -314,6 +329,7 @@ cmd_execute() (
     recover_record
     return $?
   fi
+  [ "$recover_only" -eq 0 ] || return 0
 
   if [ "$FM_HANDOFF_MODE" != enabled ]; then
     if [ "$force" -ne 1 ]; then
@@ -409,7 +425,7 @@ cmd_check() {
   local active remaining ctx_used next
   fm_handoff_load_config || return 1
   if fm_handoff_rotation_in_progress; then
-    cmd_execute
+    cmd_execute --recover-only
     return $?
   fi
   if [ "$FM_HANDOFF_MODE" != enabled ]; then

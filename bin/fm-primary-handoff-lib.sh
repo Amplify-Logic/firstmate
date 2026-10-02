@@ -569,6 +569,11 @@ fm_handoff_preflight() {
   FM_HOME="$FM_HOME" "$FM_ROOT/bin/fm-primary.sh" "$profile" --preflight
 }
 
+fm_handoff_launch_lock() { # <token>
+  case "${1:-}" in ''|*[!0-9-]*) return 1 ;; esac
+  printf '%s/.primary-handoff-launch.%s.lock\n' "$STATE" "$1"
+}
+
 fm_handoff_launch_incoming() {
   local profile=$1
   case "${FM_HANDOFF_INJECT_FAIL:-}" in
@@ -577,8 +582,9 @@ fm_handoff_launch_incoming() {
   fm_handoff_assert_never_two_live_holders --require-free || return 1
   # A surviving launcher is already starting this generation. Its independent
   # lock survives a controller crash and stays held across the primary's exec.
-  local launch_pid
-  launch_pid=$(cat "$STATE/.primary-handoff-launch.lock/pid" 2>/dev/null || true)
+  local launch_lock launch_pid
+  launch_lock=$(fm_handoff_launch_lock "$token") || return 1
+  launch_pid=$(cat "$launch_lock/pid" 2>/dev/null || true)
   if fm_pid_alive "$launch_pid"; then return 0; fi
   if [ -n "${FM_HANDOFF_LAUNCH_CMD:-}" ]; then
     "$FM_ROOT/bin/fm-primary-handoff.sh" launch "$token" "$profile" \

@@ -271,6 +271,87 @@ test_disabled_check_recovers_crashed_force() {
   pass "check reconciles a crashed forced handoff before reporting disabled"
 }
 
+test_launcher_lock_is_generation_bound() {
+  local out status=0 other_pid other_lock
+  : > "$LAUNCH_LOG"
+  write_enabled_config
+  write_active claude-fable
+  start_fake_holder
+  sleep 60 &
+  other_pid=$!
+  printf '%s\n' "$other_pid" >> "$HOME_FIX/holders"
+  other_lock="$HOME_FIX/state/.primary-handoff-launch.1-2-3-4.lock"
+  mkdir -p "$other_lock"
+  printf '%s\n' "$other_pid" > "$other_lock/pid"
+  out=$(run_execute "$ROOT/bin/fm-primary-handoff.sh" execute --to pi 2>&1) || status=$?
+  expect_code 0 "$status" "first generation should complete: $out"
+  out=$(run_execute "$ROOT/bin/fm-primary-handoff.sh" execute --force --to codex 2>&1) || status=$?
+  expect_code 0 "$status" "live earlier launcher blocked the next generation: $out"
+  assert_contains "$(cat "$HOME_FIX/state/.primary-handoff")" 'to=codex' "second generation target missing"
+  assert_contains "$(cat "$HOME_FIX/state/.primary-handoff")" 'phase=complete' "second generation did not complete"
+  [ "$(wc -l < "$LAUNCH_LOG" | tr -d ' ')" = 2 ] || fail "expected one launch per generation: $(cat "$LAUNCH_LOG")"
+  [ "$(live_holder_count)" = 1 ] || fail "second generation left no single live owner"
+  [ "$(cat "$other_lock/pid" 2>/dev/null)" = "$other_pid" ] || fail "an unrelated live generation's launch lock was removed"
+  rm -rf "$other_lock"
+  cleanup_holders
+  pass "incoming launcher reuse and cleanup are bound to the matching generation"
+}
+
+test_recovery_preflight_failure_preserves_outgoing() {
+  local out status=0
+  : > "$SIGNAL_LOG"
+  : > "$LAUNCH_LOG"
+  write_enabled_config
+  write_active claude-fable
+  start_fake_holder
+  run_execute env FM_HANDOFF_SIGNAL_CMD=true FM_HANDOFF_INJECT_FAIL=wait_dead \
+    "$ROOT/bin/fm-primary-handoff.sh" execute --to pi > "$TMP_ROOT/timeout.out" 2>&1 || true
+  assert_contains "$(cat "$HOME_FIX/state/.primary-handoff")" 'phase=releasing' "timeout should retain releasing"
+  out=$(run_execute env FM_HANDOFF_PREFLIGHT_CMD=false \
+    "$ROOT/bin/fm-primary-handoff.sh" check 2>&1) || status=$?
+  assert_contains "$(cat "$HOME_FIX/state/.primary-handoff")" 'phase=aborted' "failed recovery preflight left the attempt nonterminal: $out"
+  kill -0 "$FAKE_HOLDER_PID" || fail "failed recovery preflight stopped the outgoing primary"
+  [ ! -s "$LAUNCH_LOG" ] || fail "failed recovery preflight launched an incoming primary"
+  cleanup_holders
+  pass "recovery preflight failure aborts while the outgoing primary stays the owner"
+}
+
+test_record_without_target_is_aborted() {
+  local out
+  : > "$LAUNCH_LOG"
+  write_enabled_config
+  write_active claude-fable
+  start_fake_holder
+  FM_HANDOFF_INJECT_CRASH=releasing run_execute \
+    "$ROOT/bin/fm-primary-handoff.sh" execute --to pi > "$TMP_ROOT/crash.out" 2>&1 || true
+  sed 's/^to=.*/to=/' "$HOME_FIX/state/.primary-handoff" > "$HOME_FIX/record.tmp"
+  mv "$HOME_FIX/record.tmp" "$HOME_FIX/state/.primary-handoff"
+  out=$(run_execute "$ROOT/bin/fm-primary-handoff.sh" check 2>&1) || true
+  assert_contains "$(cat "$HOME_FIX/state/.primary-handoff")" 'phase=aborted' "targetless record stayed nonterminal: $out"
+  assert_contains "$(cat "$HOME_FIX/state/.primary-handoff")" 'incomplete handoff record' "targetless record not rejected as incomplete"
+  kill -0 "$FAKE_HOLDER_PID" || fail "targetless record recovery stopped the outgoing primary"
+  [ ! -s "$LAUNCH_LOG" ] || fail "targetless record recovery launched"
+  cleanup_holders
+  pass "a handoff record without a target is aborted rather than retried forever"
+}
+
+test_recover_only_never_starts_rotation() {
+  local out status=0
+  : > "$SIGNAL_LOG"
+  : > "$LAUNCH_LOG"
+  write_enabled_config
+  write_quota "$TMP_ROOT/quota.json" 5
+  write_active claude-fable
+  start_fake_holder
+  out=$(run_execute "$ROOT/bin/fm-primary-handoff.sh" execute --recover-only 2>&1) || status=$?
+  expect_code 0 "$status" "recover-only with nothing to recover should succeed: $out"
+  [ ! -s "$SIGNAL_LOG" ] && [ ! -s "$LAUNCH_LOG" ] || fail "recover-only started a fresh rotation"
+  [ ! -f "$HOME_FIX/state/.primary-handoff" ] || fail "recover-only planned a new handoff record"
+  kill -0 "$FAKE_HOLDER_PID" || fail "recover-only stopped the healthy primary"
+  cleanup_holders
+  pass "recovery-only dispatch never falls through into a fresh rotation"
+}
+
 test_happy_path_atomic_handoff() {
   local out status=0 record
   : > "$SIGNAL_LOG"
@@ -1279,6 +1360,10 @@ test_unrelated_owner_is_not_acknowledged
 test_disabled_is_noop
 test_disabled_force_uses_default_chain
 test_disabled_check_recovers_crashed_force
+test_launcher_lock_is_generation_bound
+test_recovery_preflight_failure_preserves_outgoing
+test_record_without_target_is_aborted
+test_recover_only_never_starts_rotation
 test_astra_registered_profile
 test_cursor_grok_quota_monitored
 test_happy_path_atomic_handoff
