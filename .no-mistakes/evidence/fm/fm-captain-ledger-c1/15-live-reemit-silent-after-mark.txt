@@ -1,0 +1,12 @@
+== cursor 7, ledger newest #7; /clear typed into the lab primary; SessionStart:clear stdout (session 4236a76a-2850-45d8-a604-60ae3a9b9626):
+[hook SessionStart:clear exit 0]
+================================================================================
+SESSION START (CONTEXT RE-EMIT) - /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.jqOTCl
+================================================================================
+WAKE QUEUE
+--------------------------------------------------------------------------------
+1790965800	1	check	startup-network	check: startup-network: deferred startup network checks finished (done); read them with /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.jqOTCl/checkout/bin/fm-startup-network.sh report
+WAKE_ACK_REQUIRED: after handling completes run bin/fm-wake-drain.sh --ack-through 1 --recovery-generation 38845.1790965801.QqAb1h
+================================================================================
+SUPERVISION OPERATING INSTRUCTIONS - primary harness: claude
+== occurrences of UNRECONCILED in that hook output: 0

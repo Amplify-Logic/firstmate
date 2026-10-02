@@ -1,0 +1,20 @@
+== target e5f288fb; lab primary: claude 2.1.287 (Claude Code) on tmux -L fm-lab, cwd $LAB/checkout (plain clone), FM_HOME=$LAB
+== prompts the lab Claude primary actually submitted (from its own session transcript, U+2063 already stripped by Claude):
+  > <task-notification><task-id>x1</task-id><status>completed</status><summary>Stop hook rewake</summary></task-notification>
+  > FIRSTMATE_OP: v1 away-supervisor: Supervisor escalate (3 events): demo stalled
+  > FIRSTMATE_OP: v1 away-supervisor: Supervisor escalate (3 events): demo stalled
+  > Move the Peru deposit from 2 November to 1 February.
+  > Move the Peru deposit from 2 November to 1 February.Why did the FIRSTMATE_OP: v1 watcher: wake fire twice?
+  > Why did the FIRSTMATE_OP: v1 watcher: wake fire twice?
+  > FIRSTMATE_OP: v1 launch-brief: Launch brief: ship task demo-1
+  > FIRSTMATE_OP: v1 watcher: watcher: crew demo-1 finished
+  > FIRSTMATE_OP: v1 bogus: this is me typing, keep it
+== Claude showed 'Removed 1 invisible character · review and press Enter to send' for the typed away-supervisor digest and launch brief, and stripped the mark from the pasted watcher wake too
+== data/captain-ledger.jsonl after all of the above:
+{"seq":1,"epoch":1790965656,"session":"e5655295-d8fe-4ac5-83c3-8332f669e50d","text":"Move the Peru deposit from 2 November to 1 February."}
+{"seq":2,"epoch":1790965660,"session":"e5655295-d8fe-4ac5-83c3-8332f669e50d","text":"Move the Peru deposit from 2 November to 1 February.Why did the FIRSTMATE_OP: v1 watcher: wake fire twice?"}
+{"seq":3,"epoch":1790965675,"session":"e5655295-d8fe-4ac5-83c3-8332f669e50d","text":"Why did the FIRSTMATE_OP: v1 watcher: wake fire twice?"}
+{"seq":4,"epoch":1790965703,"session":"e5655295-d8fe-4ac5-83c3-8332f669e50d","text":"FIRSTMATE_OP: v1 bogus: this is me typing, keep it"}
+== result: the <task-notification> rewake and the three stripped operational labels (away-supervisor, launch-brief, watcher) recorded nothing;
+   the captain sentence (#1), a mid-sentence mention of FIRSTMATE_OP (#3), and an unknown-kind label (#4) were recorded.
+   (#2 is my own driving artefact: Escape restored #1 into the composer, so the next typed prompt was appended to it; still captain words.)

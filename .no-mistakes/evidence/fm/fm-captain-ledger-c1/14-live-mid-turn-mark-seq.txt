@@ -1,0 +1,19 @@
+$ pending   (the agent reads this, newest shown is #6)
+UNRECONCILED CAPTAIN WORDS (2 since 2026-10-02)
+  #5 2026-10-02 20:28  Move the Peru deposit from 2 November to 1 February.
+  #6 2026-10-02 20:30  Quote verbatim the heading line of the UNRECONCILED CAPTAIN WORDS section from your session-start context and nothing else. Do not run any command.
+Ledger: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.jqOTCl/data/captain-ledger.jsonl (full text of every entry after #4)
+Reconcile each entry against data/captain.md, the backlog, and the decision files, or run /stow, then run /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.jqOTCl/checkout/bin/fm-captain-ledger.sh mark 6.
+== while it reconciles, the captain types a new instruction into the lab primary:
+{"seq":7,"epoch":1790965874,"session":"39e8a797-64df-4610-8852-016c3f0c0155","text":"Also cancel the Lima hotel."}
+$ mark 6   (the seq pending showed)
+captain ledger: reconciled through #6
+$ pending   (expect #7 still pending)
+UNRECONCILED CAPTAIN WORDS (1 since 2026-10-02)
+  #7 2026-10-02 20:31  Also cancel the Lima hotel.
+Ledger: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.jqOTCl/data/captain-ledger.jsonl (full text of every entry after #6)
+Reconcile each entry against data/captain.md, the backlog, and the decision files, or run /stow, then run /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.jqOTCl/checkout/bin/fm-captain-ledger.sh mark 7.
+$ mark 99   (past the newest: clamps to newest)
+captain ledger: reconciled through #7
+$ pending   (expect silence)
+[0 bytes]

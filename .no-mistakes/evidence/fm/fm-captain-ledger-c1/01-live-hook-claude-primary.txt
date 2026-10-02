@@ -1,0 +1,5 @@
+== lab primary: claude (pid 75262) in /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.9lW04g/checkout, FM_HOME=/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.9lW04g
+after <task-notification> rewake typed into the lab primary: ledger absent
+after captain prompt 'Move the Peru deposit from 2 November to 1 February.':
+-rw-------@ 1 larsmusic  staff  140 Oct  2 20:15 /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.9lW04g/data/captain-ledger.jsonl
+{"seq":1,"epoch":1790964919,"session":"ce6b49ae-61e9-4bd0-9172-c24a158f485e","text":"Move the Peru deposit from 2 November to 1 February."}

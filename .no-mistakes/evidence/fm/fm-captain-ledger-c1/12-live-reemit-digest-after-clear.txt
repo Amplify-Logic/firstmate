@@ -1,0 +1,19 @@
+== after 'mark 4' silenced pending, a new captain prompt typed into the lab Claude primary:
+{"seq":5,"epoch":1790965737,"session":"e5655295-d8fe-4ac5-83c3-8332f669e50d","text":"Move the Peru deposit from 2 November to 1 February."}
+== then /clear typed into the same primary; SessionStart:clear hook stdout as Claude recorded it in session d103bb95-7639-40c1-a56f-c285fc7a31c1:
+[hook SessionStart:clear exit 0]
+================================================================================
+SESSION START (CONTEXT RE-EMIT) - /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.jqOTCl
+================================================================================
+WAKE QUEUE
+--------------------------------------------------------------------------------
+(no queued wakes)
+
+================================================================================
+UNRECONCILED CAPTAIN WORDS (1 since 2026-10-02)
+================================================================================
+  #5 2026-10-02 20:28  Move the Peru deposit from 2 November to 1 February.
+Ledger: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.jqOTCl/data/captain-ledger.jsonl (full text of every entry after #4)
+Reconcile each entry against data/captain.md, the backlog, and the decision files, or run /stow, then run /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.jqOTCl/checkout/bin/fm-captain-ledger.sh mark 5.
+================================================================================
+SUPERVISION OPERATING INSTRUCTIONS - primary harness: claude

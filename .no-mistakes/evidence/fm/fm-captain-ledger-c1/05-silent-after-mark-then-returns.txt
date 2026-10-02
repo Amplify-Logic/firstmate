@@ -1,0 +1,15 @@
+# /clear digest right after mark 1 (live lab primary): UNRECONCILED lines = 0
+SESSION START (CONTEXT RE-EMIT) - /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.9lW04g
+
+# new captain prompt typed into the live primary; ledger now:
+{"seq":1,"epoch":1790964919,"session":"ce6b49ae-61e9-4bd0-9172-c24a158f485e","text":"Move the Peru deposit from 2 November to 1 February."}
+{"seq":2,"epoch":1790965031,"session":"924e97f3-dba6-4c89-8476-12506904f1c7","text":"Keep the Lima hotel booking on hold until the deposit date is confirmed."}
+
+# next /clear digest:
+SESSION START (CONTEXT RE-EMIT) - /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.9lW04g
+UNRECONCILED CAPTAIN WORDS (1 since 2026-10-02)
+================================================================================
+  #2 2026-10-02 20:17  Keep the Lima hotel booking on hold until the deposit date is confirmed.
+Ledger: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.9lW04g/data/captain-ledger.jsonl (full text of every entry after #1)
+Reconcile each entry against data/captain.md, the backlog, and the decision files, or run /stow, then run /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.9lW04g/checkout/bin/fm-captain-ledger.sh mark 2.
+================================================================================

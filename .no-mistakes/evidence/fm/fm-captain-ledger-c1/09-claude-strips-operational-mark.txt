@@ -1,0 +1,15 @@
+# Live lab, Claude Code v2.1.287 primary (lab home, real claude CLI), 2026-10-02
+# An encoded watcher wake (U+2063 FIRSTMATE_OP: v1 watcher: signal: demo.status),
+# typed into the composer with `tmux send-keys -l` + Enter, the way
+# bin/fm-tmux-lib.sh fm_tmux_submit_core and the away supervisor's inject_msg do:
+
+# pane after the first Enter (the TUI's footer, text stays in the composer):
+❯ FIRSTMATE_OP: v1 watcher: signal: demo.status
+  ⏵⏵ auto mode on (shift+tab to cycle)        Removed 1 invisible character · review and press Enter to send
+
+# after a second Enter (the submit helpers retry Enter on a pending composer):
+data/captain-ledger.jsonl:
+{"seq":1,"epoch":1790964866,"session":"ce6b49ae-...","text":"FIRSTMATE_OP: v1 watcher: signal: demo.status"}
+
+$ printf '%s' "<wake without U+2063>" | bin/fm-operational-input.sh classify   -> exit 1 (not operational)
+$ printf '%s' "<wake with U+2063>"    | bin/fm-operational-input.sh classify   -> watcher, exit 0

@@ -1,0 +1,8 @@
+# crew Claude session (pid 2500) in a linked worktree of the primary checkout: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.9lW04g/crew
+git-dir: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.9lW04g/checkout/.git/worktrees/crew
+git-common-dir: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.9lW04g/checkout/.git
+lock before: 3732  -> writing the crew session's pid so only the worktree guard can refuse
+ledger lines before: 3
+prompt submitted in crew pane: 1x visible
+ledger lines after:  3
+ledger entries containing that text: 0

@@ -1,0 +1,11 @@
+$ FM_HOME=$LAB $LAB/checkout/bin/fm-captain-ledger.sh pending
+UNRECONCILED CAPTAIN WORDS (1 since 2026-10-02)
+  #1 2026-10-02 20:15  Move the Peru deposit from 2 November to 1 February.
+Ledger: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.9lW04g/data/captain-ledger.jsonl (full text of every entry after #0)
+Reconcile each entry against data/captain.md, the backlog, and the decision files, or run /stow, then run /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.9lW04g/checkout/bin/fm-captain-ledger.sh mark 1.
+$ FM_HOME=$LAB $LAB/checkout/bin/fm-captain-ledger.sh mark 1
+captain ledger: reconciled through #1
+exit 0
+cursor file: 1 (mode 600)
+$ ... pending   (after mark)
+(pending printed 0 bytes)

@@ -1,0 +1,9 @@
+# second Claude session (pid 61728) in the same primary checkout and FM_HOME; lock holder: 3732 (the primary)
+# its SessionStart header:
+SESSION START - /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.9lW04g
+error: another live firstmate session holds the lock (pid 3732, session 4142145f-3e7b-4804-b5cd-f57343de85d6); operate read-only until resolved
+●  READ-ONLY SESSION - FLEET LOCK OWNERSHIP WAS NOT VERIFIED
+ledger lines before: 3
+prompt submitted in second session: 1x visible in its pane
+ledger lines after:  3
+ledger entries containing that text: 0

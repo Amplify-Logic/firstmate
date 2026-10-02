@@ -1,0 +1,34 @@
+$ fm-captain-ledger.sh pending      # the agent reads what is pending
+UNRECONCILED CAPTAIN WORDS (1 since 2026-10-02)
+  #2 2026-10-02 20:17  Keep the Lima hotel booking on hold until the deposit date is confirmed.
+Ledger: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.9lW04g/data/captain-ledger.jsonl (full text of every entry after #1)
+Reconcile each entry against data/captain.md, the backlog, and the decision files, or run /stow, then run /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.9lW04g/checkout/bin/fm-captain-ledger.sh mark 2.
+
+# while the agent reconciles, the captain submits another prompt in the live primary
+{"seq":3,"epoch":1790965063,"session":"4142145f-3e7b-4804-b5cd-f57343de85d6","text":"Also tell the travel agent the new dates by Friday."}
+
+$ fm-captain-ledger.sh mark 2      # the seq pending showed
+captain ledger: reconciled through #2
+
+$ fm-captain-ledger.sh pending
+UNRECONCILED CAPTAIN WORDS (1 since 2026-10-02)
+  #3 2026-10-02 20:17  Also tell the travel agent the new dates by Friday.
+Ledger: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.9lW04g/data/captain-ledger.jsonl (full text of every entry after #2)
+Reconcile each entry against data/captain.md, the backlog, and the decision files, or run /stow, then run /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.9lW04g/checkout/bin/fm-captain-ledger.sh mark 3.
+
+# adversarial: mark backwards and past the newest
+$ fm-captain-ledger.sh mark 1
+captain ledger: nothing new to mark (reconciled through #2)
+cursor=2
+$ fm-captain-ledger.sh mark 99
+captain ledger: reconciled through #3
+cursor=3
+$ fm-captain-ledger.sh mark 0
+Usage:
+  fm-captain-ledger.sh hook claude   a UserPromptSubmit payload on stdin
+  fm-captain-ledger.sh pending       list entries not yet marked reconciled
+  fm-captain-ledger.sh mark [<seq>]  mark entries through <seq> reconciled
+                                     (every entry so far when omitted)
+exit 2
+$ fm-captain-ledger.sh mark abc
+exit 2

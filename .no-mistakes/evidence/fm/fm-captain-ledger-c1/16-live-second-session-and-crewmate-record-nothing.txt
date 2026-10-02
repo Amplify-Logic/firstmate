@@ -1,0 +1,9 @@
+== lock holder: 32642 (the 'primary' tmux session's claude: 32642)
+== ledger lines before: 7
+== 'second' session (cwd /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.jqOTCl/checkout) submitted; transcript shows: Move the Peru deposit from 2 November to 1 February. (typed in second)
+   ledger lines after: 7
+== 'crew' session (cwd /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.jqOTCl/checkout/.crew-demo) submitted; transcript shows: Move the Peru deposit from 2 November to 1 February. (typed in crew)
+   ledger lines after: 7
+== control: the same prompt typed in the lock-holding primary:
+   ledger lines after: 8
+{"seq":8,"epoch":1790965968,"session":"4236a76a-2850-45d8-a604-60ae3a9b9626","text":"Move the Peru deposit from 2 November to 1 February. (typed in primary)"}
