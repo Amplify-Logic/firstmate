@@ -666,7 +666,8 @@ A block reaches the worker as a denied tool call whose reason names the conditio
 To let one blocked command through, switch the gate off, have the worker run it, then switch the gate back on.
 
 **What leaves the machine.** Only the command text, never the working directory, the task or the environment.
-Before it is sent, every value in this home's `.env` and every secret-looking environment variable is removed wherever it appears, anything shaped like a known key, token, password argument, credentialed URL or private-key block is replaced, and a `NAME=value` assignment loses its value when the name looks secret (key, token, secret, password, auth and the like) or the value looks random.
+Redaction is best-effort: it removes `.env` values and secret-looking environment values of at least six characters, plus shorter nonempty values from secret-named `.env` keys at token boundaries.
+It also replaces known key and token shapes, whole quoted or unquoted credential arguments, credentialed URLs and private-key blocks; a `NAME=value` assignment loses its value when the name looks secret (key, token, secret, password, auth and the like) or the value looks random.
 Plain values such as paths, `env=prod` or `of=/dev/disk2` stay visible, so the judge can see what `T=../sibling-copy; rm -rf "$T"` removes.
 
 **Steps aside on failure.** No key, a timeout, an HTTP error, an unreadable answer or a crash all allow the command, a multi-part command only once its head-and-tail request has failed too.

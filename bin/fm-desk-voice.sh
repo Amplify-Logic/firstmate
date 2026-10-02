@@ -82,6 +82,10 @@
 #   rung: <backend> <target>              typed and submit confirmed
 #   rung-unconfirmed: <backend> <target> (<verdict>)
 #   not-rung                              nothing typed; the queued wake stands
+# Ring and send share a per-home pane-writer lock through inspection, typing,
+# submission and recovery. On contention send uses its mailbox and ring leaves
+# its queued wake alone. Before every ring Enter, including retries, the box
+# must still show only the ring's literal payload.
 #
 # deliver is the mailbox path. Transcripts land under
 #   $FM_HOME/state/desk-voice/inbox/<utc>-<id>.json
@@ -452,6 +456,14 @@ send_past_draft() {  # <backend> <target> <line>
     [ "$i" -lt 15 ] || break
   done
   if [ "$i" -ge 15 ]; then
+    # An empty/unreadable box is not acknowledgment that the paste was handled.
+    # A queued paste would run before recovery keys, replacing the saved draft.
+    if [ -z "${after:-}" ] \
+      || [ "$(fm_backend_composer_state "$backend" "$target" 2>/dev/null)" != pending ]; then
+      note "the paste has not appeared; the draft remains stashed, and no recovery keys were sent"
+      printf 'unknown'
+      return 0
+    fi
     i=0
     while ! await_composer "$backend" "$target" empty 1; do
       if [ "$i" -ge "$rows" ] || ! fm_backend_send_key "$backend" "$target" C-u >/dev/null 2>&1; then
@@ -480,6 +492,31 @@ send_past_draft() {  # <backend> <target> <line>
     i=$((i + 1))
     [ "$i" -lt 15 ] || { printf 'unknown'; return 0; }
   done
+}
+
+# Ring input is short literal text. Do not accept a pasted-text placeholder as
+# proof of its contents: it could be a new draft. Re-read before EVERY Enter,
+# so a draft typed during settling or restored after submission gets no retry.
+# Whitespace normalization is only for the composer's line wrapping.
+submit_ring() {  # <backend> <target> <line>
+  local backend=$1 target=$2 line=$3 expected after rows i=0 state
+  rows=$(fm_composer_proof_lines "$line")
+  expected=$(squeezed "$line")
+  paste_text "$backend" "$target" "$line" || { printf 'send-failed'; return 0; }
+  sleep 0.5
+  while [ "$i" -lt 3 ]; do
+    if ! after=$(composer_text "$backend" "$target" "$rows") \
+      || [ "$(squeezed "$after")" != "$expected" ]; then
+      printf 'unknown'
+      return 0
+    fi
+    fm_backend_send_key "$backend" "$target" Enter >/dev/null 2>&1 || { printf 'unknown'; return 0; }
+    sleep 0.4
+    state=$(fm_backend_composer_state "$backend" "$target" 2>/dev/null)
+    [ "$state" != empty ] || { printf 'empty'; return 0; }
+    i=$((i + 1))
+  done
+  printf 'unknown'
 }
 
 # The pids of the herdr clients attached to the server that owns <socket> (the
@@ -554,10 +591,11 @@ EOF
 # "<verdict><TAB><backend><TAB><target>" once the pane is proven to host the
 # primary and show its chat input. Returns 1 when the pane is not proven, or
 # with <app> and <tty> is not in front (see shown_in_front), and 2 when it is
-# proven but not showing its chat input; nothing was typed either way. Call it
-# in a subshell: it replaces the pane environment with the primary's own.
-primary_submit() {  # <line> [<app> <tty>]
+# proven but not showing its chat input or another writer owns it; nothing was
+# typed either way. Its subshell scopes the pane environment and writer lock.
+primary_submit() (  # <line> [<app> <tty>]
   local lock="$STATE/.lock" pid envs kv backend target root verdict draft claude composer
+  local writer_lock="$STATE/desk-voice/.send.lock"
   [ -f "$lock" ] && [ ! -L "$lock" ] || return 1
   pid=$(head -n 1 "$lock" 2>/dev/null) || return 1
   case "$pid" in ''|*[!0-9]*) return 1 ;; esac
@@ -581,6 +619,9 @@ EOF
   if [ "$#" -ge 3 ]; then
     shown_in_front "$backend" "$target" "$root" "$2" "$3" || return 1
   fi
+  mkdir -p "$STATE/desk-voice" || return 2
+  fm_lock_try_acquire "$writer_lock" || return 2
+  trap 'fm_lock_release "$writer_lock"' EXIT
   composer=$(fm_backend_composer_state "$backend" "$target" 2>/dev/null)
   case " ${PRIMARY_SUBMIT_COMPOSER:-empty pending} " in
     *" $composer "*) ;;
@@ -592,13 +633,15 @@ EOF
     *) return 2 ;;
   esac
   ! shows_selection_dialog "$backend" "$target" || return 2
-  if [ "$draft" = 1 ] && [ "$claude" = 1 ]; then
+  if [ "${PRIMARY_SUBMIT_COMPOSER:-}" = empty ]; then
+    verdict=$(submit_ring "$backend" "$target" "$1") || verdict=send-failed
+  elif [ "$draft" = 1 ] && [ "$claude" = 1 ]; then
     verdict=$(send_past_draft "$backend" "$target" "$1") || verdict=send-failed
   else
     verdict=$(fm_backend_send_text_submit "$backend" "$target" "$1" 3 0.4 0.5) || verdict=send-failed
   fi
   printf '%s\t%s\t%s\n' "${verdict:-send-failed}" "$backend" "$target"
-}
+)
 
 send() {
   local source text line result='' verdict backend target path image rc=0
