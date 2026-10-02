@@ -265,8 +265,7 @@ test_quoted_search_strings_keep_commands_visible() {
     'printf "x TOKEN=" ; rm -rf ~ ; echo "y"|printf "x TOKEN="<redacted> ; rm -rf ~ ; echo "y"' \
     'find . -name "a password=" -delete -o -name "b"|find . -name "a password="<redacted> -delete -o -name "b"' \
     'rm "x token=" -rf ~/projects "y"|rm "x token="<redacted> -rf ~/projects "y"' \
-    ": # it's done"$'\n'"rm 'a token=' -rf ~ 'b'|: # it's done"$'\n'"rm 'a token='<redacted> -rf ~ 'b'" \
-    "cat <<EOF"$'\n'"x\\"$'\n'"EOF"$'\n'"'"$'\n'"EOF"$'\n'"rm 'a token=' -rf ~ 'b'|cat <<EOF"$'\n'"x\\"$'\n'"EOF"$'\n'"'"$'\n'"EOF"$'\n'"rm 'a token='<redacted> -rf ~ 'b'"; do
+    ": # it's done"$'\n'"rm 'a token=' -rf ~ 'b'|: # it's done"$'\n'"rm 'a token='<redacted> -rf ~ 'b'"; do
     reset_server "$FIX/response-git-status.json"
     run_hook "$home" "${cmd%%|*}" >/dev/null
     body=$(jq -r '.state.command' "$SRV/requests.jsonl")
@@ -279,8 +278,45 @@ test_quoted_search_strings_keep_commands_visible() {
   reset_server "$FIX/response-git-status.json"
   run_hook "$home" 'client --password "unterminated-secret' >/dev/null
   body=$(jq -r '.state.command' "$SRV/requests.jsonl")
-  assert_equals 'client --password "<redacted>' "$body" "an unterminated quoted credential must still be redacted"
+  assert_equals 'client --password <redacted>' "$body" "an unterminated quoted credential must be redacted to its end"
   pass "credential names inside quoted strings, comments and here-documents leave following arguments visible to the judge"
+}
+
+test_multiline_quoted_secrets_are_whole_or_unjudged() {
+  local home cmd body log err text word
+  home=$(new_home redact-multiline 'enabled = true\n')
+  for cmd in \
+    $'curl -u me \\\n --password "ink fern moss" https://x.example|curl -u me \\\n --password <redacted> https://x.example' \
+    $'mysql -h db \\\n --password="correct horse battery" -e status|mysql -h db \\\n --password=<redacted> -e status' \
+    $'client --token \'alpha beta gamma\' \\\n --verbose|client --token <redacted> \\\n --verbose' \
+    $'DB_PASSWORD="ink fern moss" \\\n ./migrate --all|DB_PASSWORD=<redacted> \\\n ./migrate --all' \
+    $'echo ok; # note \\\nclient --password "ink fern moss" --verbose|echo ok; # note \\\nclient --password <redacted> --verbose'; do
+    reset_server "$FIX/response-git-status.json"
+    run_hook "$home" "${cmd%%|*}" >/dev/null
+    body=$(jq -r '.state.command' "$SRV/requests.jsonl")
+    log=$(tail -n 1 "$home/state/command-guard.log")
+    assert_equals "${cmd#*|}" "$body" "a line-continued command must keep its arguments and lose each quoted secret whole"
+    for text in "$body" "$log"; do
+      for word in fern moss horse battery beta gamma; do
+        assert_not_contains "$text" "$word" "no word of a quoted secret may leave the machine or reach the log"
+      done
+    done
+  done
+  for cmd in \
+    'x=$((1 + 2)); client --password "ink fern moss" --verbose' \
+    'client --password "ink;fern moss" --verbose' \
+    $'cat <<EOF\nx\\\nEOF\n\'\nEOF\nrm \'a token=\' -rf ~ \'b\''; do
+    reset_server "$FIX/response-git-status.json"
+    err=$(run_hook "$home" "$cmd" 2>&1 >/dev/null)
+    assert_equals 0 "$(requests)" "a quoted secret whose extent cannot be followed must not be sent in part"
+    assert_contains "$err" "not judged" "the step-aside must be reported"
+    log=$(tail -n 1 "$home/state/command-guard.log")
+    assert_contains "$log" '"outcome": "skip"' "the step-aside must be logged"
+    for word in fern moss; do
+      assert_not_contains "$log" "$word" "an unjudged command's secret must not reach the log"
+    done
+  done
+  pass "a line-continued command keeps quoted secrets whole, and one whose quotes cannot be followed is allowed unjudged"
 }
 
 # --- a long command is judged whole, in parts ---------------------------------
@@ -484,6 +520,7 @@ test_non_bash_tool_ignored
 test_redaction
 test_quoted_and_short_secrets_are_redacted
 test_quoted_search_strings_keep_commands_visible
+test_multiline_quoted_secrets_are_whole_or_unjudged
 test_plain_assignments_stay_visible
 test_long_command_judged_in_parts
 test_parts_failure_falls_back_to_head_and_tail

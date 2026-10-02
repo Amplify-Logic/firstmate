@@ -55,10 +55,11 @@
 # fails (timeout, HTTP error, unusable answer), the guard asks once more about
 # the first HEAD_CHARS and last TAIL_CHARS characters alone before it steps
 # aside, and the log's `path` names what decided: whole, parts or
-# head-and-tail. A command needing more than MAX_PARTS parts is not judged: it
-# is allowed, and a warning goes to stderr and the log. Only the Bash tool is judged, so a script written with
-# another tool and then run as `bash x.sh` is judged by that short command
-# alone. It is still an extra check on a worker that already runs in a
+# head-and-tail. A command needing more than MAX_PARTS parts, or holding a
+# quoted secret whose extent the redaction cannot follow, is not judged: it
+# is allowed, and a warning goes to stderr and the log. Only the Bash tool is
+# judged, so a script written with another tool and then run as `bash x.sh`
+# is judged by that short command alone. It is still an extra check on a worker that already runs in a
 # disposable copy under supervision, not a sandbox.
 #
 # Borrowed, with changes, from github.com/disler/ten-levels-of-jev
@@ -231,8 +232,8 @@ CREDENTIAL_NAME = re.compile(
     r"(?:api[_-]?key|access[_-]?key|secret|token|password|passwd|auth)[\"']?\s*[=:]\s*|"
     r"--(?:api[_-]?key|token|password|passwd|secret|auth)(?:=|\s+)")
 BARE_VALUE = re.compile(r"[\"']?([^\s\"';&|]+)")
-# A quoted value never swallows text that could run as a command, should the
-# quotes not be what they seem.
+# A quoted value holding text that could run as a command, should the quotes
+# not be what they seem, is not redacted in part: the command is not judged.
 UNSAFE_IN_QUOTES = re.compile(r"[\n;&|<>`]|\$\(")
 URL_CREDENTIAL = re.compile(r"(://)[^/\s:@]+:[^/\s@]+@")
 # NAME=value at the start, after whitespace or an operator, or on its own line
@@ -262,20 +263,21 @@ def _assignment(match, value):
 
 
 def _shell_quotes(text):
-    """Map each quote that opens a shell string to the index after its close.
-    It follows bash's own rules for escapes, $ parameters, $'...' strings,
-    comments and here-document bodies. A command it cannot follow, such as one
-    with a backtick, arithmetic, a line continuation or an expansion nested
-    inside double quotes, gets no openers at all, so every value falls back to
-    its bare run."""
-    if any(part in text for part in ("`", "((", "$[", "\\\n")):
-        return {}
+    """Map each quote that opens a shell string to the index after its close,
+    or to the end of <text> when it never closes. It follows bash's own rules
+    for escapes, line continuations, $ parameters, $'...' strings, comments
+    and here-document bodies. For a command it cannot follow, such as one with
+    a backtick, arithmetic or an expansion nested inside double quotes, it
+    returns None."""
+    if any(part in text for part in ("`", "((", "$[")):
+        return None
     quotes, heredocs, i, word_start = {}, [], 0, True
     while i < len(text):
         char = text[i]
         if char == "\\":
+            if text[i + 1:i + 2] != "\n":
+                word_start = False
             i += 2
-            word_start = False
             continue
         if char == "#" and word_start:
             i = text.find("\n", i)
@@ -285,7 +287,7 @@ def _shell_quotes(text):
         if char == "\n" and heredocs:
             i = _heredoc_bodies(text, i + 1, heredocs, quotes)
             if i is None:
-                return {}
+                return None
             heredocs = []
             word_start = True
             continue
@@ -296,7 +298,7 @@ def _shell_quotes(text):
         if text.startswith("<<", i):
             heredoc = HEREDOC.match(text, i)
             if not heredoc or text[heredoc.end():heredoc.end() + 1] not in ("", " ", "\t", "\n", ";", "&", "|", "<", ">", "(", ")"):
-                return {}
+                return None
             word = heredoc.group(2)
             heredocs.append((re.sub(r"\\(.)|['\"]", r"\1", word), heredoc.group(1) == "-",
                              not re.search(r"['\"\\]", word)))
@@ -316,9 +318,10 @@ def _shell_quotes(text):
             end = i + 1
             while end < len(text) and text[end] != text[i]:
                 if text[i] == '"' and text.startswith(("$(", "${"), end):
-                    return {}
+                    return None
                 end += 2 if escapes and text[end] == "\\" else 1
             if end >= len(text):
+                quotes[i] = len(text)
                 break
             quotes[i] = end + 1
             i = end
@@ -338,7 +341,7 @@ def _heredoc_bodies(text, i, heredocs, quotes):
             if (line.lstrip("\t") if strip_tabs else line) == delimiter:
                 i = len(text) if end < 0 else end + 1
                 break
-            if end < 0 or (expands and "$(" in line):
+            if end < 0 or (expands and ("$(" in line or line.endswith("\\"))):
                 return None
             for pair in re.finditer(r"'[^']*'|\"[^\"]*\"", line):
                 quotes[i + pair.start()] = i + pair.end()
@@ -346,18 +349,29 @@ def _heredoc_bodies(text, i, heredocs, quotes):
     return i
 
 
+class Unredactable(Exception):
+    """A quoted value that would lose its value, but whose extent cannot be followed."""
+
+
 def _replace_values(text, names, bare_value, replace):
     """Pass the value after each match of <names> through <replace>: a whole
-    shell string that opens right there, else the run <bare_value> captures."""
+    shell string that opens right there, else the run <bare_value> captures.
+    Raises Unredactable rather than redact part of a quoted value."""
     quotes = _shell_quotes(text)
     out, pos = [], 0
     for name in names.finditer(text):
         if name.start() < pos:
             continue
         start = name.end()
-        end = quotes.get(start)
-        if end is None or UNSAFE_IN_QUOTES.search(text, start, end):
+        opener = start + 1 if text.startswith(("$'", '$"'), start) else start
+        end = None if quotes is None else quotes.get(opener)
+        uncertain = text[opener:opener + 1] in ("'", '"') and (
+            quotes is None or (end is not None and UNSAFE_IN_QUOTES.search(text, opener, end)))
+        if end is None or uncertain:
             bare = bare_value.match(text, start)
+            value = bare.group(1) if bare else ""
+            if uncertain and replace(name, value) != value:
+                raise Unredactable()
             if not bare:
                 continue
             start, end = bare.span(1)
@@ -586,7 +600,11 @@ def ask(parts, key):
 def judge(command, home):
     """(outcome, reason, answers, sent, path): outcome is block, allow, skip or error,
     and path is what decided: whole, parts, head-and-tail, or none."""
-    sent = redact(command, literal_secrets(home))
+    try:
+        sent = redact(command, literal_secrets(home))
+    except Unredactable:
+        return ("skip", "not judged: a quoted secret's extent could not be followed, so it "
+                "could not be redacted whole", {}, REDACTED, "none")
     parts = split_parts(sent)
     if len(parts) > MAX_PARTS:
         return "skip", ("not judged: %d characters need %d parts, over the cap of %d"

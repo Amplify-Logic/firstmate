@@ -661,13 +661,13 @@ Each command is one request of three questions, asked in this order: whether the
 A redacted command longer than 2,000 characters is cut into overlapping parts of at most 2,000 characters, and the same request carries every part and asks the three questions of each, so every part of the command is judged.
 Any one condition in any part blocks: text aimed at the judge at 0.8, irreversible at 0.6 confidence, or destructive intent at 0.7.
 If that multi-part request fails (a timeout, an HTTP error or an unusable answer), the guard asks once more about the first 1,500 and last 500 characters alone before it steps aside, so a long command is never judged on less than that.
-A command that needs more than 8 parts is not judged: it is allowed, and a warning goes to stderr and to `state/command-guard.log`.
+A command that needs more than 8 parts, or holds a quoted credential whose extent the redaction cannot follow, is not judged: it is allowed, and a warning goes to stderr and to `state/command-guard.log`.
 A block reaches the worker as a denied tool call whose reason names the condition and says the block is final, not to work around it, and to report it to firstmate as a blocked status line.
 To let one blocked command through, switch the gate off, have the worker run it, then switch the gate back on.
 
 **What leaves the machine.** Only the command text, never the working directory, the task or the environment.
 Redaction is best-effort: it removes `.env` values and secret-looking environment values of at least six characters, plus shorter nonempty values from secret-named `.env` keys at token boundaries.
-It also replaces known key and token shapes, whole quoted or unquoted credential arguments, credentialed URLs and private-key blocks; a quoted value loses only its first word when it holds a command operator, a substitution or a line break, or when the command uses shell syntax the guard does not follow, such as backticks, arithmetic or a line continuation, so the arguments and commands after it stay visible to the judge; a `NAME=value` assignment loses its value when the name looks secret (key, token, secret, password, auth and the like) or the value looks random.
+It also replaces known key and token shapes, whole quoted or unquoted credential arguments, credentialed URLs and private-key blocks; a quoted credential value is removed whole, and when it holds a command operator, a substitution or a line break, or the command uses shell syntax the guard does not follow, such as backticks or arithmetic, the command is not judged rather than sent with part of the value; a `NAME=value` assignment loses its value when the name looks secret (key, token, secret, password, auth and the like) or the value looks random.
 Plain values such as paths, `env=prod` or `of=/dev/disk2` stay visible, so the judge can see what `T=../sibling-copy; rm -rf "$T"` removes.
 
 **Steps aside on failure.** No key, a timeout, an HTTP error, an unreadable answer or a crash all allow the command, a multi-part command only once its head-and-tail request has failed too.
