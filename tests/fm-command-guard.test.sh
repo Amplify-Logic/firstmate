@@ -245,6 +245,7 @@ EOF
 test_routine_expansions_are_judged() {
   local home cmd out body
   home=$(new_home redact-routine 'enabled = true\n')
+  # shellcheck disable=SC2016 # literal commands sent to the fake judge; nothing here may expand
   for cmd in \
     'GH_TOKEN="$(gh auth token)" gh pr create --fill|GH_TOKEN=<redacted> gh pr create --fill' \
     'mysql --password="$(cat ~/.dbpw)" -e "select 1"|mysql --password=<redacted> -e "select 1"' \
