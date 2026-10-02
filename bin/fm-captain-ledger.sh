@@ -20,7 +20,9 @@
 # whitespace at its very end trimmed, and records nothing for:
 #   - input bin/fm-operational-input.sh classifies as operational (watcher
 #     wakes, turn-end guard follow-ups, away-supervisor escalations, launch
-#     briefs, from-firstmate steers, and their pre-protocol forms);
+#     briefs, from-firstmate steers, and their pre-protocol forms), and a
+#     prompt opening with the current "FIRSTMATE_OP: v1 <kind>: " label whose
+#     mark Claude stripped from typed input;
 #   - a prompt that opens with <task-notification>, the wrapper Claude puts
 #     around a turn it started itself, such as a Stop-hook rewake;
 #   - a payload Cursor delivered through the same settings file
@@ -144,6 +146,9 @@ hook_claude() {
     '<task-notification>'*) return 0 ;;
   esac
   fm_operational_input_classify "$text" kind && return 0
+  # Claude Code strips invisible characters from typed input, so operational
+  # input typed into a Claude pane arrives without its leading mark.
+  fm_operational_generic_kind "$FM_OPERATIONAL_MARK$text" kind && return 0
 
   fm_primary_scope_matches "$FM_ROOT" "$STATE" || return 0
   fm_session_lock_owned_by_self "$STATE" || return 0

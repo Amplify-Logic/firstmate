@@ -107,6 +107,20 @@ test_operational_and_harness_started_input_is_dropped() {
   pass "ledger: operational input, the <task-notification> rewake, foreign and non-prompt payloads record nothing"
 }
 
+test_an_operational_label_stripped_of_its_mark_is_dropped() {
+  local home digest
+  home=$(make_home stripped)
+  digest=$(printf 'Supervisor escalate (3 events): demo stalled' | "$OPERATIONAL" encode away-supervisor)
+  # Claude Code removes invisible characters from typed input, so the digest
+  # reaches the hook without its leading U+2063 mark.
+  submit "$home" "${digest#$'\xE2\x81\xA3'}"
+  assert_absent "$home/data/captain-ledger.jsonl" "an away-supervisor digest stripped of its mark was recorded"
+  submit "$home" "Why did the FIRSTMATE_OP: v1 watcher: wake fire twice?"
+  assert_equals "Why did the FIRSTMATE_OP: v1 watcher: wake fire twice?" "$(texts "$home")" \
+    "a captain prompt that mentions the operational label mid-sentence must still be recorded"
+  pass "ledger: an operational label stripped of its mark records nothing, a mention of it mid-sentence is kept"
+}
+
 test_a_session_without_the_lock_records_nothing() {
   local home holder
   home=$(make_home unowned)
@@ -231,6 +245,7 @@ test_seq_survives_a_removed_ledger_and_a_torn_line() {
 
 test_registration_records_the_captain_prompt
 test_operational_and_harness_started_input_is_dropped
+test_an_operational_label_stripped_of_its_mark_is_dropped
 test_a_session_without_the_lock_records_nothing
 test_a_crewmate_records_nothing
 test_a_long_prompt_keeps_its_head_and_tail
