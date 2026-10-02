@@ -670,6 +670,76 @@ SH
   pass "status bar: herdr companion retires once its live pane stops running Codex, and only after seeing Codex"
 }
 
+# Retiring leaves the primary pane alive, so a zoom the launcher applied would
+# otherwise outlive its only releaser and hide whatever later splits the tab.
+# The tab stays at two panes, so the in-loop crowding release never fires and
+# only the retirement itself can turn the zoom off.
+test_retiring_companion_releases_only_the_zoom_it_owns() {
+  local log="$TMP_ROOT/retire-zoom-log" pane_count="$TMP_ROOT/retire-zoom-pane"
+  local proc_count="$TMP_ROOT/retire-zoom-proc" bin="$TMP_ROOT/retire-zoom-bin"
+  mkdir -p "$bin"
+  cat > "$bin/herdr" <<'SH'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >> "$FM_CHROME_LOG"
+bump() {  # <file> -> new count
+  local n=0
+  [ ! -f "$1" ] || n=$(<"$1")
+  n=$((n + 1))
+  printf '%s\n' "$n" > "$1"
+  printf '%s' "$n"
+}
+case " $* " in
+  *" pane get "*)
+    [ "$(bump "$FM_TEST_PANE_COUNT")" -le 40 ] || { printf '{"result":{"pane":{}}}\n'; exit 0; }
+    printf '{"result":{"pane":{"pane_id":"w9:p9"}}}\n'
+    ;;
+  *" pane process-info "*)
+    if [ "$(bump "$FM_TEST_PROC_COUNT")" -le 2 ]; then name=codex; else name=claude; fi
+    printf '{"result":{"type":"pane_process_info","process_info":{"pane_id":"w9:p9","shell_pid":500,"foreground_processes":[{"pid":501,"name":"%s","argv0":"%s"}]}}}\n' "$name" "$name"
+    ;;
+  *" pane layout "*) printf '{"result":{"layout":{"panes":[{},{}]}}}\n' ;;
+  *) printf '{}\n' ;;
+esac
+exit 0
+SH
+  chmod +x "$bin/herdr"
+
+  : > "$log"
+  PATH="$bin:$FAKEBIN:$PATH" \
+    FM_HOME="$HOME_FIX" \
+    FM_PRIMARY_HARNESS=codex \
+    FM_CODEX_METRICS_ROLLOUT="$TMP_ROOT/no-rollout" \
+    FM_STATUS_BAR_INTERVAL=0 \
+    FM_STATUS_CHROME_ZOOM_EVERY=1 \
+    FM_STATUS_HERDR_SESSION=default \
+    FM_CHROME_LOG="$log" FM_TEST_PANE_COUNT="$pane_count" FM_TEST_PROC_COUNT="$proc_count" \
+    "$ROOT/bin/fm-status-bar.sh" --adapter codex --model gpt-6-astra --effort high \
+      --follow-pane w9:p9 --follow-backend herdr \
+      --chrome-pane w9:p1 --chrome-role FM --chrome-zoomed >/dev/null
+  [ "$(<"$pane_count")" -lt 40 ] || fail "zoomed companion only stopped because its pane finally disappeared"
+  [ "$(grep -c 'pane zoom w9:p1 --off' "$log")" -eq 1 ] \
+    || fail "a companion retiring from a live primary pane must release the zoom it owns, exactly once"
+  grep -q -- '--on' "$log" && fail "a retiring companion re-applied the zoom"
+
+  rm -f "$pane_count" "$proc_count"
+  : > "$log"
+  PATH="$bin:$FAKEBIN:$PATH" \
+    FM_HOME="$HOME_FIX" \
+    FM_PRIMARY_HARNESS=codex \
+    FM_CODEX_METRICS_ROLLOUT="$TMP_ROOT/no-rollout" \
+    FM_STATUS_BAR_INTERVAL=0 \
+    FM_STATUS_CHROME_ZOOM_EVERY=1 \
+    FM_STATUS_HERDR_SESSION=default \
+    FM_CHROME_LOG="$log" FM_TEST_PANE_COUNT="$pane_count" FM_TEST_PROC_COUNT="$proc_count" \
+    "$ROOT/bin/fm-status-bar.sh" --adapter codex --model gpt-6-astra --effort high \
+      --follow-pane w9:p9 --follow-backend herdr \
+      --chrome-pane w9:p1 --chrome-role FM >/dev/null
+  [ "$(<"$pane_count")" -lt 40 ] || fail "unzoomed companion only stopped because its pane finally disappeared"
+  assert_not_contains "$(cat "$log")" 'pane zoom' \
+    "a retiring companion released a zoom the launcher never applied"
+  pass "status bar: a retiring companion releases the zoom it owns and never one it does not"
+}
+
 test_tmux_companion_retires_when_its_pane_stops_running_codex() {
   local out rows bin="$TMP_ROOT/retire-tmux-bin" pane_count="$TMP_ROOT/retire-tmux-pane"
   local ps_count="$TMP_ROOT/retire-tmux-ps"
@@ -1581,6 +1651,7 @@ test_account_role_label_is_verified_and_compact
 test_herdr_companion_exits_when_primary_pane_is_gone
 test_herdr_companion_retires_when_its_pane_stops_running_codex
 test_tmux_companion_retires_when_its_pane_stops_running_codex
+test_retiring_companion_releases_only_the_zoom_it_owns
 test_companion_clears_the_whole_pane_once_at_startup
 test_companion_never_leaves_the_row_blank_while_collecting
 test_companion_publishes_every_refresh_to_the_pane

@@ -274,7 +274,7 @@ It also exits once that pane stops running the runtime it was launched for, beca
 primary: the captain can quit Codex and start another harness in the same pane, and a reused pane id can
 belong to new work, so pane liveness alone would leave a stale Astra row under a Claude primary.
 That retirement arms only after the companion has positively seen a Codex process behind the pane, using the
-same identity rule the Codex metrics supply binds with, and then needs Codex absent for several consecutive
+same identity rule the Codex metrics supply binds with, and then needs Codex absent for three consecutive
 refreshes, so the launch window before `exec` and a single failed process read never retire a working row.
 A provider that cannot report pane processes never arms it and keeps the pane-liveness behavior.
 Exiting is the whole retirement: the renderer is the companion pane's only process on both providers, so the
@@ -409,6 +409,8 @@ is the ONLY thing that arms the renderer's release watch. The launcher still pas
 a crowded tab - the border row is worth having either way - so without the signal the renderer would
 otherwise be releasing a zoom that belongs to someone else. If `pane run` then fails, the launcher
 releases its own zoom before closing the pane it was taken for.
+Likewise, a renderer that retires because the primary pane stopped running Codex releases the zoom it
+owns before exiting, since that pane outlives it; one that does not own the zoom leaves it alone.
 The renderer never re-applies the zoom: it only RELEASES, on a slow cadence, if a third pane later
 appears in that tab, and it stops checking once released.
 That keeps two properties at the same time - a co-tenant pane's live work is never hidden, and a
