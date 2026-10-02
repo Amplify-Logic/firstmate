@@ -272,7 +272,7 @@ Address the captain directly and translate paths, storage mechanics, and workflo
 State what reset-safe means in the same breath as the claim: nothing this session knew has been lost.
 It is never a claim that the home's durable records are correct, because this pass checks no record the session did not name.
 Do not hide an over-budget result behind a reset-safe claim.
-A receipt that declares the session reset-safe ends with `bin/fm-captain-ledger.sh mark`, run only after every entry that pass listed is reconciled.
+A receipt that declares the session reset-safe ends with `bin/fm-captain-ledger.sh mark <seq>`, where `<seq>` is the newest entry number that pass's `pending` listed, run only after every entry it listed is reconciled.
 In a primary home the receipt is written after the cascade below, not instead of it.
 
 ## Automatic cascade to secondmates

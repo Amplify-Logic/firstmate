@@ -45,18 +45,23 @@
 # reconciled. `pending` lists the entries above it: a heading with their count
 # and the date of the oldest, previews of the newest 12 (each at most 160
 # characters, whitespace collapsed), the ledger path, and the one instruction to
-# reconcile and mark. It prints nothing when nothing is pending, and a heading
-# naming the ledger when the ledger exists but cannot be read.
+# reconcile and then run `mark <seq>` with the newest seq it showed. It prints
+# nothing when nothing is pending, and a heading naming the ledger when the
+# ledger exists but cannot be read.
 # bin/fm-session-start.sh prints that output as a digest section on both its
 # full and --reemit paths, so it reappears at every startup, /clear, and
-# compaction until `mark` moves the cursor to the newest entry.
+# compaction until `mark` moves the cursor past every entry.
+# `mark <seq>` moves the cursor up to that seq, never backwards and never past
+# the newest entry, so a prompt recorded while an agent reconciled what pending
+# showed stays pending; a bare `mark` moves it to the newest entry.
 # The ledger holds the captain's raw words, so nothing but `pending` (and through
 # it the digest) ever prints them.
 #
 # Usage:
 #   fm-captain-ledger.sh hook claude   a UserPromptSubmit payload on stdin
 #   fm-captain-ledger.sh pending       list entries not yet marked reconciled
-#   fm-captain-ledger.sh mark          mark every entry so far reconciled
+#   fm-captain-ledger.sh mark [<seq>]  mark entries through <seq> reconciled
+#                                      (every entry so far when omitted)
 # hook always exits 0 silently; pending and mark exit 0, and 2 on misuse.
 #
 # Environment overrides, for tests and unusual layouts:
@@ -188,21 +193,25 @@ pending() {
         ($shown[] | "  #\(.seq) \((.epoch // 0) | strflocaltime("%Y-%m-%d %H:%M"))  \(.text | preview)"),
         (if ($all | length) > ($shown | length)
           then "  (\(($all | length) - ($shown | length)) earlier entries not shown)" else empty end),
-        "Ledger: \($ledger) (full text of every entry after #\($after))"' "$LEDGER" 2>/dev/null); then
+        "Ledger: \($ledger) (full text of every entry after #\($after))",
+        "Reconcile each entry against data/captain.md, the backlog, and the decision files, or run /stow, then run \($mark) \($all | max_by(.seq) | .seq)."' \
+      --arg mark "$FM_ROOT/bin/fm-captain-ledger.sh mark" "$LEDGER" 2>/dev/null); then
     printf 'UNRECONCILED CAPTAIN WORDS (unknown - the ledger could not be read)\n'
     printf 'Ledger: %s\n' "$LEDGER"
-    printf 'Read it directly and reconcile any entry after #%s before marking it.\n' "$after"
+    printf 'Read it directly and reconcile every entry after #%s, then run %s/bin/fm-captain-ledger.sh mark <the newest seq you reconciled>.\n' "$after" "$FM_ROOT"
     return 0
   fi
   [ -n "$out" ] || return 0
   printf '%s\n' "$out"
-  printf 'Reconcile each entry against data/captain.md, the backlog, and the decision files, or run /stow, then run %s/bin/fm-captain-ledger.sh mark.\n' "$FM_ROOT"
 }
 
-mark() {
+mark() {  # [<seq>]
   local last cursor tmp
   last=$(ledger_last_seq)
   cursor=$(cursor_seq)
+  if [ "$#" -eq 1 ] && [ "$1" -lt "$last" ]; then
+    last=$1
+  fi
   if [ "$last" -le "$cursor" ]; then
     printf 'captain ledger: nothing new to mark (reconciled through #%s)\n' "$cursor"
     return 0
@@ -232,8 +241,9 @@ case "${1:-}" in
     exit 0
     ;;
   mark)
-    [ "$#" -eq 1 ] || usage
-    mark
+    [ "$#" -eq 1 ] || { [ "$#" -eq 2 ] && [[ $2 =~ ^[1-9][0-9]{0,17}$ ]]; } || usage
+    shift
+    mark "$@"
     exit $?
     ;;
   -h|--help)

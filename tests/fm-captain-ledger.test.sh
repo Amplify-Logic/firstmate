@@ -69,7 +69,7 @@ submit() {  # <home> <text> [<root>]
 texts() { jq -r '.text' "$1/data/captain-ledger.jsonl" 2>/dev/null; }
 mode_of() { stat -c %a "$1" 2>/dev/null || stat -f %Lp "$1"; }
 pending() { FM_HOME="$1" "$LEDGER_SH" pending; }
-mark() { FM_HOME="$1" "$LEDGER_SH" mark >/dev/null || fail "mark failed"; }
+mark() { FM_HOME="$1" "$LEDGER_SH" mark ${2:+"$2"} >/dev/null || fail "mark failed"; }
 
 test_registration_records_the_captain_prompt() {
   local home entry
@@ -160,7 +160,7 @@ test_pending_mark_and_return() {
   assert_contains "$out" "UNRECONCILED CAPTAIN WORDS (1 since $(date +%Y-%m-%d))" "pending must count the entry and date the oldest"
   assert_contains "$out" "$PERU" "pending must preview the captain's words"
   assert_contains "$out" "$home/data/captain-ledger.jsonl" "pending must name the ledger"
-  assert_contains "$out" "fm-captain-ledger.sh mark" "pending must say how to mark the words reconciled"
+  assert_contains "$out" "fm-captain-ledger.sh mark 1." "pending must say to mark through the newest entry it showed"
   mark "$home"
   assert_equals "" "$(pending "$home")" "pending must be silent once every entry is marked"
   submit "$home" "Keep the review on Thursday."
@@ -169,6 +169,28 @@ test_pending_mark_and_return() {
   assert_contains "$out" "Keep the review on Thursday." "the new prompt must be previewed"
   assert_not_contains "$out" "$PERU" "a marked entry must not reappear"
   pass "ledger: pending lists unmarked words, mark silences it, and a new prompt brings it back with a count of 1"
+}
+
+test_mark_stops_at_the_seq_pending_showed() {
+  local home out
+  home=$(make_home midturn)
+  submit "$home" "first"
+  submit "$home" "second"
+  submit "$home" "third"
+  assert_contains "$(pending "$home")" "fm-captain-ledger.sh mark 3." "pending must name the newest seq it showed"
+  submit "$home" "Said while the agent was reconciling."
+  mark "$home" 3
+  out=$(pending "$home")
+  assert_contains "$out" "UNRECONCILED CAPTAIN WORDS (1 since " "a prompt recorded after pending was shown must stay pending"
+  assert_contains "$out" "Said while the agent was reconciling." "the mid-turn prompt must still be previewed"
+  assert_not_contains "$out" "third" "an entry marked by its seq must not reappear"
+  mark "$home" 2
+  assert_contains "$(pending "$home")" "(1 since " "mark must never move the cursor backwards"
+  mark "$home" 99
+  assert_equals 4 "$(cat "$home/state/.captain-ledger-cursor")" "mark must never move the cursor past the newest entry"
+  FM_HOME="$home" "$LEDGER_SH" mark 3x >/dev/null 2>&1
+  assert_equals 2 "$?" "mark must refuse a seq that is not a number"
+  pass "ledger: mark <seq> stops at the seq pending showed, so a mid-turn prompt stays pending"
 }
 
 test_pending_bounds_its_previews() {
@@ -213,6 +235,7 @@ test_a_session_without_the_lock_records_nothing
 test_a_crewmate_records_nothing
 test_a_long_prompt_keeps_its_head_and_tail
 test_pending_mark_and_return
+test_mark_stops_at_the_seq_pending_showed
 test_pending_bounds_its_previews
 test_seq_survives_a_removed_ledger_and_a_torn_line
 
