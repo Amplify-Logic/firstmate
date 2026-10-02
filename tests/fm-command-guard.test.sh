@@ -251,26 +251,33 @@ test_quoted_search_strings_keep_commands_visible() {
     'printf "token=" ; rm -rf ~ ; printf " "' \
     'rm "token=" -rf ~/projects "x"' \
     "rm \$'a\\' --password \"' -rf ~ '\"'" \
-    "rm \$'a\\' secret: \"' -rf ~ '\"'"; do
+    "rm \$'a\\' secret: \"' -rf ~ '\"'" \
+    "rm \$\$'\\' 'a --password ' -rf ~ ' b'" \
+    "cat <<'EOF' > notes.txt"$'\n'"Don't stop"$'\n'"EOF"$'\n'"rm 'x secret: ' -rf ~/projects 'y'"; do
     reset_server "$FIX/response-git-status.json"
     run_hook "$home" "$cmd" >/dev/null
     body=$(jq -r '.state.command' "$SRV/requests.jsonl")
-    assert_equals "$cmd" "$body" "a credential name inside a quoted or ANSI-C string must not hide what follows"
+    assert_equals "$cmd" "$body" "a credential name inside a quoted, ANSI-C or here-document string must not hide what follows"
   done
   for cmd in \
-    'printf "x TOKEN=" ; rm -rf ~ ; echo "y"|rm -rf ~ ; echo "y"' \
-    'find . -name "a password=" -delete -o -name "b"| -delete -o -name "b"' \
-    'rm "x token=" -rf ~/projects "y"| -rf ~/projects "y"'; do
+    'printf "x TOKEN=" ; rm -rf ~ ; echo "y"|printf "x TOKEN="<redacted> ; rm -rf ~ ; echo "y"' \
+    'find . -name "a password=" -delete -o -name "b"|find . -name "a password="<redacted> -delete -o -name "b"' \
+    'rm "x token=" -rf ~/projects "y"|rm "x token="<redacted> -rf ~/projects "y"' \
+    ": # it's done"$'\n'"rm 'a token=' -rf ~ 'b'|: # it's done"$'\n'"rm 'a token='<redacted> -rf ~ 'b'"; do
     reset_server "$FIX/response-git-status.json"
     run_hook "$home" "${cmd%%|*}" >/dev/null
     body=$(jq -r '.state.command' "$SRV/requests.jsonl")
-    assert_contains "$body" "${cmd#*|}" "a secret-named assignment inside a quoted string must not hide what follows"
+    assert_equals "${cmd#*|}" "$body" "a secret-named assignment inside a quoted string or after a comment must keep every quote and argument in place"
   done
+  reset_server "$FIX/response-git-status.json"
+  run_hook "$home" "cat > .env <<'EOF'"$'\n''DB_PASSWORD="ink fern moss"'$'\n''EOF' >/dev/null
+  body=$(jq -r '.state.command' "$SRV/requests.jsonl")
+  assert_equals "cat > .env <<'EOF'"$'\n''DB_PASSWORD=<redacted>'$'\n''EOF' "$body" "a quoted value in a here-document body must be removed whole"
   reset_server "$FIX/response-git-status.json"
   run_hook "$home" 'client --password "unterminated-secret' >/dev/null
   body=$(jq -r '.state.command' "$SRV/requests.jsonl")
   assert_equals 'client --password "<redacted>' "$body" "an unterminated quoted credential must still be redacted"
-  pass "credential names inside quoted search strings leave following commands visible to the judge"
+  pass "credential names inside quoted strings, comments and here-documents leave following arguments visible to the judge"
 }
 
 # --- a long command is judged whole, in parts ---------------------------------

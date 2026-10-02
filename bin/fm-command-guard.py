@@ -239,7 +239,9 @@ URL_CREDENTIAL = re.compile(r"(://)[^/\s:@]+:[^/\s@]+@")
 # inside a heredoc body. Only a secret-looking name or a random-looking value
 # loses its value.
 ASSIGNMENT_NAME = re.compile(r"(?:^|[\s;&|(`])([A-Za-z_][A-Za-z0-9_]*)=")
-ASSIGNMENT_BARE = re.compile(r"([^\s;&|)`]*)")
+ASSIGNMENT_BARE = re.compile(r"[\"']?([^\s\"';&|)`]*)")
+# A here-document operator and its delimiter word.
+HEREDOC = re.compile(r"<<(-?)[ \t]*((?:'[^'\n]*'|\"[^\"\n]*\"|\\.|[^\s;&|<>()'\"\\`$])+)")
 # A long random-looking run: mixed case AND digits. Git SHAs and task ids are
 # single-case, so they survive; most generated keys do not.
 LONG_RUN = re.compile(r"[A-Za-z0-9_+=-]{32,}")
@@ -261,19 +263,54 @@ def _assignment(match, value):
 
 def _shell_quotes(text):
     """Map each quote that opens a shell string to the index after its close.
-    A $'...' string, like a double-quoted one, can escape its closing quote."""
-    quotes, i = {}, 0
+    It follows bash's own rules for escapes, $ parameters, $'...' strings,
+    comments and here-document bodies. A command it cannot follow, such as one
+    with a backtick, arithmetic or an expansion nested inside double quotes,
+    gets no openers at all, so every value falls back to its bare run."""
+    if "`" in text or "((" in text or "$[" in text:
+        return {}
+    quotes, heredocs, i = {}, [], 0
     while i < len(text):
-        if text[i] == "\\":
+        char = text[i]
+        if char == "\\":
             i += 2
             continue
-        escapes = text[i] == '"'
-        if text.startswith("$'", i):
-            i += 1
-            escapes = True
+        if char == "#" and (i == 0 or text[i - 1] in " \t\n;&|()<>"):
+            i = text.find("\n", i)
+            if i < 0:
+                break
+            continue
+        if char == "\n" and heredocs:
+            i = _heredoc_bodies(text, i + 1, heredocs, quotes)
+            if i is None:
+                return {}
+            heredocs = []
+            continue
+        if text.startswith("<<<", i):
+            i += 3
+            continue
+        if text.startswith("<<", i):
+            heredoc = HEREDOC.match(text, i)
+            if not heredoc or text[heredoc.end():heredoc.end() + 1] not in ("", " ", "\t", "\n", ";", "&", "|", "<", ">", "(", ")"):
+                return {}
+            word = heredoc.group(2)
+            heredocs.append((re.sub(r"\\(.)|['\"]", r"\1", word), heredoc.group(1) == "-",
+                             not re.search(r"['\"\\]", word)))
+            i = heredoc.end()
+            continue
+        escapes = char == '"'
+        if char == "$":
+            if text[i + 1:i + 2] in ("$", "#", "?", "!", "@", "*", "-") or text[i + 1:i + 2].isdigit():
+                i += 2
+                continue
+            if text.startswith("$'", i):
+                i += 1
+                escapes = True
         if text[i] in "'\"":
             end = i + 1
             while end < len(text) and text[end] != text[i]:
+                if text[i] == '"' and text.startswith(("$(", "${"), end):
+                    return {}
                 end += 2 if escapes and text[end] == "\\" else 1
             if end >= len(text):
                 break
@@ -281,6 +318,25 @@ def _shell_quotes(text):
             i = end
         i += 1
     return quotes
+
+
+def _heredoc_bodies(text, i, heredocs, quotes):
+    """Skip the bodies of <heredocs>, which start at <i>; the index after the
+    last one, or None when one never ends or may run a command. A body is
+    data, so only a quoted value within one line of it can open there."""
+    for delimiter, strip_tabs, expands in heredocs:
+        while True:
+            end = text.find("\n", i)
+            line = text[i:] if end < 0 else text[i:end]
+            if (line.lstrip("\t") if strip_tabs else line) == delimiter:
+                i = len(text) if end < 0 else end + 1
+                break
+            if end < 0 or (expands and "$(" in line):
+                return None
+            for pair in re.finditer(r"'[^']*'|\"[^\"]*\"", line):
+                quotes[i + pair.start()] = i + pair.end()
+            i = end + 1
+    return i
 
 
 def _replace_values(text, names, bare_value, replace):
