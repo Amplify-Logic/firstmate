@@ -390,6 +390,31 @@ STUB
   pass 'overlap and death after queue acceptance cannot enqueue an operation twice'
 }
 
+test_leftover_temporaries_and_empty_claims_block_only_their_own_operation() {
+  reset_runs
+  local plan other out rc run_id runs="$FM_STATE_OVERRIDE/fota-staging"
+  plan=$(make_plan 1)
+  other=$(make_plan 2)
+  mkdir -p "$runs"
+  # A settle or ack killed before its rename, and a start for another operation
+  # killed between claiming its run id and publishing the record.
+  : > "$runs/.settle-interrupted.json"
+  : > "$runs/.ack-interrupted.json"
+  : > "$runs/$(plan_key "$other")-1789000000.json"
+  run_id=$(start_run "$plan")
+  [ -n "$run_id" ] || fail "an unrelated interrupted claim or temporary blocked staging"
+  [ "$(wc -l < "$QUEUE_LOG" | tr -d ' ')" = 1 ] || fail 'the unrelated operation was not enqueued once'
+  [ "$("$RUNNER" list --json | python3 -c 'import json,sys; print(len(json.load(sys.stdin)))')" = 1 ] \
+    || fail 'list read a publication temporary as a run'
+
+  # The interrupted claim still reserves its own operation.
+  out=$("$RUNNER" start "$other" 2>&1) && rc=0 || rc=$?
+  expect_code 1 "$rc" "an interrupted claim released its own operation"
+  assert_contains "$out" 'unreadable reservation' "the refusal names the interrupted claim"
+  [ "$(wc -l < "$QUEUE_LOG" | tr -d ' ')" = 1 ] || fail 'the interrupted operation was enqueued'
+  pass 'leftover temporaries are ignored and an empty claim reserves only its own operation'
+}
+
 test_a_stale_result_is_never_read_as_a_new_runs_readback() {
   reset_runs
   local plan first second
@@ -721,6 +746,7 @@ test_queue_timeout_is_pending_and_never_requeued
 test_generated_request_is_not_world_readable
 test_a_settled_record_is_never_overwritten
 test_concurrent_and_interrupted_queue_attempts_are_reserved
+test_leftover_temporaries_and_empty_claims_block_only_their_own_operation
 test_a_stale_result_is_never_read_as_a_new_runs_readback
 test_deadline_argument_is_validated
 test_acknowledgement_clears_the_ask_without_losing_the_outcome

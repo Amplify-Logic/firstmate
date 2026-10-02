@@ -90,6 +90,7 @@ A deliberate retry raises an explicit **attempt ordinal**, which is part of the 
 The guard covers the queue step, so a first attempt that did not land is never quietly enqueued again; a deliberate retry raises the attempt ordinal.
 
 Operation reservation is serialized and durably published before queueing; run ids are also claimed with `O_EXCL`, so overlapping starts cannot enqueue the same attempt or share an id.
+A start that died after claiming its run id but before publishing its record leaves an empty claim; that claim keeps reserving its own operation until it is reconciled, and never blocks another one.
 A settled record is never written over, and a run never adopts an id whose result file already exists - a stale result read as a new run's readback is exactly the evidence loss `unknown` exists to prevent.
 
 ## Delivery: four facts, never collapsed

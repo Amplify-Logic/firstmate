@@ -220,13 +220,19 @@ def publish_record(record):
             os.unlink(temp)
 
 
+# Dot-prefixed names are publication temporaries, never records. A record that
+# cannot be read - an empty claim left by a start that died before publishing -
+# reserves only the operation its run id was named for.
+own_record = re.compile(re.escape(key) + r"-[0-9]+(?:-[0-9]+)?\.json")
 for name in sorted(os.listdir(runs)):
-    if not name.endswith(".json"):
+    if name.startswith(".") or not name.endswith(".json"):
         continue
     try:
         existing = json.load(open(os.path.join(runs, name), encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
-        sys.exit("fm-fota-stage-run: unreadable reservation %s; reconcile it before staging" % name)
+        if own_record.fullmatch(name):
+            sys.exit("fm-fota-stage-run: unreadable reservation %s; reconcile it before staging" % name)
+        continue
     if existing.get("idempotency_key") == key:
         sys.exit(
             "fm-fota-stage-run: operation already has a %s run (%s); "
@@ -768,7 +774,7 @@ def acknowledged(record):
 runs = os.environ["RUNS_DIR"]
 rows = []
 for name in os.listdir(runs):
-    if name.endswith(".json"):
+    if not name.startswith(".") and name.endswith(".json"):
         try:
             rows.append(json.load(open(os.path.join(runs, name), encoding="utf-8")))
         except (OSError, json.JSONDecodeError):
