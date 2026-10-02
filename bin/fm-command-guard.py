@@ -265,17 +265,19 @@ def _shell_quotes(text):
     """Map each quote that opens a shell string to the index after its close.
     It follows bash's own rules for escapes, $ parameters, $'...' strings,
     comments and here-document bodies. A command it cannot follow, such as one
-    with a backtick, arithmetic or an expansion nested inside double quotes,
-    gets no openers at all, so every value falls back to its bare run."""
-    if "`" in text or "((" in text or "$[" in text:
+    with a backtick, arithmetic, a line continuation or an expansion nested
+    inside double quotes, gets no openers at all, so every value falls back to
+    its bare run."""
+    if any(part in text for part in ("`", "((", "$[", "\\\n")):
         return {}
-    quotes, heredocs, i = {}, [], 0
+    quotes, heredocs, i, word_start = {}, [], 0, True
     while i < len(text):
         char = text[i]
         if char == "\\":
             i += 2
+            word_start = False
             continue
-        if char == "#" and (i == 0 or text[i - 1] in " \t\n;&|()<>"):
+        if char == "#" and word_start:
             i = text.find("\n", i)
             if i < 0:
                 break
@@ -285,9 +287,11 @@ def _shell_quotes(text):
             if i is None:
                 return {}
             heredocs = []
+            word_start = True
             continue
         if text.startswith("<<<", i):
             i += 3
+            word_start = True
             continue
         if text.startswith("<<", i):
             heredoc = HEREDOC.match(text, i)
@@ -297,11 +301,13 @@ def _shell_quotes(text):
             heredocs.append((re.sub(r"\\(.)|['\"]", r"\1", word), heredoc.group(1) == "-",
                              not re.search(r"['\"\\]", word)))
             i = heredoc.end()
+            word_start = False
             continue
         escapes = char == '"'
         if char == "$":
             if text[i + 1:i + 2] in ("$", "#", "?", "!", "@", "*", "-") or text[i + 1:i + 2].isdigit():
                 i += 2
+                word_start = False
                 continue
             if text.startswith("$'", i):
                 i += 1
@@ -316,6 +322,7 @@ def _shell_quotes(text):
                 break
             quotes[i] = end + 1
             i = end
+        word_start = text[i] in " \t\n;&|()<>"
         i += 1
     return quotes
 
