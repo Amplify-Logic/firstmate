@@ -1,0 +1,18 @@
+### F9-a: legacy ownerless lock directory left by a pre-upgrade crash (no pid file, 2 days old)
+  lock before: 0 files
+  rc=0 in 2s: UPSTREAM_REPORT: wrote private report /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-upstream-watch-tests.RCjTJq/world/home/data/upstream-watch/reports/legacy.md (watermark a5fe89159d68)
+  lock after run: released
+### F9-b: lock whose recorded owner process has died (SIGKILL, no trap ran)
+  owner pid 64235 alive? no
+  rc=0 in 1s: UPSTREAM_REPORT: wrote private report /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-upstream-watch-tests.RCjTJq/world/home/data/upstream-watch/reports/deadowner.md (watermark a5fe89159d68)
+  lock after run: released
+### F9-c: a live owner holds the lock -> second run is refused, bounded by FM_UPSTREAM_WATCH_LOCK_TIMEOUT=3
+  rc=2 in 3s: fm-upstream-watch: another upstream watch run is active (/private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-upstream-watch-tests.RCjTJq/world/home/data/upstream-watch/.run-lock)
+  live owner's lock untouched: pid=64502 (expected 64502)
+### F9-d: once that owner exits, the next run proceeds
+  rc=0 in 1s: UPSTREAM_REPORT: wrote private report /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-upstream-watch-tests.RCjTJq/world/home/data/upstream-watch/reports/afterlive.md (watermark a5fe89159d68)
+  lock after run: released
+### F9-e: SIGTERM mid-run releases the lock
+  lock held by pid 65322
+  run exit=143
+  lock after SIGTERM: released

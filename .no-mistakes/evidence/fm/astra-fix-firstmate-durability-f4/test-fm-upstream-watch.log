@@ -1,0 +1,5 @@
+ok - standing watch reports ledger-derived gains/collisions once, then one quiet line without moving live refs
+ok - session-start bootstrap surfaces one pending report until explicit acknowledgement
+ok - reports are ignored and the explicit launchd schedule is weekly, configurable, and fetch-safe
+ok - a killed owner is reclaimed and a stalled fetch times out without stranding reports
+exit=0 secs=33

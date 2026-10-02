@@ -1,0 +1,34 @@
+ok - start records pending and generates the request from the plan
+ok - a repeat is refused while a deliberate retry is allowed
+ok - a readback matching the plan settles ready
+ok - payload comparison ignores incidental whitespace
+ok - a success claim without a readback settles unknown, never ready
+ok - a readback from the wrong target settles error
+ok - a readback that contradicts the staged payload settles error
+ok - a result reporting a send is never accepted as ready
+ok - a result carrying another run's id is not attributed to this one
+ok - a passed deadline settles unknown and directs a human to verify
+ok - a run inside its deadline stays pending rather than guessing
+ok - a settled run is never re-decided
+ok - the runner holds no send or browser-driving code path
+ok - start queues through the documented transport and stores the receipt
+ok - an unconfigured transport records prepared and enqueues nothing
+ok - a refused queue is an honest state that is never silently re-queued
+ok - a queue timeout is ambiguous, live, and never re-queued
+ok - the generated request gets the same protection as the record
+ok - a settled unknown record permanently reserves its operation identity
+ok - overlap and death after queue acceptance cannot enqueue an operation twice
+ok - leftover temporaries are ignored and an empty claim reserves only its own operation
+ok - a leftover result file is never accepted as a new run's readback
+ok - --deadline is validated with this script's own refusal
+ok - an acknowledgement clears the ask and preserves every piece of evidence
+ok - no live run - prepared, pending or ready - can be acknowledged away
+ok - acknowledgement is idempotent and removes nothing but the open ask
+ok - an acknowledgement never covers an outcome it was not given for
+ok - the surface can tell every never-queued reason apart
+ok - a start that cannot complete releases the run id it claimed
+ok - an incomplete plan is refused before a run id is claimed
+ok - the generated request carries the payload exactly as the plan holds it
+ok - the generated request states the plan's own permitted origin
+ok - a plan that cannot name its origin is refused, never queued permissively
+exit=0 secs=37

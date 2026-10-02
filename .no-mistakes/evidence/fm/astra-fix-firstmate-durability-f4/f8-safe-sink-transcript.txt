@@ -1,0 +1,16 @@
+### F8-a: first apply of an approved canonical plan
+{'outcome': 'applied', 'readback_verified': True}
+  receipts=1 journal_lines=1
+### F8-b: repeated apply (retry / restart) creates no second effect
+{'outcome': 'already-applied', 'readback_verified': True}
+  receipts=1 journal_lines=1
+### F8-c: the derived JSONL journal is lost (crash before export replace); retry repairs it from the committed receipt
+  journal present before retry: no; receipts=1
+{'outcome': 'already-applied', 'readback_verified': True}
+  receipts=1 journal_lines=1
+### F8-d: leftover export temporaries are not mistaken for the journal
+{'outcome': 'applied', 'readback_verified': True}
+  receipts=2 journal_lines=2
+### F8-e: a legacy store whose journal holds an effect with no receipt (the old append/COMMIT gap) refuses replay
+fm-action-safe-sink-v2: legacy sink journal has an unreceipted effect; reconciliation required
+  rc=1  journal_lines=2 (orphan preserved, not replayed)

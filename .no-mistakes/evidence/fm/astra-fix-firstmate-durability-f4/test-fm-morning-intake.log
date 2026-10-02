@@ -1,0 +1,23 @@
+ok - a home without an explicit opt-in is completely inert, so no clone or device self-enrolls
+ok - the intake arms once per local day past the threshold, and repeat wakes never duplicate it
+ok - a morning missed while the laptop was asleep or offline is caught up on the first later run
+ok - a wake drives the intake through claim, report, completion and acknowledgement
+ok - failed and partial intakes never advance the watermark, and a same-date correction still lands
+ok - the day's page is part of completion, and skipping it is a recorded reason rather than a silent omission
+ok - retries are bounded per local day, exhaustion stays visible, and the next day starts fresh
+ok - the intake never takes a fleet lock, starts an agent, or touches another home
+ok - durable-state writes are serialized, so a watcher sweep never clobbers a claim in flight
+ok - a failure recorded before any claim spends an attempt, so pre-claim failures cannot re-arm forever
+ok - arming the watcher check is all-or-nothing, so no unregistered shim is ever left in state
+ok - an unresolved morning failure is re-woken only by the 12-hour backstop
+ok - a timezone that does not resolve fails closed instead of silently becoming UTC
+ok - re-arming on a new local day starts from a fresh budget and drops the stale report path
+ok - both schedule owners render through one launchd writer, per home, with no change to the upstream contract
+ok - unknown config keys are refused, status prints only declared knobs, and every private path is ignored
+ok - install, status and remove work against a temporary home and refuse a home without an opt-in
+ok - a lost or unregistered live check is reported at session start, and re-arming is idempotent
+ok - run --force arms outside the window but never overrides the bounded retry budget
+ok - the session-start bootstrap section surfaces an owed, failed, or finished intake
+ok - bootstrap without bin/fm-morning-intake.sh still completes and degrades to upstream output
+ok - morning completion composes the page and failed composition preserves the claim
+exit=0 secs=97

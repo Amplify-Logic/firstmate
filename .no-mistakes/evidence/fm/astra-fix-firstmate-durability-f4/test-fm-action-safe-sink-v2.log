@@ -1,0 +1,13 @@
+ok - the receipt store has its own root, derived rather than caller-selected, and both programs resolve the same one
+ok - the safe sink refuses an outward, foreign, malformed, or empty plan and writes nothing
+ok - the sink record is deterministic, matches the broker's independently computed record, and is read back
+ok - a repeated apply of the same approved plan produces exactly one effect
+ok - the receipt store is the executor's own, setgid, group-readable, and writable by nobody else
+ok - a store file whose group or mode drifted is refused fail-closed rather than tolerated
+ok - the store root is held setgid so every receipt inherits the group the broker reads through
+ok - a store root whose setgid bit this process cannot set is refused with the reason named
+ok - the broker reads a real store it cannot write, through a directory it cannot write either
+ok - death before/after commit and export fsync/replacement converges to one effect and receipt
+ok - legacy journal effects without receipts survive and refuse automatic replay
+ok - a legacy receipted journal migrates to atomic storage without replay
+exit=0 secs=28

@@ -1,0 +1,7 @@
+### BASE b6f475a9 (before this change): five concurrent starts of the same operation, same synthetic 2s transport
+-- #1: run_id=30487649465e58ee489da98d3cebc3d2-attempt-1-1790970255 rc=0 
+-- #2: run_id=30487649465e58ee489da98d3cebc3d2-attempt-1-1790970255-3 rc=0 
+-- #3: run_id=30487649465e58ee489da98d3cebc3d2-attempt-1-1790970255-4 rc=0 
+-- #4: run_id=30487649465e58ee489da98d3cebc3d2-attempt-1-1790970255-2 rc=0 
+-- #5: run_id=30487649465e58ee489da98d3cebc3d2-attempt-1-1790970255-5 rc=0 
+-- transport invocations: 5

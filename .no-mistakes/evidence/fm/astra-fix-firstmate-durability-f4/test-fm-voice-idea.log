@@ -1,0 +1,23 @@
+ok - recognises song name first, then the idea, and nothing else
+ok - journey 1: held under its capture id, filed through the Artevo Inbox, receipt spoken once
+ok - an ordinary question is left pending for firstmate
+ok - an unreachable desk: saved and waiting, then filed and announced once
+ok - a missing inbox still recognises the song from the kept list and files later
+ok - sending it twice makes one capture
+ok - a long recording waiting to be sorted does not hold the import
+ok - a duplicate of a waiting capture produces one receipt
+ok - no recording, a format Artevo cannot take, and an unfiled capture are each said plainly
+ok - a question already answered gets its receipt as an announcement
+ok - the default announce is the starship-voice clone when it exists
+ok - the default announce falls back to the glasses-voice clone
+ok - FM_VOICE_IDEA_ANNOUNCE still wins over both project clones
+ok - a refused receipt wakes firstmate once and status says it was not spoken
+ok - take refuses words that are not an idea and ids that are not request ids
+tests/fm-voice-idea.test.sh: line 525: 80862 Killed: 9               "$IDEA" take "$ID1" > "$W/log/take.out" 2> "$W/log/take.err"
+ok - timeout, nonzero exit, and death after accepted speech never replay it
+ok - a terminal alert is told once per state, and an upgrade does not re-announce old ones
+ok - an answer that fails is retried and reported once
+ok - arm registers a check the watcher can run; disarm retires it and keeps the ideas
+ok - # SKIP real Artevo importer (set FM_TEST_ARTEVO_CHECKOUT to an Artevo checkout)
+ok - # SKIP real glasses mailbox (set FM_TEST_GLASSES_CHECKOUT to a glasses-voice checkout)
+exit=0 secs=49

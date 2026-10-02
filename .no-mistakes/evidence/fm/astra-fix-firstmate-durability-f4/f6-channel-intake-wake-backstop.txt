@@ -1,0 +1,18 @@
+### F6 channel intake: held alert (recipient unverified), nothing due; watcher sweeps every 300s
+t+     0s  WAKE: channel-intake: 1 item(s) blocked, notify_recipient_verified is not true
+t+ 43200s  WAKE: channel-intake: 1 item(s) blocked, notify_recipient_verified is not true
+-- sweeps run: 146, wakes: 2 (expected 2: initial + one 12h backstop at t+43200)
+-- marker: unverified:1:b52a5ada790306a475930dc4c9c937517af7e9551206190b219c47236c1688c1|1789066800
+
+### signature change inside the backstop window wakes at once
+t+ 43800s  check -> channel-intake: 2 item(s) blocked, notify_recipient_verified is not true
+t+ 44100s  check -> 
+
+### due sources with no progress: wake once, silent on sweeps, one backstop after 12h
+t+ 86400s  check -> channel-intake: 2 source(s) due to read, 2 item(s) blocked, notify_recipient_verified is not true
+t+ 86700s  check -> 
+t+ 87000s  check -> 
+t+100000s  check -> 
+t+129599s  check -> 
+t+129600s  check -> channel-intake: 2 source(s) due to read, 2 item(s) blocked, notify_recipient_verified is not true
+t+129900s  check -> 

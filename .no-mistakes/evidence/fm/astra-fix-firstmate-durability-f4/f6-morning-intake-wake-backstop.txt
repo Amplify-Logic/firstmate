@@ -1,0 +1,10 @@
+### F6 morning intake: a failed intake held across watcher sweeps (every 300s)
+t+     0s  WAKE: morning-intake failed for 2026-09-10 (attempt 1 of 2): synthetic fixture failure
+t+ 43200s  WAKE: morning-intake failed for 2026-09-10 (attempt 1 of 2): synthetic fixture failure
+-- sweeps: 147, wakes: 2 (expected 2: first surfacing and the 12h backstop)
+
+### state change (retry run, then a second failure) wakes immediately
+MORNING_INTAKE: morning-intake due for 2026-09-10 (retrying after: synthetic fixture failure)
+MORNING_INTAKE: morning-intake failed for 2026-09-10 (attempt 2 of 2) - second synthetic failure
+t+ 44000s  check -> morning-intake failed for 2026-09-10 (attempt 2 of 2): second synthetic failure
+t+ 44300s  check -> 

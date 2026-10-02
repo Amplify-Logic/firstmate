@@ -1,0 +1,52 @@
+### F5-a: five concurrent `start` calls for the same operation (synthetic transport sleeps 2s)
+-- start #1
+fm-fota-stage-run: operation already has a pending run (30487649465e58ee489da98d3cebc3d2-attempt-1-1790969851); raise the attempt ordinal to stage a deliberate retry
+rc=1
+-- start #2
+fm-fota-stage-run: operation already has a pending run (30487649465e58ee489da98d3cebc3d2-attempt-1-1790969851); raise the attempt ordinal to stage a deliberate retry
+rc=1
+-- start #3
+fm-fota-stage-run: operation already has a pending run (30487649465e58ee489da98d3cebc3d2-attempt-1-1790969851); raise the attempt ordinal to stage a deliberate retry
+rc=1
+-- start #4
+run_id=30487649465e58ee489da98d3cebc3d2-attempt-1-1790969851
+state=pending
+queue=accepted
+rc=0
+-- start #5
+fm-fota-stage-run: operation already has a pending run (30487649465e58ee489da98d3cebc3d2-attempt-1-1790969851); raise the attempt ordinal to stage a deliberate retry
+rc=1
+-- transport invocations: 1
+-- runs dir: .start.lock 30487649465e58ee489da98d3cebc3d2-attempt-1-1790969851.json 
+
+### F5-b: empty dot-prefixed temporaries left by killed settle/ack/start do not block an unrelated start
+-- planted: .ack-wxyz.json .run-qqqq .settle-abcd.json .start.lock 
+run_id=30487649465e58ee489da98d3cebc3d2-attempt-2-1790969854
+state=pending
+queue=accepted
+rc=
+
+### F5-c: a zero-length claim left by a start that died before publishing blocks only its own operation
+-- planted empty claim 30487649465e58ee489da98d3cebc3d2-attempt-3-1700000000.json
+-- start attempt 3 (same operation as the claim):
+fm-fota-stage-run: unreadable reservation 30487649465e58ee489da98d3cebc3d2-attempt-3-1700000000.json; reconcile it before staging
+rc=
+-- start attempt 4 (unrelated operation):
+run_id=30487649465e58ee489da98d3cebc3d2-attempt-4-1790969856
+state=pending
+queue=accepted
+rc=
+
+### F5-d: a run settled `unknown` (deadline 0, no result) still reserves its operation
+state=unknown
+reason=no result inside the deadline; verify at the portal
+fm-fota-stage-run: operation already has a unknown run (30487649465e58ee489da98d3cebc3d2-attempt-5-1790969859); raise the attempt ordinal to stage a deliberate retry
+rc=1
+-- transport invocations total: 4 (1 for attempt 1, 1 each for attempts 2, 4, 5)
+
+### F5-e: `list` ignores temporaries and the empty claim
+30487649465e58ee489da98d3cebc3d2-attempt-5-1790969859	unknown	1234567000111	attempt 5
+30487649465e58ee489da98d3cebc3d2-attempt-4-1790969856	pending	1234567000111	attempt 4
+30487649465e58ee489da98d3cebc3d2-attempt-2-1790969854	pending	1234567000111	attempt 2
+30487649465e58ee489da98d3cebc3d2-attempt-1-1790969851	pending	1234567000111	attempt 1
+rc=0
