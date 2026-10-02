@@ -40,10 +40,12 @@
 # working directory, the task or the environment. Before it is sent, known
 # .env and secret-looking environment values are removed, as described in
 # docs/configuration.md. Redaction is best-effort: known keys, tokens,
-# password arguments, credentialed URLs and private-key blocks are replaced; a
-# NAME=value assignment loses its value when the name looks secret or the value
-# looks random. Plain values such as paths stay visible, so the judge can see
-# what `T=../sibling-copy; rm -rf "$T"` removes.
+# password arguments, whole quoted or unquoted, credentialed URLs and
+# private-key blocks are replaced; a NAME=value assignment loses its value when
+# the name looks secret or the value looks random. It matches text patterns,
+# not shell syntax, and every command is judged with whatever it removed.
+# Plain values such as paths stay visible, so the judge can see what
+# `T=../sibling-copy; rm -rf "$T"` removes.
 #
 # ONE SIGNAL AMONG SEVERAL. The video this borrows from saw an agent route
 # around a write-only gate by writing the same file with a shell heredoc, so
@@ -55,14 +57,11 @@
 # fails (timeout, HTTP error, unusable answer), the guard asks once more about
 # the first HEAD_CHARS and last TAIL_CHARS characters alone before it steps
 # aside, and the log's `path` names what decided: whole, parts or
-# head-and-tail. A command needing more than MAX_PARTS parts is not judged:
-# it is allowed, and a warning goes to stderr and the log. A command holding a
-# quoted secret that cannot be safely redacted, because the command uses shell
-# syntax the redaction does not follow, is blocked unjudged and logged, never
-# sent with part of the secret. Only the Bash tool is judged, so a script
-# written with another tool and then run as `bash x.sh` is judged by that
-# short command alone. It is still an extra check on a worker that already
-# runs in a disposable copy under supervision, not a sandbox.
+# head-and-tail. A command needing more than MAX_PARTS parts is not judged: it
+# is allowed, and a warning goes to stderr and the log. Only the Bash tool is judged, so a script written with
+# another tool and then run as `bash x.sh` is judged by that short command
+# alone. It is still an extra check on a worker that already runs in a
+# disposable copy under supervision, not a sandbox.
 #
 # Borrowed, with changes, from github.com/disler/ten-levels-of-jev
 # (apps/ten-levels/src/levels/level06/bash-gate.ts, commit 777adaf, MIT licence,
@@ -226,24 +225,18 @@ KEY_PATTERNS = [
     re.compile(r"\bAIza[0-9A-Za-z_-]{30,}"),
     re.compile(r"\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}"),
 ]
-# A credential-looking name or flag: api_key=..., token: ..., --password ...,
-# Authorization: Bearer ... Its value is a whole shell-quoted string that
-# opens right there, or else the run up to whitespace or an operator.
-CREDENTIAL_NAME = re.compile(
-    r"(?i)(?:bearer|basic)\s+(?=[^\s\"';&|]{8,})|"
+# The value after a credential-looking name or flag: api_key=..., token: ...,
+# --password ..., Authorization: Bearer ...
+NAMED_VALUE = re.compile(
+    r"(?i)((?:bearer|basic)\s+(?=[^\s\"';&|]{8,})|"
     r"(?:api[_-]?key|access[_-]?key|secret|token|password|passwd|auth)[\"']?\s*[=:]\s*|"
-    r"--(?:api[_-]?key|token|password|passwd|secret|auth)(?:=|\s+)")
-BARE_VALUE = re.compile(r"[\"']?([^\s\"';&|]+)")
+    r"--(?:api[_-]?key|token|password|passwd|secret|auth)(?:=|\s+))"
+    r"(\"(?:\\.|[^\"\\])*\"|'[^']*'|[^\s\"';&|]+)")
 URL_CREDENTIAL = re.compile(r"(://)[^/\s:@]+:[^/\s@]+@")
 # NAME=value at the start, after whitespace or an operator, or on its own line
 # inside a heredoc body. Only a secret-looking name or a random-looking value
 # loses its value.
-ASSIGNMENT_NAME = re.compile(r"(?:^|[\s;&|(`])([A-Za-z_][A-Za-z0-9_]*)=")
-ASSIGNMENT_BARE = re.compile(r"[\"']?([^\s\"';&|)`]*)")
-# A ${...} expansion with no quoting or substitution inside it.
-SIMPLE_BRACE = re.compile(r"\$\{[^{}'\"\\`()]*\}")
-# A here-document operator and its delimiter word.
-HEREDOC = re.compile(r"<<(-?)[ \t]*((?:'[^'\n]*'|\"[^\"\n]*\"|\\.|[^\s;&|<>()'\"\\`$])+)")
+ASSIGNMENT = re.compile(r"(^|[\s;&|(`])([A-Za-z_][A-Za-z0-9_]*)=(\"[^\"]*\"|'[^']*'|[^\s;&|)`]*)")
 # A long random-looking run: mixed case AND digits. Git SHAs and task ids are
 # single-case, so they survive; most generated keys do not.
 LONG_RUN = re.compile(r"[A-Za-z0-9_+=-]{32,}")
@@ -254,204 +247,13 @@ def _random_looking(token):
             and re.search(r"[0-9]", token))
 
 
-def _assignment(match, value):
-    name = match.group(1)
+def _assignment(match):
+    lead, name, value = match.groups()
     bare = value[1:-1] if value[:1] in "'\"" else value
     if ((SECRET_NAME.search(name) and name not in NOT_SECRET_NAMES)
             or (re.fullmatch(r"[A-Za-z0-9_+=-]{12,}", bare) and _random_looking(bare))):
-        return REDACTED
-    return value
-
-
-class _Unfollowable(Exception):
-    """Shell syntax the quote lexer does not follow."""
-
-
-def _shell_quotes(text):
-    """(quotes, substitutions) for <text>, or None for a command it cannot
-    follow, such as one with a backtick, arithmetic or an unusual expansion.
-    quotes maps each quote that opens a shell string to the index after its
-    close, or to the end of <text> when it never closes; substitutions are the
-    (start, end) spans of each $(...) inside a double-quoted string. It follows
-    bash's own rules for escapes, line continuations, $ parameters, $'...'
-    strings, comments, here-document bodies, and $(...) and ${...} inside
-    double quotes."""
-    if any(part in text for part in ("`", "((", "$[")):
-        return None
-    quotes, substitutions = {}, []
-    try:
-        _scan_commands(text, 0, quotes, substitutions, False)
-    except _Unfollowable:
-        return None
-    return quotes, substitutions
-
-
-def _scan_commands(text, i, quotes, substitutions, nested):
-    """Scan shell commands from <i>: to the end of <text>, or, when <nested>,
-    to the ) that closes a $( and return the index after it."""
-    heredocs, word_start, depth = [], True, 0
-    while i < len(text):
-        char = text[i]
-        if char == "\\":
-            if text[i + 1:i + 2] != "\n":
-                word_start = False
-            i += 2
-            continue
-        if char == "#" and word_start:
-            i = text.find("\n", i)
-            if i < 0:
-                break
-            continue
-        if nested and word_start and re.match(r"case\b", text[i:i + 5]):
-            raise _Unfollowable()
-        if char == "\n" and heredocs:
-            i = _heredoc_bodies(text, i + 1, heredocs, quotes)
-            heredocs = []
-            word_start = True
-            continue
-        if text.startswith("<<<", i):
-            i += 3
-            word_start = True
-            continue
-        if text.startswith("<<", i):
-            heredoc = HEREDOC.match(text, i)
-            if not heredoc or text[heredoc.end():heredoc.end() + 1] not in ("", " ", "\t", "\n", ";", "&", "|", "<", ">", "(", ")"):
-                raise _Unfollowable()
-            word = heredoc.group(2)
-            heredocs.append((re.sub(r"\\(.)|['\"]", r"\1", word), heredoc.group(1) == "-",
-                             not re.search(r"['\"\\]", word)))
-            i = heredoc.end()
-            word_start = False
-            continue
-        if nested and char == ")":
-            if depth == 0:
-                if heredocs:
-                    raise _Unfollowable()
-                return i + 1
-            depth -= 1
-        if nested and char == "(":
-            depth += 1
-        ansi = False
-        if char == "$":
-            if text[i + 1:i + 2] in ("$", "#", "?", "!", "@", "*", "-") or text[i + 1:i + 2].isdigit():
-                i += 2
-                word_start = False
-                continue
-            if text.startswith("$(", i):
-                i = _scan_commands(text, i + 2, quotes, substitutions, True)
-                word_start = False
-                continue
-            if text.startswith("$'", i):
-                i += 1
-                ansi = True
-        if text[i] in "'\"":
-            if text[i] == '"':
-                end = _scan_double(text, i + 1, quotes, substitutions)
-            else:
-                end = i + 1
-                while end < len(text) and text[end] != "'":
-                    end += 2 if ansi and text[end] == "\\" else 1
-            if end >= len(text):
-                if nested:
-                    raise _Unfollowable()
-                quotes[i] = len(text)
-                break
-            quotes[i] = end + 1
-            i = end
-        word_start = text[i] in " \t\n;&|()<>"
-        i += 1
-    if nested:
-        raise _Unfollowable()
-    return i
-
-
-def _scan_double(text, i, quotes, substitutions):
-    """The index of the quote that closes a double-quoted string whose
-    contents start at <i>, or the end of <text> when it never closes."""
-    while i < len(text) and text[i] != '"':
-        if text[i] == "\\":
-            i += 2
-        elif text.startswith("$(", i):
-            end = _scan_commands(text, i + 2, quotes, substitutions, True)
-            substitutions.append((i, end))
-            i = end
-        elif text.startswith("${", i):
-            brace = SIMPLE_BRACE.match(text, i)
-            if not brace:
-                raise _Unfollowable()
-            i = brace.end()
-        else:
-            i += 1
-    return min(i, len(text))
-
-
-def _heredoc_bodies(text, i, heredocs, quotes):
-    """Skip the bodies of <heredocs>, which start at <i>, and return the index
-    after the last one. A body is data, so only a quoted value within one line
-    of it can open there. A body that never ends or may run a command cannot
-    be followed."""
-    for delimiter, strip_tabs, expands in heredocs:
-        while True:
-            end = text.find("\n", i)
-            line = text[i:] if end < 0 else text[i:end]
-            if (line.lstrip("\t") if strip_tabs else line) == delimiter:
-                i = len(text) if end < 0 else end + 1
-                break
-            if end < 0 or (expands and ("$(" in line or line.endswith("\\"))):
-                raise _Unfollowable()
-            for pair in re.finditer(r"'[^']*'|\"[^\"]*\"", line):
-                quotes[i + pair.start()] = i + pair.end()
-            i = end + 1
-    return i
-
-
-class Unredactable(Exception):
-    """A quoted value that would lose its value, in a command whose quotes cannot be followed."""
-
-
-def _replace_values(text, names, bare_value, replace):
-    """Pass the value after each match of <names> through <replace>: a whole
-    shell string that opens right there, else the run <bare_value> captures.
-    A $(...) inside a double-quoted value stays as it is, to be judged; only
-    the text around it is passed. Raises Unredactable rather than redact part
-    of a quoted value."""
-    lexed = _shell_quotes(text)
-    quotes, substitutions = lexed if lexed is not None else (None, [])
-    edits = []
-    for name in names.finditer(text):
-        if any(start <= name.start() < end for start, end, _ in edits):
-            continue
-        start = name.end()
-        opener = start + 1 if text.startswith(("$'", '$"'), start) else start
-        end = None if quotes is None else quotes.get(opener)
-        if end is None:
-            bare = bare_value.match(text, start)
-            value = bare.group(1) if bare else ""
-            if quotes is None and text[opener:opener + 1] in ("'", '"') and replace(name, value) != value:
-                raise Unredactable()
-            if not bare:
-                continue
-            start, end = bare.span(1)
-        first, last = start, end
-        if quotes is not None and opener in quotes:
-            first = opener + 1
-            last = end - 1 if end - 1 > opener and text[end - 1] == text[opener] else end
-        inner = sorted(span for span in substitutions if first <= span[0] < last)
-        pieces, gap = [], first
-        for sub_start, sub_end in inner:
-            if sub_start >= gap:
-                pieces.append((gap, sub_start))
-                gap = sub_end
-        pieces = pieces + [(gap, last)] if inner else [(start, end)]
-        for piece_start, piece_end in pieces:
-            if piece_start < piece_end and not any(
-                    s < piece_end and piece_start < e for s, e, _ in edits):
-                edits.append((piece_start, piece_end, replace(name, text[piece_start:piece_end])))
-    out, pos = [], 0
-    for start, end, value in sorted(edits):
-        out += [text[pos:start], value]
-        pos = end
-    return "".join(out) + text[pos:]
+        value = REDACTED
+    return "%s%s=%s" % (lead, name, value)
 
 
 def literal_secrets(home):
@@ -476,9 +278,9 @@ def redact(command, secrets):
             text = text.replace(value, REDACTED)
     for pattern in KEY_PATTERNS:
         text = pattern.sub(REDACTED, text)
-    text = _replace_values(text, CREDENTIAL_NAME, BARE_VALUE, lambda name, value: REDACTED)
+    text = NAMED_VALUE.sub(lambda m: m.group(1) + REDACTED, text)
     text = URL_CREDENTIAL.sub(r"\1%s@" % REDACTED, text)
-    text = _replace_values(text, ASSIGNMENT_NAME, ASSIGNMENT_BARE, _assignment)
+    text = ASSIGNMENT.sub(_assignment, text)
     text = LONG_RUN.sub(lambda m: REDACTED if _random_looking(m.group(0)) else m.group(0), text)
     return text
 
@@ -674,11 +476,7 @@ def ask(parts, key):
 def judge(command, home):
     """(outcome, reason, answers, sent, path): outcome is block, allow, skip or error,
     and path is what decided: whole, parts, head-and-tail, or none."""
-    try:
-        sent = redact(command, literal_secrets(home))
-    except Unredactable:
-        return ("block", "not judged: a quoted secret could not be safely redacted, because the "
-                "command uses shell syntax the guard does not follow", {}, REDACTED, "none")
+    sent = redact(command, literal_secrets(home))
     parts = split_parts(sent)
     if len(parts) > MAX_PARTS:
         return "skip", ("not judged: %d characters need %d parts, over the cap of %d"

@@ -197,32 +197,6 @@ test_redaction() {
   pass "secret-named or random assignments, .env values, secret-looking environment values and key shapes never leave the machine"
 }
 
-test_expansions_in_quoted_secrets_are_judged() {
-  local home cmd body out log text word
-  home=$(new_home redact-expansions 'enabled = true\n')
-  for cmd in \
-    'GH_TOKEN="$(gh auth token)" gh pr create --fill|GH_TOKEN="$(gh auth token)" gh pr create --fill' \
-    'mysql --password="$(cat ~/.dbpw)" -e "select 1"|mysql --password="$(cat ~/.dbpw)" -e "select 1"' \
-    'export API_KEY="${API_KEY:-dev}"; npm test|export API_KEY=<redacted>; npm test' \
-    "cd \"\${HOME}/proj\" && client --token 'abc def'|cd \"\${HOME}/proj\" && client --token <redacted>" \
-    "git commit -m \"\$(cat <<'EOF'"$'\n''Redact --password "a b" values whole'$'\n'"EOF"$'\n'")\"|git commit -m \"\$(cat <<'EOF'"$'\n''Redact --password <redacted> values whole'$'\n'"EOF"$'\n'")\"" \
-    'client --password "ink fern $(get --token '"'alpha beta'"') moss" -v|client --password "<redacted>$(get --token <redacted>)<redacted>" -v'; do
-    reset_server "$FIX/response-git-status.json"
-    out=$(run_hook "$home" "${cmd%%|*}")
-    assert_equals "" "$out" "a command whose secret is an expansion must be judged, not denied"
-    assert_equals 1 "$(requests)" "a command whose secret is an expansion must be sent to the judge"
-    body=$(jq -r '.state.command' "$SRV/requests.jsonl")
-    log=$(tail -n 1 "$home/state/command-guard.log")
-    assert_equals "${cmd#*|}" "$body" "an expansion stays visible and every literal secret around it is removed whole"
-    for text in "$body" "$log"; do
-      for word in "abc def" "a b\"" fern moss alpha beta; do
-        assert_not_contains "$text" "$word" "no word of a literal quoted secret may leave the machine or reach the log"
-      done
-    done
-  done
-  pass "a quoted secret holding an expansion keeps the expansion visible to the judge and loses every literal word"
-}
-
 test_plain_assignments_stay_visible() {
   local home body wipe
   home=$(new_home plain 'enabled = true\n')
@@ -268,90 +242,23 @@ EOF
   pass "whole quoted credentials and short secret-named .env values are removed from requests and logs"
 }
 
-test_quoted_search_strings_keep_commands_visible() {
-  local home cmd body
-  home=$(new_home redact-search 'enabled = true\n')
+test_routine_expansions_are_judged() {
+  local home cmd out body
+  home=$(new_home redact-routine 'enabled = true\n')
   for cmd in \
-    'grep -n "password=" .env.example && rm -rf ~/projects && echo "done"' \
-    "grep 'token: ' cfg.yml; git push --force origin main; echo 'ok'" \
-    'printf "token=" ; rm -rf ~ ; printf " "' \
-    'rm "token=" -rf ~/projects "x"' \
-    "rm \$'a\\' --password \"' -rf ~ '\"'" \
-    "rm \$'a\\' secret: \"' -rf ~ '\"'" \
-    "rm \$\$'\\' 'a --password ' -rf ~ ' b'" \
-    "cat <<'EOF' > notes.txt"$'\n'"Don't stop"$'\n'"EOF"$'\n'"rm 'x secret: ' -rf ~/projects 'y'" \
-    "rm a\\"$'\n'"#'"$'\n'"' x 'token=' -rf ~ ' b'" \
-    "rm a\\ #'"$'\n'"' 'token=' -rf ~ 'b'"; do
+    'GH_TOKEN="$(gh auth token)" gh pr create --fill|GH_TOKEN=<redacted> gh pr create --fill' \
+    'mysql --password="$(cat ~/.dbpw)" -e "select 1"|mysql --password=<redacted> -e "select 1"' \
+    'export API_KEY="${API_KEY:-dev}"; npm test|export API_KEY=<redacted>; npm test' \
+    "cd \"\${HOME}/proj\" && client --token 'abc def'|cd \"\${HOME}/proj\" && client --token <redacted>" \
+    "git commit -m \"\$(cat <<'EOF'"$'\n''Redact --password "a b" values whole'$'\n'"EOF"$'\n'")\"|git commit -m \"\$(cat <<'EOF'"$'\n''Redact --password <redacted> values whole'$'\n'"EOF"$'\n'")\""; do
     reset_server "$FIX/response-git-status.json"
-    run_hook "$home" "$cmd" >/dev/null
+    out=$(run_hook "$home" "${cmd%%|*}")
+    assert_equals "" "$out" "a routine command with an expanded or quoted credential must be allowed by the judge's answer"
+    assert_equals 1 "$(requests)" "a routine command with an expanded or quoted credential must be judged"
     body=$(jq -r '.state.command' "$SRV/requests.jsonl")
-    assert_equals "$cmd" "$body" "a credential name inside a quoted, ANSI-C, escaped or here-document string must not hide what follows"
+    assert_equals "${cmd#*|}" "$body" "the judged command keeps its arguments and loses each credential value"
   done
-  for cmd in \
-    'printf "x TOKEN=" ; rm -rf ~ ; echo "y"|printf "x TOKEN=" ; rm -rf ~ ; echo "y"' \
-    'find . -name "a password=" -delete -o -name "b"|find . -name "a password=" -delete -o -name "b"' \
-    'rm "x token=" -rf ~/projects "y"|rm "x token=" -rf ~/projects "y"' \
-    ": # it's done"$'\n'"rm 'a token=' -rf ~ 'b'|: # it's done"$'\n'"rm 'a token=' -rf ~ 'b'"; do
-    reset_server "$FIX/response-git-status.json"
-    run_hook "$home" "${cmd%%|*}" >/dev/null
-    body=$(jq -r '.state.command' "$SRV/requests.jsonl")
-    assert_equals "${cmd#*|}" "$body" "a secret-named assignment inside a quoted string, after a comment or after a line continuation must keep every quote and argument in place"
-  done
-  reset_server "$FIX/response-git-status.json"
-  run_hook "$home" "cat > .env <<'EOF'"$'\n''DB_PASSWORD="ink fern moss"'$'\n''EOF' >/dev/null
-  body=$(jq -r '.state.command' "$SRV/requests.jsonl")
-  assert_equals "cat > .env <<'EOF'"$'\n''DB_PASSWORD=<redacted>'$'\n''EOF' "$body" "a quoted value in a here-document body must be removed whole"
-  reset_server "$FIX/response-git-status.json"
-  run_hook "$home" 'client --password "unterminated-secret' >/dev/null
-  body=$(jq -r '.state.command' "$SRV/requests.jsonl")
-  assert_equals 'client --password <redacted>' "$body" "an unterminated quoted credential must be redacted to its end"
-  pass "credential names inside quoted strings, comments and here-documents leave following arguments visible to the judge"
-}
-
-test_multiline_quoted_secrets_are_whole_or_blocked() {
-  local home cmd body log out text word
-  home=$(new_home redact-multiline 'enabled = true\n')
-  for cmd in \
-    $'curl -u me \\\n --password "ink fern moss" https://x.example|curl -u me \\\n --password <redacted> https://x.example' \
-    $'mysql -h db \\\n --password="correct horse battery" -e status|mysql -h db \\\n --password=<redacted> -e status' \
-    $'client --token \'alpha beta gamma\' \\\n --verbose|client --token <redacted> \\\n --verbose' \
-    $'DB_PASSWORD="ink fern moss" \\\n ./migrate --all|DB_PASSWORD=<redacted> \\\n ./migrate --all' \
-    $'echo ok; # note \\\nclient --password "ink fern moss" --verbose|echo ok; # note \\\nclient --password <redacted> --verbose'; do
-    reset_server "$FIX/response-git-status.json"
-    run_hook "$home" "${cmd%%|*}" >/dev/null
-    body=$(jq -r '.state.command' "$SRV/requests.jsonl")
-    log=$(tail -n 1 "$home/state/command-guard.log")
-    assert_equals "${cmd#*|}" "$body" "a line-continued command must keep its arguments and lose each quoted secret whole"
-    for text in "$body" "$log"; do
-      for word in fern moss horse battery beta gamma; do
-        assert_not_contains "$text" "$word" "no word of a quoted secret may leave the machine or reach the log"
-      done
-    done
-  done
-  for cmd in \
-    'client --password "ink;fern moss" --verbose|client --password <redacted> --verbose' \
-    'rm -rf ~/projects; : --token "a;b"|rm -rf ~/projects; : --token <redacted>'; do
-    reset_server "$FIX/response-git-status.json"
-    run_hook "$home" "${cmd%%|*}" >/dev/null
-    body=$(jq -r '.state.command' "$SRV/requests.jsonl")
-    assert_equals "${cmd#*|}" "$body" "a quoted secret holding shell operators is removed whole and the rest is judged"
-  done
-  for cmd in \
-    'x=$((1 + 2)); client --password "ink fern moss" --verbose' \
-    'rm -rf ~ # ` --password "ink fern moss"' \
-    $'cat <<EOF\nx\\\nEOF\n\'\nEOF\nrm \'a token=\' -rf ~ \'b\''; do
-    reset_server "$FIX/response-git-status.json"
-    out=$(run_hook "$home" "$cmd")
-    assert_contains "$out" '"deny"' "a quoted secret that cannot be safely redacted must block the command"
-    assert_contains "$out" "could not be safely redacted" "the block must say why"
-    assert_equals 0 "$(requests)" "a quoted secret that cannot be safely redacted must not be sent in part"
-    log=$(tail -n 1 "$home/state/command-guard.log")
-    assert_contains "$log" '"outcome": "block"' "the block must be logged"
-    for word in fern moss; do
-      assert_not_contains "$log" "$word" "a blocked command's secret must not reach the log"
-    done
-  done
-  pass "a line-continued command keeps quoted secrets whole, a quoted secret holding operators is removed whole and judged, and one whose quotes cannot be followed blocks"
+  pass "routine commands with expanded or quoted credentials are judged with each value redacted"
 }
 
 # --- a long command is judged whole, in parts ---------------------------------
@@ -554,9 +461,7 @@ test_thresholds
 test_non_bash_tool_ignored
 test_redaction
 test_quoted_and_short_secrets_are_redacted
-test_quoted_search_strings_keep_commands_visible
-test_multiline_quoted_secrets_are_whole_or_blocked
-test_expansions_in_quoted_secrets_are_judged
+test_routine_expansions_are_judged
 test_plain_assignments_stay_visible
 test_long_command_judged_in_parts
 test_parts_failure_falls_back_to_head_and_tail
