@@ -741,6 +741,88 @@ PY
   pass "the real glasses mailbox hears saved and waiting, then filed"
 }
 
+test_timeout_stops_descendants_for_every_transport() {
+  local phase tool
+  for phase in import answer announce; do
+    make_world
+    make_wav "$W/audio/hum.wav" 91
+    add_question "$ID1" "What a Life bridge idea" "$W/audio/hum.wav" audio/wav
+    [ "$phase" != announce ] || python3 - "$DB" <<'PYTEST'
+import sqlite3, sys
+with sqlite3.connect(sys.argv[1]) as db:
+    db.execute("UPDATE requests SET state='answered', answer_json='{}'")
+PYTEST
+    case "$phase" in
+      import) tool=$FM_VOICE_IDEA_TARTEVO ;;
+      answer) tool=$FM_VOICE_IDEA_ANSWER ;;
+      announce) tool=$FM_VOICE_IDEA_ANNOUNCE ;;
+    esac
+    cat > "$tool" <<'PYTEST'
+#!/usr/bin/env python3
+import os, pathlib, signal, subprocess, sys, time
+# The child keeps inherited output pipes and ignores TERM; its parent exits on TERM.
+child = subprocess.Popen([sys.executable, "-c", "import signal,time; signal.signal(signal.SIGTERM, signal.SIG_IGN); time.sleep(30)"])
+pathlib.Path(os.environ["FAKE_LOG_DIR"], "child.pid").write_text(str(child.pid))
+time.sleep(30)
+PYTEST
+    export FM_VOICE_IDEA_IMPORT_TIMEOUT=1 FM_VOICE_IDEA_SPEAK_TIMEOUT=1
+    python3 - "$IDEA" "$ID1" "$W/log/child.pid" <<'PYTEST' || fail "$phase timeout left a descendant or pipe alive"
+import os, pathlib, signal, subprocess, sys, time
+start = time.monotonic()
+result = subprocess.run([sys.argv[1], "take", sys.argv[2]], capture_output=True, timeout=10)
+pid = int(pathlib.Path(sys.argv[3]).read_text())
+try:
+    assert result.returncode == 0, result.stderr
+    assert time.monotonic() - start < 6, "transport exceeded bounded cleanup"
+    for _ in range(30):
+        state = subprocess.run(["ps", "-o", "stat=", "-p", str(pid)], capture_output=True, text=True).stdout.strip()
+        if not state or state.startswith("Z"):
+            break
+        time.sleep(0.05)
+    else:
+        raise AssertionError("transport child survived timeout")
+finally:
+    try: os.kill(pid, signal.SIGKILL)
+    except ProcessLookupError: pass
+PYTEST
+    if [ "$phase" = announce ]; then
+      assert_contains "$(cat "$FM_HOME/data/voice-ideas/captures/$ID1/said-final")" unknown "announcement must remain ambiguous"
+    fi
+    unset FM_VOICE_IDEA_IMPORT_TIMEOUT FM_VOICE_IDEA_SPEAK_TIMEOUT
+  done
+  pass "import, answer and announce timeouts terminate their process groups without hanging on inherited pipes"
+}
+
+test_failed_capture_publication_does_not_strand_duplicate() {
+  make_world
+  make_wav "$W/audio/hum.wav" 92
+  add_question "$ID1" "What a Life bridge idea" "$W/audio/hum.wav"
+  add_question "$ID2" "What a Life bridge idea" "$W/audio/hum.wav"
+  python3 - "$IDEA" "$ID1" <<'PYTEST' || fail "publication interruption was not exercised"
+import importlib.util, sys
+spec = importlib.util.spec_from_file_location("idea", sys.argv[1])
+m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
+def fail_publish(*_):
+    raise OSError("fixture capture publication interrupted")
+m.os.rename = fail_publish
+try:
+    m.main(["take", sys.argv[2]])
+except OSError:
+    pass
+else:
+    raise AssertionError("publication did not fail")
+PYTEST
+  [ ! -d "$FM_HOME/data/voice-ideas/captures/$ID1" ] || fail "interrupted original was published"
+  "$IDEA" take "$ID2" >/dev/null || fail "second request could not recover abandoned ownership"
+  assert_equals filed "$(status_field "$ID2" state)" "second request must file instead of naming a missing capture"
+  "$IDEA" take "$ID1" >/dev/null || fail "original retry failed"
+  assert_equals duplicate "$(status_field "$ID1" state)" "original retry must deduplicate against the recovered capture"
+  assert_equals 1 "$(fake_capture_count)" "recovery imports the same bytes only once"
+  pass "a failed capture publication cannot strand a later request behind a missing original"
+}
+
+test_timeout_stops_descendants_for_every_transport
+test_failed_capture_publication_does_not_strand_duplicate
 test_recognises_song_first_then_the_idea
 test_journey_files_the_idea_and_speaks_the_receipt
 test_an_ordinary_question_is_left_for_firstmate
