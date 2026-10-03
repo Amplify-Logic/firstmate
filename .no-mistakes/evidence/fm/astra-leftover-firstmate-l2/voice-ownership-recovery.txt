@@ -1,0 +1,23 @@
+[target] crashed state: by-hash marker -> 11111111-1111-4111-8111-111111111111; captures/11111111-1111-4111-8111-111111111111 exists? no
+filed: What a Life: Filed to What a Life.
+take ID2 exit=0
+  status 22222222-2222-4222-8222-222222222222 filed duplicate_of=None
+  answers spoken: Filed to What a Life.|
+  marker now -> 22222222-2222-4222-8222-222222222222
+duplicate: What a Life: Already filed to What a Life.
+take ID1 exit=0
+  status 11111111-1111-4111-8111-111111111111 duplicate duplicate_of=None
+  status 22222222-2222-4222-8222-222222222222 filed duplicate_of=None
+  Artevo captures imported: 1
+
+[base] crashed state: by-hash marker -> 11111111-1111-4111-8111-111111111111; captures/11111111-1111-4111-8111-111111111111 exists? no
+duplicate: What a Life: Already saved, waiting for the desk.
+take ID2 exit=0
+  status 22222222-2222-4222-8222-222222222222 duplicate duplicate_of=None
+  answers spoken: Already saved, waiting for the desk.|
+  marker now -> 11111111-1111-4111-8111-111111111111
+filed: What a Life: Filed to What a Life.
+take ID1 exit=0
+  status 11111111-1111-4111-8111-111111111111 filed duplicate_of=None
+  status 22222222-2222-4222-8222-222222222222 duplicate duplicate_of=None
+  Artevo captures imported: 1

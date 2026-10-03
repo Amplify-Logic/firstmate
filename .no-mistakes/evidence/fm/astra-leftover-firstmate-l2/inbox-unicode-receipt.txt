@@ -1,0 +1,6 @@
+[target] progress exit=0
+  receipt progress body: 'Checked the watcher\u2028still checking the relay\u2029next\x0bpart\x0cfinal: fix pushed'
+  intact: True
+[base] progress exit=0
+  receipt progress body: 'Checked the watcher'
+  intact: False

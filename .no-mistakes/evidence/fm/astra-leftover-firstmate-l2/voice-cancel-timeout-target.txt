@@ -1,0 +1,19 @@
+=== [target] watcher cancels 'check' during each transport ===
+check exit: 143
+phase=import transport pids after: 8500:gone 8770:gone
+check exit: 143
+phase=answer transport pids after: 10130:gone 10598:gone
+check exit: 143
+phase=announce transport pids after: 12156:gone 12394:gone
+announce-attempt: {
+  "at": "2026-10-03T07:39:15Z",
+  "line": "Filed to What a Life.",
+  "outcome": "unknown"
+}
+=== [target] import timeout with TERM-ignoring descendants ===
+glasses idea for What a Life is saved but waiting for the desk: Artevo's import did not finish in time
+held: What a Life: Saved, waiting for the desk.
+take exit=0
+elapsed 1.96s
+transport pids after: 12954:gone 13129:gone
+answers spoken: 11111111-1111-4111-8111-111111111111	Saved, waiting for the desk.

@@ -1,0 +1,6 @@
+[target] start exit=0
+  selected binary ran: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-herdr-rel.zGCpeB/work/tools/herdr /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-herdr-rel.zGCpeB/home
+  HOME's different tools/herdr ran instead: no
+[base] start exit=0
+  selected binary ran: NO
+  HOME's different tools/herdr ran instead: YES

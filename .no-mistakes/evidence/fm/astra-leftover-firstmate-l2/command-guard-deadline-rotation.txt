@@ -1,0 +1,25 @@
+=== [target] A: Jev blocks after 1s, then the decision log write stalls (log is a FIFO with no reader) ===
+  exit=0 elapsed=2.59s
+  decision: deny
+  stderr: 
+  outage marker present: no
+=== [target] B: 8 concurrent hooks against a >2 MiB log (rotation race) ===
+  .1 holds original history: yes
+  decisions in fresh log: 8 (want 8)
+=== [base] A: Jev blocks after 1s, then the decision log write stalls (log is a FIFO with no reader) ===
+  exit=143 elapsed=208.63s
+  decision: <none: command would be ALLOWED>
+  stderr: fm-command-guard: stepping aside, commands are allowed until Jev answers again: HookBound
+  outage marker present: yes
+=== [base] B: 8 concurrent hooks against a >2 MiB log (rotation race) ===
+  .1 holds original history: yes
+  decisions in fresh log: 8 (want 8)
+
+[exited with code 0]
+
+NOTE (tester): the [base] A hook did not return on its own. After the whole-hook alarm fired, its
+error path called outage_once -> append_log, which blocked on the stalled log with no timer. It was still
+blocked after more than 3 minutes and was killed by hand (SIGTERM). Base never emitted the computed deny
+and recorded an outage. [target] A printed the deny before bookkeeping and returned in about 2.6 s.
+Natural concurrency in B did not hit the narrow rotation window on base. The deterministic
+paused-rotation regression in tests/fm-command-guard.test.sh covers that race.

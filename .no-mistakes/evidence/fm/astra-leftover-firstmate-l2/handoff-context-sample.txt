@@ -1,0 +1,27 @@
+=== [target] ===
+1. primary A (pid 75797, conv-A) sample written by status bar:
+     schema=fm-primary-context.v1
+     remaining_percent=48
+     used_percent=52
+     owner=75797|Sat Oct  3 07:49:44 2026     sleep 600|conv-A
+     updated_at=1791013785
+   status for A:            context_used_percent: 52
+2. incoming primary B (pid 77948, conv-B), old sample still on disk:
+   status for B:            context_used_percent: na
+3. B's own status-bar sample: context_used_percent: 52
+4. same pid, new conversation conv-C: context_used_percent: na
+5. B sample read 301s later (FM_HANDOFF_NOW): context_used_percent: na
+6. B sample read with the clock at epoch 1 (sample dated in the future): context_used_percent: na
+=== [base] ===
+1. primary A (pid 86065, conv-A) sample written by status bar:
+     schema=fm-primary-context.v1
+     remaining_percent=48
+     used_percent=52
+     updated_at=1791013792
+   status for A:            context_used_percent: 52
+2. incoming primary B (pid 88072, conv-B), old sample still on disk:
+   status for B:            context_used_percent: 52
+3. B's own status-bar sample: context_used_percent: 52
+4. same pid, new conversation conv-C: context_used_percent: 52
+5. B sample read 301s later (FM_HANDOFF_NOW): context_used_percent: 52
+6. B sample read with the clock at epoch 1 (sample dated in the future): context_used_percent: 52
