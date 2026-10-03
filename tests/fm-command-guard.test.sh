@@ -476,19 +476,22 @@ for boundary in ("outage_over", "append_log"):
     original = getattr(g, boundary)
     setattr(g, boundary, stalled)
     sys.stdin = io.StringIO(json.dumps({"tool_name": "Bash", "tool_input": {"command": "invented command"}}))
-    output = io.StringIO(); start = time.monotonic()
-    # Avoid a second attempt at the deliberately stalled logger in error reporting.
-    g.outage_once = lambda *_: None
+    output, errors = io.StringIO(), io.StringIO(); start = time.monotonic()
     try:
-        with contextlib.redirect_stdout(output):
+        with contextlib.redirect_stdout(output), contextlib.redirect_stderr(errors):
             assert g.main() == 0
     finally:
         signal.setitimer(signal.ITIMER_REAL, 0)
         setattr(g, boundary, original)
     assert time.monotonic() - start < 2, "bookkeeping was not bounded"
     assert json.loads(output.getvalue())["hookSpecificOutput"]["permissionDecision"] == "deny"
+    state = home / "state"
+    assert not (state / g.OUTAGE_NAME).exists(), "a judged command opened an outage"
+    log = state / g.LOG_NAME
+    assert not log.exists() or '"outcome": "error"' not in log.read_text(), "a judged command logged an outage"
+    assert "stepping aside" not in errors.getvalue(), "a judged command announced an outage"
 PYTEST
-  pass "a known deny survives slow outage cleanup and log append under a bounded budget"
+  pass "a known deny survives slow outage cleanup and log append under a bounded budget without reporting an outage"
 }
 
 test_concurrent_log_rotation_preserves_history() {

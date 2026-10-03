@@ -793,6 +793,42 @@ PYTEST
   pass "import, answer and announce timeouts terminate their process groups without hanging on inherited pipes"
 }
 
+test_timeout_after_leader_exit_keeps_announcement_ambiguous() {
+  make_world
+  make_wav "$W/audio/hum.wav" 94
+  add_question "$ID1" "What a Life bridge idea" "$W/audio/hum.wav" audio/wav
+  python3 - "$DB" <<'PYTEST'
+import sqlite3, sys
+with sqlite3.connect(sys.argv[1]) as db:
+    db.execute("UPDATE requests SET state='answered', answer_json='{}'")
+PYTEST
+  cat > "$FM_VOICE_IDEA_ANNOUNCE" <<'PYTEST'
+#!/usr/bin/env python3
+import os, pathlib, subprocess, sys
+# The leader exits at once, leaving only its zombie in the group, while an
+# escaped descendant keeps the output pipes open past the deadline.
+child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)"], start_new_session=True)
+pathlib.Path(os.environ["FAKE_LOG_DIR"], "child.pid").write_text(str(child.pid))
+PYTEST
+  rm -f "$W/log/child.pid"
+  export FM_VOICE_IDEA_SPEAK_TIMEOUT=3
+  python3 - "$IDEA" "$ID1" "$W/log/child.pid" <<'PYTEST' || fail "an escaped descendant turned the announce timeout into another outcome"
+import os, pathlib, signal, subprocess, sys
+marker = pathlib.Path(sys.argv[3])
+try:
+    result = subprocess.run([sys.argv[1], "take", sys.argv[2]], capture_output=True, timeout=20)
+    assert result.returncode == 0, result.stderr
+finally:
+    if marker.exists():
+        try: os.kill(int(marker.read_text()), signal.SIGKILL)
+        except ProcessLookupError: pass
+PYTEST
+  unset FM_VOICE_IDEA_SPEAK_TIMEOUT
+  assert_equals unknown "$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["outcome"])' \
+    "$FM_HOME/data/voice-ideas/captures/$ID1/announce-attempt.json")" "an announcement timed out after its leader exited must stay ambiguous"
+  pass "a timeout after the transport leader exits keeps the announcement ambiguous instead of retrying it"
+}
+
 test_outer_cancellation_stops_every_transport_group() {
   local phase tool
   for phase in import answer announce; do
@@ -890,6 +926,7 @@ PYTEST
 }
 
 test_timeout_stops_descendants_for_every_transport
+test_timeout_after_leader_exit_keeps_announcement_ambiguous
 test_outer_cancellation_stops_every_transport_group
 test_failed_capture_publication_does_not_strand_duplicate
 test_recognises_song_first_then_the_idea

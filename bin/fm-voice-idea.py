@@ -709,7 +709,7 @@ def _stop_group(proc: subprocess.Popen, grace: float) -> None:
     """TERM the command's group, then KILL it, waiting at most 3 * grace."""
     try:
         os.killpg(proc.pid, signal.SIGTERM)
-    except ProcessLookupError:
+    except (ProcessLookupError, PermissionError):
         pass
     try:
         proc.communicate(timeout=grace)
@@ -718,7 +718,7 @@ def _stop_group(proc: subprocess.Popen, grace: float) -> None:
     # The leader may have exited while a descendant ignored TERM.
     try:
         os.killpg(proc.pid, signal.SIGKILL)
-    except ProcessLookupError:
+    except (ProcessLookupError, PermissionError):
         pass
     try:
         proc.communicate(timeout=grace)

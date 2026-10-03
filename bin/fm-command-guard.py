@@ -607,15 +607,17 @@ def run_hook(opts):
     signal.setitimer(signal.ITIMER_REAL, 1.0)
     record = dict(base, at=int(time.time()), outcome=outcome, reason=reason,
                   answers=answers, command=sent, path=path)
-    if outcome == "error":
-        outage_once(state_dir, record)
-        return 0
-    if outcome == "skip":
-        note("allowed without judging it: %s" % reason)
-        append_log(state_dir, dict(record, command=sent[:PART_CHARS]))
-        return 0
-    outage_over(state_dir)
-    append_log(state_dir, record)
+    try:
+        if outcome == "error":
+            outage_once(state_dir, record)
+        elif outcome == "skip":
+            note("allowed without judging it: %s" % reason)
+            append_log(state_dir, dict(record, command=sent[:PART_CHARS]))
+        else:
+            outage_over(state_dir)
+            append_log(state_dir, record)
+    except (Exception, HookBound):  # noqa: BLE001
+        pass
     return 0
 
 
