@@ -14,7 +14,7 @@ Never put Compass, Artevo, Your Magical Journey, or any private repository or da
 It reads new tags on default-branch commits and recent default-branch commits of a fixed list of public repositories with plain git, and writes one rolling digest, `creator-watch.md`, on the `main` branch of a separate, dedicated public repository, [Amplify-Logic/firstmate-routine-reports](https://github.com/Amplify-Logic/firstmate-routine-reports), which holds nothing else.
 Each run replaces that file with one new commit, so that repository's history is the audit log of every run.
 A release tag on a commit that is not on a repository's default branch is not in the digest; the laptop creator watch, which keeps running alongside, covers those.
-The routine holds no write access to firstmate: its clone of this repository is only read to run the script, and the script builds its commit in a temporary repository.
+The routine holds no write access to firstmate as long as the claude.ai account's GitHub connection is the Claude GitHub App only, with no `/web-setup` gh token stored (setup step 3): its clone of this repository is only read to run the script, and the script builds its commit in a temporary repository.
 
 The routine's saved prompt tells its model to run that one script and nothing else.
 The model never reads the digest, so release names and commit subjects from other people's repositories never reach it as instructions.
@@ -26,9 +26,9 @@ The model never reads the digest, so release names and commit subjects from othe
 | Model | Claude Haiku 4.5 |
 | Tools | Bash only |
 | Connectors | none; every connector the form adds by default was removed |
-| Repositories | this firstmate repository, which is public, cloned and only read; and Amplify-Logic/firstmate-routine-reports, added in setup step 3 so the push can reach it |
+| Repositories | this firstmate repository, which is public, cloned and only read; and Amplify-Logic/firstmate-routine-reports, added in setup step 4 so the push can reach it |
 | Publishes to | `main` of Amplify-Logic/firstmate-routine-reports |
-| Environment | a dedicated environment with network access **None** (setup step 4); until then it points at the Default environment only because it stays disabled |
+| Environment | a dedicated environment with network access **None** (setup step 5); until then it points at the Default environment only because it stays disabled |
 
 ## What it can and cannot touch
 
@@ -40,7 +40,7 @@ It can:
 
 It cannot:
 
-- Push to firstmate or any repository other than the reports repository: the Claude GitHub App is installed on the reports repository only.
+- Push to firstmate or any repository other than the reports repository, as long as the claude.ai account's GitHub connection is the Claude GitHub App only, with no `/web-setup` gh token stored: the Claude GitHub App is installed on the reports repository only. A stored `/web-setup` token lets cloud sessions push to any repository that token can reach, whether or not the App is installed there.
 - Use the GitHub API or github.com pages for any repository other than its own: the cloud's GitHub proxy refuses them.
 - Reach any host other than GitHub, once it runs in the **None** environment.
 - Use Gmail, Drive, Calendar, Docs, or any other connector.
@@ -48,9 +48,9 @@ It cannot:
 - Delete a branch or push a tag: the GitHub proxy refuses both.
 
 Probe runs of the routine on 3 October 2026 confirmed the GitHub API, github.com page, and outside-host refusals, a refused push to this repository, where the App is not installed, and that public git reads of other repositories succeed.
-The push to the reports repository is not proven yet: the first manual **Run now** in setup step 5 verifies it before the schedule is trusted, and a refused push exits 1 and publishes nothing.
+The push to the reports repository is not proven yet: the first manual **Run now** in setup step 6 verifies it before the schedule is trusted, and a refused push exits 1 and publishes nothing.
 
-The GitHub proxy does not limit which branch a push updates, so the boundary is the repository the App is installed on, not the script: whatever the routine's model does, it cannot write to firstmate, the repository the laptop updates itself from.
+The GitHub proxy does not limit which branch a push updates, so the boundary is the repository the App is installed on, not the script: as long as the claude.ai account's GitHub connection is the Claude GitHub App only, with no `/web-setup` gh token stored, whatever the routine's model does, it cannot write to firstmate, the repository the laptop updates itself from.
 
 ## One-time setup
 
@@ -58,10 +58,11 @@ The routine stays disabled until the captain has done all of these, in order:
 
 1. Create the empty public repository Amplify-Logic/firstmate-routine-reports, with no README or other initial file.
 2. Install the Claude GitHub App on Amplify-Logic, scoped to that repository only.
-3. Add Amplify-Logic/firstmate-routine-reports to the routine's repositories.
-4. Create a dedicated cloud environment with network access **None** in the environment dialog at claude.ai, and point the routine at it.
-5. Only then, with this script on firstmate's default branch, start one manual **Run now** at claude.ai/code/routines and confirm a commit landed on `main` of the reports repository; that run verifies the push before the schedule is trusted.
-6. Turn the routine's schedule on, and arm the laptop check in the firstmate home: `bin/fm-routine-report-check.sh arm`.
+3. Check how the claude.ai account connects to GitHub: it must be the Claude GitHub App only. If a `/web-setup` gh token is stored on the account, remove it before enabling the routine, and do not run `/web-setup` again while the routine exists.
+4. Add Amplify-Logic/firstmate-routine-reports to the routine's repositories.
+5. Create a dedicated cloud environment with network access **None** in the environment dialog at claude.ai, and point the routine at it.
+6. Only then, with this script on firstmate's default branch, start one manual **Run now** at claude.ai/code/routines and confirm a commit landed on `main` of the reports repository; that run verifies the push before the schedule is trusted.
+7. Turn the routine's schedule on, and arm the laptop check in the firstmate home: `bin/fm-routine-report-check.sh arm`.
 
 ## Reviewing a report
 
@@ -75,7 +76,7 @@ When that repository's `main` moves, it wakes firstmate with one generic line th
 - Pause the routine with its on/off switch at claude.ai/code/routines, or delete it from the menu next to its name.
 - From a firstmate Claude session, the routine tools can set it to disabled; they cannot delete it.
 - Add a file named `PAUSED` to `main` of the reports repository: the script then publishes nothing until it is removed.
-- Uninstall the Claude GitHub App, or remove the reports repository from it, to take away write access entirely.
+- Uninstall the Claude GitHub App, or remove the reports repository from it, to take away write access entirely; this holds only while no `/web-setup` gh token is stored on the claude.ai account, so remove any such token as well.
 - Stop the laptop notices with `bin/fm-routine-report-check.sh disarm`.
 
 ## Cost and limits
