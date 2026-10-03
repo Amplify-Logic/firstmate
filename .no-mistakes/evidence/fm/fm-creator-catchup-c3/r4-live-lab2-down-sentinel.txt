@@ -1,0 +1,9 @@
+stopped: lab tmux server and lab processes
+removed: task temp /tmp/fm-lab3686b865056c-mate+a71a68a63abdfa1d31117960dbcf88ecebfe2d049f7a25b5f3a881d1a4477b88
+removed: task temp /tmp/fm-lab3686b865056c-mate
+removed: 2 Claude project entries under /private/tmp/fmlab.r4bUv8xRX
+removed: /private/tmp/fmlab.r4bUv8xRX
+down rc=0
+lab root removed
+launchd sentinel jobs identical to pre-lab baseline
+launchd dumpstate mentions of lab: 0

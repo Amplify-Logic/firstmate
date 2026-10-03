@@ -1,0 +1,4 @@
+# tmux tmux 3.6a: list-windows with a tab-separated -F format (fm-live-lab.sh:195 window_id)
+0000000    l   a   b   _   @   0  \n   f   m   -   l   a   b   a   2   4
+0000020    c   5   c   8   b   2   2   1   3   -   m   a   t   e   _   @
+0000040    1  \n                                                        

@@ -1,0 +1,13 @@
+# Proposed fix (not applied in this test phase). Proven equivalent by running the
+# whole file with FM_SUPERVISION_SENTINEL_MODE=off exported from outside: 75/75 ok,
+# zero sentinel launchd jobs registered (r5-fm-supervision-host-test-node22.23-sentinel-off.txt).
+--- a/tests/fm-supervision-host.test.sh
++++ b/tests/fm-supervision-host.test.sh
+@@ TMP_ROOT=$(fm_test_tmproot fm-supervision-host)
+ FAKEBIN=$(fm_fakebin "$TMP_ROOT/fakebin")
+ ln -s /bin/bash "$FAKEBIN/claude"
+ FAKE_CLAUDE="$FAKEBIN/claude"
++# The Stop hook sessions run the real fm-watch-arm.sh, which arms the host
++# supervision sentinel in a primary home. A fixture home must never register a
++# launchd job that outlives it, so the sentinel stays off for this file.
++export FM_SUPERVISION_SENTINEL_MODE=off

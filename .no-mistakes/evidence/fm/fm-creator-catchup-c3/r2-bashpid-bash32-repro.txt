@@ -1,0 +1,11 @@
+$ /bin/bash --version
+GNU bash, version 3.2.57(1)-release (arm64-apple-darwin25)
+$ HEAD (feedea30): set -u; . bin/fm-timeout-lib.sh; fm_exec_timed 5 1 echo hello
+bin/fm-timeout-lib.sh: line 224: BASHPID: unbound variable
+rc=127
+$ same, without set -u
+bin/fm-timeout-lib.sh: line 224: BASHPID: unbound variable
+rc=127
+$ fork base e031413b version under set -u
+hello
+rc=0

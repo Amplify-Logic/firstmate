@@ -1,0 +1,11 @@
+--- bin/fm-timeout-lib.sh	2026-10-03 10:52:19
++++ /tmp/fm-bashpid.gJfh5v/fm-timeout-lib.sh	2026-10-03 11:58:41
+@@ -221,7 +221,7 @@
+     exit 125
+   fi
+   owner=${FM_EXEC_TIMED_OWNER_PID:-$$}
+-  [ "$owner" != "$BASHPID" ] || owner=$PPID
++  [ "$owner" != "${BASHPID:-$(exec sh -c 'echo "$PPID"')}" ] || owner=$PPID
+   unset FM_EXEC_TIMED_OWNER_PID
+   if command -v perl >/dev/null 2>&1; then
+     exec perl -MPOSIX=WNOHANG,setpgid -MTime::HiRes=time -e '

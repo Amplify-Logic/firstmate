@@ -1,0 +1,9 @@
+stopped: lab tmux server and lab processes
+removed: task temp /tmp/fm-lab7c0b3ff208a5-mate+b90732989b6722434fb4d94c915f55d1c4bc397a6bdead1536da6a4bfe1e4429
+removed: task temp /tmp/fm-lab7c0b3ff208a5-mate
+removed: 2 Claude project entries under /private/tmp/fmlab.r7jPWx6T
+removed: /private/tmp/fmlab.r7jPWx6T
+down rc=0
+lab root exists? no
+== launchd sentinel jobs after down
+-	0	works.earendil.firstmate.supervision-sentinel-v1.6d32346fbc70597a11f372c231fbdd675247f711440c6d82d362074b2e04f025

@@ -1,0 +1,12 @@
+== bash: GNU bash, version 3.2.57(1)-release (arm64-apple-darwin25)
+== HEAD d35dbc5d: fm_exec_timed under /bin/bash 3.2
+bounded-command-ran
+rc=0
+== bound still fires (sleep 10 under a 1s bound)
+rc=124
+== in a subshell
+subshell-ran
+rc=0
+== base-of-fix (HEAD~1) for contrast
+/tmp/r3-timeout-old.sh: line 224: BASHPID: unbound variable
+rc=127

@@ -1,0 +1,3 @@
+-	1	works.earendil.firstmate.supervision-sentinel-v1.db80b6014812a4edb5ed4e2a6a7f2954b43d34467c006427764098b424bea7d4
+-	1	works.earendil.firstmate.supervision-sentinel-v1.54828a66ec7a827100847bbd02a10520d966dffe28ce199b64350b292e92222a
+-	0	works.earendil.firstmate.supervision-sentinel-v1.6d32346fbc70597a11f372c231fbdd675247f711440c6d82d362074b2e04f025

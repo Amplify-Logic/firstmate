@@ -1,0 +1,39 @@
+== leaked job from bash tests/fm-supervision-host.test.sh (round 5)
+	path = /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-supervision-host.l0Ds9u/hook-successor-closed-before-return/state/.supervision-sentinel.plist
+	program = /Users/larsmusic/.no-mistakes/worktrees/f569cc43ac96/01M40FDNDQ814T0JQX3MKAE4JW/bin/fm-supervision-sentinel.sh
+		FM_HOME => /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-supervision-host.l0Ds9u/hook-successor-closed-before-return
+/private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-supervision-host.l0Ds9u
+bootout rc=0
+-	1	works.earendil.firstmate.supervision-sentinel-v1.db80b6014812a4edb5ed4e2a6a7f2954b43d34467c006427764098b424bea7d4
+-	1	works.earendil.firstmate.supervision-sentinel-v1.54828a66ec7a827100847bbd02a10520d966dffe28ce199b64350b292e92222a
+25146	0	works.earendil.firstmate.supervision-sentinel-v1.6d32346fbc70597a11f372c231fbdd675247f711440c6d82d362074b2e04f025
+
+== leaked job from rerun (bare node 22.13.1), home already deleted by the test's cleanup
+	program = /Users/larsmusic/.no-mistakes/worktrees/f569cc43ac96/01M40FDNDQ814T0JQX3MKAE4JW/bin/fm-supervision-sentinel.sh
+		FM_HOME => /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-supervision-host.9ikaiq/hook-successor-closed-before-return
+bootout rc=0
+
+== leaked jobs after the Node 22.23.1 run of tests/fm-supervision-host.test.sh
+bootout b903f4d6f96d02a9723b35bcb3265b1572edd771022680035578b29a7d7cda76 home=/private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-supervision-host.YZpDDC/hook-quiet-record exists=no
+bootout db80b6014812a4edb5ed4e2a6a7f2954b43d34467c006427764098b424bea7d4 home=/private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-supervision-host.bZ6C88/hook-successor-closed-before-return exists=no
+bootout 54828a66ec7a827100847bbd02a10520d966dffe28ce199b64350b292e92222a home=/private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-supervision-host.DU7blH/hook-successor-closed-before-return exists=no
+bootout 64f00eddbc38aaae5f1165f2e0c04024d7960cab05fb4432bcae3f7b9db2f286 home=/private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-supervision-host.YZpDDC/hook-default-on exists=no
+bootout 338d610d356945a14174e4d0b91c2e55b2f0ac39c35a5f3f36b129f95e359ff0 home=/private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-supervision-host.YZpDDC/hook-successor-restore-fails-pending exists=no
+bootout 578fd072006aceb9005ff26de7aa7c75ca354f60d95780afbde419034c764914 home=/private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-supervision-host.YZpDDC/hook-turns-main-only exists=no
+bootout 48df1a0e0f83b1346d65a1c9106e791e8ec12d994ef4941ba669865889400020 home=/private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-supervision-host.YZpDDC/hook-successor-closed-before-outcome exists=no
+bootout aa0db747959c5202e4c3759f194f8e640d1fed656ee82689cf7e3b90dfc4ff56 home=/private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-supervision-host.YZpDDC/hook-turns-main-only-write-fails exists=no
+bootout 1572b6ab342a20f8f7d8775446c1c1801b6dc3ae40229e7aab218b0ce8c338e5 home=/private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-supervision-host.YZpDDC/hook-successor-close exists=no
+kept 6d32346fbc70597a11f372c231fbdd675247f711440c6d82d362074b2e04f025 home=/Users/larsmusic/starship
+bootout b072e18da16263fa82340a3fe98783a8bd156f6810c562e5bd6573a7663e6d66 home=/private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-supervision-host.YZpDDC/hook-takeover-interrupted exists=no
+bootout e3d544694c1906998aff908d13dc2715ff741ac321162f98a2f47574aaf51261 home=/private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-supervision-host.YZpDDC/hook-successor-restore-fails-announced exists=no
+bootout 012f023bad762e552a8f3da91587a03d48eeeccd99c9e637a9ccd52e26fb4903 home=/private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-supervision-host.YZpDDC/hook-successor-closed-before-return exists=no
+bootout 969ee8711e02c005acbdcfbdf9942e516a29a9b29c0f820e18c61164dceb05c0 home=/private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-supervision-host.YZpDDC/hook-main-only exists=no
+bootout cb9d709e90bcd2ada733ececded65a3a9a3e44bb3e03ae03191195ae795e8856 home=/private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-supervision-host.YZpDDC/hook-takeover exists=no
+bootout 069ab557131a06c4383e0f594d7ddcc937e1aec570b2fc205bac91ee6eaae8cf home=/private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-supervision-host.YZpDDC/hook-opted-out exists=no
+bootout 642dd1df73db0e4214f27c9a71de244cb464d7f0f747281360751a6e40d3db1b home=/private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-supervision-host.YZpDDC/hook-successor-unrecorded exists=no
+booted out: 16
+== remaining vs pre-run snapshot
+0a1
+> works.earendil.firstmate.supervision-sentinel-v1.54828a66ec7a827100847bbd02a10520d966dffe28ce199b64350b292e92222a
+1a3
+> works.earendil.firstmate.supervision-sentinel-v1.db80b6014812a4edb5ed4e2a6a7f2954b43d34467c006427764098b424bea7d4

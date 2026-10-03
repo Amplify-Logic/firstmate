@@ -1,0 +1,25 @@
+home config/                       primary   runs supervision host?
+(empty)                            claude    yes
+(empty)                            cursor    no (rc=1)
+(empty)                            codex     no (rc=1)
+(empty)                            opencode  no (rc=1)
+(empty)                            pi        no (rc=1)
+supervision-host                   claude    yes
+supervision-host                   cursor    yes
+supervision-host                   codex     yes
+supervision-host                   opencode  yes
+supervision-host                   pi        yes
+supervision-host-off               claude    no (rc=1)
+supervision-host-off               cursor    no (rc=1)
+supervision-host-off               codex     no (rc=1)
+supervision-host-off               opencode  no (rc=1)
+supervision-host-off               pi        no (rc=1)
+supervision-host supervision-host-off  claude    no (rc=1)
+supervision-host supervision-host-off  cursor    no (rc=1)
+supervision-host supervision-host-off  codex     no (rc=1)
+supervision-host supervision-host-off  opencode  no (rc=1)
+supervision-host supervision-host-off  pi        no (rc=1)
+
+$ bash bin/fm-supervision-engine-lib.sh enabled   # usage error
+usage: fm-supervision-engine-lib.sh enabled <config-dir> <primary-harness>
+rc=2

@@ -1,0 +1,8 @@
+== staged tree: prefix (files: fm-supervision-lib.sh fm-wake-lib.sh fm-watch-arm.sh )
+<tmp>/prefix/bin/fm-watch-arm.sh: line 102: <tmp>/prefix/bin/fm-gate-refuse-lib.sh: No such file or directory
+<tmp>/prefix/bin/fm-wake-lib.sh: line 14: <tmp>/prefix/bin/fm-path-lib.sh: No such file or directory
+usage: fm-watch-arm.sh [--restart | --stop | --take-over ARM_PID | --handling-delivered GENERATION --watcher-pid PID]
+rc=
+== staged tree: postfix (files: fm-gate-refuse-lib.sh fm-path-lib.sh fm-supervision-lib.sh fm-wake-lib.sh fm-watch-arm.sh )
+usage: fm-watch-arm.sh [--restart | --stop | --take-over ARM_PID | --handling-delivered GENERATION --watcher-pid PID]
+rc=

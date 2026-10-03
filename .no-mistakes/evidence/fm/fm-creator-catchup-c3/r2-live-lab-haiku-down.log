@@ -1,0 +1,4 @@
+stopped: lab tmux server and lab processes
+removed: 2 Claude project entries under /private/tmp/fmlab.43rs93
+removed: /private/tmp/fmlab.43rs93
+exit=0

@@ -1,0 +1,17 @@
+== lab PATH node: /usr/local/bin/node v22.13.1
+== host process env PATH node
+  PID COMMAND
+== supervision host ledger
+1791023759	start	gen=host-36703-1791023759	primary=claude
+1791023762	pass-through	attended	branch eligibility could not be computed (found node v22.13.1, needs 22.18 or later)	check: rearm-resurface
+== disarm records
+home:
+state=disarmed
+reason=fm-live-lab home
+mate:
+state=disarmed
+reason=fm-live-lab home
+== launchd sentinel jobs while lab is up
+-	1	works.earendil.firstmate.supervision-sentinel-v1.db80b6014812a4edb5ed4e2a6a7f2954b43d34467c006427764098b424bea7d4
+-	1	works.earendil.firstmate.supervision-sentinel-v1.54828a66ec7a827100847bbd02a10520d966dffe28ce199b64350b292e92222a
+-	0	works.earendil.firstmate.supervision-sentinel-v1.6d32346fbc70597a11f372c231fbdd675247f711440c6d82d362074b2e04f025

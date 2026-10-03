@@ -1,0 +1,7 @@
+== Node 22.23.1 (nvm), FM_SUPERVISION_SENTINEL_MODE=off
+ok - host: an attended close on a node too old for branch dispatch reaches main, naming the node and its floor
+ok - host+hook: a successor closed before exit_to_main does not suppress the branch-outcome rewake
+ok - host: an engine turn is bounded, and tool processes outside its process group are reaped
+== bare /usr/local/bin/node v22.13.1, FM_SUPERVISION_SENTINEL_MODE=off
+ok - host: an attended close on a node too old for branch dispatch reaches main, naming the node and its floor
+not ok - the host must hand its captain outcome to main

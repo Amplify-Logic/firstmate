@@ -1,0 +1,16 @@
+== disarm records
+home: state=disarmed reason=fm-live-lab home 
+mate: state=disarmed reason=fm-live-lab home 
+stopped: lab tmux server and lab processes
+removed: task temp /tmp/fm-lab7e08498f333e-mate+b600cedb11c190c75c929386a4aa3f447c0558aa0b3658ef5d654b38c448de25
+removed: task temp /tmp/fm-lab7e08498f333e-mate
+removed: 2 Claude project entries under /private/tmp/fmlab.r5bW67pX
+removed: /private/tmp/fmlab.r5bW67pX
+down rc=0
+lab root exists? no
+== jobs mentioning fmlab.r5bW67pX
+db80b6014812a4edb5ed4e2a6a7f2954b43d34467c006427764098b424bea7d4 0
+54828a66ec7a827100847bbd02a10520d966dffe28ce199b64350b292e92222a 0
+6d32346fbc70597a11f372c231fbdd675247f711440c6d82d362074b2e04f025 0
+== diff vs pre-lab snapshot
+identical job set

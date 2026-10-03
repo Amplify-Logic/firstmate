@@ -1,0 +1,24 @@
+ok - supervision sentinel: stale beacon alert deduplicates, backs off, resets on a new episode, and re-arms
+ok - supervision sentinel: in-harness guards record outage evidence without any notifier work
+ok - supervision sentinel: check reports a marker-only verdict, note-outage stays silent, and every mode honors a durable disarm
+ok - supervision sentinel: marker-only evidence refreshes a moved episode without touching a live claim
+ok - supervision sentinel: watcher identity matches through symlinks but not across homes
+ok - supervision sentinel: live identity-matched watcher with a fresh beacon stays silent
+ok - supervision sentinel: an armed shift with no crew task is supervised, alerts once, and goes idle when stood down
+ok - supervision sentinel: a dead away daemon with a shift armed fires the host alarm, and a watched shift reports OK by name
+ok - supervision sentinel: a shift record that outlived away mode is not supervised
+ok - supervision sentinel: failed alert remains pending and retries on the next check
+ok - supervision sentinel: launchd registration is one-per-home, reconciles its manifest, and never auto-recovers
+ok - supervision sentinel: an unconverged launchd registration backs off per home instead of churning
+ok - supervision sentinel: a retry deadline beyond its own recorded window is stale evidence, not a suppression
+ok - supervision sentinel: explicit disarm is durable, home-scoped, visible, and explicitly reversible
+ok - supervision sentinel: disarm then enable restores host monitoring without forged liveness or external noise
+ok - supervision sentinel: watcher arm validates argv before host registration
+ok - supervision sentinel: the watcher arm registers the host service only after observing a healthy watcher
+ok - supervision sentinel: away mode defers host registration to an observed healthy watcher, retries on cadence, and latches only success
+ok - supervision sentinel: a contended arm retries the lock once, then reports the missing evidence instead of success
+ok - supervision sentinel: a positively missing host capability is a distinct permanent result and never renders as protected
+ok - supervision sentinel: a deliberate no-op arm reports its own status with no launchd mutation and no failure record
+ok - supervision sentinel: OS alert title and body are unambiguous (fake notifier only)
+ok - supervision sentinel: real-launchd smoke skipped (FM_SENTINEL_REAL_LAUNCHD_SMOKE=1 on an attended macOS login session runs it)
+exit=0

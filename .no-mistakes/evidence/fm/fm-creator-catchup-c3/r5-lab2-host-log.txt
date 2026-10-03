@@ -1,0 +1,11 @@
+== host ledger
+1791023817	start	gen=host-81226-1791023817	primary=claude
+1791023820	pass-through	attended	main-only	check: rearm-resurface
+1791023836	start	gen=host-92628-1791023836	primary=claude
+1791023836	take-over	arm=84412
+1791023886	handled	turn=host-92628-1791023836.1	posture=attended	rc=0	reports=1	error=0 cost=0.028334 conversation_cost=0.028334 input=10 cache_read=63441 cache_write=2204 output=681 turns=5	signal: /private/tmp/fmlab.r5bW67pX/home/state/lab7e08498f333e-mate.status
+1791024101	handled	turn=host-92628-1791023836.2	posture=attended	rc=0	reports=1	error=0 cost=0.016147 conversation_cost=0.044481 input=6 cache_read=42042 cache_write=849 output=433 turns=3	signal: /private/tmp/fmlab.r5bW67pX/home/state/lab7e08498f333e-mate.status
+== mate status
+done [at=1791023825]: corr=7d910de32c1b0553 config re-read applied (startup-memory-budget=7500)
+done [at=1791024047]: lab routine heartbeat r5 complete, nothing in flight
+== lab node: v22.23.1

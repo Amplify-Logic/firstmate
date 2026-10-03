@@ -1,0 +1,7 @@
+== 56df3df1 (three trigger capabilities forced to scope=core so G5 checks their anchors)
+fm-fork-surface: daily-todo-freshness: anchor missing in AGENTS.md: ^- `daily-todo-freshness` - load before producing or updating any captain-facing to-do; restore the fork edit or update the declaration in the same change
+FORK_SURFACE FAIL failures=87
+anchor-failures-for-the-three: 1
+== b17001c3 (three trigger capabilities forced to scope=core so G5 checks their anchors)
+FORK_SURFACE FAIL failures=86
+anchor-failures-for-the-three: 0

@@ -1,0 +1,35 @@
+skip: control: set FM_SUPERVISION_HOST_ATTENDED_LIVE_CONTROL_REF to a pre-fix ref to run the negative control
+# 11:12:09 positive step 1: primary idle (claude pid 84870, 2.1.288 (Claude Code), model haiku); tracked Stop hook registered; config/supervision-host present; host pid 99059 parked on watcher 100; listener runner 1615; captain prompts so far: 1
+# 11:12:09 positive transcript: /Users/larsmusic/.claude/projects/-private-var-folders-1g-hctp3vpn27b1zrlsn4nsfg680000gn-T-fm-sh-attended-live-WYu1eX-positive-fm/022377be-11ab-4618-99a0-34dc401d8c4d.jsonl
+# 11:12:09 positive step 2: event 1 appended at 1791018729 (demo.status needs-decision)
+not ok - positive: event 1 was not a main-only pass-through
+--- host log
+1791018727	start	gen=host-99059-1791018726	primary=claude
+1791018731	pass-through	attended	branch eligibility could not be computed	signal: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-sh-attended-live.WYu1eX/positive/fm/state/demo.status /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-sh-attended-live.WYu1eX/positive/fm/state/demo2.status
+1791018743	start	gen=host-18262-1791018743	primary=claude
+--- cycle exits
+arm_pid=99725	watcher_pid=100	origin=started	started_at=1791018727	ended_at=1791018731	exit_code=0	signal=none	reason=actionable-signal
+--- queue
+
+--- ledger: epoch=2 owner_pid=17610 outcome=arming updated_at=1791018743
+--- marker: acked:handling:100.1791018730.e6TtSa
+--- screen
+  ⎿  1791018730 3       signal  demo.status     needs-decision: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-sh-attended-live.WYu1eX/positive/fm/state/demo.status
+     /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000
+     gn/T/fm-sh-attended-live.WYu1eX/positive/fm/state/demo2.status
+     1791018730 4       signal  demo2.status    signal: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-sh-attended-live.WYu1eX/positive/fm/state/demo.status
+     /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm
+     … +7 lines (ctrl+o to expand)
+
+⏺ Bash(bin/fm-wake-drain.sh --ack-through 4 --recovery-generation 100.1791018730.e6TtSa)
+  ⎿  (No output)
+
+⏺ ACKED
+
+✻ Sautéed for 11s · done 11:12 AM
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏵⏵ bypass permissions on (shift+tab to cycle) · ← 2 agents
+exit=1

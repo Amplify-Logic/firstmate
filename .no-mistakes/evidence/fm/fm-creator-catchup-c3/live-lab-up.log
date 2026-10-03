@@ -1,0 +1,7 @@
+lab: /private/tmp/fmlab.0KXeG2 (tear down with: bin/fm-live-lab.sh down /private/tmp/fmlab.0KXeG2)
+tree: b17001c3e0f538a79345e702097920cd06d485a9 from /Users/larsmusic/.no-mistakes/worktrees/f569cc43ac96/01M40FDNDQ814T0JQX3MKAE4JW
+scaffolded: /private/tmp/fmlab.0KXeG2/home/data/laba24c5c8b2213-mate/brief.md (secondmate charter)
+home=/private/tmp/fmlab.0KXeG2/mate
+spawned laba24c5c8b2213-mate harness=claude kind=secondmate mode=secondmate yolo=off window=firstmate:fm-laba24c5c8b2213-mate worktree=/private/tmp/fmlab.0KXeG2/mate
+fm-live-lab: cannot record lab process: missing or invalid PID ''
+exit=1

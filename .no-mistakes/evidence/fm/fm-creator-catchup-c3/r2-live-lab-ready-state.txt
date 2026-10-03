@@ -1,0 +1,59 @@
+== check
+ok primary: claude pid 65145 in /private/tmp/fmlab.43rs93/home
+ok probe: the primary answered LABREADY-bd887c144838
+ok trust: /private/tmp/fmlab.43rs93/home is trusted in the Claude store
+ok mirror: verified writer, check passed, captain=1 main=1
+fail host: no live supervision host (expected one)
+ok watcher: live watcher with a fresh beacon
+ok mate: labbd887c144838-mate pid 61529 in /private/tmp/fmlab.43rs93/mate
+ok treehouse: ~/.treehouse unchanged
+== pane main
+ ▐▛███▛█   Claude Code v2.1.288
+▝▜██████▀  Haiku 4.5 · Claude Max
+ ▝▝   ▝▝   /private/tmp/fmlab.43rs93/home
+⚠ AGENTS.md is over the 40.0k-char limit (50.7k chars) · /memory to free up context
+❯ Lab readiness probe from bin/fm-live-lab.sh. Run no tool or command for this message. Reply with only the word LABREADY, a hyphen, and then bd887c144838, with no spaces.                                                 
+⏺ LABREADY-bd887c144838                                                                                                                                                                                                     
+✻ Crunched for 3s · done 11:38 AM                                                                                                                                                                                           
+⏺ Stop hook feedback                                                                                                                                                                                                        
+⏺ I need to handle a supervision event. Let me drain the wake queue first to see what needs attention.
+✽ Ruminating… (4s · ↓ 252 tokens · thought for 2s)
+  ⎿  Tip: Use /theme to change the color theme                                                                                                                                                                              
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯                              
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏸ manual mode on · ← 2 agents
+== pane mate
+(base) larsmusic@Larss-MacBook-Pro mate % export GOTMPDIR=/tmp/fm-labbd887c144838-mate/gotmp
+(base) larsmusic@Larss-MacBook-Pro mate % unset FM_HERDR_PROJECT_KEY FM_HERDR_PROJECT_LABEL
+(base) larsmusic@Larss-MacBook-Pro mate % export COMPACT_ADVISER_DISABLE=1
+(base) larsmusic@Larss-MacBook-Pro mate % . '/tmp/fm-labbd887c144838-mate+fc01c6fabc1fd0039048a7379775cbfd8d35e9eb3b947e2c4501133e2e9dcba2/launch.s1791020306.55908.11115.sh'
+ ▐▛███▛█   Claude Code v2.1.288
+▝▜██████▀  Sonnet 5.5 with low effort · Claude Max
+ ▝▝   ▝▝   /private/tmp/fmlab.43rs93/mate
+  ⎿  SessionStart:startup hook error
+  ⎿  Failed with non-blocking status code: /bin/sh: ${CLAUDE_PLUGIN_ROOT}/hooks/run-hook.cmd: No such file or directory                                                                                                     
+❯ : Firstmate operational input waiting: read '/private/tmp/fmlab.43rs93/mate/state/operational-inbox/1791020308-efde3187b477adc4.msg' and handle its contents as Firstmate operational input.                              
+  Read 1 file (ctrl+o to expand)                                                                                                                                                                                            
+❯ : Firstmate instruction waiting: list "$FM_TASK_INBOX"/*.msg in your 'labbd887c144838-mate.inbox' steering inbox, read and act on each in numeric order, then mv each into its handled/.                                  
+  Read 1 file, listed 1 directory (ctrl+o to expand)                                                                                                                                                                        
+⏺ Noted (startup-memory-budget = 7500). Acknowledging the message.
+⏺ Bash(d=/private/tmp/fmlab.43rs93/home/state/labbd887c144838-mate.inbox; mkdir -p $d/handled && mv $d/001.msg $d/handled/ && echo ok)
+  ⎿  ok
+⏺ Captain, shipshape. The config update is read and applied: the startup memory budget is now 7500. I've acknowledged the message, and I'm idle until the main firstmate routes me a task.
+✻ Churned for 30s · done 11:39 AM                                                                                                                                                                                           
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯                                                  
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏵⏵ auto mode on (shift+tab to cycle) · ← 2 agents
+== host log
+home-summary.json
+labbd887c144838-mate.git-hooks
+labbd887c144838-mate.inbox
+labbd887c144838-mate.meta
+labbd887c144838-mate.steers
+pending-replies
+terminal-outcomes
+1791020336	start	gen=host-78687-1791020336	primary=claude
+1791020340	pass-through	attended	main-only	check: rearm-resurface
+cat: /private/tmp/fmlab.43rs93/home/state/.supervision-host: No such file or directory

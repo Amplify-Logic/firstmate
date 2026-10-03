@@ -1,0 +1,20 @@
+== /bin/bash: GNU bash, version 3.2.57(1)-release (arm64-apple-darwin25)
+== fm_exec_timed at e031413b
+ran-ok
+rc=0
+bound-rc=124
+ran-in-nested-subshell
+nested-rc=0
+== fm_exec_timed at 56df3df1
+/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/tmp.8QuZRJ8uLn/lib.sh: line 224: BASHPID: unbound variable
+rc=127
+/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/tmp.8QuZRJ8uLn/lib.sh: line 224: BASHPID: unbound variable
+bound-rc=127
+/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/tmp.8QuZRJ8uLn/lib.sh: line 224: BASHPID: unbound variable
+nested-rc=127
+== fm_exec_timed at HEAD
+ran-ok
+rc=0
+bound-rc=124
+ran-in-nested-subshell
+nested-rc=0

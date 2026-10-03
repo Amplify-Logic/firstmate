@@ -1,0 +1,13 @@
+ ▐▛███▛█   Claude Code v2.1.288
+▝▜██████▀  Sonnet 5.5 with medium effort · Claude Max
+ ▝▝   ▝▝   /private/tmp/fmlab.r5bW67pX/home
+❯ Lab readiness probe from bin/fm-live-lab.sh. Run no tool or command for this message. Reply with only the word LABREADY, a hyphen, and then 7e08498f333e, with no spaces.                                                 
+⏺ LABREADY-7e08498f333e                                                                                                                                                                                                     
+✻ Sautéed for 3s · done 12:36 PM                                                                                                                                                                                            
+⏺ Stop hook feedback                                                                                                                                                                                                        
+✽ Polishing… 
+  ⎿  Tip: Run /install-github-app to tag @claude right from your Github issues and PRs                                                                                                                                      
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯                                                                                                                                                                                                                         
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏵⏵ auto mode on (shift+tab to cycle) · ← 2 agents                                                                   tmux focus-events off · add 'set -g focus-events on' to ~/.tmux.conf and reattach for focus tracking

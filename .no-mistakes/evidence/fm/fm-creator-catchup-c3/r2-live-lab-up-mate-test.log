@@ -1,0 +1,3 @@
+ok - up --mate with supervision host off reaches readiness
+ok - up --mate with supervision host on reaches readiness
+exit=0

@@ -1,0 +1,10 @@
+Applying fm-fork-surface.sh's own G5 test (grep -Eq pattern path) to the three repointed scope=personal anchors:
+HIT  ^- `adhd-auto-fire` - load before committing to a genuinely divergent -> 18:- `adhd-auto-fire` - load before committing to a genuinely divergent, fuzzy, high-lever
+     (absent from AGENTS.md, as expected after the move)
+HIT  ^- `second-opinion-auto-fire` - load before committing to an architectural -> 19:- `second-opinion-auto-fire` - load before committing to an architectural, security-sen
+     (absent from AGENTS.md, as expected after the move)
+HIT  ^- `daily-todo-freshness` - load before producing or updating any captain-facing to-do -> 15:- `daily-todo-freshness` - load before producing or updating any captain-facing to-do, 
+     (absent from AGENTS.md, as expected after the move)
+
+FORK_SURFACE OK capabilities=84 owned_paths=269
+exit=0

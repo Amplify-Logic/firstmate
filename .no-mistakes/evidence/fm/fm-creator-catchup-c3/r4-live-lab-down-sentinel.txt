@@ -1,0 +1,15 @@
+stopped: lab tmux server and lab processes
+removed: task temp /tmp/fm-labd82ce0f2f606-mate+84c2d89552c9d6d7a1a61bc9cab3400ed13d1c92870a8ed1ebd700ad6d9cd5f1
+removed: task temp /tmp/fm-labd82ce0f2f606-mate
+removed: 2 Claude project entries under /private/tmp/fmlab.r4w5DMOu
+removed: /private/tmp/fmlab.r4w5DMOu
+down rc=0
+lab root exists? no
+== launchd sentinel jobs after down
+-	1	works.earendil.firstmate.supervision-sentinel-v1.db80b6014812a4edb5ed4e2a6a7f2954b43d34467c006427764098b424bea7d4
+-	1	works.earendil.firstmate.supervision-sentinel-v1.54828a66ec7a827100847bbd02a10520d966dffe28ce199b64350b292e92222a
+-	0	works.earendil.firstmate.supervision-sentinel-v1.6d32346fbc70597a11f372c231fbdd675247f711440c6d82d362074b2e04f025
+== diff vs baseline
+identical to pre-lab baseline (operator's 3 jobs only)
+== any launchd job mentioning the lab path
+0

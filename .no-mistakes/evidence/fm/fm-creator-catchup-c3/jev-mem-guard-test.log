@@ -1,0 +1,19 @@
+Running Pattern 46 regression tests...
+ok - shellcheck clean
+ok - python syntax clean
+ok - --help works
+ok - json audit schema valid
+fm-jev-mem-guard — 2026-10-03T09:11:01Z
+  • RAM: unavailable
+  • Swap: unknown (not measurable)
+  • Status: UNKNOWN
+  • Recommendation: /proc/meminfo is unreadable or incomplete on this host; the verdict is withheld rather than fabricated.
+ok - --check exits 0 with pass-forcing thresholds
+fm-jev-mem-guard — 2026-10-03T09:11:01Z
+  • RAM: unavailable
+  • Swap: unknown (not measurable)
+  • Status: UNKNOWN
+  • Recommendation: /proc/meminfo is unreadable or incomplete on this host; the verdict is withheld rather than fabricated.
+ok - --check exits 0 under fail-forcing thresholds while status is UNKNOWN (fail-open)
+ok - text mode runs cleanly
+ok - all Pattern 46 memory guard tests passed

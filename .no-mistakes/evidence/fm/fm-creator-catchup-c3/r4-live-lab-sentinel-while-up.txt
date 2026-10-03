@@ -1,0 +1,18 @@
+== disarm records
+/private/tmp/fmlab.r4w5DMOu/home:
+state=disarmed
+reason=fm-live-lab home
+/private/tmp/fmlab.r4w5DMOu/mate:
+state=disarmed
+reason=fm-live-lab home
+== launchd sentinel jobs while lab is up
+-	1	works.earendil.firstmate.supervision-sentinel-v1.db80b6014812a4edb5ed4e2a6a7f2954b43d34467c006427764098b424bea7d4
+-	1	works.earendil.firstmate.supervision-sentinel-v1.54828a66ec7a827100847bbd02a10520d966dffe28ce199b64350b292e92222a
+-	0	works.earendil.firstmate.supervision-sentinel-v1.6d32346fbc70597a11f372c231fbdd675247f711440c6d82d362074b2e04f025
+== jobs whose program names the lab
+works.earendil.firstmate.supervision-sentinel-v1.db80b6014812a4edb5ed4e2a6a7f2954b43d34467c006427764098b424bea7d4 hits=0
+works.earendil.firstmate.supervision-sentinel-v1.54828a66ec7a827100847bbd02a10520d966dffe28ce199b64350b292e92222a hits=0
+works.earendil.firstmate.supervision-sentinel-v1.6d32346fbc70597a11f372c231fbdd675247f711440c6d82d362074b2e04f025 hits=0
+== sentinel-related state in lab homes
+-rw-r--r--@  1 larsmusic  wheel    39 Oct  3 12:25 .supervision-sentinel.disarmed
+-rw-r--r--@  1 larsmusic  wheel    39 Oct  3 12:25 .supervision-sentinel.disarmed

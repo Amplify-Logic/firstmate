@@ -1,0 +1,11 @@
+== candidate under /bin/bash 3.2
+hello
+rc=0
+== bound still fires (sleep 30 bounded at 2s)
+rc=124
+== owner in subshell (expect script pid == $$)
+script=72982
+watchdog-parent=72983
+== owner in main shell resolves to the shell's own pid via exec sh
+self=73021 probe=73021
+sub_probe=73023 parent_dollar=73021

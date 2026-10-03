@@ -1,0 +1,3 @@
+1791023161	start	gen=host-59574-1791023160	primary=claude
+1791023163	pass-through	attended	branch eligibility could not be computed	check: rearm-resurface
+1791023178	start	gen=host-69977-1791023178	primary=claude

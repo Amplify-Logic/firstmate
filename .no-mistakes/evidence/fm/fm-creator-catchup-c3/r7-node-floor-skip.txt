@@ -1,0 +1,19 @@
+== Real bare node on this Mac: PATH=/usr/local/bin first (v22.13.1)
+skip: node v22.13.1 is older than the Node 22.18 floor bin/fm-branch-dispatch.mjs needs
+rc=0 elapsed=0s
+
+== Version boundary matrix (shim node answers --version, else execs nvm node 22.23.1; perl hidden so a passing gate stops at the next skip without running cases)
+v18.20.4     -> skip: node v18.20.4 is older than the Node 22.18 floor bin/fm-branch-dispatch.mjs needs
+v21.7.3      -> skip: node v21.7.3 is older than the Node 22.18 floor bin/fm-branch-dispatch.mjs needs
+v22.0.0      -> skip: node v22.0.0 is older than the Node 22.18 floor bin/fm-branch-dispatch.mjs needs
+v22.13.1     -> skip: node v22.13.1 is older than the Node 22.18 floor bin/fm-branch-dispatch.mjs needs
+v22.17.9     -> skip: node v22.17.9 is older than the Node 22.18 floor bin/fm-branch-dispatch.mjs needs
+v22.18.0     -> skip: perl absent
+v22.18.1     -> skip: perl absent
+v22.23.1     -> skip: perl absent
+v23.0.0      -> skip: perl absent
+v24.9.0      -> skip: perl absent
+v100.1.0     -> skip: perl absent
+weird-build  -> skip: cannot read node version weird-build; needs Node 22.18 or later
+nonsense     -> skip: cannot read node version nonsense; needs Node 22.18 or later
+<empty>      -> skip: cannot read node version ; needs Node 22.18 or later

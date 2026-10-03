@@ -1,0 +1,16 @@
+lab: /private/tmp/fmlab.ZF5B35 (tear down with: /tmp/fm-patched.B0pjdM/bin/fm-live-lab.sh down /private/tmp/fmlab.ZF5B35)
+tree: b17001c3e0f538a79345e702097920cd06d485a9 from /Users/larsmusic/.no-mistakes/worktrees/f569cc43ac96/01M40FDNDQ814T0JQX3MKAE4JW
+scaffolded: /private/tmp/fmlab.ZF5B35/home/data/lab79092fe6c87d-mate/brief.md (secondmate charter)
+home=/private/tmp/fmlab.ZF5B35/mate
+spawned lab79092fe6c87d-mate harness=claude kind=secondmate mode=secondmate yolo=off window=firstmate:fm-lab79092fe6c87d-mate worktree=/private/tmp/fmlab.ZF5B35/mate
+primary: claude --setting-sources project,local --model haiku --effort medium --permission-mode auto
+ok primary: claude pid 29141 in /private/tmp/fmlab.ZF5B35/home
+ok probe: the primary answered LABREADY-79092fe6c87d
+ok trust: /private/tmp/fmlab.ZF5B35/home is trusted in the Claude store
+ok mirror: verified writer, check passed, captain=1 main=1
+fail host: no live supervision host (expected one)
+fail watcher: no live watcher with a fresh beacon holds the lab home
+ok mate: lab79092fe6c87d-mate pid 24493 in /private/tmp/fmlab.ZF5B35/mate
+ok treehouse: ~/.treehouse unchanged
+not ready after 600s; the lab is left up for inspection: /tmp/fm-patched.B0pjdM/bin/fm-live-lab.sh pane /private/tmp/fmlab.ZF5B35, then /tmp/fm-patched.B0pjdM/bin/fm-live-lab.sh down /private/tmp/fmlab.ZF5B35
+exit=1

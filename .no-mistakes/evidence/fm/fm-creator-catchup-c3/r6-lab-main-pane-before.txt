@@ -1,0 +1,29 @@
+ ▐▛███▛█   Claude Code v2.1.288
+▝▜██████▀  Sonnet 5.5 with medium effort · Claude Max
+ ▝▝   ▝▝   /private/tmp/fmlab.r6Y7S7F7/home
+❯ Lab readiness probe from bin/fm-live-lab.sh. Run no tool or command for this message. Reply with only the word LABREADY, a hyphen, and then a1d847a47a14, with no spaces.                                                 
+⏺ LABREADY-a1d847a47a14                                                                                                                                                                                                     
+✻ Baked for 3s · done 2:39 PM                                                                                                                                                                                               
+⏺ Stop hook feedback                                                                                                                                                                                                        
+⏺ Bash(bin/fm-wake-drain.sh)                      
+  ⎿  1791031141 1       check   startup-network check: startup-network: deferred startup network checks finished (done); read them with /private/tmp/fmlab.r6Y7S7F7/home/bin/fm-startup-network.sh report
+     WAKE_ACK_REQUIRED: after handling completes run bin/fm-wake-drain.sh --ack-through 1 --recovery-generation 58214.1791031141.R3Fxxu
+     STATUS OUTCOME BACKSTOP (newest captain-facing task event has no covering branch outcome):                                                                                                                             
+     … +2 lines (ctrl+o to expand)
+  ⎿  Allowed by auto mode classifier                                                                                                                                                                                        
+⏺ Bash(bin/fm-startup-network.sh report)                                                                                                                                                                                    
+  ⎿  completed off the startup path in 7s: GitHub authentication, dead-secondmate relaunch, secondmate convergence, pending handoff delivery, project clone refresh with its drift reporting, and inactive terminal-out
+     come reconciliation.        
+     TOOLCHAIN_DRIFT: claude installed 2.1.288, certified 2.1.217 (docs/subagent-guard.md) - Claude Code is the default crewmate harness and self-updates on the latest channel; the subagent-guard deny keys and turn-     
+     … +18 lines (ctrl+o to expand)
+  ⎿  Allowed by auto mode classifier                                                                                                                                                                                        
+⏺ Only informational drift notes; nothing actionable. Acknowledging.                                                                                                                                                        
+⏺ Bash(bin/fm-wake-drain.sh --ack-through 1 --recovery-generation 58214.1791031141.R3Fxxu)
+  ⎿  (No output)
+  ⎿  Allowed by auto mode classifier
+⏺ Captain, shipshape.             
+✻ Cooked for 12s · done 2:39 PM                             
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯                                                                                                                                                                                                                           
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏵⏵ auto mode on (shift+tab to cycle) · ← 2 agents                                                                                                                                                                         

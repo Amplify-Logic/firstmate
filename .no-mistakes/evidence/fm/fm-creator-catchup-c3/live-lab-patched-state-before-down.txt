@@ -1,0 +1,34 @@
+# lab state before teardown
+1791019030	start	gen=host-58759-1791019029	primary=claude
+1791019035	pass-through	attended	branch eligibility could not be computed	check: rearm-resurface
+arm_pid=59835	watcher_pid=60099	origin=started	started_at=1791019031	ended_at=1791019034	exit_code=0	signal=none	reason=actionable-check	beacon_age=2	lock_before=pid:60099|identity:Sat Oct  3 09:17:10 2026     bash /private/tmp/fmlab.ZF5B35/home/bin/fm-watch.sh	lock_after=pid:none|identity:none	successor=none
+# sentinel outage alarm
+state=outage
+delivery=sent
+claim=48023-1791019341-5947
+attempt_at=1791019342
+delivered_at=1791019342
+delivery_count=2
+next_alert_at=1791019942
+episode=beat:1791019032|lock:none
+SUPERVISION DOWN: 1 task(s) in flight; last watcher beat: 309s ago (grace 300s). No automatic restart was attempted; see /private/tmp/fmlab.ZF5B35/home/state/.supervision-outage-alarm
+
+# primary pane
+⚠ AGENTS.md is over the 40.0k-char limit (50.7k chars) · /memory to free up context
+❯ Lab readiness probe from bin/fm-live-lab.sh. Run no tool or command for this message. Reply with only the word LABREADY, a hyphen, and then 79092fe6c87d, with no spaces.                                                 
+⏺ LABREADY-79092fe6c87d                                                                                                                                                                                                     
+✻ Cogitated for 4s · done 11:17 AM                                                                                                                                                                                          
+⏺ Stop hook feedback                                                                                                                                                                                                        
+⏺ I'll drain the wake queue and handle the supervision event.
+⏺ Bash(bin/fm-wake-drain.sh)                                                
+  ⎿  Waiting…                                                                                                                                                                                                               
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ Bash command                                                                                     
+ Drain the durable wake queue for supervision handling
+ bin/fm-wake-drain.sh
+ This command requires approval
+ Do you want to proceed?
+ ❯ 1. Yes
+   2. Yes, and don’t ask again for: bin/fm-wake-drain.sh *
+   3. No
+ Esc to cancel · Tab to amend

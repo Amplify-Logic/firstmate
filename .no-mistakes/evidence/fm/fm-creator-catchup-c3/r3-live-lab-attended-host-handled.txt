@@ -1,0 +1,56 @@
+== tree d35dbc5dc7eb2b661223807344fe9f5298d67640; node on lab PATH: v22.23.1
+== mate status
+done [at=1791022007]: corr=07bf17a87cc060e1 config reread applied (startup-memory-budget=7500)
+== supervision host log
+1791022002	start	gen=host-61127-1791022001	primary=claude
+1791022006	pass-through	attended	main-only	check: rearm-resurface
+1791022022	start	gen=host-76180-1791022021	primary=claude
+1791022022	take-over	arm=65146
+1791022074	handled	turn=host-76180-1791022021.1	posture=attended	rc=0	reports=1	error=0 cost=0.07278 conversation_cost=0.07278 input=10 cache_read=52060 cache_write=13812 output=710 turns=5	signal: /private/tmp/fmlab.ZMDoae/home/state/lab3ddd6306a162-mate.status
+== watch cycle exits
+arm_pid=61490	watcher_pid=61587	origin=started	started_at=1791022002	ended_at=1791022005	exit_code=0	signal=none	reason=actionable-check	beacon_age=2	lock_before=pid:61587|identity:Sat Oct  3 10:06:42 2026     bash /private/tmp/fmlab.ZMDoae/home/bin/fm-watch.sh	lock_after=pid:none|identity:none	successor=started:65203
+arm_pid=65146	watcher_pid=65203	origin=started	started_at=1791022006	ended_at=1791022022	exit_code=143	signal=TERM	reason=signal-exit	beacon_age=16	lock_before=pid:65203|identity:Sat Oct  3 10:06:46 2026     bash /private/tmp/fmlab.ZMDoae/home/bin/fm-watch.sh	lock_after=pid:none|identity:none	successor=none
+arm_pid=76517	watcher_pid=65203	origin=attached	started_at=1791022022	ended_at=1791022022	exit_code=unknown	signal=unknown	reason=taken-over	beacon_age=16	lock_before=pid:65203|identity:Sat Oct  3 10:06:46 2026     bash /private/tmp/fmlab.ZMDoae/home/bin/fm-watch.sh	lock_after=pid:none|identity:none	successor=started:77701
+arm_pid=76517	watcher_pid=77701	origin=started	started_at=1791022022	ended_at=1791022055	exit_code=0	signal=none	reason=actionable-signal	beacon_age=32	lock_before=pid:77701|identity:Sat Oct  3 10:07:02 2026     bash /private/tmp/fmlab.ZMDoae/home/bin/fm-watch.sh	lock_after=pid:none|identity:none	successor=started:87787
+== watch deliveries
+61587	Sat Oct  3 10:06:42 2026     bash /private/tmp/fmlab.ZMDoae/home/bin/fm-watch.sh	check: rearm-resurface
+77701	Sat Oct  3 10:07:02 2026     bash /private/tmp/fmlab.ZMDoae/home/bin/fm-watch.sh	signal: /private/tmp/fmlab.ZMDoae/home/state/lab3ddd6306a162-mate.status
+== main pane (captain's chat): no mate-status wake was drained here
+ ▐▛███▛█   Claude Code v2.1.288
+▝▜██████▀  Sonnet 5.5 with medium effort · Claude Max
+ ▝▝   ▝▝   /private/tmp/fmlab.ZMDoae/home
+❯ Lab readiness probe from bin/fm-live-lab.sh. Run no tool or command for this message. Reply with only the word LABREADY, a hyphen, and then 3ddd6306a162, with no spaces.
+⏺ LABREADY-3ddd6306a162
+✻ Churned for 4s · done 12:06 PM
+⏺ Stop hook feedback
+⏺ Bash(bin/fm-wake-drain.sh)
+  ⎿  1791021993 1       check   startup-network check: startup-network: deferred startup network checks finished (done); read them with /private/tmp/fmlab.ZMDoae/home/bin/fm-startup-network.sh report
+     WAKE_ACK_REQUIRED: after handling completes run bin/fm-wake-drain.sh --ack-through 1 --recovery-generation 43032.1791021993.Y8RWvu
+     STATUS OUTCOME BACKSTOP (newest captain-facing task event has no covering branch outcome):
+     … +2 lines (ctrl+o to expand)
+  ⎿  Allowed by auto mode classifier
+⏺ Bash(bin/fm-startup-network.sh report)
+  ⎿  completed off the startup path in 9s: GitHub authentication, dead-secondmate relaunch, secondmate convergence, pending handoff delivery, project clone refresh with its drift reporting, and inactive terminal-out
+     come reconciliation.
+     TOOLCHAIN_DRIFT: claude installed 2.1.288, certified 2.1.217 (docs/subagent-guard.md) - Claude Code is the default crewmate harness and self-updates on the latest channel; the subagent-guard deny keys and turn-
+     … +18 lines (ctrl+o to expand)
+  ⎿  Allowed by auto mode classifier
+⏺ Only version drift and no actionable failures. Acknowledging.
+⏺ Bash(bin/fm-wake-drain.sh --ack-through 1 --recovery-generation 43032.1791021993.Y8RWvu)
+  ⎿  (No output)
+  ⎿  Allowed by auto mode classifier
+⏺ Captain, shipshape.
+✻ Worked for 13s · done 12:07 PM
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏵⏵ auto mode on (shift+tab to cycle) · ← 2 agents
+== check
+ok primary: claude pid 39179 in /private/tmp/fmlab.ZMDoae/home
+ok probe: the primary answered LABREADY-3ddd6306a162
+ok trust: /private/tmp/fmlab.ZMDoae/home is trusted in the Claude store
+ok mirror: verified writer, check passed, captain=1 main=2
+ok host: supervision host pid 76180
+ok watcher: live watcher with a fresh beacon
+ok mate: lab3ddd6306a162-mate pid 33881 in /private/tmp/fmlab.ZMDoae/mate
+ok treehouse: ~/.treehouse unchanged
