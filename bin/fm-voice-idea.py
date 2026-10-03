@@ -705,8 +705,17 @@ def place_in_inbox(inbox: Path, name: str, data: bytes) -> str | None:
     return None
 
 
+CANCEL_SIGNALS = (signal.SIGTERM, signal.SIGHUP)
+
+
+def _hold_cancel_signals() -> None:
+    for sig in CANCEL_SIGNALS:
+        signal.signal(sig, signal.SIG_IGN)
+
+
 def _stop_group(proc: subprocess.Popen, grace: float) -> None:
     """TERM the command's group, then KILL it, waiting at most 3 * grace."""
+    _hold_cancel_signals()
     try:
         os.killpg(proc.pid, signal.SIGTERM)
     except (ProcessLookupError, PermissionError):
@@ -732,6 +741,7 @@ def _stop_group(proc: subprocess.Popen, grace: float) -> None:
 
 
 def _cancelled(signum, _frame):
+    _hold_cancel_signals()
     raise SystemExit(128 + signum)
 
 
@@ -744,7 +754,7 @@ def run_transport(cmd: list[str], *, timeout: float, env: dict | None = None) ->
     this process stops the command's group within 0.15 seconds before exiting,
     inside the watcher's 0.2 second grace.
     """
-    previous = {sig: signal.signal(sig, _cancelled) for sig in (signal.SIGTERM, signal.SIGHUP)}
+    previous = {sig: signal.signal(sig, _cancelled) for sig in CANCEL_SIGNALS}
     try:
         proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                 text=True, stdin=subprocess.DEVNULL, env=env, start_new_session=True)

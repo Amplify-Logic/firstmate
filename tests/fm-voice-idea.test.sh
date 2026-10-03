@@ -897,6 +897,70 @@ PYTEST
   pass "import, answer and announce stop their process groups when the watcher cancels the check"
 }
 
+test_repeated_cancellation_signals_still_stop_the_announcement() {
+  make_world
+  make_wav "$W/audio/hum.wav" 95
+  add_question "$ID1" "What a Life bridge idea" "$W/audio/hum.wav" audio/wav
+  python3 - "$DB" <<'PYTEST'
+import sqlite3, sys
+with sqlite3.connect(sys.argv[1]) as db:
+    db.execute("UPDATE requests SET state='answered', answer_json='{}'")
+PYTEST
+  cat > "$FM_VOICE_IDEA_ANNOUNCE" <<'PYTEST'
+#!/usr/bin/env python3
+import os, pathlib, signal, subprocess, sys, time
+signal.signal(signal.SIGTERM, signal.SIG_IGN)
+child = subprocess.Popen([sys.executable, "-c", "import signal,time; signal.signal(signal.SIGTERM, signal.SIG_IGN); time.sleep(30)"])
+pathlib.Path(os.environ["FAKE_LOG_DIR"], "child.pid").write_text(f"{os.getpid()} {child.pid}")
+time.sleep(30)
+PYTEST
+  rm -f "$W/log/child.pid"
+  export FM_VOICE_IDEA_SPEAK_TIMEOUT=20
+  python3 - "$IDEA" "$ID1" "$W/log/child.pid" <<'PYTEST' || fail "repeated cancellation signals left the announcement running"
+import os, pathlib, signal, subprocess, sys, time
+marker = pathlib.Path(sys.argv[3])
+# The watcher and its timeout wrapper both signal the check's group before the KILL.
+check = subprocess.Popen([sys.argv[1], "take", sys.argv[2]], start_new_session=True,
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+pids = []
+try:
+    for _ in range(400):
+        if marker.exists() and len(marker.read_text().split()) == 2:
+            break
+        time.sleep(0.05)
+    else:
+        raise AssertionError("announcement never started")
+    pids = [int(p) for p in marker.read_text().split()]
+    stop = time.monotonic() + 0.2
+    for sig in [signal.SIGTERM, signal.SIGTERM, signal.SIGHUP] + [signal.SIGTERM] * 50:
+        if time.monotonic() >= stop:
+            break
+        try: os.killpg(check.pid, sig)
+        except (ProcessLookupError, PermissionError): break
+        time.sleep(0.004)
+    time.sleep(max(0, stop - time.monotonic()))
+    try: os.killpg(check.pid, signal.SIGKILL)
+    except (ProcessLookupError, PermissionError): pass
+    check.wait(timeout=5)
+    for pid in pids:
+        for _ in range(40):
+            state = subprocess.run(["ps", "-o", "stat=", "-p", str(pid)], capture_output=True, text=True).stdout.strip()
+            if not state or state.startswith("Z"):
+                break
+            time.sleep(0.05)
+        else:
+            raise AssertionError(f"announcement process {pid} survived repeated cancellation")
+finally:
+    for pid in pids:
+        try: os.kill(pid, signal.SIGKILL)
+        except ProcessLookupError: pass
+PYTEST
+  unset FM_VOICE_IDEA_SPEAK_TIMEOUT
+  assert_equals unknown "$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["outcome"])' \
+    "$FM_HOME/data/voice-ideas/captures/$ID1/announce-attempt.json")" "a cancelled announcement must stay ambiguous"
+  pass "repeated TERM and HUP from the watcher and its wrapper still stop the announcement group"
+}
+
 test_failed_capture_publication_does_not_strand_duplicate() {
   make_world
   make_wav "$W/audio/hum.wav" 92
@@ -928,6 +992,7 @@ PYTEST
 test_timeout_stops_descendants_for_every_transport
 test_timeout_after_leader_exit_keeps_announcement_ambiguous
 test_outer_cancellation_stops_every_transport_group
+test_repeated_cancellation_signals_still_stop_the_announcement
 test_failed_capture_publication_does_not_strand_duplicate
 test_recognises_song_first_then_the_idea
 test_journey_files_the_idea_and_speaks_the_receipt
