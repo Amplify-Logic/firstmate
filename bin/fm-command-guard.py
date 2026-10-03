@@ -32,9 +32,10 @@
 # operator contract.
 #
 # STEPS ASIDE ON ANY FAILURE. No key, a timeout, an HTTP error, an unreadable
-# answer, a malformed gate or a crash all ALLOW the command. The first such
-# failure of an episode is written once to the log and stderr, and the next good
-# answer ends the episode. The guard never stops work because Jev is down.
+# answer, a malformed gate or a crash before the verdict all ALLOW the command.
+# The first such failure of an episode is written once to the log and stderr,
+# and the next good answer ends the episode. The guard never stops work because
+# Jev is down.
 #
 # REDACTS KNOWN SECRETS. Only the command text leaves the machine, never the
 # working directory, the task or the environment. Before it is sent, known
