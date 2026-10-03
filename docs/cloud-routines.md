@@ -11,8 +11,9 @@ Never put Compass, Artevo, Your Magical Journey, or any private repository or da
 ## The creator-repo watch
 
 [`bin/fm-routine-creator-watch.sh`](../bin/fm-routine-creator-watch.sh) is the whole job, and its header owns the mechanics.
-It reads tags and recent commits of a fixed list of public repositories with plain git, and writes one rolling digest, `creator-watch.md`, on the `main` branch of a separate, dedicated public repository, [Amplify-Logic/firstmate-routine-reports](https://github.com/Amplify-Logic/firstmate-routine-reports), which holds nothing else.
+It reads new tags on default-branch commits and recent default-branch commits of a fixed list of public repositories with plain git, and writes one rolling digest, `creator-watch.md`, on the `main` branch of a separate, dedicated public repository, [Amplify-Logic/firstmate-routine-reports](https://github.com/Amplify-Logic/firstmate-routine-reports), which holds nothing else.
 Each run replaces that file with one new commit, so that repository's history is the audit log of every run.
+A release tag on a commit that is not on a repository's default branch is not in the digest; the laptop creator watch, which keeps running alongside, covers those.
 The routine holds no write access to firstmate: its clone of this repository is only read to run the script, and the script builds its commit in a temporary repository.
 
 The routine's saved prompt tells its model to run that one script and nothing else.
@@ -25,9 +26,9 @@ The model never reads the digest, so release names and commit subjects from othe
 | Model | Claude Haiku 4.5 |
 | Tools | Bash only |
 | Connectors | none; every connector the form adds by default was removed |
-| Repository | this firstmate repository, which is public, cloned and only read |
+| Repositories | this firstmate repository, which is public, cloned and only read; and Amplify-Logic/firstmate-routine-reports, added in setup step 3 so the push can reach it |
 | Publishes to | `main` of Amplify-Logic/firstmate-routine-reports |
-| Environment | a dedicated environment with network access **None** (setup step 3); until then it points at the Default environment only because it stays disabled |
+| Environment | a dedicated environment with network access **None** (setup step 4); until then it points at the Default environment only because it stays disabled |
 
 ## What it can and cannot touch
 
@@ -47,7 +48,7 @@ It cannot:
 - Delete a branch or push a tag: the GitHub proxy refuses both.
 
 Probe runs of the routine on 3 October 2026 confirmed the GitHub API, github.com page, and outside-host refusals, a refused push to this repository, where the App is not installed, and that public git reads of other repositories succeed.
-The push to the reports repository is not proven yet: the first enabled run proves it, and a refused push exits 1 and publishes nothing.
+The push to the reports repository is not proven yet: the first manual **Run now** in setup step 5 verifies it before the schedule is trusted, and a refused push exits 1 and publishes nothing.
 
 The GitHub proxy does not limit which branch a push updates, so the boundary is the repository the App is installed on, not the script: whatever the routine's model does, it cannot write to firstmate, the repository the laptop updates itself from.
 
@@ -57,8 +58,10 @@ The routine stays disabled until the captain has done all of these, in order:
 
 1. Create the empty public repository Amplify-Logic/firstmate-routine-reports, with no README or other initial file.
 2. Install the Claude GitHub App on Amplify-Logic, scoped to that repository only.
-3. Create a dedicated cloud environment with network access **None** in the environment dialog at claude.ai, and point the routine at it.
-4. Only then, with this script on firstmate's default branch, turn the routine on at claude.ai/code/routines, and arm the laptop check in the firstmate home: `bin/fm-routine-report-check.sh arm`.
+3. Add Amplify-Logic/firstmate-routine-reports to the routine's repositories.
+4. Create a dedicated cloud environment with network access **None** in the environment dialog at claude.ai, and point the routine at it.
+5. Only then, with this script on firstmate's default branch, start one manual **Run now** at claude.ai/code/routines and confirm a commit landed on `main` of the reports repository; that run verifies the push before the schedule is trusted.
+6. Turn the routine's schedule on, and arm the laptop check in the firstmate home: `bin/fm-routine-report-check.sh arm`.
 
 ## Reviewing a report
 

@@ -7,8 +7,11 @@
 #   fm-routine-creator-watch.sh --help
 #
 # It reads public git data for a fixed list of public repositories and writes
-# one rolling markdown digest: each repository's new tags and its commits on the
-# default branch inside the reporting window. `run` publishes that digest as the
+# one rolling markdown digest: each repository's new tags on default-branch
+# commits and its commits on the default branch inside the reporting window. A
+# release tag on a commit that is not on the default branch is not listed; the
+# laptop creator watch, which keeps running alongside, covers those. `run`
+# publishes that digest as the
 # single file creator-watch.md on the main branch of the dedicated public
 # reports repository Amplify-Logic/firstmate-routine-reports, replacing the
 # previous copy with one new commit, so that branch's history is the routine's
