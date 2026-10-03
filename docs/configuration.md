@@ -657,7 +657,7 @@ exclude = private-client-app, family-notes
 Excluded projects and Compass still get the local database list, because it sends nothing.
 Both match the project's logical directory name, the name the project registry uses, even when that directory is a link to a differently named copy.
 List every other project whose code or commands must not reach a third party.
-Any other key or a malformed value leaves the guard off, and the spawn prints why.
+Any other key or a malformed value leaves the guard off at spawn, and the spawn prints why.
 
 **How it runs.** When the gate is on, `fm-spawn.sh` adds a Claude Code `PreToolUse` hook on `Bash` to the worker's own `.claude/settings.local.json`, beside its lifecycle hooks.
 The hook reads the same gate again on every command, so switching it off or excluding a project takes effect at once, while switching it on reaches workers spawned or relaunched after the change.
@@ -665,7 +665,7 @@ The hook reads the same gate again on every command, so switching it off or excl
 **Local database list.** Before anything is sent, the hook matches the whole command, heredoc and `-c` bodies included, against a fixed list and blocks a match outright.
 The list covers `prisma migrate dev` or `reset`, `prisma migrate diff` with `--shadow-database-url` or `--from-migrations`, a shadow database set on the command line, `prisma db push`, `drizzle-kit push` or `drop`, `supabase db push`, `db reset`, `migration repair`, `link`, `projects delete` or `branches delete` without `--local`, Supabase Management API database queries and login-role calls, `DROP TABLE`, `SCHEMA` or `DATABASE`, `TRUNCATE` or a `DELETE FROM` with no `WHERE` in a `psql` or `sqlite3` command, `railway volume`, `down`, `delete`, `ssh` or `run`, and `vercel env rm` or `pull`.
 The deny names the rule that fired and tells the worker to report the exact change to firstmate as a blocker, because workers never change a live database.
-Nothing remote is involved, so this list never steps aside: it holds when Jev is down or no key is set, and a crash in the check blocks.
+Nothing remote is involved, so this list never steps aside: it holds when Jev is down or no key is set, a crash in the check blocks, and a gate that turns malformed after the hook is installed stops only the Jev call while the list keeps blocking.
 It matches text, not shell syntax, so a command that only mentions one of these, such as a search or a commit message, is blocked too; a script that runs one of them under another name is not seen.
 Each command is one request of three questions, asked in this order: whether the command contains text addressed to the judge, whether its effect is read-only, reversible or irreversible, and whether it aims to remove or wipe something.
 A redacted command longer than 2,000 characters is cut into overlapping parts of at most 2,000 characters, and the same request carries every part and asks the three questions of each, so every part of the command is judged.

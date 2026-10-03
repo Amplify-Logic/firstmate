@@ -244,6 +244,8 @@ psql "$DB" <<'SQL'\nbegin;\ndrop schema public cascade;\ncommit;\nSQL
 psql -c "TRUNCATE orders, customers CASCADE;"
 sqlite3 store.sqlite 'DELETE FROM jobs'
 sqlite3 store.sqlite <<'EOF'\ndelete from jobs;\nEOF
+psql "$DATABASE_URL" -c 'DELETE FROM "User"'
+psql "$DATABASE_URL" -c "DELETE FROM \\"User\\"; select 1 where true"
 bash -c 'npx prisma migrate dev'
 npx prisma \\\n  migrate dev
 railway volume delete data
@@ -252,6 +254,16 @@ railway ssh
 railway run npm start
 vercel env rm SECRET production
 vercel env pull .env.local
+npx prisma@5 migrate dev
+pnpm dlx prisma@6 migrate reset --force
+npx prisma@latest db push
+npx -y supabase@latest db reset --linked
+npx supabase@latest db push
+bunx drizzle-kit@latest push
+npx vercel@latest env pull
+supabase --workdir ./app db push
+supabase --profile prod db push
+npx prisma migrate --schema prisma/schema.prisma dev
 CASES
   reset_server "$FIX/response-git-status.json"
   while IFS= read -r cmd; do
@@ -267,6 +279,10 @@ supabase db push --local
 supabase migration list --linked
 supabase status
 sqlite3 store.sqlite 'DELETE FROM jobs WHERE id = 3'
+psql "$DATABASE_URL" -c "DELETE FROM \\"User\\" WHERE id = 1"
+psql "$DATABASE_URL" -c 'DELETE FROM "User" WHERE id = 1'
+psql "$DATABASE_URL" -c 'DELETE FROM "public"."User" WHERE id = 1'
+npx prisma@5 migrate deploy
 psql -c "delete from t where x = 'a'"
 truncate -s 0 log.txt && psql -c 'select 1'
 echo "DROP TABLE x"
@@ -276,6 +292,20 @@ vercel env ls
 vercel env add FOO production
 CASES
   pass "the local list blocks every listed database command, in heredoc and -c bodies too, and passes their read-only and local neighbours"
+}
+
+test_malformed_gate_keeps_local_list() {
+  local home out
+  home=$(new_home local-malformed 'enabled = true\n')
+  printf 'enabled = true\nexclude: foo\n' > "$home/config/command-guard"
+  reset_server "$FIX/response-force-push.json"
+  assert_local_block "$home" 'npx prisma migrate dev' "a malformed gate must keep the local list blocking"
+  out=$(run_hook "$home" "git push --force origin main" 2>/dev/null)
+  assert_equals "" "$out" "a malformed gate must stop the Jev call"
+  printf 'enabled = yes\n' > "$home/config/command-guard"
+  assert_local_block "$home" 'npx prisma migrate dev' "a malformed value must keep the local list blocking"
+  assert_equals 0 "$(requests)" "a malformed gate must send nothing"
+  pass "a gate that turns malformed after spawn keeps the local list blocking and sends nothing to Jev"
 }
 
 test_local_list_benchmark_cases() {
@@ -719,6 +749,7 @@ test_thresholds
 test_non_bash_tool_ignored
 test_local_list_blocks_when_jev_is_unreachable
 test_local_list_rules
+test_malformed_gate_keeps_local_list
 test_local_list_benchmark_cases
 test_local_list_reaches_excluded_projects
 test_local_check_crash_blocks

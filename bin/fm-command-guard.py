@@ -18,7 +18,8 @@
 #       excluded one without Jev. A malformed gate says why on stderr and counts
 #       as off. fm-spawn.sh asks this before it writes the hook, and the hook
 #       reads the gate again on every command, so switching the gate off, or
-#       excluding a project from Jev, takes effect at once.
+#       excluding a project from Jev, takes effect at once. A gate that turns
+#       malformed after the hook is installed stops only the Jev call.
 #   fm-command-guard.py bench FILE
 #       Run every labelled command in FILE through the real request and the real
 #       rule, one request per command exactly as the hook sends it, and print the
@@ -46,8 +47,9 @@
 # one of these (a grep, a commit message) is blocked as well.
 #
 # JEV STEPS ASIDE ON ANY FAILURE. No key, a timeout, an HTTP error, an unreadable
-# answer or a crash before Jev's verdict all ALLOW the command, and a malformed
-# gate switches the whole guard off, local list included.
+# answer, a crash before Jev's verdict or a malformed gate all ALLOW a command
+# the local list did not block. Only an absent gate or `enabled = false`
+# switches the local list off.
 # The first such failure of an episode is written once to the log and stderr,
 # and the next good answer ends the episode. The guard never stops work because
 # Jev is down.
@@ -205,16 +207,18 @@ def sent_for(project, excluded):
 # ---- local database list ----------------------------------------------------
 
 # Words and the quotes around them separate tool names from their subcommands,
-# and flag words in between are skipped, so `npx supabase --debug db push` and
-# `bash -c 'prisma migrate dev'` both match.
+# a version pin on the tool name is skipped, and flag words in between are
+# skipped with or without a value, so `npx supabase@latest --workdir app db
+# push` and `bash -c 'prisma migrate dev'` both match.
 _SEP = r"[\s'\"]+"
-_FLAGS = r"(?:-[^\s'\"]*[\s'\"]+)*"
+_VERSION = r"(?:@[^\s'\"]*)?"
+_FLAGS = r"(?:-[^\s'\"]*[\s'\"]+(?:[^-\s'\"][^\s'\"]*[\s'\"]+)?)*"
 _END = r"(?![\w./-])"
 
 
 def _tool_pattern(name, *subcommands):
     words = (_SEP + _FLAGS).join("(?:%s)" % word for word in subcommands)
-    return r"(?<![\w.-])%s%s%s%s%s" % (name, _SEP, _FLAGS, words, _END)
+    return r"(?<![\w.-])%s%s%s%s%s%s" % (name, _VERSION, _SEP, _FLAGS, words, _END)
 
 
 def _tool(*patterns):
@@ -234,7 +238,8 @@ SUPABASE_REMOTE = re.compile(r"(?<![\w-])--(?:linked|db-url|project-ref)(?![\w-]
 SUPABASE_API = re.compile(r"(?i)api\.supabase\.com/[^\s'\"]*/(?:database/query|cli/login-role)")
 SQL_CLIENT = re.compile(r"(?<![\w.-])(?:psql|sqlite3)(?![\w-])")
 SQL_DROP = re.compile(r"(?i)\b(?:drop\s+(?:table|schema|database)|truncate\s+(?:table\s+)?[\w\"])")
-SQL_DELETE = re.compile(r"(?i)\bdelete\s+from\b([^;\"'`]*)")
+_SQL_NAME = r"(?:\\?\"[^\"\\]+\\?\"|[\w$]+)"
+SQL_DELETE = re.compile(r"(?i)\bdelete\s+from\b\s*(?:%s(?:\.%s)*)?([^;\"'`]*)" % (_SQL_NAME, _SQL_NAME))
 SQL_WHERE = re.compile(r"(?i)\bwhere\b")
 RAILWAY = _tool(("railway", "volume|down|delete|ssh|run"))
 VERCEL_ENV = _tool(("vercel", "env", "rm|remove|pull"))
@@ -687,10 +692,11 @@ def run_hook(opts):
     base = {"task": opts["task"], "project": opts["project"]}
     try:
         enabled, excluded = read_gate(opts["config"])
+        jev = True
     except GateError as error:
         outage_once(state_dir, dict(base, at=int(time.time()), outcome="error",
                                     reason="gate: %s" % error))
-        return 0
+        enabled, excluded, jev = True, set(), False
     if not enabled or not opts["project"]:
         return 0
     try:
@@ -716,7 +722,7 @@ def run_hook(opts):
         except (Exception, HookBound):  # noqa: BLE001
             pass
         return 0
-    if not sent_for(opts["project"], excluded):
+    if not jev or not sent_for(opts["project"], excluded):
         return 0
 
     outcome, reason, answers, sent, path = judge(command, opts["home"])
