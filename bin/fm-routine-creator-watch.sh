@@ -291,7 +291,7 @@ publish() {
   fi
   commit=$(
     export GIT_AUTHOR_NAME="${GIT_AUTHOR_NAME:-firstmate routine}"
-    export GIT_AUTHOR_EMAIL="${GIT_AUTHOR_EMAIL:-firstmate-routine@users.noreply.github.com}"
+    export GIT_AUTHOR_EMAIL="${GIT_AUTHOR_EMAIL:-firstmate-routine@example.invalid}"
     export GIT_COMMITTER_NAME="${GIT_COMMITTER_NAME:-$GIT_AUTHOR_NAME}"
     export GIT_COMMITTER_EMAIL="${GIT_COMMITTER_EMAIL:-$GIT_AUTHOR_EMAIL}"
     if [ -n "$PARENT" ]; then
