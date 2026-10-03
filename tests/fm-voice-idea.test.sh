@@ -741,6 +741,342 @@ PY
   pass "the real glasses mailbox hears saved and waiting, then filed"
 }
 
+test_timeout_stops_descendants_for_every_transport() {
+  local phase tool
+  for phase in import answer announce; do
+    make_world
+    make_wav "$W/audio/hum.wav" 91
+    add_question "$ID1" "What a Life bridge idea" "$W/audio/hum.wav" audio/wav
+    [ "$phase" != announce ] || python3 - "$DB" <<'PYTEST'
+import sqlite3, sys
+with sqlite3.connect(sys.argv[1]) as db:
+    db.execute("UPDATE requests SET state='answered', answer_json='{}'")
+PYTEST
+    case "$phase" in
+      import) tool=$FM_VOICE_IDEA_TARTEVO ;;
+      answer) tool=$FM_VOICE_IDEA_ANSWER ;;
+      announce) tool=$FM_VOICE_IDEA_ANNOUNCE ;;
+    esac
+    cat > "$tool" <<'PYTEST'
+#!/usr/bin/env python3
+import os, pathlib, signal, subprocess, sys, time
+# The child keeps inherited output pipes and ignores TERM; its parent exits on TERM.
+child = subprocess.Popen([sys.executable, "-c", "import signal,time; signal.signal(signal.SIGTERM, signal.SIG_IGN); time.sleep(30)"])
+pathlib.Path(os.environ["FAKE_LOG_DIR"], "child.pid").write_text(str(child.pid))
+time.sleep(30)
+PYTEST
+    export FM_VOICE_IDEA_IMPORT_TIMEOUT=1 FM_VOICE_IDEA_SPEAK_TIMEOUT=1
+    python3 - "$IDEA" "$ID1" "$W/log/child.pid" <<'PYTEST' || fail "$phase timeout left a descendant or pipe alive"
+import os, pathlib, signal, subprocess, sys, time
+start = time.monotonic()
+result = subprocess.run([sys.argv[1], "take", sys.argv[2]], capture_output=True, timeout=10)
+pid = int(pathlib.Path(sys.argv[3]).read_text())
+try:
+    assert result.returncode == 0, result.stderr
+    assert time.monotonic() - start < 6, "transport exceeded bounded cleanup"
+    for _ in range(30):
+        state = subprocess.run(["ps", "-o", "stat=", "-p", str(pid)], capture_output=True, text=True).stdout.strip()
+        if not state or state.startswith("Z"):
+            break
+        time.sleep(0.05)
+    else:
+        raise AssertionError("transport child survived timeout")
+finally:
+    try: os.kill(pid, signal.SIGKILL)
+    except ProcessLookupError: pass
+PYTEST
+    if [ "$phase" = announce ]; then
+      assert_contains "$(cat "$FM_HOME/data/voice-ideas/captures/$ID1/said-final")" unknown "announcement must remain ambiguous"
+    fi
+    unset FM_VOICE_IDEA_IMPORT_TIMEOUT FM_VOICE_IDEA_SPEAK_TIMEOUT
+  done
+  pass "import, answer and announce timeouts terminate their process groups without hanging on inherited pipes"
+}
+
+test_timeout_after_leader_exit_keeps_announcement_ambiguous() {
+  make_world
+  make_wav "$W/audio/hum.wav" 94
+  add_question "$ID1" "What a Life bridge idea" "$W/audio/hum.wav" audio/wav
+  python3 - "$DB" <<'PYTEST'
+import sqlite3, sys
+with sqlite3.connect(sys.argv[1]) as db:
+    db.execute("UPDATE requests SET state='answered', answer_json='{}'")
+PYTEST
+  cat > "$FM_VOICE_IDEA_ANNOUNCE" <<'PYTEST'
+#!/usr/bin/env python3
+import os, pathlib, subprocess, sys
+# The leader exits at once, leaving only its zombie in the group, while an
+# escaped descendant keeps the output pipes open past the deadline.
+child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)"], start_new_session=True)
+pathlib.Path(os.environ["FAKE_LOG_DIR"], "child.pid").write_text(str(child.pid))
+PYTEST
+  rm -f "$W/log/child.pid"
+  export FM_VOICE_IDEA_SPEAK_TIMEOUT=3
+  python3 - "$IDEA" "$ID1" "$W/log/child.pid" <<'PYTEST' || fail "an escaped descendant turned the announce timeout into another outcome"
+import os, pathlib, signal, subprocess, sys
+marker = pathlib.Path(sys.argv[3])
+try:
+    result = subprocess.run([sys.argv[1], "take", sys.argv[2]], capture_output=True, timeout=20)
+    assert result.returncode == 0, result.stderr
+finally:
+    if marker.exists():
+        try: os.kill(int(marker.read_text()), signal.SIGKILL)
+        except ProcessLookupError: pass
+PYTEST
+  unset FM_VOICE_IDEA_SPEAK_TIMEOUT
+  assert_equals unknown "$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["outcome"])' \
+    "$FM_HOME/data/voice-ideas/captures/$ID1/announce-attempt.json")" "an announcement timed out after its leader exited must stay ambiguous"
+  pass "a timeout after the transport leader exits keeps the announcement ambiguous instead of retrying it"
+}
+
+test_outer_cancellation_stops_every_transport_group() {
+  local phase tool
+  for phase in import answer announce; do
+    make_world
+    make_wav "$W/audio/hum.wav" 93
+    add_question "$ID1" "What a Life bridge idea" "$W/audio/hum.wav" audio/wav
+    [ "$phase" != announce ] || python3 - "$DB" <<'PYTEST'
+import sqlite3, sys
+with sqlite3.connect(sys.argv[1]) as db:
+    db.execute("UPDATE requests SET state='answered', answer_json='{}'")
+PYTEST
+    case "$phase" in
+      import) tool=$FM_VOICE_IDEA_TARTEVO ;;
+      answer) tool=$FM_VOICE_IDEA_ANSWER ;;
+      announce) tool=$FM_VOICE_IDEA_ANNOUNCE ;;
+    esac
+    cat > "$tool" <<'PYTEST'
+#!/usr/bin/env python3
+import os, pathlib, signal, subprocess, sys, time
+# Both the command and its child ignore TERM, so only a group KILL stops them.
+signal.signal(signal.SIGTERM, signal.SIG_IGN)
+child = subprocess.Popen([sys.executable, "-c", "import signal,time; signal.signal(signal.SIGTERM, signal.SIG_IGN); time.sleep(30)"])
+pathlib.Path(os.environ["FAKE_LOG_DIR"], "child.pid").write_text(f"{os.getpid()} {child.pid}")
+time.sleep(30)
+PYTEST
+    rm -f "$W/log/child.pid"
+    export FM_VOICE_IDEA_IMPORT_TIMEOUT=20 FM_VOICE_IDEA_SPEAK_TIMEOUT=20
+    python3 - "$IDEA" "$ID1" "$W/log/child.pid" <<'PYTEST' || fail "$phase outer cancellation left the transport group alive"
+import os, pathlib, signal, subprocess, sys, time
+marker = pathlib.Path(sys.argv[3])
+# Run like a watcher check: its own group, stopped by TERM then KILL 0.2 s later.
+check = subprocess.Popen([sys.argv[1], "take", sys.argv[2]], start_new_session=True,
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+pids = []
+try:
+    for _ in range(200):
+        if marker.exists() and len(marker.read_text().split()) == 2:
+            break
+        time.sleep(0.05)
+    else:
+        raise AssertionError("transport never started")
+    pids = [int(p) for p in marker.read_text().split()]
+    os.killpg(check.pid, signal.SIGTERM)
+    time.sleep(0.2)
+    try: os.killpg(check.pid, signal.SIGKILL)
+    except (ProcessLookupError, PermissionError): pass
+    check.wait(timeout=5)
+    for pid in pids:
+        for _ in range(40):
+            state = subprocess.run(["ps", "-o", "stat=", "-p", str(pid)], capture_output=True, text=True).stdout.strip()
+            if not state or state.startswith("Z"):
+                break
+            time.sleep(0.05)
+        else:
+            raise AssertionError(f"transport process {pid} survived the check's cancellation")
+finally:
+    for pid in pids:
+        try: os.kill(pid, signal.SIGKILL)
+        except ProcessLookupError: pass
+PYTEST
+    if [ "$phase" = announce ]; then
+      assert_contains "$(cat "$FM_HOME/data/voice-ideas/captures/$ID1/announce-attempt.json")" '"outcome": "unknown"' "a cancelled announcement must remain ambiguous"
+    fi
+    unset FM_VOICE_IDEA_IMPORT_TIMEOUT FM_VOICE_IDEA_SPEAK_TIMEOUT
+  done
+  pass "import, answer and announce stop their process groups when the watcher cancels the check"
+}
+
+test_repeated_cancellation_signals_still_stop_the_announcement() {
+  make_world
+  make_wav "$W/audio/hum.wav" 95
+  add_question "$ID1" "What a Life bridge idea" "$W/audio/hum.wav" audio/wav
+  python3 - "$DB" <<'PYTEST'
+import sqlite3, sys
+with sqlite3.connect(sys.argv[1]) as db:
+    db.execute("UPDATE requests SET state='answered', answer_json='{}'")
+PYTEST
+  cat > "$FM_VOICE_IDEA_ANNOUNCE" <<'PYTEST'
+#!/usr/bin/env python3
+import os, pathlib, signal, subprocess, sys, time
+signal.signal(signal.SIGTERM, signal.SIG_IGN)
+child = subprocess.Popen([sys.executable, "-c", "import signal,time; signal.signal(signal.SIGTERM, signal.SIG_IGN); time.sleep(30)"])
+pathlib.Path(os.environ["FAKE_LOG_DIR"], "child.pid").write_text(f"{os.getpid()} {child.pid}")
+time.sleep(30)
+PYTEST
+  rm -f "$W/log/child.pid"
+  export FM_VOICE_IDEA_SPEAK_TIMEOUT=20
+  python3 - "$IDEA" "$ID1" "$W/log/child.pid" <<'PYTEST' || fail "repeated cancellation signals left the announcement running"
+import os, pathlib, signal, subprocess, sys, time
+marker = pathlib.Path(sys.argv[3])
+# The watcher and its timeout wrapper both signal the check's group before the KILL.
+check = subprocess.Popen([sys.argv[1], "take", sys.argv[2]], start_new_session=True,
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+pids = []
+try:
+    for _ in range(400):
+        if marker.exists() and len(marker.read_text().split()) == 2:
+            break
+        time.sleep(0.05)
+    else:
+        raise AssertionError("announcement never started")
+    pids = [int(p) for p in marker.read_text().split()]
+    stop = time.monotonic() + 0.2
+    for sig in [signal.SIGTERM, signal.SIGTERM, signal.SIGHUP] + [signal.SIGTERM] * 50:
+        if time.monotonic() >= stop:
+            break
+        try: os.killpg(check.pid, sig)
+        except (ProcessLookupError, PermissionError): break
+        time.sleep(0.004)
+    time.sleep(max(0, stop - time.monotonic()))
+    try: os.killpg(check.pid, signal.SIGKILL)
+    except (ProcessLookupError, PermissionError): pass
+    check.wait(timeout=5)
+    for pid in pids:
+        for _ in range(40):
+            state = subprocess.run(["ps", "-o", "stat=", "-p", str(pid)], capture_output=True, text=True).stdout.strip()
+            if not state or state.startswith("Z"):
+                break
+            time.sleep(0.05)
+        else:
+            raise AssertionError(f"announcement process {pid} survived repeated cancellation")
+finally:
+    for pid in pids:
+        try: os.kill(pid, signal.SIGKILL)
+        except ProcessLookupError: pass
+PYTEST
+  unset FM_VOICE_IDEA_SPEAK_TIMEOUT
+  assert_equals unknown "$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["outcome"])' \
+    "$FM_HOME/data/voice-ideas/captures/$ID1/announce-attempt.json")" "a cancelled announcement must stay ambiguous"
+  pass "repeated TERM and HUP from the watcher and its wrapper still stop the announcement group"
+}
+
+test_cancellation_while_the_transport_starts_still_stops_its_group() {
+  local sig
+  for sig in TERM HUP INT; do
+    python3 - "$IDEA" "$sig" <<'PYTEST' || fail "a $sig during transport start orphaned the transport group"
+import importlib.util, os, signal, subprocess, sys, time
+spec = importlib.util.spec_from_file_location("idea", sys.argv[1])
+m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
+sig = getattr(signal, "SIG" + sys.argv[2])
+real_popen = subprocess.Popen
+started = []
+def popen_then_signal(*args, **kwargs):
+    # The child exists, but Popen has not returned it to the caller yet.
+    proc = real_popen(*args, **kwargs)
+    started.append(proc.pid)
+    os.kill(os.getpid(), sig)
+    return proc
+m.subprocess.Popen = popen_then_signal
+cmd = [sys.executable, "-c", "import signal,time; signal.signal(signal.SIGTERM, signal.SIG_IGN); time.sleep(30)"]
+try:
+    m.run_transport(cmd, timeout=20)
+except SystemExit as exc:
+    assert exc.code == 128 + sig, exc.code
+else:
+    raise AssertionError("cancellation was lost")
+finally:
+    m.subprocess.Popen = real_popen
+try:
+    for _ in range(40):
+        state = subprocess.run(["ps", "-o", "stat=", "-p", str(started[0])], capture_output=True, text=True).stdout.strip()
+        if not state or state.startswith("Z"):
+            break
+        time.sleep(0.05)
+    else:
+        raise AssertionError("transport survived cancellation during its start")
+    assert signal.getsignal(sig) is not signal.SIG_IGN, "the cancellation signal stayed ignored"
+finally:
+    try: os.kill(started[0], signal.SIGKILL)
+    except ProcessLookupError: pass
+PYTEST
+  done
+  pass "TERM, HUP or an interrupt while a transport is starting still stops its group and exits"
+}
+
+test_cancellation_while_a_transport_fails_to_start_is_kept() {
+  python3 - "$IDEA" "$W/fakes/no-such-transport" <<'PYTEST' || fail "a cancellation during a failed transport start was lost"
+import importlib.util, os, signal, subprocess, sys
+spec = importlib.util.spec_from_file_location("idea", sys.argv[1])
+m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
+missing = [sys.argv[2]]
+real_popen = subprocess.Popen
+original = {sig: signal.getsignal(sig) for sig in (signal.SIGTERM, signal.SIGHUP, signal.SIGINT)}
+def restored():
+    assert {sig: signal.getsignal(sig) for sig in original} == original, "handlers were not restored"
+# Without a cancellation, the ordinary start failure still reaches the caller.
+try:
+    m.run_transport(missing, timeout=5)
+except FileNotFoundError:
+    pass
+else:
+    raise AssertionError("a missing transport started")
+restored()
+for sig in original:
+    def signal_then_fail(*args, **kwargs):
+        os.kill(os.getpid(), sig)
+        return real_popen(*args, **kwargs)
+    m.subprocess.Popen = signal_then_fail
+    try:
+        m.run_transport(missing, timeout=5)
+    except SystemExit as exc:
+        assert exc.code == 128 + sig, exc.code
+    except OSError as exc:
+        raise AssertionError(f"signal {sig} became a start failure: {exc}")
+    else:
+        raise AssertionError("a missing transport started")
+    finally:
+        m.subprocess.Popen = real_popen
+    restored()
+PYTEST
+  pass "TERM, HUP or an interrupt while a transport fails to start still exits, and a plain start failure is reported"
+}
+
+test_failed_capture_publication_does_not_strand_duplicate() {
+  make_world
+  make_wav "$W/audio/hum.wav" 92
+  add_question "$ID1" "What a Life bridge idea" "$W/audio/hum.wav"
+  add_question "$ID2" "What a Life bridge idea" "$W/audio/hum.wav"
+  python3 - "$IDEA" "$ID1" <<'PYTEST' || fail "publication interruption was not exercised"
+import importlib.util, sys
+spec = importlib.util.spec_from_file_location("idea", sys.argv[1])
+m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
+def fail_publish(*_):
+    raise OSError("fixture capture publication interrupted")
+m.os.rename = fail_publish
+try:
+    m.main(["take", sys.argv[2]])
+except OSError:
+    pass
+else:
+    raise AssertionError("publication did not fail")
+PYTEST
+  [ ! -d "$FM_HOME/data/voice-ideas/captures/$ID1" ] || fail "interrupted original was published"
+  "$IDEA" take "$ID2" >/dev/null || fail "second request could not recover abandoned ownership"
+  assert_equals filed "$(status_field "$ID2" state)" "second request must file instead of naming a missing capture"
+  "$IDEA" take "$ID1" >/dev/null || fail "original retry failed"
+  assert_equals duplicate "$(status_field "$ID1" state)" "original retry must deduplicate against the recovered capture"
+  assert_equals 1 "$(fake_capture_count)" "recovery imports the same bytes only once"
+  pass "a failed capture publication cannot strand a later request behind a missing original"
+}
+
+test_timeout_stops_descendants_for_every_transport
+test_timeout_after_leader_exit_keeps_announcement_ambiguous
+test_outer_cancellation_stops_every_transport_group
+test_repeated_cancellation_signals_still_stop_the_announcement
+test_cancellation_while_the_transport_starts_still_stops_its_group
+test_cancellation_while_a_transport_fails_to_start_is_kept
+test_failed_capture_publication_does_not_strand_duplicate
 test_recognises_song_first_then_the_idea
 test_journey_files_the_idea_and_speaks_the_receipt
 test_an_ordinary_question_is_left_for_firstmate
