@@ -107,6 +107,7 @@ import os
 import re
 import shlex
 import shutil
+import signal
 import sqlite3
 import subprocess
 import sys
@@ -585,6 +586,11 @@ def claim_hash(paths: Paths, digest: str, ident: str) -> str | None:
         first = marker.read_text(encoding="utf-8").strip()
     except OSError:
         return None
+    # hold() runs under SpoolLock. A crash before capture publication must
+    # not make later requests permanent duplicates of a missing original.
+    if not first or load_capture(paths, first) is None:
+        write_atomic(marker, ident + "\n")
+        return None
     return None if first == ident else first
 
 
@@ -699,6 +705,91 @@ def place_in_inbox(inbox: Path, name: str, data: bytes) -> str | None:
     return None
 
 
+CANCEL_SIGNALS = (signal.SIGTERM, signal.SIGHUP, signal.SIGINT)
+
+
+def _hold_cancel_signals() -> None:
+    for sig in CANCEL_SIGNALS:
+        signal.signal(sig, signal.SIG_IGN)
+
+
+def _signal_group(pid: int, sig: int) -> None:
+    try:
+        os.killpg(pid, sig)
+    except (ProcessLookupError, PermissionError):
+        pass
+
+
+def _stop_group(proc: subprocess.Popen, grace: float) -> None:
+    """TERM the command's group, then KILL it, waiting at most 3 * grace."""
+    _hold_cancel_signals()
+    _signal_group(proc.pid, signal.SIGTERM)
+    try:
+        proc.communicate(timeout=grace)
+    except subprocess.TimeoutExpired:
+        pass
+    # The leader may have exited while a descendant ignored TERM.
+    _signal_group(proc.pid, signal.SIGKILL)
+    try:
+        proc.communicate(timeout=grace)
+    except subprocess.TimeoutExpired:
+        # An escaped descendant can retain a pipe; never drain forever.
+        pass
+    try:
+        proc.wait(timeout=grace)
+    except subprocess.TimeoutExpired:
+        pass
+
+
+def run_transport(cmd: list[str], *, timeout: float, env: dict | None = None) -> subprocess.CompletedProcess:
+    """Bound the command and its descendants, including inherited output pipes.
+
+    Timeout cleanup gets at most 0.75 seconds beyond the command deadline.
+    Keep TimeoutExpired as the outcome even if cleanup cannot finish.
+    The command runs in its own session, so TERM, HUP or an interrupt aimed at
+    this process, even one that arrives while the command is starting, ends the
+    command's group within 0.05 seconds, inside the watcher's 0.2 second grace,
+    and then exits.
+    """
+    launched: dict = {}
+
+    def cancelled(signum, _frame):
+        _hold_cancel_signals()
+        launched.setdefault("signal", signum)
+        proc = launched.get("proc")
+        if proc is None:
+            return
+        _signal_group(proc.pid, signal.SIGTERM)
+        time.sleep(0.05)
+        _signal_group(proc.pid, signal.SIGKILL)
+        raise SystemExit(128 + launched["signal"])
+
+    previous = {sig: signal.signal(sig, cancelled) for sig in CANCEL_SIGNALS}
+    try:
+        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                text=True, stdin=subprocess.DEVNULL, env=env, start_new_session=True)
+        try:
+            launched["proc"] = proc
+            if "signal" in launched:
+                cancelled(launched["signal"], None)
+            stdout, stderr = proc.communicate(timeout=timeout)
+            return subprocess.CompletedProcess(cmd, proc.returncode, stdout, stderr)
+        except subprocess.TimeoutExpired:
+            _stop_group(proc, 0.25)
+            raise
+        except BaseException:
+            _stop_group(proc, 0.05)
+            raise
+        finally:
+            proc.stdout.close()
+            proc.stderr.close()
+    finally:
+        for sig, handler in previous.items():
+            signal.signal(sig, handler)
+        if "signal" in launched and "proc" not in launched:
+            raise SystemExit(128 + launched["signal"])
+
+
 def run_import(ctx: Context) -> tuple[dict | None, str | None]:
     paths = ctx.paths
     timeout = ctx.timeout(paths.import_timeout)
@@ -706,7 +797,7 @@ def run_import(ctx: Context) -> tuple[dict | None, str | None]:
         return None, NO_TIME
     cmd = [str(paths.tartevo), "captures", "import", "--inbox", str(paths.inbox), "--json", "--no-lyrics", "--no-sort"]
     try:
-        done = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, stdin=subprocess.DEVNULL)
+        done = run_transport(cmd, timeout=timeout)
     except subprocess.TimeoutExpired:
         return None, "Artevo's import did not finish in time"
     except OSError as exc:
@@ -815,9 +906,7 @@ def answer(ctx: Context, ident: str, line: str) -> tuple[str, str]:
         return "retry", NO_TIME
     cmd = [str(paths.answer_cli), ident, "--text", line, "--database", str(paths.mailbox_db)]
     try:
-        done = subprocess.run(
-            cmd, capture_output=True, text=True, timeout=timeout, env=env, stdin=subprocess.DEVNULL
-        )
+        done = run_transport(cmd, timeout=timeout, env=env)
         why = _last_line(done)
     except subprocess.TimeoutExpired:
         why = "the answer took too long"
@@ -851,9 +940,9 @@ def announce(ctx: Context, ident: str, line: str) -> tuple[str, str]:
         return "retry", NO_TIME
     write_atomic(attempt, dump({"line": line, "outcome": "unknown", "at": now_iso()}), durable=True)
     try:
-        done = subprocess.run(
+        done = run_transport(
             [str(paths.announce_cli), line],
-            capture_output=True, text=True, timeout=timeout, env=env, stdin=subprocess.DEVNULL,
+            timeout=timeout, env=env,
         )
     except subprocess.TimeoutExpired:
         return "unknown", "announcement delivery is unknown after timeout; reconcile before any manual retry"
