@@ -61,8 +61,9 @@ new_home() {  # <name> [gate-text]
 }
 
 payload() {  # <command> [tool]
-  python3 -c 'import json,sys; print(json.dumps({"hook_event_name":"PreToolUse","tool_name":sys.argv[2],"tool_input":{"command":sys.argv[1]}}))' \
-    "$1" "${2:-Bash}"
+  # The command goes through stdin: Linux caps a single argument at 128 KiB, below the long-command cases.
+  printf '%s' "$1" | python3 -c 'import json,sys; print(json.dumps({"hook_event_name":"PreToolUse","tool_name":sys.argv[1],"tool_input":{"command":sys.stdin.read()}}))' \
+    "${2:-Bash}"
 }
 
 run_hook() {  # <home> <command> [project] [tool]
