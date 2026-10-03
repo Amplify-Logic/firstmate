@@ -1004,6 +1004,44 @@ PYTEST
   pass "TERM, HUP or an interrupt while a transport is starting still stops its group and exits"
 }
 
+test_cancellation_while_a_transport_fails_to_start_is_kept() {
+  python3 - "$IDEA" "$W/fakes/no-such-transport" <<'PYTEST' || fail "a cancellation during a failed transport start was lost"
+import importlib.util, os, signal, subprocess, sys
+spec = importlib.util.spec_from_file_location("idea", sys.argv[1])
+m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
+missing = [sys.argv[2]]
+real_popen = subprocess.Popen
+original = {sig: signal.getsignal(sig) for sig in (signal.SIGTERM, signal.SIGHUP, signal.SIGINT)}
+def restored():
+    assert {sig: signal.getsignal(sig) for sig in original} == original, "handlers were not restored"
+# Without a cancellation, the ordinary start failure still reaches the caller.
+try:
+    m.run_transport(missing, timeout=5)
+except FileNotFoundError:
+    pass
+else:
+    raise AssertionError("a missing transport started")
+restored()
+for sig in original:
+    def signal_then_fail(*args, **kwargs):
+        os.kill(os.getpid(), sig)
+        return real_popen(*args, **kwargs)
+    m.subprocess.Popen = signal_then_fail
+    try:
+        m.run_transport(missing, timeout=5)
+    except SystemExit as exc:
+        assert exc.code == 128 + sig, exc.code
+    except OSError as exc:
+        raise AssertionError(f"signal {sig} became a start failure: {exc}")
+    else:
+        raise AssertionError("a missing transport started")
+    finally:
+        m.subprocess.Popen = real_popen
+    restored()
+PYTEST
+  pass "TERM, HUP or an interrupt while a transport fails to start still exits, and a plain start failure is reported"
+}
+
 test_failed_capture_publication_does_not_strand_duplicate() {
   make_world
   make_wav "$W/audio/hum.wav" 92
@@ -1037,6 +1075,7 @@ test_timeout_after_leader_exit_keeps_announcement_ambiguous
 test_outer_cancellation_stops_every_transport_group
 test_repeated_cancellation_signals_still_stop_the_announcement
 test_cancellation_while_the_transport_starts_still_stops_its_group
+test_cancellation_while_a_transport_fails_to_start_is_kept
 test_failed_capture_publication_does_not_strand_duplicate
 test_recognises_song_first_then_the_idea
 test_journey_files_the_idea_and_speaks_the_receipt

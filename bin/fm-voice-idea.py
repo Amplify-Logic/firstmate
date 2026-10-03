@@ -786,6 +786,8 @@ def run_transport(cmd: list[str], *, timeout: float, env: dict | None = None) ->
     finally:
         for sig, handler in previous.items():
             signal.signal(sig, handler)
+        if "signal" in launched and "proc" not in launched:
+            raise SystemExit(128 + launched["signal"])
 
 
 def run_import(ctx: Context) -> tuple[dict | None, str | None]:
