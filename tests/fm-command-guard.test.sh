@@ -312,16 +312,37 @@ test_local_list_stays_fast_on_long_commands() {
   local home cmd started elapsed
   home=$(new_home local-long 'enabled = true\n')
   rm -f "$home/.env"
-  for cmd in "$(printf 'prisma -a %.0s' $(seq 16000))npx prisma migrate dev" \
-    "$(printf 'prisma %.0s-a -a -a -a -a -a -a -a -a -a ' $(seq 3000)); npx prisma migrate dev" \
-    "curl $(printf 'api.supabase.com/%.0s' $(seq 9000)) && npx prisma migrate dev"; do
+  while IFS= read -r -d '' cmd; do
     started=$(python3 -c 'import time; print(time.time())')
-    assert_local_block "$home" "$cmd" "a long command must still be blocked locally"
+    assert_local_block "$home" "$cmd" "a long command must still be blocked locally: ${cmd:0:40}"
     elapsed=$(python3 -c 'import sys, time; print(time.time() - float(sys.argv[1]))' "$started")
     python3 -c 'import sys; sys.exit(float(sys.argv[1]) >= 2.0)' "$elapsed" \
-      || fail "a ${#cmd}-character command took ${elapsed}s to decide locally"
-  done
-  pass "the local list decides a 160 KB command in well under two seconds and still blocks it"
+      || fail "a ${#cmd}-character command starting ${cmd:0:40} took ${elapsed}s to decide locally"
+  done < <(python3 - <<'PYCASES'
+import sys
+block = " && npx prisma migrate dev"
+cases = [
+    "prisma -a " * 16000 + "npx prisma migrate dev",
+    ("prisma " + "-a " * 10) * 3000 + block,
+    "echo " + "prisma@" * 16000 + block,
+    "echo " + "supabase@x," * 10000 + block,
+    "echo " + "drizzle-kit@" * 9000 + block,
+    "echo " + "railway@-" * 12000 + block,
+    "vercel -a" + " '\"" * 30000 + "x" + block,
+    "railway -" + "x" * 100000 + block,
+    "echo " + "supabase -a -" * 10000 + block,
+    "prisma migrate " + "-x " * 30000 + block,
+    "SHADOW_DATABASE_URL " * 6000 + block,
+    "psql -c '" + 'delete from "' * 10000 + "'; psql -c 'delete from t'",
+    "psql -c '" + "delete from a." * 10000 + "'; psql -c 'delete from t'",
+    "psql " + "drop " * 20000 + "drop table t",
+    "psql " + "truncate " * 15000 + "truncate t",
+    "curl " + "api.supabase.com/v1/projects/" * 4000 + " https://api.supabase.com/v1/projects/a/database/query",
+]
+sys.stdout.write("".join(case + "\0" for case in cases))
+PYCASES
+)
+  pass "the local list decides long repetitive commands for every rule in well under two seconds and still blocks them"
 }
 
 test_local_list_benchmark_cases() {

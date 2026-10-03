@@ -213,7 +213,7 @@ def sent_for(project, excluded):
 # pattern here stays linear, so a long command is decided well inside the hook
 # bound instead of timing out into an allow.
 _SEP = r"[\s'\"]+"
-_VERSION = r"(?:@[^\s'\"]*)?"
+_VERSION = r"(?:@[^\s'\"@]*)?"
 _FLAGS = r"(?:-[^\s'\"]*[\s'\"]+(?:[^-\s'\"][^\s'\"]*[\s'\"]+)?){0,8}"
 _END = r"(?![\w./-])"
 
