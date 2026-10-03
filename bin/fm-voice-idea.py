@@ -705,7 +705,7 @@ def place_in_inbox(inbox: Path, name: str, data: bytes) -> str | None:
     return None
 
 
-CANCEL_SIGNALS = (signal.SIGTERM, signal.SIGHUP)
+CANCEL_SIGNALS = (signal.SIGTERM, signal.SIGHUP, signal.SIGINT)
 
 
 def _hold_cancel_signals() -> None:
@@ -713,22 +713,23 @@ def _hold_cancel_signals() -> None:
         signal.signal(sig, signal.SIG_IGN)
 
 
+def _signal_group(pid: int, sig: int) -> None:
+    try:
+        os.killpg(pid, sig)
+    except (ProcessLookupError, PermissionError):
+        pass
+
+
 def _stop_group(proc: subprocess.Popen, grace: float) -> None:
     """TERM the command's group, then KILL it, waiting at most 3 * grace."""
     _hold_cancel_signals()
-    try:
-        os.killpg(proc.pid, signal.SIGTERM)
-    except (ProcessLookupError, PermissionError):
-        pass
+    _signal_group(proc.pid, signal.SIGTERM)
     try:
         proc.communicate(timeout=grace)
     except subprocess.TimeoutExpired:
         pass
     # The leader may have exited while a descendant ignored TERM.
-    try:
-        os.killpg(proc.pid, signal.SIGKILL)
-    except (ProcessLookupError, PermissionError):
-        pass
+    _signal_group(proc.pid, signal.SIGKILL)
     try:
         proc.communicate(timeout=grace)
     except subprocess.TimeoutExpired:
@@ -740,25 +741,37 @@ def _stop_group(proc: subprocess.Popen, grace: float) -> None:
         pass
 
 
-def _cancelled(signum, _frame):
-    _hold_cancel_signals()
-    raise SystemExit(128 + signum)
-
-
 def run_transport(cmd: list[str], *, timeout: float, env: dict | None = None) -> subprocess.CompletedProcess:
     """Bound the command and its descendants, including inherited output pipes.
 
     Timeout cleanup gets at most 0.75 seconds beyond the command deadline.
     Keep TimeoutExpired as the outcome even if cleanup cannot finish.
     The command runs in its own session, so TERM, HUP or an interrupt aimed at
-    this process stops the command's group within 0.15 seconds before exiting,
-    inside the watcher's 0.2 second grace.
+    this process, even one that arrives while the command is starting, ends the
+    command's group within 0.05 seconds, inside the watcher's 0.2 second grace,
+    and then exits.
     """
-    previous = {sig: signal.signal(sig, _cancelled) for sig in CANCEL_SIGNALS}
+    launched: dict = {}
+
+    def cancelled(signum, _frame):
+        _hold_cancel_signals()
+        launched.setdefault("signal", signum)
+        proc = launched.get("proc")
+        if proc is None:
+            return
+        _signal_group(proc.pid, signal.SIGTERM)
+        time.sleep(0.05)
+        _signal_group(proc.pid, signal.SIGKILL)
+        raise SystemExit(128 + launched["signal"])
+
+    previous = {sig: signal.signal(sig, cancelled) for sig in CANCEL_SIGNALS}
     try:
         proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                 text=True, stdin=subprocess.DEVNULL, env=env, start_new_session=True)
         try:
+            launched["proc"] = proc
+            if "signal" in launched:
+                cancelled(launched["signal"], None)
             stdout, stderr = proc.communicate(timeout=timeout)
             return subprocess.CompletedProcess(cmd, proc.returncode, stdout, stderr)
         except subprocess.TimeoutExpired:

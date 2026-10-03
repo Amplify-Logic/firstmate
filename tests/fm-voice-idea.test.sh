@@ -961,6 +961,49 @@ PYTEST
   pass "repeated TERM and HUP from the watcher and its wrapper still stop the announcement group"
 }
 
+test_cancellation_while_the_transport_starts_still_stops_its_group() {
+  local sig
+  for sig in TERM HUP INT; do
+    python3 - "$IDEA" "$sig" <<'PYTEST' || fail "a $sig during transport start orphaned the transport group"
+import importlib.util, os, signal, subprocess, sys, time
+spec = importlib.util.spec_from_file_location("idea", sys.argv[1])
+m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
+sig = getattr(signal, "SIG" + sys.argv[2])
+real_popen = subprocess.Popen
+started = []
+def popen_then_signal(*args, **kwargs):
+    # The child exists, but Popen has not returned it to the caller yet.
+    proc = real_popen(*args, **kwargs)
+    started.append(proc.pid)
+    os.kill(os.getpid(), sig)
+    return proc
+m.subprocess.Popen = popen_then_signal
+cmd = [sys.executable, "-c", "import signal,time; signal.signal(signal.SIGTERM, signal.SIG_IGN); time.sleep(30)"]
+try:
+    m.run_transport(cmd, timeout=20)
+except SystemExit as exc:
+    assert exc.code == 128 + sig, exc.code
+else:
+    raise AssertionError("cancellation was lost")
+finally:
+    m.subprocess.Popen = real_popen
+try:
+    for _ in range(40):
+        state = subprocess.run(["ps", "-o", "stat=", "-p", str(started[0])], capture_output=True, text=True).stdout.strip()
+        if not state or state.startswith("Z"):
+            break
+        time.sleep(0.05)
+    else:
+        raise AssertionError("transport survived cancellation during its start")
+    assert signal.getsignal(sig) is not signal.SIG_IGN, "the cancellation signal stayed ignored"
+finally:
+    try: os.kill(started[0], signal.SIGKILL)
+    except ProcessLookupError: pass
+PYTEST
+  done
+  pass "TERM, HUP or an interrupt while a transport is starting still stops its group and exits"
+}
+
 test_failed_capture_publication_does_not_strand_duplicate() {
   make_world
   make_wav "$W/audio/hum.wav" 92
@@ -993,6 +1036,7 @@ test_timeout_stops_descendants_for_every_transport
 test_timeout_after_leader_exit_keeps_announcement_ambiguous
 test_outer_cancellation_stops_every_transport_group
 test_repeated_cancellation_signals_still_stop_the_announcement
+test_cancellation_while_the_transport_starts_still_stops_its_group
 test_failed_capture_publication_does_not_strand_duplicate
 test_recognises_song_first_then_the_idea
 test_journey_files_the_idea_and_speaks_the_receipt
