@@ -1,0 +1,3 @@
+{"type": "assistant", "tool_use": [{"type": "tool_use", "id": "toolu_01SqjZt3QQ3KuVEd8UHxnQjv", "name": "Bash", "input": {"command": "psql \"$DATABASE_URL\" -c 'DELETE FROM \"User\" WHERE id = 1'", "description": "Run psql delete command for hook test"}, "caller": {"type": "direct"}}]}
+{"type": "user", "content": [{"tool_use_id": "toolu_01SqjZt3QQ3KuVEd8UHxnQjv", "type": "tool_result", "content": "fake psql executed (sandbox stub):  -c DELETE FROM \"User\" WHERE id = 1", "is_error": false}]}
+{"type": "result", "subtype": "success", "is_error": false, "result": "fake psql executed (sandbox stub):  -c DELETE FROM \"User\" WHERE id = 1", "num_turns": 2}

@@ -1,0 +1,39 @@
+[bounded-quoted-delete] $ psql "$DATABASE_URL" -c 'DELETE FROM "User" WHERE id = 1'
+  -> fake psql executed (sandbox stub):  -c DELETE FROM "User" WHERE id = 1
+
+[compass] $ supabase db push --linked
+  -> PreToolUse:Bash hook error: Database guard blocked this command: a Supabase change to a linked or hosted database (only --local is allowed). Workers never change a live database. Do not work around this; report the exact
+
+[control-local-reset] $ supabase db reset --local
+  -> fake supabase executed (sandbox stub): db reset --local
+
+[excluded-control] $ supabase db reset --local
+  -> fake supabase executed (sandbox stub): db reset --local
+
+[excluded-project] $ npx prisma migrate dev
+  -> PreToolUse:Bash hook error: Database guard blocked this command: prisma migrate dev or reset. Workers never change a live database. Do not work around this; report the exact change to firstmate as a blocked status line.
+
+[gate-off] $ npx prisma migrate dev
+  -> fake npx executed (sandbox stub): prisma migrate dev
+
+[heredoc-delete] $ psql "$DATABASE_URL" <<SQL\nDELETE FROM users;\nSQL
+  -> PreToolUse:Bash hook error: Database guard blocked this command: DELETE FROM with no WHERE in a psql or sqlite3 command. Workers never change a live database. Do not work around this; report the exact change to firstmate
+
+[incident] $ npx prisma migrate diff --from-migrations prisma/migrations --to-schema-datamodel prisma/schema.prisma --shadow-database-url "$DATABASE_URL_UNPOOLED" --script
+  -> PreToolUse:Bash hook error: Database guard blocked this command: prisma migrate diff with a shadow database or --from-migrations. Workers never change a live database. Do not work around this; report the exact change to 
+
+[jev-down-incident] $ npx prisma migrate diff --from-migrations prisma/migrations --to-schema-datamodel prisma/schema.prisma --shadow-database-url "$DATABASE_URL_UNPOOLED" --script
+  -> PreToolUse:Bash hook error: Database guard blocked this command: prisma migrate diff with a shadow database or --from-migrations. Workers never change a live database. Do not work around this; report the exact change to 
+
+[malformed-gate] $ npx prisma@5 migrate reset --force
+  -> PreToolUse:Bash hook error: Database guard blocked this command: prisma migrate dev or reset. Workers never change a live database. Do not work around this; report the exact change to firstmate as a blocked status line.
+
+[migrate-dev] $ npx prisma migrate dev --name init
+  -> PreToolUse:Bash hook error: Database guard blocked this command: prisma migrate dev or reset. Workers never change a live database. Do not work around this; report the exact change to firstmate as a blocked status line.
+
+[migration-repair] $ supabase migration repair --linked --status reverted 20240101000000
+  -> PreToolUse:Bash hook error: Database guard blocked this command: a Supabase change to a linked or hosted database (only --local is allowed). Workers never change a live database. Do not work around this; report the exact
+
+[version-pinned] $ npx -y supabase@latest db reset --linked
+  -> PreToolUse:Bash hook error: Database guard blocked this command: a Supabase change to a linked or hosted database (only --local is allowed). Workers never change a live database. Do not work around this; report the exact
+

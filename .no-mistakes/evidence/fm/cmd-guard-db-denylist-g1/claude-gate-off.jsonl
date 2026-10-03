@@ -1,0 +1,3 @@
+{"type": "assistant", "tool_use": [{"type": "tool_use", "id": "toolu_01JyuLZ8zmr6fq9oR8vwkNBh", "name": "Bash", "input": {"command": "npx prisma migrate dev", "description": "Run Prisma dev migration command"}, "caller": {"type": "direct"}}]}
+{"type": "user", "content": [{"tool_use_id": "toolu_01JyuLZ8zmr6fq9oR8vwkNBh", "type": "tool_result", "content": "fake npx executed (sandbox stub): prisma migrate dev", "is_error": false}]}
+{"type": "result", "subtype": "success", "is_error": false, "result": "fake npx executed (sandbox stub): prisma migrate dev", "num_turns": 2}

@@ -1,0 +1,4 @@
+'prisma -a '                 x16000  160117 bytes  0.26s  deny - Database guard blocked this command: prisma migrate dev or r
+'prisma@'                    x8000    56117 bytes  0.12s  deny - Database guard blocked this command: prisma migrate dev or r
+'supabase@x,'                x5000    55117 bytes  0.12s  deny - Database guard blocked this command: prisma migrate dev or r
+'psql DELETE FROM \"a\" '    x5000   135117 bytes  0.13s  deny - Database guard blocked this command: prisma migrate dev or r
