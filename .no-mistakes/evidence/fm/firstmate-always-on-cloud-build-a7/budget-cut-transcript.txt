@@ -1,0 +1,41 @@
+$ FM_ROUTINE_BUDGET_SECS=5 bin/fm-routine-creator-watch.sh run   # full 19-repository list, real GitHub reads
+creator-watch: published 3 item(s) from 2 repositories (17 unread) to the reports main at fa9fa2c
+[exit=0]
+--- 'Could not read' lines in the published digest:
+Could not read: kunchenguid/tasks-axi
+Could not read: kunchenguid/quota-axi
+Could not read: kunchenguid/lavish-axi
+Could not read: kunchenguid/gh-axi
+Could not read: kunchenguid/chrome-devtools-axi
+Could not read: kunchenguid/axi
+Could not read: kunchenguid/gnhf
+Could not read: kunchenguid/backpass
+Could not read: kunchenguid/vision
+Could not read: kunchenguid/grok-ship
+Could not read: kunchenguid/dotfiles
+Could not read: kunchenguid/pi-launcher
+Could not read: herdrdev/herdr
+Could not read: omacom/omarchy
+Could not read: anthropics/claude-code
+Could not read: openai/codex
+Could not read: earendil-works/pi
+--- accounting: each of the 19 repositories is either reported or named unread
+read        kunchenguid/no-mistakes
+read        kunchenguid/treehouse
+unread-named kunchenguid/tasks-axi
+unread-named kunchenguid/quota-axi
+unread-named kunchenguid/lavish-axi
+unread-named kunchenguid/gh-axi
+unread-named kunchenguid/chrome-devtools-axi
+unread-named kunchenguid/axi
+unread-named kunchenguid/gnhf
+unread-named kunchenguid/backpass
+unread-named kunchenguid/vision
+unread-named kunchenguid/grok-ship
+unread-named kunchenguid/dotfiles
+unread-named kunchenguid/pi-launcher
+unread-named herdrdev/herdr
+unread-named omacom/omarchy
+unread-named anthropics/claude-code
+unread-named openai/codex
+unread-named earendil-works/pi

@@ -1,0 +1,14 @@
+=== Every read fails (watched repositories unreachable): nothing may be published
+$ FM_ROUTINE_URL_BASE=https://github.com/fm-no-such-owner-zz9/ bin/fm-routine-creator-watch.sh run
+creator-watch: every repository read failed; nothing published
+[exit=1]
+reports main unchanged (30c028e55c1f0ba49262caf555bde9e13574de2b)
+
+=== Reports repository unreachable: nothing read or published
+fm-routine-creator-watch: could not read the main branch of file:///var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-routine-live.uCpmiy/no-such-reports.git
+[exit=1]
+
+=== Push refused by the reports remote (pre-receive hook): exit 1, nothing published
+fm-routine-creator-watch: the push to main of file:///var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-routine-live.uCpmiy/reports.git was refused or timed out
+[exit=1]
+reports main unchanged (30c028e55c1f0ba49262caf555bde9e13574de2b)

@@ -1,0 +1,2 @@
+$ FM_HOME=<lab> FM_ROUTINE_REPORTS_URL=file://<lab>/reports.git FM_CHECK_INTERVAL=0 FM_POLL=2 bin/fm-watch.sh   # after a new report was published
+check: <lab>/home/state/routine-reports.check.sh: routine report ready: a scheduled cloud routine published a new report; review it with bin/fm-routine-report-check.sh show

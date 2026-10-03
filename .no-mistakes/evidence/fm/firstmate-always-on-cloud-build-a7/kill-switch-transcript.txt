@@ -1,0 +1,14 @@
+=== Kill switch: captain adds PAUSED to main of the reports repository
+reports main before: 0ac67a9c81839080f5894da0fa2b73cc3866f360
+$ bin/fm-routine-creator-watch.sh run
+creator-watch: paused by a PAUSED file on the reports main; nothing published
+[exit=0]
+reports main after:  0ac67a9c81839080f5894da0fa2b73cc3866f360
+=== captain removes PAUSED; run publishes again and keeps the captain's history
+creator-watch: published 1 item(s) from 1 repositories (0 unread) to the reports main at 30c028e
+[exit=0]
+30c028e firstmate routine: creator-watch: digest for 2026-10-02T08:04:11Z to 2026-10-03T08:04:57Z
+43c123b captain: resume routine
+0ac67a9 captain: pause routine
+7ddb028 firstmate routine: creator-watch: digest for 2026-10-02T08:02:19Z to 2026-10-03T08:04:11Z
+creator-watch.md

@@ -1,0 +1,8 @@
+$ FM_ROUTINE_REMOTE=file://<lab>/reports.git bin/fm-routine-creator-watch.sh run
+creator-watch: published 52 item(s) from 19 repositories (0 unread) to the reports main at c371d42
+exit=0
+
+$ git -C <lab>/reports.git for-each-ref; ls-tree main; log main
+c371d421166fafef0d177a609d62c4868b99f5bb commit	refs/heads/main
+100644 blob fb0141dc8c478ac0371100b3fdb717ae70525b56	creator-watch.md
+c371d42 firstmate routine <firstmate-routine@users.noreply.github.com> creator-watch: digest for 2026-09-25T08:00:50Z to 2026-10-03T08:00:50Z

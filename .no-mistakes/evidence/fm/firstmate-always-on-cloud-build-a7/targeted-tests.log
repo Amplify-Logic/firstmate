@@ -1,0 +1,17 @@
+ok - the first run publishes one capped digest to the reports repository and changes nothing in firstmate
+ok - the next run extends the branch, keeps other files, and starts a day before the last window ended
+ok - a tag or commit that straddles a run is reported by the next one
+ok - a PAUSED file in the reports repository stops the routine from publishing
+ok - a run whose every read failed publishes nothing and fails
+ok - a repository that cannot be read is named in the digest
+ok - the digest stays under its byte cap and keeps its window marker
+ok - invalid settings and actions are refused
+exit=0
+ok - each new report is announced once with one generic line
+ok - probes are spaced by the interval and a held-back report still arrives
+ok - an unreachable remote is silent and the next probe still announces
+ok - show prints every report and changes nothing
+ok - arm registers a trusted check and disarm removes every trace
+ok - the armed shim runs the check against its own home
+ok - invalid settings and actions are refused
+exit=0

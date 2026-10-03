@@ -1,0 +1,51 @@
+== run 2 (6 days later, a few repos): extends history, window starts 1 day before last window-end
+creator-watch: published 4 item(s) from 2 repositories (0 unread) to the reports main at a5a3472
+exit=0
+parent of new head == first digest: yes
+a5a3472 creator-watch: digest for 2026-10-02T07:53:37Z to 2026-10-09T07:55:04Z
+499a8a3 creator-watch: digest for 2026-09-25T07:53:37Z to 2026-10-03T07:53:37Z
+Window (UTC): 2026-10-02T07:53:37Z to 2026-10-09T07:55:04Z
+<!-- fm-routine-report: creator-watch v1 window-end-epoch=1791532504 -->
+
+== kill switch: PAUSED file on reports main
+creator-watch: paused by a PAUSED file on the reports main; nothing published
+exit=0
+head unchanged: yes
+
+== every read fails (nonexistent public repos): nothing published, exit 1
+creator-watch: every repository read failed; nothing published
+exit=1
+head unchanged: yes
+
+== budget cap: FM_ROUTINE_BUDGET_SECS=5 over the full real list
+creator-watch: published 14 item(s) from 2 repositories (17 unread) to the reports main at 22e73b9
+exit=0
+Could not read: kunchenguid/tasks-axi kunchenguid/quota-axi kunchenguid/lavish-axi kunchenguid/gh-axi kunchenguid/chrome-devtools-axi kunchenguid/axi kunchenguid/gnhf kunchenguid/backpass kunchenguid/vision kunchenguid/grok-ship kunchenguid/dotfiles kunchenguid/pi-launcher herdrdev/herdr omacom/omar
+
+== size cap: FM_ROUTINE_MAX_BYTES=1500
+creator-watch: published 6 item(s) from 4 repositories (0 unread) to the reports main at e2553c0
+exit=0
+    1400
+
+(Truncated at the routine report size cap.)
+
+<!-- fm-routine-report: creator-watch v1 window-end-epoch=1791014121 -->
+
+== refs ever written in the reports repo, and firstmate clone status
+refs/heads/main
+e2553c0 firstmate routine creator-watch: digest for 2026-10-02T07:55:15Z to 2026-10-03T07:55:21Z
+22e73b9 firstmate routine creator-watch: digest for 2026-09-25T07:55:15Z to 2026-10-03T07:55:15Z
+06e7ed2 captain unpause
+3917aa6 captain pause
+a5a3472 firstmate routine creator-watch: digest for 2026-10-02T07:53:37Z to 2026-10-09T07:55:04Z
+499a8a3 firstmate routine creator-watch: digest for 2026-09-25T07:53:37Z to 2026-10-03T07:53:37Z
+refs/remotes/origin/contrib/herdr-lab-session-delimiter
+refs/remotes/origin/contrib/spawn-refuse-missing-harness
+refs/remotes/origin/fm/artevo-2-voice-file-idea-g8
+refs/remotes/origin/fm/astra-bench-fix-firstmate-b1
+refs/remotes/origin/fm/astra-fix-dictation-rewrites-f5
+refs/remotes/origin/fm/astra-fix-firstmate-durability-f4
+refs/remotes/origin/fm/astra-fix-firstmate-handoff-f3
+refs/remotes/origin/fm/astra-leftover-firstmate-l2
+refs/remotes/origin/fm/ci-replatform-trigger
+refs/remotes/origin/fm/composer-classifier-dialogs-c1
