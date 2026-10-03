@@ -308,6 +308,22 @@ test_malformed_gate_keeps_local_list() {
   pass "a gate that turns malformed after spawn keeps the local list blocking and sends nothing to Jev"
 }
 
+test_local_list_stays_fast_on_long_commands() {
+  local home cmd started elapsed
+  home=$(new_home local-long 'enabled = true\n')
+  rm -f "$home/.env"
+  for cmd in "$(printf 'prisma -a %.0s' $(seq 16000))npx prisma migrate dev" \
+    "$(printf 'prisma %.0s-a -a -a -a -a -a -a -a -a -a ' $(seq 3000)); npx prisma migrate dev" \
+    "curl $(printf 'api.supabase.com/%.0s' $(seq 9000)) && npx prisma migrate dev"; do
+    started=$(python3 -c 'import time; print(time.time())')
+    assert_local_block "$home" "$cmd" "a long command must still be blocked locally"
+    elapsed=$(python3 -c 'import sys, time; print(time.time() - float(sys.argv[1]))' "$started")
+    python3 -c 'import sys; sys.exit(float(sys.argv[1]) >= 2.0)' "$elapsed" \
+      || fail "a ${#cmd}-character command took ${elapsed}s to decide locally"
+  done
+  pass "the local list decides a 160 KB command in well under two seconds and still blocks it"
+}
+
 test_local_list_benchmark_cases() {
   local home id want cmd out
   home=$(new_home local-bench 'enabled = true\n')
@@ -750,6 +766,7 @@ test_non_bash_tool_ignored
 test_local_list_blocks_when_jev_is_unreachable
 test_local_list_rules
 test_malformed_gate_keeps_local_list
+test_local_list_stays_fast_on_long_commands
 test_local_list_benchmark_cases
 test_local_list_reaches_excluded_projects
 test_local_check_crash_blocks

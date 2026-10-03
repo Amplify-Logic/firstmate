@@ -207,12 +207,14 @@ def sent_for(project, excluded):
 # ---- local database list ----------------------------------------------------
 
 # Words and the quotes around them separate tool names from their subcommands,
-# a version pin on the tool name is skipped, and flag words in between are
-# skipped with or without a value, so `npx supabase@latest --workdir app db
-# push` and `bash -c 'prisma migrate dev'` both match.
+# a version pin on the tool name is skipped, and up to eight flag words in
+# between are skipped with or without a value, so `npx supabase@latest
+# --workdir app db push` and `bash -c 'prisma migrate dev'` both match. Every
+# pattern here stays linear, so a long command is decided well inside the hook
+# bound instead of timing out into an allow.
 _SEP = r"[\s'\"]+"
 _VERSION = r"(?:@[^\s'\"]*)?"
-_FLAGS = r"(?:-[^\s'\"]*[\s'\"]+(?:[^-\s'\"][^\s'\"]*[\s'\"]+)?)*"
+_FLAGS = r"(?:-[^\s'\"]*[\s'\"]+(?:[^-\s'\"][^\s'\"]*[\s'\"]+)?){0,8}"
 _END = r"(?![\w./-])"
 
 
@@ -235,7 +237,7 @@ SUPABASE = _tool(("supabase", "db", "push|reset"), ("supabase", "migration", "re
                  ("supabase", "link"), ("supabase", "projects|branches", "delete"))
 SUPABASE_LOCAL = re.compile(r"(?<![\w-])--local(?![\w-])")
 SUPABASE_REMOTE = re.compile(r"(?<![\w-])--(?:linked|db-url|project-ref)(?![\w-])")
-SUPABASE_API = re.compile(r"(?i)api\.supabase\.com/[^\s'\"]*/(?:database/query|cli/login-role)")
+SUPABASE_API = re.compile(r"(?i)api\.supabase\.com/v1/projects/[^\s'\"/]*/(?:database/query|cli/login-role)")
 SQL_CLIENT = re.compile(r"(?<![\w.-])(?:psql|sqlite3)(?![\w-])")
 SQL_DROP = re.compile(r"(?i)\b(?:drop\s+(?:table|schema|database)|truncate\s+(?:table\s+)?[\w\"])")
 _SQL_NAME = r"(?:\\?\"[^\"\\]+\\?\"|[\w$]+)"
