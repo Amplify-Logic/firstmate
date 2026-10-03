@@ -352,7 +352,7 @@ fm_handoff_context_used_percent() {
   used=$(printf '%s\n' "$sample" | sed -n 's/^used_percent=//p')
   case "$used" in
     ''|*[!0-9]*) printf 'na\n' ;;
-    *) if [ "$used" -le 100 ]; then printf '%s\n' "$used"; else printf 'na\n'; fi ;;
+    *) printf '%s\n' "$used" ;;
   esac
 }
 

@@ -705,44 +705,64 @@ def place_in_inbox(inbox: Path, name: str, data: bytes) -> str | None:
     return None
 
 
+def _stop_group(proc: subprocess.Popen, grace: float) -> None:
+    """TERM the command's group, then KILL it, waiting at most 3 * grace."""
+    try:
+        os.killpg(proc.pid, signal.SIGTERM)
+    except ProcessLookupError:
+        pass
+    try:
+        proc.communicate(timeout=grace)
+    except subprocess.TimeoutExpired:
+        pass
+    # The leader may have exited while a descendant ignored TERM.
+    try:
+        os.killpg(proc.pid, signal.SIGKILL)
+    except ProcessLookupError:
+        pass
+    try:
+        proc.communicate(timeout=grace)
+    except subprocess.TimeoutExpired:
+        # An escaped descendant can retain a pipe; never drain forever.
+        pass
+    try:
+        proc.wait(timeout=grace)
+    except subprocess.TimeoutExpired:
+        pass
+
+
+def _cancelled(signum, _frame):
+    raise SystemExit(128 + signum)
+
+
 def run_transport(cmd: list[str], *, timeout: float, env: dict | None = None) -> subprocess.CompletedProcess:
     """Bound the command and its descendants, including inherited output pipes.
 
     Timeout cleanup gets at most 0.75 seconds beyond the command deadline.
     Keep TimeoutExpired as the outcome even if cleanup cannot finish.
+    The command runs in its own session, so TERM, HUP or an interrupt aimed at
+    this process stops the command's group within 0.15 seconds before exiting,
+    inside the watcher's 0.2 second grace.
     """
-    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                            text=True, stdin=subprocess.DEVNULL, env=env, start_new_session=True)
+    previous = {sig: signal.signal(sig, _cancelled) for sig in (signal.SIGTERM, signal.SIGHUP)}
     try:
-        stdout, stderr = proc.communicate(timeout=timeout)
-        return subprocess.CompletedProcess(cmd, proc.returncode, stdout, stderr)
-    except subprocess.TimeoutExpired:
+        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                text=True, stdin=subprocess.DEVNULL, env=env, start_new_session=True)
         try:
-            os.killpg(proc.pid, signal.SIGTERM)
-        except ProcessLookupError:
-            pass
-        try:
-            proc.communicate(timeout=0.25)
+            stdout, stderr = proc.communicate(timeout=timeout)
+            return subprocess.CompletedProcess(cmd, proc.returncode, stdout, stderr)
         except subprocess.TimeoutExpired:
-            pass
-        # The leader may have exited while a descendant ignored TERM.
-        try:
-            os.killpg(proc.pid, signal.SIGKILL)
-        except ProcessLookupError:
-            pass
-        try:
-            proc.communicate(timeout=0.25)
-        except subprocess.TimeoutExpired:
-            # An escaped descendant can retain a pipe; never drain forever.
-            pass
-        try:
-            proc.wait(timeout=0.25)
-        except subprocess.TimeoutExpired:
-            pass
-        raise
+            _stop_group(proc, 0.25)
+            raise
+        except BaseException:
+            _stop_group(proc, 0.05)
+            raise
+        finally:
+            proc.stdout.close()
+            proc.stderr.close()
     finally:
-        proc.stdout.close()
-        proc.stderr.close()
+        for sig, handler in previous.items():
+            signal.signal(sig, handler)
 
 
 def run_import(ctx: Context) -> tuple[dict | None, str | None]:

@@ -793,6 +793,74 @@ PYTEST
   pass "import, answer and announce timeouts terminate their process groups without hanging on inherited pipes"
 }
 
+test_outer_cancellation_stops_every_transport_group() {
+  local phase tool
+  for phase in import answer announce; do
+    make_world
+    make_wav "$W/audio/hum.wav" 93
+    add_question "$ID1" "What a Life bridge idea" "$W/audio/hum.wav" audio/wav
+    [ "$phase" != announce ] || python3 - "$DB" <<'PYTEST'
+import sqlite3, sys
+with sqlite3.connect(sys.argv[1]) as db:
+    db.execute("UPDATE requests SET state='answered', answer_json='{}'")
+PYTEST
+    case "$phase" in
+      import) tool=$FM_VOICE_IDEA_TARTEVO ;;
+      answer) tool=$FM_VOICE_IDEA_ANSWER ;;
+      announce) tool=$FM_VOICE_IDEA_ANNOUNCE ;;
+    esac
+    cat > "$tool" <<'PYTEST'
+#!/usr/bin/env python3
+import os, pathlib, signal, subprocess, sys, time
+# Both the command and its child ignore TERM, so only a group KILL stops them.
+signal.signal(signal.SIGTERM, signal.SIG_IGN)
+child = subprocess.Popen([sys.executable, "-c", "import signal,time; signal.signal(signal.SIGTERM, signal.SIG_IGN); time.sleep(30)"])
+pathlib.Path(os.environ["FAKE_LOG_DIR"], "child.pid").write_text(f"{os.getpid()} {child.pid}")
+time.sleep(30)
+PYTEST
+    rm -f "$W/log/child.pid"
+    export FM_VOICE_IDEA_IMPORT_TIMEOUT=20 FM_VOICE_IDEA_SPEAK_TIMEOUT=20
+    python3 - "$IDEA" "$ID1" "$W/log/child.pid" <<'PYTEST' || fail "$phase outer cancellation left the transport group alive"
+import os, pathlib, signal, subprocess, sys, time
+marker = pathlib.Path(sys.argv[3])
+# Run like a watcher check: its own group, stopped by TERM then KILL 0.2 s later.
+check = subprocess.Popen([sys.argv[1], "take", sys.argv[2]], start_new_session=True,
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+pids = []
+try:
+    for _ in range(200):
+        if marker.exists() and len(marker.read_text().split()) == 2:
+            break
+        time.sleep(0.05)
+    else:
+        raise AssertionError("transport never started")
+    pids = [int(p) for p in marker.read_text().split()]
+    os.killpg(check.pid, signal.SIGTERM)
+    time.sleep(0.2)
+    try: os.killpg(check.pid, signal.SIGKILL)
+    except (ProcessLookupError, PermissionError): pass
+    check.wait(timeout=5)
+    for pid in pids:
+        for _ in range(40):
+            state = subprocess.run(["ps", "-o", "stat=", "-p", str(pid)], capture_output=True, text=True).stdout.strip()
+            if not state or state.startswith("Z"):
+                break
+            time.sleep(0.05)
+        else:
+            raise AssertionError(f"transport process {pid} survived the check's cancellation")
+finally:
+    for pid in pids:
+        try: os.kill(pid, signal.SIGKILL)
+        except ProcessLookupError: pass
+PYTEST
+    if [ "$phase" = announce ]; then
+      assert_contains "$(cat "$FM_HOME/data/voice-ideas/captures/$ID1/announce-attempt.json")" '"outcome": "unknown"' "a cancelled announcement must remain ambiguous"
+    fi
+    unset FM_VOICE_IDEA_IMPORT_TIMEOUT FM_VOICE_IDEA_SPEAK_TIMEOUT
+  done
+  pass "import, answer and announce stop their process groups when the watcher cancels the check"
+}
+
 test_failed_capture_publication_does_not_strand_duplicate() {
   make_world
   make_wav "$W/audio/hum.wav" 92
@@ -822,6 +890,7 @@ PYTEST
 }
 
 test_timeout_stops_descendants_for_every_transport
+test_outer_cancellation_stops_every_transport_group
 test_failed_capture_publication_does_not_strand_duplicate
 test_recognises_song_first_then_the_idea
 test_journey_files_the_idea_and_speaks_the_receipt
