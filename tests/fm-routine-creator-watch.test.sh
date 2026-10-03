@@ -178,6 +178,19 @@ test_an_unreadable_repository_is_named() {
   pass "a repository that cannot be read is named in the digest"
 }
 
+test_many_unreadable_repositories_are_all_named() {
+  local dir digest repos='acme/tool' i
+  dir=$(make_fixture many-unread)
+  for i in $(seq 1 20); do repos="$repos some-long-owner-name-$i/some-long-repository-name-$i"; done
+  run_watch "$dir" run FM_ROUTINE_REPOS="$repos" >/dev/null || fail "a run with many unreadable repositories failed"
+  digest=$(report_at "$dir")
+  for i in $(seq 1 20); do
+    assert_contains "$digest" "Could not read: some-long-owner-name-$i/some-long-repository-name-$i
+" "unreadable repository $i is not named in full"
+  done
+  pass "every unreadable repository is named even when the list outgrows one line"
+}
+
 test_the_digest_is_capped() {
   local dir digest size
   dir=$(make_fixture capped)
@@ -208,5 +221,6 @@ test_a_late_tag_on_a_commit_from_before_the_last_run_is_reported
 test_a_paused_file_publishes_nothing
 test_every_read_failing_publishes_nothing
 test_an_unreadable_repository_is_named
+test_many_unreadable_repositories_are_all_named
 test_the_digest_is_capped
 test_invalid_settings_and_action_refuse

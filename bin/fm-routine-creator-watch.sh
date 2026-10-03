@@ -264,7 +264,9 @@ build_digest() {
       printf 'No new tags or commits in this window.\n'
     fi
     if [ -n "$READ_FAILED" ]; then
-      printf '\nCould not read:%s\n' "$READ_FAILED"
+      printf '\n'
+      # shellcheck disable=SC2086 # one line per repository, so the line cap never hides one
+      printf 'Could not read: %s\n' $READ_FAILED
     fi
   } | cut -c1-"$LINE_CHARS" > "$WORK/body"
   awk -v cap=$(( MAX_BYTES - ${#footer} - 64 )) '
