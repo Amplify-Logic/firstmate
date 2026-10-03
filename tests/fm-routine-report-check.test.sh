@@ -23,19 +23,18 @@ make_home() {
   printf '%s\n' "$home"
 }
 
-make_remote() {  # <name> -> path of a bare remote with a main branch only
-  local dir="$TMP_ROOT/$1-remote"
-  fm_git_init_commit "$dir-src" >/dev/null
-  git clone -q --bare "$dir-src" "$dir.git"
-  printf '%s\n' "$dir.git"
+make_remote() {  # <name> -> path of an empty bare reports repository
+  local dir="$TMP_ROOT/$1-remote.git"
+  git init -q --bare "$dir"
+  printf '%s\n' "$dir"
 }
 
-# publish <remote> <file> <text>: a new commit on routine-reports holding the
-# previous files plus <file>, the way a routine publishes.
+# publish <remote> <file> <text>: a new commit on main holding the previous
+# files plus <file>, the way a routine publishes.
 publish() {
   local remote=$1 file=$2 text=$3 blob tree parent commit
   blob=$(printf '%s\n' "$text" | git -C "$remote" hash-object -w --stdin)
-  if parent=$(git -C "$remote" rev-parse --verify --quiet refs/heads/routine-reports); then
+  if parent=$(git -C "$remote" rev-parse --verify --quiet refs/heads/main); then
     tree=$( { git -C "$remote" ls-tree "$parent" | awk -F '\t' -v f="$file" '$2 != f'
       printf '100644 blob %s\t%s\n' "$blob" "$file"; } | git -C "$remote" mktree)
     commit=$(git -C "$remote" commit-tree "$tree" -p "$parent" -m report)
@@ -43,7 +42,7 @@ publish() {
     tree=$(printf '100644 blob %s\t%s\n' "$blob" "$file" | git -C "$remote" mktree)
     commit=$(git -C "$remote" commit-tree "$tree" -m report)
   fi
-  git -C "$remote" update-ref refs/heads/routine-reports "$commit"
+  git -C "$remote" update-ref refs/heads/main "$commit"
 }
 
 run_check() {  # <home> <remote> [action] [env assignments...]
@@ -99,14 +98,12 @@ test_show_prints_reports_and_writes_nothing() {
   local home remote out before after
   home=$(make_home show)
   remote=$(make_remote show)
-  publish "$remote" README.md "branch readme"
   publish "$remote" creator-watch.md "creator digest body"
   before=$(git -C "$remote" for-each-ref --format='%(refname) %(objectname)')
   out=$(run_check "$home" "$remote" show) || fail "show failed"
   after=$(git -C "$remote" for-each-ref --format='%(refname) %(objectname)')
   assert_contains "$out" "===== creator-watch.md =====" "show did not name the report"
   assert_contains "$out" "creator digest body" "show did not print the report"
-  assert_not_contains "$out" "branch readme" "show printed the branch README as a report"
   assert_equals "$before" "$after" "show changed the remote"
   pass "show prints every report and changes nothing"
 }

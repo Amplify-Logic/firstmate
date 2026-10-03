@@ -4,15 +4,17 @@
 #
 # Usage:
 #   fm-routine-creator-watch.sh run       build the digest and publish it
-#   fm-routine-creator-watch.sh preview   build the digest and print it; publish nothing
 #   fm-routine-creator-watch.sh --help
 #
 # It reads public git data for a fixed list of public repositories and writes
 # one rolling markdown digest: each repository's new tags and its commits on the
 # default branch inside the reporting window. `run` publishes that digest as the
-# single file creator-watch.md on the orphan branch routine-reports of the
-# clone's own origin, replacing the previous copy with one new commit, so the
-# branch history is the routine's audit log.
+# single file creator-watch.md on the main branch of the dedicated public
+# reports repository Amplify-Logic/firstmate-routine-reports, replacing the
+# previous copy with one new commit, so that branch's history is the routine's
+# audit log. The firstmate clone the routine runs this from is only read: the
+# commit is built in a temporary repository and nothing is ever pushed to
+# firstmate.
 #
 # Reads use plain git over https because a cloud session's GitHub proxy binds
 # the REST API and github.com pages to the session's own configured repository,
@@ -27,9 +29,9 @@
 #
 # What it can touch, and nothing more:
 #   - Public git reads of the listed repositories.
-#   - The routine-reports branch of origin: one non-forced push of one commit
-#     whose tree is the previous tree with creator-watch.md replaced. It never
-#     checks out, edits, or pushes any other branch, and never rewrites history.
+#   - The main branch of the reports repository: one non-forced push of one
+#     commit whose tree is the previous tree with creator-watch.md replaced. It
+#     never pushes any other branch or repository, and never rewrites history.
 #
 # Bounds: each git read is capped at FM_ROUTINE_READ_SECS (default 45) and the
 # whole sweep at FM_ROUTINE_BUDGET_SECS (default 240); repositories left unread
@@ -39,17 +41,20 @@
 # characters. When every read fails, nothing is published and the exit status
 # is 1, so a broken run never looks like a quiet week.
 #
-# Kill switch on the branch itself: when the routine-reports tree holds a file
+# Kill switch in the reports repository itself: when its main tree holds a file
 # named PAUSED, `run` publishes nothing and exits 0. The primary kill switch is
 # pausing or deleting the routine at claude.ai/code/routines.
 #
-# The reporting window starts where the previous digest's window ended (read
-# from its trailing marker), capped at 31 days back, and defaults to 8 days so a
-# late weekly run still overlaps the last one.
+# The reporting window starts one day before the previous digest's window ended
+# (read from its trailing marker), capped at 31 days back, and defaults to 8
+# days so a late weekly run still overlaps the last one. The day of overlap
+# catches a tag added after a run to a commit from just before it, and a commit
+# pushed after the run it predates; items in that day can appear in two digests.
 #
-# Test seams: FM_ROUTINE_NOW (epoch seconds), FM_ROUTINE_REMOTE (default
-# origin), FM_ROUTINE_URL_BASE (default https://github.com/), and
-# FM_ROUTINE_REPOS (a whitespace-separated replacement repository list).
+# Test seams: FM_ROUTINE_NOW (epoch seconds), FM_ROUTINE_REMOTE (default the
+# reports repository's https URL), FM_ROUTINE_URL_BASE (default
+# https://github.com/), and FM_ROUTINE_REPOS (a whitespace-separated
+# replacement repository list).
 set -u
 export LC_ALL=C
 export GIT_TERMINAL_PROMPT=0
@@ -59,10 +64,10 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$SCRIPT_DIR/fm-timeout-lib.sh"
 
 ROUTINE=creator-watch
-BRANCH=routine-reports
+BRANCH=main
 FILE="$ROUTINE.md"
 MARKER_PREFIX="<!-- fm-routine-report: $ROUTINE v1 window-end-epoch="
-REMOTE=${FM_ROUTINE_REMOTE:-origin}
+REMOTE=${FM_ROUTINE_REMOTE:-https://github.com/Amplify-Logic/firstmate-routine-reports.git}
 URL_BASE=${FM_ROUTINE_URL_BASE:-https://github.com/}
 READ_SECS=${FM_ROUTINE_READ_SECS:-45}
 BUDGET_SECS=${FM_ROUTINE_BUDGET_SECS:-240}
@@ -70,6 +75,7 @@ DEPTH=${FM_ROUTINE_DEPTH:-1000}
 MAX_BYTES=${FM_ROUTINE_MAX_BYTES:-65536}
 LINE_CHARS=300
 DEFAULT_WINDOW=$(( 8 * 86400 ))
+OVERLAP=86400
 MAX_WINDOW=$(( 31 * 86400 ))
 
 # The same public repositories as the laptop's creator watch. Only public
@@ -100,8 +106,7 @@ REPOS=${FM_ROUTINE_REPOS:-$REPOS}
 usage() {
   cat <<'EOF'
 Usage:
-  fm-routine-creator-watch.sh run       build the digest and publish it to the routine-reports branch
-  fm-routine-creator-watch.sh preview   build the digest and print it; publish nothing
+  fm-routine-creator-watch.sh run       build the digest and publish it to the reports repository
   fm-routine-creator-watch.sh --help    print this help
 
 Run by the scheduled creator-watch Claude cloud routine; see docs/cloud-routines.md.
@@ -145,12 +150,15 @@ whole_number "$NOW" || { echo "fm-routine-creator-watch: FM_ROUTINE_NOW must be 
 START=$(date +%s)
 WORK=$(mktemp -d "${TMPDIR:-/tmp}/fm-routine-creator-watch.XXXXXX") || exit 1
 trap 'rm -rf -- "$WORK"' EXIT
+REPORTS="$WORK/reports.git"
+git init --quiet --bare "$REPORTS" || exit 1
 
 PARENT=
 PREVIOUS_END=
 
 # Find the previous digest. ls-remote exits 2 when the branch does not exist yet,
-# which is the first run; any other failure is a real error.
+# which is the first run into the empty reports repository; any other failure
+# is a real error.
 locate_parent() {
   local rc marker
   fm_run_timed "$READ_SECS" git ls-remote --exit-code "$REMOTE" "refs/heads/$BRANCH" >/dev/null 2>&1
@@ -160,10 +168,10 @@ locate_parent() {
     2) return 0 ;;
     *) echo "fm-routine-creator-watch: could not read the $BRANCH branch of $REMOTE" >&2; return 1 ;;
   esac
-  fm_run_timed "$READ_SECS" git fetch --quiet --no-tags "$REMOTE" "+refs/heads/$BRANCH:refs/fm-routine/$BRANCH" >/dev/null 2>&1 \
+  fm_run_timed "$READ_SECS" git -C "$REPORTS" fetch --quiet --no-tags "$REMOTE" "+refs/heads/$BRANCH:refs/heads/$BRANCH" >/dev/null 2>&1 \
     || { echo "fm-routine-creator-watch: could not fetch the $BRANCH branch of $REMOTE" >&2; return 1; }
-  PARENT=$(git rev-parse --verify --quiet "refs/fm-routine/$BRANCH^{commit}") || return 1
-  marker=$(git cat-file -p "$PARENT:$FILE" 2>/dev/null | grep -F "$MARKER_PREFIX" | tail -1)
+  PARENT=$(git -C "$REPORTS" rev-parse --verify --quiet "refs/heads/$BRANCH^{commit}") || return 1
+  marker=$(git -C "$REPORTS" cat-file -p "$PARENT:$FILE" 2>/dev/null | grep -F "$MARKER_PREFIX" | tail -1)
   marker=${marker#"$MARKER_PREFIX"}
   marker=${marker%% *}
   if whole_number "$marker"; then
@@ -172,13 +180,13 @@ locate_parent() {
 }
 
 paused() {
-  [ -n "$PARENT" ] && git cat-file -e "$PARENT:PAUSED" 2>/dev/null
+  [ -n "$PARENT" ] && git -C "$REPORTS" cat-file -e "$PARENT:PAUSED" 2>/dev/null
 }
 
 window_start() {
   local since=$(( NOW - DEFAULT_WINDOW ))
   if [ -n "$PREVIOUS_END" ] && [ "$PREVIOUS_END" -lt "$NOW" ]; then
-    since=$PREVIOUS_END
+    since=$(( PREVIOUS_END - OVERLAP ))
   fi
   [ "$since" -ge $(( NOW - MAX_WINDOW )) ] || since=$(( NOW - MAX_WINDOW ))
   printf '%s\n' "$since"
@@ -269,12 +277,12 @@ PUBLISHED=
 
 publish() {
   local digest=$1 since_iso=$2 now_iso=$3 blob tree commit
-  blob=$(git hash-object -w "$digest") || return 1
+  blob=$(git -C "$REPORTS" hash-object -w "$digest") || return 1
   if [ -n "$PARENT" ]; then
-    tree=$( { git ls-tree "$PARENT" | awk -F '\t' -v f="$FILE" '$2 != f'
-              printf '100644 blob %s\t%s\n' "$blob" "$FILE"; } | git mktree) || return 1
+    tree=$( { git -C "$REPORTS" ls-tree "$PARENT" | awk -F '\t' -v f="$FILE" '$2 != f'
+              printf '100644 blob %s\t%s\n' "$blob" "$FILE"; } | git -C "$REPORTS" mktree) || return 1
   else
-    tree=$(printf '100644 blob %s\t%s\n' "$blob" "$FILE" | git mktree) || return 1
+    tree=$(printf '100644 blob %s\t%s\n' "$blob" "$FILE" | git -C "$REPORTS" mktree) || return 1
   fi
   commit=$(
     export GIT_AUTHOR_NAME="${GIT_AUTHOR_NAME:-firstmate routine}"
@@ -282,23 +290,23 @@ publish() {
     export GIT_COMMITTER_NAME="${GIT_COMMITTER_NAME:-$GIT_AUTHOR_NAME}"
     export GIT_COMMITTER_EMAIL="${GIT_COMMITTER_EMAIL:-$GIT_AUTHOR_EMAIL}"
     if [ -n "$PARENT" ]; then
-      git commit-tree "$tree" -p "$PARENT" -m "$ROUTINE: digest for $since_iso to $now_iso"
+      git -C "$REPORTS" commit-tree "$tree" -p "$PARENT" -m "$ROUTINE: digest for $since_iso to $now_iso"
     else
-      git commit-tree "$tree" -m "$ROUTINE: digest for $since_iso to $now_iso"
+      git -C "$REPORTS" commit-tree "$tree" -m "$ROUTINE: digest for $since_iso to $now_iso"
     fi
   ) || return 1
-  fm_run_timed "$READ_SECS" git push --quiet --no-verify "$REMOTE" "$commit:refs/heads/$BRANCH" >/dev/null 2>&1 || {
-    echo "fm-routine-creator-watch: the push to $BRANCH was refused or timed out" >&2
+  fm_run_timed "$READ_SECS" git -C "$REPORTS" push --quiet --no-verify "$REMOTE" "$commit:refs/heads/$BRANCH" >/dev/null 2>&1 || {
+    echo "fm-routine-creator-watch: the push to $BRANCH of $REMOTE was refused or timed out" >&2
     return 1
   }
-  PUBLISHED=$(git rev-parse --short "$commit")
+  PUBLISHED=$(git -C "$REPORTS" rev-parse --short "$commit")
 }
 
-action() {
-  local mode=$1 since since_iso now_iso unread
+action_run() {
+  local since since_iso now_iso unread
   locate_parent || exit 1
-  if [ "$mode" = run ] && paused; then
-    printf '%s: paused by a PAUSED file on %s; nothing published\n' "$ROUTINE" "$BRANCH"
+  if paused; then
+    printf '%s: paused by a PAUSED file on the reports %s; nothing published\n' "$ROUTINE" "$BRANCH"
     exit 0
   fi
   since=$(window_start)
@@ -310,18 +318,14 @@ action() {
     exit 1
   fi
   build_digest "$since_iso" "$now_iso" "$WORK/digest"
-  if [ "$mode" = preview ]; then
-    cat "$WORK/digest"
-    exit 0
-  fi
   publish "$WORK/digest" "$since_iso" "$now_iso" || exit 1
   unread=$(printf '%s' "$READ_FAILED" | wc -w | tr -d ' ')
-  printf '%s: published %s item(s) from %s repositories (%s unread) to %s at %s\n' \
+  printf '%s: published %s item(s) from %s repositories (%s unread) to the reports %s at %s\n' \
     "$ROUTINE" "$ITEMS" "$READ_OK" "$unread" "$BRANCH" "$PUBLISHED"
 }
 
 case "${1:-}" in
-  run|preview) action "$1" ;;
+  run) action_run ;;
   -h|--help) usage ;;
   *) usage >&2; exit 2 ;;
 esac

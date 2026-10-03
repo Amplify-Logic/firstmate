@@ -4,13 +4,14 @@
 #
 # Usage:
 #   fm-routine-report-check.sh [check]   print one line when a new report landed; silent otherwise
-#   fm-routine-report-check.sh show      print every report on the routine-reports branch
+#   fm-routine-report-check.sh show      print every report in the reports repository
 #   fm-routine-report-check.sh arm       write and register state/routine-reports.check.sh
 #   fm-routine-report-check.sh disarm    remove the check shim, its trust binding, and the record
 #   fm-routine-report-check.sh --help
 #
 # Scheduled Claude cloud routines publish capped digests, one file per routine,
-# on the routine-reports branch of this firstmate repository's own origin
+# on the main branch of the dedicated public reports repository
+# Amplify-Logic/firstmate-routine-reports, never in firstmate itself
 # (docs/cloud-routines.md). `check` asks the remote for that branch's head with
 # one `git ls-remote` and prints one generic line when the head moved since the
 # last report, so the watcher turns it into a `check:` wake and firstmate
@@ -32,8 +33,8 @@
 # The record state/.routine-reports holds the schema line, the last reported
 # head, and the epoch of the last probe. `disarm` removes it with the shim.
 #
-# FM_ROUTINE_REPORTS_URL overrides the remote; by default it is the origin URL
-# of the repository this script lives in.
+# FM_ROUTINE_REPORTS_URL overrides the remote; by default it is the reports
+# repository's https URL.
 set -u
 export LC_ALL=C
 export GIT_TERMINAL_PROMPT=0
@@ -47,7 +48,8 @@ CHECK_SHIM="$STATE/$CHECK_ID.check.sh"
 CHECK_TRUST="$STATE/$CHECK_ID.check-trust"
 RECORD="$STATE/.routine-reports"
 RECORD_SCHEMA=fm-routine-reports-v1
-BRANCH=routine-reports
+BRANCH=main
+REPORTS_URL=${FM_ROUTINE_REPORTS_URL:-https://github.com/Amplify-Logic/firstmate-routine-reports.git}
 REGISTER_BIN="$SCRIPT_DIR/fm-check-register.sh"
 
 # shellcheck source=bin/fm-timeout-lib.sh
@@ -61,7 +63,7 @@ usage() {
   cat <<'EOF'
 Usage:
   fm-routine-report-check.sh [check]   print one line when a new routine report landed (silent otherwise)
-  fm-routine-report-check.sh show      print every report on the routine-reports branch
+  fm-routine-report-check.sh show      print every report in the reports repository
   fm-routine-report-check.sh arm       write and register state/routine-reports.check.sh
   fm-routine-report-check.sh disarm    remove the check shim, its trust binding, and the record
   fm-routine-report-check.sh --help    print this help
@@ -89,14 +91,6 @@ PROBE_SECS=${FM_ROUTINE_REPORT_PROBE_SECS:-20}
 bounded_setting FM_ROUTINE_REPORT_INTERVAL "$INTERVAL" 60 86400 zero
 bounded_setting FM_ROUTINE_REPORT_PROBE_SECS "$PROBE_SECS" 1 25
 
-remote_url() {
-  if [ -n "${FM_ROUTINE_REPORTS_URL:-}" ]; then
-    printf '%s\n' "$FM_ROUTINE_REPORTS_URL"
-  else
-    git -C "$FM_ROOT" remote get-url origin 2>/dev/null
-  fi
-}
-
 RECORD_HEAD=
 RECORD_PROBED=0
 
@@ -123,14 +117,13 @@ record_write() {  # <head> <probed-epoch>
 }
 
 action_check() {
-  local now url out rc head
+  local now out rc head
   now=$(date +%s)
   record_read
   if [ "$INTERVAL" -ne 0 ] && [ $(( now - RECORD_PROBED )) -lt "$INTERVAL" ] && [ "$RECORD_PROBED" -le "$now" ]; then
     return 0
   fi
-  url=$(remote_url) && [ -n "$url" ] || return 0
-  out=$(fm_run_timed "$PROBE_SECS" git ls-remote --exit-code "$url" "refs/heads/$BRANCH" 2>/dev/null)
+  out=$(fm_run_timed "$PROBE_SECS" git ls-remote --exit-code "$REPORTS_URL" "refs/heads/$BRANCH" 2>/dev/null)
   rc=$?
   case "$rc" in
     0) head=${out%%[[:space:]]*} ;;
@@ -149,19 +142,17 @@ action_check() {
 }
 
 action_show() {
-  local url tmp name
-  url=$(remote_url) && [ -n "$url" ] || die "no remote to read reports from"
+  local tmp name
   tmp=$(mktemp -d "${TMPDIR:-/tmp}/fm-routine-reports.XXXXXX") || die "could not make a temporary directory"
   # shellcheck disable=SC2064  # Expand now: the path is fixed for this call.
   trap "rm -rf -- '$tmp'" EXIT
   git init --quiet --bare "$tmp/r" || die "could not make a temporary repository"
-  if ! fm_run_timed 60 git -C "$tmp/r" fetch --quiet --no-tags --depth=1 "$url" "refs/heads/$BRANCH:refs/heads/$BRANCH" >/dev/null 2>&1; then
-    die "could not read the $BRANCH branch of $url"
+  if ! fm_run_timed 60 git -C "$tmp/r" fetch --quiet --no-tags --depth=1 "$REPORTS_URL" "refs/heads/$BRANCH:refs/heads/$BRANCH" >/dev/null 2>&1; then
+    die "could not read the $BRANCH branch of $REPORTS_URL"
   fi
   printf 'Routine reports on %s at %s\n' "$BRANCH" "$(git -C "$tmp/r" rev-parse --short "refs/heads/$BRANCH")"
   git -C "$tmp/r" ls-tree --name-only "refs/heads/$BRANCH" | while IFS= read -r name; do
     case "$name" in *.md) ;; *) continue ;; esac
-    [ "$name" = README.md ] && continue
     printf '\n===== %s =====\n' "$name"
     git -C "$tmp/r" cat-file -p "refs/heads/$BRANCH:$name"
   done
