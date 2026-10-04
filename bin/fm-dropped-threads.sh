@@ -32,12 +32,12 @@
 # per-home session lock; the only lock is a private mutex over its own record
 # directory, so a scheduled run and a manual one cannot both publish a slot.
 #
-# Delivery is a durable record, which the phone bridge reads, plus one line
-# spoken at the desk through bin/fm-speak.sh. That speaker is itself opt-in
-# (config/speak), so with desk voice off nothing is heard. When nothing is
-# waiting the slot's record is still written, with `spoken` null and no items,
-# and nothing is spoken. No item text carries a link: any http(s) address in a
-# title or note is removed before it is recorded.
+# Delivery is a durable record, which a later Starship Voice change will read
+# for the phone card, plus one line spoken at the desk through bin/fm-speak.sh.
+# That speaker is itself opt-in (config/speak), so with desk voice off nothing
+# is heard. When nothing is waiting the slot's record is still written, with
+# `spoken` null and no items, and nothing is spoken. No item text carries a
+# link: any http(s) address in a title or note is removed before it is recorded.
 #
 # `run` is the scheduled entry point (bin/fm-dropped-threads-schedule.sh installs
 # it on macOS launchd) and the manual command. It publishes the latest slot whose
