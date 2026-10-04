@@ -1,0 +1,52 @@
+# HEAD bcc641e3
+=== facts before (frontmost)
+Arc company.thebrowser.Browser
+=== front (header + 3 lines)
+app: Arc | window: Fleet Report: 2 to 4 October 2026 | dialog: no | snapshot: ps1_9c523a2805bb6553b7bb8099baa3210b | elements: 26/26
+elem_2 button 'Close'
+elem_3 button 'Enter Full Screen'
+elem_6 button 'close button'
+rc=
+=== facts after front (must be unchanged)
+Arc company.thebrowser.Browser
+=== front --app Finder (adversarial: must refuse, exit 2)
+fm-computer-use.sh: front: --app is not taken; front reads whatever window is in front
+rc=2
+=== front --window-title X (adversarial)
+fm-computer-use.sh: front: --window-title is not taken; front reads whatever window is in front
+rc=2
+=== settle --app Finder (header carries | partial:)
+rc=0 header: app: Finder | window: Desktop | dialog: no | snapshot: ps1_52035d826d6ed9956feac748c96d78a0 | elements: 200/458 | partial: Warning: AX tree truncated at element stderr: 
+=== settle --app Arc (resolved id header)
+rc=0 header: app: Arc (company.thebrowser.Browser) | window: Fleet Report: 2 to 4 October 2026 | dialog: no | snapshot: ps1_56c79e487d29745799756a3d8f2e47b2 | elements: 26/26 stderr: 
+=== elements --app com.google.Chrome --screenshot (on-request window image)
+rc=1 header: app: Google Chrome | window: localhost:8091 - Google Chrome – Person 1 | dialog: no | snapshot: ps1_69c0a0c5f5574cc3c368519d7f12ec3c | elements: 32/32
+stderr: fm-computer-use.sh: no window image of com.google.Chrome: The desktop observation provider returned inconsistent response evidence: window-context window title.
+=== elements --app com.apple.dt.Xcode --thin 50 (12 listed < 50 => image taken automatically)
+rc=0 header: app: Xcode | window: Welcome to Xcode | dialog: no | snapshot: ps1_947e768112d63108a849c946b7c8f03f | elements: 12/12 | screenshot: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-computer-use/latest_annotated.png
+stderr: 
+=== elements --app com.apple.dt.Xcode (default thin 5, 12 listed => no image)
+app: Xcode | window: Welcome to Xcode | dialog: no | snapshot: ps1_93eb6bc9dcfbb44e6996e384c2baf3a6 | elements: 12/12
+=== elements --app NoSuchAppXYZ (adversarial: Peekaboo's reason passed through)
+fm-computer-use.sh: peekaboo could not read NoSuchAppXYZ: Application 'NoSuchAppXYZ' not found
+rc=1
+=== BASE d7e0bcc1 for comparison
+--- base elements --app 'Finder'
+app: Finder | window: Desktop | dialog: no | snapshot: ps1_fe2597318937ada112717d341a66f887 | elements: 200/458
+--- base elements --app 'System Settings'
+fm-computer-use.sh: peekaboo see failed for System Settings
+--- base elements --app 'Arc'
+fm-computer-use.sh: peekaboo see failed for Arc
+--- base elements --app 'com.google.Chrome'
+fm-computer-use.sh: peekaboo see failed for com.google.Chrome
+--- base elements --app 'com.apple.dt.Xcode'
+app: Xcode | window: Welcome to Xcode | dialog: no | snapshot: ps1_25bdd82504bf1aa9058326decd0b3f2c | elements: 12/12
+--- base front
+fm-computer-use.sh: unknown command front (see --help)
+=== elements --app Arc --screenshot (ambiguous name resolved, front window imaged)
+rc=0 header: app: Arc (company.thebrowser.Browser) | window: Fleet Report: 2 to 4 October 2026 | dialog: no | snapshot: ps1_65924b1c3a31286d5a9d2d8e9026d655 | elements: 12/12 | screenshot: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-computer-use/latest_annotated.png
+stderr: 
+copied to r2-arc-annotated.png
+=== front --screenshot
+rc=0 header: app: Arc | window: Fleet Report: 2 to 4 October 2026 | dialog: no | snapshot: ps1_97e5d75a818bd8b1684e8313af0f7595 | elements: 12/12 | screenshot: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-computer-use/latest_annotated.png
+stderr: 

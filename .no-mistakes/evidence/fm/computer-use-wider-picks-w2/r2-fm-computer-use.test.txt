@@ -1,0 +1,14 @@
+ok - check is silent only for the pinned version and names absent, other, unrecognised and broken copies
+ok - install verifies the pinned digest, links a versioned user-level copy, is idempotent, and never replaces a foreign copy
+ok - elements renders one compact line per useful element with state, and refuses malformed output
+ok - elements reads the element list without a screenshot, marks a partial or read-only list, and passes Peekaboo's reason through
+ok - elements takes an annotated window image only when asked or when the list is thin, and keeps the list when the image fails
+ok - elements retries an ambiguous app name by the bundle id of its one running app, and never guesses between two
+ok - front reads whatever window is in front without a screenshot
+ok - settle returns on the first two matching reads and times out on a list that never settles
+ok - dialog-kind classifies privacy, save, replace, destructive, quit and other dialogs
+ok - guard allows only the expected app, idle input, a quiet microphone and allowed dialogs, and refuses whatever it cannot read
+ok - guard waits a bounded time for a quiet input window and refuses only if input keeps arriving
+ok - guard refuses while a desk dictation is in flight or when it cannot tell
+ok - guard --activate checks the captain's screen before activating, then re-checks the front app, input, dialogs and field
+ok - facts report a running desk transcription

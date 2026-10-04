@@ -1,0 +1,67 @@
+# Browser recipe surface
+$ ls -d "$HOME/Library/Application Support/Arc/User Data/Default/Extensions/fcoeoabgfenejglbffodgkkbkcdhcgfn" | sed "s#$HOME#~#"
+~/Library/Application Support/Arc/User Data/Default/Extensions/fcoeoabgfenejglbffodgkkbkcdhcgfn
+  (0.03s)
+$ ls -d "$HOME/Library/Application Support/Google/Chrome/Profile 1/Extensions/fcoeoabgfenejglbffodgkkbkcdhcgfn" | sed "s#$HOME#~#"
+~/Library/Application Support/Google/Chrome/Profile 1/Extensions/fcoeoabgfenejglbffodgkkbkcdhcgfn
+  (0.03s)
+$ ls "$HOME/Library/Application Support/Arc/User Data/NativeMessagingHosts/" | grep -i claude
+com.anthropic.claude_code_browser_extension.json
+  (0.03s)
+$ osascript -e 'application id "company.thebrowser.Browser" is running'
+true
+  (0.09s)
+$ perl -e 'alarm 20; exec @ARGV' osascript -e 'tell application id "company.thebrowser.Browser" to count windows'; echo rc=$?
+rc=142
+  (20.22s)
+$ perl -e 'alarm 20; exec @ARGV' osascript -e 'tell application id "com.google.Chrome" to count windows'; echo rc=$?
+rc=142
+  (20.22s)
+# Recipe cards: read-only commands, run as written
+$ osascript -e 'get volume settings'
+output volume:63, input volume:63, alert volume:100, output muted:false
+  (0.23s)
+$ SwitchAudioSource -c
+MacBook Pro Speakers
+  (0.15s)
+$ pmset -g batt
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=23068771)	100%; charged; 0:00 remaining present: true
+  (0.05s)
+$ defaults read -g AppleInterfaceStyle
+Dark
+  (0.03s)
+$ osascript -e 'tell application "Finder" to get name of every disk'
+Ableton Live 12 Suite 12.4.6 U2B [HCiSO], Hardware, Macintosh HD, Preboot, SSD, Update, VM, home, iOS_23D8133, iSCPreboot, xarts
+  (0.19s)
+$ test -d "$HOME/Library/Mobile Documents/com~apple~CloudDocs/Artevo Inbox" && echo exists
+exists
+  (0.03s)
+$ sqlite3 -readonly "file:$HOME/Library/Group Containers/group.com.apple.calendar/Calendar.sqlitedb?mode=ro" 'select count(*) from Calendar'
+15
+  (0.08s)
+$ sqlite3 -readonly "file:$HOME/Library/Group Containers/group.com.apple.notes/NoteStore.sqlite?mode=ro" "select count(*) from ZICCLOUDSYNCINGOBJECT where ZTITLE1 is not null and coalesce(ZMARKEDFORDELETION,0)=0"
+246
+  (0.05s)
+$ sqlite3 -readonly "file:$HOME/Library/Group Containers/group.net.whatsapp.WhatsApp.shared/ChatStorage.sqlite?mode=ro" 'select count(*) from ZWACHATSESSION'
+222
+  (0.06s)
+$ xcrun simctl list devices booted
+== Devices ==
+-- iOS 26.3 --
+  (0.34s)
+$ osascript -e 'id of application "Logic Pro"'
+0:2: execution error: Can’t get application "Logic Pro". (-1728)
+  (0.12s)
+$ osascript -e 'id of application "Xcode"'
+com.apple.dt.Xcode
+  (0.08s)
+$ osascript -e 'application id "com.apple.logic10" is running'
+false
+  (0.09s)
+$ bin/fm-computer-use.sh elements --app com.apple.logic10
+fm-computer-use.sh: peekaboo could not read com.apple.logic10: Application 'com.apple.logic10' not found
+  (2.71s)
+$ bin/fm-computer-use.sh elements --app WhatsApp
+fm-computer-use.sh: peekaboo could not read WhatsApp: Window not found: accessible window for PID 82064
+  (0.76s)

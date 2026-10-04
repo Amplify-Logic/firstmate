@@ -1,0 +1,49 @@
+# HEAD bcc641e3: bin/fm-computer-use.sh elements, header + first 3 lines, timing
+=== elements --app 'Finder'
+app: Finder | window: Desktop | dialog: no | snapshot: ps1_d2fc44131d453ec03f06c21de95098de | elements: 200/458 | partial: Warning: AX tree truncated at element count 1000. Retry with larger --depth, --max-elements, or -
+elem_56 button 'Eject' (disabled)
+elem_61 button 'Eject' (disabled)
+elem_76 button 'increment page button'
+rc=0 time=8.6s stderr: 
+=== elements --app 'System Settings'
+app: System Settings | window: Battery – ￼ Fully Charged | dialog: yes | snapshot: ps1_279b52d295d3d39d19785ff87260478d | elements: 117/117
+elem_109 button 'increment page button'
+elem_112 button 'Search'
+elem_118 button 'low_power_mode' = Never
+rc=0 time=1.3s stderr: 
+=== elements --app 'Notes'
+app: Notes | window: All iCloud – 246 notes | dialog: yes | snapshot: ps1_539a8b488c7d3dfa47f93cf38e682366 | elements: 200/785 | partial: Warning: AX tree truncated at element count 1000, children per node 250. Retry w
+elem_10 image '_NS:100'
+elem_11 image '_NS:93'
+elem_14 image 'move'
+rc=0 time=5.9s stderr: 
+=== elements --app 'Arc'
+app: Arc (company.thebrowser.Browser) | window: Fleet Report: 2 to 4 October 2026 | dialog: no | snapshot: ps1_580aadf2d71bfc48c98278cc5332b130 | elements: 26/26
+elem_2 button 'Close'
+elem_3 button 'Enter Full Screen'
+elem_6 button 'close button'
+rc=0 time=1.8s stderr: 
+=== elements --app 'com.apple.finder'
+app: Finder | window: Desktop | dialog: no | snapshot: ps1_b4fd111894a6e45eaae3155a9c6bfdeb | elements: 200/458 | partial: Warning: AX tree truncated at element count 1000. Retry with larger --depth, --max-elements, or -
+elem_56 button 'Eject' (disabled)
+elem_61 button 'Eject' (disabled)
+elem_76 button 'increment page button'
+rc=0 time=6.7s stderr: 
+=== elements --app 'com.google.Chrome'
+app: Google Chrome | window: localhost:8091 - Google Chrome – Person 1 | dialog: no | snapshot: ps1_3f38b56fafd803a9525bfa5fb4222829 | elements: 32/32
+elem_7 button 'Back'
+elem_8 button 'Forward' (disabled)
+elem_9 button 'Reload'
+rc=0 time=0.8s stderr: 
+=== elements --app 'com.apple.dt.Xcode'
+app: Xcode | window: Welcome to Xcode | dialog: no | snapshot: ps1_4e7a9689b25d3d81f0fd59a463730d85 | elements: 12/12
+elem_2 button 'Close'
+elem_8 button 'Create New Project'
+elem_9 button 'Clone Git Repository'
+rc=0 time=1.1s stderr: 
+=== elements --app 'WhatsApp'
+rc=1 time=0.8s stderr: fm-computer-use.sh: peekaboo could not read WhatsApp: Window not found: accessible window for PID 82064
+=== elements --app 'VLC'
+rc=1 time=1.1s stderr: fm-computer-use.sh: peekaboo could not read VLC: Window not found: accessible window for PID 25494
+=== elements --app 'Simulator'
+rc=1 time=0.7s stderr: fm-computer-use.sh: peekaboo could not read Simulator: Window not found: accessible window for PID 90555

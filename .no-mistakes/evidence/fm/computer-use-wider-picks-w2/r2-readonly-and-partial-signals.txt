@@ -1,0 +1,14 @@
+# Live Peekaboo 4.5.0 reads: raw snapshot_reusable / truncation, and the helper header for the same app
+=== com.apple.systempreferences
+raw: success=True snapshot_reusable=True max_element_count_reached=None incomplete_accessibility_read=None warning=''
+helper: app: System Settings | window: Battery | dialog: yes | snapshot: ps1_f31f10d109b78682a8e85326c5c56f90 | elements: 118/118
+=== com.apple.finder
+raw: success=True snapshot_reusable=True max_element_count_reached=True incomplete_accessibility_read=False warning='Warning: AX tree truncated at element count 1000. Retry with larger --depth, --max-element'
+helper: app: Finder | window: Desktop | dialog: no | snapshot: ps1_8bb4612e707b1815df0be9b1886b45e1 | elements: 200/458 | partial: Warning: AX tree truncated at element count 1000. Retry with larger --depth, --max-elements, or --max-child
+=== com.apple.Notes
+raw: success=True snapshot_reusable=True max_element_count_reached=True incomplete_accessibility_read=False warning='Warning: AX tree truncated at element count 1000, children per node 250. Retry with larger'
+helper: app: Notes | window: All iCloud – 246 notes | dialog: yes | snapshot: ps1_8879ebf818196a43dced8646e4f8ed64 | elements: 200/785 | partial: Warning: AX tree truncated at element count 1000, children per node 250. Retry with larger
+=== com.apple.dt.Xcode
+raw: success=True snapshot_reusable=True max_element_count_reached=None incomplete_accessibility_read=None warning=''
+helper: app: Xcode | window: Welcome to Xcode | dialog: no | snapshot: ps1_039cd623f84971a9496c6db40f2d1409 | elements: 12/12
+# No live read on this Mac returned snapshot_reusable=false, so '(read-only)' correctly never appears above.
