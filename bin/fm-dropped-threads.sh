@@ -21,9 +21,10 @@
 #   question    an open needs-decision or blocked event from work under way,
 #               the same keyed open-decision set the wake drain folds
 #   time-gate   any other held backlog item whose hold-until date has arrived
-#   quiet-task  an in-flight task whose newest status event is stamped more than
-#               stale_hours ago; an unstamped event is unknown time and is never
-#               guessed from a file time, so it is not reported
+#   quiet-task  an in-flight task with no captain hold whose newest status event
+#               is stamped more than stale_hours ago; an unstamped event is
+#               unknown time and is never guessed from a file time, so it is
+#               not reported
 #
 # IT ONLY REPORTS. It never changes the backlog, a hold, a task or the wake
 # queue, never wakes firstmate, never writes a captain inbox note, opens no
@@ -220,8 +221,8 @@ due_slot() {
 # --- collection -------------------------------------------------------------
 
 # Newest status event age, in seconds, for every in-flight task with metadata
-# whose newest event is stamped at least stale_hours ago, as a JSON array of
-# {id, age_seconds}. The stamp grammar is owned by bin/fm-classify-lib.sh.
+# and no captain hold whose newest event is stamped at least stale_hours ago,
+# as a JSON array of {id, age_seconds}. The stamp grammar is owned by bin/fm-classify-lib.sh.
 quiet_tasks_json() {  # <backlog-json-file> <now-epoch>
   local backlog=$1 now=$2 limit id status line epoch age rows=''
   limit=$((CFG_STALE_HOURS * 3600))
@@ -237,7 +238,7 @@ quiet_tasks_json() {  # <backlog-json-file> <now-epoch>
     age=$((now - epoch))
     [ "$age" -ge "$limit" ] || continue
     rows="$rows$(jq -cn --arg id "$id" --argjson age "$age" '{id:$id,age_seconds:$age}')"$'\n'
-  done < <(jq -r '.records[]? | select(.structured == true and .state == "in_flight") | .id' "$backlog")
+  done < <(jq -r '.records[]? | select(.structured == true and .state == "in_flight" and .hold_bucket == null) | .id' "$backlog")
   printf '%s' "$rows" | jq -cs '.'
 }
 

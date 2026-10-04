@@ -5,7 +5,7 @@
 #   - A home with no `enabled = true` line is completely inert.
 #   - The digest lists live and aged captain holds with their due dates, open
 #     questions from work under way, other held items whose date has arrived,
-#     and in-flight tasks whose newest stamped status event is older than
+#     and unheld in-flight tasks whose newest stamped status event is older than
 #     stale_hours, most pressing first, in one spoken sentence plus a short list
 #     with no links in it.
 #   - Each slot publishes once, at or after its local time; a morning missed
@@ -169,6 +169,41 @@ test_preview_lists_the_dropped_threads() {
     and .counts.quiet_tasks == 0 and .counts.total == 5
   ' >/dev/null || fail "max_items and stale_hours were not honoured: $out"
   pass 'the digest lists decisions, questions, arrived dates and quiet tasks, most pressing first'
+}
+
+test_held_work_is_not_a_quiet_task() {
+  local h out id
+  h="$TMP_ROOT/held-in-flight"
+  new_home "$h" false
+  cat >"$h/data/backlog.md" <<'EOF'
+# Backlog
+
+## In flight
+- [ ] dated-work - Paused until next month (repo: alpha) (kind: ship) (since 2026-10-01) (hold: wait for launch) (hold-kind: captain) (hold-until: 2026-11-02)
+  Captain hold set: 2026-10-01T09:00:00Z
+- [ ] blocked-work - Waiting on a blocker blocked-by: blocker-task (repo: alpha) (kind: ship) (since 2026-10-01) (hold: needs the blocker) (hold-kind: captain)
+  Captain hold set: 2026-10-01T09:00:00Z
+- [ ] blocker-task - The blocker (repo: alpha) (kind: ship) (since 2026-10-01)
+## Queued
+## Done
+EOF
+  for id in dated-work blocked-work blocker-task; do
+    fm_write_meta "$h/state/$id.meta" \
+      "window=firstmate:fm-$id" \
+      "worktree=$h/projects/work" \
+      "project=alpha" \
+      "harness=claude" \
+      "kind=ship" \
+      "mode=no-mistakes" \
+      "yolo=off"
+    printf 'working [at=%s]: setup done\n' "$T_STALE" >"$h/state/$id.status"
+  done
+  out=$(digest "$h" "$T_0845" preview) || fail 'preview failed'
+  printf '%s' "$out" | jq -e '
+    .counts.quiet_tasks == 1 and .counts.total == 1
+    and ([.items[].id] == ["blocker-task"])
+  ' >/dev/null || fail "a captain-held in-flight task was reported as quiet: $out"
+  pass 'in-flight work the captain set aside or blocked is not reported as quiet'
 }
 
 test_each_slot_publishes_once() {
@@ -361,6 +396,7 @@ FAKE
 
 test_inert_without_opt_in
 test_preview_lists_the_dropped_threads
+test_held_work_is_not_a_quiet_task
 test_each_slot_publishes_once
 test_missed_morning_catch_up
 test_silent_when_nothing_waits
