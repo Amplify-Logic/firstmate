@@ -682,7 +682,7 @@ test_snapshot_requests_complete_glance_rows() {
   cat > "$fixture/bin/fm-bearings-snapshot.sh" <<'SH'
 #!/usr/bin/env bash
 case " $* " in
-  *' --all-in-flight '*'--all-secondmates '*--all-queued*) printf '%s\n' '{"schema":"fm-bearings.v1"}' ;;
+  *' --all-in-flight '*--all-queued*) printf '%s\n' '{"schema":"fm-bearings.v1"}' ;;
   *) exit 9 ;;
 esac
 SH
@@ -695,7 +695,7 @@ spec.loader.exec_module(module)
 module.run_snapshot(pathlib.Path(sys.argv[2]), pathlib.Path(sys.argv[3]))
 PY
   ) || fail "bridge snapshot did not request complete glance rows: $output"
-  pass "snapshot requests complete in-flight, second-mate, and waiting rows"
+  pass "snapshot requests complete in-flight and waiting rows"
 }
 
 test_bridge_page_async_progress_and_release() {

@@ -1241,7 +1241,6 @@ def run_snapshot(home: Path, root: Path) -> Dict[str, Any]:
             "--json",
             "--passive-view",
             "--all-in-flight",
-            "--all-secondmates",
             "--all-decisions",
             "--all-queued",
         ],

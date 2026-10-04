@@ -540,13 +540,13 @@ RESULT=$(jq -n --arg floor "$CONFIDENCE_FLOOR" --argjson lat "$LAT_MS" --arg non
      then {source: "default", use: profiles($cfg.default // null), note: "rule \($choice) floor \($rule.floor.scope) below \($rule.floor.min_percent)%: fall through to default"}
    else {source: $choice, use: profiles($rule.use), note: "rule matched"} end) as $sel |
   def when_of($c): (if rule_at($c) == null then $none_criterion else rule_at($c).when end | .[0:60]);
+  (if $fb.below and ($fb.to | not) then $choice else ($sel.source // $choice) end) as $drawn |
   {
     model: $r.model, latency_ms: $lat, tokens: ($r.usage // null),
     rule: $picked,
     rule_when: when_of($picked),
     confidence: $a.confidence, probabilities: $a.probabilities,
-    chosen_rule: ($sel.source // $choice), chosen_when: when_of($sel.source // $choice),
-    chosen_p: $a.probabilities[$sel.source // $choice]
+    chosen_rule: $drawn, chosen_when: when_of($drawn), chosen_p: $a.probabilities[$drawn]
   }
   + (if $fb.to then {fallback: "\($choice) (\(when_of($choice))) probability \($fb.p) clears its floor \($fb.to_floor); \($picked) probability \($a.probabilities[$picked]) is below its floor \($picked_floor)"} else {} end)
   as $ev |

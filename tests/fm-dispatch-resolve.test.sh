@@ -705,7 +705,13 @@ assert_contains "$out" '  note: rule rule_1 floor model:fable below 20%: fall th
 assert_contains "$out" "  profile: --harness 'cursor' --model 'cursor-grok-4.6-high'" "fall-through resolves among the default profiles"
 assert_not_contains "$out" 'candidate: claude:fable' "the floored rule's own profile is not a candidate"
 assert_equals 'clear|default|0.01|cursor-grok-4.6-high' "$(jq -r '"\(.status)|\(.rule)|\(.p)|\(.profile.model)"' "$HOME_DIR/state/dispatch-decisions.jsonl")" "a floor fall-through records the default it drew the profile from"
+reset_log
+write_response "$RESPONSE" rule_1 0.4
+TYPESAFE_API_KEY=$KEY run code out err "$BRIEF"
+assert_contains "$out" '  status: ambiguous' "low confidence on a floored rule is ambiguous"
+assert_equals 'ambiguous|rule_1|New feature work on the app.|0.01|null' "$(tail -n 1 "$HOME_DIR/state/dispatch-decisions.jsonl" | jq -r '"\(.status)|\(.rule)|\(.rule_when)|\(.p)|\(.profile)"')" "an ambiguous answer records its own rule even when that rule's floor is below"
 rm -rf "$HOME_DIR/state"
+write_response "$RESPONSE" rule_1 0.97
 
 MISSING_RULE_FLOOR="$TMP_ROOT/missing-rule-floor.json"
 jq '(.providers[] | select(.provider == "claude") | .quotaSemantics.effectiveAvailability) |= map(select(.scope != "model:fable"))' "$QUOTA" > "$MISSING_RULE_FLOOR"
