@@ -25,7 +25,8 @@
 #       (`peekaboo see --tree --no-screenshot --json`), so a minimised window
 #       or one on another desktop still reads. <app> is a name or a bundle id
 #       (com.apple.Notes); when a name matches several processes, the bundle id
-#       of the one running app with exactly that name is used instead.
+#       of the one running app with exactly that name is used instead, and the
+#       header names it as "<app> (<bundle id>)" to pass to later peekaboo calls.
 #       Printed compactly:
 #         "app: <app> | window: <title> | dialog: yes|no | snapshot: <id> | elements: <shown>/<total>"
 #       plus " | screenshot: <path>" when a window image was taken, then one
@@ -188,12 +189,12 @@ cmd_install() {
   echo "installed peekaboo $PEEKABOO_PIN at $link -> $lib/peekaboo"
 }
 
-# render_elements <see-json-file> <all:0|1> <max> [screenshot-path]
+# render_elements <see-json-file> <all:0|1> <max> [screenshot-path] [resolved-bundle-id]
 render_elements() {
-  python3 - "$1" "$2" "$3" "${4:-}" <<'PY'
+  python3 - "$1" "$2" "$3" "${4:-}" "${5:-}" <<'PY'
 import json, sys
 
-path, show_all, cap, shot = sys.argv[1], sys.argv[2] == "1", int(sys.argv[3]), sys.argv[4]
+path, show_all, cap, shot, resolved = sys.argv[1], sys.argv[2] == "1", int(sys.argv[3]), sys.argv[4], sys.argv[5]
 try:
     with open(path, encoding="utf-8") as fh:
         doc = json.load(fh)
@@ -249,7 +250,8 @@ for el in data["ui_elements"]:
 total = len(lines)
 shown = lines[:cap]
 dialog = "yes" if data.get("is_dialog") else "no"
-print(f"app: {text(data.get('application_name'))} | window: {text(data.get('window_title'))} | "
+app = text(data.get("application_name")) + (f" ({resolved})" if resolved else "")
+print(f"app: {app} | window: {text(data.get('window_title'))} | "
       f"dialog: {dialog} | snapshot: {text(data.get('snapshot_id'))} | elements: {len(shown)}/{total}"
       + (f" | screenshot: {shot}" if shot else ""))
 for line in shown:
@@ -346,7 +348,7 @@ resolve_app() {
 }
 
 cmd_elements() {
-  local app="" title="" all=0 max=200 from="" shot=0 thin=5 tmp rc=0 id reason total path
+  local app="" title="" all=0 max=200 from="" shot=0 thin=5 tmp rc=0 id resolved="" reason total path
   while [ $# -gt 0 ]; do
     case "$1" in
       --app) app=${2:-}; shift 2 ;;
@@ -384,6 +386,7 @@ cmd_elements() {
           reason="$reason - pass the bundle id instead"
         elif see_read "$tmp/tree.json" "$tmp/tree.err" tree "$id" "$title"; then
           app=$id
+          resolved=$id
           reason=""
         else
           app=$id
@@ -396,12 +399,12 @@ cmd_elements() {
       return 1
     fi
   fi
-  render_elements "$tmp/tree.json" "$all" "$max" > "$tmp/tree.txt" || { rm -rf "$tmp"; return 1; }
+  render_elements "$tmp/tree.json" "$all" "$max" "" "$resolved" > "$tmp/tree.txt" || { rm -rf "$tmp"; return 1; }
   total=$(sed -n '1s/.*| elements: [0-9]*\/\([0-9]*\).*/\1/p' "$tmp/tree.txt")
   if [ "$shot" = 1 ] || [ "${total:-0}" -lt "$thin" ]; then
     if see_read "$tmp/shot.json" "$tmp/shot.err" shot "$app" "$title"; then
       path=$(shot_path "$tmp/shot.json")
-      render_elements "$tmp/shot.json" "$all" "$max" "${path:-none}"
+      render_elements "$tmp/shot.json" "$all" "$max" "${path:-none}" "$resolved"
       rc=$?
       rm -rf "$tmp"
       return "$rc"

@@ -32,7 +32,7 @@ Claude Code's built-in computer use is not used here: it hides the captain's oth
 1. **Read** the target app's window as a compact list:
    `bin/fm-computer-use.sh elements --app "<App or bundle id>"`
    It reads the element list without a screenshot, so a window that is minimised or on another desktop still reads; only a hidden window with no accessible window at all (WhatsApp while hidden) fails.
-   Prefer the bundle id (`company.thebrowser.Browser` for Arc): a name can match several processes, and the helper only resolves that when exactly one running app has that name.
+   Prefer the bundle id (`company.thebrowser.Browser` for Arc): a name can match several processes, and the helper only resolves that when exactly one running app has that name; when it does, the header shows `app: Arc (company.thebrowser.Browser)`, and that bundle id is the one to pass to every later `peekaboo` call.
    The header names the app, the window, whether it is a dialog, and the snapshot id; each line is `<element id> <role> '<label>'` with its value and state.
    A failed read prints Peekaboo's own reason; report it rather than retrying blindly.
    Use `--window-title` when the app has several windows, and `--all` only when a needed element is missing from the default list.

@@ -239,8 +239,11 @@ test_elements_resolve_an_ambiguous_name_to_its_bundle_id() {
   see_json 18 Arc > "$d/tree-company.thebrowser.Browser.json"
   fake_osascript "$d" 0 company.thebrowser.Browser
   out=$(PATH="$d:$BASE_PATH" "$CU" elements --app Arc) || fail "an ambiguous name with one running app must resolve: $out"
-  assert_contains "$(sed -n 1p <<<"$out")" "app: Arc | " "the resolved read must render"
+  assert_contains "$(sed -n 1p <<<"$out")" "app: Arc (company.thebrowser.Browser) | " "the resolved read must name the bundle id to act with"
   assert_contains "$(sed -n 2p "$d/calls")" "--app company.thebrowser.Browser" "the retry must read by bundle id"
+  see_json 18 Arc > "$d/shot-company.thebrowser.Browser.json"
+  out=$(PATH="$d:$BASE_PATH" "$CU" elements --app Arc --screenshot) || fail "a resolved name must take its image by bundle id: $out"
+  assert_contains "$(sed -n 1p <<<"$out")" "app: Arc (company.thebrowser.Browser) | " "the image read must name the bundle id too"
 
   d="$TMP_ROOT/ambiguous-two"; fake_see "$d"
   see_error "$long" > "$d/tree-Arc.json"
