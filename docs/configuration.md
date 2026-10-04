@@ -2657,7 +2657,7 @@ Nothing re-creates that shim on its own, so while an intake is armed or owed `pe
 With no session running, nothing is delivered when the job fires: the armed state is durable and the next session's bootstrap section surfaces it as `MORNING_INTAKE: ...`, so the intake is queued until firstmate next starts rather than running on its own.
 
 `bin/fm-morning-intake-schedule.sh` owns the inspectable macOS launchd schedule and refuses to install on a home that has not opted in.
-It shares the LaunchAgent writer in `bin/fm-launchd-schedule-lib.sh` with `bin/fm-upstream-watch-schedule.sh` and `bin/fm-channel-intake-schedule.sh`, so all three schedules render, validate and load the same way.
+It shares the LaunchAgent writer in `bin/fm-launchd-schedule-lib.sh` with this fork's other scheduled owners, so every schedule renders, validates and loads the same way.
 Run `render` to inspect the complete definition, `install` to write it, load it and arm the live check, `status` to print the resolved knobs and installed file, or `remove` to unload it and disarm the check.
 `StartInterval` plus `RunAtLoad` is the whole trigger: launchd runs the job at login and then on the interval, and an interval that elapsed during sleep runs shortly after the machine wakes.
 That is why the intake is defined as the first available morning rather than a lid-open event; launchd exposes no such event here and none is claimed.
@@ -2685,7 +2685,7 @@ Notifications are refused outright until `notify_recipient_verified = true`, whi
 Source identities live in the private inventory named by `sources_file`, never in this config file and never in the tracked repository; unknown config keys are refused rather than parked.
 
 `bin/fm-channel-intake-schedule.sh` owns the inspectable macOS launchd schedule under its own `channel-intake` agent label and refuses to install on a home that has not opted in.
-It shares the LaunchAgent writer in `bin/fm-launchd-schedule-lib.sh` with the morning-intake and upstream-watch schedules, so all three render, validate and load the same way.
+It shares the LaunchAgent writer in `bin/fm-launchd-schedule-lib.sh` with this fork's other scheduled owners, so every schedule renders, validates and loads the same way.
 `StartInterval` plus `RunAtLoad` is the whole trigger, and a tick reads forward from each source's own checkpoint, so a sleep or offline gap is walked rather than skipped.
 The interval is a target detection latency and never an upper bound: sleep, offline stretches, backoff, quota and queue delay all add to it, and no instant or 24x7 availability is claimed.
 Removing the schedule disarms the live check and leaves the ledger in place, because an open obligation must survive an uninstall.
