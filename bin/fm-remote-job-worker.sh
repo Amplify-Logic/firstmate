@@ -36,10 +36,11 @@
 #
 # The worker lock is the account queue's singleton. A serving loop that finds
 # another worker recorded as the lock's owner - a challenger that reclaimed it
-# while this loop looked stale - yields the same way: it stops its tracked
-# lanes and exits 0 without touching the lock, and the Linux supervisor above
-# it exits with it. It never claims, reclaims, or heartbeats beside the owner,
-# because two loops serving one queue stop each other's running jobs.
+# while this loop looked stale - yields as a loop that lost its lock does: it
+# stops its tracked lanes and exits 0 without touching the lock, and the Linux
+# supervisor above it exits with it. It never claims, reclaims, or heartbeats
+# beside the owner, because two loops serving one queue stop each other's
+# running jobs.
 #
 # The worker is abandoned when its configured FM_ROOT stops being a genuine
 # Firstmate checkout - the state a pruned no-mistakes gate worktree, a returned
