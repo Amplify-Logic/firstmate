@@ -377,12 +377,14 @@ FAKE
   assert_contains "$out" 'fm-dropped-threads.sh' 'the schedule does not call the digest owner'
   assert_contains "$out" 'dev.firstmate.dropped-threads.' 'the label is not the per-home digest label'
 
-  out=$(schedule install 2>&1) && code=0 || code=$?
-  expect_code 2 "$code" 'install on a home that never opted in'
-  assert_contains "$out" 'not opted in' 'the refusal did not say why'
-  [ -z "$(ls -A "$agents")" ] || fail 'a refused install wrote a LaunchAgent'
-
+  # install requires macOS launchd, so off Darwin it refuses before the opt-in
+  # check and only render is exercised.
   if [ "$(uname)" = Darwin ]; then
+    out=$(schedule install 2>&1) && code=0 || code=$?
+    expect_code 2 "$code" 'install on a home that never opted in'
+    assert_contains "$out" 'not opted in' 'the refusal did not say why'
+    [ -z "$(ls -A "$agents")" ] || fail 'a refused install wrote a LaunchAgent'
+
     printf 'enabled = true\ninterval_seconds = 600\n' >"$h/config/dropped-threads"
     out=$(schedule install) || fail 'install failed'
     assert_contains "$out" 'interval_seconds: 600' 'install did not use the configured cadence'
