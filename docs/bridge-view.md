@@ -128,8 +128,9 @@ A symlink is skipped rather than followed.
 The harness memory store under `~/.claude`, `.env` and key files, task and project data folders, and the backlog are never read.
 
 Any line with a word starting gift, surpris, or present is withheld so the captain's private gift exchange never reaches the screen.
-A matching line of any kind (an ATX or Setext heading, a bold label, a paragraph, a bullet, or a table row) withholds its whole entry and everything after it, blank lines and tables included, up to the next heading of the same or higher level than the heading it sits under; a matching heading counts as under its own level.
-A matching line under no heading withholds everything up to the next heading or the end of the file.
+A matching line of any kind (an ATX or Setext heading, a bold label, a paragraph, a bullet, or a table row) withholds its whole entry and everything after it, blank lines and tables included, up to the next ATX heading of the same or higher level than the heading it sits under; a matching heading counts as under its own level.
+A matching line under no heading withholds everything up to the next ATX heading or the end of the file.
+Only an ATX heading ends a withheld block; a Setext underline inside one is withheld with it.
 A goal charter whose name matches is withheld whole, name included.
 The page footer says how many lines were withheld.
 

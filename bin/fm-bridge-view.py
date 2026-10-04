@@ -1451,10 +1451,12 @@ def memory_sections(text: str) -> Tuple[List[Dict[str, Any]], int]:
     An entry is a top-level line plus every line under it up to the next blank
     line, heading, or top-level bullet. A withheld line of any kind drops its
     whole entry and everything after it, blank lines and tables included, up to
-    the next heading of the same or higher level than the heading it sits under
-    (an ATX or Setext heading counts as under its own level); a withheld line
-    under no heading hides up to the next heading or the end of the file.
-    Returns the sections and how many non-blank lines were withheld."""
+    the next ATX heading of the same or higher level than the heading it sits
+    under (a withheld ATX or Setext heading counts as under its own level); a
+    withheld line under no heading hides up to the next ATX heading or the end
+    of the file. Only an ATX heading ends a hidden block: a Setext underline
+    inside one is hidden with it. Returns the sections and how many non-blank
+    lines were withheld."""
     sections: List[Dict[str, Any]] = []
     current: Dict[str, Any] = {"heading": "", "entries": []}
     sections.append(current)
@@ -1514,7 +1516,7 @@ def memory_sections(text: str) -> Tuple[List[Dict[str, Any]], int]:
         if bullet:
             flush()
         if not entry:
-            entry_plain = top and not bullet
+            entry_plain = top and not bullet and not hidden_level
         if not hidden_level and _memory_withheld(stripped):
             hidden_level = section_level or 6
         entry.append(MEMORY_BULLET_RE.sub("", line, count=1) if bullet else stripped)
