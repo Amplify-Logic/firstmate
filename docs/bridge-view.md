@@ -100,7 +100,7 @@ Last-good on the server cannot save a tab that never hears back.
 
 ## Routing
 
-The glance ends with a read-only Routing section: which model each kind of job goes to, the latest Jev routing decisions, a graph of the running workers, and the live workers with model, effort, age, and state.
+Near its end the glance has a read-only Routing section: which model each kind of job goes to, the latest Jev routing decisions, a graph of the running workers, and the live workers with model, effort, age, and state.
 It rides the same 30-second observation as the buckets above, so it never adds a request or a refresh of its own.
 
 The server reads it from `bin/fm-routing-snapshot.sh --json`, whose header owns the `fm-routing.v1` fields, and joins it to the bearings read the glance already made:
@@ -116,6 +116,24 @@ If the routing read fails, the buckets still render and the section says why in 
 
 The mailbox indicator is a local listen or launchd check.
 It must never call `GET /v1/announcements`, because that call marks announcements delivered.
+
+## What I remember
+
+After Routing, a read-only What I remember section shows exactly what this home keeps about the captain, so Starship's memory is legible rather than hidden.
+It rides the same 30-second observation and redraws only when a file changed, so a fold the captain opened stays open.
+
+The server reads these files under the home's `data/` and nothing else: `captain.md`, `captain-shared.md`, `learnings.md`, and each goal charter directly inside `goals/` ([`chart-room.md`](chart-room.md) owns charters).
+Each source is one fold with its last-changed date and its entries as plain text under the file's own headings; an absent source still appears as nothing kept.
+A symlink is skipped rather than followed, and a goal file whose name reads like an env, key, secret, token, or credential file is never read.
+The harness memory store under `~/.claude`, `.env` and key files, task and project data folders, and the backlog are never read.
+
+Any line with a word starting gift, surpris, or present is withheld so the captain's private gift exchange never reaches the screen.
+An entry is withheld whole when any of its lines matches, a matching heading withholds everything beneath it, and a goal charter whose name matches is withheld whole, name included.
+The page footer says how many lines were withheld.
+
+The section reads local files only and sends nothing off the machine; there is no editing from the page and no new storage.
+If the read fails, the buckets still render and the section says why in place.
+`read_memory` in `bin/fm-bridge-view.py` owns the exact parsing.
 
 ## Writes
 

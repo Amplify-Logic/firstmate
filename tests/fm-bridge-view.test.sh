@@ -6,7 +6,7 @@
 # photo drops into the quarantined inbox, multi-file Origin-null uploads,
 # hold-to-speak mailbox forwarding with the relay token kept server-side,
 # captain-facing glance titles, pinned links, needs-you selection, waiting project chips, keep-alive body drain after early error
-# returns, and the Action Deck page over bin/fm-deck.sh --json.
+# returns, the What I remember section's privacy guard, and the Action Deck page over bin/fm-deck.sh --json.
 set -u
 
 # shellcheck source=tests/lib.sh
@@ -350,6 +350,7 @@ markers = [
     '<h2>Waiting</h2>',
     '<h2>Just finished</h2>',
     '<h2>Routing</h2>',
+    '<h2>What I remember</h2>',
 ]
 positions = [page.index(marker) for marker in markers]
 if positions != sorted(positions):
@@ -1944,6 +1945,176 @@ JS
   pass "glance page renders the roster, decisions, graph, and workers, with empty and error copy"
 }
 
+# The What I remember section: only the captain files, learnings and goal
+# charters under data/, rendered as plain text, with any gift, surprise or
+# present line withheld and counted.
+test_memory_reads_only_allowlisted_sources() {
+  local home outside output
+  home=$(make_home memory-sources)
+  outside=$TMP_ROOT/memory-outside
+  mkdir -p "$outside" "$home/data/goals" "$home/data/some-task" "$home/.claude/projects/x/memory"
+  cat > "$home/data/captain.md" <<'EOF'
+# Captain
+
+## Settled matters
+- Plain outcome language, **outcome first**.
+  Detail lives in the `report`.
+- Birthday gift for Derya is the blue watch.
+- Mornings are for study.
+
+## Surprise party
+- Booked the boathouse for the 12th.
+### Guests
+- Mikis and Liesje
+## Music
+- Two to four hours a week.
+EOF
+  printf '# Learnings\n- Full disk looks like low memory.\n- Present the PR link in full.\n' > "$home/data/learnings.md"
+  printf '# Firstmate\nStatus: APPROVED\n\n## Goals\n- The fleet keeps working.\n' > "$home/data/goals/firstmate.md"
+  printf '# Gifts\n- HIDDEN-GIFT-CHARTER\n' > "$home/data/goals/gift-list.md"
+  printf '%s\n' '- HIDDEN-UNDERSCORE-CHARTER' > "$home/data/goals/birthday_gift.md"
+  printf '%s\n' '- LEAKED-KEY-CHARTER' > "$home/data/goals/api-key.md"
+  printf '%s\n' '- LEAKED-LINK-TARGET' > "$outside/linked.md"
+  ln -s "$outside/linked.md" "$home/data/goals/linked.md"
+  printf '%s\n' 'TOKEN=LEAKED-ENV' > "$home/data/.env"
+  printf '%s\n' 'LEAKED-PROJECT-DATA' > "$home/data/some-task/report.md"
+  printf '%s\n' '- LEAKED-HARNESS-MEMORY' > "$home/.claude/projects/x/memory/MEMORY.md"
+  output=$(python3 - "$ROOT/bin/fm-bridge-view.py" "$home" <<'PY'
+import importlib.util, json, pathlib, sys
+spec = importlib.util.spec_from_file_location("bridge", sys.argv[1])
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+out = module.read_memory(pathlib.Path(sys.argv[2]))
+text = json.dumps(out)
+paths = [s["path"] for s in out["sources"]]
+assert paths == ["data/captain.md", "data/captain-shared.md", "data/learnings.md",
+                 "data/goals/firstmate.md", "data/goals/linked.md"], paths
+captain, shared, learnings, goal, linked = out["sources"]
+assert shared.get("missing") is True and "sections" not in shared, shared
+assert "link" in linked["error"] and "sections" not in linked, linked
+assert [s["heading"] for s in captain["sections"]] == ["Settled matters", "Music"], captain["sections"]
+assert captain["sections"][0]["entries"] == [
+    "Plain outcome language, outcome first.\nDetail lives in the report.",
+    "Mornings are for study.",
+], captain["sections"][0]
+assert captain["entries"] == 3 and len(captain["changed_date"]) == 10, captain
+assert learnings["sections"][0]["entries"] == ["Full disk looks like low memory."], learnings
+assert goal["label"] == "Goals: firstmate" and goal["sections"][1]["entries"] == ["The fleet keeps working."], goal
+# captain: the gift entry, the Surprise heading and its entry, the Guests
+# heading and its entry (5); learnings: the Present line (1); the gift-list
+# charter, withheld whole by its name (2); the birthday_gift charter (1).
+assert out["withheld"] == 9, out["withheld"]
+for leaked in ("gift", "Gift", "Surprise", "boathouse", "Mikis", "Present", "HIDDEN-GIFT-CHARTER", "HIDDEN-UNDERSCORE-CHARTER",
+               "LEAKED-KEY-CHARTER", "LEAKED-LINK-TARGET", "LEAKED-ENV", "LEAKED-PROJECT-DATA",
+               "LEAKED-HARNESS-MEMORY", "VoiceLoop", "ship-task", "**", chr(96)):
+    assert leaked not in text, leaked
+PY
+  ) || fail "memory read failed: $output"
+  pass "what I remember reads only the captain files, learnings and goals, and withholds gift lines with a count"
+}
+
+test_observation_carries_memory_without_writes() {
+  local home fixture output before after
+  home=$(make_home memory-observation)
+  fixture=$home/root
+  mkdir -p "$fixture/bin"
+  cat > "$fixture/bin/fm-bearings-snapshot.sh" <<'SH'
+#!/usr/bin/env bash
+printf '%s\n' '{"schema":"fm-bearings.v1","in_flight":[]}'
+SH
+  chmod +x "$fixture/bin/fm-bearings-snapshot.sh"
+  printf '# Captain\n- Plain outcome language.\n- A present for Derya.\n' > "$home/data/captain.md"
+  before=$(fingerprint "$home")
+  output=$(python3 - "$ROOT/bin/fm-bridge-view.py" "$home" "$fixture" <<'PY'
+import importlib.util, pathlib, sys
+spec = importlib.util.spec_from_file_location("bridge", sys.argv[1])
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+home, root = pathlib.Path(sys.argv[2]), pathlib.Path(sys.argv[3])
+module.mailbox_listener_available = lambda: False
+obs = module.SnapshotCache(home, root).get()
+assert obs["routing"].get("error"), obs
+memory = obs["memory"]
+assert memory["sources"][0]["sections"][0]["entries"] == ["Plain outcome language."], memory
+assert memory["withheld"] == 1, memory
+PY
+  ) || fail "memory observation failed: $output"
+  after=$(fingerprint "$home")
+  [ "$before" = "$after" ] || fail "reading memory changed home records"
+  pass "the observation carries what I remember beside a failed routing read, without writing"
+}
+
+test_glance_page_renders_memory() {
+  local output
+  output=$(node - "$ROOT/bin/fm-bridge-view.py" <<'JS'
+const {execFileSync} = require('child_process');
+const vm = require('vm');
+const script = execFileSync('python3', ['-', process.argv[2]], {
+  input: `import importlib.util, sys
+spec = importlib.util.spec_from_file_location("bridge", sys.argv[1])
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+print(module.PAGE_JS)
+`,
+  encoding: 'utf8'
+});
+const memory = {innerHTML: '', textContent: ''};
+const foot = {textContent: ''};
+const elements = {
+  needs: {innerHTML: '', textContent: ''},
+  underway: {innerHTML: '', textContent: ''},
+  finished: {innerHTML: '', textContent: ''},
+  waiting: {innerHTML: '', textContent: ''},
+  memory,
+  'memory-withheld': foot,
+  observed: {textContent: ''},
+  desk: {textContent: ''},
+  mailbox: {textContent: ''},
+  stale: {classList: {toggle() {}}},
+  'photo-count': {textContent: ''}
+};
+const context = vm.createContext({
+  document: {hidden: false, addEventListener() {}, getElementById(id) { return elements[id] || null; }},
+  window: {addEventListener() {}},
+  Date, setInterval() {}, setTimeout, clearTimeout
+});
+vm.runInContext(script, context);
+const apply = vm.runInContext('apply', context);
+const base = {mailbox_listener: true, photos_today: 0, needs_you: {items: []}, under_way: {items: []},
+  just_finished: {items: []}, waiting: {groups: []}, server_unix: 10000};
+const kept = {withheld: 3, sources: [
+  {label: 'About you', path: 'data/captain.md', changed_date: '2026-10-04', entries: 2,
+   sections: [{heading: 'Settled <b>matters</b>', entries: ['Plain outcome language.\nDetail in the report.', 'Mornings are for study.']}]},
+  {label: 'About you, shared with second mates', path: 'data/captain-shared.md', missing: true},
+  {label: 'Goals: linked', path: 'data/goals/linked.md', error: 'skipped: a link, not a file this home keeps'}
+]};
+apply(Object.assign({}, base, {memory: kept}));
+const html = memory.innerHTML;
+for (const want of ['About you', 'changed 2026-10-04 · 2 entries', 'data/captain.md',
+                    '<h3>Settled &lt;b&gt;matters&lt;/b&gt;</h3>', '<li>Plain outcome language.\nDetail in the report.</li>',
+                    'About you, shared with second mates · nothing kept',
+                    'Goals: linked · skipped: a link, not a file this home keeps', 'class="more-fold mem-fold"']) {
+  if (!html.includes(want)) throw new Error('memory render missing ' + JSON.stringify(want) + ': ' + html);
+}
+if (foot.textContent !== 'What I remember withheld 3 lines that mention a gift, surprise or present.') {
+  throw new Error('withheld footer wrong: ' + foot.textContent);
+}
+memory.innerHTML = 'OPEN FOLD';
+apply(Object.assign({}, base, {memory: JSON.parse(JSON.stringify(kept))}));
+if (memory.innerHTML !== 'OPEN FOLD') throw new Error('unchanged memory re-rendered and closed an open fold');
+apply(Object.assign({}, base, {memory: {withheld: 1, sources: []}}));
+if (foot.textContent !== 'What I remember withheld 1 line that mentions a gift, surprise or present.') {
+  throw new Error('singular footer wrong: ' + foot.textContent);
+}
+apply(Object.assign({}, base, {memory: {error: 'memory read failed'}}));
+if (!memory.innerHTML.includes('Memory is unavailable: memory read failed')) {
+  throw new Error('memory error not shown: ' + memory.innerHTML);
+}
+JS
+  ) || fail "glance memory rendering failed: $output"
+  pass "glance page renders what I remember per source, keeps open folds, and counts withheld lines"
+}
+
 test_observation_selects_and_groups_live_backlog() {
   local home fakebin port cookie hdr body
   home=$(make_home glance-select)
@@ -2528,6 +2699,9 @@ test_routing_projection_joins_live_rows
 test_routing_failure_leaves_glance_whole
 test_observation_carries_routing_from_local_records
 test_glance_page_renders_routing
+test_memory_reads_only_allowlisted_sources
+test_observation_carries_memory_without_writes
+test_glance_page_renders_memory
 test_observation_selects_and_groups_live_backlog
 test_multi_file_origin_null_uploads_are_atomic_and_partial
 test_unauthenticated_speak_rejected
