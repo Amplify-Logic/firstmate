@@ -78,7 +78,7 @@ Commands:
 - Google Docs and Drive: the connectors.
 - Pages: AppleScript, which the terminal is allowed to send.
 - `.docx` files: make them locally with `pandoc`.
-- TextEdit or VS Code: `open -a TextEdit "<file>"`, which takes the screen.
+- TextEdit or VS Code, only when the captain asked: `open -a TextEdit "<file>"`, which takes the screen.
 
 Yours to decide: granting the Notes permission, and anything that edits or deletes a note.
 
@@ -92,7 +92,7 @@ Traps:
 Commands:
 
 - WhatsApp (`net.whatsapp.WhatsApp`) has no scripting. Its chat database reads read-only with no prompt: `~/Library/Group Containers/group.net.whatsapp.WhatsApp.shared/ChatStorage.sqlite` (table `ZWACHATSESSION` holds the chats). **Tested** on counts only.
-- Preparing a WhatsApp message: `open "whatsapp://send?phone=<number>&text=<url-encoded text>"` opens it ready to send, and pressing Send is a foreground step through the guard after the captain's yes. **Untested**, because it sends.
+- Preparing a WhatsApp message: `open -g "whatsapp://send?phone=<number>&text=<url-encoded text>"` opens it ready to send while WhatsApp stays in the background. Pressing Send is a foreground step after the captain's yes, brought forward only by `bin/fm-computer-use.sh guard --app net.whatsapp.WhatsApp --activate`. **Untested**, because it sends; that `open -g` keeps WhatsApp in the background is also untested.
 - Slack (`com.tinyspeck.slackmacgap`): no connection yet; the proper route is Slack's own connector after the captain signs in to the workspace.
 - Messages (`com.apple.MobileSMS`): its history is in `~/Library/Messages/chat.db`; sending needs a permission the terminal does not have and is not recommended.
 
