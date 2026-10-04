@@ -1489,7 +1489,13 @@ def memory_sections(text: str) -> Tuple[List[Dict[str, Any]], int]:
                 withheld += 1
             continue
         heading = None if in_fence else MEMORY_HEADING_RE.match(line)
-        setext = not in_fence and entry_plain and entry and MEMORY_SETEXT_RE.match(line)
+        setext = (
+            not in_fence
+            and entry_plain
+            and entry
+            and MEMORY_SETEXT_RE.match(line)
+            and (not hidden_level or _memory_withheld(" ".join(entry)))
+        )
         if heading or setext:
             if heading:
                 flush()
