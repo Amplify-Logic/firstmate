@@ -1,0 +1,115 @@
+{
+  "roster": [
+    {
+      "label": "SIT STUDY WRITING",
+      "profile": "fable-5.1 · medium",
+      "default": false
+    },
+    {
+      "label": "New feature work on the app",
+      "profile": "fable · xhigh",
+      "default": false
+    },
+    {
+      "label": "A simple bug fix with a stated root cause",
+      "profile": "sonnet-5.5 · high / gpt-5.6-sol",
+      "default": false
+    },
+    {
+      "label": "default",
+      "profile": "opus · high",
+      "default": true
+    }
+  ],
+  "roster_error": null,
+  "decisions": [
+    {
+      "task": "Phone routing panel",
+      "status": "clear",
+      "rule": "A simple bug fix with a stated root cause",
+      "p": 0.88,
+      "profile": "sonnet-5.5 · high",
+      "at": 1791133173
+    },
+    {
+      "task": "Earlier task",
+      "status": "ambiguous",
+      "rule": "New feature work on the app",
+      "p": 0.4,
+      "profile": "",
+      "at": 1791133172
+    },
+    {
+      "task": "Spoken updates on the glasses",
+      "status": "clear",
+      "rule": "default",
+      "p": 0.05,
+      "profile": "opus · high",
+      "at": 1791133171
+    },
+    {
+      "task": "Discussion post draft",
+      "status": "clear",
+      "rule": "SIT STUDY WRITING",
+      "p": 0.93,
+      "profile": "fable-5.1 · medium",
+      "at": 1791133170
+    }
+  ],
+  "graph": [
+    {
+      "kind": "scout",
+      "model": "fable-5.1",
+      "state": "working",
+      "children": []
+    },
+    {
+      "kind": "ship",
+      "model": "sonnet-5.5",
+      "state": "working",
+      "children": []
+    },
+    {
+      "kind": "secondmate",
+      "model": "opus",
+      "state": "active_child_work",
+      "children": [
+        {
+          "kind": "scout",
+          "model": "-",
+          "state": "working",
+          "children": []
+        }
+      ]
+    }
+  ],
+  "workers": [
+    {
+      "title": "Discussion post draft",
+      "kind": "scout",
+      "model": "fable-5.1",
+      "effort": "medium",
+      "age_secs": 366,
+      "state": "working",
+      "dot": "Under way"
+    },
+    {
+      "title": "Phone routing panel",
+      "kind": "ship",
+      "model": "sonnet-5.5",
+      "effort": "high",
+      "age_secs": 1566,
+      "state": "working",
+      "dot": "Under way"
+    },
+    {
+      "title": "Setlist evidence",
+      "kind": "scout",
+      "model": "-",
+      "effort": "",
+      "age_secs": -1,
+      "state": "working",
+      "dot": "Under way"
+    }
+  ]
+}

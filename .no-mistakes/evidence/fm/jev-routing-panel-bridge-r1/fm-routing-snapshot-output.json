@@ -1,0 +1,129 @@
+{
+  "schema": "fm-routing.v1",
+  "generated": 1791133218,
+  "roster": [
+    {
+      "rule": "rule_1",
+      "label": "SIT STUDY WRITING",
+      "profiles": [
+        {
+          "harness": "claude",
+          "model": "claude-fable-5-1",
+          "effort": "medium"
+        }
+      ]
+    },
+    {
+      "rule": "rule_2",
+      "label": "New feature work on the app",
+      "profiles": [
+        {
+          "harness": "claude",
+          "model": "fable",
+          "effort": "xhigh"
+        }
+      ]
+    },
+    {
+      "rule": "rule_3",
+      "label": "A simple bug fix with a stated root cause",
+      "profiles": [
+        {
+          "harness": "claude",
+          "model": "claude-sonnet-5-5",
+          "effort": "high"
+        },
+        {
+          "harness": "codex",
+          "model": "gpt-5.6-sol",
+          "effort": null
+        }
+      ]
+    },
+    {
+      "rule": "default",
+      "label": "default",
+      "profiles": [
+        {
+          "harness": "claude",
+          "model": "opus",
+          "effort": "high"
+        }
+      ]
+    }
+  ],
+  "roster_error": null,
+  "decisions": [
+    {
+      "at": 1791133173,
+      "task": "routing-panel",
+      "status": "clear",
+      "rule": "rule_3",
+      "label": "A simple bug fix with a stated root cause",
+      "p": 0.88,
+      "profile": {
+        "harness": "claude",
+        "model": "claude-sonnet-5-5",
+        "effort": "high"
+      }
+    },
+    {
+      "at": 1791133172,
+      "task": "vague-ask",
+      "status": "ambiguous",
+      "rule": "rule_2",
+      "label": "New feature work on the app",
+      "p": 0.40,
+      "profile": null
+    },
+    {
+      "at": 1791133171,
+      "task": "app-feature",
+      "status": "clear",
+      "rule": "default",
+      "label": "default",
+      "p": 0.05,
+      "profile": {
+        "harness": "claude",
+        "model": "opus",
+        "effort": "high"
+      }
+    },
+    {
+      "at": 1791133170,
+      "task": "essay-draft",
+      "status": "clear",
+      "rule": "rule_1",
+      "label": "SIT STUDY WRITING",
+      "p": 0.93,
+      "profile": {
+        "harness": "claude",
+        "model": "claude-fable-5-1",
+        "effort": "medium"
+      }
+    }
+  ],
+  "workers": [
+    {
+      "id": "essay-draft",
+      "kind": "scout",
+      "model": "claude-fable-5-1",
+      "effort": "medium",
+      "started": 1791132896
+    },
+    {
+      "id": "mate",
+      "kind": "secondmate",
+      "model": "opus",
+      "effort": "high",
+      "started": 1791125996
+    },
+    {
+      "id": "routing-panel",
+      "kind": "ship",
+      "model": "claude-sonnet-5-5",
+      "effort": "high",
+      "started": 1791131696
+    }
+  ]
+}

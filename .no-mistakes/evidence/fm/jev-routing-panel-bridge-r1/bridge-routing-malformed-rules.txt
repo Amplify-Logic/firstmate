@@ -1,0 +1,48 @@
+MODEL ROSTER
+
+rules file is unreadable or malformed
+
+No routing rules configured.
+
+JEV DECISIONS
+Phone routing panel
+2m ago
+
+CLEAR · p 0.88 · A simple bug fix with a stated root cause
+
+→ sonnet-5.5 · high
+
+Earlier task
+2m ago
+
+AMBIGUOUS · p 0.40 · New feature work on the app
+
+→ left to firstmate's own call
+
+Spoken updates on the glasses
+2m ago
+
+CLEAR · p 0.05 · default
+
+→ opus · high
+
+Discussion post draft
+2m ago
+
+CLEAR · p 0.93 · SIT STUDY WRITING
+
+→ fable-5.1 · medium
+
+AGENT GRAPH
+firstmate
+├ scout · fable-5.1
+├ ship · sonnet-5.5
+└ secondmate · opus
+  └ scout · -
+LIVE WORKERS · 3
+Discussion post draft
+scout · fable-5.1 · medium · 6m · working
+Phone routing panel
+ship · sonnet-5.5 · high · 26m · working
+Setlist evidence
+scout · - · working

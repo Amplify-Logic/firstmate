@@ -1,0 +1,65 @@
+$ TYPESAFE_API_KEY=lab-key bin/fm-dispatch-resolve.sh data/essay-draft/brief.md --project firstmate   # Jev answer: r-essay
+dispatch-resolve:
+  status: clear
+  model: jev-1.13.0   latency_ms: 0   tokens: 700/50
+  rule: rule_1 (SIT STUDY WRITING: essays, discussion posts and coursework d)   confidence: 0.93
+  probabilities: rule_1=0.93 rule_2=0.03 rule_3=0.02 default=0.02
+  note: rule matched
+  candidate: claude:claude-fable-5-1  provider=claude  scope=all_models  remaining=79%  spendPriority=0.2  runway=projected_exhaustion  -> eligible
+  profile: --harness 'claude' --model 'claude-fable-5-1' --effort 'medium'
+exit 0
+$ TYPESAFE_API_KEY=lab-key bin/fm-dispatch-resolve.sh data/app-feature/brief.md --project firstmate   # Jev answer: r-feature
+dispatch-resolve:
+  status: clear
+  model: jev-1.13.0   latency_ms: 0   tokens: 700/50
+  rule: rule_2 (New feature work on the app.)   confidence: 0.92
+  probabilities: rule_1=0.02 rule_2=0.90 rule_3=0.03 default=0.05
+  note: rule rule_2 floor model:fable below 20%: fall through to default
+  candidate: claude:opus  provider=claude  scope=all_models  remaining=79%  spendPriority=0.2  runway=projected_exhaustion  -> eligible
+  profile: --harness 'claude' --model 'opus' --effort 'high'
+exit 0
+$ TYPESAFE_API_KEY=lab-key bin/fm-dispatch-resolve.sh data/vague-ask/brief.md --project firstmate   # Jev answer: r-vague
+dispatch-resolve:
+  status: ambiguous
+  model: jev-1.13.0   latency_ms: 0   tokens: 700/50
+  rule: rule_2 (New feature work on the app.)   confidence: 0.40
+  probabilities: rule_1=0.10 rule_2=0.40 rule_3=0.20 default=0.30
+  reason: confidence 0.40 below floor 0.6
+  candidate: claude:fable  provider=claude  scope=model:fable  remaining=15%  spendPriority=-0.79  runway=projected_exhaustion  bounds=all_models:79%/projected_exhaustion,model:fable:15%/projected_exhaustion  -> eligible
+exit 0
+$ TYPESAFE_API_KEY=lab-key bin/fm-dispatch-resolve.sh data/routing-panel/brief.md --project firstmate   # Jev answer: r-panel
+dispatch-resolve:
+  status: clear
+  model: jev-1.13.0   latency_ms: 0   tokens: 700/50
+  rule: rule_3 (A simple bug fix with a stated root cause.)   confidence: 0.88
+  probabilities: rule_1=0.02 rule_2=0.05 rule_3=0.88 default=0.05
+  note: rule matched
+  candidate: claude:claude-sonnet-5-5  provider=claude  scope=all_models  remaining=79%  spendPriority=0.2  runway=projected_exhaustion  -> eligible
+  candidate: codex:gpt-5.6-sol  provider=codex  scope=all_models  remaining=31%  spendPriority=-0.16  runway=projected_exhaustion  -> eligible
+  profile: --harness 'claude' --model 'claude-sonnet-5-5' --effort 'high'
+exit 0
+$ cat state/dispatch-decisions.jsonl
+{"at":1791133170,"task":"essay-draft","status":"clear","rule":"rule_1","rule_when":"SIT STUDY WRITING: essays, discussion posts and coursework d","p":0.93,"profile":{"harness":"claude","model":"claude-fable-5-1","effort":"medium"}}
+{"at":1791133171,"task":"app-feature","status":"clear","rule":"default","rule_when":"No listed rule applies to this task.","p":0.05,"profile":{"harness":"claude","model":"opus","effort":"high"}}
+{"at":1791133172,"task":"vague-ask","status":"ambiguous","rule":"rule_2","rule_when":"New feature work on the app.","p":0.40,"profile":null}
+{"at":1791133173,"task":"routing-panel","status":"clear","rule":"rule_3","rule_when":"A simple bug fix with a stated root cause.","p":0.88,"profile":{"harness":"claude","model":"claude-sonnet-5-5","effort":"high"}}
+
+# adversarial: brief text never reaches the record
+$ grep -c SENTINEL-BRIEF state/dispatch-decisions.jsonl
+0
+# but the brief did go in the (lab-stubbed) Jev request, as designed:
+SENTINEL-BRIEF-routing-panel
+
+# off path (no key): nothing recorded
+$ bin/fm-dispatch-resolve.sh data/essay-draft/brief.md   # TYPESAFE_API_KEY unset
+dispatch-resolve: off (TYPESAFE_API_KEY absent from the environment and $LAB/home/.env)
+exit 0
+record lines before=       4 after=       4
+
+# home without state/: answer still printed, exit 0, nothing written
+  status: clear
+  profile: --harness 'claude' --model 'claude-fable-5-1' --effort 'medium'
+exit 
+config
+data
+exit 0
