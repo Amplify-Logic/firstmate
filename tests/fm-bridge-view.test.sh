@@ -1973,7 +1973,7 @@ EOF
   printf '# Firstmate\nStatus: APPROVED\n\n## Goals\n- The fleet keeps working.\n' > "$home/data/goals/firstmate.md"
   printf '# Gifts\n- HIDDEN-GIFT-CHARTER\n' > "$home/data/goals/gift-list.md"
   printf '%s\n' '- HIDDEN-UNDERSCORE-CHARTER' > "$home/data/goals/birthday_gift.md"
-  printf '%s\n' '- LEAKED-KEY-CHARTER' > "$home/data/goals/api-key.md"
+  printf '%s\n' '- Rotate the deploy keys monthly.' > "$home/data/goals/api-key.md"
   printf '%s\n' '- LEAKED-LINK-TARGET' > "$outside/linked.md"
   ln -s "$outside/linked.md" "$home/data/goals/linked.md"
   printf '%s\n' 'TOKEN=LEAKED-ENV' > "$home/data/.env"
@@ -1988,8 +1988,9 @@ out = module.read_memory(pathlib.Path(sys.argv[2]))
 text = json.dumps(out)
 paths = [s["path"] for s in out["sources"]]
 assert paths == ["data/captain.md", "data/captain-shared.md", "data/learnings.md",
-                 "data/goals/firstmate.md", "data/goals/linked.md"], paths
-captain, shared, learnings, goal, linked = out["sources"]
+                 "data/goals/api-key.md", "data/goals/firstmate.md", "data/goals/linked.md"], paths
+captain, shared, learnings, keys, goal, linked = out["sources"]
+assert keys["label"] == "Goals: api key" and keys["sections"][0]["entries"] == ["Rotate the deploy keys monthly."], keys
 assert shared.get("missing") is True and "sections" not in shared, shared
 assert "link" in linked["error"] and "sections" not in linked, linked
 assert [s["heading"] for s in captain["sections"]] == ["Settled matters", "Music"], captain["sections"]
@@ -2005,12 +2006,44 @@ assert goal["label"] == "Goals: firstmate" and goal["sections"][1]["entries"] ==
 # charter, withheld whole by its name (2); the birthday_gift charter (1).
 assert out["withheld"] == 9, out["withheld"]
 for leaked in ("gift", "Gift", "Surprise", "boathouse", "Mikis", "Present", "HIDDEN-GIFT-CHARTER", "HIDDEN-UNDERSCORE-CHARTER",
-               "LEAKED-KEY-CHARTER", "LEAKED-LINK-TARGET", "LEAKED-ENV", "LEAKED-PROJECT-DATA",
+               "LEAKED-LINK-TARGET", "LEAKED-ENV", "LEAKED-PROJECT-DATA",
                "LEAKED-HARNESS-MEMORY", "VoiceLoop", "ship-task", "**", chr(96)):
     assert leaked not in text, leaked
 PY
   ) || fail "memory read failed: $output"
   pass "what I remember reads only the captain files, learnings and goals, and withholds gift lines with a count"
+}
+
+test_memory_withholds_gift_blocks_after_any_lead_in() {
+  local output
+  output=$(python3 - "$ROOT/bin/fm-bridge-view.py" <<'PY'
+import importlib.util, sys
+spec = importlib.util.spec_from_file_location("bridge", sys.argv[1])
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+cases = [
+    ("paragraph lead-in",
+     "## Family\nGift ideas for Derya:\n- Blue watch\n- Book on sailing\n\nMornings are for study.\n",
+     [{"heading": "Family", "entries": ["Mornings are for study."]}], 3),
+    ("bold label",
+     "## Family\n**Gifts**\n\n- Blue watch\n\n- Book on sailing\n  with a chart\n\nMornings are for study.\n",
+     [{"heading": "Family", "entries": ["Mornings are for study."]}], 4),
+    ("setext heading",
+     "Gift ideas\n----------\n- Blue watch\n\nMore\n### Ideas\n- Book on sailing\n\nMusic\n=====\n- Two hours a week.\n",
+     [{"heading": "Music", "entries": ["Two hours a week."]}], 6),
+    ("bullet continuation",
+     "- Gift for Derya:\n\n  Blue watch\n  ---\n- Mornings are for study.\n",
+     [{"heading": "", "entries": ["Mornings are for study."]}], 3),
+    ("plain setext heading",
+     "Settled matters\n---\n- Plain outcome language.\n",
+     [{"heading": "Settled matters", "entries": ["Plain outcome language."]}], 0),
+]
+for name, text, sections, withheld in cases:
+    got = module.memory_sections(text)
+    assert got == (sections, withheld), (name, got)
+PY
+  ) || fail "memory gift blocks leaked: $output"
+  pass "what I remember withholds the whole block after a gift heading, Setext heading, bold label, or paragraph lead-in"
 }
 
 test_observation_carries_memory_without_writes() {
@@ -2700,6 +2733,7 @@ test_routing_failure_leaves_glance_whole
 test_observation_carries_routing_from_local_records
 test_glance_page_renders_routing
 test_memory_reads_only_allowlisted_sources
+test_memory_withholds_gift_blocks_after_any_lead_in
 test_observation_carries_memory_without_writes
 test_glance_page_renders_memory
 test_observation_selects_and_groups_live_backlog

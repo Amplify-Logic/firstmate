@@ -1418,15 +1418,13 @@ MEMORY_SOURCES = (
 MEMORY_GOALS_DIR = "goals"
 MEMORY_MAX_BYTES = 256_000
 MEMORY_GOAL_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*\.md$")
-MEMORY_SECRET_NAME_RE = re.compile(
-    r"(?i)(?:^|[._-])(?:env|keys?|secrets?|tokens?|credentials?|passcode)(?:[._-]|$)"
-)
 # Any word starting gift, surpris or present withholds the line, so the
 # captain's private gift exchange never reaches the screen. Over-matching
 # ("presentation") only withholds more.
 MEMORY_WITHHELD_RE = re.compile(r"(?i)\b(?:gift|surpris|present)")
 MEMORY_HEADING_RE = re.compile(r"^(#{1,6})\s+(.*?)\s*#*\s*$")
 MEMORY_BULLET_RE = re.compile(r"^(?:[-*+]|\d+[.)])\s+")
+MEMORY_SETEXT_RE = re.compile(r"^ {0,3}(?:=+|-+)$")
 
 
 def _memory_withheld(text: str) -> bool:
@@ -1452,22 +1450,30 @@ def memory_sections(text: str) -> Tuple[List[Dict[str, Any]], int]:
 
     An entry is a top-level line plus every line under it up to the next blank
     line, heading, or top-level bullet. An entry with any withheld line is
-    dropped whole, and a withheld heading drops everything beneath it up to the
-    next heading of its level or higher. Returns the sections and how many
-    non-blank lines were withheld."""
+    dropped whole. A withheld ATX or Setext heading drops everything beneath it
+    up to the next heading of its level or higher. A withheld paragraph or bold
+    label drops the list that follows it up to the next heading or the next
+    blank-line-separated paragraph, and a withheld bullet drops its indented
+    continuation. Returns the sections and how many non-blank lines were
+    withheld."""
     sections: List[Dict[str, Any]] = []
     current: Dict[str, Any] = {"heading": "", "entries": []}
     sections.append(current)
     entry: List[str] = []
+    entry_bullet = False
     withheld = 0
     hidden_level = 0
+    hidden_lead: Optional[str] = None
     in_fence = False
 
     def flush() -> None:
-        nonlocal entry, withheld
+        nonlocal entry, withheld, hidden_lead
         if entry:
-            if hidden_level or any(_memory_withheld(line) for line in entry):
+            lead = any(_memory_withheld(line) for line in entry)
+            if hidden_level or hidden_lead or lead:
                 withheld += len(entry)
+                if lead and hidden_lead != "para":
+                    hidden_lead = "item" if entry_bullet else "para"
             else:
                 plain = _memory_plain(entry)
                 if plain:
@@ -1479,31 +1485,41 @@ def memory_sections(text: str) -> Tuple[List[Dict[str, Any]], int]:
         stripped = line.strip()
         if stripped.startswith("```") or stripped.startswith("~~~"):
             in_fence = not in_fence
-            if hidden_level or _memory_withheld(stripped):
+            if hidden_level or hidden_lead or _memory_withheld(stripped):
                 withheld += 1
             continue
         heading = None if in_fence else MEMORY_HEADING_RE.match(line)
-        if heading:
-            flush()
-            level = len(heading.group(1))
+        setext = not in_fence and not hidden_lead and entry and not entry_bullet and MEMORY_SETEXT_RE.match(line)
+        if heading or setext:
+            if heading:
+                flush()
+                level, title, lines = len(heading.group(1)), heading.group(2), 1
+            else:
+                level, title, lines = (1 if stripped[0] == "=" else 2), " ".join(entry), len(entry) + 1
+                entry = []
+            hidden_lead = None
             if hidden_level and level <= hidden_level:
                 hidden_level = 0
-            if hidden_level or _memory_withheld(heading.group(2)):
+            if hidden_level or _memory_withheld(title):
                 hidden_level = hidden_level or level
-                withheld += 1
+                withheld += lines
                 continue
-            current = {"heading": _memory_plain([heading.group(2)]), "entries": []}
+            current = {"heading": _memory_plain([title]), "entries": []}
             sections.append(current)
             continue
         if not stripped:
             if not in_fence:
                 flush()
             continue
-        if not in_fence and not line[:1].isspace() and MEMORY_BULLET_RE.match(line):
+        top = not in_fence and not line[:1].isspace()
+        bullet = top and MEMORY_BULLET_RE.match(line)
+        if bullet:
             flush()
-            entry = [MEMORY_BULLET_RE.sub("", line, count=1)]
-            continue
-        entry.append(stripped)
+        if not entry:
+            if top and (not bullet or hidden_lead == "item"):
+                hidden_lead = None
+            entry_bullet = bool(bullet)
+        entry.append(MEMORY_BULLET_RE.sub("", line, count=1) if bullet else stripped)
     flush()
     return [s for s in sections if s["entries"]], withheld
 
@@ -1578,7 +1594,7 @@ def read_memory(home: Path) -> Dict[str, Any]:
         names = []
     shown = 0
     for name in names:
-        if not MEMORY_GOAL_NAME_RE.match(name) or MEMORY_SECRET_NAME_RE.search(name[:-3]):
+        if not MEMORY_GOAL_NAME_RE.match(name):
             continue
         goal = name[:-3]
         if _memory_withheld(goal):
@@ -2571,7 +2587,7 @@ def glance_html(nonce: str, home: Optional[Path] = None) -> str:
 <h2>Routing</h2>
 <div id="routing"><p class="empty">Loading…</p></div>
 <h2>What I remember</h2>
-<p class="note">What this home keeps about you, read from files on this Mac. Nothing here leaves the machine, and nothing can be changed from this page.</p>
+<p class="note">What this home keeps about you, shown only to your logged-in devices on your private network and never sent to any outside service. Nothing can be changed from this page.</p>
 <div id="memory"><p class="empty">Loading…</p></div>
 <footer><p class="note" id="memory-withheld"></p></footer>
 </main>

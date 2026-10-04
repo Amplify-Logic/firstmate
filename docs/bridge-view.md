@@ -124,14 +124,16 @@ It rides the same 30-second observation and redraws only when a file changed, so
 
 The server reads these files under the home's `data/` and nothing else: `captain.md`, `captain-shared.md`, `learnings.md`, and each goal charter directly inside `goals/` ([`chart-room.md`](chart-room.md) owns charters).
 Each source is one fold with its last-changed date and its entries as plain text under the file's own headings; an absent source still appears as nothing kept.
-A symlink is skipped rather than followed, and a goal file whose name reads like an env, key, secret, token, or credential file is never read.
+A symlink is skipped rather than followed.
 The harness memory store under `~/.claude`, `.env` and key files, task and project data folders, and the backlog are never read.
 
 Any line with a word starting gift, surpris, or present is withheld so the captain's private gift exchange never reaches the screen.
-An entry is withheld whole when any of its lines matches, a matching heading withholds everything beneath it, and a goal charter whose name matches is withheld whole, name included.
+An entry is withheld whole when any of its lines matches, and a goal charter whose name matches is withheld whole, name included.
+A matching ATX or Setext heading withholds everything beneath it up to the next heading of its level or higher.
+A matching paragraph or bold label withholds the list that follows it, across blank lines, up to the next heading or the next blank-line-separated paragraph; a matching bullet withholds its indented continuation.
 The page footer says how many lines were withheld.
 
-The section reads local files only and sends nothing off the machine; there is no editing from the page and no new storage.
+The section is shown only to the captain's logged-in devices on the private network and is never sent to any outside service; there is no editing from the page and no new storage.
 If the read fails, the buckets still render and the section says why in place.
 `read_memory` in `bin/fm-bridge-view.py` owns the exact parsing.
 
