@@ -1,0 +1,19 @@
+=== [base-before-fix] code rev 73a9ec36 ===
+supervisor#1 pid=15393  serve-loop#1 pid=16010  lock owner=16010
+serve-loop#1 stalled (SIGSTOP) - its heartbeat goes stale
+supervisor#2 pid=17048  serve-loop#2 pid=17181  lock owner=17181  (reclaimed stale lock)
+--- two worker parents + two serve loops on one queue (the larsdell state):
+15393     1 /bin/bash <root>/bin/fm-remote-job-worker.sh
+16010 15393 /bin/bash <root>/bin/fm-remote-job-worker.sh --serve
+17048     1 /bin/bash <root>/bin/fm-remote-job-worker.sh
+17181 17048 /bin/bash <root>/bin/fm-remote-job-worker.sh --serve
+job job-ux1GTL staged by listener; running=yes
+serve-loop#1 resumed (SIGCONT)
+--- listener result: wait rc=0 exit=125
+stdout: 
+stderr: remote job worker stopped before this job completed
+--- after: serve-loop#1 alive, supervisor#1 alive, serve-loop#2 alive, supervisor#2 alive, lock owner=17181 ready=16010
+--- follow-up job: wait rc=0 exit=125 stdout=
+--- worker log (supervisor#1):
+--- worker log (supervisor#2):
+claim-race lines in logs: 0

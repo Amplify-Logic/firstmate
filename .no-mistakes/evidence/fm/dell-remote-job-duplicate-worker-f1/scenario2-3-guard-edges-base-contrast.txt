@@ -1,0 +1,20 @@
+=== guard edges, code rev 73a9ec36 ===
+
+### Scenario: resumed duplicate must not touch a QUEUED job it does not own
+loop#1=99243 (stalled)  loop#2=99487 now owns lock=99487
+owner loop#2 paused so the job stays queued
+staged job-gE1iAO state=queued
+loop#1 resumed beside the queued job
+loop#1 alive, supervisor#1 alive; job state=done claim-dir=PRESENT ran=yes lock=99487
+owner loop#2 resumed
+listener: wait rc=0 exit=0 stdout=reply ok stderr=
+sup1 log: 
+
+### Scenario: lone worker with a momentarily unreadable lock owner keeps serving (no false yield)
+loop#3=26708 owns lock=26708
+baseline job: rc=0 exit=0 stdout=reply ok
+worker.lock/pid removed (owner unreadable, as during a reclaim still publishing)
+after 3s of polls: loop#3 alive, supervisor#3 alive, heartbeat ready=26708
+job while owner unreadable: rc=0 exit=0 stdout=reply ok
+owner restored to own pid: loop#3 alive
+sup3 log: 

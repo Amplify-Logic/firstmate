@@ -1,0 +1,20 @@
+=== [fixed] code rev ace54ae6 ===
+supervisor#1 pid=28686  serve-loop#1 pid=28910  lock owner=28910
+serve-loop#1 stalled (SIGSTOP) - its heartbeat goes stale
+supervisor#2 pid=29229  serve-loop#2 pid=29302  lock owner=29302  (reclaimed stale lock)
+--- two worker parents + two serve loops on one queue (the larsdell state):
+28686     1 /bin/bash <root>/bin/fm-remote-job-worker.sh
+28910 28686 /bin/bash <root>/bin/fm-remote-job-worker.sh --serve
+29229     1 /bin/bash <root>/bin/fm-remote-job-worker.sh
+29302 29229 /bin/bash <root>/bin/fm-remote-job-worker.sh --serve
+job job-xFJCeR staged by listener; running=yes
+serve-loop#1 resumed (SIGCONT)
+--- listener result: wait rc=0 exit=0
+stdout: reply from dell second mate
+stderr: 
+--- after: serve-loop#1 exited, supervisor#1 exited, serve-loop#2 alive, supervisor#2 alive, lock owner=29302 ready=29302
+--- follow-up job: wait rc=0 exit=0 stdout=reply from dell second mate
+--- worker log (supervisor#1):
+remote-job-worker: another worker now owns this account queue; stopping this duplicate serving loop
+--- worker log (supervisor#2):
+claim-race lines in logs: 0
