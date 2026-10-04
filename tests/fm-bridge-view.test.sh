@@ -1996,16 +1996,16 @@ assert "link" in linked["error"] and "sections" not in linked, linked
 assert [s["heading"] for s in captain["sections"]] == ["Settled matters", "Music"], captain["sections"]
 assert captain["sections"][0]["entries"] == [
     "Plain outcome language, outcome first.\nDetail lives in the report.",
-    "Mornings are for study.",
 ], captain["sections"][0]
-assert captain["entries"] == 3 and len(captain["changed_date"]) == 10, captain
+assert captain["entries"] == 2 and len(captain["changed_date"]) == 10, captain
 assert learnings["sections"][0]["entries"] == ["Full disk looks like low memory."], learnings
 assert goal["label"] == "Goals: firstmate" and goal["sections"][1]["entries"] == ["The fleet keeps working."], goal
-# captain: the gift entry, the Surprise heading and its entry, the Guests
-# heading and its entry (5); learnings: the Present line (1); the gift-list
-# charter, withheld whole by its name (2); the birthday_gift charter (1).
-assert out["withheld"] == 9, out["withheld"]
-for leaked in ("gift", "Gift", "Surprise", "boathouse", "Mikis", "Present", "HIDDEN-GIFT-CHARTER", "HIDDEN-UNDERSCORE-CHARTER",
+# captain: the gift entry and the Mornings entry after it, the Surprise
+# heading and its entry, the Guests heading and its entry (6); learnings: the
+# Present line (1); the gift-list charter, withheld whole by its name (2); the
+# birthday_gift charter (1).
+assert out["withheld"] == 10, out["withheld"]
+for leaked in ("gift", "Gift", "Mornings", "Surprise", "boathouse", "Mikis", "Present", "HIDDEN-GIFT-CHARTER", "HIDDEN-UNDERSCORE-CHARTER",
                "LEAKED-LINK-TARGET", "LEAKED-ENV", "LEAKED-PROJECT-DATA",
                "LEAKED-HARNESS-MEMORY", "VoiceLoop", "ship-task", "**", chr(96)):
     assert leaked not in text, leaked
@@ -2023,17 +2023,23 @@ module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)
 cases = [
     ("paragraph lead-in",
-     "## Family\nGift ideas for Derya:\n- Blue watch\n- Book on sailing\n\nMornings are for study.\n",
-     [{"heading": "Family", "entries": ["Mornings are for study."]}], 3),
+     "## Family\nGift ideas for Derya:\n- Blue watch\n- Book on sailing\n\nMornings are for study.\n## Music\n- Two hours a week.\n",
+     [{"heading": "Music", "entries": ["Two hours a week."]}], 4),
     ("bold label",
-     "## Family\n**Gifts**\n\n- Blue watch\n\n- Book on sailing\n  with a chart\n\nMornings are for study.\n",
-     [{"heading": "Family", "entries": ["Mornings are for study."]}], 4),
+     "## Family\n- Call on Sundays.\n\n**Gifts**\n\n- Blue watch\n\n- Book on sailing\n  with a chart\n\n### Ideas\n- Kite\n# Music\n- Two hours a week.\n",
+     [{"heading": "Family", "entries": ["Call on Sundays."]}, {"heading": "Music", "entries": ["Two hours a week."]}], 6),
     ("setext heading",
      "Gift ideas\n----------\n- Blue watch\n\nMore\n### Ideas\n- Book on sailing\n\nMusic\n=====\n- Two hours a week.\n",
      [{"heading": "Music", "entries": ["Two hours a week."]}], 6),
     ("bullet continuation",
-     "- Gift for Derya:\n\n  Blue watch\n  ---\n- Mornings are for study.\n",
-     [{"heading": "", "entries": ["Mornings are for study."]}], 3),
+     "- Gift for Derya:\n\n  Blue watch\n  ---\n- Mornings are for study.\n# Music\n- Two hours a week.\n",
+     [{"heading": "Music", "entries": ["Two hours a week."]}], 4),
+    ("table after a blank line",
+     "Gift ideas:\n\n| who | what |\n| Derya | watch |\n",
+     [], 3),
+    ("paragraph after a blank line",
+     "Gift ideas for Derya:\n\nA blue watch, or a book on sailing.\n",
+     [], 2),
     ("plain setext heading",
      "Settled matters\n---\n- Plain outcome language.\n",
      [{"heading": "Settled matters", "entries": ["Plain outcome language."]}], 0),
@@ -2043,7 +2049,7 @@ for name, text, sections, withheld in cases:
     assert got == (sections, withheld), (name, got)
 PY
   ) || fail "memory gift blocks leaked: $output"
-  pass "what I remember withholds the whole block after a gift heading, Setext heading, bold label, or paragraph lead-in"
+  pass "what I remember withholds everything after a gift line up to the next heading of its level or higher"
 }
 
 test_observation_carries_memory_without_writes() {
@@ -2129,14 +2135,14 @@ for (const want of ['About you', 'changed 2026-10-04 · 2 entries', 'data/captai
                     'Goals: linked · skipped: a link, not a file this home keeps', 'class="more-fold mem-fold"']) {
   if (!html.includes(want)) throw new Error('memory render missing ' + JSON.stringify(want) + ': ' + html);
 }
-if (foot.textContent !== 'What I remember withheld 3 lines that mention a gift, surprise or present.') {
+if (foot.textContent !== 'What I remember withheld 3 lines about a gift, surprise or present.') {
   throw new Error('withheld footer wrong: ' + foot.textContent);
 }
 memory.innerHTML = 'OPEN FOLD';
 apply(Object.assign({}, base, {memory: JSON.parse(JSON.stringify(kept))}));
 if (memory.innerHTML !== 'OPEN FOLD') throw new Error('unchanged memory re-rendered and closed an open fold');
 apply(Object.assign({}, base, {memory: {withheld: 1, sources: []}}));
-if (foot.textContent !== 'What I remember withheld 1 line that mentions a gift, surprise or present.') {
+if (foot.textContent !== 'What I remember withheld 1 line about a gift, surprise or present.') {
   throw new Error('singular footer wrong: ' + foot.textContent);
 }
 apply(Object.assign({}, base, {memory: {error: 'memory read failed'}}));

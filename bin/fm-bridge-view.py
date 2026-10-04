@@ -1449,31 +1449,27 @@ def memory_sections(text: str) -> Tuple[List[Dict[str, Any]], int]:
     """Split one memory file into headed sections of plain-text entries.
 
     An entry is a top-level line plus every line under it up to the next blank
-    line, heading, or top-level bullet. An entry with any withheld line is
-    dropped whole. A withheld ATX or Setext heading drops everything beneath it
-    up to the next heading of its level or higher. A withheld paragraph or bold
-    label drops the list that follows it up to the next heading or the next
-    blank-line-separated paragraph, and a withheld bullet drops its indented
-    continuation. Returns the sections and how many non-blank lines were
-    withheld."""
+    line, heading, or top-level bullet. A withheld line of any kind drops its
+    whole entry and everything after it, blank lines and tables included, up to
+    the next heading of the same or higher level than the heading it sits under
+    (an ATX or Setext heading counts as under its own level); a withheld line
+    under no heading hides up to the next heading or the end of the file.
+    Returns the sections and how many non-blank lines were withheld."""
     sections: List[Dict[str, Any]] = []
     current: Dict[str, Any] = {"heading": "", "entries": []}
     sections.append(current)
     entry: List[str] = []
-    entry_bullet = False
+    entry_plain = False
     withheld = 0
+    section_level = 0
     hidden_level = 0
-    hidden_lead: Optional[str] = None
     in_fence = False
 
     def flush() -> None:
-        nonlocal entry, withheld, hidden_lead
+        nonlocal entry, withheld
         if entry:
-            lead = any(_memory_withheld(line) for line in entry)
-            if hidden_level or hidden_lead or lead:
+            if hidden_level:
                 withheld += len(entry)
-                if lead and hidden_lead != "para":
-                    hidden_lead = "item" if entry_bullet else "para"
             else:
                 plain = _memory_plain(entry)
                 if plain:
@@ -1485,11 +1481,13 @@ def memory_sections(text: str) -> Tuple[List[Dict[str, Any]], int]:
         stripped = line.strip()
         if stripped.startswith("```") or stripped.startswith("~~~"):
             in_fence = not in_fence
-            if hidden_level or hidden_lead or _memory_withheld(stripped):
+            if not hidden_level and _memory_withheld(stripped):
+                hidden_level = section_level or 6
+            if hidden_level:
                 withheld += 1
             continue
         heading = None if in_fence else MEMORY_HEADING_RE.match(line)
-        setext = not in_fence and not hidden_lead and entry and not entry_bullet and MEMORY_SETEXT_RE.match(line)
+        setext = not in_fence and entry_plain and entry and MEMORY_SETEXT_RE.match(line)
         if heading or setext:
             if heading:
                 flush()
@@ -1497,13 +1495,13 @@ def memory_sections(text: str) -> Tuple[List[Dict[str, Any]], int]:
             else:
                 level, title, lines = (1 if stripped[0] == "=" else 2), " ".join(entry), len(entry) + 1
                 entry = []
-            hidden_lead = None
             if hidden_level and level <= hidden_level:
                 hidden_level = 0
             if hidden_level or _memory_withheld(title):
                 hidden_level = hidden_level or level
                 withheld += lines
                 continue
+            section_level = level
             current = {"heading": _memory_plain([title]), "entries": []}
             sections.append(current)
             continue
@@ -1516,9 +1514,9 @@ def memory_sections(text: str) -> Tuple[List[Dict[str, Any]], int]:
         if bullet:
             flush()
         if not entry:
-            if top and (not bullet or hidden_lead == "item"):
-                hidden_lead = None
-            entry_bullet = bool(bullet)
+            entry_plain = top and not bullet
+        if not hidden_level and _memory_withheld(stripped):
+            hidden_level = section_level or 6
         entry.append(MEMORY_BULLET_RE.sub("", line, count=1) if bullet else stripped)
     flush()
     return [s for s in sections if s["entries"]], withheld
@@ -2194,7 +2192,7 @@ function renderMemory(m) {
   root.innerHTML = (m.sources || []).map(memorySource).join('');
   const w = m.withheld || 0;
   if (foot) foot.textContent = 'What I remember withheld ' + w +
-    (w === 1 ? ' line that mentions' : ' lines that mention') + ' a gift, surprise or present.';
+    (w === 1 ? ' line' : ' lines') + ' about a gift, surprise or present.';
 }
 function apply(data) {
   lastSuccess = Date.now();
