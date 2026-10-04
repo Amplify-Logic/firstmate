@@ -1,0 +1,16 @@
+=== bin/fm-computer-use.sh elements --app Terminal --screenshot   (header only; Terminal is the one on-screen window)
+app: Terminal | window: larsmusic — herdr ▸ sleep — 213×64 | dialog: no | snapshot: ps1_79279d90453723cfedf5b1ddbb584a8a | elements: 14/14
+rc=1 stderr: fm-computer-use.sh: no window image of Terminal: The desktop observation provider returned inconsistent response evidence: window-context window title.
+ls: : No such file or directory
+cannot open `' (No such file or directory)
+
+=== retry (the first try failed because Terminal's title changed mid-read, which Peekaboo reported and the script passed through)
+rc=0
+app: Terminal | window: larsmusic — herdr ▸ caffeinate — 213×64 | dialog: no | snapshot: ps1_26364d2e69781dc2f23d076043888b3c | elements: 6/6 | screenshot: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-computer-use/latest_annotated.png
+total 2160
+drwx------@    4 larsmusic  staff     128 Oct  4 10:17 .
+drwx------@ 4576 larsmusic  staff  146432 Oct  4 10:18 ..
+-rw-r--r--@    1 larsmusic  staff  568341 Oct  4 10:17 latest.png
+-rw-r--r--@    1 larsmusic  staff  533257 Oct  4 10:17 latest_annotated.png
+/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-computer-use/latest.png:           PNG image data, 1512 x 913, 8-bit/color RGBA, non-interlaced
+/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-computer-use/latest_annotated.png: PNG image data, 1512 x 913, 8-bit/color RGBA, non-interlaced

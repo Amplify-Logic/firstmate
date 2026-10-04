@@ -1,0 +1,29 @@
+=== bin/fm-computer-use.sh elements --app TextEdit   (throwaway background window, default: no screenshot)
+app: TextEdit | window: fm-cu-live-test.txt | dialog: no | snapshot: ps1_c571ea6f0b285cb3d24a9bba2403f3f0 | elements: 11/11
+elem_5 button 'close button'
+elem_6 button 'full screen button'
+elem_9 button 'minimise button'
+elem_2 textField 'First Text View' = fm-computer-use live test window This throwaway TextEdit document exists only fo
+elem_11 image 'fm-cu-live-test.txt'
+elem_0 standard-window 'fm-cu-live-test.txt'
+elem_1 scroll-area '_NS:8'
+elem_3 scroll-bar '_NS:24' = 0.1851851791143417 (disabled)
+elem_4 scroll-bar '_NS:27' = 0.615384578704834 (disabled)
+elem_10 menu-button 'document actions' (disabled)
+elem_12 text 'fm-cu-live-test.txt'
+rc=0
+=== bin/fm-computer-use.sh elements --app com.apple.TextEdit --screenshot
+fm-computer-use.sh: no window image of com.apple.TextEdit: Desktop observation target was not found: shareable window for TextEdit. Candidates: #0 id=11601 'fm-cu-live-test.txt' 656x422 alpha=1.00 reason=window minimized; #1 id=11600 '<untitled>' 500x500 alpha=1.00 reason=window minimized
+app: TextEdit | window: fm-cu-live-test.txt | dialog: no | snapshot: ps1_66871b5068c95544c28051c3e3180dc5 | elements: 11/11
+elem_5 button 'close button'
+elem_6 button 'full screen button'
+elem_9 button 'minimise button'
+elem_2 textField 'First Text View' = fm-computer-use live test window This throwaway TextEdit document exists only fo
+elem_11 image 'fm-cu-live-test.txt'
+elem_0 standard-window 'fm-cu-live-test.txt'
+elem_1 scroll-area '_NS:8'
+elem_3 scroll-bar '_NS:24' = 0.1851851791143417 (disabled)
+elem_4 scroll-bar '_NS:27' = 0.615384578704834 (disabled)
+elem_10 menu-button 'document actions' (disabled)
+elem_12 text 'fm-cu-live-test.txt'
+rc=1

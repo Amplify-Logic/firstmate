@@ -1,0 +1,8 @@
+=== raw: peekaboo see --app Arc --tree --no-screenshot --json (error message only)
+False Multiple apps match 'Arc'. Did you mean: loginwindow, universalaccessd, WindowManager, GamePolicyAgent, Dock, SystemUIServer, Control Centre, Wallpaper, Accessibility, Finder, ViewBridgeAuxiliary, chr
+=== bin/fm-computer-use.sh elements --app Arc
+app: Arc (company.thebrowser.Browser) | window: Fleet Report: 2 to 4 October 2026 | dialog: no | snapshot: ps1_6d0104e09b816b58a518d185bf8a0d23 | elements: 10/10
+rc= stderr: 
+=== bin/fm-computer-use.sh elements --app company.thebrowser.Browser
+app: Arc | window: Fleet Report: 2 to 4 October 2026 | dialog: no | snapshot: ps1_7368b702f460dfaac59c050e2e3dd9b3 | elements: 10/10
+rc= stderr: 

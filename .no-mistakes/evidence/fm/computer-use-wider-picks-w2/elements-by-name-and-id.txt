@@ -1,0 +1,24 @@
+=== elements --app 'System Settings'
+rc=0 (2s)
+app: System Settings | window: Untitled | dialog: yes | snapshot: ps1_daa2825513fe555ad79975f28ab99453 | elements: 12/12
+stderr: 
+=== elements --app 'com.apple.systempreferences'
+rc=0 (1s)
+app: System Settings | window: Untitled | dialog: yes | snapshot: ps1_1d0a7ad336b6030ff62e2ed67aaf2dc0 | elements: 12/12
+stderr: 
+=== elements --app 'Finder'
+rc=0 (8s)
+app: Finder | window: Desktop | dialog: no | snapshot: ps1_d33e5560480e057e592905c7fa229de9 | elements: 200/458
+stderr: 
+=== elements --app 'Notes'
+rc=0 (7s)
+app: Notes | window: All iCloud – 246 notes | dialog: yes | snapshot: ps1_88f201be03c67aa6b2fbafc0acb998e1 | elements: 200/785
+stderr: 
+=== elements --app 'WhatsApp'
+rc=1 (0s)
+
+stderr: fm-computer-use.sh: peekaboo could not read WhatsApp: Window not found: accessible window for PID 82064
+=== elements --app 'Simulator'
+rc=1 (1s)
+
+stderr: fm-computer-use.sh: peekaboo could not read Simulator: Window not found: accessible window for PID 90555

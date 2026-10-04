@@ -1,0 +1,23 @@
+=== BASE 73a9ec36: elements --app 'System Settings'
+fm-computer-use.sh: peekaboo see failed for System Settings
+=== THIS CHANGE:    elements --app 'System Settings'
+app: System Settings | window: Untitled | dialog: yes | snapshot: ps1_d8ce6c19d3a7814b46d3f009018afa68 | elements: 12/12
+=== BASE 73a9ec36: elements --app 'TextEdit'
+fm-computer-use.sh: peekaboo see failed for TextEdit
+=== THIS CHANGE:    elements --app 'TextEdit'
+app: TextEdit | window: fm-cu-live-test.txt | dialog: no | snapshot: ps1_a1e903e8a0ef7c3fc15edfd5806aac7c | elements: 11/11
+=== BASE 73a9ec36: elements --app 'Notes'
+fm-computer-use.sh: peekaboo see failed for Notes
+=== THIS CHANGE:    elements --app 'Notes'
+app: Notes | window: All iCloud – 246 notes | dialog: yes | snapshot: ps1_928b790acddb8f95bdf32142f6bfc893 | elements: 200/785
+=== BASE 73a9ec36: elements --app 'Arc'
+fm-computer-use.sh: peekaboo see failed for Arc
+=== THIS CHANGE:    elements --app 'Arc'
+app: Arc (company.thebrowser.Browser) | window: Fleet Report: 2 to 4 October 2026 | dialog: no | snapshot: ps1_cf98beb6f727e748189593aea31ea3b3 | elements: 10/10
+=== BASE 73a9ec36: elements --app 'WhatsApp'
+fm-computer-use.sh: peekaboo see failed for WhatsApp
+=== THIS CHANGE:    elements --app 'WhatsApp'
+fm-computer-use.sh: peekaboo could not read WhatsApp: Window not found: accessible window for PID 82064
+=== settle exit codes (no pipe)
+settle System Settings rc=0
+settle Arc rc=0

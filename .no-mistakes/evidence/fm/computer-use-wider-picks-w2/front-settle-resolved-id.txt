@@ -1,0 +1,18 @@
+=== bin/fm-computer-use.sh front   (header only)
+app: Terminal | window: larsmusic — herdr ▸ caffeinate — 213×64 | dialog: no | snapshot: ps1_fd3e4e9c338db495058b833c2510a337 | elements: 14/14
+stderr: 
+=== front with --app (must be refused, exit 2)
+fm-computer-use.sh: front: --app is not taken; front reads whatever window is in front
+rc=2
+=== facts frontmost (front must not have changed it)
+Terminal com.apple.Terminal
+=== settle --app 'System Settings' (minimised window, no screenshot reads)
+app: System Settings | window: Untitled | dialog: yes | snapshot: ps1_a41c720595453f2eba1caf12348134db | elements: 12/12
+rc=0
+=== settle --app Arc (ambiguous name resolved again on each read)
+app: Arc (company.thebrowser.Browser) | window: Fleet Report: 2 to 4 October 2026 | dialog: no | snapshot: ps1_1e01cdaf4efe23a872b6d30af163bc1f | elements: 10/10
+=== use resolved id with a real peekaboo call: peekaboo menu list --app company.thebrowser.Browser (first lines)
+success: True 
+app: Arc | top menus: []
+=== same call by the ambiguous name: peekaboo menu list --app Arc
+success: False Multiple apps match 'Arc'. Did you mean: loginwindow, universalaccessd, WindowMa

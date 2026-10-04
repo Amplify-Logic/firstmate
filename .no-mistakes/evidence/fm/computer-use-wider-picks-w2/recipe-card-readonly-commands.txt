@@ -1,0 +1,32 @@
+=== Arc tab read (browser recipe item 2), title length only
+true
+=== Chrome is running?
+true
+=== Claude extension (fcoeoabgfenejglbffodgkkbkcdhcgfn) installed in Arc Default / Chrome Profile 1?
+~/Library/Application Support/Arc/User Data/Default/Extensions/fcoeoabgfenejglbffodgkkbkcdhcgfn
+~/Library/Application Support/Google/Chrome/Profile 1/Extensions/fcoeoabgfenejglbffodgkkbkcdhcgfn
+=== Arc native messaging host for Claude Code's browser connector
+com.anthropic.claude_code_browser_extension.json
+=== Opening/closing card: id lookup and is-running
+0:2: execution error: Can’t get application "Logic Pro". (-1728)
+false
+=== Settings card reads
+output volume:63, input volume:63, alert volume:100, output 
+MacBook Pro Speakers
+Now drawing from 'AC Power'
+=== Simulator card
+== Devices ==
+-- iOS 26.3 --
+=== Calendar card (count only)
+15
+=== Notes card (count only)
+246
+=== Files card
+Ableton Live 12 Suite 12.4.6 U2B [HCiSO], Hardware, Macintosh HD, Preboot, SSD, 
+
+=== Arc AppleScript diagnosis (gate process: launchd -> no-mistakes -> claude -> zsh)
+osascript -e 'tell application id "company.thebrowser.Browser" to get title of active tab of front window'  -> killed by 40 s alarm (rc=142), no output
+osascript -e 'tell application id "company.thebrowser.Browser" to count windows'                            -> killed by 40 s alarm (rc=142)
+Finder AppleScript from the same process works (disk list above), so Apple Events to Arc are blocked or pending for this
+process's TCC responsible app (no-mistakes), not the captain's Terminal that the recipe relies on.
+No consent window was open afterwards (UserNotificationCenter / universalAccessAuthWarn / CoreServicesUIAgent: no windows).

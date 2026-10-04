@@ -1,0 +1,21 @@
+=== elements --app 'System Settings' --screenshot
+app: System Settings | window: Untitled | dialog: yes | snapshot: ps1_e2c034ca5458015eab803e148c6d9d36 | elements: 12/12
+elem_7 button 'Service Options…'
+elem_15 button 'Learn More…'
+elem_16 button 'Done'
+elem_4 image 'Warning'
+elem_5 text 'battery_health_service_title' = Important Battery Message
+elem_6 text 'battery_health_service_message' = The battery’s capacity is significantly reduced. To restore capacity, please che
+elem_9 text 'battery_health_condition_title' = Battery Condition
+elem_10 text 'battery_health_condition_subtitle' = Mac batteries, like all rechargeable batteries, are consumable components that b
+elem_11 text 'battery_health_condition' = Service Recommended
+elem_12 text 'battery_health_max_capacity_title' = Maximum Capacity
+elem_13 text 'battery_health_max_capacity_subtitle' = This is a measure of battery capacity compared to when it was new. Lower capacit
+elem_14 text 'battery_health_max_capacity' = 79%
+rc=1 stderr: fm-computer-use.sh: no window image of System Settings: Desktop observation target was not found: shareable window for System Settings. Candidates: #0 id=10176 '<untitled>' 500x328 alpha=1.00 reason=window minimized; #1 id=10174 'Battery' 723x874 alpha=1.00 reason=window minimized; #2 id=10172 '<untitled>' 1512x33 alpha=1.00 reason=window minimized; #...
+=== elements --app 'System Settings' --thin 20   (12 listed < 20 => image taken automatically)
+app: System Settings | window: Untitled | dialog: yes | snapshot: ps1_68244963fd33c7f974f409c13b3de15d | elements: 12/12
+stderr: fm-computer-use.sh: no window image of System Settings: Desktop observation target was not found: shareable window for System Settings. Candidates: #0 id=10176 '<untitled>' 500x328 alpha=1.00 reason=window minimized; #1 id=10174 'Battery' 723x874 alpha=1.00 reason=window minimized; #2 id=10172 '<untitled>' 1512x33 alpha=1.00 reason=window minimized; #...
+=== elements --app 'System Settings' --thin 0
+app: System Settings | window: Untitled | dialog: yes | snapshot: ps1_48c5fe895ed1d73e2efc28eb5d0a8dde | elements: 12/12
+stderr: 
