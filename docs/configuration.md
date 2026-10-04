@@ -2690,6 +2690,23 @@ It shares the LaunchAgent writer in `bin/fm-launchd-schedule-lib.sh` with the mo
 The interval is a target detection latency and never an upper bound: sleep, offline stretches, backoff, quota and queue delay all add to it, and no instant or 24x7 availability is claimed.
 Removing the schedule disarms the live check and leaves the ledger in place, because an open obligation must survive an uninstall.
 
+## Dropped-threads digest (config/dropped-threads)
+
+An opt-in, twice-daily digest of what has been left hanging in this home's own records, delivered as one spoken sentence and a short list.
+It ships inert: with no `enabled = true` line in private gitignored `config/dropped-threads`, `bin/fm-dropped-threads.sh` does nothing at all, so cloning this repo, seeding a secondmate home, or adding a device never enrols it.
+Each home and each device opts in separately.
+
+At about the configured morning and evening times (08:30 and 19:30 local by default) it lists live and aged captain holds with any due date, open questions from work under way, other held items whose date has arrived, and in-flight tasks with no stamped status event for over a day.
+It reads local records only, through the canonical snapshot's local-only modes, and it only reports: it never changes the backlog, a hold or a task, never wakes firstmate, never writes a captain inbox note, and opens no network connection.
+When nothing is waiting the slot is still recorded, with no sentence and no list, and nothing is spoken.
+
+Delivery is a durable record under private `data/dropped-threads/`, which the phone bridge reads, plus the sentence spoken at the desk through `bin/fm-speak.sh`, which stays silent unless desk voice-out is on.
+`bin/fm-dropped-threads.sh`'s header owns the record format (`fm-dropped-threads.v1`), the slot and catch-up rules, the exact commands and the config keys; `latest --json` is the reader's entry point and `preview` shows what the next digest would say without writing or speaking anything.
+
+`bin/fm-dropped-threads-schedule.sh` owns the inspectable macOS launchd schedule, written through the shared `bin/fm-launchd-schedule-lib.sh`, and refuses to install on a home that has not opted in.
+Run `render` to inspect the complete definition, `install` to write and load it, `status` to print the resolved knobs and installed file, or `remove` to unload it.
+The default cadence is 900 seconds, read back from the digest owner; set `interval_seconds = N` in `config/dropped-threads` to change it.
+
 ## Desk voice-out (config/speak)
 
 An opt-in, per-home and per-device gate for speaking a captain-facing outcome out of this machine's own speaker.
