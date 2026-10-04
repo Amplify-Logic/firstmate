@@ -74,7 +74,7 @@ launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.firstmate.bridge-vie
 
 ## Observation
 
-The page calls `bin/fm-bearings-snapshot.sh --json --passive-view --all-in-flight --all-decisions --all-queued` so the waiting list is complete.
+The page calls `bin/fm-bearings-snapshot.sh --json --passive-view --all-in-flight --all-secondmates --all-decisions --all-queued` so the waiting list and the Routing graph are complete.
 The title, repo, hold kind, and hold reason the page reads are added to that model by `bin/fm-bridge-fields.sh` after the projection.
 When that script is absent the page receives the bare projection and its buckets degrade to the fields upstream emits.
 That named Bearings mode is allowed while away mode is on; ordinary `/bearings` chat still refuses until return catch-up finishes.
@@ -107,7 +107,8 @@ The server reads it from `bin/fm-routing-snapshot.sh --json`, whose header owns 
 
 - The model roster is every rule in `config/crew-dispatch.json`, as a short label cut from its `when` text, beside its model and effort, then the default.
 - The decisions are the newest few lines of the local dispatch decision record ([`docs/configuration.md`](configuration.md#typed-dispatch-resolution-env-typesafe_api_key) owns it): outcome, probability, rule, and chosen profile.
-- The graph and the live workers are the bearings `in_flight` rows, so they list exactly the work Under way, Waiting, and Needs you already show, each with its record's kind, model, effort, and spawn time; a second mate's own workers hang beneath it.
+- The live workers are the bearings `in_flight` rows, so they list exactly the work Under way, Waiting, and Needs you already show, each with its record's kind, model, effort, and spawn time.
+- The graph shows the same rows under firstmate, plus each second mate from the bearings `secondmates` rows with its own workers hanging beneath it.
 
 A task is named only by the title the glance already shows for it, and a decision whose task the glance no longer shows reads "Earlier task"; task ids, a record's outcome line, and brief text never reach the page.
 The section reads local files only: it makes no Jev call, changes no routing or model, and sends nothing off the machine.

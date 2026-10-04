@@ -13,8 +13,8 @@
 #                                    (docs/configuration.md "Crew dispatch profiles")
 #   state/dispatch-decisions.jsonl   recent decisions, as bin/fm-dispatch-resolve.sh
 #                                    records them (its header owns the line format)
-#   state/<id>.meta                  per task: kind, harness, model, effort,
-#                                    task_type, and the spawn time from spawn_gen
+#   state/<id>.meta                  per task: kind, model, effort, and the
+#                                    spawn time from spawn_gen
 #                                    (bin/fm-spawn.sh owns those fields)
 # A meta's outcome= line and every brief stay unread, so no task description
 # reaches the snapshot. Current state is not read here: a consumer joins each
@@ -26,17 +26,16 @@
 #    "roster":[{"rule":"rule_<n>|default","label":"..","profiles":[{"harness":..,"model":..|null,"effort":..|null}]}],
 #    "roster_error":null|"<why the rules file could not be read>",
 #    "decisions":[{"at":<epoch>,"task":"..","status":"..","rule":"..","label":"..","p":<0..1>|null,"profile":{..}|null}],
-#    "workers":[{"id":"..","kind":"..","harness":"..","model":"..","effort":"..","task_type":"..","started":<epoch>|null}]}
+#    "workers":[{"id":"..","kind":"..","model":"..","effort":"..","started":<epoch>|null}]}
 # A rule's label is its `when` cut at the first ": ", ". ", or " (" within 64
 # characters, else its first 64 characters at a word boundary with an ellipsis.
-# decisions holds the newest FM_ROUTING_DECISIONS (default 5) well-formed lines,
-# newest first; a malformed line is skipped. An absent rules file is an empty
+# decisions holds the newest 5 well-formed lines, newest first; a malformed line
+# is skipped. An absent rules file is an empty
 # roster with no error.
 #
 # Environment:
 #   FM_HOME                 the home to read (default: the code root)
 #   FM_CONFIG_OVERRIDE      config directory, as in the other scripts
-#   FM_ROUTING_DECISIONS    how many recent decisions to include (default 5)
 set -u
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -62,9 +61,6 @@ while [ $# -gt 0 ]; do
 done
 
 command -v jq >/dev/null 2>&1 || { echo "error: jq required" >&2; exit 2; }
-
-LIMIT=${FM_ROUTING_DECISIONS:-5}
-case "$LIMIT" in ''|*[!0-9]*|0) LIMIT=5 ;; esac
 
 # shellcheck disable=SC2016 # a jq program: its $names are jq variables
 LABEL_JQ='
@@ -108,7 +104,7 @@ fi
 DECISIONS='[]'
 LOG="$STATE/dispatch-decisions.jsonl"
 if [ -f "$LOG" ] && [ -r "$LOG" ]; then
-  DECISIONS=$(tail -n 200 "$LOG" 2>/dev/null | jq -R -s -c --argjson limit "$LIMIT" "$LABEL_JQ"'
+  DECISIONS=$(tail -n 200 "$LOG" 2>/dev/null | jq -R -s -c "$LABEL_JQ"'
     def num01: if type == "number" and . >= 0 and . <= 1 then . else null end;
     def text: if type == "string" then gsub("[[:cntrl:]]"; " ") else null end;
     [split("\n")[]
@@ -127,7 +123,7 @@ if [ -f "$LOG" ] && [ -r "$LOG" ]; then
         profile: (if (.profile | type) == "object"
                   then (.profile | {harness: (.harness | text), model: (.model | text), effort: (.effort | text)})
                   else null end)}]
-    | reverse | .[0:$limit]
+    | reverse | .[0:5]
   ' 2>/dev/null) || DECISIONS='[]'
 fi
 
@@ -137,11 +133,11 @@ WORKERS=$(
     [ -f "$meta" ] || continue
     id=$(basename "$meta" .meta)
     awk -F= -v id="$id" '
-      BEGIN { want["kind"]; want["harness"]; want["model"]; want["model_live"]; want["effort"]; want["task_type"]; want["spawn_gen"] }
+      BEGIN { want["kind"]; want["model"]; want["model_live"]; want["effort"]; want["spawn_gen"] }
       ($1 in want) && !($1 in seen) { seen[$1] = 1; v[$1] = substr($0, index($0, "=") + 1) }
       END {
         printf "%s", id
-        n = split("kind harness model model_live effort task_type spawn_gen", k, " ")
+        n = split("kind model model_live effort spawn_gen", k, " ")
         for (i = 1; i <= n; i++) printf "\t%s", v[k[i]]
         printf "\n"
       }
@@ -150,10 +146,10 @@ WORKERS=$(
     [split("\n")[]
      | select(length > 0)
      | split("\t")
-     | {id: .[0], kind: .[1], harness: .[2],
-        model: (if (.[4] // "") != "" then .[4] else .[3] end),
-        effort: .[5], task_type: .[6],
-        started: (((.[7] // "") | capture("^s(?<t>[0-9]+)\\.") | .t | tonumber)? // null)}
+     | {id: .[0], kind: .[1],
+        model: (if (.[3] // "") != "" then .[3] else .[2] end),
+        effort: .[4],
+        started: (((.[5] // "") | capture("^s(?<t>[0-9]+)\\.") | .t | tonumber)? // null)}
      | with_entries(if (.value | type) == "string" and .value == "" then .value = null else . end)]
   '
 ) || WORKERS='[]'

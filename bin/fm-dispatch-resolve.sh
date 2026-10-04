@@ -71,8 +71,10 @@
 #     {"at":<epoch>,"task":"<id>","status":"<status>","rule":"rule_<n>|default",
 #      "rule_when":"<first 60 chars of that rule's when>","p":<probability>,
 #      "profile":{"harness":..,"model":..|null,"effort":..|null}|null}
-#   rule and p are the rule the answer resolved to (after any fallback) and its
-#   probability; profile is the chosen profile on a clear result, else null.
+#   rule is the rule whose profiles the result was drawn from: the answer's
+#   rule after any runner-up fallback, or default when that rule's quota floor
+#   falls through to the default; p is Jev's probability for that rule, and
+#   profile is the chosen profile on a clear result, else null.
 #   task is the <id> of a data/<id>/brief.md path. No brief text, quota, or
 #   candidate evidence is written. The off, no-rules, and pre-answer error paths
 #   write nothing. Writing is best effort and never changes stdout or the exit.
@@ -543,7 +545,8 @@ RESULT=$(jq -n --arg floor "$CONFIDENCE_FLOOR" --argjson lat "$LAT_MS" --arg non
     rule: $picked,
     rule_when: when_of($picked),
     confidence: $a.confidence, probabilities: $a.probabilities,
-    chosen_rule: $choice, chosen_when: when_of($choice), chosen_p: $a.probabilities[$choice]
+    chosen_rule: ($sel.source // $choice), chosen_when: when_of($sel.source // $choice),
+    chosen_p: $a.probabilities[$sel.source // $choice]
   }
   + (if $fb.to then {fallback: "\($choice) (\(when_of($choice))) probability \($fb.p) clears its floor \($fb.to_floor); \($picked) probability \($a.probabilities[$picked]) is below its floor \($picked_floor)"} else {} end)
   as $ev |

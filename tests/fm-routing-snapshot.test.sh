@@ -67,8 +67,11 @@ assert_equals 'new-c,mid-b,old-a' "$(jq -r '[.decisions[].task] | join(",")' <<<
 assert_equals 'default|null' "$(jq -r '.decisions[0] | "\(.label)|\(.p)"' <<<"$out")" "default reads as default and an out-of-range probability is dropped"
 assert_equals 'Implementation, validation, difficult debugging…|0.41|null' "$(jq -r '.decisions[1] | "\(.label)|\(.p)|\(.profile)"' <<<"$out")" "a cut rule excerpt gains an ellipsis; a non-clear decision has no profile"
 assert_equals 'SIT STUDY WRITING|claude-fable-5-1' "$(jq -r '.decisions[2] | "\(.label)|\(.profile.model)"' <<<"$out")" "the chosen profile is kept"
-out=$(FM_ROUTING_DECISIONS=2 snapshot)
-assert_equals '2' "$(jq '.decisions | length' <<<"$out")" "FM_ROUTING_DECISIONS bounds the list"
+for at in 4000 5000 6000; do
+  printf '{"at":%s,"task":"later-%s","status":"clear","rule":"default","p":0.9,"profile":null}\n' "$at" "$at" >> "$HOME_DIR/state/dispatch-decisions.jsonl"
+done
+out=$(snapshot)
+assert_equals 'later-6000,later-5000,later-4000,new-c,mid-b' "$(jq -r '[.decisions[].task] | join(",")' <<<"$out")" "the list holds the newest five decisions"
 pass "recent decisions are newest first, bounded, and tolerant of malformed lines"
 
 # --- workers: model_live wins, spawn time from spawn_gen, outcome never read ---------
@@ -82,8 +85,9 @@ before=$(fingerprint)
 out=$(snapshot)
 after=$(fingerprint)
 assert_equals "$before" "$after" "the snapshot writes nothing"
-assert_equals 'ship|claude|opus|high|implementation|1790000000' "$(jq -r '.workers[] | select(.id == "ship-a") | "\(.kind)|\(.harness)|\(.model)|\(.effort)|\(.task_type)|\(.started)"' <<<"$out")" "a ship record carries kind, model, effort, task type, and spawn time"
-assert_equals 'grok-4.7-high|null|null' "$(jq -r '.workers[] | select(.id == "scout-b") | "\(.model)|\(.task_type)|\(.started)"' <<<"$out")" "model_live wins and absent fields are null"
+assert_equals '["effort","id","kind","model","started"]' "$(jq -c '.workers[] | select(.id == "ship-a") | keys' <<<"$out")" "a worker carries only id, kind, model, effort, and spawn time"
+assert_equals 'ship|opus|high|1790000000' "$(jq -r '.workers[] | select(.id == "ship-a") | "\(.kind)|\(.model)|\(.effort)|\(.started)"' <<<"$out")" "a ship record carries kind, model, effort, and spawn time"
+assert_equals 'grok-4.7-high|null' "$(jq -r '.workers[] | select(.id == "scout-b") | "\(.model)|\(.started)"' <<<"$out")" "model_live wins and absent fields are null"
 assert_not_contains "$out" 'PRIVATE-OUTCOME-TEXT' "a record's outcome never reaches the snapshot"
 assert_not_contains "$out" 'PRIVATE-BRIEF-TEXT' "brief text never reaches the snapshot"
 pass "workers come from task records without their outcome or brief"

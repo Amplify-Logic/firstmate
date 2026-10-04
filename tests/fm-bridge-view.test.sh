@@ -682,7 +682,7 @@ test_snapshot_requests_complete_glance_rows() {
   cat > "$fixture/bin/fm-bearings-snapshot.sh" <<'SH'
 #!/usr/bin/env bash
 case " $* " in
-  *' --all-in-flight '*--all-queued*) printf '%s\n' '{"schema":"fm-bearings.v1"}' ;;
+  *' --all-in-flight '*'--all-secondmates '*--all-queued*) printf '%s\n' '{"schema":"fm-bearings.v1"}' ;;
   *) exit 9 ;;
 esac
 SH
@@ -695,7 +695,7 @@ spec.loader.exec_module(module)
 module.run_snapshot(pathlib.Path(sys.argv[2]), pathlib.Path(sys.argv[3]))
 PY
   ) || fail "bridge snapshot did not request complete glance rows: $output"
-  pass "snapshot requests complete in-flight and waiting rows"
+  pass "snapshot requests complete in-flight, second-mate, and waiting rows"
 }
 
 test_bridge_page_async_progress_and_release() {
@@ -1764,16 +1764,19 @@ routing = {
         {"at": 700, "task": "gone-task-q7", "status": "clear", "rule": "default", "label": "default", "p": True, "profile": None},
     ],
     "workers": [
-        {"id": "ship-a", "kind": "ship", "harness": "claude", "model": "claude-sonnet-5-5", "effort": "medium", "task_type": "implementation", "started": 400},
-        {"id": "mate", "kind": "secondmate", "harness": "claude", "model": "opus", "effort": "default", "task_type": None, "started": None},
-        {"id": "unlisted-record", "kind": "scout", "harness": "claude", "model": "opus", "effort": "high", "task_type": None, "started": 100},
+        {"id": "ship-a", "kind": "ship", "model": "claude-sonnet-5-5", "effort": "medium", "started": 400},
+        {"id": "mate", "kind": "secondmate", "model": "opus", "effort": "default", "started": None},
+        {"id": "unlisted-record", "kind": "scout", "model": "opus", "effort": "high", "started": 100},
     ],
 }
 bearings = {
     "in_flight": [
         {"id": "ship-a", "kind": "ship", "state": "working", "name": "Phone routing panel"},
-        {"id": "mate", "kind": "secondmate", "state": "working", "name": "Music desk"},
         {"id": "mate/child-b", "kind": "scout", "state": "paused", "name": "Setlist evidence"},
+    ],
+    "secondmates": [
+        {"id": "(registry)", "state": "unknown", "doing": "Registered secondmate table unavailable"},
+        {"id": "mate", "state": "active_child_work", "doing": "child-b: paused"},
     ],
     "landed": [{"id": "landed-z", "what": "Spoken updates on the glasses"}],
 }
@@ -1786,10 +1789,12 @@ assert out["decisions"][0]["profile"] == "sonnet-5.5 · medium" and out["decisio
 assert out["decisions"][1]["profile"] == "" and out["decisions"][2]["p"] is None
 assert [(w["title"], w["kind"], w["model"], w["effort"], w["age_secs"], w["state"]) for w in out["workers"]] == [
     ("Phone routing panel", "ship", "sonnet-5.5", "medium", 600, "working"),
-    ("Music desk", "secondmate", "opus", "", -1, "working"),
     ("Setlist evidence", "scout", "-", "", -1, "paused"),
 ], out["workers"]
-assert len(out["graph"]) == 2 and out["graph"][1]["children"][0]["kind"] == "scout", out["graph"]
+assert [(n["kind"], n["model"], n["state"], [(c["kind"], c["model"]) for c in n["children"]]) for n in out["graph"]] == [
+    ("ship", "sonnet-5.5", "working", []),
+    ("secondmate", "opus", "active_child_work", [("scout", "-")]),
+], out["graph"]
 for leaked in ("ship-a", "landed-z", "gone-task-q7", "unlisted-record", "child-b"):
     assert leaked not in text, leaked
 PY

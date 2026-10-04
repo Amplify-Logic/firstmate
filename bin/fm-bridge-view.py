@@ -1241,6 +1241,7 @@ def run_snapshot(home: Path, root: Path) -> Dict[str, Any]:
             "--json",
             "--passive-view",
             "--all-in-flight",
+            "--all-secondmates",
             "--all-decisions",
             "--all-queued",
         ],
@@ -1302,7 +1303,9 @@ def project_routing(routing: Dict[str, Any], bearings: Dict[str, Any], now: floa
     """Shape the Routing section: the roster, the latest dispatch decisions,
     the worker graph, and live workers. Live work is the bearings read's own
     in_flight rows, named exactly as the glance names them, each joined by id
-    to its record's kind, model, effort, and spawn time. A decision names its
+    to its record's kind, model, effort, and spawn time. The graph hangs each
+    `<mate>/<child>` row beneath its second mate from the bearings
+    secondmates rows. A decision names its
     task by the title the glance already shows for it (live, landed, or
     waiting), never by its id. Nothing else from a task record or brief
     reaches the page."""
@@ -1326,7 +1329,19 @@ def project_routing(routing: Dict[str, Any], bearings: Dict[str, Any], now: floa
     in_flight = bearings.get("in_flight") if isinstance(bearings.get("in_flight"), list) else []
     workers: List[Dict[str, Any]] = []
     graph: List[Dict[str, Any]] = []
-    parents: Dict[str, Dict[str, Any]] = {}
+    mates: Dict[str, Dict[str, Any]] = {}
+    secondmates = bearings.get("secondmates") if isinstance(bearings.get("secondmates"), list) else []
+    for row in secondmates:
+        mate_id = str(row.get("id") or "") if isinstance(row, dict) else ""
+        if not mate_id or mate_id.startswith("(") or mate_id in mates:
+            continue
+        record = records.get(mate_id) or {}
+        mates[mate_id] = {
+            "kind": str(record.get("kind") or "secondmate"),
+            "model": short_model(record.get("model")) or "-",
+            "state": str(row.get("state") or "unknown"),
+            "children": [],
+        }
     names: Dict[str, str] = {}
     for key, field in (("landed", "what"), ("gates", "title")):
         rows = bearings.get(key) if isinstance(bearings.get(key), list) else []
@@ -1360,12 +1375,12 @@ def project_routing(routing: Dict[str, Any], bearings: Dict[str, Any], now: floa
             }
         )
         node = {"kind": kind, "model": model, "state": state, "children": []}
-        parent_id, _, child_id = task_id.partition("/")
-        if child_id and parent_id in parents:
-            parents[parent_id]["children"].append(node)
+        mate_id, _, child_id = task_id.partition("/")
+        if child_id and mate_id in mates:
+            mates[mate_id]["children"].append(node)
         else:
             graph.append(node)
-            parents[task_id] = node
+    graph.extend(mates.values())
     decisions = []
     for row in routing.get("decisions") or []:
         if not isinstance(row, dict):
