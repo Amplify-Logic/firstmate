@@ -1226,6 +1226,7 @@ worker_process_once() { # <account-home>
     case "$state" in
       queued)
         worker_lane_owns_job "$job" && continue
+        worker_yield_if_lock_taken
         if ! worker_clear_dead_claim "$job"; then
           if worker_claim_owner_alive "$job"; then
             home=$(worker_read_text "$job" home 8192 2>/dev/null || true)
