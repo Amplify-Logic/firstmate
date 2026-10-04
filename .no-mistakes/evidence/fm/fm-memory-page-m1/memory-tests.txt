@@ -1,0 +1,4 @@
+ok - what I remember reads only the captain files, learnings and goals, and withholds gift lines with a count
+ok - what I remember withholds everything after a gift line up to the next heading of its level or higher
+ok - the observation carries what I remember beside a failed routing read, without writing
+ok - glance page renders what I remember per source, keeps open folds, and counts withheld lines

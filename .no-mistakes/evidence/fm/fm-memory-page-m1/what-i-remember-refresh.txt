@@ -1,0 +1,4 @@
+t0 opened learnings fold: true
+t+36s (no file change) fetches=1 learnings fold still open: true
+appended "- LIVE-ADDED: prefer small PRs." to data/learnings.md
+new entry appeared after file change: true; meta: changed 2026-10-04 · 3 entries

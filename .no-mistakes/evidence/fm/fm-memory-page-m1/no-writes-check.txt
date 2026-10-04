@@ -1,0 +1,6 @@
+# data/ and state/ files changed while the server ran (expected: only data/learnings.md, which the test appended to):
+7c7
+< 2145349083 178 /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-memlab.9DkMIW/home/data/learnings.md
+---
+> 2026414162 210 /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-memlab.9DkMIW/home/data/learnings.md
+# new files under data/ or state/:

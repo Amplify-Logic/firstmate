@@ -1,0 +1,6 @@
+== empty home:
+{"sources":[{"label":"About you","path":"data/captain.md","missing":true},{"label":"About you, shared with second mates","path":"data/captain-shared.md","missing":true},{"label":"What the crew has learned","path":"data/learnings.md","missing":true},{"label":"Goals","path":"data/goals/","missing":true}],"withheld":0}
+== captain.md / captain-shared.md written with Setext-inside-gift-block inputs; waiting for cache expiry
+[{"label":"About you","path":"data/captain.md","changed":1791146965,"changed_date":"2026-10-04","sections":[{"heading":"Work","entries":["Visible work note."]}],"entries":1},{"label":"About you, shared with second mates","path":"data/captain-shared.md","changed":1791146965,"changed_date":"2026-10-04","sections":[],"entries":0}]
+8
+SECRET occurrences in observation: 0

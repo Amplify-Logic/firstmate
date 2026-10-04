@@ -1,0 +1,83 @@
+{
+  "sources": [
+    {
+      "label": "About you",
+      "path": "data/captain.md",
+      "changed": 1791146761,
+      "changed_date": "2026-10-04",
+      "sections": [
+        {
+          "heading": "Working style",
+          "entries": [
+            "Prefers plain outcome language, no jargon.",
+            "Lives in Auckland; replies are best before 10pm NZT."
+          ]
+        },
+        {
+          "heading": "Tools",
+          "entries": [
+            "Uses an iPhone for the bridge page."
+          ]
+        }
+      ],
+      "entries": 3
+    },
+    {
+      "label": "About you, shared with second mates",
+      "path": "data/captain-shared.md",
+      "changed": 1791146761,
+      "changed_date": "2026-10-04",
+      "sections": [
+        {
+          "heading": "Shared with second mates",
+          "entries": [
+            "Captain likes short PR descriptions."
+          ]
+        }
+      ],
+      "entries": 1
+    },
+    {
+      "label": "What the crew has learned",
+      "path": "data/learnings.md",
+      "changed": 1791146761,
+      "changed_date": "2026-10-04",
+      "sections": [
+        {
+          "heading": "Learnings",
+          "entries": [
+            "Full disk looks like low memory."
+          ]
+        },
+        {
+          "heading": "Next",
+          "entries": [
+            "Always run the gate before pushing."
+          ]
+        }
+      ],
+      "entries": 2
+    },
+    {
+      "label": "Goals: fleet",
+      "path": "data/goals/fleet.md",
+      "changed": 1791146761,
+      "changed_date": "2026-10-04",
+      "sections": [
+        {
+          "heading": "Goal: fleet",
+          "entries": [
+            "Keep the fleet green."
+          ]
+        }
+      ],
+      "entries": 1
+    },
+    {
+      "label": "Goals: linked",
+      "path": "data/goals/linked.md",
+      "error": "skipped: a link, not a file this home keeps"
+    }
+  ],
+  "withheld": 15
+}
