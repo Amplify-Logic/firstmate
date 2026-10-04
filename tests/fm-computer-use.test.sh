@@ -192,7 +192,12 @@ test_elements_read_the_list_without_a_screenshot() {
   assert_contains "$(sed -n 1p <<<"$out")" "elements: 8/8 | partial: Warning: AX tree truncated at element count 1000. Narrow the target." \
     "a successful read Peekaboo marks partial must say so in the header"
   assert_equals 1 "$(wc -l < "$d/calls" | tr -d ' ')" "a partial read must not be retried"
-  pass "elements reads the element list without a screenshot, marks a partial list, and passes Peekaboo's reason through"
+
+  d="$TMP_ROOT/read-only"; fake_see "$d"
+  see_json 8 | python3 -c 'import json, sys; doc = json.load(sys.stdin); doc["data"]["snapshot_reusable"] = False; print(json.dumps(doc))' > "$d/tree-Demo.json"
+  out=$(PATH="$d:$BASE_PATH" "$CU" elements --app Demo) || fail "a read-only snapshot must still render: $out"
+  assert_contains "$(sed -n 1p <<<"$out")" "| snapshot: s1 (read-only) | elements: 8/8" "a snapshot Peekaboo calls not reusable must be marked read-only"
+  pass "elements reads the element list without a screenshot, marks a partial or read-only list, and passes Peekaboo's reason through"
 }
 
 test_elements_take_a_screenshot_only_when_asked_or_thin() {

@@ -29,6 +29,7 @@
 #       header names it as "<app> (<bundle id>)" to pass to later peekaboo calls.
 #       Printed compactly:
 #         "app: <app> | window: <title> | dialog: yes|no | snapshot: <id> | elements: <shown>/<total>"
+#       with "<id> (read-only)" when Peekaboo says its ids cannot be acted on,
 #       plus " | partial: <Peekaboo's warning>" when Peekaboo says the list is
 #       incomplete or cut at its element limit, and " | screenshot: <path>"
 #       when a window image was taken, then one
@@ -259,7 +260,9 @@ if not partial and cut.get("incomplete_accessibility_read") is True:
 if not partial and cut.get("max_element_count_reached") is True:
     partial = "element limit reached"
 print(f"app: {app} | window: {text(data.get('window_title'))} | "
-      f"dialog: {dialog} | snapshot: {text(data.get('snapshot_id'))} | elements: {len(shown)}/{total}"
+      f"dialog: {dialog} | snapshot: {text(data.get('snapshot_id'))}"
+      + (" (read-only)" if data.get("snapshot_reusable") is False else "")
+      + f" | elements: {len(shown)}/{total}"
       + (f" | partial: {partial}" if partial else "")
       + (f" | screenshot: {shot}" if shot else ""))
 for line in shown:
