@@ -142,9 +142,8 @@ see_error() {  # <message>: a failed `see --json` read as Peekaboo prints it.
 }
 
 # fake_see <dir>: a peekaboo whose `see` answers from <dir>/<mode>-<app>.json
-# (mode tree for --no-screenshot reads, shot otherwise), or from
-# <dir>/<mode>-<app>.<n>.json on its <n>th such read, exiting 1 when the answer
-# is a failure. Every call's arguments are appended to <dir>/calls.
+# (mode tree for --no-screenshot reads, shot otherwise), exiting 1 when the
+# answer is a failure. Every call's arguments are appended to <dir>/calls.
 fake_see() {
   mkdir -p "$1"
   cat > "$1/peekaboo" <<SH
@@ -157,9 +156,7 @@ for a in "\$@"; do
   [ "\$a" = --no-screenshot ] && mode=tree
   prev=\$a
 done
-key="\$mode-\$app"
-n=\$(cat "$1/\$key.count" 2>/dev/null || echo 0); n=\$((n + 1)); printf '%s' "\$n" > "$1/\$key.count"
-f="$1/\$key.\$n.json"; [ -f "\$f" ] || f="$1/\$key.json"
+f="$1/\$mode-\$app.json"
 if [ ! -f "\$f" ]; then
   printf '{"success":false,"data":null,"error":{"message":"Application %s not found"}}\n' "\$app"
   exit 1
@@ -189,13 +186,13 @@ test_elements_read_the_list_without_a_screenshot() {
   assert_equals "fm-computer-use.sh: peekaboo could not read WhatsApp: Window not found: accessible window for PID 82064" "$err" \
     "a failed read must pass Peekaboo's own reason through"
 
-  d="$TMP_ROOT/incomplete"; fake_see "$d"
-  see_error "Warning: AX tree incomplete at incomplete accessibility read. Retry once to obtain a fresh observation." > "$d/tree-Demo.1.json"
-  see_json 6 > "$d/tree-Demo.json"
-  out=$(PATH="$d:$BASE_PATH" "$CU" elements --app Demo) || fail "an incomplete read must be retried once: $out"
-  assert_contains "$(sed -n 1p <<<"$out")" "elements: 6/6" "the retried read must render"
-  assert_equals 2 "$(wc -l < "$d/calls" | tr -d ' ')" "an incomplete read must be retried exactly once"
-  pass "elements reads the element list without a screenshot, retries an incomplete read once, and passes Peekaboo's reason through"
+  d="$TMP_ROOT/truncated"; fake_see "$d"
+  see_json 8 | python3 -c 'import json, sys; doc = json.load(sys.stdin); doc["data"]["truncation"] = {"incomplete_accessibility_read": False, "max_element_count_reached": True, "warning": "Warning: AX tree truncated at element count 1000. Narrow the target."}; print(json.dumps(doc))' > "$d/tree-Finder.json"
+  out=$(PATH="$d:$BASE_PATH" "$CU" elements --app Finder) || fail "a truncated read must still render: $out"
+  assert_contains "$(sed -n 1p <<<"$out")" "elements: 8/8 | partial: Warning: AX tree truncated at element count 1000. Narrow the target." \
+    "a successful read Peekaboo marks partial must say so in the header"
+  assert_equals 1 "$(wc -l < "$d/calls" | tr -d ' ')" "a partial read must not be retried"
+  pass "elements reads the element list without a screenshot, marks a partial list, and passes Peekaboo's reason through"
 }
 
 test_elements_take_a_screenshot_only_when_asked_or_thin() {

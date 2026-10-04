@@ -29,7 +29,9 @@
 #       header names it as "<app> (<bundle id>)" to pass to later peekaboo calls.
 #       Printed compactly:
 #         "app: <app> | window: <title> | dialog: yes|no | snapshot: <id> | elements: <shown>/<total>"
-#       plus " | screenshot: <path>" when a window image was taken, then one
+#       plus " | partial: <Peekaboo's warning>" when Peekaboo says the list is
+#       incomplete or cut at its element limit, and " | screenshot: <path>"
+#       when a window image was taken, then one
 #       line per element, "<id> <role> '<label>'" plus " = <value>",
 #       " (disabled)" and " (selected)" where they apply. By default only
 #       actionable elements and elements carrying readable text are listed;
@@ -39,8 +41,7 @@
 #       its list replaces the first so ids match the image. When that image
 #       cannot be taken the element list is still printed and Peekaboo's
 #       reason goes to stderr; that is a failure (exit 1) only with
-#       --screenshot. A read Peekaboo calls incomplete is retried once; a
-#       failed read prints Peekaboo's own reason.
+#       --screenshot. A failed read prints Peekaboo's own reason.
 #       --from renders a saved `see --json` file instead of reading the screen.
 #   fm-computer-use.sh front [--all] [--max <n>] [--screenshot] [--thin <n>]
 #       The same read of whatever window is in front; the header names the app.
@@ -251,8 +252,15 @@ total = len(lines)
 shown = lines[:cap]
 dialog = "yes" if data.get("is_dialog") else "no"
 app = text(data.get("application_name")) + (f" ({resolved})" if resolved else "")
+cut = data.get("truncation") if isinstance(data.get("truncation"), dict) else {}
+partial = text(cut.get("warning")).replace("|", "/")
+if not partial and cut.get("incomplete_accessibility_read") is True:
+    partial = "incomplete accessibility read"
+if not partial and cut.get("max_element_count_reached") is True:
+    partial = "element limit reached"
 print(f"app: {app} | window: {text(data.get('window_title'))} | "
       f"dialog: {dialog} | snapshot: {text(data.get('snapshot_id'))} | elements: {len(shown)}/{total}"
+      + (f" | partial: {partial}" if partial else "")
       + (f" | screenshot: {shot}" if shot else ""))
 for line in shown:
     print(line)
@@ -374,13 +382,6 @@ cmd_elements() {
   if ! see_read "$tmp/tree.json" "$tmp/tree.err" tree "$app" "$title"; then
     reason=$(see_reason "$tmp/tree.json" "$tmp/tree.err")
     case "$reason" in
-      *"AX tree incomplete"*)
-        # Peekaboo's own advice for a partial read is one fresh retry.
-        if see_read "$tmp/tree.json" "$tmp/tree.err" tree "$app" "$title"; then
-          reason=""
-        else
-          reason=$(see_reason "$tmp/tree.json" "$tmp/tree.err")
-        fi ;;
       "Multiple apps match"*)
         if ! id=$(resolve_app "$app"); then
           reason="$reason - pass the bundle id instead"
