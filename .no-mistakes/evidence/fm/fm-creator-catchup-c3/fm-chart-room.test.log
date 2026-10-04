@@ -1,0 +1,14 @@
+ok - a charter parses into goals, planned lines, and an on-ice lane
+ok - an explicit goal token and a named exception both beat the family pattern
+ok - work no goal claims lands in a visible bucket instead of vanishing
+ok - answers the captain owes are separated from work parked with a reason
+ok - an encoded captain-hold reason reaches the captain as its decoded words
+ok - a project claims its own name, its remote name, and its charter aliases
+ok - a project with no charter renders flat and functional
+ok - home, goal map, node, goal and report views all render with no dead rows
+ok - every served page carries an inline map favicon
+ok - a folded row is hidden until its bucket is opened, and shown once it is
+ok - unknown and unsafe addresses refuse with a plain page
+ok - a record that cannot be read stays visible and marked, and the rest still renders
+ok - rendered pages carry no internal vocabulary
+exit=0

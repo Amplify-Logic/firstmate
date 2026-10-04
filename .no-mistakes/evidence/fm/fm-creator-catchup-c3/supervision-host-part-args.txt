@@ -1,0 +1,10 @@
+$ tests/fm-supervision-host.test.sh all
+fm-supervision-host.test.sh: unknown part all; use core or lifecycle
+exit=2
+$ tests/fm-supervision-host.test.sh bogus
+fm-supervision-host.test.sh: unknown part bogus; use core or lifecycle
+exit=2
+$ tests/fm-supervision-host-lifecycle.test.sh (wrapper)
+set -u
+
+exec bash "$(dirname "${BASH_SOURCE[0]}")/fm-supervision-host.test.sh" lifecycle

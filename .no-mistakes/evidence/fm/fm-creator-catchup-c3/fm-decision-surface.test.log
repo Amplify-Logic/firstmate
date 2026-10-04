@@ -1,0 +1,4 @@
+ok - generator reconciles every captain hold and renders reason, options, recommendation, and groups
+ok - Lavish mark polls to exact text and routes through resolve before scratch cleanup
+ok - ambiguous or forged marks remain unresolved
+exit=0

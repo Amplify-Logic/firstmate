@@ -1,0 +1,5 @@
+# first turn: handled	turn=host-37091-1791105624.1	posture=away	rc=0
+# outcome: {"seq":1,"epoch":1791105646,"task":"demo","wake":"signal: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-supervision-host-live.Ajli8w/fm/state/demo.status","verdict":"captain","summary":"The demo worker reports its cleanup finished and nothing else is needed. No PR is recorded and its worktree is already gone, so there was nothing to tear down or merge; no action taken (away: merge nothing, dispatch nothing).","silent":false,"statusEndpoint":72,"statusIdent":"strong:16777231:285557431:1791105625.766536416"}
+# second turn: handled	turn=host-37091-1791105624.2	posture=away	rc=0
+ok - supervision host live (2.1.289 (Claude Code)): a real engine handles and resumes away wakes under the branch contract without waking main
+exit=0 seconds=62

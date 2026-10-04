@@ -1,0 +1,43 @@
+$ bin/fm-test-run.sh --list-lanes
+portable-parallel-1
+portable-parallel-2
+portable-serial
+portable-serial-1of11
+portable-serial-2of11
+portable-serial-3of11
+portable-serial-4of11
+portable-serial-5of11
+portable-serial-6of11
+portable-serial-7of11
+portable-serial-8of11
+portable-serial-9of11
+portable-serial-10of11
+portable-serial-11of11
+real-herdr-gated
+exit=0
+$ bin/fm-test-run.sh --check-coverage
+FM_TEST_COVERAGE ok total=333 parallel=24 parallel_max_ms=665545 parallel_imbalance_ms=2 parallel_unhinted=0 serial=292 serial_shards=11 serial_unhinted=0 serial_max_ms=1116376 serial_budget_ms=1200000 herdr=17
+exit=
+$ CI matrix (parsed with yq/python yaml)
+Traceback (most recent call last):
+  File "<stdin>", line 1, in <module>
+ModuleNotFoundError: No module named 'yaml'
+$ which lanes hold the two supervision-host parts
+shard 2: tests/fm-supervision-host.test.sh
+shard 2: tests/fm-supervision-host-attended-live-e2e.test.sh
+shard 3: tests/fm-supervision-host-lifecycle.test.sh
+shard 6: tests/fm-supervision-host-live-e2e.test.sh
+$ every serial shard non-empty, sizes:
+shard 1: 15 suites
+shard 2: 23 suites
+shard 3: 25 suites
+shard 4: 28 suites
+shard 5: 28 suites
+shard 6: 29 suites
+shard 7: 29 suites
+shard 8: 29 suites
+shard 9: 28 suites
+shard 10: 29 suites
+shard 11: 29 suites
+$ union of 11 shards == portable-serial lane?
+identical

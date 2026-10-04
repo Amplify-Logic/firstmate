@@ -1,0 +1,16 @@
+$ fm-decision-surface.sh generate --output .lavish/decisions.html
+generated: 1 captain decisions (tasks-axi count: 1)
+groups: 1; blocking other work: 0; lifecycle-routable: 0
+page: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.2pOnew/.lavish/decisions.html
+exit=0
+$ fm-decision-surface.sh show alpha-mail-d1 --page .lavish/decisions.html
+Title: Answer whether the run may email people
+Reason: Sending mail is outward (and irreversible), so it is the captain's word
+Options:
+  - Exact answer required; source options were not separable without guessing.
+Recommendation: No explicit recommendation is recorded in the backlog.
+Blocking: 0 dependent items
+exit=0
+$ grep reason text in generated page
+Sending mail is outward (and irreversible), so it is the captain&#39;s word
+Sending mail is outward (and irreversible), so it is the captain's word","repo":"alpha","gro

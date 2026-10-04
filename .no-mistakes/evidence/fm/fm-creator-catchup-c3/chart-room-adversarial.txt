@@ -1,0 +1,17 @@
+$ tasks-axi add alpha-legacy-l1 ... && tasks-axi hold alpha-legacy-l1 --reason "Legacy plain reason kept verbatim" --kind captain   # pre-encoding record
+exit=0
+$ fm-captain-hold.sh hold alpha-multi-m1 --reason $'Line one: pick A
+Line two: or B' (multi-line reason)
+alpha-multi-m1
+exit=0
+== GET /p/alpha/node/alpha-legacy-l1
+Legacy plain reason kept verbatim
+== GET /p/alpha/node/alpha-multi-m1
+Line one: pick A
+Line two: or B
+== GET /p/alpha/node/alpha-mail-d1
+Sending mail is outward (and irreversible), so it is the captain&#39;s word
+== GET / (Captain's Call)
+Legacy plain reason kept verbatim
+Sending mail is outward (and irreversible), so it is the captain&#39;s word
+Line one: pick A Line two: or B

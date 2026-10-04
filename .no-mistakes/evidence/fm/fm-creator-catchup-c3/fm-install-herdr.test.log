@@ -1,0 +1,5 @@
+ok - Herdr installer pins exact version, asset, checksum, and protocol floor
+ok - Treehouse installer pins exact version, asset, and checksum
+ok - cleanup is bounded to job-owned fm-lab-* sessions
+ok - CI wires pinned installers into a required serial Herdr lane
+exit=0

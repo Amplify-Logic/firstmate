@@ -1,0 +1,7 @@
+ok - watch-arm: an attached arm reports the wake its cycle delivered instead of a false failure
+ok - watch-arm: a delivered wake consumed by the handling turn still closes the attached arm cleanly
+ok - watch-arm: an unusable launch confirm window refuses to arm by name
+ok - watch-arm: a disposable validation checkout refuses to arm
+not ok - arm did not start a watcher: /Users/larsmusic/.no-mistakes/worktrees/f569cc43ac96/01M4314DNZ2SWY0S72966Q6FY2/bin/fm-watch-arm.sh: line 655: 22599 Terminated: 15          "$WATCH" > "$child_out"
+watcher: FAILED - no live watcher with a fresh beacon
+exit=1

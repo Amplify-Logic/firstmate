@@ -1,0 +1,14 @@
+$ fm-captain-hold.sh hold alpha-mail-d1 --title "Answer whether the run may email people" --repo alpha --reason "Sending mail is outward (and irreversible), so it is the captain's word"
+alpha-mail-d1
+exit=0
+
+$ grep alpha-mail-d1 data/backlog.md   # stored form
+- [ ] alpha-mail-d1 - Answer whether the run may email people (repo: alpha) (kind: captain) (since 2026-10-04) (hold: fm-hold-v1:U2VuZGluZyBtYWlsIGlzIG91dHdhcmQgKGFuZCBpcnJldmVyc2libGUpLCBzbyBpdCBpcyB0aGUgY2FwdGFpbidzIHdvcmQ=) (hold-kind: captain)
+  Captain hold set: 2026-10-04T09:13:30Z
+## Done
+
+$ tasks-axi show alpha-mail-d1 --full | grep hold_reason   # raw record
+  hold_reason: "fm-hold-v1:U2VuZGluZyBtYWlsIGlzIG91dHdhcmQgKGFuZCBpcnJldmVyc2libGUpLCBzbyBpdCBpcyB0aGUgY2FwdGFpbidzIHdvcmQ="
+  hold_kind: captain
+  hold_until: "-"
+  body: "Captain hold set: 2026-10-04T09:13:30Z"

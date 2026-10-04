@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en" data-lavish-live-reload-root>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Captain's decision register</title>
+  <style>
+    :root { color-scheme: dark; --ink:#f4f0e7; --muted:#a8b4b9; --panel:#12232b; --panel2:#172d37; --line:#31505c; --gold:#f1c46c; --sea:#71d6c2; --danger:#ffad8f; }
+    * { box-sizing: border-box; }
+    body { margin:0; background:#08161c; color:var(--ink); font:16px/1.6 ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+    body::before { content:""; position:fixed; inset:0; pointer-events:none; opacity:.2; background-image:linear-gradient(rgba(113,214,194,.06) 1px,transparent 1px),linear-gradient(90deg,rgba(113,214,194,.06) 1px,transparent 1px); background-size:32px 32px; }
+    main { position:relative; width:min(1180px,calc(100% - 32px)); margin:0 auto; padding:48px 0 96px; min-width:0; }
+    h1,h2,h3,h4,p { overflow-wrap:anywhere; }
+    h1 { max-width:800px; margin:.15em 0; padding-bottom:.08em; font-size:clamp(2.5rem,7vw,5.8rem); line-height:1.12; letter-spacing:-.035em; }
+    h2 { margin:0; font-size:2rem; line-height:1.2; }
+    h3 { margin:.5rem 0 .2rem; font-size:clamp(1.4rem,3vw,2rem); line-height:1.34; padding-bottom:4px; }
+    h4 { margin:0 0 .35rem; font-size:.78rem; text-transform:uppercase; letter-spacing:.12em; color:var(--sea); }
+    .kicker,.domain-heading p { margin:0; color:var(--gold); text-transform:uppercase; letter-spacing:.18em; font-size:.76rem; font-weight:800; }
+    .intro { max-width:760px; color:var(--muted); font-size:1.08rem; }
+    .stats { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; margin:28px 0; }
+    .stat { padding:18px; border:1px solid var(--line); background:rgba(18,35,43,.88); border-radius:14px; min-width:0; }
+    .stat strong { display:block; padding-bottom:.08em; color:var(--gold); font-size:2rem; line-height:1.2; }
+    .stat span { color:var(--muted); font-size:.85rem; }
+    .toolbar { position:sticky; top:0; z-index:5; display:flex; gap:10px; align-items:center; margin:24px 0 42px; padding:12px; background:rgba(8,22,28,.94); border:1px solid var(--line); border-radius:14px; backdrop-filter:blur(12px); }
+    .toolbar input { width:100%; min-width:0; border:1px solid var(--line); border-radius:9px; background:#0c1d24; color:var(--ink); padding:11px 13px; font:inherit; }
+    .domain { margin-top:54px; }
+    .domain-heading { display:flex; justify-content:space-between; gap:16px; align-items:end; border-bottom:1px solid var(--line); padding-bottom:13px; }
+    .domain-heading > * { min-width:0; }
+    .domain-heading > span { color:var(--muted); white-space:nowrap; }
+    .decision-list { display:grid; grid-template-columns:minmax(0,1fr); gap:20px; margin-top:20px; }
+    .decision-card { min-width:0; padding:24px; border:1px solid var(--line); border-radius:18px; background:linear-gradient(145deg,rgba(23,45,55,.96),rgba(14,31,38,.96)); box-shadow:0 20px 55px rgba(0,0,0,.18); }
+    .eyebrow { display:flex; gap:8px; flex-wrap:wrap; align-items:center; color:var(--sea); font-size:.75rem; font-weight:800; text-transform:uppercase; letter-spacing:.09em; }
+    .badge { display:inline-flex; border:1px solid var(--line); border-radius:999px; padding:2px 8px; letter-spacing:.03em; text-transform:none; }
+    .routeable { color:var(--sea); }.legacy { color:var(--danger); }.blocker { color:var(--gold); }
+    .identity { display:block; color:var(--muted); font-size:.72rem; white-space:normal; overflow-wrap:anywhere; }
+    .reason { margin:22px 0; padding-top:18px; border-top:1px solid var(--line); }
+    .reason p,.recommendation p { margin:.2rem 0; }
+    .recommendation { margin:18px 0; padding:16px 18px; border-left:4px solid var(--gold); background:rgba(241,196,108,.09); }
+    .recommendation > span { color:var(--gold); font-size:.76rem; font-weight:900; letter-spacing:.08em; text-transform:uppercase; }
+    .blocking { margin:18px 0; padding:14px 16px; background:rgba(255,173,143,.08); border:1px solid rgba(255,173,143,.35); border-radius:12px; }
+    .blocking strong { color:var(--danger); }.blocking ul { margin:.4rem 0 0; padding-left:1.2rem; }.blocking li { overflow-wrap:anywhere; }
+    .not-blocking { color:var(--muted); font-size:.86rem; }
+    fieldset { min-width:0; margin:24px 0 0; padding:0; border:0; }
+    legend { margin-bottom:10px; font-weight:900; }
+    .option-row { display:grid; grid-template-columns:22px minmax(0,1fr); gap:11px; align-items:start; margin:8px 0; padding:13px; border:1px solid var(--line); border-radius:11px; background:#0d2028; cursor:pointer; }
+    .option-row:has(input:checked) { border-color:var(--sea); box-shadow:inset 0 0 0 1px var(--sea); }
+    .option-row input { margin-top:5px; accent-color:var(--sea); }
+    .option-row strong { display:block; color:var(--sea); font-size:.72rem; letter-spacing:.08em; text-transform:uppercase; }
+    .custom-answer { display:none; width:100%; min-width:0; resize:vertical; margin-top:8px; padding:12px; border:1px solid var(--line); border-radius:10px; background:#091a21; color:var(--ink); font:inherit; }
+    .answer-form:has(input[value="__custom__"]:checked) .custom-answer { display:block; }
+    .missing { color:var(--danger); font-size:.85rem; }
+    .answer-actions { display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin-top:14px; }
+    button { border:0; border-radius:9px; padding:11px 15px; background:var(--sea); color:#082019; font:800 .9rem/1 ui-sans-serif,system-ui,sans-serif; cursor:pointer; }
+    button:hover { filter:brightness(1.08); }.answer-actions output { color:var(--sea); font-size:.85rem; }
+    .hidden { display:none !important; }
+    @media (max-width:700px) { main{width:min(100% - 20px,1180px);padding-top:28px}.stats{grid-template-columns:1fr}.decision-card{padding:18px}.domain-heading{align-items:start}.toolbar{top:6px} }
+  </style>
+</head>
+<body>
+  <main>
+    <p class="kicker">Private loopback register</p>
+    <h1>Decisions, all on one deck.</h1>
+    <p class="intro">Each answer stays local until it is queued and sent through Lavish. A recommendation is advice, never a preselected answer. Exact custom answers are preserved verbatim.</p>
+    <section class="stats" aria-label="Decision totals"><div class="stat"><strong>1</strong><span>captain decisions</span></div><div class="stat"><strong>1</strong><span>domains</span></div><div class="stat"><strong>0</strong><span>blocking other work</span></div></section>
+    <div class="toolbar"><input id="filter" type="search" placeholder="Filter decisions, reasons, or domains" aria-label="Filter decisions"><span id="visible-count">1 shown</span></div>
+    <section class="domain" data-domain="alpha">
+      <div class="domain-heading"><div><p>Domain</p><h2>alpha</h2></div><span>1 decision</span></div>
+      <div class="decision-list"><article class="decision-card" id="alpha-mail-d1" data-search="answer whether the run may email people sending mail is outward (and irreversible), so it is the captain&#39;s word alpha">
+          <header>
+            <div class="eyebrow"><span>alpha</span><span class="badge legacy">Needs lifecycle identity before routing</span></div>
+            <h3>Answer whether the run may email people</h3>
+            <code class="identity">alpha-mail-d1</code>
+          </header>
+          <section class="reason"><h4>Why this needs a decision</h4><p>Sending mail is outward (and irreversible), so it is the captain&#39;s word</p></section>
+          <aside class="recommendation"><span>Firstmate recommendation - advisory, not decided</span><p class="missing">No explicit recommendation is recorded in the backlog.</p></aside>
+          <p class="not-blocking">No dependent work is currently blocked by this decision.</p>
+          <form class="answer-form" data-decision-id="alpha-mail-d1" data-lavish-question="alpha-mail-d1">
+            <fieldset>
+              <legend>Choose one option</legend>
+              
+                <label class="option-row custom-row">
+                  <input type="radio" name="answer-alpha-mail-d1" value="__custom__">
+                  <span><strong>Exact answer</strong>Write a different or more precise decision.</span>
+                </label>
+                <textarea class="custom-answer" rows="2" maxlength="8192" placeholder="Captain's exact chosen option or instruction"></textarea>
+                <p class="missing">No explicit options were separable from the backlog without guessing. Write the exact decision below.</p>
+            </fieldset>
+            <div class="answer-actions"><button type="submit">Queue this answer</button><output aria-live="polite"></output></div>
+          </form>
+        </article></div>
+    </section>
+  </main>
+  <script id="fm-decision-data" type="application/json">{"schema":"fm-decision-surface.v1","generated_at":"2026-10-04T09:16:12.743Z","count":1,"decisions":[{"id":"alpha-mail-d1","title":"Answer whether the run may email people","reason":"Sending mail is outward (and irreversible), so it is the captain's word","repo":"alpha","group":"alpha","created":"2026-10-04","options":[],"recommendation":"","origin":"","key":"","dependents":[]}]}</script>
+  <script>
+    const marker = "FM_DECISION_ANSWER_V1:";
+    const manifest = JSON.parse(document.getElementById("fm-decision-data").textContent);
+    const byId = new Map(manifest.decisions.map((item) => [item.id, item]));
+    function encodePayload(value) {
+      const bytes = new TextEncoder().encode(JSON.stringify(value));
+      let binary = "";
+      for (const byte of bytes) binary += String.fromCharCode(byte);
+      return btoa(binary).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/, "");
+    }
+    for (const form of document.querySelectorAll(".answer-form")) {
+      form.addEventListener("submit", (event) => {
+        event.preventDefault();
+        const decision = byId.get(form.dataset.decisionId);
+        const selected = new FormData(form).get("answer-" + decision.id);
+        const output = form.querySelector("output");
+        if (!selected) { output.textContent = "Select an option first."; return; }
+        const custom = form.querySelector(".custom-answer").value.trim();
+        const answer = selected === "__custom__" ? custom : selected;
+        if (!answer) { output.textContent = "Write the exact answer first."; return; }
+        const payload = { version:1, hold_id:decision.id, origin_id:decision.origin, decision_key:decision.key, answer, answer_type:selected === "__custom__" ? "custom" : "option" };
+        const encoded = encodePayload(payload);
+        window.lavish.queuePrompt("Captain decision answer: " + answer + "\n" + marker + encoded, { tag:"decision-answer", text:decision.title + ": " + answer, queueKey:decision.id, element:form });
+        output.textContent = "Answer queued. Use Send to Agent when your batch is ready.";
+      });
+    }
+    document.getElementById("filter").addEventListener("input", (event) => {
+      const query = event.target.value.trim().toLowerCase();
+      let count = 0;
+      for (const card of document.querySelectorAll(".decision-card")) {
+        const visible = !query || card.dataset.search.includes(query);
+        card.classList.toggle("hidden", !visible);
+        if (visible) count += 1;
+      }
+      for (const domain of document.querySelectorAll(".domain")) domain.classList.toggle("hidden", !domain.querySelector(".decision-card:not(.hidden)"));
+      document.getElementById("visible-count").textContent = count + " shown";
+    });
+  </script>
+</body>
+</html>
