@@ -1,0 +1,27 @@
+[base 12:42:07] source ref d7e0bcc1 (d7e0bcc1)
+[base 12:42:08] supervisor A pid=93913 owns queue via --serve pid=93970
+[base 12:42:08] supervisor B pid=94109 reclaimed queue via --serve pid=94148
+[base 12:42:08] stalled loop A resumed; process table now:
+93913 93865 93913 /bin/bash $LAB_ROOT/bin/fm-remote-job-worker.sh
+93970 93913 93913 /bin/bash $LAB_ROOT/bin/fm-remote-job-worker.sh --serve
+94109 93865 94109 /bin/bash $LAB_ROOT/bin/fm-remote-job-worker.sh
+94148 94109 94109 /bin/bash $LAB_ROOT/bin/fm-remote-job-worker.sh --serve
+[base 12:42:09] job 1 exit=125 stdout=[] stderr=[remote job worker stopped before this job completed]
+[base 12:42:11] job 2 exit=125 stdout=[] stderr=[remote job worker stopped before this job completed]
+[base 12:42:12] job 3 exit=125 stdout=[] stderr=[remote job worker stopped before this job completed]
+[base 12:42:13] job 4 exit=125 stdout=[] stderr=[remote job worker stopped before this job completed]
+[base 12:42:15] job 5 exit=125 stdout=[] stderr=[remote job worker stopped before this job completed]
+[base 12:42:15] process table after jobs:
+93913 93865 93913 /bin/bash $LAB_ROOT/bin/fm-remote-job-worker.sh
+93970 93913 93913 /bin/bash $LAB_ROOT/bin/fm-remote-job-worker.sh --serve
+94109 93865 94109 /bin/bash $LAB_ROOT/bin/fm-remote-job-worker.sh
+94148 94109 94109 /bin/bash $LAB_ROOT/bin/fm-remote-job-worker.sh --serve
+[base 12:42:15] supervisor A alive? yes; serve A alive? yes
+[base 12:42:15] supervisor B alive? yes; serve B alive? yes
+[base 12:42:15] lock owner pid=94148 ready pid=94148
+[base 12:42:15] supervisor A stderr:
+    rmdir: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-dupworker.gY2Ej2/jobs/jobs/job-LwPgF5/.claim: No such file or directory
+[base 12:42:15] supervisor B stderr:
+[base 12:42:15] RESULT: 0/5 replies delivered, 5 failed
+/Users/larsmusic/.no-mistakes/evidence/01M42ZZ2AVF1ZQ3C4Q98QS8528/drive-duplicate-worker.sh: line 26: 93913 Killed: 9               "$ROOT/bin/fm-remote-job-worker.sh" 2> "$LAB/supA.err"
+/Users/larsmusic/.no-mistakes/evidence/01M42ZZ2AVF1ZQ3C4Q98QS8528/drive-duplicate-worker.sh: line 26: 94109 Killed: 9               "$ROOT/bin/fm-remote-job-worker.sh" 2> "$LAB/supB.err"

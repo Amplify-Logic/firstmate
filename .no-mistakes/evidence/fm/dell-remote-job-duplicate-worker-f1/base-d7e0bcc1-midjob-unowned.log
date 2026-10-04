@@ -1,0 +1,10 @@
+[base 12:43:09] == midjob case, ref d7e0bcc1
+[base 12:43:09] A serve=19810 stalled; B serve=20271 owns queue
+[base 12:43:11] owner B is running job job-fu7HQ0 (started marker present: yes); resuming A now
+[base 12:43:11] midjob job exit=125 stdout=[] stderr=[remote job worker stopped before this job completed]
+[base 12:43:12] supervisor A alive? yes; serve A alive? yes; B serve alive? yes; lock pid=20271
+[base 12:43:12] supervisor A stderr: 
+[base 12:43:12] == unowned case: lock/pid briefly unreadable on the sole owner B
+[base 12:43:15] after 2.5s with no readable owner: B serve alive? yes; job state=done
+[base 12:43:15] unowned job exit=125 stdout=[] stderr=[remote job worker stopped before this job completed]
+[base 12:43:15] B serve still alive? yes; supervisor B stderr: []

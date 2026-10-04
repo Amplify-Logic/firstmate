@@ -1,0 +1,22 @@
+[fix 12:42:20] source ref 11b6e3c5 (11b6e3c5)
+[fix 12:42:20] supervisor A pid=99317 owns queue via --serve pid=99632
+[fix 12:42:21] supervisor B pid=99939 reclaimed queue via --serve pid=102
+[fix 12:42:21] stalled loop A resumed; process table now:
+  102 99939 99939 /bin/bash $LAB_ROOT/bin/fm-remote-job-worker.sh --serve
+99939 99096 99939 /bin/bash $LAB_ROOT/bin/fm-remote-job-worker.sh
+[fix 12:42:25] job 1 exit=0 stdout=[reply from dell second mate: msg-1] stderr=[]
+[fix 12:42:29] job 2 exit=0 stdout=[reply from dell second mate: msg-2] stderr=[]
+[fix 12:42:32] job 3 exit=0 stdout=[reply from dell second mate: msg-3] stderr=[]
+[fix 12:42:36] job 4 exit=0 stdout=[reply from dell second mate: msg-4] stderr=[]
+[fix 12:42:40] job 5 exit=0 stdout=[reply from dell second mate: msg-5] stderr=[]
+[fix 12:42:40] process table after jobs:
+  102 99939 99939 /bin/bash $LAB_ROOT/bin/fm-remote-job-worker.sh --serve
+99939 99096 99939 /bin/bash $LAB_ROOT/bin/fm-remote-job-worker.sh
+[fix 12:42:40] supervisor A alive? no; serve A alive? no
+[fix 12:42:40] supervisor B alive? yes; serve B alive? yes
+[fix 12:42:40] lock owner pid=102 ready pid=102
+[fix 12:42:40] supervisor A stderr:
+    remote-job-worker: another worker now owns this account queue; stopping this duplicate serving loop
+[fix 12:42:40] supervisor B stderr:
+[fix 12:42:40] RESULT: 5/5 replies delivered, 0 failed
+/Users/larsmusic/.no-mistakes/evidence/01M42ZZ2AVF1ZQ3C4Q98QS8528/drive-duplicate-worker.sh: line 26: 99939 Killed: 9               "$ROOT/bin/fm-remote-job-worker.sh" 2> "$LAB/supB.err"

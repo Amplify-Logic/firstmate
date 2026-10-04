@@ -1,0 +1,10 @@
+[fix 12:43:16] == midjob case, ref 11b6e3c5
+[fix 12:43:16] A serve=25683 stalled; B serve=25985 owns queue
+[fix 12:43:17] owner B is running job job-JeiOaO (started marker present: yes); resuming A now
+[fix 12:43:21] midjob job exit=0 stdout=[reply from dell second mate: midjob] stderr=[]
+[fix 12:43:22] supervisor A alive? no; serve A alive? no; B serve alive? yes; lock pid=25985
+[fix 12:43:22] supervisor A stderr: remote-job-worker: another worker now owns this account queue; stopping this duplicate serving loop
+[fix 12:43:22] == unowned case: lock/pid briefly unreadable on the sole owner B
+[fix 12:43:25] after 2.5s with no readable owner: B serve alive? yes; job state=running
+[fix 12:43:27] unowned job exit=0 stdout=[reply from dell second mate: unowned] stderr=[]
+[fix 12:43:27] B serve still alive? yes; supervisor B stderr: []
