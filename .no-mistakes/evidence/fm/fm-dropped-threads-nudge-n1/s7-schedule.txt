@@ -1,0 +1,104 @@
+## S7: schedule - refuses an un-enrolled home, renders and installs once opted in (temp LaunchAgents dir; launchctl transport logged, never the real launchd)
+$ (not opted in) fm-dropped-threads-schedule.sh install
+fm-dropped-threads-schedule: this home is not opted in; add 'enabled = true' to config/dropped-threads first
+exit=2
+$ ls LaunchAgents
+$ fm-dropped-threads-schedule.sh render
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>dev.firstmate.dropped-threads.3956308121</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/Users/larsmusic/.no-mistakes/worktrees/f569cc43ac96/01M44ACE83QFHGC3814B6QACJX/bin/fm-dropped-threads.sh</string>
+    <string>run</string>
+  </array>
+  <key>WorkingDirectory</key>
+  <string>/Users/larsmusic/.no-mistakes/worktrees/f569cc43ac96/01M44ACE83QFHGC3814B6QACJX</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>FM_HOME</key>
+    <string>/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.D64Ybl</string>
+    <key>FM_ROOT_OVERRIDE</key>
+    <string>/Users/larsmusic/.no-mistakes/worktrees/f569cc43ac96/01M44ACE83QFHGC3814B6QACJX</string>
+  </dict>
+  <key>StartInterval</key>
+  <integer>900</integer>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>StandardOutPath</key>
+  <string>/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.D64Ybl/data/dropped-threads/launchd.stdout.log</string>
+  <key>StandardErrorPath</key>
+  <string>/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.D64Ybl/data/dropped-threads/launchd.stderr.log</string>
+</dict>
+</plist>
+$ plutil -lint
+/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.D64Ybl/render.plist: OK
+$ (enabled = true) fm-dropped-threads-schedule.sh install
+installed: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.D64Ybl/LaunchAgents/dev.firstmate.dropped-threads.3956308121.plist
+interval_seconds: 900
+exit=0
+$ ls LaunchAgents
+dev.firstmate.dropped-threads.3956308121.plist
+$ launchctl transport log
+launchctl bootout gui/501/dev.firstmate.dropped-threads.3956308121
+launchctl bootstrap gui/501 /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.D64Ybl/LaunchAgents/dev.firstmate.dropped-threads.3956308121.plist
+$ fm-dropped-threads-schedule.sh status
+plist: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.D64Ybl/LaunchAgents/dev.firstmate.dropped-threads.3956308121.plist
+enabled: true
+morning: 08:30
+evening: 19:30
+stale_hours: 24
+max_items: 8
+interval_seconds: 900
+latest: 2026-10-04 evening total=6
+--- installed definition ---
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>dev.firstmate.dropped-threads.3956308121</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/Users/larsmusic/.no-mistakes/worktrees/f569cc43ac96/01M44ACE83QFHGC3814B6QACJX/bin/fm-dropped-threads.sh</string>
+    <string>run</string>
+  </array>
+  <key>WorkingDirectory</key>
+  <string>/Users/larsmusic/.no-mistakes/worktrees/f569cc43ac96/01M44ACE83QFHGC3814B6QACJX</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>FM_HOME</key>
+    <string>/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.D64Ybl</string>
+    <key>FM_ROOT_OVERRIDE</key>
+    <string>/Users/larsmusic/.no-mistakes/worktrees/f569cc43ac96/01M44ACE83QFHGC3814B6QACJX</string>
+  </dict>
+  <key>StartInterval</key>
+  <integer>900</integer>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>StandardOutPath</key>
+  <string>/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.D64Ybl/data/dropped-threads/launchd.stdout.log</string>
+  <key>StandardErrorPath</key>
+  <string>/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.D64Ybl/data/dropped-threads/launchd.stderr.log</string>
+</dict>
+</plist>
+--- launchd status ---
+$ run the exact ProgramArguments + EnvironmentVariables the plist names (as launchd would)
+Dict {
+    FM_HOME = /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.D64Ybl
+    FM_ROOT_OVERRIDE = /Users/larsmusic/.no-mistakes/worktrees/f569cc43ac96/01M44ACE83QFHGC3814B6QACJX
+}
+program: /Users/larsmusic/.no-mistakes/worktrees/f569cc43ac96/01M44ACE83QFHGC3814B6QACJX/bin/fm-dropped-threads.sh run
+exit=0 (slot already published, so no output)
+$ fm-dropped-threads-schedule.sh remove
+removed: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.D64Ybl/LaunchAgents/dev.firstmate.dropped-threads.3956308121.plist
+exit=0
+$ ls LaunchAgents
+(empty)
+launchctl bootout gui/501/dev.firstmate.dropped-threads.3956308121
+launchctl bootstrap gui/501 /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.D64Ybl/LaunchAgents/dev.firstmate.dropped-threads.3956308121.plist
+launchctl print gui/501/dev.firstmate.dropped-threads.3956308121
+launchctl bootout gui/501/dev.firstmate.dropped-threads.3956308121

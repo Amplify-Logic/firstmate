@@ -1,0 +1,64 @@
+## S2: preview on a not-yet-opted-in home at Sun Oct  4 22:50:11 CEST 2026 - composes, writes and speaks nothing
+$ fm-dropped-threads.sh preview
+{
+  "schema": "fm-dropped-threads.v1",
+  "at": "2026-10-04T20:50:11Z",
+  "local_date": "2026-10-04",
+  "slot": "evening",
+  "spoken": "Six things are waiting on you: three decisions held for you, one question from work under way, one set-aside item whose date has come, and one task with no news for a day.",
+  "counts": {
+    "decisions": 3,
+    "questions": 1,
+    "time_gates": 1,
+    "quiet_tasks": 1,
+    "total": 6
+  },
+  "items": [
+    {
+      "kind": "question",
+      "id": "asking-task",
+      "text": "Pick the sign-in provider - Apple or Google first? See",
+      "due": null
+    },
+    {
+      "kind": "decision",
+      "id": "due-hold",
+      "text": "Approve the eval spend (due 28 Sep)",
+      "due": "2026-09-28"
+    },
+    {
+      "kind": "time-gate",
+      "id": "arrived-gate",
+      "text": "Weekly fleet scorecard (set aside until 3 Oct)",
+      "due": "2026-10-03"
+    },
+    {
+      "kind": "quiet-task",
+      "id": "quiet-task",
+      "text": "Rebuild the bridge page - no news for 3 days",
+      "due": null
+    },
+    {
+      "kind": "decision",
+      "id": "live-hold",
+      "text": "Choose the memory policy",
+      "due": null
+    },
+    {
+      "kind": "decision",
+      "id": "aged-hold",
+      "text": "Decide the old licence question",
+      "due": null
+    }
+  ],
+  "more": 0
+}
+exit=
+$ ls data/
+backlog.md
+$ any http(s) in record?
+0
+$ ids reported
+[{"kind":"question","id":"asking-task"},{"kind":"decision","id":"due-hold"},{"kind":"time-gate","id":"arrived-gate"},{"kind":"quiet-task","id":"quiet-task"},{"kind":"decision","id":"live-hold"},{"kind":"decision","id":"aged-hold"}]
+$ captain-held in-flight (dated-work, blocked-work) present?
+[]

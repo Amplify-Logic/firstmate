@@ -1,0 +1,7 @@
+## S6: the spoken line through the real desk speaker's register shaper (--dry-run, no audio)
+$ (config/speak absent) fm-speak.sh --dry-run "<spoken>"
+fm-speak: this home is not opted in; add 'enabled = true' to config/speak to speak here
+exit=0
+$ (config/speak enabled = true) fm-speak.sh --dry-run "<spoken>"
+fm-speak: the spoken register owner is not executable: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.D64Ybl/projects/glasses-voice/bin/announce (set FM_SPEAK_SHAPER)
+exit=1

@@ -1,0 +1,17 @@
+## S1: home with no config/dropped-threads -> run is inert (real clock: Sun Oct  4 22:50:05 CEST 2026)
+$ fm-dropped-threads.sh run
+exit=0
+$ ls data/
+backlog.md
+$ fm-dropped-threads.sh status
+enabled: false
+morning: 08:30
+evening: 19:30
+stale_hours: 24
+max_items: 8
+interval_seconds: 900
+latest: none
+$ (enabled = false) fm-dropped-threads.sh run
+exit=0
+$ ls data/
+backlog.md

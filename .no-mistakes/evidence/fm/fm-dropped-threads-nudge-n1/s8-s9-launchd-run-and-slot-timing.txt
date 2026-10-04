@@ -1,0 +1,17 @@
+## S8: a launchd-shaped run (bare system PATH, only the plist's env) publishes a due slot
+$ env -i HOME PATH=/usr/bin:/bin:/usr/sbin:/sbin FM_HOME=... FM_ROOT_OVERRIDE=... bin/fm-dropped-threads.sh run
+published 2026-10-04 evening: Six things are waiting on you: three decisions held for you, one question from work under way, one set-aside item whose date has come, and one task with no news for a day.
+exit=0
+{"local_date":"2026-10-04","slot":"evening","total":6}
+
+## S9: slot timing in the same lab home, using the product's own FM_DROPPED_THREADS_NOW clock (TZ=Europe/Amsterdam, Mon 2026-10-05)
+$ run at 07:00 -> <nothing published>
+$ run at 08:45 -> published 2026-10-05 morning: Six things are waiting on you:
+$ run at 08:45-again -> <nothing published>
+$ run at 14:00 -> <nothing published>
+$ run at 19:45 -> published 2026-10-05 evening: Six things are waiting on you:
+2026-10-05-evening.json
+2026-10-05-morning.json
+$ catch-up: first run of the day at 14:00 (slept through morning) -> published 2026-10-05 morning: Six things are waiting on you:
+$ overtaken: first run of the day at 19:45 -> published 2026-10-05 evening: Six things are waiting on you:
+2026-10-05-evening.json

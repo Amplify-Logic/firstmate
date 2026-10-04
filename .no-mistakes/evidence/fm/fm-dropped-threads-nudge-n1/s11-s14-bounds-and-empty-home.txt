@@ -1,0 +1,19 @@
+## S11 (exit code re-check)
+failed-collection run exit=1
+/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.D64Ybl/data/dropped-threads
+(no record files above)
+
+## S13: max_items bounds the list and 'more' counts the rest; stale_hours = 72 drops the 3-day-old task
+{"spoken":"Six things are waiting on you: three decisions held for you, one question from work under way, one set-aside item whose date has come, and one task with no news for 72 hours.","items":["asking-task","due-hold"],"more":4,"counts":{"decisions":3,"questions":1,"time_gates":1,"quiet_tasks":1,"total":6}}
+{"quiet":0,"total":5}
+
+## S14: a home with nothing waiting records the slot with spoken null and stays silent
+$ latest --json (before any)
+null
+$ run
+published 2026-10-04 evening: nothing waiting
+$ latest --json
+{"schema":"fm-dropped-threads.v1","at":"2026-10-04T20:51:46Z","local_date":"2026-10-04","slot":"evening","spoken":null,"counts":{"decisions":0,"questions":0,"time_gates":0,"quiet_tasks":0,"total":0},"items":[],"more":0}
+$ latest
+2026-10-04 evening: nothing waiting
+speaker calls: 0

@@ -1,0 +1,51 @@
+## S3: opt in with 'enabled = true' in config/dropped-threads, then run at Sun Oct  4 22:50:29 CEST 2026 (evening slot due)
+$ cat config/dropped-threads
+enabled = true
+$ fm-dropped-threads.sh run
+published 2026-10-04 evening: Six things are waiting on you: three decisions held for you, one question from work under way, one set-aside item whose date has come, and one task with no news for a day.
+exit=0
+$ find data/dropped-threads
+dropped-threads
+dropped-threads/digests
+dropped-threads/digests/2026-10-04-evening.json
+dropped-threads/latest.json
+$ perms
+-rw-------@ 1 larsmusic  staff  1315 Oct  4 22:50 /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.D64Ybl/data/dropped-threads/latest.json
+
+/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.D64Ybl/data/dropped-threads/digests/:
+total 8
+-rw-------@ 1 larsmusic  staff  1315 Oct  4 22:50 2026-10-04-evening.json
+$ cmp latest.json digests/<today>-evening.json
+identical
+$ lines handed to the desk speaker (real bin/fm-speak.sh behind a logging tap; config/speak absent so desk voice is off)
+22:50:30	Six things are waiting on you: three decisions held for you, one question from work under way, one set-aside item whose date has come, and one task with no news for a day.
+$ fm-dropped-threads.sh latest
+2026-10-04 evening: Six things are waiting on you: three decisions held for you, one question from work under way, one set-aside item whose date has come, and one task with no news for a day.
+- Pick the sign-in provider - Apple or Google first? See
+- Approve the eval spend (due 28 Sep)
+- Weekly fleet scorecard (set aside until 3 Oct)
+- Rebuild the bridge page - no news for 3 days
+- Choose the memory policy
+- Decide the old licence question
+$ fm-dropped-threads.sh latest --json | jq -c "{schema,at,local_date,slot,spoken,counts,more}"
+{"schema":"fm-dropped-threads.v1","at":"2026-10-04T20:50:29Z","local_date":"2026-10-04","slot":"evening","spoken":"Six things are waiting on you: three decisions held for you, one question from work under way, one set-aside item whose date has come, and one task with no news for a day.","counts":{"decisions":3,"questions":1,"time_gates":1,"quiet_tasks":1,"total":6},"more":0}
+$ fm-dropped-threads.sh status
+enabled: true
+morning: 08:30
+evening: 19:30
+stale_hours: 24
+max_items: 8
+interval_seconds: 900
+latest: 2026-10-04 evening total=6
+## S4: run again (manual, and as the next 15-minute poll would) -> no second publish, no second speech
+$ fm-dropped-threads.sh run
+exit=0
+$ fm-dropped-threads.sh run
+exit=0
+speaker calls total: 1
+## S5: read-only - backlog and status logs unchanged, no wake queue, no inbox
+backlog.md unchanged
+status logs unchanged
+no wake-queue / inbox entries in state/
+backlog.md
+dropped-threads

@@ -1,0 +1,24 @@
+## S10: bad local config is refused, not ignored (run exits 2 and writes nothing)
+$ config [enabled = true;channel = https://example.com/hook] run -> fm-dropped-threads: unknown config key: channel
+  exit=2
+$ config [enabled = yes] run -> fm-dropped-threads: enabled must be true or false: yes
+  exit=2
+$ config [enabled = true;morning = 8:30] run -> fm-dropped-threads: morning must be HH:MM in 24-hour form: 8:30
+  exit=2
+$ config [enabled = true;morning = 20:00;evening = 19:30] run -> fm-dropped-threads: evening (19:30) must be later than morning (20:00)
+  exit=2
+$ config [enabled = true;max_items = 0] run -> fm-dropped-threads: max_items must be a positive integer: 0
+  exit=2
+backlog.md
+
+## S11: a failed collection writes nothing and the next run retries the slot
+$ (snapshot fails) run -> fm-dropped-threads: could not collect the evening digest for 2026-10-04; the next run tries again
+  exit=
+speaker calls: 0
+$ next run -> published 2026-10-04 evening: Six things are waiting on you:
+
+## S12: two runs racing for the same slot publish and speak once
+run 1: 
+run 2: published 2026-10-04 evening: Six things are waiti
+run 3: 
+published lines: 1; speaker calls: 1; lock left behind: no
