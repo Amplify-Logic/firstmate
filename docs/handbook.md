@@ -215,6 +215,8 @@ For example:
 remember this as a standing rule, and add the same line to config/brief-include.md so every worker brief carries it: never send, post, or reply to anyone outside on my behalf without showing me the draft first
 ```
 
+Once you run second mates, also put the rule in `data/captain-shared.md`, which second mates inherit, and in each second mate home's `config/brief-include.md`, since neither of your main home's copies reaches them.
+
 Record useful facts about your connectors as learnings, for example "the shared support inbox replies never show in my own Gmail".
 
 ### Firstmate's own tools
