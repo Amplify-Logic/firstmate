@@ -352,13 +352,13 @@ If the slug never comes back: ask "why can't you start a worker?" or "what happe
 The first mate becomes genuinely useful once it can read your mail, calendar, documents, meeting notes, chat, and tracker.
 
 1. Before you connect mail or chat, tell the first mate how to treat outward sends.
-   It does not hold them by itself, so record this standing rule first:
+   It does not hold them by itself, so record this standing rule first, both for the first mate (`data/captain.md`) and for every worker brief (`config/brief-include.md`):
 
 ```text
-remember this as a standing rule: never send, post, or reply to anyone outside on my behalf without showing me the draft first
+remember this as a standing rule, and add the same line to config/brief-include.md so every worker brief carries it: never send, post, or reply to anyone outside on my behalf without showing me the draft first
 ```
 
-You should see: it confirms it recorded the rule in `data/captain.md`.
+You should see: it confirms it recorded the rule in `data/captain.md` and added it to `config/brief-include.md`.
 
 2. In a browser, open claude.ai, go to Settings, then Connectors, and add the services you use.
    A work account may already have some added by your administrator.

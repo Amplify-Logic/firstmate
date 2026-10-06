@@ -207,10 +207,12 @@ Claude in Chrome is not a claude.ai connector, so it does not appear in that lis
 It is a browser extension that lets Claude use pages in your own Chrome when no connector exists; install it, then enable it in Claude Code with `/chrome`.
 
 The first mate does not hold outward sends by itself: a connector that can send, post, or change something can do so without asking you first.
-Record a standing rule before you connect mail or chat ([ONBOARDING step 8](../ONBOARDING.md#8-connect-your-other-tools) prompts for it), for example:
+Record a standing rule before you connect mail or chat ([ONBOARDING step 8](../ONBOARDING.md#8-connect-your-other-tools) prompts for it).
+Record it in both places: `data/captain.md` binds the first mate, and the same line in `config/brief-include.md` puts it in every worker brief, since workers get the same connectors but do not read `data/captain.md`.
+For example:
 
 ```text
-remember this as a standing rule: never send, post, or reply to anyone outside on my behalf without showing me the draft first
+remember this as a standing rule, and add the same line to config/brief-include.md so every worker brief carries it: never send, post, or reply to anyone outside on my behalf without showing me the draft first
 ```
 
 Record useful facts about your connectors as learnings, for example "the shared support inbox replies never show in my own Gmail".
