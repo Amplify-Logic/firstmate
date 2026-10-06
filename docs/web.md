@@ -39,8 +39,10 @@ Each home runs its own server against its own `FM_HOME`, on its own port.
 ## How it reads the conversation
 
 The page reads the Claude Code transcript of the session that holds this home's session lock.
-The session id comes from `state/.lock-session`, and the transcript is found under the Claude config directory: `CLAUDE_CONFIG_DIR`, the home's pinned accounts under `data/accounts/claude/`, then `~/.claude`.
-The lock and transcript are re-read on every refresh, so a restarted or compacted session is followed without restarting the page.
+The session id is the one the live lock holder's Claude process records in `sessions/<pid>.json` under the Claude config directory, which follows `/clear`; without it, `state/.lock-session`.
+The transcript is found under the Claude config directory: `CLAUDE_CONFIG_DIR`, the home's pinned accounts under `data/accounts/claude/`, then `~/.claude`.
+The lock and transcript are re-read on every refresh, so a restarted, cleared or compacted session is followed without restarting the page.
+After `/clear` the earlier conversation stays on the page until the first new message.
 Only the end of the transcript is parsed, so a very large transcript stays quick; older history stays in the terminal.
 The page polls about every one and a half seconds while visible.
 

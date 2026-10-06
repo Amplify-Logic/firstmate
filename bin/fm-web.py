@@ -13,10 +13,13 @@ Every POST also needs the page's CSRF header and, when the browser sends one,
 a same-origin Origin. The token lives in state/web/token (0600 in a 0700
 directory); docs/web.md owns the security model.
 
-The conversation is read, never written: the session id comes from
-state/.lock-session (bin/fm-lock.sh is its only writer) and the transcript is
-<claude-config>/projects/*/<id>.jsonl, re-resolved on every read so a
-restarted or compacted session is followed. Only the tail is parsed.
+The conversation is read, never written: the session id is the one the live
+lock holder's Claude process records in <claude-config>/sessions/<pid>.json,
+which Claude Code rewrites when /clear starts a new session, else
+state/.lock-session (bin/fm-lock.sh is its only writer, and it is not re-keyed
+on /clear). The transcript is <claude-config>/projects/*/<id>.jsonl,
+re-resolved on every read so a restarted, cleared or compacted session is
+followed. Only the tail is parsed.
 
 Sending never types anywhere itself. Every message, with any pasted images
 saved into state/desk-voice/shots/, goes through
@@ -164,16 +167,21 @@ def lock_session_id(home: Path) -> Optional[str]:
     return first if SESSION_ID_RE.match(first) else None
 
 
-def lock_pid_alive(home: Path) -> Optional[bool]:
-    """True or False for the lock's recorded pid, None when there is no lock."""
+def lock_pid(home: Path) -> Optional[int]:
     try:
         first = (home / "state" / ".lock").read_text(encoding="utf-8").splitlines()[0].strip()
     except (OSError, IndexError, UnicodeDecodeError):
         return None
-    if not first.isdigit():
+    return int(first) if first.isdigit() else None
+
+
+def lock_pid_alive(home: Path) -> Optional[bool]:
+    """True or False for the lock's recorded pid, None when there is no lock."""
+    pid = lock_pid(home)
+    if pid is None:
         return None
     try:
-        os.kill(int(first), 0)
+        os.kill(pid, 0)
     except ProcessLookupError:
         return False
     except PermissionError:
@@ -181,10 +189,30 @@ def lock_pid_alive(home: Path) -> Optional[bool]:
     return True
 
 
-def resolve_transcript(home: Path) -> Tuple[Optional[str], Optional[Path]]:
-    session = lock_session_id(home)
-    if not session:
-        return None, None
+def live_session_id(home: Path) -> Optional[str]:
+    """The session id the live lock holder's Claude process records now.
+
+    The lock's pid is the Claude model-loop process, and Claude Code keeps
+    <claude-config>/sessions/<pid>.json naming its current session, rewritten
+    when /clear starts a new one. A dead holder's leftover file is ignored.
+    """
+    pid = lock_pid(home)
+    if pid is None or not lock_pid_alive(home):
+        return None
+    for base in claude_config_dirs(home):
+        try:
+            record = json.loads((base / "sessions" / f"{pid}.json").read_text(encoding="utf-8"))
+        except (OSError, ValueError, UnicodeDecodeError):
+            continue
+        if not isinstance(record, dict) or record.get("pid") != pid:
+            continue
+        session = record.get("sessionId")
+        if isinstance(session, str) and SESSION_ID_RE.match(session):
+            return session
+    return None
+
+
+def find_transcript(home: Path, session: str) -> Optional[Path]:
     best: Optional[Path] = None
     best_mtime = -1.0
     for base in claude_config_dirs(home):
@@ -198,7 +226,21 @@ def resolve_transcript(home: Path) -> Tuple[Optional[str], Optional[Path]]:
                 continue
             if mtime > best_mtime:
                 best, best_mtime = candidate, mtime
-    return session, best
+    return best
+
+
+def resolve_transcript(home: Path) -> Tuple[Optional[str], Optional[Path]]:
+    """The live session first, then the lock sidecar's.
+
+    A just-cleared session has no transcript until its first message, so the
+    sidecar's conversation stays on the page until then.
+    """
+    sessions = [s for s in (live_session_id(home), lock_session_id(home)) if s]
+    for session in sessions:
+        path = find_transcript(home, session)
+        if path is not None:
+            return session, path
+    return (sessions[0] if sessions else None), None
 
 
 # --- markdown ----------------------------------------------------------------

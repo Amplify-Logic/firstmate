@@ -2,7 +2,8 @@
 # Behavior tests for the localhost web page (bin/fm-web.sh, bin/fm-web.py):
 # transcript parsing into chat items (tool calls collapsed with their results,
 # hook notices as quiet notes, compaction boundaries carrying their summary,
-# escaped markdown), busy/idle/offline state, following a restarted session,
+# escaped markdown), busy/idle/offline state, following a restarted or
+# /clear'd session,
 # the loopback bind, the token/cookie, Host, CSRF and Origin guards on every
 # POST, sends that only ever reach bin/fm-desk-voice.sh send with images saved
 # in the floater's shots folder, the fleet panel through the bridge view's
@@ -205,6 +206,29 @@ test_idle_offline_and_session_restart() {
   pass "state reads busy, idle and offline, and a restarted session is followed"
 }
 
+# /clear gives the live primary a new session id that Claude Code records in
+# sessions/<pid>.json, while state/.lock-session keeps the old one.
+test_cleared_session_is_followed_through_the_live_registry() {
+  local home out cleared
+  home=$(make_home cleared)
+  write_basic_transcript "$(transcript "$home")"
+  cleared=77777777-6666-5555-4444-333333333333
+  mkdir -p "$home/claude/sessions"
+  printf '{"pid":%s,"sessionId":"%s","kind":"interactive"}\n' "$$" "$cleared" > "$home/claude/sessions/$$.json"
+  out=$(conversation "$home")
+  assert_equals "$(jq -r '.session' <<<"$out")" "$SESSION" "a cleared session with no transcript yet keeps the old conversation"
+  printf '%s\n' '{"type":"user","uuid":"c1","origin":{"kind":"human"},"message":{"role":"user","content":"after clear"}}' \
+    > "$(transcript "$home" "$cleared")"
+  out=$(conversation "$home")
+  assert_equals "$(jq -r '.session' <<<"$out")" "$cleared" "follows the cleared session while the sidecar is stale"
+  assert_equals "$(jq -r '.state' <<<"$out")" "busy" "the cleared session's turn reads busy"
+  assert_equals "$(jq -r '[.items[].html] | join(",")' <<<"$out")" "<p>after clear</p>" "shows the message sent after /clear"
+  python3 -c 'import subprocess; p=subprocess.Popen(["true"]); p.wait(); print(p.pid)' > "$home/state/.lock"
+  out=$(conversation "$home")
+  assert_equals "$(jq -r '.session' <<<"$out")" "$SESSION" "a dead holder's registry entry is ignored"
+  pass "a /clear'd primary is followed through its live session registry"
+}
+
 test_tail_reads_only_the_end_of_a_large_transcript() {
   local home out
   home=$(make_home tail)
@@ -334,6 +358,7 @@ test_launcher_start_status_url_stop() {
 test_transcript_parsing_collapses_tools_and_marks_compaction
 test_numbered_lists_keep_their_numbers
 test_idle_offline_and_session_restart
+test_cleared_session_is_followed_through_the_live_registry
 test_tail_reads_only_the_end_of_a_large_transcript
 test_get_guards_token_cookie_and_host
 test_post_guards_never_reach_desk_voice
