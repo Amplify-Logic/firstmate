@@ -1,0 +1,35 @@
+# HEAD eb83b867
+$ FM_PRIMARY_DRY_RUN=1 bin/fm-primary.sh claude
+fm-primary: launching model claude-fable-5-1 at effort xhigh
+root=/Users/larsmusic/.no-mistakes/worktrees/f569cc43ac96/01M49CVS6WMD2YKFVPXFXA684T
+profile=claude-fable
+role=FIRSTMATE
+CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP=1
+CLAUDE_CODE_AUTO_COMPACT_WINDOW=500000
+'claude' '--model' 'claude-fable-5-1' '--effort' 'xhigh' '--name' 'FIRSTMATE' '--dangerously-skip-permissions'
+exit=0
+$ FM_PRIMARY_DRY_RUN=1 bin/fm-primary.sh opus
+fm-primary: launching model claude-opus-5-5 at effort xhigh
+root=/Users/larsmusic/.no-mistakes/worktrees/f569cc43ac96/01M49CVS6WMD2YKFVPXFXA684T
+profile=claude-opus
+role=FIRSTMATE
+CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP=1
+CLAUDE_CODE_AUTO_COMPACT_WINDOW=500000
+'claude' '--model' 'claude-opus-5-5' '--effort' 'xhigh' '--name' 'FIRSTMATE' '--dangerously-skip-permissions'
+exit=0
+$ bin/fm-primary.sh --help | grep -nE "^  (pi|claude|claude-fable|claude-opus|opus|codex|cursor)"
+9:  pi            pi --name FIRSTMATE
+13:  claude-fable  claude --model claude-fable-5-1 --effort <value> --name FIRSTMATE
+15:  claude-opus   claude --model claude-opus-5-5 --effort <value> --name FIRSTMATE
+30:  codex         codex --dangerously-bypass-hook-trust
+33:  astra         codex --model gpt-6-astra
+50:  opencode      OPENCODE_CONFIG_CONTENT={"permission":{"*":"allow"}}
+52:  grok          grok --permission-mode bypassPermissions
+53:  cursor-grok   agent --yolo --model cursor-grok-4.6-high
+80:  claude-fable / claude-opus  export CLAUDE_CODE_AUTO_COMPACT_WINDOW=500000.
+85:  codex / astra  -c model_auto_compact_token_limit=500000 on the launch line.
+88:  pi  nothing is passed. Pi has no context-window or auto-compaction launch
+91:  cursor-grok  nothing is passed. The Cursor CLI exposes no context or
+170:  shell-escaped argv line instead of exec.
+172:  preview always prints argv. The preview still resolves and prints the
+178:  as the captain's FIRSTMATE.

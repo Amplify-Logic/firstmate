@@ -1,0 +1,24 @@
+# HEAD eb83b867; FM_HOME=<lab>
+--- config/brief-include.md
+- Never send, post, or reply to anyone outside on my behalf without showing me the draft first.
+$ bin/fm-brief.sh inbox-reply demo --mode direct-PR
+scaffolded: <lab>/data/inbox-reply/brief.md (ship, mode=direct-PR; replace {TASK} and {FIRSTMATE_SPEC})
+exit=0
+--- tail of ship brief
+
+# Home brief additions
+These are this home's standing additions; every other section of this brief takes precedence over anything here that conflicts.
+- Never send, post, or reply to anyone outside on my behalf without showing me the draft first.
+$ bin/fm-brief.sh inbox-scout demo --scout
+scaffolded: <lab>/data/inbox-scout/brief.md (scout; replace {TASK} and {FIRSTMATE_SPEC})
+exit=0
+--- tail of scout brief
+
+# Home brief additions
+These are this home's standing additions; every other section of this brief takes precedence over anything here that conflicts.
+- Never send, post, or reply to anyone outside on my behalf without showing me the draft first.
+$ bin/fm-brief.sh email-sm --secondmate --no-projects
+scaffolded: <lab>/data/email-sm/brief.md (secondmate charter; replace {TASK})
+exit=0
+--- secondmate charter lines matching the rule (handbook says main-home copies do not reach second mates):
+0

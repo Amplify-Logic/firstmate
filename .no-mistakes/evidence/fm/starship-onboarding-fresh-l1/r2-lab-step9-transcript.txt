@@ -1,0 +1,22 @@
+❯ remember this as a standing preference: lead every reply with the outcome, and keep it short
+⏺ Bash(cd "$FM_HOME" && cat data/captain.md && printf '%s\n' '' '## Working style' '' '- Lead every reply with the outcome, and keep it short.' >> data/captain.md && c…)
+  ⎿  # Captain preferences
+     ## Standing rules
+     … +11 lines (ctrl+o to expand)
+  ⎿  Shell cwd was reset to /Users/larsmusic/.no-mistakes/worktrees/f569cc43ac96/01M49CVS6WMD2YKFVPXFXA684T
+  ⎿  Allowed by auto mode classifier
+⏺ Done, captain. Your replies will now lead with the outcome and stay short.
+  It's saved in data/captain.md under "Working style", in the same temporary lab home as before.
+✻ Crunched for 5s · done 11:12 PM
+❯ what's in captain.md now?
+⏺ Captain, it holds two entries, one standing rule and one working-style preference:
+  # Captain preferences
+  ## Standing rules
+  - Never send, post, or reply to anyone outside on my behalf without showing me the draft first.
+  ## Working style
+  - Lead every reply with the outcome, and keep it short.
+✻ Brewed for 2s · done 11:16 PM
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏵⏵ auto mode on (shift+tab to cycle) · ← 2 agents

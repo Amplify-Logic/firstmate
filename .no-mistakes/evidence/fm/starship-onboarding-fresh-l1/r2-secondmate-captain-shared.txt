@@ -1,0 +1,29 @@
+# HEAD eb83b867; main home=<lab>, secondmate home=<sm-lab> (throwaway sibling seeded with .fm-secondmate-home=email-sm, AGENTS.md, bin/; fixture state/email-sm.meta kind=secondmate)
+--- main data/captain-shared.md
+- Never send, post, or reply to anyone outside on my behalf without showing me the draft first.
+$ bin/fm-config-push.sh
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+config-push: <lab> -> live secondmate homes
+secondmate email-sm (/private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab-sm.iB3VfA):
+fm-config-inherit: error: primary source header missing required main-authoritative warning: missing "main-authoritative" data/captain-shared.md at <lab>/data/captain-shared.md
+  crew-dispatch.json: unchanged
+  dispatch-never-send: unchanged
+  crew-harness: unchanged
+  backlog-backend: unchanged
+  backend: unchanged
+  herdr-presentation-spaces: unchanged
+  startup-memory-budget: unchanged
+  trace-context: unchanged - session-scoped
+  launch-env-allowlist: unchanged
+  claude-permission-mode: unchanged
+  lavish-axi-host: unchanged
+  keep-ai-trailers: unchanged
+  supervision-host-off: unchanged
+  data/captain-shared.md: error - primary source header missing required main-authoritative warning: missing "main-authoritative"
+exit=
+--- secondmate home data/
+total 0
+--- secondmate data/captain-shared.md
+cat: <sm-lab>/data/captain-shared.md: No such file or directory
+--- secondmate config/brief-include.md (not inherited; handbook says add it in each second-mate home)
+cat: <sm-lab>/config/brief-include.md: No such file or directory

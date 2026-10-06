@@ -1,0 +1,26 @@
+# config/brief-include.md (lab home) contains:
+never send, post, or reply to anyone outside on my behalf without showing me the draft first
+$ bin/fm-brief.sh inbox-reply demo --mode direct-PR
+scaffolded: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.6zwVOb/data/inbox-reply/brief.md (ship, mode=direct-PR; replace {TASK} and {FIRSTMATE_SPEC})
+exit=0
+--- tail of generated ship brief data/inbox-reply/brief.md ---
+Before you append the done line, confirm the PR URL the forge printed is under `$ORIGIN_REPO`; if it is not, close that PR and raise it again against `$ORIGIN_REPO`.
+
+# Home brief additions
+These are this home's standing additions; every other section of this brief takes precedence over anything here that conflicts.
+never send, post, or reply to anyone outside on my behalf without showing me the draft first
+$ bin/fm-brief.sh inbox-scout demo --scout
+scaffolded: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.6zwVOb/data/inbox-scout/brief.md (scout; replace {TASK} and {FIRSTMATE_SPEC})
+exit=0
+--- tail of generated scout brief ---
+If your findings reveal work that should ship (e.g. you reproduced a bug and the fix is clear), say so in the report; firstmate may promote this task in place, and you would then receive mode-specific ship instructions as a follow-up message.
+
+# Home brief additions
+These are this home's standing additions; every other section of this brief takes precedence over anything here that conflicts.
+never send, post, or reply to anyone outside on my behalf without showing me the draft first
+$ bin/fm-brief.sh email-sm --secondmate --no-projects
+scaffolded: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.6zwVOb/data/email-sm/brief.md (secondmate charter)
+exit=0
+--- secondmate charter: grep for the rule (expect no match, charters never take brief-include) ---
+0
+(no Home brief additions section)

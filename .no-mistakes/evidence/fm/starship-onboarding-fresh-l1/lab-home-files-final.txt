@@ -1,0 +1,13 @@
+== data/captain.md at teardown ==
+# Captain preferences
+
+## Standing rules
+
+- Never send, post, or reply to anyone outside on my behalf without showing me the draft first.
+
+## Working style
+
+- Lead every reply with the outcome, and keep it short.
+
+== config/brief-include.md at teardown ==
+Never send, post, or reply to anyone outside on my behalf without showing me the draft first.

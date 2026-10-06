@@ -1,0 +1,74 @@
+ ▐▛███▛█   Claude Code v2.1.292
+▝▜██████▀  Opus 5.5 (1M context) with high effort · Claude Max
+ ▝▝   ▝▝   ~/.no-mistakes/worktrees/f569cc43ac96/01M49CVS6WMD2YKFVPXFXA684T
+
+⚠ Your login expires in 2 days · run /login to renew
+  ⎿  SessionStart:startup hook error
+  ⎿  Failed with non-blocking status code: /bin/sh: gh-axi: command not found
+  ⎿  SessionStart:startup hook error
+  ⎿  Failed with non-blocking status code: /bin/sh: lavish-axi: command not found
+  ⎿  SessionStart:startup hook error
+  ⎿  Failed with non-blocking status code: /bin/sh: chrome-devtools-axi: command not found
+  ⎿  SessionStart:startup hook error
+  ⎿  Failed with non-blocking status code: /bin/sh: ${CLAUDE_PLUGIN_ROOT}/hooks/run-hook.cmd: No such file or directory
+
+❯ remember this as a standing rule, and add the same line to config/brief-include.md so every worker brief carries it: never send, post, or reply to anyone outside on my behalf without showing me the
+  draft first
+
+⏺ Bash(pwd; ls; echo ---; ls config data 2>&1 | head -50; echo ---; echo "FM_HOME=$FM_HOME"; git log --oneline -3; grep -rn "brief-include" docs bin AGENTS.md 2>/dev/n…)
+  ⎿  /Users/larsmusic/.no-mistakes/worktrees/f569cc43ac96/01M49CVS6WMD2YKFVPXFXA684T
+     AGENTS.md
+     CLAUDE.md
+     … +35 lines (ctrl+o to expand)
+  ⎿  Allowed by auto mode classifier
+
+⏺ Bash(ls -la "$FM_HOME"; ls "$FM_HOME/config" "$FM_HOME/data" 2>&1; echo ---; sed -n 1040,1070p docs/configuration.md; echo ---; sed -n 200,225p docs/handbook.md; ech…)
+  ⎿  total 8
+     drwxr-xr-x@    8 larsmusic  staff     256 Oct  6 22:52 .
+     drwx------@ 5702 larsmusic  staff  182464 Oct  6 22:53 ..
+     … +95 lines (ctrl+o to expand)
+  ⎿  Allowed by auto mode classifier
+
+⏺ Bash(cat "$FM_HOME/.fm-lab-home"; bin/fm-session-start.sh 2>&1 | head -80)
+  ⎿  fm-lab-home v1
+
+     ================================================================================
+     … +78 lines (ctrl+o to expand)
+  ⎿  (timeout 3m)
+  ⎿  Allowed by auto mode classifier
+
+  Searched for 1 pattern (ctrl+o to expand)
+
+⏺ Both files are absent in this home, so I'll create them.
+
+⏺ Bash(set -e
+      cat > "$FM_HOME/data/captain.md" <<'EOF'…)
+  ⎿  # Captain preferences
+
+     ## Standing rules
+     … +33 lines (ctrl+o to expand)
+  ⎿  Allowed by auto mode classifier
+
+⏺ Bash(bin/fm-brief.sh zz-include-check demo --scout >/dev/null 2>&1; tail -4 "$FM_HOME/data/zz-include-check/brief.md"; rm -rf "$FM_HOME/data/zz-include-check")
+  ⎿  # Home brief additions
+     These are this home's standing additions; every other section of this brief takes precedence over anything here that conflicts.
+     Never send, post, or reply to anyone outside on my behalf without showing me the draft first.
+  ⎿  Allowed by auto mode classifier
+
+⏺ Captain, the rule is recorded. I won't send, post, or reply to anyone outside on your behalf without showing you the draft first. Every worker's instructions now carry the same line.
+
+  - For me: it's in this home's captain preferences file, data/captain.md, under a "Standing rules" heading. That file didn't exist yet, so I created it.
+  - For workers: the same line is in config/brief-include.md. I made a throwaway set of worker instructions to check it, and the rule showed up at the end under "Home brief additions". Then I deleted
+    the test copy.
+  - Second mates: none are set up in this home yet, so nothing else is needed for now. If you add any later, the rule also needs to go in data/captain-shared.md and in each second mate's own
+    config/brief-include.md. Neither of this home's copies reaches them.
+
+  This session is running in a temporary test home, not your usual one. If you meant your main home, the rule needs recording there too.
+
+✻ Baked for 51s · done 10:54 PM
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ what's in captain.md now?
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏵⏵ auto mode on (shift+tab to cycle) · ← 2 agents
+

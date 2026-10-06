@@ -1,0 +1,25 @@
+⏺ Captain, it holds two entries, one standing rule and one working-style preference:
+  # Captain preferences
+  ## Standing rules
+  - Never send, post, or reply to anyone outside on my behalf without showing me the draft first.
+  ## Working style
+  - Lead every reply with the outcome, and keep it short.
+✻ Brewed for 2s · done 11:16 PM
+❯ /mcp
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  Manage MCP servers
+  9 servers
+    User MCPs (/Users/larsmusic/.claude.json)
+  ❯ ✔ AbletonMCP                  131 tools
+    ✔ wearables                   2 tools
+    claude.ai
+    ✔ claude.ai Claude Docs       8 tools
+    ✔ claude.ai Gmail             30 tools
+    ✔ claude.ai Google Calendar   9 tools
+    ✔ claude.ai Google Drive      11 tools
+    → Show unused connectors      1 hidden
+    Built-in MCPs (always available)
+    ✔ claude-in-chrome            22 tools
+    ◯ computer-use
+  https://code.claude.com/docs/en/mcp for help
+ ↑/↓ to navigate · Enter to confirm · Esc to cancel

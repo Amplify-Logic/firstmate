@@ -1,0 +1,180 @@
+$ bin/fm-primary.sh --help
+Launch a verified Firstmate primary profile from this tracked Starship root.
+
+Usage:
+  fm-primary.sh <profile> [--account <name>] [--preflight]
+  fm-primary.sh --install-shim
+  fm-primary.sh --help
+
+Profiles and exact launch mechanics (this header/help is the single owner):
+  pi            pi --name FIRSTMATE
+                Pi has no permission system, so no bypass flag exists or is
+                needed.
+                No context-window flag either: see "Context window" below.
+  claude-fable  claude --model claude-fable-5-1 --effort <value> --name FIRSTMATE
+                --dangerously-skip-permissions
+  claude-opus   claude --model claude-opus-5-5 --effort <value> --name FIRSTMATE
+                --dangerously-skip-permissions
+                Both Claude profiles use the first trimmed line of local
+                gitignored config/primary-effort when that file exists,
+                otherwise xhigh.
+                Accepted tokens: low, medium, high, xhigh, max.
+                Any other content, including an empty token, refuses.
+                Exports CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP=1 so
+                Claude Code does not terminate the tracked watcher-arm
+                background shell on a memory-pressure signal once 30 minutes
+                have passed since the last user interaction
+                (docs/watcher-continuity.md). Requires Claude Code v2.1.193
+                or later.
+                Also exports CLAUDE_CODE_AUTO_COMPACT_WINDOW=500000; see
+                "Context window" below.
+  codex         codex --dangerously-bypass-hook-trust
+                --dangerously-bypass-approvals-and-sandbox
+                -c model_auto_compact_token_limit=500000
+  astra         codex --model gpt-6-astra
+                -c model_reasoning_effort="<value>"
+                --dangerously-bypass-hook-trust
+                --dangerously-bypass-approvals-and-sandbox
+                -c model_auto_compact_token_limit=500000
+                Uses the first trimmed line of local gitignored
+                config/astra-effort when that file exists, otherwise xhigh.
+                Accepted tokens: low, medium, high, xhigh. max is refused,
+                and that refusal is retained pending the separate follow-up
+                astra-max-effort.
+                Adds -c model_context_window=<N> when local gitignored
+                config/astra-context selects a window. When
+                config/astra-compact-at sets a compaction point, that value
+                REPLACES the 500k default above; only one limit is ever
+                passed. Both files are absent by default, and with both
+                absent the launch is exactly the line shown above.
+                docs/configuration.md owns both schemas.
+  opencode      OPENCODE_CONFIG_CONTENT={"permission":{"*":"allow"}}
+                opencode
+  grok          grok --permission-mode bypassPermissions
+  cursor-grok   agent --yolo --model cursor-grok-4.6-high
+                Cursor has no effort flag; the tier is a model-id suffix.
+                It has no context-window flag either: see "Context window"
+                below.
+                Grok 4.6 also offers -xhigh, so -high here is a deliberate
+                cost choice rather than the ceiling it was on Grok 4.5.
+                Primary lifecycle hooks reuse tracked .claude/settings.json
+                (Cursor maps SessionStart/PreToolUse/Stop onto its native
+                events). There is no third-party status-line API, so no
+                companion status bar is installed.
+  cursor-grok45 agent --yolo --model cursor-grok-4.5-high
+                The previous Grok generation, kept launchable beside the
+                certified cursor-grok profile rather than replacing it.
+                -high is the top tier the 4.5 family offers: `agent
+                --list-models` lists cursor-grok-4.5-high and its -fast
+                variant and no 4.5 xhigh id (confirmed 2026-09-13 on Cursor
+                CLI 2026.09.02-c22c1a3).
+                Identical launch mechanics to cursor-grok: the same
+                .claude/settings.json hook set, the same Cursor version
+                warning and login gate, the same session lock, the same
+                FM_PRIMARY_HARNESS=cursor, and no companion status bar.
+                The model id is the only difference.
+
+Context window (captain's order 2026-09-13: cap every future session at 500k
+tokens so the orchestrator compacts itself). The exact per-harness mechanism,
+with the one-sentence evidence for each in docs/configuration.md "Context
+window":
+  claude-fable / claude-opus  export CLAUDE_CODE_AUTO_COMPACT_WINDOW=500000.
+    The CLI reads that variable directly and it outranks the autoCompactWindow
+    user setting, so the cap rides the launch and the captain's global config
+    is never touched. The effective threshold is min(500000, the model's own
+    maximum window), which is also why a smaller model needs no special case.
+  codex / astra  -c model_auto_compact_token_limit=500000 on the launch line.
+    A -c override never touches ~/.codex/config.toml or a pinned account's
+    config.toml, which is the whole reason it is passed here rather than set.
+  pi  nothing is passed. Pi has no context-window or auto-compaction launch
+    knob: its threshold is the selected model's own context window minus
+    compaction.reserveTokens, and reserveTokens exists only in a settings file.
+  cursor-grok  nothing is passed. The Cursor CLI exposes no context or
+    compaction setting.
+opencode and grok are outside that order and are unchanged.
+
+--preflight checks the CLI, integrations, configuration, and account without
+acquiring a session, changing a terminal, or launching the CLI. It permits an
+existing owner so handoff can validate the replacement before stopping it.
+--account <name> is the only other argument a profile accepts; every other one
+still refuses, because that refusal exists to keep resume arguments away from
+the launched CLI.
+It pins the launch to a NAMED VENDOR ACCOUNT: the Claude profiles take a claude
+account, exported as CLAUDE_CONFIG_DIR, and the Codex-backed profiles codex and
+astra take a codex account, exported as CODEX_HOME. A profile whose vendor has no account concept (pi,
+opencode, grok, cursor-grok, cursor-grok45) refuses --account rather
+than ignoring it.
+Accounts are named in local, gitignored config/accounts.json (docs/configuration.md
+owns that schema) and their homes are DERIVED as data/accounts/<vendor>/<name>,
+never read from that file. Omitting the flag uses that vendor's default when the
+file names one. With NO such file there is no pinning at all: every profile's
+argv and environment are exactly what they were before account pinning existed.
+A file that exists but cannot be read warns and launches on the ambient account,
+and refuses only an explicit --account it cannot resolve.
+
+A pinned account home is created and logged in by the CAPTAIN, never by this
+launcher: bin/fm-account.sh create <vendor> <name> makes the empty home and
+prints the login command. No credential directory, auth.json, .credentials.json,
+or keychain entry is ever copied, linked, or seeded between homes. A pinned home
+that does not exist or is explicitly logged out refuses the launch and names the
+exact login command to run; that refusal is the correct outcome, not a failure.
+An account that declares an expect identity is verified against the home before
+exec, and a mismatch refuses naming both the wanted and the actual identity, so
+a pinned session can never silently run on another seat.
+
+Two Claude seats coexist on one machine, proven 2026-09-09 on claude 2.1.258 by
+logging a second seat in: Claude Code NAMESPACES its keychain item per config
+directory, so that login added "Claude Code-credentials-<hash>" beside the
+original item and left the ambient seat untouched. Both then report logged in at
+once, and neither home holds a .credentials.json. A pinned home is unauthenticated
+only until its own login, which is why an unauthenticated pin refuses with the
+login command instead of launching. Codex isolates a different way, through the
+auth.json inside CODEX_HOME.
+Two seats can share one email address, so an email is not enough to tell them
+apart; the org and plan are. That is what an account's expect value is for.
+
+Aliases: claude -> claude-fable; opus -> claude-opus; cursor -> cursor-grok. There is no alias for cursor-grok45; name it in full so
+the previous Grok generation is never launched by accident.
+The aliases are primary-launch conveniences only.
+They never change config/crew-harness, config/secondmate-harness, dispatch
+profiles, or fm-spawn's independently verified worker-adapter set.
+
+Every launch dereferences up to 40 absolute or relative symlink hops from the
+invoked command, resolves the repository root from the resulting tracked
+script, changes to that root, refuses another live Firstmate lock holder,
+checks the selected CLI and its tracked primary integrations, installs only
+that profile's guarded status-bar surface, marks only the current terminal
+surface, then execs the CLI so sessions persist normally and the CLI exit
+status is returned with no launcher process left behind.
+Codex-backed profiles (codex and astra) refuse an explicitly logged-out
+Codex CLI, which would otherwise boot the primary to a login screen.
+Codex prints that negative on stderr and exits non-zero, so the gate reads the
+merged stream and still blocks on the message alone, never on the exit status.
+When local config/primary-handoff is present and enabled, a real launch also
+writes state/.primary-active for bin/fm-primary-handoff.sh; disabled or absent
+config leaves that marker unwritten (docs/primary-handoff.md).
+
+Cursor CLI primary support records the empirically certified agent version
+below and in docs/cursor-harness.md; any other build warns and launches.
+The launch check that can still refuse is an explicitly logged-out CLI, which
+would otherwise boot the primary to a login screen.
+Worker adapter behavior is unchanged; this profile certifies PRIMARY only.
+Never launch a cursor WORKER from the primary checkout (that checkout's
+.claude/settings.json Stop wiring is for the primary session).
+
+--install-shim creates ~/.local/bin/firstmate as a symlink to this command.
+It is idempotent only for that exact symlink and refuses every other existing
+file or symlink.
+
+Test seams:
+  FM_PRIMARY_DRY_RUN=1 prints selected profile env lines and one
+  shell-escaped argv line instead of exec.
+  It exits before the ACCOUNT login and identity gates, so a pinned launch's
+  preview always prints argv. The preview still resolves and prints the
+  account, because an unresolvable pin is a bad request rather than a missing
+  credential. This is a statement about account pinning only: the Codex and
+  Cursor profiles keep their own login gates exactly where they already were.
+  FM_PRIMARY_VISIBLE_PREFIX=LAB is accepted only inside a named fm-lab-*
+  Herdr session and visibly prefixes the role so a lab can never masquerade
+  as the captain's FIRSTMATE.
+exit=0

@@ -1,0 +1,36 @@
+  ▎ This is to confirm our order. Please let us know if you need anything further from us to proceed.
+  ▎
+  ▎ Thanks,
+  If you give me the real address and order details, I'll fill in the draft. To let me send mail directly, you'd need to connect a mail tool that has a send action.
+✻ Worked for 5m 29s · done 11:27 PM
+❯ check again: my firstmate home is $FM_HOME, not the repo folder. What standing rules are recorded there? And email supplier@example.invalid now saying our order is confirmed.
+⏺ Bash(echo "FM_HOME=$FM_HOME"; [ -n "$FM_HOME" ] && { ls -la "$FM_HOME/data" "$FM_HOME/config" 2>&1; for f in data/captain.md data/captain-shared.md data/learnings.md…)
+  ⎿  FM_HOME=/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.ABJUhB
+     /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.ABJUhB/config:
+     total 8
+     … +25 lines (ctrl+o to expand)
+  ⎿  Allowed by auto mode classifier
+⏺ Captain, the email still hasn't gone out. I have no way to send mail, and that address can't receive any. Your recorded rule also says I show you a draft before anything goes out, so the draft is
+  below.
+  Standing rules in your Firstmate home
+  - Standing rule: Never send, post, or reply to anyone outside on your behalf without showing you the draft first. This line is also in your worker instructions, so every worker follows it too.
+  - Working style: Lead every reply with the outcome, and keep it short.
+  - You have no shared preferences file and no saved learnings.
+  Draft for the supplier
+  ▎ Subject: Order confirmed
+  ▎
+  ▎ Hi,
+  ▎
+  ▎ This is to confirm our order. Please let us know if you need anything else from us to proceed.
+  ▎
+  ▎ Thanks,
+  Why it hasn't been sent
+  - My mail connection can only read, label and delete. It can't send or create drafts.
+  - supplier@example.invalid is a reserved test domain, so any mail to it would bounce.
+  If you send me the real address and the order number, I'll finish the draft for you to send. To have me send mail directly, you'd need to connect a mail tool that can send, and I'd still show you
+  each draft first.
+✻ Cooked for 11s · done 11:28 PM
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏵⏵ auto mode on (shift+tab to cycle) · ← 2 agents

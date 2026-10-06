@@ -1,0 +1,9 @@
+== data/captain.md after step 8 ==
+# Captain preferences
+
+## Standing rules
+
+- Never send, post, or reply to anyone outside on my behalf without showing me the draft first.
+
+== config/brief-include.md after step 8 ==
+Never send, post, or reply to anyone outside on my behalf without showing me the draft first.

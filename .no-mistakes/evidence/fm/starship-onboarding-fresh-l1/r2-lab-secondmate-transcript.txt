@@ -1,0 +1,60 @@
+  ⎿  244:shared_captain_header_valid() {
+     245-  local src=$1 head
+     246-  head=$(sed -n '1,12p' "$src" 2>/dev/null) || return 1
+     … +23 lines (ctrl+o to expand)
+  ⎿  Allowed by auto mode classifier
+⏺ Update(/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.ABJUhB/data/captain-shared.md)
+  ⎿  Added 2 lines, removed 2 lines
+      1  # Shared captain preferences
+      2
+      3 -This file is main-authoritative: the primary firstmate home owns it, and every secondmate home receives a read-only copy.
+      4 -Do not edit it in a secondmate home; route any new captain-preference discovery to the main firstmate through marked status or a document pointer.
+      3 +This file is main-authoritative: the primary firstmate home owns it, and it is read-only in secondmate homes.
+      4 +Its secondmate copies must not be edited there; route any new captain-preference discovery to the main firstmate through marked status or a document pointer.
+      5
+      6  ## Standing rules
+      7
+  ⎿  Allowed by auto mode classifier
+⏺ Bash(cd /Users/larsmusic/.no-mistakes/worktrees/f569cc43ac96/01M49CVS6WMD2YKFVPXFXA684T; bin/fm-config-push.sh 2>&1 | grep -vE ": unchanged"; echo "exit=${PIPESTATUS…)
+  ⎿  WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+     config-push: <lab> -> live secondmate homes
+     secondmate email-sm (/private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab-sm.iB3VfA):
+     … +8 lines (ctrl+o to expand)
+  ⎿  Allowed by auto mode classifier
+⏺ Captain, the draft-first rule is now in your shared preferences file, and your one existing second mate already has a copy. That second mate has to show you a draft before it sends anything outside.
+  Its own workers aren't covered yet, though. Details and one question are below.
+  What changed
+  - I created data/captain-shared.md in your Firstmate home. It has the standard header saying the main home owns the file and second mates can only read it. Below the header is the rule: never send,
+    post, or reply to anyone outside on your behalf without showing you the draft first.
+  - My first push to the second mate (email-sm) was rejected because my header didn't match the wording the push requires. I fixed the wording and pushed again. That second mate now has an identical,
+    read-only copy.
+  Still open
+  - Its workers aren't covered yet. Second mates read the shared file, but the workers they launch don't. The handbook says to also add the rule to each second mate home's config/brief-include.md, and
+    email-sm's is empty. Should I add the same line there?
+  - email-sm looks half set up. Its charter and routing scope are still unfilled templates, and it isn't listed in your second mates registry. Tell me what it's meant to handle and I'll finish setting
+    it up.
+✻ Crunched for 1m 5s · done 11:30 PM
+❯ yes, add the same line to email-sm's config/brief-include.md
+⏺ Bash(cd /Users/larsmusic/.no-mistakes/worktrees/f569cc43ac96/01M49CVS6WMD2YKFVPXFXA684T; SM=/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab-sm.iB3VfA; grep -…)
+  ⎿  total 0
+     drwxr-xr-x@  2 larsmusic  staff   64 Oct  6 23:29 .
+     drwx------@ 10 larsmusic  staff  320 Oct  6 23:29 ..
+  ⎿  Allowed by auto mode classifier
+⏺ Bash(cd /Users/larsmusic/.no-mistakes/worktrees/f569cc43ac96/01M49CVS6WMD2YKFVPXFXA684T; SM=/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab-sm.iB3VfA; cp "$F…)
+  ⎿  - Never send, post, or reply to anyone outside on my behalf without showing me the draft first.
+     bin/fm-brief.sh:114:# script: when config/brief-include.md exists under the active home, ship and
+     bin/fm-brief.sh:305:BRIEF_INCLUDE_FILE="$CONFIG/brief-include.md"
+  ⎿  Allowed by auto mode classifier
+⏺ Captain, it's done. Every worker that the email second mate launches from now on will carry the draft-first rule. With that, the rule now covers you, your workers, the email second mate, and that
+  second mate's workers.
+  - I added the same single line to config/brief-include.md in that second mate's home. It's an exact copy of your main home's line: never send, post, or reply to anyone outside on your behalf without
+    showing you the draft first.
+  - This file isn't part of what second mates inherit automatically. Future changes to your main home's copy won't reach it, and any new second mate needs the line added by hand.
+  - It only affects workers launched after now. That second mate has no workers running, so nothing was missed.
+  One thing is still open from before. The email second mate's charter and routing scope are unfilled templates, and it isn't in your second mates registry. Tell me what it's meant to handle and I'll
+  finish setting it up.
+✻ Cogitated for 17s · done 11:31 PM
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏵⏵ auto mode on (shift+tab to cycle) · ← 2 agents

@@ -1,0 +1,15 @@
+# after step 8.1 (HEAD eb83b867)
+--- data/captain.md
+# Captain preferences
+
+## Standing rules
+
+- Never send, post, or reply to anyone outside on my behalf without showing me the draft first.
+--- config/brief-include.md
+- Never send, post, or reply to anyone outside on my behalf without showing me the draft first.
+--- ls data config
+/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.ABJUhB/config:
+brief-include.md
+
+/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.ABJUhB/data:
+captain.md

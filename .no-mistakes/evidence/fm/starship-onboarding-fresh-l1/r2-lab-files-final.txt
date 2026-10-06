@@ -1,0 +1,33 @@
+# lab files at teardown (HEAD eb83b867)
+== main home data/captain.md
+# Captain preferences
+
+## Standing rules
+
+- Never send, post, or reply to anyone outside on my behalf without showing me the draft first.
+
+## Working style
+
+- Lead every reply with the outcome, and keep it short.
+== main home data/captain-shared.md
+# Shared captain preferences
+
+This file is main-authoritative: the primary firstmate home owns it, and it is read-only in secondmate homes.
+Its secondmate copies must not be edited there; route any new captain-preference discovery to the main firstmate through marked status or a document pointer.
+
+## Standing rules
+
+- Never send, post, or reply to anyone outside on my behalf without showing me the draft first.
+== main home config/brief-include.md
+- Never send, post, or reply to anyone outside on my behalf without showing me the draft first.
+== secondmate home data/captain-shared.md
+# Shared captain preferences
+
+This file is main-authoritative: the primary firstmate home owns it, and it is read-only in secondmate homes.
+Its secondmate copies must not be edited there; route any new captain-preference discovery to the main firstmate through marked status or a document pointer.
+
+## Standing rules
+
+- Never send, post, or reply to anyone outside on my behalf without showing me the draft first.
+== secondmate home config/brief-include.md
+- Never send, post, or reply to anyone outside on my behalf without showing me the draft first.
