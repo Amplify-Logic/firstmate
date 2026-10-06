@@ -1,0 +1,9 @@
+no cookie GET /api/conversation: 403
+bad token GET /?token=nope: 403
+token sign-in sets HttpOnly SameSite=Strict cookie: HttpOnly SameSite=Strict 
+cookie GET /api/conversation: 200
+rebinding Host evil.example: 403
+POST send without CSRF header: 403
+POST send cross-origin Origin: 403
+token in web.log: 0
+listening sockets: 127.0.0.1:52240
