@@ -351,14 +351,23 @@ If the slug never comes back: ask "why can't you start a worker?" or "what happe
 
 The first mate becomes genuinely useful once it can read your mail, calendar, documents, meeting notes, chat, and tracker.
 
-1. In a browser, open claude.ai, go to Settings, then Connectors, and add the services you use.
+1. Before you connect mail or chat, tell the first mate how to treat outward sends.
+   It does not hold them by itself, so record this standing rule first:
+
+```text
+remember this as a standing rule: never send, post, or reply to anyone outside on my behalf without showing me the draft first
+```
+
+You should see: it confirms it recorded the rule in `data/captain.md`.
+
+2. In a browser, open claude.ai, go to Settings, then Connectors, and add the services you use.
    A work account may already have some added by your administrator.
-2. Back in the first mate's window, type `/mcp`.
+3. Back in the first mate's window, type `/mcp`.
 
 You should see: each connector listed as connected (Claude Code shows claude.ai connectors as `claude.ai <Service>`).
 Sign in from that list to any that ask.
 
-3. Ask one real question per connector, for example:
+4. Ask one real question per connector, for example:
 
 ```text
 what's on my calendar tomorrow?
@@ -417,7 +426,7 @@ That way you never leave setup in an undefined state.
 
 - It never merges a pull request without your say-so, unless you have told it a project may merge passing work on its own.
 - Anything destructive, irreversible, or security-sensitive comes to you first.
-- It does not hold outward sends by itself. Once mail or chat is connected, record a standing rule such as "never send, post, or reply to anyone outside on my behalf without showing me the draft first" ([handbook](docs/handbook.md#a-rounded-starter-set-for-a-work-setup)).
+- It does not hold outward sends by itself. Record the standing rule from [step 8](#8-connect-your-other-tools) before you connect mail or chat.
 - It only touches projects you point it at.
 - Your setup is yours alone - nothing you do is shared back to anyone.
 

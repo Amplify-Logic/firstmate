@@ -207,7 +207,7 @@ Claude in Chrome is not a claude.ai connector, so it does not appear in that lis
 It is a browser extension that lets Claude use pages in your own Chrome when no connector exists; install it, then enable it in Claude Code with `/chrome`.
 
 The first mate does not hold outward sends by itself: a connector that can send, post, or change something can do so without asking you first.
-Record a standing rule on day one, before you connect mail or chat, for example:
+Record a standing rule before you connect mail or chat ([ONBOARDING step 8](../ONBOARDING.md#8-connect-your-other-tools) prompts for it), for example:
 
 ```text
 remember this as a standing rule: never send, post, or reply to anyone outside on my behalf without showing me the draft first
@@ -260,7 +260,7 @@ Each step is small and proves one part of the system.
 **Day 1 - running and connected.**
 
 1. Finish [ONBOARDING.md](../ONBOARDING.md), including the slug test.
-2. Add your connectors and check each with one real question.
+2. Record the outward-send standing rule from [Connectors and tools](#a-rounded-starter-set-for-a-work-setup), then add your connectors and check each with one real question.
 3. Tell the first mate three things about how you work, as standing preferences, then ask "what's in captain.md now?".
 4. Run `/bearings`.
 
