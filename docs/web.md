@@ -61,11 +61,11 @@ Typing into the chat turns line breaks into spaces, as it does for the floater; 
 - The server binds the literal `127.0.0.1`; there is no flag that widens it, and it is never published on a tailnet.
 - Every request needs this home's token: once in the sign-in link, then as an HttpOnly, SameSite=Strict cookie derived from it.
   The token is random, created once in `state/web/token` with owner-only permissions in an owner-only folder, so another local user cannot read it.
-- Every request must carry a Host of `127.0.0.1:<port>` or `localhost:<port>`, so a page using DNS rebinding cannot reach it.
+- Every request must carry a Host of `127.0.0.1:<port>`, so a page using DNS rebinding cannot reach it.
 - Every POST also needs the page's CSRF header, a same-origin Origin when the browser sends one, and no cross-site fetch metadata.
   A custom header cannot be sent cross-origin without a preflight the server never answers.
 - Pages carry a strict Content-Security-Policy with per-response nonces, and all transcript text is escaped before Markdown is applied; only http and https links become links.
-- The request log, `state/web/web.log`, records paths only, never the token.
+- The request log, `state/web/web.log`, records paths only, never the token, and leaves out the page's successful polls.
 - The server never takes the session lock, never drains wakes, and never writes backlog or fleet state.
   Its only writes are its own `state/web/` files and the pasted images.
 

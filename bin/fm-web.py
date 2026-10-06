@@ -8,7 +8,7 @@ tailnet.
 Every request must carry the home's token: once as ?token= on the first
 visit, which sets an HttpOnly SameSite=Strict cookie and redirects to a clean
 URL, and as that cookie afterwards. The Host header must name this loopback
-port (127.0.0.1 or localhost), so a rebound DNS name cannot reach the page.
+port on 127.0.0.1, so a rebound DNS name cannot reach the page.
 Every POST also needs the page's CSRF header and, when the browser sends one,
 a same-origin Origin. The token lives in state/web/token (0600 in a 0700
 directory); docs/web.md owns the security model.
@@ -90,6 +90,7 @@ SUMMARY_TAG_RE = re.compile(r"<summary>(.*?)</summary>", re.S)
 COMMAND_NAME_RE = re.compile(r"<command-name>(.*?)</command-name>", re.S)
 COMMAND_ARGS_RE = re.compile(r"<command-args>(.*?)</command-args>", re.S)
 SKIPPED_TAGS = {"local-command-stdout", "local-command-stderr", "local-command-caveat"}
+BASH_MODE_TAGS = {"bash-input", "bash-stdout", "bash-stderr"}
 INTERRUPT_RE = re.compile(r"^\[Request interrupted by user")
 
 
@@ -515,6 +516,11 @@ def _classify_user_string(uid: str, ts: str, text: str, origin_kind: str) -> Opt
     return _user_item(uid, ts, text)
 
 
+def _starts_turn(text: str) -> bool:
+    tag = EVENT_TAG_RE.match(text)
+    return not (tag and tag.group(1) in BASH_MODE_TAGS)
+
+
 class Conversation:
     """Folds transcript entries into display items, oldest first."""
 
@@ -579,7 +585,7 @@ class Conversation:
             item = _classify_user_string(uid, ts, content, origin_kind)
             if item is not None:
                 self._push(item)
-                self.busy = True
+                self.busy = self.busy or _starts_turn(content)
             return
         if not isinstance(content, list):
             return
@@ -608,7 +614,7 @@ class Conversation:
             if item["kind"] == "user":
                 item["images"] = images
             self._push(item)
-            self.busy = True
+            self.busy = self.busy or _starts_turn(text)
 
     def _tool_result(self, block: Dict[str, Any]) -> None:
         tool = self.tools.get(str(block.get("tool_use_id") or ""))
@@ -917,20 +923,14 @@ class WebState:
     def __init__(self, home: Path, root: Path, port: int, token: str) -> None:
         self.home = home
         self.root = root
-        self.port = port
         self.token = token
+        self.host = f"{LOOPBACK}:{port}"
         self.cookie_name = f"{COOKIE_PREFIX}{port}"
         self.cookie_value = derive(token, "cookie")
         self.csrf = derive(token, "csrf")
         self.transcript = TranscriptCache(home)
         self.fleet = FleetCache(home, root)
         self.send_lock = threading.Lock()
-
-    def allowed_hosts(self) -> set[str]:
-        return {f"127.0.0.1:{self.port}", f"localhost:{self.port}"}
-
-    def allowed_origins(self) -> set[str]:
-        return {f"http://{host}" for host in self.allowed_hosts()}
 
 
 STATE: Optional[WebState] = None
@@ -940,6 +940,11 @@ class WebHandler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
     server_version = "fm-web"
     sys_version = ""
+
+    def log_request(self, code: Any = "-", size: Any = "-") -> None:
+        if self.command == "GET" and self.path.startswith("/api/") and isinstance(code, int) and 200 <= code < 300:
+            return
+        super().log_request(code, size)
 
     def log_message(self, fmt: str, *args: Any) -> None:
         if STATE is None:
@@ -954,7 +959,7 @@ class WebHandler(BaseHTTPRequestHandler):
     # guards
 
     def _host_ok(self) -> bool:
-        return (self.headers.get("Host") or "").strip().lower() in STATE.allowed_hosts()
+        return (self.headers.get("Host") or "").strip().lower() == STATE.host
 
     def _cookie_ok(self) -> bool:
         raw = self.headers.get("Cookie") or ""
@@ -971,7 +976,7 @@ class WebHandler(BaseHTTPRequestHandler):
         if not hmac.compare_digest(csrf, STATE.csrf):
             return False
         origin = (self.headers.get("Origin") or "").strip().rstrip("/").lower()
-        if origin and origin not in STATE.allowed_origins():
+        if origin and origin != f"http://{STATE.host}":
             return False
         site = (self.headers.get("Sec-Fetch-Site") or "").strip().lower()
         return site in {"", "same-origin", "none"}
@@ -1392,15 +1397,11 @@ def main(argv: Optional[List[str]] = None) -> None:
     serve.add_argument("--port", type=int, default=DEFAULT_PORT)
     tok = sub.add_parser("token")
     tok.add_argument("--home", required=True)
-    conv = sub.add_parser("conversation")
-    conv.add_argument("--home", required=True)
     args = parser.parse_args(argv)
     if args.command == "serve":
         command_serve(Path(args.home), Path(args.root), args.port)
     elif args.command == "token":
         print(load_or_create_token(Path(args.home)))
-    elif args.command == "conversation":
-        print(json.dumps(TranscriptCache(Path(args.home)).get()))
 
 
 if __name__ == "__main__":

@@ -23,9 +23,12 @@ command -v python3 >/dev/null 2>&1 || { echo "skip: python3 not found"; exit 0; 
 command -v jq >/dev/null 2>&1 || { echo "skip: jq not found"; exit 0; }
 command -v curl >/dev/null 2>&1 || { echo "skip: curl not found"; exit 0; }
 
+# start_web runs inside $(...), so its servers are recorded in a file.
 WEB_PIDS=()
+WEB_PID_FILE=$TMP_ROOT/web.pids
 fm_web_cleanup() {
   local pid
+  [ -f "$WEB_PID_FILE" ] && while IFS= read -r pid; do WEB_PIDS+=("$pid"); done < "$WEB_PID_FILE"
   for pid in "${WEB_PIDS[@]:-}"; do
     [ -n "$pid" ] || continue
     kill "$pid" 2>/dev/null || true
@@ -73,16 +76,12 @@ SH
   printf '%s\n' "$root"
 }
 
-conversation() {  # <home>
-  HOME="$1" CLAUDE_CONFIG_DIR="$1/claude" python3 "$ENGINE" conversation --home "$1"
-}
-
 start_web() {  # <home> <root>
   local home=$1 root=$2 log n=0 line
   log=$home/web-serve.log
   : > "$log"
   HOME="$home" CLAUDE_CONFIG_DIR="$home/claude" python3 "$ENGINE" serve --home "$home" --root "$root" --port 0 >"$log" 2>&1 &
-  WEB_PIDS+=("$!")
+  printf '%s\n' "$!" >> "$WEB_PID_FILE"
   while [ "$n" -lt 50 ]; do
     line=$(grep -E '^listening on 127\.0\.0\.1:[0-9]+$' "$log" 2>/dev/null || true)
     if [ -n "$line" ]; then
@@ -108,6 +107,19 @@ sign_in() {  # <home> <port>
 
 csrf_of() {  # <port> <cookie>
   curl -sS --cookie "$2" "http://127.0.0.1:$1/" | sed -n 's/.*data-csrf="\([0-9a-f]*\)".*/\1/p'
+}
+
+# Serves <home> and signs in, so conversation reads its /api/conversation.
+serve_home() {  # <home>
+  local root port
+  root=$(make_root "$1" "sent: tmux %1")
+  port=$(start_web "$1" "$root")
+  printf '%s\n' "$port" > "$1/web.test-port"
+  sign_in "$1" "$port" > "$1/web.test-cookie"
+}
+
+conversation() {  # <home>
+  curl -sS --cookie "$(cat "$1/web.test-cookie")" "http://127.0.0.1:$(cat "$1/web.test-port")/api/conversation"
 }
 
 status_of() {  # curl args... -> HTTP status
@@ -141,6 +153,7 @@ test_transcript_parsing_collapses_tools_and_marks_compaction() {
   local home out
   home=$(make_home parse)
   write_basic_transcript "$(transcript "$home")"
+  serve_home "$home"
   out=$(conversation "$home") || fail "conversation read failed"
   assert_equals "$(jq -r '[.items[].kind] | join(",")' <<<"$out")" \
     "user,assistant,tool,assistant,event,compact,user,tool" "item kinds in order"
@@ -164,6 +177,7 @@ file-b" "tool call collapsed with its result"
   assert_equals "$(jq -r '.items[7] | [.name, .summary, .pending] | join("|")' <<<"$out")" \
     "Read|/tmp/notes.md|true" "unanswered tool call is pending"
   assert_equals "$(jq -r '.state' <<<"$out")" "busy" "work after the last turn end reads busy"
+  assert_no_grep "/api/conversation" "$home/state/web/web.log"
   pass "transcript parsing collapses tools, marks compaction and escapes markdown"
 }
 
@@ -173,6 +187,7 @@ test_numbered_lists_keep_their_numbers() {
   jq -nc --arg text $'Options:\n\n1. Merge now\n\n2. Wait for CI\n\n3. Abort\n\nLater:\n\n4. Tidy up' \
     '{type:"assistant",uuid:"a1",message:{id:"msg_1",role:"assistant",content:[{type:"text",text:$text}]}}' \
     > "$(transcript "$home")"
+  serve_home "$home"
   out=$(conversation "$home") || fail "conversation read failed"
   html=$(jq -r '.items[0].html' <<<"$out")
   assert_contains "$html" '<ol><li>Merge now</li></ol>'
@@ -187,8 +202,16 @@ test_idle_offline_and_session_restart() {
   home=$(make_home state)
   write_basic_transcript "$(transcript "$home")"
   printf '%s\n' '{"type":"system","subtype":"turn_duration","uuid":"s9"}' >> "$(transcript "$home")"
+  serve_home "$home"
   out=$(conversation "$home")
   assert_equals "$(jq -r '.state' <<<"$out")" "idle" "turn end reads idle"
+  # What Claude Code writes for a terminal `! git status`: no turn starts.
+  {
+    printf '%s\n' '{"type":"user","uuid":"b1","message":{"role":"user","content":"<bash-input>git status</bash-input>"}}'
+    printf '%s\n' '{"type":"user","uuid":"b2","message":{"role":"user","content":"<bash-stdout>clean</bash-stdout><bash-stderr></bash-stderr>"}}'
+  } >> "$(transcript "$home")"
+  out=$(conversation "$home")
+  assert_equals "$(jq -r '.state' <<<"$out")" "idle" "a terminal shell command leaves it idle"
   python3 -c 'import os,signal,subprocess; p=subprocess.Popen(["true"]); p.wait(); print(p.pid)' > "$home/state/.lock"
   out=$(conversation "$home")
   assert_equals "$(jq -r '.state' <<<"$out")" "offline" "dead lock pid reads offline"
@@ -212,6 +235,7 @@ test_cleared_session_is_followed_through_the_live_registry() {
   local home out cleared
   home=$(make_home cleared)
   write_basic_transcript "$(transcript "$home")"
+  serve_home "$home"
   cleared=77777777-6666-5555-4444-333333333333
   mkdir -p "$home/claude/sessions"
   printf '{"pid":%s,"sessionId":"%s","kind":"interactive"}\n' "$$" "$cleared" > "$home/claude/sessions/$$.json"
@@ -247,6 +271,7 @@ with open(sys.argv[1], "w") as fh:
         fh.write(json.dumps({"type": "user", "uuid": f"u{i}", "origin": {"kind": "human"},
                              "message": {"role": "user", "content": f"message {i} " + "x" * 600}}) + "\n")
 PY
+  serve_home "$home"
   out=$(conversation "$home")
   assert_equals "$(jq -r '.older' <<<"$out")" "true" "older history is flagged"
   assert_equals "$(jq -r '.items | length' <<<"$out")" "160" "only the recent tail is shown"
@@ -266,7 +291,6 @@ test_get_guards_token_cookie_and_host() {
   assert_equals "$(status_of "http://127.0.0.1:$port/?token=wrong")" "403" "wrong token is refused"
   cookie=$(sign_in "$home" "$port")
   assert_equals "$(status_of --cookie "$cookie" "http://127.0.0.1:$port/")" "200" "cookie opens the page"
-  assert_equals "$(status_of --cookie "$cookie" "http://localhost:$port/")" "200" "localhost Host is accepted"
   assert_equals "$(status_of --cookie "$cookie" -H "Host: evil.example:$port" "http://127.0.0.1:$port/")" "403" "rebound Host is refused"
   assert_equals "$(status_of --cookie "$cookie" -H "Host: 127.0.0.1:1" "http://127.0.0.1:$port/")" "403" "other port Host is refused"
   token=$(head -n 1 "$home/state/web/token")
