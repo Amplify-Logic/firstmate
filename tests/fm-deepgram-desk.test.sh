@@ -1106,7 +1106,7 @@ stt_says() {  # <home> <transcript> | <home> --fail
 }
 
 mode_of() {  # <path>
-  stat -f '%Lp' "$1" 2>/dev/null || stat -c '%a' "$1"
+  stat -c '%a' "$1" 2>/dev/null || stat -f '%Lp' "$1"
 }
 
 saved_at_of() {  # <json>
