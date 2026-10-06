@@ -73,14 +73,14 @@ SH
 }
 
 conversation() {  # <home>
-  FM_WEB_CLAUDE_DIRS="$1/claude" python3 "$ENGINE" conversation --home "$1"
+  HOME="$1" CLAUDE_CONFIG_DIR="$1/claude" python3 "$ENGINE" conversation --home "$1"
 }
 
 start_web() {  # <home> <root>
   local home=$1 root=$2 log n=0 line
   log=$home/web-serve.log
   : > "$log"
-  FM_WEB_CLAUDE_DIRS="$home/claude" python3 "$ENGINE" serve --home "$home" --root "$root" --port 0 >"$log" 2>&1 &
+  HOME="$home" CLAUDE_CONFIG_DIR="$home/claude" python3 "$ENGINE" serve --home "$home" --root "$root" --port 0 >"$log" 2>&1 &
   WEB_PIDS+=("$!")
   while [ "$n" -lt 50 ]; do
     line=$(grep -E '^listening on 127\.0\.0\.1:[0-9]+$' "$log" 2>/dev/null || true)
@@ -164,6 +164,21 @@ file-b" "tool call collapsed with its result"
     "Read|/tmp/notes.md|true" "unanswered tool call is pending"
   assert_equals "$(jq -r '.state' <<<"$out")" "busy" "work after the last turn end reads busy"
   pass "transcript parsing collapses tools, marks compaction and escapes markdown"
+}
+
+test_numbered_lists_keep_their_numbers() {
+  local home out html
+  home=$(make_home numbers)
+  jq -nc --arg text $'Options:\n\n1. Merge now\n\n2. Wait for CI\n\n3. Abort\n\nLater:\n\n4. Tidy up' \
+    '{type:"assistant",uuid:"a1",message:{id:"msg_1",role:"assistant",content:[{type:"text",text:$text}]}}' \
+    > "$(transcript "$home")"
+  out=$(conversation "$home") || fail "conversation read failed"
+  html=$(jq -r '.items[0].html' <<<"$out")
+  assert_contains "$html" '<ol><li>Merge now</li></ol>'
+  assert_contains "$html" '<ol start="2"><li>Wait for CI</li></ol>'
+  assert_contains "$html" '<ol start="3"><li>Abort</li></ol>'
+  assert_contains "$html" '<ol start="4"><li>Tidy up</li></ol>'
+  pass "numbered items split by blank lines keep their written numbers"
 }
 
 test_idle_offline_and_session_restart() {
@@ -303,7 +318,7 @@ test_fleet_panel_reuses_bridge_snapshot() {
 test_launcher_start_status_url_stop() {
   local home out port
   home=$(make_home launcher)
-  out=$(FM_HOME="$home" FM_WEB_CLAUDE_DIRS="$home/claude" "$LAUNCHER" start --port 0) || fail "start failed"
+  out=$(FM_HOME="$home" HOME="$home" CLAUDE_CONFIG_DIR="$home/claude" "$LAUNCHER" start --port 0) || fail "start failed"
   case "$out" in http://127.0.0.1:[0-9]*/\?token=*) ;; *) fail "start did not print a loopback URL: $out" ;; esac
   WEB_PIDS+=("$(cat "$home/state/web/web.pid")")
   port=$(cat "$home/state/web/web.port")
@@ -317,6 +332,7 @@ test_launcher_start_status_url_stop() {
 }
 
 test_transcript_parsing_collapses_tools_and_marks_compaction
+test_numbered_lists_keep_their_numbers
 test_idle_offline_and_session_restart
 test_tail_reads_only_the_end_of_a_large_transcript
 test_get_guards_token_cookie_and_host

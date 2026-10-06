@@ -42,7 +42,6 @@ import json
 import os
 import re
 import secrets
-import socket
 import subprocess
 import sys
 import threading
@@ -138,13 +137,9 @@ def derive(token: str, purpose: str) -> str:
 def claude_config_dirs(home: Path) -> List[Path]:
     """Where a Claude primary's transcripts can live, most specific first.
 
-    FM_WEB_CLAUDE_DIRS (colon separated) replaces the list; the behavior suite
-    uses it. Otherwise: CLAUDE_CONFIG_DIR, this home's pinned accounts under
-    data/accounts/claude/, then ~/.claude.
+    CLAUDE_CONFIG_DIR, this home's pinned accounts under data/accounts/claude/,
+    then ~/.claude.
     """
-    override = os.environ.get("FM_WEB_CLAUDE_DIRS")
-    if override is not None:
-        return [Path(item) for item in override.split(":") if item]
     dirs: List[Path] = []
     env_dir = os.environ.get("CLAUDE_CONFIG_DIR")
     if env_dir:
@@ -279,12 +274,13 @@ def _table_cells(line: str) -> List[str]:
     return [cell.strip() for cell in line.split("|")]
 
 
-def _render_list(block: List[Tuple[int, str, str]]) -> str:
-    """Nested lists from (indent, ul|ol, text) rows; deeper indents nest
-    inside the previous item, so bullets under a numbered step stay bullets."""
+def _render_list(block: List[Tuple[int, str, str, int]]) -> str:
+    """Nested lists from (indent, ul|ol, text, number) rows; deeper indents
+    nest inside the previous item, so bullets under a numbered step stay
+    bullets. A numbered list starts at its first item's number."""
     out: List[str] = []
     stack: List[Tuple[int, str]] = []
-    for indent, tag, body_text in block:
+    for indent, tag, body_text, number in block:
         while stack and indent < stack[-1][0]:
             out.append(f"</li></{stack.pop()[1]}>")
         if stack and indent == stack[-1][0] and tag != stack[-1][1]:
@@ -294,7 +290,7 @@ def _render_list(block: List[Tuple[int, str, str]]) -> str:
                 indent = stack[-1][0]
                 out.append("</li>")
             else:
-                out.append(f"<{tag}>")
+                out.append(f'<ol start="{number}">' if tag == "ol" and number != 1 else f"<{tag}>")
                 stack.append((indent, tag))
         else:
             out.append("</li>")
@@ -372,17 +368,17 @@ def render_markdown(text: str) -> str:
             continue
         if BULLET_RE.match(line) or ORDERED_RE.match(line):
             flush()
-            block: List[Tuple[int, str, str]] = []
+            block: List[Tuple[int, str, str, int]] = []
             while i < len(lines):
                 bullet = BULLET_RE.match(lines[i])
                 number = ORDERED_RE.match(lines[i])
                 if bullet:
-                    block.append((len(bullet.group(1)), "ul", bullet.group(2)))
+                    block.append((len(bullet.group(1)), "ul", bullet.group(2), 0))
                 elif number:
-                    block.append((len(number.group(1)), "ol", number.group(3)))
+                    block.append((len(number.group(1)), "ol", number.group(3), int(number.group(2))))
                 elif lines[i].strip() and lines[i].startswith("  ") and block:
-                    indent, tag, body_text = block[-1]
-                    block[-1] = (indent, tag, body_text + "\n" + lines[i].strip())
+                    indent, tag, body_text, start = block[-1]
+                    block[-1] = (indent, tag, body_text + "\n" + lines[i].strip(), start)
                 else:
                     break
                 i += 1
@@ -672,7 +668,7 @@ def read_tail(path: Path, want_items: int = TAIL_ITEMS) -> Tuple[Conversation, b
         conversation = parse_lines(lines)
         if start == 0 or len(conversation.items) >= want_items or window >= TAIL_MAX_WINDOW:
             return conversation, start > 0
-        window *= 4
+        window = min(window * 4, TAIL_MAX_WINDOW)
 
 
 class TranscriptCache:
@@ -1331,7 +1327,6 @@ def command_serve(home: Path, root: Path, port: int) -> None:
     token = load_or_create_token(home)
     try:
         server = ThreadingHTTPServer((LOOPBACK, port), WebHandler)
-        server.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     except OSError as exc:
         fail(f"could not bind {LOOPBACK}:{port}: {exc}")
     bound = server.server_address[1]
