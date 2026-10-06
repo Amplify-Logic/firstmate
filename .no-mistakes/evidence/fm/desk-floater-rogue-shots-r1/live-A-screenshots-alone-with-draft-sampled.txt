@@ -1,0 +1,13 @@
+### Scenario A (FIX c62af0fe): draft in box, screenshots-only send
+--- $ FM_HOME=$LAB bin/fm-desk-voice.sh send --image $LAB/shot-one.png --    (target script)
+fm-desk-voice: the primary's chat pane is not reachable; saving to the mailbox instead
+mailbox: $LAB/state/desk-voice/inbox/20261006T184106Z-6adda180.json
+--- chat box row as seen every 0.1 s during the send (changes only):
+20:41:03.435  box: ❯ What if we did 2. with 3. somehow
+--- chat pane after:
+  Also tell me what you want done with them.
+✻ Sautéed for 6s · done 8:40 PM
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ What if we did 2. with 3. somehow
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏵⏵ auto mode on (shift+tab to cycle)

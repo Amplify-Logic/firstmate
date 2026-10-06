@@ -1,0 +1,17 @@
+### Scenario B: chat box empty, floater sends a screenshots-only message
+--- chat pane BEFORE send:
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏵⏵ auto mode on (shift+tab to cycle) · ← 2 agents                                                                               Ctrl+Y to paste deleted text
+--- $ FM_HOME=$LAB bin/fm-desk-voice.sh send --image $LAB/shot-two.png --
+sent: tmux %0
+--- chat pane AFTER send:
+ rules are relaxed, a managed read-path lock is on, or the working directory name has glob characters). To undo, remove
+ permissions.blockReadsOutsideWorkingDirectories from your user settings; file tools follow next session, sandboxed commands at once.
+ Allow this read outside the working directories?
+ ❯ 1. Yes, and keep allowing any reads outside the working directories
+   2. No, and block reads outside the working directories from now on
+   3. No, and ask again next time
+   4. Yes, but ask again next time
+ Esc to cancel · Tab to amend

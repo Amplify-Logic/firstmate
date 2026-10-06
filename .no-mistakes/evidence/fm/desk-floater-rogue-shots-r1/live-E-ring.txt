@@ -1,0 +1,18 @@
+### Scenario E: ring with a draft in the box (must not touch it)
+❯ What if we did 2. with 3. somehow
+$ fm-desk-voice.sh ring 'Lab ring check one'
+not-rung
+exit=0
+❯ What if we did 2. with 3. somehow
+### Scenario E2: ring into an empty box (submits)
+❯ 
+$ fm-desk-voice.sh ring 'Lab ring check, reply only with the word ok'
+rung: tmux %0
+exit=0
+❯ Lab ring check, reply only with the word ok
+⏺ ok
+✻ Baked for 2s · done 8:44 PM
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏵⏵ auto mode on (shift+tab to cycle) · ← 2 agents

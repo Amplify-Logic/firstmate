@@ -1,0 +1,19 @@
+### Scenario A: captain mid-draft, floater sends a screenshots-only message
+--- chat pane BEFORE send:
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ What if we did 2. with 3. somehow
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏵⏵ auto mode on (shift+tab to cycle)
+--- $ FM_HOME=$LAB bin/fm-desk-voice.sh send --image $LAB/shot-one.png --
+fm-desk-voice: the primary's chat pane is not reachable; saving to the mailbox instead
+mailbox: $LAB/state/desk-voice/inbox/20261006T183727Z-1b3a1179.json
+--- chat pane AFTER send:
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ What if we did 2. with 3. somehow
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏵⏵ auto mode on (shift+tab to cycle)
+--- mailbox record $LAB/state/desk-voice/inbox/20261006T183727Z-1b3a1179.json:
+{"schema": "fm-desk-voice-transcript.v1", "id": "1b3a1179", "created_at": "20261006T183727Z", "source": "desk-floater", "transcript": "Screenshots: $LAB/shot-one.png", "images": ["$LAB/shot-one.png"]}
+
+--- fm-desk-voice.sh pending:
+$LAB/state/desk-voice/inbox/20261006T183727Z-1b3a1179.json

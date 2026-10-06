@@ -1,0 +1,17 @@
+### Scenario D baseline (pre-fix 17508a14): draft in box, words plus a screenshot
+--- $ FM_HOME=$LAB bin/fm-desk-voice.sh send --image $LAB/shot-one.png -- "Lab check, reply only with the word ok"   (base script)
+fm-desk-voice: the primary's chat pane refused the text; saving it to the mailbox instead
+mailbox: $LAB/state/desk-voice/inbox/20261006T184401Z-53309687.json
+--- chat box row as seen every 0.1 s during the send (changes only):
+20:43:12.876  box: ❯ What if we did 2. with 3. somehow
+20:43:48.518  box: ❯ 
+20:43:49.712  box: ❯ [Image #3]Lab check, reply only with the word ok Screenshots:
+20:44:00.753  box: ❯ 
+20:44:01.381  box: ❯ What if we did 2. with 3. somehow
+--- chat pane after:
+  Also tell me what you want done with them.
+✻ Sautéed for 6s · done 8:40 PM
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ What if we did 2. with 3. somehow
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏵⏵ auto mode on (shift+tab to cycle)

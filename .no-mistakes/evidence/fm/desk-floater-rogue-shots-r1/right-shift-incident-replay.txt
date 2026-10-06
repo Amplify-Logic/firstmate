@@ -1,0 +1,8 @@
+BASE   (17508a14) incident: 2 screenshot(s) taken at 3.22s, 3.36s
+TARGET (c62af0fe) incident: 0 screenshot(s) taken
+BASE   (17508a14) pause-then-brush: 1 screenshot(s) taken at 3.23s
+TARGET (c62af0fe) pause-then-brush: 0 screenshot(s) taken
+BASE   (17508a14) deliberate: 1 screenshot(s) taken at 3.19s
+TARGET (c62af0fe) deliberate: 1 screenshot(s) taken at 3.79s
+BASE   (17508a14) double-deliberate: 2 screenshot(s) taken at 0.17s, 0.33s
+TARGET (c62af0fe) double-deliberate: 1 screenshot(s) taken at 0.95s

@@ -1,0 +1,19 @@
+Test Case '-[DeskFloaterTests.TapKeyTests testCapitalLetterIsNotATap]' started.
+Test Case '-[DeskFloaterTests.TapKeyTests testCapitalLetterIsNotATap]' passed (0.054 seconds).
+Test Case '-[DeskFloaterTests.TapKeyTests testClickWhileDownIsAShortcutButNotTyping]' started.
+Test Case '-[DeskFloaterTests.TapKeyTests testClickWhileDownIsAShortcutButNotTyping]' passed (0.001 seconds).
+Test Case '-[DeskFloaterTests.TapKeyTests testDeliberateTapAwayFromTypingTakesAShot]' started.
+Test Case '-[DeskFloaterTests.TapKeyTests testDeliberateTapAwayFromTypingTakesAShot]' passed (0.003 seconds).
+Test Case '-[DeskFloaterTests.TapKeyTests testDictationKeyKeepsItsPlainTap]' started.
+Test Case '-[DeskFloaterTests.TapKeyTests testDictationKeyKeepsItsPlainTap]' passed (0.000 seconds).
+Test Case '-[DeskFloaterTests.TapKeyTests testHeldShiftAndOtherModifiersAreNotTaps]' started.
+Test Case '-[DeskFloaterTests.TapKeyTests testHeldShiftAndOtherModifiersAreNotTaps]' passed (0.000 seconds).
+Test Case '-[DeskFloaterTests.TapKeyTests testLaterTapReplacesAnUnsettledOne]' started.
+Test Case '-[DeskFloaterTests.TapKeyTests testLaterTapReplacesAnUnsettledOne]' passed (0.011 seconds).
+Test Case '-[DeskFloaterTests.TapKeyTests testShiftBrushedMidSentenceIsNotATap]' started.
+Test Case '-[DeskFloaterTests.TapKeyTests testShiftBrushedMidSentenceIsNotATap]' passed (0.000 seconds).
+Test Case '-[DeskFloaterTests.TapKeyTests testTapThatTypingResumesAfterIsDropped]' started.
+Test Case '-[DeskFloaterTests.TapKeyTests testTapThatTypingResumesAfterIsDropped]' passed (0.000 seconds).
+	 Executed 8 tests, with 0 failures (0 unexpected) in 0.068 (0.069) seconds
+	 Executed 8 tests, with 0 failures (0 unexpected) in 0.068 (0.069) seconds
+	 Executed 8 tests, with 0 failures (0 unexpected) in 0.068 (0.074) seconds

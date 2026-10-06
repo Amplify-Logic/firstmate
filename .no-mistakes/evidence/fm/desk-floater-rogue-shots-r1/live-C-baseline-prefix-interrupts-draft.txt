@@ -1,0 +1,15 @@
+### Scenario C (BASELINE pre-fix 17508a14): draft in box, screenshots-only send
+--- $ FM_HOME=$LAB bin/fm-desk-voice.sh send --image $LAB/shot-one.png --    (base script)
+sent: tmux %0
+--- chat box row as seen every 0.1 s during the send (changes only):
+20:40:32.452  box: ❯ What if we did 2. with 3. somehow
+20:40:47.099  box: ❯ 
+20:40:51.625  box: ❯ Screenshots: $LAB/shot-one.png
+20:40:54.236  box: ❯ What if we did 2. with 3. somehow
+--- chat pane after:
+  To have me look at it, you can either:
+  -
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ What if we did 2. with 3. somehow
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏵⏵ auto mode on (shift+tab to cycle)

@@ -1,0 +1,12 @@
+fm-desk-voice: the primary's chat pane is not reachable; saving to the mailbox instead
+fm-desk-voice: the primary's chat pane is not reachable; saving to the mailbox instead
+ok - fm-desk-voice send: screenshots alone wait in the mailbox while a draft is in the chat box
+ok - fm-desk-voice send: screenshots, alone or with words, are typed into the primary's pane
+fm-desk-voice: the primary's chat pane refused the text; saving it to the mailbox instead
+ok - fm-desk-voice send: screenshots the pane refuses land in the mailbox with the words
+ok - fm-desk-voice send: a Claude draft is set aside, the message sent alone, and the draft put back
+ok - fm-desk-voice send: another harness's half-typed draft is joined and submitted
+ok - fm-inbox note: a new captain note rings the busy primary within seconds and stays queued
+ok - fm-inbox note: the ring never submits a draft, never rings away mode, and falls back to the queue
+ok - desk ring: both backends re-read the payload before every Enter, including retries
+ok - fm-desk-voice send: dictation into the Firstmate chat in front is typed and submitted
