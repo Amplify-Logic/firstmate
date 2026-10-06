@@ -246,7 +246,7 @@ Recordings are made in this home's private `state/desk-voice/recording/` and rem
 
 When the words do not arrive, the recording is saved instead:
 
-- Transcription failed, for example because the network or Deepgram was down.
+- Transcription failed, for example because the network or Deepgram was down, for a recording at least half a second long. A shorter one shows `Transcribe failed` and is not kept.
 - Transcription came back with no words from a recording at least two seconds long. A shorter one is taken as a stray press, shows `No speech`, and is not kept.
 - The message could not be delivered at all.
 
