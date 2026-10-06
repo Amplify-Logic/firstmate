@@ -18,6 +18,8 @@ The server requires Python 3.12 and uses only the standard library.
 
 Bookmark: `https://larss-macbook-pro-2.taile26864.ts.net/` after Serve is pointed at the loopback port.
 
+On the Mac itself, [web.md](web.md) is the localhost chat page with this glance as its side panel.
+
 ## Auth
 
 There is one captain, so there is no account system.
