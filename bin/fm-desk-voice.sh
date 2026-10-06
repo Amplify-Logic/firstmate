@@ -8,6 +8,9 @@
 #   fm-desk-voice.sh deliver [--source <name>] [--image <png>]... [<transcript text...>]
 #   fm-desk-voice.sh ring <line>
 #   fm-desk-voice.sh shot [--display <n>]
+#   fm-desk-voice.sh keep [--purpose firstmate|dictate] [--reason <text>] <audio-file>
+#   fm-desk-voice.sh recordings
+#   fm-desk-voice.sh retry [<saved-recording>...]
 #   fm-desk-voice.sh pending
 #   fm-desk-voice.sh drain [--print]
 #   fm-desk-voice.sh --help
@@ -96,6 +99,15 @@
 # deliver is the mailbox path. Transcripts land under
 #   $FM_HOME/state/desk-voice/inbox/<utc>-<id>.json
 # and a single wake is appended so the primary can see and drain them.
+# A wake alone reaches a busy primary only at its next turn end, minutes
+# later, so deliver also rings the primary, as a captain inbox note does: a
+# detached ring (every check above, empty composer only) of one labelled line
+# asking it to drain now. A ring that cannot be typed yet is tried again after
+# FM_DESK_VOICE_RING_DELAYS seconds (default "0 2 5 10 20 30 60 60 60", about
+# four minutes in all; empty turns the ring off). The ring stops once it is
+# typed, once the message has been drained, when no proven primary holds the
+# session lock, or in away or quiet mode, whose own supervision owns wakes.
+# The queued wake stays the durable delivery either way.
 #
 # deliver --image (repeatable, absolute path to an existing file) attaches
 # screenshots: the message becomes the transcript, if any, followed by one line
@@ -109,6 +121,32 @@
 # (default 30) images. It never delivers anything by itself. The capture
 # command is FM_DESK_SHOT_CAPTURE (default screencapture), called as
 # <cmd> -x -t png [-D <n>] <file>; tests point it at a stub.
+#
+# keep, recordings and retry make sure a recording is never lost. The floater
+# records into state/desk-voice/recording/ and keeps that audio until its
+# words are delivered; when transcription fails, hears nothing in a recording
+# worth keeping, or delivery fails, it hands the audio to keep, which moves it
+# into state/desk-voice/unsent/ (folder 0700, files 0600) beside a small JSON
+# record of its purpose (talk to Firstmate, or dictation), how many attempts
+# it has had, and why the last one failed, and prints the saved path. Each
+# keep prunes the folder to the newest FM_DESK_UNSENT_KEEP (default 20)
+# recordings and drops any older than FM_DESK_UNSENT_DAYS (default 30) days.
+# recordings lists them oldest first, one line each:
+#   <path> TAB <purpose> TAB <attempts> TAB <saved-at> TAB <last reason>
+# retry transcribes the named saved recordings again (every saved one when
+# none is named) through bin/fm-deepgram-stt.sh, one at a time under one lock,
+# and prints one line each (exit 0):
+#   delivered TAB <path> TAB <send outcome>   talk to Firstmate: the words went
+#                                         through send above, and the recording
+#                                         is removed
+#   transcript TAB <path> TAB <text>      dictation: the words on one line, for
+#                                         the caller to paste; the recording is
+#                                         removed
+#   unsent TAB <path> TAB <attempts> TAB <reason>
+#                                         still not delivered; kept for later
+#   busy TAB <path>                       another retry holds the lock
+#   gone TAB <path>                       already delivered or removed
+# Only files inside the unsent folder are retried.
 #
 # Drain moves files to state/desk-voice/processed/ and prints each transcript
 # (one JSON object per line with --print, plain text otherwise). The primary
@@ -124,6 +162,7 @@ STATE="${FM_STATE_OVERRIDE:-$FM_HOME/state}"
 INBOX="$STATE/desk-voice/inbox"
 PROCESSED="$STATE/desk-voice/processed"
 SHOTS="$STATE/desk-voice/shots"
+UNSENT="$STATE/desk-voice/unsent"
 
 # shellcheck source=bin/fm-wake-lib.sh
 . "$SCRIPT_DIR/fm-wake-lib.sh"
@@ -254,6 +293,7 @@ deliver() {
   # Wake the primary: one check wake naming the durable file.
   fm_wake_append check desk-voice "desk-voice: $path" \
     || note "transcript saved but wake append failed; primary will see it on next drain"
+  ring_mailbox "$path"
 
   # Best-effort macOS notice so a human at the desk knows something landed.
   if command -v osascript >/dev/null 2>&1; then
@@ -262,6 +302,36 @@ deliver() {
   fi
 
   printf '%s\n' "$path"
+}
+
+# Rings the primary about mailbox message <path> in the background, trying
+# again on the FM_DESK_VOICE_RING_DELAYS schedule (see the header). Its output
+# goes nowhere, so a caller reading this script's output (the floater) is
+# never held by it.
+ring_mailbox() {  # <path>
+  local path=$1 delays=${FM_DESK_VOICE_RING_DELAYS-0 2 5 10 20 30 60 60 60} delay
+  local line='[firstmate desk-voice] a desk voice message is waiting in the mailbox. Run bin/fm-wake-drain.sh now to pick it up; it stays queued until handled and acknowledged.'
+  [ -n "${delays// /}" ] || return 0
+  for delay in $delays; do
+    case "$delay" in
+      ''|*[!0-9]*) note "FM_DESK_VOICE_RING_DELAYS must be whole seconds; not ringing"; return 0 ;;
+    esac
+  done
+  (
+    trap '' HUP
+    local result rc
+    for delay in $delays; do
+      sleep "$delay"
+      [ -e "$path" ] || exit 0
+      [ ! -e "$STATE/.afk" ] && [ ! -e "$STATE/.afk-contract" ] || exit 0
+      rc=0
+      result=$(PRIMARY_SUBMIT_COMPOSER=empty primary_submit "$line") || rc=$?
+      [ "$rc" != 1 ] || exit 0
+      if [ "$rc" = 0 ] && [ -n "$result" ] && [ "${result%%$'\t'*}" != send-failed ]; then
+        exit 0
+      fi
+    done
+  ) </dev/null >/dev/null 2>&1 &
 }
 
 # The captain's words as one typed line: every control character (C0, DEL,
@@ -803,6 +873,225 @@ shot() {
   printf '%s\n' "$path"
 }
 
+ensure_unsent() {
+  ensure_dirs
+  mkdir -p "$UNSENT" || die "cannot create $UNSENT"
+  chmod 700 "$UNSENT" 2>/dev/null || true
+}
+
+# The saved recordings, oldest first (names start with the UTC time saved).
+unsent_audio() {
+  local f
+  shopt -s nullglob
+  for f in "$UNSENT"/*; do
+    case "$f" in
+      *.json|*/.*) continue ;;
+    esac
+    [ -f "$f" ] && printf '%s\n' "$f"
+  done
+}
+
+# Reads or writes the JSON record beside a saved recording.
+#   recording_meta read <json>  -> purpose TAB attempts TAB saved-at TAB reason
+#   recording_meta write <json> <purpose> <attempts> <reason> [<saved-at>]
+recording_meta() {
+  python3 - "$@" <<'PY'
+import json, os, sys, tempfile
+mode, path = sys.argv[1], sys.argv[2]
+def flat(value):
+    return " ".join(str(value).split())
+if mode == "read":
+    try:
+        with open(path, encoding="utf-8") as fh:
+            doc = json.load(fh)
+    except (OSError, ValueError):
+        doc = {}
+    attempts = doc.get("attempts", 0)
+    if not isinstance(attempts, int) or attempts < 0:
+        attempts = 0
+    purpose = doc.get("purpose") if doc.get("purpose") in ("firstmate", "dictate") else "firstmate"
+    print("\t".join([purpose, str(attempts), flat(doc.get("saved_at", "")), flat(doc.get("last_reason", ""))]))
+    raise SystemExit(0)
+purpose, attempts, reason = sys.argv[3], int(sys.argv[4]), sys.argv[5]
+saved_at = sys.argv[6] if len(sys.argv) > 6 else None
+if saved_at is None:
+    try:
+        with open(path, encoding="utf-8") as fh:
+            saved_at = json.load(fh).get("saved_at", "")
+    except (OSError, ValueError):
+        saved_at = ""
+doc = {
+    "schema": "fm-desk-voice-recording.v1",
+    "purpose": purpose,
+    "saved_at": saved_at,
+    "attempts": attempts,
+    "last_reason": reason,
+}
+fd, tmp = tempfile.mkstemp(dir=os.path.dirname(path), prefix=".tmp.")
+with os.fdopen(fd, "w", encoding="utf-8") as fh:
+    json.dump(doc, fh, ensure_ascii=False)
+    fh.write("\n")
+os.chmod(tmp, 0o600)
+os.replace(tmp, path)
+PY
+}
+
+prune_unsent() {
+  local keep=${FM_DESK_UNSENT_KEEP:-20} days=${FM_DESK_UNSENT_DAYS:-30} excess f
+  local -a all=()
+  while IFS= read -r f; do
+    [ -n "$f" ] && all+=("$f")
+  done < <(find "$UNSENT" -maxdepth 1 -type f ! -name '*.json' ! -name '.*' -mtime +"$days" 2>/dev/null)
+  for f in ${all[@]+"${all[@]}"}; do
+    rm -f "$f" "${f%.*}.json"
+  done
+  all=()
+  while IFS= read -r f; do
+    [ -n "$f" ] && all+=("$f")
+  done < <(unsent_audio)
+  excess=$(( ${#all[@]} - keep ))
+  [ "$excess" -gt 0 ] || return 0
+  for f in "${all[@]:0:$excess}"; do
+    rm -f "$f" "${f%.*}.json"
+  done
+}
+
+keep() {
+  local purpose=firstmate reason='' src ext stamp id dest
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --purpose)
+        [ "$#" -ge 2 ] || refuse "--purpose needs firstmate or dictate"
+        case "$2" in
+          firstmate|dictate) purpose=$2 ;;
+          *) refuse "--purpose needs firstmate or dictate: $2" ;;
+        esac
+        shift 2
+        ;;
+      --reason)
+        [ "$#" -ge 2 ] || refuse "--reason needs a text"
+        reason=$2
+        shift 2
+        ;;
+      --) shift; break ;;
+      -*) refuse "unexpected option: $1" ;;
+      *) break ;;
+    esac
+  done
+  [ "$#" -eq 1 ] || refuse "usage: fm-desk-voice.sh keep [--purpose firstmate|dictate] [--reason <text>] <audio-file>"
+  src=$1
+  [ -f "$src" ] && [ ! -L "$src" ] || refuse "no such recording: $src"
+  ext=$(printf '%s' "${src##*.}" | tr '[:upper:]' '[:lower:]')
+  case "$ext" in
+    wav|mp3|m4a|webm|ogg) ;;
+    *) refuse "not an audio recording: $src" ;;
+  esac
+  case "${FM_DESK_UNSENT_KEEP:-20}:${FM_DESK_UNSENT_DAYS:-30}" in
+    0*|*:0*|*[!0-9:]*) refuse "FM_DESK_UNSENT_KEEP and FM_DESK_UNSENT_DAYS must be whole numbers from 1" ;;
+  esac
+
+  ensure_unsent
+  stamp=$(date -u +%Y%m%dT%H%M%SZ)
+  id=$(python3 -c 'import secrets; print(secrets.token_hex(4))')
+  dest="$UNSENT/$stamp-$id.$ext"
+  # The record goes first, so a retry never meets audio without one.
+  recording_meta write "$UNSENT/$stamp-$id.json" "$purpose" 1 "$reason" "$stamp" \
+    || die "cannot write the recording record"
+  if ! mv -- "$src" "$dest"; then
+    rm -f "$UNSENT/$stamp-$id.json"
+    die "cannot move $src into $UNSENT"
+  fi
+  chmod 600 "$dest" 2>/dev/null || true
+  prune_unsent
+  printf '%s\n' "$dest"
+}
+
+recordings() {
+  [ "$#" -eq 0 ] || refuse "usage: fm-desk-voice.sh recordings"
+  local f
+  [ -d "$UNSENT" ] || return 0
+  while IFS= read -r f; do
+    [ -n "$f" ] || continue
+    printf '%s\t%s\n' "$f" "$(recording_meta read "${f%.*}.json")"
+  done < <(unsent_audio)
+}
+
+# Transcribes one saved recording again and delivers its words; see the header.
+retry_one() {  # <path>
+  local path=$1 meta purpose attempts reason text outcome err rc=0
+  if [ ! -f "$path" ]; then
+    printf 'gone\t%s\n' "$path"
+    return 0
+  fi
+  meta=$(recording_meta read "${path%.*}.json")
+  IFS=$'\t' read -r purpose attempts _ reason <<<"$meta"
+  err=$(mktemp "${TMPDIR:-/tmp}/fm-desk-voice-retry.XXXXXX") || die "cannot create a temporary file"
+  text=$(FM_HOME="$FM_HOME" "$SCRIPT_DIR/fm-deepgram-stt.sh" "$path" 2>"$err") || rc=$?
+  if [ "$rc" != 0 ]; then
+    reason=$(sed -n 's/^fm-deepgram-stt: //p' "$err" 2>/dev/null | tail -n 1)
+    reason="transcription failed${reason:+: $reason}"
+  fi
+  rm -f "$err"
+  case "$text" in
+    *[![:space:]]*) ;;
+    *) text='' ;;
+  esac
+  if [ "$rc" = 0 ] && [ -z "$text" ]; then
+    reason="no speech heard"
+  elif [ "$rc" = 0 ] && [ "$purpose" = dictate ]; then
+    text=$(plain_line "$text") || die "cannot prepare the transcript"
+    rm -f "$path" "${path%.*}.json"
+    printf 'transcript\t%s\t%s\n' "$path" "$text"
+    return 0
+  elif [ "$rc" = 0 ]; then
+    if outcome=$(send --source desk-floater-retry -- "$text") && [ -n "$outcome" ]; then
+      rm -f "$path" "${path%.*}.json"
+      printf 'delivered\t%s\t%s\n' "$path" "$outcome"
+      return 0
+    fi
+    reason="delivery failed"
+  fi
+  attempts=$(( ${attempts:-0} + 1 ))
+  recording_meta write "${path%.*}.json" "$purpose" "$attempts" "$reason" \
+    || note "could not update the record for $path"
+  printf 'unsent\t%s\t%s\t%s\n' "$path" "$attempts" "$(plain_line "$reason")"
+}
+
+retry() (
+  local lock="$STATE/desk-voice/.retry.lock" path dir unsent_real
+  local -a paths=()
+  ensure_unsent
+  unsent_real=$(cd -P "$UNSENT" && pwd) || die "cannot read $UNSENT"
+  for path in "$@"; do
+    case "$path" in
+      /*) ;;
+      *) path="$PWD/$path" ;;
+    esac
+    dir=$(cd -P "$(dirname "$path")" 2>/dev/null && pwd) || dir=''
+    [ "$dir" = "$unsent_real" ] || refuse "not a saved recording in $UNSENT: $path"
+    case "$path" in
+      *.json|*/.*) refuse "not a saved recording: $path" ;;
+    esac
+    paths+=("$UNSENT/$(basename "$path")")
+  done
+  if [ "${#paths[@]}" -eq 0 ]; then
+    while IFS= read -r path; do
+      [ -n "$path" ] && paths+=("$path")
+    done < <(unsent_audio)
+  fi
+  [ "${#paths[@]}" -gt 0 ] || return 0
+  if ! fm_lock_try_acquire "$lock"; then
+    for path in "${paths[@]}"; do
+      printf 'busy\t%s\n' "$path"
+    done
+    return 0
+  fi
+  trap 'fm_lock_release "$lock"' EXIT
+  for path in "${paths[@]}"; do
+    retry_one "$path"
+  done
+)
+
 pending() {
   ensure_dirs
   local f
@@ -847,6 +1136,9 @@ main() {
     deliver) shift; deliver "$@" ;;
     ring) shift; ring "$@" ;;
     shot) shift; shot "$@" ;;
+    keep) shift; keep "$@" ;;
+    recordings) shift; recordings "$@" ;;
+    retry) shift; retry "$@" ;;
     pending) shift; pending "$@" ;;
     drain) shift; drain "$@" ;;
     *) refuse "unknown command: $1" ;;
