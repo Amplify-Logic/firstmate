@@ -285,7 +285,7 @@ test_get_guards_token_cookie_and_host() {
   write_basic_transcript "$(transcript "$home")"
   root=$(make_root "$home" "sent: tmux %1")
   port=$(start_web "$home" "$root")
-  assert_equals "$(stat -f '%Lp' "$home/state/web/token" 2>/dev/null || stat -c '%a' "$home/state/web/token")" "600" "token is owner-only"
+  assert_equals "$(if [ "$(uname)" = Darwin ]; then stat -f '%Lp' "$home/state/web/token"; else stat -c '%a' "$home/state/web/token"; fi)" "600" "token is owner-only"
   assert_equals "$(status_of "http://127.0.0.1:$port/")" "403" "no cookie is refused"
   assert_equals "$(status_of "http://127.0.0.1:$port/api/conversation")" "403" "api without cookie is refused"
   assert_equals "$(status_of "http://127.0.0.1:$port/?token=wrong")" "403" "wrong token is refused"
