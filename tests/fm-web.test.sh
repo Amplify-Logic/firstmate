@@ -217,12 +217,20 @@ test_cleared_session_is_followed_through_the_live_registry() {
   printf '{"pid":%s,"sessionId":"%s","kind":"interactive"}\n' "$$" "$cleared" > "$home/claude/sessions/$$.json"
   out=$(conversation "$home")
   assert_equals "$(jq -r '.session' <<<"$out")" "$SESSION" "a cleared session with no transcript yet keeps the old conversation"
-  printf '%s\n' '{"type":"user","uuid":"c1","origin":{"kind":"human"},"message":{"role":"user","content":"after clear"}}' \
-    > "$(transcript "$home" "$cleared")"
+  # What Claude Code writes for an idle /clear: caveat, command, local_command.
+  {
+    printf '%s\n' '{"type":"user","uuid":"m1","isMeta":true,"message":{"role":"user","content":"<local-command-caveat>Caveat</local-command-caveat>"}}'
+    printf '%s\n' '{"type":"user","uuid":"c0","message":{"role":"user","content":"<command-name>/clear</command-name>\n<command-message>clear</command-message>\n<command-args></command-args>"}}'
+    printf '%s\n' '{"type":"system","subtype":"local_command","uuid":"l1","content":"<local-command-stdout></local-command-stdout>"}'
+  } > "$(transcript "$home" "$cleared")"
   out=$(conversation "$home")
   assert_equals "$(jq -r '.session' <<<"$out")" "$cleared" "follows the cleared session while the sidecar is stale"
+  assert_equals "$(jq -r '.state' <<<"$out")" "idle" "an idle /clear reads idle"
+  printf '%s\n' '{"type":"user","uuid":"c1","origin":{"kind":"human"},"message":{"role":"user","content":"after clear"}}' \
+    >> "$(transcript "$home" "$cleared")"
+  out=$(conversation "$home")
   assert_equals "$(jq -r '.state' <<<"$out")" "busy" "the cleared session's turn reads busy"
-  assert_equals "$(jq -r '[.items[].html] | join(",")' <<<"$out")" "<p>after clear</p>" "shows the message sent after /clear"
+  assert_equals "$(jq -r '[.items[].html] | join(",")' <<<"$out")" "<p>/clear</p>,<p>after clear</p>" "shows the message sent after /clear"
   python3 -c 'import subprocess; p=subprocess.Popen(["true"]); p.wait(); print(p.pid)' > "$home/state/.lock"
   out=$(conversation "$home")
   assert_equals "$(jq -r '.session' <<<"$out")" "$SESSION" "a dead holder's registry entry is ignored"

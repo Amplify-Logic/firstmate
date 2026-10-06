@@ -555,7 +555,7 @@ class Conversation:
 
     def _system(self, entry: Dict[str, Any], uid: str, ts: str) -> None:
         subtype = entry.get("subtype")
-        if subtype == "turn_duration":
+        if subtype in ("turn_duration", "local_command"):
             self.busy = False
         elif subtype == "compact_boundary":
             item = {"id": uid, "kind": "compact", "ts": ts, "summary": "Conversation compacted", "detail": ""}
