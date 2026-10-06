@@ -201,9 +201,18 @@ Add the ones your organisation actually uses; skip the rest.
 | Slack (or your team chat) | Read channels and threads, find decisions | "what was decided in my team channel this week?" |
 | Your tracker (Linear, Asana, Jira, or Notion) | Tickets and tasks you own or follow | "what's assigned to me and due this week?" |
 | Your CRM or helpdesk (for example HubSpot), if you handle customers | Tickets, contacts, and deal or ticket history | "which of my open tickets are waiting on us?" |
-| A browser tool (Claude in Chrome) | Lets Claude use pages in your own browser when no connector exists | "open our status page and tell me what it shows" |
+| Zapier | A bridge to the tools that have no connector of their own: one connector that can reach thousands of apps through actions you pick | "list the Zapier actions I have enabled" |
 
-Treat anything a connector can send, post, or change as an outward action: the first mate shows you a draft and waits for your yes unless you have told it otherwise in `data/captain.md`.
+Claude in Chrome is not a claude.ai connector, so it does not appear in that list or under `/mcp`.
+It is a browser extension that lets Claude use pages in your own Chrome when no connector exists; install it, then enable it in Claude Code with `/chrome`.
+
+The first mate does not hold outward sends by itself: a connector that can send, post, or change something can do so without asking you first.
+Record a standing rule on day one, before you connect mail or chat, for example:
+
+```text
+remember this as a standing rule: never send, post, or reply to anyone outside on my behalf without showing me the draft first
+```
+
 Record useful facts about your connectors as learnings, for example "the shared support inbox replies never show in my own Gmail".
 
 ### Firstmate's own tools
@@ -233,7 +242,7 @@ Ask the first mate to set one up; each owner page lists what it needs.
 | Desk floater ([desk-floater.md](desk-floater.md)) | Push-to-talk button on your Mac that types what you say into the first mate | A Deepgram API key; spoken replies also need a separate voice project's speech shaper |
 | Spoken replies ([configuration](configuration.md#desk-voice-out-configspeak)) | The first mate reads the start of each reply aloud | The same speech shaper |
 | Phone bridge page ([bridge-view.md](bridge-view.md)) | A phone page showing what needs you, with photo drop and hold-to-speak | Tailscale and Python 3.12 |
-| Morning intake and dropped-threads digest ([configuration](configuration.md#morning-intake-configmorning-intake)) | A daily intake and a twice-daily "what is left hanging" summary | A scheduled job on this Mac |
+| Morning intake ([configuration](configuration.md#morning-intake-configmorning-intake)) and dropped-threads digest ([configuration](configuration.md#dropped-threads-digest-configdropped-threads)) | A daily intake and a twice-daily "what is left hanging" summary | A scheduled job on this Mac |
 | Computer use ([macos-computer-use](../.agents/skills/macos-computer-use/SKILL.md)) | Lets the agents operate Mac apps and windows | Peekaboo, which the first mate installs, and Mac Accessibility permissions |
 | Activity ledger ([fleet-ledger.md](fleet-ledger.md)) | A file other tools can read to follow the fleet | Nothing extra |
 

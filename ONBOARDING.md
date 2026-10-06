@@ -416,7 +416,8 @@ That way you never leave setup in an undefined state.
 ## 11. House rules
 
 - It never merges a pull request without your say-so, unless you have told it a project may merge passing work on its own.
-- Anything destructive, irreversible, security-sensitive, or sent outside on your behalf comes to you first.
+- Anything destructive, irreversible, or security-sensitive comes to you first.
+- It does not hold outward sends by itself. Once mail or chat is connected, record a standing rule such as "never send, post, or reply to anyone outside on my behalf without showing me the draft first" ([handbook](docs/handbook.md#a-rounded-starter-set-for-a-work-setup)).
 - It only touches projects you point it at.
 - Your setup is yours alone - nothing you do is shared back to anyone.
 
