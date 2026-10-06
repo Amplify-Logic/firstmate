@@ -203,7 +203,7 @@ Add the ones your organisation actually uses; skip the rest.
 | Your CRM or helpdesk (for example HubSpot), if you handle customers | Tickets, contacts, and deal or ticket history | "which of my open tickets are waiting on us?" |
 | Zapier | A bridge to the tools that have no connector of their own: one connector that can reach thousands of apps through actions you pick | "list the Zapier actions I have enabled" |
 
-Claude in Chrome is not a claude.ai connector, so it does not appear in that list or under `/mcp`.
+Claude in Chrome is not a claude.ai connector, so it is not in the claude.ai Connectors list; once enabled, `/mcp` shows it separately as the built-in `claude-in-chrome`.
 It is a browser extension that lets Claude use pages in your own Chrome when no connector exists; install it, then enable it in Claude Code with `/chrome`.
 
 The first mate does not hold outward sends by itself: a connector that can send, post, or change something can do so without asking you first.
