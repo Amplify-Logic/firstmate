@@ -1,0 +1,6 @@
+[23:32:43] companion launched on shell-only pane %2 (Codex never started)
+[23:32:53] after 10s:
+noarm:%2 pid=38037 cmd=zsh h=18
+noarm:%3 pid=38043 cmd=bash h=1
+--- companion row ---
+⚓ gpt-6-astra·high │ 🧠-- ⚡45%wk │ 🚢0 🧪0 ⏸0 ⚠0 🪦0 📋0 │ 👁 NO-WATCH -- │ $-- │ 💤--

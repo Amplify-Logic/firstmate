@@ -1,0 +1,32 @@
+ spaces                  │ 1       +
+                         │
+ · stalebar-primary      │─────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ · zoom-owned            │ Accessing workspace:
+ · zoom-not-owned        │
+ · probe                 │ /private/var/folders/2c/9sf1hvpn23q336b08gs1np0c0000gn/T/fm-lab.aIGZzQ/work
+ · zoom3-owned           │
+ · zoom3-notowned        │ Quick safety check: Is this a project you created or one you trust? (Like your own code, a well-known open
+ · probe2                │ source project, or work from your team). If not, take a moment to review what's in this folder first.
+ · probe3                │
+ · zl-owned              │ Claude Code'll be able to read, edit, and execute files here.
+ · zl-notowned           │
+ · visual-astra-to-claude│ Security guide
+ · astra-to-claude       │
+ ● astra-to-claude-2     │ ❯ No, exit
+ new               ● menu│   Yes, I trust this folder
+─────────────────────────│
+ agents           grouped│ Enter to confirm · Esc to cancel
+                         │
+ ◉ astra-to-claude-2     │
+   claude                │
+                         │
+                         │
+                         │
+                         │
+                         │
+                         │
+                         │
+                         │
+                         │
+                         │
+                        «│

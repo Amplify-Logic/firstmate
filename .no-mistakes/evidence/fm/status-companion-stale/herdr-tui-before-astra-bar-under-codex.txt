@@ -1,0 +1,32 @@
+ spaces                  │ 1       +
+                         │┌────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+ · stalebar-primary      ││                                                                                                                │
+ · zoom-owned            ││  Hooks need review                                                                                             │
+ · zoom-not-owned        ││  1 hook is new or changed.                                                                                     │
+ · probe                 ││  Hooks can run outside the sandbox after you trust them.                                                       │
+ · zoom3-owned           ││                                                                                                                │
+ · zoom3-notowned        ││                                                                                                                │
+ · probe2                ││› 1. Review hooks                                                                                               │
+ · probe3                ││  2. Trust all and continue                                                                                     │
+ · zl-owned              ││  3. Continue without trusting (hooks won't run)                                                                │
+ · zl-notowned           ││                                                                                                                │
+ · visual-astra-to-claude││  enter confirm · esc skip                                                                                      │
+ · astra-to-claude       ││                                                                                                                │
+ ○ astra-to-claude-2     ││                                                                                                                │
+ new               ● menu││                                                                                                                │
+─────────────────────────││                                                                                                                │
+ agents           grouped││                                                                                                                │
+                         ││                                                                                                                │
+ ✓ astra-to-claude-2     ││                                                                                                                │
+   codex                 ││                                                                                                                │
+                         ││                                                                                                                │
+                         ││                                                                                                                │
+                         ││                                                                                                                │
+                         ││                                                                                                                │
+                         ││                                                                                                                │
+                         ││                                                                                                                │
+                         ││                                                                                                                │
+                         │└────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+                         │┌────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+                         ││⚓ gpt-6-astra·high │ 🧠-- ⚡45%wk │ 🚢0 🧪0 ⏸0 ⚠0 🪦0 📋0 │ 👁 NO-WATCH -- │ $-- │ 💤--                         │
+                        «│└────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘

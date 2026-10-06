@@ -1,0 +1,9 @@
+Herdr 0.7.4 clears a tab's zoom whenever it is split or left with one pane, so this run puts a co-tenant pane
+in the tab first. That keeps the zoom alive after the companion pane closes, so who released it is visible.
+[23:35:48] OWNED     w5:p1 companion w5:p3 (--chrome-zoomed): {"tab_id":"w5:t1","zoomed":true,"panes":["w5:p1","w5:p3","w5:p2"]}
+[23:35:48] NOT OWNED w6:p1 companion w6:p3 (no flag):         {"tab_id":"w6:t1","zoomed":true,"panes":["w6:p1","w6:p3","w6:p2"]}
+[23:35:52] Codex running (w5:p1 pid=16649, w6:p1 pid=16661); zoom: {"tab_id":"w5:t1","zoomed":true,"panes":["w5:p1","w5:p3","w5:p2"]} / {"tab_id":"w6:t1","zoomed":true,"panes":["w6:p1","w6:p3","w6:p2"]}
+[23:35:54] Codex quit, Claude started in both primaries
+[23:36:02] after the retirement window:
+  OWNED     w5:p1: {"tab_id":"w5:t1","zoomed":false,"panes":["w5:p1","w5:p2"]}  (companion w5:p3 gone; zoom released by renderer)
+  NOT OWNED w6:p1: {"tab_id":"w6:t1","zoomed":false,"panes":["w6:p1","w6:p2"]}  (companion w6:p3 gone; zoom left alone)

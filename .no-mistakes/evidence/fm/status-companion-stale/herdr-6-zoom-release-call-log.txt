@@ -1,0 +1,15 @@
+[23:36:31] OWNED w9:p1 (+companion w9:p2, --chrome-pane w9:p1 --chrome-zoomed): {"zoomed":true,"panes":["w9:p1","w9:p2"]}
+[23:36:31] NOT OWNED wA:p1 (+companion wA:p2, no --chrome-zoomed): {"zoomed":true,"panes":["wA:p1","wA:p2"]}
+[23:36:35] Codex running in both (27777, 27778)
+[23:36:37] Codex quit, Claude started
+[23:36:45] OWNED: {"zoomed":false,"panes":["w9:p1"]}; NOT OWNED: {"zoomed":false,"panes":["wA:p1"]}
+--- zoom calls made by OWNED renderer (pass-through log) ---
+23:36:39 --session fm-lab-stalebar-78026-6408 pane zoom w9:p1 --off
+--- zoom calls made by NOT-OWNED renderer ---
+(none)
+--- last process-info reads by OWNED renderer (shows one per ~1s tick until exit) ---
+23:36:37 --session fm-lab-stalebar-78026-6408 pane process-info --pane w9:p1
+23:36:37 --session fm-lab-stalebar-78026-6408 pane process-info --pane w9:p1
+23:36:38 --session fm-lab-stalebar-78026-6408 pane process-info --pane w9:p1
+23:36:38 --session fm-lab-stalebar-78026-6408 pane process-info --pane w9:p1
+23:36:39 --session fm-lab-stalebar-78026-6408 pane process-info --pane w9:p1

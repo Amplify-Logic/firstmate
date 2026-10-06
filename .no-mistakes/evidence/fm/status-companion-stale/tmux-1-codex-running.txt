@@ -1,0 +1,101 @@
++ T new-session -d -s primary -x 160 -y 40 -c /var/folders/2c/9sf1hvpn23q336b08gs1np0c0000gn/T//fm-lab.aIGZzQ/work -e FM_HOME=/var/folders/2c/9sf1hvpn23q336b08gs1np0c0000gn/T//fm-lab.aIGZzQ
++ env -u TMUX TMUX_TMPDIR=/var/folders/2c/9sf1hvpn23q336b08gs1np0c0000gn/T//fm-lab.aIGZzQ/tmux tmux -L fm-lab new-session -d -s primary -x 160 -y 40 -c /var/folders/2c/9sf1hvpn23q336b08gs1np0c0000gn/T//fm-lab.aIGZzQ/work -e FM_HOME=/var/folders/2c/9sf1hvpn23q336b08gs1np0c0000gn/T//fm-lab.aIGZzQ
+++ T display-message -p -t primary '#{pane_id}'
+++ env -u TMUX TMUX_TMPDIR=/var/folders/2c/9sf1hvpn23q336b08gs1np0c0000gn/T//fm-lab.aIGZzQ/tmux tmux -L fm-lab display-message -p -t primary '#{pane_id}'
++ P=%0
++ companion primary %0
++ local s=primary pane=%0
++ shift 2
++ T split-window -d -v -l 1 -t %0 -c /Users/larstolhurst/.no-mistakes/worktrees/9957e108f4d7/01M49HVXATJM6CZGFDQ5E4Q2V1 'exec env FM_HOME=/var/folders/2c/9sf1hvpn23q336b08gs1np0c0000gn/T//fm-lab.aIGZzQ FM_PRIMARY_HARNESS=codex /Users/larstolhurst/.no-mistakes/worktrees/9957e108f4d7/01M49HVXATJM6CZGFDQ5E4Q2V1/bin/fm-status-bar.sh --adapter codex --model gpt-6-astra --effort high --follow-pane %0 --follow-backend tmux '
++ env -u TMUX TMUX_TMPDIR=/var/folders/2c/9sf1hvpn23q336b08gs1np0c0000gn/T//fm-lab.aIGZzQ/tmux tmux -L fm-lab split-window -d -v -l 1 -t %0 -c /Users/larstolhurst/.no-mistakes/worktrees/9957e108f4d7/01M49HVXATJM6CZGFDQ5E4Q2V1 'exec env FM_HOME=/var/folders/2c/9sf1hvpn23q336b08gs1np0c0000gn/T//fm-lab.aIGZzQ FM_PRIMARY_HARNESS=codex /Users/larstolhurst/.no-mistakes/worktrees/9957e108f4d7/01M49HVXATJM6CZGFDQ5E4Q2V1/bin/fm-status-bar.sh --adapter codex --model gpt-6-astra --effort high --follow-pane %0 --follow-backend tmux '
++ sleep 3
+++ ts
+++ date +%H:%M:%S
++ echo '[23:31:39] panes after companion launch:'
+[23:31:39] panes after companion launch:
++ panes
++ T list-panes -a -F '#{session_name}:#{pane_id} pid=#{pane_pid} cmd=#{pane_current_command} h=#{pane_height}'
++ env -u TMUX TMUX_TMPDIR=/var/folders/2c/9sf1hvpn23q336b08gs1np0c0000gn/T//fm-lab.aIGZzQ/tmux tmux -L fm-lab list-panes -a -F '#{session_name}:#{pane_id} pid=#{pane_pid} cmd=#{pane_current_command} h=#{pane_height}'
+primary:%0 pid=12931 cmd=zsh h=38
+primary:%1 pid=12935 cmd=bash h=1
++ T send-keys -t %0 codex Enter
++ env -u TMUX TMUX_TMPDIR=/var/folders/2c/9sf1hvpn23q336b08gs1np0c0000gn/T//fm-lab.aIGZzQ/tmux tmux -L fm-lab send-keys -t %0 codex Enter
+++ seq 1 30
++ for i in '$(seq 1 30)'
++ sleep 1
++++ T display-message -p -t %0 '#{pane_pid}'
++++ env -u TMUX TMUX_TMPDIR=/var/folders/2c/9sf1hvpn23q336b08gs1np0c0000gn/T//fm-lab.aIGZzQ/tmux tmux -L fm-lab display-message -p -t %0 '#{pane_pid}'
+++ codex_under 12931
+++ local f=12931 n p c out=
+++ for _ in 1 2 3 4 5
+++ n=
+++ for p in '$f'
++++ pgrep -P 12931
+++ for c in '$(pgrep -P $p)'
+++ n=' 13395'
+++++ ps -o comm= -p 13395
++++ basename node
+++ '[' node = codex ']'
+++ f=' 13395'
+++ for _ in 1 2 3 4 5
+++ n=
+++ for p in '$f'
++++ pgrep -P 13395
+++ for c in '$(pgrep -P $p)'
+++ n=' 13396'
+++++ ps -o comm= -p 13396
++++ basename /Users/larstolhurst/.npm-global/lib/node_modules/@openai/codex/node_modules/@openai/codex-darwin-arm64/vendor/aarch64-apple-darwin/bin/codex
+++ '[' codex = codex ']'
+++ out=' 13396'
+++ f=' 13396'
+++ for _ in 1 2 3 4 5
+++ n=
+++ for p in '$f'
++++ pgrep -P 13396
+++ f=
+++ for _ in 1 2 3 4 5
+++ n=
+++ f=
+++ for _ in 1 2 3 4 5
+++ n=
+++ f=
+++ echo 13396
++ c=13396
++ '[' -n 13396 ']'
++ break
+++ ts
+++ date +%H:%M:%S
++ echo '[23:31:40] codex pids behind primary: 13396'
+[23:31:40] codex pids behind primary: 13396
++ sleep 4
+++ ts
+++ date +%H:%M:%S
++ echo '[23:31:44] panes with Codex running:'
+[23:31:44] panes with Codex running:
++ panes
++ T list-panes -a -F '#{session_name}:#{pane_id} pid=#{pane_pid} cmd=#{pane_current_command} h=#{pane_height}'
++ env -u TMUX TMUX_TMPDIR=/var/folders/2c/9sf1hvpn23q336b08gs1np0c0000gn/T//fm-lab.aIGZzQ/tmux tmux -L fm-lab list-panes -a -F '#{session_name}:#{pane_id} pid=#{pane_pid} cmd=#{pane_current_command} h=#{pane_height}'
+primary:%0 pid=12931 cmd=node h=38
+primary:%1 pid=12935 cmd=bash h=1
++ echo '--- companion row (capture-pane) ---'
+--- companion row (capture-pane) ---
++ T capture-pane -p -t primary.1
++ env -u TMUX TMUX_TMPDIR=/var/folders/2c/9sf1hvpn23q336b08gs1np0c0000gn/T//fm-lab.aIGZzQ/tmux tmux -L fm-lab capture-pane -p -t primary.1
+⚓ gpt-6-astra·high │ 🧠-- ⚡45%wk │ 🚢0 🧪0 ⏸0 ⚠0 🪦0 📋0 │ 👁 NO-WATCH -- │ $-- │ 💤--
++ echo '--- primary (top 12 lines) ---'
+--- primary (top 12 lines) ---
++ T capture-pane -p -t %0
++ env -u TMUX TMUX_TMPDIR=/var/folders/2c/9sf1hvpn23q336b08gs1np0c0000gn/T//fm-lab.aIGZzQ/tmux tmux -L fm-lab capture-pane -p -t %0
++ head -12
+╭─────────────────────────────────────────────────────────╮
+  ✨ Update available! 0.154.0 -> 0.160.0
+
+  Release notes: https://github.com/openai/codex/releases/latest
+
+› 1. Update now (runs `npm install -g @openai/codex`)
+  2. Skip
+  3. Skip until next version
+
+  Press enter to continue
+
+

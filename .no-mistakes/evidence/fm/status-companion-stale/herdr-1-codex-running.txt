@@ -1,0 +1,8 @@
+[23:34:02] herdr lab fm-lab-stalebar-78026-6408: companion w1:p2 follows w1:p1
+[23:34:05] panes: w1:p1 tab=w1:t1 w1:p2 tab=w1:t1 
+--- companion row (pane read w1:p2) ---
+⚓ gpt-6-astra·high │ 🧠-- ⚡45%wk │ 🚢0 🧪0 ⏸0 ⚠0 🪦-
+[23:34:06] Codex running behind w1:p1: pid 82023; process-info: {"pane_id":"w1:p1","shell_pid":79090,"fg":["codex","node"]}
+[23:34:10] panes with Codex running: w1:p1 tab=w1:t1 w1:p2 tab=w1:t1 
+--- companion row ---
+⚓ gpt-6-astra·high │ 🧠-- ⚡45%wk │ 🚢0 🧪0 ⏸0 ⚠0 🪦-

@@ -1,0 +1,10 @@
+[23:34:16] sent Ctrl-Z to w1:p1 as key 'ctrl+z'
+[23:34:18] process-info: {"pane_id":"w1:p1","shell_pid":79090,"fg":["zsh"]}
+[23:34:18] states: 79090 Ss+ -zsh;82021 T node;codex;
+--- primary tail ---
+  Press enter to continue
+zsh: suspended  codex
+larstolhurst@Larss-MacBook-Air work %
+[23:34:27] after ~11s suspended: panes: w1:p1 tab=w1:t1 w1:p2 tab=w1:t1 
+--- companion row still present ---
+⚓ gpt-6-astra·high │ 🧠-- ⚡45%wk │ 🚢0 🧪0 ⏸0 ⚠0 🪦-

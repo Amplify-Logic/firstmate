@@ -1,0 +1,8 @@
+[23:33:05] BASE COMMIT 17508a14 companion on %4
+[23:33:06] codex running: 47444
+[23:33:12] codex after quit: ''
+[23:33:24] 12s after starting Claude:
+base:%4 pid=47379 cmd=claude.exe h=28
+base:%5 pid=47400 cmd=bash h=1
+--- stale companion row under Claude (base) ---
+⚓ gpt-6-astra·high │ 🧠-- ⚡45%wk │ 🚢0 🧪0 ⏸0 ⚠0 🪦0 📋0 │ 👁 NO-WATCH -- │ $-- │ 💤--
