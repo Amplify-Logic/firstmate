@@ -1,0 +1,3 @@
+== herdr: companion running, primary w1:p1 still only a shell (never armed), zoomed by launcher
+[{"pane_id":"w1:p1"},{"pane_id":"w1:p2"}]
+{"zoomed":true}

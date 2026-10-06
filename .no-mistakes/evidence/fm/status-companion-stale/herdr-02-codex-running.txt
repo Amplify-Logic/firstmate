@@ -1,0 +1,16 @@
+== herdr: real Codex started in w1:p1
+[{"pane_id":"w1:p1"},{"pane_id":"w1:p2"}]
+{"zoomed":true}
+-- process-info w1:p1:
+{"shell_pid":57992,"fg":[{"pid":68093,"name":"codex"},{"pid":68092,"name":"node"}]}
+-- companion pane w1:p2 visible text:
+-- companion pane w1:p2 visible text:
+⚓ gpt-6-astra·high │ 🧠-- ⚡45%wk │ 🚢0 🧪0 ⏸0 ⚠0 🪦-
+-- primary w1:p1 (Codex) visible text:
+  Cannot use the background server
+  Experimental feature request failed
+  1. Run without daemon this time
+     Restart with these settings (disabled)
+› 2. Cancel
+-- w1:p1 border title (chrome row) via pane get:
+{"pane_id":"w1:p1","label":null,"title":null,"agent_status":"idle"}

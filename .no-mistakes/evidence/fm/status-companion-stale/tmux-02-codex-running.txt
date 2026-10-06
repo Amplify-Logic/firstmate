@@ -1,0 +1,16 @@
+== real Codex running in %0; companion bar below it
+%0 cmd=node h=28
+%1 cmd=bash h=1
+-- process tree under pane shell:
+28174 28173 bash
+-- full window capture:
+
+
+
+
+
+
+
+
+-- companion row:
+⚓ gpt-6-astra·high │ 🧠-- ⚡45%wk │ 🚢0 🧪0 ⏸0 ⚠0 🪦0 📋0 │ 👁 NO-WATCH -- │ $-- │ 💤--

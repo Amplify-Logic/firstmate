@@ -1,0 +1,13 @@
+== herdr: Codex suspended with Ctrl-Z for ~11s (>3 refreshes); foreground group is the shell only
+{"shell_pid":57992,"fg":[{"pid":57992,"name":"zsh"}]}
+68092 T    node
+68093 T    /Users/larstolhurst/.npm-global/lib/node_modules/@openai/codex/node_modules/@openai/codex-darwin-arm64/vendor/aarch64-apple-darwin/bin/codex
+-- panes:
+[{"pane_id":"w1:p1"},{"pane_id":"w1:p2"}]
+{"zoomed":true}
+-- companion row:
+⚓ gpt-6-astra·high │ 🧠-- ⚡45%wk │ 🚢0 🧪0 ⏸0 ⚠0 🪦-
+-- primary tail:
+zsh: suspended  codex
+larstolhurst@Larss-MacBook-Air 01M49M8WW5S5MP0W1BRG5D
+9PQ0 %

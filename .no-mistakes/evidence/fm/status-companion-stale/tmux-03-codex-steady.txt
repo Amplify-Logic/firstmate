@@ -1,0 +1,3 @@
+== codex alive, 8s later (armed, must not retire)
+%0 cmd=node h=28
+%1 cmd=bash h=1

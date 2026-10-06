@@ -1,0 +1,3 @@
+== t+6s: companion started while the pane still runs only a shell (never armed)
+%0 cmd=bash h=28
+%1 cmd=bash h=1

@@ -1,0 +1,24 @@
+== herdr: Codex killed and Claude started in the same pane w1:p1 at 00:15:53
+t+1s: panes=["w1:p1","w1:p2"] zoomed=true
+t+2s: panes=["w1:p1","w1:p2"] zoomed=true
+t+3s: panes=["w1:p1","w1:p2"] zoomed=true
+t+4s: panes=["w1:p1"] zoomed=false
+t+5s: panes=["w1:p1"] zoomed=false
+t+6s: panes=["w1:p1"] zoomed=false
+t+7s: panes=["w1:p1"] zoomed=false
+t+8s: panes=["w1:p1"] zoomed=false
+t+9s: panes=["w1:p1"] zoomed=false
+t+10s: panes=["w1:p1"] zoomed=false
+-- process-info w1:p1:
+{"shell_pid":57992,"fg":[{"pid":92933,"name":"node"},{"pid":82342,"name":"claude.exe"}]}
+-- primary w1:p1 (Claude) visible text, head:
+▗ ▗   ▖ ▖  Claude Code v2.1.292
+           Opus 5.5 (1M context) · Claude Team
+ ▘▘   ▝▝   ~/…/01M49M8WW5S5MP0W1BRG5D9PQ0
+                                 ◐ medium · /effort
+─────────────────────────────────────────────────────
+❯ Try "refactor fm-test-run.sh"
+─────────────────────────────────────────────────────
+  ⚠ Transcript saving is off — inherited CLAUDE_CO…
+-- occurrences of gpt-6-astra anywhere in session panes:
+w1:p1: 0
