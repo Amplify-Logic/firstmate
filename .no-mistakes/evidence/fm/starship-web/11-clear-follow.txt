@@ -1,0 +1,7 @@
+waitFor ok (0ms): !/red/.test(document.getElementById('items').textContent)
+eval items after /clear: ["msg user: /clear"]
+eval state: "Ready"
+shot /Users/larstolhurst/.no-mistakes/evidence/01M49HVXTQMYERRNX9TPQJNMEM/11-after-clear.png
+waitFor ok (5533ms): document.querySelector('#state .label').textContent==='Ready' && /after-clear-ok/.test(([...document.querySelectorAll('#items .msg.assistant')].pop()||{}).textContent||'')
+eval items after new message: ["msg user: /clear","msg user: Reply with exactly: after-clear-ok","msg assistant: after-clear-ok"]
+shot /Users/larstolhurst/.no-mistakes/evidence/01M49HVXTQMYERRNX9TPQJNMEM/12-after-clear-conversation.png

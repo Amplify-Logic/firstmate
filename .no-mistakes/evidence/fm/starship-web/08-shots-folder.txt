@@ -1,0 +1,7 @@
+total 8
+drwx------@ 3 larstolhurst  staff   96 Oct  6 23:41 .
+drwxr-xr-x@ 3 larstolhurst  staff   96 Oct  6 23:41 ..
+-rw-------@ 1 larstolhurst  staff  123 Oct  6 23:41 20261006T214100251232Z-edc2f569.png
+700 /var/folders/2c/9sf1hvpn23q336b08gs1np0c0000gn/T//fm-lab.ZSr8hz/state/desk-voice/shots
+600 /var/folders/2c/9sf1hvpn23q336b08gs1np0c0000gn/T//fm-lab.ZSr8hz/state/desk-voice/shots/20261006T214100251232Z-edc2f569.png
+/var/folders/2c/9sf1hvpn23q336b08gs1np0c0000gn/T//fm-lab.ZSr8hz/state/desk-voice/shots/20261006T214100251232Z-edc2f569.png: PNG image data, 48 x 48, 8-bit/color RGB, non-interlaced

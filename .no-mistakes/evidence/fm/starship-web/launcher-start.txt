@@ -1,0 +1,14 @@
+$ FM_HOME=$LAB bin/fm-web.sh start --port 18767
+http://127.0.0.1:18767/?token=<redacted>
+$ bin/fm-web.sh status
+running on 127.0.0.1:18767 (pid 94423)
+$ lsof listen
+Python 127.0.0.1:18767
+$ bin/fm-web.sh stop
+stopped
+$ bin/fm-web.sh status
+stopped
+exit 3
+$ bin/fm-web.sh url
+fm-web: not running; start it with fm-web.sh start
+exit 1

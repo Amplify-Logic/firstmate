@@ -1,0 +1,7 @@
+waitFor ok (2ms): document.querySelectorAll('#items .msg').length>=2 && document.querySelector('#state .label').textContent!=='Connecting'
+eval address after sign-in: "http://127.0.0.1:18767/"
+eval cookie: "cookie not visible to JS (HttpOnly)"
+eval header state: "Ready"
+eval items: ["msg user: Take the helm for this lab home (run the session start), then reply with one short line.","quiet: Bash · Run firstmate session start{\n  \"command\": \"bin/fm-session-start.sh 2>&1 | tail -c 6","quiet: Bash · Check session lock and state{\n  \"command\": \"ls state/ 2>/dev/null | head; cat state","msg assistant: Captain, I'm at the helm. The fleet is empty and nothing needs your call; the only notices"]
+eval fleet: ["Nothing here","Nothing here","Nothing here"]
+shot /Users/larstolhurst/.no-mistakes/evidence/01M49HVXTQMYERRNX9TPQJNMEM/01-signed-in-light.png

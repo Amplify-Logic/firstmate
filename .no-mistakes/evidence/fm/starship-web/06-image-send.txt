@@ -1,0 +1,9 @@
+eval drop: "dropped png + txt"
+waitFor ok (11ms): document.querySelectorAll('#thumbs .thumb').length>=1
+eval thumbnails (txt must be ignored): 1
+shot /Users/larstolhurst/.no-mistakes/evidence/01M49HVXTQMYERRNX9TPQJNMEM/06-image-attached.png
+waitFor ok (2023ms): document.getElementById('result').textContent && !/Sending/.test(document.getElementById('result').textContent)
+eval delivery result: "Typed into the first mate's chat."
+waitFor ok (2514ms): document.querySelector('#state .label').textContent==='Ready' && /colour/.test([...document.querySelectorAll('#items .msg.user')].pop().textContent) && [...document.querySelectorAll('#items > *')].pop().classList.contains('assistant')
+eval last items: ["msg assistant: Captain, shipshape.","msg user: What single colour fills the attached image? Answer in one word, no tools. Screenshots: /var/folders/2c/9sf1hvpn23q336b0","msg assistant: Captain, I can't tell you the colour. I only got the file path, not the image itself, and you asked me not to use tools,"]
+shot /Users/larstolhurst/.no-mistakes/evidence/01M49HVXTQMYERRNX9TPQJNMEM/07-image-reply.png

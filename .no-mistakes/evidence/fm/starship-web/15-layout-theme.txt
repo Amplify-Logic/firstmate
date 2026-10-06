@@ -1,0 +1,7 @@
+eval light body bg: "rgb(247, 247, 245)"
+shot /Users/larstolhurst/.no-mistakes/evidence/01M49HVXTQMYERRNX9TPQJNMEM/15-light-theme.png
+eval dark body bg: "rgb(20, 20, 22)"
+eval narrow: toggle display, aside display: ["block","none"]
+shot /Users/larstolhurst/.no-mistakes/evidence/01M49HVXTQMYERRNX9TPQJNMEM/16-narrow-fleet-closed.png
+eval aside after Fleet click: "block"
+shot /Users/larstolhurst/.no-mistakes/evidence/01M49HVXTQMYERRNX9TPQJNMEM/17-narrow-fleet-open.png

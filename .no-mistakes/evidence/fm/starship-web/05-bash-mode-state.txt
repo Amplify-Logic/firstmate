@@ -1,0 +1,6 @@
+waitFor ok (0ms): [...document.querySelectorAll('#items > *')].some(e=>/bash-mode-probe/.test(e.textContent))
+eval last items: ["quiet: Note · bash input<bash-input>echo bash-mode-probe</bash-input>","quiet: Note · bash stdout<bash-stdout>bash-mode-probe</bash-stdout><bash-stderr></bash-","msg assistant: Captain, shipshape."]
+eval state t+0: "Ready"
+eval state t+5s: "Ready"
+eval state t+10s: "Ready"
+shot /Users/larstolhurst/.no-mistakes/evidence/01M49HVXTQMYERRNX9TPQJNMEM/05-after-bash-mode-ready.png

@@ -1,0 +1,8 @@
+waitFor ok (2013ms): document.getElementById('result').textContent && !/Sending/.test(document.getElementById('result').textContent)
+eval delivery result: "Typed into the first mate's chat."
+eval input after send: ""
+waitFor ok (0ms): document.querySelector('#state .label').textContent==='Working'
+shot /Users/larstolhurst/.no-mistakes/evidence/01M49HVXTQMYERRNX9TPQJNMEM/02-working.png
+waitFor ok (4022ms): document.querySelector('#state .label').textContent==='Ready' && document.querySelectorAll('#items .msg.assistant').length>=2
+eval last reply: {"html":"<p>Captain, here are three options for what to do next, listed on screen.</p><ol><li>Re-certify the three updated worker tools so they're back on verified versions, and use this <strong>bold</strong> step first.</li></ol><ol start=\"2\"><li>Set up your project list and preferences, since this home has neither yet.</li></ol><ol start=\"3\"><li>Leave things as they are until you have work to send.</li></ol>","ols":[null,"2","3"],"lis":3,"strong":["bold"]}
+shot /Users/larstolhurst/.no-mistakes/evidence/01M49HVXTQMYERRNX9TPQJNMEM/03-reply-light.png

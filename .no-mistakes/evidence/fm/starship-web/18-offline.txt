@@ -1,0 +1,3 @@
+waitFor ok (1ms): document.querySelector('#state .label').textContent==='Not running'
+eval state after primary stopped: "Not running"
+shot /Users/larstolhurst/.no-mistakes/evidence/01M49HVXTQMYERRNX9TPQJNMEM/18-primary-stopped.png

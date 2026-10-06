@@ -1,0 +1,22 @@
+GET / without token or cookie                                          -> 403
+GET /api/conversation without cookie                                   -> 403
+GET /?token=<wrong>                                                    -> 403
+sign-in GET /?token=<real> (headers):
+HTTP/1.1 303 See Other
+Location: /
+Set-Cookie: fm_web_18767=<redacted>; Path=/; HttpOnly; SameSite=Strict; Max-Age=31536000
+GET /api/conversation with cookie                                      -> 200
+GET /api/fleet with cookie                                             -> 200
+DNS-rebinding: cookie + Host: evil.example:18767                       -> 403
+Host: localhost:18767 (dropped spelling)                               -> 403
+Host: 127.0.0.1:9999 (wrong port)                                      -> 403
+POST /api/send with cookie but no CSRF header                          -> 403
+POST /api/send CSRF ok, Origin: http://evil.example                    -> 403
+POST /api/send CSRF ok, Origin: http://localhost:18767                 -> 403
+POST /api/send CSRF ok, Sec-Fetch-Site: cross-site                     -> 403
+POST /api/send no cookie, CSRF guessed                                 -> 403
+POST /api/send with a non-image attachment                             -> 400
+listening sockets:
+  Python 127.0.0.1:18767
+connect via LAN address 192.168.178.103:
+  000 (000 = refused)
