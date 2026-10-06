@@ -49,6 +49,23 @@ final class TapKeyTests: XCTestCase {
         XCTAssertNil(tap(&key, down: lastKey + 0.45, up: lastKey + 0.5), "and a second one just after it")
     }
 
+    /// "?" typed with Right Shift at the end of a sentence in a terminal: the
+    /// shot of 6 Oct 2026, 20:25:58 UTC.
+    func testShiftedPunctuationIsNotATap() {
+        var key = TapKey.rightShift
+        // After a long pause: the "/" pressed while Shift is down makes it a shortcut.
+        key.keyPressed(at: at(0))
+        XCTAssertFalse(key.update(keyCode: 60, flags: rightShiftDown, at: at(5), allowed: [], limit: limit))
+        key.keyPressed(at: at(5.05))
+        XCTAssertFalse(key.update(keyCode: 60, flags: [], at: at(5.1), allowed: [], limit: limit),
+                       "Shift held with a key is a shortcut, not a tap")
+        XCTAssertFalse(key.takeSettled(tap: at(5.1)))
+        // Right after typing, with the "/" press itself never reaching the floater.
+        key.keyPressed(at: at(10))
+        XCTAssertNil(tap(&key, down: 10.2, up: 10.3), "a Shift pressed straight after typing is typing")
+        XCTAssertFalse(key.takeSettled(tap: at(10.3)))
+    }
+
     func testTapThatTypingResumesAfterIsDropped() {
         var key = TapKey.rightShift
         // A pause long enough to pass the quiet window, then a brush and "?".
