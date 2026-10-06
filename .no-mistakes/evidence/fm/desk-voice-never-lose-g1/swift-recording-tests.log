@@ -1,0 +1,25 @@
+Test Case '-[DeskFloaterTests.RecordingTests testDurationOfAFinishedRecording]' passed (0.004 seconds).
+Test Case '-[DeskFloaterTests.RecordingTests testDurationOfATenMinuteRecordingHasNoCap]' started.
+Test Case '-[DeskFloaterTests.RecordingTests testDurationOfATenMinuteRecordingHasNoCap]' passed (0.022 seconds).
+Test Case '-[DeskFloaterTests.RecordingTests testEmptyTranscriptsAreKeptOnlyWhenLongEnoughToHoldWords]' started.
+Test Case '-[DeskFloaterTests.RecordingTests testEmptyTranscriptsAreKeptOnlyWhenLongEnoughToHoldWords]' passed (0.000 seconds).
+Test Case '-[DeskFloaterTests.RecordingTests testFailedTranscriptionsKeepEvenAShortAnswer]' started.
+Test Case '-[DeskFloaterTests.RecordingTests testFailedTranscriptionsKeepEvenAShortAnswer]' passed (0.003 seconds).
+Test Case '-[DeskFloaterTests.RecordingTests testLaunchSavesARecordingLeftBehindAndShowsTheRetry]' started.
+Test Case '-[DeskFloaterTests.RecordingTests testLaunchSavesARecordingLeftBehindAndShowsTheRetry]' passed (0.612 seconds).
+Test Case '-[DeskFloaterTests.RecordingTests testRetriesFollowTheScheduleThenStop]' started.
+Test Case '-[DeskFloaterTests.RecordingTests testRetriesFollowTheScheduleThenStop]' passed (0.002 seconds).
+Test Case '-[DeskFloaterTests.RecordingTests testRetryLinesAreRead]' started.
+Test Case '-[DeskFloaterTests.RecordingTests testRetryLinesAreRead]' passed (0.001 seconds).
+Test Case '-[DeskFloaterTests.RecordingTests testTheFileNameCarriesThePurpose]' started.
+Test Case '-[DeskFloaterTests.RecordingTests testTheFileNameCarriesThePurpose]' passed (0.002 seconds).
+Test Suite 'RecordingTests' passed at 2026-10-06 22:28:45.957.
+	 Executed 11 tests, with 0 failures (0 unexpected) in 3.023 (3.024) seconds
+Test Suite 'DeskFloaterPackageTests.xctest' passed at 2026-10-06 22:28:45.957.
+	 Executed 11 tests, with 0 failures (0 unexpected) in 3.023 (3.024) seconds
+Test Suite 'Selected tests' passed at 2026-10-06 22:28:45.957.
+	 Executed 11 tests, with 0 failures (0 unexpected) in 3.023 (3.028) seconds
+◇ Test run started.
+↳ Testing Library Version: 1501
+↳ Target Platform: arm64e-apple-macos14.0
+✔ Test run with 0 tests in 0 suites passed after 0.001 seconds.

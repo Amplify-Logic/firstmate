@@ -1,0 +1,20 @@
+## Adversarial: the mailbox cannot be written (state/desk-voice/inbox is a plain file, not a folder)
+keep -> /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.qKAVEo/state/desk-voice/unsent/20261006T203450Z-0fcafe20.wav
+$ fm-desk-voice.sh retry /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.qKAVEo/state/desk-voice/unsent/20261006T203450Z-0fcafe20.wav
+mkdir: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.qKAVEo/state/desk-voice/inbox: File exists
+fm-desk-voice: cannot create desk-voice mailbox dirs
+[exit 1]
+-rw-------@ 151 /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.qKAVEo/state/desk-voice/unsent/20261006T203450Z-0fcafe20.json
+-rw-------@ 160044 /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.qKAVEo/state/desk-voice/unsent/20261006T203450Z-0fcafe20.wav
+$ fm-desk-voice.sh recordings
+/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.qKAVEo/state/desk-voice/unsent/20261006T203450Z-0fcafe20.wav	firstmate	1	20261006T203450Z	transcription failed
+[exit 0]
+
+## Mailbox restored: the same recording now delivers and is removed
+$ fm-desk-voice.sh retry /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.qKAVEo/state/desk-voice/unsent/20261006T203450Z-0fcafe20.wav
+fm-desk-voice: the primary's chat pane is not reachable; saving to the mailbox instead
+delivered	/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.qKAVEo/state/desk-voice/unsent/20261006T203450Z-0fcafe20.wav	mailbox: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.qKAVEo/state/desk-voice/inbox/20261006T203452Z-b9f5604a.json
+[exit 0]
+recording removed after delivery
+$ fm-desk-voice.sh recordings
+[exit 0]

@@ -1,0 +1,30 @@
+  ⎿  Failed with non-blocking status code: /bin/sh: lavish-axi: command not found
+  ⎿  SessionStart:startup hook error
+  ⎿  Failed with non-blocking status code: /bin/sh: ${CLAUDE_PLUGIN_ROOT}/hooks/run-hook.cmd: No such file or directory
+❯ Run bin/fm-session-start.sh once, then reply only "ready". Do nothing else.
+⏺ Bash(bin/fm-session-start.sh 2>&1 | tail -c 4000)
+  ⎿  NOT re-read any of them after reading this digest, and do NOT bulk-read
+     data/backlog.md or state/*.status: re-reading everything defeats the entire
+     point of this command.
+     … +74 lines (ctrl+o to expand)
+  ⎿  Allowed by auto mode classifier
+⏺ ready
+✻ Crunched for 20s · done 10:32 PM
+❯ [firstmate desk-voice] a desk voice message is waiting in the mailbox. Run bin/fm-wake-drain.sh now to pick it up; it stays queued until handled and
+  acknowledged.
+⏺ Bash(bin/fm-wake-drain.sh 2>&1 | tail -c 5000)
+  ⎿  1791318791 1       check   desk-voice      desk-voice:
+     /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.6xRl2G/state/desk-voice/inbox/20261006T203311Z-5828baf8
+     .json
+     WAKE_ACK_REQUIRED: after handling completes run bin/fm-wake-drain.sh --ack-through 1 --recovery-generation 18781.1791318792.fWhp1S
+  ⎿  Allowed by auto mode classifier
+⏺ Bash(bin/fm-desk-voice.sh drain 2>&1 | tail -c 5000)
+  ⎿  Really long voice note text that went to the mailbox
+  ⎿  Allowed by auto mode classifier
+⏺ Bash(bin/fm-wake-drain.sh --ack-through 1 --recovery-generation 18781.1791318792.fWhp1S 2>&1 | tail -c 2000)
+✢ Zesting… (23s · ↓ 757 tokens)
+  ⎿  Tip: Double-tap esc to rewind the code and/or conversation to a previous point in time
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏵⏵ auto mode on (shift+tab to cycle) · ← 2 agents

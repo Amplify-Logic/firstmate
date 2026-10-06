@@ -1,0 +1,19 @@
+ok - fm-deepgram-tts: refuses when the key is absent
+ok - fm-deepgram-stt: a ten-minute recording is uploaded whole, with a bounded, retried request
+ok - fm-deepgram-stt: a request that times out fails instead of hanging
+ok - fm-desk-voice: deliver, wake, pending, drain
+ok - fm-desk-voice keep/retry: a recording is kept, private, until its words are delivered
+ok - fm-desk-voice retry: a ten-minute recording is transcribed and delivered whole
+ok - fm-desk-voice retry: dictation returns its words to the floater, never to Firstmate
+ok - fm-desk-voice keep: an undelivered recording is never removed, however old or many
+ok - fm-desk-voice retry: a mailbox that cannot save leaves the recording saved
+ok - fm-desk-voice retry/keep: only saved audio recordings are touched
+ok - fm-desk-voice retry: one retry at a time, the other is told it is busy
+fm-desk-voice: the primary's chat pane is not reachable; saving to the mailbox instead
+ok - fm-desk-voice send: no live primary falls back to the mailbox
+fm-desk-voice: the primary's chat pane is not reachable; saving to the mailbox instead
+ok - fm-desk-voice: a mailbox message rings the primary as soon as its chat is free
+fm-desk-voice: the primary's chat pane is not reachable; saving to the mailbox instead
+fm-desk-voice: the primary's chat pane is not reachable; saving to the mailbox instead
+ok - fm-desk-voice: the mailbox ring stops once the message is drained, and never rings in away mode
+ok - fm-inbox note: a new captain note rings the busy primary within seconds and stays queued

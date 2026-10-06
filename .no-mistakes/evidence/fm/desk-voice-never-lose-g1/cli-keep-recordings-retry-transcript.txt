@@ -1,0 +1,69 @@
+## A 10-minute talk-to-Firstmate recording whose transcription failed is kept
+keep -> /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.qKAVEo/state/desk-voice/unsent/20261006T203421Z-d04d0665.wav
+-rw-------@ 151 /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.qKAVEo/state/desk-voice/unsent/20261006T203421Z-d04d0665.json
+-rw-------@ 19200044 /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.qKAVEo/state/desk-voice/unsent/20261006T203421Z-d04d0665.wav
+700 /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.qKAVEo/state/desk-voice/unsent
+$ fm-desk-voice.sh recordings
+/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.qKAVEo/state/desk-voice/unsent/20261006T203421Z-d04d0665.wav	firstmate	1	20261006T203421Z	transcription failed
+[exit 0]
+
+## Deepgram down: retry keeps it and counts the attempt
+$ fm-desk-voice.sh retry
+unsent	/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.qKAVEo/state/desk-voice/unsent/20261006T203421Z-d04d0665.wav	2	transcription failed: Deepgram listen failed HTTP 502
+[exit 0]
+
+## Deepgram hears nothing: still kept
+$ fm-desk-voice.sh retry /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.qKAVEo/state/desk-voice/unsent/20261006T203421Z-d04d0665.wav
+unsent	/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.qKAVEo/state/desk-voice/unsent/20261006T203421Z-d04d0665.wav	3	no speech heard
+[exit 0]
+
+## Mailbox cannot be written (inbox read-only): retry must NOT delete the recording
+$ fm-desk-voice.sh retry /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.qKAVEo/state/desk-voice/unsent/20261006T203421Z-d04d0665.wav
+fm-desk-voice: the primary's chat pane is not reachable; saving to the mailbox instead
+delivered	/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.qKAVEo/state/desk-voice/unsent/20261006T203421Z-d04d0665.wav	mailbox: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.qKAVEo/state/desk-voice/inbox/20261006T203425Z-a88d1265.json
+[exit 0]
+ls: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.qKAVEo/state/desk-voice/unsent/20261006T203421Z-d04d0665.json: No such file or directory
+ls: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.qKAVEo/state/desk-voice/unsent/20261006T203421Z-d04d0665.wav: No such file or directory
+
+## Mailbox writable again: retry delivers the whole note, removes the recording
+$ fm-desk-voice.sh retry /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.qKAVEo/state/desk-voice/unsent/20261006T203421Z-d04d0665.wav
+gone	/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.qKAVEo/state/desk-voice/unsent/20261006T203421Z-d04d0665.wav
+[exit 0]
+No such file or directory
+$ fm-desk-voice.sh pending
+/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.qKAVEo/state/desk-voice/inbox/20261006T203425Z-a88d1265.json
+[exit 0]
+
+## retry again: gone
+$ fm-desk-voice.sh retry /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.qKAVEo/state/desk-voice/unsent/20261006T203421Z-d04d0665.wav
+gone	/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.qKAVEo/state/desk-voice/unsent/20261006T203421Z-d04d0665.wav
+[exit 0]
+
+## Dictation is kept and only returned as words, never sent
+keep -> /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.qKAVEo/state/desk-voice/unsent/20261006T203427Z-825894f6.wav
+$ fm-desk-voice.sh retry
+transcript	/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.qKAVEo/state/desk-voice/unsent/20261006T203427Z-825894f6.wav	Dear team, the release is Friday
+[exit 0]
+$ fm-desk-voice.sh recordings
+[exit 0]
+
+## Adversarial: retry refuses paths outside the unsent folder
+$ fm-desk-voice.sh retry /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.qKAVEo/state/desk-voice/unsent/../../../note.json
+fm-desk-voice: not a saved recording in /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.qKAVEo/state/desk-voice/unsent: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.qKAVEo/state/desk-voice/unsent/../../../note.json
+[exit 2]
+$ fm-desk-voice.sh retry /etc/hosts
+fm-desk-voice: not a saved recording in /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.qKAVEo/state/desk-voice/unsent: /etc/hosts
+[exit 2]
+
+## Stand-in Deepgram request log (whole file uploaded, bounded request)
+uploaded= 19200044 args: --connect-timeout 15 --max-time 312 --retry 2
+uploaded= 19200044 args: --connect-timeout 15 --max-time 312 --retry 2
+uploaded= 19200044 args: --connect-timeout 15 --max-time 312 --retry 2
+uploaded=   96044 args: --connect-timeout 15 --max-time 120 --retry 2
+
+## Note on the "inbox read-only" step above
+That fixture was ineffective: deliver's ensure_dirs chmods the inbox back to 0700 before writing, so the
+mailbox write really succeeded ("pending" lists it and its transcript is "The whole ten minute note about the
+finances PR"). The recording was removed only because its words were saved. The genuine mailbox-cannot-save
+case is in cli-retry-mailbox-failure-keeps-recording.txt (the inbox replaced by a plain file) and in
+test_desk_voice_retry_keeps_the_recording_when_the_mailbox_cannot_save; in both the recording stays saved.
