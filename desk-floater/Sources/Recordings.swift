@@ -5,7 +5,8 @@ import Foundation
 /// One that cannot be transcribed, comes back with no words although it is
 /// long enough to hold some, or cannot be delivered is handed to
 /// `bin/fm-desk-voice.sh keep`, which saves it in the home's private
-/// `state/desk-voice/unsent/`, and is tried again on `retryDelays`.
+/// `state/desk-voice/unsent/`. A talk-to-Firstmate recording is tried again on
+/// `retryDelays`; a dictation waits for a manual retry.
 enum Recording {
     /// A recording this long that comes back with no words is kept: words may
     /// be in it that were missed. A shorter one is a stray press.
@@ -35,9 +36,10 @@ enum Recording {
     }
 
     /// How long a recording lasts. A file left unfinished by a floater that
-    /// stopped mid-capture is measured by its size.
+    /// stopped mid-capture, whose header is unreadable or reports no length,
+    /// is measured by its size.
     static func duration(of url: URL) -> TimeInterval {
-        if let file = try? AVAudioFile(forReading: url), file.processingFormat.sampleRate > 0 {
+        if let file = try? AVAudioFile(forReading: url), file.processingFormat.sampleRate > 0, file.length > 0 {
             return Double(file.length) / file.processingFormat.sampleRate
         }
         let size = (try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? NSNumber)?
@@ -74,8 +76,6 @@ enum SendOutcome {
 enum RetryResult: Equatable {
     /// Talk to Firstmate: the words went, with this status line.
     case delivered(status: String)
-    /// Dictation: the words, to put on the clipboard.
-    case transcript(String)
     /// Still not delivered after this many attempts; kept.
     case unsent(attempts: Int)
     /// Another retry holds the lock.
@@ -90,8 +90,6 @@ enum RetryResult: Equatable {
         switch cols[0] {
         case "delivered" where cols.count >= 3:
             return .delivered(status: SendOutcome.status(cols[2]) ?? SendOutcome.savedForFirstmate)
-        case "transcript" where cols.count >= 3:
-            return .transcript(cols[2...].joined(separator: " "))
         case "unsent" where cols.count >= 3:
             return Int(cols[2]).map { .unsent(attempts: $0) }
         case "busy":

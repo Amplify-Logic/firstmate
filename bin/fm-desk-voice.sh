@@ -128,9 +128,9 @@
 # worth keeping, or delivery fails, it hands the audio to keep, which moves it
 # into state/desk-voice/unsent/ (folder 0700, files 0600) beside a small JSON
 # record of its purpose (talk to Firstmate, or dictation), how many attempts
-# it has had, and why the last one failed, and prints the saved path. Each
-# keep prunes the folder to the newest FM_DESK_UNSENT_KEEP (default 20)
-# recordings and drops any older than FM_DESK_UNSENT_DAYS (default 30) days.
+# it has had, and why the last one failed, and prints the saved path. A saved
+# recording is never removed automatically: only once retry delivers its words
+# (or prints them, for dictation), or when the owner deletes it.
 # recordings lists them oldest first, one line each:
 #   <path> TAB <purpose> TAB <attempts> TAB <saved-at> TAB <last reason>
 # retry transcribes the named saved recordings again (every saved one when
@@ -801,7 +801,8 @@ send() {
   for image in ${ARG_IMAGES[@]+"${ARG_IMAGES[@]}"}; do
     image_args+=(--image "$image")
   done
-  path=$(deliver --source "$source" ${image_args[@]+"${image_args[@]}"} -- "$text")
+  path=$(deliver --source "$source" ${image_args[@]+"${image_args[@]}"} -- "$text") \
+    || die "cannot save to the mailbox"
   printf 'mailbox: %s\n' "$path"
 }
 
@@ -936,26 +937,6 @@ os.replace(tmp, path)
 PY
 }
 
-prune_unsent() {
-  local keep=${FM_DESK_UNSENT_KEEP:-20} days=${FM_DESK_UNSENT_DAYS:-30} excess f
-  local -a all=()
-  while IFS= read -r f; do
-    [ -n "$f" ] && all+=("$f")
-  done < <(find "$UNSENT" -maxdepth 1 -type f ! -name '*.json' ! -name '.*' -mtime +"$days" 2>/dev/null)
-  for f in ${all[@]+"${all[@]}"}; do
-    rm -f "$f" "${f%.*}.json"
-  done
-  all=()
-  while IFS= read -r f; do
-    [ -n "$f" ] && all+=("$f")
-  done < <(unsent_audio)
-  excess=$(( ${#all[@]} - keep ))
-  [ "$excess" -gt 0 ] || return 0
-  for f in "${all[@]:0:$excess}"; do
-    rm -f "$f" "${f%.*}.json"
-  done
-}
-
 keep() {
   local purpose=firstmate reason='' src ext stamp id dest
   while [ "$#" -gt 0 ]; do
@@ -986,9 +967,6 @@ keep() {
     wav|mp3|m4a|webm|ogg) ;;
     *) refuse "not an audio recording: $src" ;;
   esac
-  case "${FM_DESK_UNSENT_KEEP:-20}:${FM_DESK_UNSENT_DAYS:-30}" in
-    0*|*:0*|*[!0-9:]*) refuse "FM_DESK_UNSENT_KEEP and FM_DESK_UNSENT_DAYS must be whole numbers from 1" ;;
-  esac
 
   ensure_unsent
   stamp=$(date -u +%Y%m%dT%H%M%SZ)
@@ -1002,7 +980,6 @@ keep() {
     die "cannot move $src into $UNSENT"
   fi
   chmod 600 "$dest" 2>/dev/null || true
-  prune_unsent
   printf '%s\n' "$dest"
 }
 

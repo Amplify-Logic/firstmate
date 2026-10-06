@@ -244,18 +244,19 @@ Dictation types text only where you put the cursor, sending it only when that is
 The floater keeps every recording until its words have arrived: typed into the Firstmate chat, saved to the mailbox, or, for dictation, typed or left on the clipboard.
 Recordings are made in this home's private `state/desk-voice/recording/` and removed once their words arrive.
 
-When the words do not arrive, the recording is saved instead and the status line reads `Saved - retrying`:
+When the words do not arrive, the recording is saved instead:
 
 - Transcription failed, for example because the network or Deepgram was down.
 - Transcription came back with no words from a recording at least two seconds long. A shorter one is taken as a stray press, shows `No speech`, and is not kept.
 - The message could not be delivered at all.
 
-Saved recordings go to `state/desk-voice/unsent/`, readable only by your own account, and the floater tries each one again by itself after about 20 seconds, a minute and five minutes.
-A talk-to-Firstmate recording that works on a retry is sent to Firstmate as usual, a little later than you spoke it, and the status line says how it went.
-A dictation that works on a retry is put on the clipboard, and the status line reads `Dictation copied - press ⌘V`.
+Saved recordings go to `state/desk-voice/unsent/`, readable only by your own account.
+A talk-to-Firstmate recording is tried again by the floater itself after about 20 seconds, a minute and five minutes, and the status line reads `Saved - retrying` meanwhile.
+One that works on a retry is sent to Firstmate as usual, a little later than you spoke it, and the status line says how it went.
 After the last automatic try the status line reads `Saved, not sent` and the recording stays saved.
+A dictation is not tried again by itself, since its words belong where your cursor was when you spoke: the status line reads `Saved, not sent` and the recording stays saved until you retry it.
 Words held back for screenshots that then fail to send are saved and retried the same way, without the screenshots, which stay in `state/desk-voice/shots/`.
-If the floater stops while a recording is being made or transcribed, it saves that recording the next time it starts and tries it again.
+If the floater stops while a recording is being made or transcribed, it saves that recording the next time it starts and, for talk to Firstmate, tries it again.
 
 To see and transcribe saved recordings yourself, or ask Firstmate to:
 
@@ -264,15 +265,15 @@ bin/fm-desk-voice.sh recordings
 bin/fm-desk-voice.sh retry
 ```
 
-`retry` tries every saved recording, or only the ones you name.
-Only the newest 20 saved recordings are kept, and none older than 30 days.
-`bin/fm-desk-voice.sh`'s header owns the saved recordings, the retry and those limits.
+`retry` tries every saved recording, or only the ones you name, and prints a dictation's words for you to paste.
+A saved recording is never removed by itself: it goes only once its words are delivered, or printed by `retry` for a dictation, or when you delete it from `state/desk-voice/unsent/` with its `.json` record.
+`bin/fm-desk-voice.sh`'s header owns the saved recordings and the retry.
 
 ### Long messages
 
 A message has no length limit: a ten-minute recording is transcribed whole and arrives like any other.
 A long one takes longer to transcribe, and the status line reads `Transcribing…` until it is done.
-The transcription request cannot hang: it gives up after a time that grows with the recording, about five minutes for a ten-minute one, and a dropped connection or a busy Deepgram is retried twice first.
+The transcription request cannot hang: each attempt gives up after a time that grows with the recording, about five minutes for a ten-minute one, and a timeout, a dropped connection or a busy Deepgram is retried twice, so a ten-minute recording waits about 16 minutes at worst before it fails.
 A recording whose transcription still fails is saved and retried as above.
 `bin/fm-deepgram-stt.sh`'s header owns those limits.
 

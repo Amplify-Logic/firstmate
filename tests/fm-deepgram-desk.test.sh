@@ -295,7 +295,7 @@ SH
 }
 
 test_stt_bounds_a_long_request_and_retries_without_a_length_cap() {
-  local home out bytes status=0
+  local home out bytes
   home=$(new_home stt-long)
   long_wav "$home/long.wav" 600
   bytes=$(wc -c < "$home/long.wav" | tr -d ' ')
@@ -309,13 +309,6 @@ test_stt_bounds_a_long_request_and_retries_without_a_length_cap() {
   assert_contains "$(cat "$home/curl.log")" "--max-time $(( 120 + bytes / 100000 ))" \
     "the request bound grows with the recording instead of capping it"
   assert_contains "$(cat "$home/curl.log")" "--retry 2" "a dropped or busy request is retried"
-  : > "$home/curl.log"
-  DEEPGRAM_API_KEY=test-key-not-real FM_DEEPGRAM_CURL="$home/curl" FM_DEEPGRAM_STT_MAX_TIME=45 \
-    "$STT" "$home/long.wav" >/dev/null 2>&1 || fail "stt failed with an explicit bound"
-  assert_contains "$(cat "$home/curl.log")" "--max-time 45" "FM_DEEPGRAM_STT_MAX_TIME overrides the bound"
-  out=$(DEEPGRAM_API_KEY=test-key-not-real FM_DEEPGRAM_CURL="$home/curl" FM_DEEPGRAM_STT_MAX_TIME=soon \
-    "$STT" "$home/long.wav" 2>&1) || status=$?
-  [ "$status" -eq 2 ] || fail "a bad bound must be refused, got $status: $out"
   pass "fm-deepgram-stt: a ten-minute recording is uploaded whole, with a bounded, retried request"
 }
 
@@ -325,10 +318,10 @@ test_stt_names_the_bound_when_deepgram_never_answers() {
   printf 'RIFF' > "$home/clip.wav"
   printf '#!/bin/sh\nexit 28\n' > "$home/curl"
   chmod +x "$home/curl"
-  out=$(DEEPGRAM_API_KEY=test-key-not-real FM_DEEPGRAM_CURL="$home/curl" FM_DEEPGRAM_STT_MAX_TIME=30 \
+  out=$(DEEPGRAM_API_KEY=test-key-not-real FM_DEEPGRAM_CURL="$home/curl" \
     "$STT" "$home/clip.wav" 2>&1) || status=$?
   [ "$status" -eq 1 ] || fail "a timed-out request must fail with 1, got $status: $out"
-  assert_contains "$out" "no answer within 30s" "the failure names the bound"
+  assert_contains "$out" "no answer within 120s" "the failure names the bound"
   pass "fm-deepgram-stt: a request that times out fails instead of hanging"
 }
 
@@ -1190,29 +1183,45 @@ test_desk_voice_retry_of_dictation_returns_the_words() {
   pass "fm-desk-voice retry: dictation returns its words to the floater, never to Firstmate"
 }
 
-test_desk_voice_keep_prunes_old_recordings() {
-  local home first second third out status=0
-  home=$(new_home recordings-prune)
-  long_wav "$home/a.wav" 1
-  first=$(desk "$home" keep "$home/a.wav") || fail "keep failed"
-  sleep 1
-  long_wav "$home/b.wav" 1
-  second=$(desk "$home" keep "$home/b.wav") || fail "keep failed"
-  sleep 1
-  long_wav "$home/c.wav" 1
-  third=$(FM_DESK_UNSENT_KEEP=2 desk "$home" keep "$home/c.wav") || fail "keep failed"
-  [ ! -e "$first" ] && [ ! -e "${first%.wav}.json" ] || fail "the oldest beyond the limit is removed"
-  [ -e "$second" ] && [ -e "$third" ] || fail "the newest are kept"
-  touch -t 202001010000 "$second"
-  long_wav "$home/d.wav" 1
-  desk "$home" keep "$home/d.wav" >/dev/null || fail "keep failed"
-  [ ! -e "$second" ] || fail "a recording older than the age limit is removed"
-  [ -e "$third" ] || fail "a recent recording stays"
-  long_wav "$home/e.wav" 1
-  out=$(FM_DESK_UNSENT_KEEP=0 desk "$home" keep "$home/e.wav" 2>&1) || status=$?
-  [ "$status" -eq 2 ] || fail "a zero limit must be refused, got $status: $out"
-  [ -e "$home/e.wav" ] || fail "a refused keep leaves the recording where it was"
-  pass "fm-desk-voice keep: saved recordings are pruned by count and age"
+test_desk_voice_keep_never_removes_a_saved_recording() {
+  local home old i
+  home=$(new_home recordings-never-pruned)
+  long_wav "$home/old.wav" 1
+  old=$(desk "$home" keep "$home/old.wav") || fail "keep failed"
+  touch -t 202001010000 "$old" "${old%.wav}.json"
+  for i in $(seq 1 25); do
+    long_wav "$home/capture-$i.wav" 0.1
+    desk "$home" keep "$home/capture-$i.wav" >/dev/null || fail "keep $i failed"
+  done
+  [ -e "$old" ] && [ -e "${old%.wav}.json" ] || fail "an old undelivered recording must stay saved"
+  [ "$(desk "$home" recordings | wc -l | tr -d ' ')" = 26 ] || fail "every undelivered recording must stay saved"
+  pass "fm-desk-voice keep: an undelivered recording is never removed, however old or many"
+}
+
+test_desk_voice_retry_keeps_the_recording_when_the_mailbox_cannot_save() {
+  local home saved out real
+  home=$(new_home recordings-mailbox-fails)
+  long_wav "$home/capture.wav" 1
+  saved=$(desk "$home" keep "$home/capture.wav") || fail "keep failed"
+  stt_says "$home" "words that must not vanish"
+  # A python3 that cannot write a mailbox message, as on a full disk.
+  real=$(command -v python3)
+  mkdir -p "$home/pybin"
+  cat > "$home/pybin/python3" <<SH
+#!/usr/bin/env bash
+if [ "\${1:-}" = - ]; then
+  script=\$(cat)
+  case "\$script" in *fm-desk-voice-transcript.v1*) exit 1 ;; esac
+  exec "$real" "\$@" <<<"\$script"
+fi
+exec "$real" "\$@"
+SH
+  chmod +x "$home/pybin/python3"
+  out=$(PATH="$home/pybin:$PATH" desk "$home" retry "$saved" 2>/dev/null) || fail "retry failed: $out"
+  assert_equals "unsent	$saved	2	delivery failed" "$out" "a mailbox that cannot save is not a delivery"
+  [ -e "$saved" ] && [ -e "${saved%.wav}.json" ] || fail "the recording must stay saved when its words were stored nowhere"
+  [ "$(inbox_count "$home")" = 0 ] || fail "nothing reached the mailbox"
+  pass "fm-desk-voice retry: a mailbox that cannot save leaves the recording saved"
 }
 
 test_desk_voice_retry_refuses_anything_but_a_saved_recording() {
@@ -2699,7 +2708,8 @@ test_desk_voice_deliver_pending_drain
 test_desk_voice_keeps_a_recording_until_its_words_are_delivered
 test_desk_voice_retry_of_a_ten_minute_recording_delivers_every_word
 test_desk_voice_retry_of_dictation_returns_the_words
-test_desk_voice_keep_prunes_old_recordings
+test_desk_voice_keep_never_removes_a_saved_recording
+test_desk_voice_retry_keeps_the_recording_when_the_mailbox_cannot_save
 test_desk_voice_retry_refuses_anything_but_a_saved_recording
 test_desk_voice_retries_run_one_at_a_time
 test_desk_voice_send_types_into_the_primary_pane

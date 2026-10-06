@@ -65,6 +65,23 @@ final class RecordingTests: XCTestCase {
         XCTAssertEqual(Recording.duration(of: dir.appendingPathComponent("missing.wav")), 0)
     }
 
+    /// A capture cut off mid-recording has a well-formed header whose data
+    /// length was never filled in; it is measured by its size, not as empty.
+    func testDurationOfAFileWhoseHeaderReportsNoLengthComesFromItsSize() throws {
+        let url = dir.appendingPathComponent("cut-off.wav")
+        var header = Data()
+        func append(_ text: String) { header.append(contentsOf: Array(text.utf8)) }
+        func append32(_ value: UInt32) { withUnsafeBytes(of: value.littleEndian) { header.append(contentsOf: $0) } }
+        func append16(_ value: UInt16) { withUnsafeBytes(of: value.littleEndian) { header.append(contentsOf: $0) } }
+        append("RIFF"); append32(36); append("WAVE")
+        append("fmt "); append32(16); append16(1); append16(1)
+        append32(16000); append32(32_000); append16(2); append16(16)
+        append("data"); append32(0)
+        try (header + Data(count: 32_000 * 4)).write(to: url)
+        XCTAssertEqual(Recording.duration(of: url), 4, accuracy: 0.01)
+        XCTAssertTrue(Recording.keep(failed: true, duration: Recording.duration(of: url)))
+    }
+
     func testTheFileNameCarriesThePurpose() {
         XCTAssertEqual(Recording.purpose(ofFileName: Recording.fileName(purpose: "dictate")), "dictate")
         XCTAssertEqual(Recording.purpose(ofFileName: Recording.fileName(purpose: "firstmate")), "firstmate")
@@ -82,7 +99,6 @@ final class RecordingTests: XCTestCase {
         XCTAssertEqual(RetryResult.parse("delivered\t/u/a.wav\tsent: herdr w7:p3\n"), .delivered(status: "Sent"))
         XCTAssertEqual(RetryResult.parse("delivered\t/u/a.wav\tmailbox: /i/x.json\n"),
                        .delivered(status: "Saved for Firstmate"))
-        XCTAssertEqual(RetryResult.parse("transcript\t/u/a.wav\thello there\n"), .transcript("hello there"))
         XCTAssertEqual(RetryResult.parse("unsent\t/u/a.wav\t3\tno speech heard\n"), .unsent(attempts: 3))
         XCTAssertEqual(RetryResult.parse("busy\t/u/a.wav\n"), .busy)
         XCTAssertEqual(RetryResult.parse("gone\t/u/a.wav\n"), .gone)
@@ -92,8 +108,9 @@ final class RecordingTests: XCTestCase {
 
     /// At launch the floater saves a recording a stopped floater left behind,
     /// through bin/fm-desk-voice.sh keep (here a stand-in that records what it
-    /// was asked), drops one too short to hold words, and shows that saved
-    /// recordings are being retried.
+    /// was asked), drops one too short to hold words, and resumes the retries
+    /// of saved talk-to-Firstmate recordings only: a dictation waits for a
+    /// manual retry.
     @MainActor
     func testLaunchSavesARecordingLeftBehindAndShowsTheRetry() async throws {
         let root = dir.appendingPathComponent("home")
@@ -108,7 +125,10 @@ final class RecordingTests: XCTestCase {
         printf '%s\\n' "$*" >> '\(log.path)'
         case "$1" in
           keep) printf '/saved/one.wav\\n' ;;
-          recordings) printf '/saved/one.wav\\tdictate\\t1\\tstamp\\tthe floater stopped\\n' ;;
+          recordings)
+            printf '/saved/one.wav\\tdictate\\t1\\tstamp\\tthe floater stopped\\n'
+            printf '/saved/two.wav\\tfirstmate\\t1\\tstamp\\ttranscription failed\\n'
+            ;;
         esac
         exit 0
         """.write(to: stub, atomically: true, encoding: .utf8)
@@ -137,6 +157,7 @@ final class RecordingTests: XCTestCase {
         XCTAssertFalse(calls.contains(live.path), "a capture still being written is left alone")
         XCTAssertTrue(FileManager.default.fileExists(atPath: live.path))
         XCTAssertTrue(calls.contains("recordings\n"))
+        XCTAssertEqual(Array(model.retrying.keys), ["/saved/two.wav"], "a saved dictation is not retried by itself")
     }
 
     @MainActor

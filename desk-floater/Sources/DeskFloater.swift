@@ -496,13 +496,6 @@ enum Paster {
     private static let concealed = NSPasteboard.PasteboardType("org.nspasteboard.ConcealedType")
     private static let transient = NSPasteboard.PasteboardType("org.nspasteboard.TransientType")
 
-    /// Leaves text on the clipboard for the captain to paste by hand.
-    static func copy(_ text: String) {
-        let board = NSPasteboard.general
-        board.clearContents()
-        board.setString(text, forType: .string)
-    }
-
     static func paste(_ text: String) -> Bool {
         let board = NSPasteboard.general
         let saved: [[(NSPasteboard.PasteboardType, Data)]] = (board.pasteboardItems ?? [])
@@ -809,9 +802,9 @@ final class FloaterModel: ObservableObject {
     // The recordings of the words held in the stack, kept until they are sent.
     private var heldAudio: [URL] = []
 
-    // Saved recordings waiting for an automatic retry, by path, with the
-    // attempts each has had. See Recording.
-    private var retrying: [String: Int] = [:]
+    // Saved talk-to-Firstmate recordings waiting for an automatic retry, by
+    // path, with the attempts each has had. See Recording.
+    private(set) var retrying: [String: Int] = [:]
 
     init(repoRoot: String, fmHome: String) {
         self.repoRoot = repoRoot
@@ -1356,18 +1349,20 @@ final class FloaterModel: ObservableObject {
     // MARK: recordings kept until delivered
 
     /// Saves a recording whose words did not reach their destination to the
-    /// home's unsent folder and retries it on Recording.retryDelays. Should the
-    /// save itself fail, the audio stays in the recording folder, where the
-    /// next launch finds it.
+    /// home's unsent folder and, for talk to Firstmate, retries it on
+    /// Recording.retryDelays. A dictation stays saved for a manual retry with
+    /// `bin/fm-desk-voice.sh retry`. Should the save itself fail, the audio
+    /// stays in the recording folder, where the next launch finds it.
     private func keepForRetry(_ url: URL, purpose: Purpose, reason: String) {
         let name = purpose == .dictate ? "dictate" : "firstmate"
+        let retries = purpose == .firstmate
         if mode == .busy {
-            finish(status: Self.savedRetrying, for: 6)
+            finish(status: retries ? Self.savedRetrying : "Saved, not sent", for: 6)
         }
         Task.detached(priority: .userInitiated) { [repoRoot, fmHome] in
             let saved = Self.keep(repoRoot: repoRoot, fmHome: fmHome, audio: url, purpose: name, reason: reason)
             await MainActor.run {
-                guard let saved else {
+                guard let saved, retries else {
                     self.flash("Saved, not sent", for: 6)
                     return
                 }
@@ -1402,9 +1397,6 @@ final class FloaterModel: ObservableObject {
                 switch result {
                 case .delivered(let status):
                     self.retried(path, status: status)
-                case .transcript(let text):
-                    Paster.copy(text)
-                    self.retried(path, status: "Dictation copied - press ⌘V")
                 case .unsent(let made):
                     self.scheduleRetry(path, attempts: made)
                 case .busy:
@@ -1429,8 +1421,8 @@ final class FloaterModel: ObservableObject {
     }
 
     /// At launch: saves any recording a stopped floater left in the recording
-    /// folder, then resumes the automatic retries of saved recordings that
-    /// still have some left.
+    /// folder, then resumes the automatic retries of saved talk-to-Firstmate
+    /// recordings that still have some left.
     func recoverRecordings() {
         Task.detached(priority: .utility) { [repoRoot, fmHome, recordingDir] in
             let names = (try? FileManager.default.contentsOfDirectory(atPath: recordingDir)) ?? []
@@ -1454,7 +1446,7 @@ final class FloaterModel: ObservableObject {
                                    args: ["recordings"], env: ["FM_HOME": fmHome]) ?? ""
             let pending: [(String, Int)] = listing.split(separator: "\n").compactMap { line in
                 let cols = line.split(separator: "\t", omittingEmptySubsequences: false)
-                guard cols.count >= 3, let attempts = Int(cols[2]),
+                guard cols.count >= 3, cols[1] == "firstmate", let attempts = Int(cols[2]),
                       Recording.retryDelay(afterAttempts: attempts) != nil else { return nil }
                 return (String(cols[0]), attempts)
             }
