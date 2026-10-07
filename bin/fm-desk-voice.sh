@@ -101,12 +101,13 @@
 # and a single wake is appended so the primary can see and drain them.
 # A wake alone reaches a busy primary only at its next turn end, minutes
 # later, so deliver also rings the primary, as a captain inbox note does: a
-# detached ring (the ring below, with its payload and stash checks) of one
-# labelled line asking it to drain now. A ring that cannot be typed yet is tried again after
-# FM_DESK_VOICE_RING_DELAYS seconds (default "0 2 5 10 20 30 60 60 60", about
-# four minutes in all; empty turns the ring off). The ring stops once it is
-# typed, once the message has been drained, when no proven primary holds the
-# session lock, or in away or quiet mode, whose own supervision owns wakes.
+# detached ring (ring above, with every one of its checks) of one labelled
+# line asking it to drain now. A ring that cannot be typed yet is tried again
+# after FM_DESK_VOICE_RING_DELAYS seconds
+# (default "0 2 5 10 20 30 60 60 60", about four minutes in all; empty turns
+# the ring off). The ring stops once it is typed, once the message has been
+# drained, when no proven primary holds the session lock, or in away or quiet
+# mode, whose own supervision owns wakes.
 # The queued wake stays the durable delivery either way.
 #
 # deliver --image (repeatable, absolute path to an existing file) attaches
