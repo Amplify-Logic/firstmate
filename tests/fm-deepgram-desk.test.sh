@@ -1734,6 +1734,36 @@ test_desk_voice_mailbox_ring_stops_once_drained_or_away() {
   pass "fm-desk-voice: the mailbox ring stops once the message is drained, and never rings in away mode"
 }
 
+test_desk_voice_mailbox_ring_never_submits_a_draft_or_stash() {
+  local home out when
+  for when in draft stash; do
+    home=$(desk_send_fixture "mailbox-ring-$when") || { desk_send_skip "mailbox-ring-$when"; return 0; }
+    printf ' Do you want to proceed?\n ❯ 1. Yes\n   2. No\n' > "$home/fixture/modal"
+    out=$(desk_send_ringing "$home" "status please") || fail "send failed: $out"
+    case "$out" in mailbox:\ *) ;; *) fail "expected a mailbox delivery, got: $out" ;; esac
+    case "$when" in
+      draft) printf 'half typed thought' > "$home/fixture/type-before-enter" ;;
+      stash) printf 'half typed thought' > "$home/fixture/stash" ;;
+    esac
+    rm -f "$home/fixture/modal"
+    sleep 4
+    [ -z "$(herdr_calls "$home" pane send-keys)" ] || fail "$when: no Enter may submit the captain's words"
+    [ ! -e "$home/fixture/submitted" ] || fail "$when: nothing may be submitted"
+    case "$when" in
+      draft)
+        [ "$(herdr_calls "$home" pane send-text | wc -l | tr -d ' ')" = 1 ] || fail "draft: a ring that met the captain's typing is not typed again"
+        assert_contains "$(cat "$home/fixture/draft")" 'half typed thought' "the captain's typing must be kept"
+        ;;
+      stash)
+        [ -z "$(herdr_calls "$home" pane send-text)" ] || fail "stash: nothing may be typed over a stash"
+        [ "$(cat "$home/fixture/stash")" = 'half typed thought' ] || fail "stash: the stash must be kept"
+        ;;
+    esac
+    desk_send_done "$home"
+  done
+  pass "fm-desk-voice: the mailbox ring re-reads its payload before Enter and never rings over a stash"
+}
+
 # --- captain inbox notes ring the busy primary -------------------------------
 #
 # A Starship Voice or glasses note goes through bin/fm-inbox.sh note, which
@@ -2734,6 +2764,7 @@ test_desk_voice_send_restores_a_draft_stashed_without_a_marker
 test_desk_voice_send_joins_another_harness_draft
 test_desk_voice_mailbox_rings_the_primary_once_its_chat_is_free
 test_desk_voice_mailbox_ring_stops_once_drained_or_away
+test_desk_voice_mailbox_ring_never_submits_a_draft_or_stash
 test_inbox_note_rings_the_busy_primary
 test_inbox_note_ring_never_submits_a_draft_or_rings_away
 test_ring_checks_the_payload_before_each_enter

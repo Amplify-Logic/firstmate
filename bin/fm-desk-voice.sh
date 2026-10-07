@@ -101,8 +101,8 @@
 # and a single wake is appended so the primary can see and drain them.
 # A wake alone reaches a busy primary only at its next turn end, minutes
 # later, so deliver also rings the primary, as a captain inbox note does: a
-# detached ring (every check above, empty composer only) of one labelled line
-# asking it to drain now. A ring that cannot be typed yet is tried again after
+# detached ring (the ring below, with its payload and stash checks) of one
+# labelled line asking it to drain now. A ring that cannot be typed yet is tried again after
 # FM_DESK_VOICE_RING_DELAYS seconds (default "0 2 5 10 20 30 60 60 60", about
 # four minutes in all; empty turns the ring off). The ring stops once it is
 # typed, once the message has been drained, when no proven primary holds the
@@ -319,17 +319,13 @@ ring_mailbox() {  # <path>
   done
   (
     trap '' HUP
-    local result rc
+    local result
     for delay in $delays; do
       sleep "$delay"
       [ -e "$path" ] || exit 0
       [ ! -e "$STATE/.afk" ] && [ ! -e "$STATE/.afk-contract" ] || exit 0
-      rc=0
-      result=$(PRIMARY_SUBMIT_COMPOSER=empty primary_submit "$line") || rc=$?
-      [ "$rc" != 1 ] || exit 0
-      if [ "$rc" = 0 ] && [ -n "$result" ] && [ "${result%%$'\t'*}" != send-failed ]; then
-        exit 0
-      fi
+      result=$(ring_line "$line") || exit 0
+      [ "$result" = not-rung ] || exit 0
     done
   ) </dev/null >/dev/null 2>&1 &
 }
@@ -807,11 +803,18 @@ send() {
 }
 
 ring() {
-  local line result='' verdict backend target rc=0
+  local line
   [ "$#" -eq 1 ] || refuse "usage: fm-desk-voice.sh ring <line>"
   line=$(plain_line "$1") || die "cannot prepare the line"
   [ -n "$line" ] || refuse "nothing to ring"
-  result=$(PRIMARY_SUBMIT_COMPOSER=empty PRIMARY_SUBMIT_RING=1 primary_submit "$line") || rc=$?
+  ring_line "$line" || true
+}
+
+# Rings plain <line> once and prints ring's one outcome line. Returns 1 when
+# no proven primary holds the session lock.
+ring_line() {  # <line>
+  local result='' verdict backend target rc=0
+  result=$(PRIMARY_SUBMIT_COMPOSER=empty PRIMARY_SUBMIT_RING=1 primary_submit "$1") || rc=$?
   if [ "$rc" = 0 ] && [ -n "$result" ]; then
     IFS=$'\t' read -r verdict backend target <<<"$result"
     case "$verdict" in
@@ -821,6 +824,7 @@ ring() {
     esac
   fi
   printf 'not-rung\n'
+  [ "$rc" != 1 ]
 }
 
 shot() {
