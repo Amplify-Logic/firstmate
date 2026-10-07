@@ -2068,7 +2068,11 @@ test_desk_voice_send_reads_only_the_visible_screen() {
   assert_not_contains "$reads" "--source recent" "a send past a draft reads only the visible screen"
   desk_send_done "$home"
   home=$(desk_send_fixture send-viewport-dialog) || { desk_send_skip send-viewport-dialog; return 0; }
-  printf ' Which branch should I merge?\n\n   main\n\n Enter to select · Esc to cancel\n' > "$home/fixture/modal"
+  # An empty chat box under a picker's footer: the composer check passes it,
+  # so only the dialog check keeps the words out of the picker.
+  printf '%s\n' ' Which branch should I merge?' ' Enter to select · Esc to cancel' \
+    '────────────────────────────────────────' '❯' \
+    '────────────────────────────────────────' '  ⏵⏵ auto mode on' > "$home/fixture/screen"
   out=$(desk_send "$home" "main please") || fail "send failed: $out"
   case "$out" in mailbox:\ *) ;; *) fail "expected a mailbox delivery, got: $out" ;; esac
   reads=$(herdr_calls "$home" pane read)
