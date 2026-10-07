@@ -1,0 +1,11 @@
+### fm-deepgram-stt.sh with real curl routed (--connect-to) to a local socket that accepts and never answers; 2s recording (64 kB) -> per-attempt bound 120s
+start 10:08:35
+curl: (28) SSL connection timeout
+curl: (28) SSL connection timeout
+curl: (28) SSL connection timeout
+fm-deepgram-stt: curl failed talking to Deepgram (no answer within 120s, or the connection failed)
+[exit 1] end 10:09:27, elapsed 52s
+### connections the silent endpoint saw (one per attempt):
+10:08:35 connection accepted, never answering
+10:08:54 connection accepted, never answering
+10:09:12 connection accepted, never answering

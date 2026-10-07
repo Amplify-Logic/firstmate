@@ -1,0 +1,29 @@
+### Real DeskFloater (build-only app) launched with FM_HOME=lab, stand-in Deepgram via FM_DEEPGRAM_CURL, no primary (mailbox path).
+Seeded state/desk-voice/recording/ before launch at 10:06:04:
+  A AAAAAAAA-...-firstmate.wav  30s talk capture cut off mid-recording (WAV header data length 0), 2 min old
+  B BBBBBBBB-...-dictate.wav    5s dictation, 2 min old
+  C CCCCCCCC-...-firstmate.wav  0.2s stray press, 2 min old
+  D DDDDDDDD-...-firstmate.wav  3s capture touched just before launch (still being written)
+
+4s after launch: recording/ held only D; unsent/ held A (firstmate, 960044 bytes) and B (dictate), mode 0700/0600; C deleted.
+fm-desk-voice.sh recordings:
+  unsent/20261007T080604Z-0b64eddc.wav  firstmate  1  the floater stopped before it was sent
+  unsent/20261007T080604Z-93069617.wav  dictate    1  the floater stopped before it was sent
+Status line: 'Saved - retrying' (floater-saved-retrying.png)
+
+Stand-in Deepgram calls (floater automatic retries of A only; B, a dictation, is not retried automatically):
+  10:06:25 
+  10:07:25 
+  10:08:02 
+  10:06:25 Deepgram down (502) -> A kept, attempts 2, 'transcription failed: Deepgram listen failed HTTP 502'
+  10:07:25 Deepgram back -> A delivered to mailbox, removed from unsent/; status 'Saved for Firstmate' (floater-after-auto-retry.png)
+Mailbox message:
+  {"schema": "fm-desk-voice-transcript.v1", "id": "ace5812b", "created_at": "20261007T080726Z", "source": "desk-floater-retry", "transcript": "This is the long note the floater saved when it stopped, now delivered."}
+
+### Relaunch at 10:07:42: D (now idle >10s) saved as firstmate and auto-retried at 10:08:02 -> mailbox 20261007T080802Z-687f8728.json
+
+### Manual retry of the saved dictation B:
+$ fm-desk-voice.sh retry
+transcript	/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.FCsM02/state/desk-voice/unsent/20261007T080604Z-93069617.wav	Dear team, the dictated paragraph.
+$ fm-desk-voice.sh recordings
+(empty)

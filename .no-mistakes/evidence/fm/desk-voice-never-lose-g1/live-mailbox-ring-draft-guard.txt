@@ -1,0 +1,38 @@
+### Captain has a half-typed draft in the lab primary's chat box:
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ captain draft half typed thought
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏵⏵ auto mode on (shift+tab to cycle)
+
+$ fm-desk-voice.sh deliver (ring schedule '0 2 5 10 20 30 60 60 60')
+/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.wSeCDz/state/desk-voice/inbox/20261007T080309Z-ce768038.json
+
+### 12s later - draft untouched, nothing submitted:
+  running in a temporary test home that has no data and no registered projects. If you meant your main home, the note may have landed here by mistake.
+✻ Cogitated for 33s · done 10:03 AM
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ captain draft half typed thought
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏵⏵ auto mode on (shift+tab to cycle)
+
+inbox: 20261007T080309Z-ce768038.json
+
+### Captain clears the draft at 10:03:29:
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏵⏵ auto mode on (shift+tab to cycle) · ← 2 agents                                                                               Ctrl+Y to paste deleted text
+
+
+### At 10:03:50 (cleared 10:03:29) the ring has landed on its next scheduled try; ring lines in scrollback: 2
+✻ Cogitated for 33s · done 10:03 AM
+❯ [firstmate desk-voice] a desk voice message is waiting in the mailbox. Run bin/fm-wake-drain.sh now to pick it up; it stays queued until handled and
+  acknowledged.
+✻ Harmonizing…
+  ⎿  Tip: Use /memory to view and manage Claude memory
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏵⏵ auto mode on (shift+tab to cycle) · ← 2 agents
+
+inbox: 20261007T080309Z-ce768038.json

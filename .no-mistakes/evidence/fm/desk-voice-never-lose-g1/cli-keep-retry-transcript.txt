@@ -1,0 +1,72 @@
+total 37504
+drwxr-xr-x@ 3 larsmusic  staff        96 Oct  7 10:00 .
+drwxr-xr-x@ 3 larsmusic  staff        96 Oct  7 10:00 ..
+-rw-r--r--@ 1 larsmusic  staff  19200044 Oct  7 10:00 long-note-firstmate.wav
+### 1. Deepgram down: a 10-minute talk-to-Firstmate note fails to transcribe
+
+$ bin/fm-deepgram-stt.sh /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.FCsM02/state/desk-voice/recording/long-note-firstmate.wav
+fm-deepgram-stt: Deepgram listen failed HTTP 502
+{"err_msg":"bad gateway"}
+[exit 1]
+### 2. The floater hands it to keep
+
+$ bin/fm-desk-voice.sh keep --purpose firstmate --reason transcription failed /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.FCsM02/state/desk-voice/recording/long-note-firstmate.wav
+/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.FCsM02/state/desk-voice/unsent/20261007T080032Z-80dd53e1.wav
+[exit 0]
+
+$ ls -la /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.FCsM02/state/desk-voice/recording /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.FCsM02/state/desk-voice/unsent
+/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.FCsM02/state/desk-voice/recording:
+total 0
+drwxr-xr-x@ 2 larsmusic  staff   64 Oct  7 10:00 .
+drwx------@ 6 larsmusic  staff  192 Oct  7 10:00 ..
+
+/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.FCsM02/state/desk-voice/unsent:
+total 37512
+drwx------@ 4 larsmusic  staff       128 Oct  7 10:00 .
+drwx------@ 6 larsmusic  staff       192 Oct  7 10:00 ..
+-rw-------@ 1 larsmusic  staff       151 Oct  7 10:00 20261007T080032Z-80dd53e1.json
+-rw-------@ 1 larsmusic  staff  19200044 Oct  7 10:00 20261007T080032Z-80dd53e1.wav
+[exit 0]
+
+$ bin/fm-desk-voice.sh recordings
+/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.FCsM02/state/desk-voice/unsent/20261007T080032Z-80dd53e1.wav	firstmate	1	20261007T080032Z	transcription failed
+[exit 0]
+### 3. Retry while Deepgram is still down: kept, attempt counted
+
+$ bin/fm-desk-voice.sh retry
+unsent	/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.FCsM02/state/desk-voice/unsent/20261007T080032Z-80dd53e1.wav	2	transcription failed: Deepgram listen failed HTTP 502
+[exit 0]
+### 4. Deepgram answers with no words: still kept
+
+$ bin/fm-desk-voice.sh retry
+unsent	/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.FCsM02/state/desk-voice/unsent/20261007T080032Z-80dd53e1.wav	3	no speech heard
+[exit 0]
+
+$ bin/fm-desk-voice.sh recordings
+/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.FCsM02/state/desk-voice/unsent/20261007T080032Z-80dd53e1.wav	firstmate	3	20261007T080032Z	no speech heard
+[exit 0]
+### 5. Deepgram back: retry delivers (no primary -> mailbox), recording removed
+
+$ bin/fm-desk-voice.sh retry
+fm-desk-voice: the primary's chat pane is not reachable; saving to the mailbox instead
+delivered	/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.FCsM02/state/desk-voice/unsent/20261007T080032Z-80dd53e1.wav	mailbox: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.FCsM02/state/desk-voice/inbox/20261007T080033Z-ffb63975.json
+[exit 0]
+
+$ ls -la /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.FCsM02/state/desk-voice/unsent
+total 0
+drwx------@ 2 larsmusic  staff   64 Oct  7 10:00 .
+drwx------@ 6 larsmusic  staff  192 Oct  7 10:00 ..
+[exit 0]
+
+$ bin/fm-desk-voice.sh pending
+/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.FCsM02/state/desk-voice/inbox/20261007T080033Z-ffb63975.json
+[exit 0]
+
+$ bin/fm-desk-voice.sh recordings
+[exit 0]
+### upload sizes Deepgram saw (whole 10-minute file each time)
+10:00:31 bytes=19200044
+10:00:32 bytes=19200044
+10:00:32 bytes=19200044
+10:00:33 bytes=19200044
+   4 --max-time 312

@@ -1,0 +1,76 @@
+### Dictation: saved on 'no speech', retry returns words, never mailed to Firstmate
+
+$ bin/fm-desk-voice.sh keep --purpose dictate --reason no speech heard /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.FCsM02/state/desk-voice/recording/d-dictate.wav
+/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.FCsM02/state/desk-voice/unsent/20261007T080045Z-5e3947e2.wav
+[exit 0]
+
+$ bin/fm-desk-voice.sh retry
+transcript	/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.FCsM02/state/desk-voice/unsent/20261007T080045Z-5e3947e2.wav	Dear team, the release is moving to Thursday.
+[exit 0]
+inbox files before=1 after=1
+
+$ bin/fm-desk-voice.sh recordings
+[exit 0]
+### Guard: retry refuses a file outside unsent/, keep refuses a non-audio file and a symlink
+
+$ bin/fm-desk-voice.sh retry /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.FCsM02/outside.wav
+fm-desk-voice: not a saved recording in /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.FCsM02/state/desk-voice/unsent: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.FCsM02/outside.wav
+[exit 2]
+
+$ ls /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.FCsM02/outside.wav
+/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.FCsM02/outside.wav
+[exit 0]
+
+$ bin/fm-desk-voice.sh keep /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.FCsM02/notes.txt
+fm-desk-voice: not an audio recording: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.FCsM02/notes.txt
+[exit 2]
+
+$ bin/fm-desk-voice.sh keep /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.FCsM02/link.wav
+fm-desk-voice: no such recording: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.FCsM02/link.wav
+[exit 2]
+
+$ bin/fm-desk-voice.sh retry /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.FCsM02/state/desk-voice/unsent/../../../outside.wav
+fm-desk-voice: not a saved recording in /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.FCsM02/state/desk-voice/unsent: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.FCsM02/state/desk-voice/unsent/../../../outside.wav
+[exit 2]
+### Guard: delivery failure (mailbox cannot be written) leaves the recording saved
+
+$ bin/fm-desk-voice.sh keep --reason transcription failed /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.FCsM02/state/desk-voice/recording/f-firstmate.wav
+/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.FCsM02/state/desk-voice/unsent/20261007T080046Z-e3b25e26.wav
+[exit 0]
+
+$ bin/fm-desk-voice.sh retry
+fm-desk-voice: the primary's chat pane is not reachable; saving to the mailbox instead
+delivered	/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.FCsM02/state/desk-voice/unsent/20261007T080046Z-e3b25e26.wav	mailbox: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.FCsM02/state/desk-voice/inbox/20261007T080046Z-c43b605c.json
+[exit 0]
+
+$ bin/fm-desk-voice.sh recordings
+[exit 0]
+
+$ bin/fm-desk-voice.sh retry
+[exit 0]
+
+$ bin/fm-desk-voice.sh recordings
+[exit 0]
+### (note: the chmod 500 attempt above did not block the mailbox, since deliver resets the folder to 0700; the words were really delivered. Re-done with the mailbox replaced by a plain file.)
+
+$ bin/fm-desk-voice.sh keep --reason transcription failed /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.FCsM02/state/desk-voice/recording/g-firstmate.wav
+/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.FCsM02/state/desk-voice/unsent/20261007T080100Z-ac52f27e.wav
+[exit 0]
+
+$ bin/fm-desk-voice.sh retry
+mkdir: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.FCsM02/state/desk-voice/inbox: File exists
+fm-desk-voice: cannot create desk-voice mailbox dirs
+[exit 1]
+
+$ bin/fm-desk-voice.sh recordings
+/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.FCsM02/state/desk-voice/unsent/20261007T080100Z-ac52f27e.wav	firstmate	1	20261007T080100Z	transcription failed
+[exit 0]
+### mailbox restored: retry now delivers and removes it
+
+$ bin/fm-desk-voice.sh retry
+fm-desk-voice: the primary's chat pane is not reachable; saving to the mailbox instead
+delivered	/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.FCsM02/state/desk-voice/unsent/20261007T080100Z-ac52f27e.wav	mailbox: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.FCsM02/state/desk-voice/inbox/20261007T080100Z-5490bdba.json
+[exit 0]
+
+$ bin/fm-desk-voice.sh recordings
+[exit 0]

@@ -1,0 +1,79 @@
+### Lab Claude primary (pid 66602) in private tmux socket fm-lab, FM_HOME=/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.wSeCDz
+### Pane before deliver:
+  ⎿  SessionStart:startup hook error
+  ⎿  Failed with non-blocking status code: /bin/sh: ${CLAUDE_PLUGIN_ROOT}/hooks/run-hook.cmd: No such file or directory
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ Try "fix lint errors"
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏵⏵ auto mode on (shift+tab to cycle) · ← 2 agents
+
+$ fm-desk-voice.sh deliver --source desk-floater 'a really long voice note ...'
+/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.wSeCDz/state/desk-voice/inbox/20261007T080226Z-b93f46ca.json
+[deliver returned after 0s]
+
+### Pane 6s later:
+ ▐▛███▛█   Claude Code v2.1.292
+▝▜██████▀  Opus 5.5 (1M context) with high effort · Claude Max
+ ▝▝   ▝▝   ~/.no-mistakes/worktrees/f569cc43ac96/01M4ANF8MPPS52V9M6QYTEW3ED
+⚠ Your login expires in 1 day · run /login to renew
+  ⎿  SessionStart:startup hook error
+  ⎿  Failed with non-blocking status code: /bin/sh: lavish-axi: command not found
+  ⎿  SessionStart:startup hook error
+  ⎿  Failed with non-blocking status code: /bin/sh: gh-axi: command not found
+  ⎿  SessionStart:startup hook error
+  ⎿  Failed with non-blocking status code: /bin/sh: chrome-devtools-axi: command not found
+  ⎿  SessionStart:startup hook error
+  ⎿  Failed with non-blocking status code: /bin/sh: ${CLAUDE_PLUGIN_ROOT}/hooks/run-hook.cmd: No such file or directory
+❯ [firstmate desk-voice] a desk voice message is waiting in the mailbox. Run bin/fm-wake-drain.sh now to pick it up; it stays queued until handled and
+  acknowledged.
+✶ Coalescing… (5s · ↓ 188 tokens · thought for 2s)
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏵⏵ auto mode on (shift+tab to cycle) · ← 2 agents
+
+### Pane after the primary acted on the ring:
+❯ [firstmate desk-voice] a desk voice message is waiting in the mailbox. Run bin/fm-wake-drain.sh now to pick it up; it stays queued until handled and
+  acknowledged.
+⏺ Bash(pwd; git rev-parse --abbrev-ref HEAD; echo "FM_HOME=$FM_HOME"; ls; ls state 2>/dev/null | head)
+  ⎿  /Users/larsmusic/.no-mistakes/worktrees/f569cc43ac96/01M4ANF8MPPS52V9M6QYTEW3ED
+     HEAD
+     FM_HOME=/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.wSeCDz
+     … +16 lines (ctrl+o to expand)
+  ⎿  Allowed by auto mode classifier
+⏺ Bash(ls -la "$FM_HOME" 2>&1; ls -la "$FM_HOME/state" 2>&1 | head -40; ps -o pid,ppid,command -p $PPID 2>/dev/null)
+  ⎿  total 8
+     drwx------@    8 larsmusic  staff     256 Oct  7 10:01 .
+     drwx------@ 5506 larsmusic  staff  176192 Oct  7 10:02 ..
+     … +16 lines (ctrl+o to expand)
+  ⎿  Allowed by auto mode classifier
+⏺ Bash(cd "$FM_HOME"; cat .fm-lab-home; echo; cat state/.wake-queue; echo; cat state/.lock; echo; cat state/.watcher-down; echo; find state/desk-voice -maxdepth
+      3 | he…)
+  ⎿  fm-lab-home v1
+     1791360146 1       check   desk-voice      desk-voice:
+     /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.wSeCDz/state/desk-voice/inbox/20261007T080226Z-b93f46ca
+     … +10 lines (ctrl+o to expand)
+  ⎿  Shell cwd was reset to /Users/larsmusic/.no-mistakes/worktrees/f569cc43ac96/01M4ANF8MPPS52V9M6QYTEW3ED
+  ⎿  Allowed by auto mode classifier
+⏺ The lock is held by this session (pid 66602), so this is my home. Draining the queue as instructed.
+⏺ Bash(bin/fm-wake-drain.sh 2>&1)
+  ⎿  1791360146 1       check   desk-voice      desk-voice:
+     /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.wSeCDz/state/desk-voice/inbox/20261007T080226Z-b93f46ca
+     .json
+     WAKE_ACK_REQUIRED: after handling completes run bin/fm-wake-drain.sh --ack-through 1 --recovery-generation 91919.1791360146.rOkQ7S
+  ⎿  Allowed by auto mode classifier
+⏺ Per section 9, a desk-voice wake means running the desk-voice drain.
+⏺ Bash(bin/fm-desk-voice.sh drain 2>&1)
+  ⎿  Please check the release plan; this is the really long voice note from the desk.
+  ⎿  Allowed by auto mode classifier
+· Coalescing… (23s · ↓ 1.1k tokens)
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏵⏵ auto mode on (shift+tab to cycle) · ← 2 agents
+
+### mailbox inbox / processed now:
+/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.wSeCDz/state/desk-voice/inbox:
+
+/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.wSeCDz/state/desk-voice/processed:
+20261007T080226Z-b93f46ca.json

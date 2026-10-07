@@ -1,0 +1,124 @@
+ok - fm-deepgram-tts: refuses when the key is absent
+ok - fm-deepgram-tts: dry-run succeeds when a key is present
+ok - fm-deepgram-stt: refuses when the key or the audio file is absent
+ok - fm-deepgram-stt: mocked Deepgram transcript is printed and the key stays out of argv
+ok - fm-deepgram-stt: a Deepgram failure exits 1 with the status
+ok - fm-deepgram-stt: a ten-minute recording is uploaded whole, with a bounded, retried request
+ok - fm-deepgram-stt: a request that times out fails instead of hanging
+ok - fm-deepgram-stt: an absent vocabulary changes nothing
+ok - fm-deepgram-stt: key terms reach Deepgram encoded in the model's hint form
+ok - fm-deepgram-stt: an oversized vocabulary is trimmed, not refused
+ok - fm-deepgram-stt: rewrites turn spoken addresses into written ones
+ok - fm-deepgram-stt: rewrites match whole phrases, longest first, ignoring case
+ok - fm-deepgram-stt: malformed vocabulary lines are ignored
+ok - fm-deepgram-stt: email addresses, dotted names, contractions and hyphenated words stay intact
+ok - fm-deepgram-stt: possessive names take the rewrite
+ok - fm-deepgram-stt: whole compound rewrites and shorter valid alternatives still work
+ok - fm-deepgram-stt: model and hints follow environment, home .env, then default
+ok - fm-desk-floater: --help exits 0 and unknown options are refused
+ok - fm-desk-floater: every launched build is signed with one stable identity, and only the launched copy can be reopened
+ok - fm-desk-floater: --build-only assembles its own ad-hoc bundle and never touches the launched one
+ok - fm-desk-floater: a configured identity wins, and an unusable one falls back to Apple Development, then ad-hoc, without stopping the launch
+ok - fm-speak: key absent uses say
+ok - fm-speak: key present prefers Deepgram
+ok - fm-speak: a configured voice is spoken by say, not by Deepgram
+ok - fm-speak: a voice this machine does not have is reported, not substituted
+ok - fm-speak: a spelling say resolves is spoken, not refused
+ok - fm-speak: an incomplete voice list never refuses a voice
+ok - fm-speak: a confirmed voice is asked about once, a renamed one is asked again
+ok - fm-speak: a refused line leaves no voice list or watchdog marker behind
+ok - fm-speak: a say that fails is not re-spoken through Deepgram
+ok - fm-speak: Deepgram failure falls back to say
+ok - fm-desk-voice: deliver, wake, pending, drain
+ok - fm-desk-voice keep/retry: a recording is kept, private, until its words are delivered
+ok - fm-desk-voice retry: a ten-minute recording is transcribed and delivered whole
+ok - fm-desk-voice retry: dictation returns its words to the floater, never to Firstmate
+ok - fm-desk-voice keep: an undelivered recording is never removed, however old or many
+ok - fm-desk-voice retry: a mailbox that cannot save leaves the recording saved
+ok - fm-desk-voice retry/keep: only saved audio recordings are touched
+ok - fm-desk-voice retry: one retry at a time, the other is told it is busy
+ok - fm-desk-voice send: types the transcript into the primary's own pane and submits it
+fm-desk-voice: the primary's chat pane is not reachable; saving to the mailbox instead
+ok - fm-desk-voice send: no live primary falls back to the mailbox
+fm-desk-voice: the primary's chat pane is not reachable; saving to the mailbox instead
+ok - fm-desk-voice send: a pane that does not host the primary gets nothing
+fm-desk-voice: the primary's chat pane refused the text; saving it to the mailbox instead
+ok - fm-desk-voice send: a refused send falls back to the mailbox
+fm-desk-voice: typed into the primary's chat pane but the submit was not confirmed (pending)
+ok - fm-desk-voice send: typed text whose submit is unproven is never re-sent to the mailbox
+fm-desk-voice: the primary's chat pane is not reachable; saving to the mailbox instead
+fm-desk-voice: the primary's chat pane is not reachable; saving to the mailbox instead
+fm-desk-voice: the primary's chat pane is not reachable; saving to the mailbox instead
+fm-desk-voice: the primary's chat pane is not reachable; saving to the mailbox instead
+fm-desk-voice: the primary's chat pane is not reachable; saving to the mailbox instead
+fm-desk-voice: the primary's chat pane is not reachable; saving to the mailbox instead
+ok - fm-desk-voice send: a pane showing a dialog instead of its chat input gets nothing
+ok - fm-desk-voice send: Claude's dim suggested prompt counts as an empty chat box
+ok - fm-desk-voice send: a Claude draft is set aside, the message sent alone, and the draft put back
+ok - fm-desk-voice send: a stash marker wrapped onto its own footer row is not read as text in the box
+ok - fm-desk-voice send: a draft that is only a pasted-text placeholder is put back and the send confirmed
+fm-desk-voice: the primary's chat pane refused the text; saving it to the mailbox instead
+fm-desk-voice: the chat box did not set the captain's draft aside
+fm-desk-voice: the primary's chat pane refused the text; saving it to the mailbox instead
+ok - fm-desk-voice send: a draft that cannot be set aside safely stays put and the message goes to the mailbox
+ok - fm-desk-voice send: a message that wraps past a 20-row read still goes past a Claude draft
+ok - fm-desk-voice send: a voice-length message is pasted past a Claude draft, shown as one placeholder, and sent
+fm-desk-voice: the primary's chat pane refused the text; saving it to the mailbox instead
+fm-desk-voice: the captain's draft is stashed; Ctrl+S in the chat brings it back
+fm-desk-voice: the primary's chat pane refused the text; saving it to the mailbox instead
+ok - fm-desk-voice send: a long message refused before Enter is cleared and sent to the mailbox
+ok - fm-desk-voice send: a message the chat draws late is waited for, not stashed over the draft
+fm-desk-voice: the paste has not appeared; the draft remains stashed, and no recovery keys were sent
+fm-desk-voice: typed into the primary's chat pane but the submit was not confirmed (unknown)
+fm-desk-voice: the paste has not appeared; the draft remains stashed, and no recovery keys were sent
+fm-desk-voice: typed into the primary's chat pane but the submit was not confirmed (unknown)
+ok - desk send: a paste delayed beyond the proof window never receives recovery Ctrl+S
+fm-desk-voice: the paste has not appeared; the draft remains stashed, and no recovery keys were sent
+fm-desk-voice: typed into the primary's chat pane but the submit was not confirmed (unknown)
+fm-desk-voice: typed into the primary's chat pane but the submit was not confirmed (pending)
+fm-desk-voice: typed into the primary's chat pane but the submit was not confirmed (pending)
+ok - desk send: a message sent over a stashed draft presses Enter once, so the restored draft stays unsent
+fm-desk-voice: typed into the primary's chat pane but the submit was not confirmed (unknown)
+ok - fm-desk-voice send: a message Claude redraws instead of submitting is not reported as sent
+fm-desk-voice: the chat box did not show the captain's draft as stashed, so it was put back
+fm-desk-voice: the primary's chat pane refused the text; saving it to the mailbox instead
+ok - fm-desk-voice send: a draft stashed without a readable marker is put back before the mailbox
+ok - fm-desk-voice send: another harness's half-typed draft is joined and submitted
+fm-desk-voice: the primary's chat pane is not reachable; saving to the mailbox instead
+ok - fm-desk-voice: a mailbox message rings the primary as soon as its chat is free
+fm-desk-voice: the primary's chat pane is not reachable; saving to the mailbox instead
+fm-desk-voice: the primary's chat pane is not reachable; saving to the mailbox instead
+ok - fm-desk-voice: the mailbox ring stops once the message is drained, and never rings in away mode
+fm-desk-voice: the primary's chat pane is not reachable; saving to the mailbox instead
+fm-desk-voice: the primary's chat pane is not reachable; saving to the mailbox instead
+ok - fm-desk-voice: the mailbox ring re-reads its payload before Enter and never rings over a stash
+ok - fm-inbox note: a new captain note rings the busy primary within seconds and stays queued
+ok - fm-inbox note: the ring never submits a draft, never rings away mode, and falls back to the queue
+ok - desk ring: both backends re-read the payload before every Enter, including retries
+ok - desk ring: a late paste is still proven, even under a dim suggestion, a late redraw gets no retry, and a stash is never rung over
+fm-desk-voice: the primary's chat pane is not reachable; saving to the mailbox instead
+fm-desk-voice: the primary's chat pane is not reachable; saving to the mailbox instead
+ok - desk ring and send: concurrent writers use one lock and release it after delivery
+ok - fm-inbox: ring uses the same .afk and .afk-contract posture as readiness
+ok - fm-desk-voice send: screenshots, alone or with words, are typed into the primary's pane
+fm-desk-voice: the primary's chat pane refused the text; saving it to the mailbox instead
+ok - fm-desk-voice send: screenshots the pane refuses land in the mailbox with the words
+fm-desk-voice: the primary's chat pane is not reachable; saving to the mailbox instead
+fm-desk-voice: the primary's chat pane is not reachable; saving to the mailbox instead
+ok - fm-desk-voice send: screenshots alone wait in the mailbox while a draft is in the chat box
+ok - fm-desk-voice send: dictation into the Firstmate chat in front is typed and submitted
+ok - fm-desk-voice send: dictation anywhere but the Firstmate chat in front sends nothing
+fm-desk-voice: the primary's chat pane is not reachable; saving to the mailbox instead
+ok - fm-desk-voice send: dictation into a chat showing a dialog goes to the mailbox
+fm-desk-voice: the primary's chat pane is not reachable; saving to the mailbox instead
+ok - fm-desk-voice send: on tmux, only the active pane shown on the front terminal is in front
+ok - fm-desk-voice send: malformed front arguments are refused
+ok - fm-desk-voice: shot captures the named display into the home's screenshot folder
+ok - fm-desk-voice: shot works with a capture tool that cannot write dot-prefixed file names
+ok - fm-desk-voice: the screenshot folder keeps only the newest images
+ok - fm-desk-voice: a failed capture exits 1 and leaves no screenshot
+ok - fm-desk-voice: screenshots are delivered by path, alone or with the transcript, as one message
+ok - desk floater: Swift tests pass
+ok - fm-deepgram-lib: loads .env key without printing it
+ok - fm-deepgram-tts: reads the voice from .env, the environment wins, else the default
+exit=0
