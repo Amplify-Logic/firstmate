@@ -934,7 +934,7 @@ final class FloaterModel: ObservableObject {
     private func delivered(_ outcome: String?, audio: [URL], finishing: Bool = false) {
         guard outcome != nil || audio.isEmpty else {
             for url in audio {
-                keepForRetry(url, purpose: .firstmate, reason: "delivery failed")
+                keepForRetry(url, purpose: .firstmate, reason: "delivery failed", finishing: finishing)
             }
             return
         }
@@ -1293,7 +1293,8 @@ final class FloaterModel: ObservableObject {
                 if Recording.keep(failed: failed, duration: Recording.duration(of: url)) {
                     await MainActor.run {
                         self.keepForRetry(url, purpose: purpose,
-                                          reason: failed ? "transcription failed" : "no speech heard")
+                                          reason: failed ? "transcription failed" : "no speech heard",
+                                          finishing: true)
                     }
                 } else {
                     try? FileManager.default.removeItem(at: url)
@@ -1353,11 +1354,14 @@ final class FloaterModel: ObservableObject {
     /// Recording.retryDelays. A dictation stays saved for a manual retry with
     /// `bin/fm-desk-voice.sh retry`. Should the save itself fail, the audio
     /// stays in the recording folder, where the next launch finds it.
-    private func keepForRetry(_ url: URL, purpose: Purpose, reason: String) {
+    private func keepForRetry(_ url: URL, purpose: Purpose, reason: String, finishing: Bool) {
         let name = purpose == .dictate ? "dictate" : "firstmate"
         let retries = purpose == .firstmate
-        if mode == .busy {
-            finish(status: retries ? Self.savedRetrying : "Saved, not sent", for: 6)
+        let message = retries ? Self.savedRetrying : "Saved, not sent"
+        if finishing {
+            finish(status: message, for: 6)
+        } else {
+            flash(message, for: 6)
         }
         Task.detached(priority: .userInitiated) { [repoRoot, fmHome] in
             let saved = Self.keep(repoRoot: repoRoot, fmHome: fmHome, audio: url, purpose: name, reason: reason)
