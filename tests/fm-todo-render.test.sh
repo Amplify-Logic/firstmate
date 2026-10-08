@@ -45,6 +45,8 @@
 #   - The out-of-date window follows the intake's configured poll interval, and
 #     a snapshot whose consumed fields are not strings is reported as malformed
 #     rather than failing the render.
+#   - Team announcements render in their own collapsed "Updates" fold, newest
+#     post first with its post time and link, and never in "Needs you now".
 # shellcheck disable=SC2016
 set -u
 
@@ -730,6 +732,33 @@ HTML
   pass 'a legacy morning file holding only the tickets copy leaves no empty reference fold'
 }
 
+test_team_updates_fold_newest_post_first() {
+  local h page
+  h="$TMP_ROOT/updates"
+  new_home "$h"
+  printf 'C_TEAM\tslack-announcements\tteam announcement channels\n' >>"$h/data/channel-intake/sources.tsv"
+  # Recorded newest-read first but oldest-posted first, so only the post time orders them.
+  observe_at "$h" "$T_1500" observe --source C_TEAM --ref u-old --digest a --class update \
+    --source-epoch "$T_YESTERDAY_1500" --title 'price list changes 1 Nov' >/dev/null
+  observe_at "$h" "$T_0900" observe --source C_TEAM --ref u-new --digest b --class update \
+    --source-epoch "$T_0900" --title 'Furniture limited release - live on the partner webshop' \
+    --link 'https://example.slack.com/archives/C_TEAM/p1' >/dev/null
+  observe_at "$h" "$T_0900" observe --source C_BRIEF --ref ask --digest c --class obligation \
+    --title 'approve the RMA' >/dev/null
+  render_at "$h" "$T_1530" render >/dev/null
+  page=$(page_of "$h")
+  assert_contains "$(cat "$page")" '<summary>Updates (2)</summary>' 'the updates fold is missing'
+  [ "$(line_of "$page" 'Furniture limited release')" -lt "$(line_of "$page" 'price list changes')" ] \
+    || fail 'updates are not newest post first'
+  [ "$(line_of "$page" 'Furniture limited release')" -gt "$(line_of "$page" '<summary>Updates')" ] \
+    || fail 'an update leaked into needs-you'
+  [ "$(line_of "$page" 'approve the RMA')" -lt "$(line_of "$page" '<summary>Updates')" ] \
+    || fail 'the ask is not above the updates'
+  assert_contains "$(cat "$page")" 'posted 09:00 CEST' 'the post time is missing'
+  assert_contains "$(cat "$page")" 'https://example.slack.com/archives/C_TEAM/p1' 'the permalink is missing'
+  pass 'team announcements fold under Updates, newest post first, below every ask'
+}
+
 test_severity_then_recency_orders_the_live_section
 test_waiting_and_closed_never_mix_into_the_live_section
 test_every_line_carries_its_own_read_time
@@ -750,3 +779,4 @@ test_open_tickets_drop_leaves_no_empty_panel_behind
 test_open_tickets_empty_subject_renders_as_an_untitled_ticket
 test_open_tickets_legacy_morning_copy_leaves_no_empty_reference_fold
 test_calm_layout_ranks_live_problems_first_and_folds_the_rest
+test_team_updates_fold_newest_post_first

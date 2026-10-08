@@ -30,7 +30,9 @@
 # first tier. There is no summary strip, no separate Now box and no sweep
 # banner, and no item renders twice. A captain-held backlog decision no read
 # made current stays off the page; the backlog still holds it. Fleet
-# conditions follow, then collapsed folds for waiting on others (including
+# conditions follow, then a collapsed "Updates" fold of team announcements
+# (class update), newest post first, each with its post time and link, then
+# collapsed folds for waiting on others (including
 # requested handoffs), other channel activity (its lines not current for this
 # build in one capped "not re-checked" fold), everything closed since the
 # previous sweep ("Closed today" when that is the start of the day) with its

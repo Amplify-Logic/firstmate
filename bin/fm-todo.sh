@@ -30,8 +30,8 @@
 # {at, how, rev} and `rev`, the item's meaningful revision over its slots.
 # data/todo/journal is an append-only line per transition or command effect.
 # One lock serializes sync and every write. Sync deletes one kind of record
-# and no other: a routine item the intake retired, thirty days after that
-# closure. A routine line you marked with mine, park, you or dig is never
+# and no other: a routine item or team update the intake retired, thirty days
+# after that closure. A routine line you marked with mine, park, you or dig is never
 # retired that way, so it is never pruned either. Every closed obligation and
 # every command tombstone is kept, so done and drop keep suppressing a reopen,
 # and the journal is never trimmed.

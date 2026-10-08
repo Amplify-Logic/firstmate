@@ -120,7 +120,7 @@
 # PER-POLL WORK IS BOUNDED, HISTORY IS NOT DISCARDED. Every ledger surface
 # reads a whole record directory in one process rather than one per field per
 # record, and routine traffic older than the brief horizon that is the only
-# place it is rendered MOVES out of the polled set into `inactive/` with its
+# place it is rendered (a team update after UPDATE_WINDOW) MOVES out of the polled set into `inactive/` with its
 # record intact. Nothing is deleted, nothing is auto-resolved: `items` still
 # lists it, `status` still counts it, and re-observing the same key restores
 # it rather than opening a second item. Anything owed, waiting, corrected or
@@ -179,6 +179,20 @@
 # stage or "Waiting on contact", whoever owns it, whose emails or notes name
 # the captain or in which a colleague promised the customer that the tech team
 # is on it, whatever its last-modified date, and observe each with a timeline. `complete --rescanned` records that the re-scan ran.
+#
+# TEAM ANNOUNCEMENTS ARE INFORMATION, NOT ASKS. A `slack-announcements` source
+# is a set of team channels the orchestrator reads for posts that announce a
+# product or feature launch or change, a date or deadline, a price,
+# availability or ordering change, or a process or policy change; everything
+# else in those channels is not observed at all. A kept post is observed with
+# `--class update`, which only a `slack-announcements` source accepts: it is
+# never owed, never notifiable and never on the to-do list, the day page shows
+# it in its "Updates" fold newest first, and it leaves the polled set like
+# routine traffic but only after UPDATE_WINDOW. A post that asks the page's
+# owner to act, or sets a deadline that is theirs, is observed with an owed
+# class instead.
+# docs/channel-intake.md owns which posts are kept, the title and date
+# convention, and the durable updates log the orchestrator writes beside it.
 #
 # Opt-in is per home and per device: with no `enabled = true` line in private
 # config/channel-intake this command is inert, so cloning the repo or seeding
@@ -270,7 +284,10 @@ DEFAULT_RESCAN_INTERVAL=21600
 # that survives quiet hours, which is what "preserve real severity" means here.
 NOTIFY_CLASSES='urgent outage deadline'
 QUIET_BYPASS_CLASSES='outage'
-ALL_CLASSES='urgent outage deadline routine obligation automation-candidate'
+ALL_CLASSES='urgent outage deadline routine obligation automation-candidate update'
+# A kept team announcement stays on the day page's Updates fold this long
+# before it leaves the polled set the way routine traffic does.
+UPDATE_WINDOW=1209600
 
 CFG_ENABLED=false
 CFG_TIMEZONE=
@@ -886,7 +903,7 @@ restore_inactive_item() {
 }
 
 retire_inactive_items() {
-  local epoch=$1 rows path class state revisions created updated notified retired=0
+  local epoch=$1 rows path class state revisions created updated notified retired=0 horizon
   rows=$(scan_records "$ITEM_DIR" class state revisions created updated notified)
   [ -n "$rows" ] || return 0
   while IFS="$FIELD_SEP" read -r path class state revisions created updated notified; do
@@ -895,13 +912,17 @@ retire_inactive_items() {
     # itself become the unbounded step; the remainder drains on later ticks.
     [ "$retired" -lt "$RETIRE_MAX_PER_PASS" ] || break
     [ "$state" = open ] || continue
-    [ "$class" = routine ] || continue
+    case "$class" in
+      routine) horizon=$BRIEF_WINDOW ;;
+      update) horizon=$UPDATE_WINDOW ;;
+      *) continue ;;
+    esac
     case "$revisions" in ''|0) ;; *) continue ;; esac
     [ -z "$notified" ] || continue
     case "$created" in ''|*[!0-9]*) continue ;; esac
     case "$updated" in ''|*[!0-9]*) updated=$created ;; esac
-    [ $((epoch - created)) -gt "$BRIEF_WINDOW" ] || continue
-    [ $((epoch - updated)) -gt "$BRIEF_WINDOW" ] || continue
+    [ $((epoch - created)) -gt "$horizon" ] || continue
+    [ $((epoch - updated)) -gt "$horizon" ] || continue
     mkdir -p "$INACTIVE_DIR" || continue
     mv -f "$path" "$INACTIVE_DIR/${path##*/}" || continue
     retired=$((retired + 1))
@@ -909,7 +930,7 @@ retire_inactive_items() {
 $rows
 EOF
   [ "$retired" -eq 0 ] \
-    || log_event "moved $retired routine item(s) past the brief horizon to the inactive set"
+    || log_event "moved $retired routine or update item(s) past their horizon to the inactive set"
 }
 
 # The tracked thread set is bounded by the SAME revision window that bounds
@@ -1404,6 +1425,8 @@ observe() {
   esac
   source_known "$id" || die "source is not in the inventory: $id"
   require_class "$class"
+  [ "$class" != update ] || [ "$(inventory_field "$id" 2)" = slack-announcements ] \
+    || die '--class update requires a slack-announcements source'
   if [ -n "$digest_file" ]; then
     [ -z "$digest_in" ] || die 'pass --digest or --digest-file, not both'
     [ -f "$digest_file" ] && [ ! -L "$digest_file" ] \
@@ -2027,8 +2050,8 @@ changed_section() {
       printf -- '- %s was corrected %s time(s) (%s)\n' "$title" "$revisions" "$source"
       continue
     fi
-    # Routine traffic is never a ping; this is where it accumulates.
-    [ "$class" = routine ] || continue
+    # Routine traffic and team updates are never a ping; this is where they accumulate.
+    case "$class" in routine|update) ;; *) continue ;; esac
     case "$created" in ''|*[!0-9]*) continue ;; esac
     [ $((epoch - created)) -le "$BRIEF_WINDOW" ] || continue
     found=true
@@ -2107,7 +2130,7 @@ render_todo() {
     [ -n "$path" ] || continue
     [ "$state" = open ] || continue
     case "$class" in
-      automation-candidate|routine) continue ;;
+      automation-candidate|routine|update) continue ;;
     esac
     found=true
     printf -- '- [ ] %s%s (%s)\n' "$title" "${link:+ $link}" "$source"
