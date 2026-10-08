@@ -1,0 +1,22 @@
+### 8. Valerie edits the post on 9 Oct: webshop date moved to 22 Oct
+updated 38568b14bc8a6490f6a60e91b80956429cc89b06fd658ac411aca56589bb299e
+notify-due exit=0 (no output expected)
+<summary>Updates (2)</summary>
+<td>Aquablu Furniture limited release (REFILL+ Series 2 cabinet), 50 units - live on the partner webshop 22 Oct</td>
+Closed-today mentions: 0
+
+### 9. tick on 10 Oct (past the 1-day routine horizon)
+open items in polled set: 3
+
+### 10. tick on 23 Oct 08:00: >14d after both were first read (8 Oct 14:45), <14d after the 9 Oct 09:30 edit
+inactive: 572a15ebc8bceca19fa37e79ca982dba786e21741f6236fc0c5dd9859b0b0448	open	update	C_TEAM	Flavour box price list changes from 1 Nov
+<summary>Updates (1)</summary>
+<td>Aquablu Furniture limited release (REFILL+ Series 2 cabinet), 50 units - live on the partner webshop 22 Oct</td>
+Closed-today mentions: 0
+
+### 11. tick on 24 Oct 10:00 (>14d after the edit)
+inactive: 38568b14bc8a6490f6a60e91b80956429cc89b06fd658ac411aca56589bb299e	open	update	C_TEAM	Aquablu Furniture limited release (REFILL+ Series 2 cabinet), 50 units - live on the partner webshop 22 Oct
+inactive: 572a15ebc8bceca19fa37e79ca982dba786e21741f6236fc0c5dd9859b0b0448	open	update	C_TEAM	Flavour box price list changes from 1 Nov
+(no Updates fold)
+Closed-today mentions: 0
+Furniture mentions on 24 Oct page: 0
