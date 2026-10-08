@@ -1,0 +1,235 @@
+################ S5 adversarial: observe refusals
+$ fm-channel-intake.sh observe --source C_SUPPORT --ref 1791442800.1 --digest x  [at Thu 08 Oct 09:00]
+fm-channel-intake: --title is required for a new item
+  -> exit 2
+$ fm-channel-intake.sh observe --source FLEET --condition b14 --count 3 --units systems --digest u  [at Thu 08 Oct 09:00]
+fm-channel-intake: --units must name the newest units by id, or be none: systems
+  -> exit 2
+$ fm-channel-intake.sh observe --source FLEET --condition freezing --count 2 --units 867280069323517 (-1.0 C), 867280069323962 (0.5 C) --digest f  [at Thu 08 Oct 09:00]
+fm-channel-intake: --units lists a -1.0 reading, the broken-sensor value; leave such units out of the freezing count and list
+  -> exit 2
+$ fm-channel-intake.sh observe --source FLEET --condition freezing --count 1 --units 867280069323962 (0.5 C) --digest g  [at Thu 08 Oct 09:00]
+new 0d9043719e9914eaa0ab225824d1da941e3435d5e0bf16ccf9804ea65822b6be
+  -> exit 0
+
+################ seed asks (some days old, with rotting relative times)
+$ fm-channel-intake.sh observe --source C_SUPPORT --ref 1791183600.5 --digest a --class obligation --title tidy the internal wiki  [at Mon 05 Oct 09:00]
+new 832e4a44f37697b546b1ebe4adf697333b7d3b828c3a9c602496bab323223fc9
+  -> exit 0
+$ fm-channel-intake.sh observe --source C_SUPPORT --ref 1791183600.6 --digest a --class obligation --title PARTNER WAITING 14 DAYS - Kasper asked yesterday about the spare filters  [at Mon 05 Oct 09:00]
+new c9641f0133bcdd5ddac77a2ffd14c3a6c80c6e41b8b0854d37d8107ed8f43dfd
+  -> exit 0
+$ fm-channel-intake.sh observe --source C_SUPPORT --ref 1791356400.1 --digest b --class obligation --partner --title Natalia relays a dealer question on cooling  [at Wed 07 Oct 09:00]
+new 2751c226fc1c32c10e970ece183a28f30b1295639691d140ee6b0599625424a8
+  -> exit 0
+$ fm-channel-intake.sh observe --source C_SUPPORT --ref 1791442800.2 --digest c --class obligation --title black screen at 869951034894703  [at Thu 08 Oct 09:00]
+new 8c89d71bf97ccd3ca5ca25f3d4954256226db33d8e51d5722ff9c3dac29cf8a8
+  -> exit 0
+$ fm-channel-intake.sh observe --source A_RMA --ref rma-17 --digest d --class obligation --title Partner RMA: tower return costs  [at Thu 08 Oct 09:00]
+new 5da83eb6a40c7d67b12ce572bb8f169ed5a9c3e5940100e76b5bf4be4c769811
+  -> exit 0
+$ fm-channel-intake.sh observe --source C_SUPPORT --ref 1791442800.3 --digest e --class obligation --title Send the quote by tomorrow  [at Thu 08 Oct 09:00]
+new 45c96e9e4c3bbef20c694afe12e5f48a12552143cf5b6e820a7e8b5a08504dc2
+  -> exit 0
+$ fm-channel-intake.sh observe --source C_SUPPORT --ref 1791442800.4 --digest e --class obligation --title Approve 30 days extension  [at Thu 08 Oct 09:00]
+new b6aa8d692be0595e6cfdc020f123d5a22721cdbfd73dcb02e1be6776b4d41836
+  -> exit 0
+$ fm-channel-intake.sh observe --source C_SUPPORT --ref 1791442800.7 --digest e --class obligation --title Return within 14 days?  [at Thu 08 Oct 09:00]
+new be8cdfb58464caf3dbc7efbeb1a887601a579a9bcdc323f69da3a6ecc18ab7bb
+  -> exit 0
+$ fm-channel-intake.sh observe --source FLEET --ref ota-9 --digest o --class obligation --title Raise thermostat OTA? 3 systems  [at Thu 08 Oct 09:00]
+new ece9834d9f2e9293c40f626f36239ccd3799c173e1261f9d94b99ded6dff573e
+  -> exit 0
+$ fm-channel-intake.sh observe --source C_SUPPORT --ref 1791442800.8 --digest h --class urgent --title invoice question from finance  [at Thu 08 Oct 09:00]
+new 795305048f1868f0adcfa36a1071b343729df5f918a6007a2a587cd9c3f1faa8
+  -> exit 0
+$ fm-todo.sh sweep-start  [at Thu 08 Oct 09:00]
+TODO_ITEMS: verification sweep started at 2026-10-08 09:00 CEST
+  -> exit 0
+$ fm-todo-render.sh render  [at Thu 08 Oct 09:00]
+TODO_RENDER: /var/folders/2c/9sf1hvpn23q336b08gs1np0c0000gn/T//fm-lab.JgILp1/.lavish/today-2026-10-08.html rendered at 09:00 CEST
+  -> exit 0
+
+################ S2: Lars closes one himself (actor Lars)
+$ fm-todo.sh close --item t-d316332c6a90 --evidence Lars answered in the thread at 09:55 --actor Lars  [at Thu 08 Oct 10:00]
+TODO_ITEMS: close t-d316332c6a90 -> closed
+  -> exit 0
+
+################ S1: 30-minute pass claim lists recheck: lines
+$ fm-channel-intake.sh claim --source C_SUPPORT  [at Thu 08 Oct 10:30]
+now: 1791448200
+revision_window_seconds: 86400
+revision_window_from: 1791361800
+thread_tracking_window_seconds: 86400
+source: C_SUPPORT	kind: slack-channel	checkpoint: 	coverage: support channel
+recheck: t-3413461be975	e3b0c44298	open	hubspot	hubspot:t-45		YellowBeard consumption report
+recheck: t-3e91ad539e95	cda0a61e81	open	slack-channel (C_SUPPORT)	C_SUPPORT:1791442800.4		Approve 30 days extension
+recheck: t-44e4b905cdda	1a41dd9cae	open	slack-channel (C_SUPPORT)	C_SUPPORT:1791442800.7		Return within 14 days?
+recheck: t-4e5cc29eb243	02235dcabb	open	asana-projects (A_RMA)	A_RMA:rma-17		Partner RMA: tower return costs
+recheck: t-7fa932cca759	d4584cf191	open	slack-channel (C_SUPPORT)	C_SUPPORT:1791183600.5		tidy the internal wiki
+recheck: t-b11cc4beb0e5	5236414222	open	slack-channel (C_SUPPORT)	C_SUPPORT:1791442800.3		Send the quote by tomorrow
+recheck: t-c41c810b4446	4555a7b5f6	open	slack-channel (C_SUPPORT)	C_SUPPORT:1791356400.1		Natalia relays a dealer question on cooling
+recheck: t-ccc57e9b2767	38ee1565f9	open	slack-channel (C_SUPPORT)	C_SUPPORT:1791442800.2		black screen at 869951034894703
+recheck: t-df4c3c4511ca	6d8ae0a010	open	slack-channel (C_SUPPORT)	C_SUPPORT:1791183600.6		PARTNER WAITING - Kasper asked about the spare filters
+  -> exit 0
+$ fm-todo.sh sweep-start --pass  [at Thu 08 Oct 10:30]
+TODO_ITEMS: intake pass started at 2026-10-08 10:30 CEST
+  -> exit 0
+$ fm-todo.sh verify --item t-ccc57e9b2767 --how read the Slack thread  [at Thu 08 Oct 11:00]
+TODO_ITEMS: verify t-ccc57e9b2767 -> open
+  -> exit 0
+$ fm-todo.sh verify --item t-c41c810b4446 --how read the Slack thread  [at Thu 08 Oct 11:00]
+TODO_ITEMS: verify t-c41c810b4446 -> open
+  -> exit 0
+$ fm-channel-intake.sh complete --source C_SUPPORT --checkpoint p1  [at Thu 08 Oct 11:00]
+CHANNEL_INTAKE: C_SUPPORT read complete, checkpoint p1
+TODO_RENDER: /var/folders/2c/9sf1hvpn23q336b08gs1np0c0000gn/T//fm-lab.JgILp1/.lavish/today-2026-10-08.html rendered at 11:00 CEST
+CHANNEL_INTAKE: 7 of 9 listed not re-read: t-3413461be975 t-3e91ad539e95 t-44e4b905cdda t-4e5cc29eb243 t-7fa932cca759 t-b11cc4beb0e5 t-df4c3c4511ca
+  -> exit 0
+
+################ S4: coverage sources get their own reads
+$ fm-channel-intake.sh claim --source D_DMS  [at Thu 08 Oct 10:30]
+now: 1791448200
+revision_window_seconds: 86400
+revision_window_from: 1791361800
+thread_tracking_window_seconds: 86400
+source: D_DMS	kind: slack-dms	checkpoint: 	coverage: DMs with Natalia and Queco
+dms: D_DMS	read each DM and group DM the coverage sentence names directly by its conversation id with the channel-read tool, never through search; observe every message to the captain since the checkpoint, whether or not it carries an @mention
+recheck: t-3413461be975	e3b0c44298	open	hubspot	hubspot:t-45		YellowBeard consumption report
+recheck: t-3e91ad539e95	cda0a61e81	open	slack-channel (C_SUPPORT)	C_SUPPORT:1791442800.4		Approve 30 days extension
+recheck: t-44e4b905cdda	1a41dd9cae	open	slack-channel (C_SUPPORT)	C_SUPPORT:1791442800.7		Return within 14 days?
+recheck: t-4e5cc29eb243	02235dcabb	open	asana-projects (A_RMA)	A_RMA:rma-17		Partner RMA: tower return costs
+recheck: t-7fa932cca759	d4584cf191	open	slack-channel (C_SUPPORT)	C_SUPPORT:1791183600.5		tidy the internal wiki
+recheck: t-b11cc4beb0e5	5236414222	open	slack-channel (C_SUPPORT)	C_SUPPORT:1791442800.3		Send the quote by tomorrow
+recheck: t-c41c810b4446	4555a7b5f6	open	slack-channel (C_SUPPORT)	C_SUPPORT:1791356400.1		Natalia relays a dealer question on cooling
+recheck: t-ccc57e9b2767	38ee1565f9	open	slack-channel (C_SUPPORT)	C_SUPPORT:1791442800.2		black screen at 869951034894703
+recheck: t-df4c3c4511ca	6d8ae0a010	open	slack-channel (C_SUPPORT)	C_SUPPORT:1791183600.6		PARTNER WAITING - Kasper asked about the spare filters
+  -> exit 0
+$ fm-channel-intake.sh claim --source CAL  [at Thu 08 Oct 10:30]
+now: 1791448200
+revision_window_seconds: 86400
+revision_window_from: 1791361800
+thread_tracking_window_seconds: 86400
+source: CAL	kind: calendar	checkpoint: 	coverage: Lars calendar
+calendar: CAL	from: 2026-10-08	to: 2026-10-12	scope: invites the captain has not answered (responseStatus needsAction), and events in this window whose description asks him to prepare or complete something before it; observe each with the event end as --source-epoch
+recheck: t-3413461be975	e3b0c44298	open	hubspot	hubspot:t-45		YellowBeard consumption report
+recheck: t-3e91ad539e95	cda0a61e81	open	slack-channel (C_SUPPORT)	C_SUPPORT:1791442800.4		Approve 30 days extension
+recheck: t-44e4b905cdda	1a41dd9cae	open	slack-channel (C_SUPPORT)	C_SUPPORT:1791442800.7		Return within 14 days?
+recheck: t-4e5cc29eb243	02235dcabb	open	asana-projects (A_RMA)	A_RMA:rma-17		Partner RMA: tower return costs
+recheck: t-7fa932cca759	d4584cf191	open	slack-channel (C_SUPPORT)	C_SUPPORT:1791183600.5		tidy the internal wiki
+recheck: t-b11cc4beb0e5	5236414222	open	slack-channel (C_SUPPORT)	C_SUPPORT:1791442800.3		Send the quote by tomorrow
+recheck: t-c41c810b4446	4555a7b5f6	open	slack-channel (C_SUPPORT)	C_SUPPORT:1791356400.1		Natalia relays a dealer question on cooling
+recheck: t-ccc57e9b2767	38ee1565f9	open	slack-channel (C_SUPPORT)	C_SUPPORT:1791442800.2		black screen at 869951034894703
+recheck: t-df4c3c4511ca	6d8ae0a010	open	slack-channel (C_SUPPORT)	C_SUPPORT:1791183600.6		PARTNER WAITING - Kasper asked about the spare filters
+  -> exit 0
+$ fm-channel-intake.sh claim --source A_RMA  [at Thu 08 Oct 10:30]
+now: 1791448200
+revision_window_seconds: 86400
+revision_window_from: 1791361800
+thread_tracking_window_seconds: 86400
+source: A_RMA	kind: asana-projects	checkpoint: 	coverage: Partner RMA board and tasks assigned to Lars
+relist: A_RMA	last_relist: never	scope: every incomplete task assigned to the captain, whatever its modified date or due date; observe each, then complete with --relisted
+recheck: t-3413461be975	e3b0c44298	open	hubspot	hubspot:t-45		YellowBeard consumption report
+recheck: t-3e91ad539e95	cda0a61e81	open	slack-channel (C_SUPPORT)	C_SUPPORT:1791442800.4		Approve 30 days extension
+recheck: t-44e4b905cdda	1a41dd9cae	open	slack-channel (C_SUPPORT)	C_SUPPORT:1791442800.7		Return within 14 days?
+recheck: t-4e5cc29eb243	02235dcabb	open	asana-projects (A_RMA)	A_RMA:rma-17		Partner RMA: tower return costs
+recheck: t-7fa932cca759	d4584cf191	open	slack-channel (C_SUPPORT)	C_SUPPORT:1791183600.5		tidy the internal wiki
+recheck: t-b11cc4beb0e5	5236414222	open	slack-channel (C_SUPPORT)	C_SUPPORT:1791442800.3		Send the quote by tomorrow
+recheck: t-c41c810b4446	4555a7b5f6	open	slack-channel (C_SUPPORT)	C_SUPPORT:1791356400.1		Natalia relays a dealer question on cooling
+recheck: t-ccc57e9b2767	38ee1565f9	open	slack-channel (C_SUPPORT)	C_SUPPORT:1791442800.2		black screen at 869951034894703
+recheck: t-df4c3c4511ca	6d8ae0a010	open	slack-channel (C_SUPPORT)	C_SUPPORT:1791183600.6		PARTNER WAITING - Kasper asked about the spare filters
+  -> exit 0
+$ fm-channel-intake.sh complete --source A_RMA --checkpoint a1 --relisted  [at Thu 08 Oct 10:30]
+CHANNEL_INTAKE: A_RMA read complete, checkpoint a1
+TODO_RENDER: /var/folders/2c/9sf1hvpn23q336b08gs1np0c0000gn/T//fm-lab.JgILp1/.lavish/today-2026-10-08.html rendered at 10:30 CEST
+CHANNEL_INTAKE: 7 of 9 listed not re-read: t-3413461be975 t-3e91ad539e95 t-44e4b905cdda t-4e5cc29eb243 t-7fa932cca759 t-b11cc4beb0e5 t-df4c3c4511ca
+  -> exit 0
+(second claim same day: expect no relist)
+$ fm-channel-intake.sh claim --source A_RMA  [at Thu 08 Oct 11:00]
+now: 1791450000
+revision_window_seconds: 86400
+revision_window_from: 1791363600
+thread_tracking_window_seconds: 86400
+source: A_RMA	kind: asana-projects	checkpoint: a1	coverage: Partner RMA board and tasks assigned to Lars
+recheck: t-3413461be975	e3b0c44298	open	hubspot	hubspot:t-45		YellowBeard consumption report
+recheck: t-3e91ad539e95	cda0a61e81	open	slack-channel (C_SUPPORT)	C_SUPPORT:1791442800.4		Approve 30 days extension
+recheck: t-44e4b905cdda	1a41dd9cae	open	slack-channel (C_SUPPORT)	C_SUPPORT:1791442800.7		Return within 14 days?
+recheck: t-4e5cc29eb243	02235dcabb	open	asana-projects (A_RMA)	A_RMA:rma-17		Partner RMA: tower return costs
+recheck: t-7fa932cca759	d4584cf191	open	slack-channel (C_SUPPORT)	C_SUPPORT:1791183600.5		tidy the internal wiki
+recheck: t-b11cc4beb0e5	5236414222	open	slack-channel (C_SUPPORT)	C_SUPPORT:1791442800.3		Send the quote by tomorrow
+recheck: t-c41c810b4446	4555a7b5f6	open	slack-channel (C_SUPPORT)	C_SUPPORT:1791356400.1		Natalia relays a dealer question on cooling
+recheck: t-ccc57e9b2767	38ee1565f9	open	slack-channel (C_SUPPORT)	C_SUPPORT:1791442800.2		black screen at 869951034894703
+recheck: t-df4c3c4511ca	6d8ae0a010	open	slack-channel (C_SUPPORT)	C_SUPPORT:1791183600.6		PARTNER WAITING - Kasper asked about the spare filters
+  -> exit 0
+$ fm-channel-intake.sh complete --source C_SUPPORT --checkpoint x --relisted  [at Thu 08 Oct 10:30]
+fm-channel-intake: --relisted requires an asana source
+  -> exit 2
+
+################ S4b adversarial: HubSpot pass needs its tickets + rescan
+$ fm-channel-intake.sh claim --source H_TICKETS  [at Thu 08 Oct 10:30]
+now: 1791448200
+revision_window_seconds: 86400
+revision_window_from: 1791361800
+thread_tracking_window_seconds: 86400
+source: H_TICKETS	kind: hubspot-tickets	checkpoint: 	coverage: Lars HubSpot tickets
+stages: H_TICKETS	every open stage plus "Waiting on contact", which HubSpot marks closed but where a partner can still be waiting on the captain
+tickets: H_TICKETS	hand the complete set of the captain's tickets whose stage is not Closed to tickets before complete; complete refuses without it
+rescan: H_TICKETS	last_rescan: never	scope: every ticket in those stages, any owner, whose emails or notes name the captain or in which a colleague promised the customer that the tech team is on it, re-read in full whatever its last-modified date; observe each with --timeline-file, then complete with --rescanned
+recheck: t-3413461be975	e3b0c44298	open	hubspot	hubspot:t-45		YellowBeard consumption report
+recheck: t-3e91ad539e95	cda0a61e81	open	slack-channel (C_SUPPORT)	C_SUPPORT:1791442800.4		Approve 30 days extension
+recheck: t-44e4b905cdda	1a41dd9cae	open	slack-channel (C_SUPPORT)	C_SUPPORT:1791442800.7		Return within 14 days?
+recheck: t-4e5cc29eb243	02235dcabb	open	asana-projects (A_RMA)	A_RMA:rma-17		Partner RMA: tower return costs
+recheck: t-7fa932cca759	d4584cf191	open	slack-channel (C_SUPPORT)	C_SUPPORT:1791183600.5		tidy the internal wiki
+recheck: t-b11cc4beb0e5	5236414222	open	slack-channel (C_SUPPORT)	C_SUPPORT:1791442800.3		Send the quote by tomorrow
+recheck: t-c41c810b4446	4555a7b5f6	open	slack-channel (C_SUPPORT)	C_SUPPORT:1791356400.1		Natalia relays a dealer question on cooling
+recheck: t-ccc57e9b2767	38ee1565f9	open	slack-channel (C_SUPPORT)	C_SUPPORT:1791442800.2		black screen at 869951034894703
+recheck: t-df4c3c4511ca	6d8ae0a010	open	slack-channel (C_SUPPORT)	C_SUPPORT:1791183600.6		PARTNER WAITING - Kasper asked about the spare filters
+  -> exit 0
+$ fm-channel-intake.sh complete --source H_TICKETS --checkpoint h1 --rescanned  [at Thu 08 Oct 10:30]
+fm-channel-intake: H_TICKETS: hand this pass's open tickets to '/Users/larstolhurst/.no-mistakes/worktrees/9957e108f4d7/01M4DQAQ9JR80R41PSXC9GGAZP/bin/fm-channel-intake.sh tickets' before complete; the open-tickets table was not refreshed
+  -> exit 2
+$ fm-channel-intake.sh tickets --owner captain < tickets.json
+tickets: wrote 1 open tickets for captain read at 1791448200 to /var/folders/2c/9sf1hvpn23q336b08gs1np0c0000gn/T//fm-lab.JgILp1/data/channel-intake/tickets.json
+  -> exit 0
+$ fm-channel-intake.sh complete --source H_TICKETS --checkpoint h1  [at Thu 08 Oct 10:30]
+fm-channel-intake: H_TICKETS: the re-scan is due; run it in this pass and complete with --rescanned
+  -> exit 2
+$ fm-channel-intake.sh complete --source H_TICKETS --checkpoint h1 --rescanned  [at Thu 08 Oct 10:30]
+CHANNEL_INTAKE: H_TICKETS read complete, checkpoint h1
+TODO_RENDER: /var/folders/2c/9sf1hvpn23q336b08gs1np0c0000gn/T//fm-lab.JgILp1/.lavish/today-2026-10-08.html rendered at 10:30 CEST
+CHANNEL_INTAKE: 7 of 9 listed not re-read: t-3413461be975 t-3e91ad539e95 t-44e4b905cdda t-4e5cc29eb243 t-7fa932cca759 t-b11cc4beb0e5 t-df4c3c4511ca
+  -> exit 0
+
+################ S5b: resolve --waiting date rule
+$ fm-channel-intake.sh resolve --item b6aa8d692be0595e6cfdc020f123d5a22721cdbfd73dcb02e1be6776b4d41836 --waiting --reason waiting on Lars for 3 decisions  [at Thu 08 Oct 11:00]
+fm-channel-intake: a wait on the captain needs a date in --reason (YYYY-MM-DD, a full weekday name or mon/tue/thu/fri, tomorrow, next week, or a day number with a month); without one it is a park with no end: waiting on Lars for 3 decisions
+  -> exit 2
+$ fm-channel-intake.sh resolve --item b6aa8d692be0595e6cfdc020f123d5a22721cdbfd73dcb02e1be6776b4d41836 --waiting --reason Lars will answer Sat  [at Thu 08 Oct 11:00]
+fm-channel-intake: a wait on the captain needs a date in --reason (YYYY-MM-DD, a full weekday name or mon/tue/thu/fri, tomorrow, next week, or a day number with a month); without one it is a park with no end: Lars will answer Sat
+  -> exit 2
+$ fm-channel-intake.sh resolve --item b6aa8d692be0595e6cfdc020f123d5a22721cdbfd73dcb02e1be6776b4d41836 --waiting --reason waiting on you  [at Thu 08 Oct 11:00]
+fm-channel-intake: a wait on the captain needs a date in --reason (YYYY-MM-DD, a full weekday name or mon/tue/thu/fri, tomorrow, next week, or a day number with a month); without one it is a park with no end: waiting on you
+  -> exit 2
+$ fm-channel-intake.sh resolve --item b6aa8d692be0595e6cfdc020f123d5a22721cdbfd73dcb02e1be6776b4d41836 --waiting --reason Lars will decide 2 options  [at Thu 08 Oct 11:00]
+fm-channel-intake: a wait on the captain needs a date in --reason (YYYY-MM-DD, a full weekday name or mon/tue/thu/fri, tomorrow, next week, or a day number with a month); without one it is a park with no end: Lars will decide 2 options
+  -> exit 2
+$ fm-channel-intake.sh resolve --item b6aa8d692be0595e6cfdc020f123d5a22721cdbfd73dcb02e1be6776b4d41836 --waiting --reason Queco will send you the logs  [at Thu 08 Oct 11:00]
+waiting b6aa8d692be0595e6cfdc020f123d5a22721cdbfd73dcb02e1be6776b4d41836
+  -> exit 0
+$ fm-channel-intake.sh resolve --item b6aa8d692be0595e6cfdc020f123d5a22721cdbfd73dcb02e1be6776b4d41836 --waiting --reason Lars handed it to Sara  [at Thu 08 Oct 11:00]
+waiting b6aa8d692be0595e6cfdc020f123d5a22721cdbfd73dcb02e1be6776b4d41836
+  -> exit 0
+$ fm-channel-intake.sh resolve --item b6aa8d692be0595e6cfdc020f123d5a22721cdbfd73dcb02e1be6776b4d41836 --waiting --reason waiting on Lars until 14 Oct  [at Thu 08 Oct 11:00]
+waiting b6aa8d692be0595e6cfdc020f123d5a22721cdbfd73dcb02e1be6776b4d41836
+  -> exit 0
+$ fm-channel-intake.sh resolve --item b6aa8d692be0595e6cfdc020f123d5a22721cdbfd73dcb02e1be6776b4d41836 --waiting --reason Lars will answer Friday  [at Thu 08 Oct 11:00]
+waiting b6aa8d692be0595e6cfdc020f123d5a22721cdbfd73dcb02e1be6776b4d41836
+  -> exit 0
+
+################ S3: mine on YellowBeard; final render
+$ fm-todo.sh command --item t-3413461be975 mine  [at Thu 08 Oct 11:00]
+TODO_CMD: mine t-3413461be975 [hubspot:t-45] YellowBeard consumption report
+  -> exit 0
+$ fm-todo-render.sh render  [at Thu 08 Oct 15:00]
+TODO_RENDER: /var/folders/2c/9sf1hvpn23q336b08gs1np0c0000gn/T//fm-lab.JgILp1/.lavish/today-2026-10-08.html rendered at 15:00 CEST
+  -> exit 0
