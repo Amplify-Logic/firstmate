@@ -1,0 +1,22 @@
+ok - the live section ranks a live outage first, then the oldest ask first, never the newest read
+ok - waiting, closed-today and closed-earlier items each render in exactly one place
+ok - each live line carries the time that item was read, separately from the render stamp, with its channel kept for audit
+ok - legacy morning content stays in a labelled historical disclosure
+ok - morning actions merge, resolutions win, and invalid metadata preserves the page
+ok - fleet snapshots group by condition with newest counts and units
+ok - the page is rebuilt from the records every time, so nothing is invented or carried forward
+ok - the page renders from the tracked house-style templates with no visual tool installed
+ok - a completed read refreshes an existing page, never manufactures one, and never fails on the render
+ok - open tickets render live from the snapshot with its own read time and stored stage labels
+ok - the snapshot writer refuses malformed input and keeps the previous snapshot
+ok - an out-of-date snapshot says so with its read time
+ok - a missing or corrupt snapshot says it could not be read
+ok - a morning copy of the tickets table is replaced by the live section
+ok - the out-of-date window follows the configured poll interval
+ok - a snapshot whose consumed fields are not strings is reported, never crashed on
+ok - dropping the morning copy leaves no empty panel or wrapper behind
+ok - a ticket with no subject is written and rendered as an untitled ticket
+ok - a legacy morning file holding only the tickets copy leaves no empty reference fold
+ok - the calm layout ranks live problems and deadlines first in one list, never repeats an item, and folds the rest
+ok - team announcements fold under Updates, newest post first, below every ask
+exit=0

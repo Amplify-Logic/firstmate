@@ -1,0 +1,233 @@
+=== LAB=/var/folders/2c/9sf1hvpn23q336b08gs1np0c0000gn/T//fm-lab.sEAHbZ  now=Thu Oct  8 16:52:10 CEST 2026
+
+##### S5 adversarial: observe refusals
+
+$ /Users/larstolhurst/.no-mistakes/worktrees/9957e108f4d7/01M4DXBK2S9MRA80NVB7C97AZ1/bin/fm-channel-intake.sh observe --source C_BRIEF --ref 1791000000.10 --digest a
+fm-channel-intake: --title is required for a new item
+[exit 2]
+
+$ /Users/larstolhurst/.no-mistakes/worktrees/9957e108f4d7/01M4DXBK2S9MRA80NVB7C97AZ1/bin/fm-channel-intake.sh observe --source FLEET --condition b14 --count 3 --units systems --digest u
+fm-channel-intake: --units must name the newest units by id, or be none: systems
+[exit 2]
+
+$ /Users/larstolhurst/.no-mistakes/worktrees/9957e108f4d7/01M4DXBK2S9MRA80NVB7C97AZ1/bin/fm-channel-intake.sh observe --source FLEET --condition freezing --count 2 --units 867280069323517 (-1.0 C), 867280069323962 (0.5 C) --digest f
+fm-channel-intake: --units lists a -1.0 reading, the broken-sensor value; leave such units out of the freezing count and list
+[exit 2]
+
+$ /Users/larstolhurst/.no-mistakes/worktrees/9957e108f4d7/01M4DXBK2S9MRA80NVB7C97AZ1/bin/fm-channel-intake.sh observe --source FLEET --condition freezing --count 1 --units 867280069323962 (0.5 C) --digest g
+new 0d9043719e9914eaa0ab225824d1da941e3435d5e0bf16ccf9804ea65822b6be
+[exit 0]
+
+##### Seed asks (ask time via --source-epoch)
+
+$ /Users/larstolhurst/.no-mistakes/worktrees/9957e108f4d7/01M4DXBK2S9MRA80NVB7C97AZ1/bin/fm-channel-intake.sh observe --source C_BRIEF --ref r-wiki --digest a --class obligation --source-epoch 1791039130 --title tidy the internal wiki
+new 2e4d2bdbdab7c0859db48cc0d73e3ab9a5cbc0ea117a664e904dd07cfa86df47
+[exit 0]
+
+$ /Users/larstolhurst/.no-mistakes/worktrees/9957e108f4d7/01M4DXBK2S9MRA80NVB7C97AZ1/bin/fm-channel-intake.sh observe --source C_BRIEF --ref r-relay --digest b --class obligation --partner --source-epoch 1791298330 --title Natalia relays a dealer question
+new 6f83141beb9a6adf41cb1ece0cc41e817d014d1ba20c42b7e7e89fc3414e6585
+[exit 0]
+
+$ /Users/larstolhurst/.no-mistakes/worktrees/9957e108f4d7/01M4DXBK2S9MRA80NVB7C97AZ1/bin/fm-channel-intake.sh observe --source C_BRIEF --ref r-sys --digest c --class obligation --source-epoch 1791384730 --title black screen at 869951034894703
+new e9ca72976a74426c6002e7775940ab8e4626591130c2fbec5dbca1d781b6deb3
+[exit 0]
+
+$ /Users/larstolhurst/.no-mistakes/worktrees/9957e108f4d7/01M4DXBK2S9MRA80NVB7C97AZ1/bin/fm-channel-intake.sh observe --source A_RMA --ref r-rma --digest d --class obligation --source-epoch 1791460330 --title Partner RMA: tower return costs
+new e9ce054eb15891b06a661b1796a9a48f2b38a54c65707528aca012a0b969d614
+[exit 0]
+
+$ /Users/larstolhurst/.no-mistakes/worktrees/9957e108f4d7/01M4DXBK2S9MRA80NVB7C97AZ1/bin/fm-channel-intake.sh observe --source C_BRIEF --ref r-rot --digest e --class obligation --source-epoch 1791211930 --title PARTNER WAITING 14 DAYS - Kasper asked yesterday
+new 8009ad5f58746a9ad2f5b016ace16d319346c5e41c780898d3bdfd7ede98797d
+[exit 0]
+
+$ /Users/larstolhurst/.no-mistakes/worktrees/9957e108f4d7/01M4DXBK2S9MRA80NVB7C97AZ1/bin/fm-channel-intake.sh observe --source C_BRIEF --ref r-dead --digest e2 --class obligation --source-epoch 1791467530 --title Send the quote by tomorrow
+new 62261515ac58cb6f11b01aaf355b3a56b4687bdc24f9bf75781196f4730f1fef
+[exit 0]
+
+$ /Users/larstolhurst/.no-mistakes/worktrees/9957e108f4d7/01M4DXBK2S9MRA80NVB7C97AZ1/bin/fm-channel-intake.sh observe --source C_BRIEF --ref r-lars --digest f --class obligation --source-epoch 1791456730 --title invoice question from finance
+new 2f012147962a92955dc6e522e1cd849b7a81676f4323b3a65c74f5096fd169c4
+[exit 0]
+
+$ /Users/larstolhurst/.no-mistakes/worktrees/9957e108f4d7/01M4DXBK2S9MRA80NVB7C97AZ1/bin/fm-channel-intake.sh observe --source C_BRIEF --ref r-chat --digest g --class routine --title lunch is in the kitchen
+new 7d9ae3fd32ddb6ebabe41e72f6429f863e207ed9fd7b603fa8f09f4254f9b886
+[exit 0]
+
+$ /Users/larstolhurst/.no-mistakes/worktrees/9957e108f4d7/01M4DXBK2S9MRA80NVB7C97AZ1/bin/fm-channel-intake.sh observe --source FLEET --ref ota-1 --digest h --class obligation --title Raise thermostat OTA? 3 systems
+new 08d9826bc3602d3fb5dd21ba1ef59db1cb6d79aaada0d5155d80cd582c73f0d8
+[exit 0]
+
+$ /Users/larstolhurst/.no-mistakes/worktrees/9957e108f4d7/01M4DXBK2S9MRA80NVB7C97AZ1/bin/fm-channel-intake.sh tickets --owner captain
+tickets: wrote 1 open tickets for captain read at 1791471131 to /var/folders/2c/9sf1hvpn23q336b08gs1np0c0000gn/T//fm-lab.sEAHbZ/data/channel-intake/tickets.json
+[exit 0]
+
+$ /Users/larstolhurst/.no-mistakes/worktrees/9957e108f4d7/01M4DXBK2S9MRA80NVB7C97AZ1/bin/fm-channel-intake.sh observe --source C_BRIEF --ref r-sys --digest c2 --class obligation
+updated e9ca72976a74426c6002e7775940ab8e4626591130c2fbec5dbca1d781b6deb3
+[exit 0]
+
+##### Morning sweep + first render
+
+$ /Users/larstolhurst/.no-mistakes/worktrees/9957e108f4d7/01M4DXBK2S9MRA80NVB7C97AZ1/bin/fm-todo.sh sweep-start
+TODO_ITEMS: verification sweep started at 2026-10-08 16:52 CEST
+[exit 0]
+
+$ /Users/larstolhurst/.no-mistakes/worktrees/9957e108f4d7/01M4DXBK2S9MRA80NVB7C97AZ1/bin/fm-todo-render.sh render
+TODO_RENDER: /var/folders/2c/9sf1hvpn23q336b08gs1np0c0000gn/T//fm-lab.sEAHbZ/.lavish/today-2026-10-08.html rendered at 16:52 CEST
+[exit 0]
+
+##### S1: claim prints recheck lines + kind-specific reads
+
+$ /Users/larstolhurst/.no-mistakes/worktrees/9957e108f4d7/01M4DXBK2S9MRA80NVB7C97AZ1/bin/fm-channel-intake.sh claim
+now: 1791471134
+revision_window_seconds: 86400
+revision_window_from: 1791384734
+thread_tracking_window_seconds: 86400
+source: C_BRIEF	kind: slack-channel	checkpoint: 	coverage: daily brief channel
+source: D_DMS	kind: slack-dms	checkpoint: 	coverage: DMs with Natalia and Queco
+dms: D_DMS	read each DM and group DM the coverage sentence names directly by its conversation id with the channel-read tool, never through search; observe every message to the captain since the checkpoint, whether or not it carries an @mention
+source: CAL	kind: calendar	checkpoint: 	coverage: the captain calendar
+calendar: CAL	from: 2026-10-08	to: 2026-10-12	scope: invites the captain has not answered (responseStatus needsAction), and events in this window whose description asks him to prepare or complete something before it; observe each with the time the invite was sent or last updated as --source-epoch, never the event time
+source: A_REQ	kind: asana-projects	checkpoint: 	coverage: tasks assigned to the captain
+relist: A_REQ	last_relist: never	scope: every incomplete task assigned to the captain, whatever its modified date or due date; observe each, then complete with --relisted
+source: A_RMA	kind: asana-projects	checkpoint: 	coverage: partner RMA board
+relist: A_RMA	last_relist: never	scope: every incomplete task assigned to the captain, whatever its modified date or due date; observe each, then complete with --relisted
+source: H_TICKETS	kind: hubspot-tickets	checkpoint: 	coverage: tickets naming the captain
+stages: H_TICKETS	every open stage plus "Waiting on contact", which HubSpot marks closed but where a partner can still be waiting on the captain
+tickets: H_TICKETS	hand the complete set of the captain's tickets whose stage is not Closed to tickets before complete; complete refuses without it
+rescan: H_TICKETS	last_rescan: never	scope: every ticket in those stages, any owner, whose emails or notes name the captain or in which a colleague promised the customer that the tech team is on it, re-read in full whatever its last-modified date; observe each with --timeline-file, then complete with --rescanned
+source: FLEET	kind: telemetry-fleet-alerts	checkpoint: 	coverage: fleet telemetry
+recheck: t-31b7d0eea86c	a6f9a6336a	open	slack-channel (C_BRIEF)	C_BRIEF:r-dead		Send the quote by tomorrow
+recheck: t-3413461be975	e3b0c44298	open	hubspot	hubspot:t-45		YellowBeard consumption report
+recheck: t-997b589eaf7c	b7db748c8e	open	asana-projects (A_RMA)	A_RMA:r-rma		Partner RMA: tower return costs
+recheck: t-99921f872745	c7188e787d	open	slack-channel (C_BRIEF)	C_BRIEF:r-rot		PARTNER WAITING - Kasper asked
+recheck: t-a5edbf4eeeb5	b396e70c65	open	slack-channel (C_BRIEF)	C_BRIEF:r-sys		black screen at 869951034894703
+recheck: t-e89e84263d9f	564a45f525	open	slack-channel (C_BRIEF)	C_BRIEF:r-lars		invoice question from finance
+recheck: t-e8caa8ecd451	93db74bfaa	open	slack-channel (C_BRIEF)	C_BRIEF:r-relay		Natalia relays a dealer question
+recheck: t-f92ea310e116	be4785e238	open	slack-channel (C_BRIEF)	C_BRIEF:r-wiki		tidy the internal wiki
+[exit 0]
+
+##### S1: pass floor, re-read one, Lars closes one, skip the rest, complete counts misses
+
+$ /Users/larstolhurst/.no-mistakes/worktrees/9957e108f4d7/01M4DXBK2S9MRA80NVB7C97AZ1/bin/fm-todo.sh sweep-start --pass
+TODO_ITEMS: intake pass started at 2026-10-08 16:52 CEST
+[exit 0]
+
+$ /Users/larstolhurst/.no-mistakes/worktrees/9957e108f4d7/01M4DXBK2S9MRA80NVB7C97AZ1/bin/fm-todo.sh verify --item t-e8caa8ecd451 --how read the Slack thread
+TODO_ITEMS: verify t-e8caa8ecd451 -> open
+[exit 0]
+
+$ /Users/larstolhurst/.no-mistakes/worktrees/9957e108f4d7/01M4DXBK2S9MRA80NVB7C97AZ1/bin/fm-todo.sh close --item t-e89e84263d9f --evidence Lars answered in the thread --actor Lars
+TODO_ITEMS: close t-e89e84263d9f -> closed
+[exit 0]
+
+$ /Users/larstolhurst/.no-mistakes/worktrees/9957e108f4d7/01M4DXBK2S9MRA80NVB7C97AZ1/bin/fm-channel-intake.sh complete --source C_BRIEF --checkpoint c-1
+CHANNEL_INTAKE: C_BRIEF read complete, checkpoint c-1
+TODO_RENDER: /var/folders/2c/9sf1hvpn23q336b08gs1np0c0000gn/T//fm-lab.sEAHbZ/.lavish/today-2026-10-08.html rendered at 16:52 CEST
+CHANNEL_INTAKE: 6 of 8 listed not re-read: t-31b7d0eea86c t-3413461be975 t-997b589eaf7c t-99921f872745 t-a5edbf4eeeb5 t-f92ea310e116
+[exit 0]
+
+##### S4 adversarial: HubSpot complete without this pass's tickets / rescan
+
+$ /Users/larstolhurst/.no-mistakes/worktrees/9957e108f4d7/01M4DXBK2S9MRA80NVB7C97AZ1/bin/fm-channel-intake.sh complete --source H_TICKETS --checkpoint h1 --rescanned
+fm-channel-intake: H_TICKETS: hand this pass's open tickets to '/Users/larstolhurst/.no-mistakes/worktrees/9957e108f4d7/01M4DXBK2S9MRA80NVB7C97AZ1/bin/fm-channel-intake.sh tickets' before complete; the open-tickets table was not refreshed
+[exit 2]
+
+$ /Users/larstolhurst/.no-mistakes/worktrees/9957e108f4d7/01M4DXBK2S9MRA80NVB7C97AZ1/bin/fm-channel-intake.sh tickets --owner captain
+tickets: wrote 1 open tickets for captain read at 1791471136 to /var/folders/2c/9sf1hvpn23q336b08gs1np0c0000gn/T//fm-lab.sEAHbZ/data/channel-intake/tickets.json
+[exit 0]
+
+$ /Users/larstolhurst/.no-mistakes/worktrees/9957e108f4d7/01M4DXBK2S9MRA80NVB7C97AZ1/bin/fm-channel-intake.sh complete --source H_TICKETS --checkpoint h1
+fm-channel-intake: H_TICKETS: the re-scan is due; run it in this pass and complete with --rescanned
+[exit 2]
+
+$ /Users/larstolhurst/.no-mistakes/worktrees/9957e108f4d7/01M4DXBK2S9MRA80NVB7C97AZ1/bin/fm-channel-intake.sh complete --source H_TICKETS --checkpoint h1 --rescanned
+CHANNEL_INTAKE: H_TICKETS read complete, checkpoint h1
+TODO_RENDER: /var/folders/2c/9sf1hvpn23q336b08gs1np0c0000gn/T//fm-lab.sEAHbZ/.lavish/today-2026-10-08.html rendered at 16:52 CEST
+CHANNEL_INTAKE: 6 of 8 listed not re-read: t-31b7d0eea86c t-3413461be975 t-997b589eaf7c t-99921f872745 t-a5edbf4eeeb5 t-f92ea310e116
+[exit 0]
+
+$ /Users/larstolhurst/.no-mistakes/worktrees/9957e108f4d7/01M4DXBK2S9MRA80NVB7C97AZ1/bin/fm-channel-intake.sh complete --source A_REQ --checkpoint a1 --relisted
+CHANNEL_INTAKE: A_REQ read complete, checkpoint a1
+TODO_RENDER: /var/folders/2c/9sf1hvpn23q336b08gs1np0c0000gn/T//fm-lab.sEAHbZ/.lavish/today-2026-10-08.html rendered at 16:52 CEST
+CHANNEL_INTAKE: 6 of 8 listed not re-read: t-31b7d0eea86c t-3413461be975 t-997b589eaf7c t-99921f872745 t-a5edbf4eeeb5 t-f92ea310e116
+[exit 0]
+
+$ /Users/larstolhurst/.no-mistakes/worktrees/9957e108f4d7/01M4DXBK2S9MRA80NVB7C97AZ1/bin/fm-channel-intake.sh claim --source A_REQ
+now: 1791471137
+revision_window_seconds: 86400
+revision_window_from: 1791384737
+thread_tracking_window_seconds: 86400
+source: A_REQ	kind: asana-projects	checkpoint: a1	coverage: tasks assigned to the captain
+recheck: t-31b7d0eea86c	a6f9a6336a	open	slack-channel (C_BRIEF)	C_BRIEF:r-dead		Send the quote by tomorrow
+recheck: t-3413461be975	e3b0c44298	open	hubspot	hubspot:t-45		YellowBeard consumption report
+recheck: t-997b589eaf7c	b7db748c8e	open	asana-projects (A_RMA)	A_RMA:r-rma		Partner RMA: tower return costs
+recheck: t-99921f872745	c7188e787d	open	slack-channel (C_BRIEF)	C_BRIEF:r-rot		PARTNER WAITING - Kasper asked
+recheck: t-a5edbf4eeeb5	b396e70c65	open	slack-channel (C_BRIEF)	C_BRIEF:r-sys		black screen at 869951034894703
+recheck: t-e8caa8ecd451	93db74bfaa	open	slack-channel (C_BRIEF)	C_BRIEF:r-relay		Natalia relays a dealer question
+recheck: t-f92ea310e116	be4785e238	open	slack-channel (C_BRIEF)	C_BRIEF:r-wiki		tidy the internal wiki
+[exit 0]
+
+##### S3: mine keeps YellowBeard tracked, not surfaced
+
+$ /Users/larstolhurst/.no-mistakes/worktrees/9957e108f4d7/01M4DXBK2S9MRA80NVB7C97AZ1/bin/fm-todo.sh command --item t-3413461be975 mine
+TODO_CMD: mine t-3413461be975 [hubspot:t-45] YellowBeard consumption report
+[exit 0]
+
+##### S5 adversarial: resolve --waiting needs a date or a named non-captain owner
+ledger key=2e4d2bdbdab7c0859db48cc0d73e3ab9a5cbc0ea117a664e904dd07cfa86df47
+
+$ /Users/larstolhurst/.no-mistakes/worktrees/9957e108f4d7/01M4DXBK2S9MRA80NVB7C97AZ1/bin/fm-channel-intake.sh resolve --item 2e4d2bdbdab7c0859db48cc0d73e3ab9a5cbc0ea117a664e904dd07cfa86df47 --waiting --reason later
+fm-channel-intake: a wait needs a date in --reason (YYYY-MM-DD, a full weekday name or mon/tue/thu/fri, tomorrow, next week, or a day number with a month) or a hand-over to someone named other than the captain (waiting on/for Name, routed to Name, handed (over) to Name, assigned to Name, Name will ...); without one it is a park with no end: later
+[exit 2]
+
+$ /Users/larstolhurst/.no-mistakes/worktrees/9957e108f4d7/01M4DXBK2S9MRA80NVB7C97AZ1/bin/fm-channel-intake.sh resolve --item 2e4d2bdbdab7c0859db48cc0d73e3ab9a5cbc0ea117a664e904dd07cfa86df47 --waiting --reason Lars will do it later
+fm-channel-intake: a wait needs a date in --reason (YYYY-MM-DD, a full weekday name or mon/tue/thu/fri, tomorrow, next week, or a day number with a month) or a hand-over to someone named other than the captain (waiting on/for Name, routed to Name, handed (over) to Name, assigned to Name, Name will ...); without one it is a park with no end: Lars will do it later
+[exit 2]
+
+$ /Users/larstolhurst/.no-mistakes/worktrees/9957e108f4d7/01M4DXBK2S9MRA80NVB7C97AZ1/bin/fm-channel-intake.sh resolve --item 2e4d2bdbdab7c0859db48cc0d73e3ab9a5cbc0ea117a664e904dd07cfa86df47 --waiting --reason He will reply later
+fm-channel-intake: a wait needs a date in --reason (YYYY-MM-DD, a full weekday name or mon/tue/thu/fri, tomorrow, next week, or a day number with a month) or a hand-over to someone named other than the captain (waiting on/for Name, routed to Name, handed (over) to Name, assigned to Name, Name will ...); without one it is a park with no end: He will reply later
+[exit 2]
+
+$ /Users/larstolhurst/.no-mistakes/worktrees/9957e108f4d7/01M4DXBK2S9MRA80NVB7C97AZ1/bin/fm-channel-intake.sh resolve --item 2e4d2bdbdab7c0859db48cc0d73e3ab9a5cbc0ea117a664e904dd07cfa86df47 --waiting --reason Everything will settle later
+fm-channel-intake: a wait needs a date in --reason (YYYY-MM-DD, a full weekday name or mon/tue/thu/fri, tomorrow, next week, or a day number with a month) or a hand-over to someone named other than the captain (waiting on/for Name, routed to Name, handed (over) to Name, assigned to Name, Name will ...); without one it is a park with no end: Everything will settle later
+[exit 2]
+
+$ /Users/larstolhurst/.no-mistakes/worktrees/9957e108f4d7/01M4DXBK2S9MRA80NVB7C97AZ1/bin/fm-channel-intake.sh resolve --item 2e4d2bdbdab7c0859db48cc0d73e3ab9a5cbc0ea117a664e904dd07cfa86df47 --waiting --reason Whoever will pick it up
+fm-channel-intake: a wait needs a date in --reason (YYYY-MM-DD, a full weekday name or mon/tue/thu/fri, tomorrow, next week, or a day number with a month) or a hand-over to someone named other than the captain (waiting on/for Name, routed to Name, handed (over) to Name, assigned to Name, Name will ...); without one it is a park with no end: Whoever will pick it up
+[exit 2]
+
+$ /Users/larstolhurst/.no-mistakes/worktrees/9957e108f4d7/01M4DXBK2S9MRA80NVB7C97AZ1/bin/fm-channel-intake.sh resolve --item 2e4d2bdbdab7c0859db48cc0d73e3ab9a5cbc0ea117a664e904dd07cfa86df47 --waiting --reason Mine will wait
+fm-channel-intake: a wait needs a date in --reason (YYYY-MM-DD, a full weekday name or mon/tue/thu/fri, tomorrow, next week, or a day number with a month) or a hand-over to someone named other than the captain (waiting on/for Name, routed to Name, handed (over) to Name, assigned to Name, Name will ...); without one it is a park with no end: Mine will wait
+[exit 2]
+
+$ /Users/larstolhurst/.no-mistakes/worktrees/9957e108f4d7/01M4DXBK2S9MRA80NVB7C97AZ1/bin/fm-channel-intake.sh resolve --item 2e4d2bdbdab7c0859db48cc0d73e3ab9a5cbc0ea117a664e904dd07cfa86df47 --waiting --reason waiting on you
+fm-channel-intake: a wait needs a date in --reason (YYYY-MM-DD, a full weekday name or mon/tue/thu/fri, tomorrow, next week, or a day number with a month) or a hand-over to someone named other than the captain (waiting on/for Name, routed to Name, handed (over) to Name, assigned to Name, Name will ...); without one it is a park with no end: waiting on you
+[exit 2]
+
+$ /Users/larstolhurst/.no-mistakes/worktrees/9957e108f4d7/01M4DXBK2S9MRA80NVB7C97AZ1/bin/fm-channel-intake.sh resolve --item 2e4d2bdbdab7c0859db48cc0d73e3ab9a5cbc0ea117a664e904dd07cfa86df47 --waiting --reason Queco will send the logs
+waiting 2e4d2bdbdab7c0859db48cc0d73e3ab9a5cbc0ea117a664e904dd07cfa86df47
+[exit 0]
+
+$ /Users/larstolhurst/.no-mistakes/worktrees/9957e108f4d7/01M4DXBK2S9MRA80NVB7C97AZ1/bin/fm-channel-intake.sh resolve --item 2e4d2bdbdab7c0859db48cc0d73e3ab9a5cbc0ea117a664e904dd07cfa86df47 --waiting --reason waiting on Lars until 14 Oct
+waiting 2e4d2bdbdab7c0859db48cc0d73e3ab9a5cbc0ea117a664e904dd07cfa86df47
+[exit 0]
+
+##### Final render
+
+$ /Users/larstolhurst/.no-mistakes/worktrees/9957e108f4d7/01M4DXBK2S9MRA80NVB7C97AZ1/bin/fm-todo-render.sh render
+TODO_RENDER: /var/folders/2c/9sf1hvpn23q336b08gs1np0c0000gn/T//fm-lab.sEAHbZ/.lavish/today-2026-10-08.html rendered at 16:52 CEST
+[exit 0]
+
+$ /Users/larstolhurst/.no-mistakes/worktrees/9957e108f4d7/01M4DXBK2S9MRA80NVB7C97AZ1/bin/fm-todo.sh list
+t-31b7d0eea86c	open	reply	a6f9a6336a	Send the quote by tomorrow
+t-3413461be975	open	reply	e3b0c44298	YellowBeard consumption report
+t-801b4580ed94	open	info	5839d6434a	lunch is in the kitchen
+t-997b589eaf7c	open	reply	b7db748c8e	Partner RMA: tower return costs
+t-99921f872745	open	reply	c7188e787d	PARTNER WAITING - Kasper asked
+t-9f47d5608f55	open	condition	3aa982882a	Raise thermostat OTA? 3 systems
+t-a5edbf4eeeb5	open	reply	b396e70c65	black screen at 869951034894703
+t-a7f423244065	open	approval	e3b0c44298	merge the voice fix?
+t-d2b0572581d4	open	condition	67cef5ad02	1 coolers under 1 C; newest: 867280069323962 (0.5 C)
+t-e89e84263d9f	closed	reply	564a45f525	invoice question from finance
+t-e8caa8ecd451	open	reply	93db74bfaa	Natalia relays a dealer question
+t-f92ea310e116	waiting	reply	be4785e238	tidy the internal wiki
+[exit 0]

@@ -1,0 +1,29 @@
+ok - a pass judges every stored record by its aliases, whenever it was written
+ok - an age counts calendar days across a clock change
+ok - a time-bound ask closes by auto-expiry after its end, and a reopen or a missing end time stays open
+ok - a Z end time expires its item, and a line the captain marked is left for him to clear
+ok - a park holds off expiry only until it lapses
+ok - an expired meeting moved later reopens and waits for its new end
+ok - an expired ask the next sweep re-lists with no end time reopens
+ok - verification changes only on a source read or an explicit verify, never on a sync or render
+ok - done survives repeated syncs and the next morning; a changed ask resurfaces once with its reason
+ok - an edit after a ledger resolution reopens the item once and the old resolution does not re-close it
+ok - a reopen by any of its slots hides the source label, and a manual reason is shown as written
+ok - stale pages are refused, repeats are harmless, and a handoff stays requested until accepted
+ok - missing or corrupt input closes nothing and a released hold closes only its own item
+ok - one ask seen twice dedupes, a snooze returns unverified, and only a named fulfilled close counts
+ok - reopen brings a handed-over item back to the captain and refuses one already open
+ok - captain holds nobody re-checked stay in the store and off the page
+ok - routine activity older than the sweep stays on the page in its own not re-checked fold
+ok - a retired routine record closes its item as superseded and an unreadable ledger closes nothing
+ok - the routine not re-checked fold is capped at ten rows and a count of the rest
+ok - sync prunes a retired routine record after thirty days and keeps every ask it ever tracked
+ok - a routine line the captain marked is never retired by the intake, nor pruned
+ok - a reopen note is not a captain mark: a revived routine thread still retires and prunes
+ok - a partner-facing ask awaiting the captain ranks right after live problems and deadlines, oldest first and undated last
+ok - each row marks the system it came from, and an unknown source gets a neutral marker
+ok - a row merged from a morning line and a later ledger record marks the source it presents
+ok - a pass lists every open item to re-check, counts the ones it skipped, keeps the closed boundary and leaves held decisions to the morning sweep
+ok - Needs you ranks partners from the source, oldest ask first, folds tooling below, and honours mine
+ok - titles lose relative times, device updates stay off, ticket times are local and coverage names its gaps
+exit=0
