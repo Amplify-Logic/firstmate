@@ -217,9 +217,9 @@
 # A WAIT ON THE CAPTAIN HAS A DATE. `resolve --waiting` is for work handed to
 # someone else. A reason that leaves the wait with the captain - "later",
 # "waiting on/for" him, or him (you, captain, one of his captain_names) who
-# will answer, decide or reply - is refused unless
-# it names a date (YYYY-MM-DD, a weekday, tomorrow, next week, or a day and
-# month), because without one it is a park with no end.
+# will answer, decide or reply - is refused unless it names a date
+# (YYYY-MM-DD, a full weekday name or mon/tue/thu/fri, tomorrow, next week, or
+# a day number with a month), because without one it is a park with no end.
 #
 # TEAM ANNOUNCEMENTS ARE INFORMATION, NOT ASKS. A `slack-announcements` source
 # is a set of team channels the orchestrator reads for posts that announce a
@@ -1775,7 +1775,7 @@ resolve_item() {
   require_id 'item key' "$key"
   [ -n "$reason" ] || die '--reason is required'
   if [ "$waiting" = true ] && waits_on_captain "$reason" && ! names_a_date "$reason"; then
-    die "a wait on the captain needs a date in --reason (YYYY-MM-DD, a weekday, tomorrow, next week or a day and month); without one it is a park with no end: $reason"
+    die "a wait on the captain needs a date in --reason (YYYY-MM-DD, a full weekday name or mon/tue/thu/fri, tomorrow, next week, or a day number with a month); without one it is a park with no end: $reason"
   fi
   epoch=$(now_epoch)
   require_state_lock

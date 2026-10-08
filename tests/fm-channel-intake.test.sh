@@ -1968,6 +1968,9 @@ test_observe_and_resolve_refuse_what_rots_the_page() {
     out=$(at "$h" "$T_0915" resolve --item "$key" --waiting --reason "$reason" 2>&1) && code=0 || code=$?
     expect_code 2 "$code" "a wait on the captain with no date was accepted: $reason"
   done
+  out=$(at "$h" "$T_0915" resolve --item "$key" --waiting --reason 'Lars will answer Sat' 2>&1) && code=0 || code=$?
+  expect_code 2 "$code" 'a bare "Sat" was accepted as a date'
+  assert_contains "$out" 'a full weekday name or mon/tue/thu/fri' 'the refusal did not say which weekdays count'
   # A hand-over to someone else that only mentions him is not a wait on him.
   for reason in 'Lars handed it to Sara' 'Queco will send you the logs' 'routed to Naomi, she will update your ticket'; do
     at "$h" "$T_0915" resolve --item "$key" --waiting --reason "$reason" >/dev/null \
