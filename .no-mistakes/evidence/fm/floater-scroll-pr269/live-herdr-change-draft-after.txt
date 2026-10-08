@@ -1,0 +1,23 @@
+
+❯ Run exactly this one bash command and nothing
+  else: bin/fm-lock.sh ; then reply with just its
+  exit code.
+
+  Ran 1 shell command
+
+⏺ 0
+
+✻ Worked for 5s · done 10:02 AM
+
+❯ Reply with only the word HERDRPONG.
+
+⏺ HERDRPONG
+
+✻ Churned for 1s · done 10:02 AM
+
+─────────────────────────────────────────────────────
+❯ my unfinished draft about the glasses
+─────────────────────────────────────────────────────
+  ⚠ Transcript saving is off — inherited CLAUDE_CO…
+  ⚓ Opus 5.5 (1M context)·medium │ 🧠6% ⚡7% │ 🚢…
+  ⏵⏵ auto mode on (shift+tab to cycle)

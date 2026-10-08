@@ -1,0 +1,4 @@
+herdr pane get w1:p1 --session fm-lab-pr269-52310-10541
+herdr pane process-info --pane w1:p1 --session fm-lab-pr269-52310-10541
+herdr status --json --session fm-lab-pr269-52310-10541
+herdr pane read w1:p1 --source visible --format ansi --session fm-lab-pr269-52310-10541
