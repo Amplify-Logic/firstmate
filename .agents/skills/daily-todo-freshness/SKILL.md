@@ -2,8 +2,8 @@
 name: daily-todo-freshness
 description: >-
   Agent-only verification procedure for any captain-facing "waiting on you" surface.
-  Load before producing or updating a daily Fresh to-do, needs-you, waiting-on-you, or morning-brief page, and before claiming in chat that a person or ticket is waiting on the captain.
-  Owns the clock rule, the per-ticket HubSpot timeline read, direct Slack reads, Gmail's limits, Asana, Calendar, telemetry, the other-party acknowledgement check, the pre-publish re-read, and labelling discipline.
+  Load before producing or updating a daily Fresh to-do, needs-you, waiting-on-you, or morning-brief page, before re-checking the `recheck:` items a channel-intake claim lists, and before claiming in chat that a person or ticket is waiting on the captain.
+  Owns the clock rule, the per-ticket HubSpot timeline read, direct Slack reads, Gmail's limits, Asana, Calendar, telemetry, the other-party acknowledgement check, the closing rules, the pre-publish re-read, and labelling discipline.
 user-invocable: false
 metadata:
   internal: true
@@ -36,7 +36,14 @@ Every stage below exists to close one of those gaps.
 1. Record the sweep start time in CEST and in UTC.
 2. Every HubSpot and Gmail timestamp is UTC, printed with a trailing `Z`.
 3. Convert to CEST before writing any time on the surface; never print a raw UTC value as local.
-4. For the daily page, record the sweep start with `bin/fm-todo.sh sweep-start`, so a line not re-read in this sweep renders as not re-checked.
+4. For the daily page, record the sweep start with `bin/fm-todo.sh sweep-start`, or `sweep-start --pass` on a 30-minute intake pass, so a line not re-read in this sweep or pass renders as not re-checked.
+
+## The 30-minute pass re-checks what is open
+
+A pass is not only an intake of new messages.
+Every `recheck:` line its claim prints is an open or waiting item to re-read at its source in that same pass, through the stage below that owns the source.
+Record each outcome on the item: `bin/fm-todo.sh verify` when it is still open, `bin/fm-todo.sh close` with the evidence when it is discharged.
+`complete` reports the listed items left unread; that count is a miss to fix in the next pass, not a result.
 
 ## Stage 1 - HubSpot, per ticket, in this order
 
@@ -59,7 +66,7 @@ The HubSpot tool's own help owns object types, filter syntax, and association pa
 ## Stage 2 - Slack, read directly, never via search
 
 1. For each named counterparty, read the DM or channel history directly with the channel-read tool.
-2. Known ids: Queco `D08G6R0TD2T`, Naomi `D0C2F8VAVH6`, Salla `D0C1FRAK87Q`, Sara `D08USUFHL75`, Gaspar `D0C0RLVV04B`, Valerie/Ashlyn group `C0A0WA3MLKF`, NS/Payter group `C0BG0NGUQGZ`, `#operations-tech-support` `C08DL1GGTE1`, the captain's self-DM `D08B1CRK41M`.
+2. Known ids, which a `slack-dms` intake source reads directly on every pass: Queco `D08G6R0TD2T`, Naomi `D0C2F8VAVH6`, Salla `D0C1FRAK87Q`, Sara `D08USUFHL75`, Gaspar `D0C0RLVV04B`, Valerie/Ashlyn group `C0A0WA3MLKF`, NS/Payter group `C0BG0NGUQGZ`, `#operations-tech-support` `C08DL1GGTE1`, the captain's self-DM `D08B1CRK41M`.
 3. For any item whose thread is named, read the thread to its last reply and check whether the captain appears after the question.
 4. Use Slack search only to discover an unknown thread, never to conclude that something is absent.
 5. A zero-result search is not evidence of absence; record it as "not located".
@@ -98,6 +105,14 @@ For anything still looking open after Stages 1 to 6:
 1. Before writing "no reply from him", look for the counterparty's next message in every visible channel.
 2. If they thank him, confirm, or move on, he acted somewhere invisible; the item is not open.
 3. Where a relationship is known to run on WhatsApp or phone, write "cannot verify, likely handled off-channel" rather than "no reply".
+
+## Closing rules
+
+An item closes on evidence that its ask was discharged, never on silence.
+
+1. A reply the captain posted in the parent channel after the mention, not inside the thread, counts as a reply; a thread read that finds no replies is not evidence that he did not answer.
+2. An internal hand-over - routing the ask to a colleague, another ticket or another team - never closes a partner-facing ask while its HubSpot ticket still reads Waiting on us; it stays open or waiting until the partner has an answer.
+3. The sent-replies harvest closes each open item a sent message discharges, with that message as the evidence and the captain as the actor; an acknowledgement or a promise to act closes nothing.
 
 ## Stage 8 - the pre-publish re-read, non-negotiable
 

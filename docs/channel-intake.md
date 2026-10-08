@@ -26,8 +26,10 @@ A tick therefore looks like this.
 
 1. launchd runs `tick`. It reads no source and finds the due set from each source's own checkpoint and backoff.
 2. If anything is due it records one armed cycle and appends exactly one wake.
-3. The orchestrator runs `claim`, which hands back each due source's checkpoint, its coverage sentence, the bounded revision window, and the tracked thread parents with their reply markers.
+3. The orchestrator runs `claim`, which hands back each due source's checkpoint, its coverage sentence, the bounded revision window, the tracked thread parents with their reply markers, any extra read the source's kind owes, and one `recheck:` line per open or waiting to-do item that names a source.
+   It then records the pass with `bin/fm-todo.sh sweep-start --pass`, so every line the pass does not re-read shows as not re-checked.
 4. The orchestrator reads those sources through its own authenticated connector path.
+   It re-reads every `recheck:` item at its source in the same pass, applying the closing rules in `daily-todo-freshness`, and records each outcome with `bin/fm-todo.sh verify` or, with the evidence, `bin/fm-todo.sh close`.
 5. Each observed message becomes one `observe` call carrying a stable source id and a content digest.
    Before classifying anything as `obligation`, `urgent` or `deadline`, the orchestrator reads the rest of the thread for a reply the captain already sent, and reads the source-side item's own completion state.
    A message the captain has already answered with content that discharges it, or whose source-side task is already completed, is reported as `routine` rather than opened as a new owed item.
@@ -36,13 +38,20 @@ A tick therefore looks like this.
    A HubSpot ticket is observed with `--timeline-file`, so the gate itself decides whether it is a partner-facing ask awaiting the captain; `bin/fm-channel-intake.sh --help` owns the timeline format and the rules.
    Such an ask is recorded as owed and leads the day page, `todo` and the brief ahead of every other class; the alert payload orders it first only within the notifiable classes.
    Re-reading a resolved ticket's timeline records the fresh facts on the archived item, which stays resolved.
-6. A HubSpot ticket source also hands the complete current set of the captain's tickets whose stage is not Closed, Waiting on contact included, to `tickets` on every pass, before `complete`; that snapshot is what the day page's "Your open tickets" section renders, so a pass that skips it leaves the section labelled out of date.
+6. A HubSpot ticket source also hands the complete current set of the captain's tickets whose stage is not Closed, Waiting on contact included, to `tickets` on every pass, before `complete`; that snapshot is what the day page's "Your open tickets" section renders, and `complete` refuses a pass that skipped it.
    The source's private coverage sentence names which owner that is, and `bin/fm-channel-intake.sh --help` owns the input format and the refusals.
-7. `complete --source ID --checkpoint VALUE` advances that source's checkpoint, or `fail --source ID --reason TEXT` records the failure and backs off.
+7. A source that reads what the captain sent - his ticket replies, his sent mail and his Slack replies - closes each open item that a sent message discharges, with `bin/fm-todo.sh close --actor` naming him and the sent message as evidence; an acknowledgement or a promise to act closes nothing.
+8. `complete --source ID --checkpoint VALUE` advances that source's checkpoint and says how many listed `recheck:` items are still not re-read, or `fail --source ID --reason TEXT` records the failure and backs off.
 
 A `hubspot-tickets` source's claim also names the stages to read, including "Waiting on contact", which HubSpot marks closed, and on a bounded cadence hands out a re-scan of every owner's tickets that name the captain or in which a colleague promised the customer that the tech team is on it, whatever their last-modified date.
 That re-scan exists because a colleague-owned ticket naming the captain only inside an email body, one promising the customer that tech is on it, or one parked in "Waiting on contact", returns from no checkpoint read.
-The orchestrator completes a read that included it with `--rescanned`.
+The orchestrator completes a read that included it with `--rescanned`, in the same pass: while it is due, `complete` refuses without it.
+
+Three more kinds carry their own read, so asks that never carry an @mention or a fresh modification date still reach the page between morning sweeps.
+A `slack-dms` source reads each DM its coverage sentence names directly by conversation id, never through search.
+A `calendar` source reads the window through the next two working days for unanswered invites and events that ask for preparation.
+An `asana` source hands out, once per local day, a full re-list of every incomplete task assigned to the captain, completed with `--relisted`.
+The day page's coverage fold names every channel family no enrolled kind reads between morning sweeps.
 
 ## Install
 

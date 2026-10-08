@@ -74,6 +74,13 @@
 #   - A HubSpot claim names "Waiting on contact" and hands out a bounded
 #     periodic re-scan of every owner's tickets that name the captain or
 #     promise the customer that tech is on it.
+#   - A HubSpot pass completes only with its own open-tickets table and any
+#     re-scan that is due.
+#   - Slack DM, calendar and Asana sources each get their own read on a claim,
+#     the Asana full re-list once per local day.
+#   - Observe refuses a title-less new item, a unit list naming no unit and the
+#     -1.0 broken-sensor reading, keeps a partner mark across re-reads, and a
+#     wait left with the captain needs a date.
 # shellcheck disable=SC2016
 set -u
 
@@ -836,13 +843,13 @@ test_ledger_writes_are_serialized() {
   # A live write refuses loudly rather than racing the holder.
   out=$(FM_HOME="$h" FM_ROOT_OVERRIDE="$ROOT" FM_CHANNEL_INTAKE_NOW="$T_0900" \
     FM_CHANNEL_INTAKE_LOCK_WAIT=1 "$INTAKE" observe --source C_BRIEF --ref 1789023000.7 \
-    --digest 'contended' 2>&1) && code=0 || code=$?
+    --digest 'contended' --title 'contended ask' 2>&1) && code=0 || code=$?
   expect_code 2 "$code" 'a contended observation was not refused'
   assert_contains "$out" 'still holds' 'the refusal did not name the contended record'
   release_state_lock "$h"
 
   # With the holder gone the same command succeeds.
-  out=$(at "$h" "$T_0900" observe --source C_BRIEF --ref 1789023000.7 --digest 'contended')
+  out=$(at "$h" "$T_0900" observe --source C_BRIEF --ref 1789023000.7 --digest 'contended' --title 'contended ask')
   case "$out" in new\ *) ;; *) fail "the observation did not land once uncontended: $out" ;; esac
 
   pass 'ledger writes are serialized on a private mutex, so a sweep never clobbers an observation'
@@ -858,7 +865,7 @@ test_no_existing_fleet_is_overridden() {
     --digest 'the other home' --class urgent --title 'the other home' >/dev/null
 
   at "$h" "$T_0900" tick >/dev/null
-  at "$h" "$T_0900" observe --source C_BRIEF --ref 1789023000.1 --digest 'this home' >/dev/null
+  at "$h" "$T_0900" observe --source C_BRIEF --ref 1789023000.1 --digest 'this home' --title 'this home' >/dev/null
 
   # No session lock, no watcher lock, no watcher process.
   assert_absent "$h/state/.lock" 'the intake took the per-home session lock'
@@ -1856,12 +1863,14 @@ test_hubspot_rescan_covers_colleague_and_waiting_on_contact_tickets() {
   assert_contains "$out" $'rescan: H_TICKETS\tlast_rescan: never' 'a never-rescanned source was not handed a re-scan'
   assert_contains "$out" 'any owner, whose emails or notes name the captain or in which a colleague promised the customer that the tech team is on it, re-read in full whatever its last-modified date' \
     'the re-scan scope is not colleague-owned tickets naming the captain or tech, regardless of modification date'
+  printf '[]' | at "$h" "$T_0900" tickets --owner captain >/dev/null
   at "$h" "$T_0900" complete --source H_TICKETS --checkpoint c1 --rescanned >/dev/null
   # Inside the re-scan interval, the checkpoint read still names the stages but
   # re-scans nothing; past it, the re-scan is due again.
   out=$(at "$h" "$T_0915" claim --source H_TICKETS)
   assert_contains "$out" 'stages: H_TICKETS' 'a later claim dropped the stage rule'
   assert_not_contains "$out" 'rescan: H_TICKETS' 'the re-scan ran on every checkpoint read'
+  printf '[]' | at "$h" "$T_0915" tickets --owner captain >/dev/null
   at "$h" "$T_0915" complete --source H_TICKETS --checkpoint c2 >/dev/null
   out=$(at "$h" $((T_0900 + 3600)) claim --source H_TICKETS)
   assert_contains "$out" $'rescan: H_TICKETS\tlast_rescan: '"$T_0900" 'a plain complete lost the last re-scan time'
@@ -1874,6 +1883,81 @@ test_hubspot_rescan_covers_colleague_and_waiting_on_contact_tickets() {
   out=$(at "$h" "$T_0900" status 2>&1) && code=0 || code=$?
   expect_code 2 "$code" 'a re-scan faster than the poll interval was accepted'
   pass 'HubSpot claims cover Waiting on contact and a bounded periodic re-scan of every owner'"'"'s tickets'
+}
+
+test_a_hubspot_pass_needs_its_tickets_and_its_due_rescan() {
+  local h out code
+  h="$TMP_ROOT/hubspot-pass"
+  partner_home "$h"
+  out=$(at "$h" "$T_0900" claim --source H_TICKETS)
+  assert_contains "$out" 'tickets: H_TICKETS' 'the claim did not ask for the open-tickets table'
+  out=$(at "$h" "$T_0900" complete --source H_TICKETS --checkpoint c1 --rescanned 2>&1) && code=0 || code=$?
+  expect_code 2 "$code" 'a HubSpot pass completed without refreshing the open tickets'
+  assert_contains "$out" 'open-tickets table was not refreshed' 'the refusal did not name the missing table'
+  printf '[]' | at "$h" "$T_0900" tickets --owner captain >/dev/null
+  out=$(at "$h" "$T_0900" complete --source H_TICKETS --checkpoint c1 2>&1) && code=0 || code=$?
+  expect_code 2 "$code" 'a HubSpot pass completed without the re-scan it was handed'
+  assert_contains "$out" 'the re-scan is due' 'the refusal did not name the due re-scan'
+  at "$h" "$T_0900" complete --source H_TICKETS --checkpoint c1 --rescanned >/dev/null \
+    || fail 'a HubSpot pass with its tickets and re-scan was refused'
+  # A table from an earlier pass does not count for a later one.
+  at "$h" "$T_0915" claim --source H_TICKETS >/dev/null
+  out=$(at "$h" "$T_0915" complete --source H_TICKETS --checkpoint c2 2>&1) && code=0 || code=$?
+  expect_code 2 "$code" 'an earlier pass'"'"'s open-tickets table satisfied a later pass'
+  pass 'a HubSpot pass completes only with this pass'"'"'s open-tickets table and any re-scan that is due'
+}
+
+test_new_source_kinds_get_their_own_reads() {
+  local h out code
+  h="$TMP_ROOT/kinds"
+  new_home "$h"
+  printf 'D_DMS\tslack-dms\tDMs with the named colleagues\nCAL\tcalendar\tthe captain calendar\nA_REQ\tasana-projects\ttasks assigned to the captain\n' \
+    >>"$h/data/channel-intake/sources.tsv"
+  out=$(at "$h" "$T_0900" claim)
+  assert_contains "$out" $'dms: D_DMS\tread each DM and group DM the coverage sentence names directly' 'a DM source was not told to read DMs directly'
+  # Thursday 10 Sep: the next two working days end on Monday 14 Sep.
+  assert_contains "$out" $'calendar: CAL\tfrom: 2026-09-10\tto: 2026-09-14' 'the calendar window is not the next two working days'
+  assert_contains "$out" $'relist: A_REQ\tlast_relist: never' 'Asana was not handed its daily full re-list'
+  at "$h" "$T_0900" complete --source A_REQ --checkpoint a1 --relisted >/dev/null
+  out=$(at "$h" "$T_0915" claim --source A_REQ)
+  assert_not_contains "$out" 'relist:' 'the Asana re-list ran twice in one day'
+  out=$(at "$h" "$T_NEXT_0900" claim --source A_REQ)
+  assert_contains "$out" $'relist: A_REQ\tlast_relist: '"$T_0900" 'the Asana re-list did not come back the next day'
+  out=$(at "$h" "$T_0900" complete --source C_BRIEF --checkpoint x --relisted 2>&1) && code=0 || code=$?
+  expect_code 2 "$code" 'a non-Asana source recorded a re-list'
+  pass 'Slack DMs, the calendar and a daily Asana re-list each get their own read on a claim'
+}
+
+test_observe_and_resolve_refuse_what_rots_the_page() {
+  local h out code key
+  h="$TMP_ROOT/refusals"
+  new_home "$h"
+  printf 'captain_names = Lars Tolhurst\n' >>"$h/config/channel-intake"
+  printf 'FLEET\ttelemetry-fleet-alerts\tfleet telemetry\n' >>"$h/data/channel-intake/sources.tsv"
+  out=$(at "$h" "$T_0900" observe --source C_BRIEF --ref 1789023000.40 --digest a 2>&1) && code=0 || code=$?
+  expect_code 2 "$code" 'a title-less observe opened an item'
+  assert_contains "$out" '--title is required' 'the refusal did not name the missing title'
+  key=$(at "$h" "$T_0900" observe --source C_BRIEF --ref 1789023000.40 --digest a --class obligation \
+    --title 'router question' --partner | awk '{ print $2 }')
+  # A later re-read needs no title and keeps the partner mark.
+  at "$h" "$T_0915" observe --source C_BRIEF --ref 1789023000.40 --digest b >/dev/null \
+    || fail 'a re-read of a known item needed a title'
+  assert_grep 'partner_hint=1' "$h/data/channel-intake/items/$key" 'a re-read dropped the partner mark'
+  out=$(at "$h" "$T_0900" observe --source FLEET --condition b14 --count 3 --units systems --digest u 2>&1) && code=0 || code=$?
+  expect_code 2 "$code" 'a unit list naming no unit was accepted'
+  out=$(at "$h" "$T_0900" observe --source FLEET --condition freezing --count 2 \
+    --units '867280069323517 (-1.0 C), 867280069323962 (0.5 C)' --digest f 2>&1) && code=0 || code=$?
+  expect_code 2 "$code" 'a broken-sensor -1.0 reading was counted as freezing'
+  assert_contains "$out" 'broken-sensor' 'the refusal did not name the broken-sensor value'
+  at "$h" "$T_0900" observe --source FLEET --condition freezing --count 1 \
+    --units '867280069323962 (0.5 C)' --digest g >/dev/null || fail 'a real freezing snapshot was refused'
+  for reason in 'Karolina asks - later' 'Lars will answer'; do
+    out=$(at "$h" "$T_0915" resolve --item "$key" --waiting --reason "$reason" 2>&1) && code=0 || code=$?
+    expect_code 2 "$code" "a wait on the captain with no date was accepted: $reason"
+  done
+  at "$h" "$T_0915" resolve --item "$key" --waiting --reason 'Karolina asks - later, back on Friday' >/dev/null \
+    || fail 'a dated wait on the captain was refused'
+  pass 'observe refuses untitled items, unit-less lists and the broken-sensor reading; a wait on the captain needs a date'
 }
 
 test_bootstrap_surfaces_the_intake() {
@@ -1921,3 +2005,6 @@ test_a_changed_re_read_keeps_an_awaiting_partner_owed
 test_a_resolved_ticket_re_read_records_its_current_facts
 test_a_long_poll_interval_keeps_the_rescan_default_valid
 test_hubspot_rescan_covers_colleague_and_waiting_on_contact_tickets
+test_a_hubspot_pass_needs_its_tickets_and_its_due_rescan
+test_new_source_kinds_get_their_own_reads
+test_observe_and_resolve_refuse_what_rots_the_page

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Private composition helper for fm-todo-render.sh; its header owns the contract."""
+import datetime
 import html
 from html.parser import HTMLParser
 import json
@@ -9,8 +10,11 @@ import re
 import sys
 import time
 
-STORE, MORNING, DAY, NOW, ZONE, HOME, MORNING_JSON, INTAKE, SOURCES, INTERVAL = sys.argv[1:]
+STORE, MORNING, DAY, NOW, ZONE, HOME, MORNING_JSON, INTAKE, SOURCES, INTERVAL, NAMES = sys.argv[1:]
 NOW = int(NOW)
+# Every spelling of the captain a closure actor may carry: the internal label
+# and the configured captain_names, singly and as one full name.
+ME = {'captain'} | {w.lower() for w in NAMES.split()} | ({' '.join(NAMES.lower().split())} if NAMES.split() else set())
 if ZONE:
     os.environ['TZ'] = ZONE
     time.tzset()
@@ -170,16 +174,21 @@ if items_dir.is_dir():
     for path in sorted(items_dir.glob('*.json')):
         if path.is_file() and not path.is_symlink():
             items.append(json.loads(path.read_text()))
-sweeps = []
-if (Path(STORE) / 'sweeps').is_file():
-    sweeps = sorted(number(x) for x in (Path(STORE) / 'sweeps').read_text().split() if 0 < number(x) <= NOW)
-# The freshness floor is this build's verification sweep, never earlier than
-# the page's own day. A line whose recorded check predates it, or checked a
-# different revision than the one shown, is labelled not re-checked.
-FLOOR = max([day_start(NOW)] + [s for s in sweeps if stamp(s, '%Y-%m-%d') == DAY])
+def epochs(name):
+    path = Path(STORE) / name
+    return sorted(number(x) for x in path.read_text().split() if 0 < number(x) <= NOW) if path.is_file() else []
+
+
+sweeps = epochs('sweeps')
+# The freshness floor is this build's verification sweep or intake pass, never
+# earlier than the page's own day. A line whose recorded check predates it, or
+# checked a different revision than the one shown, is labelled not re-checked.
+FLOOR = max([day_start(NOW)] + [s for s in sweeps + epochs('passes') if stamp(s, '%Y-%m-%d') == DAY])
 # Closed since: the sweep before this one, else the start of the day. Stable
 # through the day, so background rebuilds never shrink it.
-earlier = [s for s in sweeps if s < FLOOR]
+# An intake pass never moves it: the boundary is the morning sweep's.
+MORNING_FLOOR = max([day_start(NOW)] + [s for s in sweeps if stamp(s, '%Y-%m-%d') == DAY])
+earlier = [s for s in sweeps if s < MORNING_FLOOR]
 SINCE = earlier[-1] if earlier else day_start(NOW)
 sidecar = json.loads(Path(MORNING_JSON).read_text()) if MORNING_JSON else {}
 
@@ -197,6 +206,31 @@ def partner_first(rec):
     if not rec.get('partner_first'):
         return (1, 0)
     return (0, number(rec.get('awaiting_since')) or UNDATED)
+
+
+def asked(rec):
+    """When the ask was made: an awaiting partner's own ask, else the item's ask time."""
+    return ((rec.get('partner_first') and number(rec.get('awaiting_since')))
+            or number(rec.get('asked_at')) or number(rec.get('first_seen')) or UNDATED)
+
+
+# A system id is the fifteen-digit unit number the fleet uses everywhere.
+SYSTEM_ID = re.compile(r'\b\d{15}\b')
+
+
+def partner(rec):
+    """Partner- or customer-facing, from the source rather than a rarely set flag: an
+    awaiting partner, a ticket with a partner contact, a line the orchestrator or
+    the morning sweep marked (a colleague relaying a partner question, a customer
+    site), an ask naming a system id, or an Asana partner RMA."""
+    text = f'{rec.get("title", "")} {rec.get("ask", "")}'
+    return bool(rec.get('partner_first') or rec.get('partner') or SYSTEM_ID.search(text)
+                or ('asana' in (rec.get('label') or '').lower() and re.search(r'\bRMA\b', text, re.I)))
+
+
+def tooling(rec):
+    """An approval about Firstmate's own tooling, never a partner or customer ask."""
+    return bool(rec.get('tooling')) and not partner(rec)
 
 
 def sortkey(rec):
@@ -336,13 +370,24 @@ def context(rec):
     return ''
 
 
+def age(rec):
+    """How long the ask has waited, computed now; stored titles never carry it."""
+    at = asked(rec)
+    if at == UNDATED or at > NOW:
+        return ''
+    days = (day_start(NOW) - day_start(at)) // 86400
+    if days < 1:
+        return ''
+    return f'<span class="prov inf">asked {esc(stamp(at, "%a %-d %b"))}, {days} day{"s" if days > 1 else ""} ago</span>'
+
+
 def row(rec, reply=True):
     title = esc(rec.get('title') or 'untitled item')
     severity = rec.get('class', 'obligation')
     pill = {'outage': 'bad', 'urgent': 'warn', 'deadline': 'warn'}.get(severity, 'info')
     toggle = note_toggle(rec) if reply else ''
     main = (f'<tr class="item" id="item-{esc(rec.get("id", ""))}"{audit(rec)}><td class="who"><span class="pill {pill}">{esc(severity)}</span>{source_marker(rec)}</td>\n'
-            f'<td class="what">{title}{freshness(rec)}{context(rec)}</td>\n'
+            f'<td class="what">{title}{freshness(rec)}{age(rec)}{context(rec)}</td>\n'
             f'<td class="links">{link(rec.get("link"))}{toggle}</td></tr>')
     return main + '\n' + reply_form(rec) if reply else main
 
@@ -387,21 +432,21 @@ def split(recs):
 # --- action order -----------------------------------------------------------
 
 # Tier 0 is a live problem or a hard deadline, as the source classed it: an
-# outage, or a deadline. Tier 1 is a partner-facing ask awaiting the captain,
-# oldest ask first. Everything else follows by class, newest read first. An
-# urgent class earned only by waiting long never reaches tier 0.
+# outage, or a deadline. Tier 1 is a partner- or customer-facing ask. Everything
+# else follows. Inside every tier the oldest ask comes first, whatever was read
+# last. An urgent class earned only by waiting long never reaches tier 0.
 FIRST = ('outage', 'deadline')
 
 
 def tier(rec):
     if rec.get('class') in FIRST:
         return 0
-    return 1 if rec.get('partner_first') else 2
+    return 1 if partner(rec) else 2
 
 
 def actionkey(rec):
-    """Tier first; sortkey then puts awaiting partner asks oldest first inside tier 1."""
-    return tier(rec), sortkey(rec)
+    """Tier, then the oldest ask first, then class."""
+    return tier(rec), asked(rec), RANK.get(rec.get('class'), 99), rec.get('id', '')
 
 
 # --- morning detail fragment ------------------------------------------------
@@ -441,6 +486,8 @@ if MORNING:
 # --- partition ----------------------------------------------------------------
 
 today = DAY
+# A device update belongs in chat, never on the page, whatever its state.
+items = [r for r in items if not r.get('device_update')]
 snoozed, mine, handoffs, live = [], [], [], []
 for rec in items:
     if rec.get('state') != 'open':
@@ -465,6 +512,10 @@ def held(rec):
 # backlog holds it, and a hold is never evidence that it needs him today.
 asks = sorted((r for r in live if r.get('kind') in ('decision', 'approval', 'reply')
                and not (held(r) and not current(r))), key=actionkey)
+# Approvals about Firstmate's own tooling get their own fold below every
+# partner and customer ask, unless one is a live outage.
+tools = [r for r in asks if tooling(r) and r.get('class') != 'outage']
+asks = [r for r in asks if r not in tools]
 conditions = [r for r in live if r.get('kind') == 'condition']
 activity = [r for r in live if r.get('kind') == 'info']
 waiting = sorted([r for r in items if r.get('state') == 'waiting'] + handoffs, key=sortkey)
@@ -481,16 +532,22 @@ closed = [r for r in items if r.get('state') == 'closed' and not intake_retired(
 closed.sort(key=lambda r: (-number(r['closure'].get('at')), r['id']))
 # Counted as handled without you only with a named actor other than the
 # captain and a fulfilled close; unknown actors, dismissals and releases never count.
+def by_you(actor):
+    return str(actor or '').strip().lower() in ME
+
+
 handled = [r for r in closed if r['closure'].get('reason') == 'fulfilled'
-           and r['closure'].get('actor') not in ('captain', 'source', 'unknown', '')]
+           and not by_you(r['closure'].get('actor')) and r['closure'].get('actor') not in ('source', 'unknown', '')]
 
 # --- page -------------------------------------------------------------------
 
-print('<h2>Needs you now<small>live problems and deadlines first, then partners waiting on you</small></h2>')
+print('<h2>Needs you now<small>live problems and deadlines first, then partners and customers, oldest ask first</small></h2>')
 if asks:
     print(table([row(r) for r in asks]))
 else:
     print('<div class="note"><b>Nothing open.</b> Nothing recorded is waiting on you.</div>')
+if tools:
+    print(disclosure(f'Firstmate tooling approvals ({len(tools)})', table([row(r) for r in tools])))
 
 watch = {}
 for rec in conditions:
@@ -514,7 +571,10 @@ for condition, readings in sorted(watch.items()):
         summary = f'{match.group(1)} units at {when(rec["verification"].get("at"))}'
     newest = readings[0]
     title = newest.get('title', '')
-    units = title.split('; newest:', 1)[1].strip() if '; newest:' in title else (title if re.search(r'\b\d{15}\b', title) else 'no unit detail in latest observation')
+    units = title.split('; newest:', 1)[1].strip() if '; newest:' in title else (title if re.search(r'\b\d{15}\b', title) else '')
+    # A unit list is unit ids; a bare word such as "systems" names no unit.
+    if not re.search(r'\d', units):
+        units = 'no unit detail in latest observation'
     print(f'<div class="watch-line"{audit(newest)}><b>{esc(condition)}</b> - {esc(summary)}'
           f'<span class="why">Latest: {esc(units)} · {freshness(newest)} · {link(newest.get("link"))}</span></div>')
 
@@ -533,12 +593,12 @@ if activity:
     print(disclosure('Other channel activity', body))
 
 if closed:
-    who = {'captain': 'by you', 'source': 'at the source', 'unknown': 'actor not recorded'}
+    who = {'source': 'at the source', 'unknown': 'actor not recorded'}
     label = 'Closed today' if SINCE == day_start(NOW) else f'Closed since {when(SINCE)}'
     count = f'{len(closed)}' + (f', {len(handled)} handled without you' if handled else '')
     print(disclosure(f'{label} ({count})', table([
         f'<tr class="closed" id="item-{esc(r["id"])}"{audit(r)}><td>{esc(r.get("title"))}</td><td>{brief(r["closure"].get("evidence") or "no closing evidence recorded")}</td>'
-        f'<td>{esc(r["closure"].get("reason", ""))} {esc(who.get(r["closure"].get("actor"), "by " + str(r["closure"].get("actor"))))} · {esc(when(r["closure"].get("at")))}</td></tr>'
+        f'<td>{esc(r["closure"].get("reason", ""))} {esc("by you" if by_you(r["closure"].get("actor")) else who.get(r["closure"].get("actor"), "by " + str(r["closure"].get("actor"))))} · {esc(when(r["closure"].get("at")))}</td></tr>'
         for r in closed])))
 
 if snoozed:
@@ -596,6 +656,18 @@ def tickets_snapshot():
     return doc, ''
 
 
+def local_time(text):
+    """A ticket time in the page's zone: an ISO time with Z or an offset is
+    converted, anything else is shown as stored."""
+    try:
+        at = datetime.datetime.fromisoformat(re.sub(r'[Zz]$', '+00:00', text.strip()))
+    except ValueError:
+        return text
+    if at.tzinfo is None:
+        return text
+    return when(int(at.timestamp()))
+
+
 def tickets_section():
     doc, why = tickets_snapshot()
     if doc is None:
@@ -622,7 +694,7 @@ def tickets_section():
     rows = ''.join(
         f'<tr><td>{link_to(t["link"], t["subject"] or "untitled ticket")}'
         f'</td><td>{esc(t["stage"])}</td>'
-        f'<td>{esc(t["last_in"] or "-")}</td><td>{esc(t["last_out"] or "-")}</td></tr>'
+        f'<td>{esc(local_time(t["last_in"]) or "-")}</td><td>{esc(local_time(t["last_out"]) or "-")}</td></tr>'
         for t in tickets)
     print('<div class="tablewrap"><table><thead><tr><th>Ticket</th><th>Stage</th><th>Last inbound</th><th>Last outbound</th></tr></thead>'
           f'<tbody>{rows}</tbody></table></div>')
@@ -647,6 +719,17 @@ for state in sorted(Path(INTAKE).glob('sources/*/state')) if INTAKE else []:
     if rec.get('error'):
         line += f'<span class="why">last attempt failed: {brief(rec["error"], 180)}</span>'
     coverage.append(line + '</li>')
+# What no enrolled source reads between morning sweeps, named rather than
+# implied by its absence: each family is covered by an enrolled kind prefix.
+FAMILIES = (('Slack DMs', 'slack-dms'), ('Slack mentions', 'slack-mentions'), ('Calendar', 'calendar'),
+            ('Gmail inbound', 'gmail'), ('Asana', 'asana'), ('HubSpot tickets', 'hubspot'))
 if coverage:
+    kinds = set()
+    if SOURCES and Path(SOURCES).is_file() and not Path(SOURCES).is_symlink():
+        kinds = {l.split('\t')[1] for l in Path(SOURCES).read_text().splitlines()
+                 if l.strip() and not l.startswith('#') and len(l.split('\t')) > 1}
+    unread = [name for name, prefix in FAMILIES if not any(k.startswith(prefix) for k in kinds)]
+    coverage.append('<li><b>Not read between morning sweeps</b> - '
+                    + esc(', '.join(unread + ['WhatsApp, phone and in person, which no source can read'])) + '</li>')
     print(disclosure('Intake coverage', '<ul class="done">' + ''.join(coverage) + '</ul>'))
 print(reference)
