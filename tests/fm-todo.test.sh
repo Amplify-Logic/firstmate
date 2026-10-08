@@ -769,6 +769,12 @@ test_a_pass_rechecks_open_items_and_counts_the_misses() {
   assert_contains "$out" '<summary>Closed today (1)</summary>' 'an intake pass moved the closed boundary'
   assert_contains "$out" 'fulfilled by you' 'a close recorded under his name was not counted as his'
   assert_not_contains "$out" 'handled without you' 'his own close was counted as handled without him'
+  # A claim that cannot list leaves no earlier pass's list behind to count against.
+  mv "$h/data/todo/items" "$h/data/todo/items.off"
+  intake_at "$h" "$((T_1100 + 900))" claim >/dev/null
+  mv "$h/data/todo/items.off" "$h/data/todo/items"
+  out=$(intake_at "$h" "$((T_1100 + 900))" complete --source C_BRIEF --checkpoint c-2)
+  assert_not_contains "$out" 'listed not re-read' 'a claim with no list counted an earlier pass'"'"'s list'
   pass 'a pass lists every open item to re-check, counts the ones it skipped, keeps the closed boundary and leaves held decisions to the morning sweep'
 }
 

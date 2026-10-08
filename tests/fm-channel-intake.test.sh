@@ -1969,7 +1969,7 @@ test_observe_and_resolve_refuse_what_rots_the_page() {
   assert_contains "$out" 'broken-sensor' 'the refusal did not name the broken-sensor value'
   at "$h" "$T_0900" observe --source FLEET --condition freezing --count 1 \
     --units '867280069323962 (0.5 C)' --digest g >/dev/null || fail 'a real freezing snapshot was refused'
-  for reason in 'Karolina asks - later' 'Lars will answer' 'waiting on you' 'waiting for Tolhurst to sign off' \
+  for reason in 'Karolina asks - later' 'later' 'Lars will do it later' 'Lars will answer' 'waiting on you' 'waiting for Tolhurst to sign off' \
     'waiting on Lars for 3 decisions' 'Lars will decide 2 options' 'waiting on you, he marked 2 units' 'waiting on you, he sat on it'; do
     out=$(at "$h" "$T_0915" resolve --item "$key" --waiting --reason "$reason" 2>&1) && code=0 || code=$?
     expect_code 2 "$code" "a wait on the captain with no date was accepted: $reason"
@@ -1978,7 +1978,8 @@ test_observe_and_resolve_refuse_what_rots_the_page() {
   expect_code 2 "$code" 'a bare "Sat" was accepted as a date'
   assert_contains "$out" 'a full weekday name or mon/tue/thu/fri' 'the refusal did not say which weekdays count'
   # A hand-over to someone else that only mentions him is not a wait on him.
-  for reason in 'Lars handed it to Sara' 'Queco will send you the logs' 'routed to Naomi, she will update your ticket'; do
+  for reason in 'Lars handed it to Sara' 'Queco will send you the logs' 'routed to Naomi, she will update your ticket' \
+    'routed to Naomi, she will confirm later' 'asked Sara to check later'; do
     at "$h" "$T_0915" resolve --item "$key" --waiting --reason "$reason" >/dev/null \
       || fail "a hand-over to someone else was refused as a wait on the captain: $reason"
   done

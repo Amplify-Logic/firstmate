@@ -92,7 +92,8 @@
 # is not Closed, Waiting on contact included - as a bare JSON array of
 # {id, subject, stage, last_in, last_out, link}: id is the numeric ticket id,
 # stage the pipeline-stage label exactly as HubSpot names it, last_in/last_out
-# the display times of the newest inbound and outbound message, link an
+# the ISO-8601 timestamps, with Z or a UTC offset, of the newest inbound and
+# outbound message, which the page converts to its own time zone, link an
 # https:// record URL. subject, last_in and last_out may be empty - the page
 # shows such a row as an untitled ticket rather than losing a whole refresh
 # over one odd ticket. Unknown or missing fields, an empty id, stage or link,
@@ -216,8 +217,9 @@
 # handed out a re-scan.
 #
 # A WAIT ON THE CAPTAIN HAS A DATE. `resolve --waiting` is for work handed to
-# someone else. A reason that leaves the wait with the captain - "later",
-# "waiting on/for" him, or him (you, captain, one of his captain_names) who
+# someone else. A reason that leaves the wait with the captain - "later" with
+# no other owner named (no other person's name, no she/he/they), "waiting
+# on/for" him, or him (you, captain, one of his captain_names) who
 # will answer, decide or reply - is refused unless it names a date
 # (YYYY-MM-DD, a full weekday name or mon/tue/thu/fri, tomorrow, next week, or
 # a day number with a month), because without one it is a park with no end.
@@ -1300,6 +1302,7 @@ EOF
 # nothing and never costs the claim.
 recheck_claim_lines() {
   local epoch=$1 out ids
+  rm -f "$RECHECK_FILE"
   [ -d "$TODO_STORE/items" ] && [ -x "$SCRIPT_DIR/fm-todo.sh" ] || return 0
   out=$(FM_HOME="$FM_HOME" FM_TODO_NOW="$epoch" "$SCRIPT_DIR/fm-todo.sh" recheck 2>/dev/null) || {
     log_event 'recheck list not available: fm-todo.sh recheck failed'
@@ -1332,7 +1335,7 @@ kind_claim_lines() {
       printf 'dms: %s\tread each DM and group DM the coverage sentence names directly by its conversation id with the channel-read tool, never through search; observe every message to the captain since the checkpoint, whether or not it carries an @mention\n' "$id"
       ;;
     calendar)
-      printf 'calendar: %s\tfrom: %s\tto: %s\tscope: invites the captain has not answered (responseStatus needsAction), and events in this window whose description asks him to prepare or complete something before it; observe each with the event end as --source-epoch\n' \
+      printf 'calendar: %s\tfrom: %s\tto: %s\tscope: invites the captain has not answered (responseStatus needsAction), and events in this window whose description asks him to prepare or complete something before it; observe each with the time the invite was sent or last updated as --source-epoch, never the event time\n' \
         "$id" "$(local_date "$epoch")" "$(working_days_ahead "$epoch" 2)"
       ;;
     asana*) asana_claim_lines "$id" "$epoch" ;;
@@ -1740,16 +1743,40 @@ with_partner_hint() {
 
 # --- resolution -------------------------------------------------------------
 
-# A hand-over reason that leaves the wait with the captain: "later", "waiting
-# on/for" him, or him answering, deciding or replying. A hand-over to someone
-# else that merely mentions him is not one.
+# A hand-over reason that leaves the wait with the captain: "later" with no
+# other owner named, "waiting on/for" him, or him answering, deciding or
+# replying. A hand-over to someone else that merely mentions him is not one.
 waits_on_captain() {
   local who=you word
   for word in captain $(printf '%s' "$CFG_CAPTAIN_NAMES" | tr '[:upper:]' '[:lower:]'); do
     who="$who|$word"
   done
   printf ' %s ' "$1" | tr '[:upper:]' '[:lower:]' | grep -Eq \
-    "[^a-z]later[^a-z]|[^a-z]waiting (on|for) (the )?($who|your)[^a-z]|[^a-z]($who) will (answer|decide|reply|respond)[^a-z]"
+    "[^a-z]waiting (on|for) (the )?($who|your)[^a-z]|[^a-z]($who) will (answer|decide|reply|respond)[^a-z]" \
+    && return 0
+  printf ' %s ' "$1" | tr '[:upper:]' '[:lower:]' | grep -Eq '[^a-z]later[^a-z]' \
+    && ! names_other_owner "$1"
+}
+
+# Another owner in a reason: she, he or they, or a capitalised name that does
+# not open a sentence and is not the captain's.
+names_other_owner() {
+  printf '%s\n' "$1" | awk -v captains=" captain you $(printf '%s' "$CFG_CAPTAIN_NAMES" | tr '[:upper:]' '[:lower:]') " '
+    {
+      n = split($0, sentence, /[.!?]/)
+      for (i = 1; i <= n; i++) {
+        m = split(sentence[i], word, /[^A-Za-z]+/)
+        first = 1
+        for (j = 1; j <= m; j++) {
+          if (word[j] == "") continue
+          w = tolower(word[j])
+          if (w == "she" || w == "he" || w == "they") found = 1
+          if (!first && word[j] ~ /^[A-Z][a-z]+$/ && index(captains, " " w " ") == 0) found = 1
+          first = 0
+        }
+      }
+    }
+    END { exit !found }'
 }
 
 # Month and weekday names count only as whole words, a month only next to a day
