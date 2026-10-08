@@ -94,6 +94,7 @@ class Store:
             path.unlink()
 
     def save(self, rec):
+        rec['rereadable'] = bool(source_refs(rec))
         body = json.dumps(rec, indent=1, sort_keys=True, ensure_ascii=False) + '\n'
         path = self.items_dir / (rec['id'] + '.json')
         if path.is_file() and path.read_text() == body:
@@ -346,7 +347,6 @@ def present(rec):
     for field in ('title', 'why'):
         rec[field] = strip_relative(rec[field])
     # The ask was made when its earliest source saw it, whichever source presents it.
-    rec['rereadable'] = bool(source_refs(rec))
     rec['asked_at'] = min([number(s.get('asked_at')) for s in slots if number(s.get('asked_at'))] or [0])
     rec['source_snooze'] = next((s['snoozed_until'] for s in slots if s.get('snoozed_until')), '')
     rec['rev'] = rev_of(rec)

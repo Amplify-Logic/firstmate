@@ -52,9 +52,11 @@
 # a line current only when its check is at or after this build's sweep
 # (`sweep-start`, or `sweep_started` in the sidecar; else the start of the
 # day) and checked the revision now shown. `sweep-start --pass` records a
-# 30-minute intake pass instead of a morning sweep: it raises the same
-# freshness floor but never moves the page's "Closed since" boundary, which
-# stays at the previous morning sweep.
+# 30-minute intake pass instead of a morning sweep: it raises the freshness
+# floor only for items a pass can re-read (those `recheck` lists by their
+# source refs); a held decision or a Firstmate-internal line still answers to
+# the morning sweep. A pass never moves the page's "Closed since" boundary,
+# which stays at the previous morning sweep.
 #
 # RE-CHECK ON EVERY PASS. `recheck` prints one `recheck:` line per open or
 # waiting item that names an external source to re-read: id, revision, state,
@@ -66,9 +68,11 @@
 # one `TODO_RECHECK:` line counting the listed ids still open or waiting with
 # no verification at or after EPOCH, and names them.
 #
-# TITLES CARRY NO RELATIVE TIME. "today", "yesterday", "tomorrow", "tonight",
-# "this morning" and "N days" rot the day after they are written, so they are
-# stripped from every stored title and why; the page computes ages itself from
+# TITLES CARRY NO RELATIVE TIME. "today", "yesterday" and the days of a
+# waiting or age phrasing ("WAITING N DAYS", "N days ago", "(N days)") rot the
+# day after they are written, so they are stripped from every stored title and
+# why; a deadline such as "tomorrow" or a duration the ask is about stays. The
+# page computes ages itself from
 # the item's ask time (`asked_at`: the earliest source's ask epoch, a ledger
 # record's source epoch or creation, a morning action's `asked_at`, a held
 # task's `since` day).
