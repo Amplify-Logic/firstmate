@@ -839,6 +839,24 @@ test_page_bugs_stay_fixed() {
   pass 'titles lose relative times, device updates stay off, ticket times are local and coverage names its gaps'
 }
 
+test_a_pass_judges_a_record_from_before_the_flag_by_its_aliases() {
+  local h path
+  h="$TMP_ROOT/legacy-floor"
+  new_home "$h"
+  sidecar "$h" 2026-09-10 '{"key":"k-h","source":"hubspot","ref":"t-77","class":"obligation","kind":"reply","title":"dealer asks about the filter","updated":'"$T_0900"'}'
+  todo_at "$h" "$T_0900" sweep-start >/dev/null
+  render_at "$h" "$T_0900"
+  # A record stored before the flag existed, and no longer re-observed.
+  path=$(grep -l 'dealer asks about the filter' "$h"/data/todo/items/*.json)
+  python3 -c 'import json,sys; p=sys.argv[1]; r=json.load(open(p)); r.pop("rereadable",None); open(p,"w").write(json.dumps(r))' "$path"
+  rm "$h/.lavish/today-2026-09-10.morning.json"
+  todo_at "$h" "$T_1030" sweep-start --pass >/dev/null
+  render_at "$h" "$T_1100"
+  assert_contains "$(page "$h" 2026-09-10)" 'dealer asks about the filter<span class="prov unv">not re-checked since 09:00 CEST</span>' \
+    'a re-readable record a pass skipped still reads as current'
+  pass 'a pass judges every stored record by its aliases, whenever it was written'
+}
+
 test_an_age_counts_calendar_days_across_a_clock_change() {
   local h asked=1774602000 now=1775203200 # Fri 27 Mar and Fri 3 Apr 2026, 10:00 local
   h="$TMP_ROOT/age-dst"
@@ -850,6 +868,7 @@ test_an_age_counts_calendar_days_across_a_clock_change() {
   pass 'an age counts calendar days across a clock change'
 }
 
+test_a_pass_judges_a_record_from_before_the_flag_by_its_aliases
 test_an_age_counts_calendar_days_across_a_clock_change
 test_time_bound_asks_expire_after_their_end
 test_expiry_leaves_marked_lines_to_the_captain
