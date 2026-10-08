@@ -64,8 +64,9 @@
 # ledger key, a held decision, a Firstmate-internal line or a fleet
 # snapshot), link and title, tab-separated. A parked item, a device update,
 # routine activity and a team update are not listed; like a held decision,
-# they answer to the morning sweep's freshness floor, never a pass's. bin/fm-channel-intake.sh `claim` prints these and the pass
-# answers each with `verify` or `close`. `recheck --since EPOCH ID ...` prints
+# they answer to the morning sweep's freshness floor, never a pass's.
+# bin/fm-channel-intake.sh `claim` prints these and the pass answers each
+# with `verify` or `close`. `recheck --since EPOCH ID ...` prints
 # one `TODO_RECHECK:` line counting the listed ids still open or waiting with
 # no verification at or after EPOCH, and names them.
 #

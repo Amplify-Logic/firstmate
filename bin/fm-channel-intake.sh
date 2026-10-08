@@ -182,11 +182,12 @@
 #
 # RE-CHECK ON EVERY PASS. A claim that hands out any source also prints one
 # `recheck:` line per open or waiting to-do item that names an external source
-# (bin/fm-todo.sh `recheck` owns the columns), so the pass re-reads what is
-# already open instead of only what is new, and answers each line with
-# `fm-todo.sh verify` or `close`. The claim records the listed ids and its own
-# time; every `complete` then prints how many of them are still open with no
-# re-read since the claim, and names them. No to-do store prints nothing.
+# (bin/fm-todo.sh `recheck` owns which items and the columns), so the pass
+# re-reads what is already open instead of only what is new, and answers
+# each line with `fm-todo.sh verify` or `close`. The claim records the
+# listed ids and its own time; every `complete` then prints how many of them
+# are still open with no re-read since the claim, and names them. No to-do
+# store prints nothing.
 #
 # KIND-SPECIFIC READS. Beyond its checkpoint read, a claim hands some kinds
 # one more line:
