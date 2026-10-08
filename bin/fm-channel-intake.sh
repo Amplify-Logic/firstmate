@@ -1619,6 +1619,12 @@ observe() {
   key=$(item_key "$dedup" "$id" "$ref")
   kind=$(inventory_field "$id" 2)
   prov_tag="$id:$ref"
+  # A line with no title renders as an untitled row nobody can act on. Refused
+  # before any write, so a refused reply leaves no thread marker behind.
+  if [ -z "$(printf '%s' "$title" | tr -d '[:space:]')" ] && [ ! -f "$(archive_path "$key")" ] \
+    && [ ! -f "$(item_path "$key")" ] && [ ! -f "$INACTIVE_DIR/$key" ]; then
+    die '--title is required for a new item'
+  fi
 
   if [ -n "$thread" ]; then
     require_id 'thread parent' "$thread"
@@ -1706,8 +1712,6 @@ observe() {
     return 0
   fi
 
-  # A line with no title renders as an untitled row nobody can act on.
-  [ -n "$(printf '%s' "$title" | tr -d '[:space:]')" ] || die '--title is required for a new item'
   attention=$(with_partner_hint "$attention" "$partner_hint" '')
   save_item "$path" "$(item_body "$key" "$id" "$kind" "$ref" "$link" "$(owed_class "$class" "$attention")" \
     "$title" "$digest" open "$epoch" "$epoch" "$source_epoch" '' '' 0 "$prov_tag" '' '' "$attention")"

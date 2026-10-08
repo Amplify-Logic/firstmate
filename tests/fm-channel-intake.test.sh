@@ -1949,6 +1949,12 @@ test_observe_and_resolve_refuse_what_rots_the_page() {
   out=$(at "$h" "$T_0900" observe --source C_BRIEF --ref 1789023000.40 --digest a 2>&1) && code=0 || code=$?
   expect_code 2 "$code" 'a title-less observe opened an item'
   assert_contains "$out" '--title is required' 'the refusal did not name the missing title'
+  # A refused title-less thread reply leaves no marker, so the next claim still offers the thread.
+  out=$(at "$h" "$T_0900" observe --source C_BRIEF --ref 1789023100.41 --digest a \
+    --thread 1789023000.40 --reply-marker 1789023100.41 2>&1) && code=0 || code=$?
+  expect_code 2 "$code" 'a title-less thread reply opened an item'
+  [ ! -e "$h/data/channel-intake/threads/C_BRIEF/1789023000.40" ] \
+    || fail 'a refused title-less thread reply still recorded its reply marker'
   key=$(at "$h" "$T_0900" observe --source C_BRIEF --ref 1789023000.40 --digest a --class obligation \
     --title 'router question' --partner | awk '{ print $2 }')
   # A later re-read needs no title and keeps the partner mark.

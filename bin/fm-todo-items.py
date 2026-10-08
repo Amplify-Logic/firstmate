@@ -94,7 +94,7 @@ class Store:
             path.unlink()
 
     def save(self, rec):
-        rec['rereadable'] = bool(source_refs(rec))
+        rec['rereadable'] = rereadable(rec)
         body = json.dumps(rec, indent=1, sort_keys=True, ensure_ascii=False) + '\n'
         path = self.items_dir / (rec['id'] + '.json')
         if path.is_file() and path.read_text() == body:
@@ -591,14 +591,18 @@ def source_refs(rec):
     return [a for a in rec['aliases'] if not NOT_A_SOURCE.search(a)]
 
 
+def rereadable(rec):
+    """An ask a pass can re-read at its source; routine activity and team updates were never asks."""
+    return bool(source_refs(rec)) and not rec.get('device_update') and rec.get('kind') not in UNOWED_KINDS
+
+
 def recheck_listed(items, now):
-    """Every open or waiting item a pass can re-read at its source; a team update is never an ask."""
+    """Every open or waiting item a pass can re-read at its source."""
     for rec in sorted(items.values(), key=lambda r: r['id']):
-        if rec['state'] not in ('open', 'waiting') or rec.get('device_update') or rec.get('kind') == 'update':
+        if rec['state'] not in ('open', 'waiting') or (rec.get('snoozed_until') or '') > local_day(now):
             continue
-        if (rec.get('snoozed_until') or '') > local_day(now) or not source_refs(rec):
-            continue
-        yield rec
+        if rereadable(rec):
+            yield rec
 
 
 def recheck(args, items, now):

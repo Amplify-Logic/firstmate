@@ -732,6 +732,7 @@ test_a_pass_rechecks_open_items_and_counts_the_misses() {
   intake_at "$h" "$T_0900" observe --source C_BRIEF --ref m-1 --digest a --class urgent --title 'quote for the dealer' >/dev/null
   intake_at "$h" "$T_0900" observe --source C_BRIEF --ref m-2 --digest b --class urgent --title 'cover lens question' >/dev/null
   intake_at "$h" "$T_0900" observe --source C_BRIEF --ref m-3 --digest c --class urgent --title 'invoice question' >/dev/null
+  intake_at "$h" "$T_0900" observe --source C_BRIEF --ref m-4 --digest d --class routine --title 'lunch is in the kitchen' >/dev/null
   printf 'C_TEAM\tslack-announcements\tteam announcement channels\n' >>"$h/data/channel-intake/sources.tsv"
   intake_at "$h" "$T_0900" observe --source C_TEAM --ref u-1 --digest d --class update \
     --source-epoch "$T_0900" --title 'price list changes 1 Nov' >/dev/null
@@ -747,6 +748,8 @@ test_a_pass_rechecks_open_items_and_counts_the_misses() {
   assert_contains "$out" "recheck: $a" 'the claim did not list an open item for re-checking'
   assert_contains "$out" 'C_BRIEF:m-2' 'a re-check line does not name its source reference'
   assert_not_contains "$out" "recheck: $c" 'a closed item was listed for re-checking'
+  # Routine activity was never an ask: a pass neither lists it nor counts it as a miss.
+  assert_not_contains "$out" 'C_BRIEF:m-4' 'routine activity was listed for re-checking'
   assert_not_contains "$out" 'price list changes' 'a team update, never an ask, was listed for re-checking'
   # The pass starts its own freshness floor, re-reads one item and skips one.
   todo_at "$h" "$T_1030" sweep-start --pass >/dev/null
