@@ -196,6 +196,7 @@ An acknowledgement or a promise to act is not a completion.
 
 - `resolve --item KEY --reason TEXT` archives the item. The active list loses it; the archive keeps its source, ref, link, provenance, revision count and the reason it was closed.
 - `resolve --item KEY --waiting --reason TEXT` is the honest middle state for work handed to someone else. The item stays on the ledger under waiting-on-others.
+  A reason that names neither a date nor a hand-over to someone other than the captain is refused, because that wait is a park with no end; `bin/fm-channel-intake.sh --help` owns the accepted forms.
 
 A resolved ask is never reopened by a poll.
 A reaction or an unchanged re-read reports `archived-unchanged` and does nothing.
