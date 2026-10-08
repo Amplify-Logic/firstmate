@@ -1744,10 +1744,10 @@ with_partner_hint() {
 # --- resolution -------------------------------------------------------------
 
 # Whether a reason hands the wait to a named owner who is neither the captain
-# nor a pronoun.
+# nor a pronoun or indefinite word.
 hands_over_to_other() {
   local name not_owner
-  not_owner=" you your captain it this that there we i $(printf '%s' "$CFG_CAPTAIN_NAMES" | tr '[:upper:]' '[:lower:]') "
+  not_owner=" you your captain it this that there we i he she they him her them someone somebody nobody nothing everyone anyone who what $(printf '%s' "$CFG_CAPTAIN_NAMES" | tr '[:upper:]' '[:lower:]') "
   for name in $(printf ' %s ' "$1" | grep -oE \
     '([Ww]aiting (on|for)|[Rr]outed to|[Hh]anded( it)?( over)? to|[Aa]ssigned to) [A-Z][a-z]+|[A-Z][a-z]+ will [a-z]+' \
     | sed -E 's/ will [a-z]+$//; s/.* //'); do

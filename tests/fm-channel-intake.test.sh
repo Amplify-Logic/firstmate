@@ -1971,7 +1971,8 @@ test_observe_and_resolve_refuse_what_rots_the_page() {
     --units '867280069323962 (0.5 C)' --digest g >/dev/null || fail 'a real freezing snapshot was refused'
   for reason in 'Karolina asks - later' 'later' 'Later' 'Lars will do it later' 'This will happen later' \
     'Reply to Karolina later' 'follow up in Notion later' 'Customer is waiting, Lars replies later' \
-    'asked Sara to check later' 'waiting on the logs' \
+    'asked Sara to check later' 'waiting on the logs' 'She will confirm later' 'Someone will check' \
+    'He will reply later' 'They will confirm' 'waiting on Him' \
     'follow up in Asana later' 'Lars will answer' 'waiting on you' 'waiting for Tolhurst to sign off' \
     'waiting on Lars for 3 decisions' 'Lars will decide 2 options' 'waiting on you, he marked 2 units' 'waiting on you, he sat on it'; do
     out=$(at "$h" "$T_0915" resolve --item "$key" --waiting --reason "$reason" 2>&1) && code=0 || code=$?
