@@ -45,7 +45,7 @@ A tick therefore looks like this.
 
 A `hubspot-tickets` source's claim also names the stages to read, including "Waiting on contact", which HubSpot marks closed, and on a bounded cadence hands out a re-scan of every owner's tickets that name the captain or in which a colleague promised the customer that the tech team is on it, whatever their last-modified date.
 That re-scan exists because a colleague-owned ticket naming the captain only inside an email body, one promising the customer that tech is on it, or one parked in "Waiting on contact", returns from no checkpoint read.
-The orchestrator completes a read that included it with `--rescanned`, in the same pass: while it is due, `complete` refuses without it.
+The orchestrator completes a read that included it with `--rescanned`, in the same pass: when the claim handed one out, `complete` refuses without it.
 
 Three more kinds carry their own read, so asks that never carry an @mention or a fresh modification date still reach the page between morning sweeps.
 A `slack-dms` source reads each DM its coverage sentence names directly by conversation id, never through search.

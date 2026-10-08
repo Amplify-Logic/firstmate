@@ -43,13 +43,14 @@
 #     line the captain marked never expires until a park on it lapses.
 #   - A claim lists every open item with a source to re-check, `complete`
 #     counts the ones the pass skipped, a pass raises the freshness floor
-#     without moving the closed boundary, and a close under one of his
+#     only for items it can re-read and never moves the closed boundary, and a close under one of his
 #     captain_names counts as his own.
 #   - Needs you ranks partners and customers from the source (a system id, an
 #     Asana RMA, an observe --partner mark, an awaiting partner) oldest ask
-#     first, folds Firstmate tooling approvals below them, and keeps a mine
+#     first, folds Firstmate-sourced or tooling approvals below them, and keeps a mine
 #     line out of the ranked list.
-#   - Stored titles lose relative times and the page computes ages, device
+#   - Stored titles lose relative times but keep a deadline or duration the
+#     ask is about, the page computes ages in calendar days, device
 #     updates never reach the page, ticket times show in the page's zone, and
 #     the coverage fold names what no source reads.
 # shellcheck disable=SC2016
@@ -727,6 +728,7 @@ test_a_pass_rechecks_open_items_and_counts_the_misses() {
   h="$TMP_ROOT/recheck"
   new_home "$h"
   printf 'captain_names = Lars Tolhurst\n' >>"$h/config/channel-intake"
+  printf '## Queued\n- [ ] fleet-a - Approve reads on unit A (since 2026-09-01) (hold: needs the captain'"'"'s go) (hold-kind: captain)\n' >"$h/backlog.md"
   intake_at "$h" "$T_0900" observe --source C_BRIEF --ref m-1 --digest a --class urgent --title 'quote for the dealer' >/dev/null
   intake_at "$h" "$T_0900" observe --source C_BRIEF --ref m-2 --digest b --class urgent --title 'cover lens question' >/dev/null
   intake_at "$h" "$T_0900" observe --source C_BRIEF --ref m-3 --digest c --class urgent --title 'invoice question' >/dev/null
@@ -735,6 +737,7 @@ test_a_pass_rechecks_open_items_and_counts_the_misses() {
   a=$(field_of "$h" 'quote for' 1)
   b=$(field_of "$h" 'cover lens' 1)
   c=$(field_of "$h" 'invoice question' 1)
+  todo_at "$h" "$T_0900" verify --item "$(field_of "$h" 'unit A' 1)" --how 'backlog hold re-read' >/dev/null
   # Lars answered one himself; the pass records it under his name.
   todo_at "$h" "$T_1000" close --item "$c" --evidence 'Lars answered in the thread' --actor Lars >/dev/null
   out=$(intake_at "$h" "$T_1030" claim)
@@ -751,11 +754,15 @@ test_a_pass_rechecks_open_items_and_counts_the_misses() {
   assert_contains "$out" 'quote for the dealer<span class="prov obs">read 11:00 CEST</span>' 'the re-read line is not current'
   assert_contains "$out" 'cover lens question<span class="prov unv">not re-checked since 09:00 CEST</span>' \
     'a line the pass skipped still reads as current'
+  # A held decision no pass can re-read answers to the morning sweep only.
+  assert_not_contains "$(todo_at "$h" "$T_1100" recheck)" 'unit A' 'a held decision was listed for a pass'
+  assert_contains "$out" 'Approve reads on unit A<span class="prov obs">read 09:00 CEST</span>' \
+    'a pass demoted a held decision it can never re-read'
   # A pass never moves the closed fold's boundary, and his own close is his.
   assert_contains "$out" '<summary>Closed today (1)</summary>' 'an intake pass moved the closed boundary'
   assert_contains "$out" 'fulfilled by you' 'a close recorded under his name was not counted as his'
   assert_not_contains "$out" 'handled without you' 'his own close was counted as handled without him'
-  pass 'a pass lists every open item to re-check, counts the ones it skipped, and keeps the closed boundary'
+  pass 'a pass lists every open item to re-check, counts the ones it skipped, keeps the closed boundary and leaves held decisions to the morning sweep'
 }
 
 test_ranking_follows_partners_and_the_oldest_ask() {
@@ -771,7 +778,7 @@ test_ranking_follows_partners_and_the_oldest_ask() {
     --title 'black screen at 869951034894703' >/dev/null
   intake_at "$h" "$T_1100" observe --source A_RMA --ref r-rma --digest d --class obligation \
     --title 'Partner RMA: tower return costs' >/dev/null
-  sidecar "$h" 2026-09-10 '{"key":"k-t","source":"firstmate","ref":"voice-pr","class":"obligation","kind":"approval","title":"merge the voice fix?","tooling":true,"updated":'"$T_1100"'},{"key":"k-y","source":"hubspot","ref":"t-45","class":"obligation","kind":"reply","title":"consumption report the partner asked for","partner_awaiting":true,"awaiting_since":'"$((T_0900 - 86400))"',"updated":'"$T_1100"'}'
+  sidecar "$h" 2026-09-10 '{"key":"k-t","source":"firstmate","ref":"voice-pr","class":"obligation","kind":"approval","title":"merge the voice fix?","tooling":true,"updated":'"$T_1100"'},{"key":"k-f","source":"firstmate","ref":"intake-window","class":"obligation","kind":"approval","title":"widen the intake window?","updated":'"$T_1100"'},{"key":"k-y","source":"hubspot","ref":"t-45","class":"obligation","kind":"reply","title":"consumption report the partner asked for","partner_awaiting":true,"awaiting_since":'"$((T_0900 - 86400))"',"updated":'"$T_1100"'}'
   render_at "$h" "$T_1500"
   out=$(page "$h" 2026-09-10)
   # Partners and customers lead, oldest ask first, whatever was read last;
@@ -782,7 +789,8 @@ black screen at 869951034894703
 Partner RMA: tower return costs
 tidy the internal wiki' ] || fail "Needs you is not partners first, oldest ask first:
 $(needs_order "$out")"
-  assert_contains "$out" '<summary>Firstmate tooling approvals (1)</summary>' 'the tooling approval has no fold of its own'
+  # A Firstmate-sourced line needs no flag to land there.
+  assert_contains "$out" '<summary>Firstmate tooling approvals (2)</summary>' 'a Firstmate-sourced approval has no fold of its own'
   [ "$(grep -n 'merge the voice fix' <<<"$out" | head -n1 | cut -d: -f1)" -gt "$(grep -n 'tidy the internal wiki' <<<"$out" | head -n1 | cut -d: -f1)" ] \
     || fail 'the tooling approval ranks above a partner or customer ask'
   # mine keeps a partner ask tracked and out of the ranked list.
@@ -803,6 +811,13 @@ test_page_bugs_stay_fixed() {
   # A title written three days ago with rotting relative times.
   intake_at "$h" $((T_0900 - 3 * 86400)) observe --source C_BRIEF --ref r-rot --digest a --class obligation \
     --title 'PARTNER WAITING 14 DAYS - Kasper asked yesterday' >/dev/null
+  # A deadline or a duration the ask is about is not a rotting relative time.
+  intake_at "$h" "$T_0900" observe --source C_BRIEF --ref r-by --digest a1 --class obligation \
+    --title 'Send the quote by tomorrow' >/dev/null
+  intake_at "$h" "$T_0900" observe --source C_BRIEF --ref r-ext --digest a2 --class obligation \
+    --title 'Approve 30 days extension' >/dev/null
+  intake_at "$h" "$T_0900" observe --source C_BRIEF --ref r-ret --digest a3 --class obligation \
+    --title 'Return within 14 days?' >/dev/null
   # A device update is not an ask for the page, in any state.
   intake_at "$h" "$T_0900" observe --source FLEET --ref ota-1 --digest b --class obligation \
     --title 'Raise thermostat OTA? 3 systems' >/dev/null
@@ -813,6 +828,9 @@ test_page_bugs_stay_fixed() {
   out=$(page "$h" 2026-09-10)
   assert_contains "$out" 'class="what">PARTNER WAITING - Kasper asked<' 'a stored title kept its relative times'
   assert_contains "$out" 'asked Mon 7 Sep, 3 days ago' 'the age was not computed at render'
+  for title in 'Send the quote by tomorrow' 'Approve 30 days extension' 'Return within 14 days?'; do
+    assert_contains "$out" "class=\"what\">$title<" "a title lost what the ask is about: $title"
+  done
   assert_not_contains "$out" 'thermostat OTA' 'a device update reached the page'
   assert_contains "$out" '<td>08:24 CEST</td>' 'a UTC ticket time was not shown in CEST'
   assert_not_contains "$out" '2026-09-10T06:24:04Z' 'a raw UTC ticket time reached the page'
@@ -821,6 +839,18 @@ test_page_bugs_stay_fixed() {
   pass 'titles lose relative times, device updates stay off, ticket times are local and coverage names its gaps'
 }
 
+test_an_age_counts_calendar_days_across_a_clock_change() {
+  local h asked=1774602000 now=1775203200 # Fri 27 Mar and Fri 3 Apr 2026, 10:00 local
+  h="$TMP_ROOT/age-dst"
+  new_home "$h"
+  intake_at "$h" "$asked" observe --source C_BRIEF --ref r-dst --digest a --class obligation \
+    --title 'answer the dealer about the spring order' >/dev/null
+  render_at "$h" "$now"
+  assert_contains "$(page "$h" 2026-04-03)" 'asked Fri 27 Mar, 7 days ago' 'an age across the spring clock change lost a day'
+  pass 'an age counts calendar days across a clock change'
+}
+
+test_an_age_counts_calendar_days_across_a_clock_change
 test_time_bound_asks_expire_after_their_end
 test_expiry_leaves_marked_lines_to_the_captain
 test_a_lapsed_park_no_longer_holds_off_expiry

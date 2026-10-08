@@ -211,12 +211,13 @@
 # is on it, whatever its last-modified date, and observe each with a timeline. `complete --rescanned` records that the re-scan ran.
 # Both belong to the pass that claimed them: `complete` on a hubspot-tickets
 # source is refused unless `tickets` wrote the open-tickets snapshot at or
-# after that source's claim, and refused without --rescanned while a re-scan
-# is due.
+# after that source's claim, and refused without --rescanned when that claim
+# handed out a re-scan.
 #
 # A WAIT ON THE CAPTAIN HAS A DATE. `resolve --waiting` is for work handed to
-# someone else. A reason that leaves the wait with the captain - it says
-# "later", "you" or "captain", or one of his captain_names - is refused unless
+# someone else. A reason that leaves the wait with the captain - "later",
+# "waiting on/for" him, or him (you, captain, one of his captain_names) who
+# will answer, decide or reply - is refused unless
 # it names a date (YYYY-MM-DD, a weekday, tomorrow, next week, or a day and
 # month), because without one it is a park with no end.
 #
@@ -1429,7 +1430,7 @@ complete_source() {
     case "$read_at" in ''|*[!0-9]*) read_at=-1 ;; esac
     [ "$read_at" -ge "$claimed" ] \
       || die "$id: hand this pass's open tickets to '$0 tickets' before complete; the open-tickets table was not refreshed"
-    [ "$rescanned" = true ] || ! rescan_due "$id" "$epoch" \
+    [ "$rescanned" = true ] || ! rescan_due "$id" "$claimed" \
       || die "$id: the re-scan is due; run it in this pass and complete with --rescanned"
   fi
   save_source "$id" "$checkpoint" "$epoch" "$epoch" 0 0 '' "$last_rescan" "$last_relist"
@@ -1734,15 +1735,16 @@ with_partner_hint() {
 
 # --- resolution -------------------------------------------------------------
 
-# A hand-over reason that leaves the wait with the captain: "later", "you", or
-# one of his captain_names.
+# A hand-over reason that leaves the wait with the captain: "later", "waiting
+# on/for" him, or him answering, deciding or replying. A hand-over to someone
+# else that merely mentions him is not one.
 waits_on_captain() {
-  local reason word
-  reason=$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')
-  for word in later you your captain $(printf '%s' "$CFG_CAPTAIN_NAMES" | tr '[:upper:]' '[:lower:]'); do
-    printf ' %s ' "$reason" | grep -Eq "[^a-z]${word}[^a-z]" && return 0
+  local who=you word
+  for word in captain $(printf '%s' "$CFG_CAPTAIN_NAMES" | tr '[:upper:]' '[:lower:]'); do
+    who="$who|$word"
   done
-  return 1
+  printf ' %s ' "$1" | tr '[:upper:]' '[:lower:]' | grep -Eq \
+    "[^a-z]later[^a-z]|[^a-z]waiting (on|for) (the )?($who|your)[^a-z]|[^a-z]($who) will (answer|decide|reply|respond)[^a-z]"
 }
 
 names_a_date() {

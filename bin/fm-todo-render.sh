@@ -31,9 +31,11 @@
 # (`partner_first`), its ticket has a partner contact, a source marked it
 # (`partner`, or the intake's `observe --partner`: a colleague relaying a
 # partner question, a customer site), it names a fifteen-digit system id, or
-# it is an Asana partner RMA. An approval about Firstmate's own tooling
-# (`tooling`) that is not partner-facing sits in its own "Firstmate tooling
-# approvals" fold right below the list, unless it is an outage. A line marked
+# it is an Asana partner RMA. An ask whose source is Firstmate itself (label
+# `firstmate`, or a `firstmate:` or `firstmate-backlog:` alias) or that the
+# morning sweep flagged as its tooling (`tooling`), and that is not
+# partner-facing, sits in its own "Firstmate tooling approvals" fold right
+# below the list, unless it is an outage. A line marked
 # `mine` stays out of both. Each row shows how many days ago the ask was made,
 # computed at render. An urgent class alone - which a long wait earns - never
 # lifts a line into the first tier. There is no summary strip, no separate
@@ -87,8 +89,9 @@
 # next h2, because it is always an older read than the snapshot.
 #
 # FRESHNESS IS ON EVERY LINE. A line is "read <time>" only when its recorded
-# check is at or after this build's sweep (or the start of the day) and
-# checked the revision shown; otherwise "not re-checked since <time>", or
+# check is at or after this build's sweep or intake pass (or the start of the
+# day) and checked the revision shown - a line no pass can re-read at its
+# source, such as a held decision, answers to the morning sweep only; otherwise "not re-checked since <time>", or
 # "cannot verify" when no read was ever recorded. The page header carries the
 # render time separately, so build time and read time are never confused.
 #
