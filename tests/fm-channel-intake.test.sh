@@ -78,6 +78,14 @@
 #     source accepts it, it is never notified or put on the to-do list, it
 #     shows in the brief, and it leaves the polled set only after its own
 #     longer horizon.
+#   - A HubSpot pass completes only with its own open-tickets table and the
+#     re-scan its claim handed out.
+#   - Slack DM, calendar and Asana sources each get their own read on a claim,
+#     the Asana full re-list once per local day.
+#   - Observe refuses a title-less new item, a unit list naming no unit and the
+#     -1.0 broken-sensor reading, keeps a partner mark across re-reads, and a
+#     wait needs a date unless it states a hand-over to someone named other
+#     than the captain.
 # shellcheck disable=SC2016
 set -u
 
@@ -369,7 +377,7 @@ test_captain_response_clears_and_never_reopens() {
   out=$(at "$h" "$T_0900" observe --source M_ACTION --ref msg-77 \
     --digest 'supplier must confirm' --class obligation --title 'supplier confirmation')
   key=$(key_of "$out")
-  at "$h" "$T_0915" resolve --item "$key" --waiting --reason 'handed to the supplier' >/dev/null
+  at "$h" "$T_0915" resolve --item "$key" --waiting --reason 'handed to Dirk at the supplier' >/dev/null
   out=$(at "$h" "$T_0915" brief)
   assert_contains "$out" 'supplier confirmation' 'a handed-off obligation vanished from the brief'
   [ "$(item_field "$h" "$key" state)" = waiting ] \
@@ -379,12 +387,12 @@ test_captain_response_clears_and_never_reopens() {
   # something is stuck, not who it is stuck on.
   at "$h" $((T_0915 + 900)) observe --source M_ACTION --ref msg-77 \
     --digest 'supplier must confirm' --class obligation --title 'supplier confirmation' >/dev/null
-  [ "$(item_field "$h" "$key" resolution)" = 'handed to the supplier' ] \
+  [ "$(item_field "$h" "$key" resolution)" = 'handed to Dirk at the supplier' ] \
     || fail 'an unchanged re-read erased the reason a handed-off item is waiting'
   at "$h" $((T_0915 + 1800)) observe --source M_ACTION --ref msg-77 \
     --digest 'supplier must confirm by friday' --class obligation \
     --title 'supplier confirmation' >/dev/null
-  [ "$(item_field "$h" "$key" resolution)" = 'handed to the supplier' ] \
+  [ "$(item_field "$h" "$key" resolution)" = 'handed to Dirk at the supplier' ] \
     || fail 'a corrected re-read erased the reason a handed-off item is waiting'
   assert_contains "$(at "$h" $((T_0915 + 1800)) brief)" 'supplier confirmation' \
     'a corrected handed-off obligation left waiting-on-others'
@@ -840,13 +848,13 @@ test_ledger_writes_are_serialized() {
   # A live write refuses loudly rather than racing the holder.
   out=$(FM_HOME="$h" FM_ROOT_OVERRIDE="$ROOT" FM_CHANNEL_INTAKE_NOW="$T_0900" \
     FM_CHANNEL_INTAKE_LOCK_WAIT=1 "$INTAKE" observe --source C_BRIEF --ref 1789023000.7 \
-    --digest 'contended' 2>&1) && code=0 || code=$?
+    --digest 'contended' --title 'contended ask' 2>&1) && code=0 || code=$?
   expect_code 2 "$code" 'a contended observation was not refused'
   assert_contains "$out" 'still holds' 'the refusal did not name the contended record'
   release_state_lock "$h"
 
   # With the holder gone the same command succeeds.
-  out=$(at "$h" "$T_0900" observe --source C_BRIEF --ref 1789023000.7 --digest 'contended')
+  out=$(at "$h" "$T_0900" observe --source C_BRIEF --ref 1789023000.7 --digest 'contended' --title 'contended ask')
   case "$out" in new\ *) ;; *) fail "the observation did not land once uncontended: $out" ;; esac
 
   pass 'ledger writes are serialized on a private mutex, so a sweep never clobbers an observation'
@@ -862,7 +870,7 @@ test_no_existing_fleet_is_overridden() {
     --digest 'the other home' --class urgent --title 'the other home' >/dev/null
 
   at "$h" "$T_0900" tick >/dev/null
-  at "$h" "$T_0900" observe --source C_BRIEF --ref 1789023000.1 --digest 'this home' >/dev/null
+  at "$h" "$T_0900" observe --source C_BRIEF --ref 1789023000.1 --digest 'this home' --title 'this home' >/dev/null
 
   # No session lock, no watcher lock, no watcher process.
   assert_absent "$h/state/.lock" 'the intake took the per-home session lock'
@@ -1777,7 +1785,7 @@ test_awaiting_partners_lead_every_summary_and_survive_rewrites() {
   # Stamping a notification or handing the item over keeps the facts it carries.
   at "$h" "$T_0900" notify-sent --keys "$key" >/dev/null
   [ "$(item_field "$h" "$key" awaiting)" = 1 ] || fail 'a notification stamp erased the awaiting flag'
-  at "$h" "$T_0900" resolve --item "$key" --waiting --reason 'Natalia chasing' >/dev/null
+  at "$h" "$T_0900" resolve --item "$key" --waiting --reason 'Natalia will chase' >/dev/null
   [ "$(item_field "$h" "$key" awaiting)" = 1 ] || fail 'a hand-over erased the awaiting flag'
   # An unchanged plain re-read keeps them; a timeline re-read replaces them.
   at "$h" "$T_0915" observe --source H_TICKETS --ref ticket-promise --digest 'promise v1' >/dev/null
@@ -1860,12 +1868,14 @@ test_hubspot_rescan_covers_colleague_and_waiting_on_contact_tickets() {
   assert_contains "$out" $'rescan: H_TICKETS\tlast_rescan: never' 'a never-rescanned source was not handed a re-scan'
   assert_contains "$out" 'any owner, whose emails or notes name the captain or in which a colleague promised the customer that the tech team is on it, re-read in full whatever its last-modified date' \
     'the re-scan scope is not colleague-owned tickets naming the captain or tech, regardless of modification date'
+  printf '[]' | at "$h" "$T_0900" tickets --owner captain >/dev/null
   at "$h" "$T_0900" complete --source H_TICKETS --checkpoint c1 --rescanned >/dev/null
   # Inside the re-scan interval, the checkpoint read still names the stages but
   # re-scans nothing; past it, the re-scan is due again.
   out=$(at "$h" "$T_0915" claim --source H_TICKETS)
   assert_contains "$out" 'stages: H_TICKETS' 'a later claim dropped the stage rule'
   assert_not_contains "$out" 'rescan: H_TICKETS' 'the re-scan ran on every checkpoint read'
+  printf '[]' | at "$h" "$T_0915" tickets --owner captain >/dev/null
   at "$h" "$T_0915" complete --source H_TICKETS --checkpoint c2 >/dev/null
   out=$(at "$h" $((T_0900 + 3600)) claim --source H_TICKETS)
   assert_contains "$out" $'rescan: H_TICKETS\tlast_rescan: '"$T_0900" 'a plain complete lost the last re-scan time'
@@ -1878,6 +1888,115 @@ test_hubspot_rescan_covers_colleague_and_waiting_on_contact_tickets() {
   out=$(at "$h" "$T_0900" status 2>&1) && code=0 || code=$?
   expect_code 2 "$code" 'a re-scan faster than the poll interval was accepted'
   pass 'HubSpot claims cover Waiting on contact and a bounded periodic re-scan of every owner'"'"'s tickets'
+}
+
+test_a_hubspot_pass_needs_its_tickets_and_its_due_rescan() {
+  local h out code
+  h="$TMP_ROOT/hubspot-pass"
+  partner_home "$h"
+  out=$(at "$h" "$T_0900" claim --source H_TICKETS)
+  assert_contains "$out" 'tickets: H_TICKETS' 'the claim did not ask for the open-tickets table'
+  out=$(at "$h" "$T_0900" complete --source H_TICKETS --checkpoint c1 --rescanned 2>&1) && code=0 || code=$?
+  expect_code 2 "$code" 'a HubSpot pass completed without refreshing the open tickets'
+  assert_contains "$out" 'open-tickets table was not refreshed' 'the refusal did not name the missing table'
+  printf '[]' | at "$h" "$T_0900" tickets --owner captain >/dev/null
+  out=$(at "$h" "$T_0900" complete --source H_TICKETS --checkpoint c1 2>&1) && code=0 || code=$?
+  expect_code 2 "$code" 'a HubSpot pass completed without the re-scan it was handed'
+  assert_contains "$out" 'the re-scan is due' 'the refusal did not name the due re-scan'
+  at "$h" "$T_0900" complete --source H_TICKETS --checkpoint c1 --rescanned >/dev/null \
+    || fail 'a HubSpot pass with its tickets and re-scan was refused'
+  # A table from an earlier pass does not count for a later one.
+  at "$h" "$T_0915" claim --source H_TICKETS >/dev/null
+  out=$(at "$h" "$T_0915" complete --source H_TICKETS --checkpoint c2 2>&1) && code=0 || code=$?
+  expect_code 2 "$code" 'an earlier pass'"'"'s open-tickets table satisfied a later pass'
+  # A claim just inside the re-scan interval hands out no re-scan, so the
+  # complete that follows it, just past the interval, owes none either.
+  out=$(at "$h" $((T_0900 + 3300)) claim --source H_TICKETS)
+  assert_not_contains "$out" 'rescan: H_TICKETS' 'a claim inside the re-scan interval handed out a re-scan'
+  printf '[]' | at "$h" $((T_0900 + 3300)) tickets --owner captain >/dev/null
+  at "$h" $((T_0900 + 3660)) complete --source H_TICKETS --checkpoint c3 >/dev/null \
+    || fail 'a pass was refused a re-scan its claim never handed out'
+  pass 'a HubSpot pass completes only with this pass'"'"'s open-tickets table and the re-scan its claim handed out'
+}
+
+test_new_source_kinds_get_their_own_reads() {
+  local h out code
+  h="$TMP_ROOT/kinds"
+  new_home "$h"
+  printf 'D_DMS\tslack-dms\tDMs with the named colleagues\nCAL\tcalendar\tthe captain calendar\nA_REQ\tasana-projects\ttasks assigned to the captain\n' \
+    >>"$h/data/channel-intake/sources.tsv"
+  out=$(at "$h" "$T_0900" claim)
+  assert_contains "$out" $'dms: D_DMS\tread each DM and group DM the coverage sentence names directly' 'a DM source was not told to read DMs directly'
+  # Thursday 10 Sep: the next two working days end on Monday 14 Sep.
+  assert_contains "$out" $'calendar: CAL\tfrom: 2026-09-10\tto: 2026-09-14' 'the calendar window is not the next two working days'
+  assert_contains "$out" $'relist: A_REQ\tlast_relist: never' 'Asana was not handed its daily full re-list'
+  at "$h" "$T_0900" complete --source A_REQ --checkpoint a1 --relisted >/dev/null
+  out=$(at "$h" "$T_0915" claim --source A_REQ)
+  assert_not_contains "$out" 'relist:' 'the Asana re-list ran twice in one day'
+  out=$(at "$h" "$T_NEXT_0900" claim --source A_REQ)
+  assert_contains "$out" $'relist: A_REQ\tlast_relist: '"$T_0900" 'the Asana re-list did not come back the next day'
+  out=$(at "$h" "$T_0900" complete --source C_BRIEF --checkpoint x --relisted 2>&1) && code=0 || code=$?
+  expect_code 2 "$code" 'a non-Asana source recorded a re-list'
+  pass 'Slack DMs, the calendar and a daily Asana re-list each get their own read on a claim'
+}
+
+test_observe_and_resolve_refuse_what_rots_the_page() {
+  local h out code key
+  h="$TMP_ROOT/refusals"
+  new_home "$h"
+  printf 'captain_names = Lars Tolhurst\n' >>"$h/config/channel-intake"
+  printf 'FLEET\ttelemetry-fleet-alerts\tfleet telemetry\n' >>"$h/data/channel-intake/sources.tsv"
+  out=$(at "$h" "$T_0900" observe --source C_BRIEF --ref 1789023000.40 --digest a 2>&1) && code=0 || code=$?
+  expect_code 2 "$code" 'a title-less observe opened an item'
+  assert_contains "$out" '--title is required' 'the refusal did not name the missing title'
+  # A refused title-less thread reply leaves no marker, so the next claim still offers the thread.
+  out=$(at "$h" "$T_0900" observe --source C_BRIEF --ref 1789023100.41 --digest a \
+    --thread 1789023000.40 --reply-marker 1789023100.41 2>&1) && code=0 || code=$?
+  expect_code 2 "$code" 'a title-less thread reply opened an item'
+  [ ! -e "$h/data/channel-intake/threads/C_BRIEF/1789023000.40" ] \
+    || fail 'a refused title-less thread reply still recorded its reply marker'
+  key=$(at "$h" "$T_0900" observe --source C_BRIEF --ref 1789023000.40 --digest a --class obligation \
+    --title 'router question' --partner | awk '{ print $2 }')
+  # A later re-read needs no title and keeps the partner mark.
+  at "$h" "$T_0915" observe --source C_BRIEF --ref 1789023000.40 --digest b >/dev/null \
+    || fail 'a re-read of a known item needed a title'
+  assert_grep 'partner_hint=1' "$h/data/channel-intake/items/$key" 'a re-read dropped the partner mark'
+  out=$(at "$h" "$T_0900" observe --source FLEET --condition b14 --count 3 --units systems --digest u 2>&1) && code=0 || code=$?
+  expect_code 2 "$code" 'a unit list naming no unit was accepted'
+  out=$(at "$h" "$T_0900" observe --source FLEET --condition freezing --count 2 \
+    --units '867280069323517 (-1.0 C), 867280069323962 (0.5 C)' --digest f 2>&1) && code=0 || code=$?
+  expect_code 2 "$code" 'a broken-sensor -1.0 reading was counted as freezing'
+  assert_contains "$out" 'broken-sensor' 'the refusal did not name the broken-sensor value'
+  at "$h" "$T_0900" observe --source FLEET --condition freezing --count 1 \
+    --units '867280069323962 (0.5 C)' --digest g >/dev/null || fail 'a real freezing snapshot was refused'
+  for reason in 'Karolina asks - later' 'later' 'Later' 'Lars will do it later' 'This will happen later' \
+    'Reply to Karolina later' 'follow up in Notion later' 'Customer is waiting, Lars replies later' \
+    'asked Sara to check later' 'waiting on the logs' 'She will confirm later' 'Someone will check' \
+    'He will reply later' 'They will confirm' 'waiting on Him' \
+    'Everything will settle later' 'Everybody will chip in' 'Whoever will pick it up' 'Mine will wait' \
+    'follow up in Asana later' 'Lars will answer' 'waiting on you' 'waiting for Tolhurst to sign off' \
+    'waiting on Lars for 3 decisions' 'Lars will decide 2 options' 'waiting on you, he marked 2 units' 'waiting on you, he sat on it'; do
+    out=$(at "$h" "$T_0915" resolve --item "$key" --waiting --reason "$reason" 2>&1) && code=0 || code=$?
+    expect_code 2 "$code" "a dateless wait with no named hand-over was accepted: $reason"
+  done
+  out=$(at "$h" "$T_0915" resolve --item "$key" --waiting --reason 'Lars will answer Sat' 2>&1) && code=0 || code=$?
+  expect_code 2 "$code" 'a bare "Sat" was accepted as a date'
+  assert_contains "$out" 'a full weekday name or mon/tue/thu/fri' 'the refusal did not say which weekdays count'
+  assert_contains "$out" 'a hand-over to someone named other than the captain' 'the refusal did not say a named hand-over is accepted'
+  # A stated hand-over to someone else needs no date, even when it mentions him.
+  for reason in 'Lars handed it to Sara' 'Queco will send you the logs' 'routed to Naomi, she will update your ticket' \
+    'routed to Naomi, she will confirm later' 'waiting on Pedro for the RMA decision' 'Queco will send the logs' \
+    'Naomi will confirm later' 'assigned to Sara' 'handed over to Pedro'; do
+    at "$h" "$T_0915" resolve --item "$key" --waiting --reason "$reason" >/dev/null \
+      || fail "a hand-over to someone else was refused as a wait on the captain: $reason"
+  done
+  for reason in 'waiting on Lars until 14 Oct' 'Lars will answer by Oct 14'; do
+    at "$h" "$T_0915" resolve --item "$key" --waiting --reason "$reason" >/dev/null \
+      || fail "a wait with a day and month was refused: $reason"
+  done
+  at "$h" "$T_0915" resolve --item "$key" --waiting --reason 'Karolina asks - later, back on Friday' >/dev/null \
+    || fail 'a dated wait was refused'
+  pass 'observe refuses untitled items, unit-less lists and the broken-sensor reading; a wait needs a date or a named hand-over to someone else'
 }
 
 test_bootstrap_surfaces_the_intake() {
@@ -1989,3 +2108,6 @@ test_a_resolved_ticket_re_read_records_its_current_facts
 test_a_long_poll_interval_keeps_the_rescan_default_valid
 test_hubspot_rescan_covers_colleague_and_waiting_on_contact_tickets
 test_team_announcements_are_information_not_asks
+test_a_hubspot_pass_needs_its_tickets_and_its_due_rescan
+test_new_source_kinds_get_their_own_reads
+test_observe_and_resolve_refuse_what_rots_the_page

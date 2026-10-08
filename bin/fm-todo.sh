@@ -3,7 +3,8 @@
 #
 # Usage:
 #   fm-todo.sh sync [--morning-json FILE]
-#   fm-todo.sh sweep-start [--at EPOCH]
+#   fm-todo.sh sweep-start [--at EPOCH] [--pass]
+#   fm-todo.sh recheck [--since EPOCH ID ...]
 #   fm-todo.sh verify --item ID --how TEXT [--rev REV] [--at EPOCH]
 #   fm-todo.sh close --item ID --evidence TEXT [--reason fulfilled|dismissed|superseded] [--actor NAME]
 #   fm-todo.sh reopen --item ID [--reason TEXT]
@@ -50,7 +51,33 @@
 # hold time and a report's written time are never verification. The page calls
 # a line current only when its check is at or after this build's sweep
 # (`sweep-start`, or `sweep_started` in the sidecar; else the start of the
-# day) and checked the revision now shown.
+# day) and checked the revision now shown. `sweep-start --pass` records a
+# 30-minute intake pass instead of a morning sweep: it raises the freshness
+# floor only for items a pass can re-read (those `recheck` lists by their
+# source refs); a held decision or a Firstmate-internal line still answers to
+# the morning sweep. A pass never moves the page's "Closed since" boundary,
+# which stays at the previous morning sweep.
+#
+# RE-CHECK ON EVERY PASS. `recheck` prints one `recheck:` line per open or
+# waiting item that names an external source to re-read: id, revision, state,
+# source label, its source refs (the item's `source:ref` aliases, never a
+# ledger key, a held decision, a Firstmate-internal line or a fleet
+# snapshot), link and title, tab-separated. A parked item, a device update,
+# routine activity and a team update are not listed; like a held decision,
+# they answer to the morning sweep's freshness floor, never a pass's.
+# bin/fm-channel-intake.sh `claim` prints these and the pass answers each
+# with `verify` or `close`. `recheck --since EPOCH ID ...` prints
+# one `TODO_RECHECK:` line counting the listed ids still open or waiting with
+# no verification at or after EPOCH, and names them.
+#
+# TITLES CARRY NO RELATIVE TIME. "today", "yesterday" and the days of a
+# waiting or age phrasing ("WAITING N DAYS", "N days ago", "(N days)") rot the
+# day after they are written, so they are stripped from every stored title and
+# why; a deadline such as "tomorrow" or a duration the ask is about stays. The
+# page computes ages itself from
+# the item's ask time (`asked_at`: the earliest source's ask epoch, a ledger
+# record's source epoch or creation, a morning action's `asked_at`, a held
+# task's `since` day).
 #
 # CHANGES, NOT SNAPSHOTS. Sync applies only what changed since the last sync,
 # so repeated syncs, an old sidecar and a re-asserted morning action are
@@ -167,7 +194,7 @@ esac
 cmd=$1
 shift
 case "$cmd" in
-  sync|sweep-start|verify|close|reopen|ack|command|list) ;;
+  sync|sweep-start|recheck|verify|close|reopen|ack|command|list) ;;
   *) die "unknown command: $cmd" ;;
 esac
 
@@ -176,7 +203,8 @@ morning=''
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --morning-json) [ "$#" -ge 2 ] || die '--morning-json requires a value'; morning=$2; shift 2 ;;
-    --item|--how|--evidence|--at|--state|--rev|--actor|--reason)
+    --pass) args+=("$1"); shift ;;
+    --item|--how|--evidence|--at|--since|--state|--rev|--actor|--reason)
       [ "$#" -ge 2 ] || die "$1 requires a value"; args+=("$1" "$2"); shift 2 ;;
     --*) die "unknown argument: $1" ;;
     *) args+=("$1"); shift ;;
