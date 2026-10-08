@@ -74,6 +74,10 @@
 #   - A HubSpot claim names "Waiting on contact" and hands out a bounded
 #     periodic re-scan of every owner's tickets that name the captain or
 #     promise the customer that tech is on it.
+#   - A team announcement is information, not an ask: only an announcement
+#     source accepts it, it is never notified or put on the to-do list, it
+#     shows in the brief, and it leaves the polled set only after its own
+#     longer horizon.
 # shellcheck disable=SC2016
 set -u
 
@@ -1885,6 +1889,69 @@ test_bootstrap_surfaces_the_intake() {
   pass 'the session-start bootstrap section surfaces due sources, ready alerts and a lost live check'
 }
 
+test_team_announcements_are_information_not_asks() {
+  local h out code key late edited_key edited
+  h="$TMP_ROOT/announcements"
+  new_home "$h"
+  printf 'C_TEAM\tslack-announcements\tteam announcement channels, kept posts only\n' \
+    >>"$h/data/channel-intake/sources.tsv"
+
+  # Only an announcement source may record an update; anywhere else it would
+  # quietly turn an ask into information.
+  out=$(at "$h" "$T_0900" observe --source C_BRIEF --ref 1789023000.30 \
+    --digest 'cabinet launch' --class update --title 'cabinet launch' 2>&1) && code=0 || code=$?
+  expect_code 2 "$code" 'a non-announcement source accepted an update'
+  assert_contains "$out" 'requires a slack-announcements source' \
+    'the refusal did not name the announcement source'
+
+  out=$(at "$h" "$T_0900" observe --source C_TEAM --ref 1789023000.31 \
+    --digest 'furniture limited release' --class update --source-epoch 1789022000 \
+    --title 'Furniture limited release, 50 units - live on the partner webshop 15 Oct' \
+    --link 'https://example.slack.com/archives/C_TEAM/p1789023000000031')
+  key=$(key_of "$out")
+  [ -n "$key" ] || fail "an announcement was not recorded: $out"
+  assert_contains "$(item_field "$h" "$key" class)" 'update' 'the announcement lost its class'
+
+  # Never a ping and never owed, but news on the brief.
+  out=$(at "$h" "$T_0915" notify-due)
+  case "$out" in *Furniture*) fail "an announcement was notified: $out" ;; esac
+  out=$(at "$h" "$T_0915" todo)
+  case "$out" in *Furniture*) fail "an announcement landed on the to-do list: $out" ;; esac
+  assert_contains "$(at "$h" "$T_0915" brief)" 'Furniture limited release' \
+    'the brief did not carry the announcement'
+
+  # Past the routine horizon it stays; past its own horizon it moves aside intact.
+  at "$h" $((T_0900 + 86401 + 900)) tick >/dev/null
+  assert_present "$h/data/channel-intake/items/$key" \
+    'an announcement left the polled set at the routine horizon'
+  late=$((T_0900 + 1209601 + 900))
+  at "$h" "$late" tick >/dev/null
+  assert_absent "$h/data/channel-intake/items/$key" \
+    'an announcement never left the polled set'
+  assert_present "$h/data/channel-intake/inactive/$key" \
+    'a retired announcement was deleted rather than moved'
+
+  # An edited announcement (a moved date) ages out from its last change.
+  out=$(at "$h" "$T_0900" observe --source C_TEAM --ref 1789023000.32 \
+    --digest 'flavour box price change' --class update --title 'Flavour box price change')
+  edited_key=$(key_of "$out")
+  edited=$((T_0900 + 86400))
+  out=$(at "$h" "$edited" observe --source C_TEAM --ref 1789023000.32 \
+    --digest 'flavour box price change, date moved' --class update \
+    --title 'Flavour box price change, from 1 Nov')
+  assert_contains "$out" "updated $edited_key" 'the edit did not update the same announcement'
+  at "$h" "$late" tick >/dev/null
+  assert_present "$h/data/channel-intake/items/$edited_key" \
+    'an edited announcement left the polled set before its edit was past the horizon'
+  at "$h" $((edited + 1209601 + 900)) tick >/dev/null
+  assert_absent "$h/data/channel-intake/items/$edited_key" \
+    'an edited announcement never left the polled set'
+  assert_present "$h/data/channel-intake/inactive/$edited_key" \
+    'a retired edited announcement was deleted rather than moved'
+
+  pass 'a team announcement is recorded as information only, from an announcement source, and ages out on its own horizon'
+}
+
 test_inert_without_opt_in
 test_new_ask_appears_once_and_unchanged_polls_are_silent
 test_edit_updates_the_same_item
@@ -1921,3 +1988,4 @@ test_a_changed_re_read_keeps_an_awaiting_partner_owed
 test_a_resolved_ticket_re_read_records_its_current_facts
 test_a_long_poll_interval_keeps_the_rescan_default_valid
 test_hubspot_rescan_covers_colleague_and_waiting_on_contact_tickets
+test_team_announcements_are_information_not_asks

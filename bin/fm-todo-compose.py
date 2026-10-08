@@ -467,13 +467,15 @@ asks = sorted((r for r in live if r.get('kind') in ('decision', 'approval', 'rep
                and not (held(r) and not current(r))), key=actionkey)
 conditions = [r for r in live if r.get('kind') == 'condition']
 activity = [r for r in live if r.get('kind') == 'info']
+updates = sorted((r for r in live if r.get('kind') == 'update'),
+                 key=lambda r: (-number(r.get('posted')), r.get('id', '')))
 waiting = sorted([r for r in items if r.get('state') == 'waiting'] + handoffs, key=sortkey)
 
 
 def intake_retired(rec):
-    """Routine chatter the intake dropped from its ledger; it was never an ask to close."""
+    """Routine chatter or a team update the intake dropped from its ledger; it was never an ask to close."""
     c = rec.get('closure') or {}
-    return rec.get('kind') == 'info' and c.get('reason') == 'superseded' and c.get('actor') == 'source'
+    return rec.get('kind') in ('info', 'update') and c.get('reason') == 'superseded' and c.get('actor') == 'source'
 
 
 closed = [r for r in items if r.get('state') == 'closed' and not intake_retired(r)
@@ -517,6 +519,14 @@ for condition, readings in sorted(watch.items()):
     units = title.split('; newest:', 1)[1].strip() if '; newest:' in title else (title if re.search(r'\b\d{15}\b', title) else 'no unit detail in latest observation')
     print(f'<div class="watch-line"{audit(newest)}><b>{esc(condition)}</b> - {esc(summary)}'
           f'<span class="why">Latest: {esc(units)} · {freshness(newest)} · {link(newest.get("link"))}</span></div>')
+
+if updates:
+    # Information, not asks: what changed in the team channels, newest post first.
+    print(disclosure(f'Updates ({len(updates)})', table([
+        f'<tr id="item-{esc(r["id"])}"{audit(r)}><td>{brief(r.get("title"))}</td>'
+        f'<td><span class="prov inf">posted {esc(when(r["posted"])) if number(r.get("posted")) else "time not recorded"}'
+        f' · {esc(r.get("label") or "")}</span></td><td>{link(r.get("link"))}</td></tr>'
+        for r in updates])))
 
 if waiting:
     def waiting_note(r):

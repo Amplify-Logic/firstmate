@@ -30,7 +30,9 @@
 # first tier. There is no summary strip, no separate Now box and no sweep
 # banner, and no item renders twice. A captain-held backlog decision no read
 # made current stays off the page; the backlog still holds it. Fleet
-# conditions follow, then collapsed folds for waiting on others (including
+# conditions follow, then a collapsed "Updates" fold of team announcements
+# (class update), newest post first, each with its post time and link, then
+# collapsed folds for waiting on others (including
 # requested handoffs), other channel activity (its lines not current for this
 # build in one capped "not re-checked" fold), everything closed since the
 # previous sweep ("Closed today" when that is the start of the day) with its
@@ -39,10 +41,10 @@
 # out-of-date line, the morning detail fragment (worth knowing, only context
 # that is not time-bound) and the intake coverage fold (each enrolled
 # source's last successful read and last failure, which is separate from item
-# freshness). Routine chatter the intake dropped from its ledger was never an
-# ask and is not a closure. Sections with nothing in them are omitted. The
-# closed fold counts as "handled without you" only a fulfilled close with a
-# named actor other than the captain.
+# freshness). Routine chatter or a team update the intake dropped from its
+# ledger was never an ask and is not a closure. Sections with nothing in them
+# are omitted. The closed fold counts as "handled without you" only a
+# fulfilled close with a named actor other than the captain.
 #
 # EACH ROW IS THE CLASS BADGE, THE ASK, AT MOST ONE SHORT CONTEXT LINE (a
 # reopen note, else the why, else the ask's wording), ITS READ TIME, the Open

@@ -44,6 +44,40 @@ A `hubspot-tickets` source's claim also names the stages to read, including "Wai
 That re-scan exists because a colleague-owned ticket naming the captain only inside an email body, one promising the customer that tech is on it, or one parked in "Waiting on contact", returns from no checkpoint read.
 The orchestrator completes a read that included it with `--rescanned`.
 
+## Team announcement channels
+
+A `slack-announcements` source enrols a set of team channels for what they announce rather than for asks addressed to the page's owner.
+Its coverage sentence lists the channel ids; the source kind is what makes the gate accept the `update` class from it.
+
+Each pass reads, in every enrolled channel, the new top-level posts since the checkpoint and the poster's own replies under them.
+It keeps only a post that announces something relevant to support:
+
+- a product or feature launch or change;
+- a date or deadline;
+- a price, availability or ordering change;
+- a process or policy change.
+
+Chit-chat, social posts, lunch and celebrations, and questions between colleagues are not observed at all.
+
+A kept post is one `observe --class update` call.
+Its `--ref` is the message timestamp, its `--source-epoch` the post time, its `--link` the Slack permalink, and its `--title` a one-line summary that carries the post's dates, for example "Aquablu Furniture limited release, 50 units - live on the partner webshop 15 Oct".
+A post that asks the page's owner to act, or sets a deadline that is theirs, is observed with an owed class instead (`obligation` or `deadline`), so it reaches "Needs you now" like any other ask.
+An edit inside the revision window is re-observed like any other message, so a moved date updates the same item.
+
+An update is never notified and never on the to-do list.
+The brief lists it under what changed, and the day page shows it in the collapsed "Updates" fold, newest post first with its post time and link.
+It leaves the polled set two weeks after it was posted or last edited, the same way routine traffic leaves after a day; `bin/fm-channel-intake.sh --help` owns the horizon.
+
+### The durable updates log
+
+Each kept post also appends one dated entry to `data/product-updates/log.md` in the home, newest last, so drafting and investigations work from the latest facts rather than from what an earlier session remembered.
+The orchestrator writes it on the same pass as the `observe`; tracked code never does.
+An entry is a level-two heading of the post date and the one-line summary, then the dates it announces, the facts a reply would need (names, quantities, prices, dimensions, ordering channel), and the permalink.
+An edit that changes a fact appends a new entry naming the change rather than rewriting the old one, so the newest entry for a topic is the current one.
+
+Drafts and investigations read the newest entries before relying on product, date, price or process facts, as they already read the reply bank before drafting.
+That standing instruction lives in the home's private brief include, which `docs/configuration.md` owns.
+
 ## Install
 
 Every step is local to one device and one home.
@@ -107,6 +141,7 @@ Three destinations, and they are not interchangeable.
 | `routine` | the brief only | never a ping |
 | `obligation` | the daily to-do list | not the Action Deck |
 | `automation-candidate` | a proposal in the brief | never an executable card |
+| `update` | the brief and the day page's "Updates" fold | never a ping, never owed; only a `slack-announcements` source records one |
 
 Quiet hours defer, they do not drop: a deferred alert renders as soon as the window ends.
 `outage` is the single class that still goes out inside quiet hours, because silencing a live service outage until morning would not preserve real severity.
@@ -219,8 +254,9 @@ Routine traffic is rendered in exactly one place: the brief's "what changed", bo
 Past that horizon it leaves the polled set by *moving* into `data/channel-intake/inactive/` with its record byte for byte intact.
 It is not deleted, not resolved and not closed on the captain's behalf: `items --state inactive` lists it, a bare `items` lists it, `status` counts it as `items_inactive`, and re-observing the same message restores it to the active set rather than opening a second item.
 `tick` does that pass, capped per run so a first sweep over a long-running ledger is itself bounded, with the remainder draining on later ticks.
+A team update leaves the same way on its own longer horizon, edited or not (see "Team announcement channels").
 
-Nothing owed, waiting, corrected or already notified ever leaves the polled set, whatever its age.
+Nothing else owed, waiting, corrected or already notified ever leaves the polled set, whatever its age.
 An open obligation is a durable record with no expiry, and the only thing that takes one off the active list is an explicit `resolve`.
 
 ## Session-start surface

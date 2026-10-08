@@ -16,7 +16,9 @@ RANK = ('outage', 'urgent', 'deadline', 'obligation')
 KINDS = ('decision', 'approval', 'reply', 'info')
 WEEKDAYS = ('monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday')
 SLOT_FIELDS = ('title', 'link', 'class', 'kind', 'ask', 'why', 'label', 'since', 'partner_first', 'awaiting_since',
-               'ends_at')
+               'ends_at', 'posted')
+# Records that were never an ask: the intake retires them and nobody closes them.
+UNOWED_KINDS = ('info', 'update')
 RETIRED_TTL = 30 * 86400
 
 
@@ -140,9 +142,13 @@ def ledger_observations(intake_dir, labels):
                 # An edit after resolution lands in edited_digest, never in digest.
                 'rev': rec.get('edited_digest') or rec.get('digest', ''),
                 'title': rec.get('title', ''), 'link': rec.get('link', ''), 'class': cls or 'obligation',
-                'kind': 'condition' if rec.get('kind') == 'telemetry-fleet-alerts' else ('reply' if cls in RANK else 'info'),
+                'kind': 'condition' if rec.get('kind') == 'telemetry-fleet-alerts' else (
+                    'reply' if cls in RANK else ('update' if cls == 'update' else 'info')),
                 'label': label, 'state': state,
             }
+            # A team announcement sorts by when it was posted, not when it was read.
+            if cls == 'update':
+                o['posted'] = number(rec.get('source_epoch')) or number(rec.get('created'))
             # A partner-facing ask awaiting the captain, as the intake's timeline
             # assessment recorded it; the composer ranks it right after a live
             # problem or hard deadline, above every other class.
@@ -361,7 +367,7 @@ def fold(store, items, observations, now, backlog_seen, ledger_seen):
         for rec in items.values():
             gone = [s for slot, s in rec['slots'].items()
                     if slot.startswith('ledger:') and (rec['id'], slot) not in seen and s['state'] == 'open']
-            if (not gone or rec['state'] != 'open' or rec.get('kind') != 'info'
+            if (not gone or rec['state'] != 'open' or rec.get('kind') not in UNOWED_KINDS
                     or rec.get('owner') or rec.get('snoozed_until') or rec.get('pending')
                     or any((rec['id'], slot) in seen for slot in rec['slots'])):
                 continue
@@ -520,9 +526,9 @@ def sync(args, store, now):
 
 
 def prunable(rec, now):
-    """Only an intake-retired routine record past its retention; it was never an ask."""
+    """Only an intake-retired routine record or team update past its retention; it was never an ask."""
     c = rec.get('closure') or {}
-    return (rec.get('state') == 'closed' and rec.get('kind') == 'info'
+    return (rec.get('state') == 'closed' and rec.get('kind') in UNOWED_KINDS
             and c.get('reason') == 'superseded' and c.get('actor') == 'source'
             and 0 < number(c.get('at')) <= now - RETIRED_TTL)
 
