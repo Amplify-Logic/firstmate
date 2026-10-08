@@ -1890,7 +1890,7 @@ test_bootstrap_surfaces_the_intake() {
 }
 
 test_team_announcements_are_information_not_asks() {
-  local h out code key late
+  local h out code key late edited_key edited
   h="$TMP_ROOT/announcements"
   new_home "$h"
   printf 'C_TEAM\tslack-announcements\tteam announcement channels, kept posts only\n' \
@@ -1930,6 +1930,24 @@ test_team_announcements_are_information_not_asks() {
     'an announcement never left the polled set'
   assert_present "$h/data/channel-intake/inactive/$key" \
     'a retired announcement was deleted rather than moved'
+
+  # An edited announcement (a moved date) ages out from its last change.
+  out=$(at "$h" "$T_0900" observe --source C_TEAM --ref 1789023000.32 \
+    --digest 'flavour box price change' --class update --title 'Flavour box price change')
+  edited_key=$(key_of "$out")
+  edited=$((T_0900 + 86400))
+  out=$(at "$h" "$edited" observe --source C_TEAM --ref 1789023000.32 \
+    --digest 'flavour box price change, date moved' --class update \
+    --title 'Flavour box price change, from 1 Nov')
+  assert_contains "$out" "updated $edited_key" 'the edit did not update the same announcement'
+  at "$h" "$late" tick >/dev/null
+  assert_present "$h/data/channel-intake/items/$edited_key" \
+    'an edited announcement left the polled set before its edit was past the horizon'
+  at "$h" $((edited + 1209601 + 900)) tick >/dev/null
+  assert_absent "$h/data/channel-intake/items/$edited_key" \
+    'an edited announcement never left the polled set'
+  assert_present "$h/data/channel-intake/inactive/$edited_key" \
+    'a retired edited announcement was deleted rather than moved'
 
   pass 'a team announcement is recorded as information only, from an announcement source, and ages out on its own horizon'
 }

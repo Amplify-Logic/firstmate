@@ -66,7 +66,7 @@ An edit inside the revision window is re-observed like any other message, so a m
 
 An update is never notified and never on the to-do list.
 The brief lists it under what changed, and the day page shows it in the collapsed "Updates" fold, newest post first with its post time and link.
-It leaves the polled set two weeks after it was posted, the same way routine traffic leaves after a day; `bin/fm-channel-intake.sh --help` owns the horizon.
+It leaves the polled set two weeks after it was posted or last edited, the same way routine traffic leaves after a day; `bin/fm-channel-intake.sh --help` owns the horizon.
 
 ### The durable updates log
 

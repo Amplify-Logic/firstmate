@@ -124,7 +124,8 @@
 # record intact. Nothing is deleted, nothing is auto-resolved: `items` still
 # lists it, `status` still counts it, and re-observing the same key restores
 # it rather than opening a second item. Anything owed, waiting, corrected or
-# already notified stays in the polled set whatever its age.
+# already notified stays in the polled set whatever its age, except that a
+# corrected team update leaves once its last change is past UPDATE_WINDOW.
 #
 # NO POLL LOOP CAN RUN AWAY. interval_seconds has a hard floor, a failing
 # source backs off geometrically to a bounded ceiling instead of retrying
@@ -890,7 +891,8 @@ save_item() {
 # is resolved, nothing is auto-closed: `items` still lists it, `status` still
 # counts it, and re-observing the same key restores it to the active set rather
 # than opening a second item. Anything owed, waiting, corrected or already
-# notified stays where it is, forever, whatever its age.
+# notified stays where it is, forever, whatever its age - except a corrected
+# update, which leaves once its last change is past its own horizon.
 RETIRE_MAX_PER_PASS=200
 
 restore_inactive_item() {
@@ -913,11 +915,13 @@ retire_inactive_items() {
     [ "$retired" -lt "$RETIRE_MAX_PER_PASS" ] || break
     [ "$state" = open ] || continue
     case "$class" in
-      routine) horizon=$BRIEF_WINDOW ;;
+      routine)
+        horizon=$BRIEF_WINDOW
+        case "$revisions" in ''|0) ;; *) continue ;; esac
+        ;;
       update) horizon=$UPDATE_WINDOW ;;
       *) continue ;;
     esac
-    case "$revisions" in ''|0) ;; *) continue ;; esac
     [ -z "$notified" ] || continue
     case "$created" in ''|*[!0-9]*) continue ;; esac
     case "$updated" in ''|*[!0-9]*) updated=$created ;; esac
