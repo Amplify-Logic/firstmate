@@ -1747,7 +1747,7 @@ with_partner_hint() {
 # nor a pronoun or indefinite word.
 hands_over_to_other() {
   local name not_owner
-  not_owner=" you your captain it this that there we i he she they him her them someone somebody nobody nothing everyone anyone who what $(printf '%s' "$CFG_CAPTAIN_NAMES" | tr '[:upper:]' '[:lower:]') "
+  not_owner=" i me my mine myself we us our ours ourselves you your yours yourself yourselves he him his himself she her hers herself they them their theirs themselves it its itself one this that these those there here someone somebody something anyone anybody anything everyone everybody everything noone nobody nothing some any every no all both each either neither none other others another such few many much most several who whom whose which what whoever whichever whatever where when captain $(printf '%s' "$CFG_CAPTAIN_NAMES" | tr '[:upper:]' '[:lower:]') "
   for name in $(printf ' %s ' "$1" | grep -oE \
     '([Ww]aiting (on|for)|[Rr]outed to|[Hh]anded( it)?( over)? to|[Aa]ssigned to) [A-Z][a-z]+|[A-Z][a-z]+ will [a-z]+' \
     | sed -E 's/ will [a-z]+$//; s/.* //'); do

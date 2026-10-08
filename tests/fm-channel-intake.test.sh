@@ -1973,6 +1973,7 @@ test_observe_and_resolve_refuse_what_rots_the_page() {
     'Reply to Karolina later' 'follow up in Notion later' 'Customer is waiting, Lars replies later' \
     'asked Sara to check later' 'waiting on the logs' 'She will confirm later' 'Someone will check' \
     'He will reply later' 'They will confirm' 'waiting on Him' \
+    'Everything will settle later' 'Everybody will chip in' 'Whoever will pick it up' 'Mine will wait' \
     'follow up in Asana later' 'Lars will answer' 'waiting on you' 'waiting for Tolhurst to sign off' \
     'waiting on Lars for 3 decisions' 'Lars will decide 2 options' 'waiting on you, he marked 2 units' 'waiting on you, he sat on it'; do
     out=$(at "$h" "$T_0915" resolve --item "$key" --waiting --reason "$reason" 2>&1) && code=0 || code=$?
