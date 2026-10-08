@@ -1747,9 +1747,14 @@ waits_on_captain() {
     "[^a-z]later[^a-z]|[^a-z]waiting (on|for) (the )?($who|your)[^a-z]|[^a-z]($who) will (answer|decide|reply|respond)[^a-z]"
 }
 
+# Month and weekday names count only as whole words, a month only next to a day
+# number; "sat", "sun" and "wed" are ordinary words, so those days need their
+# full names.
 names_a_date() {
+  local month='(jan(uary)?|feb(ruary)?|mar(ch)?|apr(il)?|may|june?|july?|aug(ust)?|sep(t(ember)?)?|oct(ober)?|nov(ember)?|dec(ember)?)'
+  local weekday='(monday|tuesday|wednesday|thursday|friday|saturday|sunday|mon|tues?|thu(rs?)?|fri)'
   printf ' %s ' "$1" | tr '[:upper:]' '[:lower:]' | grep -Eq \
-    '[0-9]{4}-[0-9]{2}-[0-9]{2}|[^a-z](mon|tue|wed|thu|fri|sat|sun)(day|sday|nesday|rsday|urday)?[^a-z]|[^a-z]tomorrow[^a-z]|next week|[0-9]{1,2} ?(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)|(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]* [0-9]{1,2}[^0-9]'
+    "[0-9]{4}-[0-9]{2}-[0-9]{2}|[^a-z]$weekday[^a-z]|[^a-z]tomorrow[^a-z]|[^a-z]next week[^a-z]|[^0-9][0-9]{1,2}(st|nd|rd|th)? ?$month[^a-z]|[^a-z]$month\.? [0-9]{1,2}[^0-9]"
 }
 
 # An obligation is discharged by content, not by the fact that somebody replied.
