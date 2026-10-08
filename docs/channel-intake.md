@@ -254,8 +254,9 @@ Routine traffic is rendered in exactly one place: the brief's "what changed", bo
 Past that horizon it leaves the polled set by *moving* into `data/channel-intake/inactive/` with its record byte for byte intact.
 It is not deleted, not resolved and not closed on the captain's behalf: `items --state inactive` lists it, a bare `items` lists it, `status` counts it as `items_inactive`, and re-observing the same message restores it to the active set rather than opening a second item.
 `tick` does that pass, capped per run so a first sweep over a long-running ledger is itself bounded, with the remainder draining on later ticks.
+A team update leaves the same way on its own longer horizon, edited or not (see "Team announcement channels").
 
-Nothing owed, waiting, corrected or already notified ever leaves the polled set, whatever its age.
+Nothing else owed, waiting, corrected or already notified ever leaves the polled set, whatever its age.
 An open obligation is a durable record with no expiry, and the only thing that takes one off the active list is an explicit `resolve`.
 
 ## Session-start surface

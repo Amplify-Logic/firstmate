@@ -120,8 +120,8 @@
 # PER-POLL WORK IS BOUNDED, HISTORY IS NOT DISCARDED. Every ledger surface
 # reads a whole record directory in one process rather than one per field per
 # record, and routine traffic older than the brief horizon that is the only
-# place it is rendered (a team update after UPDATE_WINDOW) MOVES out of the polled set into `inactive/` with its
-# record intact. Nothing is deleted, nothing is auto-resolved: `items` still
+# place it is rendered (a team update after UPDATE_WINDOW) MOVES out of the
+# polled set into `inactive/` with its record intact. Nothing is deleted, nothing is auto-resolved: `items` still
 # lists it, `status` still counts it, and re-observing the same key restores
 # it rather than opening a second item. Anything owed, waiting, corrected or
 # already notified stays in the polled set whatever its age, except that a
