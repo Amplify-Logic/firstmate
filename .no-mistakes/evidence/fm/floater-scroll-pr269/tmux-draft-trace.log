@@ -1,0 +1,26 @@
+tmux display-message -p -t %0 #{pane_id}
+tmux display-message -p -t %0 #{pane_pid}
+tmux display-message -p -t %0 #{cursor_y}
+tmux capture-pane -e -p -t %0 -S 0 -E -
+tmux display-message -p -t %0 #{pane_tty}
+tmux display-message -p -t %0 #{pane_current_command}
+tmux capture-pane -p -t %0 -S -0
+tmux capture-pane -p -t %0 -S -0
+tmux capture-pane -p -t %0 -S -0
+tmux display-message -p -t %0 #{pane_id}
+tmux send-keys -t %0 C-s
+tmux display-message -p -t %0 #{cursor_y}
+tmux capture-pane -e -p -t %0 -S 0 -E -
+tmux display-message -p -t %0 #{pane_tty}
+tmux display-message -p -t %0 #{pane_current_command}
+tmux capture-pane -p -t %0 -S -0
+tmux load-buffer -b fm-desk-voice-46152 -
+tmux paste-buffer -p -d -b fm-desk-voice-46152 -t %0
+tmux capture-pane -p -t %0 -S -0
+tmux display-message -p -t %0 #{pane_id}
+tmux send-keys -t %0 Enter
+tmux display-message -p -t %0 #{cursor_y}
+tmux capture-pane -e -p -t %0 -S 0 -E -
+tmux display-message -p -t %0 #{pane_tty}
+tmux display-message -p -t %0 #{pane_current_command}
+tmux capture-pane -p -t %0 -S -0

@@ -1,0 +1,9 @@
+❯ Reply with only the word PONG
+⏺ PONG
+✻ Sautéed for 1s · done 2:07 AM
+─────────────────────────────────────────────────────
+❯
+─────────────────────────────────────────────────────
+  ⚠ Transcript saving is off — inherited CLAUDE_CO…
+  ⚓ Opus 5.5 (1M context)·medium │ 🧠5% ⚡0% │ 🚢…
+  ⏵⏵ auto mode on (shift+tab to cycle)

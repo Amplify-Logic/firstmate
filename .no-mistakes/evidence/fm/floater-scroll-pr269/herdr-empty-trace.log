@@ -1,0 +1,23 @@
+herdr pane get w1:p1 --session fm-lab-desk-viewport-91247-13712
+herdr pane process-info --pane w1:p1 --session fm-lab-desk-viewport-91247-13712
+herdr status --json --session fm-lab-desk-viewport-91247-13712
+herdr pane read w1:p1 --source visible --format ansi --session fm-lab-desk-viewport-91247-13712
+herdr agent get w1:p1 --session fm-lab-desk-viewport-91247-13712
+herdr status --json --session fm-lab-desk-viewport-91247-13712
+herdr pane read w1:p1 --source visible --session fm-lab-desk-viewport-91247-13712
+herdr status --json --session fm-lab-desk-viewport-91247-13712
+herdr pane read w1:p1 --source visible --session fm-lab-desk-viewport-91247-13712
+herdr agent get w1:p1 --session fm-lab-desk-viewport-91247-13712
+herdr status --json --session fm-lab-desk-viewport-91247-13712
+herdr pane read w1:p1 --source visible --format ansi --session fm-lab-desk-viewport-91247-13712
+herdr status --json --session fm-lab-desk-viewport-91247-13712
+herdr pane send-text w1:p1 Reply with only the word PONG --session fm-lab-desk-viewport-91247-13712
+herdr status --json --session fm-lab-desk-viewport-91247-13712
+herdr pane read w1:p1 --source visible --format ansi --session fm-lab-desk-viewport-91247-13712
+herdr agent get w1:p1 --session fm-lab-desk-viewport-91247-13712
+herdr status --json --session fm-lab-desk-viewport-91247-13712
+herdr pane send-keys w1:p1 enter --session fm-lab-desk-viewport-91247-13712
+herdr agent get w1:p1 --session fm-lab-desk-viewport-91247-13712
+herdr agent get w1:p1 --session fm-lab-desk-viewport-91247-13712
+herdr agent get w1:p1 --session fm-lab-desk-viewport-91247-13712
+herdr agent get w1:p1 --session fm-lab-desk-viewport-91247-13712

@@ -1,0 +1,23 @@
+
+▗ ▗   ▖ ▖  Claude Code v2.1.293
+           Opus 5.5 (1M context) · Claude Team
+ ▘▘   ▝▝   ~/…/01M4BG0WS9G5K8CBMFZHFND09X
+
+
+
+
+
+
+
+
+
+
+
+
+
+─────────────────────────────────────────────────────
+❯ Try "edit herdr.sh to..."
+─────────────────────────────────────────────────────
+  ⚠ Transcript saving is off — inherited CLAUDE_CO…
+  ⚓ Opus 5.5 (1M context)·medium │ 🧠-- ⚡-- │ 🚢…
+  ⏵⏵ auto mode on (shift+tab to cycle)
