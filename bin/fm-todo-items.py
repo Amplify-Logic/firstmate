@@ -592,9 +592,9 @@ def source_refs(rec):
 
 
 def recheck_listed(items, now):
-    """Every open or waiting item a pass can re-read at its source."""
+    """Every open or waiting item a pass can re-read at its source; a team update is never an ask."""
     for rec in sorted(items.values(), key=lambda r: r['id']):
-        if rec['state'] not in ('open', 'waiting') or rec.get('device_update'):
+        if rec['state'] not in ('open', 'waiting') or rec.get('device_update') or rec.get('kind') == 'update':
             continue
         if (rec.get('snoozed_until') or '') > local_day(now) or not source_refs(rec):
             continue
