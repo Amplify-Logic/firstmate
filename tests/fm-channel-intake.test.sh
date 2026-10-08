@@ -74,13 +74,14 @@
 #   - A HubSpot claim names "Waiting on contact" and hands out a bounded
 #     periodic re-scan of every owner's tickets that name the captain or
 #     promise the customer that tech is on it.
-#   - A HubSpot pass completes only with its own open-tickets table and any
-#     re-scan that is due.
+#   - A HubSpot pass completes only with its own open-tickets table and the
+#     re-scan its claim handed out.
 #   - Slack DM, calendar and Asana sources each get their own read on a claim,
 #     the Asana full re-list once per local day.
 #   - Observe refuses a title-less new item, a unit list naming no unit and the
 #     -1.0 broken-sensor reading, keeps a partner mark across re-reads, and a
-#     wait left with the captain needs a date.
+#     wait left with the captain needs a date while a hand-over to others that
+#     only mentions him does not.
 # shellcheck disable=SC2016
 set -u
 
@@ -1904,7 +1905,14 @@ test_a_hubspot_pass_needs_its_tickets_and_its_due_rescan() {
   at "$h" "$T_0915" claim --source H_TICKETS >/dev/null
   out=$(at "$h" "$T_0915" complete --source H_TICKETS --checkpoint c2 2>&1) && code=0 || code=$?
   expect_code 2 "$code" 'an earlier pass'"'"'s open-tickets table satisfied a later pass'
-  pass 'a HubSpot pass completes only with this pass'"'"'s open-tickets table and any re-scan that is due'
+  # A claim just inside the re-scan interval hands out no re-scan, so the
+  # complete that follows it, just past the interval, owes none either.
+  out=$(at "$h" $((T_0900 + 3300)) claim --source H_TICKETS)
+  assert_not_contains "$out" 'rescan: H_TICKETS' 'a claim inside the re-scan interval handed out a re-scan'
+  printf '[]' | at "$h" $((T_0900 + 3300)) tickets --owner captain >/dev/null
+  at "$h" $((T_0900 + 3660)) complete --source H_TICKETS --checkpoint c3 >/dev/null \
+    || fail 'a pass was refused a re-scan its claim never handed out'
+  pass 'a HubSpot pass completes only with this pass'"'"'s open-tickets table and the re-scan its claim handed out'
 }
 
 test_new_source_kinds_get_their_own_reads() {
@@ -1951,13 +1959,18 @@ test_observe_and_resolve_refuse_what_rots_the_page() {
   assert_contains "$out" 'broken-sensor' 'the refusal did not name the broken-sensor value'
   at "$h" "$T_0900" observe --source FLEET --condition freezing --count 1 \
     --units '867280069323962 (0.5 C)' --digest g >/dev/null || fail 'a real freezing snapshot was refused'
-  for reason in 'Karolina asks - later' 'Lars will answer'; do
+  for reason in 'Karolina asks - later' 'Lars will answer' 'waiting on you' 'waiting for Tolhurst to sign off'; do
     out=$(at "$h" "$T_0915" resolve --item "$key" --waiting --reason "$reason" 2>&1) && code=0 || code=$?
     expect_code 2 "$code" "a wait on the captain with no date was accepted: $reason"
   done
+  # A hand-over to someone else that only mentions him is not a wait on him.
+  for reason in 'Lars handed it to Sara' 'Queco will send you the logs' 'routed to Naomi, she will update your ticket'; do
+    at "$h" "$T_0915" resolve --item "$key" --waiting --reason "$reason" >/dev/null \
+      || fail "a hand-over to someone else was refused as a wait on the captain: $reason"
+  done
   at "$h" "$T_0915" resolve --item "$key" --waiting --reason 'Karolina asks - later, back on Friday' >/dev/null \
     || fail 'a dated wait on the captain was refused'
-  pass 'observe refuses untitled items, unit-less lists and the broken-sensor reading; a wait on the captain needs a date'
+  pass 'observe refuses untitled items, unit-less lists and the broken-sensor reading; a wait on the captain needs a date, a hand-over to others does not'
 }
 
 test_bootstrap_surfaces_the_intake() {

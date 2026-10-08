@@ -44,13 +44,14 @@ def when(epoch):
 
 
 # Relative times rot the day after they are written ("yesterday", "WAITING 14
-# DAYS"), so a stored title or why never keeps one; the page computes ages.
-RELATIVE = re.compile(r'\b(?:(?:for|since)\s+)?\d+\s+days?(?:\s+(?:ago|old))?\b'
-                      r'|\b(?:today|yesterday|tomorrow|tonight|this\s+(?:morning|afternoon|evening))\b', re.I)
+# DAYS"), so a stored title or why never keeps one; the page computes ages. Only
+# a waiting or age phrasing loses its days: a duration the ask is about stays.
+RELATIVE = re.compile(r'\b(waiting)\s+\d+\s+days?\b|\b\d+\s+days?\s+ago\b|\(\s*\d+\s+days?\s*\)'
+                      r'|\b(?:today|yesterday)\b', re.I)
 
 
 def strip_relative(text):
-    text = RELATIVE.sub('', str(text or ''))
+    text = RELATIVE.sub(lambda m: m.group(1) or '', str(text or ''))
     text = re.sub(r'\(\s*\)', '', text)
     text = re.sub(r'\s+([,.;:)])', r'\1', text)
     text = re.sub(r'([(])\s+', r'\1', text)
@@ -339,6 +340,7 @@ def present(rec):
     for field in ('title', 'why'):
         rec[field] = strip_relative(rec[field])
     # The ask was made when its earliest source saw it, whichever source presents it.
+    rec['rereadable'] = bool(source_refs(rec))
     rec['asked_at'] = min([number(s.get('asked_at')) for s in slots if number(s.get('asked_at'))] or [0])
     rec['source_snooze'] = next((s['snoozed_until'] for s in slots if s.get('snoozed_until')), '')
     rec['rev'] = rev_of(rec)

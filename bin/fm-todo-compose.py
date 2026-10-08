@@ -194,8 +194,11 @@ sidecar = json.loads(Path(MORNING_JSON).read_text()) if MORNING_JSON else {}
 
 
 def current(rec):
+    """A pass makes current only what it can re-read at its source; anything else,
+    a held decision or a Firstmate-internal line, answers to the morning sweep."""
     v = rec.get('verification') or {}
-    return number(v.get('at')) >= FLOOR and v.get('rev') == rec.get('rev')
+    floor = FLOOR if rec.get('rereadable') else MORNING_FLOOR
+    return number(v.get('at')) >= floor and v.get('rev') == rec.get('rev')
 
 
 def partner_first(rec):
@@ -229,8 +232,11 @@ def partner(rec):
 
 
 def tooling(rec):
-    """An approval about Firstmate's own tooling, never a partner or customer ask."""
-    return bool(rec.get('tooling')) and not partner(rec)
+    """An ask whose source is Firstmate itself, or that the morning sweep flagged as
+    its tooling; never a partner or customer ask."""
+    own = rec.get('label') == 'firstmate' or any(
+        a.startswith(('firstmate:', 'firstmate-backlog:')) for a in rec.get('aliases') or [])
+    return bool(rec.get('tooling') or own) and not partner(rec)
 
 
 def sortkey(rec):
@@ -375,7 +381,7 @@ def age(rec):
     at = asked(rec)
     if at == UNDATED or at > NOW:
         return ''
-    days = (day_start(NOW) - day_start(at)) // 86400
+    days = (datetime.date.fromtimestamp(NOW) - datetime.date.fromtimestamp(at)).days
     if days < 1:
         return ''
     return f'<span class="prov inf">asked {esc(stamp(at, "%a %-d %b"))}, {days} day{"s" if days > 1 else ""} ago</span>'
