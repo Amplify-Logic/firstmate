@@ -110,7 +110,7 @@ line_of() {
   grep -n -F "$2" "$1" | head -n 1 | cut -d: -f1
 }
 
-test_severity_then_recency_orders_the_live_section() {
+test_outage_then_oldest_ask_orders_the_live_section() {
   local h page order
 
   h="$TMP_ROOT/ordering"
@@ -133,12 +133,12 @@ test_severity_then_recency_orders_the_live_section() {
   order=$(title_order "$page")
 
   [ "$order" = 'tap down at the customer
-newer urgent ask
 older urgent ask
+newer urgent ask
 routine housekeeping' ] || fail "the live section is not ranked as expected:
 $order"
 
-  pass 'the live section ranks outage above urgent above routine, newest first inside each class'
+  pass 'the live section ranks a live outage first, then the oldest ask first, never the newest read'
 }
 
 test_waiting_and_closed_never_mix_into_the_live_section() {
@@ -271,7 +271,9 @@ HTML
 JSON
   render_at "$h" "$T_1530" render >/dev/null
   page=$(page_of "$h")
-  [ "$(line_of "$page" 'new morning decision')" -lt "$(line_of "$page" 'ledger action')" ] || fail 'morning and ledger priorities must sort together'
+  # Morning and ledger lines sort together by when the ask was made: the ledger
+  # ask seen at 09:00 is older than a morning line first seen on this render.
+  [ "$(line_of "$page" 'ledger action')" -lt "$(line_of "$page" 'new morning decision')" ] || fail 'morning and ledger priorities must sort together, oldest ask first'
   assert_not_contains "$(cat "$page")" 'duplicate morning action' 'ledger identity must win'
   observe_at "$h" "$T_1500" resolve --item "$key" --reason 'no longer needed' >/dev/null
   render_at "$h" "$T_1530" render >/dev/null
@@ -379,12 +381,12 @@ test_calm_layout_ranks_live_problems_first_and_folds_the_rest() {
 
   # Tier 0 is a live problem or a hard deadline, tier 1 a partner awaiting
   # him; age alone never lifts the urgent ask above them, and everything
-  # else follows by class.
+  # else follows oldest ask first. The stored title loses its rotting "26 days".
   [ "$(grep -o 'class="what">[^<]*' <<<"$body" | sed 's/^class="what">//')" = 'partner machine down now
 feedback due before leave
 partner awaiting your answer
-partner waiting 26 days
-answer the training question' ] || fail "the Needs you list is not in action order:
+answer the training question
+partner waiting' ] || fail "the Needs you list is not in action order:
 $body"
 
   # One list: no summary strip, no Now box, no sweep banner, no held count.
@@ -759,7 +761,7 @@ test_team_updates_fold_newest_post_first() {
   pass 'team announcements fold under Updates, newest post first, below every ask'
 }
 
-test_severity_then_recency_orders_the_live_section
+test_outage_then_oldest_ask_orders_the_live_section
 test_waiting_and_closed_never_mix_into_the_live_section
 test_every_line_carries_its_own_read_time
 test_legacy_morning_is_a_historical_reference

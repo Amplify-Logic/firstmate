@@ -7,16 +7,24 @@
 #   fm-channel-intake.sh observe --source ID --ref REF (--digest TEXT | --digest-file FILE)
 #                                [--class CLASS] [--title TEXT] [--link URL]
 #                                [--dedup-key KEY] [--thread PARENT] [--reply-marker VALUE]
-#                                [--source-epoch EPOCH] [--timeline-file FILE]
+#                                [--source-epoch EPOCH] [--timeline-file FILE] [--partner]
 #                                [--condition b14|freezing --count N --units TEXT]
+# A new item needs a --title; a later re-read of a known one does not.
+# --partner marks the ask partner- or customer-facing when no timeline shows
+# it - a colleague relaying a partner question, a customer site, a system id -
+# and the mark survives every later read.
 # Fleet condition snapshots use a stable source-scoped identity instead of a
 # per-read reference. Supply the full current count and newest affected units;
-# the renderer never sums snapshots. Only telemetry-fleet-alerts accepts these
-# flags. This changes composition/identity, never source enrollment or cadence.
+# the renderer never sums snapshots. --units names units by id (at least one
+# digit), or is `none`; a bare word such as "systems" is refused. A freezing
+# snapshot may not list a -1.0 reading, the broken-sensor value, which is never
+# a freezing cooler and never belongs in its count. Only telemetry-fleet-alerts
+# accepts these flags. This changes composition/identity, never source
+# enrollment or cadence.
 # A timeline is the orchestrator's normalized read of one HubSpot ticket, used
 # to decide whether the item is PARTNER-FACING and AWAITING THE CAPTAIN; its
 # schema and rules are under "PARTNER-FACING ASKS" below.
-#   fm-channel-intake.sh complete --source ID --checkpoint VALUE [--rescanned]
+#   fm-channel-intake.sh complete --source ID --checkpoint VALUE [--rescanned] [--relisted]
 #   fm-channel-intake.sh fail --source ID --reason TEXT
 #   fm-channel-intake.sh tickets --owner NAME   (ticket array on stdin)
 #   fm-channel-intake.sh resolve --item KEY --reason TEXT [--waiting]
@@ -172,6 +180,27 @@
 # ahead of every other class, oldest ask first; the alert payload orders them
 # first only within the notifiable classes.
 #
+# RE-CHECK ON EVERY PASS. A claim that hands out any source also prints one
+# `recheck:` line per open or waiting to-do item that names an external source
+# (bin/fm-todo.sh `recheck` owns the columns), so the pass re-reads what is
+# already open instead of only what is new, and answers each line with
+# `fm-todo.sh verify` or `close`. The claim records the listed ids and its own
+# time; every `complete` then prints how many of them are still open with no
+# re-read since the claim, and names them. No to-do store prints nothing.
+#
+# KIND-SPECIFIC READS. Beyond its checkpoint read, a claim hands some kinds
+# one more line:
+#   slack-dms        `dms:` read each DM and group DM its coverage sentence
+#                    names directly by conversation id, never through search,
+#                    and observe every message to the captain, @mention or not.
+#   calendar         `calendar:` the window from today through the next two
+#                    working days: invites he has not answered, and events
+#                    whose description asks him to prepare something.
+#   asana*           `relist:` once per local day, every incomplete task
+#                    assigned to him whatever its modified date; complete the
+#                    read that included it with --relisted.
+#   hubspot-tickets  `stages:`, `tickets:` and the re-scan below.
+#
 # THE HUBSPOT RE-SCAN. A colleague-owned ticket that names the captain only in
 # an email body, or that sits in "Waiting on contact" (a stage HubSpot marks
 # CLOSED), changes nothing a checkpoint read would return, so `claim` hands
@@ -180,6 +209,16 @@
 # stage or "Waiting on contact", whoever owns it, whose emails or notes name
 # the captain or in which a colleague promised the customer that the tech team
 # is on it, whatever its last-modified date, and observe each with a timeline. `complete --rescanned` records that the re-scan ran.
+# Both belong to the pass that claimed them: `complete` on a hubspot-tickets
+# source is refused unless `tickets` wrote the open-tickets snapshot at or
+# after that source's claim, and refused without --rescanned while a re-scan
+# is due.
+#
+# A WAIT ON THE CAPTAIN HAS A DATE. `resolve --waiting` is for work handed to
+# someone else. A reason that leaves the wait with the captain - it says
+# "later", "you" or "captain", or one of his captain_names - is refused unless
+# it names a date (YYYY-MM-DD, a weekday, tomorrow, next week, or a day and
+# month), because without one it is a park with no end.
 #
 # TEAM ANNOUNCEMENTS ARE INFORMATION, NOT ASKS. A `slack-announcements` source
 # is a set of team channels the orchestrator reads for posts that announce a
@@ -267,6 +306,8 @@ ARMED_FILE="$INTAKE_DIR/armed"
 LATENCY_LOG="$INTAKE_DIR/latency.log"
 LOG_FILE="$INTAKE_DIR/log"
 STATE_LOCK="$INTAKE_DIR/state.lock"
+RECHECK_FILE="$INTAKE_DIR/recheck"
+TODO_STORE="${FM_TODO_STORE_OVERRIDE:-$DATA/todo}"
 
 # The floor is a quota guard, not a preference: below it a laptop awake all day
 # multiplies every enrolled source by an unbounded call count.
@@ -850,10 +891,11 @@ source_due() {
 
 save_source() {
   local id=$1 checkpoint=$2 last_ok=$3 last_attempt=$4 failures=$5 backoff_until=$6 error=$7
-  local last_rescan=${8-$(record_field "$(source_record "$1")" last_rescan)} body
-  body=$(printf 'id=%s\ncheckpoint=%s\nlast_ok=%s\nlast_attempt=%s\nfailures=%s\nbackoff_until=%s\nerror=%s\nlast_rescan=%s' \
+  local last_rescan=${8-$(record_field "$(source_record "$1")" last_rescan)}
+  local last_relist=${9-$(record_field "$(source_record "$1")" last_relist)} body
+  body=$(printf 'id=%s\ncheckpoint=%s\nlast_ok=%s\nlast_attempt=%s\nfailures=%s\nbackoff_until=%s\nerror=%s\nlast_rescan=%s\nlast_relist=%s' \
     "$id" "$(sanitize "$checkpoint")" "$last_ok" "$last_attempt" "$failures" \
-    "$backoff_until" "$(sanitize "$error")" "$last_rescan")
+    "$backoff_until" "$(sanitize "$error")" "$last_rescan" "$last_relist")
   mkdir -p "$SOURCE_DIR/$id"
   write_atomic "$(source_record "$id")" "$body" || die "cannot write the source record for $id"
 }
@@ -1005,7 +1047,7 @@ record_archived_attention() {
   class=$(owed_class "$(record_field "$path" class)" "$attention")
   body=$(awk -v class="$class" '
     /^class=/ { print "class=" class; next }
-    !/^(partner|awaiting|awaiting_since|awaiting_why|read_at)=/
+    !/^(partner|partner_hint|awaiting|awaiting_since|awaiting_why|read_at)=/
   ' "$path") || die "cannot read the archived item record: $path"
   write_atomic "$path" "$(printf '%s\n%s' "$body" "$attention")" \
     || die "cannot record the timeline facts on the archived item record: $path"
@@ -1024,7 +1066,7 @@ item_body() {
 # cannot silently demote a partner who is waiting on the captain.
 attention_fields() {
   [ -f "$1" ] && [ ! -L "$1" ] || return 0
-  grep -E '^(partner|awaiting|awaiting_since|awaiting_why|read_at)=' "$1" || true
+  grep -E '^(partner|partner_hint|awaiting|awaiting_since|awaiting_why|read_at)=' "$1" || true
 }
 
 # The class a record is written with, given the attention facts it carries: a
@@ -1222,7 +1264,7 @@ claim() {
       "$id" "$(inventory_field "$id" 2)" \
       "$(record_field "$(source_record "$id")" checkpoint)" \
       "$(inventory_field "$id" 3)"
-    [ "$(inventory_field "$id" 2)" != hubspot-tickets ] || hubspot_claim_lines "$id" "$epoch"
+    kind_claim_lines "$id" "$(inventory_field "$id" 2)" "$epoch"
     # Tracked thread parents, so the orchestrator can re-read only the threads
     # whose reply marker advanced instead of re-reading every thread.
     if [ -d "$THREAD_DIR/$id" ]; then
@@ -1242,7 +1284,88 @@ EOF
       "$(record_field "$rec" error)"
   done
   clear_armed
-  [ "$any" = true ] || printf 'source: <none due>\n'
+  if [ "$any" = true ]; then
+    recheck_claim_lines "$epoch"
+  else
+    printf 'source: <none due>\n'
+  fi
+}
+
+# Every pass re-reads what is already open, not only what is new: without it
+# an item closes only when the captain says so. The listed ids and the claim
+# time are kept so `complete` can say how many were not re-read. Fail-soft and
+# bounded like the page refresh: no store, or a store that cannot list, prints
+# nothing and never costs the claim.
+recheck_claim_lines() {
+  local epoch=$1 out ids
+  [ -d "$TODO_STORE/items" ] && [ -x "$SCRIPT_DIR/fm-todo.sh" ] || return 0
+  out=$(FM_HOME="$FM_HOME" FM_TODO_NOW="$epoch" "$SCRIPT_DIR/fm-todo.sh" recheck 2>/dev/null) || {
+    log_event 'recheck list not available: fm-todo.sh recheck failed'
+    return 0
+  }
+  ids=$(printf '%s\n' "$out" | sed -n 's/^recheck: \([^[:space:]]*\).*/\1/p' | tr '\n' ' ')
+  write_atomic "$RECHECK_FILE" "$(printf 'claimed=%s\nitems=%s' "$epoch" "${ids% }")" \
+    || log_event 'recheck list not recorded'
+  [ -z "$out" ] || printf '%s\n' "$out"
+}
+
+recheck_report() {
+  local since ids out
+  since=$(record_field "$RECHECK_FILE" claimed)
+  ids=$(record_field "$RECHECK_FILE" items)
+  case "$since" in ''|*[!0-9]*) return 0 ;; esac
+  [ -n "$ids" ] && [ -x "$SCRIPT_DIR/fm-todo.sh" ] || return 0
+  # shellcheck disable=SC2086
+  out=$(FM_HOME="$FM_HOME" "$SCRIPT_DIR/fm-todo.sh" recheck --since "$since" $ids 2>/dev/null) || return 0
+  log_event "recheck: $out"
+  printf 'CHANNEL_INTAKE: %s\n' "${out#TODO_RECHECK: }"
+}
+
+# The extra read a source kind owes on a claim, beyond its checkpoint read.
+kind_claim_lines() {
+  local id=$1 kind=$2 epoch=$3
+  case "$kind" in
+    hubspot-tickets) hubspot_claim_lines "$id" "$epoch" ;;
+    slack-dms)
+      printf 'dms: %s\tread each DM and group DM the coverage sentence names directly by its conversation id with the channel-read tool, never through search; observe every message to the captain since the checkpoint, whether or not it carries an @mention\n' "$id"
+      ;;
+    calendar)
+      printf 'calendar: %s\tfrom: %s\tto: %s\tscope: invites the captain has not answered (responseStatus needsAction), and events in this window whose description asks him to prepare or complete something before it; observe each with the event end as --source-epoch\n' \
+        "$id" "$(local_date "$epoch")" "$(working_days_ahead "$epoch" 2)"
+      ;;
+    asana*) asana_claim_lines "$id" "$epoch" ;;
+  esac
+}
+
+# The local date N working days (Monday to Friday) after the epoch's day.
+working_days_ahead() {
+  local epoch=$1 n=$2 t day
+  t=$epoch
+  while [ "$n" -gt 0 ]; do
+    t=$((t + 86400))
+    day=$(local_fmt "$t" '%u')
+    [ "$day" -ge 6 ] || n=$((n - 1))
+  done
+  local_date "$t"
+}
+
+# A checkpoint read of Asana returns only tasks modified since it, so a task
+# assigned to the captain and left stale never comes back. Once per local day
+# the claim hands out a full re-list of every incomplete task assigned to him.
+asana_claim_lines() {
+  local id=$1 epoch=$2 last
+  last=$(record_field "$(source_record "$id")" last_relist)
+  case "$last" in ''|*[!0-9]*) last=0 ;; esac
+  [ "$last" -eq 0 ] || [ "$(local_date "$last")" != "$(local_date "$epoch")" ] || return 0
+  printf 'relist: %s\tlast_relist: %s\tscope: every incomplete task assigned to the captain, whatever its modified date or due date; observe each, then complete with --relisted\n' \
+    "$id" "$([ "$last" -gt 0 ] && printf '%s' "$last" || printf never)"
+}
+
+rescan_due() {
+  local id=$1 epoch=$2 last
+  last=$(record_field "$(source_record "$id")" last_rescan)
+  case "$last" in ''|*[!0-9]*) last=0 ;; esac
+  [ $((epoch - last)) -ge "$CFG_RESCAN_INTERVAL" ]
 }
 
 # A checkpoint read of HubSpot returns only tickets modified since it, and a
@@ -1255,21 +1378,24 @@ hubspot_claim_lines() {
   local id=$1 epoch=$2 last
   printf 'stages: %s	every open stage plus "Waiting on contact", which HubSpot marks closed but where a partner can still be waiting on the captain
 ' "$id"
+  printf 'tickets: %s	hand the complete set of the captain'"'"'s tickets whose stage is not Closed to tickets before complete; complete refuses without it
+' "$id"
+  rescan_due "$id" "$epoch" || return 0
   last=$(record_field "$(source_record "$id")" last_rescan)
   case "$last" in ''|*[!0-9]*) last=0 ;; esac
-  [ $((epoch - last)) -ge "$CFG_RESCAN_INTERVAL" ] || return 0
   printf 'rescan: %s	last_rescan: %s	scope: every ticket in those stages, any owner, whose emails or notes name the captain or in which a colleague promised the customer that the tech team is on it, re-read in full whatever its last-modified date; observe each with --timeline-file, then complete with --rescanned
 ' \
     "$id" "$([ "$last" -gt 0 ] && printf '%s' "$last" || printf never)"
 }
 
 complete_source() {
-  local id='' checkpoint='' epoch rescanned=false last_rescan
+  local id='' checkpoint='' epoch rescanned=false relisted=false last_rescan last_relist kind claimed read_at
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --source) [ "$#" -ge 2 ] || die '--source requires a value'; id=$2; shift 2 ;;
       --checkpoint) [ "$#" -ge 2 ] || die '--checkpoint requires a value'; checkpoint=$2; shift 2 ;;
       --rescanned) rescanned=true; shift ;;
+      --relisted) relisted=true; shift ;;
       *) die "unknown complete argument: $1" ;;
     esac
   done
@@ -1283,16 +1409,35 @@ complete_source() {
   # The checkpoint advances ONLY here, and only on a read the orchestrator has
   # already captured. An interrupted read leaves the old checkpoint, so the
   # next tick re-reads that window instead of skipping it.
+  kind=$(inventory_field "$id" 2)
   last_rescan=$(record_field "$(source_record "$id")" last_rescan)
+  last_relist=$(record_field "$(source_record "$id")" last_relist)
   if [ "$rescanned" = true ]; then
-    [ "$(inventory_field "$id" 2)" = hubspot-tickets ] || die '--rescanned requires a hubspot-tickets source'
+    [ "$kind" = hubspot-tickets ] || die '--rescanned requires a hubspot-tickets source'
     last_rescan=$epoch
   fi
-  save_source "$id" "$checkpoint" "$epoch" "$epoch" 0 0 '' "$last_rescan"
+  if [ "$relisted" = true ]; then
+    case "$kind" in asana*) ;; *) die '--relisted requires an asana source' ;; esac
+    last_relist=$epoch
+  fi
+  if [ "$kind" = hubspot-tickets ]; then
+    # The open-tickets table and the re-scan are part of the same pass, so a
+    # pass that skipped either is refused rather than recorded as complete.
+    claimed=$(record_field "$(source_record "$id")" last_attempt)
+    case "$claimed" in ''|*[!0-9]*) claimed=0 ;; esac
+    read_at=$(sed -n 's/^ *"read_at": *\([0-9]*\).*/\1/p' "$INTAKE_DIR/tickets.json" 2>/dev/null | head -n 1)
+    case "$read_at" in ''|*[!0-9]*) read_at=-1 ;; esac
+    [ "$read_at" -ge "$claimed" ] \
+      || die "$id: hand this pass's open tickets to '$0 tickets' before complete; the open-tickets table was not refreshed"
+    [ "$rescanned" = true ] || ! rescan_due "$id" "$epoch" \
+      || die "$id: the re-scan is due; run it in this pass and complete with --rescanned"
+  fi
+  save_source "$id" "$checkpoint" "$epoch" "$epoch" 0 0 '' "$last_rescan" "$last_relist"
   clear_armed
   log_event "source $id complete at checkpoint $checkpoint"
   printf 'CHANNEL_INTAKE: %s read complete, checkpoint %s\n' "$id" "$checkpoint"
   refresh_todo_page "$epoch"
+  recheck_report
 }
 
 # The day's page re-ranks itself on every completed read. This is the whole
@@ -1382,6 +1527,7 @@ observe() {
   local condition='' condition_count='' condition_units=''
   local existing_digest existing_state created revisions provenance notified
   local notified_digest kind outcome prov_tag existing_class timeline_file='' attention='' facts
+  local partner_hint=false
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --source) [ "$#" -ge 2 ] || die '--source requires a value'; id=$2; shift 2 ;;
@@ -1399,6 +1545,7 @@ observe() {
       --units) [ "$#" -ge 2 ] || die '--units requires a value'; condition_units=$2; shift 2 ;;
       --source-epoch) [ "$#" -ge 2 ] || die '--source-epoch requires a value'; source_epoch=$2; shift 2 ;;
       --timeline-file) [ "$#" -ge 2 ] || die '--timeline-file requires a value'; timeline_file=$2; shift 2 ;;
+      --partner) partner_hint=true; shift ;;
       *) die "unknown observe argument: $1" ;;
     esac
   done
@@ -1410,6 +1557,12 @@ observe() {
       || die '--condition requires a telemetry-fleet-alerts source'
     case "$condition_count" in ''|*[!0-9]*) die '--count must be a non-negative integer' ;; esac
     [ -n "$condition_units" ] || die '--units is required (use none for an empty snapshot)'
+    # A unit list names units; a bare word such as "systems" names none.
+    [ "$condition_units" = none ] || printf '%s' "$condition_units" | grep -q '[0-9]' \
+      || die "--units must name the newest units by id, or be none: $condition_units"
+    # -1.0 is the broken-sensor reading, never a freezing cooler.
+    [ "$condition" != freezing ] || ! printf '%s' "$condition_units" | grep -Eq '(^|[^0-9.])-1(\.0+)?([^0-9.]|$)' \
+      || die '--units lists a -1.0 reading, the broken-sensor value; leave such units out of the freezing count and list'
     [ -z "$dedup" ] || die '--condition supplies its own identity; omit --dedup-key'
     ref="condition-$condition"
     case "$condition" in
@@ -1445,6 +1598,7 @@ observe() {
     *[!0-9]*) die "--source-epoch must be an epoch second: $source_epoch" ;;
   esac
   epoch=$(now_epoch)
+  [ "$partner_hint" != true ] || [ -z "$condition" ] || die '--partner does not apply to a fleet condition'
   if [ -n "$timeline_file" ]; then
     [ -z "$condition" ] || die '--timeline-file does not apply to a fleet condition'
     [ -f "$timeline_file" ] && [ ! -L "$timeline_file" ] \
@@ -1488,7 +1642,8 @@ observe() {
   # later poll of the same edited message would re-announce it forever.
   if [ -f "$(archive_path "$key")" ]; then
     path=$(archive_path "$key")
-    [ -z "$timeline_file" ] || record_archived_attention "$path" "$attention"
+    [ -z "$timeline_file" ] \
+      || record_archived_attention "$path" "$(with_partner_hint "$attention" "$partner_hint" "$path")"
     existing_digest=$(record_field "$path" digest)
     if [ "$existing_digest" = "$digest" ]; then
       printf 'archived-unchanged %s\n' "$key"
@@ -1522,6 +1677,7 @@ observe() {
       *) provenance="$provenance $prov_tag"; outcome=merged ;;
     esac
     [ -n "$timeline_file" ] || attention=$(attention_fields "$path")
+    attention=$(with_partner_hint "$attention" "$partner_hint" "$path")
     if [ "$existing_digest" = "$digest" ]; then
       # Unchanged content. Provenance may still have grown, so the record is
       # rewritten, but nothing about the item's attention state moves - except
@@ -1549,6 +1705,9 @@ observe() {
     return 0
   fi
 
+  # A line with no title renders as an untitled row nobody can act on.
+  [ -n "$(printf '%s' "$title" | tr -d '[:space:]')" ] || die '--title is required for a new item'
+  attention=$(with_partner_hint "$attention" "$partner_hint" '')
   save_item "$path" "$(item_body "$key" "$id" "$kind" "$ref" "$link" "$(owed_class "$class" "$attention")" \
     "$title" "$digest" open "$epoch" "$epoch" "$source_epoch" '' '' 0 "$prov_tag" '' '' "$attention")"
   if [ -n "$source_epoch" ] && [ "$epoch" -ge "$source_epoch" ]; then
@@ -1562,7 +1721,34 @@ observe() {
   printf 'new %s\n' "$key"
 }
 
+# The attention facts with the partner mark kept: once a source or an earlier
+# observe marked an item partner-facing, a later read does not unmark it.
+with_partner_hint() {
+  local attention=$1 hint=$2 path=$3
+  attention=$(printf '%s\n' "$attention" | grep -v '^partner_hint=' || true)
+  if [ "$hint" = true ] || { [ -n "$path" ] && [ "$(record_field "$path" partner_hint)" = 1 ]; }; then
+    attention=$(printf '%s\npartner_hint=1' "$attention")
+  fi
+  printf '%s' "$attention" | sed '/^$/d'
+}
+
 # --- resolution -------------------------------------------------------------
+
+# A hand-over reason that leaves the wait with the captain: "later", "you", or
+# one of his captain_names.
+waits_on_captain() {
+  local reason word
+  reason=$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')
+  for word in later you your captain $(printf '%s' "$CFG_CAPTAIN_NAMES" | tr '[:upper:]' '[:lower:]'); do
+    printf ' %s ' "$reason" | grep -Eq "[^a-z]${word}[^a-z]" && return 0
+  done
+  return 1
+}
+
+names_a_date() {
+  printf ' %s ' "$1" | tr '[:upper:]' '[:lower:]' | grep -Eq \
+    '[0-9]{4}-[0-9]{2}-[0-9]{2}|[^a-z](mon|tue|wed|thu|fri|sat|sun)(day|sday|nesday|rsday|urday)?[^a-z]|[^a-z]tomorrow[^a-z]|next week|[0-9]{1,2} ?(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)|(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]* [0-9]{1,2}[^0-9]'
+}
 
 # An obligation is discharged by content, not by the fact that somebody replied.
 # `--waiting` is the honest middle state for "handed to someone else": it leaves
@@ -1581,6 +1767,9 @@ resolve_item() {
   [ -n "$key" ] || die '--item is required'
   require_id 'item key' "$key"
   [ -n "$reason" ] || die '--reason is required'
+  if [ "$waiting" = true ] && waits_on_captain "$reason" && ! names_a_date "$reason"; then
+    die "a wait on the captain needs a date in --reason (YYYY-MM-DD, a weekday, tomorrow, next week or a day and month); without one it is a park with no end: $reason"
+  fi
   epoch=$(now_epoch)
   require_state_lock
   path=$(item_path "$key")

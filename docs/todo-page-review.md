@@ -14,7 +14,7 @@ Sorting only the first document cannot resolve any of these conflicts.
 
 ## Composition direction
 
-Use one header and one short queue of explicitly verified asks, ordered by urgency then newest observation, so an action never carries the same weight as a changed sensor reading or as evidence that nothing remains.
+Use one header and one short queue of explicitly verified asks, ordered by urgency, then partners and customers, then the oldest ask, so an action never carries the same weight as a changed sensor reading or as evidence that nothing remains.
 Give each ask an identity that outlives one render, so a later state supersedes the morning version - a resolution, a hand-over, an answered hold - instead of appearing beside it.
 Routine changes belong outside that queue unless classified as a real obligation.
 Keep fleet conditions grouped as conditions, with one summary each and explicitly dated counts rather than accumulated per-read totals.

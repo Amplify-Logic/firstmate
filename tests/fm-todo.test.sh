@@ -41,6 +41,17 @@
 #     end time moved later or a re-listing with no end time brings an expired
 #     item back. A UTC end time written with Z expires the same way, and a
 #     line the captain marked never expires until a park on it lapses.
+#   - A claim lists every open item with a source to re-check, `complete`
+#     counts the ones the pass skipped, a pass raises the freshness floor
+#     without moving the closed boundary, and a close under one of his
+#     captain_names counts as his own.
+#   - Needs you ranks partners and customers from the source (a system id, an
+#     Asana RMA, an observe --partner mark, an awaiting partner) oldest ask
+#     first, folds Firstmate tooling approvals below them, and keeps a mine
+#     line out of the ranked list.
+#   - Stored titles lose relative times and the page computes ages, device
+#     updates never reach the page, ticket times show in the page's zone, and
+#     the coverage fold names what no source reads.
 # shellcheck disable=SC2016
 set -u
 
@@ -711,6 +722,105 @@ test_a_lapsed_park_no_longer_holds_off_expiry() {
   pass 'a park holds off expiry only until it lapses'
 }
 
+test_a_pass_rechecks_open_items_and_counts_the_misses() {
+  local h out a b c
+  h="$TMP_ROOT/recheck"
+  new_home "$h"
+  printf 'captain_names = Lars Tolhurst\n' >>"$h/config/channel-intake"
+  intake_at "$h" "$T_0900" observe --source C_BRIEF --ref m-1 --digest a --class urgent --title 'quote for the dealer' >/dev/null
+  intake_at "$h" "$T_0900" observe --source C_BRIEF --ref m-2 --digest b --class urgent --title 'cover lens question' >/dev/null
+  intake_at "$h" "$T_0900" observe --source C_BRIEF --ref m-3 --digest c --class urgent --title 'invoice question' >/dev/null
+  todo_at "$h" "$T_0900" sweep-start >/dev/null
+  render_at "$h" "$T_0900"
+  a=$(field_of "$h" 'quote for' 1)
+  b=$(field_of "$h" 'cover lens' 1)
+  c=$(field_of "$h" 'invoice question' 1)
+  # Lars answered one himself; the pass records it under his name.
+  todo_at "$h" "$T_1000" close --item "$c" --evidence 'Lars answered in the thread' --actor Lars >/dev/null
+  out=$(intake_at "$h" "$T_1030" claim)
+  assert_contains "$out" "recheck: $a" 'the claim did not list an open item for re-checking'
+  assert_contains "$out" 'C_BRIEF:m-2' 'a re-check line does not name its source reference'
+  assert_not_contains "$out" "recheck: $c" 'a closed item was listed for re-checking'
+  # The pass starts its own freshness floor, re-reads one item and skips one.
+  todo_at "$h" "$T_1030" sweep-start --pass >/dev/null
+  todo_at "$h" "$T_1100" verify --item "$a" --how 'read the thread on Slack' >/dev/null
+  out=$(intake_at "$h" "$T_1100" complete --source C_BRIEF --checkpoint c-1)
+  assert_contains "$out" "1 of 2 listed not re-read: $b" 'complete did not count the item the pass skipped'
+  render_at "$h" "$T_1100"
+  out=$(page "$h" 2026-09-10)
+  assert_contains "$out" 'quote for the dealer<span class="prov obs">read 11:00 CEST</span>' 'the re-read line is not current'
+  assert_contains "$out" 'cover lens question<span class="prov unv">not re-checked since 09:00 CEST</span>' \
+    'a line the pass skipped still reads as current'
+  # A pass never moves the closed fold's boundary, and his own close is his.
+  assert_contains "$out" '<summary>Closed today (1)</summary>' 'an intake pass moved the closed boundary'
+  assert_contains "$out" 'fulfilled by you' 'a close recorded under his name was not counted as his'
+  assert_not_contains "$out" 'handled without you' 'his own close was counted as handled without him'
+  pass 'a pass lists every open item to re-check, counts the ones it skipped, and keeps the closed boundary'
+}
+
+test_ranking_follows_partners_and_the_oldest_ask() {
+  local h out yb
+  h="$TMP_ROOT/ranking"
+  new_home "$h"
+  printf 'A_RMA\tasana-projects\tpartner RMA board\n' >>"$h/data/channel-intake/sources.tsv"
+  intake_at "$h" "$T_0900" observe --source C_BRIEF --ref r-old --digest a --class obligation \
+    --title 'tidy the internal wiki' >/dev/null
+  intake_at "$h" "$T_1000" observe --source C_BRIEF --ref r-relay --digest b --class obligation --partner \
+    --title 'Natalia relays a dealer question' >/dev/null
+  intake_at "$h" "$T_1030" observe --source C_BRIEF --ref r-sys --digest c --class obligation \
+    --title 'black screen at 869951034894703' >/dev/null
+  intake_at "$h" "$T_1100" observe --source A_RMA --ref r-rma --digest d --class obligation \
+    --title 'Partner RMA: tower return costs' >/dev/null
+  sidecar "$h" 2026-09-10 '{"key":"k-t","source":"firstmate","ref":"voice-pr","class":"obligation","kind":"approval","title":"merge the voice fix?","tooling":true,"updated":'"$T_1100"'},{"key":"k-y","source":"hubspot","ref":"t-45","class":"obligation","kind":"reply","title":"consumption report the partner asked for","partner_awaiting":true,"awaiting_since":'"$((T_0900 - 86400))"',"updated":'"$T_1100"'}'
+  render_at "$h" "$T_1500"
+  out=$(page "$h" 2026-09-10)
+  # Partners and customers lead, oldest ask first, whatever was read last;
+  # the tooling approval sits in its own fold below them.
+  [ "$(needs_order "$out")" = 'consumption report the partner asked for
+Natalia relays a dealer question
+black screen at 869951034894703
+Partner RMA: tower return costs
+tidy the internal wiki' ] || fail "Needs you is not partners first, oldest ask first:
+$(needs_order "$out")"
+  assert_contains "$out" '<summary>Firstmate tooling approvals (1)</summary>' 'the tooling approval has no fold of its own'
+  [ "$(grep -n 'merge the voice fix' <<<"$out" | head -n1 | cut -d: -f1)" -gt "$(grep -n 'tidy the internal wiki' <<<"$out" | head -n1 | cut -d: -f1)" ] \
+    || fail 'the tooling approval ranks above a partner or customer ask'
+  # mine keeps a partner ask tracked and out of the ranked list.
+  yb=$(field_of "$h" 'consumption report' 1)
+  todo_at "$h" "$T_1500" command --item "$yb" 'mine' >/dev/null
+  render_at "$h" "$T_1500"
+  out=$(page "$h" 2026-09-10)
+  assert_not_contains "$(needs_order "$out")" 'consumption report' 'a line marked mine is still ranked'
+  assert_contains "$out" '<summary>Yours, tracked but not surfaced (1)</summary>' 'the mine line is not tracked'
+  pass 'Needs you ranks partners from the source, oldest ask first, folds tooling below, and honours mine'
+}
+
+test_page_bugs_stay_fixed() {
+  local h out
+  h="$TMP_ROOT/page-bugs"
+  new_home "$h"
+  printf 'FLEET\ttelemetry-fleet-alerts\tfleet telemetry\n' >>"$h/data/channel-intake/sources.tsv"
+  # A title written three days ago with rotting relative times.
+  intake_at "$h" $((T_0900 - 3 * 86400)) observe --source C_BRIEF --ref r-rot --digest a --class obligation \
+    --title 'PARTNER WAITING 14 DAYS - Kasper asked yesterday' >/dev/null
+  # A device update is not an ask for the page, in any state.
+  intake_at "$h" "$T_0900" observe --source FLEET --ref ota-1 --digest b --class obligation \
+    --title 'Raise thermostat OTA? 3 systems' >/dev/null
+  printf '[{"id":"49149551973","subject":"Problem with the unit","stage":"Waiting on us","last_in":"2026-09-10T06:24:04Z","last_out":"","link":"https://app.example/49149551973"}]' \
+    | intake_at "$h" "$T_1000" tickets --owner captain >/dev/null
+  intake_at "$h" "$T_1000" complete --source C_BRIEF --checkpoint c-1 >/dev/null
+  render_at "$h" "$T_1000"
+  out=$(page "$h" 2026-09-10)
+  assert_contains "$out" 'class="what">PARTNER WAITING - Kasper asked<' 'a stored title kept its relative times'
+  assert_contains "$out" 'asked Mon 7 Sep, 3 days ago' 'the age was not computed at render'
+  assert_not_contains "$out" 'thermostat OTA' 'a device update reached the page'
+  assert_contains "$out" '<td>08:24 CEST</td>' 'a UTC ticket time was not shown in CEST'
+  assert_not_contains "$out" '2026-09-10T06:24:04Z' 'a raw UTC ticket time reached the page'
+  assert_contains "$out" '<b>Not read between morning sweeps</b> - Slack DMs, Slack mentions, Calendar, Gmail inbound, Asana, HubSpot tickets, WhatsApp' \
+    'the coverage fold does not name what is not read'
+  pass 'titles lose relative times, device updates stay off, ticket times are local and coverage names its gaps'
+}
+
 test_time_bound_asks_expire_after_their_end
 test_expiry_leaves_marked_lines_to_the_captain
 test_a_lapsed_park_no_longer_holds_off_expiry
@@ -734,3 +844,6 @@ test_a_revived_routine_thread_still_retires_and_prunes
 test_partner_awaiting_asks_rank_above_every_class
 test_each_row_marks_where_it_came_from
 test_a_merged_row_marks_the_source_it_presents
+test_a_pass_rechecks_open_items_and_counts_the_misses
+test_ranking_follows_partners_and_the_oldest_ask
+test_page_bugs_stay_fixed

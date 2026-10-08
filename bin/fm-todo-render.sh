@@ -24,12 +24,23 @@
 #
 # PAGE SHAPE. One "Needs you now" list of every open decision, approval and
 # reply, in action order: first a live problem or hard deadline (class outage
-# or deadline), then a partner-facing ask awaiting him (`partner_first`,
-# oldest ask first), then everything else by class, newest read first. An
-# urgent class alone - which a long wait earns - never lifts a line into the
-# first tier. There is no summary strip, no separate Now box and no sweep
-# banner, and no item renders twice. A captain-held backlog decision no read
-# made current stays off the page; the backlog still holds it. Fleet
+# or deadline), then a partner- or customer-facing ask, then everything else;
+# inside each tier the oldest ask first (an awaiting partner's
+# `awaiting_since`, else the item's ask time, never its last read), then by
+# class. A line is partner- or customer-facing when it is awaiting him
+# (`partner_first`), its ticket has a partner contact, a source marked it
+# (`partner`, or the intake's `observe --partner`: a colleague relaying a
+# partner question, a customer site), it names a fifteen-digit system id, or
+# it is an Asana partner RMA. An approval about Firstmate's own tooling
+# (`tooling`) that is not partner-facing sits in its own "Firstmate tooling
+# approvals" fold right below the list, unless it is an outage. A line marked
+# `mine` stays out of both. Each row shows how many days ago the ask was made,
+# computed at render. An urgent class alone - which a long wait earns - never
+# lifts a line into the first tier. There is no summary strip, no separate
+# Now box and no sweep banner, and no item renders twice. A captain-held
+# backlog decision no read made current stays off the page; the backlog still
+# holds it. A device update - a telemetry record that is not a fleet-condition
+# snapshot - is never on the page; it goes to chat. Fleet
 # conditions follow, then a collapsed "Updates" fold of team announcements
 # (class update), newest post first, each with its post time and link, then
 # collapsed folds for waiting on others (including
@@ -41,10 +52,15 @@
 # out-of-date line, the morning detail fragment (worth knowing, only context
 # that is not time-bound) and the intake coverage fold (each enrolled
 # source's last successful read and last failure, which is separate from item
-# freshness). Routine chatter or a team update the intake dropped from its
-# ledger was never an ask and is not a closure. Sections with nothing in them
-# are omitted. The closed fold counts as "handled without you" only a
-# fulfilled close with a named actor other than the captain.
+# freshness, plus one line naming the channel families no enrolled source kind
+# reads between morning sweeps - Slack DMs, Slack mentions, Calendar, Gmail
+# inbound, Asana and HubSpot tickets by kind prefix - and WhatsApp, phone and
+# in person, which nothing reads). Routine chatter or a team update the intake
+# dropped from its ledger was never an ask and is not a closure. Sections
+# with nothing in them are omitted. The closed fold counts as "handled without
+# you" only a fulfilled close with a named actor other than the captain or one
+# of his captain_names. A fleet condition line whose newest unit list names no unit
+# id says so instead of printing it.
 #
 # EACH ROW IS THE CLASS BADGE, THE ASK, AT MOST ONE SHORT CONTEXT LINE (a
 # reopen note, else the why, else the ask's wording), ITS READ TIME, the Open
@@ -61,8 +77,9 @@
 # YOUR OPEN TICKETS IS LIVE. That section is rendered on every build from
 # data/channel-intake/tickets.json, which `bin/fm-channel-intake.sh tickets`
 # alone writes and whose header owns the format: the count with its stage
-# breakdown, each ticket's stage exactly as stored, and the snapshot's own
-# read time. A snapshot older than two of the intake's configured
+# breakdown, each ticket's stage exactly as stored, its last inbound and
+# outbound converted to the page's zone when stored as an ISO time with a zone
+# (as stored otherwise), and the snapshot's own read time. A snapshot older than two of the intake's configured
 # `interval_seconds` polls, and never less than an hour, is headed out of date
 # with that read time and never called live; a missing or unreadable one says
 # the tickets could not be read. Any "Your open tickets" section in a morning
@@ -88,8 +105,11 @@
 # the only thing that may reopen a closed item) and aliases (extra
 # `source:ref` identities of the SAME ask), partner_awaiting (the JSON boolean
 # true for a partner-facing ask awaiting him) and awaiting_since (epoch second
-# of that ask; an ask with none sorts after every dated partner ask), and
-# ends_at (ISO timestamp with a zone at which the ask stops being one: a
+# of that ask; an ask with none sorts after every dated partner ask),
+# partner (JSON boolean: partner- or customer-facing without awaiting him,
+# e.g. a colleague relaying a partner question), tooling (JSON boolean: an
+# approval about Firstmate's own tooling), asked_at (epoch second the ask was
+# made, which orders the page), and ends_at (ISO timestamp with a zone at which the ask stops being one: a
 # calendar event's end, or the end of the day for a "due today" deadline;
 # bin/fm-todo.sh owns what happens once it passes)}. Every calendar-sourced
 # action sets ends_at to the event's end, and a "due today" deadline sets it
@@ -114,13 +134,15 @@
 # else installed and no visual tool running.
 #
 # Configuration is read - never written - from the private, gitignored
-# config/channel-intake, and only the three keys this renderer needs:
+# config/channel-intake, and only the four keys this renderer needs:
 #   timezone          IANA zone for the local day and every rendered time
 #   sources_file      private inventory, read only for a source's coverage label
 #   interval_seconds  the intake's poll cadence, default 900; two of those
 #                     polls, and never less than an hour, is how long an
 #                     open-tickets snapshot still counts as live
-# A value this renderer rejects for one of those three exits 2, as it does for
+#   captain_names     words naming the captain; a closure whose actor is one of
+#                     them, or all of them as one name, is his own ("by you")
+# A value this renderer rejects for one of those exits 2, as it does for
 # a missing template. Every other key belongs to bin/fm-channel-intake.sh,
 # which owns that file.
 set -eu
@@ -141,6 +163,7 @@ FOOT_TEMPLATE="$TEMPLATE_DIR/today-page.foot.html"
 CFG_TIMEZONE=
 CFG_SOURCES_FILE=
 CFG_INTERVAL=900
+CFG_CAPTAIN_NAMES=
 
 usage() {
   awk '
@@ -210,6 +233,7 @@ load_config() {
           *) die "sources_file must be an absolute path: $value" ;;
         esac
         ;;
+      captain_names) CFG_CAPTAIN_NAMES=$value ;;
     esac
   done <"$CONFIG_FILE"
   [ -n "$CFG_SOURCES_FILE" ] || CFG_SOURCES_FILE="$INTAKE_DIR/sources.tsv"
@@ -260,7 +284,7 @@ render_page() {
   printf '<div class="meta">%s<br>Page rebuilt from the to-do records at <span class="mono">%s</span>.<br>Each line carries its own last check.</div></header>\n' \
     "$(local_fmt "$epoch" '%A %-d %B %Y')" "$(local_fmt "$epoch" '%H:%M %Z')"
   python3 "$SCRIPT_DIR/fm-todo-compose.py" "$STORE" "$morning" "$day" "$epoch" "$CFG_TIMEZONE" \
-    "$FM_HOME" "$sidecar" "$INTAKE_DIR" "$CFG_SOURCES_FILE" "$CFG_INTERVAL" || return 1
+    "$FM_HOME" "$sidecar" "$INTAKE_DIR" "$CFG_SOURCES_FILE" "$CFG_INTERVAL" "$CFG_CAPTAIN_NAMES" || return 1
   cat "$FOOT_TEMPLATE"
 }
 

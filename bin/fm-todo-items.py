@@ -16,7 +16,7 @@ RANK = ('outage', 'urgent', 'deadline', 'obligation')
 KINDS = ('decision', 'approval', 'reply', 'info')
 WEEKDAYS = ('monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday')
 SLOT_FIELDS = ('title', 'link', 'class', 'kind', 'ask', 'why', 'label', 'since', 'partner_first', 'awaiting_since',
-               'ends_at', 'posted')
+               'ends_at', 'posted', 'asked_at', 'partner', 'tooling', 'device_update')
 # Records that were never an ask: the intake retires them and nobody closes them.
 UNOWED_KINDS = ('info', 'update')
 RETIRED_TTL = 30 * 86400
@@ -43,6 +43,21 @@ def digest(*parts):
 
 def when(epoch):
     return time.strftime('%Y-%m-%d %H:%M %Z', time.localtime(int(epoch)))
+
+
+# Relative times rot the day after they are written ("yesterday", "WAITING 14
+# DAYS"), so a stored title or why never keeps one; the page computes ages.
+RELATIVE = re.compile(r'\b(?:(?:for|since)\s+)?\d+\s+days?(?:\s+(?:ago|old))?\b'
+                      r'|\b(?:today|yesterday|tomorrow|tonight|this\s+(?:morning|afternoon|evening))\b', re.I)
+
+
+def strip_relative(text):
+    text = RELATIVE.sub('', str(text or ''))
+    text = re.sub(r'\(\s*\)', '', text)
+    text = re.sub(r'\s+([,.;:)])', r'\1', text)
+    text = re.sub(r'([(])\s+', r'\1', text)
+    text = ' '.join(text.split())
+    return re.sub(r'^[\s,;:-]+|[\s,;:-]+$', '', text)
 
 
 class Store:
@@ -88,15 +103,16 @@ class Store:
         os.chmod(tmp, 0o600)
         os.replace(tmp, path)
 
-    def sweeps(self):
-        path = self.root / 'sweeps'
+    def sweeps(self, name='sweeps'):
+        path = self.root / name
         if not path.is_file():
             return []
         return sorted(number(x) for x in path.read_text().split() if number(x))
 
-    def add_sweep(self, epoch):
-        kept = sorted(set(self.sweeps() + [int(epoch)]))[-30:]
-        (self.root / 'sweeps').write_text(''.join(f'{e}\n' for e in kept))
+    def add_sweep(self, epoch, name='sweeps'):
+        """A morning sweep (`sweeps`) or a 30-minute pass (`passes`); both bound freshness."""
+        kept = sorted(set(self.sweeps(name) + [int(epoch)]))[-60:]
+        (self.root / name).write_text(''.join(f'{e}\n' for e in kept))
 
     def journal(self, entry):
         with open(self.root / 'journal', 'a') as fh:
@@ -155,6 +171,15 @@ def ledger_observations(intake_dir, labels):
             if rec.get('partner') == '1' and rec.get('awaiting') == '1':
                 o.update(partner_first=True, awaiting_since=number(rec.get('awaiting_since')),
                          why=rec.get('awaiting_why', ''))
+            # Partner-facing from the source: the timeline found a partner
+            # contact, or the orchestrator marked it (`observe --partner`).
+            o['partner'] = rec.get('partner') == '1' or rec.get('partner_hint') == '1'
+            # When the ask was made, which orders the page; never a read time.
+            o['asked_at'] = number(rec.get('source_epoch')) or number(rec.get('created'))
+            # A telemetry record that is not a fleet-condition snapshot is a
+            # device update, which belongs in chat and never on the page.
+            o['device_update'] = (rec.get('kind') == 'telemetry-fleet-alerts'
+                                  and not rec.get('ref', '').startswith('condition-'))
             if state == 'closed':
                 o['closed_at'] = number(rec.get('resolved_at')) or number(rec.get('updated'))
                 o['evidence'] = rec.get('resolution') or 'resolved on the channel ledger, no reason recorded'
@@ -197,6 +222,12 @@ def morning_observations(doc, day, now):
                 not isinstance(since, int) or isinstance(since, bool) or not 0 < since < 10 ** 11)):
             raise Refusal('morning action partner_awaiting must be a JSON boolean '
                           'and awaiting_since an epoch second')
+        for flag in ('partner', 'tooling'):
+            if not isinstance(raw.get(flag, False), bool):
+                raise Refusal(f'morning action {flag} must be a JSON boolean')
+        asked = raw.get('asked_at')
+        if asked is not None and (not isinstance(asked, int) or isinstance(asked, bool) or not 0 < asked < 10 ** 11):
+            raise Refusal('morning action asked_at must be an epoch second')
         ends_at = 0
         if raw.get('ends_at') is not None:
             try:
@@ -217,6 +248,8 @@ def morning_observations(doc, day, now):
             'ask': raw.get('ask', ''), 'why': raw.get('why', ''), 'label': raw['source'], 'state': 'open',
             'partner_first': awaiting,
             'awaiting_since': number(since),
+            'partner': raw.get('partner', False), 'tooling': raw.get('tooling', False),
+            'asked_at': number(asked),
             'ends_at': ends_at,
             # The sidecar is the morning sweep's own verification record.
             'verified': {'at': read, 'how': raw.get('verified_how') or 'morning verification sweep'},
@@ -245,6 +278,15 @@ def balanced_tail(line):
     return rest, notes
 
 
+def day_epoch(day):
+    """The local start of a YYYY-MM-DD day, or 0 when it is not one."""
+    try:
+        d = datetime.date.fromisoformat(day)
+    except (TypeError, ValueError):
+        return 0
+    return int(time.mktime((d.year, d.month, d.day, 0, 0, 0, 0, 0, -1)))
+
+
 def backlog_observations(path):
     """Captain-held tasks in the markdown backlog; None when there is no readable file."""
     backlog = Path(path) if path else None
@@ -268,6 +310,7 @@ def backlog_observations(path):
             'title': title, 'link': '', 'class': 'obligation', 'kind': 'decision',
             'ask': notes.get('hold', ''), 'label': 'firstmate-backlog', 'state': 'open',
             'since': since if re.match(r'^\d{4}-\d{2}-\d{2}$', since) else '',
+            'asked_at': day_epoch(since),
             'snoozed_until': until if re.match(r'^\d{4}-\d{2}-\d{2}$', until) else '',
         })
     return obs
@@ -299,6 +342,10 @@ def present(rec):
         rec[field] = next((s[field] for s in slots if s.get(field)), '')
     # The morning sweep's curated kind outranks a channel default.
     rec['kind'] = next((s['kind'] for s in slots if s['slot'].startswith('morning:')), rec['kind'] or 'info')
+    for field in ('title', 'why'):
+        rec[field] = strip_relative(rec[field])
+    # The ask was made when its earliest source saw it, whichever source presents it.
+    rec['asked_at'] = min([number(s.get('asked_at')) for s in slots if number(s.get('asked_at'))] or [0])
     rec['source_snooze'] = next((s['snoozed_until'] for s in slots if s.get('snoozed_until')), '')
     rec['rev'] = rev_of(rec)
 
@@ -533,6 +580,40 @@ def prunable(rec, now):
             and 0 < number(c.get('at')) <= now - RETIRED_TTL)
 
 
+# Aliases that name no external source to re-read: the store's own ledger key,
+# a Firstmate-held decision, a Firstmate-internal morning line, a fleet snapshot.
+NOT_A_SOURCE = re.compile(r'^(?:ledger|firstmate-backlog|firstmate):|:condition-')
+
+
+def source_refs(rec):
+    return [a for a in rec['aliases'] if not NOT_A_SOURCE.search(a)]
+
+
+def recheck_listed(items, now):
+    """Every open or waiting item a pass can re-read at its source."""
+    for rec in sorted(items.values(), key=lambda r: r['id']):
+        if rec['state'] not in ('open', 'waiting') or rec.get('device_update'):
+            continue
+        if (rec.get('snoozed_until') or '') > local_day(now) or not source_refs(rec):
+            continue
+        yield rec
+
+
+def recheck(args, items, now):
+    if not args.since:
+        for rec in recheck_listed(items, now):
+            print('\t'.join(['recheck: ' + rec['id'], rec['rev'], rec['state'], rec.get('label', ''),
+                             ' '.join(source_refs(rec)), rec.get('link', ''), rec.get('title', '')]))
+        return 0
+    # Re-read means a verify or a close at or after the claim that listed it.
+    missed = [i for i in args.lines if i in items and items[i]['state'] != 'closed'
+              and number(items[i]['verification'].get('at')) < args.since]
+    gone = [i for i in args.lines if i not in items]
+    print(f'TODO_RECHECK: {len(missed)} of {len(args.lines)} listed not re-read'
+          + (': ' + ' '.join(missed) if missed else '') + (f' ({len(gone)} no longer in the store)' if gone else ''))
+    return 0
+
+
 def one(items, iid):
     if iid not in items:
         raise Refusal(f'no item with id {iid}')
@@ -548,6 +629,8 @@ def main():
         parser.add_argument(flag, default='')
     parser.add_argument('--now', type=int, required=True)
     parser.add_argument('--at', type=int, default=0)
+    parser.add_argument('--since', type=int, default=0)
+    parser.add_argument('--pass', dest='pass_', action='store_true')
     args = parser.parse_intermixed_args()
     now = args.now
     try:
@@ -556,10 +639,13 @@ def main():
                 print(f'TODO_ITEMS: {len(sync(args, store, now))} items synced')
                 return 0
             if args.command == 'sweep-start':
-                store.add_sweep(args.at or now)
-                print(f'TODO_ITEMS: verification sweep started at {when(args.at or now)}')
+                store.add_sweep(args.at or now, 'passes' if args.pass_ else 'sweeps')
+                kind = 'intake pass' if args.pass_ else 'verification sweep'
+                print(f'TODO_ITEMS: {kind} started at {when(args.at or now)}')
                 return 0
             items = store.load()
+            if args.command == 'recheck':
+                return recheck(args, items, now)
             if args.command == 'command':
                 lines = args.lines or [l for l in sys.stdin.read().splitlines() if l.strip()]
                 failed = False
