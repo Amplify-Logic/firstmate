@@ -216,13 +216,13 @@
 # after that source's claim, and refused without --rescanned when that claim
 # handed out a re-scan.
 #
-# A WAIT ON THE CAPTAIN HAS A DATE. `resolve --waiting` is for work handed to
-# someone else. A reason that leaves the wait with the captain - "later" with
-# no other owner named (no other person's name, no she/he/they), "waiting
-# on/for" him, or him (you, captain, one of his captain_names) who
-# will answer, decide or reply - is refused unless it names a date
-# (YYYY-MM-DD, a full weekday name or mon/tue/thu/fri, tomorrow, next week, or
-# a day number with a month), because without one it is a park with no end.
+# A WAIT HAS A DATE OR A NAMED OWNER. `resolve --waiting` is for work handed
+# to someone else. A reason is refused unless it names a date (YYYY-MM-DD, a
+# full weekday name or mon/tue/thu/fri, tomorrow, next week, or a day number
+# with a month) or states the hand-over to a capitalised name that is not the
+# captain's ("waiting on/for Name", "routed to Name", "handed (over) to Name",
+# "assigned to Name", "Name will ..."), because a wait left with him and no
+# date is a park with no end.
 #
 # TEAM ANNOUNCEMENTS ARE INFORMATION, NOT ASKS. A `slack-announcements` source
 # is a set of team channels the orchestrator reads for posts that announce a
@@ -1743,44 +1743,20 @@ with_partner_hint() {
 
 # --- resolution -------------------------------------------------------------
 
-# A hand-over reason that leaves the wait with the captain: "later" with no
-# other owner named, "waiting on/for" him, or him answering, deciding or
-# replying. A hand-over to someone else that merely mentions him is not one.
-waits_on_captain() {
-  local who=you word
-  for word in captain $(printf '%s' "$CFG_CAPTAIN_NAMES" | tr '[:upper:]' '[:lower:]'); do
-    who="$who|$word"
+# Whether a reason hands the wait to a named owner who is neither the captain
+# nor a pronoun.
+hands_over_to_other() {
+  local name not_owner
+  not_owner=" you your captain it this that there we i $(printf '%s' "$CFG_CAPTAIN_NAMES" | tr '[:upper:]' '[:lower:]') "
+  for name in $(printf ' %s ' "$1" | grep -oE \
+    '([Ww]aiting (on|for)|[Rr]outed to|[Hh]anded( it)?( over)? to|[Aa]ssigned to) [A-Z][a-z]+|[A-Z][a-z]+ will [a-z]+' \
+    | sed -E 's/ will [a-z]+$//; s/.* //'); do
+    case "$not_owner" in
+      *" $(printf '%s' "$name" | tr '[:upper:]' '[:lower:]') "*) ;;
+      *) return 0 ;;
+    esac
   done
-  printf ' %s ' "$1" | tr '[:upper:]' '[:lower:]' | grep -Eq \
-    "[^a-z]waiting (on|for) (the )?($who|your)[^a-z]|[^a-z]($who) will (answer|decide|reply|respond)[^a-z]" \
-    && return 0
-  printf ' %s ' "$1" | tr '[:upper:]' '[:lower:]' | grep -Eq '[^a-z]later[^a-z]' \
-    && ! names_other_owner "$1"
-}
-
-# Another owner in a reason: she, he or they, or a capitalised name that is
-# neither the captain's nor a common sentence word or tool name. A name that
-# opens a sentence counts only as the subject of a hand-over ("Naomi will",
-# "Queco to"), not as the one who asked ("Karolina asks").
-names_other_owner() {
-  printf '%s\n' "$1" | awk \
-    -v captains=" captain you $(printf '%s' "$CFG_CAPTAIN_NAMES" | tr '[:upper:]' '[:lower:]') " \
-    -v common=" later waiting back routed handed will need needs please follow the an it this that we asana slack gmail hubspot calendar " '
-    {
-      n = split($0, sentence, /[.!?]/)
-      for (i = 1; i <= n; i++) {
-        m = split(sentence[i], part, /[^A-Za-z]+/)
-        k = 0
-        for (j = 1; j <= m; j++) if (part[j] != "") word[++k] = part[j]
-        for (j = 1; j <= k; j++) {
-          w = tolower(word[j])
-          if (w == "she" || w == "he" || w == "they") found = 1
-          if (word[j] !~ /^[A-Z][a-z]+$/ || index(captains common, " " w " ")) continue
-          if (j > 1 || (k > 1 && tolower(word[2]) ~ /^(will|to|is|has|should|can|would|owes|needs)$/)) found = 1
-        }
-      }
-    }
-    END { exit !found }'
+  return 1
 }
 
 # Month and weekday names count only as whole words, a month only next to a day
@@ -1810,8 +1786,8 @@ resolve_item() {
   [ -n "$key" ] || die '--item is required'
   require_id 'item key' "$key"
   [ -n "$reason" ] || die '--reason is required'
-  if [ "$waiting" = true ] && waits_on_captain "$reason" && ! names_a_date "$reason"; then
-    die "a wait on the captain needs a date in --reason (YYYY-MM-DD, a full weekday name or mon/tue/thu/fri, tomorrow, next week, or a day number with a month); without one it is a park with no end: $reason"
+  if [ "$waiting" = true ] && ! names_a_date "$reason" && ! hands_over_to_other "$reason"; then
+    die "a wait needs a date in --reason (YYYY-MM-DD, a full weekday name or mon/tue/thu/fri, tomorrow, next week, or a day number with a month) or a hand-over to someone named other than the captain (waiting on/for Name, routed to Name, handed (over) to Name, assigned to Name, Name will ...); without one it is a park with no end: $reason"
   fi
   epoch=$(now_epoch)
   require_state_lock

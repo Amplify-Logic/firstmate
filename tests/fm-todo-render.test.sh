@@ -368,7 +368,7 @@ test_calm_layout_ranks_live_problems_first_and_folds_the_rest() {
     --digest f --class urgent --title 'dealer quote handed over' | awk '{ print $2 }')
   key_done=$(observe_at "$h" "$T_0900" observe --source M_ACTION --ref c-d \
     --digest g --class urgent --title 'invoice settled' | awk '{ print $2 }')
-  observe_at "$h" "$T_1100" resolve --item "$key_wait" --reason 'Naomi has it' --waiting >/dev/null
+  observe_at "$h" "$T_1100" resolve --item "$key_wait" --reason 'Naomi will answer it' --waiting >/dev/null
   observe_at "$h" "$T_1100" resolve --item "$key_done" --reason 'credit note sent' >/dev/null
 
   # A partner-facing ask awaiting him, flagged by the morning sweep.

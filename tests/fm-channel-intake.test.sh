@@ -84,8 +84,8 @@
 #     the Asana full re-list once per local day.
 #   - Observe refuses a title-less new item, a unit list naming no unit and the
 #     -1.0 broken-sensor reading, keeps a partner mark across re-reads, and a
-#     wait left with the captain needs a date while a hand-over to others that
-#     only mentions him does not.
+#     wait needs a date unless it states a hand-over to someone named other
+#     than the captain.
 # shellcheck disable=SC2016
 set -u
 
@@ -377,7 +377,7 @@ test_captain_response_clears_and_never_reopens() {
   out=$(at "$h" "$T_0900" observe --source M_ACTION --ref msg-77 \
     --digest 'supplier must confirm' --class obligation --title 'supplier confirmation')
   key=$(key_of "$out")
-  at "$h" "$T_0915" resolve --item "$key" --waiting --reason 'handed to the supplier' >/dev/null
+  at "$h" "$T_0915" resolve --item "$key" --waiting --reason 'handed to Dirk at the supplier' >/dev/null
   out=$(at "$h" "$T_0915" brief)
   assert_contains "$out" 'supplier confirmation' 'a handed-off obligation vanished from the brief'
   [ "$(item_field "$h" "$key" state)" = waiting ] \
@@ -387,12 +387,12 @@ test_captain_response_clears_and_never_reopens() {
   # something is stuck, not who it is stuck on.
   at "$h" $((T_0915 + 900)) observe --source M_ACTION --ref msg-77 \
     --digest 'supplier must confirm' --class obligation --title 'supplier confirmation' >/dev/null
-  [ "$(item_field "$h" "$key" resolution)" = 'handed to the supplier' ] \
+  [ "$(item_field "$h" "$key" resolution)" = 'handed to Dirk at the supplier' ] \
     || fail 'an unchanged re-read erased the reason a handed-off item is waiting'
   at "$h" $((T_0915 + 1800)) observe --source M_ACTION --ref msg-77 \
     --digest 'supplier must confirm by friday' --class obligation \
     --title 'supplier confirmation' >/dev/null
-  [ "$(item_field "$h" "$key" resolution)" = 'handed to the supplier' ] \
+  [ "$(item_field "$h" "$key" resolution)" = 'handed to Dirk at the supplier' ] \
     || fail 'a corrected re-read erased the reason a handed-off item is waiting'
   assert_contains "$(at "$h" $((T_0915 + 1800)) brief)" 'supplier confirmation' \
     'a corrected handed-off obligation left waiting-on-others'
@@ -1785,7 +1785,7 @@ test_awaiting_partners_lead_every_summary_and_survive_rewrites() {
   # Stamping a notification or handing the item over keeps the facts it carries.
   at "$h" "$T_0900" notify-sent --keys "$key" >/dev/null
   [ "$(item_field "$h" "$key" awaiting)" = 1 ] || fail 'a notification stamp erased the awaiting flag'
-  at "$h" "$T_0900" resolve --item "$key" --waiting --reason 'Natalia chasing' >/dev/null
+  at "$h" "$T_0900" resolve --item "$key" --waiting --reason 'Natalia will chase' >/dev/null
   [ "$(item_field "$h" "$key" awaiting)" = 1 ] || fail 'a hand-over erased the awaiting flag'
   # An unchanged plain re-read keeps them; a timeline re-read replaces them.
   at "$h" "$T_0915" observe --source H_TICKETS --ref ticket-promise --digest 'promise v1' >/dev/null
@@ -1970,28 +1970,31 @@ test_observe_and_resolve_refuse_what_rots_the_page() {
   at "$h" "$T_0900" observe --source FLEET --condition freezing --count 1 \
     --units '867280069323962 (0.5 C)' --digest g >/dev/null || fail 'a real freezing snapshot was refused'
   for reason in 'Karolina asks - later' 'later' 'Later' 'Lars will do it later' 'This will happen later' \
+    'Reply to Karolina later' 'follow up in Notion later' 'Customer is waiting, Lars replies later' \
+    'asked Sara to check later' 'waiting on the logs' \
     'follow up in Asana later' 'Lars will answer' 'waiting on you' 'waiting for Tolhurst to sign off' \
     'waiting on Lars for 3 decisions' 'Lars will decide 2 options' 'waiting on you, he marked 2 units' 'waiting on you, he sat on it'; do
     out=$(at "$h" "$T_0915" resolve --item "$key" --waiting --reason "$reason" 2>&1) && code=0 || code=$?
-    expect_code 2 "$code" "a wait on the captain with no date was accepted: $reason"
+    expect_code 2 "$code" "a dateless wait with no named hand-over was accepted: $reason"
   done
   out=$(at "$h" "$T_0915" resolve --item "$key" --waiting --reason 'Lars will answer Sat' 2>&1) && code=0 || code=$?
   expect_code 2 "$code" 'a bare "Sat" was accepted as a date'
   assert_contains "$out" 'a full weekday name or mon/tue/thu/fri' 'the refusal did not say which weekdays count'
-  # A hand-over to someone else that only mentions him is not a wait on him.
+  assert_contains "$out" 'a hand-over to someone named other than the captain' 'the refusal did not say a named hand-over is accepted'
+  # A stated hand-over to someone else needs no date, even when it mentions him.
   for reason in 'Lars handed it to Sara' 'Queco will send you the logs' 'routed to Naomi, she will update your ticket' \
-    'routed to Naomi, she will confirm later' 'asked Sara to check later' \
-    'Queco will send the logs later' 'Naomi will confirm later'; do
+    'routed to Naomi, she will confirm later' 'waiting on Pedro for the RMA decision' 'Queco will send the logs' \
+    'Naomi will confirm later' 'assigned to Sara' 'handed over to Pedro'; do
     at "$h" "$T_0915" resolve --item "$key" --waiting --reason "$reason" >/dev/null \
       || fail "a hand-over to someone else was refused as a wait on the captain: $reason"
   done
   for reason in 'waiting on Lars until 14 Oct' 'Lars will answer by Oct 14'; do
     at "$h" "$T_0915" resolve --item "$key" --waiting --reason "$reason" >/dev/null \
-      || fail "a wait on the captain with a day and month was refused: $reason"
+      || fail "a wait with a day and month was refused: $reason"
   done
   at "$h" "$T_0915" resolve --item "$key" --waiting --reason 'Karolina asks - later, back on Friday' >/dev/null \
-    || fail 'a dated wait on the captain was refused'
-  pass 'observe refuses untitled items, unit-less lists and the broken-sensor reading; a wait on the captain needs a date, a hand-over to others does not'
+    || fail 'a dated wait was refused'
+  pass 'observe refuses untitled items, unit-less lists and the broken-sensor reading; a wait needs a date or a named hand-over to someone else'
 }
 
 test_bootstrap_surfaces_the_intake() {
