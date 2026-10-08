@@ -526,7 +526,7 @@ def sync(args, store, now):
 
 
 def prunable(rec, now):
-    """Only an intake-retired routine record past its retention; it was never an ask."""
+    """Only an intake-retired routine record or team update past its retention; it was never an ask."""
     c = rec.get('closure') or {}
     return (rec.get('state') == 'closed' and rec.get('kind') in UNOWED_KINDS
             and c.get('reason') == 'superseded' and c.get('actor') == 'source'

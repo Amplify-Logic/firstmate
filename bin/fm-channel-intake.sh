@@ -1646,7 +1646,7 @@ count_records() {
 }
 
 # `--state inactive` is a LOCATION, not a state field: those records still read
-# `open`, they have simply left the polled set under the brief horizon. A bare
+# `open`, they have simply left the polled set past their class horizon. A bare
 # `items` lists every location, so nothing this gate keeps is invisible.
 items_cmd() {
   local want='' dirs dir path key state class source title
@@ -2328,8 +2328,8 @@ status_cmd() {
   # directory would report work handed to someone else as still owed.
   printf 'items_open: %s\n' "$(count_items_in_state "$ITEM_DIR" open)"
   printf 'items_waiting: %s\n' "$(count_items_in_state "$ITEM_DIR" waiting)"
-  # Retired routine records are reported, never silently gone: they left the
-  # polled set under the brief horizon and `items --state inactive` lists them.
+  # Retired routine and update records are reported, never silently gone: they
+  # left the polled set past their horizon and `items --state inactive` lists them.
   printf 'items_inactive: %s\n' "$(count_records "$INACTIVE_DIR")"
   printf 'items_archived: %s\n' "$(count_records "$ARCHIVE_DIR")"
   printf 'tracked_threads: %s\n' \

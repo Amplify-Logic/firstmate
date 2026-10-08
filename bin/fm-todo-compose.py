@@ -473,7 +473,7 @@ waiting = sorted([r for r in items if r.get('state') == 'waiting'] + handoffs, k
 
 
 def intake_retired(rec):
-    """Routine chatter the intake dropped from its ledger; it was never an ask to close."""
+    """Routine chatter or a team update the intake dropped from its ledger; it was never an ask to close."""
     c = rec.get('closure') or {}
     return rec.get('kind') in ('info', 'update') and c.get('reason') == 'superseded' and c.get('actor') == 'source'
 
