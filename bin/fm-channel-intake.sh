@@ -1758,21 +1758,25 @@ waits_on_captain() {
     && ! names_other_owner "$1"
 }
 
-# Another owner in a reason: she, he or they, or a capitalised name that does
-# not open a sentence and is not the captain's.
+# Another owner in a reason: she, he or they, or a capitalised name that is
+# neither the captain's nor a common sentence word or tool name. A name that
+# opens a sentence counts only as the subject of a hand-over ("Naomi will",
+# "Queco to"), not as the one who asked ("Karolina asks").
 names_other_owner() {
-  printf '%s\n' "$1" | awk -v captains=" captain you $(printf '%s' "$CFG_CAPTAIN_NAMES" | tr '[:upper:]' '[:lower:]') " '
+  printf '%s\n' "$1" | awk \
+    -v captains=" captain you $(printf '%s' "$CFG_CAPTAIN_NAMES" | tr '[:upper:]' '[:lower:]') " \
+    -v common=" later waiting back routed handed will need needs please follow the an it this that we asana slack gmail hubspot calendar " '
     {
       n = split($0, sentence, /[.!?]/)
       for (i = 1; i <= n; i++) {
-        m = split(sentence[i], word, /[^A-Za-z]+/)
-        first = 1
-        for (j = 1; j <= m; j++) {
-          if (word[j] == "") continue
+        m = split(sentence[i], part, /[^A-Za-z]+/)
+        k = 0
+        for (j = 1; j <= m; j++) if (part[j] != "") word[++k] = part[j]
+        for (j = 1; j <= k; j++) {
           w = tolower(word[j])
           if (w == "she" || w == "he" || w == "they") found = 1
-          if (!first && word[j] ~ /^[A-Z][a-z]+$/ && index(captains, " " w " ") == 0) found = 1
-          first = 0
+          if (word[j] !~ /^[A-Z][a-z]+$/ || index(captains common, " " w " ")) continue
+          if (j > 1 || (k > 1 && tolower(word[2]) ~ /^(will|to|is|has|should|can|would|owes|needs)$/)) found = 1
         }
       }
     }
