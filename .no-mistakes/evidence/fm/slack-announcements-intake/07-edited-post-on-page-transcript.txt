@@ -1,0 +1,12 @@
+# 14:2x observe Furniture post; render
+new faa624f69df807f1fe803f18d08a8960003f029ffeddd6562ae6f74c7f7c30d2
+TODO_RENDER: /var/folders/2c/9sf1hvpn23q336b08gs1np0c0000gn/T//fm-lab.HuMeZm/.lavish/today-2026-10-08.html rendered at 14:55 CEST
+<summary>Updates (1)</summary>
+<td>Aquablu Furniture limited release, 50 units - live on the partner webshop 15 Oct</td>
+
+# +1h: edit moves the date; re-observe same ref; render
+updated faa624f69df807f1fe803f18d08a8960003f029ffeddd6562ae6f74c7f7c30d2
+TODO_RENDER: /var/folders/2c/9sf1hvpn23q336b08gs1np0c0000gn/T//fm-lab.HuMeZm/.lavish/today-2026-10-08.html rendered at 15:55 CEST
+<summary>Updates (1)</summary>
+<td>Aquablu Furniture limited release, 50 units - live on the partner webshop 22 Oct (moved)</td>
+posted 14:21 CEST · slack-announcements (C_TEAM)

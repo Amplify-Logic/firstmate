@@ -1,0 +1,32 @@
+# T0 = Thu 08 Oct 14:54
+
+# T0+1h: Valerie edits the post, moving the webshop date (re-observe same ref)
+updated faa624f69df807f1fe803f18d08a8960003f029ffeddd6562ae6f74c7f7c30d2
+
+# T0+2d (Sat 10 Oct 14:54): tick - routine would have retired after 1 day; updates must stay
+CHANNEL_INTAKE: 2 source(s) due for channel-intake
+23aed4d42fe90e0770c7f09e8a3e8f4520114128e3b5c92e016ed630c8a40ea3	open	update	C_TEAM	Flavour box price list changes from 1 Nov
+3226f8c82c0502b7cf93c26030804ebfc3c03645525deda07cf8d0a0e9744e1f	open	obligation	C_MENTIONS	Approve the RMA for Hotel Krasnapolsky
+faa624f69df807f1fe803f18d08a8960003f029ffeddd6562ae6f74c7f7c30d2	open	update	C_TEAM	Aquablu Furniture limited release (REFILL+ Series 2 cabinet), 50 units - live on the partner webshop 22 Oct (moved from 15 Oct)
+
+# T0+14d+30m (Thu 22 Oct 15:24): tick - unedited price-list update past its 14-day horizon retires; edited Furniture (last change T0+1h) stays
+CHANNEL_INTAKE: 2 source(s) due for channel-intake
+-- items --state open
+3226f8c82c0502b7cf93c26030804ebfc3c03645525deda07cf8d0a0e9744e1f	open	obligation	C_MENTIONS	Approve the RMA for Hotel Krasnapolsky
+faa624f69df807f1fe803f18d08a8960003f029ffeddd6562ae6f74c7f7c30d2	open	update	C_TEAM	Aquablu Furniture limited release (REFILL+ Series 2 cabinet), 50 units - live on the partner webshop 22 Oct (moved from 15 Oct)
+-- items --state inactive
+23aed4d42fe90e0770c7f09e8a3e8f4520114128e3b5c92e016ed630c8a40ea3	open	update	C_TEAM	Flavour box price list changes from 1 Nov
+
+# T0+15d (Fri 23 Oct 14:54): tick - edited Furniture now past its horizon too
+CHANNEL_INTAKE: 2 source(s) due for channel-intake
+-- items --state open
+3226f8c82c0502b7cf93c26030804ebfc3c03645525deda07cf8d0a0e9744e1f	open	obligation	C_MENTIONS	Approve the RMA for Hotel Krasnapolsky
+-- items --state inactive
+23aed4d42fe90e0770c7f09e8a3e8f4520114128e3b5c92e016ed630c8a40ea3	open	update	C_TEAM	Flavour box price list changes from 1 Nov
+faa624f69df807f1fe803f18d08a8960003f029ffeddd6562ae6f74c7f7c30d2	open	update	C_TEAM	Aquablu Furniture limited release (REFILL+ Series 2 cabinet), 50 units - live on the partner webshop 22 Oct (moved from 15 Oct)
+
+-- status
+items_open: 1
+items_waiting: 0
+items_inactive: 2
+items_archived: 0

@@ -1,0 +1,100 @@
+$ fm-channel-intake.sh sources
+C_MENTIONS	slack-channel	unknown	checkpoint=	last_ok=	failures=	@mentions of Lars
+C_TEAM	slack-announcements	unknown	checkpoint=	last_ok=	failures=	#channel-team and #channel-announcements, kept posts only
+
+$ fm-channel-intake.sh tick
+CHANNEL_INTAKE: 2 source(s) due for channel-intake
+
+$ fm-channel-intake.sh claim
+now: 1791464054
+revision_window_seconds: 86400
+revision_window_from: 1791377654
+thread_tracking_window_seconds: 86400
+source: C_MENTIONS	kind: slack-channel	checkpoint: 	coverage: @mentions of Lars
+source: C_TEAM	kind: slack-announcements	checkpoint: 	coverage: #channel-team and #channel-announcements, kept posts only
+
+# adversarial: a mention source may not record an update
+$ fm-channel-intake.sh observe --source C_MENTIONS --ref 1791462060.000100 --digest furniture --class update --title "Aquablu Furniture"
+fm-channel-intake: --class update requires a slack-announcements source
+exit=2
+
+# Valerie Loutphi, #channel-team, 8 Oct 2026 14:21 - kept as an update
+$ fm-channel-intake.sh observe --source C_TEAM --ref 1791462060.000100 --class update --source-epoch 1791462060 ...
+new faa624f69df807f1fe803f18d08a8960003f029ffeddd6562ae6f74c7f7c30d2
+exit=0
+
+# an older announcement (price list) posted yesterday
+new 23aed4d42fe90e0770c7f09e8a3e8f4520114128e3b5c92e016ed630c8a40ea3
+exit=0
+
+# an ask for Lars from the mention source
+new 3226f8c82c0502b7cf93c26030804ebfc3c03645525deda07cf8d0a0e9744e1f
+exit=0
+
+$ fm-channel-intake.sh complete --source C_TEAM ...
+CHANNEL_INTAKE: C_TEAM read complete, checkpoint 1791462060.000100
+TODO_RENDER: no page at /var/folders/2c/9sf1hvpn23q336b08gs1np0c0000gn/T//fm-lab.Xjy9Rf/.lavish/today-2026-10-08.html yet; nothing refreshed
+CHANNEL_INTAKE: C_MENTIONS read complete, checkpoint 1791463000.000300
+TODO_RENDER: no page at /var/folders/2c/9sf1hvpn23q336b08gs1np0c0000gn/T//fm-lab.Xjy9Rf/.lavish/today-2026-10-08.html yet; nothing refreshed
+
+$ fm-channel-intake.sh items
+23aed4d42fe90e0770c7f09e8a3e8f4520114128e3b5c92e016ed630c8a40ea3	open	update	C_TEAM	Flavour box price list changes from 1 Nov
+3226f8c82c0502b7cf93c26030804ebfc3c03645525deda07cf8d0a0e9744e1f	open	obligation	C_MENTIONS	Approve the RMA for Hotel Krasnapolsky
+faa624f69df807f1fe803f18d08a8960003f029ffeddd6562ae6f74c7f7c30d2	open	update	C_TEAM	Aquablu Furniture limited release (REFILL+ Series 2 cabinet), 50 units - live on the partner webshop 15 Oct
+
+$ fm-channel-intake.sh notify-due
+exit=0
+
+$ fm-channel-intake.sh todo
+# Daily to-do - 2026-10-08
+
+Human obligations only. Executable automations live in the Action Deck behind their own approval.
+
+- [ ] Approve the RMA for Hotel Krasnapolsky (C_MENTIONS)
+
+## Waiting on others
+
+- nothing
+
+$ fm-channel-intake.sh brief
+# Channel intake brief - 2026-10-08 14:54 CEST
+
+## Coverage
+
+Enrolled sources only. Enrolling these does not enrol every channel, mailbox or board in the workspace.
+A source reading `unknown` did not complete its last read; that is not the same as nothing new.
+
+- `C_MENTIONS` (slack-channel): fresh - last read 0s ago, @mentions of Lars
+- `C_TEAM` (slack-announcements): fresh - last read 0s ago, #channel-team and #channel-announcements, kept posts only
+
+## What changed
+
+- Flavour box price list changes from 1 Nov (C_TEAM)
+- Aquablu Furniture limited release (REFILL+ Series 2 cabinet), 50 units - live on the partner webshop 15 Oct (C_TEAM)
+
+## What needs you
+
+- [obligation] Approve the RMA for Hotel Krasnapolsky (C_MENTIONS, first seen 2026-10-08)
+
+## Waiting on others
+
+- nothing
+
+## Next dated actions
+
+- nothing
+
+## Automation candidates
+
+Proposals only. Nothing here is prepared, staged or executable, and detecting one grants no permission to act.
+
+- nothing
+
+## Detection limits
+
+- An in-place edit older than the 86400s revision window is not detected.
+- A reply on a thread whose parent is not in the tracked set can appear in no cursor read.
+- The tracked set is bounded, not forever: a parent whose reply marker has not advanced within 86400s leaves it, and replies on a parent that has left are not re-read.
+- Routine traffic older than 86400s leaves the polled set and is listed by `items --state inactive`. Nothing is deleted, and nothing owed, waiting or corrected ever leaves.
+- The 1800s poll interval is a target detection latency, not a guaranteed upper bound: sleep, offline stretches, backoff and queue delay all add to it.
+- Measured detection latency so far: 2 sample(s), mean 48024s, max 94054s
