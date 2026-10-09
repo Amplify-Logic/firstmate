@@ -468,13 +468,36 @@ def parse_when(text, now):
     raise Refusal(f'park needs a real date (YYYY-MM-DD, today, tomorrow, a weekday or next week): {text}')
 
 
+TICKET_VERBS = ('close', 'waiting', 'reassign', 'note', 'priority')
+PRIORITIES = ('low', 'medium', 'high')
+# A HubSpot ticket named by an alias whose whole ref is the ticket id, or by a
+# ticket record or help-desk link; anything else names no ticket.
+TICKET_ALIAS = re.compile(r'^hubspot[\w-]*:(\d{6,})$', re.I)
+TICKET_LINK = re.compile(r'app\.hubspot\.com/(?:contacts/\d+/record/0-5|help-desk/\d+/view/\d+/ticket)/(\d+)')
+
+
 def parse_line(line, targeted, now):
     """(verb, words, extra), or None for a line with no leading verb."""
-    match = re.match(r'^\s*(drop|done|park|mine|you|dig)\b\s*(.*)$', line, re.I | re.S)
+    match = re.match(r'^\s*(drop|done|park|mine|you|dig|close|waiting|reassign|priority)\b\s*(.*)$'
+                     r'|^\s*(note)\s*:\s*(.*)$', line, re.I | re.S)
     if not match:
         return None
-    verb, rest = match.group(1).lower(), match.group(2).strip()
+    verb = (match.group(1) or match.group(3)).lower()
+    rest = (match.group(2) if match.group(1) else match.group(4)).strip()
     extra = {}
+    if verb in TICKET_VERBS:
+        # A ticket verb acts on exactly the row it was typed against; its words are its argument.
+        if not targeted:
+            raise Refusal(f'{verb} changes a HubSpot ticket, so it needs the page row\'s item id (--item)')
+        rest = re.sub(r'^[:\s]+', '', rest)
+        if verb == 'reassign' and not rest:
+            raise Refusal('reassign needs a name: reassign <name>')
+        if verb == 'note' and not rest:
+            raise Refusal('note needs text: note: <text>')
+        if verb == 'priority' and rest.lower() not in PRIORITIES:
+            raise Refusal('priority is low, medium or high')
+        extra['arg'] = rest.lower() if verb == 'priority' else rest
+        return verb, '', extra
     if verb == 'park':
         split = re.match(r'^(.*?)\s*\b(?:til|till|until)\b\s*(.+)$', rest, re.I)
         if split:
@@ -505,6 +528,61 @@ def match_item(items, words):
     raise Refusal(f'"{words}" matches {len(hits)} items: ' + ', '.join(r['id'] for r in hits[:6]))
 
 
+def hubspot_ticket(rec):
+    """The one HubSpot ticket id the item names, or a refusal saying why there is none."""
+    ids = {m.group(1) for m in map(TICKET_ALIAS.match, rec['aliases']) if m}
+    for link in [rec.get('link')] + [s.get('link') for s in (rec.get('slots') or {}).values()]:
+        ids.update(TICKET_LINK.findall(link or ''))
+    if not ids:
+        raise Refusal(f'{rec["id"]} has no HubSpot ticket, so close, waiting, reassign, note and priority '
+                      'cannot apply to it')
+    if len(ids) > 1:
+        raise Refusal(f'{rec["id"]} names {len(ids)} HubSpot tickets ({", ".join(sorted(ids))}); '
+                      'name the one ticket to change to Firstmate directly')
+    return ids.pop()
+
+
+def queue_ticket_action(store, rec, verb, arg, line, now):
+    """Record a pending HubSpot change for Firstmate; (action, True when it was already pending)."""
+    ticket = hubspot_ticket(rec)
+    actions = rec.setdefault('ticket_actions', [])
+    same = next((a for a in actions if a['state'] == 'pending' and a['verb'] == verb and a['arg'] == arg), None)
+    if same:
+        return same, True
+    action = {'id': 'k' + digest(rec['id'], verb, arg, now, len(actions))[:8], 'verb': verb, 'arg': arg,
+              'ticket': ticket, 'line': line.strip(), 'requested_at': now, 'rev': rec['rev'], 'state': 'pending'}
+    actions.append(action)
+    # Finished actions are history the journal also keeps; the item holds the recent ones.
+    finished = [a for a in actions if a['state'] != 'pending']
+    rec['ticket_actions'] = [a for a in actions if a['state'] == 'pending' or a in finished[-10:]]
+    store.journal({'at': now, 'item': rec['id'], 'ticket_action': action, 'actor': 'captain', 'rev': rec['rev']})
+    return action, False
+
+
+def finish_ticket_action(store, rec, action_id, outcome, evidence, now):
+    """Firstmate's recorded result of one pending HubSpot change, and what it does to the item."""
+    action = next((a for a in rec.get('ticket_actions') or [] if a['id'] == action_id), None)
+    if action is None:
+        raise Refusal(f'{rec["id"]} has no ticket action {action_id}')
+    if action['state'] != 'pending':
+        raise Refusal(f'ticket action {action_id} is already {action["state"]}')
+    action.update(state=outcome, outcome={'at': now, 'evidence': evidence})
+    store.journal({'at': now, 'item': rec['id'], 'ticket_action': action['id'], 'outcome': outcome,
+                   'evidence': evidence, 'actor': 'firstmate', 'rev': rec['rev']})
+    if outcome != 'done':
+        return
+    ticket, verb, arg = action['ticket'], action['verb'], action['arg']
+    if verb == 'close' and rec['state'] != 'closed':
+        transition(store, rec, now, 'closed', 'captain', 'fulfilled',
+                   f'HubSpot ticket {ticket} closed from the page: {evidence}', pending={}, note='')
+    elif verb == 'waiting' and rec['state'] == 'open':
+        transition(store, rec, now, 'waiting', 'captain', 'ticket waiting', evidence,
+                   handover=f'HubSpot ticket {ticket} set to waiting: {evidence}')
+    elif verb == 'reassign' and rec['state'] != 'closed':
+        transition(store, rec, now, 'waiting', 'captain', 'ticket reassigned', evidence, owner=arg,
+                   handover=f'HubSpot ticket {ticket} reassigned: {evidence}')
+
+
 def apply_command(store, items, line, target, shown_rev, now):
     parsed = parse_line(line, bool(target), now)
     if parsed is None:
@@ -514,6 +592,14 @@ def apply_command(store, items, line, target, shown_rev, now):
     if shown_rev and shown_rev != rec['rev']:
         raise Refusal(f'the page showed revision {shown_rev} but {rec["id"]} is now {rec["rev"]}; refresh the page first')
     refs = ' '.join(a for a in rec['aliases'] if not a.startswith('ledger:'))
+    if verb in TICKET_VERBS:
+        action, already = queue_ticket_action(store, rec, verb, extra['arg'], line, now)
+        result = (f'ticket-{verb} {rec["id"]} [{refs}] {rec["title"]} :: HubSpot ticket {action["ticket"]}'
+                  f' action {action["id"]}' + (f': {action["arg"]}' if action['arg'] else ''))
+        if already:
+            return 'already ' + result
+        store.save(rec)
+        return result
     tail = f' :: {extra["what"]}' if 'what' in extra else (f' until {extra["until"]}' if 'until' in extra else '')
     result = f'{verb} {rec["id"]} [{refs}] {rec["title"]}{tail}'
     if verb in ('done', 'drop'):
@@ -631,7 +717,7 @@ def main():
     parser.add_argument('command')
     parser.add_argument('lines', nargs='*')
     for flag in ('--store', '--intake', '--sources', '--morning-json', '--backlog', '--item', '--how',
-                 '--evidence', '--state', '--rev', '--actor', '--reason'):
+                 '--evidence', '--state', '--rev', '--actor', '--reason', '--action'):
         parser.add_argument(flag, default='')
     parser.add_argument('--now', type=int, required=True)
     parser.add_argument('--at', type=int, default=0)
@@ -662,6 +748,14 @@ def main():
                         result, failed = f'refused {line.strip()} :: {exc}', True
                     print(f'TODO_CMD: {result}')
                 return 1 if failed else 0
+            if args.command == 'tickets':
+                pending = [(rec, a) for rec in sorted(items.values(), key=lambda r: r['id'])
+                           for a in rec.get('ticket_actions') or [] if a['state'] == 'pending']
+                for rec, a in pending:
+                    print('\t'.join(['TODO_TICKET: ' + rec['id'], a['id'], a['ticket'], a['verb'], a['arg'],
+                                     when(a['requested_at']), rec.get('link', ''), rec.get('title', '')]))
+                print(f'TODO_TICKETS: {len(pending)} pending')
+                return 0
             if args.command == 'list':
                 for rec in sorted(items.values(), key=lambda r: r['id']):
                     if not args.state or rec['state'] == args.state:
@@ -689,6 +783,13 @@ def main():
                 back = {'owner': '', 'handover': ''} if rec['state'] == 'waiting' else {}
                 transition(store, rec, now, 'open', args.actor or 'firstmate', 'reopened',
                            note=args.reason or 'reopened by firstmate', **back)
+            elif args.command in ('ticket-done', 'ticket-failed'):
+                if not args.action:
+                    raise Refusal(f'{args.command} needs --action naming the queued ticket action')
+                if not args.evidence:
+                    raise Refusal(f'{args.command} needs --evidence; a ticket change is recorded with what happened')
+                finish_ticket_action(store, rec, args.action, 'done' if args.command == 'ticket-done' else 'failed',
+                                     args.evidence, now)
             elif args.command == 'ack':
                 if not rec['pending']:
                     raise Refusal(f'{rec["id"]} has no pending handoff')
@@ -697,7 +798,8 @@ def main():
             else:
                 raise Refusal(f'unknown command: {args.command}')
             store.save(rec)
-            print(f'TODO_ITEMS: {args.command} {rec["id"]} -> {rec["state"]}')
+            print(f'TODO_ITEMS: {args.command} {rec["id"]} -> {rec["state"]}'
+                  + (f' (ticket action {args.action})' if args.action else ''))
     except Refusal as exc:
         print(f'fm-todo: {exc}', file=sys.stderr)
         return 2

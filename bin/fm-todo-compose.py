@@ -297,7 +297,7 @@ def reply_form(rec):
     return (f'<tr class="replyrow" id="note-{esc(iid)}"><td colspan="3">'
             f'<form class="reply" data-lavish-question="todo-item-{esc(iid)}" onsubmit="{esc(js)}">'
             f'<input type="text" name="note" autocomplete="off" '
-            f'placeholder="drop, done, park til Friday, mine, you: what to do, dig, or anything else">'
+            f'placeholder="drop, done, park til Friday, mine, you: what to do, dig, close, waiting, reassign name, note: text, priority high, or anything else">'
             f'<button type="submit">Queue</button><span class="ack"></span>'
             f'</form></td></tr>')
 
@@ -387,13 +387,27 @@ def age(rec):
     return f'<span class="prov inf">asked {esc(stamp(at, "%a %-d %b"))}, {days} day{"s" if days > 1 else ""} ago</span>'
 
 
+def ticket_marker(rec):
+    """A queued HubSpot change shows until Firstmate records it; a failed one shows until the next."""
+    actions = rec.get('ticket_actions') or []
+    pending = [a for a in actions if a.get('state') == 'pending']
+    if pending:
+        what = '; '.join(f'{a.get("verb")} {a.get("arg") or ""}'.strip() for a in pending)
+        return f'<span class="prov unv">HubSpot change pending: {brief(what, 120)}</span>'
+    if actions and actions[-1].get('state') == 'failed':
+        a = actions[-1]
+        return (f'<span class="prov unv">HubSpot change failed ({esc(a.get("verb"))}): '
+                f'{brief((a.get("outcome") or {}).get("evidence") or "no evidence recorded", 120)}</span>')
+    return ''
+
+
 def row(rec, reply=True):
     title = esc(rec.get('title') or 'untitled item')
     severity = rec.get('class', 'obligation')
     pill = {'outage': 'bad', 'urgent': 'warn', 'deadline': 'warn'}.get(severity, 'info')
     toggle = note_toggle(rec) if reply else ''
     main = (f'<tr class="item" id="item-{esc(rec.get("id", ""))}"{audit(rec)}><td class="who"><span class="pill {pill}">{esc(severity)}</span>{source_marker(rec)}</td>\n'
-            f'<td class="what">{title}{freshness(rec)}{age(rec)}{context(rec)}</td>\n'
+            f'<td class="what">{title}{freshness(rec)}{age(rec)}{ticket_marker(rec)}{context(rec)}</td>\n'
             f'<td class="links">{link(rec.get("link"))}{toggle}</td></tr>')
     return main + '\n' + reply_form(rec) if reply else main
 

@@ -50,6 +50,11 @@
 #     Asana RMA, an observe --partner mark, an awaiting partner) oldest ask
 #     first, folds Firstmate-sourced or tooling approvals below them, and keeps a mine
 #     line out of the ranked list.
+#   - Ticket verbs (close, waiting, reassign, note:, priority) queue a pending
+#     HubSpot change on a row naming exactly one ticket, wake Firstmate once
+#     per command run that queued one, show as pending on the page until
+#     Firstmate records the result, and refuse a row with no ticket or an
+#     untargeted line.
 #   - Stored titles lose relative times but keep a deadline or duration the
 #     ask is about, the page computes ages in calendar days, device
 #     updates never reach the page, ticket times show in the page's zone, and
@@ -920,6 +925,98 @@ test_an_age_counts_calendar_days_across_a_clock_change() {
   pass 'an age counts calendar days across a clock change'
 }
 
+# The action id of the one pending ticket action with verb $3 on item $2.
+pending_action() {
+  todo_at "$1" "$T_1500" tickets | awk -F '\t' -v i="TODO_TICKET: $2" -v v="$3" '$1 == i && $4 == v { print $2 }'
+}
+
+test_ticket_verbs_queue_a_pending_hubspot_change() {
+  local h id rev out code neshu
+  h="$TMP_ROOT/tickets"
+  new_home "$h"
+  sidecar "$h" 2026-09-10 '{"key":"k-t1","source":"hubspot","ref":"48576658049","class":"obligation","kind":"reply","title":"Tomra pump ticket","link":"https://app.hubspot.com/contacts/1/record/0-5/48576658049","updated":'"$T_0900"'},{"key":"k-t2","source":"slack","ref":"C1-1","class":"obligation","kind":"reply","title":"Queco question","updated":'"$T_0900"'},{"key":"k-t3","source":"hubspot","ref":"48600120191","class":"obligation","kind":"reply","title":"Neshu ticket","updated":'"$T_0900"'}'
+  render_at "$h" "$T_1000"
+  id=$(field_of "$h" 'Tomra' 1)
+  rev=$(field_of "$h" 'Tomra' 4)
+  neshu=$(field_of "$h" 'Neshu' 1)
+  # A row with no HubSpot ticket refuses every ticket verb and records nothing.
+  out=$(todo_at "$h" "$T_1000" command --item "$(field_of "$h" 'Queco' 1)" 'close resolved') && code=0 || code=$?
+  expect_code 1 "$code" 'a ticket verb on a row with no ticket was accepted'
+  assert_contains "$out" 'has no HubSpot ticket' 'the no-ticket refusal does not say why'
+  # A ticket verb acts on one row, so a line with no item id is refused.
+  out=$(todo_at "$h" "$T_1000" command 'close Tomra') && code=0 || code=$?
+  expect_code 1 "$code" 'an untargeted ticket verb was accepted'
+  assert_contains "$out" 'needs the page row' 'the untargeted refusal does not say why'
+  for line in 'reassign' 'note:' 'priority urgent'; do
+    out=$(todo_at "$h" "$T_1000" command --item "$id" "$line") && code=0 || code=$?
+    expect_code 1 "$code" "the malformed ticket line '$line' was accepted"
+  done
+  [ ! -s "$h/state/.wake-queue" ] || fail 'a refused ticket verb woke Firstmate'
+  # Each verb keeps its argument as typed.
+  out=$(todo_at "$h" "$T_1000" command --item "$id" --rev "$rev" 'reassign Fauve van Dijk')
+  assert_contains "$out" 'TODO_CMD: ticket-reassign' 'reassign was not queued'
+  assert_contains "$out" 'HubSpot ticket 48576658049 action k' 'the queued action does not name the ticket and action'
+  assert_contains "$out" ': Fauve van Dijk' 'the reassign name was not stored as typed'
+  out=$(todo_at "$h" "$T_1000" command --item "$id" 'note: customer replaced the pump' 'priority HIGH' 'waiting')
+  assert_contains "$out" ': customer replaced the pump' 'the note text was not kept'
+  assert_contains "$out" ': high' 'priority was not normalised'
+  assert_contains "$out" 'TODO_CMD: ticket-waiting' 'waiting was not queued'
+  out=$(todo_at "$h" "$T_1000" command --item "$neshu" 'close: fixed by firmware')
+  assert_contains "$out" 'HubSpot ticket 48600120191 action k' 'a ticket named only by its alias was not found'
+  assert_contains "$out" ': fixed by firmware' 'the close reason lost its text'
+  out=$(todo_at "$h" "$T_1000" command --item "$id" 'reassign Fauve van Dijk')
+  assert_contains "$out" 'TODO_CMD: already ticket-reassign' 'a repeated pending action was queued twice'
+  [ "$(grep -c 'todo-ticket' "$h/state/.wake-queue")" = 3 ] \
+    || fail 'expected one wake per command run that queued a change'
+  assert_contains "$(cat "$h/state/.wake-queue")" 'run bin/fm-todo.sh tickets' 'the wake does not say what to run'
+  assert_contains "$(todo_at "$h" "$T_1000" tickets)" 'TODO_TICKETS: 5 pending' 'tickets does not count every pending action'
+  # The page marks the row until Firstmate confirms.
+  render_at "$h" "$T_1030"
+  assert_contains "$(page "$h" 2026-09-10)" 'HubSpot change pending: reassign Fauve van Dijk; note customer replaced the pump' \
+    'the page does not show the pending ticket change'
+  # A result needs evidence, is recorded once, and a done note leaves the item open.
+  out=$(todo_at "$h" "$T_1030" ticket-done --item "$id" --action "$(pending_action "$h" "$id" note)" 2>&1) && code=0 || code=$?
+  expect_code 2 "$code" 'a ticket result without evidence was recorded'
+  todo_at "$h" "$T_1030" ticket-done --item "$id" --action "$(pending_action "$h" "$id" note)" --evidence 'note added' >/dev/null
+  [ -z "$(pending_action "$h" "$id" note)" ] || fail 'a done note is still pending'
+  [ "$(field_of "$h" 'Tomra' 2)" = open ] || fail 'a done note changed the item state'
+  # A done reassign hands the item over to the name as typed.
+  todo_at "$h" "$T_1030" ticket-done --item "$id" --action "$(pending_action "$h" "$id" reassign)" \
+    --evidence 'owner Fauve van Dijk' >/dev/null
+  render_at "$h" "$T_1100"
+  [ "$(field_of "$h" 'Tomra' 2)" = waiting ] || fail 'a done reassign did not hand the item over'
+  assert_contains "$(page "$h" 2026-09-10)" 'Fauve van Dijk has it: HubSpot ticket 48576658049 reassigned' \
+    'the reassigned owner is not shown'
+  # A done close closes the item as fulfilled by Lars, with the ticket as evidence.
+  todo_at "$h" "$T_1100" ticket-done --item "$neshu" --action "$(pending_action "$h" "$neshu" close)" \
+    --evidence 'stage Closed' >/dev/null
+  render_at "$h" "$T_1500"
+  [ "$(field_of "$h" 'Neshu' 2)" = closed ] || fail 'a done close did not close the item'
+  out=$(page "$h" 2026-09-10)
+  assert_contains "$out" 'HubSpot ticket 48600120191 closed from the page: stage Closed' 'the close evidence is not shown'
+  assert_not_contains "$out" 'handled without you' 'a close Lars asked for counted as handled without him'
+  assert_contains "$(todo_at "$h" "$T_1500" tickets)" 'TODO_TICKETS: 2 pending' 'finished actions are still listed as pending'
+  pass 'ticket verbs queue a pending HubSpot change, refuse rows without a ticket, and record the result'
+}
+
+test_ticket_failure_stays_on_the_row() {
+  local h id
+  h="$TMP_ROOT/ticket-failed"
+  new_home "$h"
+  sidecar "$h" 2026-09-10 '{"key":"k-t1","source":"slack","ref":"C9-9","class":"obligation","kind":"reply","title":"Dealer ticket","link":"https://app.hubspot.com/help-desk/1/view/2/ticket/49033119384/thread/5","updated":'"$T_0900"'}'
+  render_at "$h" "$T_1000"
+  id=$(field_of "$h" 'Dealer' 1)
+  todo_at "$h" "$T_1000" command --item "$id" 'priority low' >/dev/null
+  todo_at "$h" "$T_1000" ticket-failed --item "$id" --action "$(pending_action "$h" "$id" priority)" \
+    --evidence 'property is read-only' >/dev/null
+  render_at "$h" "$T_1030"
+  assert_contains "$(page "$h" 2026-09-10)" 'HubSpot change failed (priority): property is read-only' \
+    'a failed ticket change is not shown on its row'
+  pass 'a help-desk link names the ticket and a failed change stays visible on the row'
+}
+
+test_ticket_verbs_queue_a_pending_hubspot_change
+test_ticket_failure_stays_on_the_row
 test_a_pass_judges_a_record_from_before_the_flag_by_its_aliases
 test_an_age_counts_calendar_days_across_a_clock_change
 test_time_bound_asks_expire_after_their_end
