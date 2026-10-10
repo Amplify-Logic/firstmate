@@ -45,6 +45,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let hotkeys = HotkeyMonitor()
         hotkeys.onTalkDown = { [weak model] in model?.hotkeyTalkBegan() }
         hotkeys.onTalkUp = { [weak model] in model?.hotkeyTalkEnded() }
+        hotkeys.onTalkChord = { [weak model] in model?.hotkeyTalkChorded() }
         hotkeys.onDictateTap = { [weak model] in model?.toggleDictation() }
         hotkeys.onShotTap = { [weak model] in model?.takeShot() }
         hotkeys.onTrustChanged = { [weak model] trusted in model?.keysTrusted = trusted }
@@ -331,6 +332,7 @@ struct TalkKey {
 final class HotkeyMonitor {
     var onTalkDown: (() -> Void)?
     var onTalkUp: (() -> Void)?
+    var onTalkChord: (() -> Void)?
     var onDictateTap: (() -> Void)?
     var onShotTap: (() -> Void)?
     var onTrustChanged: ((Bool) -> Void)?
@@ -426,9 +428,9 @@ final class HotkeyMonitor {
             // A key or click while a hotkey is held makes it a shortcut, not a
             // hotkey: Option-letter types a character, Command-click opens a link.
             // Right Option is a shortcut only in the first moment of its hold,
-            // which ends it as a brush of the key would: nothing is sent.
+            // and that cancels the capture without sending anything.
             if talkKey.chord(at: at) == .drop {
-                onTalkUp?()
+                onTalkChord?()
             }
             if event.type == .keyDown {
                 dictateKey.keyPressed(at: at)
@@ -1087,6 +1089,11 @@ final class FloaterModel: ObservableObject {
         case .idle, .busy:
             break
         }
+    }
+
+    func hotkeyTalkChorded() {
+        guard fromHotkey, mode == .starting || mode == .recording else { return }
+        cancelCapture()
     }
 
     // MARK: dictation (a tap of Right Command)
