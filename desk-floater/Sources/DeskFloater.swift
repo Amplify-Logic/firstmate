@@ -45,7 +45,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let hotkeys = HotkeyMonitor()
         hotkeys.onTalkDown = { [weak model] in model?.hotkeyTalkBegan() }
         hotkeys.onTalkUp = { [weak model] in model?.hotkeyTalkEnded() }
-        hotkeys.onTalkChord = { [weak model] in model?.hotkeyTalkChorded() }
         hotkeys.onDictateTap = { [weak model] in model?.toggleDictation() }
         hotkeys.onShotTap = { [weak model] in model?.takeShot() }
         hotkeys.onTrustChanged = { [weak model] trusted in model?.keysTrusted = trusted }
@@ -282,6 +281,46 @@ struct TapKey {
     }
 }
 
+/// Right Option held is push-to-talk. A key or click in the first moment of the
+/// hold makes it a shortcut instead (Option-letter types a character,
+/// Option-click is a click) and drops the hold. After that the captain is
+/// talking: a key or a click, such as one that opens a menu, leaves the
+/// recording running, and releasing the key still sends it.
+struct TalkKey {
+    enum Action: Equatable {
+        case begin, deliver, drop
+    }
+
+    let shortcutWindow: TimeInterval
+    private var downAt: Date?
+
+    init(shortcutWindow: TimeInterval = 0.3) {
+        self.shortcutWindow = shortcutWindow
+    }
+
+    var isDown: Bool { downAt != nil }
+
+    /// Feeds a change of Right Option's own flag.
+    mutating func update(down: Bool, at now: Date) -> Action? {
+        if down && downAt == nil {
+            downAt = now
+            return .begin
+        }
+        if !down && downAt != nil {
+            downAt = nil
+            return .deliver
+        }
+        return nil
+    }
+
+    /// A key press or click while the key may be down.
+    mutating func chord(at now: Date) -> Action? {
+        guard let started = downAt, now.timeIntervalSince(started) < shortcutWindow else { return nil }
+        downAt = nil
+        return .drop
+    }
+}
+
 /// Global keys: Right Option held is push-to-talk to Firstmate, a lone tap of
 /// Right Command starts or finishes dictation, and a lone tap of Right Shift
 /// away from typing takes a screenshot. Watching keys in other apps, and typing the dictated text
@@ -292,7 +331,6 @@ struct TapKey {
 final class HotkeyMonitor {
     var onTalkDown: (() -> Void)?
     var onTalkUp: (() -> Void)?
-    var onTalkChord: (() -> Void)?
     var onDictateTap: (() -> Void)?
     var onShotTap: (() -> Void)?
     var onTrustChanged: ((Bool) -> Void)?
@@ -306,7 +344,7 @@ final class HotkeyMonitor {
     private var monitors: [Any] = []
     private var trustTimer: Timer?
     private var trusted = false
-    private var talkDown = false
+    private var talkKey = TalkKey()
     private var dictateKey = TapKey.rightCommand
     private var shotKey = TapKey.rightShift
 
@@ -385,11 +423,12 @@ final class HotkeyMonitor {
     private func handle(_ event: NSEvent) {
         let at = TapKey.time(of: event)
         if event.type != .flagsChanged {
-            // Any key or click while a hotkey is held makes it a shortcut, not a
+            // A key or click while a hotkey is held makes it a shortcut, not a
             // hotkey: Option-letter types a character, Command-click opens a link.
-            if talkDown {
-                talkDown = false
-                onTalkChord?()
+            // Right Option is a shortcut only in the first moment of its hold,
+            // which ends it as a brush of the key would: nothing is sent.
+            if talkKey.chord(at: at) == .drop {
+                onTalkUp?()
             }
             if event.type == .keyDown {
                 dictateKey.keyPressed(at: at)
@@ -402,12 +441,13 @@ final class HotkeyMonitor {
         }
         if event.keyCode == Self.rightOptionKey {
             let down = event.modifierFlags.rawValue & Self.rightOptionBit != 0
-            if down && !talkDown {
-                talkDown = true
+            switch talkKey.update(down: down, at: at) {
+            case .begin:
                 onTalkDown?()
-            } else if !down && talkDown {
-                talkDown = false
+            case .deliver:
                 onTalkUp?()
+            case .drop, nil:
+                break
             }
         }
         if dictateKey.update(keyCode: event.keyCode, flags: event.modifierFlags, at: at,
@@ -416,7 +456,7 @@ final class HotkeyMonitor {
         }
         // Screenshots taken while Right Option is held join that voice message.
         if shotKey.update(keyCode: event.keyCode, flags: event.modifierFlags, at: at,
-                          allowed: talkDown ? .option : [], limit: tapLimit) {
+                          allowed: talkKey.isDown ? .option : [], limit: tapLimit) {
             shotTapped(at: at)
         }
     }
@@ -1047,11 +1087,6 @@ final class FloaterModel: ObservableObject {
         case .idle, .busy:
             break
         }
-    }
-
-    func hotkeyTalkChorded() {
-        guard fromHotkey, mode == .starting || mode == .recording else { return }
-        cancelCapture()
     }
 
     // MARK: dictation (a tap of Right Command)
