@@ -1,0 +1,19 @@
+Test Case '-[DeskFloaterTests.TalkKeyTests testClickMidRecordingKeepsRecordingAndDeliversOnRelease]' passed (0.001 seconds).
+Test Case '-[DeskFloaterTests.TalkKeyTests testEachHoldGetsItsOwnShortcutMoment]' passed (0.000 seconds).
+Test Case '-[DeskFloaterTests.TalkKeyTests testKeysAndClicksWithRightOptionUpChangeNothing]' passed (0.000 seconds).
+Test Case '-[DeskFloaterTests.TalkKeyTests testLongRecordingIsNeverDroppedByAKeyOrClick]' passed (0.000 seconds).
+Test Case '-[DeskFloaterTests.TalkKeyTests testQuickOptionLetterAtTheStartIsAShortcut]' passed (0.000 seconds).
+	 Executed 5 tests, with 0 failures (0 unexpected) in 0.002 (0.003) seconds
+Test Case '-[DeskFloaterTests.ZZHotkeyHarnessTests testA_ClickThatOpensMenuMidHoldKeepsRecordingAndReleaseDelivers]' passed (0.318 seconds).
+Test Case '-[DeskFloaterTests.ZZHotkeyHarnessTests testB_QuickOptionLetterCancelsWithoutDelivering]' passed (0.262 seconds).
+Test Case '-[DeskFloaterTests.ZZHotkeyHarnessTests testC_QuickOptionClickCancelsWithoutDelivering]' passed (0.241 seconds).
+Test Case '-[DeskFloaterTests.ZZHotkeyHarnessTests testD_ClickJustPastWindowKeeps]' passed (0.254 seconds).
+Test Case '-[DeskFloaterTests.ZZHotkeyHarnessTests testE_NextHoldGetsFreshWindow]' passed (0.283 seconds).
+	 Executed 5 tests, with 0 failures (0 unexpected) in 1.359 (1.378) seconds
+	 Executed 10 tests, with 0 failures (0 unexpected) in 1.361 (1.381) seconds
+	 Executed 10 tests, with 0 failures (0 unexpected) in 1.361 (1.383) seconds
+HARNESS left click at 4s, right click at 6s, Escape at 8s, release at 30s: ["talkDown", "talkUp(deliver)"]
+HARNESS Option-e at 0.1s, release at 0.2s: ["talkDown", "talkChord(cancel)"]
+HARNESS Option-click at 0.29s, second click 0.4s, release at 1s: ["talkDown", "talkChord(cancel)"]
+HARNESS click at 0.31s, release at 2s: ["talkDown", "talkUp(deliver)"]
+HARNESS hold 0-5s with click at 3s, new hold at 10s with Option-letter at 10.1s, release 10.2s: ["talkDown", "talkUp(deliver)", "talkDown", "talkChord(cancel)"]

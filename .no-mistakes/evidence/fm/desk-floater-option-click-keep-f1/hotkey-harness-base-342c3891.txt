@@ -1,0 +1,13 @@
+/private/tmp/df-base.NubXUe/pkg/Tests/DeskFloaterTests/ZZHotkeyHarnessTests.swift:76: error: -[DeskFloaterTests.ZZHotkeyHarnessTests testA_ClickThatOpensMenuMidHoldKeepsRecordingAndReleaseDelivers] : XCTAssertEqual failed: ("["talkDown", "talkChord(cancel)"]") is not equal to ("["talkDown", "talkUp(deliver)"]")
+Test Case '-[DeskFloaterTests.ZZHotkeyHarnessTests testA_ClickThatOpensMenuMidHoldKeepsRecordingAndReleaseDelivers]' failed (0.315 seconds).
+Test Case '-[DeskFloaterTests.ZZHotkeyHarnessTests testB_QuickOptionLetterCancelsWithoutDelivering]' passed (0.261 seconds).
+Test Case '-[DeskFloaterTests.ZZHotkeyHarnessTests testC_QuickOptionClickCancelsWithoutDelivering]' passed (0.260 seconds).
+/private/tmp/df-base.NubXUe/pkg/Tests/DeskFloaterTests/ZZHotkeyHarnessTests.swift:98: error: -[DeskFloaterTests.ZZHotkeyHarnessTests testD_ClickJustPastWindowKeeps] : XCTAssertEqual failed: ("["talkDown", "talkChord(cancel)"]") is not equal to ("["talkDown", "talkUp(deliver)"]")
+Test Case '-[DeskFloaterTests.ZZHotkeyHarnessTests testD_ClickJustPastWindowKeeps]' failed (0.274 seconds).
+/private/tmp/df-base.NubXUe/pkg/Tests/DeskFloaterTests/ZZHotkeyHarnessTests.swift:106: error: -[DeskFloaterTests.ZZHotkeyHarnessTests testE_NextHoldGetsFreshWindow] : XCTAssertEqual failed: ("["talkDown", "talkChord(cancel)", "talkDown", "talkChord(cancel)"]") is not equal to ("["talkDown", "talkUp(deliver)", "talkDown", "talkChord(cancel)"]")
+Test Case '-[DeskFloaterTests.ZZHotkeyHarnessTests testE_NextHoldGetsFreshWindow]' failed (0.265 seconds).
+HARNESS left click at 4s, right click at 6s, Escape at 8s, release at 30s: ["talkDown", "talkChord(cancel)"]
+HARNESS Option-e at 0.1s, release at 0.2s: ["talkDown", "talkChord(cancel)"]
+HARNESS Option-click at 0.29s, second click 0.4s, release at 1s: ["talkDown", "talkChord(cancel)"]
+HARNESS click at 0.31s, release at 2s: ["talkDown", "talkChord(cancel)"]
+HARNESS hold 0-5s with click at 3s, new hold at 10s with Option-letter at 10.1s, release 10.2s: ["talkDown", "talkChord(cancel)", "talkDown", "talkChord(cancel)"]
