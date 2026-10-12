@@ -334,6 +334,7 @@ def transition(store, rec, at, state, actor, reason, evidence='', **extra):
     rec['state'] = state
     rec['closure'] = ({'reason': reason, 'actor': actor, 'evidence': evidence, 'at': at}
                       if state == 'closed' else {})
+    rec.pop('ticket_wait', None)
     rec.update(extra)
 
 
@@ -381,6 +382,11 @@ def fold(store, items, observations, now, backlog_seen, ledger_seen):
                 transition(store, rec, o['closed_at'] or now, 'closed', 'source', 'resolved', o['evidence'])
             elif fresh and o['state'] == 'waiting':
                 transition(store, rec, now, 'waiting', 'source', 'handed over', handover=o['handover'])
+        elif (o['rev'] and before.get('rev', '') != o['rev'] and rec['state'] == 'waiting' and o['state'] != 'closed'
+              and rec.get('ticket_wait') in ticket_ids(o['aliases'], [o.get('link')])):
+            # A ticket set waiting or reassigned from the page comes back when its source moves again.
+            transition(store, rec, now, 'open', 'source', 'reopened', owner='', handover='',
+                       note=f'reopened: {o["label"]} changed after HubSpot ticket {rec["ticket_wait"]} was handed off')
         elif o['rev'] and before.get('rev', '') != o['rev'] and rec['state'] == 'closed':
             transition(store, rec, now, 'open', 'source', 'reopened',
                        note=f'reopened: {o["label"]} changed after it was closed ({rec["closure"].get("reason")})')
@@ -468,8 +474,10 @@ def parse_when(text, now):
     raise Refusal(f'park needs a real date (YYYY-MM-DD, today, tomorrow, a weekday or next week): {text}')
 
 
-TICKET_VERBS = ('close', 'waiting', 'reassign', 'note', 'priority')
-PRIORITIES = ('low', 'medium', 'high')
+TICKET_VERBS = ('close', 'waiting', 'reassign', 'note')
+# Only these exact forms are ticket commands; any other wording is free text.
+TICKET_LINE = re.compile(r'^\s*(?:(?P<verb>close|waiting)|close\s*:\s*(?P<close>.*\S)|reassign\s+(?P<reassign>\S+)'
+                         r'|note\s*:\s*(?P<note>.*\S))\s*$', re.I | re.S)
 # A HubSpot ticket named by an alias whose whole ref is the ticket id, or by a
 # ticket record or help-desk link; anything else names no ticket.
 TICKET_ALIAS = re.compile(r'^hubspot[\w-]*:(\d{6,})$', re.I)
@@ -478,26 +486,19 @@ TICKET_LINK = re.compile(r'app\.hubspot\.com/(?:contacts/\d+/record/0-5|help-des
 
 def parse_line(line, targeted, now):
     """(verb, words, extra), or None for a line with no leading verb."""
-    match = re.match(r'^\s*(drop|done|park|mine|you|dig|close|waiting|reassign|priority)\b\s*(.*)$'
-                     r'|^\s*(note)\s*:\s*(.*)$', line, re.I | re.S)
+    ticket = TICKET_LINE.match(line)
+    if ticket:
+        # A ticket verb acts on exactly the row it was typed against; untargeted, it is free text.
+        if not targeted:
+            return None
+        if ticket.lastgroup == 'verb':
+            return ticket.group('verb').lower(), '', {'arg': ''}
+        return ticket.lastgroup, '', {'arg': ticket.group(ticket.lastgroup)}
+    match = re.match(r'^\s*(drop|done|park|mine|you|dig)\b\s*(.*)$', line, re.I | re.S)
     if not match:
         return None
-    verb = (match.group(1) or match.group(3)).lower()
-    rest = (match.group(2) if match.group(1) else match.group(4)).strip()
+    verb, rest = match.group(1).lower(), match.group(2).strip()
     extra = {}
-    if verb in TICKET_VERBS:
-        # A ticket verb acts on exactly the row it was typed against; its words are its argument.
-        if not targeted:
-            raise Refusal(f'{verb} changes a HubSpot ticket, so it needs the page row\'s item id (--item)')
-        rest = re.sub(r'^[:\s]+', '', rest)
-        if verb == 'reassign' and not rest:
-            raise Refusal('reassign needs a name: reassign <name>')
-        if verb == 'note' and not rest:
-            raise Refusal('note needs text: note: <text>')
-        if verb == 'priority' and rest.lower() not in PRIORITIES:
-            raise Refusal('priority is low, medium or high')
-        extra['arg'] = rest.lower() if verb == 'priority' else rest
-        return verb, '', extra
     if verb == 'park':
         split = re.match(r'^(.*?)\s*\b(?:til|till|until)\b\s*(.+)$', rest, re.I)
         if split:
@@ -528,14 +529,19 @@ def match_item(items, words):
     raise Refusal(f'"{words}" matches {len(hits)} items: ' + ', '.join(r['id'] for r in hits[:6]))
 
 
+def ticket_ids(aliases, links):
+    """Every HubSpot ticket id these aliases and links name."""
+    ids = {m.group(1) for m in map(TICKET_ALIAS.match, aliases) if m}
+    for link in links:
+        ids.update(TICKET_LINK.findall(link or ''))
+    return ids
+
+
 def hubspot_ticket(rec):
     """The one HubSpot ticket id the item names, or a refusal saying why there is none."""
-    ids = {m.group(1) for m in map(TICKET_ALIAS.match, rec['aliases']) if m}
-    for link in [rec.get('link')] + [s.get('link') for s in (rec.get('slots') or {}).values()]:
-        ids.update(TICKET_LINK.findall(link or ''))
+    ids = ticket_ids(rec['aliases'], [rec.get('link')] + [s.get('link') for s in (rec.get('slots') or {}).values()])
     if not ids:
-        raise Refusal(f'{rec["id"]} has no HubSpot ticket, so close, waiting, reassign, note and priority '
-                      'cannot apply to it')
+        raise Refusal(f'{rec["id"]} has no HubSpot ticket, so close, waiting, reassign and note cannot apply to it')
     if len(ids) > 1:
         raise Refusal(f'{rec["id"]} names {len(ids)} HubSpot tickets ({", ".join(sorted(ids))}); '
                       'name the one ticket to change to Firstmate directly')
@@ -576,11 +582,11 @@ def finish_ticket_action(store, rec, action_id, outcome, evidence, now):
         transition(store, rec, now, 'closed', 'captain', 'fulfilled',
                    f'HubSpot ticket {ticket} closed from the page: {evidence}', pending={}, note='')
     elif verb == 'waiting' and rec['state'] == 'open':
-        transition(store, rec, now, 'waiting', 'captain', 'ticket waiting', evidence,
+        transition(store, rec, now, 'waiting', 'captain', 'ticket waiting', evidence, ticket_wait=ticket,
                    handover=f'HubSpot ticket {ticket} set to waiting: {evidence}')
     elif verb == 'reassign' and rec['state'] != 'closed':
         transition(store, rec, now, 'waiting', 'captain', 'ticket reassigned', evidence, owner=arg,
-                   handover=f'HubSpot ticket {ticket} reassigned: {evidence}')
+                   ticket_wait=ticket, handover=f'HubSpot ticket {ticket} reassigned: {evidence}')
 
 
 def apply_command(store, items, line, target, shown_rev, now):

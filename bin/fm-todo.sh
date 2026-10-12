@@ -31,7 +31,8 @@
 # (its last observation and its own revision), `state` open|waiting|closed,
 # `closure` {reason fulfilled|dismissed|superseded|resolved|released, actor,
 # evidence, at}, `owner`, `snoozed_until`, `pending` handoff, `ticket_actions`
-# (queued HubSpot changes and their recorded results), `verification`
+# (queued HubSpot changes and their recorded results), `ticket_wait` (the
+# ticket a done waiting or reassign handed off), `verification`
 # {at, how, rev} and `rev`, the item's meaningful revision over its slots.
 # data/todo/journal is an append-only line per transition or command effect.
 # One lock serializes sync and every write. Sync deletes one kind of record
@@ -128,20 +129,22 @@
 # not-a-command` and changes nothing. Exit 1 when any line was refused.
 #
 # TICKET VERBS. On a row whose item names exactly one HubSpot ticket (an alias
-# `hubspot...:<ticket id>`, or a ticket record or help-desk ticket link), five
-# more verbs ask for a change to that ticket. They need --item, because the
-# words after the verb are the change itself:
-#   close [reason]          close the ticket
-#   waiting [reason]        set the ticket to its waiting-on-customer stage
-#   reassign <name>         give the ticket to <name>, stored exactly as typed
+# `hubspot...:<ticket id>`, or a ticket record or help-desk ticket link), these
+# exact lines, typed with --item, ask for a change to that ticket:
+#   close                   close the ticket
+#   close: <reason>         close the ticket, with the reason
+#   waiting                 set the ticket to its waiting-on-customer stage
+#   reassign <name>         give the ticket to <name>, one word, stored as typed
 #   note: <text>            add an internal note
-#   priority low|medium|high
+# Any other wording, including these words followed by more text and any
+# untargeted line, is not a ticket verb and stays free text (not-a-command).
 # This script never touches HubSpot. Each verb records a pending ticket action
 # on the item (`TODO_CMD: ticket-<verb> ... action <ACTION>`), appends one
 # `todo-ticket` check wake, and the page marks the row "HubSpot change
-# pending" until Firstmate records the result. An item with no HubSpot ticket,
-# or with more than one, refuses the verb and records nothing; repeating a
-# pending action is `already`. On the wake Firstmate:
+# pending" (also under Waiting on others) until Firstmate records the result.
+# An item with no HubSpot ticket, or with more than one, refuses the verb and
+# records nothing; repeating a pending action is `already`. On the wake
+# Firstmate:
 #   1. runs `fm-todo.sh tickets`, which prints one `TODO_TICKET:` line per
 #      pending action (item, action, ticket id, verb, argument, requested
 #      time, link, title) and a `TODO_TICKETS: N pending` count;
@@ -152,8 +155,9 @@
 #   3. records the result with `ticket-done` or `ticket-failed`, naming the
 #      action and what HubSpot now shows as --evidence. A done close closes
 #      the item as fulfilled by the captain, a done waiting or reassign moves
-#      it to waiting (a reassign with the name as owner), and a done note or
-#      priority leaves it as it was. A failed action stays on the row as
+#      it to waiting (a reassign with the name as owner) until the source
+#      re-observes that ticket with a new revision, which reopens it, and a
+#      done note leaves it as it was. A failed action stays on the row as
 #      "HubSpot change failed" with its evidence until the next action;
 #   4. re-renders the page with bin/fm-todo-render.sh.
 #

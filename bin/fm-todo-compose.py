@@ -297,7 +297,7 @@ def reply_form(rec):
     return (f'<tr class="replyrow" id="note-{esc(iid)}"><td colspan="3">'
             f'<form class="reply" data-lavish-question="todo-item-{esc(iid)}" onsubmit="{esc(js)}">'
             f'<input type="text" name="note" autocomplete="off" '
-            f'placeholder="drop, done, park til Friday, mine, you: what to do, dig, close, waiting, reassign name, note: text, priority high, or anything else">'
+            f'placeholder="drop, done, park til Friday, mine, you: what to do, dig, close, waiting, reassign name, note: text, or anything else">'
             f'<button type="submit">Queue</button><span class="ack"></span>'
             f'</form></td></tr>')
 
@@ -422,7 +422,7 @@ def disclosure(title, content):
 
 def listing(recs, note):
     return '<ul class="done">' + ''.join(
-        f'<li id="item-{esc(r["id"])}"{audit(r)}><b>{esc(r.get("title"))}</b> - {brief(note(r))}<span class="why">{freshness(r)}</span></li>'
+        f'<li id="item-{esc(r["id"])}"{audit(r)}><b>{esc(r.get("title"))}</b> - {brief(note(r))}<span class="why">{freshness(r)}{ticket_marker(r)}</span></li>'
         for r in recs) + '</ul>'
 
 
