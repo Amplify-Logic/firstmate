@@ -176,6 +176,7 @@ def ledger_observations(intake_dir, labels):
             # Partner-facing from the source: the timeline found a partner
             # contact, or the orchestrator marked it (`observe --partner`).
             o['partner'] = rec.get('partner') == '1' or rec.get('partner_hint') == '1'
+            o['last_inbound_at'] = number(rec.get('last_inbound_at'))
             # When the ask was made, which orders the page; never a read time.
             o['asked_at'] = number(rec.get('source_epoch')) or number(rec.get('created'))
             # A telemetry record that is not a fleet-condition snapshot is a
@@ -354,8 +355,9 @@ def present(rec):
 
 
 def wrote_again(o, before, since):
-    """The source shows the ask needs the captain again since `since`: a partner ask newer than it, or reopened."""
+    """The source shows the ask needs the captain again since `since`: the partner wrote after it, or it reopened."""
     return ((o.get('partner_first') and number(o.get('awaiting_since')) > since)
+            or number(o.get('last_inbound_at')) > since
             or (before.get('state') != 'open' and o['state'] == 'open'))
 
 
@@ -581,7 +583,9 @@ def finish_ticket_action(store, rec, action_id, outcome, evidence, now):
         return
     ticket, verb, arg = action['ticket'], action['verb'], action['arg']
     handoff = {'ticket': ticket, 'at': now}
-    if verb == 'close' and rec['state'] != 'closed':
+    if verb == 'close' and rec['state'] == 'closed':
+        rec['ticket_handoff'] = handoff
+    elif verb == 'close':
         transition(store, rec, now, 'closed', 'captain', 'fulfilled',
                    f'HubSpot ticket {ticket} closed from the page: {evidence}', pending={}, note='',
                    ticket_handoff=handoff)

@@ -156,10 +156,11 @@
 #      action and what HubSpot now shows as --evidence. A done close closes
 #      the item as fulfilled by the captain, and a done waiting or reassign
 #      moves it to waiting (a reassign with the name as owner). Either stays
-#      put through our own note, stage or owner change; it reopens only when
-#      the source shows the partner wrote again: a partner-awaiting ask newer
-#      than the recorded result, or the source record back to open. A done
-#      note leaves the item as it was. A failed action stays on the row as
+#      put through our own note, stage or owner change, including a done
+#      close on an item already closed; it reopens only when the source shows
+#      the partner wrote again: a partner-awaiting ask or the ticket's latest
+#      partner inbound (`last_inbound_at`) newer than the recorded result, or
+#      the source record back to open. A done note leaves the item as it was. A failed action stays on the row as
 #      "HubSpot change failed" with its evidence until the next action;
 #   4. re-renders the page with bin/fm-todo-render.sh.
 #

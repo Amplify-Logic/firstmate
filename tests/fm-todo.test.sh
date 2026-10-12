@@ -1023,32 +1023,65 @@ test_ticket_failure_stays_on_the_row() {
   pass 'a help-desk link names the ticket and a failed change stays visible on the row'
 }
 
+# Observe HubSpot ticket $3 at time $2 with digest $4, title $5 and timeline $1/$6.json.
+observe_ticket() {
+  intake_at "$1" "$2" observe --source hubspot-lars-tickets --ref "$3" --digest "$4" --class obligation \
+    --title "$5" --timeline-file "$1/$6.json" >/dev/null
+}
+
+# Append the JSON event $2 to the timeline file $1.
+timeline_event() {
+  python3 -c 'import json,sys; p=sys.argv[1]; d=json.load(open(p)); d["events"].append(json.loads(sys.argv[2])); open(p,"w").write(json.dumps(d))' "$1" "$2"
+}
+
 # A ticket handed off from the page stays put through our own HubSpot change
 # and returns to Needs you only when the partner writes again.
 test_a_ticket_handed_off_reopens_only_when_the_partner_writes_again() {
-  local h tomra neshu one two
+  local h t tomra neshu asked=$((T_0900 - 86400))
   h="$TMP_ROOT/ticket-reopen"
   new_home "$h"
-  one='"key":"k-t1","source":"hubspot","ref":"48576658049","class":"obligation","kind":"reply","title":"Tomra pump ticket","updated":'"$T_0900"
-  two='"key":"k-t2","source":"hubspot","ref":"48600120191","class":"obligation","kind":"reply","title":"Neshu ticket","updated":'"$T_0900"
-  sidecar "$h" 2026-09-10 "{$one,\"digest\":\"r1\",\"partner_awaiting\":true,\"awaiting_since\":$T_0900},{$two,\"digest\":\"r1\"}"
+  printf 'captain_names = Lars\nteam_addresses = support@team.example\n' >>"$h/config/channel-intake"
+  printf 'hubspot-lars-tickets\thubspot-tickets\ttickets naming the captain\n' >>"$h/data/channel-intake/sources.tsv"
+  # Tomra: the partner asked, and a colleague promised Lars is on it, so an
+  # older pending promise stays on the timeline. Neshu: answered, nothing owed.
+  cat >"$h/tomra.json" <<EOF
+{"kind":"hubspot-ticket","owner":"natalia@team.example","contacts":["rachel@tomra.example"],
+ "events":[{"type":"email","at":$asked,"direction":"inbound","from":"rachel@tomra.example","body":"The pump is leaking."},
+  {"type":"email","at":$((asked + 3600)),"direction":"outbound","from":"support@team.example","body":"Lars is looking into this. I will keep you updated."}]}
+EOF
+  cat >"$h/neshu.json" <<EOF
+{"kind":"hubspot-ticket","owner":"captain","contacts":["tim@neshu.example"],
+ "events":[{"type":"email","at":$asked,"direction":"inbound","from":"tim@neshu.example","body":"Is the firmware out?"},
+  {"type":"email","at":$((asked + 3600)),"direction":"outbound","from":"support@team.example","body":"Yes, it is live."}]}
+EOF
+  observe_ticket "$h" "$T_0900" 48576658049 v1 'Tomra pump ticket' tomra
+  observe_ticket "$h" "$T_0900" 48600120191 v1 'Neshu ticket' neshu
   render_at "$h" "$T_1000"
   tomra=$(field_of "$h" 'Tomra' 1)
   neshu=$(field_of "$h" 'Neshu' 1)
+  # Lars sets Tomra waiting, and marks Neshu done before its close lands.
   todo_at "$h" "$T_1000" command --item "$tomra" 'waiting' >/dev/null
-  todo_at "$h" "$T_1000" command --item "$neshu" 'close' >/dev/null
+  todo_at "$h" "$T_1000" command --item "$neshu" 'close' 'done' >/dev/null
   todo_at "$h" "$T_1000" ticket-done --item "$tomra" --action "$(pending_action "$h" "$tomra" waiting)" \
     --evidence 'stage Waiting on contact' >/dev/null
   todo_at "$h" "$T_1000" ticket-done --item "$neshu" --action "$(pending_action "$h" "$neshu" close)" \
     --evidence 'stage Closed' >/dev/null
-  # Our own internal note and stage change give both tickets a new revision;
-  # the ask Lars already handled is still marked awaiting from before.
-  sidecar "$h" 2026-09-10 "{$one,\"digest\":\"r2\",\"partner_awaiting\":true,\"awaiting_since\":$T_0900},{$two,\"digest\":\"r2\"}"
+  # Our own internal note gives both tickets a new revision; the promise is
+  # still pending on Tomra's timeline.
+  for t in tomra neshu; do
+    timeline_event "$h/$t.json" '{"type":"note","at":'"$((T_1000 + 60))"',"author":"captain","body":"waiting by Lars via assistant"}'
+  done
+  observe_ticket "$h" "$T_1030" 48576658049 v2 'Tomra pump ticket' tomra
+  observe_ticket "$h" "$T_1030" 48600120191 v2 'Neshu ticket' neshu
   render_at "$h" "$T_1030"
   [ "$(field_of "$h" 'Tomra' 2)" = waiting ] || fail 'our own HubSpot change reopened a ticket set waiting'
   [ "$(field_of "$h" 'Neshu' 2)" = closed ] || fail 'our own HubSpot change reopened a ticket closed from the page'
-  # The customer replies after the handoff: both come back, partner first.
-  sidecar "$h" 2026-09-10 "{$one,\"digest\":\"r3\",\"partner_awaiting\":true,\"awaiting_since\":$T_1100},{$two,\"digest\":\"r3\",\"partner_awaiting\":true,\"awaiting_since\":$T_1100}"
+  # The customers write again after the handoff: both come back, partner first,
+  # though Tomra's oldest pending entry is still the earlier promise.
+  timeline_event "$h/tomra.json" '{"type":"email","at":'"$T_1100"',"direction":"inbound","from":"rachel@tomra.example","body":"Any news?"}'
+  timeline_event "$h/neshu.json" '{"type":"email","at":'"$T_1100"',"direction":"inbound","from":"tim@neshu.example","body":"It broke again."}'
+  observe_ticket "$h" "$T_1100" 48576658049 v3 'Tomra pump ticket' tomra
+  observe_ticket "$h" "$T_1100" 48600120191 v3 'Neshu ticket' neshu
   render_at "$h" "$T_1500"
   [ "$(field_of "$h" 'Tomra' 2)" = open ] || fail 'a partner reply did not reopen a ticket set waiting'
   [ "$(field_of "$h" 'Neshu' 2)" = open ] || fail 'a partner reply did not reopen a ticket closed from the page'

@@ -288,6 +288,7 @@ def assess(doc, names, captain_addresses, team_addresses):
         'awaiting': '1' if awaiting else '0',
         'awaiting_since': str(pending[0][0]) if awaiting else '',
         'awaiting_why': '; '.join(w for _, w in pending) if awaiting else '',
+        'last_inbound_at': str(inbound[-1]['at']) if partner and inbound else '',
     }
 
 
@@ -304,7 +305,7 @@ def main():
     except Refusal as exc:
         print(f'fm-channel-intake: {exc}', file=sys.stderr)
         return 2
-    for key in ('partner', 'awaiting', 'awaiting_since', 'awaiting_why'):
+    for key in ('partner', 'awaiting', 'awaiting_since', 'awaiting_why', 'last_inbound_at'):
         print(f'{key}=' + ' '.join(facts[key].split()))
     return 0
 
