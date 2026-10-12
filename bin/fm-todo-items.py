@@ -354,10 +354,10 @@ def present(rec):
     rec['rev'] = rev_of(rec)
 
 
-def wrote_again(o, before, since):
-    """The source shows the ask needs the captain again since `since`: the partner wrote after it, or it reopened."""
-    return ((o.get('partner_first') and number(o.get('awaiting_since')) > since)
-            or number(o.get('last_inbound_at')) > since
+def wrote_again(o, before, handoff):
+    """The source shows the ask needs the captain again since the handoff: the partner wrote after it, or it reopened."""
+    return ((o.get('partner_first') and number(o.get('awaiting_since')) > handoff['at'])
+            or number(o.get('last_inbound_at')) > handoff['requested_at']
             or (before.get('state') != 'open' and o['state'] == 'open'))
 
 
@@ -390,7 +390,7 @@ def fold(store, items, observations, now, backlog_seen, ledger_seen):
                 transition(store, rec, o['closed_at'] or now, 'closed', 'source', 'resolved', o['evidence'])
             elif fresh and o['state'] == 'waiting':
                 transition(store, rec, now, 'waiting', 'source', 'handed over', handover=o['handover'])
-        elif rec.get('ticket_handoff') and wrote_again(o, before, rec['ticket_handoff']['at']):
+        elif rec.get('ticket_handoff') and wrote_again(o, before, rec['ticket_handoff']):
             # A ticket closed, set waiting or reassigned from the page comes back
             # only when the partner writes again, never on our own HubSpot change.
             transition(store, rec, now, 'open', 'source', 'reopened', owner='', handover='',
@@ -582,7 +582,7 @@ def finish_ticket_action(store, rec, action_id, outcome, evidence, now):
     if outcome != 'done':
         return
     ticket, verb, arg = action['ticket'], action['verb'], action['arg']
-    handoff = {'ticket': ticket, 'at': now}
+    handoff = {'ticket': ticket, 'at': now, 'requested_at': action['requested_at']}
     if rec['state'] == 'closed':
         rec['ticket_handoff'] = handoff
     elif verb == 'close':

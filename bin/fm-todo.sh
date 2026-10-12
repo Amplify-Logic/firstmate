@@ -32,7 +32,8 @@
 # `closure` {reason fulfilled|dismissed|superseded|resolved|released, actor,
 # evidence, at}, `owner`, `snoozed_until`, `pending` handoff, `ticket_actions`
 # (queued HubSpot changes and their recorded results), `ticket_handoff`
-# {ticket, at} (a done close, waiting or reassign), `verification`
+# {ticket, at, requested_at} (a done action that closed, set waiting or
+# reassigned the item, or any done action on a closed item), `verification`
 # {at, how, rev} and `rev`, the item's meaningful revision over its slots.
 # data/todo/journal is an append-only line per transition or command effect.
 # One lock serializes sync and every write. Sync deletes one kind of record
@@ -148,8 +149,10 @@
 #   1. runs `fm-todo.sh tickets`, which prints one `TODO_TICKET:` line per
 #      pending action (item, action, ticket id, verb, argument, requested
 #      time, link, title) and a `TODO_TICKETS: N pending` count;
-#   2. makes each change through its HubSpot connector, resolving a reassign
-#      name to a HubSpot owner itself, and writes the internal note
+#   2. re-reads the ticket first and records `ticket-failed` instead when it
+#      shows a partner inbound newer than the action's requested time;
+#      otherwise makes each change through its HubSpot connector, resolving
+#      a reassign name to a HubSpot owner itself, and writes the internal note
 #      "<action> by Lars via assistant: <reason>" with every change; it never
 #      deletes or merges a ticket and never sends anything to a customer;
 #   3. records the result with `ticket-done` or `ticket-failed`, naming the
@@ -158,10 +161,11 @@
 #      moves it to waiting (a reassign with the name as owner). Either stays
 #      put through our own note, stage or owner change, as does an item
 #      already closed when any action on it is done; it reopens only when
-#      the source shows the partner wrote again: a partner-awaiting ask or
-#      the ticket's latest partner inbound (`last_inbound_at`) newer than the
-#      recorded result, or the source record back to open. A done note leaves
-#      an open item as it was. A failed action stays on the row as
+#      the source shows the partner wrote again: a partner-awaiting ask
+#      newer than the recorded result, the ticket's latest partner inbound
+#      (`last_inbound_at`) newer than the time the verb was typed, or the
+#      source record back to open. A done note leaves an open item as it
+#      was. A failed action stays on the row as
 #      "HubSpot change failed" with its evidence until the next action;
 #   4. re-renders the page with bin/fm-todo-render.sh.
 #

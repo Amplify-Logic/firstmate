@@ -1089,9 +1089,38 @@ EOF
   pass 'a ticket handed off from the page ignores our own change and reopens when the partner writes again'
 }
 
+# A partner reply that lands after Lars typed the verb but before Firstmate
+# records the result still brings the ticket back.
+test_a_partner_reply_before_the_recorded_result_reopens_the_ticket() {
+  local h neshu asked=$((T_0900 - 86400))
+  h="$TMP_ROOT/ticket-reply-race"
+  new_home "$h"
+  printf 'captain_names = Lars\nteam_addresses = support@team.example\n' >>"$h/config/channel-intake"
+  printf 'hubspot-lars-tickets\thubspot-tickets\ttickets naming the captain\n' >>"$h/data/channel-intake/sources.tsv"
+  cat >"$h/neshu.json" <<EOF
+{"kind":"hubspot-ticket","owner":"captain","contacts":["tim@neshu.example"],
+ "events":[{"type":"email","at":$asked,"direction":"inbound","from":"tim@neshu.example","body":"Is the firmware out?"},
+  {"type":"email","at":$((asked + 3600)),"direction":"outbound","from":"support@team.example","body":"Yes, it is live."}]}
+EOF
+  observe_ticket "$h" "$T_0900" 48600120191 v1 'Neshu ticket' neshu
+  render_at "$h" "$T_1000"
+  neshu=$(field_of "$h" 'Neshu' 1)
+  # 10:00 Lars types close; 10:02 the customer writes; 10:05 Firstmate records the close.
+  todo_at "$h" "$T_1000" command --item "$neshu" 'close' >/dev/null
+  timeline_event "$h/neshu.json" '{"type":"email","at":'"$((T_1000 + 120))"',"direction":"inbound","from":"tim@neshu.example","body":"It is leaking again."}'
+  todo_at "$h" "$((T_1000 + 300))" ticket-done --item "$neshu" --action "$(pending_action "$h" "$neshu" close)" \
+    --evidence 'stage Closed' >/dev/null
+  timeline_event "$h/neshu.json" '{"type":"note","at":'"$((T_1000 + 300))"',"author":"captain","body":"close by Lars via assistant"}'
+  observe_ticket "$h" "$T_1030" 48600120191 v2 'Neshu ticket' neshu
+  render_at "$h" "$T_1030"
+  [ "$(field_of "$h" 'Neshu' 2)" = open ] || fail 'a partner reply between the verb and the recorded close was lost'
+  pass 'a partner reply between the typed verb and the recorded result reopens the ticket'
+}
+
 test_ticket_verbs_queue_a_pending_hubspot_change
 test_ticket_failure_stays_on_the_row
 test_a_ticket_handed_off_reopens_only_when_the_partner_writes_again
+test_a_partner_reply_before_the_recorded_result_reopens_the_ticket
 test_a_pass_judges_a_record_from_before_the_flag_by_its_aliases
 test_an_age_counts_calendar_days_across_a_clock_change
 test_time_bound_asks_expire_after_their_end
