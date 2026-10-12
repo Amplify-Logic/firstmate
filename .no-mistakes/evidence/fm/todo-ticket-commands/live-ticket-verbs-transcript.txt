@@ -1,0 +1,162 @@
+== lab home: /var/folders/2c/9sf1hvpn23q336b08gs1np0c0000gn/T//fm-lab.pt4pCi (marked: /var/folders/2c/9sf1hvpn23q336b08gs1np0c0000gn/T//fm-lab.pt4pCi/.fm-lab-home)
+== intake ledger fields for Tomra (last_inbound_at is new):
+   2 awaiting=0
+   1 awaiting=1
+   2 awaiting_since=
+   1 awaiting_since=1791710153
+   3 last_inbound_at=1791706553
+   3 partner=1
+
+$ /Users/larstolhurst/.no-mistakes/worktrees/9957e108f4d7/01M4QJ9BRQ5HXN98V9MFFJAWN1/bin/fm-todo.sh list
+t-1b3b1330ce9b	open	reply	5e251a209e	Tomra pump ticket
+t-4c2fe311f10f	open	reply	ad2a683744	Neshu ticket
+t-697de7378a87	open	reply	33eb9c3662	Dealer firmware ticket
+t-8e2450ce2ae5	open	reply	066339a603	Queco question in Slack
+[exit 0]
+
+######## S3/S4 adversarial: free text, untargeted, no-ticket row, stale rev
+
+$ /Users/larstolhurst/.no-mistakes/worktrees/9957e108f4d7/01M4QJ9BRQ5HXN98V9MFFJAWN1/bin/fm-todo.sh command --item t-8e2450ce2ae5 close
+TODO_CMD: refused close :: t-8e2450ce2ae5 has no HubSpot ticket, so close, waiting, reassign and note cannot apply to it
+[exit 1]
+
+$ /Users/larstolhurst/.no-mistakes/worktrees/9957e108f4d7/01M4QJ9BRQ5HXN98V9MFFJAWN1/bin/fm-todo.sh command close
+TODO_CMD: not-a-command close
+[exit 0]
+
+$ /Users/larstolhurst/.no-mistakes/worktrees/9957e108f4d7/01M4QJ9BRQ5HXN98V9MFFJAWN1/bin/fm-todo.sh command --item t-1b3b1330ce9b close the loop with Natalia first
+TODO_CMD: not-a-command close the loop with Natalia first
+[exit 0]
+
+$ /Users/larstolhurst/.no-mistakes/worktrees/9957e108f4d7/01M4QJ9BRQ5HXN98V9MFFJAWN1/bin/fm-todo.sh command --item t-1b3b1330ce9b waiting on Luc's answer
+TODO_CMD: not-a-command waiting on Luc's answer
+[exit 0]
+
+$ /Users/larstolhurst/.no-mistakes/worktrees/9957e108f4d7/01M4QJ9BRQ5HXN98V9MFFJAWN1/bin/fm-todo.sh command --item t-1b3b1330ce9b reassign Fauve van Dijk
+TODO_CMD: not-a-command reassign Fauve van Dijk
+[exit 0]
+
+$ /Users/larstolhurst/.no-mistakes/worktrees/9957e108f4d7/01M4QJ9BRQ5HXN98V9MFFJAWN1/bin/fm-todo.sh command --item t-1b3b1330ce9b priority high
+TODO_CMD: not-a-command priority high
+[exit 0]
+
+$ /Users/larstolhurst/.no-mistakes/worktrees/9957e108f4d7/01M4QJ9BRQ5HXN98V9MFFJAWN1/bin/fm-todo.sh command --item t-1b3b1330ce9b note:
+TODO_CMD: not-a-command note:
+[exit 0]
+
+$ /Users/larstolhurst/.no-mistakes/worktrees/9957e108f4d7/01M4QJ9BRQ5HXN98V9MFFJAWN1/bin/fm-todo.sh command --item t-1b3b1330ce9b --rev r-stale close
+TODO_CMD: refused close :: the page showed revision r-stale but t-1b3b1330ce9b is now 5e251a209e; refresh the page first
+[exit 1]
+
+$ wake queue after free text:
+(no wake queue file)
+
+$ /Users/larstolhurst/.no-mistakes/worktrees/9957e108f4d7/01M4QJ9BRQ5HXN98V9MFFJAWN1/bin/fm-todo.sh tickets
+TODO_TICKETS: 0 pending
+[exit 0]
+
+######## S1 queue verbs on ticket rows
+
+$ /Users/larstolhurst/.no-mistakes/worktrees/9957e108f4d7/01M4QJ9BRQ5HXN98V9MFFJAWN1/bin/fm-todo.sh command --item t-1b3b1330ce9b --rev 5e251a209e reassign Fauve note: customer replaced the pump
+TODO_CMD: ticket-reassign t-1b3b1330ce9b [hubspot-lars-tickets:48576658049] Tomra pump ticket :: HubSpot ticket 48576658049 action k25cb2131: Fauve
+TODO_CMD: ticket-note t-1b3b1330ce9b [hubspot-lars-tickets:48576658049] Tomra pump ticket :: HubSpot ticket 48576658049 action k7fba3a19: customer replaced the pump
+[exit 0]
+
+$ /Users/larstolhurst/.no-mistakes/worktrees/9957e108f4d7/01M4QJ9BRQ5HXN98V9MFFJAWN1/bin/fm-todo.sh command --item t-4c2fe311f10f close: fixed by firmware
+TODO_CMD: ticket-close t-4c2fe311f10f [hubspot-lars-tickets:48600120191] Neshu ticket :: HubSpot ticket 48600120191 action k0009ae40: fixed by firmware
+[exit 0]
+
+$ /Users/larstolhurst/.no-mistakes/worktrees/9957e108f4d7/01M4QJ9BRQ5HXN98V9MFFJAWN1/bin/fm-todo.sh command --item t-697de7378a87 waiting
+TODO_CMD: ticket-waiting t-697de7378a87 [hubspot-lars-tickets:49033119384] Dealer firmware ticket :: HubSpot ticket 49033119384 action kedd98682
+[exit 0]
+
+$ /Users/larstolhurst/.no-mistakes/worktrees/9957e108f4d7/01M4QJ9BRQ5HXN98V9MFFJAWN1/bin/fm-todo.sh command --item t-1b3b1330ce9b reassign Fauve
+TODO_CMD: already ticket-reassign t-1b3b1330ce9b [hubspot-lars-tickets:48576658049] Tomra pump ticket :: HubSpot ticket 48576658049 action k25cb2131: Fauve
+[exit 0]
+
+$ wake queue:
+1791792955	1	check	todo-ticket	todo-ticket: 2 HubSpot ticket change(s) queued from the to-do page; run bin/fm-todo.sh tickets
+1791792955	2	check	todo-ticket	todo-ticket: 1 HubSpot ticket change(s) queued from the to-do page; run bin/fm-todo.sh tickets
+1791792955	3	check	todo-ticket	todo-ticket: 1 HubSpot ticket change(s) queued from the to-do page; run bin/fm-todo.sh tickets
+
+$ /Users/larstolhurst/.no-mistakes/worktrees/9957e108f4d7/01M4QJ9BRQ5HXN98V9MFFJAWN1/bin/fm-todo.sh tickets
+TODO_TICKET: t-1b3b1330ce9b	k25cb2131	48576658049	reassign	Fauve	2026-10-12 10:15 CEST		Tomra pump ticket
+TODO_TICKET: t-1b3b1330ce9b	k7fba3a19	48576658049	note	customer replaced the pump	2026-10-12 10:15 CEST		Tomra pump ticket
+TODO_TICKET: t-4c2fe311f10f	k0009ae40	48600120191	close	fixed by firmware	2026-10-12 10:15 CEST		Neshu ticket
+TODO_TICKET: t-697de7378a87	kedd98682	49033119384	waiting		2026-10-12 10:15 CEST		Dealer firmware ticket
+TODO_TICKETS: 4 pending
+[exit 0]
+
+$ page row markers:
+HubSpot change pending: reassign Fauve; note customer replaced the pump
+HubSpot change pending: close fixed by firmware
+HubSpot change pending: waiting
+placeholder="drop, done, park til Friday, mine, you: what to do, dig, close, waiting, reassign name, note: text, or anything else"
+
+######## S5 Firstmate records results
+
+$ /Users/larstolhurst/.no-mistakes/worktrees/9957e108f4d7/01M4QJ9BRQ5HXN98V9MFFJAWN1/bin/fm-todo.sh ticket-done --item t-1b3b1330ce9b --action k7fba3a19
+fm-todo: ticket-done needs --evidence; a ticket change is recorded with what happened
+[exit 2]
+
+$ /Users/larstolhurst/.no-mistakes/worktrees/9957e108f4d7/01M4QJ9BRQ5HXN98V9MFFJAWN1/bin/fm-todo.sh ticket-done --item t-1b3b1330ce9b --action k7fba3a19 --evidence internal note added
+TODO_ITEMS: ticket-done t-1b3b1330ce9b -> open (ticket action k7fba3a19)
+[exit 0]
+Tomra state after done note: open
+
+$ /Users/larstolhurst/.no-mistakes/worktrees/9957e108f4d7/01M4QJ9BRQ5HXN98V9MFFJAWN1/bin/fm-todo.sh ticket-done --item t-1b3b1330ce9b --action k25cb2131 --evidence owner Fauve van Dijk
+TODO_ITEMS: ticket-done t-1b3b1330ce9b -> waiting (ticket action k25cb2131)
+[exit 0]
+Tomra state after done reassign: waiting
+
+$ /Users/larstolhurst/.no-mistakes/worktrees/9957e108f4d7/01M4QJ9BRQ5HXN98V9MFFJAWN1/bin/fm-todo.sh ticket-failed --item t-697de7378a87 --action kedd98682 --evidence ticket is locked by another user
+TODO_ITEMS: ticket-failed t-697de7378a87 -> open (ticket action kedd98682)
+[exit 0]
+Dealer state after failed waiting: open
+
+$ /Users/larstolhurst/.no-mistakes/worktrees/9957e108f4d7/01M4QJ9BRQ5HXN98V9MFFJAWN1/bin/fm-todo.sh ticket-done --item t-4c2fe311f10f --action k0009ae40 --evidence stage Closed
+TODO_ITEMS: ticket-done t-4c2fe311f10f -> closed (ticket action k0009ae40)
+[exit 0]
+
+$ /Users/larstolhurst/.no-mistakes/worktrees/9957e108f4d7/01M4QJ9BRQ5HXN98V9MFFJAWN1/bin/fm-todo.sh ticket-done --item t-4c2fe311f10f --action k0009ae40 --evidence again
+fm-todo: ticket action k0009ae40 is already done
+[exit 2]
+Neshu state after done close: closed
+
+$ page evidence:
+Fauve has it: HubSpot ticket 48576658049 reassigned: owner Fauve van Dijk
+HubSpot change failed (waiting): ticket is locked by another user
+HubSpot ticket 48600120191 closed from the page: stage Closed
+
+$ /Users/larstolhurst/.no-mistakes/worktrees/9957e108f4d7/01M4QJ9BRQ5HXN98V9MFFJAWN1/bin/fm-todo.sh tickets
+TODO_TICKETS: 0 pending
+[exit 0]
+
+######## S6 own HubSpot write keeps handed-off items put; partner reply reopens
+after our own note (new digest v2): Tomra=waiting Neshu=closed
+after Tomra customer writes again: Tomra=open Neshu=closed
+ "note": "reopened: hubspot-tickets (hubspot-lars-tickets) wrote again after HubSpot ticket 48576658049 was handed off",
+
+$ Needs you section titles:
+Tomra pump ticket
+Dealer firmware ticket
+Queco question in Slack
+
+######## S7 race: partner writes between typed verb and recorded close
+
+$ /Users/larstolhurst/.no-mistakes/worktrees/9957e108f4d7/01M4QJ9BRQ5HXN98V9MFFJAWN1/bin/fm-todo.sh command --item t-697de7378a87 close
+TODO_CMD: ticket-close t-697de7378a87 [hubspot-lars-tickets:49033119384] Dealer firmware ticket :: HubSpot ticket 49033119384 action k39afbd17
+[exit 0]
+
+$ /Users/larstolhurst/.no-mistakes/worktrees/9957e108f4d7/01M4QJ9BRQ5HXN98V9MFFJAWN1/bin/fm-todo.sh ticket-done --item t-697de7378a87 --action k39afbd17 --evidence stage Closed
+TODO_ITEMS: ticket-done t-697de7378a87 -> closed (ticket action k39afbd17)
+[exit 0]
+Dealer after done close: closed
+Dealer after next intake pass: open
+last_inbound_at=1791792959
+last_inbound_at=1791792963
+last_inbound_at=1791706553
+
+== journal ticket entries:
+10
+== lab removed on exit
