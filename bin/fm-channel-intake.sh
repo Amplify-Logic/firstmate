@@ -143,7 +143,7 @@
 # reason to measure the ceiling by hitting it.
 #
 # PARTNER-FACING ASKS COME FIRST. `observe --timeline-file FILE` hands the gate
-# one JSON timeline and bin/fm-channel-intake-assess.py derives two facts from
+# one JSON timeline and bin/fm-channel-intake-assess.py derives three facts from
 # it, stored on the item beside a short reason and never the message text:
 #   partner   a contact, a company domain or a message participant on the
 #             ticket is outside the team's own mail domains.
