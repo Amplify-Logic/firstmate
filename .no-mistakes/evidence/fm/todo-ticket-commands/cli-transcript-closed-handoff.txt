@@ -1,0 +1,38 @@
+=== S5b: 'note:' then 'done' on an intake ticket; our own note must not reopen the closed item
+
+$ fm-channel-intake.sh observe --source hubspot-lars-tickets --ref 48711002233 --digest v1 --class obligation --title Vitens install date --timeline-file $LAB/vitens.json
+new b9a0df4c2871b492ffae1e4a9434b22a1204df2754b3656ea5cc99a1df64dab1
+[exit 0]
+
+$ fm-todo-render.sh render
+TODO_RENDER: $LAB/.lavish/today-2026-10-12.html rendered at 10:01 CEST
+[exit 0]
+vitens=t-e9fc7876b607 state=open
+
+$ fm-todo.sh command --item t-e9fc7876b607 note: install confirmed for Thursday by phone done
+TODO_CMD: ticket-note t-e9fc7876b607 [hubspot-lars-tickets:48711002233] Vitens install date :: HubSpot ticket 48711002233 action k24adf07a: install confirmed for Thursday by phone
+TODO_CMD: done t-e9fc7876b607 [hubspot-lars-tickets:48711002233] Vitens install date
+[exit 0]
+state after done: closed
+
+$ fm-todo.sh ticket-done --item t-e9fc7876b607 --action k24adf07a --evidence internal note added
+TODO_ITEMS: ticket-done t-e9fc7876b607 -> closed (ticket action k24adf07a)
+[exit 0]
+
+$ fm-channel-intake.sh observe --source hubspot-lars-tickets --ref 48711002233 --digest v2 --class obligation --title Vitens install date --timeline-file $LAB/vitens.json
+updated b9a0df4c2871b492ffae1e4a9434b22a1204df2754b3656ea5cc99a1df64dab1
+[exit 0]
+
+$ fm-todo-render.sh render
+TODO_RENDER: $LAB/.lavish/today-2026-10-12.html rendered at 10:01 CEST
+[exit 0]
+vitens state after our own note write (expect closed): closed
+
+$ fm-channel-intake.sh observe --source hubspot-lars-tickets --ref 48711002233 --digest v3 --class obligation --title Vitens install date --timeline-file $LAB/vitens.json
+updated b9a0df4c2871b492ffae1e4a9434b22a1204df2754b3656ea5cc99a1df64dab1
+[exit 0]
+
+$ fm-todo-render.sh render
+TODO_RENDER: $LAB/.lavish/today-2026-10-12.html rendered at 10:01 CEST
+[exit 0]
+vitens state after the customer wrote again (expect open): open

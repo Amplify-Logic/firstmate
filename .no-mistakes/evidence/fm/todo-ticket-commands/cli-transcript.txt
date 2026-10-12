@@ -1,0 +1,199 @@
+=== SETUP: lab $LAB, day 2026-10-12
+
+$ fm-channel-intake.sh observe --source hubspot-lars-tickets --ref 48600120191 --digest v1 --class obligation --title Neshu firmware update failed --timeline-file $LAB/neshu.json
+new ee0e5948b53ac7e07926280e355bbc2b42b27445a71c6c49fe2291fd87cc4b20
+[exit 0]
+
+$ fm-todo-render.sh render
+TODO_RENDER: $LAB/.lavish/today-2026-10-12.html rendered at 10:01 CEST
+[exit 0]
+items: tomra=t-4255b601dc5d rev=e3b0c44298 queco=t-0a4a5fd2c866 dealer=t-eb7f8852956e neshu=t-4c2fe311f10f
+
+$ fm-todo.sh list
+t-0a4a5fd2c866	open	reply	e3b0c44298	Queco question about pricing (Slack, no ticket)
+t-4255b601dc5d	open	reply	e3b0c44298	Tomra pump leaking - customer asks for a technician
+t-4c2fe311f10f	open	reply	ad2a683744	Neshu firmware update failed
+t-eb7f8852956e	open	reply	e3b0c44298	Dealer ticket from help desk
+[exit 0]
+
+=== S3 ADVERSARIAL: free text, untargeted, no-ticket row
+
+$ fm-todo.sh command --item t-4255b601dc5d close the loop with Natalia first
+TODO_CMD: not-a-command close the loop with Natalia first
+[exit 0]
+
+$ fm-todo.sh command --item t-4255b601dc5d waiting on Luc's answer
+TODO_CMD: not-a-command waiting on Luc's answer
+[exit 0]
+
+$ fm-todo.sh command --item t-4255b601dc5d close to done, just the invoice left
+TODO_CMD: not-a-command close to done, just the invoice left
+[exit 0]
+
+$ fm-todo.sh command --item t-4255b601dc5d reassign Fauve van Dijk
+TODO_CMD: not-a-command reassign Fauve van Dijk
+[exit 0]
+
+$ fm-todo.sh command --item t-4255b601dc5d priority high
+TODO_CMD: not-a-command priority high
+[exit 0]
+
+$ fm-todo.sh command close
+TODO_CMD: not-a-command close
+[exit 0]
+
+$ fm-todo.sh command --item t-0a4a5fd2c866 close
+TODO_CMD: refused close :: t-0a4a5fd2c866 has no HubSpot ticket, so close, waiting, reassign and note cannot apply to it
+[exit 1]
+
+$ fm-todo.sh tickets
+TODO_TICKETS: 0 pending
+[exit 0]
+wake queue after free text: <empty>
+
+=== S6 ADVERSARIAL: stale page revision
+
+$ fm-todo.sh command --item t-4255b601dc5d --rev deadbeef close
+TODO_CMD: refused close :: the page showed revision deadbeef but t-4255b601dc5d is now e3b0c44298; refresh the page first
+[exit 1]
+
+=== S1: ticket verbs queue pending HubSpot changes
+
+$ fm-todo.sh command --item t-4255b601dc5d --rev e3b0c44298 reassign Fauve note: customer replaced the pump seal
+TODO_CMD: ticket-reassign t-4255b601dc5d [hubspot:48576658049] Tomra pump leaking - customer asks for a technician :: HubSpot ticket 48576658049 action k46029fc5: Fauve
+TODO_CMD: ticket-note t-4255b601dc5d [hubspot:48576658049] Tomra pump leaking - customer asks for a technician :: HubSpot ticket 48576658049 action k7d6f0c08: customer replaced the pump seal
+[exit 0]
+
+$ fm-todo.sh command --item t-4255b601dc5d reassign Fauve
+TODO_CMD: already ticket-reassign t-4255b601dc5d [hubspot:48576658049] Tomra pump leaking - customer asks for a technician :: HubSpot ticket 48576658049 action k46029fc5: Fauve
+[exit 0]
+
+$ fm-todo.sh command --item t-eb7f8852956e close: duplicate of the Tomra ticket
+TODO_CMD: ticket-close t-eb7f8852956e [slack:C9-9] Dealer ticket from help desk :: HubSpot ticket 49033119384 action k424a8fe8: duplicate of the Tomra ticket
+[exit 0]
+
+$ fm-todo.sh command --item t-4c2fe311f10f waiting
+TODO_CMD: ticket-waiting t-4c2fe311f10f [hubspot-lars-tickets:48600120191] Neshu firmware update failed :: HubSpot ticket 48600120191 action k9c442c1e
+[exit 0]
+
+$ fm-todo.sh tickets
+TODO_TICKET: t-4255b601dc5d	k46029fc5	48576658049	reassign	Fauve	2026-10-12 10:01 CEST	https://app.hubspot.com/contacts/1/record/0-5/48576658049	Tomra pump leaking - customer asks for a technician
+TODO_TICKET: t-4255b601dc5d	k7d6f0c08	48576658049	note	customer replaced the pump seal	2026-10-12 10:01 CEST	https://app.hubspot.com/contacts/1/record/0-5/48576658049	Tomra pump leaking - customer asks for a technician
+TODO_TICKET: t-4c2fe311f10f	k9c442c1e	48600120191	waiting		2026-10-12 10:01 CEST		Neshu firmware update failed
+TODO_TICKET: t-eb7f8852956e	k424a8fe8	49033119384	close	duplicate of the Tomra ticket	2026-10-12 10:01 CEST	https://app.hubspot.com/help-desk/1/view/2/ticket/49033119384/thread/5	Dealer ticket from help desk
+TODO_TICKETS: 4 pending
+[exit 0]
+--- wake queue:
+1791792074	1	check	todo-ticket	todo-ticket: 2 HubSpot ticket change(s) queued from the to-do page; run bin/fm-todo.sh tickets
+1791792074	2	check	todo-ticket	todo-ticket: 1 HubSpot ticket change(s) queued from the to-do page; run bin/fm-todo.sh tickets
+1791792075	3	check	todo-ticket	todo-ticket: 1 HubSpot ticket change(s) queued from the to-do page; run bin/fm-todo.sh tickets
+
+$ fm-todo-render.sh render
+TODO_RENDER: $LAB/.lavish/today-2026-10-12.html rendered at 10:01 CEST
+[exit 0]
+
+=== S4: Firstmate records results
+
+$ fm-todo.sh ticket-done --item t-4255b601dc5d --action k7d6f0c08
+fm-todo: ticket-done needs --evidence; a ticket change is recorded with what happened
+[exit 2]
+
+$ fm-todo.sh ticket-done --item t-4255b601dc5d --action k7d6f0c08 --evidence internal note added
+TODO_ITEMS: ticket-done t-4255b601dc5d -> open (ticket action k7d6f0c08)
+[exit 0]
+tomra state after done note: open
+
+$ fm-todo.sh ticket-done --item t-4255b601dc5d --action k46029fc5 --evidence owner Fauve van Dijk
+TODO_ITEMS: ticket-done t-4255b601dc5d -> waiting (ticket action k46029fc5)
+[exit 0]
+tomra state after done reassign: waiting
+
+$ fm-todo.sh ticket-failed --item t-eb7f8852956e --action k424a8fe8 --evidence ticket is locked by a merge
+TODO_ITEMS: ticket-failed t-eb7f8852956e -> open (ticket action k424a8fe8)
+[exit 0]
+dealer state after failed close: open
+
+$ fm-todo.sh command --item t-eb7f8852956e close
+TODO_CMD: ticket-close t-eb7f8852956e [slack:C9-9] Dealer ticket from help desk :: HubSpot ticket 49033119384 action k53f735ab
+[exit 0]
+
+$ fm-todo.sh ticket-done --item t-eb7f8852956e --action k53f735ab --evidence stage Closed
+TODO_ITEMS: ticket-done t-eb7f8852956e -> closed (ticket action k53f735ab)
+[exit 0]
+dealer state after done close: closed
+
+$ fm-todo.sh ticket-done --item t-4c2fe311f10f --action k9c442c1e --evidence stage Waiting on contact
+TODO_ITEMS: ticket-done t-4c2fe311f10f -> waiting (ticket action k9c442c1e)
+[exit 0]
+neshu state after done waiting: waiting
+
+$ fm-todo.sh ticket-done --item t-4c2fe311f10f --action  --evidence again
+fm-todo: ticket-done needs --action naming the queued ticket action
+[exit 2]
+
+$ fm-todo.sh tickets
+TODO_TICKETS: 0 pending
+[exit 0]
+
+$ fm-todo-render.sh render
+TODO_RENDER: $LAB/.lavish/today-2026-10-12.html rendered at 10:01 CEST
+[exit 0]
+
+=== S5: own HubSpot write does not reopen; partner writing again does
+
+$ fm-channel-intake.sh observe --source hubspot-lars-tickets --ref 48600120191 --digest v2 --class obligation --title Neshu firmware update failed --timeline-file $LAB/neshu.json
+updated ee0e5948b53ac7e07926280e355bbc2b42b27445a71c6c49fe2291fd87cc4b20
+[exit 0]
+
+$ fm-todo-render.sh render
+TODO_RENDER: $LAB/.lavish/today-2026-10-12.html rendered at 10:01 CEST
+[exit 0]
+neshu state after our own note: waiting
+
+$ fm-channel-intake.sh observe --source hubspot-lars-tickets --ref 48600120191 --digest v3 --class obligation --title Neshu firmware update failed --timeline-file $LAB/neshu.json
+updated ee0e5948b53ac7e07926280e355bbc2b42b27445a71c6c49fe2291fd87cc4b20
+[exit 0]
+
+$ fm-todo-render.sh render
+TODO_RENDER: $LAB/.lavish/today-2026-10-12.html rendered at 10:01 CEST
+[exit 0]
+neshu state after partner wrote again: open
+
+=== S5b: done note on an already-closed item survives our own write
+
+$ fm-todo.sh command --item t-eb7f8852956e note: closed as duplicate
+TODO_CMD: ticket-note t-eb7f8852956e [slack:C9-9] Dealer ticket from help desk :: HubSpot ticket 49033119384 action k7348b7e3: closed as duplicate
+[exit 0]
+
+$ fm-todo.sh ticket-done --item t-eb7f8852956e --action k7348b7e3 --evidence internal note added
+TODO_ITEMS: ticket-done t-eb7f8852956e -> closed (ticket action k7348b7e3)
+[exit 0]
+dealer state: closed
+ "ticket_handoff": {
+  "at": 1791792081,
+  "ticket": "49033119384"
+ },
+
+$ fm-todo.sh list
+t-0a4a5fd2c866	open	reply	e3b0c44298	Queco question about pricing (Slack, no ticket)
+t-4255b601dc5d	waiting	reply	e3b0c44298	Tomra pump leaking - customer asks for a technician
+t-4c2fe311f10f	open	reply	6be66395c0	Neshu firmware update failed
+t-eb7f8852956e	closed	reply	e3b0c44298	Dealer ticket from help desk
+[exit 0]
+
+--- journal (ticket lines)
+{"actor": "captain", "at": 1791792074, "item": "t-4255b601dc5d", "rev": "e3b0c44298", "ticket_action": {"arg": "Fauve", "id": "k46029fc5", "line": "reassign Fauve", "requested_at": 1791792074, "rev": "e3b0c44298", "state": "pending", "ticket": "48576658049", "verb": "reassign"}}
+{"actor": "captain", "at": 1791792074, "item": "t-4255b601dc5d", "rev": "e3b0c44298", "ticket_action": {"arg": "customer replaced the pump seal", "id": "k7d6f0c08", "line": "note: customer replaced the pump seal", "requested_at": 1791792074, "rev": "e3b0c44298", "state": "pending", "ticket": "48576658049", "verb": "note"}}
+{"actor": "captain", "at": 1791792074, "item": "t-eb7f8852956e", "rev": "e3b0c44298", "ticket_action": {"arg": "duplicate of the Tomra ticket", "id": "k424a8fe8", "line": "close: duplicate of the Tomra ticket", "requested_at": 1791792074, "rev": "e3b0c44298", "state": "pending", "ticket": "49033119384", "verb": "close"}}
+{"actor": "captain", "at": 1791792074, "item": "t-4c2fe311f10f", "rev": "ad2a683744", "ticket_action": {"arg": "", "id": "k9c442c1e", "line": "waiting", "requested_at": 1791792074, "rev": "ad2a683744", "state": "pending", "ticket": "48600120191", "verb": "waiting"}}
+{"actor": "firstmate", "at": 1791792075, "evidence": "internal note added", "item": "t-4255b601dc5d", "outcome": "done", "rev": "e3b0c44298", "ticket_action": "k7d6f0c08"}
+{"actor": "firstmate", "at": 1791792075, "evidence": "owner Fauve van Dijk", "item": "t-4255b601dc5d", "outcome": "done", "rev": "e3b0c44298", "ticket_action": "k46029fc5"}
+{"actor": "captain", "at": 1791792075, "evidence": "owner Fauve van Dijk", "from": "open", "item": "t-4255b601dc5d", "reason": "ticket reassigned", "rev": "e3b0c44298", "to": "waiting"}
+{"actor": "firstmate", "at": 1791792076, "evidence": "ticket is locked by a merge", "item": "t-eb7f8852956e", "outcome": "failed", "rev": "e3b0c44298", "ticket_action": "k424a8fe8"}
+{"actor": "captain", "at": 1791792076, "item": "t-eb7f8852956e", "rev": "e3b0c44298", "ticket_action": {"arg": "", "id": "k53f735ab", "line": "close", "requested_at": 1791792076, "rev": "e3b0c44298", "state": "pending", "ticket": "49033119384", "verb": "close"}}
+{"actor": "firstmate", "at": 1791792076, "evidence": "stage Closed", "item": "t-eb7f8852956e", "outcome": "done", "rev": "e3b0c44298", "ticket_action": "k53f735ab"}
+{"actor": "captain", "at": 1791792076, "evidence": "HubSpot ticket 49033119384 closed from the page: stage Closed", "from": "open", "item": "t-eb7f8852956e", "reason": "fulfilled", "rev": "e3b0c44298", "to": "closed"}
+{"actor": "firstmate", "at": 1791792076, "evidence": "stage Waiting on contact", "item": "t-4c2fe311f10f", "outcome": "done", "rev": "ad2a683744", "ticket_action": "k9c442c1e"}
+{"actor": "captain", "at": 1791792076, "evidence": "stage Waiting on contact", "from": "open", "item": "t-4c2fe311f10f", "reason": "ticket waiting", "rev": "ad2a683744", "to": "waiting"}
+{"actor": "captain", "at": 1791792081, "item": "t-eb7f8852956e", "rev": "e3b0c44298", "ticket_action": {"arg": "closed as duplicate", "id": "k7348b7e3", "line": "note: closed as duplicate", "requested_at": 1791792081, "rev": "e3b0c44298", "state": "pending", "ticket": "49033119384", "verb": "note"}}
+{"actor": "firstmate", "at": 1791792081, "evidence": "internal note added", "item": "t-eb7f8852956e", "outcome": "done", "rev": "e3b0c44298", "ticket_action": "k7348b7e3"}
