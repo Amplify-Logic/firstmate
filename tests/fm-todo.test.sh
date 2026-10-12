@@ -55,7 +55,8 @@
 #     Firstmate once per command run that queued one, show as pending on the
 #     page until Firstmate records the result, refuse a row with no ticket,
 #     leave any other wording or an untargeted line as free text, and a
-#     ticket set waiting from the page reopens on a new source revision.
+#     ticket handed off from the page ignores our own HubSpot change and
+#     reopens only when the partner writes again.
 #   - Stored titles lose relative times but keep a deadline or duration the
 #     ask is about, the page computes ages in calendar days, device
 #     updates never reach the page, ticket times show in the page's zone, and
@@ -1022,35 +1023,42 @@ test_ticket_failure_stays_on_the_row() {
   pass 'a help-desk link names the ticket and a failed change stays visible on the row'
 }
 
-# A ticket set waiting from the page returns to Needs you once its source moves.
-test_a_ticket_set_waiting_reopens_on_a_new_revision() {
-  local h id ticket body
+# A ticket handed off from the page stays put through our own HubSpot change
+# and returns to Needs you only when the partner writes again.
+test_a_ticket_handed_off_reopens_only_when_the_partner_writes_again() {
+  local h tomra neshu one two
   h="$TMP_ROOT/ticket-reopen"
   new_home "$h"
-  ticket='"key":"k-t1","source":"hubspot","ref":"48576658049","class":"obligation","kind":"reply","title":"Tomra pump ticket","updated":'"$T_0900"
-  sidecar "$h" 2026-09-10 "{$ticket,\"digest\":\"r1\"}"
+  one='"key":"k-t1","source":"hubspot","ref":"48576658049","class":"obligation","kind":"reply","title":"Tomra pump ticket","updated":'"$T_0900"
+  two='"key":"k-t2","source":"hubspot","ref":"48600120191","class":"obligation","kind":"reply","title":"Neshu ticket","updated":'"$T_0900"
+  sidecar "$h" 2026-09-10 "{$one,\"digest\":\"r1\",\"partner_awaiting\":true,\"awaiting_since\":$T_0900},{$two,\"digest\":\"r1\"}"
   render_at "$h" "$T_1000"
-  id=$(field_of "$h" 'Tomra' 1)
-  todo_at "$h" "$T_1000" command --item "$id" 'waiting' >/dev/null
-  todo_at "$h" "$T_1000" ticket-done --item "$id" --action "$(pending_action "$h" "$id" waiting)" \
+  tomra=$(field_of "$h" 'Tomra' 1)
+  neshu=$(field_of "$h" 'Neshu' 1)
+  todo_at "$h" "$T_1000" command --item "$tomra" 'waiting' >/dev/null
+  todo_at "$h" "$T_1000" command --item "$neshu" 'close' >/dev/null
+  todo_at "$h" "$T_1000" ticket-done --item "$tomra" --action "$(pending_action "$h" "$tomra" waiting)" \
     --evidence 'stage Waiting on contact' >/dev/null
+  todo_at "$h" "$T_1000" ticket-done --item "$neshu" --action "$(pending_action "$h" "$neshu" close)" \
+    --evidence 'stage Closed' >/dev/null
+  # Our own internal note and stage change give both tickets a new revision;
+  # the ask Lars already handled is still marked awaiting from before.
+  sidecar "$h" 2026-09-10 "{$one,\"digest\":\"r2\",\"partner_awaiting\":true,\"awaiting_since\":$T_0900},{$two,\"digest\":\"r2\"}"
   render_at "$h" "$T_1030"
-  [ "$(field_of "$h" 'Tomra' 2)" = waiting ] || fail 'a done waiting did not move the item to waiting'
-  # The same revision re-observed keeps it waiting.
-  render_at "$h" "$T_1100"
-  [ "$(field_of "$h" 'Tomra' 2)" = waiting ] || fail 'an unchanged ticket reopened a waiting item'
-  # The customer replies: the ticket comes back with a new revision, partner first.
-  body="{$ticket,\"digest\":\"r2\",\"partner_awaiting\":true}"
-  sidecar "$h" 2026-09-10 "$body"
+  [ "$(field_of "$h" 'Tomra' 2)" = waiting ] || fail 'our own HubSpot change reopened a ticket set waiting'
+  [ "$(field_of "$h" 'Neshu' 2)" = closed ] || fail 'our own HubSpot change reopened a ticket closed from the page'
+  # The customer replies after the handoff: both come back, partner first.
+  sidecar "$h" 2026-09-10 "{$one,\"digest\":\"r3\",\"partner_awaiting\":true,\"awaiting_since\":$T_1100},{$two,\"digest\":\"r3\",\"partner_awaiting\":true,\"awaiting_since\":$T_1100}"
   render_at "$h" "$T_1500"
-  [ "$(field_of "$h" 'Tomra' 2)" = open ] || fail 'a ticket set waiting did not reopen on a new revision'
+  [ "$(field_of "$h" 'Tomra' 2)" = open ] || fail 'a partner reply did not reopen a ticket set waiting'
+  [ "$(field_of "$h" 'Neshu' 2)" = open ] || fail 'a partner reply did not reopen a ticket closed from the page'
   assert_contains "$(needs_order "$(page "$h" 2026-09-10)")" 'Tomra pump ticket' 'the reopened ticket is not back in Needs you'
-  pass 'a ticket set waiting from the page reopens when its source re-observes it with a new revision'
+  pass 'a ticket handed off from the page ignores our own change and reopens when the partner writes again'
 }
 
 test_ticket_verbs_queue_a_pending_hubspot_change
 test_ticket_failure_stays_on_the_row
-test_a_ticket_set_waiting_reopens_on_a_new_revision
+test_a_ticket_handed_off_reopens_only_when_the_partner_writes_again
 test_a_pass_judges_a_record_from_before_the_flag_by_its_aliases
 test_an_age_counts_calendar_days_across_a_clock_change
 test_time_bound_asks_expire_after_their_end

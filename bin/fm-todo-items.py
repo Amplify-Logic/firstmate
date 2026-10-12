@@ -334,7 +334,7 @@ def transition(store, rec, at, state, actor, reason, evidence='', **extra):
     rec['state'] = state
     rec['closure'] = ({'reason': reason, 'actor': actor, 'evidence': evidence, 'at': at}
                       if state == 'closed' else {})
-    rec.pop('ticket_wait', None)
+    rec.pop('ticket_handoff', None)
     rec.update(extra)
 
 
@@ -351,6 +351,12 @@ def present(rec):
     rec['asked_at'] = min([number(s.get('asked_at')) for s in slots if number(s.get('asked_at'))] or [0])
     rec['source_snooze'] = next((s['snoozed_until'] for s in slots if s.get('snoozed_until')), '')
     rec['rev'] = rev_of(rec)
+
+
+def wrote_again(o, before, since):
+    """The source shows the ask needs the captain again since `since`: a partner ask newer than it, or reopened."""
+    return ((o.get('partner_first') and number(o.get('awaiting_since')) > since)
+            or (before.get('state') != 'open' and o['state'] == 'open'))
 
 
 def fold(store, items, observations, now, backlog_seen, ledger_seen):
@@ -382,12 +388,14 @@ def fold(store, items, observations, now, backlog_seen, ledger_seen):
                 transition(store, rec, o['closed_at'] or now, 'closed', 'source', 'resolved', o['evidence'])
             elif fresh and o['state'] == 'waiting':
                 transition(store, rec, now, 'waiting', 'source', 'handed over', handover=o['handover'])
-        elif (o['rev'] and before.get('rev', '') != o['rev'] and rec['state'] == 'waiting' and o['state'] != 'closed'
-              and rec.get('ticket_wait') in ticket_ids(o['aliases'], [o.get('link')])):
-            # A ticket set waiting or reassigned from the page comes back when its source moves again.
+        elif rec.get('ticket_handoff') and wrote_again(o, before, rec['ticket_handoff']['at']):
+            # A ticket closed, set waiting or reassigned from the page comes back
+            # only when the partner writes again, never on our own HubSpot change.
             transition(store, rec, now, 'open', 'source', 'reopened', owner='', handover='',
-                       note=f'reopened: {o["label"]} changed after HubSpot ticket {rec["ticket_wait"]} was handed off')
-        elif o['rev'] and before.get('rev', '') != o['rev'] and rec['state'] == 'closed':
+                       note=f'reopened: {o["label"]} wrote again after HubSpot ticket '
+                            f'{rec["ticket_handoff"]["ticket"]} was handed off')
+        elif (o['rev'] and before.get('rev', '') != o['rev'] and rec['state'] == 'closed'
+              and not rec.get('ticket_handoff')):
             transition(store, rec, now, 'open', 'source', 'reopened',
                        note=f'reopened: {o["label"]} changed after it was closed ({rec["closure"].get("reason")})')
         elif before.get('state') != o['state']:
@@ -529,17 +537,11 @@ def match_item(items, words):
     raise Refusal(f'"{words}" matches {len(hits)} items: ' + ', '.join(r['id'] for r in hits[:6]))
 
 
-def ticket_ids(aliases, links):
-    """Every HubSpot ticket id these aliases and links name."""
-    ids = {m.group(1) for m in map(TICKET_ALIAS.match, aliases) if m}
-    for link in links:
-        ids.update(TICKET_LINK.findall(link or ''))
-    return ids
-
-
 def hubspot_ticket(rec):
     """The one HubSpot ticket id the item names, or a refusal saying why there is none."""
-    ids = ticket_ids(rec['aliases'], [rec.get('link')] + [s.get('link') for s in (rec.get('slots') or {}).values()])
+    ids = {m.group(1) for m in map(TICKET_ALIAS.match, rec['aliases']) if m}
+    for link in [rec.get('link')] + [s.get('link') for s in (rec.get('slots') or {}).values()]:
+        ids.update(TICKET_LINK.findall(link or ''))
     if not ids:
         raise Refusal(f'{rec["id"]} has no HubSpot ticket, so close, waiting, reassign and note cannot apply to it')
     if len(ids) > 1:
@@ -578,15 +580,17 @@ def finish_ticket_action(store, rec, action_id, outcome, evidence, now):
     if outcome != 'done':
         return
     ticket, verb, arg = action['ticket'], action['verb'], action['arg']
+    handoff = {'ticket': ticket, 'at': now}
     if verb == 'close' and rec['state'] != 'closed':
         transition(store, rec, now, 'closed', 'captain', 'fulfilled',
-                   f'HubSpot ticket {ticket} closed from the page: {evidence}', pending={}, note='')
+                   f'HubSpot ticket {ticket} closed from the page: {evidence}', pending={}, note='',
+                   ticket_handoff=handoff)
     elif verb == 'waiting' and rec['state'] == 'open':
-        transition(store, rec, now, 'waiting', 'captain', 'ticket waiting', evidence, ticket_wait=ticket,
+        transition(store, rec, now, 'waiting', 'captain', 'ticket waiting', evidence, ticket_handoff=handoff,
                    handover=f'HubSpot ticket {ticket} set to waiting: {evidence}')
     elif verb == 'reassign' and rec['state'] != 'closed':
         transition(store, rec, now, 'waiting', 'captain', 'ticket reassigned', evidence, owner=arg,
-                   ticket_wait=ticket, handover=f'HubSpot ticket {ticket} reassigned: {evidence}')
+                   ticket_handoff=handoff, handover=f'HubSpot ticket {ticket} reassigned: {evidence}')
 
 
 def apply_command(store, items, line, target, shown_rev, now):

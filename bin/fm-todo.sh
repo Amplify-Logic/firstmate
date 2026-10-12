@@ -31,8 +31,8 @@
 # (its last observation and its own revision), `state` open|waiting|closed,
 # `closure` {reason fulfilled|dismissed|superseded|resolved|released, actor,
 # evidence, at}, `owner`, `snoozed_until`, `pending` handoff, `ticket_actions`
-# (queued HubSpot changes and their recorded results), `ticket_wait` (the
-# ticket a done waiting or reassign handed off), `verification`
+# (queued HubSpot changes and their recorded results), `ticket_handoff`
+# {ticket, at} (a done close, waiting or reassign), `verification`
 # {at, how, rev} and `rev`, the item's meaningful revision over its slots.
 # data/todo/journal is an append-only line per transition or command effect.
 # One lock serializes sync and every write. Sync deletes one kind of record
@@ -154,10 +154,12 @@
 #      deletes or merges a ticket and never sends anything to a customer;
 #   3. records the result with `ticket-done` or `ticket-failed`, naming the
 #      action and what HubSpot now shows as --evidence. A done close closes
-#      the item as fulfilled by the captain, a done waiting or reassign moves
-#      it to waiting (a reassign with the name as owner) until the source
-#      re-observes that ticket with a new revision, which reopens it, and a
-#      done note leaves it as it was. A failed action stays on the row as
+#      the item as fulfilled by the captain, and a done waiting or reassign
+#      moves it to waiting (a reassign with the name as owner). Either stays
+#      put through our own note, stage or owner change; it reopens only when
+#      the source shows the partner wrote again: a partner-awaiting ask newer
+#      than the recorded result, or the source record back to open. A done
+#      note leaves the item as it was. A failed action stays on the row as
 #      "HubSpot change failed" with its evidence until the next action;
 #   4. re-renders the page with bin/fm-todo-render.sh.
 #
