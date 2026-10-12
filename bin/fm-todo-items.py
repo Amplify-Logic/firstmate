@@ -583,7 +583,7 @@ def finish_ticket_action(store, rec, action_id, outcome, evidence, now):
         return
     ticket, verb, arg = action['ticket'], action['verb'], action['arg']
     handoff = {'ticket': ticket, 'at': now}
-    if verb == 'close' and rec['state'] == 'closed':
+    if rec['state'] == 'closed':
         rec['ticket_handoff'] = handoff
     elif verb == 'close':
         transition(store, rec, now, 'closed', 'captain', 'fulfilled',
@@ -592,7 +592,7 @@ def finish_ticket_action(store, rec, action_id, outcome, evidence, now):
     elif verb == 'waiting' and rec['state'] == 'open':
         transition(store, rec, now, 'waiting', 'captain', 'ticket waiting', evidence, ticket_handoff=handoff,
                    handover=f'HubSpot ticket {ticket} set to waiting: {evidence}')
-    elif verb == 'reassign' and rec['state'] != 'closed':
+    elif verb == 'reassign':
         transition(store, rec, now, 'waiting', 'captain', 'ticket reassigned', evidence, owner=arg,
                    ticket_handoff=handoff, handover=f'HubSpot ticket {ticket} reassigned: {evidence}')
 
