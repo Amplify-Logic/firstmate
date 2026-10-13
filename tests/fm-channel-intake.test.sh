@@ -1606,6 +1606,10 @@ EOF
         about-escalate) body='Should we escalate this to Lars?' ;;
         about-statement) body='Lars kan je hier verder mee helpen.' ;;
         about-contraction) body="Lars, can't make it today, I'll go." ;;
+        about-ask) body='Should we ask Lars?' ;;
+        about-tell) body='Did you tell Lars?' ;;
+        about-cc) body='Can you cc Lars?' ;;
+        about-contact) body='Is the contact person Lars?' ;;
       esac
       cat >"$h/$name.json" <<EOF
 {"kind":"hubspot-ticket","owner":"luc@team.example","stage":"Waiting for Tech",
@@ -1803,7 +1807,8 @@ test_partner_facing_asks_awaiting_the_captain_are_flagged() {
   # ticket a passing name, in a message, promise or note, involves him in none.
   for name in customer-owes customer-asked answered uninvolved internal unnamed-note note-answered \
     tech-promise tech-promise-chase colleague-reply passing-promise passing-note list-name \
-    about-discussed about-escalate about-statement about-contraction; do
+    about-discussed about-escalate about-statement about-contraction \
+    about-ask about-tell about-cc about-contact; do
     key=$(key_of "$(observe_ticket "$h" "$name" "$T_0900")")
     [ "$(item_field "$h" "$key" awaiting)" = 0 ] || fail "$name: flagged as awaiting the captain"
     [ "$(item_field "$h" "$key" class)" = routine ] || fail "$name: a ticket not awaiting the captain was promoted"
