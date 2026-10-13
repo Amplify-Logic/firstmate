@@ -72,8 +72,9 @@
 #     rewrite of a record keeps the facts the timeline recorded, including a
 #     timeline re-read of a resolved ticket, which stays resolved.
 #   - A HubSpot claim names "Waiting on contact" and hands out a bounded
-#     periodic re-scan of every owner's tickets that name the captain or
-#     promise the customer that tech is on it.
+#     periodic re-scan of the captain's own tickets and of every other owner's
+#     tickets that @mention or directly ask him, never of a colleague's ticket
+#     that only promises the customer that tech is on it.
 #   - A team announcement is information, not an ask: only an announcement
 #     source accepts it, it is never notified or put on the to-do list, it
 #     shows in the brief, and it leaves the polled set only after its own
@@ -1866,8 +1867,12 @@ test_hubspot_rescan_covers_colleague_and_waiting_on_contact_tickets() {
   assert_contains "$out" $'stages: H_TICKETS\tevery open stage plus "Waiting on contact"' \
     'the claim did not name the Waiting on contact stage HubSpot marks closed'
   assert_contains "$out" $'rescan: H_TICKETS\tlast_rescan: never' 'a never-rescanned source was not handed a re-scan'
-  assert_contains "$out" 'any owner, whose emails or notes name the captain or in which a colleague promised the customer that the tech team is on it, re-read in full whatever its last-modified date' \
-    'the re-scan scope is not colleague-owned tickets naming the captain or tech, regardless of modification date'
+  assert_contains "$out" 'the captain owns, or, any owner, in which an email or note @mentions the captain or asks him something directly, re-read in full whatever its last-modified date' \
+    'the re-scan scope is not the captain'"'"'s tickets plus colleague-owned tickets that @mention or ask him, regardless of modification date'
+  assert_contains "$out" 'a colleague-owned ticket that only promises the customer the tech team is on it, or only names the captain in passing, is not his' \
+    'the re-scan scope did not exclude colleague-owned tickets that only promise tech or name the captain in passing'
+  assert_not_contains "$out" 'in which a colleague promised the customer that the tech team is on it, re-read' \
+    'the re-scan still pulls in colleague-owned tickets on a tech-team promise alone'
   printf '[]' | at "$h" "$T_0900" tickets --owner captain >/dev/null
   at "$h" "$T_0900" complete --source H_TICKETS --checkpoint c1 --rescanned >/dev/null
   # Inside the re-scan interval, the checkpoint read still names the stages but
@@ -1887,7 +1892,7 @@ test_hubspot_rescan_covers_colleague_and_waiting_on_contact_tickets() {
   printf 'rescan_interval_seconds = 300\n' >>"$h/config/channel-intake"
   out=$(at "$h" "$T_0900" status 2>&1) && code=0 || code=$?
   expect_code 2 "$code" 'a re-scan faster than the poll interval was accepted'
-  pass 'HubSpot claims cover Waiting on contact and a bounded periodic re-scan of every owner'"'"'s tickets'
+  pass 'HubSpot claims cover Waiting on contact and a bounded periodic re-scan of tickets that @mention or ask the captain'
 }
 
 test_a_hubspot_pass_needs_its_tickets_and_its_due_rescan() {

@@ -203,14 +203,17 @@
 #                    read that included it with --relisted.
 #   hubspot-tickets  `stages:`, `tickets:` and the re-scan below.
 #
-# THE HUBSPOT RE-SCAN. A colleague-owned ticket that names the captain only in
-# an email body, or that sits in "Waiting on contact" (a stage HubSpot marks
+# THE HUBSPOT RE-SCAN. A colleague-owned ticket that @mentions the captain only
+# in an email body, or that sits in "Waiting on contact" (a stage HubSpot marks
 # CLOSED), changes nothing a checkpoint read would return, so `claim` hands
 # every `hubspot-tickets` source a `stages:` line and, once per
 # rescan_interval_seconds, a `rescan:` line: re-read every ticket in an open
-# stage or "Waiting on contact", whoever owns it, whose emails or notes name
-# the captain or in which a colleague promised the customer that the tech team
-# is on it, whatever its last-modified date, and observe each with a timeline. `complete --rescanned` records that the re-scan ran.
+# stage or "Waiting on contact" that the captain owns, or, whoever owns it, in
+# which an email or note @mentions the captain or asks him something directly,
+# whatever its last-modified date, and observe each with a timeline. A
+# colleague-owned ticket that only promises the customer the tech team is on
+# it, or only names the captain in passing, is the colleague's and is not
+# re-scanned. `complete --rescanned` records that the re-scan ran.
 # Both belong to the pass that claimed them: `complete` on a hubspot-tickets
 # source is refused unless `tickets` wrote the open-tickets snapshot at or
 # after that source's claim, and refused without --rescanned when that claim
@@ -1375,10 +1378,9 @@ rescan_due() {
 
 # A checkpoint read of HubSpot returns only tickets modified since it, and a
 # stage filter on "open" drops "Waiting on contact", which HubSpot marks
-# closed. Both hid colleague-owned tickets that name the captain only inside an
-# email body, or that promise the customer the tech team is on it, so every
-# claim names the stages and a bounded periodic re-scan reads the whole set
-# again regardless of modification date.
+# closed. Both hid colleague-owned tickets that @mention or ask the captain only
+# inside an email body or note, so every claim names the stages and a bounded
+# periodic re-scan reads the whole set again regardless of modification date.
 hubspot_claim_lines() {
   local id=$1 epoch=$2 last
   printf 'stages: %s	every open stage plus "Waiting on contact", which HubSpot marks closed but where a partner can still be waiting on the captain
@@ -1388,7 +1390,7 @@ hubspot_claim_lines() {
   rescan_due "$id" "$epoch" || return 0
   last=$(record_field "$(source_record "$id")" last_rescan)
   case "$last" in ''|*[!0-9]*) last=0 ;; esac
-  printf 'rescan: %s	last_rescan: %s	scope: every ticket in those stages, any owner, whose emails or notes name the captain or in which a colleague promised the customer that the tech team is on it, re-read in full whatever its last-modified date; observe each with --timeline-file, then complete with --rescanned
+  printf 'rescan: %s	last_rescan: %s	scope: every ticket in those stages that the captain owns, or, any owner, in which an email or note @mentions the captain or asks him something directly, re-read in full whatever its last-modified date; a colleague-owned ticket that only promises the customer the tech team is on it, or only names the captain in passing, is not his; observe each with --timeline-file, then complete with --rescanned
 ' \
     "$id" "$([ "$last" -gt 0 ] && printf '%s' "$last" || printf never)"
 }
