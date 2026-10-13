@@ -521,12 +521,12 @@ test_partner_awaiting_asks_rank_above_every_class() {
   printf 'captain_names = Lars\nteam_addresses = support@team.example\n' >>"$h/config/channel-intake"
   printf 'H_TICKETS\thubspot-tickets\ttickets naming the captain\n' >>"$h/data/channel-intake/sources.tsv"
   # Caffeine Mechanics, shaped like the back-sweep row: a colleague's ticket,
-  # the captain named only in her email body, nothing sent since.
+  # the captain @mentioned only in her email body, nothing sent since.
   cat >"$h/caffeine.json" <<EOF
 {"kind":"hubspot-ticket","owner":"natalia@team.example","stage":"Waiting for Tech",
  "contacts":["rachel@partner.example"],
  "events":[{"type":"email","at":$((T_0900 - 86400 * 13)),"direction":"inbound","from":"rachel@partner.example","body":"A steer on the connectivity, please."},
-  {"type":"email","at":$((T_0900 - 86400 * 13 + 9000)),"direction":"outbound","from":"support@team.example","body":"Lars is looking into this. I will keep you updated."}]}
+  {"type":"email","at":$((T_0900 - 86400 * 13 + 9000)),"direction":"outbound","from":"support@team.example","body":"@Lars is looking into this. I will keep you updated."}]}
 EOF
   intake_at "$h" "$T_0900" observe --source H_TICKETS --ref 48375229511 --digest v1 --class routine \
     --title 'Syrup availability and connectivity' --timeline-file "$h/caffeine.json" >/dev/null

@@ -157,6 +157,11 @@
 #             such a mailbox; (c) a
 #             colleague's note that names the captain has no later note by
 #             him and no reply.
+# On his own ticket any captain_names word names him. On a colleague's ticket
+# only an @mention (`@` right before the word) or a question addressed to him
+# (the word opening a line or sentence, after at most a greeting, then a comma
+# or colon and a `?`, as in "<name>, can you ...?") does: a passing name such
+# as "discussed with <name>, closing" names nobody, in (a), (b) and (c) alike.
 # Only an EMAIL engagement is a reply: a `last_message_sent_at` send with no
 # matching email is an auto-acknowledgement and answers nothing. (a) applies
 # only when the ticket involves the captain: he owns it, or a message or note
@@ -283,9 +288,10 @@
 #   label                    slug for the wake key and diagnostic line
 #                            (default channel-intake)
 #   captain_names            words that name the captain in a message or note,
-#                            e.g. a first and last name (default unset; with
-#                            none, only a ticket he owns or a message he wrote
-#                            identifies him)
+#                            e.g. a first and last name; on a colleague's
+#                            ticket only when @mentioned or asked directly
+#                            (default unset; with none, only a ticket he owns
+#                            or a message he wrote identifies him)
 #   captain_addresses        the captain's own mail addresses (default unset)
 #   team_addresses           shared mailboxes whose outbound counts as a reply,
 #                            e.g. the support address (default unset); these

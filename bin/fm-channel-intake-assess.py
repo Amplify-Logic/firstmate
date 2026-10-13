@@ -155,13 +155,24 @@ def assess(doc, names, captain_addresses, team_addresses):
     captain_addresses = {a.lower() for a in captain_addresses}
     answer_addresses = captain_addresses | {a.lower() for a in team_addresses}
     internal = {domain(a) for a in answer_addresses if domain(a)}
-    name_re = re.compile(r'(?<![\w.@-])@?(?:' + '|'.join(re.escape(n) for n in names) + r')\b', re.I) if names else None
+    name = '(?:' + '|'.join(re.escape(n) for n in names) + ')'
+    name_re = re.compile(r'(?<![\w.@-])@?' + name + r'\b', re.I) if names else None
+    mention_re = re.compile(r'(?<![\w.@-])@' + name + r'\b', re.I) if names else None
+    # Addressed to him: his name opens a line or sentence, after at most a
+    # greeting, set off by a comma or colon, and a question follows.
+    asked_re = re.compile(r'(?:^\s*|[.?!]\s+)(?:(?:hi|hello|hey|dear|hoi|hallo|beste)\s+)?'
+                          + name + r'(?:\s+' + name + r')*\s*[,:][^?]*\?', re.I | re.M) if names else None
     actors = '|'.join(ACTORS + [re.escape(n) for n in names])
     promise_re = re.compile(PROMISE + r'|\b(?:' + actors + r')\b' + NOT_YOU + '{0,20}?(?:'
                             + ACTING + ')', re.I | re.S | re.M)
 
     def names_captain(text):
-        return bool(name_re and name_re.search(text))
+        """On his own ticket any naming; on a colleague's only an @mention or a question to him."""
+        if not names:
+            return False
+        if captain_owned:
+            return bool(name_re.search(text))
+        return bool(mention_re.search(text) or asked_re.search(text))
 
     def is_captain(who):
         """One spelling of the captain everywhere: the sentinel or his address."""
