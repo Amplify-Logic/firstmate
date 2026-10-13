@@ -33,8 +33,10 @@ ACTING = (
     r"|induiken|achteraan|uitzoeken|nakijken|navragen|terugkoppel|\blaat\b[^.?!\n]{0,40}\bweten\b")
 ACTORS = [r"i", r"we", r"our", r"team", r"tech\w*", r"ik", r"wij"]
 # Words that open a request to whoever was just addressed; with no comma after
-# the name, only such a word followed by "you" makes the sentence ask him.
+# the name, only such a word followed by "you" in a question asks him.
 REQUEST = r"please|pls|kindly|can|could|would|will|kun|kunt|kan|wil|wilt|zou|zoudt|graag|mag"
+# A name right after one of these is talked about, not talked to.
+PREPOSITION = r"with|to|by|for|from|about|met|aan|naar|van|voor|bij|door|over"
 TECH = re.compile(r"\btech\b|\btechteam\b|\btechnical (?:team|support|department)\b", re.I)
 QUOTE_START = re.compile(
     r"^\s*(?:>|on .{0,120}wrote:|op .{0,120}schreef|-{2,}\s*original message|from:\s|van:\s|sent from my)",
@@ -163,12 +165,14 @@ def assess(doc, names, captain_addresses, team_addresses):
     mention_re = re.compile(r'(?<![\w.@-])@' + name + r'\b', re.I) if names else None
     # Asked directly, within one sentence: his name opens it, after at most a
     # greeting, then a comma or colon and a question or a request, or no comma
-    # and a request word with "you"; or his name closes a question.
+    # and a question opening with a request word and "you"; or his name closes
+    # a question, set off by a comma or after any word but a preposition.
     addressed = (r'(?:^\s*|[.?!]\s+)(?:(?:hi|hello|hey|dear|hoi|hallo|beste)\s+)?'
                  + name + r'(?:\s+' + name + r')*')
-    asked_re = re.compile(addressed + r'\s*[,:]\s*(?:[^.?!\n]*\?|(?:' + REQUEST + r')\b)'
-                          + '|' + addressed + r'\s+(?:' + REQUEST + r')\s+(?:you|je|jij|u)\b'
-                          + r'|\b' + name + r'\s*\?', re.I | re.M) if names else None
+    asked_re = re.compile(addressed + r'\s*[,:]\s*(?:[^.?!\n]*\?|(?:' + REQUEST + r')\b(?![\'’]))'
+                          + '|' + addressed + r'\s+(?:' + REQUEST + r')\s+(?:you|je|jij|u)\b[^.?!\n]*\?'
+                          + r'|(?:,\s*|(?:^|[^\w\'’@-])(?!(?:' + PREPOSITION + r')\b|' + name + r'\b)\w+\s+)'
+                          + name + r'(?:\s+' + name + r')*\s*\?', re.I | re.M) if names else None
     actors = '|'.join(ACTORS + [re.escape(n) for n in names])
     promise_re = re.compile(PROMISE + r'|\b(?:' + actors + r')\b' + NOT_YOU + '{0,20}?(?:'
                             + ACTING + ')', re.I | re.S | re.M)

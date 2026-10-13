@@ -1592,8 +1592,9 @@ EOF
       ;;
     # A colleague's note on her ticket, the partner's message unanswered. Each
     # ask- note asks the captain directly in a different form; list-name only
-    # opens a list with his name, and the question after it is the customer's.
-    ask-*|list-name)
+    # opens a list with his name, and the question after it is the customer's;
+    # the about- notes talk about him or say what he does, and ask him nothing.
+    ask-*|list-name|about-*)
       case "$name" in
         ask-request) body='Lars, please call the customer back about the B.14.' ;;
         ask-dutch) body='Lars, wil je de klant even bellen.' ;;
@@ -1601,6 +1602,10 @@ EOF
         ask-trailing-dutch) body='Kun jij hier even naar kijken Lars?' ;;
         ask-no-comma) body='Lars can you check the PCB?' ;;
         list-name) body='Lars, Natalia and I visited the site on Monday.\nCustomer asks: when is the next maintenance?' ;;
+        about-discussed) body='Is this the same issue we discussed with Lars?' ;;
+        about-escalate) body='Should we escalate this to Lars?' ;;
+        about-statement) body='Lars kan je hier verder mee helpen.' ;;
+        about-contraction) body="Lars, can't make it today, I'll go." ;;
       esac
       cat >"$h/$name.json" <<EOF
 {"kind":"hubspot-ticket","owner":"luc@team.example","stage":"Waiting for Tech",
@@ -1797,7 +1802,8 @@ test_partner_facing_asks_awaiting_the_captain_are_flagged() {
   # reason to own the partner's unanswered message, and on a colleague's
   # ticket a passing name, in a message, promise or note, involves him in none.
   for name in customer-owes customer-asked answered uninvolved internal unnamed-note note-answered \
-    tech-promise tech-promise-chase colleague-reply passing-promise passing-note list-name; do
+    tech-promise tech-promise-chase colleague-reply passing-promise passing-note list-name \
+    about-discussed about-escalate about-statement about-contraction; do
     key=$(key_of "$(observe_ticket "$h" "$name" "$T_0900")")
     [ "$(item_field "$h" "$key" awaiting)" = 0 ] || fail "$name: flagged as awaiting the captain"
     [ "$(item_field "$h" "$key" class)" = routine ] || fail "$name: a ticket not awaiting the captain was promoted"

@@ -161,9 +161,12 @@
 # only an @mention (`@` right before the word) or a direct ask within one
 # sentence does: the word opening it, after at most a greeting, then a comma or
 # colon and a question or a request ("<name>, can you ...?", "<name>, please
-# ..."), or no comma and a request word with "you" ("<name> can you ...?"), or
-# the word closing a question ("... check this, <name>?"). A passing name such
-# as "discussed with <name>, closing" names nobody, in (a), (b) and (c) alike.
+# ..."), or no comma and a question opening with a request word and "you"
+# ("<name> can you ...?"), or the word closing a question after a comma or any
+# word but a preposition ("... check this, <name>?"). A passing name such as
+# "discussed with <name>, closing", "should we escalate this to <name>?" or a
+# statement "<name> kan je hier verder mee helpen." names nobody, in (a), (b)
+# and (c) alike.
 # Only an EMAIL engagement is a reply: a `last_message_sent_at` send with no
 # matching email is an auto-acknowledgement and answers nothing. (a) applies
 # only when the ticket involves the captain: he owns it, or a message or note
