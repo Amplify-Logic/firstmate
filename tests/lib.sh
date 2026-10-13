@@ -1269,11 +1269,11 @@ fm_chrome_dump_dom() {
     # Chrome's first-run initialization never complete on at least Google Chrome
     # for Testing 151.0.7922.34: the browser and its renderers start, but
     # --dump-dom never returns, so all three bounded attempts end exit=0
-    # timed_out=yes bytes=0 and the DOM assertions below never run at all. A
+    # timed_out=yes bytes=0 and the caller's DOM assertions never run at all. A
     # private HOME is Chromium's documented isolation switch there and renders
     # the same document in about a second. macOS derives its profile directory
     # from ~/Library regardless of HOME, so Darwin keeps the explicit
-    # --user-data-dir that was this file's original isolation. Either way each
+    # --user-data-dir that was this helper's original isolation. Either way each
     # attempt starts from the fresh directory removed just above.
     case "$(uname -s)" in
       Darwin) profile_arg=(--user-data-dir="$profile") ;;
