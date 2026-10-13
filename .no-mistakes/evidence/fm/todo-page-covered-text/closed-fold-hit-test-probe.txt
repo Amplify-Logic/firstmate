@@ -1,0 +1,141 @@
+Hit-test probe of every [id^=item-] row on a lab-rendered today page (Chrome Google Chrome 155.0.8059.40 ). covered = sample points on the row's text that land on another element.
+
+### base-1110,6000
+viewport=1110x5913 mode=layout hash=
+CLOSED tr#item-t-aef15849b15a fold=none textArea=80032 points=27 covered=0
+CLOSED li#item-t-0d2221c78a7a fold=closed textArea=51996 points=15 covered=15 by=DETAILS,SUMMARY
+CLOSED li#item-t-399324c4ef12 fold=closed textArea=51900 points=15 covered=6 by=SMALL,H2
+CLOSED li#item-t-567ca3d0498b fold=closed textArea=52369 points=15 covered=6 by=P.sub,SPAN.prov obs
+CLOSED li#item-t-6b79fd90106f fold=closed textArea=52023 points=15 covered=15 by=TH
+CLOSED li#item-t-759542a56772 fold=closed textArea=52023 points=15 covered=15 by=A,TD
+CLOSED li#item-t-9de7ed2e7c33 fold=closed textArea=52014 points=15 covered=15 by=A,TD
+CLOSED li#item-t-b32f19f472b8 fold=closed textArea=52009 points=15 covered=9 by=TD
+CLOSED li#item-t-c22d18ce930d fold=closed textArea=52026 points=15 covered=15 by=DIV.legend,SPAN,SPAN.prov obs
+CLOSED li#item-t-d3b77e4e1701 fold=closed textArea=52029 points=15 covered=12 by=DIV.legend,SPAN
+CLOSED li#item-t-e95553465c04 fold=closed textArea=51958 points=15 covered=0
+CLOSED tr#item-t-0dbdcd3899cf fold=closed textArea=56556 points=18 covered=0
+CLOSED tr#item-t-11bb0e4dbe57 fold=closed textArea=56478 points=18 covered=0
+CLOSED tr#item-t-ce1abe940b59 fold=closed textArea=56545 points=18 covered=0
+OPENED tr#item-t-aef15849b15a fold=none textArea=80032 points=27 covered=0
+OPENED li#item-t-0d2221c78a7a fold=open textArea=51996 points=15 covered=0
+OPENED li#item-t-399324c4ef12 fold=open textArea=51900 points=15 covered=0
+OPENED li#item-t-567ca3d0498b fold=open textArea=52369 points=15 covered=0
+OPENED li#item-t-6b79fd90106f fold=open textArea=52023 points=15 covered=0
+OPENED li#item-t-759542a56772 fold=open textArea=52023 points=15 covered=0
+OPENED li#item-t-9de7ed2e7c33 fold=open textArea=52014 points=15 covered=0
+OPENED li#item-t-b32f19f472b8 fold=open textArea=52009 points=15 covered=0
+OPENED li#item-t-c22d18ce930d fold=open textArea=52026 points=15 covered=0
+OPENED li#item-t-d3b77e4e1701 fold=open textArea=52029 points=15 covered=0
+OPENED li#item-t-e95553465c04 fold=open textArea=51958 points=15 covered=0
+OPENED tr#item-t-0dbdcd3899cf fold=open textArea=56556 points=18 covered=0
+OPENED tr#item-t-11bb0e4dbe57 fold=open textArea=56478 points=18 covered=0
+OPENED tr#item-t-ce1abe940b59 fold=open textArea=56545 points=18 covered=0
+
+### fixed-1110,6000
+viewport=1110x5913 mode=layout hash=
+CLOSED tr#item-t-aef15849b15a fold=none textArea=80032 points=27 covered=0
+CLOSED li#item-t-0d2221c78a7a fold=closed textArea=0 points=0 covered=0
+CLOSED li#item-t-399324c4ef12 fold=closed textArea=0 points=0 covered=0
+CLOSED li#item-t-567ca3d0498b fold=closed textArea=0 points=0 covered=0
+CLOSED li#item-t-6b79fd90106f fold=closed textArea=0 points=0 covered=0
+CLOSED li#item-t-759542a56772 fold=closed textArea=0 points=0 covered=0
+CLOSED li#item-t-9de7ed2e7c33 fold=closed textArea=0 points=0 covered=0
+CLOSED li#item-t-b32f19f472b8 fold=closed textArea=0 points=0 covered=0
+CLOSED li#item-t-c22d18ce930d fold=closed textArea=0 points=0 covered=0
+CLOSED li#item-t-d3b77e4e1701 fold=closed textArea=0 points=0 covered=0
+CLOSED li#item-t-e95553465c04 fold=closed textArea=0 points=0 covered=0
+CLOSED tr#item-t-0dbdcd3899cf fold=closed textArea=0 points=0 covered=0
+CLOSED tr#item-t-11bb0e4dbe57 fold=closed textArea=0 points=0 covered=0
+CLOSED tr#item-t-ce1abe940b59 fold=closed textArea=0 points=0 covered=0
+OPENED tr#item-t-aef15849b15a fold=none textArea=80032 points=27 covered=0
+OPENED li#item-t-0d2221c78a7a fold=open textArea=51996 points=15 covered=0
+OPENED li#item-t-399324c4ef12 fold=open textArea=51900 points=15 covered=0
+OPENED li#item-t-567ca3d0498b fold=open textArea=52369 points=15 covered=0
+OPENED li#item-t-6b79fd90106f fold=open textArea=52023 points=15 covered=0
+OPENED li#item-t-759542a56772 fold=open textArea=52023 points=15 covered=0
+OPENED li#item-t-9de7ed2e7c33 fold=open textArea=52014 points=15 covered=0
+OPENED li#item-t-b32f19f472b8 fold=open textArea=52009 points=15 covered=0
+OPENED li#item-t-c22d18ce930d fold=open textArea=52026 points=15 covered=0
+OPENED li#item-t-d3b77e4e1701 fold=open textArea=52029 points=15 covered=0
+OPENED li#item-t-e95553465c04 fold=open textArea=51958 points=15 covered=0
+OPENED tr#item-t-0dbdcd3899cf fold=open textArea=56556 points=18 covered=0
+OPENED tr#item-t-11bb0e4dbe57 fold=open textArea=56478 points=18 covered=0
+OPENED tr#item-t-ce1abe940b59 fold=open textArea=56545 points=18 covered=0
+
+### base-390
+viewport=390x9000 mode=layout hash=
+CLOSED tr#item-t-aef15849b15a fold=none textArea=49315 points=27 covered=0
+CLOSED li#item-t-0d2221c78a7a fold=closed textArea=33451 points=24 covered=21 by=DETAILS,SUMMARY,H2
+CLOSED li#item-t-399324c4ef12 fold=closed textArea=33355 points=24 covered=24 by=H2,P.sub,SPAN.prov obs
+CLOSED li#item-t-567ca3d0498b fold=closed textArea=33823 points=24 covered=18 by=TH,TD
+CLOSED li#item-t-6b79fd90106f fold=closed textArea=33478 points=24 covered=24 by=TD,A
+CLOSED li#item-t-759542a56772 fold=closed textArea=33478 points=24 covered=24 by=TD
+CLOSED li#item-t-9de7ed2e7c33 fold=closed textArea=33469 points=24 covered=21 by=TD,DIV.legend
+CLOSED li#item-t-b32f19f472b8 fold=closed textArea=33464 points=24 covered=24 by=SPAN,DIV.legend
+CLOSED li#item-t-c22d18ce930d fold=closed textArea=33482 points=24 covered=15 by=SPAN.prov unv,SPAN
+CLOSED li#item-t-d3b77e4e1701 fold=closed textArea=33483 points=24 covered=0
+CLOSED li#item-t-e95553465c04 fold=closed textArea=33413 points=24 covered=0
+CLOSED tr#item-t-0dbdcd3899cf fold=closed textArea=38656 points=33 covered=24 by=H2,SMALL
+CLOSED tr#item-t-11bb0e4dbe57 fold=closed textArea=38643 points=30 covered=30 by=P.sub,SPAN.prov obs
+CLOSED tr#item-t-ce1abe940b59 fold=closed textArea=38645 points=33 covered=33 by=TH,A,TD
+OPENED tr#item-t-aef15849b15a fold=none textArea=49315 points=27 covered=0
+OPENED li#item-t-0d2221c78a7a fold=open textArea=33451 points=24 covered=0
+OPENED li#item-t-399324c4ef12 fold=open textArea=33355 points=24 covered=0
+OPENED li#item-t-567ca3d0498b fold=open textArea=33823 points=24 covered=0
+OPENED li#item-t-6b79fd90106f fold=open textArea=33478 points=24 covered=0
+OPENED li#item-t-759542a56772 fold=open textArea=33478 points=24 covered=0
+OPENED li#item-t-9de7ed2e7c33 fold=open textArea=33469 points=24 covered=0
+OPENED li#item-t-b32f19f472b8 fold=open textArea=33464 points=24 covered=0
+OPENED li#item-t-c22d18ce930d fold=open textArea=33482 points=24 covered=0
+OPENED li#item-t-d3b77e4e1701 fold=open textArea=33483 points=24 covered=0
+OPENED li#item-t-e95553465c04 fold=open textArea=33413 points=24 covered=0
+OPENED tr#item-t-0dbdcd3899cf fold=open textArea=38656 points=33 covered=0
+OPENED tr#item-t-11bb0e4dbe57 fold=open textArea=38643 points=30 covered=0
+OPENED tr#item-t-ce1abe940b59 fold=open textArea=38645 points=33 covered=0
+
+### fixed-390
+viewport=390x9000 mode=layout hash=
+CLOSED tr#item-t-aef15849b15a fold=none textArea=49315 points=27 covered=0
+CLOSED li#item-t-0d2221c78a7a fold=closed textArea=0 points=0 covered=0
+CLOSED li#item-t-399324c4ef12 fold=closed textArea=0 points=0 covered=0
+CLOSED li#item-t-567ca3d0498b fold=closed textArea=0 points=0 covered=0
+CLOSED li#item-t-6b79fd90106f fold=closed textArea=0 points=0 covered=0
+CLOSED li#item-t-759542a56772 fold=closed textArea=0 points=0 covered=0
+CLOSED li#item-t-9de7ed2e7c33 fold=closed textArea=0 points=0 covered=0
+CLOSED li#item-t-b32f19f472b8 fold=closed textArea=0 points=0 covered=0
+CLOSED li#item-t-c22d18ce930d fold=closed textArea=0 points=0 covered=0
+CLOSED li#item-t-d3b77e4e1701 fold=closed textArea=0 points=0 covered=0
+CLOSED li#item-t-e95553465c04 fold=closed textArea=0 points=0 covered=0
+CLOSED tr#item-t-0dbdcd3899cf fold=closed textArea=0 points=0 covered=0
+CLOSED tr#item-t-11bb0e4dbe57 fold=closed textArea=0 points=0 covered=0
+CLOSED tr#item-t-ce1abe940b59 fold=closed textArea=0 points=0 covered=0
+OPENED tr#item-t-aef15849b15a fold=none textArea=49315 points=27 covered=0
+OPENED li#item-t-0d2221c78a7a fold=open textArea=33451 points=24 covered=0
+OPENED li#item-t-399324c4ef12 fold=open textArea=33355 points=24 covered=0
+OPENED li#item-t-567ca3d0498b fold=open textArea=33823 points=24 covered=0
+OPENED li#item-t-6b79fd90106f fold=open textArea=33478 points=24 covered=0
+OPENED li#item-t-759542a56772 fold=open textArea=33478 points=24 covered=0
+OPENED li#item-t-9de7ed2e7c33 fold=open textArea=33469 points=24 covered=0
+OPENED li#item-t-b32f19f472b8 fold=open textArea=33464 points=24 covered=0
+OPENED li#item-t-c22d18ce930d fold=open textArea=33482 points=24 covered=0
+OPENED li#item-t-d3b77e4e1701 fold=open textArea=33483 points=24 covered=0
+OPENED li#item-t-e95553465c04 fold=open textArea=33413 points=24 covered=0
+OPENED tr#item-t-0dbdcd3899cf fold=open textArea=38656 points=33 covered=0
+OPENED tr#item-t-11bb0e4dbe57 fold=open textArea=38643 points=30 covered=0
+OPENED tr#item-t-ce1abe940b59 fold=open textArea=38645 points=33 covered=0
+
+### base hash
+viewport=1110x2913 mode=hash hash=#item-t-b32f19f472b8
+fragment target item-t-b32f19f472b8 foldOpen=true rect=1026x48 top=610
+
+### base hash-tr
+viewport=1110x2913 mode=hash hash=#item-t-11bb0e4dbe57
+fragment target item-t-11bb0e4dbe57 foldOpen=true rect=1065x45 top=389
+
+### fixed hash
+viewport=1110x2913 mode=hash hash=#item-t-b32f19f472b8
+fragment target item-t-b32f19f472b8 foldOpen=true rect=1026x48 top=610
+
+### fixed hash-tr
+viewport=1110x2913 mode=hash hash=#item-t-11bb0e4dbe57
+fragment target item-t-11bb0e4dbe57 foldOpen=true rect=1065x45 top=389
