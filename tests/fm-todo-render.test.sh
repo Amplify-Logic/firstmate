@@ -47,6 +47,8 @@
 #     rather than failing the render.
 #   - Team announcements render in their own collapsed "Updates" fold, newest
 #     post first with its post time and link, and never in "Needs you now".
+#   - In a real Chrome at desktop width, no row of a closed fold sits over the
+#     sections below it, and such a row can still be found on the page.
 # shellcheck disable=SC2016
 set -u
 
@@ -434,10 +436,6 @@ test_house_style_comes_from_the_tracked_templates() {
   # and the provenance legend, with nothing fetched and no tool running.
   assert_contains "$(cat "$page")" '<!doctype html>' 'the page has no document type'
   assert_contains "$(cat "$page")" '--accent:#0b4f8a' 'the house palette is missing'
-  # A collapsed fold takes its rows out of layout, so they never sit unseen
-  # over the open-tickets table below and cover its text.
-  assert_contains "$(cat "$page")" 'details:not([open])>:not(summary){display:none}' \
-    'a closed fold still lays out its rows over the sections below it'
   assert_contains "$(cat "$page")" '<span class="pill bad">outage</span>' \
     'the severity pill is missing from the outage row'
   assert_contains "$(cat "$page")" 'could not be confirmed from any source available here' \
@@ -765,6 +763,84 @@ test_team_updates_fold_newest_post_first() {
   pass 'team announcements fold under Updates, newest post first, below every ask'
 }
 
+find_chrome() {
+  local candidate
+  for candidate in "${FM_CHROME_BIN:-}" google-chrome google-chrome-stable chromium chromium-browser \
+    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"; do
+    [ -n "$candidate" ] && command -v "$candidate" >/dev/null 2>&1 && { command -v "$candidate"; return 0; }
+  done
+  return 1
+}
+
+# Load <page> in headless Chrome at the 1110px desktop width the layout
+# checker reported from and print the DOM it leaves behind. A fresh,
+# keychain-free profile per load; Chrome can linger after --dump-dom, so it is
+# bounded.
+chrome_dom() {
+  local chrome=$1 page=$2 profile out pid ticks=0
+  profile=$(mktemp -d "$TMP_ROOT/chrome.XXXXXX")
+  out="$profile.dom"
+  local -a profile_arg=()
+  [ "$(uname -s)" = Darwin ] && profile_arg=(--user-data-dir="$profile")
+  HOME="$profile" XDG_CONFIG_HOME="$profile/.config" XDG_CACHE_HOME="$profile/.cache" \
+    "$chrome" ${profile_arg[@]+"${profile_arg[@]}"} --headless=new --use-mock-keychain \
+    --password-store=basic --disable-gpu --no-sandbox --disable-dev-shm-usage \
+    --disable-background-networking --no-first-run --window-size=1110,3000 \
+    --virtual-time-budget=2000 --dump-dom "file://$page" >"$out" 2>/dev/null &
+  pid=$!
+  while [ "$ticks" -lt 300 ] && ! grep -Fq '</html>' "$out" 2>/dev/null && kill -0 "$pid" 2>/dev/null; do
+    sleep 0.1
+    ticks=$((ticks + 1))
+  done
+  kill -9 "$pid" 2>/dev/null || true
+  wait "$pid" 2>/dev/null || true
+  cat "$out"
+}
+
+test_closed_folds_cover_nothing_and_stay_findable() {
+  local h page probed chrome dom i
+
+  if ! chrome=$(find_chrome); then
+    echo 'skip: Chrome not found for the closed-fold layout test'
+    return 0
+  fi
+  h="$TMP_ROOT/closed-folds"
+  new_home "$h"
+  for i in 1 2 3 4 5 6; do
+    observe_at "$h" "$T_1100" resolve --waiting --reason "handed to Naomi for answer $i" --item "$(
+      observe_at "$h" "$T_0900" observe --source C_BRIEF --ref "w$i" --digest "a$i" --class urgent \
+        --title "waiting item $i handed on with a title long enough to wrap" | awk '{ print $2 }')" >/dev/null
+  done
+  write_tickets "$h" "$T_1500" "$TICKETS_TWO" >/dev/null
+  render_at "$h" "$T_1530" render >/dev/null
+  page=$(page_of "$h")
+
+  # Probe the rendered page the way the layout checker does: hit-test the
+  # middle of every text line of every row in a closed fold, and count a row
+  # as covered when that point lands on another section of the page. Then
+  # search for one of those rows as find-in-page would, which is what opens
+  # the fold for a find or a link.
+  probed="$h/probed.html"
+  sed 's#</body>#<script>setTimeout(() => {\
+  let covered = 0;\
+  for (const fold of document.querySelectorAll("details:not([open])")) {\
+    for (const row of fold.querySelectorAll("[id^=item-]")) {\
+      const text = document.createRange(); text.selectNodeContents(row);\
+      if ([...text.getClientRects()].some(r => r.width * r.height >= 16 \&\& (hit => hit \&\& !hit.contains(fold) \&\& !fold.contains(hit))(document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2)))) covered++;\
+    }\
+  }\
+  const out = document.createElement("pre"); out.id = "probe";\
+  out.textContent = "covered=" + covered + " found=" + window.find("waiting item 3 handed on");\
+  document.body.appendChild(out);\
+}, 300);</script></body>#' "$page" >"$probed"
+
+  dom=$(chrome_dom "$chrome" "$probed")
+  assert_contains "$dom" 'covered=0 ' 'a row in a closed fold sits over another section at desktop width'
+  assert_contains "$dom" ' found=true' 'a row in a closed fold can no longer be found on the page'
+
+  pass 'closed folds lay no row over the sections below and their rows stay findable'
+}
+
 test_outage_then_oldest_ask_orders_the_live_section
 test_waiting_and_closed_never_mix_into_the_live_section
 test_every_line_carries_its_own_read_time
@@ -786,3 +862,4 @@ test_open_tickets_empty_subject_renders_as_an_untitled_ticket
 test_open_tickets_legacy_morning_copy_leaves_no_empty_reference_fold
 test_calm_layout_ranks_live_problems_first_and_folds_the_rest
 test_team_updates_fold_newest_post_first
+test_closed_folds_cover_nothing_and_stay_findable
