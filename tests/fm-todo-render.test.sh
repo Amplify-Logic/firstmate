@@ -763,42 +763,8 @@ test_team_updates_fold_newest_post_first() {
   pass 'team announcements fold under Updates, newest post first, below every ask'
 }
 
-find_chrome() {
-  local candidate
-  for candidate in "${FM_CHROME_BIN:-}" google-chrome google-chrome-stable chromium chromium-browser \
-    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"; do
-    [ -n "$candidate" ] && command -v "$candidate" >/dev/null 2>&1 && { command -v "$candidate"; return 0; }
-  done
-  return 1
-}
-
-# Load <page> in headless Chrome at the 1110px desktop width the layout
-# checker reported from and print the DOM it leaves behind. A fresh,
-# keychain-free profile per load; Chrome can linger after --dump-dom, so it is
-# bounded.
-chrome_dom() {
-  local chrome=$1 page=$2 profile out pid ticks=0
-  profile=$(mktemp -d "$TMP_ROOT/chrome.XXXXXX")
-  out="$profile.dom"
-  local -a profile_arg=()
-  [ "$(uname -s)" = Darwin ] && profile_arg=(--user-data-dir="$profile")
-  HOME="$profile" XDG_CONFIG_HOME="$profile/.config" XDG_CACHE_HOME="$profile/.cache" \
-    "$chrome" ${profile_arg[@]+"${profile_arg[@]}"} --headless=new --use-mock-keychain \
-    --password-store=basic --disable-gpu --no-sandbox --disable-dev-shm-usage \
-    --disable-background-networking --no-first-run --window-size=1110,3000 \
-    --virtual-time-budget=2000 --dump-dom "file://$page" >"$out" 2>/dev/null &
-  pid=$!
-  while [ "$ticks" -lt 300 ] && ! grep -Fq '</html>' "$out" 2>/dev/null && kill -0 "$pid" 2>/dev/null; do
-    sleep 0.1
-    ticks=$((ticks + 1))
-  done
-  kill -9 "$pid" 2>/dev/null || true
-  wait "$pid" 2>/dev/null || true
-  cat "$out"
-}
-
 test_closed_folds_cover_nothing_and_stay_findable() {
-  local h page probed chrome dom i
+  local h page probed chrome dom report i
 
   if ! chrome=$(find_chrome); then
     echo 'skip: Chrome not found for the closed-fold layout test'
@@ -834,7 +800,11 @@ test_closed_folds_cover_nothing_and_stay_findable() {
   document.body.appendChild(out);\
 }, 300);</script></body>#' "$page" >"$probed"
 
-  dom=$(chrome_dom "$chrome" "$probed")
+  # The 1110px desktop width the layout checker reported from.
+  report=$(fm_chrome_dump_dom "$chrome" "$probed" "$h/probed.dom" "page=$probed" --window-size=1110,3000) \
+    || fail "Chrome produced no DOM for the closed-fold probe: $report"
+  dom=$(cat "$h/probed.dom")
+  assert_contains "$dom" '<pre id="probe">' 'the closed-fold probe never ran in Chrome'
   assert_contains "$dom" 'covered=0 ' 'a row in a closed fold sits over another section at desktop width'
   assert_contains "$dom" ' found=true' 'a row in a closed fold can no longer be found on the page'
 
