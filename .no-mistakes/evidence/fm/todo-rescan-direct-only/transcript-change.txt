@@ -1,0 +1,22 @@
+=== [change] claim (the re-scan handed to the orchestrator) ===
+stages: H_TICKETS	every open stage plus "Waiting on contact", which HubSpot marks closed but where a partner can still be waiting on the captain
+rescan: H_TICKETS	last_rescan: never	scope: every ticket in those stages that the captain owns, or, any owner, in which an email or note @mentions the captain or asks him something directly, re-read in full whatever its last-modified date; a colleague-owned ticket that only promises the customer the tech team is on it, or only names the captain in passing, is not his; observe each with --timeline-
+
+=== [change] observe --timeline-file per ticket (owner -> awaiting / class) ===
+ticket       owner                  awaiting class       why
+sportcity    luc@team.example       0        routine     
+citygym      luc@team.example       0        routine     
+duinrell     luc@team.example       0        routine     
+cargill      luc@team.example       0        routine     
+keiron       natalia@team.example   0        routine     
+ask-about    luc@team.example       0        routine     
+own-ticket   captain                1        obligation  the Mon 12 Oct 05:00 promise that tech is on it has had no message since
+at-mention   luc@team.example       1        obligation  the partner's Mon 12 Oct 03:00 message has no reply; the Mon 12 Oct 05:00 colleague note asking you is unanswered
+direct-ask   luc@team.example       1        obligation  the partner's Mon 12 Oct 03:00 message has no reply
+dutch-ask    natalia@team.example   1        obligation  the partner's Mon 12 Oct 03:00 message has no reply; the Mon 12 Oct 05:00 colleague note asking you is unanswered
+
+=== [change] rendered to-do page: Needs you now ===
+  - at-mention
+  - dutch-ask
+  - direct-ask
+  - own-ticket

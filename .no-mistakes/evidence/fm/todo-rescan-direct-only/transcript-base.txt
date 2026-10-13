@@ -1,0 +1,28 @@
+=== [base] claim (the re-scan handed to the orchestrator) ===
+stages: H_TICKETS	every open stage plus "Waiting on contact", which HubSpot marks closed but where a partner can still be waiting on the captain
+rescan: H_TICKETS	last_rescan: never	scope: every ticket in those stages, any owner, whose emails or notes name the captain or in which a colleague promised the customer that the tech team is on it, re-read in full whatever its last-modified date; observe each with --timeline-file, then complete with --rescanned
+
+=== [base] observe --timeline-file per ticket (owner -> awaiting / class) ===
+ticket       owner                  awaiting class       why
+sportcity    luc@team.example       1        obligation  the Mon 12 Oct 05:00 promise that tech is on it has had no message since
+citygym      luc@team.example       1        obligation  the partner's Mon 12 Oct 03:00 message has no reply
+duinrell     luc@team.example       1        obligation  the partner's Mon 12 Oct 03:00 message has no reply; the Mon 12 Oct 05:00 colleague note asking you is unanswered
+cargill      luc@team.example       1        obligation  the partner's Mon 12 Oct 03:00 message has no reply
+keiron       natalia@team.example   1        obligation  the Mon 12 Oct 05:00 promise that you are on it has had no message since
+ask-about    luc@team.example       1        obligation  the partner's Mon 12 Oct 03:00 message has no reply; the Mon 12 Oct 05:00 colleague note asking you is unanswered
+own-ticket   captain                1        obligation  the Mon 12 Oct 05:00 promise that tech is on it has had no message since
+at-mention   luc@team.example       1        obligation  the partner's Mon 12 Oct 03:00 message has no reply; the Mon 12 Oct 05:00 colleague note asking you is unanswered
+direct-ask   luc@team.example       1        obligation  the partner's Mon 12 Oct 03:00 message has no reply
+dutch-ask    natalia@team.example   1        obligation  the partner's Mon 12 Oct 03:00 message has no reply; the Mon 12 Oct 05:00 colleague note asking you is unanswered
+
+=== [base] rendered to-do page: Needs you now ===
+  - citygym
+  - cargill
+  - ask-about
+  - at-mention
+  - duinrell
+  - dutch-ask
+  - direct-ask
+  - sportcity
+  - own-ticket
+  - keiron
