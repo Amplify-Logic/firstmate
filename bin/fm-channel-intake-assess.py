@@ -195,19 +195,18 @@ def assess(doc, names, captain_addresses, team_addresses):
         return any(e['at'] > at and (is_answer(e) or (note_answers and e['type'] == 'note' and by_captain(e)))
                    for e in events)
 
-    # (b) A promise naming the captain or the tech team, or the captain's own
-    # promise, with no later reply after it.
-    tech_promise = False
+    # (b) A promise naming the captain, the captain's own promise, or on his own
+    # ticket a promise naming the tech team, with no later reply after it. A
+    # colleague's tech-team promise on the colleague's ticket is not his.
     for e in events:
         if e['type'] != 'email' or e['direction'] != 'outbound':
             continue
         text = fresh_text(e['body'])
         if not promise_re.search(text):
             continue
-        who = 'you' if names_captain(text) or by_captain(e) else ('tech' if TECH.search(text) else '')
+        who = 'you' if names_captain(text) or by_captain(e) else ('tech' if captain_owned and TECH.search(text) else '')
         if not who:
             continue
-        tech_promise = tech_promise or who == 'tech'
         if not answered_after(e['at']):
             pending.append((e['at'], f'the {when(e["at"])} promise that {"you are" if who == "you" else "tech is"} on it has had no message since'))
 
@@ -222,7 +221,7 @@ def assess(doc, names, captain_addresses, team_addresses):
 
     # (a) The partner's last message unanswered. Only a later reply discharges
     # it; a HubSpot send with no EMAIL engagement is an auto-acknowledgement.
-    involved = captain_owned or named or tech_promise
+    involved = captain_owned or named
     inbound = [e for e in events if e['type'] == 'email' and e['direction'] == 'inbound']
     if involved and inbound:
         last = inbound[-1]

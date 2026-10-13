@@ -152,14 +152,16 @@
 #             captain_addresses mailbox - only such a reply discharges it, not
 #             the pipeline stage; (b) an outbound promise to act - the team,
 #             tech or the captain acting, not a request to the customer -
-#             that names the captain or the tech team, or that the captain
-#             wrote, has no later reply from such a mailbox; (c) a
+#             that names the captain or that the captain wrote, or on his own
+#             ticket one that names the tech team, has no later reply from
+#             such a mailbox; (c) a
 #             colleague's note that names the captain has no later note by
 #             him and no reply.
 # Only an EMAIL engagement is a reply: a `last_message_sent_at` send with no
 # matching email is an auto-acknowledgement and answers nothing. (a) applies
-# only when the ticket involves the captain: he owns it, a message or note
-# names him, or a promise names the tech team. The timeline is
+# only when the ticket involves the captain: he owns it, or a message or note
+# names him. A colleague's promise that the tech team is on it involves him in
+# neither (a) nor (b). The timeline is
 #   {"kind": "hubspot-ticket", "owner": "captain"|"<owner address>",
 #    "contacts": ["<address>", ...], "companies": [{"domain": "<mail domain>"}],
 #    "last_message_sent_at": EPOCH,
@@ -282,8 +284,8 @@
 #                            (default channel-intake)
 #   captain_names            words that name the captain in a message or note,
 #                            e.g. a first and last name (default unset; with
-#                            none, only a ticket he owns, a message he wrote or
-#                            a promise naming the tech team identifies him)
+#                            none, only a ticket he owns or a message he wrote
+#                            identifies him)
 #   captain_addresses        the captain's own mail addresses (default unset)
 #   team_addresses           shared mailboxes whose outbound counts as a reply,
 #                            e.g. the support address (default unset); these

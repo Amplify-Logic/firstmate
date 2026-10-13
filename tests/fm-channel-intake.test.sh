@@ -61,8 +61,9 @@
 #   - Install and uninstall work against a temporary home and a fake launchd
 #     transport, and refuse a home that never opted in.
 #   - A timeline flags a partner-facing ask awaiting the captain - an
-#     unanswered partner message, an open promise naming him or tech, or a
-#     colleague note naming him - recognising him by the sentinel or by his own
+#     unanswered partner message, an open promise naming him or, on his own
+#     ticket, tech, or a colleague note naming him, never a colleague's
+#     tech-team promise alone - recognising him by the sentinel or by his own
 #     address and the partner by any address on the ticket, while only a reply
 #     discharges one, an auto-acknowledgement is claimed only when no email
 #     went out, and a malformed or address-less timeline is refused.
@@ -1577,6 +1578,7 @@ EOF
       ;;
     # One of the back-sweep's tech cases: a colleague told the customer the
     # tech team is on it, never naming the captain, and nothing went out since.
+    # The ticket is the colleague's, so it never waits on the captain.
     tech-promise)
       cat >"$h/$name.json" <<EOF
 {"kind":"hubspot-ticket","owner":"natalia@team.example","stage":"Waiting for Tech",
@@ -1586,6 +1588,33 @@ EOF
    "body":"The machine keeps showing E.A03 after the reset."},
   {"type":"email","at":$at_out,"direction":"outbound","from":"support@team.example",
    "body":"Our tech team is looking into this, I'll keep you updated.\nNatalia"}]}
+EOF
+      ;;
+    # The same tech-team promise on a ticket the captain owns is his to keep.
+    own-tech-promise)
+      cat >"$h/$name.json" <<EOF
+{"kind":"hubspot-ticket","owner":"captain","stage":"Waiting for Tech",
+ "contacts":["mark@office.example"],
+ "events":[
+  {"type":"email","at":$at_inbound,"direction":"inbound","from":"mark@office.example",
+   "body":"The machine keeps showing E.A03 after the reset."},
+  {"type":"email","at":$at_out,"direction":"outbound","from":"support@team.example",
+   "body":"Our tech team is looking into this, I'll keep you updated.\nNatalia"}]}
+EOF
+      ;;
+    # A colleague's tech-team promise was later answered, and the partner wrote
+    # again: the unanswered message is the colleague's, not the captain's.
+    tech-promise-chase)
+      cat >"$h/$name.json" <<EOF
+{"kind":"hubspot-ticket","owner":"luc@team.example","stage":"Waiting for Tech",
+ "contacts":["mark@office.example"],
+ "events":[
+  {"type":"email","at":$((at_inbound - 4 * H)),"direction":"outbound","from":"support@team.example",
+   "body":"Our tech team is looking into this, I'll keep you updated.\nLuc"},
+  {"type":"email","at":$((at_inbound - 2 * H)),"direction":"outbound","from":"support@team.example",
+   "body":"Please try a reset in the meantime.\nLuc"},
+  {"type":"email","at":$at_inbound,"direction":"inbound","from":"mark@office.example",
+   "body":"The reset did not help, any news?"}]}
 EOF
       ;;
     # The captain's own reply puts the next step with the customer: asking them
@@ -1659,7 +1688,7 @@ test_partner_facing_asks_awaiting_the_captain_are_flagged() {
   partner_home "$h"
 
   for name in promise autoack contact-note contact-chase thanks-and-ask owner-address \
-    participants-only colleague-reply tech-promise captain-looking colleague-following; do
+    participants-only colleague-reply own-tech-promise captain-looking colleague-following; do
     key=$(key_of "$(observe_ticket "$h" "$name" "$T_0900")")
     [ "$(item_field "$h" "$key" partner)" = 1 ] || fail "$name: a ticket with an external contact is not partner-facing"
     [ "$(item_field "$h" "$key" awaiting)" = 1 ] || fail "$name: a partner waiting on the captain was not flagged"
@@ -1670,9 +1699,9 @@ test_partner_facing_asks_awaiting_the_captain_are_flagged() {
   key=$(key_of "$(observe_ticket "$h" promise "$T_0900")")
   assert_contains "$(item_field "$h" "$key" awaiting_why)" 'promise that you are on it has had no message since' \
     'a colleague-owned ticket naming the captain only in an email body was not caught by its promise'
-  key=$(key_of "$(observe_ticket "$h" tech-promise "$T_0900")")
+  key=$(key_of "$(observe_ticket "$h" own-tech-promise "$T_0900")")
   assert_contains "$(item_field "$h" "$key" awaiting_why)" 'promise that tech is on it has had no message since' \
-    'a colleague promise that the tech team is on it was not caught'
+    'a tech-team promise on the captain'"'"'s own ticket was not caught'
   key=$(key_of "$(observe_ticket "$h" captain-looking "$T_0900")")
   assert_contains "$(item_field "$h" "$key" awaiting_why)" 'promise that you are on it has had no message since' \
     'the captain'"'"'s subjectless promise was not caught'
@@ -1704,8 +1733,11 @@ test_partner_facing_asks_awaiting_the_captain_are_flagged() {
   assert_not_contains "$(item_field "$h" "$key" awaiting_why)" 'auto-acknowledgement' \
     'a real outbound email was reported as an auto-acknowledgement'
 
-  # Only a reply discharges an ask, and only a note naming him is one.
-  for name in customer-owes customer-asked answered uninvolved internal unnamed-note note-answered; do
+  # Only a reply discharges an ask, and only a note naming him is one. A
+  # colleague's tech-team promise involves him neither as a promise nor as a
+  # reason to own the partner's unanswered message.
+  for name in customer-owes customer-asked answered uninvolved internal unnamed-note note-answered \
+    tech-promise tech-promise-chase; do
     key=$(key_of "$(observe_ticket "$h" "$name" "$T_0900")")
     [ "$(item_field "$h" "$key" awaiting)" = 0 ] || fail "$name: flagged as awaiting the captain"
     [ "$(item_field "$h" "$key" class)" = routine ] || fail "$name: a ticket not awaiting the captain was promoted"
