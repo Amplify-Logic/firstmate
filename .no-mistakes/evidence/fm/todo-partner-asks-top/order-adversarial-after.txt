@@ -1,0 +1,9 @@
+TODO_RENDER: /var/folders/2c/9sf1hvpn23q336b08gs1np0c0000gn/T//fm-lab.8E5tuN/.lavish/today-2026-10-13.html rendered at 08:30 CEST
+--- Needs you now order (after) ---
+<h2>Needs you now<small>live problems first, then partners and customers, then deadlines, oldest ask first
+  Fleet outage at HQ
+  CSG modem replacement
+  Colleague relays customer question
+  Partner quote due
+  15:00 RMA process
+  Urgent internal ask waiting long
