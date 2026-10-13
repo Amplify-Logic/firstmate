@@ -28,8 +28,8 @@
 #     the intake's absence, so it is never pruned either. A system reopen note
 #     is not such a mark: a revived routine thread still retires and prunes.
 #   - A partner-facing ask awaiting the captain ranks in the second tier of
-#     the Needs you list, after live problems and deadlines and above every
-#     other class, oldest ask first and an undated ask last, and a timeline
+#     the Needs you list, after a live outage and above deadlines, calendar
+#     meetings and every other class, oldest ask first and an undated ask last, and a timeline
 #     re-read makes it current.
 #   - Every Needs you row names the system it came from beside its severity
 #     pill, and an unrecognised source gets a neutral marker instead of failing.
@@ -541,11 +541,11 @@ EOF
     --title 'Syrup availability and connectivity' --timeline-file "$h/caffeine.json" >/dev/null
   render_at "$h" "$T_1100"
   out=$(page "$h" 2026-09-10)
-  # Live problems and deadlines lead; the awaiting partner ask comes next,
-  # above urgent asks, and its row says why the partner is waiting.
+  # A live outage leads; the awaiting partner ask comes next, above the
+  # deadline and urgent asks, and its row says why the partner is waiting.
   [ "$(needs_order "$out" | sed -n 1,3p)" = 'fresh outage-1
-fresh deadline-1
-Syrup availability and connectivity' ] && [ "$(needs_order "$out" | sed -n 4,5p | sort | tr '\n' ' ')" = 'fresh urgent-1 fresh urgent-2 ' ] || fail "the awaiting partner ask is not second tier in Needs you:
+Syrup availability and connectivity
+fresh deadline-1' ] && [ "$(needs_order "$out" | sed -n 4,5p | sort | tr '\n' ' ')" = 'fresh urgent-1 fresh urgent-2 ' ] || fail "the awaiting partner ask is not second tier in Needs you:
 $(needs_order "$out")"
   first=$(grep -m1 'class="what">Syrup' <<<"$out")
   assert_contains "$first" 'promise that you are on it' 'the row does not say why the partner is waiting'
@@ -557,14 +557,22 @@ $(needs_order "$out")"
   sidecar "$h" 2026-09-10 '{"key":"k-out","source":"C_BRIEF","ref":"m-out","class":"outage","title":"Morning outage","updated":'"$T_1030"'},{"key":"k-p","source":"hubspot","ref":"48622709535","class":"obligation","kind":"reply","title":"Morning partner ask","partner_awaiting":true,"awaiting_since":'"$((T_0900 - 3600))"',"updated":'"$T_1030"'}'
   render_at "$h" "$T_1100"
   out=$(page "$h" 2026-09-10)
-  [ "$(needs_order "$out" | sed -n 4,5p)" = 'Syrup availability and connectivity
+  [ "$(needs_order "$out" | sed -n 3,4p)" = 'Syrup availability and connectivity
 Morning partner ask' ] || fail "a morning partner ask is not in the partner tier after the live problems:
+$(needs_order "$out")"
+  # A calendar meeting ending today is a deadline, not a partner ask: the older
+  # awaiting partner reply ranks above it, and the outage still leads.
+  sidecar "$h" 2026-09-10 '{"key":"k-out","source":"C_BRIEF","ref":"m-out","class":"outage","title":"Morning outage","updated":'"$T_1030"'},{"key":"k-cal","source":"calendar","ref":"rma","class":"deadline","title":"RMA process meeting","ends_at":"2026-09-10T15:30:00+02:00","updated":'"$T_1030"'},{"key":"k-p","source":"hubspot","ref":"48622709535","class":"obligation","kind":"reply","title":"Morning partner ask","partner_awaiting":true,"awaiting_since":'"$((T_0900 - 86400 * 3))"',"updated":'"$T_1030"'}'
+  render_at "$h" "$T_1100"
+  out=$(page "$h" 2026-09-10)
+  [ "$(needs_order "$out" | grep -n -x -e 'Morning outage' -e 'fresh outage-1' -e 'Morning partner ask' -e 'RMA process meeting' | cut -d: -f2 | tr '\n' '|')" = 'fresh outage-1|Morning outage|Morning partner ask|RMA process meeting|' ] \
+    || fail "a calendar meeting ending today ranks above an older awaiting partner reply, or the outage does not lead:
 $(needs_order "$out")"
   # An undated partner ask is not the oldest ask: it sorts after the dated one.
   sidecar "$h" 2026-09-10 '{"key":"k-out","source":"C_BRIEF","ref":"m-out","class":"outage","title":"Morning outage","updated":'"$T_1030"'},{"key":"k-p","source":"hubspot","ref":"48622709535","class":"obligation","kind":"reply","title":"Morning partner ask","partner_awaiting":true,"updated":'"$T_1030"'}'
   render_at "$h" "$T_1100"
   out=$(page "$h" 2026-09-10)
-  [ "$(needs_order "$out" | sed -n 4,5p)" = 'Syrup availability and connectivity
+  [ "$(needs_order "$out" | sed -n 3,4p)" = 'Syrup availability and connectivity
 Morning partner ask' ] || fail 'an undated partner ask jumped ahead of an older dated one'
   # A sidecar that spells the flag as a string would silently rank the ask like
   # any other item, so it is refused the way a bad class already is.
@@ -576,7 +584,7 @@ Morning partner ask' ] || fail 'an undated partner ask jumped ahead of an older 
   sidecar "$h" 2026-09-10 '{"key":"k-p","source":"hubspot","ref":"48622709535","class":"obligation","kind":"reply","title":"Morning partner ask","partner_awaiting":true,"awaiting_since":'"${T_0900}000"',"updated":'"$T_1030"'}'
   if render_at "$h" "$T_1100" 2>/dev/null; then fail 'a sidecar whose awaiting_since is in milliseconds was accepted'; fi
   diff -r "$h/data/todo/items" "$h/todo.before/items" >/dev/null || fail 'a refused sidecar changed the store'
-  pass 'a partner-facing ask awaiting the captain ranks right after live problems and deadlines, oldest first and undated last'
+  pass 'a partner-facing ask awaiting the captain ranks right after a live outage and above deadlines and meetings, oldest first and undated last'
 }
 
 test_each_row_marks_where_it_came_from() {

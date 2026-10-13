@@ -4,8 +4,8 @@
 # Contracts under test:
 #   - Urgency wins the order: an outage sits above an urgent item, which sits
 #     above a routine one, whatever order the ledger recorded them in.
-#   - One calm "Needs you now" list: live problems and hard deadlines first,
-#     then a partner awaiting him, an urgent ask that only waited long never
+#   - One calm "Needs you now" list: live problems first, then a partner
+#     awaiting him, then hard deadlines, an urgent ask that only waited long never
 #     above them, no summary strip,
 #     Now box, sweep banner or held count, and no item rendered twice.
 #   - Waiting on others, other channel activity and closed today render as
@@ -379,12 +379,12 @@ test_calm_layout_ranks_live_problems_first_and_folds_the_rest() {
   page=$(page_of "$h")
   body=$(sed -n '/<h2>Needs you now/,/<\/table>/p' "$page")
 
-  # Tier 0 is a live problem or a hard deadline, tier 1 a partner awaiting
-  # him; age alone never lifts the urgent ask above them, and everything
+  # Tier 0 is a live outage, tier 1 a partner awaiting him, tier 2 a hard
+  # deadline; age alone never lifts the urgent ask above them, and everything
   # else follows oldest ask first. The stored title loses its rotting "26 days".
   [ "$(grep -o 'class="what">[^<]*' <<<"$body" | sed 's/^class="what">//')" = 'partner machine down now
-feedback due before leave
 partner awaiting your answer
+feedback due before leave
 answer the training question
 partner waiting' ] || fail "the Needs you list is not in action order:
 $body"
@@ -417,7 +417,7 @@ Your open tickets' ] || fail 'the page has headed sections beyond the Needs you 
   [ "$(line_of "$page" 'invoice settled')" -gt "$(line_of "$page" '<summary>Closed today')" ] \
     || fail 'the closed item is not inside the closed fold'
 
-  pass 'the calm layout ranks live problems and deadlines first in one list, never repeats an item, and folds the rest'
+  pass 'the calm layout ranks live problems first, then partners, then deadlines in one list, never repeats an item, and folds the rest'
 }
 
 test_house_style_comes_from_the_tracked_templates() {
