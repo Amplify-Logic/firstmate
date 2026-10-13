@@ -434,6 +434,10 @@ test_house_style_comes_from_the_tracked_templates() {
   # and the provenance legend, with nothing fetched and no tool running.
   assert_contains "$(cat "$page")" '<!doctype html>' 'the page has no document type'
   assert_contains "$(cat "$page")" '--accent:#0b4f8a' 'the house palette is missing'
+  # A collapsed fold takes its rows out of layout, so they never sit unseen
+  # over the open-tickets table below and cover its text.
+  assert_contains "$(cat "$page")" 'details:not([open])>:not(summary){display:none}' \
+    'a closed fold still lays out its rows over the sections below it'
   assert_contains "$(cat "$page")" '<span class="pill bad">outage</span>' \
     'the severity pill is missing from the outage row'
   assert_contains "$(cat "$page")" 'could not be confirmed from any source available here' \
