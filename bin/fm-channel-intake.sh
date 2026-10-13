@@ -158,9 +158,11 @@
 #             colleague's note that names the captain has no later note by
 #             him and no reply.
 # On his own ticket any captain_names word names him. On a colleague's ticket
-# only an @mention (`@` right before the word) or a question addressed to him
-# (the word opening a line or sentence, after at most a greeting, then a comma
-# or colon and a `?`, as in "<name>, can you ...?") does: a passing name such
+# only an @mention (`@` right before the word) or a direct ask within one
+# sentence does: the word opening it, after at most a greeting, then a comma or
+# colon and a question or a request ("<name>, can you ...?", "<name>, please
+# ..."), or no comma and a request word with "you" ("<name> can you ...?"), or
+# the word closing a question ("... check this, <name>?"). A passing name such
 # as "discussed with <name>, closing" names nobody, in (a), (b) and (c) alike.
 # Only an EMAIL engagement is a reply: a `last_message_sent_at` send with no
 # matching email is an auto-acknowledgement and answers nothing. (a) applies

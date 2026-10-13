@@ -32,6 +32,9 @@ ACTING = (
     r"look(?:ing)? into|check(?:ing)?\b[^.?!\n]{0,40}\bwith\b|follow(?:ing)? up"
     r"|induiken|achteraan|uitzoeken|nakijken|navragen|terugkoppel|\blaat\b[^.?!\n]{0,40}\bweten\b")
 ACTORS = [r"i", r"we", r"our", r"team", r"tech\w*", r"ik", r"wij"]
+# Words that open a request to whoever was just addressed; with no comma after
+# the name, only such a word followed by "you" makes the sentence ask him.
+REQUEST = r"please|pls|kindly|can|could|would|will|kun|kunt|kan|wil|wilt|zou|zoudt|graag|mag"
 TECH = re.compile(r"\btech\b|\btechteam\b|\btechnical (?:team|support|department)\b", re.I)
 QUOTE_START = re.compile(
     r"^\s*(?:>|on .{0,120}wrote:|op .{0,120}schreef|-{2,}\s*original message|from:\s|van:\s|sent from my)",
@@ -158,10 +161,14 @@ def assess(doc, names, captain_addresses, team_addresses):
     name = '(?:' + '|'.join(re.escape(n) for n in names) + ')'
     name_re = re.compile(r'(?<![\w.@-])@?' + name + r'\b', re.I) if names else None
     mention_re = re.compile(r'(?<![\w.@-])@' + name + r'\b', re.I) if names else None
-    # Addressed to him: his name opens a line or sentence, after at most a
-    # greeting, set off by a comma or colon, and a question follows.
-    asked_re = re.compile(r'(?:^\s*|[.?!]\s+)(?:(?:hi|hello|hey|dear|hoi|hallo|beste)\s+)?'
-                          + name + r'(?:\s+' + name + r')*\s*[,:][^?]*\?', re.I | re.M) if names else None
+    # Asked directly, within one sentence: his name opens it, after at most a
+    # greeting, then a comma or colon and a question or a request, or no comma
+    # and a request word with "you"; or his name closes a question.
+    addressed = (r'(?:^\s*|[.?!]\s+)(?:(?:hi|hello|hey|dear|hoi|hallo|beste)\s+)?'
+                 + name + r'(?:\s+' + name + r')*')
+    asked_re = re.compile(addressed + r'\s*[,:]\s*(?:[^.?!\n]*\?|(?:' + REQUEST + r')\b)'
+                          + '|' + addressed + r'\s+(?:' + REQUEST + r')\s+(?:you|je|jij|u)\b'
+                          + r'|\b' + name + r'\s*\?', re.I | re.M) if names else None
     actors = '|'.join(ACTORS + [re.escape(n) for n in names])
     promise_re = re.compile(PROMISE + r'|\b(?:' + actors + r')\b' + NOT_YOU + '{0,20}?(?:'
                             + ACTING + ')', re.I | re.S | re.M)

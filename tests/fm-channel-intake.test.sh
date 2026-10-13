@@ -1430,7 +1430,7 @@ partner_home() {
 # says otherwise, and names the captain, if at all, only inside a message body.
 H=3600
 write_timeline() {
-  local h=$1 name=$2 at_inbound=$((T_0900 - 30 * H)) at_out=$((T_0900 - 28 * H))
+  local h=$1 name=$2 at_inbound=$((T_0900 - 30 * H)) at_out=$((T_0900 - 28 * H)) body
   case "$name" in
     # Caffeine Mechanics: the customer's chase was answered with a promise that
     # @mentions the captain, and nothing has gone to the customer since.
@@ -1590,6 +1590,27 @@ EOF
    "body":"I have asked the warehouse about it."}]}
 EOF
       ;;
+    # A colleague's note on her ticket, the partner's message unanswered. Each
+    # ask- note asks the captain directly in a different form; list-name only
+    # opens a list with his name, and the question after it is the customer's.
+    ask-*|list-name)
+      case "$name" in
+        ask-request) body='Lars, please call the customer back about the B.14.' ;;
+        ask-dutch) body='Lars, wil je de klant even bellen.' ;;
+        ask-trailing) body='Can you check this, Lars?' ;;
+        ask-trailing-dutch) body='Kun jij hier even naar kijken Lars?' ;;
+        ask-no-comma) body='Lars can you check the PCB?' ;;
+        list-name) body='Lars, Natalia and I visited the site on Monday.\nCustomer asks: when is the next maintenance?' ;;
+      esac
+      cat >"$h/$name.json" <<EOF
+{"kind":"hubspot-ticket","owner":"luc@team.example","stage":"Waiting for Tech",
+ "contacts":["chloe@kiosk.example"],
+ "events":[
+  {"type":"email","at":$at_inbound,"direction":"inbound","from":"chloe@kiosk.example",
+   "body":"The unit shows B.14 again."},
+  {"type":"note","at":$at_out,"author":"luc@team.example","body":"$body"}]}
+EOF
+      ;;
     # A colleague's ticket whose customer and promise name the captain only in
     # passing: neither tags nor asks him.
     passing-promise)
@@ -1723,7 +1744,8 @@ test_partner_facing_asks_awaiting_the_captain_are_flagged() {
   partner_home "$h"
 
   for name in promise autoack contact-note contact-chase thanks-and-ask owner-address \
-    participants-only direct-ask own-tech-promise captain-looking colleague-following; do
+    participants-only direct-ask own-tech-promise captain-looking colleague-following \
+    ask-request ask-dutch ask-trailing ask-trailing-dutch ask-no-comma; do
     key=$(key_of "$(observe_ticket "$h" "$name" "$T_0900")")
     [ "$(item_field "$h" "$key" partner)" = 1 ] || fail "$name: a ticket with an external contact is not partner-facing"
     [ "$(item_field "$h" "$key" awaiting)" = 1 ] || fail "$name: a partner waiting on the captain was not flagged"
@@ -1775,7 +1797,7 @@ test_partner_facing_asks_awaiting_the_captain_are_flagged() {
   # reason to own the partner's unanswered message, and on a colleague's
   # ticket a passing name, in a message, promise or note, involves him in none.
   for name in customer-owes customer-asked answered uninvolved internal unnamed-note note-answered \
-    tech-promise tech-promise-chase colleague-reply passing-promise passing-note; do
+    tech-promise tech-promise-chase colleague-reply passing-promise passing-note list-name; do
     key=$(key_of "$(observe_ticket "$h" "$name" "$T_0900")")
     [ "$(item_field "$h" "$key" awaiting)" = 0 ] || fail "$name: flagged as awaiting the captain"
     [ "$(item_field "$h" "$key" class)" = routine ] || fail "$name: a ticket not awaiting the captain was promoted"
