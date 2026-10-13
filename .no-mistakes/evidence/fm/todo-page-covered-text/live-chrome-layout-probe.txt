@@ -1,0 +1,32 @@
+Live Chrome 155 (headless, CDP) layout probe of the rendered to-do page.
+Probe: hit-test the centre of every text line of each to-do row; a line is covered when the hit lands on an element that is neither the row nor its ancestor (the layout checker's 'opaque sibling covers this text').
+'real-*' = copy of today's live page (2026-10-13), probed only on the 10 rows Lars queued; 'after' adds only the new template rule. 'synthetic-*' = page rendered by bin/fm-todo-render.sh in a throwaway home.
+
+real-before-1110-closed        rows= 10 rows_with_covered_text= 10 closed_fold_rows_with_layout_boxes= 10/10  open_rows_readable=0/0  covered_by=['a in table', 'td in table', 'th in table']
+real-before-1110-open          rows= 10 rows_with_covered_text=  0 closed_fold_rows_with_layout_boxes=  0/0   open_rows_readable=10/10
+real-before-390-closed         rows= 10 rows_with_covered_text= 10 closed_fold_rows_with_layout_boxes= 10/10  open_rows_readable=0/0  covered_by=['a in table', 'h2', 'li', 'section', 'td in table']
+real-before-390-open           rows= 10 rows_with_covered_text=  0 closed_fold_rows_with_layout_boxes=  0/0   open_rows_readable=10/10
+real-after-1110-closed         rows= 10 rows_with_covered_text=  0 closed_fold_rows_with_layout_boxes=  0/10  open_rows_readable=0/0
+real-after-1110-open           rows= 10 rows_with_covered_text=  0 closed_fold_rows_with_layout_boxes=  0/0   open_rows_readable=10/10
+real-after-390-closed          rows= 10 rows_with_covered_text=  0 closed_fold_rows_with_layout_boxes=  0/10  open_rows_readable=0/0
+real-after-390-open            rows= 10 rows_with_covered_text=  0 closed_fold_rows_with_layout_boxes=  0/0   open_rows_readable=10/10
+synthetic-before-1110-closed   rows= 18 rows_with_covered_text=  9 closed_fold_rows_with_layout_boxes= 12/12  open_rows_readable=6/6  covered_by=['details in fold "Closed today (N)"', 'div', 'h2', 'p', 'small', 'span', 'summary in fold "Closed today (N)"', 'td in table', 'th in table']
+synthetic-before-1110-open     rows= 18 rows_with_covered_text=  0 closed_fold_rows_with_layout_boxes=  0/0   open_rows_readable=18/18
+synthetic-before-390-closed    rows= 18 rows_with_covered_text= 10 closed_fold_rows_with_layout_boxes= 12/12  open_rows_readable=6/6  covered_by=['details in fold "Closed today (N)"', 'div', 'h2', 'p', 'span', 'summary in fold "Closed today (N)"', 'td in table', 'th in table']
+synthetic-before-390-open      rows= 18 rows_with_covered_text=  0 closed_fold_rows_with_layout_boxes=  0/0   open_rows_readable=18/18
+synthetic-after-1110-closed    rows= 18 rows_with_covered_text=  0 closed_fold_rows_with_layout_boxes=  0/12  open_rows_readable=6/6
+synthetic-after-1110-open      rows= 18 rows_with_covered_text=  0 closed_fold_rows_with_layout_boxes=  0/0   open_rows_readable=18/18
+synthetic-after-390-closed     rows= 18 rows_with_covered_text=  0 closed_fold_rows_with_layout_boxes=  0/12  open_rows_readable=6/6
+synthetic-after-390-open       rows= 18 rows_with_covered_text=  0 closed_fold_rows_with_layout_boxes=  0/0   open_rows_readable=18/18
+
+Fragment / text-search navigation into a closed fold (fold opens and row scrolls into view):
+synthetic-before-1110-fragment-item-t-e95553465c04   fold_opened=True row_in_viewport=True row_size=[1026, 48]
+synthetic-before-390-fragment-item-t-09dc6128697e    fold_opened=True row_in_viewport=True row_size=[357, 66]
+synthetic-before-1110-textfragment                   fold_opened=True row_in_viewport=True row_size=[1026, 48]
+real-before-1110-fragment                            fold_opened=True row_in_viewport=True row_size=[1026, 69]
+synthetic-after-1110-fragment-item-t-e95553465c04    fold_opened=True row_in_viewport=True row_size=[1026, 48]
+synthetic-after-390-fragment-item-t-09dc6128697e     fold_opened=True row_in_viewport=True row_size=[357, 66]
+synthetic-after-1110-textfragment                    fold_opened=True row_in_viewport=True row_size=[1026, 48]
+real-after-1110-fragment                             fold_opened=True row_in_viewport=True row_size=[1026, 69]
+displaynone-control-1110-textfragment                fold_opened=False row_in_viewport=False row_size=[0, 0]
+displaynone-control-1110-fragment                    fold_opened=True row_in_viewport=True row_size=[1026, 48]
