@@ -25,6 +25,7 @@ make_world() {
   : > "$dir/calls.log"
   fm_fake_real_tool "$fakebin" bash sh env cat grep sed head mkdir mktemp \
     chmod rm cp touch tr dirname || fail "a basic tool is missing on this host"
+  fm_fake_exit0 "$fakebin" true
 
   cat > "$fakebin/uname" <<'SH'
 #!/usr/bin/env bash
@@ -37,10 +38,13 @@ SH
 #!/usr/bin/env bash
 printf '%s\n' "${FAKE_UID:-1000}"
 SH
+  # A passwordless sudo user, as the CI fixture and cloud-init servers set up:
+  # real commands run, but sudo's default verifypw=all makes -v ask for a
+  # password unless every sudoers entry is NOPASSWD.
   cat > "$fakebin/sudo" <<'SH'
 #!/usr/bin/env bash
 printf 'sudo %s\n' "$*" >> "$FAKE_WORLD/calls.log"
-[ "${1:-}" = -v ] && exit 0
+if [ "${1:-}" = -v ]; then echo "sudo: a password is required" >&2; exit 1; fi
 exec "$@"
 SH
   cat > "$fakebin/apt-get" <<'SH'
@@ -178,7 +182,7 @@ test_fresh_install_then_rerun_is_idempotent() {
   status=$?
   [ "$status" -eq 0 ] || fail "a fresh install should succeed, got $status: $out"
   log=$(calls "$w")
-  assert_contains "$log" "sudo -v" "sudo credentials are asked for once up front"
+  assert_contains "$log" "sudo true" "sudo is asked for once up front, without -v"
   assert_contains "$log" "apt-get install -y -q build-essential procps curl file git ca-certificates" \
     "Homebrew's Linux prerequisites are installed with apt"
   assert_contains "$log" "brew-installer NONINTERACTIVE=1" "Homebrew is installed non-interactively"

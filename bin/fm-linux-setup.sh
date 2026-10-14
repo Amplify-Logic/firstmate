@@ -118,7 +118,7 @@ fi
 # --- installs ---------------------------------------------------------------
 
 say "Asking for your password once, for the system packages"
-sudo -v || die "sudo is needed for the system packages"
+sudo true || die "sudo is needed for the system packages"
 
 say "System packages: $APT_PACKAGES"
 sudo env DEBIAN_FRONTEND=noninteractive apt-get update -q || die "apt-get update failed"
