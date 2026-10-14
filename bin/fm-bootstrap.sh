@@ -109,7 +109,8 @@
 #          directory, or any project that sits on a Windows drive under
 #          /mnt/<letter>/, and names a .wslconfig that turns localhost
 #          forwarding off while networking is not mirrored (read through
-#          wslinfo, cmd.exe, and wslpath; silent when they are unavailable).
+#          wslinfo, cmd.exe, and wslpath; silent when they are unavailable
+#          or cmd.exe or wslpath does not answer within 5 seconds).
 #          On a headless server (no DISPLAY or WAYLAND_DISPLAY, reached over
 #          SSH) without Tailscale up, it prints one BOOTSTRAP_INFO fact that
 #          review boards and dev servers are reached from the person's own
@@ -1663,9 +1664,9 @@ host_env_resolve() {  # <path>: physical path when it exists, else as given
 host_env_wslconfig() {  # prints the Windows user's .wslconfig path when readable
   local profile path
   command -v cmd.exe >/dev/null 2>&1 && command -v wslpath >/dev/null 2>&1 || return 1
-  profile=$(cd / && cmd.exe /c 'echo %USERPROFILE%' 2>/dev/null | tr -d '\r' | head -n 1)
+  profile=$(cd / && fm_run_timed 5 cmd.exe /c 'echo %USERPROFILE%' 2>/dev/null | tr -d '\r' | head -n 1)
   [ -n "$profile" ] || return 1
-  path=$(wslpath -u "$profile" 2>/dev/null)/.wslconfig || return 1
+  path=$(fm_run_timed 5 wslpath -u "$profile" 2>/dev/null)/.wslconfig || return 1
   [ -r "$path" ] || return 1
   printf '%s\n' "$path"
 }

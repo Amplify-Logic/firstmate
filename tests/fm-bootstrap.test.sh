@@ -38,9 +38,6 @@ export FM_BACKEND_CMUX_BUNDLE_BIN="$TMP_ROOT/no-bundled-cmux"
 # otherwise - the same hermeticity discipline as pinning PATH via BASE_PATH.
 unset TMUX TMUX_PANE HERDR_ENV HERDR_PANE_ID HERDR_SESSION HERDR_SOCKET_PATH \
   CMUX_WORKSPACE_ID CMUX_SURFACE_ID CMUX_SOCKET_PATH CMUX_TAB_ID CMUX_PANEL_ID 2>/dev/null || true
-# The same holds for the host-environment markers: a WSL shell or an SSH login
-# must not add HOST_ENV lines to cases that pin other contracts.
-unset WSL_DISTRO_NAME SSH_CONNECTION SSH_TTY SSH_CLIENT 2>/dev/null || true
 
 # A fake toolchain where every required tool is present and gh is authenticated.
 # treehouse's `get --help` advertises --lease only when FM_FAKE_TREEHOUSE_LEASE_HELP=1.
@@ -563,10 +560,10 @@ SH
 }
 
 # HOST_ENV: WSL homes and projects on the Windows drive and WSL localhost
-# forwarding turned off; plus the headless-server board advice, a once-per-home
-# BOOTSTRAP_INFO fact. wslinfo, cmd.exe, wslpath, and tailscale are stubs. The
-# headless-server cases need a real Linux kernel, so a macOS run proves that
-# branch stays silent there instead.
+# forwarding turned off (silent when cmd.exe hangs); plus the headless-server
+# board advice, a once-per-home BOOTSTRAP_INFO fact. wslinfo, cmd.exe, wslpath,
+# and tailscale are stubs. The headless-server cases need a real Linux kernel,
+# so a macOS run proves that branch stays silent there instead.
 # shellcheck disable=SC2016  # stub bodies expand when the stub runs
 make_host_env_case() {  # <name> -> echoes "<case_dir>|<fakebin>"
   local case_dir="$TMP_ROOT/host-env-$1" fakebin
@@ -610,6 +607,12 @@ test_host_environment_reports() {
   printf '[wsl2]\nnetworkingMode=nat\n' > "$case_dir/winhome/.wslconfig"
   out=$(run_host_env_bootstrap "$case_dir" "$fakebin" WSL_DISTRO_NAME=Ubuntu-24.04)
   [ -z "$out" ] || fail "default localhost forwarding needs no advice, got: $out"
+  printf '[wsl2]\nlocalhostForwarding=false\n' > "$case_dir/winhome/.wslconfig"
+  printf '#!/usr/bin/env bash\nsleep 30\nprintf "C:\\\\Users\\\\fm\\r\\n"\n' > "$fakebin/cmd.exe"
+  SECONDS=0
+  out=$(run_host_env_bootstrap "$case_dir" "$fakebin" WSL_DISTRO_NAME=Ubuntu-24.04)
+  [ "$SECONDS" -lt 20 ] || fail "a hung cmd.exe should be cut off, bootstrap took ${SECONDS}s"
+  [ -z "$out" ] || fail "a hung cmd.exe should leave the forwarding check silent, got: $out"
 
   c=$(make_host_env_case server); case_dir=${c%%|*}; fakebin=${c#*|}
   ssh='10.0.0.2 50000 10.0.0.1 22'

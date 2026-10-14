@@ -145,7 +145,7 @@ brew install $BREW_PACKAGES || die "brew install failed"
 LOCAL_BIN="$HOME/.local/bin"
 PATH="$LOCAL_BIN:$PATH"
 export PATH
-if command -v claude >/dev/null 2>&1; then
+if [ -x "$LOCAL_BIN/claude" ]; then
   say "Claude Code already present"
 else
   say "Claude Code (native installer)"

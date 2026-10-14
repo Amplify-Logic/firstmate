@@ -109,13 +109,14 @@ SH
 }
 
 # run_setup <world> [args...]: run the script inside the world; prints combined
-# output and returns its exit status.
+# output and returns its exit status. FAKE_WINDOWS_PATH appends a directory the
+# way WSL appends the Windows PATH.
 run_setup() {
   local dir=$1
   shift
   (
     cd "$dir/home" || exit 1
-    PATH="$dir/fakebin:$dir/sysbin" HOME="${FAKE_HOME:-$dir/home}" FAKE_WORLD="$dir" \
+    PATH="$dir/fakebin:$dir/sysbin${FAKE_WINDOWS_PATH:+:$FAKE_WINDOWS_PATH}" HOME="${FAKE_HOME:-$dir/home}" FAKE_WORLD="$dir" \
       HOMEBREW_PREFIX="$dir/linuxbrew" bash "$SETUP" "$@" 2>&1
   )
 }
@@ -225,6 +226,24 @@ test_arm64_skips_chrome() {
   pass "arm64 finishes without Chrome and says browser checks are unavailable"
 }
 
+test_windows_claude_does_not_count_as_installed() {
+  local w out status npm_dir
+  w=$(make_world windows-claude)
+  # Claude Code installed on Windows with npm leaves an executable sh shim in
+  # %APPDATA%\npm, which WSL puts on the Linux PATH.
+  npm_dir="$w/mnt/c/Users/fm/AppData/Roaming/npm"
+  mkdir -p "$npm_dir"
+  printf '#!/usr/bin/env bash\necho 1.0.0 Windows Claude Code\n' > "$npm_dir/claude"
+  chmod +x "$npm_dir/claude"
+  out=$(FAKE_WINDOWS_PATH="$npm_dir" run_setup "$w" --ci)
+  status=$?
+  [ "$status" -eq 0 ] || fail "setup with a Windows claude on PATH should succeed, got $status: $out"
+  assert_contains "$(calls "$w")" "claude-installer" "a Windows claude on PATH still gets the Linux install"
+  assert_not_contains "$out" "Claude Code already present" "a Windows claude is not the Linux install"
+  assert_contains "$out" "2.9.0 Claude Code" "the closing check runs the Linux claude"
+  pass "a Windows Claude Code on the WSL PATH does not stand in for the Linux install"
+}
+
 test_missing_tool_fails_the_closing_check() {
   local w out status
   w=$(make_world broken-claude)
@@ -240,4 +259,5 @@ test_help_and_usage_errors
 test_refusals_change_nothing
 test_fresh_install_then_rerun_is_idempotent
 test_arm64_skips_chrome
+test_windows_claude_does_not_count_as_installed
 test_missing_tool_fails_the_closing_check
