@@ -1,10 +1,10 @@
 <h1 align="center">firstmate</h1>
 <p align="center">
   <a
-    href="https://img.shields.io/badge/platform-macOS%20%7C%20Linux-blue?style=flat-square"
+    href="https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows%20(WSL2)-blue?style=flat-square"
     ><img
       alt="Platform"
-      src="https://img.shields.io/badge/platform-macOS%20%7C%20Linux-blue?style=flat-square"
+      src="https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows%20(WSL2)-blue?style=flat-square"
   /></a>
   <a href="https://x.com/kunchenguid"
     ><img
@@ -142,6 +142,7 @@ Firstmate's skills live in two separate places with different audiences:
 
 - [docs/architecture.md](docs/architecture.md) - maintainer architecture for the crew, supervision, worktrees, secondmates, and project modes.
 - [ONBOARDING.md](ONBOARDING.md) and [docs/handbook.md](docs/handbook.md) - blank Mac to a working first mate, then how the whole system works, making it your own, connecting your tools, and a first-week path to full use.
+- [ONBOARDING-windows.md](ONBOARDING-windows.md) and [ONBOARDING-linux-server.md](ONBOARDING-linux-server.md) - the same start on a Windows PC through WSL 2, or on a rented Linux server reached over SSH, using `bin/fm-linux-setup.sh`.
 - [docs/configuration.md](docs/configuration.md) - environment variables, `FM_HOME`, runtime backend selection, optional Relay and its X and Discord setup steps, trusted external process-event adapter setup, the files you set, and harness support.
 - [docs/porting.md](docs/porting.md) - bring Firstmate up on a second machine and keep captain-private portable material in step with explicit push/pull.
 - [docs/extension-bindings.md](docs/extension-bindings.md) - maintainer architecture for the narrow trusted external `process-event-adapter/1` package, binding, handshake, and evidence boundary.
