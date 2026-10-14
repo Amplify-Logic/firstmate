@@ -2045,6 +2045,19 @@ if (presented.options.triggerTurn !== true || presented.options.deliverAs !== "f
 for (const needle of [`[seq ${seq1}, recorded 0m ago] task-d:`, `[seq ${seq2}, recorded 0m ago] fleet:`, `through=${seq2}`]) {
   if (!presented.message.content.includes(needle)) throw new Error(`the post-archive request lost ${needle}: ${presented.message.content}`);
 }
+
+// 6. Pi before 1.x opens that request's dedicated turn with its content as the
+// prompt text; a record entered before it runs aborts it the same way.
+contract(["enter", "--words", "stepping out again\n"]);
+const presentedMsg = { role: "custom", customType: presented.message.customType, content: presented.message.content, display: false };
+aborted = false;
+await fire("before_agent_start", { prompt: presented.message.content }, abortCtx);
+await fire("agent_start", {}, defaultSessionCtx);
+const openedByPrompt = await fire("context", { messages: [...history, presentedMsg] }, abortCtx);
+if (!aborted) throw new Error("a dedicated processing turn opened as prompt text was not aborted under the record");
+if (openedByPrompt?.messages?.some((message) => message.customType === "fm-branch-process")) {
+  throw new Error(`prompt-opened processing was not stripped: ${JSON.stringify(openedByPrompt)}`);
+}
 process.exit(0);
 EOF
   status=$?
