@@ -230,7 +230,7 @@ fm_role_git_common_dir() {
 # configured. Normalized to host/owner/repo or path:<abs>. Empty when the repo
 # has no such remote.
 fm_role_publication_target() {
-  local dir=$1 remote url= key resolved identity
+  local dir=$1 remote url='' key resolved identity
   while read -r key resolved; do
     remote=${key#remote.}
     remote=${remote%.gh-resolved}
