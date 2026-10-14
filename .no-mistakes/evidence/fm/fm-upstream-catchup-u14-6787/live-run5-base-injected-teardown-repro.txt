@@ -1,0 +1,155 @@
+# Live run 5 (BASE 09853b6b fm-supervision-host.sh) with the same injected hook process-group teardown; real Claude Code 2.1.300 primary, lab /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.Bn3DFf
+== parked 21:20:14 watcher=87695
+86600 86600 72392 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.Bn3DFf/root/bin/fm-claude-stop-autoarm.sh
+86601 86601 72392 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.Bn3DFf/root/bin/fm-claude-reply-speak.sh
+86999 86600 86600 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.Bn3DFf/root/bin/fm-supervision-host.sh park
+87542 86600 86999 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.Bn3DFf/root/bin/fm-watch-arm.sh
+87695 86600 87542 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.Bn3DFf/root/bin/fm-watch.sh
+== hook pgid 86600
+== appended needs-decision 21:20:14
+== rewake delivered 21:21:51; group 86600 members before injected teardown:
+11412 86600     1 bash fm-lab.Bn3DFf/root/bin/fm-watch-arm.sh
+11633 86600 11412 bash fm-lab.Bn3DFf/root/bin/fm-watch.sh
+13629 86600 11633 caffeinate -ims -w 11633
+19449 86600 11633 sleep 15
+== successor watcher before teardown: 11633 (pgid 86600)
+== injected: kill -TERM -- -86600 at 21:21:52
+RESULT: successor watcher 11633 DEAD after the hook group teardown
+== .watcher-down: announced:downtime:87695.1792005658.w5Vw8a
+== t+1s 21:21:55 watcher=11633
+== t+2s 21:21:56 watcher=11633
+== t+3s 21:21:58 watcher=11633
+== t+4s 21:21:59 watcher=11633
+== t+5s 21:22:03 watcher=11633
+== t+6s 21:22:04 watcher=11633
+== t+7s 21:22:05 watcher=11633
+== t+8s 21:22:06 watcher=11633
+== t+9s 21:22:08 watcher=11633
+== t+10s 21:22:09 watcher=11633
+== t+11s 21:22:10 watcher=11633
+== t+12s 21:22:11 watcher=11633
+== t+13s 21:22:12 watcher=11633
+== t+14s 21:22:14 watcher=11633
+== t+15s 21:22:16 watcher=11633
+== t+16s 21:22:17 watcher=11633
+== t+17s 21:22:18 watcher=11633
+38397 38275 38283 bash /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.Bn3DFf/root/bin/fm-watch.sh
+== t+18s 21:22:20 watcher=11633
+38397 38275 38283 bash /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.Bn3DFf/root/bin/fm-watch.sh
+== t+19s 21:22:21 watcher=38397
+38397 38275 38283 bash /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.Bn3DFf/root/bin/fm-watch.sh
+== t+20s 21:22:24 watcher=38397
+38397 38275 38283 bash /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.Bn3DFf/root/bin/fm-watch.sh
+== t+21s 21:22:26 watcher=38397
+38397 38275 38283 bash /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.Bn3DFf/root/bin/fm-watch.sh
+== t+22s 21:22:27 watcher=
+== t+23s 21:22:29 watcher=
+== t+24s 21:22:30 watcher=
+== t+25s 21:22:31 watcher=
+== t+26s 21:22:32 watcher=
+== t+27s 21:22:34 watcher=
+== t+28s 21:22:35 watcher=
+== t+29s 21:22:36 watcher=
+== t+30s 21:22:38 watcher=
+== t+31s 21:22:39 watcher=
+== t+32s 21:22:40 watcher=
+== t+33s 21:22:42 watcher=
+== t+34s 21:22:43 watcher=
+== t+35s 21:22:45 watcher=
+== t+36s 21:22:47 watcher=
+== t+37s 21:22:48 watcher=
+== t+38s 21:22:49 watcher=
+== t+39s 21:22:50 watcher=
+== t+40s 21:22:52 watcher=
+57678 57678 72392 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.Bn3DFf/root/bin/fm-claude-stop-autoarm.sh
+== t+41s 21:22:53 watcher=
+57678 57678 72392 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.Bn3DFf/root/bin/fm-claude-stop-autoarm.sh
+58839 57678 57678 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.Bn3DFf/root/bin/fm-supervision-host.sh park
+59069 57678 58839 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.Bn3DFf/root/bin/fm-supervision-host.sh park
+== t+42s 21:22:55 watcher=59796
+57678 57678 72392 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.Bn3DFf/root/bin/fm-claude-stop-autoarm.sh
+58839 57678 57678 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.Bn3DFf/root/bin/fm-supervision-host.sh park
+59706 57678 58839 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.Bn3DFf/root/bin/fm-watch-arm.sh
+59796 57678 59706 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.Bn3DFf/root/bin/fm-watch.sh
+== t+43s 21:22:56 watcher=59796
+57678 57678 72392 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.Bn3DFf/root/bin/fm-claude-stop-autoarm.sh
+58839 57678 57678 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.Bn3DFf/root/bin/fm-supervision-host.sh park
+59706 57678 58839 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.Bn3DFf/root/bin/fm-watch-arm.sh
+59796 57678 59706 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.Bn3DFf/root/bin/fm-watch.sh
+61651 57678 59796 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.Bn3DFf/root/bin/fm-watch.sh
+== t+44s 21:22:57 watcher=59796
+57678 57678 72392 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.Bn3DFf/root/bin/fm-claude-stop-autoarm.sh
+58839 57678 57678 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.Bn3DFf/root/bin/fm-supervision-host.sh park
+59706 57678 58839 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.Bn3DFf/root/bin/fm-watch-arm.sh
+59796 57678 59706 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.Bn3DFf/root/bin/fm-watch.sh
+== t+45s 21:22:58 watcher=59796
+57678 57678 72392 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.Bn3DFf/root/bin/fm-claude-stop-autoarm.sh
+58839 57678 57678 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.Bn3DFf/root/bin/fm-supervision-host.sh park
+59706 57678 58839 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.Bn3DFf/root/bin/fm-watch-arm.sh
+59796 57678 59706 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.Bn3DFf/root/bin/fm-watch.sh
+== .supervision-host.log
+1792005613	start	gen=host-86999-1792005612	primary=claude
+1792005689	pass-through	attended	main-only	signal: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.Bn3DFf/state/demo.status
+1792005774	start	gen=host-58839-1792005773	primary=claude
+== .watch-cycle-exits.log
+arm_pid=87542	watcher_pid=87695	origin=started	started_at=1792005613	ended_at=1792005687	exit_code=0	signal=none	reason=actionable-signal	beacon_age=73	lock_before=pid:87695|identity:Wed Oct 14 19:20:13 2026     bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.Bn3DFf/root/bin/fm-watch.sh	lock_after=pid:none|identity:none	successor=started:11633
+arm_pid=11412	watcher_pid=11633	origin=started	started_at=1792005689	ended_at=1792005712	exit_code=143	signal=TERM	reason=arm-interrupted	beacon_age=19	lock_before=pid:11633|identity:Wed Oct 14 19:21:29 2026     bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.Bn3DFf/root/bin/fm-watch.sh	lock_after=pid:11633|identity:Wed Oct 14 19:21:29 2026     bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.Bn3DFf/root/bin/fm-watch.sh	successor=none
+arm_pid=38283	watcher_pid=38397	origin=started	started_at=1792005738	ended_at=1792005746	exit_code=0	signal=none	reason=actionable-check	beacon_age=2	lock_before=pid:38397|identity:Wed Oct 14 19:22:18 2026     bash /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.Bn3DFf/root/bin/fm-watch.sh	lock_after=pid:none|identity:none	successor=none
+== .claude-autoarm-epoch
+epoch=2 owner_pid=57678 outcome=arming updated_at=1792005773
+Wed Oct 14 19:22:52 2026     bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.Bn3DFf/root/bin/fm-claude-stop-autoarm.sh
+== .watcher-down
+acked:downtime:87695.1792005658.w5Vw8a
+== .wake-queue
+== .watch-deliveries.log
+87695	Wed Oct 14 19:20:13 2026     bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.Bn3DFf/root/bin/fm-watch.sh	signal: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.Bn3DFf/state/demo.status
+38397	Wed Oct 14 19:22:18 2026     bash /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.Bn3DFf/root/bin/fm-watch.sh	check: rearm-resurface
+== primary pane
+ ▐▛███▛█   Claude Code v2.1.300
+▝▜██████▀  Opus 5.5 (1M context) with high effort · Claude Max
+ ▝▝   ▝▝   /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.Bn3DFf/root
+  ⎿  SessionStart:startup hook error
+  ⎿  Failed with non-blocking status code: /bin/sh: ${CLAUDE_PLUGIN_ROOT}/hooks/run-hook.cmd: No such file or directory
+❯ Reply with exactly one short line: ready. Do not run any tools this turn.
+⏺ ready
+✻ Brewed for 4s · done 9:20 PM
+⏺ Stop hook feedback
+⏺ Bash(bin/fm-wake-drain.sh)
+  ⎿  1792005667      2       signal  demo.status     needs-decision: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.Bn3DFf/state/demo.status
+     WAKE_ACK_REQUIRED: after handling completes run bin/fm-wake-drain.sh --ack-through 2 --recovery-generation 87695.1792005658.w5Vw8a
+     wake annotation: latest wake-EVENT observed at drain, not current state: demo.status: needs-decision [at=1792005614]: which export format, CSV or JSON?
+     … +4 lines (ctrl+o to expand)
+  ⎿  Allowed by auto mode classifier
+⏺ Bash(cat ../state/demo.status; echo ---; ls ../data ../state 2>/dev/null; echo ---; bin/fm-crew-state.sh demo 2>&1 | head -40)
+  ⎿  Error: PreToolUse:Bash hook error: [[ -z "${GROK_AGENT:-}${GROK_HOOK_EVENT:-}" ] || exit 0; exec "$CLAUDE_PROJECT_DIR"/bin/fm-continuity-pretool-check.sh]:
+     {"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny"},"systemMessage":"[watcher-continuity] SUPERVISION OUTAGE: down for at least 39s since the last watcher beat; 1
+     task(s) in flight: demo. Failed watcher check: watcher-pid-alive - the watcher lock's recorded pid 11633 is not running. No live watcher holds this home lock. Drain wakes with
+     bin/fm-wake-drain.sh, the safe mid-session action; use fail-closed bin/fm-teardown.sh for completed tasks when needed, then re-arm with bin/fm-watch-arm.sh as a tracked Claude background task
+     before running other fleet commands (blocked: fm-crew-state.sh)"}
+⏺ Bash(bin/fm-watch-arm.sh)
+  ⎿  Running in the background (↓ to manage)
+  ⎿  Allowed by auto mode classifier
+  Listed 2 directories (ctrl+o to expand)
+⏺ Bash(bin/fm-wake-drain.sh --ack-through 2 --recovery-generation 87695.1792005658.w5Vw8a)
+  ⎿  (No output)
+  ⎿  Allowed by auto mode classifier
+⏺ Background command "Re-arm the supervision watcher" completed (exit code 0)
+⏺ Bash(cat /private/tmp/claude-501/-private-var-folders-1g-hctp3vpn27b1zrlsn4nsfg680000gn-T-fm-lab-Bn3DFf-root/c9601850-a9ce-4e49-bfc9-f8a89f50d44d/tasks/bjnru0t9b.out…)
+  ⎿  Error: PreToolUse:Bash hook error: [[ -z "${GROK_AGENT:-}${GROK_HOOK_EVENT:-}" ] || exit 0; exec "$CLAUDE_PROJECT_DIR"/bin/fm-cd-pretool-check.sh --claude]:
+     {"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny"},"systemMessage":"[persistent-cd] a persistent top-level directory change in the primary firstmate checkout is
+     blocked; it would move the shell out of the home so a later firstmate-owned command runs inside a project clone. Reach the target without moving the shell - use git -C <dir> or an absolute path
+     on the command itself - or scope the cd to a subshell like (cd <dir> && ...)."}
+⏺ Bash(cat /private/tmp/claude-501/-private-var-folders-1g-hctp3vpn27b1zrlsn4nsfg680000gn-T-fm-lab-Bn3DFf-root/c9601850-a9ce-4e49-bfc9-f8a89f50d44d/tasks/bjnru0t9b.out…)
+  ⎿  watcher: started pid=38397 (beacon fresh)
+     check: rearm-resurface
+     … +4 lines (ctrl+o to expand)
+  ⎿  Allowed by auto mode classifier
+⏺ Captain, the demo worker is paused until you pick an export format. The question is below.
+  Which export format should the demo work use, CSV or JSON?
+  I have nothing recorded from you on this and no instructions that settle it, so I haven't chosen for you. Once you answer, I'll pass it to the worker and it will carry on. Monitoring had stopped for
+  a short while, so I restarted it and it's running again.
+✻ Sautéed for 1m 4s · done 9:22 PM
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ go with JSON
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏵⏵ auto mode on (shift+tab to cycle) · ← 2 agents

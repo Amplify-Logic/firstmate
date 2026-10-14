@@ -1,0 +1,258 @@
+# Live run 4 (target e49869ad) with injected hook process-group teardown (kill -TERM -- -<hook pgid>) right after the rewake; real Claude Code 2.1.300 primary, lab /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.HyNn3H
+== parked 21:17:11 watcher=63621
+62659 62659 33372 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-claude-stop-autoarm.sh
+62662 62662 33372 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-claude-reply-speak.sh
+63201 62659 62659 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-supervision-host.sh park
+63551 62659 63201 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-watch-arm.sh
+63621 62659 63551 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-watch.sh
+64414 62659 63621 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-watch.sh
+64416 62659 64414 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-inactive-reconcile.sh scan
+64615 62659 64416 perl -e my $t = shift; my $pid = fork; die "fork failed" unless defined $pid; if (!$pid) { setpgrp(0, 0); exec @ARGV } local $SIG{ALRM} = sub { kill "TERM", -$pid; select undef, undef, undef, 0.2; kill "KILL", -$pid; exit 124 }; alarm $t; waitpid $pid, 0; exit(($? & 127) ? 128 + ($? & 127) : $? >> 8) 11 /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-inactive-reconcile.sh _scan-locked 0
+64710 64710 64615 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-inactive-reconcile.sh _scan-locked 0
+== hook pgid 62659
+== appended needs-decision 21:17:12
+== rewake delivered 21:18:03; group 62659 members before injected teardown:
+== successor watcher before teardown: 95610 (pgid 95472)
+== injected: kill -TERM -- -62659 at 21:18:03
+RESULT: successor watcher 95610 ALIVE 3s after the hook group teardown
+== .watcher-down: announced:downtime:63621.1792005462.MWUp50
+== t+1s 21:18:06 watcher=95610
+95472 95472     1 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-watch-arm.sh
+95610 95472 95472 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-watch.sh
+== t+2s 21:18:07 watcher=95610
+95472 95472     1 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-watch-arm.sh
+95610 95472 95472 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-watch.sh
+== t+3s 21:18:08 watcher=95610
+95472 95472     1 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-watch-arm.sh
+95610 95472 95472 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-watch.sh
+== t+4s 21:18:10 watcher=95610
+95472 95472     1 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-watch-arm.sh
+95610 95472 95472 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-watch.sh
+== t+5s 21:18:11 watcher=95610
+95472 95472     1 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-watch-arm.sh
+95610 95472 95472 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-watch.sh
+== t+6s 21:18:12 watcher=95610
+95472 95472     1 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-watch-arm.sh
+95610 95472 95472 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-watch.sh
+== t+7s 21:18:13 watcher=95610
+95472 95472     1 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-watch-arm.sh
+95610 95472 95472 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-watch.sh
+== t+8s 21:18:14 watcher=95610
+95472 95472     1 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-watch-arm.sh
+95610 95472 95472 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-watch.sh
+== t+9s 21:18:16 watcher=95610
+95472 95472     1 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-watch-arm.sh
+95610 95472 95472 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-watch.sh
+== t+10s 21:18:17 watcher=95610
+95472 95472     1 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-watch-arm.sh
+95610 95472 95472 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-watch.sh
+== t+11s 21:18:18 watcher=95610
+95472 95472     1 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-watch-arm.sh
+95610 95472 95472 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-watch.sh
+== t+12s 21:18:19 watcher=95610
+95472 95472     1 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-watch-arm.sh
+95610 95472 95472 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-watch.sh
+== t+13s 21:18:20 watcher=95610
+95472 95472     1 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-watch-arm.sh
+95610 95472 95472 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-watch.sh
+== t+14s 21:18:22 watcher=95610
+95472 95472     1 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-watch-arm.sh
+95610 95472 95472 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-watch.sh
+== t+15s 21:18:23 watcher=95610
+95472 95472     1 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-watch-arm.sh
+95610 95472 95472 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-watch.sh
+== t+16s 21:18:24 watcher=95610
+95472 95472     1 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-watch-arm.sh
+95610 95472 95472 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-watch.sh
+== t+17s 21:18:26 watcher=95610
+95472 95472     1 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-watch-arm.sh
+95610 95472 95472 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-watch.sh
+== t+18s 21:18:27 watcher=95610
+95472 95472     1 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-watch-arm.sh
+95610 95472 95472 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-watch.sh
+== t+19s 21:18:28 watcher=95610
+95472 95472     1 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-watch-arm.sh
+95610 95472 95472 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-watch.sh
+== t+20s 21:18:29 watcher=95610
+95472 95472     1 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-watch-arm.sh
+95610 95472 95472 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-watch.sh
+== t+21s 21:18:30 watcher=95610
+95472 95472     1 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-watch-arm.sh
+95610 95472 95472 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-watch.sh
+== t+22s 21:18:32 watcher=95610
+95472 95472     1 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-watch-arm.sh
+95610 95472 95472 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-watch.sh
+== t+23s 21:18:33 watcher=95610
+95472 95472     1 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-watch-arm.sh
+95610 95472 95472 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-watch.sh
+== t+24s 21:18:35 watcher=95610
+95472 95472     1 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-watch-arm.sh
+95610 95472 95472 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-watch.sh
+== t+25s 21:18:36 watcher=95610
+95472 95472     1 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-watch-arm.sh
+95610 95472 95472 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-watch.sh
+== t+26s 21:18:37 watcher=95610
+95472 95472     1 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-watch-arm.sh
+95610 95472 95472 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-watch.sh
+== t+27s 21:18:38 watcher=95610
+26053 26053 33372 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-claude-stop-autoarm.sh
+95472 95472     1 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-watch-arm.sh
+95610 95472 95472 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-watch.sh
+== t+28s 21:18:39 watcher=95610
+26053 26053 33372 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-claude-stop-autoarm.sh
+26932 26053 26053 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-supervision-host.sh park
+27326 26053 26932 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-watch-arm.sh --take-over 95472
+95472 95472     1 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-watch-arm.sh
+95610 95472 95472 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-watch.sh
+== t+29s 21:18:40 watcher=
+26053 26053 33372 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-claude-stop-autoarm.sh
+26932 26053 26053 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-supervision-host.sh park
+27326 26053 26932 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-watch-arm.sh --take-over 95472
+28036 26053 27326 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-watch.sh
+== t+30s 21:18:42 watcher=28036
+26053 26053 33372 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-claude-stop-autoarm.sh
+26932 26053 26053 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-supervision-host.sh park
+27326 26053 26932 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-watch-arm.sh --take-over 95472
+28036 26053 27326 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-watch.sh
+== t+31s 21:18:43 watcher=28036
+26053 26053 33372 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-claude-stop-autoarm.sh
+26932 26053 26053 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-supervision-host.sh park
+27326 26053 26932 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-watch-arm.sh --take-over 95472
+28036 26053 27326 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-watch.sh
+== t+32s 21:18:44 watcher=28036
+26053 26053 33372 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-claude-stop-autoarm.sh
+26932 26053 26053 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-supervision-host.sh park
+27326 26053 26932 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-watch-arm.sh --take-over 95472
+28036 26053 27326 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-watch.sh
+== t+33s 21:18:45 watcher=28036
+26053 26053 33372 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-claude-stop-autoarm.sh
+26932 26053 26053 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-supervision-host.sh park
+27326 26053 26932 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-watch-arm.sh --take-over 95472
+28036 26053 27326 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-watch.sh
+== t+34s 21:18:46 watcher=28036
+26053 26053 33372 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-claude-stop-autoarm.sh
+26932 26053 26053 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-supervision-host.sh park
+27326 26053 26932 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-watch-arm.sh --take-over 95472
+28036 26053 27326 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-watch.sh
+== t+35s 21:18:47 watcher=28036
+26053 26053 33372 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-claude-stop-autoarm.sh
+26932 26053 26053 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-supervision-host.sh park
+27326 26053 26932 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-watch-arm.sh --take-over 95472
+28036 26053 27326 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-watch.sh
+== t+36s 21:18:49 watcher=28036
+26053 26053 33372 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-claude-stop-autoarm.sh
+26932 26053 26053 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-supervision-host.sh park
+27326 26053 26932 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-watch-arm.sh --take-over 95472
+28036 26053 27326 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-watch.sh
+== t+37s 21:18:50 watcher=28036
+26053 26053 33372 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-claude-stop-autoarm.sh
+26932 26053 26053 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-supervision-host.sh park
+27326 26053 26932 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-watch-arm.sh --take-over 95472
+28036 26053 27326 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-watch.sh
+== t+38s 21:18:51 watcher=28036
+26053 26053 33372 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-claude-stop-autoarm.sh
+26932 26053 26053 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-supervision-host.sh park
+27326 26053 26932 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-watch-arm.sh --take-over 95472
+28036 26053 27326 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-watch.sh
+== t+39s 21:18:52 watcher=28036
+26053 26053 33372 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-claude-stop-autoarm.sh
+26932 26053 26053 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-supervision-host.sh park
+27326 26053 26932 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-watch-arm.sh --take-over 95472
+28036 26053 27326 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-watch.sh
+== t+40s 21:18:54 watcher=28036
+26053 26053 33372 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-claude-stop-autoarm.sh
+26932 26053 26053 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-supervision-host.sh park
+27326 26053 26932 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-watch-arm.sh --take-over 95472
+28036 26053 27326 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-watch.sh
+== t+41s 21:18:57 watcher=28036
+26053 26053 33372 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-claude-stop-autoarm.sh
+26932 26053 26053 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-supervision-host.sh park
+27326 26053 26932 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-watch-arm.sh --take-over 95472
+28036 26053 27326 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-watch.sh
+== t+42s 21:18:59 watcher=28036
+26053 26053 33372 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-claude-stop-autoarm.sh
+26932 26053 26053 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-supervision-host.sh park
+27326 26053 26932 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-watch-arm.sh --take-over 95472
+28036 26053 27326 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-watch.sh
+== t+43s 21:19:05 watcher=28036
+26053 26053 33372 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-claude-stop-autoarm.sh
+26932 26053 26053 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-supervision-host.sh park
+27326 26053 26932 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-watch-arm.sh --take-over 95472
+28036 26053 27326 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-watch.sh
+== t+44s 21:19:06 watcher=28036
+26053 26053 33372 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-claude-stop-autoarm.sh
+26932 26053 26053 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-supervision-host.sh park
+27326 26053 26932 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-watch-arm.sh --take-over 95472
+28036 26053 27326 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-watch.sh
+== t+45s 21:19:07 watcher=28036
+26053 26053 33372 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-claude-stop-autoarm.sh
+26932 26053 26053 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-supervision-host.sh park
+27326 26053 26932 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-watch-arm.sh --take-over 95472
+28036 26053 27326 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-watch.sh
+== .supervision-host.log
+1792005430	start	gen=host-63201-1792005430	primary=claude
+1792005477	pass-through	attended	main-only	signal: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.HyNn3H/state/demo.status
+1792005519	start	gen=host-26932-1792005519	primary=claude
+1792005519	take-over	arm=95472
+== .watch-cycle-exits.log
+arm_pid=63551	watcher_pid=63621	origin=started	started_at=1792005430	ended_at=1792005476	exit_code=0	signal=none	reason=actionable-signal	beacon_age=46	lock_before=pid:63621|identity:Wed Oct 14 19:17:10 2026     bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-watch.sh	lock_after=pid:none|identity:none	successor=started:95610
+arm_pid=95472	watcher_pid=95610	origin=started	started_at=1792005477	ended_at=1792005520	exit_code=143	signal=TERM	reason=signal-exit	beacon_age=8	lock_before=pid:95610|identity:Wed Oct 14 19:17:57 2026     bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-watch.sh	lock_after=pid:none|identity:none	successor=none
+arm_pid=27326	watcher_pid=95610	origin=attached	started_at=1792005519	ended_at=1792005520	exit_code=unknown	signal=unknown	reason=taken-over	beacon_age=8	lock_before=pid:95610|identity:Wed Oct 14 19:17:57 2026     bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-watch.sh	lock_after=pid:none|identity:none	successor=started:28036
+== .claude-autoarm-epoch
+epoch=2 owner_pid=26053 outcome=arming updated_at=1792005518
+Wed Oct 14 19:18:38 2026     bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root/bin/fm-claude-stop-autoarm.sh
+== .watcher-down
+acked:handling:63621.1792005462.MWUp50
+== .wake-queue
+== primary pane
+ ▐▛███▛█   Claude Code v2.1.300
+▝▜██████▀  Opus 5.5 (1M context) with high effort · Claude Max
+ ▝▝   ▝▝   /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root
+  ⎿  SessionStart:startup hook error
+  ⎿  Failed with non-blocking status code: /bin/sh: ${CLAUDE_PLUGIN_ROOT}/hooks/run-hook.cmd: No such file or directory
+❯ Reply with exactly one short line: ready. Do not run any tools this turn.
+⏺ ready
+✻ Baked for 12s · done 9:17 PM
+⏺ Stop hook feedback
+⏺ Bash(cd /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.HyNn3H/root && bin/fm-wake-drain.sh)
+  ⎿  1792005463      2       signal  demo.status     needs-decision: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.HyNn3H/state/demo.status
+     WAKE_ACK_REQUIRED: after handling completes run bin/fm-wake-drain.sh --ack-through 2 --recovery-generation 63621.1792005462.MWUp50
+     wake annotation: latest wake-EVENT observed at drain, not current state: demo.status: needs-decision [at=1792005432]: which export format, CSV or JSON?
+     … +4 lines (ctrl+o to expand)
+  ⎿  Allowed by auto mode classifier
+⏺ Bash(cd /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.HyNn3H && cat state/demo.status; echo ---; ls state data 2>/dev/null; echo ---; root/bin/fm-crew-sta…)
+  ⎿  needs-decision [at=1792005432]: which export format, CSV or JSON?
+     ---
+     data:
+     … +9 lines (ctrl+o to expand)
+  ⎿  Shell cwd was reset to /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root
+  ⎿  Allowed by auto mode classifier
+⏺ Bash(cd /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.HyNn3H && cat state/demo.meta; echo ---; cat data/captain-ledger.jsonl; echo ---; ls state/terminal-…)
+  ⎿  project=demo
+     window=fm-demo
+     harness=claude
+     … +58 lines (ctrl+o to expand)
+  ⎿  Shell cwd was reset to /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.HyNn3H/root
+  ⎿  Allowed by auto mode classifier
+⏺ Bash(cd /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.HyNn3H/root && sed -n 1,80p .agents/skills/ask-user-authority/SKILL.md)
+  ⎿  ---
+     name: ask-user-authority
+     description: >-
+     … +54 lines (ctrl+o to expand)
+  ⎿  Allowed by auto mode classifier
+⏺ Bash(cd /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.HyNn3H/root && bin/fm-wake-drain.sh --ack-through 2 --recovery-generation 63621.1792005462.MWUp50)
+  ⎿  (No output)
+  ⎿  Allowed by auto mode classifier
+⏺ Captain, the demo work is waiting on one choice from you: what format the export should use. Nothing moves until you answer. The question is below.
+  Decision needed: CSV or JSON for the demo export?
+  - I have no written instructions or saved preferences for this work that settle it, and it's a product choice, so it's yours to make.
+  - CSV opens straight into spreadsheets and suits flat tables.
+  - JSON suits nested data and other programs reading the export.
+  - My pick is JSON if anything other than a person will read this export, and CSV if it's mainly for opening in a spreadsheet.
+  Also: the demo worker doesn't seem to be running right now, and I can't find its isolated copy of the project. Your answer is recorded either way. If the worker turns out to be gone, I'll check what
+  work survives before restarting it with your answer.
+✻ Crunched for 37s · done 9:18 PM
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏵⏵ auto mode on (shift+tab to cycle) · ← 2 agents

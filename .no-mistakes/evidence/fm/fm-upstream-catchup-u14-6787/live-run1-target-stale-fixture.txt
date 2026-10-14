@@ -1,0 +1,247 @@
+# Live run 1 (target e49869ad), real Claude Code 2.1.300 primary in lab home /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.FBUG6L
+## process trace after appending needs-decision
+appended at 21:05:34
+== t+1s 21:05:34 watcher=67466
+66610 66610 55737 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-claude-stop-autoarm.sh
+67042 66610 66610 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-supervision-host.sh park
+67401 66610 67042 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-watch-arm.sh
+67466 66610 67401 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-watch.sh
+== t+2s 21:05:36 watcher=67466
+66610 66610 55737 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-claude-stop-autoarm.sh
+67042 66610 66610 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-supervision-host.sh park
+67401 66610 67042 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-watch-arm.sh
+67466 66610 67401 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-watch.sh
+== t+3s 21:05:37 watcher=67466
+66610 66610 55737 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-claude-stop-autoarm.sh
+67042 66610 66610 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-supervision-host.sh park
+67401 66610 67042 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-watch-arm.sh
+67466 66610 67401 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-watch.sh
+== t+4s 21:05:38 watcher=67466
+66610 66610 55737 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-claude-stop-autoarm.sh
+67042 66610 66610 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-supervision-host.sh park
+67401 66610 67042 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-watch-arm.sh
+67466 66610 67401 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-watch.sh
+== t+5s 21:05:39 watcher=67466
+66610 66610 55737 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-claude-stop-autoarm.sh
+67042 66610 66610 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-supervision-host.sh park
+67401 66610 67042 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-watch-arm.sh
+67466 66610 67401 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-watch.sh
+== t+6s 21:05:40 watcher=67466
+66610 66610 55737 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-claude-stop-autoarm.sh
+67042 66610 66610 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-supervision-host.sh park
+67401 66610 67042 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-watch-arm.sh
+67466 66610 67401 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-watch.sh
+== t+7s 21:05:42 watcher=67466
+66610 66610 55737 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-claude-stop-autoarm.sh
+67042 66610 66610 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-supervision-host.sh park
+67401 66610 67042 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-watch-arm.sh
+67466 66610 67401 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-watch.sh
+== t+8s 21:05:43 watcher=67466
+66610 66610 55737 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-claude-stop-autoarm.sh
+67042 66610 66610 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-supervision-host.sh park
+67401 66610 67042 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-watch-arm.sh
+67466 66610 67401 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-watch.sh
+== t+9s 21:05:44 watcher=67466
+66610 66610 55737 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-claude-stop-autoarm.sh
+67042 66610 66610 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-supervision-host.sh park
+67401 66610 67042 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-watch-arm.sh
+67466 66610 67401 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-watch.sh
+== t+10s 21:05:45 watcher=67466
+66610 66610 55737 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-claude-stop-autoarm.sh
+67042 66610 66610 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-supervision-host.sh park
+67401 66610 67042 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-watch-arm.sh
+67466 66610 67401 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-watch.sh
+== t+11s 21:05:46 watcher=67466
+66610 66610 55737 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-claude-stop-autoarm.sh
+67042 66610 66610 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-supervision-host.sh park
+67401 66610 67042 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-watch-arm.sh
+67466 66610 67401 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-watch.sh
+== t+12s 21:05:47 watcher=67466
+66610 66610 55737 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-claude-stop-autoarm.sh
+67042 66610 66610 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-supervision-host.sh park
+67401 66610 67042 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-watch-arm.sh
+67466 66610 67401 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-watch.sh
+== t+13s 21:05:49 watcher=67466
+66610 66610 55737 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-claude-stop-autoarm.sh
+67042 66610 66610 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-supervision-host.sh park
+67401 66610 67042 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-watch-arm.sh
+67466 66610 67401 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-watch.sh
+== t+14s 21:05:50 watcher=67466
+66610 66610 55737 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-claude-stop-autoarm.sh
+67042 66610 66610 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-supervision-host.sh park
+67401 66610 67042 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-watch-arm.sh
+67466 66610 67401 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-watch.sh
+== t+15s 21:05:51 watcher=67466
+66610 66610 55737 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-claude-stop-autoarm.sh
+67042 66610 66610 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-supervision-host.sh park
+67401 66610 67042 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-watch-arm.sh
+67466 66610 67401 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-watch.sh
+== t+16s 21:05:52 watcher=67466
+66610 66610 55737 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-claude-stop-autoarm.sh
+67042 66610 66610 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-supervision-host.sh park
+67401 66610 67042 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-watch-arm.sh
+67466 66610 67401 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-watch.sh
+== t+17s 21:05:53 watcher=67466
+66610 66610 55737 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-claude-stop-autoarm.sh
+67042 66610 66610 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-supervision-host.sh park
+67401 66610 67042 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-watch-arm.sh
+67466 66610 67401 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-watch.sh
+== t+18s 21:05:54 watcher=67466
+66610 66610 55737 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-claude-stop-autoarm.sh
+67042 66610 66610 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-supervision-host.sh park
+67401 66610 67042 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-watch-arm.sh
+67466 66610 67401 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-watch.sh
+== t+19s 21:05:55 watcher=67466
+66610 66610 55737 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-claude-stop-autoarm.sh
+67042 66610 66610 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-supervision-host.sh park
+67401 66610 67042 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-watch-arm.sh
+67466 66610 67401 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-watch.sh
+== t+20s 21:05:57 watcher=67466
+66610 66610 55737 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-claude-stop-autoarm.sh
+67042 66610 66610 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-supervision-host.sh park
+67401 66610 67042 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-watch-arm.sh
+67466 66610 67401 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-watch.sh
+== t+21s 21:05:58 watcher=67466
+66610 66610 55737 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-claude-stop-autoarm.sh
+67042 66610 66610 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-supervision-host.sh park
+67401 66610 67042 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-watch-arm.sh
+67466 66610 67401 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-watch.sh
+== t+22s 21:05:59 watcher=67466
+66610 66610 55737 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-claude-stop-autoarm.sh
+67042 66610 66610 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-supervision-host.sh park
+67401 66610 67042 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-watch-arm.sh
+67466 66610 67401 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-watch.sh
+== t+23s 21:06:00 watcher=67466
+66610 66610 55737 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-claude-stop-autoarm.sh
+67042 66610 66610 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-supervision-host.sh park
+67401 66610 67042 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-watch-arm.sh
+67466 66610 67401 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-watch.sh
+== t+24s 21:06:02 watcher=67466
+66610 66610 55737 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-claude-stop-autoarm.sh
+67042 66610 66610 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-supervision-host.sh park
+67401 66610 67042 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-watch-arm.sh
+67466 66610 67401 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-watch.sh
+== t+25s 21:06:03 watcher=67466
+66610 66610 55737 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-claude-stop-autoarm.sh
+67042 66610 66610 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-supervision-host.sh park
+67401 66610 67042 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-watch-arm.sh
+67466 66610 67401 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-watch.sh
+== t+26s 21:06:04 watcher=67466
+66610 66610 55737 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-claude-stop-autoarm.sh
+67042 66610 66610 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-supervision-host.sh park
+67401 66610 67042 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-watch-arm.sh
+67466 66610 67401 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-watch.sh
+== t+27s 21:06:05 watcher=67466
+66610 66610 55737 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-claude-stop-autoarm.sh
+67042 66610 66610 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-supervision-host.sh park
+67401 66610 67042 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-watch-arm.sh
+67466 66610 67401 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-watch.sh
+== t+28s 21:06:07 watcher=67466
+66610 66610 55737 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-claude-stop-autoarm.sh
+67042 66610 66610 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-supervision-host.sh park
+67401 66610 67042 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-watch-arm.sh
+67466 66610 67401 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-watch.sh
+== t+29s 21:06:08 watcher=67466
+66610 66610 55737 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-claude-stop-autoarm.sh
+67042 66610 66610 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-supervision-host.sh park
+67401 66610 67042 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-watch-arm.sh
+67466 66610 67401 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-watch.sh
+== t+30s 21:06:09 watcher=67466
+66610 66610 55737 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-claude-stop-autoarm.sh
+67042 66610 66610 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-supervision-host.sh park
+67401 66610 67042 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-watch-arm.sh
+67466 66610 67401 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-watch.sh
+84775 66610 67466 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-home-summary-refresh.sh --best-effort
+84818 66610 84775 perl -e my $t = shift; my $pid = fork; die "fork failed" unless defined $pid; if (!$pid) { setpgrp(0, 0); exec @ARGV } local $SIG{ALRM} = sub { kill "TERM", -$pid; select undef, undef, undef, 0.2; kill "KILL", -$pid; exit 124 }; alarm $t; waitpid $pid, 0; exit(($? & 127) ? 128 + ($? & 127) : $? >> 8) 60 env FM_HOME_SUMMARY_WORKER_BEST_EFFORT=1 FM_HOME_SUMMARY_IF_IDLE=1 /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-home-summary-refresh.sh --_worker
+84821 84821 84818 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-home-summary-refresh.sh --_worker
+84975 84821 84821 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-fleet-snapshot.sh --secondmate-home-summary
+85198 84821 84975 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-fleet-snapshot.sh --secondmate-home-summary
+== t+31s 21:06:10 watcher=
+66610 66610 55737 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-claude-stop-autoarm.sh
+67042 66610 66610 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-supervision-host.sh park
+== t+32s 21:06:11 watcher=87121
+66610 66610 55737 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-claude-stop-autoarm.sh
+67042 66610 66610 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-supervision-host.sh park
+87031 87031 67042 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-watch-arm.sh
+87121 87031 87031 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-watch.sh
+== t+33s 21:06:12 watcher=87121
+66610 66610 55737 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-claude-stop-autoarm.sh
+87031 87031     1 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-watch-arm.sh
+87121 87031 87031 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-watch.sh
+== t+34s 21:06:14 watcher=87121
+87031 87031     1 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-watch-arm.sh
+87121 87031 87031 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-watch.sh
+== t+35s 21:06:15 watcher=87121
+87031 87031     1 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-watch-arm.sh
+87121 87031 87031 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-watch.sh
+== t+36s 21:06:16 watcher=87121
+87031 87031     1 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-watch-arm.sh
+87121 87031 87031 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-watch.sh
+== t+37s 21:06:17 watcher=87121
+87031 87031     1 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-watch-arm.sh
+87121 87031 87031 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-watch.sh
+== t+38s 21:06:18 watcher=87121
+87031 87031     1 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-watch-arm.sh
+87121 87031 87031 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-watch.sh
+== t+39s 21:06:20 watcher=87121
+87031 87031     1 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-watch-arm.sh
+87121 87031 87031 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-watch.sh
+== t+40s 21:06:21 watcher=87121
+87031 87031     1 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-watch-arm.sh
+87121 87031 87031 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-watch.sh
+
+## .supervision-host.log
+1792004721	start	gen=host-67042-1792004721	primary=claude
+1792004770	pass-through	attended	main-only	signal: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.FBUG6L/state/demo.status
+1792004803	start	gen=host-14994-1792004803	primary=claude
+1792004805	pass-through	attended	main-only	check: rearm-resurface
+## .watch-cycle-exits.log
+arm_pid=67401	watcher_pid=67466	origin=started	started_at=1792004721	ended_at=1792004770	exit_code=0	signal=none	reason=actionable-signal	beacon_age=33	lock_before=pid:67466|identity:Wed Oct 14 19:05:21 2026     bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-watch.sh	lock_after=pid:none|identity:none	successor=started:87121
+arm_pid=87031	watcher_pid=87121	origin=started	started_at=1792004770	ended_at=1792004789	exit_code=0	signal=none	reason=actionable-stale	beacon_age=2	lock_before=pid:87121|identity:Wed Oct 14 19:06:10 2026     bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-watch.sh	lock_after=pid:none|identity:none	successor=none
+arm_pid=15182	watcher_pid=15227	origin=started	started_at=1792004803	ended_at=1792004804	exit_code=0	signal=none	reason=actionable-check	beacon_age=0	lock_before=pid:15227|identity:Wed Oct 14 19:06:43 2026     bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-watch.sh	lock_after=pid:none|identity:none	successor=started:16941
+## .claude-autoarm-epoch
+epoch=2 owner_pid=14488 outcome=rewake updated_at=1792004807 session_pid=55737 recovery_generation=67466.1792004769.L9BhZF
+Wed Oct 14 19:06:42 2026     bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-claude-stop-autoarm.sh
+## .supervision-host-left
+16886	Wed Oct 14 19:06:45 2026     bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root/bin/fm-watch-arm.sh
+## .wake-queue
+1792004788	3	stale	fm-demo	stale: fm-demo
+## primary pane
+ ▐▛███▛█   Claude Code v2.1.300
+▝▜██████▀  Opus 5.5 (1M context) with high effort · Claude Max
+ ▝▝   ▝▝   /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.FBUG6L/root
+  ⎿  SessionStart:startup hook error
+  ⎿  Failed with non-blocking status code: /bin/sh: ${CLAUDE_PLUGIN_ROOT}/hooks/run-hook.cmd: No such file or directory
+❯ Reply with exactly one short line: ready. Do not run any tools this turn.
+⏺ ready
+✻ Worked for 6s · done 9:05 PM
+⏺ Stop hook feedback
+⏺ Bash(bin/fm-wake-drain.sh)
+  ⎿  1792004769      2       signal  demo.status     needs-decision: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.FBUG6L/state/demo.status
+     WAKE_ACK_REQUIRED: after handling completes run bin/fm-wake-drain.sh --ack-through 2 --recovery-generation 67466.1792004769.L9BhZF
+     wake annotation: latest wake-EVENT observed at drain, not current state: demo.status: needs-decision [at=1792004734]: which export format, CSV or JSON?
+     … +4 lines (ctrl+o to expand)
+  ⎿  Allowed by auto mode classifier
+⏺ Bash(FM_HOME=/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.FBUG6L bin/fm-crew-state.sh demo 2>&1 | head -40; echo ---; cat ../state/demo.status 2>/dev/nul…)
+  ⎿  state: unknown · source: none · worktree gone (torn down?)
+     ---
+     needs-decision [at=1792004734]: which export format, CSV or JSON?
+     ---
+  ⎿  Allowed by auto mode classifier
+⏺ Bash(bin/fm-wake-drain.sh --ack-through 2 --recovery-generation 67466.1792004769.L9BhZF)
+  ⎿  (No output)
+  ⎿  Allowed by auto mode classifier
+⏺ Captain, a question about the demo task is waiting on you. The worker wants to know which export format to use, and it's on screen below. I also found something odd about the task, noted below.
+  Your call: should the export be CSV or JSON? Once you answer, I'll pass it on and the question will be closed.
+  What's odd: this home has no instructions on file for the demo task, and its isolated copy is gone, so I can't tell whether any worker is still running to receive the answer. If you still want this
+  export built, tell me the format and I'll check whether the worker is still there or start a new one. If the demo is abandoned, say so and I'll close the question without anyone acting on it.
+✻ Baked for 30s · done 9:06 PM
+⏺ Stop hook feedback
+⏺ Bash(bin/fm-wake-drain.sh)
+  ⎿  Waiting…
+✳ Forging… (4s · ↓ 29 tokens)
+  ⎿  Tip: Use git worktrees to run multiple Claude sessions in parallel.
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏵⏵ auto mode on (shift+tab to cycle) · ← 2 agents
