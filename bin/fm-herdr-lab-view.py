@@ -159,11 +159,16 @@ def capture(session: str, cols: int, rows: int, seconds: float) -> bytes:
                 break
             chunks.append(data)
     finally:
-        reap(pid)
+        # Close the master BEFORE reaping. Once the deadline stops the reads,
+        # an exiting client that still has output to flush blocks in exit
+        # waiting for the pty to drain, so a blocking reap would wait on it
+        # forever (seen with Herdr 0.9.5 on macOS); a closed master lets its
+        # writes fail and the exit finish.
         try:
             os.close(master)
         except OSError:
             pass
+        reap(pid)
     return b"".join(chunks)
 
 
