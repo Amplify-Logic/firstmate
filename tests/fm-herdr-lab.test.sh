@@ -644,6 +644,30 @@ SH
   pass "fm-herdr-lab: view reaps a client that is still flushing output at exit"
 }
 
+# A Herdr 0.9.5 client queries its terminal's color scheme with the private
+# device-status query CSI ? 996 n, which crashed the renderer. Rendering needs
+# pyte, which CI does not install, so the case reports a skip without it.
+test_view_engine_renders_past_a_private_status_query() {
+  local engine out
+  engine="$(dirname "${BASH_SOURCE[0]}")/../bin/fm-herdr-lab-view.py"
+  if ! command -v python3 >/dev/null 2>&1 || ! python3 -c 'import pyte' >/dev/null 2>&1; then
+    pass "fm-herdr-lab: view private status query (skipped: python3 module pyte not found)"
+    return
+  fi
+  out=$(python3 - "$engine" <<'PYCHECK' 2>&1
+import importlib.util, sys
+spec = importlib.util.spec_from_file_location("view", sys.argv[1])
+mod = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(mod)
+import pyte
+lines = mod.render(pyte, b"\x1b[?996n\x1b[1;1Hprobe-frame", 20, 8)
+print(lines[0].rstrip())
+PYCHECK
+) || fail "the view renderer failed on a private device-status query: $out"
+  [ "$out" = probe-frame ] || fail "the view renderer lost the frame around a private status query: $out"
+  pass "fm-herdr-lab: view renders past a private device-status query"
+}
+
 test_refuses_unsafe_names
 test_provision_run_and_guarded_teardown
 test_run_scopes_session_before_double_dash
@@ -664,3 +688,4 @@ test_viewer_stop_retains_record_when_detach_is_unreadable
 test_viewer_launcher_refuses_unsafe_arguments
 test_view_is_bounded_and_never_reaches_the_live_session
 test_view_engine_reaps_a_client_flushing_at_exit
+test_view_engine_renders_past_a_private_status_query
