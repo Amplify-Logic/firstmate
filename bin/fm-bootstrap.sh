@@ -17,7 +17,8 @@
 #                 "BACKLOG_RECONCILE: <id>: <what this home could not reconcile>",
 #                 "BACKLOG_RECONCILE: code-root <file> is not this home's <file>; ...",
 #                 "TANGLE: <remediation>",
-#                 "HOST_ENV: WSL|headless server: <problem> - <advice>",
+#                 "HOST_ENV: WSL: <problem> - <advice>",
+#                 "BOOTSTRAP_INFO: headless server: <board-access advice>",
 #                 "SECONDMATE_SYNC: secondmate <id>: skipped: <reason>",
 #                 "NUDGE_SECONDMATES: secondmate <id>: send failed: <reason>",
 #                 "BOOTSTRAP_INFO: nudged fm-<id> with '<message>'",
@@ -110,10 +111,11 @@
 #          forwarding off while networking is not mirrored (read through
 #          wslinfo, cmd.exe, and wslpath; silent when they are unavailable).
 #          On a headless server (no DISPLAY or WAYLAND_DISPLAY, reached over
-#          SSH) it reports a missing Chrome, and, unless Tailscale is up,
-#          says review boards and dev servers are reached from the person's
-#          own computer over Tailscale or an SSH port forward. Chrome is also
-#          checked inside WSL. ONBOARDING-windows.md and
+#          SSH) without Tailscale up, it prints one BOOTSTRAP_INFO fact that
+#          review boards and dev servers are reached from the person's own
+#          computer over Tailscale or an SSH port forward, once per home: a
+#          locked run records state/.host-env-headless-advised and stays
+#          silent while it exists. ONBOARDING-windows.md and
 #          ONBOARDING-linux-server.md own the setup each line points at.
 #          UPSTREAM is detect-only and silent when there is no upstream remote,
 #          origin and upstream share a URL (not a fork), the home is a secondmate,
@@ -1668,16 +1670,8 @@ host_env_wslconfig() {  # prints the Windows user's .wslconfig path when readabl
   printf '%s\n' "$path"
 }
 
-host_env_has_chrome() {
-  local c
-  for c in google-chrome google-chrome-stable chromium chromium-browser; do
-    command -v "$c" >/dev/null 2>&1 && return 0
-  done
-  return 1
-}
-
 detect_host_environment() {
-  local path seen='' wslconfig mode forwarding
+  local path seen='' wslconfig mode forwarding advised="$STATE/.host-env-headless-advised"
   # WSL exports WSL_DISTRO_NAME into every process it starts; nothing else does.
   if [ -n "${WSL_DISTRO_NAME:-}" ]; then
     for path in "$FM_ROOT" "$FM_HOME" "$PROJECTS" "$PROJECTS"/*; do
@@ -1699,18 +1693,16 @@ detect_host_environment() {
       [ "$forwarding" = false ] \
         && echo "HOST_ENV: WSL: localhost forwarding is off in $wslconfig, so review boards and dev servers will not open in the Windows browser - set networkingMode=mirrored under [wsl2] there, then run wsl --shutdown from Windows (ONBOARDING-windows.md)"
     fi
-    host_env_has_chrome \
-      || echo "HOST_ENV: WSL: Chrome is not installed, so browser checks cannot run - install it with bin/fm-linux-setup.sh"
     return 0
   fi
   [ "$(uname -s 2>/dev/null)" = Linux ] || return 0
   [ -z "${DISPLAY:-}" ] && [ -z "${WAYLAND_DISPLAY:-}" ] || return 0
   [ -n "${SSH_CONNECTION:-}" ] || [ -n "${SSH_TTY:-}" ] || return 0
-  host_env_has_chrome \
-    || echo "HOST_ENV: headless server: Chrome is not installed, so browser checks cannot run - install it with bin/fm-linux-setup.sh (it runs headless, no desktop needed)"
-  if ! { command -v tailscale >/dev/null 2>&1 && tailscale ip -4 >/dev/null 2>&1; }; then
-    echo "HOST_ENV: headless server: review boards and dev servers listen only on this server - open them from your own computer over Tailscale (recommended) or an SSH port forward (ONBOARDING-linux-server.md)"
-  fi
+  [ -e "$advised" ] && return 0
+  command -v tailscale >/dev/null 2>&1 && tailscale ip -4 >/dev/null 2>&1 && return 0
+  echo "BOOTSTRAP_INFO: headless server: review boards and dev servers listen only on this server - open them from your own computer over Tailscale (recommended) or an SSH port forward (ONBOARDING-linux-server.md); shown once for this home"
+  # A read-only session leaves the record to the session holding the fleet lock.
+  [ "${FM_BOOTSTRAP_DETECT_ONLY:-0}" = 1 ] || { [ -d "$STATE" ] && : > "$advised"; } 2>/dev/null || true
 }
 
 # Shadow-backlog check. When this home's data directory is not the code root's,

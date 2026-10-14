@@ -14,8 +14,10 @@ name: Windows (WSL 2) and Linux server kit
 #     each on its own Windows runner. fm-test-run.sh refuses a serial lane
 #     whose "of11" no longer matches its shard count, so a shard change fails
 #     here loudly rather than leaving a shard unrun.
-# Standard runners are free on this public repository. It runs weekly, by
-# hand, and on pull requests that change the kit itself.
+# Standard runners are free on this public repository. It runs weekly and by
+# hand, and also on pull requests that change this workflow or the setup
+# script: that is how a change to the setup kit gets its Windows and Ubuntu
+# proof before merge, at no cost on this public repository.
 
 on:
   schedule:
@@ -184,9 +186,6 @@ jobs:
 
       - name: Start a review board and an Expo-style dev server, and check them headless
         if: matrix.lane == 'kit'
-        env:
-          # A container cannot create Chrome's sandbox and has a tiny /dev/shm; a real server and WSL need neither flag.
-          CHROME_SANDBOX_ARG: ${{ matrix.kind == 'server' && '--no-sandbox --disable-dev-shm-usage' || '' }}
         run: |
           mkdir -p ~/board
           printf '<!doctype html><title>Kit check</title><h1>fm-board-ok</h1>\n' > ~/board/check.html
@@ -200,7 +199,10 @@ jobs:
           for _ in $(seq 30); do curl -fsS http://localhost:8081/ >/dev/null 2>&1 && break; sleep 1; done
           [ "$(curl -fsS http://localhost:8081/)" = fm-dev-server-ok ]
           curl -fsS -o /dev/null "$url"
-          export CHROME_DEVTOOLS_AXI_CHROME_ARGS="$CHROME_SANDBOX_ARG"
+          # The wrappers pass no step env into the Linux side, so the flags are
+          # written into the script. A container cannot create Chrome's sandbox
+          # and has a tiny /dev/shm; a real server and WSL need neither flag.
+          export CHROME_DEVTOOLS_AXI_CHROME_ARGS="${{ matrix.kind == 'server' && '--no-sandbox --disable-dev-shm-usage' || '' }}"
           chrome-devtools-axi open http://localhost:8081/
           chrome-devtools-axi snapshot | tee ~/snapshot.txt
           grep -q fm-dev-server-ok ~/snapshot.txt
@@ -219,13 +221,15 @@ jobs:
           if ($LASTEXITCODE -ne 0 -or $body -ne 'fm-dev-server-ok') { Write-Error "the dev server did not answer from Windows: $body"; exit 1 }
           Write-Output "Windows reached the board and the dev server through localhost"
 
+      # The Pi extension typecheck needs a global tsc, which ci.yml gets from
+      # the hosted Ubuntu image.
       - name: Install the test-only tools the hosted Ubuntu image carries
         if: matrix.lane != 'kit'
         run: |
           cd ~/starship
           sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y -q lsof psmisc rsync unzip zip
           bin/fm-bootstrap.sh install jq tasks-axi
-          npm install -g @earendil-works/pi-coding-agent
+          npm install -g @earendil-works/pi-coding-agent typescript
           bin/fm-install-shellcheck.sh "$HOME/.local/bin"
           bin/fm-install-actionlint.sh "$HOME/.local/bin"
 

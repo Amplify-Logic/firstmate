@@ -562,23 +562,21 @@ SH
   pass "bootstrap requires git with an install instruction"
 }
 
-# HOST_ENV: WSL homes and projects on the Windows drive, WSL localhost
-# forwarding turned off, and the headless-server advice. wslinfo, cmd.exe,
-# wslpath, and tailscale are stubs; BASH_ENV hides a host Chrome so the
-# missing-Chrome line does not depend on what this machine has installed. The
+# HOST_ENV: WSL homes and projects on the Windows drive and WSL localhost
+# forwarding turned off; plus the headless-server board advice, a once-per-home
+# BOOTSTRAP_INFO fact. wslinfo, cmd.exe, wslpath, and tailscale are stubs. The
 # headless-server cases need a real Linux kernel, so a macOS run proves that
 # branch stays silent there instead.
 # shellcheck disable=SC2016  # stub bodies expand when the stub runs
 make_host_env_case() {  # <name> -> echoes "<case_dir>|<fakebin>"
   local case_dir="$TMP_ROOT/host-env-$1" fakebin
-  mkdir -p "$case_dir/home/config" "$case_dir/winhome"
+  mkdir -p "$case_dir/home/config" "$case_dir/home/state" "$case_dir/winhome"
   printf '%s\n' manual > "$case_dir/home/config/backlog-backend"
   fakebin=$(make_fake_toolchain "$case_dir")
-  printf '#!/usr/bin/env bash\necho Chrome\n' > "$fakebin/google-chrome"
   printf '#!/usr/bin/env bash\nprintf "%%s\\n" "${FAKE_WSL_MODE:-nat}"\n' > "$fakebin/wslinfo"
   printf '#!/usr/bin/env bash\nprintf "C:\\\\Users\\\\fm\\r\\n"\n' > "$fakebin/cmd.exe"
   printf '#!/usr/bin/env bash\necho %s\n' "$case_dir/winhome" > "$fakebin/wslpath"
-  chmod +x "$fakebin/google-chrome" "$fakebin/wslinfo" "$fakebin/cmd.exe" "$fakebin/wslpath"
+  chmod +x "$fakebin/wslinfo" "$fakebin/cmd.exe" "$fakebin/wslpath"
   printf '%s|%s\n' "$case_dir" "$fakebin"
 }
 
@@ -589,18 +587,9 @@ run_host_env_bootstrap() {  # <case_dir> <fakebin> [env assignments...]
     FM_FAKE_TREEHOUSE_LEASE_HELP=1 "$@" "$ROOT/bin/fm-bootstrap.sh"
 }
 
+# shellcheck disable=SC2016  # the tailscale stub body expands when it runs
 test_host_environment_reports() {
-  local c case_dir fakebin out no_chrome expected
-  no_chrome="$TMP_ROOT/host-env-no-chrome.bash"
-  cat > "$no_chrome" <<'SH'
-command() {
-  case "${1:-} ${2:-}" in
-    "-v google-chrome"|"-v google-chrome-stable"|"-v chromium"|"-v chromium-browser") return 1 ;;
-  esac
-  builtin command "$@"
-}
-SH
-
+  local c case_dir fakebin out expected ssh advised
   c=$(make_host_env_case wsl-drive); case_dir=${c%%|*}; fakebin=${c#*|}
   out=$(run_host_env_bootstrap "$case_dir" "$fakebin" WSL_DISTRO_NAME=Ubuntu-24.04 \
     FM_PROJECTS_OVERRIDE=/mnt/c/fm-test-projects)
@@ -621,32 +610,38 @@ SH
   printf '[wsl2]\nnetworkingMode=nat\n' > "$case_dir/winhome/.wslconfig"
   out=$(run_host_env_bootstrap "$case_dir" "$fakebin" WSL_DISTRO_NAME=Ubuntu-24.04)
   [ -z "$out" ] || fail "default localhost forwarding needs no advice, got: $out"
-  out=$(run_host_env_bootstrap "$case_dir" "$fakebin" WSL_DISTRO_NAME=Ubuntu-24.04 BASH_ENV="$no_chrome")
-  expected="HOST_ENV: WSL: Chrome is not installed, so browser checks cannot run - install it with bin/fm-linux-setup.sh"
-  [ "$out" = "$expected" ] || fail "WSL without Chrome should say so, got: $out"
 
   c=$(make_host_env_case server); case_dir=${c%%|*}; fakebin=${c#*|}
+  ssh='10.0.0.2 50000 10.0.0.1 22'
+  advised="$case_dir/home/state/.host-env-headless-advised"
   if [ "$(uname -s)" != Linux ]; then
-    out=$(run_host_env_bootstrap "$case_dir" "$fakebin" SSH_CONNECTION='10.0.0.2 50000 10.0.0.1 22' BASH_ENV="$no_chrome")
+    out=$(run_host_env_bootstrap "$case_dir" "$fakebin" SSH_CONNECTION="$ssh")
     [ -z "$out" ] || fail "the headless-server advice is Linux-only, got: $out"
-    pass "bootstrap HOST_ENV names WSL Windows-drive paths, WSL forwarding off, and missing Chrome; headless-server cases need Linux and stay silent here"
+    pass "bootstrap HOST_ENV names WSL Windows-drive paths and WSL forwarding off; headless-server cases need Linux and stay silent here"
     return
   fi
-  out=$(run_host_env_bootstrap "$case_dir" "$fakebin" SSH_CONNECTION='10.0.0.2 50000 10.0.0.1 22')
-  expected="HOST_ENV: headless server: review boards and dev servers listen only on this server - open them from your own computer over Tailscale (recommended) or an SSH port forward (ONBOARDING-linux-server.md)"
-  [ "$out" = "$expected" ] || fail "a headless server should get the board advice, got: $out"
-  out=$(run_host_env_bootstrap "$case_dir" "$fakebin" SSH_CONNECTION='10.0.0.2 50000 10.0.0.1 22' BASH_ENV="$no_chrome")
-  printf '%s\n' "$out" | grep -Fx "HOST_ENV: headless server: Chrome is not installed, so browser checks cannot run - install it with bin/fm-linux-setup.sh (it runs headless, no desktop needed)" >/dev/null \
-    || fail "a headless server without Chrome should say so, got: $out"
-  out=$(run_host_env_bootstrap "$case_dir" "$fakebin" SSH_CONNECTION='10.0.0.2 50000 10.0.0.1 22' DISPLAY=:0)
+  out=$(run_host_env_bootstrap "$case_dir" "$fakebin" SSH_CONNECTION="$ssh" DISPLAY=:0)
   [ -z "$out" ] || fail "a session with a display is not headless, got: $out"
   out=$(run_host_env_bootstrap "$case_dir" "$fakebin")
   [ -z "$out" ] || fail "a local session without SSH is not treated as a server, got: $out"
   printf '#!/usr/bin/env bash\n[ "$*" = "ip -4" ] && echo 100.64.0.1\n' > "$fakebin/tailscale"
   chmod +x "$fakebin/tailscale"
-  out=$(run_host_env_bootstrap "$case_dir" "$fakebin" SSH_CONNECTION='10.0.0.2 50000 10.0.0.1 22')
+  out=$(run_host_env_bootstrap "$case_dir" "$fakebin" SSH_CONNECTION="$ssh")
   [ -z "$out" ] || fail "a server with Tailscale up needs no board advice, got: $out"
-  pass "bootstrap HOST_ENV names WSL Windows-drive paths, WSL forwarding off, missing Chrome, and headless-server board access, and is silent otherwise"
+  rm -f "$fakebin/tailscale"
+  [ ! -e "$advised" ] || fail "no advice was shown, so none may be recorded"
+
+  expected="BOOTSTRAP_INFO: headless server: review boards and dev servers listen only on this server - open them from your own computer over Tailscale (recommended) or an SSH port forward (ONBOARDING-linux-server.md); shown once for this home"
+  out=$(run_host_env_bootstrap "$case_dir" "$fakebin" SSH_CONNECTION="$ssh" FM_BOOTSTRAP_DETECT_ONLY=1)
+  printf '%s\n' "$out" | grep -Fx "$expected" >/dev/null \
+    || fail "a read-only session on a headless server should show the board advice, got: $out"
+  [ ! -e "$advised" ] || fail "a read-only session must not record the advice as shown"
+  out=$(run_host_env_bootstrap "$case_dir" "$fakebin" SSH_CONNECTION="$ssh")
+  [ "$out" = "$expected" ] || fail "a headless server should get the board advice as an info fact, got: $out"
+  [ -e "$advised" ] || fail "the advice was shown but not recorded for this home"
+  out=$(run_host_env_bootstrap "$case_dir" "$fakebin" SSH_CONNECTION="$ssh")
+  [ -z "$out" ] || fail "the board advice is shown once per home, got it again: $out"
+  pass "bootstrap HOST_ENV names WSL Windows-drive paths and WSL forwarding off, and a headless server gets its board advice once per home as an info fact"
 }
 
 test_orca_backend_gates_orca_tool_only_when_selected() {

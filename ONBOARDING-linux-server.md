@@ -183,7 +183,7 @@ ssh -L 4387:127.0.0.1:4387 -L 8081:127.0.0.1:8081 <you>@<server-ip>
 While that connection is open, `http://localhost:4387/...` and `http://localhost:8081` on your computer reach the server.
 Board links the first mate prints as `http://127.0.0.1:4387/...` work as they are.
 
-The first mate's startup checks remind it which of the two you use and how to hand you links.
+Without Tailscale, the first mate's startup checks note once that boards and dev servers are reached this way.
 
 ---
 
