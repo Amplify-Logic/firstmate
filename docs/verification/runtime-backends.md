@@ -1253,6 +1253,21 @@ The one gate skip is `tests/fm-status-chrome-herdr-lab-e2e.test.sh`, which needs
 The run uses a scrubbed environment because a shell inside a Firstmate worker pane inherits `HERDR_PANE_ID`, `FM_HERDR_PROJECT_LABEL`, and related variables, and those relabel the lane's lab workspaces and fail its label assertions.
 The presentation suite, the lane's longest script, took 1488 seconds on Herdr 0.9.5 and 1288 seconds on Herdr 0.7.4 on this host in back-to-back runs, so the upgrade does not materially lengthen the lane; the same script took 508 seconds on the Linux CI runner on Herdr 0.7.4.
 
+The live and opt-in Herdr guards outside the lane were run the same day on Herdr 0.9.5 with Claude Code 2.1.300 and Pi 0.87.1, with `pyte` installed for the status chrome guard:
+
+```text
+ok - herdr chrome: the live renderer keeps publishing the border row and never re-applies a released zoom
+ok - real herdr 0.9.5 + pi 0.87.1: the registration left behind by a quit pi reads stale-agent and recovers as dead
+ok - installed herdr 0.9.5 protocol 22 classifies above the presentation floor
+ok - live Herdr submit confirm: Claude Code (2.1.300 (Claude Code)) on herdr 0.9.5 proves and submits a typed /exit behind its command popup
+ok - real Herdr staging captured the current project-grouped layout and both one-worker-per-workspace candidates at eight workers across three projects
+ok - real Herdr grouped Agents presentation shows human project, WORKER outcome/state, Pi detail, and hidden task identity
+```
+
+Those come from `tests/fm-status-chrome-herdr-lab-e2e.test.sh`, `tests/fm-herdr-pi-stale-registration-live-e2e.test.sh`, `tests/fm-herdr-version-floor-live-e2e.test.sh`, `tests/fm-herdr-submit-confirm-live-e2e.test.sh`, `tests/fm-herdr-layout-preview-e2e.test.sh`, and `tests/fm-herdr-worker-presentation-e2e.test.sh`.
+The status chrome guard needed two fixes in `bin/fm-herdr-lab-view.py` first: a Herdr 0.9.5 client asks for the color scheme with the private query `CSI ? 996 n`, and on macOS an exiting client still flushing output blocked until the view closed its pty.
+Herdr 0.9 also changed `agent start` to start a named agent kind in an existing pane, which the worker presentation guard now uses.
+
 Treehouse 3.0.0 changed `treehouse return` to exit 3 when it leaves a dirty worktree in place.
 Every Firstmate return passes `--force`, so that exit code cannot reach Firstmate; measured against a scratch repository with Treehouse 3.1.3:
 
