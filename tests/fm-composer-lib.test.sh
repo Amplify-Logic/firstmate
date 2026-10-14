@@ -1279,13 +1279,16 @@ test_background_exit_picker_stays_pending_and_blocks_retry() {
   [ "$rc" -eq 1 ] || fail "two of the three strings must not match"
   out=$(fm_composer_blocking_dialog "$(printf '%s\n' "$screen" '' '')"); rc=$?
   [ "$rc" -eq 0 ] || fail "blank rows below the footer should still match"
+  # The picker's highlighted `❯ 1.` row with sibling numbered options is a
+  # selection dialog, so this fork's selection-dialog rule (bin/fm-composer-lib.sh
+  # header) reads it `unknown` while the classify still names the dialog.
   sink=$(mktemp)
   FM_COMPOSER_DIALOG_SINK=$sink
   out=$(fm_composer_classify_screen 'styled=1' "$screen" 1)
-  [ "$out" = pending ] || fail "cursor on the selected row should stay pending, got '$out'"
+  [ "$out" = unknown ] || fail "cursor on the selected row should read unknown, got '$out'"
   [ "$(cat "$sink")" = 'Claude background-task exit picker' ] || fail "classify should note the dialog, got '$(cat "$sink")'"
   out=$(fm_composer_classify_screen 'styled=1' "$screen")
-  [ "$out" = pending ] || fail "a styled cursorless picker should stay pending, got '$out'"
+  [ "$out" = unknown ] || fail "a styled cursorless picker should read unknown, got '$out'"
   unset FM_COMPOSER_DIALOG_SINK
   rm -f "$sink"
   FM_TEST_PICKER_SCREEN=$screen
@@ -1302,7 +1305,7 @@ test_background_exit_picker_stays_pending_and_blocks_retry() {
   [ "$enters" -eq 1 ] || fail "a picker must receive one Enter, got $enters"
   rm -f "$FM_TEST_PICKER_ENTERS"
   unset FM_TEST_PICKER_SCREEN FM_TEST_PICKER_ENTERS
-  pass "the Claude background-task exit picker stays pending and receives no confirming Enter"
+  pass "the Claude background-task exit picker is refused and receives no confirming Enter"
 }
 
 # The picker's own text, shown the way a worker pane shows it when it prints
@@ -1352,7 +1355,7 @@ test_dialog_note_skips_the_match_when_no_sink_is_set() {
   [ -z "$out" ] || fail "a note without a sink should print nothing, got '$out'"
   [ -z "${FM_COMPOSER_DIALOG_SINK:-}" ] || fail "a note without a sink must not create one"
   out=$(fm_composer_classify_screen 'styled=1' "$screen" 1)
-  [ "$out" = pending ] || fail "classify without a sink should stay pending, got '$out'"
+  [ "$out" = unknown ] || fail "classify without a sink should keep the selection-dialog verdict unknown, got '$out'"
   trap 'true' RETURN
   before=$(trap -p RETURN)
   fm_composer_dialog_sink_prepare || fail "the dialog sink could not be prepared"

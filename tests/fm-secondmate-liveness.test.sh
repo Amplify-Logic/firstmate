@@ -315,7 +315,8 @@ case "${1:-}" in
       # test does, and what fm-spawn.sh then reads back to confirm the
       # endpoint it just launched into is really there.
       missing)
-        if [ -e "${FM_TMUX_CALL_LOG:?}.created" ]; then printf '%s\n' fm-sm1; else printf '%s\n' main; fi
+        printf '%s\n' main
+        [ ! -f "${FM_TMUX_CALL_LOG:?}.windows" ] || cat "$FM_TMUX_CALL_LOG.windows"
         exit 0 ;;
       unreadable) exit 1 ;;
       *) [ -e "${FM_TMUX_CALL_LOG:?}.killed" ] || printf '%s\n' fm-sm1; exit 0 ;;
@@ -328,7 +329,14 @@ case "${1:-}" in
     fi
     [ "${1:-}" = kill-window ] && : > "${FM_TMUX_CALL_LOG}.killed"
     [ "${FM_TEST_FAIL_NEW_WINDOW:-0}" = 1 ] && [ "${1:-}" = new-window ] && exit 1
-    [ "${1:-}" = new-window ] && { rm -f "${FM_TMUX_CALL_LOG}.killed"; : > "${FM_TMUX_CALL_LOG}.created"; }
+    if [ "${1:-}" = new-window ]; then
+      rm -f "${FM_TMUX_CALL_LOG}.killed"; : > "${FM_TMUX_CALL_LOG}.created"
+      prev=
+      for a in "$@"; do
+        [ "$prev" != -n ] || printf '%s\n' "$a" >> "${FM_TMUX_CALL_LOG}.windows"
+        prev=$a
+      done
+    fi
     exit 0
     ;;
   has-session) exit 0 ;;

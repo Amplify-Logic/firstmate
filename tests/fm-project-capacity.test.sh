@@ -94,7 +94,19 @@ case "$*" in
     exit 0
     ;;
 esac
-case "${1:-}" in display-message) printf 'firstmate\n' ;; esac
+case "${1:-}" in
+  display-message) printf 'firstmate\n' ;;
+  # fm-spawn reads the window inventory before it reports a spawn as started,
+  # so the stub lists back every window it was asked to create.
+  new-window)
+    prev=
+    for a in "$@"; do
+      [ "$prev" != "-n" ] || printf '%s\n' "$a" >> "$FM_FAKE_CALL_LOG.windows"
+      prev=$a
+    done
+    ;;
+  list-windows) [ ! -f "$FM_FAKE_CALL_LOG.windows" ] || cat "$FM_FAKE_CALL_LOG.windows" ;;
+esac
 exit 0
 SH
   cat > "$fakebin/treehouse" <<'SH'
