@@ -1664,9 +1664,9 @@ host_env_resolve() {  # <path>: physical path when it exists, else as given
 host_env_wslconfig() {  # prints the Windows user's .wslconfig path when readable
   local profile path
   command -v cmd.exe >/dev/null 2>&1 && command -v wslpath >/dev/null 2>&1 || return 1
-  profile=$(cd / && fm_run_timed 5 cmd.exe /c 'echo %USERPROFILE%' 2>/dev/null | tr -d '\r' | head -n 1)
+  profile=$(cd / && fm_run_timed 5 cmd.exe /c 'echo %USERPROFILE%' </dev/null 2>/dev/null | tr -d '\r' | head -n 1)
   [ -n "$profile" ] || return 1
-  path=$(fm_run_timed 5 wslpath -u "$profile" 2>/dev/null)/.wslconfig || return 1
+  path=$(fm_run_timed 5 wslpath -u "$profile" </dev/null 2>/dev/null)/.wslconfig || return 1
   [ -r "$path" ] || return 1
   printf '%s\n' "$path"
 }
