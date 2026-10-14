@@ -42,11 +42,24 @@ PROJECT_TOKEN=$OWNER_TOKEN
   --token "fm_project=$PROJECT_TOKEN" >/dev/null \
   || fail 'could not bind project identity tokens'
 
-AGENT_OUT=$("$HERDR_LAB_HELPER" run "$HERDR_LAB_SESSION" agent start \
-  'WORKER · Validate GPS triggers across all seven Amsterdam stops · 🔵 WORKING' \
-  --workspace "$WS" --cwd "$ROOT" --no-focus \
-  --env 'FM_PRESENTATION_LAB=1' \
-  -- pi) || fail 'could not start isolated Pi presentation probe'
+# Herdr 0.9 replaced `agent start <name> --workspace ... -- <argv>`, which made
+# its own tab, with `agent start <name> --kind <kind> --pane <id>` into an
+# existing pane at a shell prompt, and agent names became lowercase slugs.
+if "$HERDR_LAB_HELPER" run "$HERDR_LAB_SESSION" agent start --help 2>/dev/null | grep -q -- '--kind'; then
+  TAB_OUT=$("$HERDR_LAB_HELPER" run "$HERDR_LAB_SESSION" tab create \
+    --workspace "$WS" --cwd "$ROOT" --env 'FM_PRESENTATION_LAB=1' --no-focus) \
+    || fail 'could not create the Pi presentation probe tab'
+  PROBE_PANE=$(printf '%s' "$TAB_OUT" | jq -r '.result.root_pane.pane_id // empty')
+  [ -n "$PROBE_PANE" ] || fail 'tab creation did not return the probe pane id'
+  AGENT_OUT=$("$HERDR_LAB_HELPER" run "$HERDR_LAB_SESSION" agent start worker-presentation \
+    --kind pi --pane "$PROBE_PANE") || fail 'could not start isolated Pi presentation probe'
+else
+  AGENT_OUT=$("$HERDR_LAB_HELPER" run "$HERDR_LAB_SESSION" agent start \
+    'WORKER · Validate GPS triggers across all seven Amsterdam stops · 🔵 WORKING' \
+    --workspace "$WS" --cwd "$ROOT" --no-focus \
+    --env 'FM_PRESENTATION_LAB=1' \
+    -- pi) || fail 'could not start isolated Pi presentation probe'
+fi
 TAB=$(printf '%s' "$AGENT_OUT" | jq -r '.result.agent.tab_id // empty')
 PANE=$(printf '%s' "$AGENT_OUT" | jq -r '.result.agent.pane_id // empty')
 [ -n "$TAB" ] && [ -n "$PANE" ] || fail 'agent start did not return stable tab/pane ids'
