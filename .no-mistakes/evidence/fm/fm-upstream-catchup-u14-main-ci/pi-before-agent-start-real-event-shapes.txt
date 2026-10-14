@@ -1,0 +1,11 @@
+# Real before_agent_start events captured by a probe extension loaded into the real Pi CLI
+# (RPC mode, isolated PI_CODING_AGENT_DIR, local fake OpenAI-compatible model on 127.0.0.1).
+# Run 1: captain prompt over RPC. Run 2: probe calls pi.sendMessage({customType:'fm-branch-process'}, {triggerTurn:true}) from idle.
+
+## Pi 0.87.1 (operator machines)
+{"keys":["images","prompt","systemPrompt","systemPromptOptions","type"],"messageType":"<absent>","hasPromptKey":true,"prompt":"captain says hello","hasMessageKey":false}
+(Pi 0.87.1 ran the custom-message turn [agent_start + message_start role=custom] without emitting before_agent_start.)
+
+## Pi 1.2.0 (latest public; what CI installs)
+{"keys":["images","messageType","prompt","systemPrompt","systemPromptOptions","type"],"messageType":"user","hasPromptKey":true,"prompt":"captain says hello","hasMessageKey":false}
+{"keys":["message","messageType","systemPrompt","systemPromptOptions","type"],"messageType":"custom","hasPromptKey":false,"hasMessageKey":true,"message":{"role":"custom","customType":"fm-branch-process","content":"probe processing request"}}

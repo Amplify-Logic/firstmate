@@ -1,0 +1,59 @@
+# Regression reproduction: target tests/fm-pi-branch-extension.test.sh (away-record + processing tests) run against the BASE extension (09853b6b), Pi 0.87.1
+not ok - the away posture must park main and present after archive: file://<tmp>/away-root/.pi/extensions/fm-branch-supervision.ts:1681
+    const trimmed = prompt.trim();
+                           ^
+
+TypeError: Cannot read properties of undefined (reading 'trim')
+    at file://<tmp>/away-root/.pi/extensions/fm-branch-supervision.ts:1681:28
+    at async fire (eval at <anonymous> ([eval1]:2:7), <anonymous>:182:63)
+    at async [eval1]:114:1
+
+Node.js v22.23.1: expected exit 0, got 1
+
+# Same tests against the TARGET extension (732b1d77), Pi 0.87.1 (wait budget widened to 60s in a throwaway copy because host load average was ~200 on 8 cores)
+ok - under the away-posture record the wake carries the verbatim read-back tail, claims every row, opens no processing turn, cancels a pending request, and presents the accumulated rows after archive
+ok - a captain outcome opens one sequence-keyed processing turn, survives empty and unrelated answers, is re-presented at run end and session start, and closes only on its acknowledgement
+
+# Same against the TARGET extension, Pi 1.2.0
+ok - under the away-posture record the wake carries the verbatim read-back tail, claims every row, opens no processing turn, cancels a pending request, and presents the accumulated rows after archive
+ok - a captain outcome opens one sequence-keyed processing turn, survives empty and unrelated answers, is re-presented at run end and session start, and closes only on its acknowledgement
+
+# Requested/unsolicited delivery test (run starts now tagged messageType:user), widened budget
+Pi 0.87.1:
+ok - requested and unsolicited healthy outcomes keep distinct delivery and event ownership
+Pi 1.2.0:
+ok - requested and unsolicited healthy outcomes keep distinct delivery and event ownership
+
+# Changed watch-extension tests, isolated, unmodified budget (two runs)
+ok - Pi replacement replays a streaming follow-up before consumption
+ok - Pi streaming-time wake delivery keeps the successor chain and replays only unconsumed wakes
+ok - Pi replacement persistence failure keeps its predecessor until a successor commits
+ok - Pi replacement replays a streaming follow-up before consumption
+ok - Pi streaming-time wake delivery keeps the successor chain and replays only unconsumed wakes
+ok - Pi replacement persistence failure keeps its predecessor until a successor commits
+
+# Unmodified full tests/fm-pi-branch-extension.test.sh at target (load ~75-95): changed tests pass; aborts later at an unrelated timing-based test
+ok - fm_branch_outcomes and fm_branch_processed call headers match stock on Pi before and from 0.99
+ok - fm_branch_outcomes hides through ToolExecutionComponent while Calm-off and HTML export stay stock
+ok - the installed Pi still bounds the picker's list and ranks its search
+ok - branch owns accepted wakes with a stable prefix and deterministic verdict-driven delivery
+ok - a captain outcome reaches main's model as one typed, sequence-keyed processing request while routine notes stay plain
+ok - requested and unsolicited healthy outcomes keep distinct delivery and event ownership
+ok - captain outcomes are exact and exactly once across crash, reload, busy main, compaction, and an unrelated assistant response
+ok - a captain outcome opens one sequence-keyed processing turn, survives empty and unrelated answers, is re-presented at run end and session start, and closes only on its acknowledgement
+ok - Pi: an abbreviated processing request points to the full outcome and instructs main to read it first
+ok - Pi: a marker-less >1 MiB backlog is presented oldest first in bounded requests and continues after batch acknowledgement
+ok - an unprocessed captain row the store lists without its age is reported to main, never formatted undated, and stays unprocessed until the store is healthy
+ok - scopeForUnreadWake excludes every main-only class without vetoing eligible task-local rows, and writes the eligible snapshot
+ok - second-mate signal rows route by their new span while crewmate and stale routing stay unchanged
+ok - branch prompt_cache_key is stable per home across sessions and distinct between homes
+ok - branch default-on eligibility (task-scoped, heartbeat, legacy flag ignored) binds and a broken branch rejects to watcher fallback
+ok - under the away-posture record the wake carries the verbatim read-back tail, claims every row, opens no processing turn, cancels a pending request, and presents the accumulated rows after archive
+ok - Pi branch: an unchanged held outcome reaches the captain once across cadences, and a later red check on the task still does
+ok - an accepted away-only wake rejects after archive, while a drained task-local wake stays a quiet no-op
+ok - a claimed heartbeat row on a non-heartbeat away wake lifts task scoping for the fleet report
+ok - a heartbeat review survives a check row arriving before its drain
+ok - fm_branch_report refuses a task the wake did not name, fleet included, while a heartbeat is unscoped
+ok - pre-drain eligibility re-check excludes a newly main-owned row without deferring eligible work
+ok - a co-present needs-decision row neither vetoes nor falsely settles routine branch delivery
+not ok - settled branch turns must release residual grants for main replay: file:///Users/larsmusic/.no-mistakes/worktrees/f569cc43ac96/01M4Y6MV9RZN8YN22MCK26T69B/[eval1]:13

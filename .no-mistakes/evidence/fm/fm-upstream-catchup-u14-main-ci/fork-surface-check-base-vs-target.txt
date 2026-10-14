@@ -1,0 +1,11 @@
+=== target 732b1d77: bin/fm-fork-surface.sh check
+FORK_SURFACE OK capabilities=88 owned_paths=290
+exit=0
+
+=== base 09853b6b fork-surface.conf: bin/fm-fork-surface.sh check
+fm-fork-surface: unclaimed fork-only path: desk-floater/Tests/DeskFloaterTests/TalkKeyTests.swift; add it to a [capability] block or declare a new capability
+FORK_SURFACE FAIL failures=1
+exit=1
+
+=== paths row for TalkKeyTests at target
+desk-floater-voice	desk-floater/Tests/DeskFloaterTests/TalkKeyTests.swift
