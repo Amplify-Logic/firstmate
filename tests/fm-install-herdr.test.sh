@@ -20,15 +20,15 @@ assert_present "$CLEANUP" "bin/fm-herdr-ci-cleanup.sh is missing"
 [ -x "$CLEANUP" ] || fail "fm-herdr-ci-cleanup.sh must be executable"
 
 test_herdr_installer_pins_exact_version_and_checksums() {
-  assert_grep 'FM_HERDR_CI_VERSION=0.7.4' "$HERDR_INSTALL" \
-    "Herdr installer must pin suite-verified 0.7.4"
+  assert_grep 'FM_HERDR_CI_VERSION=0.9.5' "$HERDR_INSTALL" \
+    "Herdr installer must pin suite-verified 0.9.5"
   assert_grep 'FM_HERDR_CI_MIN_PROTOCOL=16' "$HERDR_INSTALL" \
     "Herdr installer must require protocol floor 16"
-  assert_grep 'ogulcancelik/herdr' "$HERDR_INSTALL" \
+  assert_grep 'herdrdev/herdr' "$HERDR_INSTALL" \
     "Herdr installer must use the official GitHub release source"
   assert_grep 'herdr-linux-x86_64' "$HERDR_INSTALL" \
     "Herdr installer must name the Linux x86_64 release asset"
-  assert_grep 'bc0fc02d4ba500f9cac2353a43e67fe036785ecca6eb55378e050fac3c103059' "$HERDR_INSTALL" \
+  assert_grep '14d9e8bc8b4a9e0118d77c32266f76d461f09b40342eb23752960bd89f59929d' "$HERDR_INSTALL" \
     "Herdr installer must pin the Linux x86_64 SHA-256"
   assert_grep 'sha256sum' "$HERDR_INSTALL" \
     "Herdr installer must verify a SHA-256 checksum"
@@ -42,13 +42,13 @@ test_herdr_installer_pins_exact_version_and_checksums() {
 }
 
 test_treehouse_installer_pins_exact_version_and_checksums() {
-  assert_grep 'FM_TREEHOUSE_CI_VERSION=2.0.1' "$TREEHOUSE_INSTALL" \
-    "Treehouse installer must pin the suite-verified 2.0.1 release"
+  assert_grep 'FM_TREEHOUSE_CI_VERSION=3.1.3' "$TREEHOUSE_INSTALL" \
+    "Treehouse installer must pin the suite-verified 3.1.3 release"
   assert_grep 'kunchenguid/treehouse' "$TREEHOUSE_INSTALL" \
     "Treehouse installer must use the official GitHub release source"
   assert_grep 'linux-amd64.tar.gz' "$TREEHOUSE_INSTALL" \
     "Treehouse installer must name the Linux amd64 archive"
-  assert_grep '1d5a32751ab921670103fd201ddb2b91b47338cb13976f45642b827cf8976af2' "$TREEHOUSE_INSTALL" \
+  assert_grep '78c820c5872bf9d9d3eb19bbedd75e4804b9258c862238993fa160cf9d215ed8' "$TREEHOUSE_INSTALL" \
     "Treehouse installer must pin the Linux amd64 SHA-256"
   assert_grep '--max-filesize' "$TREEHOUSE_INSTALL" \
     "Treehouse installer must bound the download size"
