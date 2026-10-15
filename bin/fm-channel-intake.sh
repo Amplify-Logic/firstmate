@@ -154,9 +154,8 @@
 #             tech or the captain acting, not a request to the customer -
 #             that names the captain or that the captain wrote, or on his own
 #             ticket one that names the tech team, has no later reply from
-#             such a mailbox; (c) a
-#             colleague's note that names the captain has no later note by
-#             him and no reply.
+#             such a mailbox; (c) a colleague's note that names the captain
+#             has no later note by him and no reply.
 # On his own ticket any captain_names word names him. On a colleague's ticket
 # only an @mention (`@` right before the word) or a direct ask within one
 # sentence does: the word opening it, after at most a greeting, then a comma or
@@ -167,11 +166,11 @@
 # jij/je/u ("kun jij ... <name>?"). A message whose own text opens with a
 # greeting to the word ("Hi <name>," or "Beste <name>" on its own line) asks
 # him any question or request it carries above its sign-off line ("Kind
-# regards", "Met vriendelijke groet", ..., or "--") or confidentiality footer, a request
-# word with "you" counting only where it opens a sentence or line. A passing
-# name such as "discussed with
-# <name>, closing", "should we ask <name>?" or a statement "<name> kan je hier
-# verder mee helpen." names nobody, in (a), (b) and (c) alike.
+# regards", "Met vriendelijke groet", ..., or "--") or confidentiality footer,
+# a request word with "you" counting only where it opens a sentence or line.
+# A passing name such as "discussed with <name>, closing", "should we ask
+# <name>?" or a statement "<name> kan je hier verder mee helpen." names
+# nobody, in (a), (b) and (c) alike.
 # Only an EMAIL engagement is a reply: a `last_message_sent_at` send with no
 # matching email is an auto-acknowledgement and answers nothing. (a) applies
 # only when the ticket involves the captain: he owns it, or a message or note
