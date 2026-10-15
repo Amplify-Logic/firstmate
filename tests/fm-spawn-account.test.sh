@@ -26,19 +26,22 @@ SPAWN_HOMES_FILE="$TMP_ROOT/homes"
 BASELINE_LAUNCH_FILE="$TMP_ROOT/baseline-claude-launch"
 
 # The launch line with this case's own paths replaced by tokens - the task's
-# brief directory, its commit-msg hook directory, and the bin/ the spawn ran
-# from - so two cases that differ only in where they live can be compared byte
-# for byte.
+# brief directory, its commit-msg hook directory, its private launch directory,
+# and the bin/ the spawn ran from - so two cases that differ only in where they
+# live can be compared byte for byte.
 launch_without_case_paths() {  # <launch-line> <home> <task-id> <spawn-bin-dir>
-  local launch=$1 home=$2 id=$3 bindir=$4
+  local launch=$1 home=$2 id=$3 bindir=$4 coderoot=${4%/bin}
   launch=${launch//$home\/data\/$id/<TASK-DATA>}
   launch=${launch//$home\/state\/$id.git-hooks/<TASK-HOOKS>}
   launch=${launch//$home\/state\/$id.inbox/<TASK-INBOX>}
   launch=${launch//$home\/state\/operational-inbox/<OPERATIONAL-INBOX>}
-  launch=${launch//${bindir%/bin}\/.agents\/skills/<SKILLS>}
-  # The launch-brief doorbell names a fresh record on every spawn.
+  launch=${launch//$coderoot\/.agents\/skills/<SKILLS>}
+  launch=${launch//\/tmp\/fm-$id+/<LAUNCH-DIR>+}
+  # The launch-brief doorbell names a fresh record on every spawn, and the Git
+  # config env file carries the home token and a fresh spawn nonce.
   printf '%s' "${launch//$bindir/<BIN>}" \
-    | sed -E 's#<OPERATIONAL-INBOX>/[0-9]+-[0-9a-f]+\.msg#<OPERATIONAL-INBOX>/<RECORD>.msg#g'
+    | sed -E -e 's#<OPERATIONAL-INBOX>/[0-9]+-[0-9a-f]+\.msg#<OPERATIONAL-INBOX>/<RECORD>.msg#g' \
+      -e 's#<LAUNCH-DIR>\+[0-9a-f]+/git-config\.s[0-9.]+\.sh#<LAUNCH-DIR>/git-config.<SPAWN>.sh#g'
 }
 
 make_spawn_fakebin() {
