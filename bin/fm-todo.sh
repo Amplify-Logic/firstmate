@@ -9,7 +9,10 @@
 #   fm-todo.sh close --item ID --evidence TEXT [--reason fulfilled|dismissed|superseded] [--actor NAME]
 #   fm-todo.sh reopen --item ID [--reason TEXT]
 #   fm-todo.sh ack --item ID
-#   fm-todo.sh command [--item ID [--rev REV]] [LINE ...]   (lines on stdin when none given)
+#   fm-todo.sh command [--item ID [--rev REV] [--at EPOCH]] [LINE ...]   (lines on stdin when none given)
+#   fm-todo.sh tickets
+#   fm-todo.sh ticket-done --item ID --action ACTION --evidence TEXT
+#   fm-todo.sh ticket-failed --item ID --action ACTION --evidence TEXT
 #   fm-todo.sh list [--state open|waiting|closed]
 #   fm-todo.sh --help
 #
@@ -27,7 +30,10 @@
 # ITEM RECORD. data/todo/items/<id>.json keeps: aliases, one slot per source
 # (its last observation and its own revision), `state` open|waiting|closed,
 # `closure` {reason fulfilled|dismissed|superseded|resolved|released, actor,
-# evidence, at}, `owner`, `snoozed_until`, `pending` handoff, `verification`
+# evidence, at}, `owner`, `snoozed_until`, `pending` handoff, `ticket_actions`
+# (queued HubSpot changes and their recorded results), `ticket_handoff`
+# {ticket, at, requested_at} (a done action that closed, set waiting or
+# reassigned the item, or any done action on a closed item), `verification`
 # {at, how, rev} and `rev`, the item's meaningful revision over its slots.
 # data/todo/journal is an append-only line per transition or command effect.
 # One lock serializes sync and every write. Sync deletes one kind of record
@@ -111,8 +117,11 @@
 #   dig <words>             pending investigation by firstmate
 # Prefer --item with the row's id and --rev with the revision the page showed
 # (both are in the page's queued note); a stale --rev is refused so an old page
-# cannot act on a changed ask. Without --item, <words> must match exactly one
-# open item's title or ask. Repeating a command is harmless (`already`).
+# cannot act on a changed ask. Pass --at with the epoch the queued note gives
+# as the time Lars typed it; a ticket verb records it as the action's
+# requested time (now when absent, and never later than now). Without
+# --item, <words> must match exactly one open item's title or ask.
+# Repeating a command is harmless (`already`).
 # `you`/`dig` stay "handoff requested" on the page until firstmate accepts
 # them with `ack`, which moves the item to waiting with owner firstmate;
 # `reopen` brings a closed or waiting item back to the captain's lane, ending
@@ -122,6 +131,48 @@
 # record the answer through bin/fm-captain-hold.sh, and the item releases when
 # the backlog does. A line with no leading verb prints `TODO_CMD:
 # not-a-command` and changes nothing. Exit 1 when any line was refused.
+#
+# TICKET VERBS. On a row whose item names exactly one HubSpot ticket (an alias
+# `hubspot...:<ticket id>`, or a ticket record or help-desk ticket link), these
+# exact lines, typed with --item, ask for a change to that ticket:
+#   close                   close the ticket
+#   close: <reason>         close the ticket, with the reason
+#   waiting                 set the ticket to its waiting-on-customer stage
+#   reassign <name>         give the ticket to <name>, one word, stored as typed
+#   note: <text>            add an internal note
+# Any other wording, including these words followed by more text and any
+# untargeted line, is not a ticket verb and stays free text (not-a-command).
+# This script never touches HubSpot. Each verb records a pending ticket action
+# on the item (`TODO_CMD: ticket-<verb> ... action <ACTION>`), appends one
+# `todo-ticket` check wake, and the page marks the row "HubSpot change
+# pending" (also under Waiting on others and in the closed fold) until
+# Firstmate records the result.
+# An item with no HubSpot ticket, or with more than one, refuses the verb and
+# records nothing; repeating a pending action is `already`. On the wake
+# Firstmate:
+#   1. runs `fm-todo.sh tickets`, which prints one `TODO_TICKET:` line per
+#      pending action (item, action, ticket id, verb, argument, requested
+#      time, link, title) and a `TODO_TICKETS: N pending` count;
+#   2. re-reads the ticket first and records `ticket-failed` instead when it
+#      shows a partner inbound newer than the action's requested time;
+#      otherwise makes each change through its HubSpot connector, resolving
+#      a reassign name to a HubSpot owner itself, and writes the internal note
+#      "<action> by Lars via assistant: <reason>" with every change; it never
+#      deletes or merges a ticket and never sends anything to a customer;
+#   3. records the result with `ticket-done` or `ticket-failed`, naming the
+#      action and what HubSpot now shows as --evidence. A done close closes
+#      the item as fulfilled by the captain, and a done waiting or reassign
+#      moves it to waiting (a reassign with the name as owner). Either stays
+#      put through our own note, stage or owner change, as does an item
+#      already closed when any action on it is done; it reopens only when
+#      the source shows the partner wrote again: a partner-awaiting ask
+#      newer than the recorded result, the ticket's latest partner inbound
+#      (`last_inbound_at`) newer than the time the verb was typed, or the
+#      source record back to open. A done note leaves an open item as it
+#      was. A failed action stays on the row as
+#      "HubSpot change failed" with its evidence until a later action of
+#      the same verb (for a note, the same text), alongside any pending one;
+#   4. re-renders the page with bin/fm-todo-render.sh.
 #
 # Paths: data/todo (FM_TODO_STORE_OVERRIDE), data/channel-intake, and the
 # backlog path from .tasks.toml's markdown backend (FM_TODO_BACKLOG_OVERRIDE).
@@ -194,7 +245,7 @@ esac
 cmd=$1
 shift
 case "$cmd" in
-  sync|sweep-start|recheck|verify|close|reopen|ack|command|list) ;;
+  sync|sweep-start|recheck|verify|close|reopen|ack|command|tickets|ticket-done|ticket-failed|list) ;;
   *) die "unknown command: $cmd" ;;
 esac
 
@@ -204,13 +255,30 @@ while [ "$#" -gt 0 ]; do
   case "$1" in
     --morning-json) [ "$#" -ge 2 ] || die '--morning-json requires a value'; morning=$2; shift 2 ;;
     --pass) args+=("$1"); shift ;;
-    --item|--how|--evidence|--at|--since|--state|--rev|--actor|--reason)
+    --item|--how|--evidence|--at|--since|--state|--rev|--actor|--reason|--action)
       [ "$#" -ge 2 ] || die "$1 requires a value"; args+=("$1" "$2"); shift 2 ;;
     --*) die "unknown argument: $1" ;;
     *) args+=("$1"); shift ;;
   esac
 done
 
-exec python3 "$SCRIPT_DIR/fm-todo-items.py" "$cmd" --store "$STORE" --now "$(now_epoch)" \
-  --intake "$INTAKE_DIR" --sources "$sources" --backlog "$(backlog_path)" \
-  --morning-json "$morning" ${args[@]+"${args[@]}"}
+run_items() {
+  python3 "$SCRIPT_DIR/fm-todo-items.py" "$cmd" --store "$STORE" --now "$(now_epoch)" \
+    --intake "$INTAKE_DIR" --sources "$sources" --backlog "$(backlog_path)" \
+    --morning-json "$morning" ${args[@]+"${args[@]}"}
+}
+
+[ "$cmd" = command ] || { run_items; exit; }
+
+# A newly queued ticket action wakes Firstmate, which owns the HubSpot write.
+out=$(run_items) && code=0 || code=$?
+[ -z "$out" ] || printf '%s\n' "$out"
+queued=$(printf '%s\n' "$out" | grep -c '^TODO_CMD: ticket-' || true)
+if [ "$queued" -gt 0 ]; then
+  # shellcheck source=bin/fm-wake-lib.sh
+  . "$SCRIPT_DIR/fm-wake-lib.sh"
+  fm_wake_append check todo-ticket \
+    "todo-ticket: $queued HubSpot ticket change(s) queued from the to-do page; run bin/fm-todo.sh tickets" \
+    || printf 'fm-todo: ticket action recorded but the wake append failed; fm-todo.sh tickets still lists it\n' >&2
+fi
+exit "$code"

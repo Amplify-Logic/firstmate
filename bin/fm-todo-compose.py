@@ -285,19 +285,20 @@ def reply_form(rec):
         "var f=event.currentTarget,v=f.note.value.trim();if(!v)return;"
         "if(!window.lavish||!window.lavish.queuePrompt){f.querySelector('.ack').textContent="
         "'review session not connected';return;}"
+        "var at=Math.floor(Date.now()/1000);"
         "window.lavish.queuePrompt("
-        f"'Update on to-do item '+{json.dumps(iid)}+' rev '+{json.dumps(rev)}+' ('+{json.dumps(title_raw)}+'): '+v,"
+        f"'Update on to-do item '+{json.dumps(iid)}+' rev '+{json.dumps(rev)}+' at '+at+' ('+{json.dumps(title_raw)}+'): '+v,"
         "{tag:'item-update',"
         f"text:{json.dumps(title_raw[:70])}+': '+v,"
         "element:f,"
         f"queueKey:{json.dumps('todo-item-' + iid)},"
-        f"data:{{item_id:{json.dumps(iid)},rev:{json.dumps(rev)},title:{json.dumps(title_raw)},note:v}}}});"
+        f"data:{{item_id:{json.dumps(iid)},rev:{json.dumps(rev)},title:{json.dumps(title_raw)},note:v,at:at}}}});"
         "f.note.value='';f.querySelector('.ack').textContent='queued';"
     )
     return (f'<tr class="replyrow" id="note-{esc(iid)}"><td colspan="3">'
             f'<form class="reply" data-lavish-question="todo-item-{esc(iid)}" onsubmit="{esc(js)}">'
             f'<input type="text" name="note" autocomplete="off" '
-            f'placeholder="drop, done, park til Friday, mine, you: what to do, dig, or anything else">'
+            f'placeholder="drop, done, park til Friday, mine, you: what to do, dig, close, waiting, reassign name, note: text, or anything else">'
             f'<button type="submit">Queue</button><span class="ack"></span>'
             f'</form></td></tr>')
 
@@ -387,13 +388,30 @@ def age(rec):
     return f'<span class="prov inf">asked {esc(stamp(at, "%a %-d %b"))}, {days} day{"s" if days > 1 else ""} ago</span>'
 
 
+def ticket_marker(rec):
+    """A queued HubSpot change shows until Firstmate records it; a failed one until a later one of its kind."""
+    actions = rec.get('ticket_actions') or []
+    kind = lambda a: (a.get('verb'), a.get('arg') if a.get('verb') == 'note' else '')
+    pending = [a for a in actions if a.get('state') == 'pending']
+    failed = [a for i, a in enumerate(actions)
+              if a.get('state') == 'failed' and all(kind(b) != kind(a) for b in actions[i + 1:])]
+    marks = []
+    if pending:
+        what = '; '.join(f'{a.get("verb")} {a.get("arg") or ""}'.strip() for a in pending)
+        marks.append(f'<span class="prov unv">HubSpot change pending: {brief(what, 120)}</span>')
+    marks += [f'<span class="prov unv">HubSpot change failed ({esc(a.get("verb"))}): '
+              f'{brief((a.get("outcome") or {}).get("evidence") or "no evidence recorded", 120)}</span>'
+              for a in failed]
+    return ''.join(marks)
+
+
 def row(rec, reply=True):
     title = esc(rec.get('title') or 'untitled item')
     severity = rec.get('class', 'obligation')
     pill = {'outage': 'bad', 'urgent': 'warn', 'deadline': 'warn'}.get(severity, 'info')
     toggle = note_toggle(rec) if reply else ''
     main = (f'<tr class="item" id="item-{esc(rec.get("id", ""))}"{audit(rec)}><td class="who"><span class="pill {pill}">{esc(severity)}</span>{source_marker(rec)}</td>\n'
-            f'<td class="what">{title}{freshness(rec)}{age(rec)}{context(rec)}</td>\n'
+            f'<td class="what">{title}{freshness(rec)}{age(rec)}{ticket_marker(rec)}{context(rec)}</td>\n'
             f'<td class="links">{link(rec.get("link"))}{toggle}</td></tr>')
     return main + '\n' + reply_form(rec) if reply else main
 
@@ -408,7 +426,7 @@ def disclosure(title, content):
 
 def listing(recs, note):
     return '<ul class="done">' + ''.join(
-        f'<li id="item-{esc(r["id"])}"{audit(r)}><b>{esc(r.get("title"))}</b> - {brief(note(r))}<span class="why">{freshness(r)}</span></li>'
+        f'<li id="item-{esc(r["id"])}"{audit(r)}><b>{esc(r.get("title"))}</b> - {brief(note(r))}<span class="why">{freshness(r)}{ticket_marker(r)}</span></li>'
         for r in recs) + '</ul>'
 
 
@@ -616,7 +634,7 @@ if closed:
     label = 'Closed today' if SINCE == day_start(NOW) else f'Closed since {when(SINCE)}'
     count = f'{len(closed)}' + (f', {len(handled)} handled without you' if handled else '')
     print(disclosure(f'{label} ({count})', table([
-        f'<tr class="closed" id="item-{esc(r["id"])}"{audit(r)}><td>{esc(r.get("title"))}</td><td>{brief(r["closure"].get("evidence") or "no closing evidence recorded")}</td>'
+        f'<tr class="closed" id="item-{esc(r["id"])}"{audit(r)}><td>{esc(r.get("title"))}</td><td>{brief(r["closure"].get("evidence") or "no closing evidence recorded")}{ticket_marker(r)}</td>'
         f'<td>{esc(r["closure"].get("reason", ""))} {esc("by you" if by_you(r["closure"].get("actor")) else who.get(r["closure"].get("actor"), "by " + str(r["closure"].get("actor"))))} · {esc(when(r["closure"].get("at")))}</td></tr>'
         for r in closed])))
 

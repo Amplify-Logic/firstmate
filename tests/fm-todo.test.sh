@@ -50,6 +50,13 @@
 #     Asana RMA, an observe --partner mark, an awaiting partner) oldest ask
 #     first, folds Firstmate-sourced or tooling approvals below them, and keeps a mine
 #     line out of the ranked list.
+#   - Ticket verbs (close, close:, waiting, reassign <name>, note:) queue a
+#     pending HubSpot change on a row naming exactly one ticket, wake
+#     Firstmate once per command run that queued one, show as pending on the
+#     page until Firstmate records the result, refuse a row with no ticket,
+#     leave any other wording or an untargeted line as free text, and a
+#     ticket handed off from the page ignores our own HubSpot change and
+#     reopens only when the partner writes again.
 #   - Stored titles lose relative times but keep a deadline or duration the
 #     ask is about, the page computes ages in calendar days, device
 #     updates never reach the page, ticket times show in the page's zone, and
@@ -920,6 +927,250 @@ test_an_age_counts_calendar_days_across_a_clock_change() {
   pass 'an age counts calendar days across a clock change'
 }
 
+# The action id of the one pending ticket action with verb $3 on item $2.
+pending_action() {
+  todo_at "$1" "$T_1500" tickets | awk -F '\t' -v i="TODO_TICKET: $2" -v v="$3" '$1 == i && $4 == v { print $2 }'
+}
+
+test_ticket_verbs_queue_a_pending_hubspot_change() {
+  local h id rev out code neshu line
+  h="$TMP_ROOT/tickets"
+  new_home "$h"
+  sidecar "$h" 2026-09-10 '{"key":"k-t1","source":"hubspot","ref":"48576658049","class":"obligation","kind":"reply","title":"Tomra pump ticket","link":"https://app.hubspot.com/contacts/1/record/0-5/48576658049","updated":'"$T_0900"'},{"key":"k-t2","source":"slack","ref":"C1-1","class":"obligation","kind":"reply","title":"Queco question","updated":'"$T_0900"'},{"key":"k-t3","source":"hubspot","ref":"48600120191","class":"obligation","kind":"reply","title":"Neshu ticket","updated":'"$T_0900"'}'
+  render_at "$h" "$T_1000"
+  id=$(field_of "$h" 'Tomra' 1)
+  rev=$(field_of "$h" 'Tomra' 4)
+  neshu=$(field_of "$h" 'Neshu' 1)
+  # A row with no HubSpot ticket refuses every ticket verb and records nothing.
+  out=$(todo_at "$h" "$T_1000" command --item "$(field_of "$h" 'Queco' 1)" 'close') && code=0 || code=$?
+  expect_code 1 "$code" 'a ticket verb on a row with no ticket was accepted'
+  assert_contains "$out" 'has no HubSpot ticket' 'the no-ticket refusal does not say why'
+  # A ticket verb acts on one row, so a line with no item id stays free text.
+  out=$(todo_at "$h" "$T_1000" command 'close') && code=0 || code=$?
+  expect_code 0 "$code" 'an untargeted ticket verb was refused instead of left as free text'
+  assert_contains "$out" 'TODO_CMD: not-a-command' 'an untargeted ticket verb was read as a command'
+  # Only the exact ticket forms are commands; other wording stays free text.
+  for line in 'close the loop with Natalia first' "waiting on Luc's answer" 'reassign Fauve van Dijk' \
+    'reassign' 'note:' 'close:' 'priority high'; do
+    out=$(todo_at "$h" "$T_1000" command --item "$id" "$line") && code=0 || code=$?
+    expect_code 0 "$code" "the free-text line '$line' was refused"
+    assert_contains "$out" 'TODO_CMD: not-a-command' "the free-text line '$line' was read as a ticket verb"
+  done
+  [ ! -s "$h/state/.wake-queue" ] || fail 'a line that queued no ticket change woke Firstmate'
+  assert_contains "$(todo_at "$h" "$T_1000" tickets)" 'TODO_TICKETS: 0 pending' 'free text queued a ticket change'
+  # Each verb keeps its argument as typed.
+  out=$(todo_at "$h" "$T_1000" command --item "$id" --rev "$rev" 'reassign Fauve')
+  assert_contains "$out" 'TODO_CMD: ticket-reassign' 'reassign was not queued'
+  assert_contains "$out" 'HubSpot ticket 48576658049 action k' 'the queued action does not name the ticket and action'
+  assert_contains "$out" ': Fauve' 'the reassign name was not stored as typed'
+  out=$(todo_at "$h" "$T_1000" command --item "$id" 'note: customer replaced the pump' 'Waiting')
+  assert_contains "$out" ': customer replaced the pump' 'the note text was not kept'
+  assert_contains "$out" 'TODO_CMD: ticket-waiting' 'waiting was not queued'
+  out=$(todo_at "$h" "$T_1000" command --item "$neshu" 'close: fixed by firmware')
+  assert_contains "$out" 'HubSpot ticket 48600120191 action k' 'a ticket named only by its alias was not found'
+  assert_contains "$out" ': fixed by firmware' 'the close reason lost its text'
+  out=$(todo_at "$h" "$T_1000" command --item "$id" 'reassign Fauve')
+  assert_contains "$out" 'TODO_CMD: already ticket-reassign' 'a repeated pending action was queued twice'
+  [ "$(grep -c 'todo-ticket' "$h/state/.wake-queue")" = 3 ] \
+    || fail 'expected one wake per command run that queued a change'
+  assert_contains "$(cat "$h/state/.wake-queue")" 'run bin/fm-todo.sh tickets' 'the wake does not say what to run'
+  assert_contains "$(todo_at "$h" "$T_1000" tickets)" 'TODO_TICKETS: 4 pending' 'tickets does not count every pending action'
+  # The page marks the row until Firstmate confirms.
+  render_at "$h" "$T_1030"
+  assert_contains "$(page "$h" 2026-09-10)" 'HubSpot change pending: reassign Fauve; note customer replaced the pump; waiting' \
+    'the page does not show the pending ticket change'
+  # A result needs evidence, is recorded once, and a done note leaves the item open.
+  out=$(todo_at "$h" "$T_1030" ticket-done --item "$id" --action "$(pending_action "$h" "$id" note)" 2>&1) && code=0 || code=$?
+  expect_code 2 "$code" 'a ticket result without evidence was recorded'
+  todo_at "$h" "$T_1030" ticket-done --item "$id" --action "$(pending_action "$h" "$id" note)" --evidence 'note added' >/dev/null
+  [ -z "$(pending_action "$h" "$id" note)" ] || fail 'a done note is still pending'
+  [ "$(field_of "$h" 'Tomra' 2)" = open ] || fail 'a done note changed the item state'
+  # A done reassign hands the item over to the name as typed, and the still
+  # pending waiting stays visible on the handed-over row.
+  todo_at "$h" "$T_1030" ticket-done --item "$id" --action "$(pending_action "$h" "$id" reassign)" \
+    --evidence 'owner Fauve van Dijk' >/dev/null
+  render_at "$h" "$T_1100"
+  [ "$(field_of "$h" 'Tomra' 2)" = waiting ] || fail 'a done reassign did not hand the item over'
+  out=$(page "$h" 2026-09-10)
+  assert_contains "$out" 'Fauve has it: HubSpot ticket 48576658049 reassigned' 'the reassigned owner is not shown'
+  assert_contains "$out" 'HubSpot change pending: waiting' 'a pending change on a waiting item is not shown'
+  # A done close closes the item as fulfilled by Lars, with the ticket as evidence.
+  todo_at "$h" "$T_1100" ticket-done --item "$neshu" --action "$(pending_action "$h" "$neshu" close)" \
+    --evidence 'stage Closed' >/dev/null
+  render_at "$h" "$T_1500"
+  [ "$(field_of "$h" 'Neshu' 2)" = closed ] || fail 'a done close did not close the item'
+  out=$(page "$h" 2026-09-10)
+  assert_contains "$out" 'HubSpot ticket 48600120191 closed from the page: stage Closed' 'the close evidence is not shown'
+  assert_not_contains "$out" 'handled without you' 'a close Lars asked for counted as handled without him'
+  assert_contains "$(todo_at "$h" "$T_1500" tickets)" 'TODO_TICKETS: 1 pending' 'finished actions are still listed as pending'
+  pass 'ticket verbs queue a pending HubSpot change, leave other wording as free text, and record the result'
+}
+
+test_ticket_failure_stays_on_the_row() {
+  local h id
+  h="$TMP_ROOT/ticket-failed"
+  new_home "$h"
+  sidecar "$h" 2026-09-10 '{"key":"k-t1","source":"slack","ref":"C9-9","class":"obligation","kind":"reply","title":"Dealer ticket","link":"https://app.hubspot.com/help-desk/1/view/2/ticket/49033119384/thread/5","updated":'"$T_0900"'}'
+  render_at "$h" "$T_1000"
+  id=$(field_of "$h" 'Dealer' 1)
+  todo_at "$h" "$T_1000" command --item "$id" 'close' >/dev/null
+  todo_at "$h" "$T_1000" ticket-failed --item "$id" --action "$(pending_action "$h" "$id" close)" \
+    --evidence 'ticket is locked' >/dev/null
+  render_at "$h" "$T_1030"
+  assert_contains "$(page "$h" 2026-09-10)" 'HubSpot change failed (close): ticket is locked' \
+    'a failed ticket change is not shown on its row'
+  [ "$(field_of "$h" 'Dealer' 2)" = open ] || fail 'a failed close changed the item state'
+  # A later note of another kind, pending or done, does not hide the failed close.
+  todo_at "$h" "$T_1000" command --item "$id" 'note: replaced the pump' >/dev/null
+  render_at "$h" "$T_1030"
+  assert_contains "$(page "$h" 2026-09-10)" 'HubSpot change failed (close): ticket is locked' \
+    'a pending note hid the failed close'
+  todo_at "$h" "$T_1000" ticket-done --item "$id" --action "$(pending_action "$h" "$id" note)" \
+    --evidence 'note added' >/dev/null
+  render_at "$h" "$T_1030"
+  assert_contains "$(page "$h" 2026-09-10)" 'HubSpot change failed (close): ticket is locked' \
+    'a done note queued after the close hid the failed close'
+  # A close typed with done closes the item at once; a failed close still shows in the Closed fold.
+  todo_at "$h" "$T_1030" command --item "$id" 'close' 'done' >/dev/null
+  render_at "$h" "$T_1100"
+  [ "$(field_of "$h" 'Dealer' 2)" = closed ] || fail 'done did not close the item'
+  assert_contains "$(page "$h" 2026-09-10)" 'HubSpot change pending: close' \
+    'a pending change on a closed item is not shown'
+  todo_at "$h" "$T_1100" ticket-failed --item "$id" --action "$(pending_action "$h" "$id" close)" \
+    --evidence 'ticket still locked' >/dev/null
+  render_at "$h" "$T_1500"
+  assert_contains "$(page "$h" 2026-09-10)" 'HubSpot change failed (close): ticket still locked' \
+    'a failed change on a closed item is not shown'
+  pass 'a help-desk link names the ticket and a failed change stays visible on the row'
+}
+
+# Observe HubSpot ticket $3 at time $2 with digest $4, title $5 and timeline $1/$6.json.
+observe_ticket() {
+  intake_at "$1" "$2" observe --source hubspot-lars-tickets --ref "$3" --digest "$4" --class obligation \
+    --title "$5" --timeline-file "$1/$6.json" >/dev/null
+}
+
+# Append the JSON event $2 to the timeline file $1.
+timeline_event() {
+  python3 -c 'import json,sys; p=sys.argv[1]; d=json.load(open(p)); d["events"].append(json.loads(sys.argv[2])); open(p,"w").write(json.dumps(d))' "$1" "$2"
+}
+
+# A ticket handed off from the page stays put through our own HubSpot change
+# and returns to Needs you only when the partner writes again.
+test_a_ticket_handed_off_reopens_only_when_the_partner_writes_again() {
+  local h t tomra neshu asked=$((T_0900 - 86400))
+  h="$TMP_ROOT/ticket-reopen"
+  new_home "$h"
+  printf 'captain_names = Lars\nteam_addresses = support@team.example\n' >>"$h/config/channel-intake"
+  printf 'hubspot-lars-tickets\thubspot-tickets\ttickets naming the captain\n' >>"$h/data/channel-intake/sources.tsv"
+  # Tomra: the partner asked, and a colleague promised Lars is on it, so an
+  # older pending promise stays on the timeline. Neshu: answered, nothing owed.
+  cat >"$h/tomra.json" <<EOF
+{"kind":"hubspot-ticket","owner":"natalia@team.example","contacts":["rachel@tomra.example"],
+ "events":[{"type":"email","at":$asked,"direction":"inbound","from":"rachel@tomra.example","body":"The pump is leaking."},
+  {"type":"email","at":$((asked + 3600)),"direction":"outbound","from":"support@team.example","body":"Lars is looking into this. I will keep you updated."}]}
+EOF
+  cat >"$h/neshu.json" <<EOF
+{"kind":"hubspot-ticket","owner":"captain","contacts":["tim@neshu.example"],
+ "events":[{"type":"email","at":$asked,"direction":"inbound","from":"tim@neshu.example","body":"Is the firmware out?"},
+  {"type":"email","at":$((asked + 3600)),"direction":"outbound","from":"support@team.example","body":"Yes, it is live."}]}
+EOF
+  observe_ticket "$h" "$T_0900" 48576658049 v1 'Tomra pump ticket' tomra
+  observe_ticket "$h" "$T_0900" 48600120191 v1 'Neshu ticket' neshu
+  render_at "$h" "$T_1000"
+  tomra=$(field_of "$h" 'Tomra' 1)
+  neshu=$(field_of "$h" 'Neshu' 1)
+  # Lars sets Tomra waiting, and marks Neshu done before its close lands.
+  todo_at "$h" "$T_1000" command --item "$tomra" 'waiting' >/dev/null
+  todo_at "$h" "$T_1000" command --item "$neshu" 'close' 'done' >/dev/null
+  todo_at "$h" "$T_1000" ticket-done --item "$tomra" --action "$(pending_action "$h" "$tomra" waiting)" \
+    --evidence 'stage Waiting on contact' >/dev/null
+  todo_at "$h" "$T_1000" ticket-done --item "$neshu" --action "$(pending_action "$h" "$neshu" close)" \
+    --evidence 'stage Closed' >/dev/null
+  # Our own internal note gives both tickets a new revision; the promise is
+  # still pending on Tomra's timeline.
+  for t in tomra neshu; do
+    timeline_event "$h/$t.json" '{"type":"note","at":'"$((T_1000 + 60))"',"author":"captain","body":"waiting by Lars via assistant"}'
+  done
+  observe_ticket "$h" "$T_1030" 48576658049 v2 'Tomra pump ticket' tomra
+  observe_ticket "$h" "$T_1030" 48600120191 v2 'Neshu ticket' neshu
+  render_at "$h" "$T_1030"
+  [ "$(field_of "$h" 'Tomra' 2)" = waiting ] || fail 'our own HubSpot change reopened a ticket set waiting'
+  [ "$(field_of "$h" 'Neshu' 2)" = closed ] || fail 'our own HubSpot change reopened a ticket closed from the page'
+  # The customers write again after the handoff: both come back, partner first,
+  # though Tomra's oldest pending entry is still the earlier promise.
+  timeline_event "$h/tomra.json" '{"type":"email","at":'"$T_1100"',"direction":"inbound","from":"rachel@tomra.example","body":"Any news?"}'
+  timeline_event "$h/neshu.json" '{"type":"email","at":'"$T_1100"',"direction":"inbound","from":"tim@neshu.example","body":"It broke again."}'
+  observe_ticket "$h" "$T_1100" 48576658049 v3 'Tomra pump ticket' tomra
+  observe_ticket "$h" "$T_1100" 48600120191 v3 'Neshu ticket' neshu
+  render_at "$h" "$T_1500"
+  [ "$(field_of "$h" 'Tomra' 2)" = open ] || fail 'a partner reply did not reopen a ticket set waiting'
+  [ "$(field_of "$h" 'Neshu' 2)" = open ] || fail 'a partner reply did not reopen a ticket closed from the page'
+  assert_contains "$(needs_order "$(page "$h" 2026-09-10)")" 'Tomra pump ticket' 'the reopened ticket is not back in Needs you'
+  pass 'a ticket handed off from the page ignores our own change and reopens when the partner writes again'
+}
+
+# A partner reply that lands after Lars typed the verb but before Firstmate
+# records the result still brings the ticket back.
+test_a_partner_reply_before_the_recorded_result_reopens_the_ticket() {
+  local h neshu asked=$((T_0900 - 86400))
+  h="$TMP_ROOT/ticket-reply-race"
+  new_home "$h"
+  printf 'captain_names = Lars\nteam_addresses = support@team.example\n' >>"$h/config/channel-intake"
+  printf 'hubspot-lars-tickets\thubspot-tickets\ttickets naming the captain\n' >>"$h/data/channel-intake/sources.tsv"
+  cat >"$h/neshu.json" <<EOF
+{"kind":"hubspot-ticket","owner":"captain","contacts":["tim@neshu.example"],
+ "events":[{"type":"email","at":$asked,"direction":"inbound","from":"tim@neshu.example","body":"Is the firmware out?"},
+  {"type":"email","at":$((asked + 3600)),"direction":"outbound","from":"support@team.example","body":"Yes, it is live."}]}
+EOF
+  observe_ticket "$h" "$T_0900" 48600120191 v1 'Neshu ticket' neshu
+  render_at "$h" "$T_1000"
+  neshu=$(field_of "$h" 'Neshu' 1)
+  # 10:00 Lars types close; 10:02 the customer writes; 10:05 Firstmate records the close.
+  todo_at "$h" "$T_1000" command --item "$neshu" 'close' >/dev/null
+  timeline_event "$h/neshu.json" '{"type":"email","at":'"$((T_1000 + 120))"',"direction":"inbound","from":"tim@neshu.example","body":"It is leaking again."}'
+  todo_at "$h" "$((T_1000 + 300))" ticket-done --item "$neshu" --action "$(pending_action "$h" "$neshu" close)" \
+    --evidence 'stage Closed' >/dev/null
+  timeline_event "$h/neshu.json" '{"type":"note","at":'"$((T_1000 + 300))"',"author":"captain","body":"close by Lars via assistant"}'
+  observe_ticket "$h" "$T_1030" 48600120191 v2 'Neshu ticket' neshu
+  render_at "$h" "$T_1030"
+  [ "$(field_of "$h" 'Neshu' 2)" = open ] || fail 'a partner reply between the verb and the recorded close was lost'
+  pass 'a partner reply between the typed verb and the recorded result reopens the ticket'
+}
+
+# A verb that waits in the page's prompt queue keeps the time Lars typed it,
+# so a partner reply before Firstmate ran the command still brings it back.
+test_a_partner_reply_while_the_verb_waited_in_the_queue_reopens_the_ticket() {
+  local h neshu asked=$((T_0900 - 86400))
+  h="$TMP_ROOT/ticket-queue-delay"
+  new_home "$h"
+  printf 'captain_names = Lars\nteam_addresses = support@team.example\n' >>"$h/config/channel-intake"
+  printf 'hubspot-lars-tickets\thubspot-tickets\ttickets naming the captain\n' >>"$h/data/channel-intake/sources.tsv"
+  cat >"$h/neshu.json" <<EOF
+{"kind":"hubspot-ticket","owner":"captain","contacts":["tim@neshu.example"],
+ "events":[{"type":"email","at":$asked,"direction":"inbound","from":"tim@neshu.example","body":"Is the firmware out?"},
+  {"type":"email","at":$((asked + 3600)),"direction":"outbound","from":"support@team.example","body":"Yes, it is live."}]}
+EOF
+  observe_ticket "$h" "$T_0900" 48600120191 v1 'Neshu ticket' neshu
+  render_at "$h" "$T_1000"
+  neshu=$(field_of "$h" 'Neshu' 1)
+  # 10:00 Lars types close; 10:10 the customer writes; 10:20 Firstmate runs
+  # the queued command with the typed time; 10:25 it records the close.
+  timeline_event "$h/neshu.json" '{"type":"email","at":'"$((T_1000 + 600))"',"direction":"inbound","from":"tim@neshu.example","body":"It is leaking again."}'
+  todo_at "$h" "$((T_1000 + 1200))" command --item "$neshu" --at "$T_1000" 'close' >/dev/null
+  todo_at "$h" "$((T_1000 + 1500))" ticket-done --item "$neshu" --action "$(pending_action "$h" "$neshu" close)" \
+    --evidence 'stage Closed' >/dev/null
+  observe_ticket "$h" "$T_1030" 48600120191 v2 'Neshu ticket' neshu
+  render_at "$h" "$T_1030"
+  [ "$(field_of "$h" 'Neshu' 2)" = open ] || fail 'a partner reply while the verb waited in the queue was lost'
+  pass 'a ticket verb keeps the time Lars typed it, so a reply while it waited in the queue reopens the ticket'
+}
+
+test_ticket_verbs_queue_a_pending_hubspot_change
+test_ticket_failure_stays_on_the_row
+test_a_partner_reply_while_the_verb_waited_in_the_queue_reopens_the_ticket
+test_a_ticket_handed_off_reopens_only_when_the_partner_writes_again
+test_a_partner_reply_before_the_recorded_result_reopens_the_ticket
 test_a_pass_judges_a_record_from_before_the_flag_by_its_aliases
 test_an_age_counts_calendar_days_across_a_clock_change
 test_time_bound_asks_expire_after_their_end
