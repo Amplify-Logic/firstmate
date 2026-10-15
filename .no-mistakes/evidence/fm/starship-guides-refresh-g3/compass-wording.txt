@@ -1,0 +1,35 @@
+## Wording after the change (commit 5a4cb7be)
+
+### docs/configuration.md (Worker command guard)
+```
+
+`happiness-compass` is always excluded: its commands are never sent to an additional outside service such as Jev, whatever this file says.
+`exclude` covers the rest, naming other project directories whose commands are never sent, separated by spaces or commas.
+Excluded projects and Compass still get the local database list, because it sends nothing.
+Both match the project's logical directory name, the name the project registry uses, even when that directory is a link to a differently named copy.
+
+### bin/fm-command-guard.py header
+# OPT-IN, per home, off by default: nothing is installed or sent unless this
+# home's private gitignored config/command-guard says `enabled = true`. It is not
+# inherited into secondmate homes. happiness-compass is always excluded: its
+# commands are never sent to an additional outside service such as Jev,
+# whatever the gate says; projects named on an `exclude` line are treated the
+# same way. Both match the project's logical directory name, as the registry
+# names it. docs/configuration.md "Worker command guard" owns the operator
+# contract.
+
+### bin/fm-command-guard.py ALWAYS_EXCLUDED
+TAIL_CHARS = 500
+# happiness-compass is always excluded: its commands are never sent to an
+# additional outside service such as Jev, whatever config/command-guard says.
+ALWAYS_EXCLUDED = frozenset({"happiness-compass"})
+
+### 'local-only' occurrences in the three spots' files:
+docs/configuration.md:825:Secondmate routes cover `no-mistakes` and `direct-PR` projects; `local-only` projects remain main-firstmate work.
+docs/configuration.md:1460:- Normal completed runs keep local-only and no-origin skips silent.
+docs/configuration.md:2701:It reads local records only, through the canonical snapshot's local-only modes, and it only reports: it never changes the backlog, a hold or a task, never wakes firstmate, never writes a captain inbox note, and opens no network connection.
+docs/configuration.md:2998:`merged` means direct-PR or local-only work landed with no follow-up: its branch's content never changed after the worker's first `done:` report, so a pure rebase still counts as merged.
+docs/configuration.md:2999:Teardown keeps `merged` or `revised` only when it proves the landing before removing the worktree: a merged PR for direct-PR, or for local-only a head on the local default branch or content already in it; unproven work records `unknown`.
+
+### em dashes in changed lines:
+0

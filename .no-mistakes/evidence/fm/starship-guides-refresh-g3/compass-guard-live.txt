@@ -1,0 +1,19 @@
+## Live run of bin/fm-command-guard.py at 5a4cb7be against a local fake Jev endpoint
+gate: enabled = true  (enabled, no exclude line)
+
+$ fm-command-guard.py armed --project happiness-compass
+exit=0  (0 = hook installed: Compass still gets the local list)
+
+$ hook --project demo  <<< 'git push --force origin main'
+"deny"
+"Command guard blocked this command: irreversible (0.91): nothing would restore what this removes, overwrites or sends. This block is final. Do not try to work around it with another command, another tool, a different path, or an encoding that does the same thing. Stop and report what was blocked and why to firstmate as a blocked status line."
+requests sent to Jev endpoint so far: 1  (control: a normal project IS sent)
+
+$ hook --project happiness-compass  <<< 'git push --force origin main'
+stdout: '' (empty = allowed by Jev step skipped)
+requests sent to Jev endpoint: 0  (Compass never sent, whatever the gate says)
+
+$ hook --project happiness-compass  <<< 'supabase db reset --linked'
+"deny"
+"Database guard blocked this command: a Supabase change to a linked or hosted database (only --local is allowed). Workers never change a live database. Do not work around this; report the exact change to firstmate as a blocked status line."
+requests sent to Jev endpoint: 0  (local database list still blocks Compass, nothing sent)
