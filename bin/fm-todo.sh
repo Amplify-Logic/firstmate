@@ -142,7 +142,8 @@
 # This script never touches HubSpot. Each verb records a pending ticket action
 # on the item (`TODO_CMD: ticket-<verb> ... action <ACTION>`), appends one
 # `todo-ticket` check wake, and the page marks the row "HubSpot change
-# pending" (also under Waiting on others) until Firstmate records the result.
+# pending" (also under Waiting on others and in the closed fold) until
+# Firstmate records the result.
 # An item with no HubSpot ticket, or with more than one, refuses the verb and
 # records nothing; repeating a pending action is `already`. On the wake
 # Firstmate:
