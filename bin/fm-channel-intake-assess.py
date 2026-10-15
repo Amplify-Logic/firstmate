@@ -38,6 +38,14 @@ ACTORS = [r"i", r"we", r"our", r"team", r"tech\w*", r"ik", r"wij"]
 ASK_NL = r"kun|kunt|kan|wil|wilt|zou|zoudt"
 REQUEST = r"please|pls|kindly|can|could|would|will|" + ASK_NL + r"|graag|mag"
 GREETING = r"hi|hello|hey|dear|hoi|hallo|beste|hej"
+# Where a message's own words end: a sign-off line, or a confidentiality footer
+# with no sign-off before it. Nothing below one asks anybody anything.
+SIGN_OFF = re.compile(
+    r"^\s*(?:(?:kind|best)\s+regards|regards|best|cheers|met vriendelijke groet(?:en)?|groet(?:en)?|mvg"
+    r"|med vänlig hälsning|mvh|viele grüße|cordialement)\s*(?:[,.!]?\s*$|,[^\n.?!]{0,40}$)"
+    r"|^\s*(?:thanks|thank you)\s*[,.!]?\s*$"
+    r"|^\s*(?:this|deze)\s+(?:e-?mail|message|bericht)\b[^\n]*\b(?:confidential|vertrouwelijk)",
+    re.I | re.M)
 TECH = re.compile(r"\btech\b|\btechteam\b|\btechnical (?:team|support|department)\b", re.I)
 QUOTE_START = re.compile(
     r"^\s*(?:>|on .{0,120}wrote:|op .{0,120}schreef|-{2,}\s*original message|from:\s|van:\s|sent from my)",
@@ -62,6 +70,12 @@ def fresh_text(body):
             break
         kept.append(line)
     return '\n'.join(kept)
+
+
+def signed(text):
+    """The message down to its sign-off: a signature or footer asks nothing."""
+    end = SIGN_OFF.search(text)
+    return text[:end.start()] if end else text
 
 
 def domain(address):
@@ -169,13 +183,13 @@ def assess(doc, names, captain_addresses, team_addresses):
     # and a question opening with a request word and "you"; or his name closes
     # a question after a comma, or one that opens with a Dutch request to jij/je/u.
     # A message opening with a greeting to him asks him whatever question or
-    # request it carries.
+    # request it carries above its sign-off.
     addressed = (r'(?:^\s*|[.?!]\s+)(?:(?:' + GREETING + r')\s+)?'
                  + name + r'(?:\s+' + name + r')*')
     greeted_re = re.compile(r'\A\s*(?:' + GREETING + r')\s+' + name + r'(?:\s+' + name
                             + r')*(?:\s*[,:]|[ \t]*\n)', re.I) if names else None
-    request_re = re.compile(r'\?|\b(?:please|pls|kindly|graag)\b|\b(?:' + REQUEST
-                            + r')\s+(?:you|je|jij|u)\b', re.I)
+    request_re = re.compile(r'\?|\b(?:please|pls|kindly|graag)\b|(?:^\s*|[.?!]\s+)(?:' + REQUEST
+                            + r')\s+(?:you|je|jij|u)\b', re.I | re.M)
     asked_re = re.compile(addressed + r'\s*[,:]\s*(?:[^.?!\n]*\?|(?:' + REQUEST + r')\b(?![\'’]))'
                           + '|' + addressed + r'\s+(?:' + REQUEST + r')\s+(?:you|je|jij|u)\b[^.?!\n]*\?'
                           + r'|(?:,\s*|(?:^\s*|[.?!]\s+)(?:' + ASK_NL + r')\s+(?:jij|je|u)\b[^.?!\n]*\s)'
@@ -191,7 +205,7 @@ def assess(doc, names, captain_addresses, team_addresses):
         if captain_owned:
             return bool(name_re.search(text))
         return bool(mention_re.search(text) or asked_re.search(text)
-                    or (greeted_re.match(text) and request_re.search(text)))
+                    or (greeted_re.match(text) and request_re.search(signed(text))))
 
     def is_captain(who):
         """One spelling of the captain everywhere: the sentinel or his address."""

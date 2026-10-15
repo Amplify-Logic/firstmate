@@ -166,7 +166,10 @@
 # ("... check this, <name>?") or closing one that opens with a Dutch request to
 # jij/je/u ("kun jij ... <name>?"). A message whose own text opens with a
 # greeting to the word ("Hi <name>," or "Beste <name>" on its own line) asks
-# him any question or request it carries. A passing name such as "discussed with
+# him any question or request it carries above its sign-off line ("Kind
+# regards", "Met vriendelijke groet", ...) or confidentiality footer, a request
+# word with "you" counting only where it opens a sentence or line. A passing
+# name such as "discussed with
 # <name>, closing", "should we ask <name>?" or a statement "<name> kan je hier
 # verder mee helpen." names nobody, in (a), (b) and (c) alike.
 # Only an EMAIL engagement is a reply: a `last_message_sent_at` send with no

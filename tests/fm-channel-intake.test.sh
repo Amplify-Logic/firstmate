@@ -1591,14 +1591,19 @@ EOF
 EOF
       ;;
     # The partner's unanswered message on a colleague's ticket opens with a
-    # greeting to the captain: each greet-ask carries its question in a later
-    # sentence, greet-statement asks nothing.
+    # greeting to the captain: each greet-ask carries its question or request
+    # in a later sentence; each greet-statement asks nothing, and a request in
+    # its signature or confidentiality footer does not count.
     greet-*)
       case "$name" in
         greet-ask-context) body='Hi Lars,\nThe systems are offline since Monday. Could you check the connectivity?' ;;
         greet-ask-pleasantry) body='Hi Lars,\nI hope you are well. Can you send the quote?' ;;
         greet-ask-dutch) body='Beste Lars,\n\nDe unit geeft B.14. Kun je even kijken?' ;;
+        greet-ask-attached) body='Hi Lars,\nPlease find attached the service report.' ;;
         greet-statement) body='Hi Lars,\nThe unit is back online. Thanks for the help.' ;;
+        greet-statement-dutch) body='Beste Lars,\nIk wil je bedanken voor de hulp, de unit werkt weer.' ;;
+        greet-statement-signoff) body='Hi Lars,\nThe unit is back online. Thanks!\n\nKind regards, Chloe\nPlease consider the environment before printing this email.' ;;
+        greet-statement-footer) body='Hi Lars,\nThe unit is back online.\n\nChloe\nThis e-mail is confidential. If you received it in error, please notify the sender.' ;;
       esac
       cat >"$h/$name.json" <<EOF
 {"kind":"hubspot-ticket","owner":"luc@team.example","stage":"Waiting for Tech",
@@ -1773,7 +1778,7 @@ test_partner_facing_asks_awaiting_the_captain_are_flagged() {
   for name in promise autoack contact-note contact-chase thanks-and-ask owner-address \
     participants-only direct-ask own-tech-promise captain-looking colleague-following \
     ask-request ask-dutch ask-trailing ask-trailing-dutch ask-no-comma \
-    greet-ask-context greet-ask-pleasantry greet-ask-dutch; do
+    greet-ask-context greet-ask-pleasantry greet-ask-dutch greet-ask-attached; do
     key=$(key_of "$(observe_ticket "$h" "$name" "$T_0900")")
     [ "$(item_field "$h" "$key" partner)" = 1 ] || fail "$name: a ticket with an external contact is not partner-facing"
     [ "$(item_field "$h" "$key" awaiting)" = 1 ] || fail "$name: a partner waiting on the captain was not flagged"
@@ -1827,7 +1832,8 @@ test_partner_facing_asks_awaiting_the_captain_are_flagged() {
   for name in customer-owes customer-asked answered uninvolved internal unnamed-note note-answered \
     tech-promise tech-promise-chase colleague-reply passing-promise passing-note list-name \
     about-discussed about-escalate about-statement about-contraction \
-    about-ask about-tell about-cc about-contact greet-statement; do
+    about-ask about-tell about-cc about-contact \
+    greet-statement greet-statement-dutch greet-statement-signoff greet-statement-footer; do
     key=$(key_of "$(observe_ticket "$h" "$name" "$T_0900")")
     [ "$(item_field "$h" "$key" awaiting)" = 0 ] || fail "$name: flagged as awaiting the captain"
     [ "$(item_field "$h" "$key" class)" = routine ] || fail "$name: a ticket not awaiting the captain was promoted"
