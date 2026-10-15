@@ -54,11 +54,10 @@ You should see: `gh auth status` says you are logged in to github.com, and `clau
 ```sh
 git clone https://github.com/Amplify-Logic/firstmate ~/starship
 cd ~/starship
-bin/fm-primary.sh claude
+bin/fm-primary.sh opus
 ```
 
-That launches Claude Code on its strongest model, with its permission prompts turned off so the first mate can run its own scripts; [its house rules](docs/handbook.md#how-it-works-in-plain-words) are what keep it safe.
-If your account does not offer that model, use `bin/fm-primary.sh opus` instead.
+That launches Claude Code on Opus, with its permission prompts turned off so the first mate can run its own scripts; [its house rules](docs/handbook.md#how-it-works-in-plain-words) are what keep it safe.
 
 The first time, Claude Code asks whether you trust this folder.
 **Say yes.**
@@ -132,9 +131,8 @@ It explains the whole system in plain words, how to connect your mail, calendar 
 | `command not found: brew` | Run the two `PATH` lines Homebrew printed at the end, then open a new Terminal window. |
 | `command not found: npm` or `claude` | `brew install node`, then `npm install -g @anthropic-ai/claude-code`, then open a new Terminal window. |
 | `gh: not logged in` or `NEEDS_GH_AUTH` | `gh auth login`, choosing GitHub.com, HTTPS, and the web browser. |
-| `bin/fm-primary.sh` refuses to start | `bin/fm-primary.sh claude --preflight` names what is missing without starting anything. |
+| `bin/fm-primary.sh` refuses to start | `bin/fm-primary.sh opus --preflight` names what is missing without starting anything. |
 | `permission denied` on `bin/fm-primary.sh` | `chmod +x bin/*.sh`, then launch again. |
-| Claude Code says the model is not available | Your account does not offer that model; launch with `bin/fm-primary.sh opus`. |
 | `refuses another live Firstmate session` | One is already running; close the other window, or run `tmux ls` and exit the spare session. |
 | It doesn't call you captain | You are not in the Starship folder; `cd ~/starship` and launch again. |
 | It cannot add Happiness Compass | Your GitHub account cannot see the `happinesscompass` organisation yet; ask its owner to invite you. |

@@ -15,8 +15,8 @@
 #
 # SKILLS AND SWITCHES. docs/configuration.md "Opt-in skills" documents which
 # config/ presence flag switches each skill on; skill_table below applies it. A
-# switch is a presence flag: any file or link at one of a skill's paths turns
-# it on, whatever it holds. Every skill in the table needs a matching
+# switch is a presence flag: any file or link at a skill's path turns it on,
+# whatever it holds. Every skill in the table needs a matching
 # /.agents/skills/<skill> line in the tracked .gitignore, so a link never makes
 # the checkout read as changed.
 #
@@ -40,10 +40,8 @@
 #   fm-opt-in-skills.sh sync [<checkout>]  link or unlink every opt-in skill in
 #                                          <checkout> (default: this script's
 #                                          own repository) for this home
-#   fm-opt-in-skills.sh list               one line per skill: name, on|off for
-#                                          this home, and its switches
 # sync prints nothing unless it leaves a path alone, and exits 0 even then, so a
-# launch never fails over one skill. Both exit 2 on misuse.
+# launch never fails over one skill. It exits 2 on misuse.
 #
 # Environment overrides, for tests and unusual layouts:
 #   FM_ROOT_OVERRIDE, FM_HOME, FM_CONFIG_OVERRIDE
@@ -55,30 +53,20 @@ FM_HOME="${FM_HOME:-${FM_ROOT_OVERRIDE:-$FM_ROOT}}"
 CONFIG="${FM_CONFIG_OVERRIDE:-$FM_HOME/config}"
 
 usage() {
-  sed -n '/^# Usage:/,/^# Both exit 2/p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//' >&2
+  sed -n '/^# Usage:/,/^# launch never fails/p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//' >&2
   exit 2
 }
 
-# One line per skill: the skill name, then every config/ flag that switches it
+# One line per skill: the skill name, then the config/ flag that switches it
 # on. Plain lines rather than an array keep this readable on stock macOS bash.
 skill_table() {
   cat <<'EOF'
 adhd adhd
 adhd-auto-fire adhd
 second-opinion-auto-fire second-opinion
-daily-todo-freshness daily-todo morning-intake channel-intake
+daily-todo-freshness daily-todo
 macos-computer-use computer-use
 EOF
-}
-
-switched_on() {  # <flag>...
-  local flag
-  for flag in "$@"; do
-    if [ -e "$CONFIG/$flag" ] || [ -L "$CONFIG/$flag" ]; then
-      return 0
-    fi
-  done
-  return 1
 }
 
 note() {
@@ -86,18 +74,17 @@ note() {
 }
 
 sync_checkout() {  # <checkout>
-  local checkout=$1 skill flags link want current
+  local checkout=$1 skill flag link want current
   [ -d "$checkout/.agents/opt-in-skills" ] || return 0
   [ -d "$checkout/.agents/skills" ] || return 0
-  while read -r skill flags; do
+  while read -r skill flag; do
     [ -n "$skill" ] || continue
     [ -d "$checkout/.agents/opt-in-skills/$skill" ] || continue
     link="$checkout/.agents/skills/$skill"
     want="../opt-in-skills/$skill"
     current=
     [ ! -L "$link" ] || current=$(readlink "$link")
-    # shellcheck disable=SC2086 # flags is a space-separated list by design
-    if switched_on $flags; then
+    if [ -e "$CONFIG/$flag" ] || [ -L "$CONFIG/$flag" ]; then
       if [ "$current" = "$want" ]; then
         continue
       elif [ -e "$link" ] || [ -L "$link" ]; then
@@ -114,29 +101,10 @@ EOF
   return 0
 }
 
-list_skills() {
-  local skill flags flag state paths
-  while read -r skill flags; do
-    [ -n "$skill" ] || continue
-    state=off
-    # shellcheck disable=SC2086 # flags is a space-separated list by design
-    if switched_on $flags; then state=on; fi
-    paths=
-    for flag in $flags; do paths="$paths config/$flag"; done
-    printf '%s %s%s\n' "$skill" "$state" "$paths"
-  done <<EOF
-$(skill_table)
-EOF
-}
-
 case "${1:-}" in
   sync)
     [ "$#" -le 2 ] || usage
     sync_checkout "${2:-$FM_ROOT}"
-    ;;
-  list)
-    [ "$#" -eq 1 ] || usage
-    list_skills
     ;;
   *) usage ;;
 esac

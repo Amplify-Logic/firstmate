@@ -68,16 +68,20 @@ test_switch_links_its_skills_and_checkout_stays_clean() {
   pass "a switch links its skills where the harness looks, and the checkout stays clean"
 }
 
-test_every_switch_on_keeps_checkout_clean() {
-  local dir flag
-  dir=$(make_checkout all)
-  for flag in adhd second-opinion daily-todo computer-use; do : > "$dir/config/$flag"; done
+test_captain_home_switches_link_every_skill() {
+  local dir shipped entry flag
+  dir=$(make_checkout captain)
+  for flag in adhd second-opinion daily-todo computer-use captain-ledger; do : > "$dir/config/$flag"; done
+  printf 'enabled = true\n' > "$dir/config/speak"
   run_sync "$dir"
+  shipped=$(for entry in "$ROOT"/.agents/opt-in-skills/*/; do entry=${entry%/}; printf '%s\n' "${entry##*/}"; done \
+    | sort | tr '\n' ' ' | sed 's/ $//')
   assert_equals "adhd adhd-auto-fire daily-todo-freshness macos-computer-use second-opinion-auto-fire" \
-    "$(linked "$dir")" "every switch must link every opt-in skill"
+    "$shipped" "the shipped opt-in skills changed; update this test and the captain home switch list"
+  assert_equals "$shipped" "$(linked "$dir")" "the captain home's switches must link every shipped opt-in skill"
   assert_equals "" "$(git -C "$dir/checkout" status --porcelain)" \
     "the tracked .gitignore must cover every link the script makes"
-  pass "with every switch on, every skill is linked and the tracked .gitignore covers each link"
+  pass "the captain home's switch set links every opt-in skill, and the tracked .gitignore covers each link"
 }
 
 test_switch_off_removes_only_its_links() {
@@ -91,19 +95,6 @@ test_switch_off_removes_only_its_links() {
   assert_equals "macos-computer-use" "$(linked "$dir")" "turning config/adhd off must remove only the ADHD links"
   [ -f "$dir/checkout/.agents/skills/always-on/SKILL.md" ] || fail "a tracked skill must never be touched"
   pass "turning a switch off removes only that switch's links"
-}
-
-test_intake_configs_switch_on_the_todo_skill() {
-  local dir
-  dir=$(make_checkout intake)
-  : > "$dir/config/channel-intake"
-  run_sync "$dir"
-  assert_equals "daily-todo-freshness" "$(linked "$dir")" "config/channel-intake must link the to-do freshness skill"
-  rm -f "$dir/config/channel-intake"
-  : > "$dir/config/morning-intake"
-  run_sync "$dir"
-  assert_equals "daily-todo-freshness" "$(linked "$dir")" "config/morning-intake must keep the to-do freshness skill"
-  pass "morning or channel intake switches on the to-do freshness skill they rely on"
 }
 
 test_foreign_path_is_left_alone() {
@@ -138,41 +129,23 @@ test_checkout_without_opt_in_folder_is_untouched() {
   pass "a checkout with no opt-in skill folder is left alone"
 }
 
-test_list_names_every_opt_in_skill() {
-  local dir out shipped listed entry
-  dir=$(make_checkout list)
-  : > "$dir/config/computer-use"
-  out=$(FM_HOME="$dir" FM_CONFIG_OVERRIDE="$dir/config" "$SKILLS" list)
-  assert_contains "$out" "macos-computer-use on config/computer-use" "list must show a switched-on skill"
-  assert_contains "$out" "adhd off config/adhd" "list must show a switched-off skill"
-  assert_contains "$out" "daily-todo-freshness off config/daily-todo config/morning-intake config/channel-intake" \
-    "list must name every switch of a skill"
-  shipped=$(for entry in "$ROOT"/.agents/opt-in-skills/*/; do entry=${entry%/}; printf '%s\n' "${entry##*/}"; done \
-    | sort | tr '\n' ' ')
-  listed=$(printf '%s\n' "$out" | cut -d' ' -f1 | sort | tr '\n' ' ')
-  assert_equals "$shipped" "$listed" "every shipped opt-in skill must have a switch, and every switch a skill"
-  pass "list shows each opt-in skill's state and switches, covering every shipped opt-in skill"
-}
-
 test_misuse_exits_2() {
   local code
   "$SKILLS" 2>/dev/null; code=$?
   expect_code 2 "$code" "no subcommand"
   "$SKILLS" frobnicate 2>/dev/null; code=$?
   expect_code 2 "$code" "an unknown subcommand"
-  "$SKILLS" list extra 2>/dev/null; code=$?
-  expect_code 2 "$code" "list with an argument"
+  "$SKILLS" sync a b 2>/dev/null; code=$?
+  expect_code 2 "$code" "sync with two checkouts"
   pass "misuse exits 2"
 }
 
 test_no_switch_links_nothing
 test_switch_links_its_skills_and_checkout_stays_clean
-test_every_switch_on_keeps_checkout_clean
+test_captain_home_switches_link_every_skill
 test_switch_off_removes_only_its_links
-test_intake_configs_switch_on_the_todo_skill
 test_foreign_path_is_left_alone
 test_checkout_without_opt_in_folder_is_untouched
-test_list_names_every_opt_in_skill
 test_misuse_exits_2
 
 echo "# fm-opt-in-skills.test.sh: all assertions passed"

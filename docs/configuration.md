@@ -592,13 +592,13 @@ Each switch is an optional local, gitignored presence flag; any file at the path
 | --- | --- |
 | `adhd` and `adhd-auto-fire` ([adhd.md](adhd.md)) | `config/adhd` |
 | `second-opinion-auto-fire` ([second-opinion.md](second-opinion.md)) | `config/second-opinion` |
-| `daily-todo-freshness` | `config/daily-todo`, or a `config/morning-intake` or `config/channel-intake` file, since both intakes rely on it |
+| `daily-todo-freshness` | `config/daily-todo` |
 | `macos-computer-use` | `config/computer-use` (above) |
 
 A switched-on skill is linked into `.agents/skills/` under its usual name, so it loads exactly as a tracked skill does, and the link is gitignored.
 A harness lists skills when it starts, so a changed switch takes effect from the next launch.
 The flags are home-local and are not inherited by secondmate homes.
-`bin/fm-opt-in-skills.sh` owns the links and when they are made, and `bin/fm-opt-in-skills.sh list` shows which skills this home has on.
+`bin/fm-opt-in-skills.sh` owns the links and when they are made.
 
 ## Captain ledger (config/captain-ledger)
 
