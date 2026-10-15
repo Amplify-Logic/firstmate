@@ -1,0 +1,15 @@
+job-level continue-on-error: absent
+actions/checkout@v6                                          if=-                                                                                coe=-
+Install Ubuntu 24.04 in WSL 2                                if=matrix.kind == 'wsl'                                                             coe=-
+Give the WSL user sudo                                       if=matrix.kind == 'wsl'                                                             coe=-
+Start a fresh Ubuntu 24.04 server                            if=matrix.kind == 'server'                                                          coe=-
+Put this commit at ~/starship                                if=-                                                                                coe=-
+Run the setup script                                         if=-                                                                                coe=-
+Install the first mate's toolchain as it would after consent if=matrix.lane == 'kit'                                                             coe=-
+Spawn one stand-in worker on tmux and read its report        if=matrix.lane == 'kit'                                                             coe=-
+Keep the WSL distribution running                            if=matrix.lane == 'kit' && matrix.kind == 'wsl'                                     coe=-
+Start a review board and an Expo-style dev server, and check if=matrix.lane == 'kit'                                                             coe=-
+Reach the board and the dev server from Windows              if=matrix.lane == 'kit' && matrix.kind == 'wsl'                                     coe=-
+Install the test-only tools the hosted Ubuntu image carries  if=matrix.lane != 'kit'                                                             coe=true
+Run ${{ matrix.lane }} inside WSL 2                          if=matrix.lane != 'kit'                                                             coe=true
+Report the WSL test shard without gating                     if=matrix.lane != 'kit' && (steps.shard-tools.outcome == 'failure' || steps.shard-r coe=-

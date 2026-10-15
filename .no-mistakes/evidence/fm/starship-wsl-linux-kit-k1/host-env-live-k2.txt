@@ -1,0 +1,24 @@
+### A. WSL, home + projects in the Linux home, default NAT networking, no .wslconfig (expect silence)
+(no host-env line)
+### B. same, .wslconfig present with memory only (forwarding default on) (expect silence)
+(no host-env line)
+### C. .wslconfig sets localhostForwarding=false, NAT networking (expect one HOST_ENV)
+HOST_ENV: WSL: localhost forwarding is off in <lab>/win/.wslconfig, so review boards and dev servers will not open in the Windows browser - set networkingMode=mirrored under [wsl2] there, then run wsl --shutdown from Windows (ONBOARDING-windows.md)
+### D. same .wslconfig but networking mirrored (expect silence)
+(no host-env line)
+### E. projects dir on the Windows drive (expect one HOST_ENV naming it)
+HOST_ENV: WSL: /mnt/c/Users/fm/projects is on the Windows drive - move it under the Linux home (~); git, file watching and file permissions are slow or broken under /mnt/
+### F. /mnt/wsl (not a drive letter) (expect silence)
+(no host-env line)
+### G. cmd.exe hangs (interop stuck): bootstrap stays bounded and silent
+(no host-env line)
+elapsed=9s
+### H. Windows-drive path but not WSL (expect silence)
+(no host-env line)
+### I. macOS over SSH with no display: headless advice is Linux-only (expect silence)
+(no host-env line)
+advised marker present: no
+cmd.exe hang=no: bootstrap took 5.0s
+cmd.exe hang=1: bootstrap took 9.4s
+cmd.exe hang=no: bootstrap took 3.8s
+cmd.exe hang=1: bootstrap took 10.4s

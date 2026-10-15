@@ -1,0 +1,32 @@
+### 1. fm-linux-setup.sh on this macOS host, HOME=/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.DNEiK5/sethome (fresh, empty)
+fm-linux-setup.sh: this sets up Linux (WSL 2 or a server); on a Mac follow ONBOARDING.md
+exit=1
+files written under that HOME: 0
+--- unknown argument
+exit=2
+fm-linux-setup.sh: unknown argument: --bogus
+--- --help
+usage: fm-linux-setup.sh [--ci]
+  Takes a fresh Ubuntu 24.04 (inside WSL 2, or a server over SSH) to the point
+  where a first mate can start, cloning Firstmate into ~/starship.
+  Run it as your own user from your Linux home, never under /mnt/.
+  --ci    skip the closing sign-in instructions (gh auth login, claude)
+exit=0
+
+### 2. bootstrap inside WSL (WSL_DISTRO_NAME set) with the projects dir on the Windows drive
+HOST_ENV: WSL: /mnt/c/Users/fm/projects is on the Windows drive - move it under the Linux home (~); git, file watching and file permissions are slow or broken under /mnt/
+
+### 3. same bootstrap, projects dir under /mnt/data (not a drive letter)
+(no host-env line)
+
+### 4. same Windows-drive projects dir, but not inside WSL
+(no host-env line)
+
+### 5. WSL, home in Linux, .wslconfig turns localhost forwarding off (wslinfo/cmd.exe/wslpath are Windows tools, shimmed here)
+HOST_ENV: WSL: localhost forwarding is off in /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.DNEiK5/win/.wslconfig, so review boards and dev servers will not open in the Windows browser - set networkingMode=mirrored under [wsl2] there, then run wsl --shutdown from Windows (ONBOARDING-windows.md)
+--- same, networking already mirrored
+(no host-env line)
+
+### 6. macOS reached over SSH with no display: headless-server advice is Linux-only
+(no host-env line)
+advised marker present: no

@@ -1,0 +1,11 @@
+runner checkout refs/heads: 0 (HEAD detached at a31df2db)
+--- before the fix (origin = runner checkout):
+    error: Cannot determine remote HEAD
+    set-head exit=1
+--- the fixture as committed:
+    fetch exit=0
+'origin/HEAD' is unchanged and points to 'main'
+    set-head exit=0
+    origin/HEAD -> refs/remotes/origin/main
+    fetch +refs/heads/main exit=0
+a31df2db no-mistakes(review): Point the WSL kit fixture's origin at GitHub

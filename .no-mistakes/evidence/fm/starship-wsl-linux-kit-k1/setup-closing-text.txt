@@ -1,0 +1,38 @@
+$ curl -fsSL .../bin/fm-linux-setup.sh | bash      (stubbed installers, real script)
+==> Asking for your password once, for the system packages
+==> System packages: build-essential procps curl file git ca-certificates
+==> Homebrew on Linux
+==> Homebrew packages: git node gh tmux
+==> Claude Code (native installer)
+==> Google Chrome (runs headless; no desktop needed)
+==> Cloning Firstmate into <world>/home/starship
+==> Checking every tool
+  ok  git            git version 2.43.0
+  ok  node           node 1.0
+  ok  npm            npm 1.0
+  ok  gh             gh 1.0
+  ok  tmux           tmux 1.0
+  ok  claude         2.9.0 Claude Code
+  ok  chrome         Google Chrome 141
+  ok  firstmate      <world>/home/starship
+
+Setup finished.
+
+First open a NEW terminal, so the new tools are on your PATH: on Windows, a
+new Ubuntu tab; on a server, log out and log back in. This one still has the
+old PATH, so gh and claude are not found here.
+
+Then, in the new terminal, two sign-ins are yours to do:
+
+  1. gh auth login
+     Choose GitHub.com, then HTTPS, then "Login with a web browser".
+     On a server, open the link it prints on your own computer and type the code.
+
+  2. claude
+     Sign in, then type /exit.
+     On a server, open the link it prints on your own computer and paste the code back.
+
+Then continue with the preflight checkpoint, step 3 of ONBOARDING.md:
+
+  cd ~/starship
+exit=0

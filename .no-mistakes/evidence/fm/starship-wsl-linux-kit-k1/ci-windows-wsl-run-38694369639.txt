@@ -1,0 +1,75 @@
+GitHub Actions run 38694369639 (windows-wsl.yml, pull_request, head b51ba1da, windows-2025 + ubuntu-latest), conclusion: failure
+
+## wsl kit: setup script --ci on fresh Ubuntu 24.04 in WSL 2
+  ok  git            git version 2.56.0
+  ok  node           v26.11.1
+  ok  npm            11.20.0
+  ok  gh             gh version 2.102.0 (2026-09-30)
+  ok  tmux           tmux 3.8
+  ok  claude         2.1.300 (Claude Code)
+  ok  chrome         Google Chrome 155.0.8059.79 
+  ok  firstmate      /home/fm/starship
+
+Setup finished.
+## wsl kit: bootstrap after toolchain install (no HOST_ENV line on a correctly placed home)
+NEEDS_GH_AUTH
+TOOLCHAIN_DRIFT: claude installed 2.1.300, certified 2.1.217 (docs/subagent-guard.md) - Claude Code is the default crewmate harness and self-updates on the latest channel; the subagent-guard deny keys and turn-end continuity were certified here
+## wsl kit + server kit: spawn step (fixed later by a31df2db)
+error: treehouse get did not enter an isolated worktree within 60 polls (last seen '/home/fm/starship': it is the spawning project itself; spawning project '/home/fm/starship'); inspect window firstmate:fm-slugtest
+
+## server kit: setup script --ci in fresh ubuntu:24.04 container
+  ok  git            git version 2.56.0
+  ok  node           v26.11.1
+  ok  npm            11.20.0
+  ok  gh             gh version 2.102.0 (2026-09-30)
+  ok  tmux           tmux 3.8
+  ok  claude         2.1.300 (Claude Code)
+  ok  chrome         Google Chrome 155.0.8059.79 
+  ok  firstmate      /home/fm/starship
+
+Setup finished.
+
+## portable shards inside WSL 2: failing tests (ci.yml on main at 06a080a8 is green on hosted Ubuntu)
+== 116287374809.log
+not ok - kimi did not run the expected cheap version probe
+not ok - Pi queued-row queued_mixed case did not list the captain's queued follow-up
+not ok - kimi spawn should succeed once the agent comes up: expected exit 0, got 1
+not ok - the remote doctor did not name the missing tools (missing: 'required tools do not resolve on the remote runtime PATH: herdr tasks-axi treehouse harness')
+== 116287374914.log
+== 116287374944.log
+not ok - an ordinary https source link was not kept: {"schema": "fm-deck.v1", "home": "Deck", "read_at": 1792047780, "ready": [], "ready_note": "Running from this page is not wired yet. The d
+not ok - a rule still naming quota-balanced must keep loading: expected exit 0, got 2
+== 116287374950.log
+not ok - return: the host did not hand the late outcome to main: 1792048518	start	gen=host-1278214-1792048517	primary=claude
+not ok - verify must name the entry it could not read and the bound it hit, got: fm-captain-hold: jq is required to scan the beads graph for a migrated hold
+not ok - the fixture worker is not orphaned to init, so this case does not reproduce the leak
+== 116287374953.log
+== 116287374972.log
+not ok - merge-outcome-committed: merge entrypoint failed: error: merging a GitHub pull request requires jq on PATH
+not ok - fm-backend baseline requires local main or origin/main; fetch the default branch before running this test
+== 116287375018.log
+not ok - current fork surface must pass: fm-fork-surface: path has multiple capability owners: desk-floater/Tests/DeskFloaterTests/TalkKeyTests.swift; keep exactly one owns declaration
+== 116287375026.log
+== 116287375079.log
+not ok - remote spawn did not report separate host and backend dimensions (missing: 'remote=remote-mac backend=herdr')
+not ok - real remote secondmate launch failed
+not ok - --fix did not replace the stale worker identity: expected exit 0, got 1
+not ok - fable: advisory reads the lower of model:fable and seven_day, not five_hour (missing: 'Claude Fable week percentRemaining=42')
+== 116287375084.log
+not ok - the listener under test was not reparented away from its session (ppid 16244)
+== 116287375131.log
+not ok - allowlist absent: the remote second-mate launch failed
+not ok - the pty-host was not reparented to init after the daemon ended
+not ok - ruby is required to parse .github/workflows/ci.yml as YAML
+not ok - ruby is required to parse .github/workflows/no-mistakes-required.yml as YAML
+== 116287375174.log
+not ok - ruby is required to parse .no-mistakes.yaml for this contract
+== 116287375178.log
+not ok - consume failed
+not ok - remote transport did not publish the binding (missing: 'bound: org.example.remote@1.2.3')
+not ok - an isolated extension conformance section failed
+== 116287375416.log
+not ok - a locked session start did not publish the home summary ledger
+not ok - default-off remote secondmate spawn failed
+
+
