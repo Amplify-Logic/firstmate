@@ -41,10 +41,13 @@ GREETING = r"hi|hello|hey|dear|hoi|hallo|beste|hej"
 # Where a message's own words end: a sign-off line, or a confidentiality footer
 # with no sign-off before it. Nothing below one asks anybody anything.
 SIGN_OFF = re.compile(
-    r"^\s*(?:(?:kind|best)\s+regards|regards|best|cheers|met vriendelijke groet(?:en)?|groet(?:en)?|mvg"
-    r"|med vänlig hälsning|mvh|viele grüße|cordialement)\s*(?:[,.!]?\s*$|,[^\n.?!]{0,40}$)"
+    r"^\s*(?:(?:with\s+)?kind\s+regards|best\s+regards|best\s+wishes|met vriendelijke groet(?:en)?"
+    r"|med vänlig hälsning|viele grüße|cordialement)\s*(?:[,.!]?\s*$|,.*$)"
+    r"|^\s*(?:regards|best|cheers|groet(?:en)?|mvg|mvh)\s*(?:[,.!]?\s*$|,[^\n.?!]{0,40}$)"
     r"|^\s*(?:thanks|thank you)\s*[,.!]?\s*$"
-    r"|^\s*(?:this|deze)\s+(?:e-?mail|message|bericht)\b[^\n]*\b(?:confidential|vertrouwelijk)",
+    r"|^\s*--[ \t]*$"
+    r"|^\s*(?:the information (?:contained )?in\s+)?(?:this|dit|deze)\s+(?:e-?mail|message|bericht)\b"
+    r"[^\n]*\b(?:confidential|vertrouwelijk)",
     re.I | re.M)
 TECH = re.compile(r"\btech\b|\btechteam\b|\btechnical (?:team|support|department)\b", re.I)
 QUOTE_START = re.compile(

@@ -1604,6 +1604,13 @@ EOF
         greet-statement-dutch) body='Beste Lars,\nIk wil je bedanken voor de hulp, de unit werkt weer.' ;;
         greet-statement-signoff) body='Hi Lars,\nThe unit is back online. Thanks!\n\nKind regards, Chloe\nPlease consider the environment before printing this email.' ;;
         greet-statement-footer) body='Hi Lars,\nThe unit is back online.\n\nChloe\nThis e-mail is confidential. If you received it in error, please notify the sender.' ;;
+        greet-statement-signoff-company) body='Beste Lars,\nDe unit werkt weer.\n\nMet vriendelijke groet, Jan de Vries | Partner B.V.\nGraag melden bij de afzender als dit niet voor u bedoeld is.' ;;
+        greet-statement-signoff-title) body='Hi Lars,\nThe unit works again.\n\nBest regards, Dr. Chloe Smith\nPlease consider the environment.' ;;
+        greet-statement-with-kind-regards) body='Hi Lars,\nThe unit works again.\n\nWith kind regards,\nChloe\nPlease consider the environment.' ;;
+        greet-statement-best-wishes) body='Hi Lars,\nThe unit works again.\n\nBest wishes,\nChloe\nPlease consider the environment.' ;;
+        greet-statement-dashes) body='Hi Lars,\nThe unit works again.\n--\nChloe\nPlease consider the environment.' ;;
+        greet-statement-dit-bericht) body='Beste Lars,\nDe unit werkt weer.\n\nJan\nDit bericht is vertrouwelijk. Gelieve de afzender te verwittigen, graag.' ;;
+        greet-statement-information) body='Hi Lars,\nThe unit is back online.\n\nChloe\nThe information in this e-mail is confidential. If you received it in error, please notify the sender.' ;;
       esac
       cat >"$h/$name.json" <<EOF
 {"kind":"hubspot-ticket","owner":"luc@team.example","stage":"Waiting for Tech",
@@ -1833,7 +1840,9 @@ test_partner_facing_asks_awaiting_the_captain_are_flagged() {
     tech-promise tech-promise-chase colleague-reply passing-promise passing-note list-name \
     about-discussed about-escalate about-statement about-contraction \
     about-ask about-tell about-cc about-contact \
-    greet-statement greet-statement-dutch greet-statement-signoff greet-statement-footer; do
+    greet-statement greet-statement-dutch greet-statement-signoff greet-statement-footer \
+    greet-statement-signoff-company greet-statement-signoff-title greet-statement-with-kind-regards \
+    greet-statement-best-wishes greet-statement-dashes greet-statement-dit-bericht greet-statement-information; do
     key=$(key_of "$(observe_ticket "$h" "$name" "$T_0900")")
     [ "$(item_field "$h" "$key" awaiting)" = 0 ] || fail "$name: flagged as awaiting the captain"
     [ "$(item_field "$h" "$key" class)" = routine ] || fail "$name: a ticket not awaiting the captain was promoted"

@@ -167,7 +167,7 @@
 # jij/je/u ("kun jij ... <name>?"). A message whose own text opens with a
 # greeting to the word ("Hi <name>," or "Beste <name>" on its own line) asks
 # him any question or request it carries above its sign-off line ("Kind
-# regards", "Met vriendelijke groet", ...) or confidentiality footer, a request
+# regards", "Met vriendelijke groet", ..., or "--") or confidentiality footer, a request
 # word with "you" counting only where it opens a sentence or line. A passing
 # name such as "discussed with
 # <name>, closing", "should we ask <name>?" or a statement "<name> kan je hier
