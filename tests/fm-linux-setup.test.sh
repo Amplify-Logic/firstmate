@@ -213,9 +213,15 @@ test_fresh_install_then_rerun_is_idempotent() {
   assert_contains "$out" "already cloned" "a re-run says the clone was left as it is"
   assert_contains "$out" "gh auth login" "without --ci the GitHub sign-in is spelled out"
   assert_contains "$out" "  2. claude" "without --ci the Claude sign-in is spelled out"
+  # The setup runs as a child of curl | bash, so its PATH dies with it: the
+  # new terminal must come before the sign-ins, or gh and claude are not found.
+  newterm=$(printf '%s\n' "$out" | grep -n 'open a NEW terminal' | head -n 1 | cut -d: -f1)
+  signin=$(printf '%s\n' "$out" | grep -n 'gh auth login' | head -n 1 | cut -d: -f1)
+  [ -n "$newterm" ] && [ "$newterm" -lt "$signin" ] \
+    || fail "the new terminal must be opened before the sign-ins, got: $out"
   [ "$(grep -c 'brew shellenv' "$w/home/.profile")" -eq 1 ] \
     || fail "a re-run duplicated the profile lines: $(cat "$w/home/.profile")"
-  pass "a fresh install runs every step once, and a re-run keeps everything and only prints the sign-ins"
+  pass "a fresh install runs every step once, and a re-run keeps everything and only prints the new-terminal step and the sign-ins"
 }
 
 test_arm64_skips_chrome() {

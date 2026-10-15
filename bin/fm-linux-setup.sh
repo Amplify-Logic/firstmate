@@ -235,7 +235,11 @@ if [ "$CI_MODE" = 1 ]; then
 fi
 cat <<'EOF'
 
-Two sign-ins are yours to do, in this terminal:
+First open a NEW terminal, so the new tools are on your PATH: on Windows, a
+new Ubuntu tab; on a server, log out and log back in. This one still has the
+old PATH, so gh and claude are not found here.
+
+Then, in the new terminal, two sign-ins are yours to do:
 
   1. gh auth login
      Choose GitHub.com, then HTTPS, then "Login with a web browser".
@@ -245,8 +249,7 @@ Two sign-ins are yours to do, in this terminal:
      Sign in, then type /exit.
      On a server, open the link it prints on your own computer and paste the code back.
 
-Then open a NEW terminal so the new tools are on your PATH, and continue with
-the preflight checkpoint, step 3 of ONBOARDING.md:
+Then continue with the preflight checkpoint, step 3 of ONBOARDING.md:
 
   cd ~/starship
 EOF

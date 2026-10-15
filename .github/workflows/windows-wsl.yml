@@ -130,6 +130,9 @@ jobs:
           git config --global --add safe.directory '*'
           git clone --no-checkout --quiet "$src" ~/starship
           git -C ~/starship checkout --quiet --detach '${{ github.sha }}'
+          # A clone from GitHub has origin/main, which worker worktrees branch
+          # from; a clone of the runner's detached checkout does not, so copy it.
+          git -C ~/starship fetch --quiet "$src" '+refs/remotes/origin/main:refs/remotes/origin/main'
           git -C ~/starship log -1 --oneline
 
       - name: Run the setup script

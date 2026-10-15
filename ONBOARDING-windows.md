@@ -109,7 +109,8 @@ It asks for your Ubuntu password once, then installs the build tools, Homebrew, 
 About 15 minutes.
 
 You should see a list of `ok` lines and `Setup finished.`
-Then do the two sign-ins it prints:
+First close the tab and open a new Ubuntu tab, so the new tools are on your PATH; in the old tab, `gh` and `claude` are not found.
+Then, in the new tab, do the two sign-ins it prints:
 
 ```sh
 gh auth login
@@ -118,8 +119,6 @@ claude
 
 For `gh`, choose **GitHub.com**, then **HTTPS**, then **Login with a web browser**; the browser opens on Windows.
 For `claude`, sign in, then type `/exit`.
-
-Close the tab and open a new one, so the new tools are on your PATH.
 
 ---
 
