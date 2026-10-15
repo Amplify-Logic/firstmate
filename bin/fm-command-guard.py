@@ -30,11 +30,11 @@
 #
 # OPT-IN, per home, off by default: nothing is installed or sent unless this
 # home's private gitignored config/command-guard says `enabled = true`. It is not
-# inherited into secondmate homes. happiness-compass is local-only and its
-# commands are never sent to Jev, whatever the gate says; projects named on an
-# `exclude` line are treated the same way. Both match the project's logical
-# directory name, as the registry names it. docs/configuration.md "Worker
-# command guard" owns the operator contract.
+# inherited into secondmate homes. happiness-compass commands are never sent to
+# Jev, whatever the gate says, because Compass code and commands never go to a
+# third party; projects named on an `exclude` line are treated the same way.
+# Both match the project's logical directory name, as the registry names it.
+# docs/configuration.md "Worker command guard" owns the operator contract.
 #
 # LOCAL DATABASE LIST FIRST, FOR EVERY PROJECT. Before anything is redacted or
 # sent, database_rule() matches the whole raw command, heredoc and -c bodies
@@ -130,7 +130,8 @@ MAX_PARTS = 8
 # The fallback when a multi-part request fails: one part of the head and tail.
 HEAD_CHARS = 1500
 TAIL_CHARS = 500
-# Never guarded or sent, whatever config/command-guard says: Compass is local-only.
+# Never sent to Jev, whatever config/command-guard says: Compass code and
+# commands never go to a third party.
 ALWAYS_EXCLUDED = frozenset({"happiness-compass"})
 LOG_NAME = "command-guard.log"
 OUTAGE_NAME = ".command-guard-outage"
