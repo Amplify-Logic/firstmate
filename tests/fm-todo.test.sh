@@ -1020,6 +1020,17 @@ test_ticket_failure_stays_on_the_row() {
   assert_contains "$(page "$h" 2026-09-10)" 'HubSpot change failed (close): ticket is locked' \
     'a failed ticket change is not shown on its row'
   [ "$(field_of "$h" 'Dealer' 2)" = open ] || fail 'a failed close changed the item state'
+  # A close typed with done closes the item at once; a failed close still shows in the Closed fold.
+  todo_at "$h" "$T_1030" command --item "$id" 'close' 'done' >/dev/null
+  render_at "$h" "$T_1100"
+  [ "$(field_of "$h" 'Dealer' 2)" = closed ] || fail 'done did not close the item'
+  assert_contains "$(page "$h" 2026-09-10)" 'HubSpot change pending: close' \
+    'a pending change on a closed item is not shown'
+  todo_at "$h" "$T_1100" ticket-failed --item "$id" --action "$(pending_action "$h" "$id" close)" \
+    --evidence 'ticket still locked' >/dev/null
+  render_at "$h" "$T_1500"
+  assert_contains "$(page "$h" 2026-09-10)" 'HubSpot change failed (close): ticket still locked' \
+    'a failed change on a closed item is not shown'
   pass 'a help-desk link names the ticket and a failed change stays visible on the row'
 }
 

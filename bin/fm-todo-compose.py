@@ -630,7 +630,7 @@ if closed:
     label = 'Closed today' if SINCE == day_start(NOW) else f'Closed since {when(SINCE)}'
     count = f'{len(closed)}' + (f', {len(handled)} handled without you' if handled else '')
     print(disclosure(f'{label} ({count})', table([
-        f'<tr class="closed" id="item-{esc(r["id"])}"{audit(r)}><td>{esc(r.get("title"))}</td><td>{brief(r["closure"].get("evidence") or "no closing evidence recorded")}</td>'
+        f'<tr class="closed" id="item-{esc(r["id"])}"{audit(r)}><td>{esc(r.get("title"))}</td><td>{brief(r["closure"].get("evidence") or "no closing evidence recorded")}{ticket_marker(r)}</td>'
         f'<td>{esc(r["closure"].get("reason", ""))} {esc("by you" if by_you(r["closure"].get("actor")) else who.get(r["closure"].get("actor"), "by " + str(r["closure"].get("actor"))))} · {esc(when(r["closure"].get("at")))}</td></tr>'
         for r in closed])))
 
