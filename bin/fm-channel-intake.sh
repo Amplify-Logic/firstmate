@@ -143,7 +143,7 @@
 # reason to measure the ceiling by hitting it.
 #
 # PARTNER-FACING ASKS COME FIRST. `observe --timeline-file FILE` hands the gate
-# one JSON timeline and bin/fm-channel-intake-assess.py derives two facts from
+# one JSON timeline and bin/fm-channel-intake-assess.py derives three facts from
 # it, stored on the item beside a short reason and never the message text:
 #   partner   a contact, a company domain or a message participant on the
 #             ticket is outside the team's own mail domains.
@@ -171,6 +171,8 @@
 # A passing name such as "discussed with <name>, closing", "should we ask
 # <name>?" or a statement "<name> kan je hier verder mee helpen." names
 # nobody, in (a), (b) and (c) alike.
+#   last_inbound_at  partner-facing: when the partner's latest inbound email
+#             arrived, answered or not.
 # Only an EMAIL engagement is a reply: a `last_message_sent_at` send with no
 # matching email is an auto-acknowledgement and answers nothing. (a) applies
 # only when the ticket involves the captain: he owns it, or a message or note
@@ -1072,7 +1074,7 @@ record_archived_attention() {
   class=$(owed_class "$(record_field "$path" class)" "$attention")
   body=$(awk -v class="$class" '
     /^class=/ { print "class=" class; next }
-    !/^(partner|partner_hint|awaiting|awaiting_since|awaiting_why|read_at)=/
+    !/^(partner|partner_hint|awaiting|awaiting_since|awaiting_why|last_inbound_at|read_at)=/
   ' "$path") || die "cannot read the archived item record: $path"
   write_atomic "$path" "$(printf '%s\n%s' "$body" "$attention")" \
     || die "cannot record the timeline facts on the archived item record: $path"
@@ -1091,7 +1093,7 @@ item_body() {
 # cannot silently demote a partner who is waiting on the captain.
 attention_fields() {
   [ -f "$1" ] && [ ! -L "$1" ] || return 0
-  grep -E '^(partner|partner_hint|awaiting|awaiting_since|awaiting_why|read_at)=' "$1" || true
+  grep -E '^(partner|partner_hint|awaiting|awaiting_since|awaiting_why|last_inbound_at|read_at)=' "$1" || true
 }
 
 # The class a record is written with, given the attention facts it carries: a
