@@ -219,6 +219,8 @@ test_fresh_install_then_rerun_is_idempotent() {
   signin=$(printf '%s\n' "$out" | grep -n 'gh auth login' | head -n 1 | cut -d: -f1)
   [ -n "$newterm" ] && [ "$newterm" -lt "$signin" ] \
     || fail "the new terminal must be opened before the sign-ins, got: $out"
+  assert_contains "$out" "step 7 of ONBOARDING-windows.md" "the closing text sends Windows users to the guide's tmux step"
+  assert_contains "$out" "step 6 of ONBOARDING-linux-server.md" "the closing text sends server users to the guide's tmux step"
   [ "$(grep -c 'brew shellenv' "$w/home/.profile")" -eq 1 ] \
     || fail "a re-run duplicated the profile lines: $(cat "$w/home/.profile")"
   pass "a fresh install runs every step once, and a re-run keeps everything and only prints the new-terminal step and the sign-ins"

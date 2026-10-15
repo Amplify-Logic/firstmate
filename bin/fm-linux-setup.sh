@@ -249,7 +249,8 @@ Then, in the new terminal, two sign-ins are yours to do:
      Sign in, then type /exit.
      On a server, open the link it prints on your own computer and paste the code back.
 
-Then continue with step 3 of ONBOARDING.md; Starship is already cloned:
-
-  cd ~/starship
+Then go back to the guide you are following: step 7 of ONBOARDING-windows.md
+on Windows, or step 6 of ONBOARDING-linux-server.md on a server. It starts the
+first mate inside tmux and then hands over to step 3 of ONBOARDING.md.
+Starship is already cloned in ~/starship.
 EOF
