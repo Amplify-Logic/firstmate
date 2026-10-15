@@ -1,0 +1,4 @@
+ok - a legacy morning file holding only the tickets copy leaves no empty reference fold
+ok - the calm layout ranks live problems and deadlines first in one list, never repeats an item, and folds the rest
+ok - team announcements fold under Updates, newest post first, below every ask
+not ok - a row in a closed fold sits over another section at desktop width (missing: 'covered=0 ')

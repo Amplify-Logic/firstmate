@@ -1,0 +1,6 @@
+base #fragment: id="probe">mode=closed width=1110 probed=13 withRects=13 covered=0 coveredIds=[] fragmentOpenedFold=true find=null
+base find-in-page: id="probe">mode=closed width=1110 probed=13 withRects=13 covered=9 coveredIds=[li#item-t-0d2221c78a7a li#item-t-399324c4ef12 li#item-t-567ca3d0498b li#item-t-6b79fd90106f li#item-t-759542a56772 li#item-t-9de7ed2e7c33 li#item-t-b32f19f472b8 li#item-t-c22d18ce930d li#item-t-d3b77e4e1701] fragmentOpenedFold=null find=true foldOpenAfterFind=false
+head #fragment: id="probe">mode=closed width=1110 probed=13 withRects=10 covered=0 coveredIds=[] fragmentOpenedFold=true find=null
+head find-in-page: id="probe">mode=closed width=1110 probed=13 withRects=0 covered=0 coveredIds=[] fragmentOpenedFold=null find=true foldOpenAfterFind=false
+displaynone #fragment: id="probe">mode=closed width=1110 probed=13 withRects=10 covered=0 coveredIds=[] fragmentOpenedFold=true find=null
+displaynone find-in-page: id="probe">mode=closed width=1110 probed=13 withRects=0 covered=0 coveredIds=[] fragmentOpenedFold=null find=false foldOpenAfterFind=false
