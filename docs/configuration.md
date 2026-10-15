@@ -592,7 +592,7 @@ Each switch is an optional local, gitignored presence flag; any file at the path
 | --- | --- |
 | `adhd` and `adhd-auto-fire` ([adhd.md](adhd.md)) | `config/adhd` |
 | `second-opinion-auto-fire` ([second-opinion.md](second-opinion.md)) | `config/second-opinion` |
-| `daily-todo-freshness` | `config/daily-todo` |
+| `daily-todo-freshness`, whose re-check rules morning and channel intake apply | `config/daily-todo` |
 | `macos-computer-use` | `config/computer-use` (above) |
 
 A switched-on skill is linked into `.agents/skills/` under its usual name, so it loads exactly as a tracked skill does, and the link is gitignored.
@@ -1498,7 +1498,7 @@ The same deferred network stage performs guarded tracked-file sync and propagate
 Local routes use direct guarded filesystem operations, while remote routes delegate sync and allowlisted transfer through their configured SSH host without probing any unconfigured fleet.
 
 - It emits `SECONDMATE_SYNC:` only when a home was skipped for an actionable sync reason, inheritance failed, or a divergent shared captain-preference copy was quarantined.
-- When a running home advances and its loaded instruction surface (`AGENTS.md`, `bin/`, or `.agents/skills/`) changed, bootstrap sends the re-read nudge itself through the stable `fm-<id>` selector and reports the exact completed send as `BOOTSTRAP_INFO:`.
+- When a running home advances and its loaded instruction surface (the paths `changed_instr` in `bin/fm-ff-lib.sh` watches) changed, bootstrap sends the re-read nudge itself through the stable `fm-<id>` selector and reports the exact completed send as `BOOTSTRAP_INFO:`.
 - If that send fails, bootstrap keeps an idempotent retry marker and emits `NUDGE_SECONDMATES:` with the failure reason.
 - The same bootstrap run emits `SECONDMATE_LIVENESS:` only when a registered secondmate is skipped or its relaunch fails; already-live and successfully relaunched secondmates are handled silently.
 
