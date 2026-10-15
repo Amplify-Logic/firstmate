@@ -256,17 +256,23 @@ test_absent_registry_changes_nothing() {
 # existed and prints no shell error, while an explicit --account is refused
 # rather than silently launched on the ambient login.
 test_absent_library_degrades_without_error() {
-  local rec id out status launch expected bin
+  local rec id out status launch expected code_root bin
   id=account-nolib-a8
   rec=$(make_spawn_case account-nolib claude "$id")
   read_case_record "$rec"
-  bin="$TMP_ROOT/account-nolib/bin"
+  # The copied code root carries its own history, unrelated to the task's
+  # project, so fm-spawn's self-repository gate proves the project is not
+  # firstmate rather than refusing on an undeterminable lineage.
+  code_root="$TMP_ROOT/account-nolib-root"
+  bin="$code_root/bin"
+  git init -q "$code_root"
+  git -C "$code_root" -c user.name='Firstmate Tests' -c user.email='tests@example.invalid' commit -q --allow-empty -m root
   cp -R "$ROOT/bin" "$bin"
   rm -f "$bin/fm-account-lib.sh"
   # The Claude launch grants the code root's skills directory, so the copied
   # root needs one.
-  mkdir -p "$TMP_ROOT/account-nolib/.agents"
-  ln -s "$ROOT/.agents/skills" "$TMP_ROOT/account-nolib/.agents/skills"
+  mkdir -p "$code_root/.agents"
+  ln -s "$ROOT/.agents/skills" "$code_root/.agents/skills"
   write_registry "$HOME_DIR"
 
   out=$(SPAWN="$bin/fm-spawn.sh" run_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" "$id" "$PROJ_DIR")

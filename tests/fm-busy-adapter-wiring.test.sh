@@ -544,7 +544,7 @@ test_secondmate_claude_spawn_arms_busy_for_the_stall_gate() {
 
 run_secondmate_stop_guard() { # <sm-home>
   printf '{"stop_hook_active":false,"session_id":"sm-guard"}' \
-    | CLAUDECODE=1 FM_ROOT_OVERRIDE="$1" FM_CLAUDE_AUTOARM_SYNC_WAIT_MS=100 \
+    | CLAUDECODE=1 FM_HOME="$1" FM_ROOT_OVERRIDE="$1" FM_CLAUDE_AUTOARM_SYNC_WAIT_MS=100 \
       bash "$ROOT/bin/fm-turnend-guard.sh" --claude >/dev/null 2>&1
 }
 
@@ -793,6 +793,9 @@ test_raw_secondmate_launch_writes_no_busy_wiring() {
   sm="$case_dir/sm"
   assert_present "$state/$id.busy-gen" "canonical claude secondmate spawn did not arm a busy generation"
   assert_present "$sm/.fm-busy-stop" "canonical claude secondmate spawn did not write the Stop pointer"
+  # The canonical spawn's window is gone, as after its endpoint closed, so the
+  # respawn opens a fresh one instead of refusing the fake tmux's duplicate.
+  rm -f "$state/.fake-windows"
   : > "$case_dir/launch.log"
   out=$(FM_BACKEND=tmux FM_FAKE_LAUNCH_LOG="$case_dir/launch.log" \
     fm_test_run_spawn "$case_dir/primary" "$sm" "$case_dir/fake/fakebin" "$id" "$sm" 'claude --fm-raw-flag' --secondmate) \
