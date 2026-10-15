@@ -190,6 +190,8 @@ chmod +x "$FAKEBIN/codex"
 # codex-named process for several consecutive reads: stopping it sooner can
 # leave a registration Herdr never clears, intermittently on Herdr 0.7.4 and
 # 0.9.5 alike.
+# The process is codex-named through `name` on Linux, where `argv0` is the
+# symlink's full path, and through `argv0` on macOS, where `name` is `sleep`.
 # At the pane's top shell the stub holds its own registration, which Herdr
 # drops once the stub exits; no `pane release-agent` is sent there, because on
 # Herdr 0.9.5 a release over a codex-named pane leaves a sticky `unknown` codex
@@ -201,7 +203,7 @@ retire_fake_agent() {  # [nested]
   local pid='' seen='' samples=0 i=0
   while [ "$i" -lt 100 ] && [ "$samples" -lt 5 ]; do
     pid=$(herdr pane process-info --pane "$PANE_ID" --session "$SESSION" 2>/dev/null \
-      | jq -r '[.result.process_info.foreground_processes[]? | select(.argv0 == "codex")][0].pid // empty')
+      | jq -r '[.result.process_info.foreground_processes[]? | select(.name == "codex" or .argv0 == "codex")][0].pid // empty')
     if [ -n "$pid" ] && { [ -n "${1:-}" ] \
       || herdr agent get "$PANE_ID" --session "$SESSION" 2>/dev/null \
         | jq -e '.result.agent.agent == "codex"' >/dev/null 2>&1; }; then
