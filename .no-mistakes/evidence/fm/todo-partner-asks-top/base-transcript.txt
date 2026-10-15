@@ -1,0 +1,15 @@
+== base: Needs you now header ==
+live problems and deadlines first, then partners and customers, oldest ask first
+== base: Needs you now order ==
+ 1. Office tower leaking (internal outage)
+ 2. 16:30 Selecta partner call
+ 3. 12:30 Onboarding
+ 4. 13:30 Ashlyn/Fauve
+ 5. 09:00 Aquabreakfast
+ 6. 15:00 RMA process
+ 7. Selecta service visit
+ 8. Old customer obligation
+ 9. CSG modem replacement (ledger)
+10. Kaffeknappen PCB promise
+11. Internal wiki cleanup (urgent, 20 days old)
+12. Internal expense approval
