@@ -1785,6 +1785,11 @@ if [ "${FM_BOOTSTRAP_DETECT_ONLY:-0}" != 1 ]; then
   fi
   # x_mode_setup writes local Relay artifacts only and never leaves the machine.
   local_phase && x_mode_setup
+  # Relink this home's opt-in skills, so a switch changed by hand reaches the
+  # next session; bin/fm-opt-in-skills.sh owns the switches and the links.
+  if local_phase && [ -x "$SCRIPT_DIR/fm-opt-in-skills.sh" ]; then
+    FM_HOME="$FM_HOME" FM_CONFIG_OVERRIDE="$CONFIG" "$SCRIPT_DIR/fm-opt-in-skills.sh" sync "$FM_ROOT" || true
+  fi
   # Adopt existing durable contribution links without making a network call.
   # Detection-only startup must never publish a check registration.
   if local_phase && command -v jq >/dev/null 2>&1 \

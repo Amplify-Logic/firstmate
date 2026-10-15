@@ -23,4 +23,4 @@ Retain the 15 September typography, colours, provenance vocabulary, and responsi
 
 The renderer cannot verify sources or infer obligations from arbitrary prose.
 New morning output therefore needs explicit composition metadata; unstructured older pages belong in a collapsed, clearly dated reference, with retired connectivity content removed, rather than being promoted into fresh actions.
-The page shape and the morning composition contract live in [fm-todo-render.sh](../bin/fm-todo-render.sh), and the durable item record behind them - identity, recorded verification, closures and the captain's page commands - in [fm-todo.sh](../bin/fm-todo.sh); source verification remains owned by [daily-todo-freshness](../.agents/skills/daily-todo-freshness/SKILL.md).
+The page shape and the morning composition contract live in [fm-todo-render.sh](../bin/fm-todo-render.sh), and the durable item record behind them - identity, recorded verification, closures and the captain's page commands - in [fm-todo.sh](../bin/fm-todo.sh); source verification remains owned by [daily-todo-freshness](../.agents/opt-in-skills/daily-todo-freshness/SKILL.md).
