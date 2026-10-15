@@ -28,9 +28,10 @@
 #     the intake's absence, so it is never pruned either. A system reopen note
 #     is not such a mark: a revived routine thread still retires and prunes.
 #   - A partner-facing ask awaiting the captain ranks in the second tier of
-#     the Needs you list, after a live outage and above deadlines, calendar
-#     meetings and every other class, oldest ask first and an undated ask last, and a timeline
-#     re-read makes it current.
+#     the Needs you list, after a live outage and above older partner and
+#     customer asks, deadlines, calendar meetings and every other class, oldest
+#     ask first and an undated ask last, and a timeline re-read makes it
+#     current; the 13 Oct page opens with its two awaiting partners.
 #   - Every Needs you row names the system it came from beside its severity
 #     pill, and an unrecognised source gets a neutral marker instead of failing.
 #   - A row merged from several inputs marks the source it presents, not the
@@ -587,6 +588,36 @@ Morning partner ask' ] || fail 'an undated partner ask jumped ahead of an older 
   pass 'a partner-facing ask awaiting the captain ranks right after a live outage and above deadlines and meetings, oldest first and undated last'
 }
 
+test_awaiting_partner_asks_lead_the_13_oct_page() {
+  local h out t
+  h="$TMP_ROOT/oct-13"
+  new_home "$h"
+  # Tuesday 13 Oct, 09:00: the morning sweep flagged two partners awaiting
+  # Lars (since Fri and Mon), older partner and customer obligations stayed
+  # open, and four internal meetings end today.
+  t=$((T_0900 + 86400 * 33))
+  sidecar "$h" 2026-10-13 \
+'{"key":"k-m1","source":"calendar","ref":"breakfast","class":"deadline","title":"Aquabreakfast","ends_at":"2026-10-13T09:30:00+02:00","updated":'"$t"'},'\
+'{"key":"k-m2","source":"calendar","ref":"onboarding","class":"deadline","title":"Onboarding","ends_at":"2026-10-13T13:00:00+02:00","updated":'"$t"'},'\
+'{"key":"k-m3","source":"calendar","ref":"one-on-one","class":"deadline","title":"One-on-one","ends_at":"2026-10-13T14:00:00+02:00","updated":'"$t"'},'\
+'{"key":"k-m4","source":"calendar","ref":"rma","class":"deadline","title":"RMA process meeting","ends_at":"2026-10-13T15:30:00+02:00","updated":'"$t"'},'\
+'{"key":"k-sel","source":"hubspot","ref":"selecta","class":"obligation","title":"Selecta service visit","partner":true,"asked_at":'"$((t - 86400 * 21))"',"updated":'"$t"'},'\
+'{"key":"k-old","source":"hubspot","ref":"old","class":"obligation","title":"Old customer obligation","partner":true,"asked_at":'"$((t - 86400 * 13))"',"updated":'"$t"'},'\
+'{"key":"k-kaf","source":"hubspot","ref":"kaffeknappen","class":"obligation","kind":"reply","title":"Kaffeknappen PCB promise","partner_awaiting":true,"awaiting_since":'"$((t - 86400))"',"updated":'"$t"'},'\
+'{"key":"k-csg","source":"hubspot","ref":"csg","class":"obligation","kind":"reply","title":"CSG modem","partner_awaiting":true,"awaiting_since":'"$((t - 86400 * 4))"',"updated":'"$t"'}'
+  render_at "$h" "$((t + 600))"
+  out=$(page "$h" 2026-10-13)
+  # The awaiting partners lead, oldest first, above older partner and
+  # customer obligations; the meetings follow them all.
+  [ "$(needs_order "$out" | sed -n 1,4p)" = 'CSG modem
+Kaffeknappen PCB promise
+Selecta service visit
+Old customer obligation' ] && [ "$(needs_order "$out" | sed -n 5,8p | sort | tr '\n' '|')" = 'Aquabreakfast|Onboarding|One-on-one|RMA process meeting|' ] \
+    || fail "the 13 Oct page does not open with the awaiting partner asks:
+$(needs_order "$out")"
+  pass 'the 13 Oct page opens with the awaiting partner asks, then older partner lines, then the meetings'
+}
+
 test_each_row_marks_where_it_came_from() {
   local h out
   h="$TMP_ROOT/source-marker"
@@ -912,6 +943,7 @@ test_sync_prunes_only_retired_routine_records
 test_a_marked_routine_line_is_never_retired_by_the_intake
 test_a_revived_routine_thread_still_retires_and_prunes
 test_partner_awaiting_asks_rank_above_every_class
+test_awaiting_partner_asks_lead_the_13_oct_page
 test_each_row_marks_where_it_came_from
 test_a_merged_row_marks_the_source_it_presents
 test_a_pass_rechecks_open_items_and_counts_the_misses

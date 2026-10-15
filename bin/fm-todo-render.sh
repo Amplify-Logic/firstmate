@@ -24,6 +24,7 @@
 #
 # PAGE SHAPE. One "Needs you now" list of every open decision, approval and
 # reply, in action order: first a live problem (class outage), then a partner-
+# or customer-facing ask awaiting him (`partner_first`), then any other partner-
 # or customer-facing ask (even one also due today), then a hard deadline (class
 # deadline, which every calendar meeting with an end time gets), then
 # everything else; inside each tier the oldest ask first (an awaiting partner's

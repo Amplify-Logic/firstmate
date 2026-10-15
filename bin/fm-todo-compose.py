@@ -438,16 +438,19 @@ def split(recs):
 # --- action order -----------------------------------------------------------
 
 # Tier 0 is a live outage, as the source classed it. Tier 1 is a partner- or
-# customer-facing ask, even one that is also due today. Tier 2 is a hard
+# customer-facing ask awaiting the captain, tier 2 any other partner- or
+# customer-facing ask, even one that is also due today. Tier 3 is a hard
 # deadline, which includes every calendar meeting with an end time. Everything
 # else follows. Inside every tier the oldest ask comes first, whatever was read
 # last. An urgent class earned only by waiting long never lifts a line.
 def tier(rec):
     if rec.get('class') == 'outage':
         return 0
-    if partner(rec):
+    if rec.get('partner_first'):
         return 1
-    return 2 if rec.get('class') == 'deadline' else 3
+    if partner(rec):
+        return 2
+    return 3 if rec.get('class') == 'deadline' else 4
 
 
 def actionkey(rec):
@@ -549,7 +552,7 @@ handled = [r for r in closed if r['closure'].get('reason') == 'fulfilled'
 
 # --- page -------------------------------------------------------------------
 
-print('<h2>Needs you now<small>live problems first, then partners and customers, then deadlines, oldest ask first</small></h2>')
+print('<h2>Needs you now<small>live problems first, then partners and customers (those awaiting you first), then deadlines, oldest ask first</small></h2>')
 if asks:
     print(table([row(r) for r in asks]))
 else:
