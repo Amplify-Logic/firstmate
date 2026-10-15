@@ -4,8 +4,8 @@
 # Contracts under test:
 #   - Urgency wins the order: an outage sits above an urgent item, which sits
 #     above a routine one, whatever order the ledger recorded them in.
-#   - One calm "Needs you now" list: live problems and hard deadlines first,
-#     then a partner awaiting him, an urgent ask that only waited long never
+#   - One calm "Needs you now" list: live problems first, then a partner
+#     awaiting him, then hard deadlines, an urgent ask that only waited long never
 #     above them, no summary strip,
 #     Now box, sweep banner or held count, and no item rendered twice.
 #   - Waiting on others, other channel activity and closed today render as
@@ -47,6 +47,8 @@
 #     rather than failing the render.
 #   - Team announcements render in their own collapsed "Updates" fold, newest
 #     post first with its post time and link, and never in "Needs you now".
+#   - In a real Chrome at desktop width, no row of a closed fold sits over the
+#     sections below it, and such a row can still be found on the page.
 # shellcheck disable=SC2016
 set -u
 
@@ -379,12 +381,12 @@ test_calm_layout_ranks_live_problems_first_and_folds_the_rest() {
   page=$(page_of "$h")
   body=$(sed -n '/<h2>Needs you now/,/<\/table>/p' "$page")
 
-  # Tier 0 is a live problem or a hard deadline, tier 1 a partner awaiting
-  # him; age alone never lifts the urgent ask above them, and everything
+  # Tier 0 is a live outage, tier 1 a partner awaiting him, tier 3 a hard
+  # deadline; age alone never lifts the urgent ask above them, and everything
   # else follows oldest ask first. The stored title loses its rotting "26 days".
   [ "$(grep -o 'class="what">[^<]*' <<<"$body" | sed 's/^class="what">//')" = 'partner machine down now
-feedback due before leave
 partner awaiting your answer
+feedback due before leave
 answer the training question
 partner waiting' ] || fail "the Needs you list is not in action order:
 $body"
@@ -417,7 +419,7 @@ Your open tickets' ] || fail 'the page has headed sections beyond the Needs you 
   [ "$(line_of "$page" 'invoice settled')" -gt "$(line_of "$page" '<summary>Closed today')" ] \
     || fail 'the closed item is not inside the closed fold'
 
-  pass 'the calm layout ranks live problems and deadlines first in one list, never repeats an item, and folds the rest'
+  pass 'the calm layout ranks live problems first, then partners, then deadlines in one list, never repeats an item, and folds the rest'
 }
 
 test_house_style_comes_from_the_tracked_templates() {
@@ -761,6 +763,54 @@ test_team_updates_fold_newest_post_first() {
   pass 'team announcements fold under Updates, newest post first, below every ask'
 }
 
+test_closed_folds_cover_nothing_and_stay_findable() {
+  local h page probed chrome dom report i
+
+  if ! chrome=$(find_chrome); then
+    echo 'skip: Chrome not found for the closed-fold layout test'
+    return 0
+  fi
+  h="$TMP_ROOT/closed-folds"
+  new_home "$h"
+  for i in 1 2 3 4 5 6; do
+    observe_at "$h" "$T_1100" resolve --waiting --reason "handed to Naomi for answer $i" --item "$(
+      observe_at "$h" "$T_0900" observe --source C_BRIEF --ref "w$i" --digest "a$i" --class urgent \
+        --title "waiting item $i handed on with a title long enough to wrap" | awk '{ print $2 }')" >/dev/null
+  done
+  write_tickets "$h" "$T_1500" "$TICKETS_TWO" >/dev/null
+  render_at "$h" "$T_1530" render >/dev/null
+  page=$(page_of "$h")
+
+  # Probe the rendered page the way the layout checker does: hit-test the
+  # middle of every text line of every row in a closed fold, and count a row
+  # as covered when that point lands on another section of the page. Then
+  # search for one of those rows as find-in-page would, which is what opens
+  # the fold for a find or a link.
+  probed="$h/probed.html"
+  sed 's#</body>#<script>setTimeout(() => {\
+  let covered = 0;\
+  for (const fold of document.querySelectorAll("details:not([open])")) {\
+    for (const row of fold.querySelectorAll("[id^=item-]")) {\
+      const text = document.createRange(); text.selectNodeContents(row);\
+      if ([...text.getClientRects()].some(r => r.width * r.height >= 16 \&\& (hit => hit \&\& !hit.contains(fold) \&\& !fold.contains(hit))(document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2)))) covered++;\
+    }\
+  }\
+  const out = document.createElement("pre"); out.id = "probe";\
+  out.textContent = "covered=" + covered + " found=" + window.find("waiting item 3 handed on");\
+  document.body.appendChild(out);\
+}, 300);</script></body>#' "$page" >"$probed"
+
+  # The 1110px desktop width the layout checker reported from.
+  report=$(fm_chrome_dump_dom "$chrome" "$probed" "$h/probed.dom" "page=$probed" --window-size=1110,3000) \
+    || fail "Chrome produced no DOM for the closed-fold probe: $report"
+  dom=$(cat "$h/probed.dom")
+  assert_contains "$dom" '<pre id="probe">' 'the closed-fold probe never ran in Chrome'
+  assert_contains "$dom" 'covered=0 ' 'a row in a closed fold sits over another section at desktop width'
+  assert_contains "$dom" ' found=true' 'a row in a closed fold can no longer be found on the page'
+
+  pass 'closed folds lay no row over the sections below and their rows stay findable'
+}
+
 test_outage_then_oldest_ask_orders_the_live_section
 test_waiting_and_closed_never_mix_into_the_live_section
 test_every_line_carries_its_own_read_time
@@ -782,3 +832,4 @@ test_open_tickets_empty_subject_renders_as_an_untitled_ticket
 test_open_tickets_legacy_morning_copy_leaves_no_empty_reference_fold
 test_calm_layout_ranks_live_problems_first_and_folds_the_rest
 test_team_updates_fold_newest_post_first
+test_closed_folds_cover_nothing_and_stay_findable

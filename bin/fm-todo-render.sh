@@ -23,9 +23,11 @@
 # orchestrator that records each re-read with `fm-todo.sh verify`.
 #
 # PAGE SHAPE. One "Needs you now" list of every open decision, approval and
-# reply, in action order: first a live problem or hard deadline (class outage
-# or deadline), then a partner- or customer-facing ask, then everything else;
-# inside each tier the oldest ask first (an awaiting partner's
+# reply, in action order: first a live problem (class outage), then a partner-
+# or customer-facing ask awaiting him (`partner_first`), then any other partner-
+# or customer-facing ask (even one also due today), then a hard deadline (class
+# deadline, which every calendar meeting with an end time gets), then
+# everything else; inside each tier the oldest ask first (an awaiting partner's
 # `awaiting_since`, else the item's ask time, never its last read), then by
 # class. A line is partner- or customer-facing when it is awaiting him
 # (`partner_first`), its ticket has a partner contact, a source marked it

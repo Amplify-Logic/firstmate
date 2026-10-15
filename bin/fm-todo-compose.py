@@ -203,8 +203,8 @@ def current(rec):
 
 def partner_first(rec):
     """A partner-facing ask awaiting the captain sorts ahead of every class, oldest
-    ask first, though `tier` still puts live problems and deadlines above it in
-    the Needs you list; an undated ask is not the oldest, so it sorts after every
+    ask first, though `tier` still puts a live outage above it in the Needs you
+    list; an undated ask is not the oldest, so it sorts after every
     dated one."""
     if not rec.get('partner_first'):
         return (1, 0)
@@ -437,17 +437,20 @@ def split(recs):
 
 # --- action order -----------------------------------------------------------
 
-# Tier 0 is a live problem or a hard deadline, as the source classed it: an
-# outage, or a deadline. Tier 1 is a partner- or customer-facing ask. Everything
+# Tier 0 is a live outage, as the source classed it. Tier 1 is a partner- or
+# customer-facing ask awaiting the captain, tier 2 any other partner- or
+# customer-facing ask, even one that is also due today. Tier 3 is a hard
+# deadline, which includes every calendar meeting with an end time. Everything
 # else follows. Inside every tier the oldest ask comes first, whatever was read
-# last. An urgent class earned only by waiting long never reaches tier 0.
-FIRST = ('outage', 'deadline')
-
-
+# last. An urgent class earned only by waiting long never lifts a line.
 def tier(rec):
-    if rec.get('class') in FIRST:
+    if rec.get('class') == 'outage':
         return 0
-    return 1 if partner(rec) else 2
+    if rec.get('partner_first'):
+        return 1
+    if partner(rec):
+        return 2
+    return 3 if rec.get('class') == 'deadline' else 4
 
 
 def actionkey(rec):
@@ -549,7 +552,7 @@ handled = [r for r in closed if r['closure'].get('reason') == 'fulfilled'
 
 # --- page -------------------------------------------------------------------
 
-print('<h2>Needs you now<small>live problems and deadlines first, then partners and customers, oldest ask first</small></h2>')
+print('<h2>Needs you now<small>live problems first, then partners and customers (those awaiting you first), then deadlines, oldest ask first</small></h2>')
 if asks:
     print(table([row(r) for r in asks]))
 else:

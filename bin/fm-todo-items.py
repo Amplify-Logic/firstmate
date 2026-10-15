@@ -169,7 +169,7 @@ def ledger_observations(intake_dir, labels):
                 o['posted'] = number(rec.get('source_epoch')) or number(rec.get('created'))
             # A partner-facing ask awaiting the captain, as the intake's timeline
             # assessment recorded it; the composer ranks it right after a live
-            # problem or hard deadline, above every other class.
+            # outage, above every other partner ask, deadline and class.
             if rec.get('partner') == '1' and rec.get('awaiting') == '1':
                 o.update(partner_first=True, awaiting_since=number(rec.get('awaiting_since')),
                          why=rec.get('awaiting_why', ''))

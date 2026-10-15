@@ -32,6 +32,23 @@ ACTING = (
     r"look(?:ing)? into|check(?:ing)?\b[^.?!\n]{0,40}\bwith\b|follow(?:ing)? up"
     r"|induiken|achteraan|uitzoeken|nakijken|navragen|terugkoppel|\blaat\b[^.?!\n]{0,40}\bweten\b")
 ACTORS = [r"i", r"we", r"our", r"team", r"tech\w*", r"ik", r"wij"]
+# Words that open a request to whoever was just addressed; with no comma after
+# the name, only such a word followed by "you" in a question asks him. A Dutch
+# one with jij/je/u opening a question also asks the name that closes it.
+ASK_NL = r"kun|kunt|kan|wil|wilt|zou|zoudt"
+REQUEST = r"please|pls|kindly|can|could|would|will|" + ASK_NL + r"|graag|mag"
+GREETING = r"hi|hello|hey|dear|hoi|hallo|beste|hej"
+# Where a message's own words end: a sign-off line, or a confidentiality footer
+# with no sign-off before it. Nothing below one asks anybody anything.
+SIGN_OFF = re.compile(
+    r"^\s*(?:(?:with\s+)?kind\s+regards|best\s+regards|best\s+wishes|met vriendelijke groet(?:en)?"
+    r"|med vänlig hälsning|viele grüße|cordialement)\s*(?:[,.!]?\s*$|,.*$)"
+    r"|^\s*(?:regards|best|cheers|groet(?:en)?|mvg|mvh)\s*(?:[,.!]?\s*$|,[^\n.?!]{0,40}$)"
+    r"|^\s*(?:thanks|thank you)\s*[,.!]?\s*$"
+    r"|^\s*--[ \t]*$"
+    r"|^\s*(?:the information (?:contained )?in\s+)?(?:this|dit|deze)\s+(?:e-?mail|message|bericht)\b"
+    r"[^\n]*\b(?:confidential|vertrouwelijk)",
+    re.I | re.M)
 TECH = re.compile(r"\btech\b|\btechteam\b|\btechnical (?:team|support|department)\b", re.I)
 QUOTE_START = re.compile(
     r"^\s*(?:>|on .{0,120}wrote:|op .{0,120}schreef|-{2,}\s*original message|from:\s|van:\s|sent from my)",
@@ -56,6 +73,12 @@ def fresh_text(body):
             break
         kept.append(line)
     return '\n'.join(kept)
+
+
+def signed(text):
+    """The message down to its sign-off: a signature or footer asks nothing."""
+    end = SIGN_OFF.search(text)
+    return text[:end.start()] if end else text
 
 
 def domain(address):
@@ -155,13 +178,37 @@ def assess(doc, names, captain_addresses, team_addresses):
     captain_addresses = {a.lower() for a in captain_addresses}
     answer_addresses = captain_addresses | {a.lower() for a in team_addresses}
     internal = {domain(a) for a in answer_addresses if domain(a)}
-    name_re = re.compile(r'(?<![\w.@-])@?(?:' + '|'.join(re.escape(n) for n in names) + r')\b', re.I) if names else None
+    name = '(?:' + '|'.join(re.escape(n) for n in names) + ')'
+    name_re = re.compile(r'(?<![\w.@-])@?' + name + r'\b', re.I) if names else None
+    mention_re = re.compile(r'(?<![\w.@-])@' + name + r'\b', re.I) if names else None
+    # Asked directly, within one sentence: his name opens it, after at most a
+    # greeting, then a comma or colon and a question or a request, or no comma
+    # and a question opening with a request word and "you"; or his name closes
+    # a question after a comma, or one that opens with a Dutch request to jij/je/u.
+    # A message opening with a greeting to him asks him whatever question or
+    # request it carries above its sign-off.
+    addressed = (r'(?:^\s*|[.?!]\s+)(?:(?:' + GREETING + r')\s+)?'
+                 + name + r'(?:\s+' + name + r')*')
+    greeted_re = re.compile(r'\A\s*(?:' + GREETING + r')\s+' + name + r'(?:\s+' + name
+                            + r')*(?:\s*[,:]|[ \t]*\n)', re.I) if names else None
+    request_re = re.compile(r'\?|\b(?:please|pls|kindly|graag)\b|(?:^\s*|[.?!]\s+)(?:' + REQUEST
+                            + r')\s+(?:you|je|jij|u)\b', re.I | re.M)
+    asked_re = re.compile(addressed + r'\s*[,:]\s*(?:[^.?!\n]*\?|(?:' + REQUEST + r')\b(?![\'’]))'
+                          + '|' + addressed + r'\s+(?:' + REQUEST + r')\s+(?:you|je|jij|u)\b[^.?!\n]*\?'
+                          + r'|(?:,\s*|(?:^\s*|[.?!]\s+)(?:' + ASK_NL + r')\s+(?:jij|je|u)\b[^.?!\n]*\s)'
+                          + name + r'(?:\s+' + name + r')*\s*\?', re.I | re.M) if names else None
     actors = '|'.join(ACTORS + [re.escape(n) for n in names])
     promise_re = re.compile(PROMISE + r'|\b(?:' + actors + r')\b' + NOT_YOU + '{0,20}?(?:'
                             + ACTING + ')', re.I | re.S | re.M)
 
     def names_captain(text):
-        return bool(name_re and name_re.search(text))
+        """On his own ticket any naming; on a colleague's only an @mention or an ask to him."""
+        if not names:
+            return False
+        if captain_owned:
+            return bool(name_re.search(text))
+        return bool(mention_re.search(text) or asked_re.search(text)
+                    or (greeted_re.match(text) and request_re.search(signed(text))))
 
     def is_captain(who):
         """One spelling of the captain everywhere: the sentinel or his address."""
@@ -195,19 +242,18 @@ def assess(doc, names, captain_addresses, team_addresses):
         return any(e['at'] > at and (is_answer(e) or (note_answers and e['type'] == 'note' and by_captain(e)))
                    for e in events)
 
-    # (b) A promise naming the captain or the tech team, or the captain's own
-    # promise, with no later reply after it.
-    tech_promise = False
+    # (b) A promise naming the captain, the captain's own promise, or on his own
+    # ticket a promise naming the tech team, with no later reply after it. A
+    # colleague's tech-team promise on the colleague's ticket is not his.
     for e in events:
         if e['type'] != 'email' or e['direction'] != 'outbound':
             continue
         text = fresh_text(e['body'])
         if not promise_re.search(text):
             continue
-        who = 'you' if names_captain(text) or by_captain(e) else ('tech' if TECH.search(text) else '')
+        who = 'you' if names_captain(text) or by_captain(e) else ('tech' if captain_owned and TECH.search(text) else '')
         if not who:
             continue
-        tech_promise = tech_promise or who == 'tech'
         if not answered_after(e['at']):
             pending.append((e['at'], f'the {when(e["at"])} promise that {"you are" if who == "you" else "tech is"} on it has had no message since'))
 
@@ -222,7 +268,7 @@ def assess(doc, names, captain_addresses, team_addresses):
 
     # (a) The partner's last message unanswered. Only a later reply discharges
     # it; a HubSpot send with no EMAIL engagement is an auto-acknowledgement.
-    involved = captain_owned or named or tech_promise
+    involved = captain_owned or named
     inbound = [e for e in events if e['type'] == 'email' and e['direction'] == 'inbound']
     if involved and inbound:
         last = inbound[-1]

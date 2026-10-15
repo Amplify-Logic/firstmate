@@ -36,15 +36,16 @@ A tick therefore looks like this.
    The gate deliberately does not enforce this: it opens an item for whatever class it is handed, because only the connector read can see the thread and the source-side state.
    Silence is not completion. A message nobody replied to and a source-side item nobody closed both stay owed, and an acknowledgement or a promise to act is not a reply that discharges anything.
    A HubSpot ticket is observed with `--timeline-file`, so the gate itself decides whether it is a partner-facing ask awaiting the captain; `bin/fm-channel-intake.sh --help` owns the timeline format and the rules.
-   Such an ask is recorded as owed and leads the day page, `todo` and the brief ahead of every other class; the alert payload orders it first only within the notifiable classes.
+   Such an ask is recorded as owed and leads `todo` and the brief ahead of every other class, and the day page right after a live outage; the alert payload orders it first only within the notifiable classes.
    Re-reading a resolved ticket's timeline records the fresh facts on the archived item, which stays resolved.
 6. A HubSpot ticket source also hands the complete current set of the captain's tickets whose stage is not Closed, Waiting on contact included, to `tickets` on every pass, before `complete`; that snapshot is what the day page's "Your open tickets" section renders, and `complete` refuses a pass that skipped it.
    The source's private coverage sentence names which owner that is, and `bin/fm-channel-intake.sh --help` owns the input format and the refusals.
 7. A source that reads what the captain sent - his ticket replies, his sent mail and his Slack replies - closes each open item that a sent message discharges, with `bin/fm-todo.sh close --actor` naming him and the sent message as evidence; an acknowledgement or a promise to act closes nothing.
 8. `complete --source ID --checkpoint VALUE` advances that source's checkpoint and says how many listed `recheck:` items are still not re-read, or `fail --source ID --reason TEXT` records the failure and backs off.
 
-A `hubspot-tickets` source's claim also names the stages to read, including "Waiting on contact", which HubSpot marks closed, and on a bounded cadence hands out a re-scan of every owner's tickets that name the captain or in which a colleague promised the customer that the tech team is on it, whatever their last-modified date.
-That re-scan exists because a colleague-owned ticket naming the captain only inside an email body, one promising the customer that tech is on it, or one parked in "Waiting on contact", returns from no checkpoint read.
+A `hubspot-tickets` source's claim also names the stages to read, including "Waiting on contact", which HubSpot marks closed, and on a bounded cadence hands out a re-scan of the captain's own tickets and of every other owner's tickets in which an email or note @mentions the captain or asks him something directly, whatever their last-modified date.
+A colleague-owned ticket that only promises the customer the tech team is on it, or only names the captain in passing, stays the colleague's and is not re-scanned.
+That re-scan exists because a colleague-owned ticket that @mentions or asks the captain only inside an email body or note, or one parked in "Waiting on contact", returns from no checkpoint read.
 The orchestrator completes a read that included it with `--rescanned`, in the same pass: when the claim handed one out, `complete` refuses without it.
 
 Three more kinds carry their own read, so asks that never carry an @mention or a fresh modification date still reach the page between morning sweeps.

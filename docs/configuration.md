@@ -705,7 +705,7 @@ enabled = true
 exclude = private-client-app, family-notes
 ```
 
-`happiness-compass` is always excluded: Compass is local-only, so its commands are never sent to Jev, whatever this file says.
+`happiness-compass` is always excluded: its commands are never sent to an additional outside service such as Jev, whatever this file says.
 `exclude` covers the rest, naming other project directories whose commands are never sent, separated by spaces or commas.
 Excluded projects and Compass still get the local database list, because it sends nothing.
 Both match the project's logical directory name, the name the project registry uses, even when that directory is a link to a differently named copy.

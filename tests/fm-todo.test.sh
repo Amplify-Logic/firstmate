@@ -28,9 +28,10 @@
 #     the intake's absence, so it is never pruned either. A system reopen note
 #     is not such a mark: a revived routine thread still retires and prunes.
 #   - A partner-facing ask awaiting the captain ranks in the second tier of
-#     the Needs you list, after live problems and deadlines and above every
-#     other class, oldest ask first and an undated ask last, and a timeline
-#     re-read makes it current.
+#     the Needs you list, after a live outage and above older partner and
+#     customer asks, deadlines, calendar meetings and every other class, oldest
+#     ask first and an undated ask last, and a timeline re-read makes it
+#     current; the 13 Oct page opens with its two awaiting partners.
 #   - Every Needs you row names the system it came from beside its severity
 #     pill, and an unrecognised source gets a neutral marker instead of failing.
 #   - A row merged from several inputs marks the source it presents, not the
@@ -521,12 +522,12 @@ test_partner_awaiting_asks_rank_above_every_class() {
   printf 'captain_names = Lars\nteam_addresses = support@team.example\n' >>"$h/config/channel-intake"
   printf 'H_TICKETS\thubspot-tickets\ttickets naming the captain\n' >>"$h/data/channel-intake/sources.tsv"
   # Caffeine Mechanics, shaped like the back-sweep row: a colleague's ticket,
-  # the captain named only in her email body, nothing sent since.
+  # the captain @mentioned only in her email body, nothing sent since.
   cat >"$h/caffeine.json" <<EOF
 {"kind":"hubspot-ticket","owner":"natalia@team.example","stage":"Waiting for Tech",
  "contacts":["rachel@partner.example"],
  "events":[{"type":"email","at":$((T_0900 - 86400 * 13)),"direction":"inbound","from":"rachel@partner.example","body":"A steer on the connectivity, please."},
-  {"type":"email","at":$((T_0900 - 86400 * 13 + 9000)),"direction":"outbound","from":"support@team.example","body":"Lars is looking into this. I will keep you updated."}]}
+  {"type":"email","at":$((T_0900 - 86400 * 13 + 9000)),"direction":"outbound","from":"support@team.example","body":"@Lars is looking into this. I will keep you updated."}]}
 EOF
   intake_at "$h" "$T_0900" observe --source H_TICKETS --ref 48375229511 --digest v1 --class routine \
     --title 'Syrup availability and connectivity' --timeline-file "$h/caffeine.json" >/dev/null
@@ -541,11 +542,11 @@ EOF
     --title 'Syrup availability and connectivity' --timeline-file "$h/caffeine.json" >/dev/null
   render_at "$h" "$T_1100"
   out=$(page "$h" 2026-09-10)
-  # Live problems and deadlines lead; the awaiting partner ask comes next,
-  # above urgent asks, and its row says why the partner is waiting.
+  # A live outage leads; the awaiting partner ask comes next, above the
+  # deadline and urgent asks, and its row says why the partner is waiting.
   [ "$(needs_order "$out" | sed -n 1,3p)" = 'fresh outage-1
-fresh deadline-1
-Syrup availability and connectivity' ] && [ "$(needs_order "$out" | sed -n 4,5p | sort | tr '\n' ' ')" = 'fresh urgent-1 fresh urgent-2 ' ] || fail "the awaiting partner ask is not second tier in Needs you:
+Syrup availability and connectivity
+fresh deadline-1' ] && [ "$(needs_order "$out" | sed -n 4,5p | sort | tr '\n' ' ')" = 'fresh urgent-1 fresh urgent-2 ' ] || fail "the awaiting partner ask is not second tier in Needs you:
 $(needs_order "$out")"
   first=$(grep -m1 'class="what">Syrup' <<<"$out")
   assert_contains "$first" 'promise that you are on it' 'the row does not say why the partner is waiting'
@@ -557,14 +558,22 @@ $(needs_order "$out")"
   sidecar "$h" 2026-09-10 '{"key":"k-out","source":"C_BRIEF","ref":"m-out","class":"outage","title":"Morning outage","updated":'"$T_1030"'},{"key":"k-p","source":"hubspot","ref":"48622709535","class":"obligation","kind":"reply","title":"Morning partner ask","partner_awaiting":true,"awaiting_since":'"$((T_0900 - 3600))"',"updated":'"$T_1030"'}'
   render_at "$h" "$T_1100"
   out=$(page "$h" 2026-09-10)
-  [ "$(needs_order "$out" | sed -n 4,5p)" = 'Syrup availability and connectivity
+  [ "$(needs_order "$out" | sed -n 3,4p)" = 'Syrup availability and connectivity
 Morning partner ask' ] || fail "a morning partner ask is not in the partner tier after the live problems:
+$(needs_order "$out")"
+  # A calendar meeting ending today is a deadline, not a partner ask: the older
+  # awaiting partner reply ranks above it, and the outage still leads.
+  sidecar "$h" 2026-09-10 '{"key":"k-out","source":"C_BRIEF","ref":"m-out","class":"outage","title":"Morning outage","updated":'"$T_1030"'},{"key":"k-cal","source":"calendar","ref":"rma","class":"deadline","title":"RMA process meeting","ends_at":"2026-09-10T15:30:00+02:00","updated":'"$T_1030"'},{"key":"k-p","source":"hubspot","ref":"48622709535","class":"obligation","kind":"reply","title":"Morning partner ask","partner_awaiting":true,"awaiting_since":'"$((T_0900 - 86400 * 3))"',"updated":'"$T_1030"'}'
+  render_at "$h" "$T_1100"
+  out=$(page "$h" 2026-09-10)
+  [ "$(needs_order "$out" | grep -n -x -e 'Morning outage' -e 'fresh outage-1' -e 'Morning partner ask' -e 'RMA process meeting' | cut -d: -f2 | tr '\n' '|')" = 'fresh outage-1|Morning outage|Morning partner ask|RMA process meeting|' ] \
+    || fail "a calendar meeting ending today ranks above an older awaiting partner reply, or the outage does not lead:
 $(needs_order "$out")"
   # An undated partner ask is not the oldest ask: it sorts after the dated one.
   sidecar "$h" 2026-09-10 '{"key":"k-out","source":"C_BRIEF","ref":"m-out","class":"outage","title":"Morning outage","updated":'"$T_1030"'},{"key":"k-p","source":"hubspot","ref":"48622709535","class":"obligation","kind":"reply","title":"Morning partner ask","partner_awaiting":true,"updated":'"$T_1030"'}'
   render_at "$h" "$T_1100"
   out=$(page "$h" 2026-09-10)
-  [ "$(needs_order "$out" | sed -n 4,5p)" = 'Syrup availability and connectivity
+  [ "$(needs_order "$out" | sed -n 3,4p)" = 'Syrup availability and connectivity
 Morning partner ask' ] || fail 'an undated partner ask jumped ahead of an older dated one'
   # A sidecar that spells the flag as a string would silently rank the ask like
   # any other item, so it is refused the way a bad class already is.
@@ -576,7 +585,37 @@ Morning partner ask' ] || fail 'an undated partner ask jumped ahead of an older 
   sidecar "$h" 2026-09-10 '{"key":"k-p","source":"hubspot","ref":"48622709535","class":"obligation","kind":"reply","title":"Morning partner ask","partner_awaiting":true,"awaiting_since":'"${T_0900}000"',"updated":'"$T_1030"'}'
   if render_at "$h" "$T_1100" 2>/dev/null; then fail 'a sidecar whose awaiting_since is in milliseconds was accepted'; fi
   diff -r "$h/data/todo/items" "$h/todo.before/items" >/dev/null || fail 'a refused sidecar changed the store'
-  pass 'a partner-facing ask awaiting the captain ranks right after live problems and deadlines, oldest first and undated last'
+  pass 'a partner-facing ask awaiting the captain ranks right after a live outage and above deadlines and meetings, oldest first and undated last'
+}
+
+test_awaiting_partner_asks_lead_the_13_oct_page() {
+  local h out t
+  h="$TMP_ROOT/oct-13"
+  new_home "$h"
+  # Tuesday 13 Oct, 09:00: the morning sweep flagged two partners awaiting
+  # Lars (since Fri and Mon), older partner and customer obligations stayed
+  # open, and four internal meetings end today.
+  t=$((T_0900 + 86400 * 33))
+  sidecar "$h" 2026-10-13 \
+'{"key":"k-m1","source":"calendar","ref":"breakfast","class":"deadline","title":"Aquabreakfast","ends_at":"2026-10-13T09:30:00+02:00","updated":'"$t"'},'\
+'{"key":"k-m2","source":"calendar","ref":"onboarding","class":"deadline","title":"Onboarding","ends_at":"2026-10-13T13:00:00+02:00","updated":'"$t"'},'\
+'{"key":"k-m3","source":"calendar","ref":"one-on-one","class":"deadline","title":"One-on-one","ends_at":"2026-10-13T14:00:00+02:00","updated":'"$t"'},'\
+'{"key":"k-m4","source":"calendar","ref":"rma","class":"deadline","title":"RMA process meeting","ends_at":"2026-10-13T15:30:00+02:00","updated":'"$t"'},'\
+'{"key":"k-sel","source":"hubspot","ref":"selecta","class":"obligation","title":"Selecta service visit","partner":true,"asked_at":'"$((t - 86400 * 21))"',"updated":'"$t"'},'\
+'{"key":"k-old","source":"hubspot","ref":"old","class":"obligation","title":"Old customer obligation","partner":true,"asked_at":'"$((t - 86400 * 13))"',"updated":'"$t"'},'\
+'{"key":"k-kaf","source":"hubspot","ref":"kaffeknappen","class":"obligation","kind":"reply","title":"Kaffeknappen PCB promise","partner_awaiting":true,"awaiting_since":'"$((t - 86400))"',"updated":'"$t"'},'\
+'{"key":"k-csg","source":"hubspot","ref":"csg","class":"obligation","kind":"reply","title":"CSG modem","partner_awaiting":true,"awaiting_since":'"$((t - 86400 * 4))"',"updated":'"$t"'}'
+  render_at "$h" "$((t + 600))"
+  out=$(page "$h" 2026-10-13)
+  # The awaiting partners lead, oldest first, above older partner and
+  # customer obligations; the meetings follow them all.
+  [ "$(needs_order "$out" | sed -n 1,4p)" = 'CSG modem
+Kaffeknappen PCB promise
+Selecta service visit
+Old customer obligation' ] && [ "$(needs_order "$out" | sed -n 5,8p | sort | tr '\n' '|')" = 'Aquabreakfast|Onboarding|One-on-one|RMA process meeting|' ] \
+    || fail "the 13 Oct page does not open with the awaiting partner asks:
+$(needs_order "$out")"
+  pass 'the 13 Oct page opens with the awaiting partner asks, then older partner lines, then the meetings'
 }
 
 test_each_row_marks_where_it_came_from() {
@@ -904,6 +943,7 @@ test_sync_prunes_only_retired_routine_records
 test_a_marked_routine_line_is_never_retired_by_the_intake
 test_a_revived_routine_thread_still_retires_and_prunes
 test_partner_awaiting_asks_rank_above_every_class
+test_awaiting_partner_asks_lead_the_13_oct_page
 test_each_row_marks_where_it_came_from
 test_a_merged_row_marks_the_source_it_presents
 test_a_pass_rechecks_open_items_and_counts_the_misses
