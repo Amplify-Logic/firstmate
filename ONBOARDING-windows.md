@@ -124,7 +124,7 @@ For `claude`, sign in, then type `/exit`.
 
 ## 7. Use tmux as your view
 
-Herdr is the Mac guide's richer view; on Windows, use tmux, the longest-tested option.
+Workers open as tmux windows, as on a Mac; on Windows, stay with tmux rather than adding Herdr later, since tmux is the longest-tested option.
 Tell Firstmate before you launch:
 
 ```sh
