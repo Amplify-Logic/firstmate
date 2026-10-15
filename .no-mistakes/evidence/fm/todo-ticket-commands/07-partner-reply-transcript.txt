@@ -1,0 +1,17 @@
+## Partners write again at 1792061307, after the verbs were typed
+$ obs 48576658049 v3 Tomra pump leaking tomra --link https://app.hubspot.com/contacts/1/record/0-5/48576658049
+updated a9525a584958051575e7c5bc27b50fcbaa969c2bfaab4039d819b6b5d20eded6
+[exit 0]
+$ obs 48600120191 v3 Neshu firmware question neshu
+updated ee0e5948b53ac7e07926280e355bbc2b42b27445a71c6c49fe2291fd87cc4b20
+[exit 0]
+last_inbound_at=1792061307
+last_inbound_at=1792061307
+$ bin/fm-todo.sh list
+t-1b3b1330ce9b	open	reply	e317962bec	Tomra pump leaking
+t-4c2fe311f10f	open	reply	6be66395c0	Neshu firmware question
+t-f8eb29255280	open	reply	bec84ce5bc	Queco asks about install date
+[exit 0]
+journal reopen notes:
+/var/folders/2c/9sf1hvpn23q336b08gs1np0c0000gn/T//fm-lab.b5HMYq/data/todo/items/t-1b3b1330ce9b.json:"note": "reopened: hubspot-tickets (hubspot-lars-tickets) wrote again after HubSpot ticket 48576658049 was handed off"
+/var/folders/2c/9sf1hvpn23q336b08gs1np0c0000gn/T//fm-lab.b5HMYq/data/todo/items/t-4c2fe311f10f.json:"note": "reopened: hubspot-tickets (hubspot-lars-tickets) wrote again after HubSpot ticket 48600120191 was handed off"

@@ -1,0 +1,20 @@
+## Neshu: Lars retries close from the page (typed at 1792061294); Firstmate closes it
+$ bin/fm-todo.sh command --item t-4c2fe311f10f --rev ad2a683744 --at 1792061294 close
+TODO_CMD: ticket-close t-4c2fe311f10f [hubspot-lars-tickets:48600120191] Neshu firmware question :: HubSpot ticket 48600120191 action k21b79ecd
+[exit 0]
+$ bin/fm-todo.sh ticket-done --item t-4c2fe311f10f --action k21b79ecd --evidence stage Closed; internal note "close by Lars via assistant: fixed by firmware"
+TODO_ITEMS: ticket-done t-4c2fe311f10f -> closed (ticket action k21b79ecd)
+[exit 0]
+
+## Our own internal notes change both tickets' digests (no partner email)
+$ obs 48576658049 v2 Tomra pump leaking tomra --link https://app.hubspot.com/contacts/1/record/0-5/48576658049
+updated a9525a584958051575e7c5bc27b50fcbaa969c2bfaab4039d819b6b5d20eded6
+[exit 0]
+$ obs 48600120191 v2 Neshu firmware question neshu
+updated ee0e5948b53ac7e07926280e355bbc2b42b27445a71c6c49fe2291fd87cc4b20
+[exit 0]
+$ bin/fm-todo.sh list
+t-1b3b1330ce9b	waiting	reply	7ccc677187	Tomra pump leaking
+t-4c2fe311f10f	closed	reply	a404434c53	Neshu firmware question
+t-f8eb29255280	open	reply	bec84ce5bc	Queco asks about install date
+[exit 0]

@@ -1,0 +1,44 @@
+## Firstmate replays each queued page payload (item_id, rev, at, note)
+$ fm-todo.sh command --item t-1b3b1330ce9b --rev 5e251a209e --at 1792061244 waiting
+TODO_CMD: ticket-waiting t-1b3b1330ce9b [hubspot-lars-tickets:48576658049] Tomra pump leaking :: HubSpot ticket 48576658049 action ka7a8446e
+[exit 0]
+$ fm-todo.sh command --item t-4c2fe311f10f --rev ad2a683744 --at 1792061244 close: fixed by firmware
+TODO_CMD: ticket-close t-4c2fe311f10f [hubspot-lars-tickets:48600120191] Neshu firmware question :: HubSpot ticket 48600120191 action ka9dd5be1: fixed by firmware
+[exit 0]
+$ fm-todo.sh command --item t-f8eb29255280 --rev bec84ce5bc --at 1792061244 close
+TODO_CMD: refused close :: t-f8eb29255280 has no HubSpot ticket, so close, waiting, reassign and note cannot apply to it
+[exit 1]
+$ fm-todo.sh command --item t-1b3b1330ce9b --rev 5e251a209e --at 1792061244 close the loop with Natalia first
+TODO_CMD: not-a-command close the loop with Natalia first
+[exit 0]
+
+## Adversarial: repeat, stale revision, untargeted, near-miss wording
+$ fm-todo.sh command --item t-1b3b1330ce9b --rev 5e251a209e waiting
+TODO_CMD: already ticket-waiting t-1b3b1330ce9b [hubspot-lars-tickets:48576658049] Tomra pump leaking :: HubSpot ticket 48576658049 action ka7a8446e
+[exit 0]
+$ fm-todo.sh command --item t-4c2fe311f10f --rev deadbeef00 note: from an old page
+TODO_CMD: refused note: from an old page :: the page showed revision deadbeef00 but t-4c2fe311f10f is now ad2a683744; refresh the page first
+[exit 1]
+$ fm-todo.sh command close
+TODO_CMD: not-a-command close
+[exit 0]
+$ fm-todo.sh command --item t-1b3b1330ce9b reassign Fauve van Dijk
+TODO_CMD: not-a-command reassign Fauve van Dijk
+[exit 0]
+$ fm-todo.sh command --item t-1b3b1330ce9b priority high
+TODO_CMD: not-a-command priority high
+[exit 0]
+$ fm-todo.sh command --item t-1b3b1330ce9b note:
+TODO_CMD: not-a-command note:
+[exit 0]
+
+## Wake queue after the runs
+1792061257	1	check	todo-ticket	todo-ticket: 1 HubSpot ticket change(s) queued from the to-do page; run bin/fm-todo.sh tickets
+1792061257	2	check	todo-ticket	todo-ticket: 1 HubSpot ticket change(s) queued from the to-do page; run bin/fm-todo.sh tickets
+
+## Firstmate on the todo-ticket wake
+$ fm-todo.sh tickets
+TODO_TICKET: t-1b3b1330ce9b	ka7a8446e	48576658049	waiting		2026-10-15 12:47 CEST	https://app.hubspot.com/contacts/1/record/0-5/48576658049	Tomra pump leaking
+TODO_TICKET: t-4c2fe311f10f	ka9dd5be1	48600120191	close	fixed by firmware	2026-10-15 12:47 CEST		Neshu firmware question
+TODO_TICKETS: 2 pending
+[exit 0]

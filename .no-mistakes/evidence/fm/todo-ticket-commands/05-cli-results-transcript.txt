@@ -1,0 +1,22 @@
+## Firstmate records results (no evidence -> refused; then done/failed)
+$ fm-todo.sh ticket-done --item t-1b3b1330ce9b --action ka7a8446e
+fm-todo: ticket-done needs --evidence; a ticket change is recorded with what happened
+[exit 2]
+$ fm-todo.sh ticket-done --item t-1b3b1330ce9b --action ka7a8446e --evidence stage Waiting on contact; internal note "waiting by Lars via assistant: waiting on Tomra"
+TODO_ITEMS: ticket-done t-1b3b1330ce9b -> waiting (ticket action ka7a8446e)
+[exit 0]
+$ fm-todo.sh ticket-done --item t-1b3b1330ce9b --action ka7a8446e --evidence again
+fm-todo: ticket action ka7a8446e is already done
+[exit 2]
+$ fm-todo.sh ticket-failed --item t-4c2fe311f10f --action ka9dd5be1 --evidence ticket is locked by another agent
+TODO_ITEMS: ticket-failed t-4c2fe311f10f -> open (ticket action ka9dd5be1)
+[exit 0]
+$ fm-todo.sh list
+t-1b3b1330ce9b	waiting	reply	5e251a209e	Tomra pump leaking
+t-4c2fe311f10f	open	reply	ad2a683744	Neshu firmware question
+t-f8eb29255280	open	reply	bec84ce5bc	Queco asks about install date
+[exit 0]
+TODO_RENDER: /var/folders/2c/9sf1hvpn23q336b08gs1np0c0000gn/T//fm-lab.b5HMYq/.lavish/today-2026-10-15.html rendered at 12:47 CEST
+page markers:
+HubSpot change failed (close): ticket is locked by another agent
+HubSpot ticket 48576658049 set to waiting: stage Waiting on contact; internal note &quot;waiting by Lars via assistant: waiting on Tomra&quot;
