@@ -1267,6 +1267,7 @@ ok - real Herdr grouped Agents presentation shows human project, WORKER outcome/
 Those come from `tests/fm-status-chrome-herdr-lab-e2e.test.sh`, `tests/fm-herdr-pi-stale-registration-live-e2e.test.sh`, `tests/fm-herdr-version-floor-live-e2e.test.sh`, `tests/fm-herdr-submit-confirm-live-e2e.test.sh`, `tests/fm-herdr-layout-preview-e2e.test.sh`, and `tests/fm-herdr-worker-presentation-e2e.test.sh`.
 The status chrome guard needed two fixes in `bin/fm-herdr-lab-view.py` first: a Herdr 0.9.5 client asks for the color scheme with the private query `CSI ? 996 n`, and on macOS an exiting client still flushing output blocked until the view closed its pty.
 Herdr 0.9 also changed `agent start` to start a named agent kind in an existing pane, which the worker presentation guard now uses.
+That pane must be at an idle prompt: with this host's zsh login profile (conda and nvm hooks) the guard failed three of three runs with `timed out waiting for agent startup` or `agent_pane_busy` when it started Pi right after `tab create`, and passed three of three once it waited for the login shell to stay alone in the pane's foreground for 3 seconds.
 
 Treehouse 3.0.0 changed `treehouse return` to exit 3 when it leaves a dirty worktree in place.
 Every Firstmate return passes `--force`, so that exit code cannot reach Firstmate; measured against a scratch repository with Treehouse 3.1.3:
