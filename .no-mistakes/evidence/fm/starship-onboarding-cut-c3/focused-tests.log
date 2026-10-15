@@ -1,0 +1,101 @@
+== fm-opt-in-skills
+ok - a home with no switch gets no opt-in skill
+ok - a switch links its skills where the harness looks, and the checkout stays clean
+ok - the captain home's switch set links every opt-in skill, and the tracked .gitignore covers each link
+ok - turning a switch off removes only that switch's links
+ok - a path the script did not create is never replaced or removed
+ok - a checkout with no opt-in skill folder is left alone
+ok - misuse exits 2
+# fm-opt-in-skills.test.sh: all assertions passed
+exit=0
+== fm-captain-ledger
+ok - ledger: the tracked prompt-submit registration writes the captain's prompt before the hook returns
+ok - ledger: only a home with config/captain-ledger records, and pending and mark still reconcile without it
+ok - ledger: operational input, the <task-notification> rewake, foreign and non-prompt payloads record nothing
+ok - ledger: an operational label stripped of its mark records nothing, a mention of it mid-sentence is kept
+ok - ledger: a read-only second session and a session with no lock record nothing
+ok - ledger: a crew worktree and a task worker pane record nothing
+ok - ledger: a prompt over 4000 characters is capped with its head, its tail, and a truncation note
+ok - ledger: pending lists unmarked words, mark silences it, and a new prompt brings it back with a count of 1
+ok - ledger: mark <seq> stops at the seq pending showed, so a mid-turn prompt stays pending
+ok - ledger: pending previews at most 12 entries of at most 160 characters each
+ok - ledger: seq stays above the cursor, and a torn last line cannot swallow the next entry
+# fm-captain-ledger.test.sh: all assertions passed
+exit=0
+== fm-speak
+ok - fm-speak: the default register owner falls back to the glasses-voice clone
+ok - fm-speak: FM_SPEAK_SHAPER still wins over both project clones
+ok - fm-speak: the caller is never held open by audio that is still playing
+ok - fm-speak: a runaway speaker is killed at its bound
+ok - fm-speak: the speaker bound does not bound the register call
+ok - fm-speak: the register bound does not bound the speaker
+ok - fm-speak: an unreachable register owner ends in silence, never in unshaped speech
+ok - fm-speak: a failing register owner ends in silence
+ok - fm-speak: a hung register owner does not hold the caller's turn open
+ok - fm-speak: the register owner never inherits the caller's stdin
+ok - fm-speak: a non-integer bound is refused for either half
+ok - fm-speak: a missing speech binary is reported rather than guessed around
+ok - fm-speak: the configured voice reaches the speaker intact
+ok - fm-speak: a sentence is handed over in a file, never as an argument
+ok - fm-speak: an unknown config key is refused rather than parked in this file
+ok - fm-speak: a non-boolean opt-in is refused rather than guessed
+ok - fm-speak: a symlinked config is refused
+ok - fm-speak: blank text is refused before anything is shaped
+ok - fm-speak: no temporary files are left behind
+ok - fm-speak: a reap of the caller's process group does not cut the line short
+ok - fm-speak: a multi-sentence desk line keeps its ending with no Deepgram key present
+ok - fm-speak: an empty register override restores the glasses cut
+ok - fm-speak: a register the caller already chose is never replaced by the desk default
+ok - fm-speak: two sequential calls from one shell do not overlap playback
+ok - fm-speak: two homes may speak at the same time
+ok - fm-speak: a lock whose recorded pid was reused is reclaimed
+ok - fm-speak: an unusable state directory is refused before anything is shaped
+ok - fm-speak: mute silences every line until unmuted
+ok - fm-speak: --enabled reports the opt-in and ignores the mute
+ok - fm-speak: stop cuts the current line and cancels the one queued behind it
+ok - fm-speak: repeat replays the last spoken line, never a refused one, and honours mute
+ok - fm-speak: the history lists the newest ten replies, newest first
+ok - fm-speak: replay speaks the chosen reply, refuses unknown numbers, and honours mute
+ok - fm-speak: a replay plays kept audio without synthesizing again
+ok - fm-speak: a named voice wins over kept audio on a replay
+ok - fm-speak: stop cuts a replay of kept audio
+ok - fm-speak: the reply history is readable only by its owner
+ok - fm-speak: the volume is kept per home and refused out of range
+ok - fm-speak: a set volume reaches Deepgram audio and kept audio
+ok - fm-speak: a set volume reaches a say line
+exit=0
+== fm-claude-reply-speak
+ok - plain reply is spoken in full
+ok - a home that is not opted in runs nothing
+ok - decision reply falls back to its first sentence plus the choice pointer
+ok - decision-only reply speaks the decision notice
+ok - a refusal that is not a decision speaks the plain on-screen notice
+ok - a decision refusal of plain news never claims a decision
+ok - a refused sentence alone is dropped and the rest of the lead is spoken
+ok - markdown reply speaks only the first plain paragraph
+ok - list markers are stripped
+ok - empty and tool-only turns are silent
+ok - code-only reply is silent
+ok - routine shipshape reply is silent
+ok - shipshape near misses are spoken
+ok - one-line shipshape opener is dropped, the news is spoken
+ok - two-paragraph shipshape opener is dropped, the news is spoken
+ok - long leads are cut back to whole sentences inside the cap
+ok - a lead sized to what matters is spoken whole
+ok - the lead stops at six sentences
+ok - numbers with dots stay inside their sentence
+ok - a trailing list lead-in is dropped, or closed when it is the whole lead
+ok - the pointer names a choice, a question, steps, more, or nothing
+ok - the lead leaves room for its pointer inside the spoken budget
+ok - already-spoken turns are skipped and later turns still speak
+ok - a superseded Stop is dropped
+ok - worker worktree session is a no-op
+ok - secondmate home is a no-op
+ok - session without the home lock is a no-op
+ok - Cursor-delivered payload is a no-op
+ok - real fm-speak: decision reply falls back to its first sentence
+ok - real fm-speak: a decision-only reply speaks the decision notice
+ok - real fm-speak: muted and not-enabled homes stay silent
+ok - real fm-speak: the hook's reply honours the voice volume
+ok - settings register the reply-speak hook as an async Stop hook
+exit=0

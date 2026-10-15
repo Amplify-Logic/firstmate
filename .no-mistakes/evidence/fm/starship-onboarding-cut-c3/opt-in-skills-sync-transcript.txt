@@ -1,0 +1,49 @@
+## Scenario: teammate fresh clone, empty config/ (no switches)
+$ FM_HOME=<teammate-home> bin/fm-opt-in-skills.sh sync <checkout>
+exit=0
+$ ls .agents/skills | grep -E "adhd|second-opinion|daily-todo|macos-computer-use"
+(none of the five opt-in skills present)
+$ grep -rlE "Ableton|Artevo|sit-blackboard|Lars Tolhurst" .agents/skills/ (what a teammate harness scans)
+.agents/skills/agent-skill-trigger-index/SKILL.md
+
+## Scenario: captain home switch set
+adhd
+captain-ledger
+computer-use
+daily-todo
+second-opinion
+speak
+exit=0
+adhd -> ../opt-in-skills/adhd ; SKILL.md readable: name: adhd
+adhd-auto-fire -> ../opt-in-skills/adhd-auto-fire ; SKILL.md readable: name: adhd-auto-fire
+second-opinion-auto-fire -> ../opt-in-skills/second-opinion-auto-fire ; SKILL.md readable: name: second-opinion-auto-fire
+daily-todo-freshness -> ../opt-in-skills/daily-todo-freshness ; SKILL.md readable: name: daily-todo-freshness
+macos-computer-use -> ../opt-in-skills/macos-computer-use ; SKILL.md readable: name: macos-computer-use
+$ git status --porcelain (links must not dirty the checkout)
+(end status)
+
+## Scenario: re-sync is idempotent
+exit=0
+5
+
+## Scenario: switch one off (rm config/adhd) unlinks only the adhd pair
+daily-todo-freshness -> ../opt-in-skills/daily-todo-freshness
+macos-computer-use -> ../opt-in-skills/macos-computer-use
+second-opinion-auto-fire -> ../opt-in-skills/second-opinion-auto-fire
+
+## Adversarial: a real folder and a foreign link at a skill path are left alone
+fm-opt-in-skills: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-optin.96MfdI/co/.agents/skills/adhd is not this script's link; left as it is
+fm-opt-in-skills: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-optin.96MfdI/co/.agents/skills/macos-computer-use is not this script's link; left as it is
+exit=0
+mine
+/etc
+fm-opt-in-skills: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-optin.96MfdI/co/.agents/skills/macos-computer-use is not this script's link; left as it is
+after switching adhd off, foreign link still: /etc
+
+## Adversarial: misuse exits 2
+list exit=2
+extra arg exit=2
+
+## Non-Firstmate checkout (no .agents/opt-in-skills) is untouched
+exit=0
+       0

@@ -1,0 +1,18 @@
+fm-primary: launching model claude-opus-5-5 at effort xhigh
+ ▐▛███▛█   Claude Code v2.1.300
+▝▜██████▀  Opus 5.5 with xhigh effort · Claude Max
+ ▝▝   ▝▝   /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-optin.96MfdI/co
+  ⎿  SessionStart:startup hook error
+  ⎿  Failed with non-blocking status code: /bin/sh: ${CLAUDE_PLUGIN_ROOT}/hooks/run-hook.cmd: No such file or directory
+❯ Lab test, no actions and no tool calls please. Answer in three lines only. Line 1: SKILLS: then a comma-separated list of every skill name in your available skills list that contains adhd,
+  second-opinion, daily-todo or computer-use (or NONE). Line 2: VOICE: YES if your session-start context contains a section titled DESK VOICE-OUT REPLY RULES, else NO. Line 3: DIGEST: YES if you
+  received a Firstmate session-start digest, else NO.
+⏺ SKILLS: anthropic-skills:computer-use
+  VOICE: NO
+  DIGEST: YES
+✻ Churned for 33s · done 12:23 PM
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── FIRSTMATE ─
+❯ 
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⚓ Opus 5.5·xhigh │ 🧠5% ⚡36% │ 🚢0 🧪0 ⏸0 ⚠0 🪦0 📋0 │ 👁 NO-WATCH -- │ $0.33 │ 💤--
+  ⏵⏵ bypass permissions on (shift+tab to cycle) · ← 2 agents

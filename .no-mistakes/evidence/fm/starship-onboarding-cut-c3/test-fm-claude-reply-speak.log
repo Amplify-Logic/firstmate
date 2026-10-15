@@ -1,0 +1,34 @@
+ok - plain reply is spoken in full
+ok - a home that is not opted in runs nothing
+ok - decision reply falls back to its first sentence plus the choice pointer
+ok - decision-only reply speaks the decision notice
+ok - a refusal that is not a decision speaks the plain on-screen notice
+ok - a decision refusal of plain news never claims a decision
+ok - a refused sentence alone is dropped and the rest of the lead is spoken
+ok - markdown reply speaks only the first plain paragraph
+ok - list markers are stripped
+ok - empty and tool-only turns are silent
+ok - code-only reply is silent
+ok - routine shipshape reply is silent
+ok - shipshape near misses are spoken
+ok - one-line shipshape opener is dropped, the news is spoken
+ok - two-paragraph shipshape opener is dropped, the news is spoken
+ok - long leads are cut back to whole sentences inside the cap
+ok - a lead sized to what matters is spoken whole
+ok - the lead stops at six sentences
+ok - numbers with dots stay inside their sentence
+ok - a trailing list lead-in is dropped, or closed when it is the whole lead
+ok - the pointer names a choice, a question, steps, more, or nothing
+ok - the lead leaves room for its pointer inside the spoken budget
+ok - already-spoken turns are skipped and later turns still speak
+ok - a superseded Stop is dropped
+ok - worker worktree session is a no-op
+ok - secondmate home is a no-op
+ok - session without the home lock is a no-op
+ok - Cursor-delivered payload is a no-op
+ok - real fm-speak: decision reply falls back to its first sentence
+ok - real fm-speak: a decision-only reply speaks the decision notice
+ok - real fm-speak: muted and not-enabled homes stay silent
+ok - real fm-speak: the hook's reply honours the voice volume
+ok - settings register the reply-speak hook as an async Stop hook
+bash tests/$t.test.sh  11.80s user 21.67s system 31% cpu 1:45.10 total

@@ -1,0 +1,9 @@
+ok - a home with no switch gets no opt-in skill
+ok - a switch links its skills where the harness looks, and the checkout stays clean
+ok - the captain home's switch set links every opt-in skill, and the tracked .gitignore covers each link
+ok - turning a switch off removes only that switch's links
+ok - a path the script did not create is never replaced or removed
+ok - a checkout with no opt-in skill folder is left alone
+ok - misuse exits 2
+# fm-opt-in-skills.test.sh: all assertions passed
+bash tests/$t.test.sh  0.60s user 1.41s system 36% cpu 5.492 total

@@ -1,0 +1,26 @@
+# Teammate lab home (empty config/) after a real Claude primary launched with bin/fm-primary.sh opus and one prompt + Stop
+## config/:
+startup-memory-budget
+## data/ (captain-ledger.jsonl must be absent):
+## state/ (no speak-history, no reply-speak state):
+.host-mirror.jsonl
+.inactive-outcome-reconcile
+.lock
+.lock-session
+.primary-context
+.session-start-agents-baseline
+.session-start-complete
+.startup-network.delivered
+.startup-network.lock.owner.nV82bC
+.startup-network.report
+.startup-network.status
+.startup-network.timings
+.status-fleet-state
+.trace-context-effective
+.wake-queue
+home-summary.json
+terminal-outcomes
+## checkout .agents/skills links:
+lrwxr-xr-x@  1 larsmusic  staff   33 Oct 15 11:12 firstmate-calm -> ../../.claude/mods/firstmate-calm
+## git status of the clone:
+(end)

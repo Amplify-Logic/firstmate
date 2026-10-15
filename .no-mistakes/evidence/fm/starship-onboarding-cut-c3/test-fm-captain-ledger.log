@@ -1,0 +1,13 @@
+ok - ledger: the tracked prompt-submit registration writes the captain's prompt before the hook returns
+ok - ledger: only a home with config/captain-ledger records, and pending and mark still reconcile without it
+ok - ledger: operational input, the <task-notification> rewake, foreign and non-prompt payloads record nothing
+ok - ledger: an operational label stripped of its mark records nothing, a mention of it mid-sentence is kept
+ok - ledger: a read-only second session and a session with no lock record nothing
+ok - ledger: a crew worktree and a task worker pane record nothing
+ok - ledger: a prompt over 4000 characters is capped with its head, its tail, and a truncation note
+ok - ledger: pending lists unmarked words, mark silences it, and a new prompt brings it back with a count of 1
+ok - ledger: mark <seq> stops at the seq pending showed, so a mid-turn prompt stays pending
+ok - ledger: pending previews at most 12 entries of at most 160 characters each
+ok - ledger: seq stays above the cursor, and a torn last line cannot swallow the next entry
+# fm-captain-ledger.test.sh: all assertions passed
+bash tests/$t.test.sh  3.84s user 6.78s system 33% cpu 32.110 total

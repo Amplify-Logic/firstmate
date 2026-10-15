@@ -1,0 +1,27 @@
+# Captain-switch lab home (config/adhd second-opinion daily-todo computer-use captain-ledger, speak 'enabled = true', muted for the lab) after real Claude primaries via bin/fm-primary.sh opus
+## config/:
+adhd
+captain-ledger
+computer-use
+daily-todo
+second-opinion
+speak
+startup-memory-budget
+## fm-speak --enabled: enabled
+## data/captain-ledger.jsonl (seq + first 80 chars):
+1 Lab test, no actions and no tool calls please. Answer in three lines only. Line 
+2 Lab test follow-up, read-only. Was your SessionStart hook output shown to you on
+3 ahoy, this is a fresh lab home with no projects. Is anything waiting on me?
+## reply-speak Stop hook state present:
+.reply-speak-seen
+.reply-speak-stop
+speak-muted
+speak-stop-generation
+## checkout links:
+adhd -> ../opt-in-skills/adhd
+adhd-auto-fire -> ../opt-in-skills/adhd-auto-fire
+daily-todo-freshness -> ../opt-in-skills/daily-todo-freshness
+macos-computer-use -> ../opt-in-skills/macos-computer-use
+second-opinion-auto-fire -> ../opt-in-skills/second-opinion-auto-fire
+## git status of clone:
+(end)

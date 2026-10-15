@@ -1,0 +1,20 @@
+fm-primary: launching model claude-opus-5-5 at effort xhigh
+ ▐▛███▛█   Claude Code v2.1.300
+▝▜██████▀  Opus 5.5 with xhigh effort · Claude Max
+ ▝▝   ▝▝   ~/.no-mistakes/worktrees/f569cc43ac96/01M4Z9XXHMSFJMP9YNFHZDGQEG
+  ⎿  SessionStart:startup hook error
+  ⎿  Failed with non-blocking status code: /bin/sh: ${CLAUDE_PLUGIN_ROOT}/hooks/run-hook.cmd: No such file or directory
+❯ Without running any tool, list the exact name of every skill in your available-skills list whose name is one of: adhd, adhd-auto-fire, second-opinion-auto-fire, daily-todo-freshness,
+  macos-computer-use, agent-skill-trigger-index. Reply as one line per name you can see, prefixed SEEN:, and for each one not in your list a line prefixed ABSENT:. Nothing else.
+⏺ ABSENT: adhd
+  ABSENT: adhd-auto-fire
+  ABSENT: second-opinion-auto-fire
+  ABSENT: daily-todo-freshness
+  ABSENT: macos-computer-use
+  SEEN: agent-skill-trigger-index
+✻ Churned for 36s · done 11:30 AM
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── FIRSTMATE ─
+❯ 
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⚓ Opus 5.5·xhigh │ 🧠5% ⚡29% │ 🚢0 🧪0 ⏸0 ⚠0 🪦0 📋0 │ 👁 NO-WATCH -- │ $0.32 │ 💤--
+  ⏵⏵ bypass permissions on (shift+tab to cycle) · ← 2 agents

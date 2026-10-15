@@ -1,0 +1,14 @@
+fm-primary: launching model claude-opus-5-5 at effort xhigh
+ ▐▛███▛█   Claude Code v2.1.300
+▝▜██████▀  Opus 5.5 with xhigh effort · Claude Max
+ ▝▝   ▝▝   /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.Vt0LgA-starship
+  ⎿  SessionStart:startup hook error
+  ⎿  Failed with non-blocking status code: /bin/sh: ${CLAUDE_PLUGIN_ROOT}/hooks/run-hook.cmd: No such file or directory
+❯ Please move the Peru deposit to Friday. (Lab test: reply with one short sentence and run no tools.)
+⏺ Captain, I haven't moved anything because no tools ran this turn, so tell me where the Peru deposit lives (calendar, bank, or a booking) and confirm which Friday.
+✻ Churned for 29s · done 12:12 PM
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── FIRSTMATE ─
+❯ 
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⚓ Opus 5.5·xhigh │ 🧠5% ⚡34% │ 🚢0 🧪0 ⏸0 ⚠0 🪦0 📋0 │ 👁 NO-WATCH -- │ $0.34 │ 💤--
+  ⏵⏵ bypass permissions on (shift+tab to cycle) · ← 2 agents
