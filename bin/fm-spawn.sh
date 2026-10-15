@@ -166,11 +166,13 @@
 #   session-scoped presentation-order lock (keyed by named session plus
 #   canonical socket, outside any home's state/) through launch handoff.
 #   On contention a create makes one bounded attempt and falls back to the
-#   ordinary flat layout before any projection mutation. A resume refuses by
-#   default on the same contention (it does not degrade flat; a concurrent
-#   resume is a hard failure). Pass --herdr-resume-lock-wait to opt that
-#   resume into waiting for the lock instead, so two concurrent recoveries
-#   can serialize and each still replace its own exact husk. The flag acts
+#   ordinary flat layout before any projection mutation. A resume waits a
+#   bounded ~2 minutes for a live holder on the same contention and refuses
+#   only past that bound (it does not degrade flat; a concurrent resume that
+#   outlasts the bound is a hard failure). Pass --herdr-resume-lock-wait to
+#   opt that resume into waiting for the lock without a bound instead, so two
+#   concurrent recoveries always serialize and each still replace its own
+#   exact husk. The flag acts
 #   only on that fresh ship or scout spawn path: --relaunch reuses the
 #   recorded endpoint without taking this lock, so the flag has no effect
 #   there, and a secondmate spawn never projects. Unbounded

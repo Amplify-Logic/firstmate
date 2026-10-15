@@ -1419,7 +1419,7 @@ ok - live Herdr submit confirm: Claude Code (2.1.283 (Claude Code)) on herdr 0.9
 Measured 2026-10-05 against Claude Code 2.1.289 in an isolated tmux session.
 The Herdr lab was not running, so the Herdr path is covered by the existing fakes.
 Typing `/exit` while a background shell is still running opens a picker whose selected row is "Exit and stop tasks" and whose footer is "Enter to confirm · Esc to cancel".
-That screen still classifies as pending, the same verdict as unsubmitted composer text.
+On the creator's classifier that screen still classifies as pending, the same verdict as unsubmitted composer text; on this fork its highlighted `❯ 1.` row with sibling numbered options falls under THE SELECTION DIALOG RULE in `bin/fm-composer-lib.sh` and reads `unknown`, while the classify still names the picker (`tests/fm-composer-lib.test.sh`).
 A second Enter would confirm the selected row.
 The picker is recognised by its recorded structure only: the heading on its own line, then the selected row alone on its row, with `Enter to confirm · Esc to cancel` as the last non-blank row.
 The same strings quoted above a normal composer, as a diff, this note, or a test fixture shows them, are not a picker.
