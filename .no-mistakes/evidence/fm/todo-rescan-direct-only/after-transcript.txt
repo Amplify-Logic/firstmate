@@ -1,0 +1,41 @@
+=== claim --source H_TICKETS ===
+now: 1791874800
+revision_window_seconds: 86400
+revision_window_from: 1791788400
+thread_tracking_window_seconds: 86400
+source: H_TICKETS	kind: hubspot-tickets	checkpoint: 	coverage: tickets owned by or naming the captain
+stages: H_TICKETS	every open stage plus "Waiting on contact", which HubSpot marks closed but where a partner can still be waiting on the captain
+tickets: H_TICKETS	hand the complete set of the captain's tickets whose stage is not Closed to tickets before complete; complete refuses without it
+rescan: H_TICKETS	last_rescan: never	scope: every ticket in those stages that the captain owns, or, any owner, in which an email or note @mentions the captain or asks him something directly, re-read in full whatever its last-modified date; a colleague-owned ticket that only promises the customer the tech team is on it, or only names the captain in passing, is not his; observe each with --timeline-file, then complete with --rescanned
+
+=== observe each ticket with --timeline-file ===
+lars-own-tech              new -> class=obligation awaiting=1 why=the Mon 12 Oct 05:00 promise that tech is on it has had no message since
+luc-at-mention             new -> class=obligation awaiting=1 why=the partner's Mon 12 Oct 03:00 message has no reply; the Mon 12 Oct 05:01 colleague note asking you is unanswered
+luc-cargill-tech           new -> class=routine awaiting=0 why=
+luc-duinrell-passing       new -> class=routine awaiting=0 why=
+luc-footer-thanks          new -> class=routine awaiting=0 why=
+luc-greet-ask              new -> class=obligation awaiting=1 why=the partner's Mon 12 Oct 03:00 message has no reply
+luc-keiron-about           new -> class=routine awaiting=0 why=
+luc-sportcity-techteam     new -> class=routine awaiting=0 why=
+luc-vocative               new -> class=obligation awaiting=1 why=the partner's Mon 12 Oct 03:00 message has no reply; the Mon 12 Oct 05:01 colleague note asking you is unanswered
+natalia-citygym-tech       new -> class=routine awaiting=0 why=
+
+=== complete --rescanned ===
+CHANNEL_INTAKE: H_TICKETS read complete, checkpoint c1
+TODO_RENDER: no page at /var/folders/2c/9sf1hvpn23q336b08gs1np0c0000gn/T//fm-lab.fpWwLC/.lavish/today-2026-10-13.html yet; nothing refreshed
+
+=== render the to-do page ===
+TODO_RENDER: /Users/larstolhurst/.no-mistakes/evidence/01M4ZAFCTJT7Q5Z9QQKTW25SKV/after/todo.html rendered at 10:39 CEST
+rendered /Users/larstolhurst/.no-mistakes/evidence/01M4ZAFCTJT7Q5Z9QQKTW25SKV/after/todo.html
+
+=== tickets on the 'Needs you now' page ===
+  NEEDS YOU NOW: luc-vocative
+  NEEDS YOU NOW: luc-at-mention
+  NEEDS YOU NOW: luc-greet-ask
+  NEEDS YOU NOW: lars-own-tech
+  folded (other channel activity): luc-duinrell-passing
+  folded (other channel activity): luc-footer-thanks
+  folded (other channel activity): natalia-citygym-tech
+  folded (other channel activity): luc-sportcity-techteam
+  folded (other channel activity): luc-cargill-tech
+  folded (other channel activity): luc-keiron-about

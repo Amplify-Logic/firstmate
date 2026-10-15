@@ -1,0 +1,41 @@
+=== claim --source H_TICKETS ===
+now: 1791874800
+revision_window_seconds: 86400
+revision_window_from: 1791788400
+thread_tracking_window_seconds: 86400
+source: H_TICKETS	kind: hubspot-tickets	checkpoint: 	coverage: tickets owned by or naming the captain
+stages: H_TICKETS	every open stage plus "Waiting on contact", which HubSpot marks closed but where a partner can still be waiting on the captain
+tickets: H_TICKETS	hand the complete set of the captain's tickets whose stage is not Closed to tickets before complete; complete refuses without it
+rescan: H_TICKETS	last_rescan: never	scope: every ticket in those stages, any owner, whose emails or notes name the captain or in which a colleague promised the customer that the tech team is on it, re-read in full whatever its last-modified date; observe each with --timeline-file, then complete with --rescanned
+
+=== observe each ticket with --timeline-file ===
+lars-own-tech              new -> class=obligation awaiting=1 why=the Mon 12 Oct 05:00 promise that tech is on it has had no message since
+luc-at-mention             new -> class=obligation awaiting=1 why=the partner's Mon 12 Oct 03:00 message has no reply; the Mon 12 Oct 05:01 colleague note asking you is unanswered
+luc-cargill-tech           new -> class=obligation awaiting=1 why=the Mon 12 Oct 05:00 promise that tech is on it has had no message since
+luc-duinrell-passing       new -> class=obligation awaiting=1 why=the partner's Mon 12 Oct 03:00 message has no reply
+luc-footer-thanks          new -> class=obligation awaiting=1 why=the partner's Mon 12 Oct 03:00 message has no reply
+luc-greet-ask              new -> class=obligation awaiting=1 why=the partner's Mon 12 Oct 03:00 message has no reply
+luc-keiron-about           new -> class=obligation awaiting=1 why=the partner's Mon 12 Oct 03:00 message has no reply; the Mon 12 Oct 05:01 colleague note asking you is unanswered
+luc-sportcity-techteam     new -> class=obligation awaiting=1 why=the Mon 12 Oct 05:00 promise that tech is on it has had no message since
+luc-vocative               new -> class=obligation awaiting=1 why=the partner's Mon 12 Oct 03:00 message has no reply; the Mon 12 Oct 05:01 colleague note asking you is unanswered
+natalia-citygym-tech       new -> class=obligation awaiting=1 why=the Mon 12 Oct 05:00 promise that tech is on it has had no message since
+
+=== complete --rescanned ===
+CHANNEL_INTAKE: H_TICKETS read complete, checkpoint c1
+TODO_RENDER: no page at /var/folders/2c/9sf1hvpn23q336b08gs1np0c0000gn/T//fm-lab.FpqRez/.lavish/today-2026-10-13.html yet; nothing refreshed
+
+=== render the to-do page ===
+TODO_RENDER: /Users/larstolhurst/.no-mistakes/evidence/01M4ZAFCTJT7Q5Z9QQKTW25SKV/before/todo.html rendered at 10:39 CEST
+rendered /Users/larstolhurst/.no-mistakes/evidence/01M4ZAFCTJT7Q5Z9QQKTW25SKV/before/todo.html
+
+=== tickets on the 'Needs you now' page ===
+  NEEDS YOU NOW: luc-duinrell-passing
+  NEEDS YOU NOW: luc-vocative
+  NEEDS YOU NOW: luc-footer-thanks
+  NEEDS YOU NOW: luc-at-mention
+  NEEDS YOU NOW: luc-keiron-about
+  NEEDS YOU NOW: luc-greet-ask
+  NEEDS YOU NOW: natalia-citygym-tech
+  NEEDS YOU NOW: luc-sportcity-techteam
+  NEEDS YOU NOW: luc-cargill-tech
+  NEEDS YOU NOW: lars-own-tech

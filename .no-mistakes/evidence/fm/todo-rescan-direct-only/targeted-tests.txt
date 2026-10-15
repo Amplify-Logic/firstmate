@@ -1,0 +1,2 @@
+ok - a partner-facing ticket awaiting the captain is flagged by promise, note or unanswered message, only a reply discharges one, and a malformed or address-less timeline is refused
+ok - HubSpot claims cover Waiting on contact and a bounded periodic re-scan of tickets that @mention or ask the captain
