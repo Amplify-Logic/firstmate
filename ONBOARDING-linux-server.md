@@ -158,9 +158,8 @@ echo tmux > ~/starship/config/backend
 tmux new -s firstmate
 ```
 
-Continue with [ONBOARDING.md step 3, the preflight checkpoint](ONBOARDING.md#3-preflight-checkpoint-before-you-start-the-agent), inside this session, and go on through the slug round-trip in step 7.
-Skip step 2 of that guide: the setup script did it.
-The checkpoint shows ⚠️ for Herdr; that is expected, because you chose tmux.
+Continue with [ONBOARDING.md step 3, get Starship and start your first mate](ONBOARDING.md#3-get-starship-and-start-your-first-mate), inside this session, and go on through the Happiness Compass report in step 5.
+Skip step 2 of that guide and the `git clone` line of step 3: the setup script did both.
 
 To leave everything running, press `Ctrl-b` then `d`.
 Next time: `ssh <you>@<server>` and `tmux attach -t firstmate`.
@@ -206,4 +205,4 @@ Hetzner bills while the server **exists**, even when it is powered off.
 | The first mate stopped when you disconnected | It was not inside tmux. Reconnect, `tmux new -s firstmate`, and start it there. |
 | `command not found: brew`, `claude`, or `gh` after setup | Log out and back in; the old login has the old PATH. |
 
-For anything else, use the troubleshooting table in [ONBOARDING.md](ONBOARDING.md#10-troubleshooting).
+For anything else, use the troubleshooting table in [ONBOARDING.md](ONBOARDING.md#troubleshooting).

@@ -6,7 +6,7 @@
 #
 # It installs only what must exist before the first mate starts; the first
 # mate's own bootstrap (bin/fm-bootstrap.sh) installs the rest after the
-# person's consent, exactly as on a Mac (ONBOARDING.md step 5):
+# person's consent, exactly as on a Mac (ONBOARDING.md step 4):
 #   - apt: build-essential procps curl file git ca-certificates (Homebrew's
 #     Linux prerequisites)
 #   - Homebrew on Linux, so the bootstrap's `brew install` and `npm install -g`
@@ -249,7 +249,7 @@ Then, in the new terminal, two sign-ins are yours to do:
      Sign in, then type /exit.
      On a server, open the link it prints on your own computer and paste the code back.
 
-Then continue with the preflight checkpoint, step 3 of ONBOARDING.md:
+Then continue with step 3 of ONBOARDING.md; Starship is already cloned:
 
   cd ~/starship
 EOF

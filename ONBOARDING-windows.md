@@ -14,7 +14,7 @@ If your PC is work-managed, has less memory, or you cannot get admin rights, use
 
 ## 1. Two accounts
 
-Do [step 1 of ONBOARDING.md](ONBOARDING.md#1-two-accounts-browser-before-the-terminal): a GitHub account and a Claude subscription.
+Do [step 1 of ONBOARDING.md](ONBOARDING.md#1-accounts-browser-before-the-terminal): a GitHub account and a Claude subscription.
 
 ---
 
@@ -144,9 +144,8 @@ tmux new -s firstmate
 
 ## 8. Finish with the shared steps
 
-Continue with [ONBOARDING.md step 3, the preflight checkpoint](ONBOARDING.md#3-preflight-checkpoint-before-you-start-the-agent), inside your tmux session in Ubuntu, and go on through the slug round-trip in step 7.
-Skip step 2 of that guide: the setup script did it.
-The checkpoint shows ⚠️ for Herdr; that is expected, because you chose tmux.
+Continue with [ONBOARDING.md step 3, get Starship and start your first mate](ONBOARDING.md#3-get-starship-and-start-your-first-mate), inside your tmux session in Ubuntu, and go on through the Happiness Compass report in step 5.
+Skip step 2 of that guide and the `git clone` line of step 3: the setup script did both.
 
 When the first mate's startup checks run, it also tells you if anything sits under `/mnt/` or if `localhost` cannot reach Windows.
 
@@ -170,4 +169,4 @@ When the first mate's startup checks run, it also tells you if anything sits und
 | `command not found: brew`, `claude`, or `gh` after setup | Open a new Ubuntu tab; the old one has the old PATH. |
 | Everything is slow | Check `pwd`: your project must be under `/home/...`, never `/mnt/c/...`. |
 
-For anything else, use the troubleshooting table in [ONBOARDING.md](ONBOARDING.md#10-troubleshooting).
+For anything else, use the troubleshooting table in [ONBOARDING.md](ONBOARDING.md#troubleshooting).
