@@ -1,0 +1,31 @@
+### macOS host (Darwin): bash bin/fm-linux-setup.sh --ci
+fm-linux-setup.sh: this sets up Linux (WSL 2 or a server); on a Mac follow ONBOARDING.md
+exit=1
+
+### unknown flag
+fm-linux-setup.sh: unknown argument: --bogus
+usage: fm-linux-setup.sh [--ci]
+  Takes a fresh Ubuntu 24.04 (inside WSL 2, or a server over SSH) to the point
+  where a first mate can start, cloning Firstmate into ~/starship.
+  Run it as your own user from your Linux home, never under /mnt/.
+  --ci    skip the closing sign-in instructions (gh auth login, claude)
+exit=2
+
+### as root
+fm-linux-setup.sh: run this as your own user, not root: make one with 'adduser <name>' and 'usermod -aG sudo <name>', log in as it, then run this again (ONBOARDING-linux-server.md)
+exit=1
+
+### cwd on the Windows drive (cd /mnt/c/Users/fm/proj)
+fm-linux-setup.sh: /mnt/c/Users/fm/proj is on the Windows drive; run this from your Linux home (cd ~), never under /mnt/ - git, file watching and file permissions break there
+exit=1
+
+### HOME on the Windows drive (HOME=/mnt/c/Users/win)
+fm-linux-setup.sh: /mnt/c/Users/win is on the Windows drive; run this from your Linux home (cd ~), never under /mnt/ - git, file watching and file permissions break there
+exit=1
+
+### ~/starship exists but is not a Firstmate clone
+fm-linux-setup.sh: /home/fm/starship exists but is not a Firstmate clone; move it aside, then run this again
+exit=1
+
+### WSL 1 kernel (/proc/version bind-mounted with a WSL1 string)
+### WSL 1 kernel: see setup-refusal-wsl1.log (driven in a privileged container with /proc/version bind-mounted)

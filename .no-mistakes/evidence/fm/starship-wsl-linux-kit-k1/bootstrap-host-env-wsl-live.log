@@ -1,0 +1,65 @@
+# Real bin/fm-bootstrap.sh from the gate worktree, lab home $LAB (bin/fm-lab-home.sh create), run on macOS with the WSL marker
+# WSL_DISTRO_NAME set and stand-ins for the Windows side under $LAB/winside/bin (wslinfo, cmd.exe, wslpath -> $LAB/winside/Users/fm)
+## Scenario: WSL, projects directory on the Windows drive
+
+### WSL, FM projects at /mnt/c/Users/fm/projects
+$ WSL_DISTRO_NAME=Ubuntu-24.04 FM_PROJECTS_OVERRIDE=/mnt/c/Users/fm/projects PATH=$LAB/winside/bin:$PATH bin/fm-bootstrap.sh   (TOOLCHAIN_DRIFT lines from the host toolchain filtered)
+HOST_ENV: WSL: /mnt/c/Users/fm/projects is on the Windows drive - move it under the Linux home (~); git, file watching and file permissions are slow or broken under /mnt/
+[took 13s]
+
+### Adversarial: /mnt/wsl is not a drive letter
+$ WSL_DISTRO_NAME=Ubuntu-24.04 FM_PROJECTS_OVERRIDE=/mnt/wsl/projects PATH=$LAB/winside/bin:$PATH bin/fm-bootstrap.sh   (TOOLCHAIN_DRIFT lines from the host toolchain filtered)
+(no output)
+[took 18s]
+
+### Adversarial: same /mnt/c path but not inside WSL
+$ FM_PROJECTS_OVERRIDE=/mnt/c/Users/fm/projects PATH=$LAB/winside/bin:$PATH bin/fm-bootstrap.sh   (TOOLCHAIN_DRIFT lines from the host toolchain filtered)
+(no output)
+[took 16s]
+
+### WSL, everything in the Linux home
+$ WSL_DISTRO_NAME=Ubuntu-24.04 PATH=$LAB/winside/bin:$PATH bin/fm-bootstrap.sh   (TOOLCHAIN_DRIFT lines from the host toolchain filtered)
+(no output)
+[took 19s]
+
+## Scenario: WSL, localhost forwarding off in .wslconfig
+
+.wslconfig:
+  [wsl2]
+  memory=8GB
+  localhostForwarding = False
+
+### WSL, NAT networking, localhostForwarding=False
+$ WSL_DISTRO_NAME=Ubuntu-24.04 PATH=$LAB/winside/bin:$PATH bin/fm-bootstrap.sh   (TOOLCHAIN_DRIFT lines from the host toolchain filtered)
+HOST_ENV: WSL: localhost forwarding is off in $LAB/winside/Users/fm/.wslconfig, so review boards and dev servers will not open in the Windows browser - set networkingMode=mirrored under [wsl2] there, then run wsl --shutdown from Windows (ONBOARDING-windows.md)
+[took 12s]
+
+### WSL, mirrored networking (wslinfo reports mirrored)
+$ WSL_DISTRO_NAME=Ubuntu-24.04 FAKE_WSL_MODE=mirrored PATH=$LAB/winside/bin:$PATH bin/fm-bootstrap.sh   (TOOLCHAIN_DRIFT lines from the host toolchain filtered)
+(no output)
+[took 9s]
+
+.wslconfig:
+  [wsl2]
+  networkingMode=mirrored
+  memory=8GB
+
+### WSL, recommended .wslconfig from ONBOARDING-windows.md
+$ WSL_DISTRO_NAME=Ubuntu-24.04 FAKE_WSL_MODE=mirrored PATH=$LAB/winside/bin:$PATH bin/fm-bootstrap.sh   (TOOLCHAIN_DRIFT lines from the host toolchain filtered)
+(no output)
+[took 5s]
+
+## Adversarial: WSL interop hangs (cmd.exe never answers)
+
+### WSL, cmd.exe hangs for 120s
+$ WSL_DISTRO_NAME=Ubuntu-24.04 PATH=$LAB/winside/bin:$PATH bin/fm-bootstrap.sh   (TOOLCHAIN_DRIFT lines from the host toolchain filtered)
+(no output)
+[took 11s]
+
+## Scenario: a Mac reached over SSH with no display stays silent
+
+### macOS, SSH_CONNECTION set, no DISPLAY
+$ SSH_CONNECTION=10.0.0.2 50000 10.0.0.1 22 bin/fm-bootstrap.sh   (TOOLCHAIN_DRIFT lines from the host toolchain filtered)
+(no output)
+[took 6s]
+(no .host-env-headless-advised marker written)

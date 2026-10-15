@@ -1,0 +1,8 @@
+$ bash tests/fm-linux-setup.test.sh
+ok - --help prints usage and an unknown argument is a usage error that changes nothing
+ok - a non-Linux host, root, a home under /mnt/<drive>/, and a foreign ~/starship are refused before any change
+ok - a fresh install runs every step once, and a re-run keeps everything and only prints the sign-ins
+ok - arm64 finishes without Chrome and says browser checks are unavailable
+ok - a Windows Claude Code on the WSL PATH does not stand in for the Linux install
+ok - the closing check fails and names a tool an installer did not actually install
+exit=0

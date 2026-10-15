@@ -1,0 +1,12 @@
+### macOS host (Darwin arm64), run from the gate worktree
+$ bash bin/fm-linux-setup.sh --ci
+fm-linux-setup.sh: this sets up Linux (WSL 2 or a server); on a Mac follow ONBOARDING.md
+exit=1
+
+$ bash bin/fm-linux-setup.sh --help
+usage: fm-linux-setup.sh [--ci]
+  Takes a fresh Ubuntu 24.04 (inside WSL 2, or a server over SSH) to the point
+  where a first mate can start, cloning Firstmate into ~/starship.
+  Run it as your own user from your Linux home, never under /mnt/.
+  --ci    skip the closing sign-in instructions (gh auth login, claude)
+exit=0

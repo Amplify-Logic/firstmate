@@ -1,0 +1,23 @@
+### Reproduction: CI-style user (in group sudo + /etc/sudoers.d NOPASSWD:ALL), exactly as windows-wsl.yml sets it up
+fm ALL=(ALL) NOPASSWD:ALL
+uid=1001(fm) gid=1001(fm) groups=1001(fm),27(sudo)
+$ sudo -n true
+exit=0
+$ sudo -n -v
+sudo: a password is required
+exit=1
+$ ~/starship/bin/fm-linux-setup.sh --ci  (as fm, no tty, like the CI wsl-bash/srv-bash step)
+==> Asking for your password once, for the system packages
+sudo: a terminal is required to read the password; either use the -S option to read from standard input or configure an askpass helper
+sudo: a password is required
+fm-linux-setup.sh: sudo is needed for the system packages
+exit=1
+
+### Same user with a terminal (docker exec -t), as a person on a cloud-init server whose default user has NOPASSWD and no password
+$ sudo -v
+[sudo] password for fm: 
+[sudo] password for fm: 
+[sudo] password for fm: 
+sudo: no password was provided
+sudo: a password is required
+exit=1 (124 = still waiting at the password prompt after 6s)

@@ -1,0 +1,38 @@
+# Real bin/fm-bootstrap.sh from the gate worktree, lab home $LAB, on macOS with a uname stand-in that reports Linux for 'uname -s' only
+# (no Linux VM was available). tailscale is a stand-in reporting 'stopped' (exit 1) unless the case says it is up; the host's own
+# Tailscale is up, which on its own silences the advice as designed. TOOLCHAIN_DRIFT lines from the host toolchain filtered.
+
+### Desktop Linux reached over SSH (DISPLAY=:0)
+$ SSH_CONNECTION=203.0.113.7 50022 10.0.0.5 22 DISPLAY=:0 bin/fm-bootstrap.sh
+(no output)
+[marker state/.host-env-headless-advised: absent]
+
+### Local Linux console, no SSH
+$  bin/fm-bootstrap.sh
+(no output)
+[marker state/.host-env-headless-advised: absent]
+
+### Headless server over SSH with Tailscale up (tailscale ip -4 answers)
+$ SSH_CONNECTION=203.0.113.7 50022 10.0.0.5 22 bin/fm-bootstrap.sh
+(no output)
+[marker state/.host-env-headless-advised: absent]
+
+### Headless server over SSH, read-only session (FM_BOOTSTRAP_DETECT_ONLY=1)
+$ SSH_CONNECTION=203.0.113.7 50022 10.0.0.5 22 FM_BOOTSTRAP_DETECT_ONLY=1 bin/fm-bootstrap.sh
+BOOTSTRAP_INFO: headless server: review boards and dev servers listen only on this server - open them from your own computer over Tailscale (recommended) or an SSH port forward (ONBOARDING-linux-server.md); shown once for this home
+[marker state/.host-env-headless-advised: absent]
+
+### Headless server over SSH, first session start
+$ SSH_CONNECTION=203.0.113.7 50022 10.0.0.5 22 bin/fm-bootstrap.sh
+BOOTSTRAP_INFO: headless server: review boards and dev servers listen only on this server - open them from your own computer over Tailscale (recommended) or an SSH port forward (ONBOARDING-linux-server.md); shown once for this home
+[marker state/.host-env-headless-advised: present]
+
+### Headless server over SSH, second session start
+$ SSH_CONNECTION=203.0.113.7 50022 10.0.0.5 22 bin/fm-bootstrap.sh
+(no output)
+[marker state/.host-env-headless-advised: present]
+
+### Headless server, SSH_TTY only, later session
+$ SSH_TTY=/dev/pts/0 bin/fm-bootstrap.sh
+(no output)
+[marker state/.host-env-headless-advised: present]

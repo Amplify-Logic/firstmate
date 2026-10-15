@@ -1,0 +1,7 @@
+### Regression check: bin/fm-linux-setup.sh temporarily reverted to `sudo -v` (the round-1 bug), then restored
+$ bash tests/fm-linux-setup.test.sh
+ok - --help prints usage and an unknown argument is a usage error that changes nothing
+ok - a non-Linux host, root, a home under /mnt/<drive>/, and a foreign ~/starship are refused before any change
+not ok - a fresh install should succeed, got 1: ==> Asking for your password once, for the system packages
+sudo: a password is required
+fm-linux-setup.sh: sudo is needed for the system packages
