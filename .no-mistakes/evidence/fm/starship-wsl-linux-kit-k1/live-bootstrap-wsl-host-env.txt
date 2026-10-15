@@ -1,0 +1,23 @@
+### 1. WSL, projects directory on the Windows drive (FM_PROJECTS_OVERRIDE=/mnt/c/Users/fm/projects)
+HOST_ENV: WSL: /mnt/c/Users/fm/projects is on the Windows drive - move it under the Linux home (~); git, file watching and file permissions are slow or broken under /mnt/
+
+### 2. WSL, home and projects under the Linux home (default networking, no .wslconfig)
+(no HOST_ENV line: no false positive)
+
+### 3. WSL, /mnt/data is not a drive letter
+(no HOST_ENV line)
+
+### 4. Not WSL (no WSL_DISTRO_NAME), projects under /mnt/c
+(no HOST_ENV line: WSL-only check)
+
+### 5. WSL, .wslconfig: [wsl2] localhostForwarding = False, networking nat
+[wsl2]
+memory=8GB
+localhostForwarding = False
+HOST_ENV: WSL: localhost forwarding is off in /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.ZtJF5X/winhost/Users/fm/.wslconfig, so review boards and dev servers will not open in the Windows browser - set networkingMode=mirrored under [wsl2] there, then run wsl --shutdown from Windows (ONBOARDING-windows.md)
+
+### 6. Same .wslconfig, wslinfo reports mirrored
+(no HOST_ENV line: mirrored needs no advice)
+
+### 7. Same .wslconfig, cmd.exe hangs for 30 s
+bootstrap finished in 11s; HOST_ENV lines: (none, silent)

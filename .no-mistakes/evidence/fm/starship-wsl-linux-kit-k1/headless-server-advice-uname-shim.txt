@@ -1,0 +1,13 @@
+(uname -s answers Linux; tailscale reports stopped)
+### a. Over SSH with a display (DISPLAY=:0)
+(silent)
+### b. Local session, no SSH
+(silent)
+### c. Over SSH, headless, read-only session (FM_BOOTSTRAP_DETECT_ONLY=1)
+BOOTSTRAP_INFO: headless server: review boards and dev servers listen only on this server - open them from your own computer over Tailscale (recommended) or an SSH port forward (ONBOARDING-linux-server.md); shown once for this home
+   record: not written
+### d. Over SSH, headless, first locked run
+BOOTSTRAP_INFO: headless server: review boards and dev servers listen only on this server - open them from your own computer over Tailscale (recommended) or an SSH port forward (ONBOARDING-linux-server.md); shown once for this home
+   record: state/.host-env-headless-advised written
+### e. Over SSH, headless, second run
+(silent)
