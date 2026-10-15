@@ -1,0 +1,7 @@
+$ bin/fm-fork-surface.sh check
+FORK_SURFACE OK capabilities=90 owned_paths=293
+exit=0
+
+$ bin/fm-fork-surface.sh list | grep -E "fork-publication-target|opt-in-skills"
+fork-publication-target	Self-repository publication target follows the gh default repository
+opt-in-skills	Opt-in skills a home switches on with presence flags

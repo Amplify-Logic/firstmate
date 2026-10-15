@@ -1,0 +1,50 @@
+== worker pane before (real Claude Code 2.1.300 (Claude Code)) with a background 'sleep 900' ==
+⏺ The 900-second sleep is running in the background (ID bt3modeui). I haven't posted a status line, as you asked.
+✻ Crunched for 5s · done 3:23 PM · 1 shell still running
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏵⏵ auto mode on · 1 shell · ← 2 agents · ↓ to manage
+
+$ FM_HOME=/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fmlab.YBtqBl/home bin/fm-control.sh lab31516a92a2b1-worker exit
+error: task lab31516a92a2b1-worker is blocked on a prompt: Claude background-task exit picker. Refusing to type Enter into it.
+exit=1
+
+== worker pane after ==
+✻ Crunched for 14s · done 3:10 PM · 1 shell still running
+❯ Lab test, not your task: use your Bash tool with run_in_background set to true to run exactly 'sleep 900'. Do nothing else and do not post any status line. End your turn right after it starts.
+⏺ Bash(sleep 900)
+  ⎿  Running in the background (↓ to manage)
+  ⎿  Allowed by auto mode classifier
+⏺ The 900-second sleep is running in the background (ID bt3modeui). I haven't posted a status line, as you asked.
+✻ Crunched for 5s · done 3:23 PM · 1 shell still running
+❯ /exit
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  Background work is running
+  The following will stop when you exit:
+  shell · sleep 900
+  ❯ 1. Exit and stop tasks
+    2. Move to background and exit
+    3. Stay
+  Enter to confirm · Esc to cancel
+
+== worker claude and background sleep still alive? ==
+89920 /bin/zsh -c source /Users/larsmusic/.claude/shell-snapshots/snapshot-zsh-1792069799489-uqank5.sh 2>/dev/null || true && setopt NO_EXTENDED_GLOB NO_BARE_GLOB_QUAL 2>/dev/null || true && { \builtin unalias -- 'unsetenv'; \builtin unset -f -- 'unsetenv'; } >/dev/null 2>&1 || true && eval 'sleep 900' < /dev/null && pwd -P >| /tmp/claude-791e-cwd
+89930 sleep 900
+2.1.300 pid=90643 dead=0
+
+== adversarial: retry exit while the picker is already open ==
+error: task lab31516a92a2b1-worker is blocked on a prompt: Claude background-task exit picker. Refusing to type Enter into it.
+exit=1
+pane unchanged by the retry: no text or key reached the picker
+89930 sleep 900
+2.1.300 dead=0
+
+== adversarial: fm-send a message while the picker is open ==
+$ bin/fm-send.sh lab31516a92a2b1-worker 'hello'
+WARNING: queued wakes pending - drain them with bin/fm-wake-drain.sh before anything else.
+fm-send: doorbell did not reach firstmate:fm-lab31516a92a2b1-worker; the steer is durably recorded at /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fmlab.YBtqBl/home/state/lab31516a92a2b1-worker.inbox/001.msg and the watcher will re-ring
+exit=0
+pane unchanged: the message was not typed into the picker
+89930 sleep 900
+2.1.300 dead=0

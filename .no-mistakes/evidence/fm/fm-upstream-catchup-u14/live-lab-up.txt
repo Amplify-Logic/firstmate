@@ -1,0 +1,17 @@
+LABROOT=/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fmlab.YBtqBl
+lab: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fmlab.YBtqBl (tear down with: bin/fm-live-lab.sh down /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fmlab.YBtqBl)
+tree: cddf1d638843bbf44c92e0819667af0c4ed119ae from /Users/larsmusic/.no-mistakes/worktrees/f569cc43ac96/01M4Z3XC65WR7ARE5THQDFM7F6
+spawned lab31516a92a2b1-worker harness=claude kind=ship mode=local-only yolo=on window=firstmate:fm-lab31516a92a2b1-worker worktree=/Users/larsmusic/.treehouse/notes-98e4e2/1/notes
+gate: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fmlab.YBtqBl/home/data/lab31516a92a2b1-worker/gate (touch, then message the worker to resume)
+primary: claude --setting-sources project,local --model sonnet --effort medium --permission-mode auto
+ok primary: claude pid 95362 in /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fmlab.YBtqBl/home
+ok probe: the primary answered LABREADY-31516a92a2b1
+ok trust: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fmlab.YBtqBl/home is trusted in the Claude store
+ok mirror: verified writer, check passed, captain=1 main=1
+ok host: supervision host pid 3254
+ok watcher: live watcher with a fresh beacon
+fail worker: the worker is not currently parked on /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fmlab.YBtqBl/home/data/lab31516a92a2b1-worker/gate (state: parked · source: status-log · which export format should count_notes print, json or csv?)
+fail treehouse: new ~/.treehouse entries: notes-98e4e2
+not ready after 600s; the lab is left up for inspection: bin/fm-live-lab.sh pane /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fmlab.YBtqBl, then bin/fm-live-lab.sh down /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fmlab.YBtqBl
+
+[exited with code 0]

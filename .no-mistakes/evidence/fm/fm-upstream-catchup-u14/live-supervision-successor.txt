@@ -1,0 +1,70 @@
+== before (hook pgid holds the host) ==
+Thu Oct 15 15:20:18 CEST 2026
+  PID  PGID  PPID COMMAND
+ 3254  2172  2172 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fmlab.YBtqBl/home/bin/fm-supervision-host.sh park
+27974 27974  3254 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fmlab.YBtqBl/home/bin/fm-watch-arm.sh
+28007 27974 27974 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fmlab.YBtqBl/home/bin/fm-watch.sh
+
+== appending needs-decision line to worker status at 1792070418 ==
+needs-decision [at=1792070418]: which export format should count_notes print, json or csv?
+
+== round 2: parked host before the close ==
+Thu Oct 15 15:21:40 CEST 2026
+host	55618	Thu Oct 15 13:21:15 2026     bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fmlab.YBtqBl/home/bin/fm-supervision-host.sh park
+arm	55825	Thu Oct 15 13:21:16 2026     bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fmlab.YBtqBl/home/bin/fm-watch-arm.sh
+  PID  PGID  PPID COMMAND
+55618 55186 55186 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fmlab.YBtqBl/home/bin/fm-supervision-host.sh park
+55825 55186 55618 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fmlab.YBtqBl/home/bin/fm-watch-arm.sh
+55866 55186 55825 bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fmlab.YBtqBl/home/bin/fm-watch.sh
+== append needs-decision at 1792070500 ==
+needs-decision [at=1792070500]: should count_notes skip hidden files?
+== host log after close ==
+1792070541	pass-through	attended	main-only	signal: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fmlab.YBtqBl/home/state/lab31516a92a2b1-worker.status
+== autoarm epoch ==
+epoch=2 owner_pid=55186 outcome=arming updated_at=1792070475
+Thu Oct 15 13:21:15 2026     bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fmlab.YBtqBl/home/bin/fm-claude-stop-autoarm.sh
+== successor left for main ==
+cat: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fmlab.YBtqBl/home/state/.supervision-host-left: No such file or directory
+cut: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fmlab.YBtqBl/home/state/.supervision-host-left: No such file or directory
+successor watcher=68478 arm= hook_group(owner_pid)=55186
+15:22:21 t+1s watcher=68478 alive=yes arm_pgid= hook_group_alive=yes lock=68478 down=pending:downtime:55866.1792070539.4UboiU
+15:22:22 t+2s watcher=68478 alive=yes arm_pgid= hook_group_alive=yes lock=68478 down=announced:downtime:55866.1792070539.4UboiU
+15:22:23 t+3s watcher=68478 alive=yes arm_pgid= hook_group_alive=no lock=68478 down=announced:downtime:55866.1792070539.4UboiU
+15:22:25 t+4s watcher=68478 alive=yes arm_pgid= hook_group_alive=no lock=68478 down=announced:downtime:55866.1792070539.4UboiU
+15:22:26 t+5s watcher=68478 alive=yes arm_pgid= hook_group_alive=no lock=68478 down=announced:downtime:55866.1792070539.4UboiU
+15:22:27 t+6s watcher=68478 alive=yes arm_pgid= hook_group_alive=no lock=68478 down=announced:handling:55866.1792070539.4UboiU
+15:22:28 t+7s watcher=68478 alive=yes arm_pgid= hook_group_alive=no lock=68478 down=announced:handling:55866.1792070539.4UboiU
+15:22:29 t+8s watcher=68478 alive=yes arm_pgid= hook_group_alive=no lock=68478 down=announced:handling:55866.1792070539.4UboiU
+15:22:30 t+9s watcher=68478 alive=yes arm_pgid= hook_group_alive=no lock=68478 down=acked:handling:55866.1792070539.4UboiU
+15:22:31 t+10s watcher=68478 alive=yes arm_pgid= hook_group_alive=no lock=68478 down=acked:handling:55866.1792070539.4UboiU
+15:22:32 t+11s watcher=68478 alive=yes arm_pgid= hook_group_alive=no lock=68478 down=acked:handling:55866.1792070539.4UboiU
+15:22:34 t+12s watcher=68478 alive=no arm_pgid= hook_group_alive=no lock= down=pending:downtime:68478.1792070553.o94mKQ
+15:22:35 t+13s watcher=68478 alive=no arm_pgid= hook_group_alive=no lock=72783 down=acked:handling:55866.1792070539.4UboiU
+15:22:36 t+14s watcher=68478 alive=no arm_pgid= hook_group_alive=no lock=72783 down=acked:handling:55866.1792070539.4UboiU
+15:22:37 t+15s watcher=68478 alive=no arm_pgid= hook_group_alive=no lock=72783 down=acked:handling:55866.1792070539.4UboiU
+15:22:38 t+16s watcher=68478 alive=no arm_pgid= hook_group_alive=no lock=72783 down=acked:handling:55866.1792070539.4UboiU
+15:22:39 t+17s watcher=68478 alive=no arm_pgid= hook_group_alive=no lock=72783 down=acked:handling:55866.1792070539.4UboiU
+15:22:40 t+18s watcher=68478 alive=no arm_pgid= hook_group_alive=no lock=72783 down=acked:handling:55866.1792070539.4UboiU
+15:22:41 t+19s watcher=68478 alive=no arm_pgid= hook_group_alive=no lock=72783 down=acked:handling:55866.1792070539.4UboiU
+15:22:42 t+20s watcher=68478 alive=no arm_pgid= hook_group_alive=no lock=72783 down=acked:handling:55866.1792070539.4UboiU
+== cycle exits since close ==
+arm_pid=55825	watcher_pid=55866	origin=started	started_at=1792070476	ended_at=1792070540	exit_code=0	signal=none	reason=actionable-signal	beacon_age=32	lock_before=pid:55866|identity:Thu Oct 15 13:21:
+arm_pid=68445	watcher_pid=68478	origin=started	started_at=1792070541	ended_at=1792070553	exit_code=143	signal=TERM	reason=signal-exit	beacon_age=12	lock_before=pid:68478|identity:Thu Oct 15 13:22:21 2
+arm_pid=72272	watcher_pid=68478	origin=attached	started_at=1792070553	ended_at=1792070554	exit_code=unknown	signal=unknown	reason=taken-over	beacon_age=13	lock_before=pid:68478|identity:Thu Oct 15 13:
+
+== 60s later: host log, wake queue, cycle exits, processes ==
+Thu Oct 15 15:22:58 CEST 2026
+1792070541	pass-through	attended	main-only	signal: /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fmlab.YBtqBl/home/state/lab31516a92a2b1-worker.status
+1792070553	start	gen=host-72076-1792070553	primary=claude
+1792070553	take-over	arm=68445
+-- wake queue:
+-- watcher-down: acked:handling:55866.1792070539.4UboiU
+-- lock: 72783
+host	72076	Thu Oct 15 13:22:33 2026     bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fmlab.YBtqBl/home/bin/fm-supervision-host.sh park
+arm	72272	Thu Oct 15 13:22:33 2026     bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fmlab.YBtqBl/home/bin/fm-watch-arm.sh --take-over 68445
+arm_pid=55825	watcher_pid=55866	origin=started	started_at=1792070476	ended_at=1792070540	exit_code=0	signal=none	reason=actionable-signal	beacon_age=32
+arm_pid=68445	watcher_pid=68478	origin=started	started_at=1792070541	ended_at=1792070553	exit_code=143	signal=TERM	reason=signal-exit	beacon_age=12
+arm_pid=72272	watcher_pid=68478	origin=attached	started_at=1792070553	ended_at=1792070554	exit_code=unknown	signal=unknown	reason=taken-over	beacon_age=13
+/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fmlab.YBtqBl/home/state/.supervision-host.log:0
+/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fmlab.YBtqBl/home/state/.watch-deliveries.log:0
+/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fmlab.YBtqBl/home/state/.wake-queue:0
