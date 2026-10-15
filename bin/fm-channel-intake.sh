@@ -177,8 +177,9 @@
 # a full re-read of the ticket, so it stamps `read_at` even when the digest is
 # unchanged; that is the read bin/fm-todo.sh counts as verification. A timeline
 # observe of a resolved ticket records its facts on the archived record, which
-# stays resolved. The day page, `todo` and the brief list awaiting partner items
-# ahead of every other class, oldest ask first; the alert payload orders them
+# stays resolved. `todo` and the brief list awaiting partner items ahead of
+# every other class, oldest ask first, and the day page right after a live
+# outage (bin/fm-todo-render.sh owns its order); the alert payload orders them
 # first only within the notifiable classes.
 #
 # RE-CHECK ON EVERY PASS. A claim that hands out any source also prints one
