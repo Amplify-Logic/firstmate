@@ -626,7 +626,7 @@ while :; do sleep 0.1; done
 SH
   chmod +x "$bin/herdr"
   out="$TMP_ROOT/flushing-client.out"
-  PATH="$bin:$PATH" python3 "$engine" --session fm-lab-flush-probe --seconds 0.5 --format raw-bytes \
+  PATH="$bin:$PATH" python3 "$engine" --session fm-lab-flush-probe --seconds 2 --format raw-bytes \
     > "$out" 2>/dev/null &
   pid=$!
   while kill -0 "$pid" 2>/dev/null && [ "$waited" -lt 150 ]; do

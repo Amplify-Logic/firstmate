@@ -233,6 +233,23 @@ retire_fake_agent() {  # [nested]
 }
 printf -v FAKEBIN_Q '%q' "$FAKEBIN"
 printf -v PROJ_Q '%q' "$PROJ"
+# The pane runs the operator's login shell, whose profile (conda, nvm, prompt
+# helpers) keeps spawning foreground processes for several seconds and drops
+# any line typed meanwhile, on Herdr 0.7.4 and 0.9.5 alike. The profile spawns
+# more helpers after a lone shell sample, so wait for the shell to stay alone
+# in the foreground for 3 seconds before typing the first line.
+settled=0 i=0
+while [ "$settled" -lt 6 ]; do
+  [ "$i" -lt 240 ] || fail "the task pane login shell never settled at an idle prompt"
+  if herdr pane process-info --pane "$PANE_ID" --session "$SESSION" 2>/dev/null \
+    | jq -e '.result.process_info as $p | [$p.foreground_processes[]?.pid] == [$p.shell_pid]' >/dev/null 2>&1; then
+    settled=$((settled + 1))
+  else
+    settled=0
+  fi
+  sleep 0.5
+  i=$((i + 1))
+done
 fm_backend_herdr_send_text_line "$SESSION:$PANE_ID" "export PATH=$FAKEBIN_Q:\$PATH" \
   || fail "could not put the inert test harness on the pane PATH"
 fm_backend_herdr_send_text_line "$SESSION:$PANE_ID" "cd -- $PROJ_Q" \

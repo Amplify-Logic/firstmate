@@ -1266,6 +1266,9 @@ ok - real Herdr grouped Agents presentation shows human project, WORKER outcome/
 
 Those come from `tests/fm-status-chrome-herdr-lab-e2e.test.sh`, `tests/fm-herdr-pi-stale-registration-live-e2e.test.sh`, `tests/fm-herdr-version-floor-live-e2e.test.sh`, `tests/fm-herdr-submit-confirm-live-e2e.test.sh`, `tests/fm-herdr-layout-preview-e2e.test.sh`, and `tests/fm-herdr-worker-presentation-e2e.test.sh`.
 The status chrome guard needed two fixes in `bin/fm-herdr-lab-view.py` first: a Herdr 0.9.5 client asks for the color scheme with the private query `CSI ? 996 n`, and on macOS an exiting client still flushing output blocked until the view closed its pty.
+After those fixes the status chrome guard passes on Herdr 0.9.5, but its timed border-row step is intermittent on a heavily loaded host on both Herdr versions.
+On 2026-10-15, with this host's load average at about 250 to 285, it passed 3 of 6 runs on Herdr 0.9.5 and 3 of 4 runs on Herdr 0.7.4.
+Every failing run stopped only at that step, with `the renderer never replaced the seeded row` or `the renderer did not publish a role-marked border row`, and the rendering steps before it passed in all ten runs.
 Herdr 0.9 also changed `agent start` to start a named agent kind in an existing pane, which the worker presentation guard now uses.
 That pane must be at an idle prompt: with this host's zsh login profile (conda and nvm hooks) the guard failed three of three runs with `timed out waiting for agent startup` or `agent_pane_busy` when it started Pi right after `tab create`, and passed three of three once it waited for the login shell to stay alone in the pane's foreground for 3 seconds.
 
@@ -1777,7 +1780,11 @@ ok - real herdr: a stale registration no longer blocks relaunch, and the endpoin
 ok - real herdr: an agent behind an unproven composer fails closed instead of typing an exit command into it
 ```
 
-The same guard passed ten consecutive runs on 2026-10-14, six on Herdr 0.9.5 and four on Herdr 0.7.4.
+The task pane runs the operator's login shell, and this host's zsh profile (conda, nvm and prompt helpers) drops a line typed while it is still spawning foreground processes, so the guard waits for the shell to stay alone in the pane's foreground for 3 seconds before typing its first line.
+Without that wait the guard failed at its drift step on Herdr 0.9.5 under both the operator's zsh login shell and a scrubbed environment.
+With it, the guard passed 2 of 2 runs on Herdr 0.9.5 under the operator's zsh login shell on 2026-10-15.
+On Herdr 0.7.4 it currently fails at the drift step on this host, `the real Herdr pane did not drift out of its recorded worktree`, because the zsh profile is still spawning helpers (a late `python`) 20 seconds or more after the pane is created, so the typed `cd` never lands.
+That 0.7.4 failure is a pre-existing host condition outside the Herdr 0.9.5 upgrade.
 
 The registry read through `herdr pane report-agent` is the same source `fm_backend_herdr_agent_state` classifies, and since 2026-09-10 that registration counts as an agent only while `pane process-info` shows a harness process behind it, so the guard backs the registration with a real process named like a harness (a symlink to `sleep`) and then stops that process, with no real harness launched.
 That command is the guard that refreshes this record; run it after every Herdr upgrade rather than trusting the version above.
