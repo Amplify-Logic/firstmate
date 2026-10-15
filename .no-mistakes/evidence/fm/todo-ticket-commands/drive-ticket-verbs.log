@@ -1,0 +1,104 @@
+== lab FM_HOME: /var/folders/2c/9sf1hvpn23q336b08gs1np0c0000gn/T//fm-lab.z1RJVk (today 2026-10-15)
+
+== S3 adversarial: free text, untargeted, no-ticket row
+$ fm-todo.sh command --item t-4255b601dc5d close the loop with Natalia first
+TODO_CMD: not-a-command close the loop with Natalia first
+[exit 0]
+$ fm-todo.sh command --item t-4255b601dc5d waiting on Luc's answer
+TODO_CMD: not-a-command waiting on Luc's answer
+[exit 0]
+$ fm-todo.sh command --item t-4255b601dc5d reassign Fauve van Dijk
+TODO_CMD: not-a-command reassign Fauve van Dijk
+[exit 0]
+$ fm-todo.sh command --item t-4255b601dc5d priority high
+TODO_CMD: not-a-command priority high
+[exit 0]
+$ fm-todo.sh command close
+TODO_CMD: not-a-command close
+[exit 0]
+$ fm-todo.sh command --item t-0a4a5fd2c866 close
+TODO_CMD: refused close :: t-0a4a5fd2c866 has no HubSpot ticket, so close, waiting, reassign and note cannot apply to it
+[exit 1]
+wake lines so far: 0
+$ fm-todo.sh tickets
+TODO_TICKETS: 0 pending
+[exit 0]
+
+== S4 adversarial: row naming two tickets; stale revision
+$ fm-todo.sh command --item t-16653141f89e close
+TODO_CMD: ticket-close t-16653141f89e [slack:C7-7] Two tickets in one thread https://app.hubspot.com/contacts/1/record/0-5/11111111111 :: HubSpot ticket 22222222222 action k945bc1a9
+[exit 0]
+$ fm-todo.sh command --item t-4255b601dc5d --rev deadbeef close
+TODO_CMD: refused close :: the page showed revision deadbeef but t-4255b601dc5d is now e3b0c44298; refresh the page first
+[exit 1]
+
+== S1 queue each verb
+$ fm-todo.sh command --item t-4255b601dc5d --rev e3b0c44298 reassign Fauve
+TODO_CMD: ticket-reassign t-4255b601dc5d [hubspot:48576658049] Tomra pump leaking :: HubSpot ticket 48576658049 action k650b22ec: Fauve
+[exit 0]
+$ fm-todo.sh command --item t-4255b601dc5d note: customer replaced the pump Waiting
+TODO_CMD: ticket-note t-4255b601dc5d [hubspot:48576658049] Tomra pump leaking :: HubSpot ticket 48576658049 action kb103a010: customer replaced the pump
+TODO_CMD: ticket-waiting t-4255b601dc5d [hubspot:48576658049] Tomra pump leaking :: HubSpot ticket 48576658049 action k2b235326
+[exit 0]
+$ fm-todo.sh command --item t-2c211bcd0888 close: fixed by firmware 2.4
+TODO_CMD: ticket-close t-2c211bcd0888 [hubspot:48600120191] Neshu firmware ticket :: HubSpot ticket 48600120191 action k8fdfac29: fixed by firmware 2.4
+[exit 0]
+$ fm-todo.sh command --item t-eb7f8852956e close
+TODO_CMD: ticket-close t-eb7f8852956e [slack:C9-9] Dealer escalation :: HubSpot ticket 49033119384 action k6925ddd2
+[exit 0]
+$ fm-todo.sh command --item t-4255b601dc5d reassign Fauve
+TODO_CMD: already ticket-reassign t-4255b601dc5d [hubspot:48576658049] Tomra pump leaking :: HubSpot ticket 48576658049 action k650b22ec: Fauve
+[exit 0]
+wake lines: 5
+1792053396	5	check	todo-ticket	todo-ticket: 1 HubSpot ticket change(s) queued from the to-do page; run bin/fm-todo.sh tickets
+$ fm-todo.sh tickets
+TODO_TICKET: t-16653141f89e	k945bc1a9	22222222222	close		2026-10-15 10:36 CEST	https://app.hubspot.com/contacts/1/record/0-5/22222222222	Two tickets in one thread https://app.hubspot.com/contacts/1/record/0-5/11111111111
+TODO_TICKET: t-2c211bcd0888	k8fdfac29	48600120191	close	fixed by firmware 2.4	2026-10-15 10:36 CEST		Neshu firmware ticket
+TODO_TICKET: t-4255b601dc5d	k650b22ec	48576658049	reassign	Fauve	2026-10-15 10:36 CEST	https://app.hubspot.com/contacts/1/record/0-5/48576658049	Tomra pump leaking
+TODO_TICKET: t-4255b601dc5d	kb103a010	48576658049	note	customer replaced the pump	2026-10-15 10:36 CEST	https://app.hubspot.com/contacts/1/record/0-5/48576658049	Tomra pump leaking
+TODO_TICKET: t-4255b601dc5d	k2b235326	48576658049	waiting		2026-10-15 10:36 CEST	https://app.hubspot.com/contacts/1/record/0-5/48576658049	Tomra pump leaking
+TODO_TICKET: t-eb7f8852956e	k6925ddd2	49033119384	close		2026-10-15 10:36 CEST	https://app.hubspot.com/help-desk/1/view/2/ticket/49033119384/thread/5	Dealer escalation
+TODO_TICKETS: 6 pending
+[exit 0]
+
+== S5 Firstmate records results
+$ fm-todo.sh ticket-done --item t-4255b601dc5d --action kb103a010
+fm-todo: ticket-done needs --evidence; a ticket change is recorded with what happened
+[exit 2]
+$ fm-todo.sh ticket-done --item t-4255b601dc5d --action kb103a010 --evidence internal note added
+TODO_ITEMS: ticket-done t-4255b601dc5d -> open (ticket action kb103a010)
+[exit 0]
+Tomra state after done note: open
+$ fm-todo.sh ticket-done --item t-4255b601dc5d --action k650b22ec --evidence owner Fauve van Dijk
+TODO_ITEMS: ticket-done t-4255b601dc5d -> waiting (ticket action k650b22ec)
+[exit 0]
+Tomra state after done reassign: waiting
+$ fm-todo.sh ticket-done --item t-2c211bcd0888 --action k8fdfac29 --evidence stage Closed
+TODO_ITEMS: ticket-done t-2c211bcd0888 -> closed (ticket action k8fdfac29)
+[exit 0]
+Neshu state after done close: closed
+$ fm-todo.sh ticket-failed --item t-eb7f8852956e --action k6925ddd2 --evidence ticket is locked by Natalia
+TODO_ITEMS: ticket-failed t-eb7f8852956e -> open (ticket action k6925ddd2)
+[exit 0]
+Dealer state after failed close: open
+-- closed row keeps pending/failed marker: close+done on Dealer, then failure
+$ fm-todo.sh command --item t-eb7f8852956e close done
+TODO_CMD: ticket-close t-eb7f8852956e [slack:C9-9] Dealer escalation :: HubSpot ticket 49033119384 action k26054cca
+TODO_CMD: done t-eb7f8852956e [slack:C9-9] Dealer escalation
+[exit 0]
+$ fm-todo.sh ticket-failed --item t-eb7f8852956e --action k26054cca --evidence ticket still locked
+TODO_ITEMS: ticket-failed t-eb7f8852956e -> closed (ticket action k26054cca)
+[exit 0]
+$ fm-todo.sh tickets
+TODO_TICKET: t-16653141f89e	k945bc1a9	22222222222	close		2026-10-15 10:36 CEST	https://app.hubspot.com/contacts/1/record/0-5/22222222222	Two tickets in one thread https://app.hubspot.com/contacts/1/record/0-5/11111111111
+TODO_TICKET: t-4255b601dc5d	k2b235326	48576658049	waiting		2026-10-15 10:36 CEST	https://app.hubspot.com/contacts/1/record/0-5/48576658049	Tomra pump leaking
+TODO_TICKETS: 2 pending
+[exit 0]
+
+== journal (last 6)
+{"actor": "firstmate", "at": 1792053397, "evidence": "stage Closed", "item": "t-2c211bcd0888", "outcome": "done", "rev": "e3b0c44298", "ticket_action": "k8fdfac29"}
+{"actor": "captain", "at": 1792053397, "evidence": "HubSpot ticket 48600120191 closed from the page: stage Closed", "from": "open", "item": "t-2c211bcd0888", "reason": "fulfilled", "rev": "e3b0c44298", "to": "closed"}
+{"actor": "firstmate", "at": 1792053398, "evidence": "ticket is locked by Natalia", "item": "t-eb7f8852956e", "outcome": "failed", "rev": "e3b0c44298", "ticket_action": "k6925ddd2"}
+{"actor": "captain", "at": 1792053398, "item": "t-eb7f8852956e", "rev": "e3b0c44298", "ticket_action": {"arg": "", "id": "k26054cca", "line": "close", "requested_at": 1792053398, "rev": "e3b0c44298", "state": "pending", "ticket": "49033119384", "verb": "close"}}
+{"actor": "captain", "at": 1792053398, "evidence": "you wrote \"done\" on the page", "from": "open", "item": "t-eb7f8852956e", "reason": "fulfilled", "rev": "e3b0c44298", "to": "closed"}
+{"actor": "firstmate", "at": 1792053399, "evidence": "ticket still locked", "item": "t-eb7f8852956e", "outcome": "failed", "rev": "e3b0c44298", "ticket_action": "k26054cca"}

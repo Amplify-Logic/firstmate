@@ -1,0 +1,50 @@
+== S4 two tickets on one row
+$ fm-todo.sh command --item t-8467ec01b55f close
+TODO_CMD: refused close :: t-8467ec01b55f names 2 HubSpot tickets (33333333333, 44444444444); name the one ticket to change to Firstmate directly
+[exit 1]
+
+== S6/S7 handoff and reopen through the intake
+$ fm-channel-intake.sh observe --ref 48576658049 --digest v1
+new a9525a584958051575e7c5bc27b50fcbaa969c2bfaab4039d819b6b5d20eded6
+$ fm-channel-intake.sh observe --ref 48600120191 --digest v1
+new ee0e5948b53ac7e07926280e355bbc2b42b27445a71c6c49fe2291fd87cc4b20
+$ fm-channel-intake.sh observe --ref 48700000001 --digest v1
+new b9b114f25ef3b87b10469c05db80b9c007f0b1abe4a803d7e708ac59a4ea3651
+Tomra intake facts: 
+$ fm-todo.sh command --item t-1b3b1330ce9b waiting
+TODO_CMD: ticket-waiting t-1b3b1330ce9b [hubspot-lars-tickets:48576658049] Tomra pump ticket :: HubSpot ticket 48576658049 action ka7b711f2
+[exit 0]
+$ fm-todo.sh command --item t-4c2fe311f10f close done
+TODO_CMD: ticket-close t-4c2fe311f10f [hubspot-lars-tickets:48600120191] Neshu ticket :: HubSpot ticket 48600120191 action kd5b7d5d9
+TODO_CMD: done t-4c2fe311f10f [hubspot-lars-tickets:48600120191] Neshu ticket
+[exit 0]
+$ fm-todo.sh command --item t-c5759b06a547 close: filter swapped
+TODO_CMD: ticket-close t-c5759b06a547 [hubspot-lars-tickets:48700000001] Queco filter ticket :: HubSpot ticket 48700000001 action ka3ac5791: filter swapped
+[exit 0]
+$ fm-todo.sh ticket-done --item t-1b3b1330ce9b --action ka7b711f2 --evidence stage Waiting on contact
+TODO_ITEMS: ticket-done t-1b3b1330ce9b -> waiting (ticket action ka7b711f2)
+[exit 0]
+$ fm-todo.sh ticket-done --item t-4c2fe311f10f --action kd5b7d5d9 --evidence stage Closed
+TODO_ITEMS: ticket-done t-4c2fe311f10f -> closed (ticket action kd5b7d5d9)
+[exit 0]
+$ fm-todo.sh ticket-done --item t-c5759b06a547 --action ka3ac5791 --evidence stage Closed
+TODO_ITEMS: ticket-done t-c5759b06a547 -> closed (ticket action ka3ac5791)
+[exit 0]
+-- our own HubSpot write (note + stage) observed as a new revision
+$ fm-channel-intake.sh observe --ref 48576658049 --digest v2
+updated a9525a584958051575e7c5bc27b50fcbaa969c2bfaab4039d819b6b5d20eded6
+$ fm-channel-intake.sh observe --ref 48600120191 --digest v2
+updated ee0e5948b53ac7e07926280e355bbc2b42b27445a71c6c49fe2291fd87cc4b20
+$ fm-channel-intake.sh observe --ref 48700000001 --digest v2
+updated b9b114f25ef3b87b10469c05db80b9c007f0b1abe4a803d7e708ac59a4ea3651
+after own write: Tomra=waiting Neshu=closed Queco=open
+-- partners write again after the handoff
+$ fm-channel-intake.sh observe --ref 48576658049 --digest v3
+updated a9525a584958051575e7c5bc27b50fcbaa969c2bfaab4039d819b6b5d20eded6
+$ fm-channel-intake.sh observe --ref 48600120191 --digest v3
+updated ee0e5948b53ac7e07926280e355bbc2b42b27445a71c6c49fe2291fd87cc4b20
+Tomra intake facts: 
+after partner wrote: Tomra=open Neshu=open Queco=open
+reopened: hubspot-tickets (hubspot-lars-tickets) wrote again after HubSpot ticket 48576658049 was handed off
+reopened: hubspot-tickets (hubspot-lars-tickets) wrote again after HubSpot ticket 48600120191 was handed off
+reopened: hubspot-tickets (hubspot-lars-tickets) wrote again after HubSpot ticket 48700000001 was handed off
