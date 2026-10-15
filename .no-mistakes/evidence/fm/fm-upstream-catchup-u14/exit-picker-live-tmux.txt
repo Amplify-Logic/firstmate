@@ -1,0 +1,29 @@
+### headfix (/Users/larsmusic/.no-mistakes/worktrees/f569cc43ac96/01M4Z3XC65WR7ARE5THQDFM7F6)
+--- fm_backend_send_text_submit output:
+error: blocked on a prompt: Claude background-task exit picker
+rc=1
+--- bytes the picker pane received: 0
+--- pane after:
+Background work is running
+❯ 1. Exit and stop tasks
+The following will stop when you exit:
+shell · sleep 300
+  2. Move to background and exit
+  3. Stay
+Enter to confirm · Esc to cancel
+
+### basemain (/tmp/nm-picker.i7H3z2/base)
+--- fm_backend_send_text_submit output:
+unknownrc=0
+--- bytes the picker pane received: 16
+0000000    p   l   e   a   s   e       c   o   n   t   i   n   u   e  \n
+0000020
+--- pane after:
+Background work is running
+❯ 1. Exit and stop tasks
+The following will stop when you exit:
+shell · sleep 300
+  2. Move to background and exit
+  3. Stay
+Enter to confirm · Esc to cancel
+

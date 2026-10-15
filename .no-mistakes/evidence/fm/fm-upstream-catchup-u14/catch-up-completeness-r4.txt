@@ -1,0 +1,8 @@
+HEAD: 273d516f94f1cb411d8f9ec78cc0ba8bcc559d5c
+upstream tip 0397cb2b ancestor of HEAD: yes
+commits in 0397cb2b not in HEAD (still behind): 0
+upstream commits brought in since old merge-base e31bc6e: 51
+
+Named upstream fixes present in HEAD:
+  3c58ec8e fix(bin): keep the supervision host's successor watcher alive after the Stop hook's group is torn down (#6787) -> ancestor: yes
+  2d7daa9e fix: refuse a confirming Enter on the Claude background-task exit picker (#6666) -> ancestor: yes
