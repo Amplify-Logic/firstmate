@@ -285,13 +285,14 @@ def reply_form(rec):
         "var f=event.currentTarget,v=f.note.value.trim();if(!v)return;"
         "if(!window.lavish||!window.lavish.queuePrompt){f.querySelector('.ack').textContent="
         "'review session not connected';return;}"
+        "var at=Math.floor(Date.now()/1000);"
         "window.lavish.queuePrompt("
-        f"'Update on to-do item '+{json.dumps(iid)}+' rev '+{json.dumps(rev)}+' ('+{json.dumps(title_raw)}+'): '+v,"
+        f"'Update on to-do item '+{json.dumps(iid)}+' rev '+{json.dumps(rev)}+' at '+at+' ('+{json.dumps(title_raw)}+'): '+v,"
         "{tag:'item-update',"
         f"text:{json.dumps(title_raw[:70])}+': '+v,"
         "element:f,"
         f"queueKey:{json.dumps('todo-item-' + iid)},"
-        f"data:{{item_id:{json.dumps(iid)},rev:{json.dumps(rev)},title:{json.dumps(title_raw)},note:v}}}});"
+        f"data:{{item_id:{json.dumps(iid)},rev:{json.dumps(rev)},title:{json.dumps(title_raw)},note:v,at:at}}}});"
         "f.note.value='';f.querySelector('.ack').textContent='queued';"
     )
     return (f'<tr class="replyrow" id="note-{esc(iid)}"><td colspan="3">'
@@ -388,17 +389,20 @@ def age(rec):
 
 
 def ticket_marker(rec):
-    """A queued HubSpot change shows until Firstmate records it; a failed one shows until the next."""
+    """A queued HubSpot change shows until Firstmate records it; a failed one until a later one of its kind."""
     actions = rec.get('ticket_actions') or []
+    kind = lambda a: (a.get('verb'), a.get('arg') if a.get('verb') == 'note' else '')
     pending = [a for a in actions if a.get('state') == 'pending']
+    failed = [a for i, a in enumerate(actions)
+              if a.get('state') == 'failed' and all(kind(b) != kind(a) for b in actions[i + 1:])]
+    marks = []
     if pending:
         what = '; '.join(f'{a.get("verb")} {a.get("arg") or ""}'.strip() for a in pending)
-        return f'<span class="prov unv">HubSpot change pending: {brief(what, 120)}</span>'
-    if actions and actions[-1].get('state') == 'failed':
-        a = actions[-1]
-        return (f'<span class="prov unv">HubSpot change failed ({esc(a.get("verb"))}): '
-                f'{brief((a.get("outcome") or {}).get("evidence") or "no evidence recorded", 120)}</span>')
-    return ''
+        marks.append(f'<span class="prov unv">HubSpot change pending: {brief(what, 120)}</span>')
+    marks += [f'<span class="prov unv">HubSpot change failed ({esc(a.get("verb"))}): '
+              f'{brief((a.get("outcome") or {}).get("evidence") or "no evidence recorded", 120)}</span>'
+              for a in failed]
+    return ''.join(marks)
 
 
 def row(rec, reply=True):

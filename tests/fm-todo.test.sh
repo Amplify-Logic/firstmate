@@ -1020,6 +1020,16 @@ test_ticket_failure_stays_on_the_row() {
   assert_contains "$(page "$h" 2026-09-10)" 'HubSpot change failed (close): ticket is locked' \
     'a failed ticket change is not shown on its row'
   [ "$(field_of "$h" 'Dealer' 2)" = open ] || fail 'a failed close changed the item state'
+  # A later note of another kind, pending or done, does not hide the failed close.
+  todo_at "$h" "$T_1000" command --item "$id" 'note: replaced the pump' >/dev/null
+  render_at "$h" "$T_1030"
+  assert_contains "$(page "$h" 2026-09-10)" 'HubSpot change failed (close): ticket is locked' \
+    'a pending note hid the failed close'
+  todo_at "$h" "$T_1000" ticket-done --item "$id" --action "$(pending_action "$h" "$id" note)" \
+    --evidence 'note added' >/dev/null
+  render_at "$h" "$T_1030"
+  assert_contains "$(page "$h" 2026-09-10)" 'HubSpot change failed (close): ticket is locked' \
+    'a done note queued after the close hid the failed close'
   # A close typed with done closes the item at once; a failed close still shows in the Closed fold.
   todo_at "$h" "$T_1030" command --item "$id" 'close' 'done' >/dev/null
   render_at "$h" "$T_1100"
@@ -1128,8 +1138,37 @@ EOF
   pass 'a partner reply between the typed verb and the recorded result reopens the ticket'
 }
 
+# A verb that waits in the page's prompt queue keeps the time Lars typed it,
+# so a partner reply before Firstmate ran the command still brings it back.
+test_a_partner_reply_while_the_verb_waited_in_the_queue_reopens_the_ticket() {
+  local h neshu asked=$((T_0900 - 86400))
+  h="$TMP_ROOT/ticket-queue-delay"
+  new_home "$h"
+  printf 'captain_names = Lars\nteam_addresses = support@team.example\n' >>"$h/config/channel-intake"
+  printf 'hubspot-lars-tickets\thubspot-tickets\ttickets naming the captain\n' >>"$h/data/channel-intake/sources.tsv"
+  cat >"$h/neshu.json" <<EOF
+{"kind":"hubspot-ticket","owner":"captain","contacts":["tim@neshu.example"],
+ "events":[{"type":"email","at":$asked,"direction":"inbound","from":"tim@neshu.example","body":"Is the firmware out?"},
+  {"type":"email","at":$((asked + 3600)),"direction":"outbound","from":"support@team.example","body":"Yes, it is live."}]}
+EOF
+  observe_ticket "$h" "$T_0900" 48600120191 v1 'Neshu ticket' neshu
+  render_at "$h" "$T_1000"
+  neshu=$(field_of "$h" 'Neshu' 1)
+  # 10:00 Lars types close; 10:10 the customer writes; 10:20 Firstmate runs
+  # the queued command with the typed time; 10:25 it records the close.
+  timeline_event "$h/neshu.json" '{"type":"email","at":'"$((T_1000 + 600))"',"direction":"inbound","from":"tim@neshu.example","body":"It is leaking again."}'
+  todo_at "$h" "$((T_1000 + 1200))" command --item "$neshu" --at "$T_1000" 'close' >/dev/null
+  todo_at "$h" "$((T_1000 + 1500))" ticket-done --item "$neshu" --action "$(pending_action "$h" "$neshu" close)" \
+    --evidence 'stage Closed' >/dev/null
+  observe_ticket "$h" "$T_1030" 48600120191 v2 'Neshu ticket' neshu
+  render_at "$h" "$T_1030"
+  [ "$(field_of "$h" 'Neshu' 2)" = open ] || fail 'a partner reply while the verb waited in the queue was lost'
+  pass 'a ticket verb keeps the time Lars typed it, so a reply while it waited in the queue reopens the ticket'
+}
+
 test_ticket_verbs_queue_a_pending_hubspot_change
 test_ticket_failure_stays_on_the_row
+test_a_partner_reply_while_the_verb_waited_in_the_queue_reopens_the_ticket
 test_a_ticket_handed_off_reopens_only_when_the_partner_writes_again
 test_a_partner_reply_before_the_recorded_result_reopens_the_ticket
 test_a_pass_judges_a_record_from_before_the_flag_by_its_aliases

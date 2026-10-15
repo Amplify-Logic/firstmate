@@ -9,7 +9,7 @@
 #   fm-todo.sh close --item ID --evidence TEXT [--reason fulfilled|dismissed|superseded] [--actor NAME]
 #   fm-todo.sh reopen --item ID [--reason TEXT]
 #   fm-todo.sh ack --item ID
-#   fm-todo.sh command [--item ID [--rev REV]] [LINE ...]   (lines on stdin when none given)
+#   fm-todo.sh command [--item ID [--rev REV] [--at EPOCH]] [LINE ...]   (lines on stdin when none given)
 #   fm-todo.sh tickets
 #   fm-todo.sh ticket-done --item ID --action ACTION --evidence TEXT
 #   fm-todo.sh ticket-failed --item ID --action ACTION --evidence TEXT
@@ -117,8 +117,11 @@
 #   dig <words>             pending investigation by firstmate
 # Prefer --item with the row's id and --rev with the revision the page showed
 # (both are in the page's queued note); a stale --rev is refused so an old page
-# cannot act on a changed ask. Without --item, <words> must match exactly one
-# open item's title or ask. Repeating a command is harmless (`already`).
+# cannot act on a changed ask. Pass --at with the epoch the queued note gives
+# as the time Lars typed it; a ticket verb records it as the action's
+# requested time (now when absent, and never later than now). Without
+# --item, <words> must match exactly one open item's title or ask.
+# Repeating a command is harmless (`already`).
 # `you`/`dig` stay "handoff requested" on the page until firstmate accepts
 # them with `ack`, which moves the item to waiting with owner firstmate;
 # `reopen` brings a closed or waiting item back to the captain's lane, ending
@@ -167,7 +170,8 @@
 #      (`last_inbound_at`) newer than the time the verb was typed, or the
 #      source record back to open. A done note leaves an open item as it
 #      was. A failed action stays on the row as
-#      "HubSpot change failed" with its evidence until the next action;
+#      "HubSpot change failed" with its evidence until a later action of
+#      the same verb (for a note, the same text), alongside any pending one;
 #   4. re-renders the page with bin/fm-todo-render.sh.
 #
 # Paths: data/todo (FM_TODO_STORE_OVERRIDE), data/channel-intake, and the

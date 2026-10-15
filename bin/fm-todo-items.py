@@ -552,7 +552,7 @@ def hubspot_ticket(rec):
     return ids.pop()
 
 
-def queue_ticket_action(store, rec, verb, arg, line, now):
+def queue_ticket_action(store, rec, verb, arg, line, now, typed_at):
     """Record a pending HubSpot change for Firstmate; (action, True when it was already pending)."""
     ticket = hubspot_ticket(rec)
     actions = rec.setdefault('ticket_actions', [])
@@ -560,7 +560,7 @@ def queue_ticket_action(store, rec, verb, arg, line, now):
     if same:
         return same, True
     action = {'id': 'k' + digest(rec['id'], verb, arg, now, len(actions))[:8], 'verb': verb, 'arg': arg,
-              'ticket': ticket, 'line': line.strip(), 'requested_at': now, 'rev': rec['rev'], 'state': 'pending'}
+              'ticket': ticket, 'line': line.strip(), 'requested_at': typed_at, 'rev': rec['rev'], 'state': 'pending'}
     actions.append(action)
     # Finished actions are history the journal also keeps; the item holds the recent ones.
     finished = [a for a in actions if a['state'] != 'pending']
@@ -597,7 +597,7 @@ def finish_ticket_action(store, rec, action_id, outcome, evidence, now):
                    ticket_handoff=handoff, handover=f'HubSpot ticket {ticket} reassigned: {evidence}')
 
 
-def apply_command(store, items, line, target, shown_rev, now):
+def apply_command(store, items, line, target, shown_rev, now, typed_at):
     parsed = parse_line(line, bool(target), now)
     if parsed is None:
         return f'not-a-command {line.strip()}'
@@ -607,7 +607,7 @@ def apply_command(store, items, line, target, shown_rev, now):
         raise Refusal(f'the page showed revision {shown_rev} but {rec["id"]} is now {rec["rev"]}; refresh the page first')
     refs = ' '.join(a for a in rec['aliases'] if not a.startswith('ledger:'))
     if verb in TICKET_VERBS:
-        action, already = queue_ticket_action(store, rec, verb, extra['arg'], line, now)
+        action, already = queue_ticket_action(store, rec, verb, extra['arg'], line, now, typed_at)
         result = (f'ticket-{verb} {rec["id"]} [{refs}] {rec["title"]} :: HubSpot ticket {action["ticket"]}'
                   f' action {action["id"]}' + (f': {action["arg"]}' if action['arg'] else ''))
         if already:
@@ -757,7 +757,7 @@ def main():
                 failed = False
                 for line in lines:
                     try:
-                        result = apply_command(store, items, line, args.item, args.rev, now)
+                        result = apply_command(store, items, line, args.item, args.rev, now, min(args.at or now, now))
                     except Refusal as exc:
                         result, failed = f'refused {line.strip()} :: {exc}', True
                     print(f'TODO_CMD: {result}')
