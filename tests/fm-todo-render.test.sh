@@ -379,7 +379,7 @@ test_calm_layout_ranks_live_problems_first_and_folds_the_rest() {
   page=$(page_of "$h")
   body=$(sed -n '/<h2>Needs you now/,/<\/table>/p' "$page")
 
-  # Tier 0 is a live outage, tier 1 a partner awaiting him, tier 2 a hard
+  # Tier 0 is a live outage, tier 1 a partner awaiting him, tier 3 a hard
   # deadline; age alone never lifts the urgent ask above them, and everything
   # else follows oldest ask first. The stored title loses its rotting "26 days".
   [ "$(grep -o 'class="what">[^<]*' <<<"$body" | sed 's/^class="what">//')" = 'partner machine down now
