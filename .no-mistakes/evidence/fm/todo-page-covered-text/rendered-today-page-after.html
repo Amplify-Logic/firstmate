@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Today - Thursday 10 September 2026</title>
+<style>
+:root{
+  --bg:#f4f7fb; --panel:#ffffff; --ink:#132033; --ink-2:#3e4f66; --ink-3:#6b7a90;
+  --line:#d7e0ec; --line-2:#e8eef6; --accent:#0b4f8a; --accent-ink:#ffffff; --accent-soft:#e3eef9;
+  --ok:#1d7a4f; --ok-soft:#e2f3ea; --warn:#9a6300; --warn-soft:#fdf1d8; --bad:#a8322b; --bad-soft:#fbe5e3; --info:#2f5f9e; --info-soft:#e6eef9;
+  --obs:#0b4f8a; --inf:#7a5a00; --unv:#7a2e80;
+  --serif:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,"Times New Roman",serif;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Helvetica,Arial,sans-serif;
+  --mono:"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#0e1622; --panel:#141f2e; --ink:#e6edf6; --ink-2:#b7c4d6; --ink-3:#8593a8;
+    --line:#26354a; --line-2:#1d2a3c; --accent:#6fb1ea; --accent-ink:#0b1a2b; --accent-soft:#15304a;
+    --ok:#5fcf92; --ok-soft:#123324; --warn:#f0c264; --warn-soft:#3a2d0c; --bad:#f08a82; --bad-soft:#3d1a18; --info:#8fb6ec; --info-soft:#17304d;
+    --obs:#6fb1ea; --inf:#e0b95a; --unv:#cf8fd6;
+  }
+}
+*{box-sizing:border-box;min-width:0}
+html,body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.45}
+a{color:var(--accent);text-decoration:none;border-bottom:1px solid transparent}
+a:hover{border-bottom-color:var(--accent)}
+.wrap{max-width:1180px;margin:0 auto;padding:28px 22px 60px}
+header{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px 24px;margin-bottom:18px}
+h1{font-family:var(--serif);font-weight:600;font-size:34px;line-height:1.1;margin:0;letter-spacing:-.01em}
+h2{font-family:var(--serif);font-weight:600;font-size:22px;margin:34px 0 10px;letter-spacing:-.005em}
+h2 small{font-family:var(--sans);font-weight:500;font-size:13px;color:var(--ink-3);margin-left:10px}
+h3.sub{font-family:var(--sans);font-size:13px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);margin:22px 0 8px}
+.kicker{font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3);margin-bottom:6px}
+.meta{font-size:13px;color:var(--ink-2);text-align:right;max-width:540px}
+.meta .mono{font-family:var(--mono);font-variant-numeric:tabular-nums;color:var(--ink-2)}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin:18px 0 6px}
+.tile{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 16px}
+.tile .n{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:30px;font-weight:600;line-height:1;color:var(--accent)}
+.tile .l{font-size:13px;color:var(--ink-2);margin-top:6px}
+.tile .s{font-size:12px;color:var(--ink-3);margin-top:2px}
+.note{background:var(--panel);border:1px solid var(--line);border-left:4px solid var(--accent);border-radius:8px;padding:12px 16px;font-size:14px;color:var(--ink-2);margin:14px 0}
+.note b{color:var(--ink)}
+.note.warnline{border-left-color:var(--warn)}
+table{width:100%;border-collapse:collapse;background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden;font-size:14px}
+.tablewrap{overflow-x:auto;border-radius:10px}
+thead th{text-align:left;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);font-weight:600;padding:10px 12px;border-bottom:1px solid var(--line);background:var(--panel)}
+tbody td{padding:12px 12px;border-bottom:1px solid var(--line-2);vertical-align:top}
+tbody tr:last-child td{border-bottom:none}
+tbody tr:hover td{background:var(--accent-soft)}
+tr.closed td{color:var(--ink-3)}
+tr.replyrow{display:none}
+tr.replyrow.open{display:table-row}
+tr.replyrow td{padding:0 12px 12px;border-bottom:1px solid var(--line-2);background:var(--panel)}
+tbody tr.replyrow:hover td{background:var(--panel)}
+button.notetoggle{font-family:var(--mono);font-size:11px;letter-spacing:.04em;padding:3px 8px;margin-left:6px;border:1px dashed var(--line);border-radius:6px;background:transparent;color:var(--ink-3);cursor:pointer;vertical-align:top}
+button.notetoggle:hover{color:var(--ink-2);border-color:var(--accent)}
+button.notetoggle[aria-expanded=true]{border-style:solid;color:var(--ink-2)}
+form.reply{display:flex;gap:8px;align-items:center}
+form.reply input[type=text]{flex:1;min-width:0;font:inherit;font-size:13px;padding:6px 10px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink)}
+form.reply input[type=text]::placeholder{color:var(--ink-3)}
+form.reply button{font:inherit;font-size:12.5px;padding:6px 14px;border:1px solid var(--line);border-radius:6px;background:var(--panel);color:var(--ink-2);cursor:pointer;white-space:nowrap}
+form.reply button:hover{border-color:var(--accent);color:var(--ink)}
+form.reply .ack{font-size:12px;color:var(--ok);white-space:nowrap}
+tr.closed td.who{color:var(--ink-2)}
+td.who{font-weight:600;white-space:nowrap}
+td.who .src{display:flex;align-items:center;gap:4px;margin-top:5px;font-size:11.5px;font-weight:500;color:var(--ink-3);white-space:nowrap}
+td.who .src svg{width:12px;height:12px;flex:none;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+td.who .org{display:block;font-weight:400;font-size:12.5px;color:var(--ink-3)}
+td.what{min-width:320px;color:var(--ink)}
+td.what .ctx{display:block;color:var(--ink-2);font-size:13px;margin-top:3px}
+td.what .next{display:block;color:var(--ink);font-size:13px;margin-top:6px}
+td.what .next b{color:var(--accent)}
+td.since{white-space:nowrap;font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:13px;color:var(--ink-2)}
+td.links{white-space:nowrap}
+td.links a{display:inline-block;font-size:12.5px;padding:3px 8px;border:1px solid var(--line);border-radius:6px;margin:0 4px 4px 0;background:var(--bg)}
+td.links a:hover{border-color:var(--accent)}
+td.links .nolink{display:inline-block;font-size:12px;color:var(--ink-3);font-style:italic}
+.pill{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;padding:2px 8px;border-radius:999px;white-space:nowrap}
+.pill.bad{background:var(--bad-soft);color:var(--bad)}
+.pill.warn{background:var(--warn-soft);color:var(--warn)}
+.pill.ok{background:var(--ok-soft);color:var(--ok)}
+.pill.info{background:var(--info-soft);color:var(--info)}
+.prov{display:inline-block;font-family:var(--mono);font-size:11px;letter-spacing:.04em;padding:1px 6px;border-radius:4px;border:1px solid currentColor;margin:6px 0 0 8px}
+.prov.obs{color:var(--obs)} .prov.inf{color:var(--inf)} .prov.unv{color:var(--unv)}
+.id{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:12.5px;color:var(--ink-3)}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:14px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 16px}
+.card h3{font-family:var(--serif);font-size:17px;margin:0 0 8px;font-weight:600}
+.card ol,.card ul{margin:0;padding-left:20px;color:var(--ink-2);font-size:14px}
+.card li{margin:5px 0}
+.card li b{color:var(--ink)}
+.rec{margin-top:8px;font-size:13px;color:var(--ink-2)}
+.rec b{color:var(--ok)}
+.legend{display:flex;flex-wrap:wrap;gap:14px;font-size:12.5px;color:var(--ink-3);margin-top:28px;padding-top:14px;border-top:1px solid var(--line)}
+.done{color:var(--ink-2);font-size:14px}
+.done li{margin:3px 0}
+@media print{ body{background:#fff} .tile,.card,table{break-inside:avoid} }
+
+/* --- private improved variant: presentation only --- */
+td.since .lab{display:block;font-family:var(--sans);font-size:10.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--ink-3);font-weight:600}
+td.since .age{display:block;font-family:var(--sans);font-size:12px;color:var(--ink-3);margin-top:2px;white-space:normal}
+.strips{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr);gap:14px;margin:16px 0 6px}
+@media (max-width:760px){.strips{grid-template-columns:minmax(0,1fr)}}
+.strip{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 16px}
+.strip.now{border-left:4px solid var(--accent)}
+.strip.unv{border-left:4px solid var(--unv)}
+.strip h3{font-family:var(--serif);font-size:17px;font-weight:600;margin:0 0 2px}
+.strip .sub{font-size:12.5px;color:var(--ink-3);margin:0 0 10px}
+.strip .grp{font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:var(--ink-3);font-weight:600;margin:12px 0 6px}
+.strip .grp:first-of-type{margin-top:0}
+.strip ol{margin:0;padding-left:20px;font-size:14px;color:var(--ink-2)}
+.strip ol li{margin:7px 0}
+.strip ul{margin:0;padding-left:18px;font-size:13.5px;color:var(--ink-2)}
+.strip ul li{margin:7px 0}
+.strip a.jump{font-weight:600;border-bottom:1px solid transparent}
+.strip a.jump:hover{border-bottom-color:var(--accent)}
+.strip .why{display:block;font-size:12.5px;color:var(--ink-3);margin-top:2px}
+tr:target td{background:var(--accent-soft)}
+details{margin:20px 0;border-top:1px solid var(--line);padding-top:12px}
+/* A closed fold's rows still get layout boxes in current Chrome, stacked over the sections below it; shrink them to nothing while keeping them findable, so a find or #item link still opens the fold. */
+details:not([open])::details-content{transform:scale(0)}
+summary{cursor:pointer;font-weight:600;color:var(--ink-2)}
+.watch-line{padding:12px 16px;margin:8px 0;background:var(--panel);border:1px solid var(--line);border-radius:8px}
+.done .why{display:block;font-size:12.5px;color:var(--ink-3);margin-top:2px}
+td.what .ctx.how{font-size:12px;color:var(--ink-3)}
+.strip.now{margin:16px 0 6px}
+@media (max-width:600px){
+  .wrap{padding:18px 16px 48px}
+  td.what{min-width:0}
+  .meta{text-align:left}
+  tr.item{display:grid;grid-template-columns:minmax(0,1fr)}
+  tr.item td{border-bottom:none;padding:8px 12px}
+  tr.item td:last-child{border-bottom:1px solid var(--line-2)}
+  tr.item td.who,tr.item td.links{white-space:normal}
+  td.who .src{display:inline-flex;margin:0 0 0 8px;vertical-align:middle}
+}
+.watch-line .why{display:block;color:var(--ink-3);font-size:13px;margin-top:5px;overflow-wrap:anywhere}
+</style>
+</head><body><div class="wrap">
+<header><div><div class="kicker">Aquablu Starship</div><h1>Today</h1></div>
+<div class="meta">Thursday 10 September 2026<br>Page rebuilt from the to-do records at <span class="mono">15:30 CEST</span>.<br>Each line carries its own last check.</div></header>
+<h2>Needs you now<small>live problems and deadlines first, then partners and customers, oldest ask first</small></h2>
+<div class="tablewrap"><table><tbody>
+<tr class="item" id="item-t-3b68b8ea38c3" data-source="slack-channel (C_BRIEF)" data-how="read by the channel intake on slack-channel (C_BRIEF)"><td class="who"><span class="pill warn">urgent</span><span class="src" title="From Slack" aria-label="From Slack"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 3.5h11v7h-6l-3 2.5v-2.5h-2z"/></svg>Slack</span></td>
+<td class="what">Open ask 2 from a customer needing a reply<span class="prov obs">read 09:00 CEST</span></td>
+<td class="links"><span class="nolink">no link recorded</span><button type="button" class="notetoggle" aria-expanded="false" onclick="var r=document.getElementById(&#x27;note-t-3b68b8ea38c3&#x27;);var o=r.classList.toggle(&#x27;open&#x27;);this.setAttribute(&#x27;aria-expanded&#x27;,o);if(o){r.querySelector(&#x27;input&#x27;).focus();}">note</button></td></tr>
+<tr class="replyrow" id="note-t-3b68b8ea38c3"><td colspan="3"><form class="reply" data-lavish-question="todo-item-t-3b68b8ea38c3" onsubmit="event.preventDefault();var f=event.currentTarget,v=f.note.value.trim();if(!v)return;if(!window.lavish||!window.lavish.queuePrompt){f.querySelector(&#x27;.ack&#x27;).textContent=&#x27;review session not connected&#x27;;return;}window.lavish.queuePrompt(&#x27;Update on to-do item &#x27;+&quot;t-3b68b8ea38c3&quot;+&#x27; rev &#x27;+&quot;69121a8c44&quot;+&#x27; (&#x27;+&quot;Open ask 2 from a customer needing a reply&quot;+&#x27;): &#x27;+v,{tag:&#x27;item-update&#x27;,text:&quot;Open ask 2 from a customer needing a reply&quot;+&#x27;: &#x27;+v,element:f,queueKey:&quot;todo-item-t-3b68b8ea38c3&quot;,data:{item_id:&quot;t-3b68b8ea38c3&quot;,rev:&quot;69121a8c44&quot;,title:&quot;Open ask 2 from a customer needing a reply&quot;,note:v}});f.note.value=&#x27;&#x27;;f.querySelector(&#x27;.ack&#x27;).textContent=&#x27;queued&#x27;;"><input type="text" name="note" autocomplete="off" placeholder="drop, done, park til Friday, mine, you: what to do, dig, or anything else"><button type="submit">Queue</button><span class="ack"></span></form></td></tr>
+<tr class="item" id="item-t-6a80f5aaa11f" data-source="slack-channel (C_BRIEF)" data-how="read by the channel intake on slack-channel (C_BRIEF)"><td class="who"><span class="pill warn">urgent</span><span class="src" title="From Slack" aria-label="From Slack"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 3.5h11v7h-6l-3 2.5v-2.5h-2z"/></svg>Slack</span></td>
+<td class="what">Open ask 1 from a customer needing a reply<span class="prov obs">read 09:00 CEST</span></td>
+<td class="links"><span class="nolink">no link recorded</span><button type="button" class="notetoggle" aria-expanded="false" onclick="var r=document.getElementById(&#x27;note-t-6a80f5aaa11f&#x27;);var o=r.classList.toggle(&#x27;open&#x27;);this.setAttribute(&#x27;aria-expanded&#x27;,o);if(o){r.querySelector(&#x27;input&#x27;).focus();}">note</button></td></tr>
+<tr class="replyrow" id="note-t-6a80f5aaa11f"><td colspan="3"><form class="reply" data-lavish-question="todo-item-t-6a80f5aaa11f" onsubmit="event.preventDefault();var f=event.currentTarget,v=f.note.value.trim();if(!v)return;if(!window.lavish||!window.lavish.queuePrompt){f.querySelector(&#x27;.ack&#x27;).textContent=&#x27;review session not connected&#x27;;return;}window.lavish.queuePrompt(&#x27;Update on to-do item &#x27;+&quot;t-6a80f5aaa11f&quot;+&#x27; rev &#x27;+&quot;5195e5081a&quot;+&#x27; (&#x27;+&quot;Open ask 1 from a customer needing a reply&quot;+&#x27;): &#x27;+v,{tag:&#x27;item-update&#x27;,text:&quot;Open ask 1 from a customer needing a reply&quot;+&#x27;: &#x27;+v,element:f,queueKey:&quot;todo-item-t-6a80f5aaa11f&quot;,data:{item_id:&quot;t-6a80f5aaa11f&quot;,rev:&quot;5195e5081a&quot;,title:&quot;Open ask 1 from a customer needing a reply&quot;,note:v}});f.note.value=&#x27;&#x27;;f.querySelector(&#x27;.ack&#x27;).textContent=&#x27;queued&#x27;;"><input type="text" name="note" autocomplete="off" placeholder="drop, done, park til Friday, mine, you: what to do, dig, or anything else"><button type="submit">Queue</button><span class="ack"></span></form></td></tr>
+<tr class="item" id="item-t-a19322280707" data-source="slack-channel (C_BRIEF)" data-how="read by the channel intake on slack-channel (C_BRIEF)"><td class="who"><span class="pill warn">urgent</span><span class="src" title="From Slack" aria-label="From Slack"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 3.5h11v7h-6l-3 2.5v-2.5h-2z"/></svg>Slack</span></td>
+<td class="what">Open ask 3 from a customer needing a reply<span class="prov obs">read 09:00 CEST</span></td>
+<td class="links"><span class="nolink">no link recorded</span><button type="button" class="notetoggle" aria-expanded="false" onclick="var r=document.getElementById(&#x27;note-t-a19322280707&#x27;);var o=r.classList.toggle(&#x27;open&#x27;);this.setAttribute(&#x27;aria-expanded&#x27;,o);if(o){r.querySelector(&#x27;input&#x27;).focus();}">note</button></td></tr>
+<tr class="replyrow" id="note-t-a19322280707"><td colspan="3"><form class="reply" data-lavish-question="todo-item-t-a19322280707" onsubmit="event.preventDefault();var f=event.currentTarget,v=f.note.value.trim();if(!v)return;if(!window.lavish||!window.lavish.queuePrompt){f.querySelector(&#x27;.ack&#x27;).textContent=&#x27;review session not connected&#x27;;return;}window.lavish.queuePrompt(&#x27;Update on to-do item &#x27;+&quot;t-a19322280707&quot;+&#x27; rev &#x27;+&quot;90a4439c02&quot;+&#x27; (&#x27;+&quot;Open ask 3 from a customer needing a reply&quot;+&#x27;): &#x27;+v,{tag:&#x27;item-update&#x27;,text:&quot;Open ask 3 from a customer needing a reply&quot;+&#x27;: &#x27;+v,element:f,queueKey:&quot;todo-item-t-a19322280707&quot;,data:{item_id:&quot;t-a19322280707&quot;,rev:&quot;90a4439c02&quot;,title:&quot;Open ask 3 from a customer needing a reply&quot;,note:v}});f.note.value=&#x27;&#x27;;f.querySelector(&#x27;.ack&#x27;).textContent=&#x27;queued&#x27;;"><input type="text" name="note" autocomplete="off" placeholder="drop, done, park til Friday, mine, you: what to do, dig, or anything else"><button type="submit">Queue</button><span class="ack"></span></form></td></tr>
+</tbody></table></div>
+<details><summary>Waiting on others (8)</summary>
+<ul class="done"><li id="item-t-0d2221c78a7a" data-source="slack-channel (C_BRIEF)" data-how="no verification recorded"><b>Waiting item 2: partner owes an answer on the cooler swap with a long enough title to wrap</b> - handed over: handed to Naomi for answer 2<span class="why"><span class="prov unv">cannot verify - no source read recorded</span></span></li><li id="item-t-399324c4ef12" data-source="slack-channel (C_BRIEF)" data-how="no verification recorded"><b>Waiting item 1: partner owes an answer on the cooler swap with a long enough title to wrap</b> - handed over: handed to Naomi for answer 1<span class="why"><span class="prov unv">cannot verify - no source read recorded</span></span></li><li id="item-t-6b79fd90106f" data-source="slack-channel (C_BRIEF)" data-how="no verification recorded"><b>Waiting item 6: partner owes an answer on the cooler swap with a long enough title to wrap</b> - handed over: handed to Naomi for answer 6<span class="why"><span class="prov unv">cannot verify - no source read recorded</span></span></li><li id="item-t-9de7ed2e7c33" data-source="slack-channel (C_BRIEF)" data-how="no verification recorded"><b>Waiting item 3: partner owes an answer on the cooler swap with a long enough title to wrap</b> - handed over: handed to Naomi for answer 3<span class="why"><span class="prov unv">cannot verify - no source read recorded</span></span></li><li id="item-t-b32f19f472b8" data-source="slack-channel (C_BRIEF)" data-how="no verification recorded"><b>Waiting item 5: partner owes an answer on the cooler swap with a long enough title to wrap</b> - handed over: handed to Naomi for answer 5<span class="why"><span class="prov unv">cannot verify - no source read recorded</span></span></li><li id="item-t-c22d18ce930d" data-source="slack-channel (C_BRIEF)" data-how="no verification recorded"><b>Waiting item 4: partner owes an answer on the cooler swap with a long enough title to wrap</b> - handed over: handed to Naomi for answer 4<span class="why"><span class="prov unv">cannot verify - no source read recorded</span></span></li><li id="item-t-d3b77e4e1701" data-source="slack-channel (C_BRIEF)" data-how="no verification recorded"><b>Waiting item 8: partner owes an answer on the cooler swap with a long enough title to wrap</b> - handed over: handed to Naomi for answer 8<span class="why"><span class="prov unv">cannot verify - no source read recorded</span></span></li><li id="item-t-e95553465c04" data-source="slack-channel (C_BRIEF)" data-how="no verification recorded"><b>Waiting item 7: partner owes an answer on the cooler swap with a long enough title to wrap</b> - handed over: handed to Naomi for answer 7<span class="why"><span class="prov unv">cannot verify - no source read recorded</span></span></li></ul>
+</details>
+<details><summary>Closed today (4)</summary>
+<div class="tablewrap"><table><tbody>
+<tr class="closed" id="item-t-4b7fc40702aa" data-source="slack-channel (C_BRIEF)" data-how="no verification recorded"><td>Closed item 1 resolved this morning</td><td>done 1</td><td>resolved at the source · 11:00 CEST</td></tr>
+<tr class="closed" id="item-t-7ef9626d6ba2" data-source="slack-channel (C_BRIEF)" data-how="no verification recorded"><td>Closed item 3 resolved this morning</td><td>done 3</td><td>resolved at the source · 11:00 CEST</td></tr>
+<tr class="closed" id="item-t-e4819acc0473" data-source="slack-channel (C_BRIEF)" data-how="no verification recorded"><td>Closed item 4 resolved this morning</td><td>done 4</td><td>resolved at the source · 11:00 CEST</td></tr>
+<tr class="closed" id="item-t-e5375039e549" data-source="slack-channel (C_BRIEF)" data-how="no verification recorded"><td>Closed item 2 resolved this morning</td><td>done 2</td><td>resolved at the source · 11:00 CEST</td></tr>
+</tbody></table></div>
+</details>
+<h2>Your open tickets<small>read live from HubSpot</small></h2>
+<p class="sub">3 tickets carry you as owner and are not closed: 1 New, 1 Waiting for Tech, 1 Waiting on contact. <span class="prov obs">Read live from HubSpot at 15:00 CEST.</span></p>
+<div class="tablewrap"><table><thead><tr><th>Ticket</th><th>Stage</th><th>Last inbound</th><th>Last outbound</th></tr></thead><tbody><tr><td><a href="https://app.hubspot.com/r/101" target="_blank" rel="noreferrer">Alvina consumption report</a></td><td>Waiting for Tech</td><td>10 Sep 10:36</td><td>10 Sep 16:10</td></tr><tr><td><a href="https://app.hubspot.com/r/102" target="_blank" rel="noreferrer">Sparkling water is ambient</a></td><td>Waiting on contact</td><td>10 Sep 13:38</td><td>-</td></tr><tr><td><a href="https://app.hubspot.com/r/103" target="_blank" rel="noreferrer">Tap leaking at reception</a></td><td>New</td><td>10 Sep 14:00</td><td>-</td></tr></tbody></table></div>
+
+<div class="legend">
+<span><span class="prov obs">observed</span> read from the source system at the time stamped on the row</span>
+<span><span class="prov inf">inferred</span> reasoned from evidence, not stated outright</span>
+<span><span class="prov unv">unverifiable</span> could not be confirmed from any source available here</span>
+</div>
+
+</div><script src="outline.js"></script><script src="probe.js"></script></body></html>
