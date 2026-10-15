@@ -36,7 +36,7 @@ A tick therefore looks like this.
    The gate deliberately does not enforce this: it opens an item for whatever class it is handed, because only the connector read can see the thread and the source-side state.
    Silence is not completion. A message nobody replied to and a source-side item nobody closed both stay owed, and an acknowledgement or a promise to act is not a reply that discharges anything.
    A HubSpot ticket is observed with `--timeline-file`, so the gate itself decides whether it is a partner-facing ask awaiting the captain; `bin/fm-channel-intake.sh --help` owns the timeline format and the rules.
-   Such an ask is recorded as owed and leads the day page, `todo` and the brief ahead of every other class; the alert payload orders it first only within the notifiable classes.
+   Such an ask is recorded as owed and leads `todo` and the brief ahead of every other class, and the day page right after a live outage; the alert payload orders it first only within the notifiable classes.
    Re-reading a resolved ticket's timeline records the fresh facts on the archived item, which stays resolved.
 6. A HubSpot ticket source also hands the complete current set of the captain's tickets whose stage is not Closed, Waiting on contact included, to `tickets` on every pass, before `complete`; that snapshot is what the day page's "Your open tickets" section renders, and `complete` refuses a pass that skipped it.
    The source's private coverage sentence names which owner that is, and `bin/fm-channel-intake.sh --help` owns the input format and the refusals.
