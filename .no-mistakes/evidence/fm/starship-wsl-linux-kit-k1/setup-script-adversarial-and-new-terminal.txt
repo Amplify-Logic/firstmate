@@ -1,0 +1,29 @@
+### Q. After setup: the curl|bash parent shell vs a NEW login terminal (bash -l reads ~/.profile)
+--- old terminal (PATH as before setup):
+gh: NOT FOUND
+claude: NOT FOUND
+tmux: NOT FOUND
+node: NOT FOUND
+--- new terminal:
+gh: /tmp/fm-ubuntu.vuNAv1/linuxbrew/bin/gh
+claude: /tmp/fm-ubuntu.vuNAv1/home/.local/bin/claude
+tmux: /tmp/fm-ubuntu.vuNAv1/linuxbrew/bin/tmux
+node: /tmp/fm-ubuntu.vuNAv1/linuxbrew/bin/node
+
+### R. Adversarial: run from a home on the Windows drive (HOME=/mnt/c/Users/fm)
+fm-linux-setup.sh: /mnt/c/Users/fm is on the Windows drive; run this from your Linux home (cd ~), never under /mnt/ - git, file watching and file permissions break there
+exit=1
+### S. Adversarial: run as root
+fm-linux-setup.sh: run this as your own user, not root: make one with 'adduser <name>' and 'usermod -aG sudo <name>', log in as it, then run this again (ONBOARDING-linux-server.md)
+exit=1
+### T. Adversarial: ~/starship exists but is not a Firstmate clone
+fm-linux-setup.sh: /tmp/fm-ubuntu.vuNAv1/home3/starship exists but is not a Firstmate clone; move it aside, then run this again
+exit=1
+readme.txt
+
+### U. Adversarial: a Windows-side npm 'claude' shim is on the WSL PATH; the Linux native installer must still run
+==> Claude Code (native installer)
+  ok  claude         2.1.300 (Claude Code)
+exit=
+--- claude installer ran: 1
+-rwxr-xr-x@ /tmp/fm-ubuntu.vuNAv1/home2/.local/bin/claude

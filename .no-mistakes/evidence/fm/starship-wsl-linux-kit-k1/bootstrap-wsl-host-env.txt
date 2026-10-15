@@ -1,0 +1,27 @@
+### Host stand-ins: wslinfo, cmd.exe, wslpath in /tmp/fm-wslhost.YXpX36/bin (Windows side of WSL). Product: real bin/fm-bootstrap.sh at 3ed7d7b5, FM_HOME=/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.Anj2ij
+
+### A. WSL, home under ~, default networking, no .wslconfig -> expect no HOST_ENV
+(end A)
+
+### B. WSL, projects directory on the Windows drive (/mnt/c/Users/fm/projects) -> expect one HOST_ENV line
+HOST_ENV: WSL: /mnt/c/Users/fm/projects is on the Windows drive - move it under the Linux home (~); git, file watching and file permissions are slow or broken under /mnt/
+(end B)
+
+### C. Same path but no WSL_DISTRO_NAME (macOS/plain Linux) -> expect silence
+(end C)
+
+### D. WSL, NAT networking, .wslconfig has localhostForwarding=false -> expect mirrored-networking advice
+[wsl2]
+memory=8GB
+localhostForwarding=false
+HOST_ENV: WSL: localhost forwarding is off in /tmp/fm-wslhost.YXpX36/winhome/.wslconfig, so review boards and dev servers will not open in the Windows browser - set networkingMode=mirrored under [wsl2] there, then run wsl --shutdown from Windows (ONBOARDING-windows.md)
+(end D)
+
+### E. Same .wslconfig but wslinfo reports mirrored -> expect silence
+(end E)
+
+### F. Adversarial: cmd.exe hangs 60s (stuck WSL interop) -> expect bootstrap to finish quickly and stay silent
+(end F) bootstrap took 8s
+
+### G. Adversarial: localhostForwarding=false under a different section ([experimental]) -> expect silence
+(end G)

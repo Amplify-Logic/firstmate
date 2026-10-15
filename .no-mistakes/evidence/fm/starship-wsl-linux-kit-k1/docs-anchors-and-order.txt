@@ -1,0 +1,28 @@
+### V. Cross-doc anchors in the kit guides vs GitHub heading slugs of ONBOARDING.md
+ONBOARDING-windows.md:17 #1-accounts-browser-before-the-terminal -> resolves
+ONBOARDING-windows.md:147 #3-get-starship-and-start-your-first-mate -> resolves
+ONBOARDING-windows.md:172 #troubleshooting -> resolves
+ONBOARDING-linux-server.md:161 #3-get-starship-and-start-your-first-mate -> resolves
+ONBOARDING-linux-server.md:208 #troubleshooting -> resolves
+broken anchors: 0
+
+### W. ONBOARDING-windows.md: order of 'new terminal' vs the two sign-ins and the step-3 handoff
+79:Every new tab now opens in Ubuntu, in your Linux home.
+112:First close the tab and open a new Ubuntu tab, so the new tools are on your PATH; in the old tab, `gh` and `claude` are not found.
+113:Then, in the new tab, do the two sign-ins it prints:
+116:gh auth login
+117:claude
+121:For `claude`, sign in, then type `/exit`.
+147:Continue with [ONBOARDING.md step 3, get Starship and start your first mate](ONBOARDING.md#3-get-starship-and-start-your-first-mate), inside your tmux session in Ubuntu, and go on through the Happiness Compass report in step 5.
+148:Skip step 2 of that guide and the `git clone` line of step 3: the setup script did both.
+168:| A board link or `localhost` page does not open in Windows | Check `.wslconfig` from step 3, run `wsl --shutdown`, open a new Ubuntu tab, and start again. |
+169:| `command not found: brew`, `claude`, or `gh` after setup | Open a new Ubuntu tab; the old one has the old PATH. |
+
+### W. ONBOARDING-linux-server.md: order of 'new terminal' vs the two sign-ins and the step-3 handoff
+141:First log out (`exit`) and log back in with `ssh <you>@<server-ip>`, so the new tools are on your PATH; in the old login, `gh` and `claude` are not found.
+144:- `gh auth login`: choose **GitHub.com**, **HTTPS**, then **Login with a web browser**.
+146:- `claude`: it prints a link; open it on your own computer, sign in, paste the code it shows back into the server, then type `/exit`.
+161:Continue with [ONBOARDING.md step 3, get Starship and start your first mate](ONBOARDING.md#3-get-starship-and-start-your-first-mate), inside this session, and go on through the Happiness Compass report in step 5.
+162:Skip step 2 of that guide and the `git clone` line of step 3: the setup script did both.
+193:- **Finish for good:** copy anything you want to keep, sign out with `gh auth logout` and `claude` then `/logout`, then in the Hetzner Console open the server and choose **Delete**.
+206:| `command not found: brew`, `claude`, or `gh` after setup | Log out and back in; the old login has the old PATH. |

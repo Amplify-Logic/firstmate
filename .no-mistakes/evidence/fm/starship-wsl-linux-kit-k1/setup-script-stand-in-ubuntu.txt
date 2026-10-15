@@ -1,0 +1,107 @@
+### O. Fresh stand-in Ubuntu (stubbed apt, Homebrew, Claude and Chrome installers; real git clone of this commit): cat fm-linux-setup.sh | bash -s -- --ci
+==> Asking for your password once, for the system packages
+==> System packages: build-essential procps curl file git ca-certificates
+==> Homebrew on Linux
+==> Homebrew packages: git node gh tmux
+==> Claude Code (native installer)
+==> Google Chrome (runs headless; no desktop needed)
+==> Cloning Firstmate into /tmp/fm-ubuntu.vuNAv1/home/starship
+Note: switching to '3ed7d7b5638a315b1f43cd57a189d7c4a8ebc237'.
+
+You are in 'detached HEAD' state. You can look around, make experimental
+changes and commit them, and you can discard any commits you make in this
+state without impacting any branches by switching back to a branch.
+
+If you want to create a new branch to retain commits you create, you may
+do so (now or later) by using -c with the switch command. Example:
+
+  git switch -c <new-branch-name>
+
+Or undo this operation with:
+
+  git switch -
+
+Turn off this advice by setting config variable advice.detachedHead to false
+
+==> Checking every tool
+  ok  git            git version 2.50.1 (Apple Git-155)
+  ok  node           v22.20.0
+  ok  npm            10.9.3
+  ok  gh             gh version 2.81.0
+  ok  tmux           tmux 3.5a
+  ok  claude         2.1.300 (Claude Code)
+  ok  chrome         Google Chrome 141.0.7390.54
+  ok  firstmate      /tmp/fm-ubuntu.vuNAv1/home/starship
+
+Setup finished.
+Sign-ins skipped (--ci).
+exit=0
+--- installer calls recorded:
+sudo true
+sudo env DEBIAN_FRONTEND=noninteractive apt-get update -q
+apt-get update -q
+sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y -q build-essential procps curl file git ca-certificates
+apt-get install -y -q build-essential procps curl file git ca-certificates
+curl https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh
+brew-installer
+brew install git node gh tmux
+curl https://claude.ai/install.sh
+claude-installer
+curl https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
+sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y -q /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/tmp.dqq6ERtkNJ/google-chrome-stable_current_amd64.deb
+apt-get install -y -q /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/tmp.dqq6ERtkNJ/google-chrome-stable_current_amd64.deb
+git clone https://github.com/Amplify-Logic/firstmate /tmp/fm-ubuntu.vuNAv1/home/starship
+--- ~/starship HEAD: 3ed7d7b5 docs(onboarding): point the Windows and Linux server kit at main's five-step guide
+--- profile lines:
+# Added by Firstmate bin/fm-linux-setup.sh
+eval "$(/tmp/fm-ubuntu.vuNAv1/linuxbrew/bin/brew shellenv)"
+--
+# Added by Firstmate bin/fm-linux-setup.sh
+case ":$PATH:" in *":$HOME/.local/bin:"*) ;; *) PATH="$HOME/.local/bin:$PATH" ;; esac
+
+### P. Same machine, without --ci (a person at the keyboard), re-run: cat fm-linux-setup.sh | bash
+==> Asking for your password once, for the system packages
+==> System packages: build-essential procps curl file git ca-certificates
+==> Homebrew already present at /tmp/fm-ubuntu.vuNAv1/linuxbrew
+==> Homebrew packages: git node gh tmux
+==> Claude Code already present
+==> Google Chrome already present
+==> Firstmate already cloned at /tmp/fm-ubuntu.vuNAv1/home/starship; left as it is
+==> Checking every tool
+  ok  git            git version 2.50.1 (Apple Git-155)
+  ok  node           v22.20.0
+  ok  npm            10.9.3
+  ok  gh             gh version 2.81.0
+  ok  tmux           tmux 3.5a
+  ok  claude         2.1.300 (Claude Code)
+  ok  chrome         Google Chrome 141.0.7390.54
+  ok  firstmate      /tmp/fm-ubuntu.vuNAv1/home/starship
+
+Setup finished.
+
+First open a NEW terminal, so the new tools are on your PATH: on Windows, a
+new Ubuntu tab; on a server, log out and log back in. This one still has the
+old PATH, so gh and claude are not found here.
+
+Then, in the new terminal, two sign-ins are yours to do:
+
+  1. gh auth login
+     Choose GitHub.com, then HTTPS, then "Login with a web browser".
+     On a server, open the link it prints on your own computer and type the code.
+
+  2. claude
+     Sign in, then type /exit.
+     On a server, open the link it prints on your own computer and paste the code back.
+
+Then continue with step 3 of ONBOARDING.md; Starship is already cloned:
+
+  cd ~/starship
+exit=0
+--- installer calls on re-run (only sudo/apt expected; no Homebrew/Claude/Chrome reinstall, no clone):
+sudo true
+sudo env DEBIAN_FRONTEND=noninteractive apt-get update -q
+apt-get update -q
+sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y -q build-essential procps curl file git ca-certificates
+apt-get install -y -q build-essential procps curl file git ca-certificates
+brew install git node gh tmux
+--- profile line counts (written once): 1 1

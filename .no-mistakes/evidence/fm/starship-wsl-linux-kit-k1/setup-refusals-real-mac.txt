@@ -1,0 +1,19 @@
+### N. Real macOS host, no stand-ins: bash bin/fm-linux-setup.sh
+fm-linux-setup.sh: this sets up Linux (WSL 2 or a server); on a Mac follow ONBOARDING.md
+exit=1
+
+### --help
+usage: fm-linux-setup.sh [--ci]
+  Takes a fresh Ubuntu 24.04 (inside WSL 2, or a server over SSH) to the point
+  where a first mate can start, cloning Firstmate into ~/starship.
+  Run it as your own user from your Linux home, never under /mnt/.
+  --ci    skip the closing sign-in instructions (gh auth login, claude)
+exit=0
+### bad arg
+fm-linux-setup.sh: unknown argument: --bogus
+usage: fm-linux-setup.sh [--ci]
+  Takes a fresh Ubuntu 24.04 (inside WSL 2, or a server over SSH) to the point
+  where a first mate can start, cloning Firstmate into ~/starship.
+  Run it as your own user from your Linux home, never under /mnt/.
+  --ci    skip the closing sign-in instructions (gh auth login, claude)
+exit=2

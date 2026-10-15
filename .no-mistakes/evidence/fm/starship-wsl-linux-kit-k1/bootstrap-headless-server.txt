@@ -1,0 +1,24 @@
+### Host stand-ins: uname reports Linux x86_64, tailscale installed but stopped (or up with FAKE_TS_UP). Product: real bin/fm-bootstrap.sh at 3ed7d7b5, FM_HOME=/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.Anj2ij
+
+### H. Linux server, SSH login, no display, display marker DISPLAY=:0 set -> not headless, expect silence
+(end H)
+
+### I. Linux, no SSH (local console) -> expect silence
+(end I)
+
+### J. Linux server over SSH with Tailscale up -> expect silence, nothing recorded
+(end J)
+0
+
+### K. Linux server over SSH, Tailscale down, read-only session (FM_BOOTSTRAP_DETECT_ONLY=1) -> advice shown, not recorded
+BOOTSTRAP_INFO: headless server: review boards and dev servers listen only on this server - open them from your own computer over Tailscale (recommended) or an SSH port forward (ONBOARDING-linux-server.md); shown once for this home
+(end K)
+recorded: no
+
+### L. Same, normal session -> advice shown once, recorded
+BOOTSTRAP_INFO: headless server: review boards and dev servers listen only on this server - open them from your own computer over Tailscale (recommended) or an SSH port forward (ONBOARDING-linux-server.md); shown once for this home
+(end L)
+recorded: yes (/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.Anj2ij/state/.host-env-headless-advised)
+
+### M. Second session start on the same home -> expect silence (once per home)
+(end M)
