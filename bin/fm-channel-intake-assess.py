@@ -37,6 +37,7 @@ ACTORS = [r"i", r"we", r"our", r"team", r"tech\w*", r"ik", r"wij"]
 # one with jij/je/u opening a question also asks the name that closes it.
 ASK_NL = r"kun|kunt|kan|wil|wilt|zou|zoudt"
 REQUEST = r"please|pls|kindly|can|could|would|will|" + ASK_NL + r"|graag|mag"
+GREETING = r"hi|hello|hey|dear|hoi|hallo|beste|hej"
 TECH = re.compile(r"\btech\b|\btechteam\b|\btechnical (?:team|support|department)\b", re.I)
 QUOTE_START = re.compile(
     r"^\s*(?:>|on .{0,120}wrote:|op .{0,120}schreef|-{2,}\s*original message|from:\s|van:\s|sent from my)",
@@ -167,8 +168,14 @@ def assess(doc, names, captain_addresses, team_addresses):
     # greeting, then a comma or colon and a question or a request, or no comma
     # and a question opening with a request word and "you"; or his name closes
     # a question after a comma, or one that opens with a Dutch request to jij/je/u.
-    addressed = (r'(?:^\s*|[.?!]\s+)(?:(?:hi|hello|hey|dear|hoi|hallo|beste)\s+)?'
+    # A message opening with a greeting to him asks him whatever question or
+    # request it carries.
+    addressed = (r'(?:^\s*|[.?!]\s+)(?:(?:' + GREETING + r')\s+)?'
                  + name + r'(?:\s+' + name + r')*')
+    greeted_re = re.compile(r'\A\s*(?:' + GREETING + r')\s+' + name + r'(?:\s+' + name
+                            + r')*(?:\s*[,:]|[ \t]*\n)', re.I) if names else None
+    request_re = re.compile(r'\?|\b(?:please|pls|kindly|graag)\b|\b(?:' + REQUEST
+                            + r')\s+(?:you|je|jij|u)\b', re.I)
     asked_re = re.compile(addressed + r'\s*[,:]\s*(?:[^.?!\n]*\?|(?:' + REQUEST + r')\b(?![\'’]))'
                           + '|' + addressed + r'\s+(?:' + REQUEST + r')\s+(?:you|je|jij|u)\b[^.?!\n]*\?'
                           + r'|(?:,\s*|(?:^\s*|[.?!]\s+)(?:' + ASK_NL + r')\s+(?:jij|je|u)\b[^.?!\n]*\s)'
@@ -178,12 +185,13 @@ def assess(doc, names, captain_addresses, team_addresses):
                             + ACTING + ')', re.I | re.S | re.M)
 
     def names_captain(text):
-        """On his own ticket any naming; on a colleague's only an @mention or a question to him."""
+        """On his own ticket any naming; on a colleague's only an @mention or an ask to him."""
         if not names:
             return False
         if captain_owned:
             return bool(name_re.search(text))
-        return bool(mention_re.search(text) or asked_re.search(text))
+        return bool(mention_re.search(text) or asked_re.search(text)
+                    or (greeted_re.match(text) and request_re.search(text)))
 
     def is_captain(who):
         """One spelling of the captain everywhere: the sentinel or his address."""
