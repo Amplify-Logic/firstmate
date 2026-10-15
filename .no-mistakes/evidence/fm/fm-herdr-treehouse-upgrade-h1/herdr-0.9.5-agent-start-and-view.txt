@@ -1,0 +1,50 @@
+session=fm-lab-agentstart-43185-3098 herdr=herdr 0.9.5
+$ fm-herdr-lab.sh run fm-lab-agentstart-43185-3098 agent start --help | grep -- --kind
+Usage: herdr agent start <NAME> --kind <KIND> --pane <ID> [OPTIONS] [-- [AGENT_ARG]...]
+      --kind <KIND>
+["root_pane","tab","type","workspace"]
+workspace=w1
+{"pane_id":"w1:p2"}
+probe_pane=w1:p2
+$ fm-herdr-lab.sh run fm-lab-agentstart-43185-3098 agent start worker-presentation --kind pi --pane w1:p2
+{"error":{"code":"timeout","message":"timed out waiting for agent startup"},"id":"cli:agent:start"}
+rc=1
+tab_id= pane_id=
+$ fm-herdr-lab.sh view fm-lab-agentstart-43185-3098 --cols 120 --rows 36 --seconds 3
+00| spaces                  │   1        2      +
+01|                         │
+02| · probe-ws              │
+03|                         │
+04|                         │
+05|                         │
+06|                         │
+07|                         │
+08|                         │
+09|                         │
+10|                         │
+11|                         │
+12|                         │
+13|                         │
+14|                         │
+15|                         │
+16|                         │
+17| new               ● menu│
+18|─────────────────────────│
+19| agents           grouped│
+20|                         │
+21|                         │
+22|                         │
+23|                         │
+24|                         │
+25|                         │
+26|                         │
+27|                         │
+28|                         │
+29|                         │
+30|                         │
+31|                         │
+32|                         │
+33|                         │
+34|                         │
+35|                        «│
+view_rc=0

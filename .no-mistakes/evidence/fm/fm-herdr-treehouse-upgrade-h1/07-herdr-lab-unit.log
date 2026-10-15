@@ -1,0 +1,10 @@
+=== 11:05:11 herdr=herdr 0.7.4 treehouse=v2.0.0 SHELL=/bin/zsh :: bash tests/fm-herdr-lab.test.sh
+ok - fm-herdr-lab: names fail closed and require the lab prefix
+ok - fm-herdr-lab: provisioning, scoped calls, guarded teardown, and fleet tripwire are deterministic
+ok - fm-herdr-lab: run keeps the lab session a Herdr option before any -- delimiter
+ok - fm-herdr-lab: missing tripwire refuses teardown before any Herdr call
+ok - fm-herdr-lab: changed default fleet state is a hard failure
+ok - fm-herdr-lab: an owned stopped lab can re-provision safely
+ok - fm-herdr-lab: failed deletion retains ownership until absence is confirmed
+not ok - timed-out provision must fail: expected exit 1, got 0
+rc=1 elapsed=83s

@@ -1,0 +1,5 @@
+fg before: ["zsh","tail","zsh","zsh","zsh","zsh"]
+$ agent start diag --kind pi --pane w1:p2 --timeout 90000
+{"error":{"code":"agent_pane_busy","message":"agent target pane w1:p2 is not an available shell"},"id":"cli:agent:start"}
+fg after: [{"argv0":"zsh","cmdline":"-zsh"},{"argv0":"zsh","cmdline":"-zsh"}]
+--- pane read

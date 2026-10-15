@@ -1,0 +1,10 @@
+herdr: herdr 0.9.5, pi: 0.87.1, SHELL=/bin/zsh (operator login shell, full environment, no env scrub)
+--- run 1
+ok - real Herdr grouped Agents presentation shows human project, WORKER outcome/state, Pi detail, and hidden task identity
+rc=0 elapsed=53s
+--- run 2
+ok - real Herdr grouped Agents presentation shows human project, WORKER outcome/state, Pi detail, and hidden task identity
+rc=0 elapsed=45s
+--- run 3
+ok - real Herdr grouped Agents presentation shows human project, WORKER outcome/state, Pi detail, and hidden task identity
+rc=0 elapsed=80s

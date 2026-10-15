@@ -1,0 +1,25 @@
+herdr herdr 0.9.5 lab=fm-lab-viewab-95618-18334
+== BASE engine (06a080a8) rendering the live 0.9.5 lab client
+HUNG: still running after 60s (killed)
+== CHANGED engine via fm-herdr-lab.sh view
+00| spaces                  │   1      +
+01|                         │(base) larsmusic@Larss-MacBook-Pro 01M4Z3XR8F14DKE5QDFQDG1JCT %
+02| · view-probe            │
+03|                         │
+04|                         │
+05|                         │
+06|                         │
+07|                         │
+08|                         │
+09| new               ● menu│
+10|─────────────────────────│
+11| agents           grouped│
+12|                         │
+13|                         │
+14|                         │
+15|                         │
+16|                         │
+17|                         │
+18|                         │
+19|                        «│
+view_rc=0 after 4s

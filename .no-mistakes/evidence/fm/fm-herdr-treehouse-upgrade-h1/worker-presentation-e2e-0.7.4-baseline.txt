@@ -1,0 +1,7 @@
+herdr: herdr 0.7.4, pi: 0.87.1
+ok - real Herdr grouped Agents presentation shows human project, WORKER outcome/state, Pi detail, and hidden task identity
+
+real	0m59.591s
+user	0m1.082s
+sys	0m0.738s
+rc=0

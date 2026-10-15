@@ -1,0 +1,8 @@
+== fm-herdr-lab.test.sh (view engine cases, pyte venv on PATH)
+not ok - timed-out provision must fail: expected exit 1, got 0
+== same new render cases against the BASE view engine (06a080a8)
+-- /tmp/fm-view-base-01M4.py
+    csi_dispatch[char](*params, private=True)
+TypeError: Screen.report_device_status() got an unexpected keyword argument 'private'
+-- bin/fm-herdr-lab-view.py
+'probe-frame'

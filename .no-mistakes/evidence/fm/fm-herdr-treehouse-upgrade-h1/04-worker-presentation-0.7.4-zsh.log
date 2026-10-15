@@ -1,0 +1,3 @@
+=== 11:03:54 herdr=herdr 0.7.4 treehouse=v2.0.0 SHELL=/bin/zsh :: env FM_HERDR_WORKER_PRESENTATION_E2E=1 bash tests/fm-herdr-worker-presentation-e2e.test.sh
+ok - real Herdr grouped Agents presentation shows human project, WORKER outcome/state, Pi detail, and hidden task identity
+rc=0 elapsed=9s

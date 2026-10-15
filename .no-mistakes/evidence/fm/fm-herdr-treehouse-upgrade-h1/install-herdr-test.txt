@@ -1,0 +1,4 @@
+ok - Herdr installer fetches the pinned 0.9.5 asset, verifies its checksum, and gates the protocol floor
+ok - Treehouse installer fetches the pinned 3.1.3 archive and verifies its checksum
+ok - cleanup is bounded to job-owned fm-lab-* sessions
+ok - CI wires pinned installers into a required serial Herdr lane

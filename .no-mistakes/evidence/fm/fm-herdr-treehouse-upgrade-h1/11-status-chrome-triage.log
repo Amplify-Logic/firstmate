@@ -1,0 +1,18 @@
+=== 11:16:12 mode=full herdr=herdr 0.7.4 :: bash tests/fm-status-chrome-herdr-lab-e2e.test.sh
+ok - herdr chrome: report-metadata --ttl-ms stores a border row, pane get reads it back, and it renders on the split border
+ok - herdr chrome: zooming the primary hides the companion and reclaims its rows while the border title still renders
+ok - herdr chrome: a third pane is reported by pane layout and never left hidden, and pane zoom --off is idempotent
+ok - herdr chrome: the live renderer keeps publishing the border row and never re-applies a released zoom
+rc=0 elapsed=22s
+=== 11:16:34 mode=scrubbed herdr=herdr 0.9.5 :: bash tests/fm-status-chrome-herdr-lab-e2e.test.sh
+ok - herdr chrome: report-metadata --ttl-ms stores a border row, pane get reads it back, and it renders on the split border
+ok - herdr chrome: zooming the primary hides the companion and reclaims its rows while the border title still renders
+ok - herdr chrome: a third pane is reported by pane layout and never left hidden, and pane zoom --off is idempotent
+not ok - the renderer did not publish a role-marked border row: ''
+rc=1 elapsed=51s
+=== 11:17:26 mode=full herdr=herdr 0.9.5 :: bash tests/fm-status-chrome-herdr-lab-e2e.test.sh
+ok - herdr chrome: report-metadata --ttl-ms stores a border row, pane get reads it back, and it renders on the split border
+ok - herdr chrome: zooming the primary hides the companion and reclaims its rows while the border title still renders
+ok - herdr chrome: a third pane is reported by pane layout and never left hidden, and pane zoom --off is idempotent
+ok - herdr chrome: the live renderer keeps publishing the border row and never re-applies a released zoom
+rc=0 elapsed=21s

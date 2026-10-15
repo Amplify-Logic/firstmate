@@ -1,0 +1,6 @@
+=== 11:04:25 herdr=herdr 0.9.5 treehouse=v3.1.3 SHELL=/bin/zsh :: bash tests/fm-status-chrome-herdr-lab-e2e.test.sh
+ok - herdr chrome: report-metadata --ttl-ms stores a border row, pane get reads it back, and it renders on the split border
+ok - herdr chrome: zooming the primary hides the companion and reclaims its rows while the border title still renders
+ok - herdr chrome: a third pane is reported by pane layout and never left hidden, and pane zoom --off is idempotent
+not ok - the renderer never replaced the seeded row, so it was not actually publishing
+rc=1 elapsed=44s

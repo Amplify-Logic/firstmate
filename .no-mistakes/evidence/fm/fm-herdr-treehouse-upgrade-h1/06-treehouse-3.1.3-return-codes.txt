@@ -1,0 +1,8 @@
+treehouse v3.1.3, TREEHOUSE_ROOT=/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-th.S36mEp/pool (isolated)
+get --lease rc=0 path=/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-th.S36mEp/pool/.treehouse/repo-681c8a/1/repo
+plain return on dirty copy rc=3 (3.x: 3 = left in place)
+Worktree has uncommitted changes. Clean and return? [Y/n] 🌳 worktree not returned: it has uncommitted changes and the confirmation could not be answered (stdin reached EOF); prune will not reclaim this slot. Use treehouse return --force '/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-th.S36mEp/pool/.treehouse/repo-681c8a/1/repo' to clean and return it
+Firstmate's form 'return --force' on dirty copy rc=0
+🌳 Worktree returned to pool.
+base  main  (repository default)
+1     available    /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-th.S36mEp/pool/.treehouse/repo-681c8a/1/repo  (detached)

@@ -1,0 +1,9 @@
+=== run 1: SHELL=/bin/zsh herdr=herdr 0.9.5 pi=0.87.1 start=11:01:44
+ok - real Herdr grouped Agents presentation shows human project, WORKER outcome/state, Pi detail, and hidden task identity
+rc=0 elapsed=36s
+=== run 2: SHELL=/bin/zsh herdr=herdr 0.9.5 pi=0.87.1 start=11:02:24
+ok - real Herdr grouped Agents presentation shows human project, WORKER outcome/state, Pi detail, and hidden task identity
+rc=0 elapsed=28s
+=== run 3: SHELL=/bin/zsh herdr=herdr 0.9.5 pi=0.87.1 start=11:02:54
+ok - real Herdr grouped Agents presentation shows human project, WORKER outcome/state, Pi detail, and hidden task identity
+rc=0 elapsed=39s

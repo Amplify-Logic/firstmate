@@ -1,0 +1,10 @@
+# treehouse v3.1.3, scratch repo, TREEHOUSE_ROOT in a temp dir
+get --lease --lease-holder sm-x  rc=0 stdout=[/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-th313.2rCGVI/pool/.treehouse/repo-77f69d/1/repo]
+  path is a worktree: true
+return --if-lease-holder other <path>  rc=1
+return <dirty path> (no --force)  rc=3  dirty file still there: yes
+return --force with a held index.lock  rc=1
+  output matches fm-teardown's treehouse_return_is_index_lock_error signature
+return --force <dirty path>  rc=0
+base  main  (repository default)
+1     available    /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-th313.2rCGVI/pool/.treehouse/repo-77f69d/1/repo  (detached)

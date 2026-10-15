@@ -1,0 +1,39 @@
+0.5s cwd=/Users/larsmusic/.no-mistakes/worktrees/f569cc43ac96/01M4Z3XR8F14DKE5QDFQDG1JCT fg=["zsh","zsh","zsh"]
+1.0s cwd=/Users/larsmusic/.no-mistakes/worktrees/f569cc43ac96/01M4Z3XR8F14DKE5QDFQDG1JCT fg=["printf","zsh","zsh","zsh","zsh"]
+1.5s cwd=/Users/larsmusic/.no-mistakes/worktrees/f569cc43ac96/01M4Z3XR8F14DKE5QDFQDG1JCT fg=["printf","tail","head","zsh","zsh","zsh","zsh","tail","zsh","zsh","zsh","zsh"]
+2.0s cwd=/Users/larsmusic/.no-mistakes/worktrees/f569cc43ac96/01M4Z3XR8F14DKE5QDFQDG1JCT fg=["zsh","zsh","zsh","tail","zsh","zsh","zsh","zsh"]
+2.5s cwd=/Users/larsmusic/.no-mistakes/worktrees/f569cc43ac96/01M4Z3XR8F14DKE5QDFQDG1JCT fg=["zsh","zsh","zsh","zsh"]
+3.0s cwd=/Users/larsmusic/.no-mistakes/worktrees/f569cc43ac96/01M4Z3XR8F14DKE5QDFQDG1JCT fg=["printf","tail","zsh","zsh","zsh","zsh","zsh"]
+3.5s cwd=/Users/larsmusic/.no-mistakes/worktrees/f569cc43ac96/01M4Z3XR8F14DKE5QDFQDG1JCT fg=["zsh","zsh","zsh"]
+4.0s cwd=/Users/larsmusic/.no-mistakes/worktrees/f569cc43ac96/01M4Z3XR8F14DKE5QDFQDG1JCT fg=["zsh","zsh","zsh"]
+4.5s cwd=/Users/larsmusic/.no-mistakes/worktrees/f569cc43ac96/01M4Z3XR8F14DKE5QDFQDG1JCT fg=["zsh"]
+5.0s cwd=/Users/larsmusic/.no-mistakes/worktrees/f569cc43ac96/01M4Z3XR8F14DKE5QDFQDG1JCT fg=["zsh"]
+5.5s cwd=/Users/larsmusic/.no-mistakes/worktrees/f569cc43ac96/01M4Z3XR8F14DKE5QDFQDG1JCT fg=["zsh"]
+6.0s cwd=/Users/larsmusic/.no-mistakes/worktrees/f569cc43ac96/01M4Z3XR8F14DKE5QDFQDG1JCT fg=["zsh"]
+6.5s cwd=/Users/larsmusic/.no-mistakes/worktrees/f569cc43ac96/01M4Z3XR8F14DKE5QDFQDG1JCT fg=["python","zsh"]
+7.0s cwd=/Users/larsmusic/.no-mistakes/worktrees/f569cc43ac96/01M4Z3XR8F14DKE5QDFQDG1JCT fg=["python","zsh","zsh"]
+7.5s cwd=/Users/larsmusic/.no-mistakes/worktrees/f569cc43ac96/01M4Z3XR8F14DKE5QDFQDG1JCT fg=["python","zsh","zsh"]
+8.0s cwd=/Users/larsmusic/.no-mistakes/worktrees/f569cc43ac96/01M4Z3XR8F14DKE5QDFQDG1JCT fg=["zsh"]
+expected=/private/tmp/fm-drift-probe-dir
+--- pane text ---
+jq: parse error: Invalid numeric literal at line 1, column 3
+0.5s cwd=/private/tmp/fm-drift-probe-dir fg=["zsh"]
+1.0s cwd=/private/tmp/fm-drift-probe-dir fg=["zsh"]
+1.5s cwd=/private/tmp/fm-drift-probe-dir fg=["zsh"]
+2.0s cwd=/private/tmp/fm-drift-probe-dir fg=["zsh"]
+2.5s cwd=/private/tmp/fm-drift-probe-dir fg=["zsh"]
+3.0s cwd=/private/tmp/fm-drift-probe-dir fg=["zsh"]
+3.5s cwd=/private/tmp/fm-drift-probe-dir fg=["zsh"]
+4.0s cwd=/private/tmp/fm-drift-probe-dir fg=["zsh"]
+4.5s cwd=/private/tmp/fm-drift-probe-dir fg=["zsh"]
+5.0s cwd=/private/tmp/fm-drift-probe-dir fg=["zsh"]
+5.5s cwd=/private/tmp/fm-drift-probe-dir fg=["zsh"]
+6.0s cwd=/private/tmp/fm-drift-probe-dir fg=["zsh"]
+6.5s cwd=/private/tmp/fm-drift-probe-dir fg=["zsh"]
+7.0s cwd=/private/tmp/fm-drift-probe-dir fg=["zsh"]
+7.5s cwd=/private/tmp/fm-drift-probe-dir fg=["zsh"]
+8.0s cwd=/private/tmp/fm-drift-probe-dir fg=["zsh"]
+expected=/private/tmp/fm-drift-probe-dir
+--- pane text ---
+(base) larsmusic@Larss-MacBook-Pro 01M4Z3XR8F14DKE5QDFQDG1JCT % cd -- /tmp/fm-drift-probe-dir
+(base) larsmusic@Larss-MacBook-Pro fm-drift-probe-dir %

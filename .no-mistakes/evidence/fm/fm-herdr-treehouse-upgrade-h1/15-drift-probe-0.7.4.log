@@ -1,0 +1,19 @@
+0.5s cwd=/Users/larsmusic/.no-mistakes/worktrees/f569cc43ac96/01M4Z3XR8F14DKE5QDFQDG1JCT fg=["zsh","zsh","zsh","tail","zsh","zsh","zsh","zsh"]
+1.0s cwd=/Users/larsmusic/.no-mistakes/worktrees/f569cc43ac96/01M4Z3XR8F14DKE5QDFQDG1JCT fg=["zsh","zsh","zsh"]
+1.5s cwd=/Users/larsmusic/.no-mistakes/worktrees/f569cc43ac96/01M4Z3XR8F14DKE5QDFQDG1JCT fg=["zsh"]
+2.0s cwd=/Users/larsmusic/.no-mistakes/worktrees/f569cc43ac96/01M4Z3XR8F14DKE5QDFQDG1JCT fg=["zsh"]
+2.5s cwd=/Users/larsmusic/.no-mistakes/worktrees/f569cc43ac96/01M4Z3XR8F14DKE5QDFQDG1JCT fg=["zsh"]
+3.0s cwd=/Users/larsmusic/.no-mistakes/worktrees/f569cc43ac96/01M4Z3XR8F14DKE5QDFQDG1JCT fg=["zsh"]
+3.5s cwd=/Users/larsmusic/.no-mistakes/worktrees/f569cc43ac96/01M4Z3XR8F14DKE5QDFQDG1JCT fg=["zsh"]
+4.0s cwd=/Users/larsmusic/.no-mistakes/worktrees/f569cc43ac96/01M4Z3XR8F14DKE5QDFQDG1JCT fg=["zsh"]
+4.5s cwd=/Users/larsmusic/.no-mistakes/worktrees/f569cc43ac96/01M4Z3XR8F14DKE5QDFQDG1JCT fg=["python","zsh"]
+5.0s cwd=/Users/larsmusic/.no-mistakes/worktrees/f569cc43ac96/01M4Z3XR8F14DKE5QDFQDG1JCT fg=["python","zsh"]
+5.5s cwd=/Users/larsmusic/.no-mistakes/worktrees/f569cc43ac96/01M4Z3XR8F14DKE5QDFQDG1JCT fg=["python","zsh"]
+6.0s cwd=/Users/larsmusic/.no-mistakes/worktrees/f569cc43ac96/01M4Z3XR8F14DKE5QDFQDG1JCT fg=["zsh","zsh","zsh"]
+6.5s cwd=/Users/larsmusic/.no-mistakes/worktrees/f569cc43ac96/01M4Z3XR8F14DKE5QDFQDG1JCT fg=["python","zsh","zsh"]
+7.0s cwd=/Users/larsmusic/.no-mistakes/worktrees/f569cc43ac96/01M4Z3XR8F14DKE5QDFQDG1JCT fg=["python","zsh","zsh"]
+7.5s cwd=/Users/larsmusic/.no-mistakes/worktrees/f569cc43ac96/01M4Z3XR8F14DKE5QDFQDG1JCT fg=["zsh"]
+8.0s cwd=/Users/larsmusic/.no-mistakes/worktrees/f569cc43ac96/01M4Z3XR8F14DKE5QDFQDG1JCT fg=["zsh"]
+expected=/private/tmp/fm-drift-probe-dir
+--- pane text ---
+cd -- /tmp/fm-drift-probe-dir

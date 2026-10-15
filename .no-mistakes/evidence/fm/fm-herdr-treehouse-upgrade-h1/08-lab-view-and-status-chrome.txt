@@ -1,0 +1,38 @@
+# SHELL=/bin/zsh herdr 0.9.5, python3 with pyte 0.8.2, load: load averages: 23.24 51.27 122.83
+$ tests/fm-herdr-lab.test.sh
+ok - fm-herdr-lab: names fail closed and require the lab prefix
+ok - fm-herdr-lab: provisioning, scoped calls, guarded teardown, and fleet tripwire are deterministic
+ok - fm-herdr-lab: run keeps the lab session a Herdr option before any -- delimiter
+ok - fm-herdr-lab: missing tripwire refuses teardown before any Herdr call
+ok - fm-herdr-lab: changed default fleet state is a hard failure
+ok - fm-herdr-lab: an owned stopped lab can re-provision safely
+ok - fm-herdr-lab: failed deletion retains ownership until absence is confirmed
+ok - fm-herdr-lab: timed-out provisioning cancels the launch before teardown
+ok - fm-herdr-lab: the viewer attaches only to a session this lab owns
+ok - fm-herdr-lab: timed-out viewer startup cancels its exact launcher
+ok - fm-herdr-lab: startup timeout allows launcher child escalation
+ok - fm-herdr-lab: viewer start requires an identity-matched owned process
+tests/fm-herdr-lab.test.sh: line 308:  5259 Terminated: 15          "$REAL_SLEEP" 20
+ok - fm-herdr-lab: viewer stop signals only recorded processes and confirms the detach
+ok - fm-herdr-lab: viewer ownership requires the recorded parent
+ok - fm-herdr-lab: interrupted viewer start cancels its launcher
+tests/fm-herdr-lab.test.sh: line 308:  7389 Terminated: 15          "$REAL_SLEEP" 20
+ok - fm-herdr-lab: teardown refuses to destroy a session an attached viewer still holds
+ok - fm-herdr-lab: unreadable detach results fail closed on running sessions
+ok - fm-herdr-lab: the viewer launcher refuses unsafe sessions and pidfiles
+ok - fm-herdr-lab: view is bounded, lab-only, and forwards nothing to Herdr
+ok - fm-herdr-lab: view reaps a client that is still flushing output at exit
+ok - fm-herdr-lab: view renders past a private device-status query
+rc=0
+$ tests/fm-status-chrome-herdr-lab-e2e.test.sh   # run 1, load: load averages: 15.34 45.22 116.92
+ok - herdr chrome: report-metadata --ttl-ms stores a border row, pane get reads it back, and it renders on the split border
+ok - herdr chrome: zooming the primary hides the companion and reclaims its rows while the border title still renders
+ok - herdr chrome: a third pane is reported by pane layout and never left hidden, and pane zoom --off is idempotent
+ok - herdr chrome: the live renderer keeps publishing the border row and never re-applies a released zoom
+rc=0 (18s)
+$ tests/fm-status-chrome-herdr-lab-e2e.test.sh   # run 2, load: load averages: 15.18 43.72 115.13
+ok - herdr chrome: report-metadata --ttl-ms stores a border row, pane get reads it back, and it renders on the split border
+ok - herdr chrome: zooming the primary hides the companion and reclaims its rows while the border title still renders
+ok - herdr chrome: a third pane is reported by pane layout and never left hidden, and pane zoom --off is idempotent
+ok - herdr chrome: the live renderer keeps publishing the border row and never re-applies a released zoom
+rc=0 (17s)

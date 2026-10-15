@@ -1,0 +1,42 @@
+{"agent":"pi","name":"worker-presentation","pane":"w1:p2","tab":"w1:t2"}
+[{"name":"worker-presentation","agent":"pi","state":null}]
+00| spaces                  │   1        2      +
+01|                         │(base) larsmusic@Larss-MacBook-Pro 01M4Z3XR8F14DKE5QDFQDG1JCT %
+02| ○ Firstmate · 0.9.5 p…  │
+03|                         │
+04|                         │
+05|                         │
+06|                         │
+07|                         │
+08|                         │
+09|                         │
+10|                         │
+11|                         │
+12|                         │
+13|                         │
+14|                         │
+15|                         │
+16|                         │
+17|                         │
+18|                         │
+19| new               ● menu│
+20|─────────────────────────│
+21| agents           grouped│
+22|                         │
+23| ○ Firstmate · 0.9.5… · 2│
+24|   worker-presentation   │
+25|                         │
+26|                         │
+27|                         │
+28|                         │
+29|                         │
+30|                         │
+31|                         │
+32|                         │
+33|                         │
+34|                         │
+35|                         │
+36|                         │
+37|                         │
+38|                         │
+39|                        «│

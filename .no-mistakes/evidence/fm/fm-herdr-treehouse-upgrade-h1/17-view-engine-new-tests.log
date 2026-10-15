@@ -1,0 +1,6 @@
+=== with pyte (venv)
+not ok - the view engine must finish once its client is reaped: expected exit 0, got 3
+rc=1
+=== same two tests against the base commit's view engine
+env: timeout: No such file or directory
+rc=127

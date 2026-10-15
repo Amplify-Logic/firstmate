@@ -1,0 +1,8 @@
+herdr: herdr 0.9.5, pi: 0.87.1
+{"error":{"code":"timeout","message":"timed out waiting for agent startup"},"id":"cli:agent:start"}
+not ok - could not start isolated Pi presentation probe
+
+real	0m57.413s
+user	0m0.858s
+sys	0m0.643s
+rc=1

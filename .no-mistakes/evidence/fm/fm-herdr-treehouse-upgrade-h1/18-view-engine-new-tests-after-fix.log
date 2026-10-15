@@ -1,0 +1,11 @@
+=== after widening the capture window to 2s; load: load averages: 244.91 269.78 252.72
+ok - fm-herdr-lab: view reaps a client that is still flushing output at exit
+ok - fm-herdr-lab: view renders past a private device-status query
+rc=0
+ok - fm-herdr-lab: view reaps a client that is still flushing output at exit
+ok - fm-herdr-lab: view renders past a private device-status query
+rc=0
+=== same two tests against the base commit (06a080a8) view engine
+not ok - the view engine hung reaping a client that was still flushing output at exit
+tests/lib.sh: line 204:  1486 Killed: 9               PATH="$bin:$PATH" python3 "$engine" --session fm-lab-flush-probe --seconds 2 --format raw-bytes > "$out" 2> /dev/null
+rc=1

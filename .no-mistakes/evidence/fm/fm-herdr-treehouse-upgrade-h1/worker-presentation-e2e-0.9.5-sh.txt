@@ -1,0 +1,7 @@
+herdr: herdr 0.9.5, pi: 0.87.1, pane SHELL=/bin/sh
+ok - real Herdr grouped Agents presentation shows human project, WORKER outcome/state, Pi detail, and hidden task identity
+
+real	0m46.485s
+user	0m1.198s
+sys	0m0.827s
+rc=0

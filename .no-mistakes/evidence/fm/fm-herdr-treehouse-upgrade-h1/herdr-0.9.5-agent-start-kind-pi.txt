@@ -1,0 +1,48 @@
+fresh tab probe_pane=w1:p3
+shell settled after 1s: ["zsh"]
+$ fm-herdr-lab.sh run fm-lab-agentstart-43185-3098 agent start worker-presentation --kind pi --pane w1:p3
+{"error":{"code":"timeout","message":"timed out waiting for agent startup"},"id":"cli:agent:start"}
+rc=1
+tab_id= pane_id=
+$ agent list
+{"name":null,"agent":"pi","state":null,"pane_id":"w1:p2"}
+$ pane process-info w1:p3
+["zsh"]
+$ fm-herdr-lab.sh view fm-lab-agentstart-43185-3098 --cols 140 --rows 36 --seconds 3
+00| spaces                  │   1        2        3      +
+01|                         │(base) larsmusic@Larss-MacBook-Pro 01M4Z3XR8F14DKE5QDFQDG1JCT %
+02| ○ probe-ws              │
+03|                         │
+04|                         │
+05|                         │
+06|                         │
+07|                         │
+08|                         │
+09|                         │
+10|                         │
+11|                         │
+12|                         │
+13|                         │
+14|                         │
+15|                         │
+16|                         │
+17| new               ● menu│
+18|─────────────────────────│
+19| agents           grouped│
+20|                         │
+21| ○ probe-ws · 2          │
+22|   pi                    │
+23|                         │
+24|                         │
+25|                         │
+26|                         │
+27|                         │
+28|                         │
+29|                         │
+30|                         │
+31|                         │
+32|                         │
+33|                         │
+34|                         │
+35|                        «│
+view_rc=0

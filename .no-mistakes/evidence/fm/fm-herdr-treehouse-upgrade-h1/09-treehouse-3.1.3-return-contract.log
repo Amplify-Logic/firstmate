@@ -1,0 +1,18 @@
+treehouse v3.1.3
+$ treehouse get --help | grep -E -- --lease   (fm-bootstrap.sh lease-capability probe)
+lease flag detected
+$ treehouse get --lease --lease-holder sm-x   (fm-home-seed.sh)
+rc=0 stdout=[/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-th-probe.xm9SkW/pool/.treehouse/repo-bfc0aa/1/repo]
+🌳 Setting up worktree...
+🌳 Leased worktree at /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-th-probe.xm9SkW/pool/.treehouse/repo-bfc0aa/1/repo. Run 'treehouse return /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-th-probe.xm9SkW/pool/.treehouse/repo-bfc0aa/1/repo' to release it.
+$ treehouse return --if-lease-holder other <path>
+failed to return worktree: lease precondition failed: lease holder does not match worktree /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-th-probe.xm9SkW/pool/.treehouse/repo-bfc0aa/1/repo
+rc=1
+$ treehouse return <dirty path>   (no --force; 3.x exit code)
+Worktree has uncommitted changes. Clean and return? [Y/n] 🌳 worktree not returned: it has uncommitted changes and the confirmation could not be answered (stdin reached EOF); prune will not reclaim this slot. Use treehouse return --force '/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-th-probe.xm9SkW/pool/.treehouse/repo-bfc0aa/1/repo' to clean and return it
+rc=3
+$ treehouse return --force <dirty path>   (what fm-home-seed.sh and the spawn cleanup issue)
+🌳 Worktree returned to pool.
+rc=0
+base  main  (repository default)
+1     available    /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-th-probe.xm9SkW/pool/.treehouse/repo-bfc0aa/1/repo  (detached)

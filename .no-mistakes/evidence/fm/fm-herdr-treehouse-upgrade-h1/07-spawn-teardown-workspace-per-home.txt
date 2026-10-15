@@ -1,0 +1,13 @@
+# SHELL=/bin/zsh herdr 0.9.5 treehouse v3.1.3 load: load averages: 41.69 64.63 137.66
+$ tests/fm-backend-herdr-workspace-per-home-e2e.test.sh
+ok - real herdr E2E: a primary-shaped home spawns a crewmate on the herdr backend
+ok - real herdr E2E: the primary-shaped home's crewmate landed in its token-owned human project workspace
+ok - real herdr E2E: the primary spawns a --secondmate task on the herdr backend
+ok - real herdr E2E: a --secondmate spawn by the PRIMARY lands in the SECONDMATE's own labeled workspace with its legacy fm-<id> tab, distinct from the primary's
+ok - real herdr E2E: a crewmate spawns successfully FROM a secondmate-shaped home's own fm-spawn.sh process
+ok - real herdr E2E: a worker spawned from a secondmate home lands in that home's token-owned project workspace
+ok - real herdr E2E: list_live from the primary's own context sees only the primary's own task
+ok - real herdr E2E: list_live from the secondmate context combines its legacy primary and token-owned project workspaces
+ok - real herdr E2E: tearing down cm1 closes only its own tab - the secondmate's and cm2's tabs survive untouched
+ok - real herdr E2E: tearing down cm2 closes only its own tab - the secondmate's own tab (same workspace) survives untouched
+rc=0 (89s)

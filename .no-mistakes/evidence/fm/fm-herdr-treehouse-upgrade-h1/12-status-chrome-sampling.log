@@ -1,0 +1,18 @@
+=== 11:18:07 herdr=herdr 0.9.5
+ok - herdr chrome: the live renderer keeps publishing the border row and never re-applies a released zoom
+rc=
+=== 11:18:29 herdr=herdr 0.7.4
+not ok - the renderer did not publish a role-marked border row: ''
+rc=
+=== 11:18:54 herdr=herdr 0.9.5
+not ok - the renderer did not publish a role-marked border row: ''
+rc=
+=== 11:19:20 herdr=herdr 0.7.4
+ok - herdr chrome: the live renderer keeps publishing the border row and never re-applies a released zoom
+rc=
+=== 11:19:42 herdr=herdr 0.9.5
+ok - herdr chrome: the live renderer keeps publishing the border row and never re-applies a released zoom
+rc=
+=== 11:20:02 herdr=herdr 0.7.4
+ok - herdr chrome: the live renderer keeps publishing the border row and never re-applies a released zoom
+rc=
