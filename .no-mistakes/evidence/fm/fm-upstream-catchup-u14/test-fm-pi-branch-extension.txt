@@ -1,0 +1,14 @@
+ok - fm_branch_outcomes and fm_branch_processed call headers match stock on Pi before and from 0.99
+ok - fm_branch_outcomes hides through ToolExecutionComponent while Calm-off and HTML export stay stock
+ok - the installed Pi still bounds the picker's list and ranks its search
+ok - branch owns accepted wakes with a stable prefix and deterministic verdict-driven delivery
+ok - a captain outcome reaches main's model as one typed, sequence-keyed processing request while routine notes stay plain
+not ok - requested and unsolicited healthy outcomes must follow their distinct public delivery paths: <anonymous_script>:221
+  throw new Error(`timed out waiting for ${label}`);
+        ^
+
+Error: timed out waiting for unsolicited result acknowledgement
+    at settle (eval at <anonymous> (file:///Users/larsmusic/.no-mistakes/worktrees/f569cc43ac96/01M4Z3XC65WR7ARE5THQDFM7F6/[eval1]:2:7), <anonymous>:221:9)
+    at async file:///Users/larsmusic/.no-mistakes/worktrees/f569cc43ac96/01M4Z3XC65WR7ARE5THQDFM7F6/[eval1]:113:1
+
+Node.js v22.23.1: expected exit 0, got 1

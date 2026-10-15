@@ -1,0 +1,19 @@
+LAB COPY WITH ONLY THE #6787 HUNK REVERTED in bin/fm-supervision-host.sh (git -C lab diff --stat):
+ bin/fm-supervision-host.sh | 13 ++++---------
+ 1 file changed, 4 insertions(+), 9 deletions(-)
+== before close B ==
+Stop hook pid=86867 pgid=86867; parked host: host	87686	Thu Oct 15 07:08:31 2026     bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.WLdruQ/bin/fm-supervision-host.sh park
+
+== immediately after the hook's exit-2 rewake ==
+epoch=7 owner_pid=86867 outcome=rewake updated_at=1792048479 session_pid=59820 recovery_generation=89399.1792048323.jlf2le
+hook pid 86867 alive? yes
+successor watcher pid= pgid= (hook pgid 86867)
+1792048112	take-over	arm=70935
+1792048414	pass-through	attended	main-only	signal: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.WLdruQ/state/demo.status
+1792048443	pass-through	successor-unverified	signal: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.WLdruQ/state/demo.status
+t+1s: watcher  alive? NO  watch.lock pid=
+t+2s: watcher  alive? NO  watch.lock pid=
+t+3s: watcher  alive? NO  watch.lock pid=
+t+5s: watcher  alive? NO  watch.lock pid=
+t+8s: watcher  alive? NO  watch.lock pid=
+NOTE: inconclusive. Host load average was ~238 during this run; the reverted park's successor never verified (successor-unverified), the same outcome the fixed park hit under this load for close A, so no successor existed to observe. This red attempt is not counted as evidence either way.

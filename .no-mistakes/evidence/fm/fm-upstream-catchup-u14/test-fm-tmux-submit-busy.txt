@@ -1,0 +1,13 @@
+ok - fm_tmux_submit_enter_core: busy pane + pending composer returns empty (message queued)
+ok - fm_tmux_submit_enter_core: idle pane + pending composer stays pending (genuine swallow preserved)
+ok - fm_tmux_submit_enter_core: the Claude background-task exit picker gets no confirming Enter
+ok - fm_backend_send_text_submit: a typed message to the exit picker types nothing and sends no Enter
+ok - fm_tmux_submit_enter_core: wrapped input retains swallowed-Enter retries
+ok - fm_tmux_submit_enter_core: placeholder-like bare input retains swallowed-Enter retries
+ok - fm_tmux_submit_enter_core: busy pane clears composer on first Enter - returns empty
+ok - fm_tmux_submit_enter_core: idle pane clears composer on first Enter - returns empty as before
+ok - fm_tmux_submit_enter_core: busy conversion is limited to proven pending input
+ok - fm_tmux_submit_core: failed baseline capture disables busy unknown conversion
+ok - fm_tmux_submit_enter_core: pending-unproven retries without busy conversion
+ok - fm_tmux_submit_enter_core: unrecognized states skip busy conversion
+ok - fm_pane_is_busy: Claude spinner is scoped, multi-frame, and backward-compatible

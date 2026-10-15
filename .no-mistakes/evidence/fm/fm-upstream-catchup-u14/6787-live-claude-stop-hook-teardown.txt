@@ -1,0 +1,67 @@
+== before the close ==
+Stop hook (fm-claude-stop-autoarm.sh) pid=97208 pgid=97208
+parked watcher pid=99912
+epoch=1 owner_pid=97208 outcome=arming updated_at=1792046685
+Thu Oct 15 06:44:43 2026     bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.WLdruQ/bin/fm-claude-stop-autoarm.sh
+
+== immediately after the hook's exit-2 rewake ==
+epoch=1 owner_pid=97208 outcome=rewake updated_at=1792046758 session_pid=59820 recovery_generation=99912.1792046755.kPRsts
+Thu Oct 15 06:44:43 2026     bash /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.WLdruQ/bin/fm-claude-stop-autoarm.sh
+hook pid 97208 alive? no
+processes still in the hook's pgid 97208:
+successor watcher pid=38925 pgid=38883
+1792046687	start	gen=host-98537-1792046686	primary=claude
+1792046756	pass-through	attended	main-only	signal: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.WLdruQ/state/demo.status
+t+2s: watcher 38925 alive? yes  watch.lock pid=38925  marker=announced:downtime:99912.1792046755.kPRsts
+t+5s: watcher 38925 alive? yes  watch.lock pid=38925  marker=announced:downtime:99912.1792046755.kPRsts
+t+10s: watcher 38925 alive? NO  watch.lock pid=  marker=announced:downtime:99912.1792046755.kPRsts
+
+== after main drained and acknowledged (model turn) ==
+supervision-host.log:
+1792046687	start	gen=host-98537-1792046686	primary=claude
+1792046756	pass-through	attended	main-only	signal: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.WLdruQ/state/demo.status
+1792046766	start	gen=host-42957-1792046766	primary=claude
+1792046766	take-over	arm=38883
+1792046770	pass-through	attended	main-only	check: rearm-resurface
+1792046794	start	gen=host-55705-1792046794	primary=claude
+1792046794	take-over	arm=45887
+1792046799	pass-through	attended	main-only	check: rearm-resurface
+1792046807	start	gen=host-61289-1792046807	primary=claude
+1792046807	take-over	arm=58663
+1792046813	pass-through	attended	main-only	check: rearm-resurface
+1792046846	start	gen=host-88411-1792046845	primary=claude
+1792046846	take-over	arm=65606
+wake queue (empty = acknowledged):
+current watcher 90730 alive? yes; now=1792047618, no pass-through since the take-over at 1792046846
+
+== Claude primary pane (real Claude Code 2.1.300 (Claude Code)) ==
+✻ Cogitated for 7s · done 8:46 AM
+⏺ Stop hook feedback
+⏺ Captain, monitoring sent a second notice that the same pending update needs handling. I'm still holding because you asked for only the one command. The update is saved on disk, so nothing is lost
+  while it waits. Say the word and I'll handle it.
+✻ Churned for 5s · done 8:46 AM
+⏺ Stop hook feedback
+⏺ Captain, I'm still holding. Monitoring keeps asking me to handle the demo task's pending update, but you limited me to one command. The update stays saved and nothing is lost. Tell me if you want it
+  handled.
+✻ Sautéed for 4s · done 8:46 AM
+❯ Lab test: you may now handle the pending wake. Run bin/fm-wake-drain.sh, then run the exact acknowledgement command it prints (WAKE_ACK_REQUIRED line). The demo task is a fixture with no window;
+  take no other action for it. Then reply done.
+⏺ Bash(bin/fm-wake-drain.sh)
+  ⎿  1792046755      2       signal  demo.status     needs-decision: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.WLdruQ/state/demo.status
+     WAKE_ACK_REQUIRED: after handling completes run bin/fm-wake-drain.sh --ack-through 2 --recovery-generation 62649.1792046810.pySuxU
+     wake annotation: latest wake-EVENT observed at drain, not current state: demo.status: needs-decision [at=1792046720]: which export format?
+     … +4 lines (ctrl+o to expand)
+  ⎿  Allowed by auto mode classifier
+⏺ Stop hook feedback
+⏺ Bash(bin/fm-wake-drain.sh --ack-through 2 --recovery-generation 62649.1792046810.pySuxU)
+  ⎿  (No output)
+  ⎿  Allowed by auto mode classifier
+⏺ Captain, done. I cleared the pending update and confirmed it. I took no other action on the demo task.
+  - Still open: the demo task is asking which export format to use. Confirming the update didn't close that question. It stays open until it's answered.
+  - More updates may be waiting: the clear printed a warning that more updates are queued. Monitoring also sent another "needs handling" notice while I was working. You said to take no other action,
+    so I didn't check them.
+✻ Brewed for 32s · done 8:47 AM
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ Answer the demo task: use CSV
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏵⏵ auto mode on (shift+tab to cycle) · ← 2 agents

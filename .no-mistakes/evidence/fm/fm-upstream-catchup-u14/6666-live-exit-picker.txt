@@ -1,0 +1,39 @@
+== fm-control exit #1 (Claude idle with one background shell) ==
+$ bin/fm-control.sh t1 exit   (FM_HOME=lab, TMUX=/private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.tTUCml/tmux/tmux-501/fm-lab,52972,0)
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.tTUCml
+error: task t1 is blocked on a prompt: Claude background-task exit picker. Refusing to type Enter into it.
+exit status: 1
+
+== real Claude pane after exit #1 ==
+  ⎿  Running in the background (↓ to manage)
+  ⎿  Allowed by auto mode classifier
+⏺ started
+✻ Cooked for 4m 10s · done 11:48 AM · 1 shell still running
+❯ /exit
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  Background work is running
+  The following will stop when you exit:
+  shell · sleep 900
+  ❯ 1. Exit and stop tasks
+    2. Stay
+  Enter to confirm · Esc to cancel
+
+== fm-control exit #2 (picker already open) ==
+$ bin/fm-control.sh t1 exit   (FM_HOME=lab, TMUX=/private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.tTUCml/tmux/tmux-501/fm-lab,52972,0)
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.tTUCml
+error: task t1 is blocked on a prompt: Claude background-task exit picker. Refusing to type Enter into it.
+exit status: 1
+
+== pane unchanged by exit #2: yes ==
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  Background work is running
+  The following will stop when you exit:
+  shell · sleep 900
+  ❯ 1. Exit and stop tasks
+    2. Stay
+  Enter to confirm · Esc to cancel
+
+== claude and background sleep still running ==
+fm-t1 pane_pid=52991 cmd=2.1.300 dead=0
+65134 /bin/zsh -c -l setopt NO_EXTENDED_GLOB NO_BARE_GLOB_QUAL 2>/dev/null || true && { \builtin unalias -- 'unsetenv'; \builtin unset -f -- 'unsetenv'; } >/dev/null 2>&1 || true && eval 'sleep 900' < /dev/null && pwd -P >| /tmp/claude-9c1e-cwd
+74842 sleep 900

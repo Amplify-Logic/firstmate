@@ -1,0 +1,3 @@
+ok - host+hook: the successor a close that turns main-only at its turn leaves for main survives the hook's process group teardown
+ok - host+hook: the successor a pass-through leaves for main survives the hook's process group teardown
+bash tests/.scratch-6787.test.sh  11.35s user 20.83s system 28% cpu 1:53.65 total

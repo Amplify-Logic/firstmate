@@ -1,0 +1,19 @@
+Fork clone: origin=github.com/Amplify-Logic/firstmate, upstream=github.com/kunchenguid/firstmate
+--- no gh default recorded
+$ [home=user] bin/fm-role.sh check <fork-clone>
+refused: this home runs as firstmate user/operator and holds no publication authority for github.com/kunchenguid/firstmate
+exit=1
+$ [home=maint] bin/fm-role.sh check <fork-clone>
+refused: this home runs as firstmate user/operator and holds no publication authority for github.com/kunchenguid/firstmate
+exit=1
+--- after 'gh repo set-default' to the fork (git config remote.origin.gh-resolved base)
+$ [home=user] bin/fm-role.sh check <fork-clone>
+refused: this home runs as firstmate user/operator and holds no publication authority for github.com/amplify-logic/firstmate
+exit=1
+$ [home=maint] bin/fm-role.sh check <fork-clone>
+authorized: maintainer scope github.com/amplify-logic/firstmate
+exit=0
+--- gh default pointing at the creator repo (remote.upstream.gh-resolved base, origin unset)
+$ [home=maint] bin/fm-role.sh check <fork-clone>
+refused: this home runs as firstmate user/operator and holds no publication authority for github.com/kunchenguid/firstmate
+exit=1

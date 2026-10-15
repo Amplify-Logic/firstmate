@@ -1,0 +1,29 @@
+=== run 1: fm-control exit on a Claude worker with a running background shell ===
+$ FM_HOME=/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.rTvNmU bin/fm-control.sh demo exit
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.rTvNmU
+error: task demo is blocked on a prompt: Claude background-task exit picker. Refusing to type Enter into it.
+rc=1
+
+=== worker pane after run 1 ===
+  ⎿  Allowed by auto mode classifier
+⏺ started
+✻ Sautéed for 9s · done 8:40 AM · 1 shell still running
+❯ /exit
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  Background work is running
+  The following will stop when you exit:
+  shell · sleep 1800
+  ❯ 1. Exit and stop tasks
+    2. Move to background and exit
+    3. Stay
+  Enter to confirm · Esc to cancel
+
+=== run 2: fm-control exit retried while the picker is already open ===
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.rTvNmU
+error: task demo is blocked on a prompt: Claude background-task exit picker. Refusing to type Enter into it.
+rc=1
+=== pane diff before/after run 2 (empty means nothing was typed) ===
+diff rc=0
+=== process check ===
+window=fm-demo cmd=2.1.300
+64211 sleep 1800

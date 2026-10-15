@@ -1,0 +1,12 @@
+$ git merge-base --is-ancestor 0397cb2b HEAD && echo upstream-tip-included
+upstream-tip-included
+$ git rev-list --count HEAD..0397cb2b   # upstream commits still missing
+0
+$ git rev-list --count --no-merges 06a080a8..0397cb2b   # upstream commits brought in by this change
+51
+$ for pr in 6787 6666; do git log --oneline 06a080a8..HEAD --grep "#$pr)"; done
+3c58ec8e fix(bin): keep the supervision host's successor watcher alive after the Stop hook's group is torn down (#6787)
+2d7daa9e fix: refuse a confirming Enter on the Claude background-task exit picker (#6666)
+$ bin/fm-fork-surface.sh check
+FORK_SURFACE OK capabilities=89 owned_paths=290
+exit=0
