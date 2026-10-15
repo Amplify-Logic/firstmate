@@ -61,8 +61,9 @@
 #   - Install and uninstall work against a temporary home and a fake launchd
 #     transport, and refuse a home that never opted in.
 #   - A timeline flags a partner-facing ask awaiting the captain - an
-#     unanswered partner message, an open promise naming him or tech, or a
-#     colleague note naming him - recognising him by the sentinel or by his own
+#     unanswered partner message, an open promise naming him or, on his own
+#     ticket, tech, or a colleague note naming him, never a colleague's
+#     tech-team promise alone - recognising him by the sentinel or by his own
 #     address and the partner by any address on the ticket, while only a reply
 #     discharges one, an auto-acknowledgement is claimed only when no email
 #     went out, and a malformed or address-less timeline is refused.
@@ -72,8 +73,9 @@
 #     rewrite of a record keeps the facts the timeline recorded, including a
 #     timeline re-read of a resolved ticket, which stays resolved.
 #   - A HubSpot claim names "Waiting on contact" and hands out a bounded
-#     periodic re-scan of every owner's tickets that name the captain or
-#     promise the customer that tech is on it.
+#     periodic re-scan of the captain's own tickets and of every other owner's
+#     tickets that @mention or directly ask him, never of a colleague's ticket
+#     that only promises the customer that tech is on it.
 #   - A team announcement is information, not an ask: only an announcement
 #     source accepts it, it is never notified or put on the to-do list, it
 #     shows in the brief, and it leaves the polled set only after its own
@@ -1428,10 +1430,10 @@ partner_home() {
 # says otherwise, and names the captain, if at all, only inside a message body.
 H=3600
 write_timeline() {
-  local h=$1 name=$2 at_inbound=$((T_0900 - 30 * H)) at_out=$((T_0900 - 28 * H))
+  local h=$1 name=$2 at_inbound=$((T_0900 - 30 * H)) at_out=$((T_0900 - 28 * H)) body
   case "$name" in
     # Caffeine Mechanics: the customer's chase was answered with a promise that
-    # names the captain, and nothing has gone to the customer since.
+    # @mentions the captain, and nothing has gone to the customer since.
     promise)
       cat >"$h/$name.json" <<EOF
 {"kind":"hubspot-ticket","owner":"natalia@team.example","stage":"Waiting for Tech",
@@ -1440,21 +1442,21 @@ write_timeline() {
   {"type":"email","at":$at_inbound,"direction":"inbound","from":"rachel@partner.example",
    "body":"I'd appreciate a steer on the lack of connectivity as the systems should really be online."},
   {"type":"email","at":$at_out,"direction":"outbound","from":"support@team.example",
-   "body":"Hi Rachel,\nLars is looking into this, and I have just sent him a reminder. I will keep you updated.\nNatalia"},
+   "body":"Hi Rachel,\n@Lars is looking into this, and I have just sent him a reminder. I will keep you updated.\nNatalia"},
   {"type":"note","at":$((at_out + 60)),"author":"natalia@team.example","body":"Sent a reminder about this one."}]}
 EOF
       ;;
-    # DMG nozzle: the partner's reply to the captain's promise got only an
-    # auto-acknowledgement - a HubSpot send with no EMAIL engagement.
+    # DMG nozzle: the partner's reply asking the captain about his promise got
+    # only an auto-acknowledgement - a HubSpot send with no EMAIL engagement.
     autoack)
       cat >"$h/$name.json" <<EOF
 {"kind":"hubspot-ticket","owner":"natalia@team.example","stage":"Waiting for Logistics",
  "contacts":["alex@workplace.example"],"last_message_sent_at":$((at_inbound + 240)),
  "events":[
-  {"type":"email","at":$((at_inbound - 900)),"direction":"outbound","from":"support@team.example",
+  {"type":"email","at":$((at_inbound - 900)),"direction":"outbound","from":"support@team.example","author":"captain",
    "body":"I've made the request to our operations team, and I'll confirm once I hear.\nLars Tolhurst"},
   {"type":"email","at":$at_inbound,"direction":"inbound","from":"alex@workplace.example",
-   "body":"Once confirmed, could the delivery charge be amended? And can both parts ship together?"}]}
+   "body":"Lars, once confirmed, could the delivery charge be amended? And can both parts ship together?"}]}
 EOF
       ;;
     # CSG: "Waiting on contact" after our reply. The customer owes the next step,
@@ -1523,7 +1525,7 @@ EOF
  "contacts":["rachel@partner.example"],
  "events":[
   {"type":"email","at":$at_inbound,"direction":"inbound","from":"rachel@partner.example","body":"Any news on the connectivity?"},
-  {"type":"email","at":$at_out,"direction":"outbound","from":"support@team.example","body":"Lars is looking into this. I will keep you updated."},
+  {"type":"email","at":$at_out,"direction":"outbound","from":"support@team.example","body":"@Lars is looking into this. I will keep you updated."},
   {"type":"email","at":$((at_out + 3600)),"direction":"outbound","from":"support@team.example","body":"The SIMs were suspended; they are active again as of this morning."}]}
 EOF
       ;;
@@ -1558,11 +1560,11 @@ EOF
   {"type":"email","at":$at_inbound,"direction":"inbound","from":"rachel@partner.example",
    "body":"Any news on the syrup availability?"},
   {"type":"email","at":$at_out,"direction":"outbound","from":"support@team.example",
-   "body":"Lars is looking into this. I will keep you updated."}]}
+   "body":"@Lars is looking into this. I will keep you updated."}]}
 EOF
       ;;
-    # A colleague answered from her own mailbox, which is not a team address:
-    # the ask stands, but an email plainly went out.
+    # The partner names the captain only in passing on a colleague's ticket:
+    # nobody tagged or asked him, so it stays the colleague's.
     colleague-reply)
       cat >"$h/$name.json" <<EOF
 {"kind":"hubspot-ticket","owner":"natalia@team.example","stage":"Waiting for Tech",
@@ -1574,8 +1576,104 @@ EOF
    "body":"I have asked the warehouse about it."}]}
 EOF
       ;;
+    # The partner asks the captain directly on a colleague's ticket, and the
+    # colleague answered from her own mailbox, which is not a team address:
+    # the ask stands, but an email plainly went out.
+    direct-ask)
+      cat >"$h/$name.json" <<EOF
+{"kind":"hubspot-ticket","owner":"natalia@team.example","stage":"Waiting for Tech",
+ "contacts":["rachel@partner.example"],"last_message_sent_at":$at_out,
+ "events":[
+  {"type":"email","at":$at_inbound,"direction":"inbound","from":"rachel@partner.example",
+   "body":"Hi Lars,\ncould you check the connectivity? The systems should really be online."},
+  {"type":"email","at":$at_out,"direction":"outbound","from":"natalia@team.example",
+   "body":"I have asked the warehouse about it."}]}
+EOF
+      ;;
+    # The partner's unanswered message on a colleague's ticket opens with a
+    # greeting to the captain: each greet-ask carries its question or request
+    # in a later sentence; each greet-statement asks nothing, and a request in
+    # its signature or confidentiality footer does not count.
+    greet-*)
+      case "$name" in
+        greet-ask-context) body='Hi Lars,\nThe systems are offline since Monday. Could you check the connectivity?' ;;
+        greet-ask-pleasantry) body='Hi Lars,\nI hope you are well. Can you send the quote?' ;;
+        greet-ask-dutch) body='Beste Lars,\n\nDe unit geeft B.14. Kun je even kijken?' ;;
+        greet-ask-attached) body='Hi Lars,\nPlease find attached the service report.' ;;
+        greet-statement) body='Hi Lars,\nThe unit is back online. Thanks for the help.' ;;
+        greet-statement-dutch) body='Beste Lars,\nIk wil je bedanken voor de hulp, de unit werkt weer.' ;;
+        greet-statement-signoff) body='Hi Lars,\nThe unit is back online. Thanks!\n\nKind regards, Chloe\nPlease consider the environment before printing this email.' ;;
+        greet-statement-footer) body='Hi Lars,\nThe unit is back online.\n\nChloe\nThis e-mail is confidential. If you received it in error, please notify the sender.' ;;
+        greet-statement-signoff-company) body='Beste Lars,\nDe unit werkt weer.\n\nMet vriendelijke groet, Jan de Vries | Partner B.V.\nGraag melden bij de afzender als dit niet voor u bedoeld is.' ;;
+        greet-statement-signoff-title) body='Hi Lars,\nThe unit works again.\n\nBest regards, Dr. Chloe Smith\nPlease consider the environment.' ;;
+        greet-statement-with-kind-regards) body='Hi Lars,\nThe unit works again.\n\nWith kind regards,\nChloe\nPlease consider the environment.' ;;
+        greet-statement-best-wishes) body='Hi Lars,\nThe unit works again.\n\nBest wishes,\nChloe\nPlease consider the environment.' ;;
+        greet-statement-dashes) body='Hi Lars,\nThe unit works again.\n--\nChloe\nPlease consider the environment.' ;;
+        greet-statement-dit-bericht) body='Beste Lars,\nDe unit werkt weer.\n\nJan\nDit bericht is vertrouwelijk. Gelieve de afzender te verwittigen, graag.' ;;
+        greet-statement-information) body='Hi Lars,\nThe unit is back online.\n\nChloe\nThe information in this e-mail is confidential. If you received it in error, please notify the sender.' ;;
+      esac
+      cat >"$h/$name.json" <<EOF
+{"kind":"hubspot-ticket","owner":"luc@team.example","stage":"Waiting for Tech",
+ "contacts":["chloe@kiosk.example"],
+ "events":[
+  {"type":"email","at":$at_inbound,"direction":"inbound","from":"chloe@kiosk.example",
+   "body":"$body"}]}
+EOF
+      ;;
+    # A colleague's note on her ticket, the partner's message unanswered. Each
+    # ask- note asks the captain directly in a different form; list-name only
+    # opens a list with his name, and the question after it is the customer's;
+    # the about- notes talk about him or say what he does, and ask him nothing.
+    ask-*|list-name|about-*)
+      case "$name" in
+        ask-request) body='Lars, please call the customer back about the B.14.' ;;
+        ask-dutch) body='Lars, wil je de klant even bellen.' ;;
+        ask-trailing) body='Can you check this, Lars?' ;;
+        ask-trailing-dutch) body='Kun jij hier even naar kijken Lars?' ;;
+        ask-no-comma) body='Lars can you check the PCB?' ;;
+        list-name) body='Lars, Natalia and I visited the site on Monday.\nCustomer asks: when is the next maintenance?' ;;
+        about-discussed) body='Is this the same issue we discussed with Lars?' ;;
+        about-escalate) body='Should we escalate this to Lars?' ;;
+        about-statement) body='Lars kan je hier verder mee helpen.' ;;
+        about-contraction) body="Lars, can't make it today, I'll go." ;;
+        about-ask) body='Should we ask Lars?' ;;
+        about-tell) body='Did you tell Lars?' ;;
+        about-cc) body='Can you cc Lars?' ;;
+        about-contact) body='Is the contact person Lars?' ;;
+      esac
+      cat >"$h/$name.json" <<EOF
+{"kind":"hubspot-ticket","owner":"luc@team.example","stage":"Waiting for Tech",
+ "contacts":["chloe@kiosk.example"],
+ "events":[
+  {"type":"email","at":$at_inbound,"direction":"inbound","from":"chloe@kiosk.example",
+   "body":"The unit shows B.14 again."},
+  {"type":"note","at":$at_out,"author":"luc@team.example","body":"$body"}]}
+EOF
+      ;;
+    # A colleague's ticket whose customer and promise name the captain only in
+    # passing: neither tags nor asks him.
+    passing-promise)
+      cat >"$h/$name.json" <<EOF
+{"kind":"hubspot-ticket","owner":"luc@team.example","stage":"Waiting for Tech",
+ "contacts":["ops@cargo.example"],
+ "events":[
+  {"type":"email","at":$at_inbound,"direction":"inbound","from":"ops@cargo.example",
+   "body":"Hi Luc, Lars installed the unit last year; it now shows B.14, what should we do?"},
+  {"type":"email","at":$at_out,"direction":"outbound","from":"support@team.example",
+   "body":"Lars is looking into this. I will keep you updated.\nLuc"}]}
+EOF
+      ;;
+    # A colleague's note that names the captain in passing asks him nothing.
+    passing-note)
+      cat >"$h/$name.json" <<EOF
+{"kind":"hubspot-ticket","owner":"luc@team.example","stage":"Waiting for Tech",
+ "contacts":["chloe@kiosk.example"],
+ "events":[{"type":"note","at":$at_out,"author":"luc@team.example","body":"Discussed with Lars, closing."}]}
+EOF
+      ;;
     # One of the back-sweep's tech cases: a colleague told the customer the
     # tech team is on it, never naming the captain, and nothing went out since.
+    # The ticket is the colleague's, so it never waits on the captain.
     tech-promise)
       cat >"$h/$name.json" <<EOF
 {"kind":"hubspot-ticket","owner":"natalia@team.example","stage":"Waiting for Tech",
@@ -1585,6 +1683,33 @@ EOF
    "body":"The machine keeps showing E.A03 after the reset."},
   {"type":"email","at":$at_out,"direction":"outbound","from":"support@team.example",
    "body":"Our tech team is looking into this, I'll keep you updated.\nNatalia"}]}
+EOF
+      ;;
+    # The same tech-team promise on a ticket the captain owns is his to keep.
+    own-tech-promise)
+      cat >"$h/$name.json" <<EOF
+{"kind":"hubspot-ticket","owner":"captain","stage":"Waiting for Tech",
+ "contacts":["mark@office.example"],
+ "events":[
+  {"type":"email","at":$at_inbound,"direction":"inbound","from":"mark@office.example",
+   "body":"The machine keeps showing E.A03 after the reset."},
+  {"type":"email","at":$at_out,"direction":"outbound","from":"support@team.example",
+   "body":"Our tech team is looking into this, I'll keep you updated.\nNatalia"}]}
+EOF
+      ;;
+    # A colleague's tech-team promise was later answered, and the partner wrote
+    # again: the unanswered message is the colleague's, not the captain's.
+    tech-promise-chase)
+      cat >"$h/$name.json" <<EOF
+{"kind":"hubspot-ticket","owner":"luc@team.example","stage":"Waiting for Tech",
+ "contacts":["mark@office.example"],
+ "events":[
+  {"type":"email","at":$((at_inbound - 4 * H)),"direction":"outbound","from":"support@team.example",
+   "body":"Our tech team is looking into this, I'll keep you updated.\nLuc"},
+  {"type":"email","at":$((at_inbound - 2 * H)),"direction":"outbound","from":"support@team.example",
+   "body":"Please try a reset in the meantime.\nLuc"},
+  {"type":"email","at":$at_inbound,"direction":"inbound","from":"mark@office.example",
+   "body":"The reset did not help, any news?"}]}
 EOF
       ;;
     # The captain's own reply puts the next step with the customer: asking them
@@ -1622,7 +1747,7 @@ EOF
   {"type":"email","at":$at_inbound,"direction":"inbound","from":"ruud@kantoor.example",
    "body":"The replacement part has still not arrived."},
   {"type":"email","at":$at_out,"direction":"outbound","from":"support@team.example",
-   "body":"Lars is following up on this.\nNatalia"}]}
+   "body":"@Lars is following up on this.\nNatalia"}]}
 EOF
       ;;
     # A colleague's own ticket that never involves the captain.
@@ -1658,7 +1783,9 @@ test_partner_facing_asks_awaiting_the_captain_are_flagged() {
   partner_home "$h"
 
   for name in promise autoack contact-note contact-chase thanks-and-ask owner-address \
-    participants-only colleague-reply tech-promise captain-looking colleague-following; do
+    participants-only direct-ask own-tech-promise captain-looking colleague-following \
+    ask-request ask-dutch ask-trailing ask-trailing-dutch ask-no-comma \
+    greet-ask-context greet-ask-pleasantry greet-ask-dutch greet-ask-attached; do
     key=$(key_of "$(observe_ticket "$h" "$name" "$T_0900")")
     [ "$(item_field "$h" "$key" partner)" = 1 ] || fail "$name: a ticket with an external contact is not partner-facing"
     [ "$(item_field "$h" "$key" awaiting)" = 1 ] || fail "$name: a partner waiting on the captain was not flagged"
@@ -1668,10 +1795,10 @@ test_partner_facing_asks_awaiting_the_captain_are_flagged() {
   done
   key=$(key_of "$(observe_ticket "$h" promise "$T_0900")")
   assert_contains "$(item_field "$h" "$key" awaiting_why)" 'promise that you are on it has had no message since' \
-    'a colleague-owned ticket naming the captain only in an email body was not caught by its promise'
-  key=$(key_of "$(observe_ticket "$h" tech-promise "$T_0900")")
+    'a colleague-owned ticket @mentioning the captain only in an email body was not caught by its promise'
+  key=$(key_of "$(observe_ticket "$h" own-tech-promise "$T_0900")")
   assert_contains "$(item_field "$h" "$key" awaiting_why)" 'promise that tech is on it has had no message since' \
-    'a colleague promise that the tech team is on it was not caught'
+    'a tech-team promise on the captain'"'"'s own ticket was not caught'
   key=$(key_of "$(observe_ticket "$h" captain-looking "$T_0900")")
   assert_contains "$(item_field "$h" "$key" awaiting_why)" 'promise that you are on it has had no message since' \
     'the captain'"'"'s subjectless promise was not caught'
@@ -1699,12 +1826,23 @@ test_partner_facing_asks_awaiting_the_captain_are_flagged() {
     'a ticket whose partner is only in its mail was judged internal'
   # The clause names a fact about the timeline, so it is only claimed when the
   # timeline really holds no outbound email after the partner's message.
-  key=$(key_of "$(observe_ticket "$h" colleague-reply "$T_0900")")
+  key=$(key_of "$(observe_ticket "$h" direct-ask "$T_0900")")
+  assert_contains "$(item_field "$h" "$key" awaiting_why)" 'message has no reply' \
+    'a partner asking the captain directly on a colleague'"'"'s ticket was not caught'
   assert_not_contains "$(item_field "$h" "$key" awaiting_why)" 'auto-acknowledgement' \
     'a real outbound email was reported as an auto-acknowledgement'
 
-  # Only a reply discharges an ask, and only a note naming him is one.
-  for name in customer-owes customer-asked answered uninvolved internal unnamed-note note-answered; do
+  # Only a reply discharges an ask, and only a note naming him is one. A
+  # colleague's tech-team promise involves him neither as a promise nor as a
+  # reason to own the partner's unanswered message, and on a colleague's
+  # ticket a passing name, in a message, promise or note, involves him in none.
+  for name in customer-owes customer-asked answered uninvolved internal unnamed-note note-answered \
+    tech-promise tech-promise-chase colleague-reply passing-promise passing-note list-name \
+    about-discussed about-escalate about-statement about-contraction \
+    about-ask about-tell about-cc about-contact \
+    greet-statement greet-statement-dutch greet-statement-signoff greet-statement-footer \
+    greet-statement-signoff-company greet-statement-signoff-title greet-statement-with-kind-regards \
+    greet-statement-best-wishes greet-statement-dashes greet-statement-dit-bericht greet-statement-information; do
     key=$(key_of "$(observe_ticket "$h" "$name" "$T_0900")")
     [ "$(item_field "$h" "$key" awaiting)" = 0 ] || fail "$name: flagged as awaiting the captain"
     [ "$(item_field "$h" "$key" class)" = routine ] || fail "$name: a ticket not awaiting the captain was promoted"
@@ -1866,8 +2004,12 @@ test_hubspot_rescan_covers_colleague_and_waiting_on_contact_tickets() {
   assert_contains "$out" $'stages: H_TICKETS\tevery open stage plus "Waiting on contact"' \
     'the claim did not name the Waiting on contact stage HubSpot marks closed'
   assert_contains "$out" $'rescan: H_TICKETS\tlast_rescan: never' 'a never-rescanned source was not handed a re-scan'
-  assert_contains "$out" 'any owner, whose emails or notes name the captain or in which a colleague promised the customer that the tech team is on it, re-read in full whatever its last-modified date' \
-    'the re-scan scope is not colleague-owned tickets naming the captain or tech, regardless of modification date'
+  assert_contains "$out" 'the captain owns, or, any owner, in which an email or note @mentions the captain or asks him something directly, re-read in full whatever its last-modified date' \
+    'the re-scan scope is not the captain'"'"'s tickets plus colleague-owned tickets that @mention or ask him, regardless of modification date'
+  assert_contains "$out" 'a colleague-owned ticket that only promises the customer the tech team is on it, or only names the captain in passing, is not his' \
+    'the re-scan scope did not exclude colleague-owned tickets that only promise tech or name the captain in passing'
+  assert_not_contains "$out" 'in which a colleague promised the customer that the tech team is on it, re-read' \
+    'the re-scan still pulls in colleague-owned tickets on a tech-team promise alone'
   printf '[]' | at "$h" "$T_0900" tickets --owner captain >/dev/null
   at "$h" "$T_0900" complete --source H_TICKETS --checkpoint c1 --rescanned >/dev/null
   # Inside the re-scan interval, the checkpoint read still names the stages but
@@ -1887,7 +2029,7 @@ test_hubspot_rescan_covers_colleague_and_waiting_on_contact_tickets() {
   printf 'rescan_interval_seconds = 300\n' >>"$h/config/channel-intake"
   out=$(at "$h" "$T_0900" status 2>&1) && code=0 || code=$?
   expect_code 2 "$code" 'a re-scan faster than the poll interval was accepted'
-  pass 'HubSpot claims cover Waiting on contact and a bounded periodic re-scan of every owner'"'"'s tickets'
+  pass 'HubSpot claims cover Waiting on contact and a bounded periodic re-scan of tickets that @mention or ask the captain'
 }
 
 test_a_hubspot_pass_needs_its_tickets_and_its_due_rescan() {

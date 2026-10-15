@@ -152,14 +152,30 @@
 #             captain_addresses mailbox - only such a reply discharges it, not
 #             the pipeline stage; (b) an outbound promise to act - the team,
 #             tech or the captain acting, not a request to the customer -
-#             that names the captain or the tech team, or that the captain
-#             wrote, has no later reply from such a mailbox; (c) a
-#             colleague's note that names the captain has no later note by
-#             him and no reply.
+#             that names the captain or that the captain wrote, or on his own
+#             ticket one that names the tech team, has no later reply from
+#             such a mailbox; (c) a colleague's note that names the captain
+#             has no later note by him and no reply.
+# On his own ticket any captain_names word names him. On a colleague's ticket
+# only an @mention (`@` right before the word) or a direct ask within one
+# sentence does: the word opening it, after at most a greeting, then a comma or
+# colon and a question or a request ("<name>, can you ...?", "<name>, please
+# ..."), or no comma and a question opening with a request word and "you"
+# ("<name> can you ...?"), or the word closing a question after a comma
+# ("... check this, <name>?") or closing one that opens with a Dutch request to
+# jij/je/u ("kun jij ... <name>?"). A message whose own text opens with a
+# greeting to the word ("Hi <name>," or "Beste <name>" on its own line) asks
+# him any question or request it carries above its sign-off line ("Kind
+# regards", "Met vriendelijke groet", ..., or "--") or confidentiality footer,
+# a request word with "you" counting only where it opens a sentence or line.
+# A passing name such as "discussed with <name>, closing", "should we ask
+# <name>?" or a statement "<name> kan je hier verder mee helpen." names
+# nobody, in (a), (b) and (c) alike.
 # Only an EMAIL engagement is a reply: a `last_message_sent_at` send with no
 # matching email is an auto-acknowledgement and answers nothing. (a) applies
-# only when the ticket involves the captain: he owns it, a message or note
-# names him, or a promise names the tech team. The timeline is
+# only when the ticket involves the captain: he owns it, or a message or note
+# names him. A colleague's promise that the tech team is on it involves him in
+# neither (a) nor (b). The timeline is
 #   {"kind": "hubspot-ticket", "owner": "captain"|"<owner address>",
 #    "contacts": ["<address>", ...], "companies": [{"domain": "<mail domain>"}],
 #    "last_message_sent_at": EPOCH,
@@ -204,14 +220,17 @@
 #                    read that included it with --relisted.
 #   hubspot-tickets  `stages:`, `tickets:` and the re-scan below.
 #
-# THE HUBSPOT RE-SCAN. A colleague-owned ticket that names the captain only in
-# an email body, or that sits in "Waiting on contact" (a stage HubSpot marks
+# THE HUBSPOT RE-SCAN. A colleague-owned ticket that @mentions the captain only
+# in an email body, or that sits in "Waiting on contact" (a stage HubSpot marks
 # CLOSED), changes nothing a checkpoint read would return, so `claim` hands
 # every `hubspot-tickets` source a `stages:` line and, once per
 # rescan_interval_seconds, a `rescan:` line: re-read every ticket in an open
-# stage or "Waiting on contact", whoever owns it, whose emails or notes name
-# the captain or in which a colleague promised the customer that the tech team
-# is on it, whatever its last-modified date, and observe each with a timeline. `complete --rescanned` records that the re-scan ran.
+# stage or "Waiting on contact" that the captain owns, or, whoever owns it, in
+# which an email or note @mentions the captain or asks him something directly,
+# whatever its last-modified date, and observe each with a timeline. A
+# colleague-owned ticket that only promises the customer the tech team is on
+# it, or only names the captain in passing, is the colleague's and is not
+# re-scanned. `complete --rescanned` records that the re-scan ran.
 # Both belong to the pass that claimed them: `complete` on a hubspot-tickets
 # source is refused unless `tickets` wrote the open-tickets snapshot at or
 # after that source's claim, and refused without --rescanned when that claim
@@ -279,9 +298,10 @@
 #   label                    slug for the wake key and diagnostic line
 #                            (default channel-intake)
 #   captain_names            words that name the captain in a message or note,
-#                            e.g. a first and last name (default unset; with
-#                            none, only a ticket he owns, a message he wrote or
-#                            a promise naming the tech team identifies him)
+#                            e.g. a first and last name; on a colleague's
+#                            ticket only when @mentioned or asked directly
+#                            (default unset; with none, only a ticket he owns
+#                            or a message he wrote identifies him)
 #   captain_addresses        the captain's own mail addresses (default unset)
 #   team_addresses           shared mailboxes whose outbound counts as a reply,
 #                            e.g. the support address (default unset); these
@@ -1376,10 +1396,9 @@ rescan_due() {
 
 # A checkpoint read of HubSpot returns only tickets modified since it, and a
 # stage filter on "open" drops "Waiting on contact", which HubSpot marks
-# closed. Both hid colleague-owned tickets that name the captain only inside an
-# email body, or that promise the customer the tech team is on it, so every
-# claim names the stages and a bounded periodic re-scan reads the whole set
-# again regardless of modification date.
+# closed. Both hid colleague-owned tickets that @mention or ask the captain only
+# inside an email body or note, so every claim names the stages and a bounded
+# periodic re-scan reads the whole set again regardless of modification date.
 hubspot_claim_lines() {
   local id=$1 epoch=$2 last
   printf 'stages: %s	every open stage plus "Waiting on contact", which HubSpot marks closed but where a partner can still be waiting on the captain
@@ -1389,7 +1408,7 @@ hubspot_claim_lines() {
   rescan_due "$id" "$epoch" || return 0
   last=$(record_field "$(source_record "$id")" last_rescan)
   case "$last" in ''|*[!0-9]*) last=0 ;; esac
-  printf 'rescan: %s	last_rescan: %s	scope: every ticket in those stages, any owner, whose emails or notes name the captain or in which a colleague promised the customer that the tech team is on it, re-read in full whatever its last-modified date; observe each with --timeline-file, then complete with --rescanned
+  printf 'rescan: %s	last_rescan: %s	scope: every ticket in those stages that the captain owns, or, any owner, in which an email or note @mentions the captain or asks him something directly, re-read in full whatever its last-modified date; a colleague-owned ticket that only promises the customer the tech team is on it, or only names the captain in passing, is not his; observe each with --timeline-file, then complete with --rescanned
 ' \
     "$id" "$([ "$last" -gt 0 ] && printf '%s' "$last" || printf never)"
 }

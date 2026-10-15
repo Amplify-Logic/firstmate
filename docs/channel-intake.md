@@ -43,8 +43,9 @@ A tick therefore looks like this.
 7. A source that reads what the captain sent - his ticket replies, his sent mail and his Slack replies - closes each open item that a sent message discharges, with `bin/fm-todo.sh close --actor` naming him and the sent message as evidence; an acknowledgement or a promise to act closes nothing.
 8. `complete --source ID --checkpoint VALUE` advances that source's checkpoint and says how many listed `recheck:` items are still not re-read, or `fail --source ID --reason TEXT` records the failure and backs off.
 
-A `hubspot-tickets` source's claim also names the stages to read, including "Waiting on contact", which HubSpot marks closed, and on a bounded cadence hands out a re-scan of every owner's tickets that name the captain or in which a colleague promised the customer that the tech team is on it, whatever their last-modified date.
-That re-scan exists because a colleague-owned ticket naming the captain only inside an email body, one promising the customer that tech is on it, or one parked in "Waiting on contact", returns from no checkpoint read.
+A `hubspot-tickets` source's claim also names the stages to read, including "Waiting on contact", which HubSpot marks closed, and on a bounded cadence hands out a re-scan of the captain's own tickets and of every other owner's tickets in which an email or note @mentions the captain or asks him something directly, whatever their last-modified date.
+A colleague-owned ticket that only promises the customer the tech team is on it, or only names the captain in passing, stays the colleague's and is not re-scanned.
+That re-scan exists because a colleague-owned ticket that @mentions or asks the captain only inside an email body or note, or one parked in "Waiting on contact", returns from no checkpoint read.
 The orchestrator completes a read that included it with `--rescanned`, in the same pass: when the claim handed one out, `complete` refuses without it.
 
 Three more kinds carry their own read, so asks that never carry an @mention or a fresh modification date still reach the page between morning sweeps.
