@@ -312,6 +312,14 @@ def note_toggle(rec):
     return f'<button type="button" class="notetoggle" aria-expanded="false" onclick="{esc(js)}">note</button>'
 
 
+# A click anywhere else on a card works its note toggle, so the note opens and
+# closes without aiming at the button. Links, buttons and form fields keep
+# their own click, and a click that ends a text selection toggles nothing.
+CARD_CLICK = ("if(event.target.closest('a,button,input,textarea,select,label,summary,form'))return;"
+              "if(String(window.getSelection()).trim())return;"
+              "var b=this.querySelector('button.notetoggle');if(b)b.click();")
+
+
 def audit(rec):
     """Where the line came from and how it was read, kept off the visible row for audit."""
     how = (rec.get('verification') or {}).get('how') or 'no verification recorded'
@@ -410,7 +418,8 @@ def row(rec, reply=True):
     severity = rec.get('class', 'obligation')
     pill = {'outage': 'bad', 'urgent': 'warn', 'deadline': 'warn'}.get(severity, 'info')
     toggle = note_toggle(rec) if reply else ''
-    main = (f'<tr class="item" id="item-{esc(rec.get("id", ""))}"{audit(rec)}><td class="who"><span class="pill {pill}">{esc(severity)}</span>{source_marker(rec)}</td>\n'
+    card = f' onclick="{esc(CARD_CLICK)}"' if reply else ''
+    main = (f'<tr class="item" id="item-{esc(rec.get("id", ""))}"{audit(rec)}{card}><td class="who"><span class="pill {pill}">{esc(severity)}</span>{source_marker(rec)}</td>\n'
             f'<td class="what">{title}{freshness(rec)}{age(rec)}{ticket_marker(rec)}{context(rec)}</td>\n'
             f'<td class="links">{link(rec.get("link"))}{toggle}</td></tr>')
     return main + '\n' + reply_form(rec) if reply else main
