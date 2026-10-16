@@ -1,0 +1,26 @@
+cursor over a card: pointer / note-button cursor=pointer
+initial                                        target=                                                 -> shut/aria=false  shut/aria=false  shut/aria=false  focus=BODY
+cards: 0=Sign off the Q4 service plan before Friday | 1=Customer tap leaking at Rotterdam office, needs a call back | 2=Partner asked about filter stock
+A1-click-card1-title-text-opens                target=<td class="what">Customer tap leaking at Rotterd -> shut/aria=false  OPEN/aria=true  shut/aria=false  focus=INPUT[note]
+A2-click-card1-title-text-again-closes         target=<td class="what">Customer tap leaking at Rotterd -> shut/aria=false  shut/aria=false  shut/aria=false  focus=BODY
+A3-click-card1-severity-pill-opens             target=<span class="pill warn">urgent</span>            -> shut/aria=false  OPEN/aria=true  shut/aria=false  focus=INPUT[note]
+A4-click-card1-blank-space-closes              target=<td class="what">Customer tap leaking at Rotterd -> shut/aria=false  shut/aria=false  shut/aria=false  focus=BODY
+A5-click-card1-links-cell-blank-opens          target=<td class="links"><a href="https://example.slack -> shut/aria=false  OPEN/aria=true  shut/aria=false  focus=INPUT[note]
+A6-click-card1-who-cell-blank-closes           target=<td class="who"><span class="pill warn">urgent</ -> shut/aria=false  shut/aria=false  shut/aria=false  focus=BODY
+B1-click-card1-Open-link-does-not-toggle       target=<a href="https://example.slack.com/archives/C_BR -> shut/aria=false  shut/aria=false  shut/aria=false  focus=A
+  new tabs opened by the Open link click: 1
+C1-click-card1-note-button-opens-once          target=<button type="button" class="notetoggle" aria-ex -> shut/aria=false  OPEN/aria=true  shut/aria=false  focus=INPUT[note]
+C2-click-inside-card1-note-input-stays-open    target=<input type="text" name="note" autocomplete="off -> shut/aria=false  OPEN/aria=true  shut/aria=false  focus=INPUT[note]
+C3-click-card1-Queue-button-stays-open         target=<button type="submit">Queue</button>             -> shut/aria=false  OPEN/aria=true  shut/aria=false  focus=BUTTON
+  ack text after Queue: review session not connected
+C4-click-card1-note-button-closes-once         target=<button type="button" class="notetoggle" aria-ex -> shut/aria=false  shut/aria=false  shut/aria=false  focus=BUTTON
+D1-drag-select-card1-title-no-toggle           target=<td class="what">Customer tap leaking at Rotterd -> shut/aria=false  shut/aria=false  shut/aria=false  focus=BODY
+  selected text after drag: "Customer tap leaking at Rotterdam office, needs a c"
+D2-click-on-the-selected-text                  target=<td class="what">Customer tap leaking at Rotterd -> shut/aria=false  shut/aria=false  shut/aria=false  focus=BODY
+  selected text after that click: ""
+D3-next-click-on-card1-title                   target=<td class="what">Customer tap leaking at Rotterd -> shut/aria=false  OPEN/aria=true  shut/aria=false  focus=INPUT[note]
+D4-close-card1-via-title                       target=<td class="what">Customer tap leaking at Rotterd -> shut/aria=false  shut/aria=false  shut/aria=false  focus=BODY
+E1-click-card0-no-link-label-opens-card0       target=<span class="nolink">no link recorded</span>     -> OPEN/aria=true  shut/aria=false  shut/aria=false  focus=INPUT[note]
+E2-click-card2-title-opens-card2-too           target=<td class="what">Partner asked about filter stoc -> OPEN/aria=true  shut/aria=false  OPEN/aria=true  focus=INPUT[note]
+E3-click-card0-title-closes-only-card0         target=<td class="what">Sign off the Q4 service plan be -> shut/aria=false  shut/aria=false  OPEN/aria=true  focus=BODY
+F1-keyboard-Enter-on-card2-note-button-closes  target=                                                 -> shut/aria=false  shut/aria=false  shut/aria=false  focus=BUTTON

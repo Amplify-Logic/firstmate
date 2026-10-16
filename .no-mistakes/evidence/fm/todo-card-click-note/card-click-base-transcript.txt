@@ -1,0 +1,4 @@
+cursor over a card: auto / note-button cursor=pointer
+initial                                        target=                                                 -> shut/aria=false  shut/aria=false  shut/aria=false  focus=BODY
+BASE-click-card1-title-text                    target=<td class="what">Customer tap leaking at Rotterd -> shut/aria=false  shut/aria=false  shut/aria=false  focus=BODY
+BASE-click-card1-severity-pill                 target=<span class="pill warn">urgent</span>            -> shut/aria=false  shut/aria=false  shut/aria=false  focus=BODY
