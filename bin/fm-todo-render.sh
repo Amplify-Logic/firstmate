@@ -77,7 +77,7 @@
 # bin/fm-todo.sh can apply a page command to exactly the ask he was looking
 # at; with no review session connected the box says so and queues nothing.
 # A click anywhere else on such a row opens and closes the same box, except on
-# a link, a button or the box itself, or when it ends a text selection.
+# a link or a button, or when it ends a text selection.
 # Routine activity and the list-style folds carry no box.
 #
 # YOUR OPEN TICKETS IS LIVE. That section is rendered on every build from

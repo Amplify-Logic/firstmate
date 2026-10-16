@@ -313,9 +313,9 @@ def note_toggle(rec):
 
 
 # A click anywhere else on a card works its note toggle, so the note opens and
-# closes without aiming at the button. Links, buttons and form fields keep
-# their own click, and a click that ends a text selection toggles nothing.
-CARD_CLICK = ("if(event.target.closest('a,button,input,textarea,select,label,summary,form'))return;"
+# closes without aiming at the button. Links and buttons keep their own click,
+# and a click that ends a text selection toggles nothing.
+CARD_CLICK = ("if(event.target.closest('a,button'))return;"
               "if(String(window.getSelection()).trim())return;"
               "var b=this.querySelector('button.notetoggle');if(b)b.click();")
 
