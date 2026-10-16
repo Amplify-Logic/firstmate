@@ -2512,15 +2512,18 @@ function machinesBadge(data) {
   const alerts = (data && data.alerts) || [];
   const critical = alerts.some(function(a) { return a.severity === 'critical'; });
   const el = document.getElementById('nav-machines-text');
-  if (el) el.textContent = alerts.length ? 'Machines · ' + alerts.length + (alerts.length === 1 ? ' alert' : ' alerts') : 'Machines';
+  if (el) el.textContent = !data ? 'Machines · unreadable' : alerts.length ? 'Machines · ' + alerts.length + (alerts.length === 1 ? ' alert' : ' alerts') : 'Machines';
   const dot = document.getElementById('nav-machines-dot');
-  if (dot) dot.className = 'nav-dot ' + (critical ? 'crit' : alerts.length ? 'warn' : 'on');
+  if (dot) dot.className = 'nav-dot ' + (critical ? 'crit' : alerts.length || !data ? 'warn' : 'on');
 }
 async function refreshMachines() {
   try {
     const res = await fetch('/api/machines', { credentials: 'same-origin', cache: 'no-store' });
-    if (res.ok) machinesBadge(await res.json());
-  } catch (err) {}
+    if (!res.ok) throw new Error('status ' + res.status);
+    machinesBadge(await res.json());
+  } catch (err) {
+    machinesBadge(null);
+  }
 }
 async function refresh() {
   try {
@@ -3097,12 +3100,14 @@ function setHtml(id, html) {
     el.querySelectorAll('[data-ring]').forEach(function(ring) { ring.style.setProperty('--pct', ring.getAttribute('data-ring')); });
   }
 }
+// Matches _ago in bin/fm-machines.py, so a card and its alert never disagree.
 function ago(secs) {
   if (secs == null || secs < 0) return 'unknown';
   if (secs < 90) return 'just now';
-  if (secs < 3600) return Math.round(secs / 60) + ' minutes ago';
-  if (secs < 172800) return Math.round(secs / 3600) + ' hours ago';
-  return Math.round(secs / 86400) + ' days ago';
+  const size = secs < 3600 ? 60 : secs < 172800 ? 3600 : 86400;
+  const unit = size === 60 ? 'minute' : size === 3600 ? 'hour' : 'day';
+  const count = Math.floor(secs / size);
+  return count + ' ' + unit + (count === 1 ? '' : 's') + ' ago';
 }
 function duration(secs) {
   if (secs == null || secs < 0) return null;
@@ -3195,7 +3200,6 @@ function renderMap(data) {
   const ssh = machines.filter(function(m) { return m.link === 'ssh'; }).map(function(m) { return machineCard(m, now); });
   const probes = (data.probes || []).map(probeCard);
   let html = '<div class="hub">' + (data.this ? machineCard(data.this, now, data.services || []) : '') + '</div>';
-  if (data.services_error) html += '<p class="node-note">Services could not be read: ' + esc(data.services_error) + '</p>';
   const tn = data.tailnet || {};
   const online = machines.filter(function(m) { return m.link === 'tailnet' && m.online === true; }).length;
   html += group('tailnet', 'Tailscale', tailnet.length ? online + ' of ' + tailnet.length + ' live' : '', tailnet,

@@ -4,8 +4,9 @@
 # MagicDNS label), this machine's own numbers, configured machines read over
 # ssh only when not known to be offline, Linux and Darwin report parsing,
 # failed systemd units, disk alerts, loopback services, HTTPS probes, the
-# health count, skipped config lines, the unknown and unreachable paths, and
-# no write leaving the read.
+# health count, skipped config lines, the unknown and unreachable paths, slow
+# reads held to the collector's deadline, last-seen wording, and no write
+# leaving the read.
 set -u
 
 # shellcheck source=tests/lib.sh
@@ -61,6 +62,38 @@ PY
   [ -s "$1" ] || fail "health server did not start"
 }
 
+# A loopback server that accepts and then either never answers (hang) or
+# trickles one header byte a second forever (trickle).
+start_slow_server() {  # <hang|trickle> <portfile>
+  python3 - "$1" "$2" <<'PY' &
+import socket, sys, threading, time
+mode, portfile = sys.argv[1], sys.argv[2]
+server = socket.socket()
+server.bind(("127.0.0.1", 0))
+server.listen(16)
+with open(portfile, "w") as handle:
+    handle.write(str(server.getsockname()[1]))
+held = []
+def trickle(conn):
+    try:
+        conn.sendall(b"HTTP/1.1 200 OK\r\nX-Slow: ")
+        while True:
+            conn.sendall(b"a")
+            time.sleep(1)
+    except OSError:
+        pass
+while True:
+    conn, _ = server.accept()
+    held.append(conn)
+    if mode == "trickle":
+        threading.Thread(target=trickle, args=(conn,), daemon=True).start()
+PY
+  SERVER_PIDS+=("$!")
+  local n=0
+  while [ ! -s "$2" ] && [ "$n" -lt 50 ]; do sleep 0.1; n=$((n + 1)); done
+  [ -s "$2" ] || fail "$1 server did not start"
+}
+
 write_tailnet() {  # <file>
   cat > "$1" <<JSON
 {
@@ -106,6 +139,9 @@ for arg in "$@"; do
   if [ "$prev" = "--" ]; then alias=$arg; fi
   prev=$arg
 done
+if [ -f "$SSH_FIXTURES/$alias.sleep" ]; then
+  sleep "$(cat "$SSH_FIXTURES/$alias.sleep")"
+fi
 if [ -f "$SSH_FIXTURES/$alias" ]; then
   cat "$SSH_FIXTURES/$alias"
   exit 0
@@ -301,6 +337,73 @@ test_unknown_and_unreadable_paths() {
   pass "unreadable values stay unknown and a dead or missing tailnet still yields this machine"
 }
 
+# A wedged service, a hung probe and a slow ssh machine all run at once, and
+# a read that never ends is cut at the collector's deadline as its own timed
+# out value, so the snapshot stays inside the bridge's 20-second child limit.
+test_slow_reads_stay_within_deadline() {
+  local home fb out trickle_port hang_port started elapsed pid n
+  home=$(make_home slow)
+  fb=$(make_fakebin "$home")
+  start_slow_server trickle "$home/trickle.port"
+  start_slow_server hang "$home/hang.port"
+  trickle_port=$(cat "$home/trickle.port")
+  hang_port=$(cat "$home/hang.port")
+  printf 'os Linux\nncpu 4\n' > "$home/ssh/vps"
+  printf '4\n' > "$home/ssh/vps.sleep"
+  printf '%s\t%s\t%s\n' \
+    machine build-vps vps \
+    service 'Wedged helper' "http://127.0.0.1:$trickle_port/health" \
+    service 'Hung helper' "http://127.0.0.1:$hang_port/health" \
+    service 'Hung helper two' "http://127.0.0.1:$hang_port/health" \
+    probe 'Hung site' "https://127.0.0.1:$hang_port/" > "$home/config/bridge-machines"
+
+  started=$(date +%s)
+  snapshot "$home" "$fb" > "$home/out.json" &
+  pid=$!
+  n=0
+  while kill -0 "$pid" 2>/dev/null && [ "$n" -lt 190 ]; do sleep 0.1; n=$((n + 1)); done
+  if kill -0 "$pid" 2>/dev/null; then
+    kill "$pid" 2>/dev/null
+    wait "$pid" 2>/dev/null
+    fail "the snapshot ran past 19 seconds, beyond the bridge's 20-second child limit"
+  fi
+  wait "$pid" || fail "slow snapshot exited non-zero"
+  elapsed=$(( $(date +%s) - started ))
+  out=$(cat "$home/out.json")
+
+  assert_equals 'true 4' "$(jq -r '.machines[] | select(.name == "build-vps") | "\(.online) \(.stats.cpus)"' <<<"$out")" \
+    "the slow ssh machine was read alongside the hung checks"
+  assert_equals 'Wedged helper:false:timed out' \
+    "$(jq -r '.services[] | select(.name == "Wedged helper") | "\(.name):\(.up):\(.detail)"' <<<"$out")" "a never-ending service read is its own timed out value"
+  assert_equals 'false false' "$(jq -r '[.services[] | select(.name | startswith("Hung helper")) | .up] | map(tostring) | join(" ")' <<<"$out")" "hung services"
+  assert_equals 'false null null' "$(jq -r '.probes[0] | "\(.ok) \(.status) \(.latency_ms)"' <<<"$out")" "a hung probe is failing with unknown status"
+  jq -e '.alerts | any(.severity == "critical" and .text == "Wedged helper is down: timed out")' <<<"$out" >/dev/null \
+    || fail "timed out service alert: $(jq -c .alerts <<<"$out")"
+  assert_equals '1 5' "$(jq -r '"\(.checks.passing) \(.checks.total)"' <<<"$out")" "health count"
+  [ "$elapsed" -le 17 ] || fail "the snapshot took ${elapsed}s"
+  pass "slow reads run at once and a never-ending read is cut at the deadline as its own timed out value"
+}
+
+# An offline watched machine's alert words its last seen time the way the
+# page's card does: whole units, singular for one.
+test_offline_alert_last_seen_wording() {
+  local home fb out
+  home=$(make_home seen)
+  fb=$(make_fakebin "$home")
+  jq --arg dell "$(iso_ago 5400)" --arg phone "$(iso_ago 30)" \
+    '.Peer.k2.LastSeen = $dell | .Peer.k3.LastSeen = $phone' "$home/tailnet.json" > "$home/tailnet.next"
+  mv "$home/tailnet.next" "$home/tailnet.json"
+  printf 'machine\tdell-laptop\tdell\nmachine\tphone\n' > "$home/config/bridge-machines"
+  out=$(snapshot "$home" "$fb") || fail "snapshot exited non-zero"
+  jq -e '.alerts | any(.text == "dell-laptop is offline, last seen 1 hour ago")' <<<"$out" >/dev/null \
+    || fail "90 minutes offline: $(jq -c .alerts <<<"$out")"
+  jq -e '.alerts | any(.text == "phone is offline, last seen just now")' <<<"$out" >/dev/null \
+    || fail "30 seconds offline: $(jq -c .alerts <<<"$out")"
+  pass "offline alerts word last seen in whole, correctly numbered units"
+}
+
 test_tailnet_without_config
 test_configured_machines_services_and_probes
 test_unknown_and_unreadable_paths
+test_slow_reads_stay_within_deadline
+test_offline_alert_last_seen_wording

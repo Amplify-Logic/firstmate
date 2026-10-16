@@ -21,6 +21,11 @@ seconds; there is no background daemon):
   failed systemd units.
 - Each `probe` line in the config: one HTTPS GET with its status and latency.
 
+Every read runs at once, and the whole snapshot finishes within
+COLLECT_DEADLINE_SECONDS, well inside the bridge's 20-second child deadline: a
+read still running then is reported as timed out in its own place (a machine's
+stats_error, a service down, a probe failing) while the rest stand.
+
 A value that cannot be read is null (shown as unknown), never invented.
 
 Config: the optional, gitignored `config/bridge-machines` in the home, one
@@ -72,6 +77,7 @@ SSH_TIMEOUT_SECONDS = 9
 LOCAL_TIMEOUT_SECONDS = 5
 PROBE_TIMEOUT_SECONDS = 6
 SERVICE_TIMEOUT_SECONDS = 2
+COLLECT_DEADLINE_SECONDS = 15
 REPORT_MAX_BYTES = 64_000
 DISK_ALERT_PERCENT = 90
 MAILBOX_PORT = 8765
@@ -428,44 +434,51 @@ def _agent_installed(label: str) -> bool:
     return os.path.isfile(os.path.join(agents, f"{label}.plist"))
 
 
-def check_services(root: Path, bridge_port: int, extra: List[Dict[str, str]]) -> List[Dict[str, Any]]:
-    """Built-in Firstmate services, shown when installed here or answering,
-    then the config's own loopback services, which are always shown."""
-    services: List[Dict[str, Any]] = []
-    bridge_up = _port_open(bridge_port)
-    if bridge_up or _agent_installed("com.firstmate.bridge-view"):
-        services.append({
-            "name": "Bridge page",
-            "up": bridge_up,
-            "detail": "serving" if bridge_up else f"nothing listening on port {bridge_port}",
-        })
-    mailbox_port = _env_port("FM_BRIDGE_VIEW_MAILBOX_PORT", MAILBOX_PORT)
-    status, _latency, error = _http_status(f"http://127.0.0.1:{mailbox_port}/health", SERVICE_TIMEOUT_SECONDS)
-    if status is not None or _agent_installed("com.firstmate.glasses-voice-mailbox"):
+def _service(name: str, up: bool, detail: str) -> Dict[str, Any]:
+    return {"name": name, "up": up, "detail": detail}
+
+
+def service_checks(root: Path, bridge_port: int, extra: List[Dict[str, str]]) -> List[Tuple[str, Callable[[], Optional[Dict[str, Any]]]]]:
+    """(name, check) for the built-in Firstmate services, each shown (a dict)
+    when installed here or answering and None otherwise, then the config's
+    own loopback services, which are always shown."""
+
+    def bridge() -> Optional[Dict[str, Any]]:
+        up = _port_open(bridge_port)
+        if not up and not _agent_installed("com.firstmate.bridge-view"):
+            return None
+        return _service("Bridge page", up, "serving" if up else f"nothing listening on port {bridge_port}")
+
+    def mailbox() -> Optional[Dict[str, Any]]:
+        port = _env_port("FM_BRIDGE_VIEW_MAILBOX_PORT", MAILBOX_PORT)
+        status, _latency, error = _http_status(f"http://127.0.0.1:{port}/health", SERVICE_TIMEOUT_SECONDS)
+        if status is None and not _agent_installed("com.firstmate.glasses-voice-mailbox"):
+            return None
         up = status == 200
-        services.append({
-            "name": "Glasses voice mailbox",
-            "up": up,
-            "detail": "healthy" if up else (error or f"status {status}"),
-        })
-    floater_app = root / "desk-floater" / ".build" / "DeskFloater.app"
-    if platform.system() == "Darwin" and floater_app.is_dir():
+        return _service("Glasses voice mailbox", up, "healthy" if up else (error or f"status {status}"))
+
+    def floater() -> Optional[Dict[str, Any]]:
+        if platform.system() != "Darwin" or not (root / "desk-floater" / ".build" / "DeskFloater.app").is_dir():
+            return None
         rc, out, _err = _run(["pgrep", "-f", "DeskFloater.app/Contents/MacOS/DeskFloater"], SERVICE_TIMEOUT_SECONDS)
         up = rc == 0 and bool(out.strip())
-        services.append({"name": "Desk floater", "up": up, "detail": "running" if up else "not running"})
-    for entry in extra:
+        return _service("Desk floater", up, "running" if up else "not running")
+
+    def configured(entry: Dict[str, str]) -> Dict[str, Any]:
         status, _latency, error = _http_status(entry["url"], SERVICE_TIMEOUT_SECONDS)
         up = status is not None and 200 <= status < 300
-        services.append({
-            "name": entry["name"],
-            "up": up,
-            "detail": "healthy" if up else (error or f"status {status}"),
-        })
-    return services
+        return _service(entry["name"], up, "healthy" if up else (error or f"status {status}"))
+
+    checks: List[Tuple[str, Callable[[], Optional[Dict[str, Any]]]]] = [
+        ("Bridge page", bridge),
+        ("Glasses voice mailbox", mailbox),
+        ("Desk floater", floater),
+    ]
+    checks.extend((entry["name"], lambda entry=entry: configured(entry)) for entry in extra)
+    return checks
 
 
-def run_probe(entry: Dict[str, str]) -> Dict[str, Any]:
-    status, latency, error = _http_status(entry["url"], PROBE_TIMEOUT_SECONDS)
+def _probe(entry: Dict[str, str], status: Optional[int], latency: Optional[int], error: Optional[str]) -> Dict[str, Any]:
     ok = status is not None and 200 <= status < 400
     return {
         "label": entry["label"],
@@ -477,10 +490,16 @@ def run_probe(entry: Dict[str, str]) -> Dict[str, Any]:
     }
 
 
+def run_probe(entry: Dict[str, str]) -> Dict[str, Any]:
+    return _probe(entry, *_http_status(entry["url"], PROBE_TIMEOUT_SECONDS))
+
+
 # --- assembly ------------------------------------------------------------------
 
 
-def _parallel(jobs: List[Callable[[], Any]]) -> List[Any]:
+def _parallel(jobs: List[Callable[[], Any]], deadline: float) -> List[Any]:
+    """Run jobs at once; a job that raised, or is still running at the
+    monotonic deadline, yields its exception (TimeoutError) instead."""
     results: List[Any] = [None] * len(jobs)
 
     def runner(index: int, job: Callable[[], Any]) -> None:
@@ -493,8 +512,8 @@ def _parallel(jobs: List[Callable[[], Any]]) -> List[Any]:
     for thread in threads:
         thread.start()
     for thread in threads:
-        thread.join()
-    return results
+        thread.join(max(0.0, deadline - time.monotonic()))
+    return [TimeoutError("timed out") if thread.is_alive() else result for thread, result in zip(threads, results)]
 
 
 def _match(node: Dict[str, Any], name: str) -> bool:
@@ -503,42 +522,38 @@ def _match(node: Dict[str, Any], name: str) -> bool:
 
 
 def _ago(seconds: int) -> str:
+    """Matches the page's ago() in bin/fm-bridge-view.py, so an alert and a
+    card never disagree."""
+    if seconds < 90:
+        return "just now"
     if seconds < 3600:
-        return f"{max(1, seconds // 60)} minutes ago"
-    if seconds < 172800:
-        return f"{seconds // 3600} hours ago"
-    return f"{seconds // 86400} days ago"
+        count, unit = seconds // 60, "minute"
+    elif seconds < 172800:
+        count, unit = seconds // 3600, "hour"
+    else:
+        count, unit = seconds // 86400, "day"
+    return f"{count} {unit}{'' if count == 1 else 's'} ago"
 
 
-def collect(home: Path, root: Path, tailscale: str, ssh: str, bridge_port: int) -> Dict[str, Any]:
-    started = time.time()
-    config = read_config(home)
-    tailnet, local, services, probes = _parallel([
-        lambda: read_tailnet(tailscale),
-        local_report,
-        lambda: check_services(root, bridge_port, config["services"]),
-        lambda: _parallel([lambda entry=entry: run_probe(entry) for entry in config["probes"]]),
-    ])
-    me, peers, tailnet_error = tailnet if isinstance(tailnet, tuple) else (None, [], str(tailnet))
+def _this_machine() -> Dict[str, Any]:
+    return {
+        "name": socket.gethostname().split(".", 1)[0] or "This machine",
+        "dns_label": "",
+        "os": None,
+        "online": True,
+        "last_seen": None,
+        "ip": None,
+        "self": True,
+        "link": "this",
+    }
 
+
+def read_machines(config: Dict[str, Any], tailscale: str, ssh: str, ssh_deadline: float) -> Tuple[Dict[str, Any], List[Dict[str, Any]], Optional[str]]:
+    """(this machine, other machines, tailnet error): the tailnet, then each
+    configured machine not known to be offline read over ssh by ssh_deadline."""
+    me, peers, tailnet_error = read_tailnet(tailscale)
     if me is None:
-        me = {
-            "name": socket.gethostname().split(".", 1)[0] or "This machine",
-            "dns_label": "",
-            "os": None,
-            "online": True,
-            "last_seen": None,
-            "ip": None,
-            "self": True,
-            "link": "this",
-        }
-    local_stats, local_error = local if isinstance(local, tuple) else (None, str(local))
-    me["watched"] = True
-    me["stats"] = local_stats
-    me["stats_error"] = local_error
-    if not me.get("os") and local_stats:
-        me["os"] = local_stats.get("os")
-
+        me = _this_machine()
     machines = [dict(node, watched=False, stats=None, stats_error=None) for node in peers]
     for entry in config["machines"]:
         node = next((node for node in machines if _match(node, entry["name"])), None)
@@ -566,7 +581,7 @@ def collect(home: Path, root: Path, tailscale: str, ssh: str, bridge_port: int) 
         for node in reads:
             node["stats_error"] = "ssh is not installed"
         reads = []
-    results = _parallel([lambda node=node: ssh_report(ssh, node["ssh_alias"]) for node in reads])
+    results = _parallel([lambda node=node: ssh_report(ssh, node["ssh_alias"]) for node in reads], ssh_deadline)
     for node, result in zip(reads, results):
         stats, error = result if isinstance(result, tuple) else (None, str(result))
         node["stats"] = stats
@@ -583,6 +598,44 @@ def collect(home: Path, root: Path, tailscale: str, ssh: str, bridge_port: int) 
             node["stats_error"] = "not seen on the tailnet and no ssh alias to try"
         node.pop("dns_label", None)
     me.pop("dns_label", None)
+    return me, machines, tailnet_error
+
+
+def collect(home: Path, root: Path, tailscale: str, ssh: str, bridge_port: int) -> Dict[str, Any]:
+    started = time.time()
+    deadline = time.monotonic() + COLLECT_DEADLINE_SECONDS
+    config = read_config(home)
+    checks = service_checks(root, bridge_port, config["services"])
+    results = _parallel(
+        [lambda: read_machines(config, tailscale, ssh, deadline - 1), local_report]
+        + [check for _name, check in checks]
+        + [lambda entry=entry: run_probe(entry) for entry in config["probes"]],
+        deadline,
+    )
+    machines_result, local = results[0], results[1]
+    service_results = results[2:2 + len(checks)]
+    probe_results = results[2 + len(checks):]
+
+    if isinstance(machines_result, tuple):
+        me, machines, tailnet_error = machines_result
+    else:
+        me, machines, tailnet_error = _this_machine(), [], str(machines_result)
+        me.pop("dns_label", None)
+    local_stats, local_error = local if isinstance(local, tuple) else (None, str(local))
+    me["watched"] = True
+    me["stats"] = local_stats
+    me["stats_error"] = local_error
+    if not me.get("os") and local_stats:
+        me["os"] = local_stats.get("os")
+    services = [
+        _service(name, False, str(result)) if isinstance(result, Exception) else result
+        for (name, _check), result in zip(checks, service_results)
+        if result is not None
+    ]
+    probes = [
+        _probe(entry, None, None, str(result)) if isinstance(result, Exception) else result
+        for entry, result in zip(config["probes"], probe_results)
+    ]
 
     alerts: List[Dict[str, str]] = []
     passing = 0
@@ -611,15 +664,13 @@ def collect(home: Path, root: Path, tailscale: str, ssh: str, bridge_port: int) 
         disk = stats.get("disk_pct")
         if disk is not None and disk > DISK_ALERT_PERCENT:
             alerts.append({"severity": "warning", "text": f"{name} disk is {disk}% full"})
-    for service in services if isinstance(services, list) else []:
+    for service in services:
         total += 1
         if service["up"]:
             passing += 1
         else:
             alerts.append({"severity": "critical", "text": f"{service['name']} is down: {service['detail']}"})
-    for probe in probes if isinstance(probes, list) else []:
-        if not isinstance(probe, dict):
-            continue
+    for probe in probes:
         total += 1
         if probe["ok"]:
             passing += 1
@@ -636,9 +687,8 @@ def collect(home: Path, root: Path, tailscale: str, ssh: str, bridge_port: int) 
         "tailnet": {"ok": tailnet_error is None, "error": tailnet_error},
         "this": me,
         "machines": machines,
-        "services": services if isinstance(services, list) else [],
-        "services_error": None if isinstance(services, list) else str(services),
-        "probes": [probe for probe in probes if isinstance(probe, dict)] if isinstance(probes, list) else [],
+        "services": services,
+        "probes": probes,
         "checks": {"passing": passing, "total": total},
         "alerts": alerts,
     }

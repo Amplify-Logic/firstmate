@@ -2833,6 +2833,7 @@ apply({
     {name: 'build-vps', os: 'Linux', online: true, ip: '100.64.0.2', self: false, link: 'tailnet', watched: true, ssh: true,
      stats: {os: 'Linux', cpus: null, load: null, load_pct: null, mem_total: null, mem_pct: null, disk_total: null, disk_pct: null, uptime_secs: null, failed_units: ['backup.timer']}, stats_error: null},
     {name: 'dell-laptop', os: 'Linux', online: false, last_seen: now - 259200, ip: '100.64.0.3', self: false, link: 'tailnet', watched: true, ssh: true, stats: null, stats_error: 'offline, so not read'},
+    {name: 'phone', os: 'iOS', online: false, last_seen: now - 5400, ip: '100.64.0.4', self: false, link: 'tailnet', watched: false, ssh: false, stats: null, stats_error: null},
     {name: 'lan-box', os: null, online: null, ip: null, self: false, link: 'ssh', watched: true, ssh: true, stats: null, stats_error: 'Operation timed out'}
   ],
   services: [{name: 'Bridge page', up: true, detail: 'serving'}, {name: 'Voice bridge', up: false, detail: 'Connection refused'}],
@@ -2852,7 +2853,8 @@ must(map.indexOf('<dt>Failed units</dt><dd>1</dd>') !== -1, 'failed units missin
 must(map.indexOf('last seen 3 days ago') !== -1, 'offline card lacks last seen: ' + map);
 must(/class="state down">offline</.test(map) && /class="state unknown">unknown</.test(map), 'live states not distinguished');
 must(map.indexOf('not on the tailnet') !== -1 && map.indexOf('SSH only') !== -1, 'ssh-only machine not grouped');
-must(map.indexOf('Tailscale') !== -1 && map.indexOf('1 of 2 live') !== -1, 'tailnet group summary: ' + map);
+must(map.indexOf('last seen 1 hour ago') !== -1, '90 minutes offline is not 1 hour: ' + map);
+must(map.indexOf('Tailscale') !== -1 && map.indexOf('1 of 3 live') !== -1, 'tailnet group summary: ' + map);
 must(map.indexOf('Shop site') !== -1 && map.indexOf('84 ms') !== -1, 'probe card missing');
 must(map.indexOf('<a ') === -1, 'the map links somewhere');
 must(elements.health.innerHTML.indexOf('4 of 6 checks passing') !== -1 && elements.health.innerHTML.indexOf('Needs attention') !== -1, 'health: ' + elements.health.innerHTML);
@@ -2887,6 +2889,40 @@ vm.runInContext('refresh', context)().then(function() {
   must(elements['nav-machines-dot'].className === 'nav-dot crit', 'nav dot: ' + elements['nav-machines-dot'].className);
   badge({alerts: []});
   must(elements['nav-machines-text'].textContent === 'Machines' && elements['nav-machines-dot'].className === 'nav-dot on', 'quiet nav');
+
+  // A failed read after a good one shows the entry as unreadable, not the last good state.
+  const unreadable = function(why) {
+    must(elements['nav-machines-text'].textContent === 'Machines · unreadable', why + ' nav text: ' + elements['nav-machines-text'].textContent);
+    must(elements['nav-machines-dot'].className === 'nav-dot warn', why + ' nav dot: ' + elements['nav-machines-dot'].className);
+  };
+  glance.fetch = async function() { return {ok: false, status: 503, json: async function() { return {error: 'machines unreadable'}; }}; };
+  return vm.runInContext('refreshMachines', glance)().then(function() {
+    unreadable('a 503');
+    badge({alerts: []});
+    glance.fetch = async function() { throw new Error('network down'); };
+    return vm.runInContext('refreshMachines', glance)();
+  }).then(function() {
+    unreadable('a network failure');
+    glance.fetch = async function() { return {ok: true, status: 200, json: async function() { return {alerts: []}; }}; };
+    return vm.runInContext('refreshMachines', glance)();
+  }).then(function() {
+    must(elements['nav-machines-text'].textContent === 'Machines' && elements['nav-machines-dot'].className === 'nav-dot on', 'a good read did not clear unreadable');
+
+    // The card's ago() and the collector's alert wording agree at every boundary.
+    const secs = [0, 89, 90, 119, 120, 3599, 3600, 5400, 7199, 7200, 172799, 172800, 259200];
+    const server = JSON.parse(execFileSync('python3', ['-', process.argv[2].replace(/fm-bridge-view\.py$/, 'fm-machines.py'), JSON.stringify(secs)], {
+      input: `import importlib.util, json, sys
+spec = importlib.util.spec_from_file_location("machines", sys.argv[1])
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+print(json.dumps([module._ago(n) for n in json.loads(sys.argv[2])]))
+`,
+      encoding: 'utf8'
+    }));
+    const page = secs.map(vm.runInContext('ago', context));
+    must(JSON.stringify(page) === JSON.stringify(server), 'page and alert ago differ: ' + JSON.stringify(page) + ' vs ' + JSON.stringify(server));
+    must(page[7] === '1 hour ago' && page[3] === '1 minute ago' && page[12] === '3 days ago', 'ago wording: ' + JSON.stringify(page));
+  });
 }).catch(function(err) { console.error(err.message); process.exit(1); });
 JS
   ) || fail "machines page rendering failed: $output"

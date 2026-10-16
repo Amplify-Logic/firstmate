@@ -144,10 +144,11 @@ If the read fails, the buckets still render and the section says why in place.
 ## Machines (`/machines`)
 
 `/machines` is a read-only map of the captain's machines, on the same server, session cookie, Host check, security headers and loopback-plus-Serve publish path as the glance; `/api/machines` answers 401 without a session.
-The glance, the deck and this page link to each other through the page nav, and the glance's Machines entry carries a coloured dot and the current alert count.
+The glance, the deck and this page link to each other through the page nav, and the glance's Machines entry carries a coloured dot and the current alert count, or says unreadable when the read fails.
 
 The server reads it from `bin/fm-machines.py --json`, whose header owns the `fm-machines.v1` fields, as one scrubbed, bounded child like the bearings snapshot; the ssh agent socket is the one extra variable passed through so a configured ssh alias can log in.
 It collects only on request, through the same 30-second cache, so nothing runs while no page is open and there is no background daemon.
+Every check runs at once and the whole read ends within 15 seconds, inside the bridge's 20-second child limit; a check still running then is shown as timed out in its own place while the rest of the page stands.
 A failing read answers 503 with the collector's reason and the page says so in place.
 
 What it shows, from real sources only; a value that cannot be read is shown as unknown, never invented:
