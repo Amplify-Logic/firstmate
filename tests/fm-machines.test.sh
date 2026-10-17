@@ -402,8 +402,39 @@ test_offline_alert_last_seen_wording() {
   pass "offline alerts word last seen in whole, correctly numbered units"
 }
 
+# A tailnet with the Mullvad add-on lists hundreds of verbose exit-node peers,
+# so `tailscale status --json` runs well past the 64 KB cap on shell reports.
+test_large_tailnet_still_reads() {
+  local home fb out
+  home=$(make_home large)
+  fb=$(make_fakebin "$home")
+  jq '.Peer += ([range(0; 120)] | map({
+        key: "mv\(.)",
+        value: {ID: "n\(.)", PublicKey: "nodekey:\("0" * 64)", HostName: "se-sto-wg-\(.)",
+                DNSName: "se-sto-wg-\(.).mullvad.ts.net.", OS: "linux", Online: true,
+                TailscaleIPs: ["100.80.\(.).1", "fd7a:115c:a1e0::\(.)"],
+                AllowedIPs: ["100.80.\(.).1/32", "0.0.0.0/0", "::/0"],
+                Addrs: [range(0; 8)] | map("185.65.134.\(.):51820"),
+                ExitNodeOption: true, Location: {Country: "Sweden", CountryCode: "SE", City: "Stockholm", CityCode: "STO", Priority: 100},
+                Capabilities: [range(0; 12)] | map("https://tailscale.com/cap/feature-\(.)"),
+                LastSeen: "0001-01-01T00:00:00Z"}
+      }) | from_entries)' "$home/tailnet.json" > "$home/tailnet.next"
+  mv "$home/tailnet.next" "$home/tailnet.json"
+  [ "$(wc -c < "$home/tailnet.json")" -gt 128000 ] || fail "fixture is too small to cross the report cap"
+  printf 'machine\tdell-laptop\tdell\n' > "$home/config/bridge-machines"
+  out=$(snapshot "$home" "$fb") || fail "snapshot exited non-zero"
+  assert_equals 'true' "$(jq -r '.tailnet.ok' <<<"$out")" "large tailnet read: $(jq -c .tailnet <<<"$out")"
+  assert_equals 'build-vps,mini,dell-laptop,phone' "$(jq -r '[.machines[].name] | join(",")' <<<"$out")" \
+    "tailnet machines kept and Mullvad dropped"
+  jq -e '.alerts | any(.severity == "critical" and .text == "dell-laptop is offline, last seen 3 days ago")' <<<"$out" >/dev/null \
+    || fail "offline alert lost on a large tailnet: $(jq -c .alerts <<<"$out")"
+  if grep -q -- '-- dell' "$home/ssh.log"; then fail "ssh tried a machine the tailnet reports offline"; fi
+  pass "a tailnet dump past the report cap still reads, and the offline Dell is alerted"
+}
+
 test_tailnet_without_config
 test_configured_machines_services_and_probes
 test_unknown_and_unreadable_paths
 test_slow_reads_stay_within_deadline
 test_offline_alert_last_seen_wording
+test_large_tailnet_still_reads

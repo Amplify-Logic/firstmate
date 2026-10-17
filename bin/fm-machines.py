@@ -250,14 +250,14 @@ def _run(argv: List[str], timeout: float, stdin: str = "") -> Tuple[int, str, st
         return 124, "", "timed out"
     except OSError as exc:
         return 126, "", str(exc)
-    return proc.returncode, (proc.stdout or "")[:REPORT_MAX_BYTES], proc.stderr or ""
+    return proc.returncode, proc.stdout or "", proc.stderr or ""
 
 
 def local_report() -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
     rc, out, err = _run(["/bin/sh", "-s"], LOCAL_TIMEOUT_SECONDS, REPORT_SCRIPT)
     if rc != 0 and not out:
         return None, _short_error(err, f"local report exited {rc}")
-    return parse_report(out), None
+    return parse_report(out[:REPORT_MAX_BYTES]), None
 
 
 def ssh_report(ssh: str, alias: str) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
@@ -277,7 +277,7 @@ def ssh_report(ssh: str, alias: str) -> Tuple[Optional[Dict[str, Any]], Optional
         return None, _short_error(err, f"ssh exited {rc}")
     if not out.strip():
         return None, "ssh returned no report"
-    return parse_report(out), None
+    return parse_report(out[:REPORT_MAX_BYTES]), None
 
 
 # --- config ------------------------------------------------------------------
