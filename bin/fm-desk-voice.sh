@@ -704,8 +704,8 @@ EOF
 # tmux tracks focus only for a client that attached while focus-events was
 # on; one attached earlier keeps the focused flag it attached with forever.
 # So a client counts only when it attached after tracking began: the time in
-# the server option @fm-focus-since (set by whoever turned focus-events on in
-# the running server), or else the server's start.
+# the server option @fm-focus-since (set by the Windows floater's bridge,
+# bin/fm-desk-floater-windows.sh). Without it no client counts.
 shown_focused() {  # <backend> <target>
   local info session since
   [ "$1" = tmux ] || return 1
@@ -715,7 +715,6 @@ shown_focused() {  # <backend> <target>
   session=${info% *}
   [ "${info##* }" = 11 ] || return 1
   since=$(tmux show-options -gqv @fm-focus-since 2>/dev/null)
-  [ -n "$since" ] || since=$(tmux display-message -p '#{start_time}' 2>/dev/null) || return 1
   case "$since" in ''|*[!0-9]*) return 1 ;; esac
   tmux list-clients -t "$session" -F '#{client_created} #{client_flags}' 2>/dev/null \
     | awk -v since="$since" '$1 >= since && ("," $2 ",") ~ /,focused,/ { found = 1 } END { exit !found }'

@@ -1481,7 +1481,6 @@ dir=${FM_FAKE_HERDR_DIR:?}
 case "$*" in
   *'show-options -gv focus-events'*) cat "$dir/tmux-focus-events" 2>/dev/null || printf 'on\n' ;;
   *'@fm-focus-since'*) cat "$dir/tmux-focus-since" 2>/dev/null ;;
-  *'#{start_time}'*) printf '1000\n' ;;
   *'#{pane_pid}'*) cat "$dir/shell-pid" ;;
   *'#{session_id} #{window_active}#{pane_active}'*) cat "$dir/tmux-active" ;;
   *'#{pane_id}'*) printf '%%9\n' ;;
@@ -2555,7 +2554,8 @@ test_desk_voice_dictation_front_focused_on_tmux() {
   local home out
   home=$(desk_send_fixture front-focused tmux) || { desk_send_skip front-focused; return 0; }
   printf '%s 11\n' "\$1" > "$home/fixture/tmux-active"
-  # The fake tmux server started at 1000 with focus-events on.
+  # The fake tmux server tracks focus since 1000.
+  printf '1000\n' > "$home/fixture/tmux-focus-since"
   printf '1001 attached,focused,UTF-8\n' > "$home/fixture/tmux-clients"
   # In front, the fake's unreadable chat input sends it on to the mailbox.
   out=$(desk_send "$home" --front-focused -- "Status please") || fail "send failed: $out"
@@ -2579,6 +2579,9 @@ test_desk_voice_dictation_front_focused_on_tmux() {
   [ "$out" = not-in-front ] || fail "without focus-events nothing counts as in front, got: $out"
   rm -f "$home/fixture/tmux-focus-events" "$home/fixture/tmux-focus-since"
   printf '1001 attached,focused,UTF-8\n' > "$home/fixture/tmux-clients"
+  out=$(desk_send "$home" --front-focused -- "Status please") || fail "send failed: $out"
+  [ "$out" = not-in-front ] || fail "with no record of when focus tracking began nothing counts, got: $out"
+  printf '1000\n' > "$home/fixture/tmux-focus-since"
   printf '%s 10\n' "\$1" > "$home/fixture/tmux-active"
   out=$(desk_send "$home" --front-focused -- "Status please") || fail "send failed: $out"
   [ "$out" = not-in-front ] || fail "an inactive pane must not count as in front, got: $out"

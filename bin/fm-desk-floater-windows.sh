@@ -81,9 +81,11 @@
 #       reads tmux's record of which client's terminal has focus, which tmux
 #       keeps only for clients that attached while its focus-events option was
 #       on, so dictate and hello turn it on in a running tmux server where it
-#       is off and record when in the server option @fm-focus-since; clients
-#       attached before that count once they reattach (bin/fm-desk-voice.sh
-#       shown_focused).
+#       is off and record when in the server option @fm-focus-since. Where it
+#       is on already and nothing recorded when, they record the server's
+#       start if a "set -g focus-events on" line in ~/.tmux.conf is no newer
+#       than that start, and now otherwise. Clients attached before that time
+#       count once they reattach (bin/fm-desk-voice.sh shown_focused).
 #   hello   the floater's check-in when it starts and every hour: turns tmux
 #       focus-events on as above and prints "version TAB <source version>".
 #   shot   standard input is a PNG; prints the stored path
@@ -310,7 +312,8 @@ status() {
 # teammate's own and is left alone.
 tmux_conf_add() {
   ! grep -Eq '^[[:space:]]*set(-option)?[[:space:]].*focus-events' "$TMUX_CONF" 2>/dev/null || return 0
-  printf '%s\nset -g focus-events on\n' "$TMUX_CONF_MARK" >> "$TMUX_CONF" \
+  { [ ! -s "$TMUX_CONF" ] || [ -z "$(tail -c 1 "$TMUX_CONF")" ] || printf '\n'
+    printf '%s\nset -g focus-events on\n' "$TMUX_CONF_MARK"; } >> "$TMUX_CONF" \
     || note "could not add focus-events to $TMUX_CONF; dictation will only paste"
 }
 
@@ -376,7 +379,7 @@ receive() {  # <id> <purpose>
   local dest tmp
   mkdir -p "$RECORDING" "$RECEIVED" || die "cannot create $RECORDING"
   chmod 700 "$STATE/desk-voice" "$RECORDING" "$RECEIVED" 2>/dev/null || true
-  find "$RECEIVED" -type f -mtime +30 -delete 2>/dev/null || true
+  find "$RECEIVED" -mindepth 1 -maxdepth 1 -type d -mtime +30 -exec rmdir {} + 2>/dev/null || true
   # mkdir is the atomic claim, so two hand-overs of one id cannot both win.
   mkdir "$RECEIVED/$1" 2>/dev/null || return 3
   dest="$RECORDING/$1-$2.wav"
@@ -516,12 +519,28 @@ bridge_deliver() {
 }
 
 # Windows Terminal reports focus to tmux only once focus-events is on.
+# @fm-focus-since is left set either way: the server's start when
+# ~/.tmux.conf turned focus-events on before the server started, else now.
 tmux_focus_events() {
+  local since started modified
   command -v tmux >/dev/null 2>&1 || return 0
   tmux list-sessions >/dev/null 2>&1 || return 0
-  [ "$(tmux show-options -gv focus-events 2>/dev/null)" != on ] || return 0
-  tmux set-option -g @fm-focus-since "$(date +%s)" >/dev/null 2>&1 || true
-  tmux set-option -g focus-events on >/dev/null 2>&1 || true
+  since=$(date +%s)
+  if [ "$(tmux show-options -gv focus-events 2>/dev/null)" != on ]; then
+    tmux set-option -g @fm-focus-since "$since" >/dev/null 2>&1 || true
+    tmux set-option -g focus-events on >/dev/null 2>&1 || true
+    return 0
+  fi
+  [ -z "$(tmux show-options -gqv @fm-focus-since 2>/dev/null)" ] || return 0
+  started=$(tmux display-message -p '#{start_time}' 2>/dev/null) || started=''
+  if grep -Eq '^[[:space:]]*set(-option)?[[:space:]]+(-[[:alpha:]]+[[:space:]]+)*focus-events[[:space:]]+on([[:space:]]|$)' "$TMUX_CONF" 2>/dev/null; then
+    modified=$(stat -c %Y "$TMUX_CONF" 2>/dev/null || stat -f %m "$TMUX_CONF" 2>/dev/null) || modified=''
+    case "$started,$modified" in
+      ,*|*,|*[!0-9,]*) ;;
+      *) [ "$modified" -gt "$started" ] || since=$started ;;
+    esac
+  fi
+  tmux set-option -g @fm-focus-since "$since" >/dev/null 2>&1 || true
 }
 
 bridge_dictate() {

@@ -21,7 +21,8 @@ export FM_DESK_VOICE_RING_DELAYS=
 
 # Every home gets a tmux stand-in, so no case can reach a real tmux server on
 # the machine running the tests. It reports no server unless the case writes
-# its focus-events setting to tmux-focus.
+# its focus-events setting to tmux-focus; the server started at the time in
+# tmux-start-time.
 new_home() {  # <name>
   local home="$TMP_ROOT/$1"
   mkdir -p "$home/state" "$home/config" "$home/bin"
@@ -31,7 +32,12 @@ printf '%s\n' "\$*" >> "$home/tmux.log"
 [ -e "$home/tmux-focus" ] || exit 1
 case "\$1" in
   list-sessions) printf 'firstmate: 1 windows\n' ;;
-  show-options) cat "$home/tmux-focus" ;;
+  show-options)
+    case "\$3" in
+      @fm-focus-since) cat "$home/tmux-focus-since" 2>/dev/null ;;
+      *) cat "$home/tmux-focus" ;;
+    esac ;;
+  display-message) [ "\$3" = '#{start_time}' ] && cat "$home/tmux-start-time" ;;
   set-option)
     case "\$3" in
       focus-events) printf '%s\n' "\$4" > "$home/tmux-focus" ;;
@@ -81,7 +87,7 @@ PY
 bridge() {  # <home> <verb> [args...] -> stdout; standard input is passed through
   local home=$1
   shift
-  FM_HOME="$home" DEEPGRAM_API_KEY=test-key-not-real FM_DEEPGRAM_CURL="$home/curl" \
+  HOME="$home" FM_HOME="$home" DEEPGRAM_API_KEY=test-key-not-real FM_DEEPGRAM_CURL="$home/curl" \
     PATH="$home/bin:$PATH" "$WIN" bridge "$@"
 }
 
@@ -94,7 +100,11 @@ test_bridge_transcribes_and_holds_a_talk_recording_until_delivered() {
   home=$(new_home talk)
   wav "$home/in.wav" 1
   stt_says "$home" "Merge the finances PR when it is green"
+  mkdir -p "$home/state/desk-voice/windows-received/00000000old00000" "$home/state/desk-voice/windows-received/00000000new00000"
+  touch -t 202001010000 "$home/state/desk-voice/windows-received/00000000old00000"
   out=$(bridge "$home" transcribe 0123abcd0123abcd firstmate < "$home/in.wav") || fail "transcribe failed: $out"
+  [ ! -e "$home/state/desk-voice/windows-received/00000000old00000" ] || fail "a hand-over claim older than 30 days is pruned"
+  [ -d "$home/state/desk-voice/windows-received/00000000new00000" ] || fail "a recent hand-over claim is kept"
   rec="$home/state/desk-voice/recording/0123abcd0123abcd-firstmate.wav"
   assert_equals "text	$rec	Merge the finances PR when it is green" "$out" "the words and the recording held for delivery"
   cmp -s "$home/in.wav" "$rec" || fail "the recording must arrive byte for byte"
@@ -227,6 +237,29 @@ test_bridge_turns_on_tmux_focus_events_for_dictation() {
   : > "$home/tmux.log"
   bridge "$home" hello >/dev/null || fail "hello failed"
   assert_no_grep set-option "$home/tmux.log" "an option already on is left alone"
+
+  # focus-events already on with nothing recorded: the server's start counts
+  # only when ~/.tmux.conf turned it on before the server started.
+  printf 'on\n' > "$home/tmux-focus"
+  printf '1700000000\n' > "$home/tmux-start-time"
+  printf 'set -g mouse on\nset -g focus-events on\n' > "$home/.tmux.conf"
+  touch -t 202001010000 "$home/.tmux.conf"
+  rm -f "$home/tmux-focus-since"
+  bridge "$home" hello >/dev/null || fail "hello failed"
+  assert_equals 1700000000 "$(cat "$home/tmux-focus-since")" \
+    "a server that started with focus-events on tracks focus from its start"
+  printf '1000\n' > "$home/tmux-start-time"
+  rm -f "$home/tmux-focus-since"
+  printf 'Dear Sam' | bridge "$home" dictate >/dev/null 2>&1 || fail "dictate failed"
+  grep -Eqx '[0-9]{10,}' "$home/tmux-focus-since" \
+    || fail "a tmux config changed after the server started counts from now: $(cat "$home/tmux-focus-since" 2>&1)"
+  printf '1700000000\n' > "$home/tmux-start-time"
+  printf '# set -g focus-events on\n' > "$home/.tmux.conf"
+  touch -t 202001010000 "$home/.tmux.conf"
+  rm -f "$home/tmux-focus-since"
+  bridge "$home" hello >/dev/null || fail "hello failed"
+  [ "$(cat "$home/tmux-focus-since")" -gt 1700000000 ] \
+    || fail "focus-events turned on some other way counts from now: $(cat "$home/tmux-focus-since" 2>&1)"
   pass "bridge hello/dictate: tmux keeps track of which terminal has focus"
 }
 
@@ -361,6 +394,12 @@ running: unknown" "$(win "$home" status)" "status after uninstall"
   win "$home" install --no-start >/dev/null || fail "install without a tmux config failed"
   win "$home" uninstall >/dev/null || fail "uninstall without a tmux config failed"
   [ ! -e "$home/.tmux.conf" ] || fail "a tmux config the install created is removed again: $(cat "$home/.tmux.conf")"
+  printf 'set -g mouse on' > "$home/.tmux.conf"
+  win "$home" install --no-start >/dev/null || fail "install over a tmux config without a final newline failed"
+  assert_equals "set -g mouse on" "$(head -n 1 "$home/.tmux.conf")" "the teammate's last line stays whole"
+  assert_equals "set -g focus-events on" "$(tail -n 1 "$home/.tmux.conf")" "focus-events goes on a line of its own"
+  win "$home" uninstall >/dev/null || fail "uninstall failed"
+  assert_equals "set -g mouse on" "$(cat "$home/.tmux.conf")" "uninstall finds and takes back its lines"
   pass "fm-desk-floater-windows install: builds with Windows' own compiler, starts with Windows, updates in place"
 }
 
@@ -433,7 +472,7 @@ EOF
 }
 
 # The C# decisions are built and run where Windows' own compiler is reachable
-# (inside WSL), or where a scratch dotnet is named in FM_TEST_CSC_DOTNET.
+# (inside WSL).
 test_floater_csharp_self_test() {
   local csc out dir
   csc=/mnt/c/Windows/Microsoft.NET/Framework64/v4.0.30319/csc.exe

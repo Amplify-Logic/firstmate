@@ -446,6 +446,7 @@ namespace StarshipFloater
         private readonly ClickHandler onClick;
         private Native.HookProc keyProc;
         private Native.HookProc mouseProc;
+        private readonly Stopwatch clock = Stopwatch.StartNew();
 
         public Hotkeys(Control owner, KeyHandler onKey, ClickHandler onClick)
         {
@@ -489,7 +490,7 @@ namespace StarshipFloater
                     bool up = message == Native.WM_KEYUP || message == Native.WM_SYSKEYUP;
                     if ((down || up) && owner.IsHandleCreated)
                     {
-                        owner.BeginInvoke(onKey, (int)k.vkCode, (int)k.scanCode, down, k.time / 1000.0);
+                        owner.BeginInvoke(onKey, (int)k.vkCode, (int)k.scanCode, down, clock.Elapsed.TotalSeconds);
                     }
                 }
             }
@@ -507,7 +508,7 @@ namespace StarshipFloater
                     Native.MSLLHOOKSTRUCT m = (Native.MSLLHOOKSTRUCT)Marshal.PtrToStructure(lParam, typeof(Native.MSLLHOOKSTRUCT));
                     if (m.dwExtraInfo != OwnInput)
                     {
-                        owner.BeginInvoke(onClick, m.time / 1000.0);
+                        owner.BeginInvoke(onClick, clock.Elapsed.TotalSeconds);
                     }
                 }
             }

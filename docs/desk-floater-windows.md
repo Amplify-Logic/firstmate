@@ -78,6 +78,7 @@ When the cursor is in the first mate's chat itself, dictation sends the text the
 The floater treats the chat as being in front only when a terminal window (such as Windows Terminal) is the foreground window, the tmux pane of the first mate is the active one, and tmux says its terminal has focus.
 tmux keeps track of focus only for a terminal that attached while its `focus-events` option was on, so install adds `set -g focus-events on` to your `~/.tmux.conf` (uninstall takes it out again) and the floater also turns the option on in your running tmux.
 A tmux window that was already open before then counts once you attach to it again, for example after closing the tab and running `tmux attach -t firstmate`, or when tmux next starts.
+The same holds when you turn `focus-events` on in a running tmux yourself, for example with `tmux source ~/.tmux.conf`: the floater counts only windows attached after it first sees the option on.
 Anywhere else, and when it cannot tell, the text is only pasted and Enter is never pressed.
 
 ## Screenshots
