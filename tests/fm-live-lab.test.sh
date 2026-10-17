@@ -829,6 +829,7 @@ V=$(make_lab vanished pi)
 V_TMUX=$(sed -n 's/^tmux_dir=//p' "$V/.fm-live-lab")
 env -u TMUX -u TMUX_TMPDIR tmux -S "$V_TMUX/tmux-$(id -u)/default" kill-server
 rm -rf "$V_TMUX"
+[ ! -s "$TMUX_GUARD_LOG" ] || fail "an earlier tmux call could have reached the default tmux server: $(cat "$TMUX_GUARD_LOG")"
 : > "$TMUX_GUARD_LOG"
 out=$("$LIVE_LAB" check "$V" 2>&1)
 expect_code 1 "$?" "check fails on a lab whose tmux directory is gone: $out"

@@ -137,7 +137,7 @@ It explains the whole system in plain words, how to connect your mail, calendar 
 | `Invalid input. Please press 'y' to proceed` | Homebrew is asking yes or no; press `y`. |
 | `command not found: brew` | Run the two `PATH` lines Homebrew printed at the end, then open a new Terminal window. |
 | `command not found: npm` or `claude` | `brew install node`, then `npm install -g @anthropic-ai/claude-code`, then open a new Terminal window. |
-| `gh: not logged in` or `NEEDS_GH_AUTH` | `gh auth login`, choosing GitHub.com, HTTPS, and the web browser. |
+| `gh: not logged in` or `NEEDS_GH_AUTH` | `gh auth login`, answering its four questions with GitHub.com, HTTPS, Yes to authenticate Git, and the web browser. |
 | `bin/fm-primary.sh` refuses to start | `bin/fm-primary.sh opus --preflight` names what is missing without starting anything. |
 | `permission denied` on `bin/fm-primary.sh` | `chmod +x bin/*.sh`, then launch again. |
 | `refuses another live Firstmate session` | One is already running; close the other window, or run `tmux ls` and exit the spare session. |
