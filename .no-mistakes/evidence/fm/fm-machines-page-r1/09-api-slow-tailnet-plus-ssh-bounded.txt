@@ -1,0 +1,2 @@
+$ curl /api/machines  (tailscale status stalls 4.5s, then ssh to stuckbox hangs; wedged services and stalled TLS probe still configured)
+HTTP 503 in 40.710139s

@@ -1,0 +1,93 @@
+{
+  "checks": {
+    "passing": 4,
+    "total": 5
+  },
+  "alerts": [
+    {
+      "severity": "critical",
+      "text": "larsdell is offline, last seen 1 hour ago"
+    },
+    {
+      "severity": "warning",
+      "text": "larsmac disk is 97% full"
+    }
+  ],
+  "config": {
+    "present": true,
+    "skipped": [
+      "line 4: probe must be an https URL"
+    ]
+  },
+  "tailnet": {
+    "ok": true,
+    "error": null
+  },
+  "this": {
+    "name": "larsmac",
+    "os": "macOS",
+    "online": true,
+    "ip": "100.70.1.1",
+    "self": true,
+    "stats_error": null,
+    "stats": {
+      "load": [
+        10.17,
+        11.94,
+        14.56
+      ],
+      "mem_pct": 83,
+      "disk_pct": 97,
+      "uptime_secs": 719383
+    }
+  },
+  "machines": [
+    {
+      "name": "iphone-15",
+      "os": "iOS",
+      "online": false,
+      "last_seen": 1791936185,
+      "ip": "100.70.1.3",
+      "watched": false,
+      "link": "tailnet",
+      "stats_error": null
+    },
+    {
+      "name": "larsdell",
+      "os": "Windows",
+      "online": false,
+      "last_seen": 1792189985,
+      "ip": "100.70.1.2",
+      "watched": true,
+      "link": "tailnet",
+      "stats_error": "offline, so not read"
+    }
+  ],
+  "services": [
+    {
+      "name": "Bridge page",
+      "up": true,
+      "detail": "serving"
+    },
+    {
+      "name": "Glasses voice mailbox",
+      "up": true,
+      "detail": "healthy"
+    },
+    {
+      "name": "Starship Voice",
+      "up": true,
+      "detail": "healthy"
+    }
+  ],
+  "probes": [
+    {
+      "label": "Example site",
+      "host": "example.com",
+      "ok": true,
+      "status": 200,
+      "latency_ms": 250,
+      "error": null
+    }
+  ]
+}

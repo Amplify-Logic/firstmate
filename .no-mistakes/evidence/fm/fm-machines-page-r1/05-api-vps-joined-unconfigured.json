@@ -1,0 +1,45 @@
+{
+  "checks": {
+    "passing": 4,
+    "total": 5
+  },
+  "alerts": [
+    {
+      "severity": "critical",
+      "text": "larsdell is offline, last seen 1 hour ago"
+    },
+    {
+      "severity": "warning",
+      "text": "larsmac disk is 97% full"
+    }
+  ],
+  "machines": [
+    {
+      "name": "agent-vps",
+      "os": "Linux",
+      "online": true,
+      "ip": "100.70.1.4",
+      "watched": false,
+      "link": "tailnet",
+      "stats_error": null
+    },
+    {
+      "name": "iphone-15",
+      "os": "iOS",
+      "online": false,
+      "ip": "100.70.1.3",
+      "watched": false,
+      "link": "tailnet",
+      "stats_error": null
+    },
+    {
+      "name": "larsdell",
+      "os": "Windows",
+      "online": false,
+      "ip": "100.70.1.2",
+      "watched": true,
+      "link": "tailnet",
+      "stats_error": "offline, so not read"
+    }
+  ]
+}

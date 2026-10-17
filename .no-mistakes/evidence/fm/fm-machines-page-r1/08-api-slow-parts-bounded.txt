@@ -1,0 +1,83 @@
+$ curl /api/machines  (ssh to stuckbox sleeps 60s; 2 services + 1 https probe point at a socket that accepts and never answers)
+HTTP 200 in 13.487153s
+{
+  "checks": {
+    "passing": 7,
+    "total": 10
+  },
+  "alerts": [
+    {
+      "severity": "critical",
+      "text": "Wedged service is down: timed out"
+    },
+    {
+      "severity": "critical",
+      "text": "Wedged service 2 is down: timed out"
+    },
+    {
+      "severity": "critical",
+      "text": "Stalled TLS site probe failing: _ssl.c:983: The handshake operation timed out"
+    },
+    {
+      "severity": "warning",
+      "text": "larsmac disk is 97% full"
+    },
+    {
+      "severity": "warning",
+      "text": "1 systemd unit has failed on agent-vps: agent-worker@3.service"
+    },
+    {
+      "severity": "warning",
+      "text": "Cannot read larsdell's numbers: ssh: Could not resolve hostname larsdell"
+    },
+    {
+      "severity": "warning",
+      "text": "Cannot read stuckbox's numbers: timed out"
+    }
+  ],
+  "stuckbox": [
+    {
+      "online": true,
+      "stats_error": "timed out"
+    }
+  ],
+  "services": [
+    {
+      "name": "Bridge page",
+      "up": true,
+      "detail": "serving"
+    },
+    {
+      "name": "Glasses voice mailbox",
+      "up": true,
+      "detail": "healthy"
+    },
+    {
+      "name": "Starship Voice",
+      "up": true,
+      "detail": "healthy"
+    },
+    {
+      "name": "Wedged service",
+      "up": false,
+      "detail": "timed out"
+    },
+    {
+      "name": "Wedged service 2",
+      "up": false,
+      "detail": "timed out"
+    }
+  ],
+  "probes": [
+    {
+      "label": "Example site",
+      "ok": true,
+      "error": null
+    },
+    {
+      "label": "Stalled TLS site",
+      "ok": false,
+      "error": "_ssl.c:983: The handshake operation timed out"
+    }
+  ]
+}

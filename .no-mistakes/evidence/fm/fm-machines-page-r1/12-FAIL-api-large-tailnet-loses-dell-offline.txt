@@ -1,0 +1,28 @@
+Fixture: tailscale status --json = 94126 bytes (larsdell OFFLINE, agent-vps online, iphone offline, + 60 Mullvad exit nodes shaped like ipnstate.PeerStatus)
+HTTP 200 in 16.814908s
+{
+  "tailnet": {
+    "ok": false,
+    "error": "tailscale status was not JSON"
+  },
+  "machines": [
+    {
+      "name": "larsdell",
+      "online": null,
+      "link": "ssh",
+      "stats_error": "ssh: Could not resolve hostname larsdell"
+    },
+    {
+      "name": "agent-vps",
+      "online": true,
+      "link": "ssh",
+      "stats_error": null
+    }
+  ],
+  "alerts": [
+    "larsdell cannot be reached: ssh: Could not resolve hostname larsdell",
+    "Larss-MacBook-Pro disk is 98% full",
+    "1 systemd unit has failed on agent-vps: agent-worker@3.service",
+    "Cannot read the tailnet: tailscale status was not JSON"
+  ]
+}

@@ -1,0 +1,4 @@
+$ curl /api/machines (no session)
+HTTP/1.1 401 Unauthorized
+$ curl /machines (no session)
+action="/login"

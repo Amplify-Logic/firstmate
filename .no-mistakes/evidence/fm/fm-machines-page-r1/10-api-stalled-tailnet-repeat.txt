@@ -1,0 +1,4 @@
+Stalled tailnet (4.5s) + hung ssh + wedged services + stalled TLS probe; fresh read each time (cache expired)
+read 1 (load 44.85 71.60 56.60): HTTP 503 in 21.857084s 
+read 2 (load 39.34 66.99 56.02): HTTP 200 in 14.102282s [{"passing":7,"total":10},["timed out"],null]
+read 3 (load 35.46 61.81 54.66): HTTP 200 in 14.155244s [{"passing":7,"total":10},["timed out"],null]

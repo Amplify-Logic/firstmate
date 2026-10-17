@@ -1,0 +1,21 @@
+Round 2 live lab transcript (disposable FM_HOME, real bin/fm-bridge-view.sh serve on loopback, fake tailscale/ssh on PATH)
+
+Large tailnet (274,067 bytes: 200 Mullvad exit-node peers + larsdell offline 5400 s + lars-iphone + agent-vps):
+  pre-fix collector (81c0a8ad): tailnet {"ok":false,"error":"tailscale status was not JSON"}; larsdell link=ssh online=null;
+     alert "larsdell cannot be reached: ssh: ..."; ssh attempted to the offline Dell
+  fixed collector (22e31a2d):   tailnet {"ok":true}; larsdell link=tailnet online=false;
+     alert "larsdell is offline, last seen 1 hour ago"; no ssh to the Dell
+
+/api/machines fresh reads through the bridge (load average ~14 on 8 cores):
+  hung ssh (vps sleeps 30 s), wedged mailbox + 2 wedged loopback services, stalled-TLS probe, tailscale 4 s: HTTP 200 in 13.53 s / 13.60 s
+     -> agent-vps "timed out", services "timed out", probe "_ssl.c:983: The handshake operation timed out"
+  same plus tailscale hung 30 s: HTTP 200 in 14.54 s -> tailnet {"ok":false,"error":"timed out"}, every other part still reported
+
+Collector forced to fail (lab wrapper): /api/machines HTTP 503 {"error":"machines unreadable","detail":"lab: collector forced to fail"}
+  glance badge in-page: "Machines · 2 alerts | nav-dot crit" -> "Machines · unreadable | nav-dot warn" within 11 s
+
+VPS joins: agent-vps added to tailscale status only -> listed (online, Linux, 100.101.7.77, unwatched) with no config change;
+  after a `machine<TAB>agent-vps<TAB>vps` config line -> read over ssh (BatchMode=yes, ConnectTimeout=4): 4 cores, 38% mem, 38% disk,
+  alert "1 systemd unit has failed on agent-vps: agent-worker@3.service"
+
+Read-only: cksum of lab home config/ state/ data/ identical before and after reads.

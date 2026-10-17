@@ -1,0 +1,63 @@
+{
+  "checks": {
+    "passing": 6,
+    "total": 6
+  },
+  "alerts": [
+    {
+      "severity": "warning",
+      "text": "larsmac disk is 97% full"
+    },
+    {
+      "severity": "warning",
+      "text": "1 systemd unit has failed on agent-vps: agent-worker@3.service"
+    },
+    {
+      "severity": "warning",
+      "text": "Cannot read larsdell's numbers: ssh: Could not resolve hostname larsdell"
+    }
+  ],
+  "machines": [
+    {
+      "name": "agent-vps",
+      "online": true,
+      "watched": true,
+      "ssh": true,
+      "stats_error": null,
+      "stats": {
+        "os": "Linux",
+        "cpus": 4,
+        "load": [
+          0.42,
+          0.3,
+          0.25
+        ],
+        "load_pct": 10,
+        "mem_total": 8192000000,
+        "mem_pct": 38,
+        "disk_total": 82944000000,
+        "disk_pct": 37,
+        "uptime_secs": 360000,
+        "failed_units": [
+          "agent-worker@3.service"
+        ]
+      }
+    },
+    {
+      "name": "larsdell",
+      "online": true,
+      "watched": true,
+      "ssh": true,
+      "stats_error": "ssh: Could not resolve hostname larsdell",
+      "stats": null
+    },
+    {
+      "name": "iphone-15",
+      "online": false,
+      "watched": false,
+      "ssh": false,
+      "stats_error": null,
+      "stats": null
+    }
+  ]
+}
