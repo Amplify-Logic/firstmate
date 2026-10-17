@@ -187,7 +187,7 @@ If it says there is no session, run `tmux new -s firstmate`, then `cd ~/starship
 
 ---
 
-## 9. Talk to your first mate (optional)
+## 10. Talk to your first mate (optional)
 
 The desk floater lets you hold a key and talk to your first mate, hear its replies, dictate into any Windows app, and send it screenshots.
 Once your first mate runs, put your Deepgram key in `~/starship/.env` as a line `DEEPGRAM_API_KEY=...`, and for spoken replies put `enabled = true` in `~/starship/config/speak`.
@@ -225,7 +225,7 @@ Two lighter ways to use Claude work on Windows with no Linux at all:
 | You see | Do this |
 |---|---|
 | No Ubuntu window and no user prompt after the restart | Run `wsl --install -d Ubuntu-24.04` again in Terminal (Admin) (step 3). |
-| `Failed to configure network (networkingMode Mirrored)`, or nothing downloads in Ubuntu | Delete the `networkingMode=mirrored` line from `.wslconfig`, run `wsl --shutdown`, and open a new Ubuntu tab (step 5). |
+| `Failed to configure network (networkingMode Mirrored)`, or nothing downloads in Ubuntu | Delete the `networkingMode=mirrored` line from `.wslconfig`, run `wsl --shutdown`, and open a new Ubuntu tab (step 4). |
 | `fm-linux-setup.sh: ... is on the Windows drive` | Run `cd ~` and start the setup again. |
 | `this is WSL 1` | In PowerShell: `wsl --set-version Ubuntu-24.04 2`, then run the setup again. |
 | No `Setup finished.` at the end of the setup | Run the setup command again. |
