@@ -312,8 +312,9 @@ status() {
 # teammate's own and is left alone.
 tmux_conf_add() {
   ! grep -Eq '^[[:space:]]*set(-option)?[[:space:]].*focus-events' "$TMUX_CONF" 2>/dev/null || return 0
-  { [ ! -s "$TMUX_CONF" ] || [ -z "$(tail -c 1 "$TMUX_CONF")" ] || printf '\n'
-    printf '%s\nset -g focus-events on\n' "$TMUX_CONF_MARK"; } >> "$TMUX_CONF" \
+  local lead=
+  [ ! -s "$TMUX_CONF" ] || [ -z "$(tail -c 1 "$TMUX_CONF")" ] || lead=$'\n'
+  printf '%s%s\nset -g focus-events on\n' "$lead" "$TMUX_CONF_MARK" >> "$TMUX_CONF" \
     || note "could not add focus-events to $TMUX_CONF; dictation will only paste"
 }
 
