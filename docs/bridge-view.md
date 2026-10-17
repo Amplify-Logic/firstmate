@@ -159,7 +159,7 @@ What it shows, from real sources only; a value that cannot be read is shown as u
 - Each HTTPS probe named in the config, with its status and latency.
 
 Health counts checks passing out of the total: each watched machine reachable, each service up, and each probe passing.
-Alerts name a watched machine offline or unreachable, a service down, a probe failing, failed systemd units, a disk over 90 percent full, or a tailnet that cannot be read.
+Alerts name a watched machine offline or unreachable, a watched machine whose numbers cannot be read, a service down, a probe failing, failed systemd units, a disk over 90 percent full, or a tailnet that cannot be read.
 Only machines named in the config are watched, so a phone or laptop that sleeps shows offline on its card without raising an alert.
 The map is the hub card for this Mac with its services, then the tailnet machines, any machines reached only over ssh, and the web probes, each group joined to the hub by its link.
 
