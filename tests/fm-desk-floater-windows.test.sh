@@ -32,7 +32,11 @@ printf '%s\n' "\$*" >> "$home/tmux.log"
 case "\$1" in
   list-sessions) printf 'firstmate: 1 windows\n' ;;
   show-options) cat "$home/tmux-focus" ;;
-  set-option) printf '%s\n' "\$4" > "$home/tmux-focus" ;;
+  set-option)
+    case "\$3" in
+      focus-events) printf '%s\n' "\$4" > "$home/tmux-focus" ;;
+      @fm-focus-since) printf '%s\n' "\$4" > "$home/tmux-focus-since" ;;
+    esac ;;
 esac
 EOF
   chmod +x "$home/bin/tmux"
@@ -215,6 +219,8 @@ test_bridge_turns_on_tmux_focus_events_for_dictation() {
   printf 'off\n' > "$home/tmux-focus"
   bridge "$home" hello >/dev/null || fail "hello failed"
   assert_equals on "$(cat "$home/tmux-focus")" "hello turns focus-events on in a running tmux server"
+  grep -Eqx '[0-9]{10,}' "$home/tmux-focus-since" \
+    || fail "the time focus tracking began is kept for the dictation check: $(cat "$home/tmux-focus-since" 2>&1)"
   printf 'off\n' > "$home/tmux-focus"
   printf 'Dear Sam' | bridge "$home" dictate >/dev/null 2>&1 || fail "dictate failed"
   assert_equals on "$(cat "$home/tmux-focus")" "dictate turns it on too"
@@ -243,7 +249,7 @@ test_bridge_shot_and_speak_reach_the_shared_scripts() {
 
 # A Windows stand-in: cmd.exe answers the folders, wslpath maps them into the
 # fixture, csc.exe "builds" a stand-in floater that logs how it was called,
-# and reg.exe and tasklist.exe log theirs.
+# and reg.exe, tasklist.exe and powershell.exe log theirs.
 windows_fixture() {  # <home>
   local home=$1 win="$1/win" bin="$1/bin"
   mkdir -p "$win/Windows/Microsoft.NET/Framework64/v4.0.30319" "$win/Users/ana/AppData/Local"
@@ -253,7 +259,6 @@ printf '%s\n' "\$*" >> "$home/cmd.log"
 case "\$*" in
   *'echo %LOCALAPPDATA%'*) printf 'C:\\\\Users\\\\ana\\\\AppData\\\\Local\r\n' ;;
   *'echo %SystemRoot%'*) printf 'C:\\\\Windows\r\n' ;;
-  *'start'*) printf 'started %s\n' "\$PWD" >> "$home/started.log" ;;
   *) printf '%%%s%%\r\n' unknown ;;
 esac
 EOF
@@ -281,20 +286,25 @@ chmod +x "\$out"
 EOF
   printf '#!/usr/bin/env bash\nprintf "%%s\\n" "$*" >> "%s/reg.log"\n' "$home" > "$bin/reg.exe"
   printf '#!/usr/bin/env bash\nexit 0\n' > "$bin/tasklist.exe"
-  chmod +x "$bin/cmd.exe" "$bin/wslpath" "$bin/reg.exe" "$bin/tasklist.exe" \
+  cat > "$bin/powershell.exe" <<EOF
+#!/usr/bin/env bash
+printf 'started %s: %s\n' "\$PWD" "\$*" >> "$home/started.log"
+EOF
+  chmod +x "$bin/cmd.exe" "$bin/wslpath" "$bin/reg.exe" "$bin/tasklist.exe" "$bin/powershell.exe" \
     "$win/Windows/Microsoft.NET/Framework64/v4.0.30319/csc.exe"
 }
 
 win() {  # <home> <args...>
   local home=$1
   shift
-  FM_HOME="$home" WSL_DISTRO_NAME=Ubuntu-24.04 PATH="$home/bin:$PATH" "$WIN" "$@"
+  HOME="$home" FM_HOME="$home" WSL_DISTRO_NAME=Ubuntu-24.04 PATH="$home/bin:$PATH" "$WIN" "$@"
 }
 
 test_install_builds_registers_and_starts_the_floater() {
   local home out dir
   home=$(new_home install)
   windows_fixture "$home"
+  printf 'set -g mouse on\n' > "$home/.tmux.conf"
   out=$(win "$home" install) || fail "install failed: $out"
   dir="$home/win/Users/ana/AppData/Local/Starship/Floater"
   assert_contains "$out" 'installed and started: C:\Users\ana\AppData\Local\Starship\Floater\StarshipFloater.exe' "install says where"
@@ -310,7 +320,10 @@ version=$("$WIN" version)" "$(tr -d '\r' < "$dir/floater.ini")" "floater.ini nam
   assert_contains "$(cat "$home/reg.log")" 'add HKCU\Software\Microsoft\Windows\CurrentVersion\Run /v StarshipFloater /t REG_SZ /d "C:\Users\ana\AppData\Local\Starship\Floater\StarshipFloater.exe" /f' \
     "it starts with Windows, for this user only"
   assert_contains "$(cat "$home/started.log")" "started $dir" "it is started from its own folder"
+  assert_contains "$(cat "$home/started.log")" "Start-Process -FilePath 'C:\Users\ana\AppData\Local\Starship\Floater\StarshipFloater.exe'" \
+    "it is started apart from this WSL session, so install returns"
   assert_contains "$(cat "$home/state/desk-floater-windows/install")" "linux_dir=$dir" "the install is recorded for the player"
+  assert_contains "$(cat "$home/.tmux.conf")" "set -g focus-events on" "tmux tracks focus from its next start"
   assert_equals "installed: yes
 version: current
 running: no" "$(win "$home" status)" "status reports a current install"
@@ -330,14 +343,24 @@ running: no" "$(win "$home" status)" "status reports a current install"
   rm -f "$home/csc-fails"
   sed -i.bak 's/^version=.*/version=old/' "$home/state/desk-floater-windows/install"
   assert_contains "$(win "$home" status)" "version: stale" "status notices sources newer than the build"
+  assert_equals 1 "$(grep -c 'focus-events' "$home/.tmux.conf")" "reinstalls add focus-events to tmux's config once"
 
   out=$(win "$home" uninstall) || fail "uninstall failed: $out"
   [ ! -e "$dir" ] || fail "uninstall removes the floater's folder"
+  [ ! -e "${dir%/Floater}" ] || fail "and its Starship folder once empty"
   [ ! -e "$home/state/desk-floater-windows/install" ] || fail "uninstall removes the install record"
   assert_contains "$(cat "$home/reg.log")" 'delete HKCU\Software\Microsoft\Windows\CurrentVersion\Run /v StarshipFloater /f' "and the startup entry"
   assert_equals "installed: no
 version: unknown
 running: unknown" "$(win "$home" status)" "status after uninstall"
+  assert_equals "set -g mouse on" "$(cat "$home/.tmux.conf")" "uninstall takes back only its own tmux lines"
+  printf 'set -g focus-events off\n' > "$home/.tmux.conf"
+  win "$home" install --no-start >/dev/null || fail "install over an own focus-events line failed"
+  assert_equals "set -g focus-events off" "$(cat "$home/.tmux.conf")" "a focus-events line of the teammate's own is left alone"
+  rm -f "$home/.tmux.conf"
+  win "$home" install --no-start >/dev/null || fail "install without a tmux config failed"
+  win "$home" uninstall >/dev/null || fail "uninstall without a tmux config failed"
+  [ ! -e "$home/.tmux.conf" ] || fail "a tmux config the install created is removed again: $(cat "$home/.tmux.conf")"
   pass "fm-desk-floater-windows install: builds with Windows' own compiler, starts with Windows, updates in place"
 }
 
@@ -359,7 +382,7 @@ test_player_plays_through_the_floater_and_stops_on_term() {
   printf 'ID3audio' > "$home/line.mp3"
   : > "$dir/exe.log"
   FM_HOME="$home" "$PLAY" -v 0.40 "$home/line.mp3" || fail "playback failed"
-  assert_contains "$(cat "$dir/exe.log")" '--play C:\Users\ana\AppData\Local\Starship\Floater\play\' "the line is played by the floater from its own folder"
+  assert_contains "$(cat "$dir/exe.log")" "--play C:\\Users\\ana\\AppData\\Local\\Starship\\Floater\\play\\" "the line is played by the floater from its own folder"
   assert_contains "$(cat "$dir/exe.log")" "--volume 400" "at the set level"
   [ -z "$(ls "$dir/play")" ] || fail "the copy is removed after playing"
   : > "$dir/exe.log"
@@ -402,7 +425,7 @@ EOF
   chmod +x "$home/shaper" "$home/tts"
   : > "$dir/exe.log"
   FM_HOME="$home" FM_SPEAK_SHAPER="$home/shaper" FM_SPEAK_DEEPGRAM_TTS="$home/tts" FM_SPEAK_SAY=/nonexistent \
-    DEEPGRAM_API_KEY=test-key-not-real PATH="$home/bin:$PATH" "$SPEAK" "The build is green." \
+    DEEPGRAM_API_KEY=test-key-not-real PATH="$home/bin:$PATH" "$SPEAK" "The build is green." >/dev/null \
     || fail "speak failed"
   for i in $(seq 1 50); do grep -q -- --play "$dir/exe.log" && break; sleep 0.1; done
   assert_contains "$(cat "$dir/exe.log")" "--play" "a reply is spoken through the Windows floater"
@@ -414,7 +437,8 @@ EOF
 test_floater_csharp_self_test() {
   local csc out dir
   csc=/mnt/c/Windows/Microsoft.NET/Framework64/v4.0.30319/csc.exe
-  if [ -n "${WSL_DISTRO_NAME:-}" ] && [ -f "$csc" ] && command -v wslpath >/dev/null 2>&1; then
+  # tests/lib.sh drops WSL_DISTRO_NAME, so WSL is told by its kernel name.
+  if grep -qi microsoft /proc/sys/kernel/osrelease 2>/dev/null && [ -f "$csc" ] && command -v wslpath >/dev/null 2>&1; then
     dir=$(mktemp -d /mnt/c/Windows/Temp/fm-floater-test.XXXXXX 2>/dev/null) \
       || dir=$(mktemp -d "$(wslpath -u "$(cd /mnt/c && cmd.exe /d /c 'echo %TEMP%' 2>/dev/null | tr -d '\r')")/fm-floater-test.XXXXXX") \
       || fail "no Windows folder to build the self-test in"

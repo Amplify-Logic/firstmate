@@ -34,7 +34,10 @@
 # it, asking a floater already running to quit first. The running exe is
 # renamed aside, which Windows allows, so a reinstall never needs it stopped
 # by hand; --no-start leaves a running floater running the old build until
-# it restarts. Running install again after an update is the
+# it restarts. install also adds "set -g focus-events on" to ~/.tmux.conf
+# (marked, once, unless a focus-events line is there already), because tmux
+# tracks which terminal has focus only for clients that attach while that
+# option is on; dictate below relies on it. Running install again after an update is the
 # update path, and the floater does it by itself: it compares its own source
 # version with `version` when it starts and every hour, and reinstalls and
 # restarts itself when they differ.
@@ -43,8 +46,8 @@
 #   installed: yes|no
 #   version: current|stale|unknown
 #   running: yes|no|unknown
-# uninstall quits it, removes the "Run" value, the install folder and the
-# install record. version prints the source version, a short hash of the
+# uninstall quits it, removes the "Run" value, the install folder, the
+# install record and the marked ~/.tmux.conf lines. version prints the source version, a short hash of the
 # floater's C# sources.
 #
 # bridge is how the Windows floater reaches this home; nothing else calls it.
@@ -76,8 +79,11 @@
 #       bin/fm-desk-voice.sh send --front-focused and prints its outcome line;
 #       "not-in-front" means the floater pastes the words instead. That check
 #       reads tmux's record of which client's terminal has focus, which tmux
-#       keeps only while its focus-events option is on, so dictate and hello
-#       turn it on in a running tmux server where it is off.
+#       keeps only for clients that attached while its focus-events option was
+#       on, so dictate and hello turn it on in a running tmux server where it
+#       is off and record when in the server option @fm-focus-since; clients
+#       attached before that count once they reattach (bin/fm-desk-voice.sh
+#       shown_focused).
 #   hello   the floater's check-in when it starts and every hour: turns tmux
 #       focus-events on as above and prints "version TAB <source version>".
 #   shot   standard input is a PNG; prints the stored path
@@ -115,6 +121,8 @@ SPEAK="$SCRIPT_DIR/fm-speak.sh"
 EXE=StarshipFloater.exe
 RUN_KEY='HKCU\Software\Microsoft\Windows\CurrentVersion\Run'
 RUN_NAME="${FM_DESK_FLOATER_WINDOWS_NAME:-StarshipFloater}"
+TMUX_CONF="$HOME/.tmux.conf"
+TMUX_CONF_MARK="# Added by Starship's Windows desk floater (bin/fm-desk-floater-windows.sh): dictation tells when the first mate's chat is in front."
 
 usage() {
   awk '
@@ -195,9 +203,14 @@ floater_running() {
   tasklist.exe /FI "IMAGENAME eq $EXE" /NH 2>/dev/null | tr -d '\r' | grep -qi "^$EXE"
 }
 
-start_floater() {  # <linux dir>
-  # start detaches the floater from this WSL session entirely.
-  (cd "$1" && cmd.exe /d /c start "" "$EXE") >/dev/null 2>&1 \
+start_floater() {  # <linux dir> <windows dir>
+  # PowerShell's Start-Process detaches the floater from this WSL session and
+  # returns at once; cmd.exe's start keeps WSL waiting while the floater runs.
+  local ps=/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe dir
+  command -v powershell.exe >/dev/null 2>&1 && ps=powershell.exe
+  dir=${2//\'/\'\'}
+  (cd "$1" && "$ps" -NoProfile -NonInteractive -Command \
+    "Start-Process -FilePath '$dir\\$EXE' -WorkingDirectory '$dir'") </dev/null >/dev/null 2>&1 \
     || die "could not start the floater ($1/$EXE)"
 }
 
@@ -249,13 +262,14 @@ install() {
   mv -f "$lin_dir/StarshipFloater.new.exe" "$lin_dir/$EXE" || die "cannot install $lin_dir/$EXE"
   reg.exe add "$RUN_KEY" /v "$RUN_NAME" /t REG_SZ /d "\"$win_dir\\$EXE\"" /f >/dev/null 2>&1 \
     || note "could not add the floater to Windows startup; start it with: bin/fm-desk-floater-windows.sh start"
+  tmux_conf_add
   mkdir -p "$RECORD_DIR" || die "cannot create $RECORD_DIR"
   printf 'windows_dir=%s\nlinux_dir=%s\ndistro=%s\nversion=%s\n' \
     "$win_dir" "$lin_dir" "$WSL_DISTRO_NAME" "$version" > "$RECORD" || die "cannot write $RECORD"
   if [ "$start" = true ]; then
     # The floater runs one copy at a time, so the old one goes first.
     quit_floater "$lin_dir"
-    start_floater "$lin_dir"
+    start_floater "$lin_dir" "$win_dir"
     printf 'installed and started: %s\\%s\n' "$win_dir" "$EXE"
   else
     printf 'installed: %s\\%s\n' "$win_dir" "$EXE"
@@ -266,7 +280,7 @@ start() {
   need_wsl
   read_record || die "the Windows floater is not installed; run: bin/fm-desk-floater-windows.sh install"
   [ -f "$LIN_DIR/$EXE" ] || die "the floater is missing from $LIN_DIR; run install again"
-  start_floater "$LIN_DIR"
+  start_floater "$LIN_DIR" "$WIN_DIR"
   printf 'started\n'
 }
 
@@ -291,16 +305,42 @@ status() {
   printf 'installed: %s\nversion: %s\nrunning: %s\n' "$installed" "$version" "$running"
 }
 
+# tmux reads focus-events from ~/.tmux.conf when it starts, so every client
+# attaches with focus tracked; a focus-events line already there is the
+# teammate's own and is left alone.
+tmux_conf_add() {
+  ! grep -Eq '^[[:space:]]*set(-option)?[[:space:]].*focus-events' "$TMUX_CONF" 2>/dev/null || return 0
+  printf '%s\nset -g focus-events on\n' "$TMUX_CONF_MARK" >> "$TMUX_CONF" \
+    || note "could not add focus-events to $TMUX_CONF; dictation will only paste"
+}
+
+tmux_conf_remove() {
+  local kept
+  grep -qxF "$TMUX_CONF_MARK" "$TMUX_CONF" 2>/dev/null || return 0
+  if ! kept=$(awk -v mark="$TMUX_CONF_MARK" '$0 == mark { skip = 1; next } skip && $0 == "set -g focus-events on" { skip = 0; next } { skip = 0; print }' "$TMUX_CONF"); then
+    note "could not tidy $TMUX_CONF"
+    return 0
+  fi
+  if printf '%s' "$kept" | grep -q '[^[:space:]]'; then
+    printf '%s\n' "$kept" > "$TMUX_CONF" || note "could not tidy $TMUX_CONF"
+  else
+    rm -f "$TMUX_CONF"
+  fi
+}
+
 uninstall() {
   need_wsl
   if read_record; then
     quit_floater "$LIN_DIR"
     case "$LIN_DIR" in
-      */Starship/Floater) rm -rf "$LIN_DIR" || note "could not remove $LIN_DIR" ;;
+      */Starship/Floater)
+        rm -rf "$LIN_DIR" || note "could not remove $LIN_DIR"
+        rmdir "${LIN_DIR%/Floater}" 2>/dev/null || true ;;
       *) note "not removing an unexpected install folder: $LIN_DIR" ;;
     esac
   fi
   reg.exe delete "$RUN_KEY" /v "$RUN_NAME" /f >/dev/null 2>&1 || true
+  tmux_conf_remove
   rm -f "$RECORD"
   printf 'uninstalled\n'
 }
@@ -479,8 +519,9 @@ bridge_deliver() {
 tmux_focus_events() {
   command -v tmux >/dev/null 2>&1 || return 0
   tmux list-sessions >/dev/null 2>&1 || return 0
-  [ "$(tmux show-options -gv focus-events 2>/dev/null)" = on ] \
-    || tmux set-option -g focus-events on >/dev/null 2>&1 || true
+  [ "$(tmux show-options -gv focus-events 2>/dev/null)" != on ] || return 0
+  tmux set-option -g @fm-focus-since "$(date +%s)" >/dev/null 2>&1 || true
+  tmux set-option -g focus-events on >/dev/null 2>&1 || true
 }
 
 bridge_dictate() {

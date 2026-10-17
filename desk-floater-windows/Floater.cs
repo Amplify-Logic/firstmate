@@ -180,26 +180,26 @@ namespace StarshipFloater
                     if (!p.WaitForExit(timeoutSeconds * 1000))
                     {
                         try { p.Kill(); } catch (InvalidOperationException) { }
-                        log("bridge " + verb + ": timed out after " + timeoutSeconds + " s");
+                        log(verb + ": timed out after " + timeoutSeconds + " s");
                         return null;
                     }
                     reader.Join(5000);
                     errors.Join(5000);
                     if (p.ExitCode != 0)
                     {
-                        log("bridge " + verb + ": exit " + p.ExitCode + ": " + Trim(stderr));
+                        log(verb + ": exit " + p.ExitCode + ": " + Trim(stderr));
                         return null;
                     }
                     if (!string.IsNullOrEmpty(stderr))
                     {
-                        log("bridge " + verb + ": " + Trim(stderr));
+                        log(verb + ": " + Trim(stderr));
                     }
                     return stdout ?? "";
                 }
             }
             catch (Exception e)
             {
-                log("bridge " + verb + ": could not run wsl.exe: " + e.Message);
+                log(verb + ": could not run wsl.exe: " + e.Message);
                 return null;
             }
         }
@@ -610,6 +610,14 @@ namespace StarshipFloater
                 return false;
             }
             uint ours = Native.GetClipboardSequenceNumber();
+            // Clipboard listeners open the clipboard for a moment after each
+            // change; an app pasting in that moment finds it busy and pastes
+            // nothing (about one paste in eight without this wait).
+            Thread.Sleep(150);
+            for (int i = 0; i < 10 && Native.GetOpenClipboardWindow() != IntPtr.Zero; i++)
+            {
+                Thread.Sleep(25);
+            }
             bool typed = Hotkeys.Send(Native.VK_CONTROL, 0x56);
             if (!typed)
             {
@@ -2466,6 +2474,9 @@ namespace StarshipFloater
 
         [DllImport("user32.dll")]
         public static extern uint GetClipboardSequenceNumber();
+
+        [DllImport("user32.dll")]
+        public static extern IntPtr GetOpenClipboardWindow();
 
         [DllImport("user32.dll")]
         public static extern IntPtr GetForegroundWindow();

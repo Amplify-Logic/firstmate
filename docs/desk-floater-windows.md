@@ -29,6 +29,7 @@ You need Starship set up in Ubuntu as [ONBOARDING-windows.md](../ONBOARDING-wind
    ```
 
 The floater appears at the bottom right of your screen, a microphone icon appears in the system tray, and it starts by itself whenever you sign in to Windows.
+If its talk button shows an orange `!` and "Mic off - click !", Windows' privacy settings keep apps off the microphone: click it to open those settings and turn on microphone access for desktop apps.
 
 Install needs no download, no admin rights and no developer tools.
 It builds the floater on your PC with the C# compiler that is part of Windows (it comes with .NET Framework 4), into `%LOCALAPPDATA%\Starship\Floater`, and adds it to your own startup list only.
@@ -75,7 +76,8 @@ The text is pasted with Ctrl+V and your clipboard is put back afterwards; the di
 
 When the cursor is in the first mate's chat itself, dictation sends the text the way talking does, with the same checks.
 The floater treats the chat as being in front only when a terminal window (such as Windows Terminal) is the foreground window, the tmux pane of the first mate is the active one, and tmux says its terminal has focus.
-For that, the floater turns on tmux's `focus-events` option in your running tmux.
+tmux keeps track of focus only for a terminal that attached while its `focus-events` option was on, so install adds `set -g focus-events on` to your `~/.tmux.conf` (uninstall takes it out again) and the floater also turns the option on in your running tmux.
+A tmux window that was already open before then counts once you attach to it again, for example after closing the tab and running `tmux attach -t firstmate`, or when tmux next starts.
 Anywhere else, and when it cannot tell, the text is only pasted and Enter is never pressed.
 
 ## Screenshots
@@ -105,7 +107,7 @@ bin/fm-desk-floater-windows.sh start
 bin/fm-desk-floater-windows.sh uninstall
 ```
 
-`uninstall` quits the floater, removes it from your startup list and deletes `%LOCALAPPDATA%\Starship\Floater`.
+`uninstall` quits the floater, removes it from your startup list, deletes `%LOCALAPPDATA%\Starship\Floater` and takes its line out of `~/.tmux.conf`.
 The floater writes a short log of what it did, never your words, to `floater.log` in that folder.
 
 ## Limits

@@ -86,10 +86,11 @@
 # (docs/desk-floater-windows.md), which cannot name a terminal device: the
 # chat is in front when the proven primary pane is the active pane of its
 # tmux session's active window and a client attached to that session reports
-# that its terminal has focus (tmux's focused client flag, kept only while
-# the tmux option focus-events is on). The Windows floater asks only while a
-# terminal window is the foreground window. Herdr has no such flag, so a
-# herdr primary is never in front this way.
+# that its terminal has focus (tmux's focused client flag, trusted only for a
+# client that attached while the tmux option focus-events was on; see
+# shown_focused). The Windows floater asks only while a terminal window is the
+# foreground window. Herdr has no such flag, so a herdr primary is never in
+# front this way.
 #
 # ring is the mid-turn doorbell other captain-input paths use: it types <line>
 # into the same proven primary pane, with every send check above, and never
@@ -700,15 +701,24 @@ EOF
 
 # True when tmux <target> is the active pane of its session's active window
 # and a client attached to that session reports that its terminal has focus.
+# tmux tracks focus only for a client that attached while focus-events was
+# on; one attached earlier keeps the focused flag it attached with forever.
+# So a client counts only when it attached after tracking began: the time in
+# the server option @fm-focus-since (set by whoever turned focus-events on in
+# the running server), or else the server's start.
 shown_focused() {  # <backend> <target>
-  local info session
+  local info session since
   [ "$1" = tmux ] || return 1
+  [ "$(tmux show-options -gv focus-events 2>/dev/null)" = on ] || return 1
   info=$(tmux display-message -p -t "$2" '#{session_id} #{window_active}#{pane_active}' 2>/dev/null) \
     || return 1
   session=${info% *}
   [ "${info##* }" = 11 ] || return 1
-  tmux list-clients -t "$session" -F '#{client_flags}' 2>/dev/null \
-    | tr ',' '\n' | grep -qx focused
+  since=$(tmux show-options -gqv @fm-focus-since 2>/dev/null)
+  [ -n "$since" ] || since=$(tmux display-message -p '#{start_time}' 2>/dev/null) || return 1
+  case "$since" in ''|*[!0-9]*) return 1 ;; esac
+  tmux list-clients -t "$session" -F '#{client_created} #{client_flags}' 2>/dev/null \
+    | awk -v since="$since" '$1 >= since && ("," $2 ",") ~ /,focused,/ { found = 1 } END { exit !found }'
 }
 
 # Type <line> into the lock-holding primary's own pane and submit it. Prints

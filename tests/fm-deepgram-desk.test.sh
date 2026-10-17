@@ -1479,6 +1479,9 @@ set -u
 dir=${FM_FAKE_HERDR_DIR:?}
 { printf 'call'; for a in "$@"; do printf '\x1f%s' "$a"; done; printf '\n'; } >> "$dir/tmux.log"
 case "$*" in
+  *'show-options -gv focus-events'*) cat "$dir/tmux-focus-events" 2>/dev/null || printf 'on\n' ;;
+  *'@fm-focus-since'*) cat "$dir/tmux-focus-since" 2>/dev/null ;;
+  *'#{start_time}'*) printf '1000\n' ;;
   *'#{pane_pid}'*) cat "$dir/shell-pid" ;;
   *'#{session_id} #{window_active}#{pane_active}'*) cat "$dir/tmux-active" ;;
   *'#{pane_id}'*) printf '%%9\n' ;;
@@ -2552,16 +2555,30 @@ test_desk_voice_dictation_front_focused_on_tmux() {
   local home out
   home=$(desk_send_fixture front-focused tmux) || { desk_send_skip front-focused; return 0; }
   printf '%s 11\n' "\$1" > "$home/fixture/tmux-active"
-  printf 'attached,focused,UTF-8\n' > "$home/fixture/tmux-clients"
+  # The fake tmux server started at 1000 with focus-events on.
+  printf '1001 attached,focused,UTF-8\n' > "$home/fixture/tmux-clients"
   # In front, the fake's unreadable chat input sends it on to the mailbox.
   out=$(desk_send "$home" --front-focused -- "Status please") || fail "send failed: $out"
   case "$out" in mailbox:\ *) ;; *) fail "a focused client on the active pane is in front, got: $out" ;; esac
-  assert_contains "$(tr '\037' ' ' < "$home/fixture/tmux.log")" "list-clients -t \$1 -F #{client_flags}" \
+  assert_contains "$(tr '\037' ' ' < "$home/fixture/tmux.log")" "list-clients -t \$1 -F #{client_created} #{client_flags}" \
     "the focus of the pane's own session's clients is read"
-  printf 'attached,UTF-8\nattached,UTF-8,read-only\n' > "$home/fixture/tmux-clients"
+  printf '1001 attached,UTF-8\n1002 attached,UTF-8,read-only\n' > "$home/fixture/tmux-clients"
   out=$(desk_send "$home" --front-focused -- "Status please") || fail "send failed: $out"
   [ "$out" = not-in-front ] || fail "no focused client must not count as in front, got: $out"
-  printf 'attached,focused,UTF-8\n' > "$home/fixture/tmux-clients"
+  # focus-events turned on at 2000 in the running server: a client attached
+  # at 1500 keeps a stale focused flag, one attached at 2000 is tracked.
+  printf '2000\n' > "$home/fixture/tmux-focus-since"
+  printf '1500 attached,focused,UTF-8\n' > "$home/fixture/tmux-clients"
+  out=$(desk_send "$home" --front-focused -- "Status please") || fail "send failed: $out"
+  [ "$out" = not-in-front ] || fail "a client attached before focus tracking began must not count, got: $out"
+  printf '1500 attached,focused,UTF-8\n2000 attached,focused,UTF-8\n' > "$home/fixture/tmux-clients"
+  out=$(desk_send "$home" --front-focused -- "Status please") || fail "send failed: $out"
+  case "$out" in mailbox:\ *) ;; *) fail "a client attached once focus was tracked counts, got: $out" ;; esac
+  printf 'off\n' > "$home/fixture/tmux-focus-events"
+  out=$(desk_send "$home" --front-focused -- "Status please") || fail "send failed: $out"
+  [ "$out" = not-in-front ] || fail "without focus-events nothing counts as in front, got: $out"
+  rm -f "$home/fixture/tmux-focus-events" "$home/fixture/tmux-focus-since"
+  printf '1001 attached,focused,UTF-8\n' > "$home/fixture/tmux-clients"
   printf '%s 10\n' "\$1" > "$home/fixture/tmux-active"
   out=$(desk_send "$home" --front-focused -- "Status please") || fail "send failed: $out"
   [ "$out" = not-in-front ] || fail "an inactive pane must not count as in front, got: $out"
@@ -2570,14 +2587,14 @@ test_desk_voice_dictation_front_focused_on_tmux() {
   out=$(desk_send "$home" --front-focused -- "Status please") || fail "send failed: $out"
   [ "$out" = not-in-front ] || fail "no primary must not count as in front, got: $out"
   ! grep -qF send-keys "$home/fixture/tmux.log" || fail "no keys may reach the tmux pane"
-  [ "$(inbox_count "$home")" = 1 ] || fail "only the in-front dictation may land in the mailbox"
+  [ "$(inbox_count "$home")" = 2 ] || fail "only the in-front dictations may land in the mailbox"
   desk_send_done "$home"
   home=$(desk_send_fixture front-focused-herdr) || { desk_send_skip front-focused-herdr; return 0; }
   out=$(desk_send "$home" --front-focused -- "Status please") || fail "send failed: $out"
   [ "$out" = not-in-front ] || fail "a herdr primary is never in front this way, got: $out"
   [ -z "$(herdr_calls "$home" pane send-text)" ] || fail "nothing may be typed into a herdr chat"
   desk_send_done "$home"
-  pass "fm-desk-voice send --front-focused: only the active tmux pane of a focused client is in front"
+  pass "fm-desk-voice send --front-focused: only the active tmux pane of a focus-tracked client is in front"
 }
 
 test_desk_voice_dictation_refuses_bad_front_arguments() {
