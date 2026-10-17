@@ -1,0 +1,33 @@
+== [TARGET ae79c4ea] scenario=merged-fixed: no-mistakes runs (newest first) ==
+  cancelled  fm/task-x1               139364ec  2026-10-17 02:48  https://github.com/example/repo/pull/7
+  failed     fm/task-x1               d7bf67d7  2026-10-16 03:37
+== [TARGET ae79c4ea] axi status run.status=cancelled, pr step=completed, PR merged=1 ==
+$ FM_HOME=$LAB bin/fm-teardown.sh task-x1
+teardown exit=0
+== [TARGET ae79c4ea] data/capability-outcomes.log ==
+1792241922|ship|claude|opus|high|fixed|1|0
+== [TARGET ae79c4ea] fm-dispatch-select.sh --select capability-recent --task-type ship ==
+CAPABILITY_EVIDENCE: task-type=ship claude|opus|high|0|1|0
+{"harness":"claude","model":"opus","effort":"high"}
+
+== [TARGET ae79c4ea] scenario=unmerged: no-mistakes runs (newest first) ==
+  cancelled  fm/task-x1               0ce15767  2026-10-17 02:48  https://github.com/example/repo/pull/7
+== [TARGET ae79c4ea] axi status run.status=cancelled, pr step=completed, PR merged=0 ==
+$ FM_HOME=$LAB bin/fm-teardown.sh task-x1
+teardown exit=0
+== [TARGET ae79c4ea] data/capability-outcomes.log ==
+1792241987|ship|claude|opus|high|failed||0
+== [TARGET ae79c4ea] fm-dispatch-select.sh --select capability-recent --task-type ship ==
+CAPABILITY_EVIDENCE: task-type=ship claude|opus|high|0|1|0
+{"harness":"claude","model":"opus","effort":"high"}
+
+== [TARGET ae79c4ea] scenario=before-pr: no-mistakes runs (newest first) ==
+  cancelled  fm/task-x1               76f98447  2026-10-17 02:48  https://github.com/example/repo/pull/7
+== [TARGET ae79c4ea] axi status run.status=cancelled, pr step=pending, PR merged=1 ==
+$ FM_HOME=$LAB bin/fm-teardown.sh task-x1
+teardown exit=0
+== [TARGET ae79c4ea] data/capability-outcomes.log ==
+1792242104|ship|claude|opus|high|failed||0
+== [TARGET ae79c4ea] fm-dispatch-select.sh --select capability-recent --task-type ship ==
+CAPABILITY_EVIDENCE: task-type=ship claude|opus|high|0|1|0
+{"harness":"claude","model":"opus","effort":"high"}
