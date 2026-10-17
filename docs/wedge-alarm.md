@@ -130,7 +130,8 @@ It establishes that `launchctl bootstrap` accepts the generated plist and honors
 
 `test_real_launchd_alert_posts_a_real_banner_within_its_bound` (`FM_SENTINEL_REAL_BANNER_SMOKE=1`) keeps the real daemon in the staged copy and configures only the `osascript` channel, so it posts one visible banner titled `firstmate: SUPERVISION DOWN` naming the scratch home.
 It proves what the stub cannot: the real `--active-alert` body under launchd, including `wedge_alarm_notify` channel resolution and the `set -m` process-group watchdog, delivers a real banner inside the 10-second notifier bound, logs `wedge alarm: osascript channel delivered`, and logs no timeout.
-It is the regression guard for the job's launchd `ProcessType`: with `Background` it fails on the notifier timeout.
+It does not reliably guard the job's launchd `ProcessType`: a `Background` job missed the notifier bound only under heavy contention (load near 500), and at loads up to about 70 it still delivered.
+The dependable guard is the default-suite manifest assertion in `test_arm_registers_one_home_scoped_read_only_launchd_job`, which requires `Interactive`.
 
 ```
 FM_SENTINEL_REAL_LAUNCHD_SMOKE=1 FM_SENTINEL_REAL_BANNER_SMOKE=1 tests/fm-supervision-sentinel.test.sh

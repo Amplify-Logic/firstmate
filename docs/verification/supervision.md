@@ -907,3 +907,4 @@ ok - supervision sentinel: real launchd -> real alert owner -> osascript banner 
 
 With the manifest still `Background`, the banner case failed with `not ok - the launchd-spawned osascript notifier hit its timeout instead of posting the banner`.
 A visible `firstmate: SUPERVISION DOWN` banner naming the scratch home appeared on screen, and the launchd-spawned check logged `wedge alarm: osascript channel delivered` and committed `delivery=sent`.
+Later the same day, at load averages of about 14 and 64 to 73, the banner case passed with the manifest set to `Background` too (`spawn type = background (5)`), so the smoke separates the two only under contention like the load near 500 above.
