@@ -1,0 +1,21 @@
+[03:02:36] [FIX-96a9a928-alone] lab home /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.TRYYJv, bin /Users/larsmusic/.no-mistakes/worktrees/f569cc43ac96/01M53NAHZ1F2N63JYNYN8SDQK5/bin
+[03:02:36] stall bound: 900s, suspend gap default 60s
+[03:02:39] arm A (owner): watcher: started pid=26867 (beacon fresh)
+[03:02:40] arm B (the Stop hook's attached arm): watcher: attached pid=26867 (beacon 2s)
+[03:02:40] HOST SLEEP: SIGSTOP watcher pid=26867 and attached arm pid=27649; waiting 70s of wall clock
+[03:03:51] beacon backdated by 1h (age now 3600s); arm B resumes first
+[03:03:55] arm B after resume: STILL FOLLOWING (alive)
+[03:03:55] arm B output so far:
+    watcher: attached pid=26867 (beacon 2s)
+[03:03:55] watcher resumes
+[03:03:57] wrote a needs-decision status to give the watcher a wake
+[03:04:15] arm B exit=0; final output:
+    watcher: attached pid=26867 (beacon 2s)
+    signal: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.TRYYJv/state/demo.status
+[03:04:15] arm A final output:
+    watcher: started pid=26867 (beacon fresh)
+    signal: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.TRYYJv/state/demo.status
+[03:04:15] cycle ledger:
+    arm_pid=26841	watcher_pid=26867	origin=started	started_at=1792198956	ended_at=1792199043	exit_code=0	signal=none	reason=actionable-signal	beacon_age=5	lock_before=pid:26867|identity:Sat Oct 17 01:02:36 2026     bash /Users/larsmusic/.no-mistakes/worktrees/f569cc43ac96/01M53NAHZ1F2N63JYNYN8SDQK5/bin/fm-watch.sh	lock_after=pid:none|identity:none	successor=none
+    arm_pid=27649	watcher_pid=26867	origin=attached	started_at=1792198960	ended_at=1792199054	exit_code=unknown	signal=unknown	reason=attached-delivered-wake	beacon_age=16	lock_before=pid:26867|identity:Sat Oct 17 01:02:36 2026     bash /Users/larsmusic/.no-mistakes/worktrees/f569cc43ac96/01M53NAHZ1F2N63JYNYN8SDQK5/bin/fm-watch.sh	lock_after=pid:none|identity:none	successor=none
+[03:04:16] lab removed

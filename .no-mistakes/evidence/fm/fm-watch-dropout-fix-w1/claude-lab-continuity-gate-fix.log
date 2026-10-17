@@ -1,0 +1,35 @@
+[03:26:02] [fix] commit 96a9a928 fix(bin): keep Claude watcher monitoring through ho; lab /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.GOSqsh
+[03:27:22] session start complete; 1 task in flight (demo); no watcher lock: absent
+[03:27:22] GAP BETWEEN CYCLES: the last cycle closed, beacon fresh (0s), no watcher holds the lock
+[03:28:03] GENUINE OUTAGE: during the sleep, beacon backdated 1h, still no watcher
+[03:30:24] pane:
+  |  ▐▛███▛█   Claude Code v2.1.302
+  | ▝▜██████▀  Opus 5.5 (1M context) with high effort · Claude Max
+  |  ▝▝   ▝▝   /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fmclone.UyLDRe/fix
+  | ❯ Run these three Bash commands as three separate tool calls, in order, and report each one's exit status and first line of output: 1) bin/fm-crew-state.sh demo   2) sleep 20   3) bin/fm-crew-state.sh demo               
+  | ⏺ Bash(bin/fm-crew-state.sh demo)                                                                                                                                                                                           
+  |   ⎿  state: unknown · source: none · worktree gone (torn down?)
+  |   ⎿  Allowed by auto mode classifier             
+  | ⏺ Bash(sleep 20)                                                                                                                                                                                                            
+  |   ⎿  (No output)
+  |   ⎿  Allowed by auto mode classifier             
+  | ⏺ Bash(bin/fm-crew-state.sh demo)                                                                                                                                                                                           
+  |   ⎿  Error: PreToolUse:Bash hook error: [[ -z "${GROK_AGENT:-}${GROK_HOOK_EVENT:-}" ] || exit 0; exec "$CLAUDE_PROJECT_DIR"/bin/fm-continuity-pretool-check.sh]: 
+  |      {"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny"},"systemMessage":"[watcher-continuity] SUPERVISION OUTAGE: down for at least 1h 23s since the last watcher beat; 1 task(s) in flight: 
+  |      demo. Failed watcher check: watcher-pid-alive - no watcher lock pid is recorded. No live watcher holds this home lock. Drain wakes with bin/fm-wake-drain.sh, the safe mid-session action; use fail-closed 
+  |      bin/fm-teardown.sh for completed tasks when needed, then re-arm with bin/fm-watch-arm.sh as a tracked Claude background task before running other fleet commands (blocked: fm-crew-state.sh)"}                         
+  | ⏺ Captain, here's how the three commands went. The third one never ran.                                                                                                                                                     
+  |   1. bin/fm-crew-state.sh demo: exit 0. First line: state: unknown · source: none · worktree gone (torn down?)                                                                                                              
+  |   2. sleep 20: exit 0, no output.
+  |   3. bin/fm-crew-state.sh demo: blocked before it ran, so it has no exit status and no output of its own. The project's pre-run safety hook refused it. The hook's first line was: [watcher-continuity] SUPERVISION OUTAGE: 
+  |      down for at least 1h 23s since the last watcher beat; 1 task(s) in flight: demo. It says no live monitoring process holds this home, so it blocks fleet commands until wakes are drained (bin/fm-wake-drain.sh) and
+  |      monitoring is restarted (bin/fm-watch-arm.sh as a background task).
+  |   The two readings disagree. The first call says the "demo" task's local copy is gone, but the hook still counts "demo" as in flight. Your request was only to run and report, so I haven't restarted monitoring or retried.
+  |   If you want the third reading, I can drain, restart monitoring, and run it again.
+  | ✻ Sautéed for 1m 11s · done 3:28 AM                                           
+  | ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  | ❯ go ahead, drain and re-arm then run it
+  | ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  |   ⏵⏵ auto mode on (shift+tab to cycle) · ← 2 agents
+[03:30:24] outage marker: none
+[03:30:26] lab torn down

@@ -1,0 +1,7 @@
+[03:06:14] [short freeze below gap] stall bound 20s, suspend gap 60s (default), freeze 5s
+[03:06:16] arm B: watcher: attached pid=63234 (beacon 0s)
+[03:06:21] arm B resumed; holder pid=63234 stays frozen (never beats again)
+[03:06:21] arm B exit=1 after 0s from resume:
+    watcher: attached pid=63234 (beacon 0s)
+    watcher: FAILED - attached watcher pid=63234 stalled (beacon 3600s at or past hard bound 20s)
+[03:06:23] lab removed

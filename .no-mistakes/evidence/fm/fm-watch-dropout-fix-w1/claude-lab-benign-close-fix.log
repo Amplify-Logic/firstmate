@@ -1,0 +1,35 @@
+[03:19:26] [fix] commit 96a9a928 fix(bin): keep Claude watcher monitoring through ho; lab /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.chbYNY; supervision host off
+[03:19:34] session start complete; session lock pid 67689
+[03:19:36] owner arm (previous cycle's successor): watcher: started pid=71087 (beacon fresh)
+[03:19:44] Claude turn ended; Stop hook pid=72338 running arm pid=72697 (watch.lock pid=71087)
+[03:19:44] hook-owned arm closes without a wake (SIGTERM) while watcher 71087 is healthy
+[03:19:50] 5s later: hook alive? yes; arms under hook: 73324 
+[03:19:50]    arm 73324: watcher: attached pid=71087 (beacon 10s) 
+[03:19:50] epoch: epoch=1 owner_pid=72338 outcome=arming updated_at=1792199981
+[03:19:50] watcher 71087 given a wake (needs-decision status); waiting up to 120s for Claude to be rewoken
+[03:20:35] RESULT: Claude was rewoken with the watcher's wake
+[03:20:35] owner arm output: watcher: started pid=71087 (beacon fresh) signal: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.chbYNY/state/demo.status 
+[03:20:35] epoch: epoch=1 owner_pid=72338 outcome=rewake updated_at=1792200035 session_pid=67689 recovery_generation=71087.1792200021.4Oq4CJ
+[03:20:35] cycle ledger:
+    arm_pid=72697	watcher_pid=71087	origin=attached	started_at=1792199981	ended_at=1792199985	exit_code=143	signal=TERM	reason=arm-interrupted
+    arm_pid=71052	watcher_pid=71087	origin=started	started_at=1792199974	ended_at=1792200022	exit_code=0	signal=none	reason=actionable-signal
+    arm_pid=73324	watcher_pid=71087	origin=attached	started_at=1792199985	ended_at=1792200033	exit_code=unknown	signal=unknown	reason=attached-delivered-wake
+[03:20:43] pane:
+  |  ▐▛███▛█   Claude Code v2.1.302
+  | ▝▜██████▀  Opus 5.5 (1M context) with high effort · Claude Max
+  |  ▝▝   ▝▝   /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fmclone.UyLDRe/fix
+  |   ⎿  SessionStart:startup hook error
+  |   ⎿  Failed with non-blocking status code: /bin/sh: ${CLAUDE_PLUGIN_ROOT}/hooks/run-hook.cmd: No such file or directory                                                                                 
+  | ❯ Reply with only the word OK. Do not run any tools.                                                                                                                                                    
+  | ⏺ OK                                                                                                                                                                                                    
+  | ✻ Cooked for 2s · done 3:19 AM                                                                                                                                                                          
+  | ⏺ Stop hook feedback                                                                                                                                                                                    
+  |   Bash(FM_HOME=/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.chbYNY bin/fm-wake-drain.sh)
+  |   ⎿  Running…                                                                                                                                                                                           
+  | ✶ Brewing… (8s · ↓ 359 tokens)                                                                                                                                                                          
+  |   ⎿  Tip: You can control how big a workflow is just by prompting. Ask for a small workflow, cap it with "use at most 5 agents", or set a default with Dynamic workflow size in /config.
+  | ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  | ❯ 
+  | ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  |   ⏵⏵ auto mode on (shift+tab to cycle) · ← 2 agents
+[03:20:45] lab torn down

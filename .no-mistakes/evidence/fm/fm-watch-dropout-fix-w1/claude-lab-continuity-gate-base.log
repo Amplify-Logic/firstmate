@@ -1,0 +1,45 @@
+[03:30:31] [base] commit d867b686 feat(bin): add Windows (WSL 2) and Linux server onb; lab /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.fdw1gm
+[03:30:55] session start complete; 1 task in flight (demo); no watcher lock: absent
+[03:30:55] GAP BETWEEN CYCLES: the last cycle closed, beacon fresh (0s), no watcher holds the lock
+[03:31:14] GENUINE OUTAGE: during the sleep, beacon backdated 1h, still no watcher
+[03:31:56] pane:
+  |  ▐▛███▛█   Claude Code v2.1.302
+  | ▝▜██████▀  Opus 5.5 (1M context) with high effort · Claude Max
+  |  ▝▝   ▝▝   /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fmclone.UyLDRe/base
+  | ❯ Run these three Bash commands as three separate tool calls, in order, and report each one's exit status and first line of output: 1) bin/fm-crew-state.sh demo   2) sleep 20   3) bin/fm-crew-state.sh demo               
+  | ⏺ Bash(bin/fm-crew-state.sh demo)                                                                                                                                                                                           
+  |   ⎿  Error: PreToolUse:Bash hook error: [[ -z "${GROK_AGENT:-}${GROK_HOOK_EVENT:-}" ] || exit 0; exec "$CLAUDE_PROJECT_DIR"/bin/fm-continuity-pretool-check.sh]: 
+  |      {"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny"},"systemMessage":"[watcher-continuity] SUPERVISION OUTAGE: down for at least 11s since the last watcher beat; 1 task(s) in flight: 
+  |      demo. Failed watcher check: watcher-pid-alive - no watcher lock pid is recorded. No live watcher holds this home lock. Drain wakes with bin/fm-wake-drain.sh, the safe mid-session action; use fail-closed 
+  |      bin/fm-teardown.sh for completed tasks when needed, then re-arm with bin/fm-watch-arm.sh as a tracked Claude background task before running other fleet commands (blocked: fm-crew-state.sh)"}                         
+  | ⏺ Bash(sleep 20)                                                                                                                                                                                                            
+  |   ⎿  (No output)
+  |   ⎿  Allowed by auto mode classifier             
+  | ⏺ Bash(bin/fm-crew-state.sh demo)                                                                                                                                                                                           
+  |   ⎿  Error: PreToolUse:Bash hook error: [[ -z "${GROK_AGENT:-}${GROK_HOOK_EVENT:-}" ] || exit 0; exec "$CLAUDE_PROJECT_DIR"/bin/fm-continuity-pretool-check.sh]: 
+  |      {"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny"},"systemMessage":"[watcher-continuity] SUPERVISION OUTAGE: down for at least 1h 31s since the last watcher beat; 1 task(s) in flight: 
+  |      demo. Failed watcher check: watcher-pid-alive - no watcher lock pid is recorded. No live watcher holds this home lock. Drain wakes with bin/fm-wake-drain.sh, the safe mid-session action; use fail-closed 
+  |      bin/fm-teardown.sh for completed tasks when needed, then re-arm with bin/fm-watch-arm.sh as a tracked Claude background task before running other fleet commands (blocked: fm-crew-state.sh)"}                         
+  | ⏺ Captain, the second command ran but the first and third never did. A safety check on this home blocked both because monitoring of the in-flight task is down.                                                             
+  |   ┌─────┬──────────────────────────┬───────────────────────────────────────────────────────────────────────┬───────────────────────────────────────────────────────────────────────────────────────────────────────────┐    
+  |   │  #  │         Command          │                              Exit status                              │                                           First line of output                                            │
+  |   ├─────┼──────────────────────────┼───────────────────────────────────────────────────────────────────────┼───────────────────────────────────────────────────────────────────────────────────────────────────────────┤    
+  |   │ 1   │ bin/fm-crew-state.sh     │ Did not run. The pre-command check denied it, so there is no script   │ [watcher-continuity] SUPERVISION OUTAGE: down for at least 11s since the last watcher beat; 1 task(s) in  │
+  |   │     │ demo                     │ exit status.                                                          │ flight: demo.                                                                                             │
+  |   ├─────┼──────────────────────────┼───────────────────────────────────────────────────────────────────────┼───────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+  |   │ 2   │ sleep 20                 │ 0                                                                     │ (no output)                                                                                               │
+  |   ├─────┼──────────────────────────┼───────────────────────────────────────────────────────────────────────┼───────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+  |   │ 3   │ bin/fm-crew-state.sh     │ Did not run. Denied by the same check.                                │ [watcher-continuity] SUPERVISION OUTAGE: down for at least 1h 31s since the last watcher beat; 1 task(s)  │
+  |   │     │ demo                     │                                                                       │ in flight: demo.                                                                                          │
+  |   └─────┴──────────────────────────┴───────────────────────────────────────────────────────────────────────┴───────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+  |   Both denials gave the same reason: no running monitor holds this home's lock. The check wants the wake queue drained and monitoring re-armed before any fleet command runs.
+  |   The outage time looks wrong. It went from 11 seconds to 1 hour 31 seconds, but only about 20 seconds passed between the two checks. That jump of exactly one hour points to a bug in how the check calculates the outage,
+  |   possibly a timezone or clock-source mismatch. Since this branch is the monitoring dropout fix, it may be the thing you're testing for.
+  |   I haven't re-armed monitoring, because that would have changed the sequence you asked for. Should I drain the queue and re-arm it now?
+  | ✻ Churned for 56s · done 3:31 AM                                             
+  | ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  | ❯ yes, drain and re-arm monitoring
+  | ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  |   ⏵⏵ auto mode on (shift+tab to cycle) · ← 2 agents
+[03:31:56] outage marker: none
+[03:31:58] lab torn down

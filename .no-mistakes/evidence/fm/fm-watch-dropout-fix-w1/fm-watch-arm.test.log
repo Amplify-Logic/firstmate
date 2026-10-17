@@ -1,0 +1,13 @@
+ok - watch-arm: an attached arm reports the wake its cycle delivered instead of a false failure
+ok - watch-arm: a delivered wake consumed by the handling turn still closes the attached arm cleanly
+ok - watch-arm: an unusable launch confirm window refuses to arm by name
+ok - watch-arm: a disposable validation checkout refuses to arm
+ok - watch-arm: a watcher exits when its state directory is removed
+ok - watch-arm: a watcher exits when its home is removed
+ok - watch-arm: the test reaper stops a watcher armed for a tracked temporary home
+ok - watch-arm: a cycle that delivered no wake of its own still fails loudly
+ok - watch-arm: an attached arm keeps following a slow live holder and reports its wake
+not ok - the retry failed instead of replacing the stalled holder: watcher: replaced stalled pid 36930 (beacon 56s past hard bound 12s)
+/Users/larsmusic/.no-mistakes/worktrees/f569cc43ac96/01M53NAHZ1F2N63JYNYN8SDQK5/bin/fm-watch-arm.sh: line 681: 41782 Terminated: 15          "$WATCH" > "$child_out"
+watcher: FAILED - no live watcher with a fresh beacon
+exit=1

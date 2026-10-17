@@ -1,0 +1,21 @@
+[02:52:29] [BASE-d867b686] lab home /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.wCkNWe, bin /tmp/fmbase/bin
+[02:52:29] stall bound: 900s, suspend gap default 60s
+[02:52:31] arm A (owner): watcher: started pid=22158 (beacon fresh)
+[02:52:32] arm B (the Stop hook's attached arm): watcher: attached pid=22158 (beacon 1s)
+[02:52:32] HOST SLEEP: SIGSTOP watcher pid=22158 and attached arm pid=24501; waiting 70s of wall clock
+[02:53:46] beacon backdated by 1h (age now 3603s); arm B resumes first
+[02:53:51] arm B after resume: STILL FOLLOWING (alive)
+[02:53:52] arm B output so far:
+    watcher: attached pid=22158 (beacon 1s)
+[02:53:52] watcher resumes
+[02:53:56] wrote a needs-decision status to give the watcher a wake
+[02:54:40] arm B exit=0; final output:
+    watcher: attached pid=22158 (beacon 1s)
+    signal: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.wCkNWe/state/demo.status
+[02:54:40] arm A final output:
+    watcher: started pid=22158 (beacon fresh)
+    signal: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.wCkNWe/state/demo.status
+[02:54:40] cycle ledger:
+    arm_pid=21384	watcher_pid=22158	origin=started	started_at=1792198349	ended_at=1792198468	exit_code=0	signal=none	reason=actionable-signal	beacon_age=35	lock_before=pid:22158|identity:Sat Oct 17 00:52:29 2026     bash /tmp/fmbase/bin/fm-watch.sh	lock_after=pid:none|identity:none	successor=none
+    arm_pid=24501	watcher_pid=22158	origin=attached	started_at=1792198351	ended_at=1792198479	exit_code=unknown	signal=unknown	reason=attached-delivered-wake	beacon_age=46	lock_before=pid:22158|identity:Sat Oct 17 00:52:29 2026     bash /tmp/fmbase/bin/fm-watch.sh	lock_after=pid:none|identity:none	successor=none
+[02:54:40] lab removed

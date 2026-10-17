@@ -1,0 +1,21 @@
+ ▐▛███▛█   Claude Code v2.1.302
+▝▜██████▀  Opus 5.5 (1M context) with high effort · Claude Max
+ ▝▝   ▝▝   /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fmclone.UyLDRe/fix
+  ⎿  SessionStart:startup hook error
+  ⎿  Failed with non-blocking status code: /bin/sh: ${CLAUDE_PLUGIN_ROOT}/hooks/run-hook.cmd: No such file or directory                                                                                                     
+❯ Reply with only the word OK. Do not run any tools.                                                                                                                                                                        
+⏺ OK                                                                                                                                                                                                                        
+✻ Crunched for 10s · done 3:15 AM                                                                                                                                                                                           
+⏺ Stop hook feedback                                                                                                                                                                                                        
+⏺ Bash(FM_HOME=/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fm-lab.JqKG6z bin/fm-wake-drain.sh)
+  ⎿  1792199878      2       signal  demo.status     needs-decision: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.JqKG6z/state/demo.status
+     WAKE_ACK_REQUIRED: after handling completes run bin/fm-wake-drain.sh --ack-through 2 --recovery-generation 95719.1792199878.Dcj2Dz
+     wake annotation: latest wake-EVENT observed at drain, not current state: demo.status: needs-decision: lab probe after host sleep, which export format?                                                                 
+     … +4 lines (ctrl+o to expand)
+  ⎿  Allowed by auto mode classifier                                                                                                                                                                                        
+✶ Catapulting… (16s · ↓ 568 tokens)                                                                                                                                                                                         
+  ⎿  Tip: Use /voice to enable push-to-talk dictation                                                                                                                                                                       
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏵⏵ auto mode on (shift+tab to cycle) · ← 2 agents

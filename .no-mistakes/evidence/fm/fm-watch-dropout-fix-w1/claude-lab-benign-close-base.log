@@ -1,0 +1,29 @@
+[03:20:49] [base] commit d867b686 feat(bin): add Windows (WSL 2) and Linux server onb; lab /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.ZQ9Ugu; supervision host off
+[03:20:52] accepted folder trust prompt
+[03:21:09] session start complete; session lock pid 87422
+[03:21:14] owner arm (previous cycle's successor): watcher: started pid=97641 (beacon fresh)
+[03:21:22] Claude turn ended; Stop hook pid=3168 running arm pid=3650 (watch.lock pid=97641)
+[03:21:22] hook-owned arm closes without a wake (SIGTERM) while watcher 97641 is healthy
+[03:21:27] 5s later: hook alive? no; arms under hook: 
+[03:21:27] epoch: epoch=1 owner_pid=3168 outcome=clean updated_at=1792200083
+[03:21:27] watcher 97641 given a wake (needs-decision status); waiting up to 120s for Claude to be rewoken
+[03:23:40] RESULT: Claude was NOT rewoken within 120s (stays idle)
+[03:23:40] owner arm output: watcher: started pid=97641 (beacon fresh) signal: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.ZQ9Ugu/state/demo.status 
+[03:23:40] epoch: epoch=1 owner_pid=3168 outcome=clean updated_at=1792200083
+[03:23:40] cycle ledger:
+    arm_pid=3650	watcher_pid=97641	origin=attached	started_at=1792200078	ended_at=1792200082	exit_code=143	signal=TERM	reason=arm-interrupted
+    arm_pid=97390	watcher_pid=97641	origin=started	started_at=1792200070	ended_at=1792200119	exit_code=0	signal=none	reason=actionable-signal
+[03:23:49] pane:
+  |  ▐▛███▛█   Claude Code v2.1.302
+  | ▝▜██████▀  Opus 5.5 (1M context) with high effort · Claude Max
+  |  ▝▝   ▝▝   /private/var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T/fmclone.UyLDRe/base
+  |   ⎿  SessionStart:startup hook error
+  |   ⎿  Failed with non-blocking status code: /bin/sh: ${CLAUDE_PLUGIN_ROOT}/hooks/run-hook.cmd: No such file or directory                                                                                 
+  | ❯ Reply with only the word OK. Do not run any tools.                                                                                                                                                    
+  | ⏺ OK                                                                                                                                                                                                    
+  | ✻ Cogitated for 3s · done 3:21 AM                                                                                                                                                                       
+  | ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  | ❯                                                  
+  | ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  |   ⏵⏵ auto mode on (shift+tab to cycle) · ← 2 agents
+[03:23:52] lab torn down

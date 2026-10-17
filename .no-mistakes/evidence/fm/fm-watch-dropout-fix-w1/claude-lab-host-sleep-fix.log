@@ -1,0 +1,8 @@
+[03:15:55] lab supervision tree: 97122 bash fm-claude-stop-autoarm.sh;98074 bash fm-supervision-host.sh park;98951 bash fm-watch-arm.sh;95697 zsh -c fm-watch-arm.sh > /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.JqKG6z/armA.out 2>&1; sleep 600;95699 bash fm-watch-arm.sh;95719 bash fm-watch.sh;
+[03:15:55] watcher=95719 hook-owned attached arm=98951
+[03:15:55] HOST SLEEP: SIGSTOP 97122 98074 98951 95697 95699 95719  96044 for 70s
+[03:17:05] beacon backdated 1h; resuming the hook-owned arm first
+[03:17:09] hook-owned arm 98951: still alive after resume
+grep: /var/folders/1g/hctp3vpn27b1zrlsn4nsfg680000gn/T//fm-lab.JqKG6z/state/.watch-cycle-exits.log: No such file or directory
+[03:17:09] ledger: no attached-holder-stalled record
+[03:17:10] resuming everything else
