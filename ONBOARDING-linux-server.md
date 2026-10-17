@@ -144,6 +144,7 @@ Then do the two sign-ins it prints:
 - `gh auth login`: answer its four questions with **GitHub.com**, **HTTPS**, **Yes** to authenticate Git, then **Login with a web browser**.
   It prints a code and a link; open the link on your own computer and type the code.
 - `claude`: it prints a link; open it on your own computer, sign in, paste the code it shows back into the server, then type `/exit`.
+  If it asks whether you trust your home folder, press Enter on **No, exit**, which just closes it; you stay signed in.
 
 ---
 
