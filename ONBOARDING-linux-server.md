@@ -135,7 +135,7 @@ cd ~
 curl -fsSL https://raw.githubusercontent.com/Amplify-Logic/firstmate/main/bin/fm-linux-setup.sh | bash
 ```
 
-It asks for your password once, then installs the build tools, Homebrew, git, node, gh, tmux, Claude Code and Chrome, and clones Firstmate into `~/starship`.
+It asks for your password once, then installs the build tools, Homebrew, git, node, gh, tmux, jq, Claude Code and Chrome, and clones Firstmate into `~/starship`.
 Chrome runs headless here; no desktop is needed for the first mate's browser checks.
 
 First log out (`exit`) and log back in with `ssh <you>@<server-ip>`, so the new tools are on your PATH; in the old login, `gh` and `claude` are not found.
