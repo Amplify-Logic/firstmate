@@ -144,5 +144,5 @@ The in-harness turn-end and continuity banners do not depend on any of it: they 
 [`verification/supervision.md`](verification/supervision.md#wedge-alarm-channels) is the owner of the bounded manual macOS and Herdr channel proof; it is not restated here.
 
 Two alert titles ride that same argv-safe mechanism: away-mode escalations post `firstmate: away-mode escalations WEDGED`, and the host sentinel posts `firstmate: SUPERVISION DOWN`.
-`tests/fm-supervision-sentinel.test.sh` pins the two-item argv shape against a fake `osascript` and never posts a real banner.
+`tests/fm-supervision-sentinel.test.sh` pins the two-item argv shape against a fake `osascript`; only its opt-in real-banner smoke above posts a real banner.
 `tests/fm-daemon.test.sh` covers the safe `command:` dispatch contract, where the summary reaches both `$1` and stdin.
