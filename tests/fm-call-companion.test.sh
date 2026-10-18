@@ -7,7 +7,8 @@
 #   - stop archives the call under the stamp it got at start, so the next start
 #     begins a clean transcript; a stop with nothing recording adds no
 #     end-of-call record; a stop after the recorder crashed still closes the
-#     call out, and a start archives any call still left in place.
+#     call out, a stop after that call was deleted leaves no ghost call, and a
+#     start archives any call still left in place.
 #   - The watcher never starts a recording: a new call raises one reminder that
 #     names the start command, and a running recording is stopped once the call
 #     has been gone for 180 seconds.
@@ -189,7 +190,7 @@ EOF
 }
 
 test_unfinished_call_is_closed_out() {
-  local home bin out stamp archived pid
+  local home bin out stamp archived pid before
   home=$(new_home unfinished)
   bin="$TMP_ROOT/unfinished-bin"
   install_fake_audio_tools "$bin"
@@ -229,6 +230,17 @@ EOF
   tail -n 1 "$archived-transcript.txt" | grep -q '^# .* recording stopped$' || fail "stop after a crash wrote no stopped line: $(cat "$archived-transcript.txt")"
   [ -s "$archived-notes.md" ] || fail 'stop after a crash wrote no end-of-call notes'
   [ "$(grep -c "^$stamp	flush	" "$home/state/calls/decisions-batch.log")" -eq 1 ] || fail 'stop after a crash wrote no end-of-call record'
+
+  # The recorder dies mid-call and someone objects: delete, then stop, leaves no call behind.
+  out=$(run_companion start --mic --everyone-agreed 2>&1) || fail "restart failed: $out"
+  wait_for_speech
+  for pid in mic digest; do kill -KILL "$(cat "$home/state/calls/$pid.pid")"; done
+  sleep 3
+  before=$(run_companion list)
+  out=$(run_companion delete 2>&1) || fail "delete after a crash failed: $out"
+  out=$(run_companion stop 2>&1) || fail "stop after a deleted crashed call failed: $out"
+  [ "$(run_companion list)" = "$before" ] || fail "stop after delete archived a ghost call: $(run_companion list)"
+  [ ! -s "$home/data/calls/transcript.txt" ] || fail "stop after delete wrote a ghost transcript: $(cat "$home/data/calls/transcript.txt")"
 
   # The notes fail, so the call stays in place; the next start archives it first.
   out=$(run_companion start --mic --everyone-agreed 2>&1) || fail "second start failed: $out"

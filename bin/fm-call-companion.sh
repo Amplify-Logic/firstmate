@@ -306,6 +306,10 @@ any_started() {
   [ -e "$(pid_file_for captions)" ] || [ -e "$(pid_file_for mic)" ] || [ -e "$(pid_file_for digest)" ]
 }
 
+clear_pid_files() {
+  rm -f "$(pid_file_for captions)" "$(pid_file_for mic)" "$(pid_file_for digest)"
+}
+
 call_in_place() {
   [ -s "$TRANSCRIPT" ] || [ -s "$DIGEST" ] || [ -s "$LIVE_ITEMS" ] || [ -e "$CALL_STAMP" ]
 }
@@ -374,7 +378,7 @@ start_companion() {
     printf 'companion: already running; use fm-call-companion.sh status or stop first\n' >&2
     exit 1
   fi
-  rm -f "$(pid_file_for captions)" "$(pid_file_for mic)" "$(pid_file_for digest)"
+  clear_pid_files
   ! call_in_place || reset_companion
   prepare_views
   mkdir -p "$STATE_DIR"
@@ -470,7 +474,7 @@ write_final_notes() {
 
 stop_all() {
   local failed=0 was_running=false
-  ! any_started || was_running=true
+  if any_started && call_in_place; then was_running=true; fi
   stop_component captions fm-call-captions.sh || failed=1
   stop_component mic fm-call-mic.sh || failed=1
   stop_component digest fm-call-digest.sh || failed=1
@@ -488,6 +492,7 @@ stop_all() {
 reset_companion() {
   local stamp archived=false notes_file
   refuse_while_recording reset
+  clear_pid_files
   mkdir -p "$ARCHIVE_DIR"
   stamp=$(fm_call_stamp) || stamp=$(date '+%Y%m%d-%H%M%S')
   if [ -s "$TRANSCRIPT" ]; then
@@ -550,6 +555,7 @@ forget_call_lines() {
 delete_in_place() {
   local stamp notes_file
   stamp=$(fm_call_stamp) || stamp=
+  clear_pid_files
   rm -f "$TRANSCRIPT" "$DIGEST" "$DESK" "$GLANCE" "$LIVE_ITEMS"
   for notes_file in $NOTES_FILES; do
     if [ -f "$DATA_DIR/$notes_file" ] && [ "$DATA_DIR/$notes_file" -nt "$ARCHIVE_DIR/.last-notes-copy" ]; then rm -f "$DATA_DIR/$notes_file"; fi
@@ -602,6 +608,7 @@ delete_stamp() {
 
 delete_all() {
   refuse_while_recording delete
+  clear_pid_files
   rm -rf "$DATA_DIR"
   rm -f "$LIVE_ITEMS" "$CALL_STAMP" "$STATE_DIR/triggers.log" "$STATE_DIR/decisions.log" "$STATE_DIR/decisions-batch.log" "$STATE_DIR/actions.log"
   delete_logs
