@@ -6,7 +6,8 @@
 #     the top of the transcript, and a start without it records nothing.
 #   - stop archives the call under the stamp it got at start, so the next start
 #     begins a clean transcript; a stop with nothing recording adds no
-#     end-of-call record.
+#     end-of-call record; a stop after the recorder crashed still closes the
+#     call out, and a start archives any call still left in place.
 #   - The watcher never starts a recording: a new call raises one reminder that
 #     names the start command, and a running recording is stopped once the call
 #     has been gone for 180 seconds.
@@ -19,8 +20,8 @@
 #     lands before "recording stopped".
 #   - The live desk keeps only grounded items, records each once, and the
 #     end-of-call notes account for every live item without quoting anyone.
-#   - delete removes the current call, one archived call (with the notes it
-#     left in place), or everything, drops that call's stamped lines from the
+#   - delete removes the most recent call (in place, else the last archived),
+#     one archived call (with the notes it left in place), or everything, drops that call's stamped lines from the
 #     decision and spoken-order logs, and refuses while recording.
 #   - The second screen shows only the desk, only through the configured ssh
 #     host; there is no command to show any other page.
@@ -174,10 +175,74 @@ EOF
   run_companion delete "$first" >/dev/null || fail 'delete of the first call failed'
   ! grep -q "^$first	" "$batch" && [ "$(grep -c "^$second	flush	" "$batch")" -eq 1 ] \
     || fail "delete of one call did not drop exactly its lines: $(cat "$batch")"
+  out=$(run_companion delete 2>&1) || fail "delete of the call stop just archived failed: $out"
+  assert_contains "$out" "$second (started ${second:0:4}-${second:4:2}-${second:6:2} ${second:9:2}:${second:11:2}:${second:13:2}" 'delete did not name the call it removed'
+  [ -z "$(run_companion list)" ] || fail "delete after stop left the call behind: $(run_companion list)"
+  ! grep -q "^$second	" "$batch" || fail "delete after stop left the call's log lines behind: $(cat "$batch")"
+  out=$(run_companion delete 2>&1) && rc=0 || rc=$?
+  [ "$rc" -ne 0 ] || fail 'delete with no call reported success'
+  assert_contains "$out" 'no call to delete' 'delete with no call did not say so'
   [ -z "$(find "$home/state/calls/audio" -name '*.wav' 2>/dev/null)" ] || fail 'audio outlived its transcript'
   [ ! -e "$ROOT/transcript.txt" ] && [ ! -e "$ROOT/data/calls" ] || fail 'runtime files landed in the code root'
   unset -f run_companion
   pass 'an agreed recording starts, writes into the home, keeps no audio, and stop archives each call on its own'
+}
+
+test_unfinished_call_is_closed_out() {
+  local home bin out stamp archived pid
+  home=$(new_home unfinished)
+  bin="$TMP_ROOT/unfinished-bin"
+  install_fake_audio_tools "$bin"
+  printf '%s\n' '#!/usr/bin/env bash' 'cat > /dev/null' 'exit 1' > "$bin/claude"
+  cat > "$bin/notes-python" <<'EOF'
+#!/usr/bin/env bash
+out=
+while [ "$#" -gt 0 ]; do
+  if [ "$1" = --out-dir ]; then out=$2; fi
+  shift
+done
+[ "${FIXTURE_NOTES_FAIL:-0}" = 0 ] && [ -n "$out" ] || exit 1
+printf 'notes\n' > "$out/notes.md"
+EOF
+  chmod +x "$bin/claude" "$bin/notes-python"
+  printf 'multi_output_device =\n' > "$home/config/call-companion"
+  export FFMPEG_LOG="$TMP_ROOT/unfinished-ffmpeg.log" WHISPER_LOG="$TMP_ROOT/unfinished-whisper.log"
+  run_companion() {
+    PATH="$bin:$PATH" FM_HOME="$home" FFMPEG_BIN="$bin/ffmpeg" WHISPER_BIN="$bin/whisper-cli" WHISPER_MODEL="$bin/model.bin" \
+      MIC_CHUNK_SECONDS=2 MIC_CHUNK_OVERLAP_SECONDS=1 CALL_COMPANION_OPEN_BIN=true CALL_COMPANION_CLAUDE_BIN="$bin/claude" \
+      CALL_COMPANION_PYTHON_BIN="$bin/notes-python" "$ROOT/bin/fm-call-companion.sh" "$@"
+  }
+  wait_for_speech() {
+    for _ in $(seq 1 60); do grep -q 'fixture transcript' "$home/data/calls/transcript.txt" && return 0; sleep 0.1; done
+    fail 'no transcript line was written'
+  }
+
+  # The recorder dies mid-call (the Mac restarted); a later stop still closes the call out.
+  out=$(run_companion start --mic --everyone-agreed 2>&1) || fail "start failed: $out"
+  wait_for_speech
+  stamp=$(cat "$home/state/calls/call-stamp")
+  for pid in mic digest; do kill -KILL "$(cat "$home/state/calls/$pid.pid")"; done
+  sleep 3
+  out=$(run_companion stop 2>&1) || fail "stop after a crash failed: $out"
+  [ "$(run_companion list)" = "$stamp" ] || fail "stop after a crash did not archive the call: $(run_companion list)"
+  archived="$home/data/calls/archive/$stamp"
+  tail -n 1 "$archived-transcript.txt" | grep -q '^# .* recording stopped$' || fail "stop after a crash wrote no stopped line: $(cat "$archived-transcript.txt")"
+  [ -s "$archived-notes.md" ] || fail 'stop after a crash wrote no end-of-call notes'
+  [ "$(grep -c "^$stamp	flush	" "$home/state/calls/decisions-batch.log")" -eq 1 ] || fail 'stop after a crash wrote no end-of-call record'
+
+  # The notes fail, so the call stays in place; the next start archives it first.
+  out=$(run_companion start --mic --everyone-agreed 2>&1) || fail "second start failed: $out"
+  wait_for_speech
+  stamp=$(cat "$home/state/calls/call-stamp")
+  out=$(FIXTURE_NOTES_FAIL=1 run_companion stop 2>&1) || fail "stop with failing notes failed: $out"
+  [ -s "$home/data/calls/transcript.txt" ] || fail 'a call whose notes failed was archived'
+  ! run_companion list | grep -qx "$stamp" || fail 'a call whose notes failed was archived'
+  out=$(run_companion start --mic --everyone-agreed 2>&1) || fail "third start failed: $out"
+  run_companion list | grep -qx "$stamp" || fail 'start did not archive the call left in place'
+  [ "$(grep -c 'recording started' "$home/data/calls/transcript.txt")" -eq 1 ] || fail "start mixed two calls: $(cat "$home/data/calls/transcript.txt")"
+  out=$(run_companion stop 2>&1) || fail "third stop failed: $out"
+  unset -f run_companion wait_for_speech
+  pass 'a stop after a crash closes the call out, and a start archives a call left in place'
 }
 
 test_watch_reminds_and_stops_but_never_starts() {
@@ -503,7 +568,8 @@ test_delete_current_archived_and_all() {
   grep -q 'current order' "$state/triggers.log" || fail "the current call's lines were dropped"
   [ -e "$home/data/calls/transcript.txt" ] && [ -e "$home/data/calls/archive/20261017-100000-transcript.txt" ] || fail 'another call was deleted'
 
-  FM_HOME="$home" "$ROOT/bin/fm-call-companion.sh" delete >/dev/null || fail 'delete of the current call failed'
+  out=$(FM_HOME="$home" "$ROOT/bin/fm-call-companion.sh" delete) || fail 'delete of the current call failed'
+  assert_contains "$out" '20261017-120000 (started 2026-10-17 12:00:00)' 'delete did not name the call in place'
   [ ! -e "$home/data/calls/transcript.txt" ] && [ ! -e "$state/live-items.jsonl" ] && [ ! -e "$state/call-stamp" ] \
     || fail 'the current call survived delete'
   [ -z "$(find "$state/logs" -type f)" ] || fail 'call text survived in the logs'
@@ -611,6 +677,7 @@ EOF
 test_consent_gate_and_settings
 test_start_stop_records_agreement_in_home
 test_caption_reader_stops_in_time
+test_unfinished_call_is_closed_out
 test_watch_reminds_and_stops_but_never_starts
 test_mic_pipeline_overlap_and_cleanup
 test_live_desk_grounding

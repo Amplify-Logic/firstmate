@@ -12,7 +12,7 @@ The start command refuses to run without `--everyone-agreed`, and that agreement
 Nothing in this tool starts a recording on its own.
 The optional call watcher only notices that a call has begun, reminds you to ask, and names the command to run.
 
-If anyone says no, or asks later for the recording to stop, stop it at once and delete it (see below).
+If anyone says no, or asks later for the recording to stop, run `bin/fm-call-companion.sh stop` at once and then `bin/fm-call-companion.sh delete`, which deletes that most recent call (see below).
 
 ## Platforms
 
@@ -68,6 +68,7 @@ It stops every part at once, switches the audio output back, writes "recording s
 It then moves the call into `data/calls/archive/` under the stamp it got when it started, and prints that stamp, so the next `start` always begins a clean transcript and two calls never mix.
 A stopped call cannot be resumed; start a new one.
 If the notes fail, the call stays in place so `bin/fm-call-companion.sh notes` can retry them, and the next `start` archives it.
+If the recorder died mid-call, for example when the Mac restarted, `stop` still closes the call out the same way.
 If the call watcher is installed, it also stops a running recording on its own once the call has been gone for three minutes.
 
 ## Delete a recording
@@ -75,13 +76,13 @@ If the call watcher is installed, it also stops a running recording on its own o
 Stop it first; every delete refuses while recording.
 
 ```sh
+bin/fm-call-companion.sh delete              # the most recent call, such as the one stop just archived
 bin/fm-call-companion.sh list                # archived calls, one stamp each
-bin/fm-call-companion.sh delete <stamp>      # one archived call, such as the one stop just archived
-bin/fm-call-companion.sh delete              # the call still in place: transcript, desk, notes, and logs
+bin/fm-call-companion.sh delete <stamp>      # one archived call
 bin/fm-call-companion.sh delete --all        # every call, the archive, and the decision and order logs
 ```
 
-Deleting one call also removes its lines from the decision and spoken-order logs in `state/calls/`, which carry each call's stamp, and the notes it left on the desk.
+Deleting one call removes its transcript, desk, digest, live items and notes, prints its stamp and start time, and also removes its lines from the decision and spoken-order logs in `state/calls/`, which carry each call's stamp, and the notes it left on the desk.
 Lines written before calls had stamps carry none, so only `delete --all` removes them.
 `reset` moves the call still in place into the archive by hand.
 

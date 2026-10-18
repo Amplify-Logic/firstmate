@@ -30,11 +30,13 @@
 # notes (bin/fm-call-final-notes.py, a few minutes) to data/calls/notes.*, and
 # then archives the call under data/calls/archive/<stamp>-*, so the next start
 # always begins clean; when the notes fail, the call stays for `notes` to rerun
-# and the next start archives it. reset archives the current call by hand.
-# list prints the archived stamps. delete removes the current call's
-# transcript, desk, digest, notes, live items and logs; delete <stamp> removes
-# one archived call and the notes it left in place; both also drop that call's
-# lines from the decision and spoken-order logs. delete --all removes every
+# and the next start archives it; a stop after the recorder crashed closes the
+# call out the same way. reset archives the current call by hand.
+# list prints the archived stamps. delete removes the most recent call: the
+# one still in place, otherwise the last one archived; delete <stamp> removes
+# one archived call. Both remove its transcript, desk, digest, live items,
+# notes, the logs, and its lines in the decision and spoken-order logs, and
+# print which call went. delete --all removes every
 # call, the archive, and the decision, spoken-order and action logs, including
 # untagged lines written before calls had stamps. Every delete refuses while
 # recording.
@@ -298,6 +300,20 @@ status_component() {
   fi
 }
 
+# A call is started from start until stop has stopped its parts, even if they
+# have since died.
+any_started() {
+  [ -e "$(pid_file_for captions)" ] || [ -e "$(pid_file_for mic)" ] || [ -e "$(pid_file_for digest)" ]
+}
+
+call_in_place() {
+  [ -s "$TRANSCRIPT" ] || [ -s "$DIGEST" ] || [ -s "$LIVE_ITEMS" ] || [ -e "$CALL_STAMP" ]
+}
+
+stamp_time() {
+  printf '%s-%s-%s %s:%s:%s\n' "${1:0:4}" "${1:4:2}" "${1:6:2}" "${1:9:2}" "${1:11:2}" "${1:13:2}"
+}
+
 any_running() {
   is_owned_running captions fm-call-captions.sh ||
     is_owned_running mic fm-call-mic.sh ||
@@ -359,7 +375,7 @@ start_companion() {
     exit 1
   fi
   rm -f "$(pid_file_for captions)" "$(pid_file_for mic)" "$(pid_file_for digest)"
-  [ ! -s "$TRANSCRIPT" ] || reset_companion
+  ! call_in_place || reset_companion
   prepare_views
   mkdir -p "$STATE_DIR"
   date '+%Y%m%d-%H%M%S' > "$CALL_STAMP"
@@ -454,7 +470,7 @@ write_final_notes() {
 
 stop_all() {
   local failed=0 was_running=false
-  ! any_running || was_running=true
+  ! any_started || was_running=true
   stop_component captions fm-call-captions.sh || failed=1
   stop_component mic fm-call-mic.sh || failed=1
   stop_component digest fm-call-digest.sh || failed=1
@@ -531,22 +547,26 @@ forget_call_lines() {
   done
 }
 
-delete_current() {
+delete_in_place() {
   local stamp notes_file
-  refuse_while_recording delete
+  stamp=$(fm_call_stamp) || stamp=
   rm -f "$TRANSCRIPT" "$DIGEST" "$DESK" "$GLANCE" "$LIVE_ITEMS"
-  for notes_file in $NOTES_FILES; do rm -f "$DATA_DIR/$notes_file"; done
-  if stamp=$(fm_call_stamp); then forget_call_lines "$stamp"; fi
+  for notes_file in $NOTES_FILES; do
+    if [ -f "$DATA_DIR/$notes_file" ] && [ "$DATA_DIR/$notes_file" -nt "$ARCHIVE_DIR/.last-notes-copy" ]; then rm -f "$DATA_DIR/$notes_file"; fi
+  done
+  [ -z "$stamp" ] || forget_call_lines "$stamp"
   rm -f "$CALL_STAMP"
   delete_logs
   prepare_views
-  printf 'companion: deleted the current call and its logs; the archive is untouched\n'
+  if [ -n "$stamp" ]; then
+    printf 'companion: deleted call %s (started %s), which was not archived yet, and the logs\n' "$stamp" "$(stamp_time "$stamp")"
+  else
+    printf 'companion: deleted the unstamped call in place and the logs\n'
+  fi
 }
 
 delete_archived() {
   local stamp=$1 count notes_file notes_removed=false
-  [[ "$stamp" =~ ^[0-9]{8}-[0-9]{6}$ ]] || { printf 'companion: stamp must look like 20261018-153000; see fm-call-companion.sh list\n' >&2; exit 2; }
-  refuse_while_recording delete
   count=$(find "$ARCHIVE_DIR" -maxdepth 1 -type f -name "$stamp-*" 2>/dev/null | wc -l | tr -d ' ')
   [ "$count" -gt 0 ] || { printf 'companion: no archived call %s\n' "$stamp" >&2; exit 1; }
   for notes_file in $NOTES_FILES; do
@@ -559,7 +579,25 @@ delete_archived() {
   forget_call_lines "$stamp"
   [ "$notes_removed" = false ] || write_idle_glance
   delete_logs
-  printf 'companion: deleted archived call %s (%s files) and the logs\n' "$stamp" "$count"
+  printf 'companion: deleted archived call %s (started %s; %s files) and the logs\n' "$stamp" "$(stamp_time "$stamp")" "$count"
+}
+
+delete_latest() {
+  local latest
+  refuse_while_recording delete
+  if call_in_place; then
+    delete_in_place
+    return
+  fi
+  latest=$(list_archive | tail -n 1)
+  [ -n "$latest" ] || { printf 'companion: there is no call to delete\n' >&2; exit 1; }
+  delete_archived "$latest"
+}
+
+delete_stamp() {
+  [[ "$1" =~ ^[0-9]{8}-[0-9]{6}$ ]] || { printf 'companion: stamp must look like 20261018-153000; see fm-call-companion.sh list\n' >&2; exit 2; }
+  refuse_while_recording delete
+  delete_archived "$1"
 }
 
 delete_all() {
@@ -618,9 +656,9 @@ main() {
       ;;
     delete)
       case "$#:${2:-}" in
-        1:) delete_current ;;
+        1:) delete_latest ;;
         2:--all) delete_all ;;
-        2:*) delete_archived "$2" ;;
+        2:*) delete_stamp "$2" ;;
         *) usage; exit 2 ;;
       esac
       ;;
