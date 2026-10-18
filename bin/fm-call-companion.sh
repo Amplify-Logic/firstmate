@@ -33,13 +33,15 @@
 # and the next start archives it; a stop after the recorder crashed closes the
 # call out the same way. reset archives the current call by hand.
 # list prints the archived stamps. delete removes the most recent call: the
-# one still in place, otherwise the last one archived; delete <stamp> removes
-# one archived call. Both remove its transcript, desk, digest, live items,
-# notes, the logs, and its lines in the decision and spoken-order logs, and
-# print which call went. delete --all removes every
-# call, the archive, and the decision, spoken-order and action logs, including
-# untagged lines written before calls had stamps. Every delete refuses while
-# recording.
+# one still in place, otherwise the last one archived; while recording, it
+# first stops the recording without writing notes or calling any model, for
+# when someone objects. delete <stamp> removes one archived call. Both remove
+# its transcript, desk, digest, live items, notes, the logs, and its lines in
+# the decision and spoken-order logs, and print which call went. A stop still
+# writing the notes of a call deleted meanwhile discards them. delete --all
+# removes every call, the archive, and the decision, spoken-order and action
+# logs, including untagged lines written before calls had stamps. delete
+# <stamp> and delete --all refuse while recording.
 #
 # desk opens the desk page; with --display, or on start when the display_host
 # setting is set, it also shows display_url full screen on that ssh host's
@@ -460,11 +462,13 @@ stop_component() {
 
 # Authoritative notes from the whole transcript; a failure never blocks stop or reset.
 write_final_notes() {
+  local stamp call_date
   [ "$FINAL_NOTES" = 1 ] || return 0
   has_transcript_lines || return 0
+  if stamp=$(fm_call_stamp); then call_date="${stamp:0:4}-${stamp:4:2}-${stamp:6:2}"; else call_date=$(date '+%Y-%m-%d'); fi
   printf 'companion: writing end-of-call notes from the full transcript (a few minutes)\n'
   if "$PYTHON_BIN" "$NOTES_SCRIPT" --transcript "$TRANSCRIPT" --live-items "$LIVE_ITEMS" --out-dir "$DATA_DIR" \
-    --local-name "$LOCAL_SPEAKER" --model "$NOTES_MODEL" >> "$LOG_DIR/final-notes.log" 2>&1; then
+    --date "$call_date" --local-name "$LOCAL_SPEAKER" --model "$NOTES_MODEL" >> "$LOG_DIR/final-notes.log" 2>&1; then
     printf 'companion: end-of-call notes at %s/notes.md and notes.html\n' "$DATA_DIR"
   else
     printf 'companion: end-of-call notes failed; see %s/final-notes.log, then rerun fm-call-companion.sh notes\n' "$LOG_DIR" >&2
@@ -472,19 +476,42 @@ write_final_notes() {
   fi
 }
 
-stop_all() {
-  local failed=0 was_running=false
-  if any_started && call_in_place; then was_running=true; fi
+stop_parts() {
+  local failed=0
   stop_component captions fm-call-captions.sh || failed=1
   stop_component mic fm-call-mic.sh || failed=1
   stop_component digest fm-call-digest.sh || failed=1
+  return "$failed"
+}
+
+# Notes newer than the last archive belong to the call in place.
+remove_unarchived_notes() {
+  local notes_file
+  for notes_file in $NOTES_FILES; do
+    if [ -f "$DATA_DIR/$notes_file" ] && [ "$DATA_DIR/$notes_file" -nt "$ARCHIVE_DIR/.last-notes-copy" ]; then rm -f "$DATA_DIR/$notes_file"; fi
+  done
+}
+
+stop_all() {
+  local failed=0 was_running=false stamp notes_written=false
+  if any_started && call_in_place; then was_running=true; fi
+  stop_parts || failed=1
   if [ "$was_running" = true ]; then
     transcript_note 'recording stopped'
     "$FM_CALL_BIN/fm-call-digest.sh" --final-batch || failed=1
   fi
   restore_loopback_output || failed=1
   hide_desk_display || true
-  if [ "$was_running" = true ] && write_final_notes && ! any_running; then reset_companion; fi
+  if [ "$was_running" = true ]; then
+    stamp=$(fm_call_stamp) || stamp=
+    ! write_final_notes || notes_written=true
+    if [ "$(fm_call_stamp || true)" != "$stamp" ]; then
+      remove_unarchived_notes
+      printf 'companion: the call was deleted or archived while its notes were written; discarded them\n'
+    elif [ "$notes_written" = true ] && ! any_running; then
+      reset_companion
+    fi
+  fi
   [ "$failed" -eq 0 ] || exit 1
   printf 'companion: stopped\n'
 }
@@ -493,6 +520,10 @@ reset_companion() {
   local stamp archived=false notes_file
   refuse_while_recording reset
   clear_pid_files
+  if ! call_in_place; then
+    printf 'companion: reset; there is no call in place to archive\n'
+    return 0
+  fi
   mkdir -p "$ARCHIVE_DIR"
   stamp=$(fm_call_stamp) || stamp=$(date '+%Y%m%d-%H%M%S')
   if [ -s "$TRANSCRIPT" ]; then
@@ -526,7 +557,7 @@ reset_companion() {
   if [ "$archived" = true ]; then
     printf 'companion: archived transcript, digest, desk, live items, and notes with stamp %s, then reset\n' "$stamp"
   else
-    printf 'companion: reset; there was no transcript, digest, or desk to archive\n'
+    printf 'companion: reset; the call in place had nothing to archive\n'
   fi
 }
 
@@ -553,13 +584,11 @@ forget_call_lines() {
 }
 
 delete_in_place() {
-  local stamp notes_file
+  local stamp
   stamp=$(fm_call_stamp) || stamp=
   clear_pid_files
   rm -f "$TRANSCRIPT" "$DIGEST" "$DESK" "$GLANCE" "$LIVE_ITEMS"
-  for notes_file in $NOTES_FILES; do
-    if [ -f "$DATA_DIR/$notes_file" ] && [ "$DATA_DIR/$notes_file" -nt "$ARCHIVE_DIR/.last-notes-copy" ]; then rm -f "$DATA_DIR/$notes_file"; fi
-  done
+  remove_unarchived_notes
   [ -z "$stamp" ] || forget_call_lines "$stamp"
   rm -f "$CALL_STAMP"
   delete_logs
@@ -590,7 +619,12 @@ delete_archived() {
 
 delete_latest() {
   local latest
-  refuse_while_recording delete
+  if any_running; then
+    stop_parts || { printf 'companion: could not stop the recording; nothing was deleted\n' >&2; exit 1; }
+    restore_loopback_output || true
+    hide_desk_display || true
+    printf 'companion: stopped the recording without writing notes\n'
+  fi
   if call_in_place; then
     delete_in_place
     return

@@ -12,7 +12,7 @@ The start command refuses to run without `--everyone-agreed`, and that agreement
 Nothing in this tool starts a recording on its own.
 The optional call watcher only notices that a call has begun, reminds you to ask, and names the command to run.
 
-If anyone says no, or asks later for the recording to stop, run `bin/fm-call-companion.sh stop` at once and then `bin/fm-call-companion.sh delete`, which deletes that most recent call (see below).
+If anyone says no, or asks later for the recording to stop, run `bin/fm-call-companion.sh delete` at once: it stops the recording without writing notes or sending anything more to a model, and deletes the call (see below).
 
 ## Platforms
 
@@ -73,7 +73,8 @@ If the call watcher is installed, it also stops a running recording on its own o
 
 ## Delete a recording
 
-Stop it first; every delete refuses while recording.
+Plain `delete` stops a running recording first, without notes; `delete <stamp>` and `delete --all` refuse while recording.
+A `delete` while `stop` is still writing the notes also wins: `stop` discards the notes of the deleted call.
 
 ```sh
 bin/fm-call-companion.sh delete              # the most recent call, such as the one stop just archived

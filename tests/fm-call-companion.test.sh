@@ -7,8 +7,9 @@
 #   - stop archives the call under the stamp it got at start, so the next start
 #     begins a clean transcript; a stop with nothing recording adds no
 #     end-of-call record; a stop after the recorder crashed still closes the
-#     call out, a stop after that call was deleted leaves no ghost call, and a
-#     start archives any call still left in place.
+#     call out with notes dated by the call's stamp, a stop after that call was
+#     deleted leaves no ghost call, a reset with no call in place archives
+#     nothing, and a start archives any call still left in place.
 #   - The watcher never starts a recording: a new call raises one reminder that
 #     names the start command, and a running recording is stopped once the call
 #     has been gone for 180 seconds.
@@ -21,9 +22,11 @@
 #     lands before "recording stopped".
 #   - The live desk keeps only grounded items, records each once, and the
 #     end-of-call notes account for every live item without quoting anyone.
+#   - delete during a recording stops it without notes or any model call and
+#     deletes the call; a delete while stop writes the notes discards them.
 #   - delete removes the most recent call (in place, else the last archived),
 #     one archived call (with the notes it left in place), or everything, drops that call's stamped lines from the
-#     decision and spoken-order logs, and refuses while recording.
+#     decision and spoken-order logs; delete <stamp> refuses while recording.
 #   - The second screen shows only the desk, only through the configured ssh
 #     host; there is no command to show any other page.
 # shellcheck disable=SC2016
@@ -121,7 +124,7 @@ test_consent_gate_and_settings() {
 }
 
 test_start_stop_records_agreement_in_home() {
-  local home bin out rc
+  local home bin out rc target
   home=$(new_home lifecycle)
   bin="$TMP_ROOT/lifecycle-bin"
   install_fake_audio_tools "$bin"
@@ -147,8 +150,11 @@ EOF
     || fail "agreement line missing: $(cat "$home/data/calls/transcript.txt")"
   [ -L "$home/data/calls/public/glance.html" ] || fail 'public desk view was not linked'
   [ ! -e "$home/data/calls/public/transcript.txt" ] || fail 'the transcript is reachable from the public folder'
-  out=$(run_companion delete 2>&1) && rc=0 || rc=$?
-  [ "$rc" -ne 0 ] || fail 'delete ran while recording'
+  for target in 20000101-000000 --all; do
+    out=$(run_companion delete "$target" 2>&1) && rc=0 || rc=$?
+    [ "$rc" -ne 0 ] || fail "delete $target ran while recording"
+    assert_contains "$out" 'stop the recording before delete' "delete $target did not refuse while recording"
+  done
   for _ in $(seq 1 60); do grep -q 'unknown speaker: fixture transcript' "$home/data/calls/transcript.txt" && break; sleep 0.1; done
   grep -q '^\[[0-9:]*\] unknown speaker: fixture transcript$' "$home/data/calls/transcript.txt" \
     || fail "no transcript line was written: $(cat "$home/data/calls/transcript.txt")"
@@ -165,6 +171,8 @@ EOF
   [ "$(grep -c "^$first	flush	" "$batch")" -eq 1 ] || fail "the end-of-call record does not carry the call's stamp: $(cat "$batch")"
   run_companion stop >/dev/null || fail 'a stop with nothing recording failed'
   [ "$(grep -c '	flush	' "$batch")" -eq 1 ] || fail 'a stop with nothing recording added an end-of-call record'
+  out=$(run_companion reset 2>&1) || fail "reset with no call in place failed: $out"
+  [ "$(run_companion list)" = "$first" ] || fail "reset with no call in place archived a fake call: $(run_companion list)"
 
   out=$(run_companion start --mic --everyone-agreed 2>&1) || fail "second start failed: $out"
   if [ "$(grep -c 'recording started' "$home/data/calls/transcript.txt")" -ne 1 ] || grep -q 'recording stopped' "$home/data/calls/transcript.txt"; then
@@ -190,19 +198,30 @@ EOF
 }
 
 test_unfinished_call_is_closed_out() {
-  local home bin out stamp archived pid before
+  local home bin out stamp archived pid before calls stop_pid notes_log claude_log
   home=$(new_home unfinished)
+  notes_log="$TMP_ROOT/unfinished-notes.log"
+  claude_log="$TMP_ROOT/unfinished-claude.log"
+  : > "$notes_log"; : > "$claude_log"
   bin="$TMP_ROOT/unfinished-bin"
   install_fake_audio_tools "$bin"
-  printf '%s\n' '#!/usr/bin/env bash' 'cat > /dev/null' 'exit 1' > "$bin/claude"
+  printf '%s\n' '#!/usr/bin/env bash' 'printf "call\n" >> "${FIXTURE_CLAUDE_LOG:?}"' 'cat > /dev/null' 'exit 1' > "$bin/claude"
   cat > "$bin/notes-python" <<'EOF'
 #!/usr/bin/env bash
+args="$*"
 out=
 while [ "$#" -gt 0 ]; do
   if [ "$1" = --out-dir ]; then out=$2; fi
   shift
 done
-[ "${FIXTURE_NOTES_FAIL:-0}" = 0 ] && [ -n "$out" ] || exit 1
+[ -n "$out" ] || exit 1
+printf '%s\n' "$args" >> "${FIXTURE_NOTES_LOG:?}"
+[ "${FIXTURE_NOTES_FAIL:-0}" = 0 ] || exit 1
+printf 'raw\n' > "$out/notes-model.json"
+if [ -n "${FIXTURE_NOTES_GATE:-}" ]; then
+  : > "$FIXTURE_NOTES_GATE.started"
+  for _ in $(seq 1 100); do [ -e "$FIXTURE_NOTES_GATE" ] && break; sleep 0.1; done
+fi
 printf 'notes\n' > "$out/notes.md"
 EOF
   chmod +x "$bin/claude" "$bin/notes-python"
@@ -211,20 +230,23 @@ EOF
   run_companion() {
     PATH="$bin:$PATH" FM_HOME="$home" FFMPEG_BIN="$bin/ffmpeg" WHISPER_BIN="$bin/whisper-cli" WHISPER_MODEL="$bin/model.bin" \
       MIC_CHUNK_SECONDS=2 MIC_CHUNK_OVERLAP_SECONDS=1 CALL_COMPANION_OPEN_BIN=true CALL_COMPANION_CLAUDE_BIN="$bin/claude" \
-      CALL_COMPANION_PYTHON_BIN="$bin/notes-python" "$ROOT/bin/fm-call-companion.sh" "$@"
+      CALL_COMPANION_PYTHON_BIN="$bin/notes-python" FIXTURE_NOTES_LOG="$notes_log" FIXTURE_CLAUDE_LOG="$claude_log" \
+      "$ROOT/bin/fm-call-companion.sh" "$@"
   }
   wait_for_speech() {
     for _ in $(seq 1 60); do grep -q 'fixture transcript' "$home/data/calls/transcript.txt" && return 0; sleep 0.1; done
     fail 'no transcript line was written'
   }
 
-  # The recorder dies mid-call (the Mac restarted); a later stop still closes the call out.
+  # The recorder dies mid-call late on the 17th (the Mac restarted); a later stop still closes the call out.
   out=$(run_companion start --mic --everyone-agreed 2>&1) || fail "start failed: $out"
   wait_for_speech
-  stamp=$(cat "$home/state/calls/call-stamp")
+  stamp=20261017-235900
+  printf '%s\n' "$stamp" > "$home/state/calls/call-stamp"
   for pid in mic digest; do kill -KILL "$(cat "$home/state/calls/$pid.pid")"; done
   sleep 3
   out=$(run_companion stop 2>&1) || fail "stop after a crash failed: $out"
+  grep -q -- '--date 2026-10-17 ' "$notes_log" || fail "the notes were not dated by the call's stamp: $(cat "$notes_log")"
   [ "$(run_companion list)" = "$stamp" ] || fail "stop after a crash did not archive the call: $(run_companion list)"
   archived="$home/data/calls/archive/$stamp"
   tail -n 1 "$archived-transcript.txt" | grep -q '^# .* recording stopped$' || fail "stop after a crash wrote no stopped line: $(cat "$archived-transcript.txt")"
@@ -242,6 +264,37 @@ EOF
   [ "$(run_companion list)" = "$before" ] || fail "stop after delete archived a ghost call: $(run_companion list)"
   [ ! -s "$home/data/calls/transcript.txt" ] || fail "stop after delete wrote a ghost transcript: $(cat "$home/data/calls/transcript.txt")"
 
+  # Someone objects mid-call: delete stops the recording, writes no notes, calls no model, and deletes the call.
+  : > "$notes_log"
+  out=$(run_companion start --mic --everyone-agreed 2>&1) || fail "objection start failed: $out"
+  wait_for_speech
+  stamp=$(cat "$home/state/calls/call-stamp")
+  for _ in $(seq 1 60); do [ -s "$claude_log" ] && break; sleep 0.1; done
+  calls=$(wc -l < "$claude_log")
+  before=$(run_companion list)
+  out=$(run_companion delete 2>&1) || fail "delete during a recording failed: $out"
+  assert_contains "$out" "deleted call $stamp" 'delete during a recording did not name the call'
+  assert_not_contains "$(run_companion status)" 'running' 'delete left the recording running'
+  sleep 1
+  [ ! -s "$notes_log" ] && [ "$(wc -l < "$claude_log")" -eq "$calls" ] || fail 'delete during a recording called a model'
+  [ ! -s "$home/data/calls/transcript.txt" ] && [ "$(run_companion list)" = "$before" ] || fail 'delete during a recording left the call behind'
+  ! grep -q "^$stamp	" "$home/state/calls/decisions-batch.log" || fail "delete during a recording left the call's log lines"
+
+  # Someone objects while stop is still writing the notes: the delete wins and no notes survive.
+  out=$(run_companion start --mic --everyone-agreed 2>&1) || fail "late objection start failed: $out"
+  wait_for_speech
+  before=$(run_companion list)
+  FIXTURE_NOTES_GATE="$TMP_ROOT/unfinished-gate" run_companion stop > "$TMP_ROOT/unfinished-stop.out" 2>&1 &
+  stop_pid=$!
+  fm_test_track_pid "$stop_pid"
+  for _ in $(seq 1 100); do [ -e "$TMP_ROOT/unfinished-gate.started" ] && break; sleep 0.1; done
+  [ -e "$TMP_ROOT/unfinished-gate.started" ] || fail 'the notes pass did not start'
+  out=$(run_companion delete 2>&1) || fail "delete during the notes pass failed: $out"
+  : > "$TMP_ROOT/unfinished-gate"
+  wait "$stop_pid" || fail "stop during a delete failed: $(cat "$TMP_ROOT/unfinished-stop.out")"
+  [ -z "$(find "$home/data/calls" -maxdepth 1 -name 'notes*')" ] || fail "the deleted call's notes survived: $(ls "$home/data/calls")"
+  [ "$(run_companion list)" = "$before" ] || fail "stop archived the deleted call: $(run_companion list)"
+
   # The notes fail, so the call stays in place; the next start archives it first.
   out=$(run_companion start --mic --everyone-agreed 2>&1) || fail "second start failed: $out"
   wait_for_speech
@@ -254,7 +307,7 @@ EOF
   [ "$(grep -c 'recording started' "$home/data/calls/transcript.txt")" -eq 1 ] || fail "start mixed two calls: $(cat "$home/data/calls/transcript.txt")"
   out=$(run_companion stop 2>&1) || fail "third stop failed: $out"
   unset -f run_companion wait_for_speech
-  pass 'a stop after a crash closes the call out, and a start archives a call left in place'
+  pass 'a crashed call is closed out, delete wins over a recording or a notes pass, and a start archives a call left in place'
 }
 
 test_watch_reminds_and_stops_but_never_starts() {
