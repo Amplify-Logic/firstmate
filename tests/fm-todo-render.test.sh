@@ -49,6 +49,9 @@
 #     post first with its post time and link, and never in "Needs you now".
 #   - In a real Chrome at desktop width, no row of a closed fold sits over the
 #     sections below it, and such a row can still be found on the page.
+#   - A click anywhere on a card opens and closes its note box, as the note
+#     button still does; a click on its link, its button or inside the open
+#     box, or one that ends a text selection, does not toggle it.
 # shellcheck disable=SC2016
 set -u
 
@@ -811,6 +814,48 @@ test_closed_folds_cover_nothing_and_stay_findable() {
   pass 'closed folds lay no row over the sections below and their rows stay findable'
 }
 
+test_card_click_toggles_its_note_box() {
+  local h page probed chrome dom report
+
+  if ! chrome=$(find_chrome); then
+    echo 'skip: Chrome not found for the card-click test'
+    return 0
+  fi
+  h="$TMP_ROOT/card-click"
+  new_home "$h"
+  observe_at "$h" "$T_0900" observe --source C_BRIEF --ref r-card --digest a --class urgent \
+    --title 'card to click through' --link 'https://example.slack.com/archives/C_BRIEF/p9' >/dev/null
+  render_at "$h" "$T_1530" render >/dev/null
+  page=$(page_of "$h")
+
+  # Click the card's parts in turn and record whether its note box is open
+  # after each click: the ask text, again, the link, the note button, inside
+  # the open box, the button again, and the ask text with some of it selected.
+  probed="$h/probed.html"
+  sed 's#</body>#<script>setTimeout(() => {\
+  const card = document.querySelector("tr.item"), box = card.nextElementSibling;\
+  const link = card.querySelector("a"); link.addEventListener("click", e => e.preventDefault());\
+  const what = card.querySelector("td.what"), states = [];\
+  const click = el => { el.click(); states.push(box.classList.contains("open") ? "open" : "shut"); };\
+  click(what); click(what); click(link); click(card.querySelector("button.notetoggle"));\
+  click(box.querySelector("input")); click(card.querySelector("button.notetoggle"));\
+  const sel = document.createRange(); sel.selectNodeContents(what);\
+  getSelection().removeAllRanges(); getSelection().addRange(sel); click(what);\
+  const out = document.createElement("pre"); out.id = "probe";\
+  out.textContent = "states=" + states.join(",") + ";";\
+  document.body.appendChild(out);\
+}, 300);</script></body>#' "$page" >"$probed"
+
+  report=$(fm_chrome_dump_dom "$chrome" "$probed" "$h/probed.dom" "page=$probed" --window-size=1110,3000) \
+    || fail "Chrome produced no DOM for the card-click probe: $report"
+  dom=$(cat "$h/probed.dom")
+  assert_contains "$dom" '<pre id="probe">' 'the card-click probe never ran in Chrome'
+  assert_contains "$dom" 'states=open,shut,shut,open,open,shut,shut;' \
+    'a click on the card does not toggle its note box as expected'
+
+  pass 'a click anywhere on a card toggles its note box, except on its controls or a selection'
+}
+
 test_outage_then_oldest_ask_orders_the_live_section
 test_waiting_and_closed_never_mix_into_the_live_section
 test_every_line_carries_its_own_read_time
@@ -833,3 +878,4 @@ test_open_tickets_legacy_morning_copy_leaves_no_empty_reference_fold
 test_calm_layout_ranks_live_problems_first_and_folds_the_rest
 test_team_updates_fold_newest_post_first
 test_closed_folds_cover_nothing_and_stay_findable
+test_card_click_toggles_its_note_box
