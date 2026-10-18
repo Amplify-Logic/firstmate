@@ -217,12 +217,12 @@ done
 [ -n "$out" ] || exit 1
 printf '%s\n' "$args" >> "${FIXTURE_NOTES_LOG:?}"
 [ "${FIXTURE_NOTES_FAIL:-0}" = 0 ] || exit 1
-printf 'raw\n' > "$out/notes-model.json"
+printf '%s raw\n' "${FIXTURE_NOTES_TEXT:-notes}" > "$out/notes-model.json"
 if [ -n "${FIXTURE_NOTES_GATE:-}" ]; then
   : > "$FIXTURE_NOTES_GATE.started"
   for _ in $(seq 1 100); do [ -e "$FIXTURE_NOTES_GATE" ] && break; sleep 0.1; done
 fi
-printf 'notes\n' > "$out/notes.md"
+printf '%s\n' "${FIXTURE_NOTES_TEXT:-notes}" > "$out/notes.md"
 EOF
   chmod +x "$bin/claude" "$bin/notes-python"
   printf 'multi_output_device =\n' > "$home/config/call-companion"
@@ -284,7 +284,7 @@ EOF
   out=$(run_companion start --mic --everyone-agreed 2>&1) || fail "late objection start failed: $out"
   wait_for_speech
   before=$(run_companion list)
-  FIXTURE_NOTES_GATE="$TMP_ROOT/unfinished-gate" run_companion stop > "$TMP_ROOT/unfinished-stop.out" 2>&1 &
+  FIXTURE_NOTES_TEXT=deleted-call FIXTURE_NOTES_GATE="$TMP_ROOT/unfinished-gate" run_companion stop > "$TMP_ROOT/unfinished-stop.out" 2>&1 &
   stop_pid=$!
   fm_test_track_pid "$stop_pid"
   for _ in $(seq 1 100); do [ -e "$TMP_ROOT/unfinished-gate.started" ] && break; sleep 0.1; done
@@ -292,8 +292,25 @@ EOF
   out=$(run_companion delete 2>&1) || fail "delete during the notes pass failed: $out"
   : > "$TMP_ROOT/unfinished-gate"
   wait "$stop_pid" || fail "stop during a delete failed: $(cat "$TMP_ROOT/unfinished-stop.out")"
-  [ -z "$(find "$home/data/calls" -maxdepth 1 -name 'notes*')" ] || fail "the deleted call's notes survived: $(ls "$home/data/calls")"
+  ! grep -rq deleted-call "$home/data/calls" "$home/state/calls" || fail "the deleted call's notes survived: $(grep -rl deleted-call "$home/data/calls" "$home/state/calls")"
   [ "$(run_companion list)" = "$before" ] || fail "stop archived the deleted call: $(run_companion list)"
+
+  # Back-to-back calls: the next start while stop still writes the notes leaves them with their own call.
+  out=$(run_companion start --mic --everyone-agreed 2>&1) || fail "back-to-back start failed: $out"
+  wait_for_speech
+  stamp=$(cat "$home/state/calls/call-stamp")
+  FIXTURE_NOTES_TEXT=first-call FIXTURE_NOTES_GATE="$TMP_ROOT/unfinished-next-gate" run_companion stop > "$TMP_ROOT/unfinished-next-stop.out" 2>&1 &
+  stop_pid=$!
+  fm_test_track_pid "$stop_pid"
+  for _ in $(seq 1 100); do [ -e "$TMP_ROOT/unfinished-next-gate.started" ] && break; sleep 0.1; done
+  [ -e "$TMP_ROOT/unfinished-next-gate.started" ] || fail 'the back-to-back notes pass did not start'
+  out=$(run_companion start --mic --everyone-agreed 2>&1) || fail "the next call did not start during the notes pass: $out"
+  : > "$TMP_ROOT/unfinished-next-gate"
+  wait "$stop_pid" || fail "stop during the next start failed: $(cat "$TMP_ROOT/unfinished-next-stop.out")"
+  grep -qx first-call "$home/data/calls/archive/$stamp-notes.md" 2>/dev/null || fail "the notes of a call archived mid-pass were lost: $(cat "$TMP_ROOT/unfinished-next-stop.out")"
+  grep -q first-call "$home/data/calls/archive/$stamp-notes-model.json" 2>/dev/null || fail 'the raw notes of a call archived mid-pass were lost'
+  ! grep -rq first-call "$home/data/calls"/notes* 2>/dev/null || fail "the archived call's notes were left in place for the next call"
+  out=$(run_companion stop 2>&1) || fail "stop of the next call failed: $out"
 
   # The notes fail, so the call stays in place; the next start archives it first.
   out=$(run_companion start --mic --everyone-agreed 2>&1) || fail "second start failed: $out"
@@ -308,6 +325,31 @@ EOF
   out=$(run_companion stop 2>&1) || fail "third stop failed: $out"
   unset -f run_companion wait_for_speech
   pass 'a crashed call is closed out, delete wins over a recording or a notes pass, and a start archives a call left in place'
+}
+
+test_delete_while_stop_waits_wins() {
+  local home out fake stop_pid
+  home=$(new_home stopwait)
+  mkdir -p "$home/data/calls" "$home/state/calls"
+  printf '%s\n' '# 2026-10-18 10:00:00 CEST recording started (mic) after everyone on the call agreed to be recorded' \
+    '[10:00:05] unknown speaker: hello' > "$home/data/calls/transcript.txt"
+  printf '20261018-100000\n' > "$home/state/calls/call-stamp"
+  # A microphone reader slow to exit: it ignores SIGTERM, then stops looking like the recorder.
+  bash -c 'trap "" TERM; sleep 1; exec sleep 3' "$ROOT/bin/fm-call-mic.sh" &
+  fake=$!
+  fm_test_track_pid "$fake"
+  printf '%s\n' "$fake" > "$home/state/calls/mic.pid"
+  FM_HOME="$home" CALL_COMPANION_STOP_TIMEOUT_SECONDS=10 CALL_COMPANION_FINAL_NOTES=0 \
+    "$ROOT/bin/fm-call-companion.sh" stop > "$TMP_ROOT/stopwait.out" 2>&1 &
+  stop_pid=$!
+  fm_test_track_pid "$stop_pid"
+  sleep 1.5
+  out=$(FM_HOME="$home" "$ROOT/bin/fm-call-companion.sh" delete 2>&1) || fail "delete while stop waited failed: $out"
+  assert_contains "$out" 'deleted call 20261018-100000' 'delete while stop waited did not name the call'
+  wait "$stop_pid" || fail "stop after the call was deleted failed: $(cat "$TMP_ROOT/stopwait.out")"
+  [ -z "$(FM_HOME="$home" "$ROOT/bin/fm-call-companion.sh" list)" ] || fail 'stop archived a ghost of the deleted call'
+  ! grep -qs 'recording stopped' "$home/data/calls/transcript.txt" || fail 'stop wrote into a deleted call'
+  pass 'a delete while stop is still stopping the recorder wins, and stop leaves no ghost call'
 }
 
 test_watch_reminds_and_stops_but_never_starts() {
@@ -747,6 +789,7 @@ test_consent_gate_and_settings
 test_start_stop_records_agreement_in_home
 test_caption_reader_stops_in_time
 test_unfinished_call_is_closed_out
+test_delete_while_stop_waits_wins
 test_watch_reminds_and_stops_but_never_starts
 test_mic_pipeline_overlap_and_cleanup
 test_live_desk_grounding

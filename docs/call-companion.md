@@ -69,6 +69,7 @@ It then moves the call into `data/calls/archive/` under the stamp it got when it
 A stopped call cannot be resumed; start a new one.
 If the notes fail, the call stays in place so `bin/fm-call-companion.sh notes` can retry them, and the next `start` archives it.
 If the recorder died mid-call, for example when the Mac restarted, `stop` still closes the call out the same way.
+Starting the next call while `stop` is still writing the notes is fine: the notes land in the archive with the call they belong to.
 If the call watcher is installed, it also stops a running recording on its own once the call has been gone for three minutes.
 
 ## Delete a recording

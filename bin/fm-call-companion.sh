@@ -460,20 +460,35 @@ stop_component() {
   rm -f "$pid_file"
 }
 
-# Authoritative notes from the whole transcript; a failure never blocks stop or reset.
+# Authoritative notes from the whole transcript of call <stamp>; a failure never
+# blocks stop or reset. They are written under the logs and land with their
+# call: in place, in the archive if it was archived meanwhile, or nowhere if it
+# was deleted meanwhile.
 write_final_notes() {
-  local stamp call_date
+  local stamp=$1 call_date out status=0 notes_file
   [ "$FINAL_NOTES" = 1 ] || return 0
   has_transcript_lines || return 0
-  if stamp=$(fm_call_stamp); then call_date="${stamp:0:4}-${stamp:4:2}-${stamp:6:2}"; else call_date=$(date '+%Y-%m-%d'); fi
+  if [ -n "$stamp" ]; then call_date="${stamp:0:4}-${stamp:4:2}-${stamp:6:2}"; else call_date=$(date '+%Y-%m-%d'); fi
   printf 'companion: writing end-of-call notes from the full transcript (a few minutes)\n'
-  if "$PYTHON_BIN" "$NOTES_SCRIPT" --transcript "$TRANSCRIPT" --live-items "$LIVE_ITEMS" --out-dir "$DATA_DIR" \
-    --date "$call_date" --local-name "$LOCAL_SPEAKER" --model "$NOTES_MODEL" >> "$LOG_DIR/final-notes.log" 2>&1; then
-    printf 'companion: end-of-call notes at %s/notes.md and notes.html\n' "$DATA_DIR"
+  out=$(mktemp -d "$LOG_DIR/notes.XXXXXX")
+  "$PYTHON_BIN" "$NOTES_SCRIPT" --transcript "$TRANSCRIPT" --live-items "$LIVE_ITEMS" --out-dir "$out" \
+    --date "$call_date" --local-name "$LOCAL_SPEAKER" --model "$NOTES_MODEL" >> "$LOG_DIR/final-notes.log" 2>&1 || status=1
+  if [ "$(fm_call_stamp || true)" = "$stamp" ]; then
+    mkdir -p "$DATA_DIR"
+    for notes_file in $NOTES_FILES; do [ ! -f "$out/$notes_file" ] || mv "$out/$notes_file" "$DATA_DIR/$notes_file"; done
+    if [ "$status" -eq 0 ]; then
+      printf 'companion: end-of-call notes at %s/notes.md and notes.html\n' "$DATA_DIR"
+    else
+      printf 'companion: end-of-call notes failed; see %s/final-notes.log, then rerun fm-call-companion.sh notes\n' "$LOG_DIR" >&2
+    fi
+  elif [ -n "$stamp" ] && [ -n "$(find "$ARCHIVE_DIR" -maxdepth 1 -type f -name "$stamp-*" 2>/dev/null)" ]; then
+    for notes_file in $NOTES_FILES; do [ ! -f "$out/$notes_file" ] || mv "$out/$notes_file" "$ARCHIVE_DIR/$stamp-$notes_file"; done
+    printf 'companion: call %s was archived while its notes were written; they are in the archive\n' "$stamp"
   else
-    printf 'companion: end-of-call notes failed; see %s/final-notes.log, then rerun fm-call-companion.sh notes\n' "$LOG_DIR" >&2
-    return 1
+    printf 'companion: the call was deleted while its notes were written; discarded them\n'
   fi
+  rm -rf "$out"
+  return "$status"
 }
 
 stop_parts() {
@@ -494,8 +509,10 @@ remove_unarchived_notes() {
 
 stop_all() {
   local failed=0 was_running=false stamp notes_written=false
-  if any_started && call_in_place; then was_running=true; fi
+  stamp=$(fm_call_stamp) || stamp=
+  if [ -n "$stamp" ] && any_started; then was_running=true; fi
   stop_parts || failed=1
+  [ "$(fm_call_stamp || true)" = "$stamp" ] || was_running=false
   if [ "$was_running" = true ]; then
     transcript_note 'recording stopped'
     "$FM_CALL_BIN/fm-call-digest.sh" --final-batch || failed=1
@@ -503,14 +520,8 @@ stop_all() {
   restore_loopback_output || failed=1
   hide_desk_display || true
   if [ "$was_running" = true ]; then
-    stamp=$(fm_call_stamp) || stamp=
-    ! write_final_notes || notes_written=true
-    if [ "$(fm_call_stamp || true)" != "$stamp" ]; then
-      remove_unarchived_notes
-      printf 'companion: the call was deleted or archived while its notes were written; discarded them\n'
-    elif [ "$notes_written" = true ] && ! any_running; then
-      reset_companion
-    fi
+    ! write_final_notes "$stamp" || notes_written=true
+    if [ "$notes_written" = true ] && [ "$(fm_call_stamp || true)" = "$stamp" ] && ! any_running; then reset_companion; fi
   fi
   [ "$failed" -eq 0 ] || exit 1
   printf 'companion: stopped\n'
@@ -689,7 +700,7 @@ main() {
       ;;
     notes)
       [ "$#" -eq 1 ] || { usage; exit 2; }
-      FINAL_NOTES=1 write_final_notes
+      FINAL_NOTES=1 write_final_notes "$(fm_call_stamp || true)"
       ;;
     list)
       [ "$#" -eq 1 ] || { usage; exit 2; }
