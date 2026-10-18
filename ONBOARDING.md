@@ -56,7 +56,7 @@ You should see: `gh auth status` says you are logged in to github.com, and `clau
 
 Your first mate and its workers run inside [Herdr](https://herdr.dev), a terminal view made for AI agents: every worker shows up in its sidebar, with whether it is working or waiting for you.
 
-Coming from [ONBOARDING-windows.md](ONBOARDING-windows.md)? Its setup script already did the first part; start at **Open Herdr** below.
+Coming from [ONBOARDING-windows.md](ONBOARDING-windows.md)? Its setup script already did the first part, and its step 8 opened Herdr; start at **Start your first mate**, in Herdr's shell.
 Coming from [ONBOARDING-linux-server.md](ONBOARDING-linux-server.md)? A server runs in tmux instead; start at **Start your first mate**, inside your tmux session.
 
 **Get Starship and set up Herdr:**

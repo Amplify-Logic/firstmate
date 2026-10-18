@@ -7,9 +7,9 @@
 #   - Herdr: a herdr that passes the adapter's own version gate
 #     (bin/backends/herdr.sh fm_backend_herdr_version_check) is kept; otherwise
 #     bin/fm-install-herdr.sh installs its pinned, checksum-verified release
-#     into ~/.local/bin, and one line in the shell profile (~/.zprofile on a
-#     Mac; ~/.profile and ~/.bashrc on Linux) puts ~/.local/bin on PATH for
-#     new terminals.
+#     into ~/.local/bin. Whenever the herdr in use lives in ~/.local/bin, one
+#     line in the shell profile (~/.zprofile on a Mac; ~/.profile and ~/.bashrc
+#     on Linux) puts ~/.local/bin on PATH for new terminals.
 #   - Herdr's Claude Code integration (`herdr integration install claude`),
 #     which lets Herdr show each Claude's working, idle and blocked state.
 #     Herdr needs ~/.claude to exist, so the folder is made first when Claude
@@ -89,6 +89,9 @@ else
   say "Herdr (pinned release, into $LOCAL_BIN)"
   "$INSTALL_HERDR" "$LOCAL_BIN" >/dev/null || die "installing Herdr failed"
   herdr_usable || die "Herdr was installed to $LOCAL_BIN, but the herdr found on PATH is $(command -v herdr || echo none) and does not pass the version check; remove the older one, then run this again"
+fi
+
+if [ "$(command -v herdr)" = "$LOCAL_BIN/herdr" ]; then
   # shellcheck disable=SC2016  # written for the shell to expand later
   path_line='case ":$PATH:" in *":$HOME/.local/bin:"*) ;; *) PATH="$HOME/.local/bin:$PATH" ;; esac'
   if [ "$(uname -s)" = Darwin ]; then

@@ -109,6 +109,19 @@ test_a_usable_herdr_is_kept_and_an_old_one_replaced() {
   [ "$status" -eq 0 ] || fail "setup with Herdr present should succeed, got $status: $out"
   assert_not_contains "$(calls "$w")" "install-herdr" "a Herdr that passes the version gate is kept"
   assert_contains "$out" "Herdr 0.9.5 already present" "the kept Herdr is named"
+  for rc in $(profile_files); do
+    [ ! -e "$w/home/$rc" ] || fail "a Herdr outside ~/.local/bin should not add a PATH line to $rc"
+  done
+
+  w=$(make_world earlier-install)
+  write_fake_herdr "$w/home/.local/bin"
+  out=$(run_setup "$w")
+  status=$?
+  [ "$status" -eq 0 ] || fail "setup with an earlier ~/.local/bin Herdr should succeed, got $status: $out"
+  assert_not_contains "$(calls "$w")" "install-herdr" "an earlier ~/.local/bin Herdr is kept"
+  for rc in $(profile_files); do
+    assert_contains "$(cat "$w/home/$rc" 2>/dev/null)" '.local/bin' "a kept ~/.local/bin Herdr is found by new terminals through $rc"
+  done
 
   w=$(make_world old)
   write_fake_herdr "$w/old"
@@ -118,7 +131,7 @@ test_a_usable_herdr_is_kept_and_an_old_one_replaced() {
   [ "$status" -eq 1 ] || fail "a still-too-old herdr on PATH after install should fail, got $status: $out"
   assert_contains "$(calls "$w")" "install-herdr $w/home/.local/bin" "a Herdr below the protocol floor is replaced"
   assert_contains "$out" "does not pass the version check" "the failure says the herdr found is still too old"
-  pass "a Herdr that passes the adapter's version gate is kept, and one below it gets the pinned release"
+  pass "a Herdr that passes the adapter's version gate is kept, one in ~/.local/bin gets the PATH line, and one below the gate gets the pinned release"
 }
 
 test_a_configured_home_keeps_its_runtime() {

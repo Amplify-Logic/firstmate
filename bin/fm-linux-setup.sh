@@ -232,7 +232,6 @@ main() {
     if [ -x "$TARGET/bin/fm-herdr-setup.sh" ]; then
       HERDR_WANTED=1
       FM_HOME="$TARGET" "$TARGET/bin/fm-herdr-setup.sh" --quiet </dev/null || die "setting up Herdr failed"
-      PATH="$LOCAL_BIN:$PATH"
     else
       warn "this Starship copy predates the Herdr setup; update it with 'git -C $TARGET pull', then run $TARGET/bin/fm-herdr-setup.sh"
     fi
