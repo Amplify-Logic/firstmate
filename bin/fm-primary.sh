@@ -18,7 +18,7 @@
 #                 Both Claude profiles use the first trimmed line of local
 #                 gitignored config/primary-effort when that file exists,
 #                 otherwise the default for the signed-in Claude plan:
-#                 medium on Pro, high on Max 5x, xhigh on Max 20x, and xhigh
+#                 medium on Pro, high on Max 5x, xhigh on Max 20x, and high
 #                 when the plan cannot be read (see "Plan default" below).
 #                 Accepted tokens: low, medium, high, xhigh, max.
 #                 Any other content, including an empty token, refuses.
@@ -172,9 +172,10 @@
 # Max 20x differ. A tier naming 20x or 5x decides; otherwise a pro or max
 # subscription decides, a Max whose tier is unreadable taking the Max 5x
 # default. Anything else (an API key, a Team or Enterprise seat, a logged-out
-# or unanswering CLI) keeps xhigh, the default before plans were read. `max` is
-# never a plan default; it is reached only by writing it into
-# config/primary-effort. The launch line names the plan the default came from.
+# or unanswering CLI) takes high, the standing Opus default, so a seat whose
+# plan cannot be read is never spent at the Max 20x depth. `max` is never a plan
+# default; it is reached only by writing it into config/primary-effort. The
+# launch line names the plan the default came from.
 # tests/fm-primary-plan-live-e2e.test.sh re-proves both readings on the real CLI.
 #
 # Starter settings: a real Claude-profile launch of a fresh home - one whose
@@ -424,7 +425,7 @@ resolve_claude_effort() {
       pro) CLAUDE_EFFORT=medium; CLAUDE_EFFORT_SOURCE="the default for a Claude Pro plan" ;;
       max5) CLAUDE_EFFORT=high; CLAUDE_EFFORT_SOURCE="the default for a Claude Max 5x plan" ;;
       max20) CLAUDE_EFFORT=xhigh; CLAUDE_EFFORT_SOURCE="the default for a Claude Max 20x plan" ;;
-      *) CLAUDE_EFFORT=xhigh; CLAUDE_EFFORT_SOURCE="the default when the Claude plan cannot be read" ;;
+      *) CLAUDE_EFFORT=high; CLAUDE_EFFORT_SOURCE="the default when the Claude plan cannot be read" ;;
     esac
     CLAUDE_EFFORT_SOURCE="$CLAUDE_EFFORT_SOURCE; config/primary-effort sets your own"
     return 0

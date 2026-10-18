@@ -3034,7 +3034,7 @@ When the file is absent, the effort follows the Claude plan the first mate is si
 | Claude Pro | `medium` |
 | Claude Max 5x | `high` |
 | Claude Max 20x | `xhigh` |
-| Anything the launcher cannot read as one of these | `xhigh` |
+| Anything the launcher cannot read as one of these | `high` |
 
 `max` is never a default; it is reached only by writing it into this file.
 The launch line names the effort and the plan it came from, and `bin/fm-primary.sh`'s header owns how the plan is read.

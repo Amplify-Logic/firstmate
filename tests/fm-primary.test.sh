@@ -109,7 +109,7 @@ test_profiles_and_root() {
   assert_not_contains "$out" 'permission' "Pi profile invented a permission bypass"
 
   out=$(dry claude-fable)
-  assert_contains "$out" "'claude' '--model' 'claude-fable-5-1' '--effort' 'xhigh' '--name' 'FIRSTMATE' '--dangerously-skip-permissions'" \
+  assert_contains "$out" "'claude' '--model' 'claude-fable-5-1' '--effort' 'high' '--name' 'FIRSTMATE' '--dangerously-skip-permissions'" \
     "Claude Fable profile did not pin model, default effort, role, and bypass"
   assert_contains "$out" "CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP=1" \
     "Claude Fable dry-run omitted the background-shell pressure-reap disable"
@@ -119,7 +119,7 @@ test_profiles_and_root() {
     "Pi dry-run leaked the Claude pressure-reap env line"
 
   out=$(dry claude-opus)
-  assert_contains "$out" "'claude' '--model' 'claude-opus-5-5' '--effort' 'xhigh' '--name' 'FIRSTMATE' '--dangerously-skip-permissions'" \
+  assert_contains "$out" "'claude' '--model' 'claude-opus-5-5' '--effort' 'high' '--name' 'FIRSTMATE' '--dangerously-skip-permissions'" \
     "Claude Opus profile did not pin model, default effort, role, and bypass"
   assert_contains "$out" "CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP=1" \
     "Claude Opus dry-run omitted the background-shell pressure-reap disable"
@@ -858,9 +858,9 @@ test_claude_effort() {
   out=$(dry claude-fable 2>&1)
   assert_contains "$out" "'--model' 'claude-fable-5-1'" \
     "absent primary-effort did not launch claude-fable-5-1"
-  assert_contains "$out" "'--effort' 'xhigh'" \
-    "absent primary-effort did not default to xhigh"
-  assert_contains "$out" "launching model claude-fable-5-1 at effort xhigh" \
+  assert_contains "$out" "'--effort' 'high'" \
+    "absent primary-effort with an unreadable plan did not default to high"
+  assert_contains "$out" "launching model claude-fable-5-1 at effort high" \
     "absent primary-effort did not print the resolved model and effort"
 
   printf 'high\n' > "$effort_file"
@@ -889,7 +889,7 @@ test_claude_effort() {
   assert_contains "$out" "turbo" "invalid-effort refusal did not name the bad value"
   assert_contains "$out" "low medium high xhigh max" \
     "invalid-effort refusal did not name the accepted set"
-  assert_not_contains "$out" "'--effort' 'xhigh'" \
+  assert_not_contains "$out" "'--effort' 'high'" \
     "invalid-effort silently fell back to the default"
 
   : > "$effort_file"
@@ -1042,11 +1042,14 @@ test_claude_effort_follows_the_plan() {
   assert_contains "$out" "'--effort' 'high'" "a Max plan with no readable tier did not take the Max 5x default"
 
   out=$(plan_dry team default_claude_team claude-opus)
-  assert_contains "$out" "'--effort' 'xhigh'" "an unrecognized plan did not keep the xhigh default"
+  assert_contains "$out" "'--effort' 'high'" "an unrecognized plan did not fall back to high"
+  assert_not_contains "$out" "'--effort' 'xhigh'" "an unrecognized plan was spent at the Max 20x depth"
   assert_contains "$out" "the Claude plan cannot be read" "an unrecognized plan was not reported as unread"
 
-  out=$(FM_PRIMARY_TEST_LOGGED_OUT=1 plan_dry pro default_claude_ai claude-opus)
-  assert_contains "$out" "'--effort' 'xhigh'" "a logged-out CLI did not keep the xhigh default"
+  out=$(FM_PRIMARY_TEST_LOGGED_OUT=1 plan_dry max default_claude_max_20x claude-opus)
+  assert_contains "$out" "'--effort' 'high'" "a logged-out CLI did not fall back to high"
+  assert_not_contains "$out" "'--effort' 'xhigh'" "a logged-out CLI took a Max 20x tier it could not confirm"
+  assert_contains "$out" "the Claude plan cannot be read" "a logged-out CLI was not reported as unread"
 
   out=$(plan_dry max default_claude_max_20x astra)
   assert_contains "$out" 'model_reasoning_effort="xhigh"' "the Claude plan reached the Astra effort"
@@ -1303,7 +1306,7 @@ test_account_absent_registry_changes_nothing() {
     assert_not_contains "$out" 'CODEX_HOME' "$profile pinned a Codex home with no registry"
   done
   out=$(dry claude-fable 2>/dev/null)
-  assert_contains "$out" "'claude' '--model' 'claude-fable-5-1' '--effort' 'xhigh' '--name' 'FIRSTMATE' '--dangerously-skip-permissions'" \
+  assert_contains "$out" "'claude' '--model' 'claude-fable-5-1' '--effort' 'high' '--name' 'FIRSTMATE' '--dangerously-skip-permissions'" \
     "an absent registry changed the Claude Fable argv"
   out=$(dry codex 2>/dev/null)
   assert_contains "$out" "'codex' '--dangerously-bypass-hook-trust' '--dangerously-bypass-approvals-and-sandbox'" \

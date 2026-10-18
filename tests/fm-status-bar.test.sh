@@ -430,6 +430,14 @@ test_idle_home_without_records_shows_supervision_calmly() {
     assert_contains "$out" $'\033[91;1m👁 NO-WATCH --' "a $kind record with no beacon did not raise the bright-red NO-WATCH"
   done
   reset_fleet
+  printf '#!/bin/sh\n' > "$HOME_FIX/state/mail.check.sh"
+  rm -f "$HOME_FIX/state/.last-watcher-beat"
+  out=$(render Opus high 50 10 0)
+  assert_contains "$out" $'\033[91;1m👁 NO-WATCH --' "a registered check with no beacon did not raise the bright-red NO-WATCH"
+  : > "$HOME_FIX/state/.last-watcher-beat"
+  out=$(FM_STATUS_BAR_TEST_BEAT_EPOCH=800 render Opus high 50 10 0)
+  assert_contains "$out" $'\033[91;1m👁 NO-WATCH 200s' "a registered check with a stale beacon did not raise the bright-red NO-WATCH"
+  rm -f "$HOME_FIX/state/mail.check.sh"
   pass "status bar: an idle home with no records shows supervision calmly"
 }
 
