@@ -14,10 +14,12 @@
 # start" records the measurement.
 #
 # This drives the REAL bin/fm-spawn.sh with --harness claude into a real Herdr
-# lab session. The claude on PATH is a stand-in whose argv[0] is `claude`, so
-# Herdr registers it exactly as it registers Claude Code, and no model token is
-# spent and no account is used. Its Claude config dir is a scratch directory,
-# so the spawn's trust registration never touches the operator's own.
+# lab session. The claude every lab pane finds is a stand-in whose process name
+# is `claude`, so Herdr registers it exactly as it registers Claude Code, and no
+# model token is spent and no account is used; the lab's pane shell guarantees
+# no pane can start an installed Claude Code (see the pane shell below). Its
+# Claude config dir is a scratch directory, so the spawn's trust registration
+# never touches the operator's own.
 # On a Herdr release without the placeholder the guard still runs and passes,
 # and says so.
 #
@@ -66,31 +68,6 @@ cleanup_all() {
   return "$status"
 }
 trap cleanup_all EXIT
-"$HERDR_LAB_HELPER" provision "$HERDR_LAB_SESSION" || fail "could not provision isolated Herdr lab session"
-
-lab() { "$HERDR_LAB_HELPER" run "$HERDR_LAB_SESSION" "$@"; }
-
-# --- scratch world ----------------------------------------------------------
-
-PROJ="$TMP_ROOT/scratch-project"
-mkdir -p "$PROJ"
-git -C "$PROJ" init -q
-printf '# scratch\n' > "$PROJ/README.md"
-git -C "$PROJ" add README.md
-git -C "$PROJ" -c user.name='Firstmate Tests' -c user.email='tests@example.invalid' commit -qm initial
-git clone --quiet --bare "$PROJ" "$PROJ.origin.git"
-git -C "$PROJ" remote add origin "file://$PROJ.origin.git"
-
-HOME_DIR="$TMP_ROOT/home"
-mkdir -p "$HOME_DIR/state" "$HOME_DIR/config" "$HOME_DIR/data/agentup"
-cat > "$HOME_DIR/data/agentup/brief.md" <<'EOF'
-# Task
-## Captain's intent
-Exercise the agent-up gate on Herdr.
-
-## Firstmate spec
-Nothing to build.
-EOF
 
 # A stand-in Claude: the long-running process is a symlink named `claude` to
 # fm_agent_standin's stand-in, so the kernel records `claude` as its process
@@ -118,6 +95,68 @@ chmod +x "$FAKEBIN/claude"
 CLAUDE_DIR="$TMP_ROOT/claude-config"
 mkdir -p "$CLAUDE_DIR"
 printf '{}\n' > "$CLAUDE_DIR/.claude.json"
+
+# Every pane the spawn opens starts the lab server's $SHELL as a login shell,
+# and a login shell rebuilds PATH from the operator's own rc files, so the
+# stand-in on fm-spawn's PATH never reaches the pane: on a host with Claude
+# Code installed the pane would start the operator's real claude with the
+# operator's own config, and on one without it the launch finds no claude at
+# all. The lab is therefore provisioned with a pane shell that puts the
+# stand-in first and points Claude at a scratch config, and reads no rc file.
+PANE_SHELL_DIR="$TMP_ROOT/paneshell"
+mkdir -p "$PANE_SHELL_DIR"
+BASH_BIN=$(command -v bash)
+cat > "$PANE_SHELL_DIR/bash" <<SH
+#!$BASH_BIN
+export PATH='$FAKEBIN':"\$PATH"
+export CLAUDE_CONFIG_DIR='$CLAUDE_DIR'
+exec '$BASH_BIN' --noprofile --norc -i
+SH
+chmod +x "$PANE_SHELL_DIR/bash"
+
+SHELL="$PANE_SHELL_DIR/bash" "$HERDR_LAB_HELPER" provision "$HERDR_LAB_SESSION" \
+  || fail "could not provision isolated Herdr lab session"
+
+lab() { "$HERDR_LAB_HELPER" run "$HERDR_LAB_SESSION" "$@"; }
+
+# Prove the pane shell took before anything is launched: a lab pane must
+# resolve `claude` to the stand-in, never to an installed Claude Code.
+PROBE_WS=$(lab workspace create --cwd "$TMP_ROOT" --label fm-path-probe --no-focus) \
+  || fail "could not create the pane-shell probe workspace"
+PROBE_PANE=$(printf '%s' "$PROBE_WS" | jq -r '.result.root_pane.pane_id // empty')
+[ -n "$PROBE_PANE" ] || fail "the pane-shell probe workspace returned no pane"
+lab pane run "$PROBE_PANE" "command -v claude > '$TMP_ROOT/pane-claude'" >/dev/null \
+  || fail "could not run the pane-shell probe"
+for _ in $(seq 1 50); do
+  [ -s "$TMP_ROOT/pane-claude" ] && break
+  sleep 0.1
+done
+PANE_CLAUDE=$(cat "$TMP_ROOT/pane-claude" 2>/dev/null)
+[ "$PANE_CLAUDE" = "$FAKEBIN/claude" ] \
+  || fail "a lab pane resolves claude to '${PANE_CLAUDE:-nothing}', not the stand-in $FAKEBIN/claude"
+pass "a lab pane resolves claude to the stand-in, never an installed Claude Code"
+
+# --- scratch world ----------------------------------------------------------
+
+PROJ="$TMP_ROOT/scratch-project"
+mkdir -p "$PROJ"
+git -C "$PROJ" init -q
+printf '# scratch\n' > "$PROJ/README.md"
+git -C "$PROJ" add README.md
+git -C "$PROJ" -c user.name='Firstmate Tests' -c user.email='tests@example.invalid' commit -qm initial
+git clone --quiet --bare "$PROJ" "$PROJ.origin.git"
+git -C "$PROJ" remote add origin "file://$PROJ.origin.git"
+
+HOME_DIR="$TMP_ROOT/home"
+mkdir -p "$HOME_DIR/state" "$HOME_DIR/config" "$HOME_DIR/data/agentup"
+cat > "$HOME_DIR/data/agentup/brief.md" <<'EOF'
+# Task
+## Captain's intent
+Exercise the agent-up gate on Herdr.
+
+## Firstmate spec
+Nothing to build.
+EOF
 
 # --- observe the registration while the spawn runs ----------------------------
 
@@ -165,44 +204,3 @@ STATE=$(
 )
 [ "$STATE" = alive ] || fail "the running stand-in claude reads '$STATE' rather than alive on herdr $HERDR_VERSION"
 pass "real herdr $HERDR_VERSION: the spawned worker's endpoint reads alive afterwards"
-
-# --- the real Claude Code, when installed -----------------------------------
-#
-# The stand-in proves the spawn path; how the real CLI presents to Herdr's
-# detection and to the process classifier is the vendor fact the verdict rests
-# on. It starts with no prompt and a scratch config dir, so it sits at its
-# first-run screen: no account, no sign-in, no model token.
-if ! command -v claude >/dev/null 2>&1; then
-  note "claude is not installed here; the real-harness stage did not run (the stand-in stage above did)"
-  exit 0
-fi
-CLAUDE_VERSION=$(claude --version 2>/dev/null | head -1)
-REAL_DIR="$TMP_ROOT/real-claude"
-mkdir -p "$REAL_DIR/config" "$REAL_DIR/cwd"
-REAL_WS=$(lab workspace create --cwd "$REAL_DIR/cwd" --label fm-real-claude --no-focus) \
-  || fail "could not create the real-claude lab workspace"
-REAL_PANE=$(printf '%s' "$REAL_WS" | jq -r '.result.root_pane.pane_id // empty')
-[ -n "$REAL_PANE" ] || fail "the real-claude workspace returned no pane"
-lab pane run "$REAL_PANE" "CLAUDE_CONFIG_DIR='$REAL_DIR/config' claude" >/dev/null \
-  || fail "could not start claude in the lab pane"
-SEEN=
-for _ in $(seq 1 40); do
-  STATUS=$(lab agent get "$REAL_PANE" 2>/dev/null | jq -r '.result.agent.agent_status // empty')
-  STATUS=${STATUS:-none}
-  STATE=$(
-    # shellcheck source=bin/fm-backend.sh
-    . "$ROOT/bin/fm-backend.sh"
-    fm_backend_agent_state herdr "$HERDR_LAB_SESSION:$REAL_PANE"
-  )
-  SEEN="$SEEN $STATUS/$STATE"
-  case "$STATE" in
-    unreadable) fail "a starting real claude ($CLAUDE_VERSION) reads unreadable on herdr $HERDR_VERSION (registration '$STATUS'; seen:$SEEN)" ;;
-  esac
-  [ "$STATE" = alive ] && [ "$STATUS" != unknown ] && break
-  sleep 0.5
-done
-lab pane send-keys "$REAL_PANE" ctrl+c >/dev/null 2>&1 || true
-lab pane send-keys "$REAL_PANE" ctrl+c >/dev/null 2>&1 || true
-[ "$STATE" = alive ] || fail "a running real claude ($CLAUDE_VERSION) never read alive on herdr $HERDR_VERSION (seen:$SEEN)"
-note "claude $CLAUDE_VERSION under herdr $HERDR_VERSION, registration/state while starting:$SEEN"
-pass "real herdr $HERDR_VERSION + claude $CLAUDE_VERSION: a starting Claude Code reads alive, never unreadable"

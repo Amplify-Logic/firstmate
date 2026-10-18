@@ -1964,8 +1964,11 @@ herdr 0.7.4, real claude:  agent_not_found, then idle within a second, then bloc
 Herdr 0.9.5 creates the record with its placeholder `unknown` status the moment it notices the harness, and holds it for seconds before screen detection or the integration reports a state; 0.7.4 never showed it at start.
 The adapter read that placeholder as `unreadable`, so the spawn's one-second agent-up gate (`bin/fm-spawn.sh` `spawn_wait_agent_up`) saw two unreadable reads in a row and ended with "The herdr pane could not be read for the claude harness; delivery proceeded UNVERIFIED".
 `fm_backend_herdr_pane_agent_state` now settles the placeholder by the process view: a running harness process reads `live`, a shell-only pane reads `stale-agent`, and anything else stays `unknown`.
-`tests/fm-spawn-herdr-agent-up-live-e2e.test.sh` drives the real `bin/fm-spawn.sh --harness claude` into a lab session with the stand-in, reproduced the warning on the unfixed tree with Herdr 0.9.5, and passes on both releases; `tests/fm-backend-herdr.test.sh` pins the classifier with canned bodies.
-Its stand-in is a symlink named `claude` to a long-running native stand-in rather than the measurement's `exec -a claude`, because `exec -a` renames argv[0] only and Linux keeps the kernel process name `sleep`, so Herdr 0.9.5 on Ubuntu CI never registered it.
+`tests/fm-spawn-herdr-agent-up-live-e2e.test.sh` drives the real `bin/fm-spawn.sh --harness claude` into a lab session and passes on both releases; `tests/fm-backend-herdr.test.sh` pins the classifier with canned bodies.
+Its first version reproduced the warning on the unfixed tree with Herdr 0.9.5, but its pane ran the operator's installed Claude Code, not the stand-in: every pane the spawn opens starts the lab server's `$SHELL` as a login shell, which rebuilds PATH from the operator's rc files, so the stand-in on fm-spawn's own PATH never reached it (it sat at its trust dialog and ran no turn).
+On Ubuntu CI, with no Claude Code installed, the same pane found no `claude` at all and the gate correctly refused the spawn.
+The test now provisions its lab with a pane shell that puts the stand-in first, points Claude at a scratch config and reads no rc file, and proves a lab pane resolves the stand-in before it spawns.
+The stand-in is a symlink named `claude` to a long-running native stand-in rather than the measurement's `exec -a claude`, because `exec -a` renames argv[0] only and Linux keeps the kernel process name `sleep`.
 The same reproduction was not run inside WSL 2: the version, not the platform, decides the placeholder, and the WSL machine ran 0.9.5.
 
 ### Stale agent registration
