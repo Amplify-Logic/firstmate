@@ -262,7 +262,10 @@ if [ -f "$SECONDMATES_MD" ]; then
           *) echo "remote secondmate $id: skipped on $SECONDMATE_REGISTRY_HOST: malformed update result" >&2 ;;
         esac
       else
-        echo "remote secondmate $id: skipped on $SECONDMATE_REGISTRY_HOST: ${remote_out%%$'\n'*}" >&2
+        remote_reason=$(printf '%s\n' "$remote_out" | awk '!/^add-on: / { print; exit }')
+        [ -n "$remote_reason" ] || remote_reason=${remote_out%%$'\n'*}
+        echo "remote secondmate $id: skipped on $SECONDMATE_REGISTRY_HOST: $remote_reason" >&2
+        relay_remote_addon "$id" "$remote_out"
       fi
     else
       process_secondmate "$id" "$home" "" origin yes

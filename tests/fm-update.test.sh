@@ -627,10 +627,14 @@ test_addon_that_cannot_advance_is_reported_and_left() {
   pass "T14 an add-on that cannot advance is reported and left as it is, and no add-on prints nothing"
 }
 
-test_remote_addon_line_is_relayed() {
-  local w out fake_ssh
-  w=$(new_world t15)
+# remote_world <world> <update reply>: give the world one live remote
+# secondmate sm1 on remote-mac, reached through a fake ssh whose remote
+# `fm-remote-secondmate-control.sh update` runs <update reply> as bash, and
+# print that fake ssh.
+remote_world() {
+  local w=$1 fake_ssh
   fake_ssh="$w/fakebin/fake-ssh"
+  printf '%s\n' "$2" > "$w/fakebin/remote-update.sh"
   cat > "$fake_ssh" <<'SH'
 #!/usr/bin/env bash
 set -u
@@ -644,7 +648,7 @@ decode() { printf '%s' "$1" | base64 --decode 2>/dev/null || printf '%s' "$1" | 
 rargs=()
 while IFS= read -r -d '' a; do rargs+=("$a"); done < <(decode "$argv_b64")
 case "${rargs[1]:-}" in
-  update) printf 'add-on: updated 1111111..2222222\ncurrent: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n' ;;
+  update) . "${0%/*}/remote-update.sh" ;;
   state) printf 'alive\n' ;;
   *) exit 91 ;;
 esac
@@ -663,6 +667,13 @@ remote_backend=herdr
 EOF
   printf -- '- sm1 - remote domain (host: remote-mac; root: /srv/fm; home: /srv/sm1; scope: things; projects: p; added 2026-09-03)\n' \
     > "$w/home/data/secondmates.md"
+  printf '%s\n' "$fake_ssh"
+}
+
+test_remote_addon_line_is_relayed() {
+  local w out fake_ssh
+  w=$(new_world t15)
+  fake_ssh=$(remote_world "$w" "printf 'add-on: updated 1111111..2222222\\ncurrent: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\\n'")
 
   out=$(FM_TEST_SSH_BIN="$fake_ssh" run_update "$w")
 
@@ -670,6 +681,22 @@ EOF
   assert_contains "$out" "remote secondmate sm1 add-on: updated 1111111..2222222" "the remote home's add-on line must be relayed"
   assert_contains "$out" "restart-secondmates: fm-sm1" "the remote add-on line must not disturb the restart routing"
   pass "T15 a remote home's add-on update is relayed beside its own result"
+}
+
+# --- T16: a remote home that fails after its add-on line names its own error -
+test_remote_failure_after_addon_line_names_its_error() {
+  local w out fake_ssh
+  w=$(new_world t16)
+  fake_ssh=$(remote_world "$w" "printf 'add-on: skipped: dirty working tree\\n'; echo 'error: remote secondmate home sync skipped: dirty working tree' >&2; exit 1")
+
+  out=$(PATH="$w/fakebin:$PATH" FM_FAKE_DIR="$w/fake" FM_SSH_BIN="$fake_ssh" \
+    FM_ROOT_OVERRIDE="$w/main" FM_HOME="$w/home" "$UPDATE" 2>&1)
+
+  assert_contains "$out" "remote secondmate sm1: skipped on remote-mac: error: remote secondmate home sync skipped: dirty working tree" \
+    "the skip line must name the remote home's own error, not its add-on line"
+  assert_contains "$out" "remote secondmate sm1 add-on: skipped: dirty working tree" "the remote home's add-on line must still be relayed"
+  assert_contains "$out" "restart-secondmates: none" "a remote home that failed must not be restarted"
+  pass "T16 a remote home that fails after its add-on line names its own error and still relays the add-on"
 }
 
 test_updates_main_and_secondmate
@@ -691,5 +718,6 @@ test_primary_update_rebinds_local_watch
 test_addon_fast_forwards_with_the_update
 test_addon_that_cannot_advance_is_reported_and_left
 test_remote_addon_line_is_relayed
+test_remote_failure_after_addon_line_names_its_error
 
 echo "# all fm-update tests passed"
