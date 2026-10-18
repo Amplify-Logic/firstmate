@@ -863,23 +863,23 @@ test_claude_effort() {
   assert_contains "$out" "launching model claude-fable-5-1 at effort high" \
     "absent primary-effort did not print the resolved model and effort"
 
-  printf 'high\n' > "$effort_file"
+  printf 'medium\n' > "$effort_file"
   out=$(dry claude-fable 2>/dev/null)
-  assert_contains "$out" "'--effort' 'high'" \
-    "primary-effort high did not resolve to high"
+  assert_contains "$out" "'--effort' 'medium'" \
+    "primary-effort medium did not resolve to medium"
   assert_contains "$out" "'--model' 'claude-fable-5-1'" \
-    "primary-effort high lost the Fable 5.1 model pin"
+    "primary-effort medium lost the Fable 5.1 model pin"
 
   out=$(dry claude-opus 2>/dev/null)
-  assert_contains "$out" "'--effort' 'high'" \
-    "primary-effort high did not apply to Claude Opus"
+  assert_contains "$out" "'--effort' 'medium'" \
+    "primary-effort medium did not apply to Claude Opus"
   assert_contains "$out" "'--model' 'claude-opus-5-5'" \
-    "primary-effort high lost the Opus 5.5 model pin"
+    "primary-effort medium lost the Opus 5.5 model pin"
 
-  printf '  high \n' > "$effort_file"
+  printf '  medium \n' > "$effort_file"
   out=$(dry claude-opus 2>/dev/null)
-  assert_contains "$out" "'--effort' 'high'" \
-    "padded primary-effort high was not trimmed to high"
+  assert_contains "$out" "'--effort' 'medium'" \
+    "padded primary-effort medium was not trimmed to medium"
 
   printf 'turbo\n' > "$effort_file"
   status=0
