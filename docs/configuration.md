@@ -2967,7 +2967,7 @@ Rewrites ignore case, match whole tokens (including email addresses, dotted name
 A malformed line is ignored, and a vocabulary that cannot be read never stops a transcription.
 The default model is `nova-3` because only Nova-3 accepts Deepgram's keyterm hints; `DEEPGRAM_STT_MODEL` in the environment or this home's gitignored `.env` overrides it (the environment wins), and an older model gets the terms as boosted keywords instead.
 The script's header owns the hint parameters, the term caps, and the matching rules.
-[`docs/examples/stt-vocabulary`](examples/stt-vocabulary) is a starter template to copy and fill with your own names.
+[`docs/examples/stt-vocabulary`](examples/stt-vocabulary) is the starter template a new home installs on its first launch ([starter settings](#starter-settings-first-launch)); add your own names below its starter words.
 
 ## Call recorder (config/call-companion)
 
