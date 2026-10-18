@@ -40,7 +40,7 @@ On a Mac or inside WSL 2, `bin/fm-herdr-setup.sh` does the whole setup: it keeps
 
 Prerequisites:
 
-- Herdr protocol 14 or newer, installed from [herdr.dev](https://herdr.dev).
+- Herdr protocol 14 or newer, installed by `bin/fm-herdr-setup.sh` or from [herdr.dev](https://herdr.dev).
 - `jq` for JSON responses.
 - The universal harness and toolchain requirements in [`configuration.md`](configuration.md#toolchain).
 - `python3` only for optional protocol-16 presentation-space ordering and native event subscription.
