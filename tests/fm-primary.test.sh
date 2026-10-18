@@ -29,6 +29,11 @@ if [ "${1:-}" = auth ] && [ "${2:-}" = status ] && [ "$(basename "$0")" = claude
     printf '{\n  "loggedIn": false,\n  "authMethod": "none"\n}\n'
     exit 1
   fi
+  if [ -n "${FM_PRIMARY_TEST_CLAUDE_PLAN:-}" ]; then
+    printf '{\n  "loggedIn": true,\n  "email": "seat@example.invalid",\n  "orgId": "%s",\n  "subscriptionType": "%s"\n}\n' \
+      "${FM_PRIMARY_TEST_CLAUDE_ORG:-org-fake-0001}" "$FM_PRIMARY_TEST_CLAUDE_PLAN"
+    exit 0
+  fi
   printf '{\n  "loggedIn": true,\n  "email": "seat@example.invalid",\n  "orgId": "%s"\n}\n' \
     "${FM_PRIMARY_TEST_CLAUDE_ORG:-org-fake-0001}"
   exit 0
@@ -1003,6 +1008,129 @@ JSON
   pass "fm-primary: the Astra context window is selectable, bounded by the installed catalog, and never invented"
 }
 
+# With no config/primary-effort the first mate's effort follows the signed-in
+# Claude plan, so a Pro or Max 5x seat is not spent at the Max 20x depth.
+# plan_dry <plan> <tier> <profile>: a dry run whose account reports that plan
+# and whose account record carries that rate-limit tier ("" writes no record).
+plan_dry() {
+  local dir="$TMP_ROOT/plan-config"
+  rm -rf "$dir"
+  mkdir -p "$dir"
+  [ -z "$2" ] || printf '{"oauthAccount":{"organizationRateLimitTier":"%s"}}\n' "$2" > "$dir/.claude.json"
+  FM_PRIMARY_TEST_CLAUDE_PLAN=$1 CLAUDE_CONFIG_DIR="$dir" dry "$3" 2>&1
+}
+
+test_claude_effort_follows_the_plan() {
+  local out effort_file="$HOME_FIX/config/primary-effort"
+  mkdir -p "$HOME_FIX/config"
+  rm -f "$effort_file"
+
+  out=$(plan_dry pro default_claude_ai claude-opus)
+  assert_contains "$out" "'--effort' 'medium'" "a Pro plan did not default the first mate to medium"
+  assert_contains "$out" "at effort medium (the default for a Claude Pro plan; config/primary-effort sets your own)" \
+    "the launch line did not name the Pro plan default and how to change it"
+
+  out=$(plan_dry max default_claude_max_5x claude-opus)
+  assert_contains "$out" "'--effort' 'high'" "a Max 5x plan did not default the first mate to high"
+  assert_contains "$out" "Claude Max 5x plan" "the launch line did not name the Max 5x plan"
+
+  out=$(plan_dry max default_claude_max_20x claude-fable)
+  assert_contains "$out" "'--effort' 'xhigh'" "a Max 20x plan did not default the first mate to xhigh"
+  assert_contains "$out" "Claude Max 20x plan" "the launch line did not name the Max 20x plan"
+
+  out=$(plan_dry max "" claude-opus)
+  assert_contains "$out" "'--effort' 'high'" "a Max plan with no readable tier did not take the Max 5x default"
+
+  out=$(plan_dry team default_claude_team claude-opus)
+  assert_contains "$out" "'--effort' 'xhigh'" "an unrecognized plan did not keep the xhigh default"
+  assert_contains "$out" "the Claude plan cannot be read" "an unrecognized plan was not reported as unread"
+
+  out=$(FM_PRIMARY_TEST_LOGGED_OUT=1 plan_dry pro default_claude_ai claude-opus)
+  assert_contains "$out" "'--effort' 'xhigh'" "a logged-out CLI did not keep the xhigh default"
+
+  out=$(plan_dry max default_claude_max_20x astra)
+  assert_contains "$out" 'model_reasoning_effort="xhigh"' "the Claude plan reached the Astra effort"
+
+  printf 'low\n' > "$effort_file"
+  out=$(plan_dry max default_claude_max_20x claude-opus)
+  assert_contains "$out" "'--effort' 'low'" "config/primary-effort did not win over the plan default"
+  assert_contains "$out" "from $effort_file" "the launch line did not name config/primary-effort as the source"
+  printf 'max\n' > "$effort_file"
+  out=$(plan_dry pro default_claude_ai claude-opus)
+  assert_contains "$out" "'--effort' 'max'" "config/primary-effort max was not honoured on a Pro plan"
+  rm -f "$effort_file"
+  pass "fm-primary: the first mate's default effort follows the Claude plan, and config/primary-effort wins"
+}
+
+# A Claude launch of a home that has never run installs the starter settings,
+# and nothing else ever writes them.
+# starter_home <name>: a fresh, empty home.
+starter_home() {
+  rm -rf "${TMP_ROOT:?}/$1"
+  mkdir -p "$TMP_ROOT/$1"
+  printf '%s' "$TMP_ROOT/$1"
+}
+
+starter_launch() {  # <home> <profile> [<extra env>...]
+  local home=$1 profile=$2
+  shift 2
+  ( cd "$TMP_ROOT" && \
+    env -u HERDR_ENV -u HERDR_SESSION -u HERDR_PANE_ID -u TMUX_PANE \
+      PATH="$FAKEBIN:$PATH" TERM=dumb FM_HOME="$home" FM_PRIMARY_TEST_LOG="$LOG" "$@" \
+      "$ROOT/bin/fm-primary.sh" "$profile" ) 2>&1
+}
+
+test_fresh_home_gets_the_starter_settings() {
+  local home out name
+  home=$(starter_home starter-fresh)
+  out=$(starter_launch "$home" opus)
+  for name in crew-dispatch.json:crew-dispatch-claude-only.json speak:speak stt-vocabulary:stt-vocabulary; do
+    cmp -s "$ROOT/docs/examples/${name#*:}" "$home/config/${name%%:*}" \
+      || fail "a fresh home's first launch did not install config/${name%%:*} from docs/examples/${name#*:}"
+  done
+  assert_contains "$out" "installed the starter settings config/crew-dispatch.json config/speak config/stt-vocabulary" \
+    "the first launch did not say which starter settings it installed"
+  jq -e '.default.model == "claude-opus-5-5"' "$home/config/crew-dispatch.json" >/dev/null \
+    || fail "the installed routing does not default to Opus 5.5"
+
+  # A second launch of the same home changes nothing and says nothing.
+  printf 'enabled = false\n' > "$home/config/speak"
+  out=$(starter_launch "$home" opus)
+  assert_equals "enabled = false" "$(cat "$home/config/speak")" "a later launch overwrote a changed starter file"
+  assert_not_contains "$out" "starter settings" "a home that has run before was offered the starter settings again"
+
+  # A fresh home's own file is kept; only the missing ones arrive.
+  home=$(starter_home starter-own)
+  mkdir -p "$home/config"
+  printf '{"default":{"harness":"pi"}}\n' > "$home/config/crew-dispatch.json"
+  out=$(starter_launch "$home" claude-fable)
+  assert_equals '{"default":{"harness":"pi"}}' "$(cat "$home/config/crew-dispatch.json")" \
+    "the first launch overwrote the home's own crew-dispatch.json"
+  [ -f "$home/config/speak" ] || fail "a fresh home with its own routing did not get the missing starter files"
+  assert_contains "$out" "installed the starter settings config/speak config/stt-vocabulary" \
+    "the first launch did not name only the files it installed"
+
+  # A home that has already run keeps exactly what it has.
+  home=$(starter_home starter-existing)
+  mkdir -p "$home/state"
+  : > "$home/state/.last-watcher-beat"
+  starter_launch "$home" opus >/dev/null
+  [ ! -e "$home/config/crew-dispatch.json" ] && [ ! -e "$home/config/speak" ] \
+    || fail "a home that has already run was given the starter settings"
+
+  # Previews, preflight, and non-Claude profiles never write them.
+  home=$(starter_home starter-dry)
+  starter_launch "$home" opus FM_PRIMARY_DRY_RUN=1 >/dev/null
+  [ ! -e "$home/config/crew-dispatch.json" ] || fail "a dry run installed the starter settings"
+  home=$(starter_home starter-preflight)
+  ( cd "$TMP_ROOT" && PATH="$FAKEBIN:$PATH" FM_HOME="$home" "$ROOT/bin/fm-primary.sh" opus --preflight ) >/dev/null 2>&1 || true
+  [ ! -e "$home/config/crew-dispatch.json" ] || fail "--preflight installed the starter settings"
+  home=$(starter_home starter-pi)
+  starter_launch "$home" pi >/dev/null
+  [ ! -e "$home/config/crew-dispatch.json" ] || fail "a Pi launch installed the Claude starter routing"
+  pass "fm-primary: only a fresh home's first Claude launch installs the starter settings, never over a file"
+}
+
 test_astra_primary_profile() {
   local out status=0 probe_out probe_err
   local effort_file="$HOME_FIX/config/astra-effort" override="$TMP_ROOT/astra-config"
@@ -1557,6 +1685,8 @@ test_preflight_is_read_only_and_checks_accounts
 test_profiles_and_root
 test_context_window_is_capped_at_500k
 test_claude_effort
+test_claude_effort_follows_the_plan
+test_fresh_home_gets_the_starter_settings
 test_astra_primary_profile
 test_astra_context_window_is_selectable_and_bounded_by_the_catalog
 test_claude_disables_bg_shell_pressure_reap
