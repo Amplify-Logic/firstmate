@@ -81,7 +81,8 @@ active_call_mic_pids() {
   [ -n "$list" ] || return 0
   process_output "$list" | awk -v want="$list" 'BEGIN{n=split(want,w,",");for(i=1;i<=n;i++)ok[w[i]]=1} {pid=$1; if(!(pid in ok)) next; cmd=$0; sub(/^ *[0-9]+ +/,"",cmd); if (cmd ~ ENVIRON["CALL_APP_PATTERN"]) print pid}'
 }
-recording() { "$COMPANION" status 2>/dev/null | grep -q ' running '; }
+# Read status in full: grep -q would close the pipe early and, under pipefail, fail on SIGPIPE.
+recording() { local out; out=$("$COMPANION" status 2>/dev/null) || true; [[ "$out" == *' running '* ]]; }
 notify() {
   local message=$1 escaped
   escaped=$(printf '%s' "$message" | sed 's/\\/\\\\/g; s/"/\\"/g')

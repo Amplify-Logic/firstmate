@@ -266,7 +266,11 @@ test_watch_reminds_and_stops_but_never_starts() {
 #!/usr/bin/env bash
 printf '%s\n' "$*" >> "${FIXTURE_LOG:?}"
 if [ "$1" = status ]; then
+  # Like the real status: one line per part, each checked in turn, so lines follow the mic line.
+  printf 'captions   stopped\n'
   if [ -s "${FIXTURE_RECORDING:?}" ]; then printf 'mic        running (pid 42)\n'; else printf 'mic        stopped\n'; fi
+  sleep 0.2
+  if [ -s "${FIXTURE_RECORDING:?}" ]; then printf 'digest     running (pid 43)\n'; else printf 'digest     stopped\n'; fi
 fi
 exit 0
 STUB
