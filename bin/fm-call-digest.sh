@@ -13,16 +13,20 @@
 # Every item the desk ever showed is recorded once in state/calls/live-items.jsonl
 # so the end-of-call notes can account for it.
 #
-# Append-only records in state/calls/, one line per new item, kept across calls
-# until `fm-call-companion.sh delete --all`:
-#   triggers.log         <time>TAB<instruction> for a spoken order: the
-#                        speaker_name speaker saying "Firstmate, do it",
+# Append-only records in state/calls/, one line per new item, kept across calls.
+# Each line starts with the stamp of the call it came from
+# (state/calls/call-stamp, YYYYMMDD-HHMMSS), so `fm-call-companion.sh delete`
+# and `delete <stamp>` drop one call's lines; `delete --all` clears the files,
+# including untagged lines from before calls had stamps:
+#   triggers.log         <stamp>TAB<time>TAB<instruction> for a spoken order:
+#                        the speaker_name speaker saying "Firstmate, do it",
 #                        "Firstmate, build that" or "captain's order:"
-#   decisions.log        <time>TAB<speaker>TAB<decision>TAB<quote>
-#   decisions-batch.log  decision<TAB>... records, plus flush<TAB>[time]<TAB>final
-#                        when a recording stops, for a home's own wake check
-#   actions.log          <time>TAB<what> lines a home's Firstmate writes after
-#                        acting; the desk lists them under "Firstmate started"
+#   decisions.log        <stamp>TAB<time>TAB<speaker>TAB<decision>TAB<quote>
+#   decisions-batch.log  <stamp>TABdecisionTAB<time>TAB<speaker>TAB<decision>TAB<quote>
+#                        records, plus <stamp>TABflushTAB[time]TABfinal when a
+#                        recording stops, for a home's own wake check
+# A home's Firstmate writes one more, untagged, after acting:
+#   actions.log          <time>TAB<what>; the desk lists them under "Firstmate started"
 #
 # Paths and settings come from bin/fm-call-lib.sh. Environment overrides:
 # CALL_COMPANION_TRANSCRIPT, CALL_COMPANION_DIGEST, CALL_COMPANION_GLANCE,
@@ -48,6 +52,7 @@ PYTHON_BIN=${CALL_COMPANION_PYTHON_BIN:-$(fm_call_tool python3 /usr/bin/python3)
 INTERVAL_SECONDS=${DIGEST_INTERVAL_SECONDS:-60}
 DIGEST_MODEL=$(fm_call_setting digest_model sonnet)
 LOCAL_SPEAKER=$(fm_call_setting speaker_name me)
+CALL_STAMP=
 
 usage() {
   printf 'usage: fm-call-digest.sh [--once|--final-batch]\n' >&2
@@ -57,6 +62,10 @@ require_tools() {
   command -v "$CLAUDE_BIN" >/dev/null 2>&1 || { printf 'fm-call-digest: %s not found\n' "$CLAUDE_BIN" >&2; exit 127; }
   command -v jq >/dev/null 2>&1 || { printf 'fm-call-digest: jq is required\n' >&2; exit 127; }
   [ -x "$PYTHON_BIN" ] || { printf 'fm-call-digest: Python not executable at %s\n' "$PYTHON_BIN" >&2; exit 127; }
+}
+
+require_stamp() {
+  CALL_STAMP=$(fm_call_stamp) || { printf 'fm-call-digest: no call stamp in %s/call-stamp; start the call with fm-call-companion.sh\n' "$STATE_DIR" >&2; exit 1; }
 }
 
 recent_transcript() {
@@ -253,13 +262,13 @@ EOF
 
 record_new_triggers() {
   local old=$1
-  jq -r --argjson old "$old" '.triggered_actions[] | select(([.instruction,.time]|join("|")) as $id | ($old|index($id)|not)) | "\(.time)\t\(.instruction)"' "$DIGEST" >> "$STATE_DIR/triggers.log"
+  jq -r --argjson old "$old" --arg stamp "$CALL_STAMP" '.triggered_actions[] | select(([.instruction,.time]|join("|")) as $id | ($old|index($id)|not)) | "\($stamp)\t\(.time)\t\(.instruction)"' "$DIGEST" >> "$STATE_DIR/triggers.log"
 }
 
 record_new_decisions() {
   local old=$1
-  jq -r --argjson old "$old" '.decisions[] | select(([.text,.time]|join("|")) as $id | ($old|index($id)|not)) | [.time,.speaker,.text,.verbatim_quote] | map(gsub("[\\t\\r\\n]+"; " ")) | @tsv' "$DIGEST" >> "$DECISION_LOG"
-  jq -r --argjson old "$old" '.decisions[] | select(([.text,.time]|join("|")) as $id | ($old|index($id)|not)) | ["decision",.time,.speaker,.text,.verbatim_quote] | map(gsub("[\\t\\r\\n]+"; " ")) | @tsv' "$DIGEST" >> "$DECISION_BATCH_LOG"
+  jq -r --argjson old "$old" --arg stamp "$CALL_STAMP" '.decisions[] | select(([.text,.time]|join("|")) as $id | ($old|index($id)|not)) | [$stamp,.time,.speaker,.text,.verbatim_quote] | map(gsub("[\\t\\r\\n]+"; " ")) | @tsv' "$DIGEST" >> "$DECISION_LOG"
+  jq -r --argjson old "$old" --arg stamp "$CALL_STAMP" '.decisions[] | select(([.text,.time]|join("|")) as $id | ($old|index($id)|not)) | [$stamp,"decision",.time,.speaker,.text,.verbatim_quote] | map(gsub("[\\t\\r\\n]+"; " ")) | @tsv' "$DIGEST" >> "$DECISION_BATCH_LOG"
 }
 
 # Every item the live desk ever showed, once, under a stable id, so the end-of-call notes
@@ -303,7 +312,7 @@ PY
 record_final_batch() {
   mkdir -p "$STATE_DIR"
   touch "$DECISION_BATCH_LOG"
-  printf 'flush\t[%s]\tfinal\n' "$(date '+%H:%M:%S')" >> "$DECISION_BATCH_LOG"
+  printf '%s\tflush\t[%s]\tfinal\n' "$CALL_STAMP" "$(date '+%H:%M:%S')" >> "$DECISION_BATCH_LOG"
 }
 
 # The model runs with no tools, saves no session, and starts in an empty
@@ -346,6 +355,7 @@ main() {
   local once=false last_size=-1 size
   if [ "$#" -gt 0 ]; then
     if [ "$#" -eq 1 ] && [ "$1" = --final-batch ]; then
+      require_stamp
       record_final_batch
       exit 0
     elif [ "$#" -eq 1 ] && [ "$1" = --once ]; then
@@ -355,7 +365,7 @@ main() {
       exit 2
     fi
   fi
-  require_tools; mkdir -p "$LOG_DIR" "$STATE_DIR" "$(dirname "$TRANSCRIPT")" "$(dirname "$DIGEST")"; touch "$TRANSCRIPT" "$STATE_DIR/triggers.log" "$DECISION_LOG" "$DECISION_BATCH_LOG" "$ACTION_LOG"
+  require_tools; require_stamp; mkdir -p "$LOG_DIR" "$STATE_DIR" "$(dirname "$TRANSCRIPT")" "$(dirname "$DIGEST")"; touch "$TRANSCRIPT" "$STATE_DIR/triggers.log" "$DECISION_LOG" "$DECISION_BATCH_LOG" "$ACTION_LOG"
   while :; do
     size=$(grep -E '^\[[0-9]{2}:[0-9]{2}:[0-9]{2}\]' "$TRANSCRIPT" | wc -c | tr -d ' ' || true)
     if [ "$size" -gt 0 ] && { [ "$once" = true ] || [ "$size" -ne "$last_size" ]; }; then

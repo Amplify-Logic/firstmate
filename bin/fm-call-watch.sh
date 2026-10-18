@@ -17,7 +17,7 @@
 # recording is running, one notification asks you to get everyone's agreement
 # and names the start command. When a recording is running and no call has been
 # seen for 180 seconds, it stops the recording (which writes the end-of-call
-# notes) and archives it; a recording started with no call detected, such as an
+# notes and archives the call); a recording started with no call detected, such as an
 # in-person meeting, is left for you to stop. A microphone probe that fails
 # keeps a microphone call open rather than cutting a live recording.
 #
@@ -101,7 +101,7 @@ begin_call() {
   write_state true "$source" "$now" "$now" "$value"
 }
 end_call() {
-  if recording; then "$COMPANION" stop || true; "$COMPANION" reset || true; fi
+  if recording; then "$COMPANION" stop || true; fi
   write_state false none 0 0 0
 }
 poll_once() {

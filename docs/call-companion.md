@@ -65,6 +65,9 @@ Saying "Firstmate, do it", "Firstmate, build that" or "captain's order:" followe
 
 Run `bin/fm-call-companion.sh stop`.
 It stops every part at once, switches the audio output back, writes "recording stopped" into the transcript, and then writes the end-of-call notes to `data/calls/notes.md` and `notes.html`, which takes a few minutes.
+It then moves the call into `data/calls/archive/` under the stamp it got when it started, and prints that stamp, so the next `start` always begins a clean transcript and two calls never mix.
+A stopped call cannot be resumed; start a new one.
+If the notes fail, the call stays in place so `bin/fm-call-companion.sh notes` can retry them, and the next `start` archives it.
 If the call watcher is installed, it also stops a running recording on its own once the call has been gone for three minutes.
 
 ## Delete a recording
@@ -72,14 +75,15 @@ If the call watcher is installed, it also stops a running recording on its own o
 Stop it first; every delete refuses while recording.
 
 ```sh
-bin/fm-call-companion.sh delete              # the current call: transcript, desk, notes, and logs
 bin/fm-call-companion.sh list                # archived calls, one stamp each
-bin/fm-call-companion.sh delete <stamp>      # one archived call
+bin/fm-call-companion.sh delete <stamp>      # one archived call, such as the one stop just archived
+bin/fm-call-companion.sh delete              # the call still in place: transcript, desk, notes, and logs
 bin/fm-call-companion.sh delete --all        # every call, the archive, and the decision and order logs
 ```
 
-`reset` moves the current call into `data/calls/archive/` under a stamp, and `start` does the same for a transcript untouched for three hours, so two calls never mix.
-The decision, spoken-order and action logs in `state/calls/` keep one line per item across calls until `delete --all`.
+Deleting one call also removes its lines from the decision and spoken-order logs in `state/calls/`, which carry each call's stamp, and the notes it left on the desk.
+Lines written before calls had stamps carry none, so only `delete --all` removes them.
+`reset` moves the call still in place into the archive by hand.
 
 ## The call watcher (optional)
 
@@ -110,7 +114,7 @@ A home that already runs its own copy of this recorder from a private folder, su
 1. Stop that copy (its `companion.sh stop`) and unload its LaunchAgents, for example `launchctl bootout gui/$(id -u)/<label>` for its call watcher and its desk web server.
 2. Put that copy's private values into `config/call-companion`: `speaker_name`, and `display_host` and `display_url` for a second screen.
 3. Optionally copy its archive into `data/calls/archive/`; the file names already match.
-4. Point anything that read its files at the new ones: a desk web server at `data/calls/public/`, and a wake check at `state/calls/triggers.log` and `state/calls/decisions-batch.log`.
+4. Point anything that read its files at the new ones: a desk web server at `data/calls/public/`, and a wake check at `state/calls/triggers.log` and `state/calls/decisions-batch.log`, whose lines now start with the call's stamp (`bin/fm-call-digest.sh`'s header owns the formats).
 5. Run `bin/fm-call-watch.sh install`.
 
 One behavior changes: the shared recorder never starts on its own when a call is detected.

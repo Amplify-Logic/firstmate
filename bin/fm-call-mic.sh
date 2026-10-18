@@ -332,6 +332,7 @@ main() {
       exit 2
     fi
   fi
+  [ -n "$test_seconds" ] || rm -f "$MODEL_STATE"
   require_tools
   validate_timing
   mkdir -p "$WORK_DIR" "$(dirname "$TRANSCRIPT")"

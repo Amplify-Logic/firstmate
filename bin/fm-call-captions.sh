@@ -362,7 +362,8 @@ main() {
     else
       printf 'fm-call-captions: caption poll failed; retrying in %s seconds\n' "$POLL_SECONDS" >&2
     fi
-    sleep "$POLL_SECONDS"
+    sleep "$POLL_SECONDS" &
+    wait "$!"
   done
 }
 

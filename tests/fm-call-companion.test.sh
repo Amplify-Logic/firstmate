@@ -4,18 +4,26 @@
 # Contracts under test:
 #   - Recording starts only with --everyone-agreed; the agreement is written at
 #     the top of the transcript, and a start without it records nothing.
+#   - stop archives the call under the stamp it got at start, so the next start
+#     begins a clean transcript; a stop with nothing recording adds no
+#     end-of-call record.
 #   - The watcher never starts a recording: a new call raises one reminder that
-#     names the start command, and a running recording is stopped and archived
-#     once the call has been gone for 180 seconds.
+#     names the start command, and a running recording is stopped once the call
+#     has been gone for 180 seconds.
 #   - Every runtime file lands under the home's data/calls and state/calls,
 #     settings come from config/call-companion, and an unknown key is refused.
 #   - The microphone pipeline keeps overlapping chunks, labels speech by the
-#     track that carried it, and deletes each chunk's audio once transcribed.
+#     track that carried it, deletes each chunk's audio once transcribed, and
+#     starts each recording on the preferred whisper model.
+#   - The caption reader stops within the stop timeout, and its last caption
+#     lands before "recording stopped".
 #   - The live desk keeps only grounded items, records each once, and the
 #     end-of-call notes account for every live item without quoting anyone.
-#   - delete removes the current call, one archived call, or everything, and
-#     refuses while recording.
-#   - The second screen is driven only through the configured ssh host.
+#   - delete removes the current call, one archived call (with the notes it
+#     left in place), or everything, drops that call's stamped lines from the
+#     decision and spoken-order logs, and refuses while recording.
+#   - The second screen shows only the desk, only through the configured ssh
+#     host; there is no command to show any other page.
 # shellcheck disable=SC2016
 set -u
 
@@ -81,6 +89,7 @@ for argument in "$@"; do
   if [ "$previous" = -of ]; then prefix=$argument; fi
   previous=$argument
 done
+printf 'whisper-args\t%s\n' "$*" >> "${WHISPER_LOG:?}"
 printf 'whisper-start\t%s\t%s\n' "$$" "$(python3 -c 'import time; print(time.time())')" >> "${WHISPER_LOG:?}"
 sleep "${WHISPER_SLEEP:-0.2}"
 printf '%s\n' 'fixture transcript' > "$prefix.txt"
@@ -144,11 +153,31 @@ EOF
   out=$(run_companion stop 2>&1) || fail "stop failed: $out"
   out=$(run_companion status 2>&1)
   assert_not_contains "$out" 'running' 'a part kept running after stop'
-  tail -n 1 "$home/data/calls/transcript.txt" | grep -q '^# .* recording stopped$' || fail 'stop was not recorded'
+  local first second batch="$home/state/calls/decisions-batch.log" archived
+  first=$(run_companion list)
+  [[ "$first" =~ ^[0-9]{8}-[0-9]{6}$ ]] || fail "stop did not archive exactly one call: $first"
+  archived="$home/data/calls/archive/$first-transcript.txt"
+  head -n 1 "$archived" | grep -q 'recording started (mic) after everyone on the call agreed' || fail 'the archived call lost its agreement line'
+  tail -n 1 "$archived" | grep -q '^# .* recording stopped$' || fail 'stop was not recorded'
+  [ ! -s "$home/data/calls/transcript.txt" ] && [ ! -e "$home/state/calls/call-stamp" ] || fail 'stop left the call in place'
+  [ "$(grep -c "^$first	flush	" "$batch")" -eq 1 ] || fail "the end-of-call record does not carry the call's stamp: $(cat "$batch")"
+  run_companion stop >/dev/null || fail 'a stop with nothing recording failed'
+  [ "$(grep -c '	flush	' "$batch")" -eq 1 ] || fail 'a stop with nothing recording added an end-of-call record'
+
+  out=$(run_companion start --mic --everyone-agreed 2>&1) || fail "second start failed: $out"
+  if [ "$(grep -c 'recording started' "$home/data/calls/transcript.txt")" -ne 1 ] || grep -q 'recording stopped' "$home/data/calls/transcript.txt"; then
+    fail "the second call did not begin a clean transcript: $(cat "$home/data/calls/transcript.txt")"
+  fi
+  out=$(run_companion stop 2>&1) || fail "second stop failed: $out"
+  second=$(run_companion list | grep -vx "$first")
+  [[ "$second" =~ ^[0-9]{8}-[0-9]{6}$ ]] || fail "the second call was not archived on its own: $(run_companion list)"
+  run_companion delete "$first" >/dev/null || fail 'delete of the first call failed'
+  ! grep -q "^$first	" "$batch" && [ "$(grep -c "^$second	flush	" "$batch")" -eq 1 ] \
+    || fail "delete of one call did not drop exactly its lines: $(cat "$batch")"
   [ -z "$(find "$home/state/calls/audio" -name '*.wav' 2>/dev/null)" ] || fail 'audio outlived its transcript'
   [ ! -e "$ROOT/transcript.txt" ] && [ ! -e "$ROOT/data/calls" ] || fail 'runtime files landed in the code root'
   unset -f run_companion
-  pass 'an agreed recording starts, writes into the home, keeps no audio, and records start and stop'
+  pass 'an agreed recording starts, writes into the home, keeps no audio, and stop archives each call on its own'
 }
 
 test_watch_reminds_and_stops_but_never_starts() {
@@ -201,7 +230,7 @@ STUB
   run_at 2200
   [ "$(count stop)" -eq 0 ] || fail 'the recording stopped before the call had been gone 180 seconds'
   run_at 2280
-  [ "$(count stop)" -eq 1 ] && [ "$(count reset)" -eq 1 ] || fail "ended call was not stopped and archived: $(cat "$w/lifecycle.log")"
+  [ "$(count stop)" -eq 1 ] || fail "ended call was not stopped: $(cat "$w/lifecycle.log")"
   ! grep -q '^start' "$w/lifecycle.log" || fail 'the watcher started a recording'
 
   # A running recording is never reminded about, and a failed probe keeps a microphone call open.
@@ -237,7 +266,7 @@ STUB
 }
 
 test_mic_pipeline_overlap_and_cleanup() {
-  local home bin duty pipeline_pid capture_child whisper_child stopped_at elapsed
+  local home bin duty pipeline_pid capture_child whisper_child stopped_at elapsed models
   home=$(new_home pipeline)
   bin="$TMP_ROOT/pipeline-bin"
   install_fake_audio_tools "$bin"
@@ -275,6 +304,17 @@ print(f"{duty * 100:.1f}")
 PYEOF
 ) || fail 'chunks did not overlap into continuous capture'
 
+  models="$TMP_ROOT/pipeline-models/.cache/whisper"
+  mkdir -p "$models"
+  : > "$models/ggml-large-v3-turbo.bin"; : > "$models/ggml-base.en.bin"
+  printf '%s\n' "$models/ggml-base.en.bin" > "$home/state/calls/whisper-model"
+  : > "$WHISPER_LOG"
+  HOME="$TMP_ROOT/pipeline-models" FM_HOME="$home" FFMPEG_BIN="$bin/ffmpeg" WHISPER_BIN="$bin/whisper-cli" \
+    MIC_CHUNK_SECONDS=2 MIC_CHUNK_OVERLAP_SECONDS=1 MIC_MAX_CHUNKS=1 \
+    "$ROOT/bin/fm-call-mic.sh" 2> "$TMP_ROOT/pipeline-model.stderr" || fail "pipeline failed: $(cat "$TMP_ROOT/pipeline-model.stderr")"
+  grep -q "^whisper-args	-m $models/ggml-large-v3-turbo.bin " "$WHISPER_LOG" \
+    || fail "an earlier recording's base.en fallback carried into a new one: $(cat "$WHISPER_LOG")"
+
   : > "$FFMPEG_LOG"; : > "$WHISPER_LOG"
   WHISPER_SLEEP=30 FM_HOME="$home" FFMPEG_BIN="$bin/ffmpeg" WHISPER_BIN="$bin/whisper-cli" WHISPER_MODEL="$bin/model.bin" \
     MIC_CHUNK_SECONDS=2 MIC_CHUNK_OVERLAP_SECONDS=1 \
@@ -303,7 +343,8 @@ test_live_desk_grounding() {
   local home bin now
   home=$(new_home desk)
   bin="$TMP_ROOT/desk-bin"
-  mkdir -p "$bin" "$home/data/calls"
+  mkdir -p "$bin" "$home/data/calls" "$home/state/calls"
+  printf '20261018-130000\n' > "$home/state/calls/call-stamp"
   now=$(date '+%H:%M:%S')
   printf 'digest_model = haiku\nspeaker_name = Alex\n' > "$home/config/call-companion"
   cat > "$bin/claude" <<'EOF'
@@ -341,13 +382,16 @@ EOF
   ! grep -q "cwd=$home\|cwd=$ROOT" "$TMP_ROOT/desk-claude.args" || fail 'the desk model ran inside a Starship directory, where its hooks fire'
   [ "$(wc -l < "$state/triggers.log" | tr -d ' ')" -eq 1 ] || fail 'spoken order was not recorded exactly once'
   [ "$(wc -l < "$state/decisions.log" | tr -d ' ')" -eq 1 ] || fail 'decision was not recorded exactly once'
+  [ "$(cat "$state/triggers.log")" = "20261018-130000	[$now]	Build the pilot dashboard" ] || fail "spoken order line is not stamped: $(cat "$state/triggers.log")"
+  cut -f 1-3 "$state/decisions.log" | grep -qx "20261018-130000	\[$now\]	Mara" || fail "decision line is not stamped: $(cat "$state/decisions.log")"
+  cut -f 1-2 "$state/decisions-batch.log" | grep -qx '20261018-130000	decision' || fail "batch decision is not stamped: $(cat "$state/decisions-batch.log")"
   jq -se 'length == 3 and ([.[].id] | unique | length) == 3' "$state/live-items.jsonl" >/dev/null || fail 'live items were not recorded once each'
   printf '%s\t%s\n' '[12:00:00]' 'Started the rollout scout' > "$state/actions.log"
   run_digest
   grep -q 'Build the pilot dashboard' "$home/data/calls/desk.md" || fail 'spoken order missing from the desk'
   grep -q 'Started the rollout scout' "$home/data/calls/glance.html" || fail 'Firstmate action missing from the glance page'
   FM_HOME="$home" "$ROOT/bin/fm-call-digest.sh" --final-batch
-  tail -n 1 "$state/decisions-batch.log" | grep -Eq '^flush\t\[[0-9]{2}:[0-9]{2}:[0-9]{2}\]\tfinal$' || fail 'final batch record missing'
+  tail -n 1 "$state/decisions-batch.log" | grep -Eq '^20261018-130000\tflush\t\[[0-9]{2}:[0-9]{2}:[0-9]{2}\]\tfinal$' || fail 'final batch record missing'
   [ -z "$(find "$state/logs" -name 'digest-*' 2>/dev/null)" ] || fail 'a successful digest left call text in the logs'
   unset -f run_digest
   pass 'the live desk keeps grounded items, records each once, and uses the configured model'
@@ -424,40 +468,62 @@ EOF
 }
 
 test_delete_current_archived_and_all() {
-  local home out rc
+  local home out rc state glance
   home=$(new_home delete)
-  mkdir -p "$home/data/calls/archive" "$home/state/calls/logs"
+  state="$home/state/calls"
+  glance="$home/data/calls/glance.html"
+  mkdir -p "$home/data/calls/archive" "$state/logs"
   printf '[10:00:00] Alex: first call\n' > "$home/data/calls/archive/20261017-100000-transcript.txt"
   printf '{}\n' > "$home/data/calls/archive/20261017-100000-digest.json"
   printf '[11:00:00] Alex: second call\n' > "$home/data/calls/archive/20261017-110000-transcript.txt"
+  printf 'notes of the second call\n' > "$home/data/calls/archive/20261017-110000-notes.md"
+  printf '<p>notes of the second call</p>\n' > "$home/data/calls/archive/20261017-110000-notes.html"
+  printf 'notes of the second call\n' > "$home/data/calls/notes.md"
+  printf '<p>notes of the second call</p>\n' > "$home/data/calls/notes.html"
+  printf '<a href="notes.html">Notes from the last call</a>\n' > "$glance"
   printf '[12:00:00] Alex: current call\n' > "$home/data/calls/transcript.txt"
-  printf 'notes\n' > "$home/data/calls/notes.md"
-  printf '{}\n' > "$home/state/calls/live-items.jsonl"
-  printf 'current call text\n' > "$home/state/calls/logs/digest-raw.abc123"
-  printf '[12:00:00]\tdo it\n' > "$home/state/calls/triggers.log"
+  printf '20261017-120000\n' > "$state/call-stamp"
+  printf '{}\n' > "$state/live-items.jsonl"
+  printf 'current call text\n' > "$state/logs/digest-raw.abc123"
+  printf '%s\n' '[09:00:00]	legacy order' '20261017-100000	[10:00:00]	first order' '20261017-110000	[11:00:00]	second order' \
+    '20261017-120000	[12:00:00]	current order' > "$state/triggers.log"
+  printf '%s\n' '[09:00:00]	Alex	legacy decision	we chose' '20261017-110000	[11:00:00]	Alex	second decision	we picked' > "$state/decisions.log"
+  printf '%s\n' '20261017-110000	decision	[11:00:00]	Alex	second decision	we picked' '20261017-110000	flush	[11:30:00]	final' \
+    '20261017-120000	flush	[12:30:00]	final' > "$state/decisions-batch.log"
   out=$(FM_HOME="$home" "$ROOT/bin/fm-call-companion.sh" list)
   [ "$out" = "20261017-100000
 20261017-110000" ] || fail "list did not print the archived stamps: $out"
+
+  FM_HOME="$home" "$ROOT/bin/fm-call-companion.sh" delete 20261017-110000 >/dev/null || fail 'delete of an archived call failed'
+  [ -z "$(find "$home/data/calls/archive" -name '20261017-110000-*')" ] || fail 'the archived call survived'
+  [ ! -e "$home/data/calls/notes.md" ] && [ ! -e "$home/data/calls/notes.html" ] || fail "the deleted call's notes stayed on the desk"
+  ! grep -q 'notes.html' "$glance" || fail "the desk still links the deleted call's notes"
+  ! grep -q 'second' "$state/triggers.log" "$state/decisions.log" "$state/decisions-batch.log" || fail "the deleted call's lines stayed in the logs"
+  grep -q 'first order' "$state/triggers.log" || fail "another call's lines were dropped"
+  grep -q 'current order' "$state/triggers.log" || fail "the current call's lines were dropped"
+  [ -e "$home/data/calls/transcript.txt" ] && [ -e "$home/data/calls/archive/20261017-100000-transcript.txt" ] || fail 'another call was deleted'
+
   FM_HOME="$home" "$ROOT/bin/fm-call-companion.sh" delete >/dev/null || fail 'delete of the current call failed'
-  [ ! -e "$home/data/calls/transcript.txt" ] && [ ! -e "$home/data/calls/notes.md" ] && [ ! -e "$home/state/calls/live-items.jsonl" ] \
+  [ ! -e "$home/data/calls/transcript.txt" ] && [ ! -e "$state/live-items.jsonl" ] && [ ! -e "$state/call-stamp" ] \
     || fail 'the current call survived delete'
-  [ -z "$(find "$home/state/calls/logs" -type f)" ] || fail 'call text survived in the logs'
+  [ -z "$(find "$state/logs" -type f)" ] || fail 'call text survived in the logs'
+  ! grep -q '20261017-120000' "$state/triggers.log" "$state/decisions-batch.log" || fail "the current call's lines stayed in the logs"
   [ -e "$home/data/calls/archive/20261017-100000-transcript.txt" ] || fail 'delete of the current call touched the archive'
-  FM_HOME="$home" "$ROOT/bin/fm-call-companion.sh" delete 20261017-100000 >/dev/null || fail 'delete of an archived call failed'
-  [ -z "$(find "$home/data/calls/archive" -name '20261017-100000-*')" ] || fail 'the archived call survived'
-  [ -e "$home/data/calls/archive/20261017-110000-transcript.txt" ] || fail 'another archived call was deleted'
+
+  FM_HOME="$home" "$ROOT/bin/fm-call-companion.sh" delete 20261017-100000 >/dev/null || fail 'delete of the first archived call failed'
+  [ "$(cat "$state/triggers.log")" = '[09:00:00]	legacy order' ] && [ ! -s "$state/decisions-batch.log" ] \
+    || fail "only untagged lines should remain: $(cat "$state/triggers.log" "$state/decisions-batch.log")"
   out=$(FM_HOME="$home" "$ROOT/bin/fm-call-companion.sh" delete 20261017-100000 2>&1) && rc=0 || rc=$?
   [ "$rc" -ne 0 ] || fail 'deleting a missing call reported success'
   out=$(FM_HOME="$home" "$ROOT/bin/fm-call-companion.sh" delete '../x' 2>&1) && rc=0 || rc=$?
   expect_code 2 "$rc" 'a malformed stamp was accepted'
   FM_HOME="$home" "$ROOT/bin/fm-call-companion.sh" delete --all >/dev/null || fail 'delete --all failed'
-  [ ! -e "$home/data/calls" ] && [ ! -e "$home/state/calls/triggers.log" ] || fail 'delete --all left a call behind'
-  pass 'delete removes the current call, one archived call, or every call'
-
+  [ ! -e "$home/data/calls" ] && [ ! -e "$state/triggers.log" ] && [ ! -e "$state/decisions.log" ] || fail 'delete --all left a call behind'
+  pass "delete removes the current call, one archived call with its notes and log lines, or every call"
 }
 
 test_second_screen_uses_configured_host() {
-  local home bin hypr
+  local home bin hypr command out rc
   home=$(new_home display)
   bin="$TMP_ROOT/display-bin"
   hypr="$TMP_ROOT/display-hypr"
@@ -496,20 +562,55 @@ EOF
   [ ! -s "$TMP_ROOT/hypr.log" ] || fail 'a closed lid still drove the screen'
   grep -q 'lid closed or display unavailable' "$home/state/calls/display-note" || fail 'the closed lid was not noted on the desk'
   FIXTURE_LID_STATE=open run desk --display >/dev/null
-  FIXTURE_LID_STATE=open run show-display 'https://example.test/page?a=1'
-  FIXTURE_LID_STATE=open run hide-display
+  for command in 'show-display https://example.test/page?a=1' hide-display; do
+    # shellcheck disable=SC2086
+    out=$(FIXTURE_LID_STATE=open run $command 2>&1) && rc=0 || rc=$?
+    expect_code 2 "$rc" "$command was accepted"
+  done
+  ! grep -q 'example.test/page' "$TMP_ROOT/hypr.log" || fail 'another page was shown on the second screen'
   FIXTURE_LID_STATE=open run stop >/dev/null
   grep -Fq 'dispatch hl.dsp.exec_cmd("chromium --app=https://desk.example.test/glance.html")' "$TMP_ROOT/hypr.log" || fail 'the desk url was not opened'
   grep -Fq 'dispatch hl.dsp.window.fullscreen({window="address:0xd35c"})' "$TMP_ROOT/hypr.log" || fail 'the desk was not made full screen'
-  grep -Fq 'dispatch hl.dsp.window.close({window="address:0x71e0"})' "$TMP_ROOT/hypr.log" || fail 'the other page was not closed'
   grep -Fq 'dispatch hl.dsp.window.close({window="address:0xd35c"})' "$TMP_ROOT/hypr.log" || fail 'stop did not close the desk'
-  [ ! -e "$home/state/calls/display-desk-address" ] && [ ! -e "$home/state/calls/display-view-address" ] || fail 'window records outlived their windows'
+  [ ! -e "$home/state/calls/display-desk-address" ] || fail 'the window record outlived its window'
+  [ ! -e "$home/state/calls/decisions-batch.log" ] || fail 'a stop with nothing recording added an end-of-call record'
   unset -f run
-  pass 'the second screen is driven only through the configured host, and a closed lid is skipped'
+  pass 'the second screen shows only the desk, only through the configured host, and a closed lid is skipped'
+}
+
+test_caption_reader_stops_in_time() {
+  local home bin out archived
+  home=$(new_home captions)
+  bin="$TMP_ROOT/captions-bin"
+  mkdir -p "$bin"
+  cat > "$bin/chrome-devtools-axi" <<'EOF'
+#!/usr/bin/env bash
+case "$1" in
+  selectpage) exit 0 ;;
+  eval) printf '%s\n' 'result: [{"speaker":"Mara","text":"We ship on Friday."}]'; : > "${FIXTURE_POLLED:?}" ;;
+esac
+EOF
+  printf '%s\n' '#!/usr/bin/env bash' 'cat > /dev/null' 'exit 1' > "$bin/claude"
+  chmod +x "$bin/chrome-devtools-axi" "$bin/claude"
+  run_companion() {
+    FM_HOME="$home" FIXTURE_POLLED="$TMP_ROOT/captions-polled" CHROME_DEVTOOLS_AXI_BIN="$bin/chrome-devtools-axi" MEET_CAPTIONS_POLL_SECONDS=10 CALL_COMPANION_OPEN_BIN=true \
+      CALL_COMPANION_FINAL_NOTES=0 CALL_COMPANION_CLAUDE_BIN="$bin/claude" "$ROOT/bin/fm-call-companion.sh" "$@"
+  }
+  out=$(run_companion start --page 5 --everyone-agreed 2>&1) || fail "caption start failed: $out"
+  for _ in $(seq 1 50); do [ -e "$TMP_ROOT/captions-polled" ] && break; sleep 0.1; done
+  sleep 1
+  out=$(run_companion stop 2>&1) || fail "caption stop failed: $out"
+  assert_not_contains "$out" 'did not stop' 'the caption reader outlived the stop timeout'
+  archived="$home/data/calls/archive/$(run_companion list)-transcript.txt"
+  grep -q '^\[[0-9:]*\] Mara: We ship on Friday\.$' "$archived" || fail "the last caption was lost: $(cat "$archived")"
+  tail -n 1 "$archived" | grep -q '^# .* recording stopped$' || fail "a caption landed after the stop: $(cat "$archived")"
+  unset -f run_companion
+  pass 'the caption reader stops within the timeout and writes its last caption before the stop'
 }
 
 test_consent_gate_and_settings
 test_start_stop_records_agreement_in_home
+test_caption_reader_stops_in_time
 test_watch_reminds_and_stops_but_never_starts
 test_mic_pipeline_overlap_and_cleanup
 test_live_desk_grounding

@@ -8,8 +8,6 @@
 #   fm-call-companion.sh status
 #   fm-call-companion.sh stop
 #   fm-call-companion.sh desk [--display]
-#   fm-call-companion.sh show-display <url>
-#   fm-call-companion.sh hide-display
 #   fm-call-companion.sh notes
 #   fm-call-companion.sh reset
 #   fm-call-companion.sh list
@@ -26,18 +24,24 @@
 # whisper.cpp). start --page <id> reads a Google Meet tab's captions instead
 # (bin/fm-call-captions.sh; `fm-call-captions.sh --find-meet` lists ids). Both
 # run the live desk (bin/fm-call-digest.sh) and open data/calls/glance.html.
-# stop ends every part, restores the audio output, and writes the end-of-call
-# notes (bin/fm-call-final-notes.py, a few minutes) to data/calls/notes.*.
-# reset archives the current call under data/calls/archive/<stamp>-*.
+# Each call gets a stamp when it starts (state/calls/call-stamp); its archive
+# files and its lines in the decision and spoken-order logs carry that stamp.
+# stop ends every part, restores the audio output, writes the end-of-call
+# notes (bin/fm-call-final-notes.py, a few minutes) to data/calls/notes.*, and
+# then archives the call under data/calls/archive/<stamp>-*, so the next start
+# always begins clean; when the notes fail, the call stays for `notes` to rerun
+# and the next start archives it. reset archives the current call by hand.
 # list prints the archived stamps. delete removes the current call's
 # transcript, desk, digest, notes, live items and logs; delete <stamp> removes
-# one archived call; delete --all removes every call, the archive, and the
-# decision, spoken-order and action logs. Every delete refuses while recording.
+# one archived call and the notes it left in place; both also drop that call's
+# lines from the decision and spoken-order logs. delete --all removes every
+# call, the archive, and the decision, spoken-order and action logs, including
+# untagged lines written before calls had stamps. Every delete refuses while
+# recording.
 #
 # desk opens the desk page; with --display, or on start when the display_host
 # setting is set, it also shows display_url full screen on that ssh host's
-# Hyprland desktop with Chromium. show-display and hide-display drive that
-# screen for any other page.
+# Hyprland desktop with Chromium, and stop closes it again.
 #
 # macOS only. Paths and settings: bin/fm-call-lib.sh. Environment overrides:
 # CALL_COMPANION_OPEN_BIN, CALL_COMPANION_SSH_BIN,
@@ -61,7 +65,11 @@ DIGEST="$DATA_DIR/digest.json"
 DESK="$DATA_DIR/desk.md"
 GLANCE="$DATA_DIR/glance.html"
 LIVE_ITEMS="$STATE_DIR/live-items.jsonl"
+CALL_STAMP="$STATE_DIR/call-stamp"
 PREVIOUS_OUTPUT="$STATE_DIR/previous-output"
+DISPLAY_ADDRESS="$STATE_DIR/display-desk-address"
+NOTES_FILES='notes.md notes.html notes.json notes-model.json'
+CALL_LOGS='triggers.log decisions.log decisions-batch.log'
 OPEN_BIN=${CALL_COMPANION_OPEN_BIN:-open}
 SSH_BIN=${CALL_COMPANION_SSH_BIN:-ssh}
 SWITCH_AUDIO_BIN=${CALL_COMPANION_SWITCH_AUDIO_BIN:-$(fm_call_tool SwitchAudioSource /opt/homebrew/bin/SwitchAudioSource)}
@@ -82,8 +90,6 @@ usage: fm-call-companion.sh start --mic --everyone-agreed
        fm-call-companion.sh status
        fm-call-companion.sh stop
        fm-call-companion.sh desk [--display]
-       fm-call-companion.sh show-display <url>
-       fm-call-companion.sh hide-display
        fm-call-companion.sh notes
        fm-call-companion.sh reset
        fm-call-companion.sh list
@@ -114,12 +120,8 @@ done
 REMOTE
 }
 
-display_address_file() {
-  printf '%s/display-%s-address\n' "$STATE_DIR" "$1"
-}
-
 display_show_window() {
-  local url=$1 url_q address address_file=$2
+  local url=$1 url_q address
   printf -v url_q '%q' "$url"
   address=$(
   display_ssh "bash -s -- $url_q" <<'REMOTE'
@@ -164,8 +166,8 @@ REMOTE
   )
   [[ "$address" =~ ^0x[0-9A-Fa-f]+$ ]] || return 1
   mkdir -p "$STATE_DIR"
-  printf '%s\n' "$address" > "$address_file.tmp.$$"
-  mv "$address_file.tmp.$$" "$address_file"
+  printf '%s\n' "$address" > "$DISPLAY_ADDRESS.tmp.$$"
+  mv "$DISPLAY_ADDRESS.tmp.$$" "$DISPLAY_ADDRESS"
 }
 
 display_hide_window() {
@@ -192,22 +194,14 @@ hyprctl dispatch "hl.dsp.window.close({window=\"address:$address\"})" >/dev/null
 REMOTE
 }
 
-show_display() {
-  local url=$1 slot=$2
-  display_reachable || return 1
-  display_lid_open || return 1
-  display_show_window "$url" "$(display_address_file "$slot")"
-}
-
-hide_display() {
-  local slot=$1 address_file address
-  address_file=$(display_address_file "$slot")
-  [ -s "$address_file" ] || return 0
+hide_desk_display() {
+  local address
+  [ -s "$DISPLAY_ADDRESS" ] || return 0
   display_reachable || return 0
-  address=$(cat "$address_file")
+  address=$(cat "$DISPLAY_ADDRESS")
   [[ "$address" =~ ^0x[0-9A-Fa-f]+$ ]] || return 1
   display_hide_window "$address"
-  rm -f "$address_file"
+  rm -f "$DISPLAY_ADDRESS"
 }
 
 # The desk on the second screen; a missing or closed screen is a note on the
@@ -216,7 +210,7 @@ show_desk_display() {
   if [ -z "$DISPLAY_HOST" ] || [ -z "$DISPLAY_URL" ]; then
     mkdir -p "$STATE_DIR"
     printf '%s\n' 'Second screen skipped: set display_host and display_url' > "$STATE_DIR/display-note"
-  elif show_display "$DISPLAY_URL" desk; then
+  elif display_reachable && display_lid_open && display_show_window "$DISPLAY_URL"; then
     rm -f "$STATE_DIR/display-note"
   else
     mkdir -p "$STATE_DIR"
@@ -365,9 +359,10 @@ start_companion() {
     exit 1
   fi
   rm -f "$(pid_file_for captions)" "$(pid_file_for mic)" "$(pid_file_for digest)"
-  # A transcript untouched for three hours belongs to an earlier call: archive it rather than mix two calls.
-  if [ -s "$TRANSCRIPT" ] && [ -n "$(find "$TRANSCRIPT" -mmin +180 2>/dev/null)" ]; then reset_companion; fi
+  [ ! -s "$TRANSCRIPT" ] || reset_companion
   prepare_views
+  mkdir -p "$STATE_DIR"
+  date '+%Y%m%d-%H%M%S' > "$CALL_STAMP"
   transcript_note "recording started ($source) after everyone on the call agreed to be recorded"
 
   if [ "$source" = captions ]; then
@@ -463,11 +458,13 @@ stop_all() {
   stop_component captions fm-call-captions.sh || failed=1
   stop_component mic fm-call-mic.sh || failed=1
   stop_component digest fm-call-digest.sh || failed=1
-  [ "$was_running" = false ] || transcript_note 'recording stopped'
-  "$FM_CALL_BIN/fm-call-digest.sh" --final-batch || failed=1
+  if [ "$was_running" = true ]; then
+    transcript_note 'recording stopped'
+    "$FM_CALL_BIN/fm-call-digest.sh" --final-batch || failed=1
+  fi
   restore_loopback_output || failed=1
-  hide_display desk || true
-  write_final_notes || true
+  hide_desk_display || true
+  if [ "$was_running" = true ] && write_final_notes && ! any_running; then reset_companion; fi
   [ "$failed" -eq 0 ] || exit 1
   printf 'companion: stopped\n'
 }
@@ -476,7 +473,7 @@ reset_companion() {
   local stamp archived=false notes_file
   refuse_while_recording reset
   mkdir -p "$ARCHIVE_DIR"
-  stamp=$(date '+%Y%m%d-%H%M%S')
+  stamp=$(fm_call_stamp) || stamp=$(date '+%Y%m%d-%H%M%S')
   if [ -s "$TRANSCRIPT" ]; then
     mv "$TRANSCRIPT" "$ARCHIVE_DIR/$stamp-transcript.txt"
     archived=true
@@ -494,13 +491,14 @@ reset_companion() {
     archived=true
   fi
   # The last call's notes stay in place (the desk links them) and are copied to the archive.
-  for notes_file in notes.md notes.html notes.json; do
+  for notes_file in $NOTES_FILES; do
     if [ -s "$DATA_DIR/$notes_file" ] && [ "$DATA_DIR/$notes_file" -nt "$ARCHIVE_DIR/.last-notes-copy" ]; then
       cp -p "$DATA_DIR/$notes_file" "$ARCHIVE_DIR/$stamp-$notes_file"
       archived=true
     fi
   done
   touch "$ARCHIVE_DIR/.last-notes-copy"
+  rm -f "$CALL_STAMP"
   : > "$TRANSCRIPT"
   write_idle_glance
   write_idle_desk
@@ -523,22 +521,43 @@ delete_logs() {
   mkdir -p "$LOG_DIR"
 }
 
+# Drop one call's lines, tagged with its stamp, from the cross-call logs.
+forget_call_lines() {
+  local stamp=$1 log
+  for log in $CALL_LOGS; do
+    [ -f "$STATE_DIR/$log" ] || continue
+    awk -F '\t' -v stamp="$stamp" '$1 != stamp' "$STATE_DIR/$log" > "$STATE_DIR/$log.tmp.$$"
+    mv "$STATE_DIR/$log.tmp.$$" "$STATE_DIR/$log"
+  done
+}
+
 delete_current() {
+  local stamp notes_file
   refuse_while_recording delete
-  rm -f "$TRANSCRIPT" "$DIGEST" "$DESK" "$GLANCE" "$LIVE_ITEMS" \
-    "$DATA_DIR/notes.md" "$DATA_DIR/notes.html" "$DATA_DIR/notes.json" "$DATA_DIR/notes-model.json"
+  rm -f "$TRANSCRIPT" "$DIGEST" "$DESK" "$GLANCE" "$LIVE_ITEMS"
+  for notes_file in $NOTES_FILES; do rm -f "$DATA_DIR/$notes_file"; done
+  if stamp=$(fm_call_stamp); then forget_call_lines "$stamp"; fi
+  rm -f "$CALL_STAMP"
   delete_logs
   prepare_views
   printf 'companion: deleted the current call and its logs; the archive is untouched\n'
 }
 
 delete_archived() {
-  local stamp=$1 count
+  local stamp=$1 count notes_file notes_removed=false
   [[ "$stamp" =~ ^[0-9]{8}-[0-9]{6}$ ]] || { printf 'companion: stamp must look like 20261018-153000; see fm-call-companion.sh list\n' >&2; exit 2; }
   refuse_while_recording delete
   count=$(find "$ARCHIVE_DIR" -maxdepth 1 -type f -name "$stamp-*" 2>/dev/null | wc -l | tr -d ' ')
   [ "$count" -gt 0 ] || { printf 'companion: no archived call %s\n' "$stamp" >&2; exit 1; }
+  for notes_file in $NOTES_FILES; do
+    if [ -f "$DATA_DIR/$notes_file" ] && cmp -s "$ARCHIVE_DIR/$stamp-$notes_file" "$DATA_DIR/$notes_file"; then
+      rm -f "$DATA_DIR/$notes_file"
+      notes_removed=true
+    fi
+  done
   find "$ARCHIVE_DIR" -maxdepth 1 -type f -name "$stamp-*" -exec rm -f {} +
+  forget_call_lines "$stamp"
+  [ "$notes_removed" = false ] || write_idle_glance
   delete_logs
   printf 'companion: deleted archived call %s (%s files) and the logs\n' "$stamp" "$count"
 }
@@ -546,7 +565,7 @@ delete_archived() {
 delete_all() {
   refuse_while_recording delete
   rm -rf "$DATA_DIR"
-  rm -f "$LIVE_ITEMS" "$STATE_DIR/triggers.log" "$STATE_DIR/decisions.log" "$STATE_DIR/decisions-batch.log" "$STATE_DIR/actions.log"
+  rm -f "$LIVE_ITEMS" "$CALL_STAMP" "$STATE_DIR/triggers.log" "$STATE_DIR/decisions.log" "$STATE_DIR/decisions-batch.log" "$STATE_DIR/actions.log"
   delete_logs
   printf 'companion: deleted every call, the archive, and the decision, spoken-order and action logs\n'
 }
@@ -580,14 +599,6 @@ main() {
       "$OPEN_BIN" "$GLANCE"
       [ "${2:-}" != --display ] || show_desk_display
       printf 'companion: opened %s\n' "$GLANCE"
-      ;;
-    show-display)
-      [ "$#" -eq 2 ] || { usage; exit 2; }
-      show_display "$2" view || true
-      ;;
-    hide-display)
-      [ "$#" -eq 1 ] || { usage; exit 2; }
-      hide_display view
       ;;
     stop)
       [ "$#" -eq 1 ] || { usage; exit 2; }

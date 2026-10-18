@@ -10,8 +10,9 @@
 #                  glance.html, notes.{md,html,json}, archive/, and public/
 #                  (symlinks to just the desk views, for a home that serves them)
 #   state/calls/   process ids, logs/, audio/ (short-lived chunks), the live
-#                  item and decision logs, the watcher's state, and the compiled
-#                  microphone helper
+#                  item and decision logs, call-stamp (the current call's
+#                  stamp), the watcher's state, and the compiled microphone
+#                  helper
 #
 # Settings come from the home's private, gitignored config/call-companion:
 # `key = value` lines, `#` comments and blank lines ignored, unknown keys
@@ -69,6 +70,16 @@ fm_call_setting() {
     done < "$CALL_COMPANION_CONFIG"
   fi
   if [ "$found" = true ]; then printf '%s\n' "$result"; else printf '%s\n' "$default"; fi
+}
+
+# fm_call_stamp - print the current call's stamp (YYYYMMDD-HHMMSS, chosen by
+# `fm-call-companion.sh start` and kept until the call is archived or
+# deleted); fails when there is none.
+fm_call_stamp() {
+  local stamp
+  stamp=$(sed -n '1p' "$FM_CALL_STATE/call-stamp" 2>/dev/null) || return 1
+  [[ "$stamp" =~ ^[0-9]{8}-[0-9]{6}$ ]] || return 1
+  printf '%s\n' "$stamp"
 }
 
 # fm_call_tool <name> <fallback-path> - the first <name> on PATH, else the
