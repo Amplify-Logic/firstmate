@@ -1,4 +1,4 @@
-# Herdr runtime backend (experimental)
+# Herdr runtime backend
 
 This page covers running Firstmate workers on the Herdr runtime backend: setup, where tasks appear, how they are cleaned up, how input reaches them, and how their liveness is read.
 Operators who choose Herdr, or who verify Firstmate against it, need it.
@@ -6,6 +6,7 @@ Below the operator sections it also keeps this fork's dated adapter findings for
 A 2026-07-02 cleanup bug proved that `HERDR_SESSION` alone is not a safe way to target destructive session cleanup; see "Session targeting: the `--session` flag, not `HERDR_SESSION` alone" below.
 
 Herdr is an agent-native terminal backend with native per-pane agent state and push events.
+Starship's setup makes it the runtime of a fresh home on a Mac and inside WSL 2 on Windows, while a server and any home that already chose tmux keep tmux (see [Setup](#setup)).
 Firstmate requires Herdr protocol 14 or newer.
 Broad backend verification covers versions 0.7.1, 0.7.3, 0.7.4, 0.7.5, 0.8.0, and 0.9.5, the version the required real-Herdr CI lane pins.
 Protocol-16 features remain gated by availability.
@@ -33,6 +34,9 @@ Herdr provides the terminal session while Treehouse continues to provide task wo
 ## Setup
 
 Pick Herdr when you want native busy, idle, and blocked state and accept the [active limits](#active-limits) below.
+
+On a Mac or inside WSL 2, `bin/fm-herdr-setup.sh` does the whole setup: it keeps a Herdr that passes the version gate or installs the pinned release through `bin/fm-install-herdr.sh`, installs Herdr's Claude Code integration, and writes `herdr` to `config/backend` only for a fresh home.
+[ONBOARDING.md](../ONBOARDING.md) step 3 runs it on a Mac, and `bin/fm-linux-setup.sh` runs it inside WSL 2; the script header owns the exact rules.
 
 Prerequisites:
 
@@ -1927,6 +1931,7 @@ tests/fm-backend-herdr-launcher-workspace-e2e.test.sh
 tests/fm-backend-herdr-presentation-e2e.test.sh
 tests/fm-backend-herdr-agent-exit-shell-e2e.test.sh
 tests/fm-herdr-pi-stale-registration-live-e2e.test.sh
+tests/fm-spawn-herdr-agent-up-live-e2e.test.sh
 tests/fm-backend-herdr-eventwait-smoke.test.sh
 tests/fm-control-herdr-smoke.test.sh
 tests/fm-herdr-session-cleanup.test.sh
