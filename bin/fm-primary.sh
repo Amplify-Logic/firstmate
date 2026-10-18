@@ -397,7 +397,7 @@ claude_plan() {
   subscription=$(printf '%s' "$status" \
     | jq -r 'select(.loggedIn == true) | .subscriptionType // empty' 2>/dev/null) || subscription=
   [ -n "$subscription" ] || return 0
-  tier=$(jq -r '.oauthAccount.organizationRateLimitTier // .oauthAccount.userRateLimitTier // empty' \
+  tier=$(jq -r '.oauthAccount.organizationRateLimitTier // empty' \
     "${CLAUDE_CONFIG_DIR:-$HOME}/.claude.json" 2>/dev/null) || tier=
   case "$tier" in
     *20x*) printf 'max20' ;;

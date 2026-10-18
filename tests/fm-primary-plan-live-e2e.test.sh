@@ -38,7 +38,7 @@ subscription=$(printf '%s' "$status" | jq -r '.subscriptionType // empty')
   fail "claude $version: \`claude auth status\` no longer reports subscriptionType for a subscription sign-in; revisit claude_plan in bin/fm-primary.sh"
 
 record="${CLAUDE_CONFIG_DIR:-$HOME}/.claude.json"
-tier=$(jq -r '.oauthAccount.organizationRateLimitTier // .oauthAccount.userRateLimitTier // empty' "$record" 2>/dev/null)
+tier=$(jq -r '.oauthAccount.organizationRateLimitTier // empty' "$record" 2>/dev/null)
 if [ "$subscription" = max ]; then
   case "$tier" in
     *20x* | *5x*) ;;
