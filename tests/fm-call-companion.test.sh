@@ -584,7 +584,7 @@ EOF
   grep -q 'Build the pilot dashboard' "$home/data/calls/desk.md" || fail 'spoken order missing from the desk'
   grep -q 'Started the rollout scout' "$home/data/calls/glance.html" || fail 'Firstmate action missing from the glance page'
   FM_HOME="$home" "$ROOT/bin/fm-call-digest.sh" --final-batch
-  tail -n 1 "$state/decisions-batch.log" | grep -Eq '^20261018-130000\tflush\t\[[0-9]{2}:[0-9]{2}:[0-9]{2}\]\tfinal$' || fail 'final batch record missing'
+  tail -n 1 "$state/decisions-batch.log" | grep -Eq '^20261018-130000	flush	\[[0-9]{2}:[0-9]{2}:[0-9]{2}\]	final$' || fail 'final batch record missing'
   [ -z "$(find "$state/logs" -name 'digest-*' 2>/dev/null)" ] || fail 'a successful digest left call text in the logs'
   unset -f run_digest
   pass 'the live desk keeps grounded items, records each once, and uses the configured model'
