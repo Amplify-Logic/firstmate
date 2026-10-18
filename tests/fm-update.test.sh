@@ -25,6 +25,9 @@
 #   - Secondmate homes resolve from both state/<id>.meta and the
 #     data/secondmates.md registry, deduped, and the firstmate repo is never
 #     re-processed as one of its own secondmates.
+#   - A home's private add-on (bin/fm-addon.sh) fast-forwards from its own
+#     origin under the same guards, a remote home's add-on line is relayed, and
+#     a home with no add-on prints nothing about one.
 set -u
 
 # shellcheck source=tests/lib.sh
@@ -556,6 +559,119 @@ test_primary_update_rebinds_local_watch() {
   pass "T12 a self-update rebinds a locally armed watch on the primary"
 }
 
+# --- T13: a home's private add-on moves with the update -------------------
+# new_addon <world>: a bare add-on origin and a clone of it checked out beside
+# the home, named by the home's config/addon.
+new_addon() {
+  local w=$1
+  git init -q --bare "$w/addon.git"
+  git -C "$w/addon.git" symbolic-ref HEAD refs/heads/main
+  git clone -q "$w/addon.git" "$w/addon-seed" 2>/dev/null
+  mkdir -p "$w/addon-seed/hooks/bootstrap"
+  printf '#!/usr/bin/env bash\necho one\n' > "$w/addon-seed/hooks/bootstrap/10-mine"
+  chmod +x "$w/addon-seed/hooks/bootstrap/10-mine"
+  git -C "$w/addon-seed" add -A
+  git -C "$w/addon-seed" commit -qm a1
+  git -C "$w/addon-seed" push -q origin main
+  git clone -q "$w/addon.git" "$w/addon"
+  mkdir -p "$w/home/config"
+  printf 'path = %s\n' "$w/addon" > "$w/home/config/addon"
+}
+
+bump_addon() {
+  local w=$1
+  printf '#!/usr/bin/env bash\necho two\n' > "$w/addon-seed/hooks/bootstrap/10-mine"
+  git -C "$w/addon-seed" commit -qam a2
+  git -C "$w/addon-seed" push -q origin main
+}
+
+test_addon_fast_forwards_with_the_update() {
+  local w out
+  w=$(new_world t13)
+  new_addon "$w"
+  bump_addon "$w"
+
+  out=$(run_update "$w")
+
+  assert_contains "$out" "firstmate: already current" "the shared code had nothing new"
+  assert_contains "$out" "add-on: updated " "the add-on must fast-forward from its own origin"
+  assert_contains "$out" "(instructions changed: hooks)" "a hook change is an instruction change"
+  assert_contains "$out" "reread-firstmate: yes" "a changed add-on hook must ask the running firstmate to re-read"
+  [ "$(git -C "$w/addon" rev-parse HEAD)" = "$(git -C "$w/addon" rev-parse origin/main)" ] \
+    || fail "the add-on HEAD is not at its origin/main"
+
+  out=$(run_update "$w")
+  assert_contains "$out" "add-on: already current" "a current add-on must say so"
+  assert_contains "$out" "reread-firstmate: no" "a current add-on asks for no re-read"
+  pass "T13 the private add-on fast-forwards with the update and an instruction change asks for a re-read"
+}
+
+test_addon_that_cannot_advance_is_reported_and_left() {
+  local w out
+  w=$(new_world t14)
+  out=$(run_update "$w")
+  assert_not_contains "$out" "add-on" "a home with no add-on must print nothing about one"
+
+  new_addon "$w"
+  bump_addon "$w"
+  printf 'local edit\n' > "$w/addon/scratch.txt"
+  out=$(run_update "$w")
+  assert_contains "$out" "add-on: skipped: dirty working tree" "a dirty add-on must be skipped and reported"
+  assert_equals "local edit" "$(cat "$w/addon/scratch.txt")" "the add-on's local work must survive"
+
+  rm -rf "$w/addon"
+  out=$(run_update "$w")
+  assert_contains "$out" "add-on: skipped: the add-on checkout $w/addon is missing; run bin/fm-addon.sh install" \
+    "a missing add-on checkout must be reported with its repair"
+  assert_contains "$out" "reread-firstmate: no" "a skipped add-on asks for no re-read"
+  pass "T14 an add-on that cannot advance is reported and left as it is, and no add-on prints nothing"
+}
+
+test_remote_addon_line_is_relayed() {
+  local w out fake_ssh
+  w=$(new_world t15)
+  fake_ssh="$w/fakebin/fake-ssh"
+  cat > "$fake_ssh" <<'SH'
+#!/usr/bin/env bash
+set -u
+cat > /dev/null
+while [ "$#" -gt 0 ]; do
+  case "$1" in -o) shift 2 ;; --) shift; break ;; *) exit 90 ;; esac
+done
+shift 2
+argv_b64=$4
+decode() { printf '%s' "$1" | base64 --decode 2>/dev/null || printf '%s' "$1" | base64 -D; }
+rargs=()
+while IFS= read -r -d '' a; do rargs+=("$a"); done < <(decode "$argv_b64")
+case "${rargs[1]:-}" in
+  update) printf 'add-on: updated 1111111..2222222\ncurrent: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n' ;;
+  state) printf 'alive\n' ;;
+  *) exit 91 ;;
+esac
+SH
+  chmod +x "$fake_ssh"
+  cat > "$w/home/state/sm1.meta" <<EOF
+window=remote:sm1
+endpoint_task_id=sm1
+worktree=/srv/sm1
+project=/srv/sm1
+harness=claude
+kind=secondmate
+home=/srv/sm1
+remote_host=remote-mac
+remote_backend=herdr
+EOF
+  printf -- '- sm1 - remote domain (host: remote-mac; root: /srv/fm; home: /srv/sm1; scope: things; projects: p; added 2026-09-03)\n' \
+    > "$w/home/data/secondmates.md"
+
+  out=$(FM_TEST_SSH_BIN="$fake_ssh" run_update "$w")
+
+  assert_contains "$out" "remote secondmate sm1: already current on remote-mac" "the remote result must still be read from its last line"
+  assert_contains "$out" "remote secondmate sm1 add-on: updated 1111111..2222222" "the remote home's add-on line must be relayed"
+  assert_contains "$out" "restart-secondmates: fm-sm1" "the remote add-on line must not disturb the restart routing"
+  pass "T15 a remote home's add-on update is relayed beside its own result"
+}
+
 test_updates_main_and_secondmate
 test_reread_gate_is_instruction_only
 test_bin_only_advance_restarts
@@ -572,5 +688,8 @@ test_firstmate_wrong_branch_skipped
 test_firstmate_detached_head_skipped
 test_unsafe_secondmate_home_skipped_before_git_update
 test_primary_update_rebinds_local_watch
+test_addon_fast_forwards_with_the_update
+test_addon_that_cannot_advance_is_reported_and_left
+test_remote_addon_line_is_relayed
 
 echo "# all fm-update tests passed"

@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # tests/fm-opt-in-skills.test.sh - bin/fm-opt-in-skills.sh: a home's presence
-# flags decide which opt-in skills are linked into a checkout's skill folder,
-# the links never make the checkout read as changed, and nothing the script did
-# not create is ever touched.
+# flags decide which opt-in skills are linked into a checkout's skill folder, a
+# home's private add-on adds its own skills, the links never make the checkout
+# read as changed, and nothing the script did not create is ever touched.
 #
 # Every case runs against a throwaway git checkout holding a copy of this
 # repository's real .gitignore and .agents/opt-in-skills/, with a private
@@ -129,6 +129,82 @@ test_checkout_without_opt_in_folder_is_untouched() {
   pass "a checkout with no opt-in skill folder is left alone"
 }
 
+# make_addon <dir> <skill>...: a private add-on beside the checkout carrying the
+# named skills, configured for the home in <dir>.
+make_addon() {
+  local dir=$1 skill
+  shift
+  mkdir -p "$dir/addon/.agents/skills"
+  for skill in "$@"; do
+    mkdir -p "$dir/addon/.agents/skills/$skill"
+    printf -- '---\nname: %s\n---\n' "$skill" > "$dir/addon/.agents/skills/$skill/SKILL.md"
+  done
+  printf 'path = %s\n' "$dir/addon" > "$dir/config/addon"
+}
+
+test_addon_skills_link_and_checkout_stays_clean() {
+  local dir out addon
+  dir=$(make_checkout addon)
+  make_addon "$dir" my-todo my-glasses
+  mkdir -p "$dir/addon/.agents/skills/no-skill-file"
+  out=$(run_sync "$dir" 2>&1)
+  assert_equals "" "$out" "sync must print nothing when it only links add-on skills"
+  assert_equals "my-glasses my-todo" "$(linked "$dir")" "every add-on skill with a SKILL.md, and nothing else, must be linked"
+  addon=$(cd "$dir/addon" && pwd -P)
+  assert_equals "$addon/.agents/skills/my-todo" "$(readlink "$dir/checkout/.agents/skills/my-todo")" \
+    "an add-on link must point at the add-on by absolute path"
+  [ -f "$dir/checkout/.agents/skills/my-glasses/SKILL.md" ] || fail "a linked add-on skill must be readable at its usual path"
+  assert_equals "" "$(git -C "$dir/checkout" status --porcelain)" "an add-on link must not make the checkout read as changed"
+  out=$(run_sync "$dir" 2>&1)
+  assert_equals "" "$out" "a second sync must print nothing"
+  assert_equals "2" "$(grep -c '^/.agents/skills/my-' "$dir/checkout/.git/info/exclude")" \
+    "a second sync must not repeat an exclude line"
+  pass "an add-on's skills are linked where the harness looks, and the checkout stays clean"
+}
+
+test_addon_skill_replaces_the_opt_in_skill_of_its_name() {
+  local dir addon
+  dir=$(make_checkout addon-replace)
+  : > "$dir/config/daily-todo"
+  run_sync "$dir"
+  assert_equals "../opt-in-skills/daily-todo-freshness" "$(readlink "$dir/checkout/.agents/skills/daily-todo-freshness")" \
+    "the switch alone must link the shipped opt-in skill"
+  make_addon "$dir" daily-todo-freshness
+  run_sync "$dir"
+  addon=$(cd "$dir/addon" && pwd -P)
+  assert_equals "$addon/.agents/skills/daily-todo-freshness" "$(readlink "$dir/checkout/.agents/skills/daily-todo-freshness")" \
+    "a skill the add-on carries must replace the opt-in skill of the same name"
+  rm -f "$dir/config/addon"
+  run_sync "$dir"
+  assert_equals "../opt-in-skills/daily-todo-freshness" "$(readlink "$dir/checkout/.agents/skills/daily-todo-freshness")" \
+    "without the add-on the switched-on opt-in skill must come back"
+  assert_equals "" "$(git -C "$dir/checkout" status --porcelain)" "the checkout must stay clean throughout"
+  pass "an add-on skill replaces the opt-in skill of its name, and gives it back when the add-on goes"
+}
+
+test_addon_links_go_when_the_add_on_drops_them() {
+  local dir out
+  dir=$(make_checkout addon-drop)
+  make_addon "$dir" keep drop
+  mkdir -p "$dir/checkout/.agents/skills/drop-real"
+  ln -s /tmp "$dir/checkout/.agents/skills/elsewhere"
+  run_sync "$dir"
+  rm -rf "$dir/addon/.agents/skills/drop"
+  run_sync "$dir"
+  assert_equals "elsewhere keep" "$(linked "$dir")" "a skill the add-on dropped must lose its link and nothing else"
+  mkdir -p "$dir/addon/.agents/skills/always-on"
+  printf -- '---\nname: always-on\n---\n' > "$dir/addon/.agents/skills/always-on/SKILL.md"
+  out=$(run_sync "$dir" 2>&1)
+  assert_contains "$out" "always-on is not this script's link; left as it is" "a tracked skill of the same name must be reported"
+  [ -f "$dir/checkout/.agents/skills/always-on/SKILL.md" ] && [ ! -L "$dir/checkout/.agents/skills/always-on" ] \
+    || fail "a tracked skill must never be replaced by an add-on skill"
+  rm -f "$dir/config/addon"
+  run_sync "$dir" 2>/dev/null
+  assert_equals "elsewhere" "$(linked "$dir")" "with no add-on configured every add-on link must go, and no other link"
+  [ -d "$dir/checkout/.agents/skills/drop-real" ] || fail "a real folder must never be removed"
+  pass "add-on links go when the add-on drops a skill or is no longer configured, and nothing else is touched"
+}
+
 test_misuse_exits_2() {
   local code
   "$SKILLS" 2>/dev/null; code=$?
@@ -146,6 +222,9 @@ test_captain_home_switches_link_every_skill
 test_switch_off_removes_only_its_links
 test_foreign_path_is_left_alone
 test_checkout_without_opt_in_folder_is_untouched
+test_addon_skills_link_and_checkout_stays_clean
+test_addon_skill_replaces_the_opt_in_skill_of_its_name
+test_addon_links_go_when_the_add_on_drops_them
 test_misuse_exits_2
 
 echo "# fm-opt-in-skills.test.sh: all assertions passed"

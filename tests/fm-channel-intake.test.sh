@@ -2142,10 +2142,16 @@ test_observe_and_resolve_refuse_what_rots_the_page() {
 }
 
 test_bootstrap_surfaces_the_intake() {
-  assert_grep 'fm-channel-intake.sh' "$ROOT/bin/fm-bootstrap.sh" \
-    'bootstrap does not surface the channel intake'
-  assert_grep 'CHANNEL_INTAKE' "$ROOT/bin/fm-bootstrap.sh" \
-    'bootstrap does not document the CHANNEL_INTAKE diagnostic line'
+  local h out
+  h="$TMP_ROOT/bootstrap-hook"
+  new_home "$h"
+  at "$h" "$T_0900" arm-check
+  rm -f "$h/state/channel-intake.check.sh" "$h/state/channel-intake.check-trust"
+  # Session-start bootstrap reaches the intake through its bootstrap hook point
+  # (bin/fm-addon.sh, hooks/bootstrap/20-channel-intake), so drive that point.
+  out=$(FM_HOME="$h" FM_ROOT_OVERRIDE="$ROOT" FM_CHANNEL_INTAKE_NOW="$T_0900" "$ROOT/bin/fm-addon.sh" run bootstrap)
+  assert_contains "$out" 'CHANNEL_INTAKE:' 'the bootstrap hook point did not surface the channel intake'
+  assert_contains "$out" 'live check is absent' 'the bootstrap hook point did not report the lost live check'
 
   pass 'the session-start bootstrap section surfaces due sources, ready alerts and a lost live check'
 }

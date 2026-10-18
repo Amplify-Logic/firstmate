@@ -382,15 +382,31 @@ pass "fm_fork_event_wait_or_sleep: no glasses paths on a herdr home runs upstrea
 # watcher does. Roots are built by symlink so the real checkout is never
 # mutated, and the counterfactual at the end proves these assertions can fail.
 
-# build_degraded_root <dest> [<replacement-watcher>]
+# build_degraded_root <dest> [<replacement-watcher>] [<replacement-hook>]
 # Mirrors the checkout with bin/fm-file-event-lib.sh removed. A replacement
-# watcher is copied in as a real file so the counterfactual can edit it.
+# watcher, or a replacement for the built-in watcher hook that loads the library
+# (hooks/watcher/10-glasses-file-event.sh), is copied in as a real file so the
+# counterfactual can edit it.
 build_degraded_root() {
-  local dest=$1 watcher=${2:-} entry
+  local dest=$1 watcher=${2:-} hook=${3:-} entry point
   rm -rf "$dest"
   mkdir -p "$dest/bin"
   for entry in "$ROOT"/*; do
-    [ "$(basename "$entry")" = bin ] || ln -s "$entry" "$dest/$(basename "$entry")"
+    case "$(basename "$entry")" in
+      bin) ;;
+      hooks)
+        if [ -n "$hook" ]; then
+          mkdir -p "$dest/hooks/watcher"
+          for point in "$ROOT"/hooks/*; do
+            [ "$(basename "$point")" = watcher ] || ln -s "$point" "$dest/hooks/$(basename "$point")"
+          done
+          cp "$hook" "$dest/hooks/watcher/10-glasses-file-event.sh"
+        else
+          ln -s "$ROOT/hooks" "$dest/hooks"
+        fi
+        ;;
+      *) ln -s "$entry" "$dest/$(basename "$entry")" ;;
+    esac
   done
   for entry in "$ROOT"/bin/*; do
     case "$(basename "$entry")" in
@@ -465,23 +481,23 @@ grep -Fq 'SLEPT 1' "$TMP/degraded.out" \
   || fail "an absent library must never expire the slow-check timer"
 pass "hook W1: an absent fork library leaves the watcher silently on upstream's blind poll sleep"
 
-# The counterfactual. Everything above would also hold for a watcher whose
+# The counterfactual. Everything above would also hold for a watcher hook whose
 # source line is not guarded at all, because this file runs without set -e and
 # a failed source only prints. That is exactly the degrade test that cannot
 # fail, so the guard is deleted here and the same assertions are required to
 # catch it. Without this, the block above is decoration.
-# The pattern is the watcher's literal source line, so $SCRIPT_DIR must stay
+# The pattern is the hook's literal source line, so $FM_HOOK_ROOT must stay
 # unexpanded here too.
 # shellcheck disable=SC2016
-sed 's#^\[ ! -r "\$SCRIPT_DIR/fm-file-event-lib.sh" \] || ##' \
-  "$ROOT/bin/fm-watch.sh" > "$TMP/unguarded-watch.sh"
+sed 's#^\[ ! -r "\$FM_HOOK_ROOT/bin/fm-file-event-lib.sh" \] || ##' \
+  "$ROOT/hooks/watcher/10-glasses-file-event.sh" > "$TMP/unguarded-hook.sh"
 # shellcheck disable=SC2016
-grep -q '^\. "\$SCRIPT_DIR/fm-file-event-lib.sh"$' "$TMP/unguarded-watch.sh" \
+grep -q '^\. "\$FM_HOOK_ROOT/bin/fm-file-event-lib.sh"$' "$TMP/unguarded-hook.sh" \
   || fail "the counterfactual must produce an unguarded source line"
-bash -n "$TMP/unguarded-watch.sh" \
-  || fail "the counterfactual edit left a syntactically broken watcher"
+bash -n "$TMP/unguarded-hook.sh" \
+  || fail "the counterfactual edit left a syntactically broken watcher hook"
 
-build_degraded_root "$TMP/unguarded-root" "$TMP/unguarded-watch.sh"
+build_degraded_root "$TMP/unguarded-root" "" "$TMP/unguarded-hook.sh"
 run_degraded_root "$TMP/unguarded-root" unguarded
 
 grep -Fq 'fm-file-event-lib.sh' "$TMP/unguarded.err" \
@@ -589,11 +605,12 @@ pass "hook W1: the executed watcher fails by name when the terminal-wait either/
 # prove a source property, so this is asserted against the file.
 
 WATCHER_SRC="$ROOT/bin/fm-watch.sh"
-# The pattern is the watcher's own literal source line, so its $SCRIPT_DIR must
-# stay unexpanded.
+# The watcher loads the library through its built-in watcher hook
+# (bin/fm-addon.sh), so the readability guard lives in that hook. The pattern is
+# the hook's own literal source line, so its $FM_HOOK_ROOT must stay unexpanded.
 # shellcheck disable=SC2016
-grep -q '^\[ ! -r "\$SCRIPT_DIR/fm-file-event-lib.sh" \] || \. "\$SCRIPT_DIR/fm-file-event-lib.sh"$' \
-  "$WATCHER_SRC" || fail "the fork library must be sourced through a readability guard"
+grep -q '^\[ ! -r "\$FM_HOOK_ROOT/bin/fm-file-event-lib.sh" \] || \. "\$FM_HOOK_ROOT/bin/fm-file-event-lib.sh"$' \
+  "$ROOT/hooks/watcher/10-glasses-file-event.sh" || fail "the fork library must be sourced through a readability guard"
 
 # fm_fork_assert_watcher_hook_shape in bin/fm-file-event-lib.sh is the single
 # owner of the hook-shape rule; the test asserts it by running that function
