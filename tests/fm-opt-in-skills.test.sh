@@ -205,6 +205,41 @@ test_addon_links_go_when_the_add_on_drops_them() {
   pass "add-on links go when the add-on drops a skill or is no longer configured, and nothing else is touched"
 }
 
+# run_home_sync <dir>: sync for a home whose checkout is the home itself, as on
+# a real machine, so an add-on path relative to the home lands inside it.
+run_home_sync() {
+  FM_HOME="$1/checkout" FM_CONFIG_OVERRIDE="$1/config" "$SKILLS" sync "$1/checkout" 2>&1
+}
+
+test_addon_inside_the_home_links_replaces_and_unlinks() {
+  local dir home addon skill
+  dir=$(make_checkout addon-in-home)
+  home="$dir/checkout"
+  : > "$dir/config/daily-todo"
+  mkdir -p "$home/projects/starship-personal/.agents/skills"
+  for skill in daily-todo-freshness my-todo; do
+    mkdir -p "$home/projects/starship-personal/.agents/skills/$skill"
+    printf -- '---\nname: %s\n---\n' "$skill" > "$home/projects/starship-personal/.agents/skills/$skill/SKILL.md"
+  done
+  printf 'path = projects/starship-personal\n' > "$dir/config/addon"
+  assert_equals "" "$(run_home_sync "$dir")" "sync must print nothing when it links an add-on inside the home"
+  addon=$(cd "$home/projects/starship-personal" && pwd -P)
+  assert_equals "$addon/.agents/skills/my-todo" "$(readlink "$home/.agents/skills/my-todo")" \
+    "an add-on inside the home must be linked by absolute path"
+  assert_equals "$addon/.agents/skills/daily-todo-freshness" "$(readlink "$home/.agents/skills/daily-todo-freshness")" \
+    "an add-on inside the home must replace the opt-in skill of the same name"
+  rm -rf "$home/projects/starship-personal/.agents/skills/my-todo"
+  assert_equals "" "$(run_home_sync "$dir")" "sync must print nothing when it removes a dropped add-on skill"
+  [ ! -L "$home/.agents/skills/my-todo" ] || fail "a skill the add-on inside the home dropped must lose its link"
+  rm -f "$dir/config/addon"
+  assert_equals "" "$(run_home_sync "$dir")" "sync must print nothing when it hands a skill back to the opt-in folder"
+  assert_equals "../opt-in-skills/daily-todo-freshness" "$(readlink "$home/.agents/skills/daily-todo-freshness")" \
+    "without the add-on the switched-on opt-in skill must come back"
+  assert_equals "daily-todo-freshness" "$(linked "$dir")" "no add-on link may stay once the add-on goes"
+  assert_equals "" "$(git -C "$home" status --porcelain)" "the checkout must stay clean throughout"
+  pass "an add-on inside the home links, replaces, and unlinks like one beside it"
+}
+
 test_misuse_exits_2() {
   local code
   "$SKILLS" 2>/dev/null; code=$?
@@ -225,6 +260,7 @@ test_checkout_without_opt_in_folder_is_untouched
 test_addon_skills_link_and_checkout_stays_clean
 test_addon_skill_replaces_the_opt_in_skill_of_its_name
 test_addon_links_go_when_the_add_on_drops_them
+test_addon_inside_the_home_links_replaces_and_unlinks
 test_misuse_exits_2
 
 echo "# fm-opt-in-skills.test.sh: all assertions passed"

@@ -32,9 +32,10 @@
 #
 # SAFETY. sync only ever creates, or removes, a symlink whose target is exactly
 # ../opt-in-skills/<skill>, or an absolute <somewhere>/.agents/skills/<skill>
-# outside the checkout, which is the shape of an add-on link. Anything else at
-# that path - a real folder, a file, or a link pointing elsewhere - is left as it
-# is and named on stderr. A checkout with no .agents/opt-in-skills/ folder (any
+# other than the link's own path, which is the shape of an add-on link wherever
+# the add-on sits, inside the home (projects/starship-personal) or beside it.
+# Anything else at that path - a real folder, a file, or a link pointing
+# elsewhere - is left as it is and named on stderr. A checkout with no .agents/opt-in-skills/ folder (any
 # project other than Firstmate, or a Firstmate copy older than this split) is
 # left alone.
 #
@@ -96,10 +97,11 @@ addon_skills() {
 }
 
 # is_addon_link <checkout> <skill> <target>: whether a link has an add-on link's
-# shape, an absolute path ending in .agents/skills/<skill> outside the checkout.
+# shape, an absolute path ending in .agents/skills/<skill> other than the link's
+# own path.
 is_addon_link() {
   case "$3" in
-    "$1"/*) return 1 ;;
+    "$1/.agents/skills/$2") return 1 ;;
     /*/.agents/skills/"$2") return 0 ;;
   esac
   return 1

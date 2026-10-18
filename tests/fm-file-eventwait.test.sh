@@ -605,13 +605,6 @@ pass "hook W1: the executed watcher fails by name when the terminal-wait either/
 # prove a source property, so this is asserted against the file.
 
 WATCHER_SRC="$ROOT/bin/fm-watch.sh"
-# The watcher loads the library through its built-in watcher hook
-# (bin/fm-addon.sh), so the readability guard lives in that hook. The pattern is
-# the hook's own literal source line, so its $FM_HOOK_ROOT must stay unexpanded.
-# shellcheck disable=SC2016
-grep -q '^\[ ! -r "\$FM_HOOK_ROOT/bin/fm-file-event-lib.sh" \] || \. "\$FM_HOOK_ROOT/bin/fm-file-event-lib.sh"$' \
-  "$ROOT/hooks/watcher/10-glasses-file-event.sh" || fail "the fork library must be sourced through a readability guard"
-
 # fm_fork_assert_watcher_hook_shape in bin/fm-file-event-lib.sh is the single
 # owner of the hook-shape rule; the test asserts it by running that function
 # against the real watcher here and against guard-removed copies below.
