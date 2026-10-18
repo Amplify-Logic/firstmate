@@ -222,6 +222,7 @@ if [ -n "${FIXTURE_NOTES_GATE:-}" ]; then
   : > "$FIXTURE_NOTES_GATE.started"
   for _ in $(seq 1 100); do [ -e "$FIXTURE_NOTES_GATE" ] && break; sleep 0.1; done
 fi
+[ "${FIXTURE_NOTES_FAIL_LATE:-0}" = 0 ] || exit 1
 printf '%s\n' "${FIXTURE_NOTES_TEXT:-notes}" > "$out/notes.md"
 EOF
   chmod +x "$bin/claude" "$bin/notes-python"
@@ -311,6 +312,22 @@ EOF
   grep -q first-call "$home/data/calls/archive/$stamp-notes-model.json" 2>/dev/null || fail 'the raw notes of a call archived mid-pass were lost'
   ! grep -rq first-call "$home/data/calls"/notes* 2>/dev/null || fail "the archived call's notes were left in place for the next call"
   out=$(run_companion stop 2>&1) || fail "stop of the next call failed: $out"
+
+  # The same, but the notes pass fails: stop says so instead of pointing at the archive.
+  out=$(run_companion start --mic --everyone-agreed 2>&1) || fail "failing back-to-back start failed: $out"
+  wait_for_speech
+  FIXTURE_NOTES_FAIL_LATE=1 FIXTURE_NOTES_GATE="$TMP_ROOT/unfinished-fail-gate" run_companion stop > "$TMP_ROOT/unfinished-fail-stop.out" 2>&1 &
+  stop_pid=$!
+  fm_test_track_pid "$stop_pid"
+  for _ in $(seq 1 100); do [ -e "$TMP_ROOT/unfinished-fail-gate.started" ] && break; sleep 0.1; done
+  [ -e "$TMP_ROOT/unfinished-fail-gate.started" ] || fail 'the failing notes pass did not start'
+  out=$(run_companion start --mic --everyone-agreed 2>&1) || fail "the next call did not start during the failing notes pass: $out"
+  : > "$TMP_ROOT/unfinished-fail-gate"
+  wait "$stop_pid" || fail "stop during a failing notes pass failed: $(cat "$TMP_ROOT/unfinished-fail-stop.out")"
+  out=$(cat "$TMP_ROOT/unfinished-fail-stop.out")
+  assert_contains "$out" 'notes for archived call' 'a failed notes pass for an archived call was not reported'
+  assert_not_contains "$out" 'they are in the archive' 'a failed notes pass claimed the notes were archived'
+  out=$(run_companion stop 2>&1) || fail "stop after the failing notes pass failed: $out"
 
   # The notes fail, so the call stays in place; the next start archives it first.
   out=$(run_companion start --mic --everyone-agreed 2>&1) || fail "second start failed: $out"

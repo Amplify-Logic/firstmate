@@ -483,7 +483,11 @@ write_final_notes() {
     fi
   elif [ -n "$stamp" ] && [ -n "$(find "$ARCHIVE_DIR" -maxdepth 1 -type f -name "$stamp-*" 2>/dev/null)" ]; then
     for notes_file in $NOTES_FILES; do [ ! -f "$out/$notes_file" ] || mv "$out/$notes_file" "$ARCHIVE_DIR/$stamp-$notes_file"; done
-    printf 'companion: call %s was archived while its notes were written; they are in the archive\n' "$stamp"
+    if [ "$status" -eq 0 ]; then
+      printf 'companion: call %s was archived while its notes were written; they are in the archive\n' "$stamp"
+    else
+      printf 'companion: end-of-call notes for archived call %s failed; see %s/final-notes.log\n' "$stamp" "$LOG_DIR" >&2
+    fi
   else
     printf 'companion: the call was deleted while its notes were written; discarded them\n'
   fi
