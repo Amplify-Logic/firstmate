@@ -57,14 +57,14 @@
 # the profile lines are written once.
 #
 # Usage:
-#   fm-linux-setup.sh [--ci] [--addon OWNER/REPO|URL]
+#   fm-linux-setup.sh [--ci] [--addon OWNER/REPO]
 #   curl -fsSL https://raw.githubusercontent.com/Amplify-Logic/firstmate/main/bin/fm-linux-setup.sh | bash
 #   cat fm-linux-setup.sh | bash -s -- --ci
 #   --ci     skip the closing sign-in instructions (gh auth login, claude);
 #            .github/workflows/windows-wsl.yml runs it this way, through a
 #            pipe as the guides do, with no person at the keyboard.
-#   --addon  name this home's private add-on, as OWNER/REPO on GitHub or as a
-#            git URL, and clone it when the sign-in already allows it
+#   --addon  name this home's private add-on by its GitHub repository,
+#            OWNER/REPO, and clone it when the sign-in already allows it
 # Exit: 0 when every tool answers --version; 1 on a refusal or failed step,
 # with the reason on stderr; 2 on a usage error.
 set -eu
@@ -78,12 +78,12 @@ BREW_PACKAGES="git node gh tmux jq"
 
 usage() {
   cat <<'EOF'
-usage: fm-linux-setup.sh [--ci] [--addon OWNER/REPO|URL]
+usage: fm-linux-setup.sh [--ci] [--addon OWNER/REPO]
   Takes a fresh Ubuntu 24.04 (inside WSL 2, or a server over SSH) to the point
   where a first mate can start, cloning Firstmate into ~/starship.
   Run it as your own user from your Linux home, never under /mnt/.
   --ci     skip the closing sign-in instructions (gh auth login, claude)
-  --addon  name your private add-on (OWNER/REPO on GitHub, or a git URL)
+  --addon  name your private add-on by its GitHub repository, OWNER/REPO
 EOF
 }
 
@@ -114,25 +114,19 @@ check() {  # <label> <command...>: sets missing=1 when the tool does not answer
   fi
 }
 
-# addon_origin <OWNER/REPO|URL>: the clone URL for an add-on argument.
+# addon_origin <OWNER/REPO>: the GitHub clone URL for an add-on argument.
 addon_origin() {
-  case "$1" in
-    *://*|*@*:*) printf '%s\n' "$1" ;;
-    */*) printf 'https://github.com/%s\n' "${1%.git}" ;;
-    *) return 1 ;;
-  esac
+  [[ $1 =~ ^[A-Za-z0-9][A-Za-z0-9-]*/[A-Za-z0-9._-]*[A-Za-z0-9_-]$ ]] || return 1
+  printf 'https://github.com/%s\n' "$1"
 }
 
-# setup_addon <target> <OWNER/REPO|URL>: write config/addon unless it already
+# setup_addon <target> <OWNER/REPO>: write config/addon unless it already
 # names something else, then try the clone once. Sets ADDON_PENDING=1 when the
 # clone is still to be done after the sign-ins.
 setup_addon() {
   local target=$1 origin name config want
   origin=$(addon_origin "$2")
-  name=${origin%/}
-  name=${name##*/}
-  name=${name##*:}
-  name=${name%.git}
+  name=${2#*/}
   config="$target/config/addon"
   want=$(printf 'path = projects/%s\norigin = %s\n' "$name" "$origin")
   mkdir -p "$target/config"
@@ -159,7 +153,7 @@ main() {
       --ci) CI_MODE=1 ;;
       --addon)
         if [ "$#" -lt 2 ] || ! addon_origin "$2" >/dev/null; then
-          printf 'fm-linux-setup.sh: --addon needs OWNER/REPO or a git URL\n' >&2
+          printf "fm-linux-setup.sh: --addon needs OWNER/REPO, the add-on's GitHub repository\n" >&2
           usage >&2
           exit 2
         fi

@@ -359,7 +359,7 @@ test_piped_install_runs_to_the_end() {
 }
 
 test_addon_is_named_and_cloned_once_signed_in() {
-  local w out status config
+  local w out status config arg
   w=$(make_world addon)
   config="$w/home/starship/config/addon"
   out=$(FAKE_ADDON_CLONE_FAILS=starship-personal run_setup "$w" --addon Amplify-Logic/starship-personal)
@@ -387,11 +387,16 @@ test_addon_is_named_and_cloned_once_signed_in() {
   assert_equals "path = elsewhere" "$(cat "$config")" "an existing config/addon must be left as it is"
 
   w=$(make_world addon-usage)
-  out=$(run_setup "$w" --addon starship-personal)
-  status=$?
-  [ "$status" -eq 2 ] || fail "an add-on without an owner should be a usage error, got $status: $out"
+  for arg in starship-personal https://github.com/Amplify-Logic/starship-personal \
+    git@github.com:Amplify-Logic/starship-personal.git /srv/addon.git Amplify-Logic/..; do
+    out=$(run_setup "$w" --addon "$arg" 2>&1)
+    status=$?
+    [ "$status" -eq 2 ] || fail "--addon $arg should be a usage error, got $status: $out"
+    assert_contains "$out" "--addon needs OWNER/REPO, the add-on's GitHub repository" "--addon $arg must be refused by naming the OWNER/REPO form"
+  done
   [ ! -s "$w/calls.log" ] || fail "an add-on usage error must change nothing: $(calls "$w")"
-  pass "--addon names the private add-on, clones it once the sign-in allows, and never overwrites another one"
+  [ ! -e "$w/home/starship/config/addon" ] || fail "an add-on usage error must write no config/addon"
+  pass "--addon names the private add-on by OWNER/REPO only, clones it once the sign-in allows, and never overwrites another one"
 }
 
 test_help_and_usage_errors
