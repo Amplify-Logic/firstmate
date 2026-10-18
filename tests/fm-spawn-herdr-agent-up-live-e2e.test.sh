@@ -92,16 +92,26 @@ Exercise the agent-up gate on Herdr.
 Nothing to build.
 EOF
 
-# A stand-in Claude: argv[0] is `claude`, so Herdr's agent detection and
-# Firstmate's process classifier both read it as Claude Code.
+# A stand-in Claude: the long-running process is a symlink named `claude` to
+# fm_agent_standin's stand-in, so the kernel records `claude` as its process
+# name and Herdr's agent detection and Firstmate's process classifier both read
+# it as Claude Code. `exec -a` alone is not enough: it renames argv[0] only, and
+# Linux keeps the process name `sleep`, so Herdr never registers it there.
+STANDIN_BIN=$(fm_agent_standin "$TMP_ROOT/standin") || {
+  echo "skip: no long-running stand-in binary survives a rename (multicall coreutils, no C compiler)"
+  exit 0
+}
+AGENT_BIN="$TMP_ROOT/agentbin"
+mkdir -p "$AGENT_BIN"
+ln -s "$STANDIN_BIN" "$AGENT_BIN/claude"
 FAKEBIN="$TMP_ROOT/fakebin"
 mkdir -p "$FAKEBIN"
-cat > "$FAKEBIN/claude" <<'SH'
+cat > "$FAKEBIN/claude" <<SH
 #!/usr/bin/env bash
-case "${1:-}" in
+case "\${1:-}" in
   --version) echo "2.1.302 (Claude Code)"; exit 0 ;;
 esac
-exec -a claude sleep 600
+exec '$AGENT_BIN/claude' 600
 SH
 chmod +x "$FAKEBIN/claude"
 

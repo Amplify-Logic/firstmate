@@ -1965,6 +1965,7 @@ Herdr 0.9.5 creates the record with its placeholder `unknown` status the moment 
 The adapter read that placeholder as `unreadable`, so the spawn's one-second agent-up gate (`bin/fm-spawn.sh` `spawn_wait_agent_up`) saw two unreadable reads in a row and ended with "The herdr pane could not be read for the claude harness; delivery proceeded UNVERIFIED".
 `fm_backend_herdr_pane_agent_state` now settles the placeholder by the process view: a running harness process reads `live`, a shell-only pane reads `stale-agent`, and anything else stays `unknown`.
 `tests/fm-spawn-herdr-agent-up-live-e2e.test.sh` drives the real `bin/fm-spawn.sh --harness claude` into a lab session with the stand-in, reproduced the warning on the unfixed tree with Herdr 0.9.5, and passes on both releases; `tests/fm-backend-herdr.test.sh` pins the classifier with canned bodies.
+Its stand-in is a symlink named `claude` to a long-running native stand-in rather than the measurement's `exec -a claude`, because `exec -a` renames argv[0] only and Linux keeps the kernel process name `sleep`, so Herdr 0.9.5 on Ubuntu CI never registered it.
 The same reproduction was not run inside WSL 2: the version, not the platform, decides the placeholder, and the WSL machine ran 0.9.5.
 
 ### Stale agent registration
