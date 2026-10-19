@@ -676,9 +676,9 @@ SH
 # bin/fm-watch.sh (the watcher or one of its subshells) are held, never the
 # arm's, and only until the first beacon exists. <mode> is a per-call delay in
 # seconds, or "hold" to block each call made while the watch lock is held until
-# <release-file> exists.
-slow_watcher_startup() {  # <state> <fakebin> <mode> [release-file]
-  local state=$1 fakebin=$2 mode=$3 release=${4:-} tool real
+# <release-file> exists, creating <holding-file> when the first such call blocks.
+slow_watcher_startup() {  # <state> <fakebin> <mode> [release-file holding-file]
+  local state=$1 fakebin=$2 mode=$3 release=${4:-} holding=${5:-} tool real
   for tool in mktemp readlink; do
     real=$(command -v "$tool") || fail "no $tool to slow"
     cat > "$fakebin/$tool" <<SH
@@ -689,6 +689,7 @@ case "\$(ps -o command= -p "\$PPID" 2>/dev/null)" in
     if [ ! -e "$state/.last-watcher-beat" ]; then
       if [ "$mode" = hold ]; then
         if [ -L "$state/.watch.lock" ]; then
+          [ -e "$holding" ] || : > "$holding"
           while [ ! -e "$release" ]; do sleep 0.1; done
         fi
       else
@@ -742,24 +743,30 @@ test_slow_start_confirms_within_the_start_bound() {
 # only once that child is cleanup-ready, so the timeout leaves no dead watch
 # lock, steal mutex, or queue lock behind for the next start to steal.
 test_start_timeout_leaves_no_dead_lock() {
-  local dir home state fakebin armout release started status lock
+  local dir home state fakebin armout release holding started status lock
   dir=$(make_case start-timeout-clean)
   home="$dir/home"
   state="$dir/state"
   fakebin="$dir/fakebin"
   armout="$dir/arm.out"
   release="$dir/release"
+  holding="$dir/holding"
   mkdir -p "$home/data"
-  slow_watcher_startup "$state" "$fakebin" hold "$release"
+  slow_watcher_startup "$state" "$fakebin" hold "$release" "$holding"
 
   started=$(date +%s)
   PATH="$fakebin:$PATH" FM_HOME="$home" FM_STATE_OVERRIDE="$state" \
     FM_POLL=1 FM_SIGNAL_GRACE=0 FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 \
     FM_ARM_CONFIRM_TIMEOUT=1 FM_ARM_START_BOUND=6 "$WATCH_ARM" > "$armout" 2>&1 &
   ARM_PID=$!
-  # The arm gives up at most 7s in and then grants one more 6s start bound, so
-  # release the held startup between the two, with seconds of margin either way
-  # for a contended runner.
+  # The child holds the watch lock, so it started after the arm took its start
+  # time: the arm gives up at most 7s after this point and then grants one more
+  # 6s start bound, so release the held startup between the two.
+  while is_live_non_zombie "$ARM_PID" && [ ! -e "$holding" ]; do
+    [ $(( $(date +%s) - started )) -lt 60 ] || break
+    sleep 0.1
+  done
+  [ -e "$holding" ] || fail "the held startup never took the watch lock: $(cat "$armout")"
   sleep 8.5
   touch "$release"
   wait_for_exit "$ARM_PID" 200

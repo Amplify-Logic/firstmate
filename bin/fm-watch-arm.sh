@@ -41,7 +41,10 @@
 # for it up to FM_ARM_START_BOUND seconds (default 30) before giving up. Giving
 # up never kills a child mid-startup: it is stopped once it is cleanup-ready, so
 # its own exit cleanup releases the watch lock (or after one more start bound,
-# past which it is stopped anyway).
+# past which it is stopped anyway). Only that give-up path uses the start bound:
+# a HUP, TERM or INT sent to the arm (an adapter retiring an unready arm) waits
+# for the child to become cleanup-ready only until the confirmation deadline, so
+# such a retire keeps its confirmation-window timing.
 # It NEVER reports started/attached/healthy off a stale beacon or a dead/reused pid: a
 # stale-beacon or dead-pid holder either self-heals (the fresh child steals the
 # dead lock per the singleton self-eviction/steal path and is confirmed) or this
@@ -730,7 +733,7 @@ handle_arm_signal() {
   local signal=$1 rc=$2
   trap - HUP TERM INT
   if [ -n "$child" ] && fm_pid_alive "$child"; then
-    stop_child_once_cleanup_ready "$start_deadline"
+    stop_child_once_cleanup_ready "$deadline"
     wait "$child" 2>/dev/null || true
   fi
   cycle_log_append "$rc" "$signal" arm-interrupted none
