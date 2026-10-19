@@ -112,9 +112,10 @@ The words, from lightest to deepest, are `low`, `medium`, `high`, `xhigh` and `m
 Each worker your first mate starts appears in Herdr's sidebar as its own space while it works, and goes away when it is cleaned up.
 Click one to watch it, or press `Ctrl-b`, then `w`, to pick one; come back to your first mate the same way.
 
-**Every day after this:** open Terminal and type `herdr`.
+**Every day after this, on a Mac:** open Terminal and type `herdr`.
 Herdr keeps running when you close the window (or press `Ctrl-b`, then `q`, to leave it), so this brings back your first mate as you left it.
 After the Mac restarts, Herdr reopens your spaces; if your first mate's space shows only a shell, run `cd ~/starship && bin/fm-primary.sh opus` there again, and it picks up its work from where it stopped.
+On Windows, follow the daily steps in [ONBOARDING-windows.md step 9](ONBOARDING-windows.md#9-finish-with-the-shared-steps) instead, because closing Ubuntu stops Herdr there.
 
 **Prefer tmux?** Herdr is the default, and tmux still works: run `echo tmux > ~/starship/config/backend`, start the first mate inside `tmux new -s firstmate`, and workers open as tmux windows instead ([docs/tmux-backend.md](docs/tmux-backend.md)).
 
