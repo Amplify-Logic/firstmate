@@ -183,7 +183,9 @@ collect_staging() {
   # a run that needs a person is a need. The deck adds no section of its own.
   # The runs come from deck-staging hooks (bin/fm-addon.sh), each printing one
   # JSON array, joined here into the one array the renderer reads; a hook whose
-  # output is not a JSON array adds nothing.
+  # output is not a JSON array adds nothing. Hook output arrives concatenated
+  # with no separator, so after unparseable text the join resumes at the next
+  # '[' rather than the next newline.
   local out=''
   out=$(FM_HOME="$FM_HOME" FM_CONFIG_OVERRIDE="$CONFIG" \
     "$SCRIPT_DIR/fm-addon.sh" run deck-staging 2>/dev/null) || out=''
@@ -202,7 +204,7 @@ while True:
     try:
         value, at = decoder.raw_decode(text, at)
     except ValueError:
-        at = text.find("\n", at)
+        at = text.find("[", at + 1)
         if at < 0:
             break
         continue
