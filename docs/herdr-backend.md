@@ -1789,7 +1789,7 @@ There is no second watcher process: the reader is a short-lived subprocess of th
 **Polling is the permanent fail-closed backstop.**
 The watcher's poll loop runs every cycle regardless, so the event path only ever shortens latency and can never drop an escalation.
 Three documented triggers disable the Herdr event path (`fm_backend_herdr_events_capable` and the watcher's runtime-disable counter): a build below protocol 16 or missing the events surface in `herdr api schema`; a connect/subscribe failure; and repeated runtime failures, which disable the fast path for the rest of that watcher process (a restart re-probes).
-The watcher then uses its bounded glasses file wait when those paths exist, otherwise it returns to pure polling.
+The watcher then uses an add-on watcher hook's own bounded wait when one is loaded, otherwise it returns to pure polling.
 
 **Empirical evidence (2026-07-11, herdr 0.7.3, protocol 16, macOS aarch64 Darwin 25.5.0, python3 3.13, jq present).**
 Capability, verified read-only:
