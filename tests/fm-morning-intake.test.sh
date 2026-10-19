@@ -816,23 +816,26 @@ test_force_never_overrides_the_bounded_retry_budget() {
 }
 
 test_bootstrap_surfaces_the_intake() {
-  # Session start composes bootstrap verbatim, so pin the actual owner
-  # invocation rather than adding another report channel to session start.
-  assert_grep '"$SCRIPT_DIR/fm-morning-intake.sh" pending' "$ROOT/bin/fm-bootstrap.sh" \
-    'bootstrap no longer surfaces the morning intake'
-  assert_grep 'MORNING_INTAKE' "$ROOT/bin/fm-bootstrap.sh" \
-    'bootstrap does not document the MORNING_INTAKE diagnostic line'
+  local h out
+  h="$TMP_ROOT/bootstrap-hook"
+  new_home "$h"
+  at "$h" "$T_0700" run >/dev/null
+  # Session-start bootstrap reaches the intake through its bootstrap hook point
+  # (bin/fm-addon.sh, hooks/bootstrap/10-morning-intake), so drive that point.
+  out=$(FM_HOME="$h" FM_ROOT_OVERRIDE="$ROOT" FM_MORNING_INTAKE_NOW="$T_0715" "$ROOT/bin/fm-addon.sh" run bootstrap)
+  assert_contains "$out" 'MORNING_INTAKE:' 'the bootstrap hook point did not surface the owed intake'
 
   pass 'the session-start bootstrap section surfaces an owed, failed, or finished intake'
 }
 
-# The bootstrap side of this capability is a guarded hook: one -x test and one
-# call. That guard is the whole promise that a home without the fork script
-# behaves exactly as upstream does, and no other case in any suite removes the
-# script, so nothing else can catch the day someone makes the intake a hard
-# dependency of session start. The control run is part of the assertion: it
-# proves the silence below is caused by the missing file rather than by a
-# fixture that had nothing to say.
+# The bootstrap side of this capability is a guarded hook: the built-in
+# hooks/bootstrap/10-morning-intake runs the gate only when it is executable.
+# That guard is the whole promise that a home without the fork script behaves
+# exactly as upstream does, and no other case in any suite removes the script,
+# so nothing else can catch the day someone makes the intake a hard dependency
+# of session start. The control run is part of the assertion: it proves the
+# silence below is caused by the missing file rather than by a fixture that had
+# nothing to say.
 test_bootstrap_without_the_intake_script_degrades_to_upstream() {
   local h report fakebin degraded entry control degraded_out expected code
 
