@@ -1386,7 +1386,7 @@ test_deck_staging_hooks_feed_the_pane() {
   printf '#!/usr/bin/env bash\necho %s\n' \
     "'[{\"run_id\":\"r2\",\"state\":\"pending\",\"device_id\":\"dev-second-hook\",\"attempt\":1,\"eligibility\":\"verified\"}]'" \
     > "$addon/hooks/deck-staging/20-pending"
-  printf '#!/usr/bin/env bash\necho not json\n' > "$addon/hooks/deck-staging/30-garbage"
+  printf '#!/usr/bin/env bash\necho not json\n' > "$addon/hooks/deck-staging/05-garbage"
   chmod +x "$addon/hooks/deck-staging/"*
   printf 'path = %s\n' "$addon" > "$home/config/addon"
 

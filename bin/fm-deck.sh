@@ -202,7 +202,10 @@ while True:
     try:
         value, at = decoder.raw_decode(text, at)
     except ValueError:
-        break
+        at = text.find("\n", at)
+        if at < 0:
+            break
+        continue
     if isinstance(value, list):
         runs.extend(value)
 print(json.dumps(runs))
