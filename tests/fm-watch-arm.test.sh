@@ -741,7 +741,9 @@ test_slow_start_confirms_within_the_start_bound() {
 
 # A start that outlasts even the start bound fails, but the arm stops its child
 # only once that child is cleanup-ready, so the timeout leaves no dead watch
-# lock, steal mutex, or queue lock behind for the next start to steal.
+# lock, steal mutex, or queue lock behind for the next start to steal. This
+# checks that clean-timeout outcome; test_slow_start_confirms_within_the_start_bound
+# covers how long the arm waits.
 test_start_timeout_leaves_no_dead_lock() {
   local dir home state fakebin armout release holding started status lock
   dir=$(make_case start-timeout-clean)
@@ -761,7 +763,7 @@ test_start_timeout_leaves_no_dead_lock() {
   ARM_PID=$!
   # The child holds the watch lock, so it started after the arm took its start
   # time: the arm gives up at most 7s after this point and then grants one more
-  # 6s start bound, so release the held startup between the two.
+  # 6s start bound, so the fixture releases the held startup between the two.
   while is_live_non_zombie "$ARM_PID" && [ ! -e "$holding" ]; do
     [ $(( $(date +%s) - started )) -lt 60 ] || break
     sleep 0.1
@@ -774,8 +776,6 @@ test_start_timeout_leaves_no_dead_lock() {
   [ "$status" -ne 0 ] || fail "a start past the start bound did not fail: $(cat "$armout")"
   grep -qF 'watcher: FAILED - no live watcher with a fresh beacon' "$armout" \
     || fail "a start past the start bound did not report the confirmation failure: $(cat "$armout")"
-  [ $(( $(date +%s) - started )) -ge 8 ] \
-    || fail "the arm gave up before the start bound: $(cat "$armout")"
   for lock in .watch.lock .watch.lock.steal .wake-queue.lock .watcher-down.lock; do
     [ ! -e "$state/$lock" ] && [ ! -L "$state/$lock" ] \
       || fail "the start timeout left $lock behind (pid $(cat "$state/$lock/pid" 2>/dev/null))"
