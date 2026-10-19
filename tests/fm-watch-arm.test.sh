@@ -677,14 +677,24 @@ SH
 # arm's, and only until the first beacon exists. <mode> is a per-call delay in
 # seconds, or "hold" to block each call made while the watch lock is held until
 # <release-file> exists, creating <holding-file> when the first such call blocks.
-slow_watcher_startup() {  # <state> <fakebin> <mode> [release-file holding-file]
-  local state=$1 fakebin=$2 mode=$3 release=${4:-} holding=${5:-} tool real
+# <arm-start-file> gets the epoch at which the arm creates its output file, which
+# it does just before taking its own start time.
+slow_watcher_startup() {  # <state> <fakebin> <mode> [release-file holding-file arm-start-file]
+  local state=$1 fakebin=$2 mode=$3 release=${4:-} holding=${5:-} armstart=${6:-} tool real
   for tool in mktemp readlink; do
     real=$(command -v "$tool") || fail "no $tool to slow"
     cat > "$fakebin/$tool" <<SH
 #!/bin/sh
 case "\$(ps -o command= -p "\$PPID" 2>/dev/null)" in
-  *fm-watch-arm.sh*) ;;
+  *fm-watch-arm.sh*)
+    case "\$*" in
+      *.watch-arm-output.*)
+        if [ -n "$armstart" ] && [ ! -e "$armstart" ]; then
+          date +%s > "$armstart.tmp" && mv "$armstart.tmp" "$armstart"
+        fi
+        ;;
+    esac
+    ;;
   *fm-watch.sh*)
     if [ ! -e "$state/.last-watcher-beat" ]; then
       if [ "$mode" = hold ]; then
@@ -745,7 +755,7 @@ test_slow_start_confirms_within_the_start_bound() {
 # checks that clean-timeout outcome; test_slow_start_confirms_within_the_start_bound
 # covers how long the arm waits.
 test_start_timeout_leaves_no_dead_lock() {
-  local dir home state fakebin armout release holding started status lock
+  local dir home state fakebin armout release holding armstart started release_at status lock
   dir=$(make_case start-timeout-clean)
   home="$dir/home"
   state="$dir/state"
@@ -753,23 +763,27 @@ test_start_timeout_leaves_no_dead_lock() {
   armout="$dir/arm.out"
   release="$dir/release"
   holding="$dir/holding"
+  armstart="$dir/arm-start"
   mkdir -p "$home/data"
-  slow_watcher_startup "$state" "$fakebin" hold "$release" "$holding"
+  slow_watcher_startup "$state" "$fakebin" hold "$release" "$holding" "$armstart"
 
   started=$(date +%s)
   PATH="$fakebin:$PATH" FM_HOME="$home" FM_STATE_OVERRIDE="$state" \
     FM_POLL=1 FM_SIGNAL_GRACE=0 FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 \
-    FM_ARM_CONFIRM_TIMEOUT=1 FM_ARM_START_BOUND=6 "$WATCH_ARM" > "$armout" 2>&1 &
+    FM_ARM_CONFIRM_TIMEOUT=1 FM_ARM_START_BOUND=12 "$WATCH_ARM" > "$armout" 2>&1 &
   ARM_PID=$!
-  # The child holds the watch lock, so it started after the arm took its start
-  # time: the arm gives up at most 7s after this point and then grants one more
-  # 6s start bound, so the fixture releases the held startup between the two.
-  while is_live_non_zombie "$ARM_PID" && [ ! -e "$holding" ]; do
+  # Time the release from the arm's own start, however long its child takes to
+  # reach the watch lock: the arm gives up by about start+13s and then grants
+  # one more 12s start bound, so releasing at start+17s lands between the two
+  # with seconds of margin either way.
+  while is_live_non_zombie "$ARM_PID" && [ ! -s "$armstart" ]; do
     [ $(( $(date +%s) - started )) -lt 60 ] || break
     sleep 0.1
   done
+  [ -s "$armstart" ] || fail "the arm never created its output file: $(cat "$armout")"
+  release_at=$(( $(cat "$armstart") + 17 ))
+  while [ "$(date +%s)" -lt "$release_at" ]; do sleep 0.1; done
   [ -e "$holding" ] || fail "the held startup never took the watch lock: $(cat "$armout")"
-  sleep 8.5
   touch "$release"
   wait_for_exit "$ARM_PID" 200
   status=$?
