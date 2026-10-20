@@ -152,7 +152,7 @@ Sources read: mail, chat, meetings.
 
 ## Commitments made / people waiting
 
-4. Owe Queco the customer's answer on the noise case.
+4. Owe Daan the customer's answer on the noise case.
 5. Owe Joost the scale-up update after Thursday's review.
 6. Owe Karolina a direction on who owns the portal route.
 

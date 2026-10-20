@@ -1595,7 +1595,7 @@ model = {
          "hold_reason": "the captain raises the limit", "repo": "firstmate"},
         {"summary": "Pick the DeepSeek route", "hold_kind": "captain",
          "hold_reason": "captain choice pending", "repo": "starship"},
-        {"summary": "Supply the StudyLink facts", "hold_kind": "captain",
+        {"summary": "Supply the student loan facts", "hold_kind": "captain",
          "hold_reason": "only he can answer", "repo": "starship"},
         {"summary": "Fund worker capacity", "hold_kind": "captain",
          "hold_reason": "spend approval", "repo": "firstmate"},
@@ -2252,7 +2252,7 @@ SH
 - [ ] decide-advisor - Approve the advisor call (repo: household-finances) (kind: captain) (hold: needs the captain's word) (hold-kind: captain)
 - [ ] decide-limit - Raise the Claude spend limit (repo: firstmate) (kind: captain) (hold: the captain raises the limit) (hold-kind: captain)
 - [ ] decide-deepseek - Pick the DeepSeek route (repo: starship) (kind: captain) (hold: captain choice pending) (hold-kind: captain)
-- [ ] decide-studylink - Supply the StudyLink facts (repo: starship) (kind: captain) (hold: only he can answer) (hold-kind: captain)
+- [ ] decide-student-loan - Supply the student loan facts (repo: starship) (kind: captain) (hold: only he can answer) (hold-kind: captain)
 - [ ] decide-capacity - Fund worker capacity (repo: firstmate) (kind: captain) (hold: spend approval) (hold-kind: captain)
 - [ ] retire-miro - Confirm retiring the Miro rebuild (repo: city-guide) (kind: captain) (hold: Confirm retiring or reshaping this task.) (hold-kind: captain)
 - [ ] parked-pricing - Align Atelier pricing (repo: atelier) (kind: ship) (hold: Parked 2026-08-02 on captain order) (hold-kind: parked)
