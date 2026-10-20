@@ -849,13 +849,21 @@ def read_project_label_rules(home: Path) -> List[Tuple[str, str]]:
 def project_label(repo: str, owner: str = "", rules: Sequence[Tuple[str, str]] = ()) -> str:
     """The chip name for an item: its own repository decides; the owner (a
     task id) is read only when the item names no repository, so a project
-    name inside a task id never relabels another project's item."""
-    name = str(repo or "").strip() or str(owner or "").strip()
-    blob = name.lower()
+    name inside a task id never relabels another project's item. A
+    repository matches only a whole registered name; a task id matches a
+    name only as whole dash-separated words."""
+    repo_name = str(repo or "").strip().rsplit("/", 1)[-1].lower()
+    if repo_name:
+        for needle, label in rules:
+            if needle == repo_name:
+                return label
+        return _plain_label(repo_name) or "Other"
+    task = str(owner or "").strip().lower()
+    words = "-%s-" % task.replace("_", "-")
     for needle, label in rules:
-        if needle in blob:
+        if "-%s-" % needle.replace("_", "-") in words:
             return label
-    return _plain_label(name) or "Other"
+    return _plain_label(task) or "Other"
 
 
 def waiting_groups(items: List[Dict[str, str]]) -> List[Dict[str, Any]]:
