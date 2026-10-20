@@ -1489,7 +1489,7 @@ A brief without both sections is not asked it, and a missing, malformed, or belo
 The optional local, gitignored `config/dispatch-never-send` keeps values you name from ever leaving the machine in a resolver request or a [status second look](#status-second-look-configtriage-second-look).
 List the private words whose tasks must stay local, such as client, finance, or health names; nothing tracked in this repository seeds them.
 It has no default entries, and an absent file changes nothing.
-Like `config/crew-dispatch.json`, it is inherited into secondmate homes, so a secondmate's resolver withholds the same values.
+Like `config/crew-dispatch.json`, it is inherited into secondmate homes, so a secondmate's resolver and second look withhold the same values.
 
 Each non-blank line not beginning with `#` is one literal value, matched case-insensitively.
 Every entry is trimmed of surrounding whitespace, and any run of whitespace, in the entry or in the checked text, counts as one space, so a value the brief wraps across lines still matches.
