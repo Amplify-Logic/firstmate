@@ -177,7 +177,9 @@
 # .agents/opt-in-skills/, or anything under hooks/, including a file renamed
 # out of those places. The rules check applies when the task's recorded
 # project shares firstmate's lineage, or when that cannot be ruled out
-# (bin/fm-role-lib.sh fm_role_self_repo); a project proven unrelated skips it.
+# (bin/fm-role-lib.sh fm_role_self_repo), and when it is a Starship add-on:
+# this home's configured add-on (bin/fm-addon.sh root) or any repository with
+# bin/fm-team-root.sh at its root. Any other project proven unrelated skips it.
 # Both are read live at merge time, and an author, account, or changed-file
 # read that fails refuses rather than passing. --captain-approved, parsed
 # before the optional -- separator, records that the captain explicitly
@@ -498,8 +500,9 @@ META="$STATE/$ID.meta"
 fm_lease_forbid_branch "PR merge (fm-pr-merge)" --away-relocated
 
 # Whether this pull request can change Starship's own rules: only a project
-# proven not to share firstmate's lineage skips the changed-file read, so a
-# task-less pull request, which records no project, is always checked.
+# proven not to share firstmate's lineage and not a Starship add-on skips the
+# changed-file read, so a task-less pull request, which records no project, is
+# always checked.
 RULES_GUARDED=true
 if [ "$NO_TASK" = false ]; then
   if [ ! -f "$META" ] || [ -L "$META" ]; then
@@ -516,6 +519,14 @@ if [ "$NO_TASK" = false ]; then
     rules_lineage=0
     fm_role_self_repo "$MERGE_PROJECT" "$FM_ROOT" || rules_lineage=$?
     [ "$rules_lineage" -ne 1 ] || RULES_GUARDED=false
+    if [ "$RULES_GUARDED" = false ]; then
+      if [ -f "$MERGE_PROJECT/bin/fm-team-root.sh" ]; then
+        RULES_GUARDED=true
+      elif addon_root=$(FM_HOME="$FM_HOME" "$SCRIPT_DIR/fm-addon.sh" root 2>/dev/null) \
+        && [ "$addon_root" = "$(cd "$MERGE_PROJECT" 2>/dev/null && pwd -P)" ]; then
+        RULES_GUARDED=true
+      fi
+    fi
   fi
 fi
 

@@ -4692,6 +4692,38 @@ test_github_rules_check_skips_an_unrelated_project() {
   pass "fm-pr-merge skips the rules check for a project unrelated to firstmate"
 }
 
+# A Starship add-on changes Starship's rules too, though it shares no lineage
+# with firstmate: this home's configured add-on and any repository with the
+# add-on layout marker both get the rules check.
+test_github_rules_check_covers_starship_addons() {
+  local case_dir rc head kind
+  head=cacacacacacacacacacacacacacacacacacacaca
+  for kind in configured marker; do
+    case_dir=$(make_case "github-rules-addon-$kind")
+    add_gh_mocks "$case_dir" "$head"
+    fm_git_init_commit "$case_dir/addon"
+    if [ "$kind" = configured ]; then
+      printf 'path = %s\n' "$case_dir/addon" > "$case_dir/home/config/addon"
+    else
+      mkdir -p "$case_dir/addon/bin"
+      : > "$case_dir/addon/bin/fm-team-root.sh"
+    fi
+    printf 'project=%s\n' "$case_dir/addon" >> "$case_dir/state/task-x1.meta"
+    printf '%s\n' '[{"filename":"hooks/session-start/x"},{"filename":".agents/skills/foo/SKILL.md"}]' \
+      > "$case_dir/github-files.json"
+    set +e
+    run_pr_merge "$case_dir" task-x1 https://github.com/example/repo/pull/97 \
+      > "$case_dir/stdout" 2> "$case_dir/stderr"
+    rc=$?
+    set -e
+    expect_code 1 "$rc" "rules-addon-$kind: an add-on's skill and hook change must need the captain's yes"
+    assert_grep "Starship's own rules (.agents/skills/foo/SKILL.md, hooks/session-start/x)" "$case_dir/stderr" \
+      "rules-addon-$kind: the refusal did not name the add-on's rules files"
+    assert_no_grep 'pr merge' "$case_dir/gh.log" "rules-addon-$kind: gh pr merge ran"
+  done
+  pass "fm-pr-merge needs the captain's yes for a rules change in a Starship add-on"
+}
+
 test_captain_approved_is_attended_and_github_only() {
   local case_dir rc head
   head=c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9
@@ -4752,6 +4784,7 @@ test_github_other_author_needs_the_captain_word
 test_github_unreadable_author_or_account_refuses
 test_github_rules_change_needs_the_captain_word
 test_github_rules_check_skips_an_unrelated_project
+test_github_rules_check_covers_starship_addons
 test_captain_approved_is_attended_and_github_only
 test_captain_word_refusals_join_the_other_failures
 
