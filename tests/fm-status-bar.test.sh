@@ -260,7 +260,7 @@ test_contract_order_and_fleet_projection() {
   : > "$HOME_FIX/state/.afk"
 
   out=$(render Opus high 42 73 1.235 | strip_ansi)
-  [ "$out" = "⚓ Opus·high │ 🧠42% ⚡73% │ 👁 watching │ 1 working, 1 checking, 1 waiting, 1 needs a look │ \$1.24 │ 💤AFK" ] \
+  [ "$out" = "⚓ Opus·high │ 🧠42% ⚡73% │ 1 working, 1 checking, 1 waiting, 1 needs a look │ 👁 watching │ \$1.24 │ 💤AFK" ] \
     || fail "canonical fields, order, fleet counts, or formatting drifted: $out"
   pass "status bar: canonical field order and fleet projection are stable"
 }
@@ -345,12 +345,22 @@ test_unknown_fleet_state_shows_placeholders_and_never_zero() {
     "an unread fleet does not say its workers are unknown"
   assert_not_contains "$out" 'no workers' "an unread fleet was reported as zero live workers"
 
-  # A genuine zero still renders as zero.
+  # Records the reading could not classify are never an idle fleet: they are
+  # named as tasks whose state is unknown.
   reset_fleet
   fleet_task done1 crew 'state: done · source: run-step · checks passed'
   out=$(render Opus high -- -- -- | strip_ansi)
+  assert_contains "$out" '│ 1 task, state unknown │' "an unclassified record is not named as a task of unknown state"
+  assert_not_contains "$out" 'no workers' "a home with a task record was reported as having no workers"
+  fleet_task done2 crew 'state: done · source: run-step · checks passed'
+  out=$(render Opus high -- -- -- | strip_ansi)
+  assert_contains "$out" '│ 2 tasks, state unknown │' "two unclassified records are not named as tasks of unknown state"
+
+  # A genuine zero, with no task record at all, still renders as no workers.
+  reset_fleet
+  out=$(render Opus high -- -- -- | strip_ansi)
   assert_contains "$out" '│ no workers │' "a genuinely idle fleet is not reported as no workers"
-  pass "status bar: an unread fleet shows placeholders and a genuine zero still shows zero"
+  pass "status bar: an unread fleet shows placeholders, unclassified records stay visible, and a genuine zero still shows zero"
 }
 
 test_threshold_colors_and_placeholders() {

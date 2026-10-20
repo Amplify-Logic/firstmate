@@ -459,8 +459,8 @@ render_once() {
   # doing, and only the nonzero ones are shown. The five live counts are a
   # single reading: without one the group says so rather than showing zeros,
   # because "no workers" is a real state the captain has to be able to believe.
-  # Supervision sits before the fleet so a narrow surface that clips from the
-  # right keeps the not-watching alarm longest.
+  # For the same reason it is never shown while task records exist: records
+  # the reading could not classify are named as tasks whose state is unknown.
   if [ "$FLEET_KNOWN" != 1 ]; then
     fleet_part="${D}workers unknown${X}"
   else
@@ -470,6 +470,9 @@ render_once() {
     fleet_phrase "$PAUSED_COUNT" "$Y" waiting waiting
     fleet_phrase "$ATTENTION_COUNT" "$R" 'needs a look' 'need a look'
     fleet_phrase "$STOPPED_COUNT" "$Y" stopped stopped
+    if [ -z "$fleet_part" ] && [ "$RECORD_COUNT" -gt 0 ]; then
+      fleet_part="${D}${RECORD_COUNT} task$([ "$RECORD_COUNT" -eq 1 ] || printf s), state unknown${X}"
+    fi
     [ -n "$fleet_part" ] || fleet_part="${D}no workers${X}"
   fi
 
@@ -499,7 +502,7 @@ render_once() {
 
   printf '%s%s%s %s%s%s%s%s%s%s%s' \
     "$anchor" "$separator" "$context_part" "$quota_part" \
-    "$separator" "$watch_part" "$separator" "$fleet_part" \
+    "$separator" "$fleet_part" "$separator" "$watch_part" \
     "$separator" "$cost_part" "$separator$afk_part"
 }
 

@@ -8,7 +8,7 @@ This file is the single owner of the Firstmate primary status-bar contract.
 After ANSI styling is removed, every renderer uses this field order:
 
 ```text
-⚓ <model>·<effort> [<account-role>] │ 🧠<context-used> ⚡<provider-quota-used> │ 👁 <supervision> │ <workers> │ $<session-cost> │ 💤<afk>
+⚓ <model>·<effort> [<account-role>] │ 🧠<context-used> ⚡<provider-quota-used> │ <workers> │ 👁 <supervision> │ $<session-cost> │ 💤<afk>
 ```
 
 The separator is one space, a dim `│`, and one space.
@@ -21,8 +21,8 @@ Width-constrained surfaces clip or truncate the canonical line without wrapping 
 | `[account-role]` | A compact role word for the vendor account this primary is running on, attached to the model identity rather than forming its own group. | Omitted entirely when the account is unknown. |
 | `🧠 context` | The integer percentage of the model context window already used. | `--` when the orchestrator does not expose current context use. |
 | `⚡ quota` | The integer percentage of the provider's binding quota window already used, immediately followed by a dim token naming the window or windows that bind it when the adapter knows them. | `--` when the provider or orchestrator does not expose quota, or exposes a figure whose windows cannot all be named. |
+| `workers` | Plain-word counts, in this order and each shown only when nonzero, joined by commas: `N working`, `N checking`, `N waiting`, `N needs a look` (`N need a look` when more than one), and `N stopped`, as in `2 working, 1 needs a look`. | Dim `workers unknown` while the fleet reading is unknown; dim `N tasks, state unknown` (`1 task, state unknown`) when the reading is known, every count is zero, and task records still exist; dim `no workers` only when the reading is known, every count is zero, and no task record exists. |
 | `👁 supervision` | `watching` while `state/.last-watcher-beat` is under 180 seconds old. | Bright-red `not watching` when the beacon is missing, unreadable, or 180 seconds old or more; dim `idle` instead while the home holds no task or second-mate record and no registered check. |
-| `workers` | Plain-word counts, in this order and each shown only when nonzero, joined by commas: `N working`, `N checking`, `N waiting`, `N needs a look` (`N need a look` when more than one), and `N stopped`, as in `2 working, 1 needs a look`. | Dim `workers unknown` while the fleet reading is unknown; dim `no workers` when the reading is known and every count is zero. |
 | `$ cost` | Cumulative cost in US dollars for the current orchestrator session, rounded to two decimals. | `$--` when the orchestrator does not expose cost. |
 | `💤 AFK` | Whether the Firstmate home is in away mode. | Dim `💤--` when away mode is off. |
 
@@ -39,7 +39,7 @@ Each word maps to one figure from `bin/fm-fleet-status-lib.sh`:
 | `needs a look` | attention | Tasks that need Firstmate to act: a decision, a blocker, or a failure. |
 | `stopped` | stopped | Records still here whose worker is not: the endpoint is proven dead or absent, or the recorded worktree is gone. |
 
-The library's record count, which counts ordinary task records rather than workers, is not shown.
+The library's record count, which counts ordinary task records rather than workers, is shown only when no other count is, as `N tasks, state unknown`, so a record the reading could not classify never reads as an idle fleet.
 
 A task record outlives its worker, and `AGENTS.md` section 8 defines a status line as a wake EVENT rather than current state.
 Counting `state/*.meta` files as running workers, and folding each status log's last line into paused and attention, therefore reported records as live work in both directions at once: it overstated how much was running and understated how much needed attention.
@@ -111,7 +111,6 @@ ANSI renderers use bright colors for state and alerts.
 Green is ANSI 92, yellow is ANSI 93, red is ANSI 91, cyan is ANSI 96, dim is ANSI 2, and reset is ANSI 0.
 `not watching` is always bold bright red with ANSI `91;1`.
 It is raised only while the home holds a task or second-mate record (`state/*.meta`) or a registered check (`state/*.check.sh`), because that is when supervision has work to keep; a home with neither, such as a new one that has never dispatched anything, renders a missing or stale beacon as a dim `👁 idle` so a first launch does not open on an alarm.
-Supervision sits before the workers group so a surface that clips from the right, such as the Herdr border title, keeps the alarm longest.
 
 | Metric | Green | Yellow | Red |
 | --- | --- | --- | --- |
@@ -119,7 +118,7 @@ Supervision sits before the workers group so a surface that clips from the right
 | Provider quota used | 0 through 69 percent. | 70 through 89 percent. | 90 through 100 percent. |
 | Supervision freshness | Beacon age below 180 seconds. | Not used. | Beacon age of 180 seconds or more, or a missing or unreadable beacon, while any record or registered check exists. |
 
-`working` is bright green, `checking` is bright cyan, `waiting` and `stopped` are bright yellow, and `needs a look` is bright red; `workers unknown` and `no workers` are dim.
+`working` is bright green, `checking` is bright cyan, `waiting` and `stopped` are bright yellow, and `needs a look` is bright red; `workers unknown`, `state unknown`, and `no workers` are dim.
 The active AFK flag is bright cyan.
 Unavailable provider metrics are dim and never silently converted to zero.
 
@@ -455,7 +454,7 @@ Editing `~/.cursor` by hand is still out of scope, and no other file under it is
 
 ## Verification record
 
-Rows captured before 2026-09-12 show the fleet group as `🚢<active> ⏸<paused> ⚠<attention>`, rows captured before 2026-09-21 show it as `🚢<working> 🧪<validating> ⏸<paused> ⚠<attention> 📋<records>`, and rows captured before 2026-10-20 show it as `🚢<alive> 🧪<validating> ⏸<paused> ⚠<attention> 🪦<stopped> 📋<records>` placed before supervision, which read `👁 <seconds>s` or a bright-red `NO-WATCH`.
+Rows captured before 2026-09-12 show the fleet group as `🚢<active> ⏸<paused> ⚠<attention>`, rows captured before 2026-09-21 show it as `🚢<working> 🧪<validating> ⏸<paused> ⚠<attention> 📋<records>`, and rows captured before 2026-10-20 show it as `🚢<alive> 🧪<validating> ⏸<paused> ⚠<attention> 🪦<stopped> 📋<records>`, with supervision as `👁 <seconds>s` or a bright-red `NO-WATCH`.
 That was the field shape on the day each of those runs was observed; the current shape is the one in the canonical line above, and those older captures are kept as the evidence they were rather than rewritten.
 
 The adapter contract was checked on 2026-07-21 with Claude Code's project status-line payload shape, Pi 0.80.10, Cursor CLI 2026.07.17-3e2a980, and tmux 3.6a.

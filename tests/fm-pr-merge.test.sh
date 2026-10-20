@@ -4598,6 +4598,8 @@ test_github_rules_change_needs_the_captain_word() {
   head=c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7
   for files in '[{"filename":"AGENTS.md"}]' '[{"filename":"docs/AGENTS.md"}]' \
     '[{"filename":".agents/skills/ship-landing/SKILL.md"}]' '[{"filename":"hooks/stop.sh"}]' \
+    '[{"filename":"CLAUDE.md"}]' '[{"filename":".claude/settings.json"}]' \
+    '[{"filename":".agents/opt-in-skills/adhd/SKILL.md"}]' \
     '[{"filename":"docs/old-hook.sh","previous_filename":"hooks/old-hook.sh"}]'; do
     case_dir=$(make_case "github-rules-$(printf '%s' "$files" | cksum | cut -d' ' -f1)")
     add_gh_mocks "$case_dir" "$head"
@@ -4647,7 +4649,7 @@ test_github_rules_change_needs_the_captain_word() {
   case_dir=$(make_case github-rules-other-files)
   add_gh_mocks "$case_dir" "$head"
   printf 'project=%s\n' "$ROOT" >> "$case_dir/state/task-x1.meta"
-  printf '%s\n' '[{"filename":"bin/fm-x.sh"},{"filename":"docs/hooks/note.md"}]' > "$case_dir/github-files.json"
+  printf '%s\n' '[{"filename":"bin/fm-x.sh"},{"filename":"docs/hooks/note.md"},{"filename":"docs/CLAUDE.md"}]' > "$case_dir/github-files.json"
   set +e
   run_pr_merge "$case_dir" task-x1 https://github.com/example/repo/pull/95 \
     > "$case_dir/stdout" 2> "$case_dir/stderr"
@@ -4752,3 +4754,88 @@ test_github_rules_change_needs_the_captain_word
 test_github_rules_check_skips_an_unrelated_project
 test_captain_approved_is_attended_and_github_only
 test_captain_word_refusals_join_the_other_failures
+
+# A pull request no task owns, such as a teammate's, goes through the same live
+# guards with --no-task, and leaves no task record behind.
+test_no_task_merge_runs_the_same_guards() {
+  local case_dir rc head
+  head=cbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcb
+  case_dir=$(make_case no-task-own)
+  add_gh_mocks "$case_dir" "$head"
+  set +e
+  run_pr_merge "$case_dir" --no-task https://github.com/example/repo/pull/99 \
+    > "$case_dir/stdout" 2> "$case_dir/stderr"
+  rc=$?
+  set -e
+  expect_code 0 "$rc" "no-task-own: a green pull request this home opened must merge"
+  assert_logged_gh_merge "$case_dir" 99 example/repo --squash
+  assert_grep '/pulls/99/files' "$case_dir/gh.log" \
+    "no-task-own: a pull request with no recorded project skipped the rules check"
+  assert_grep 'verified: https://github.com/example/repo/pull/99 is merged' "$case_dir/stdout" \
+    "no-task-own: the landed merge was not verified"
+  assert_no_grep 'pr=' "$case_dir/state/task-x1.meta" "no-task-own: a task record was written"
+  [ -z "$(find "$case_dir/state" -name '*no-task*' -print)" ] \
+    || fail "no-task-own: a record was created for the --no-task placeholder"
+
+  case_dir=$(make_case no-task-teammate)
+  add_gh_mocks "$case_dir" "$head"
+  jq -c '.author.login = "teammate"' "$case_dir/github-view.json" > "$case_dir/view.tmp"
+  mv "$case_dir/view.tmp" "$case_dir/github-view.json"
+  set +e
+  run_pr_merge "$case_dir" --no-task https://github.com/example/repo/pull/99 \
+    > "$case_dir/stdout" 2> "$case_dir/stderr"
+  rc=$?
+  set -e
+  expect_code 1 "$rc" "no-task-teammate: a teammate's pull request must be refused"
+  assert_grep "opened by 'teammate'" "$case_dir/stderr" "no-task-teammate: the author refusal was dropped"
+  assert_no_grep 'pr merge' "$case_dir/gh.log" "no-task-teammate: gh pr merge ran"
+  set +e
+  run_pr_merge "$case_dir" --no-task https://github.com/example/repo/pull/99 --captain-approved \
+    > "$case_dir/stdout" 2> "$case_dir/stderr"
+  rc=$?
+  set -e
+  expect_code 0 "$rc" "no-task-teammate: --captain-approved must lift the author refusal"
+  assert_logged_gh_merge "$case_dir" 99 example/repo --squash
+
+  case_dir=$(make_case no-task-red)
+  add_gh_mocks "$case_dir" "$head"
+  write_github_red_json "$case_dir" "$head" lint
+  set +e
+  run_pr_merge "$case_dir" --no-task https://github.com/example/repo/pull/99 \
+    > "$case_dir/stdout" 2> "$case_dir/stderr"
+  rc=$?
+  set -e
+  expect_code 1 "$rc" "no-task-red: a red pull request must be refused"
+  assert_grep "check 'lint' is not green" "$case_dir/stderr" "no-task-red: the red check was not reported"
+  pass "fm-pr-merge merges a task-less pull request only through the same guards"
+}
+
+test_no_task_merge_is_attended_and_github_only() {
+  local case_dir rc head
+  head=cccccccccccccccccccccccccccccccccccccccd
+  case_dir=$(make_case no-task-away)
+  add_gh_mocks "$case_dir" "$head"
+  write_away_record "$case_dir" --words 'merge task-x1 when green'
+  set +e
+  run_pr_merge "$case_dir" --no-task https://github.com/example/repo/pull/100 \
+    > "$case_dir/stdout" 2> "$case_dir/stderr"
+  rc=$?
+  set -e
+  expect_code 2 "$rc" "no-task-away: a task-less merge must be refused while away"
+  assert_grep '--no-task is attended-only' "$case_dir/stderr" "no-task-away: the refusal did not name attended-only"
+  assert_no_grep 'pr merge' "$case_dir/gh.log" "no-task-away: gh pr merge ran"
+
+  case_dir=$(make_gitlab_case no-task-gitlab)
+  set +e
+  run_pr_merge "$case_dir" --no-task "$MR_URL" > "$case_dir/stdout" 2> "$case_dir/stderr"
+  rc=$?
+  set -e
+  expect_code 2 "$rc" "no-task-gitlab: --no-task must not apply on GitLab"
+  assert_grep '--no-task applies only to a GitHub pull request' "$case_dir/stderr" \
+    "no-task-gitlab: the refusal did not name GitHub"
+  [ ! -s "$case_dir/glab.log" ] || fail "no-task-gitlab: glab ran"
+  pass "fm-pr-merge keeps --no-task attended and GitHub-only"
+}
+
+test_no_task_merge_runs_the_same_guards
+test_no_task_merge_is_attended_and_github_only
