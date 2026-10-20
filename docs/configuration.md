@@ -2954,7 +2954,7 @@ Nothing here observes audio, so a successful call means the shaped line was hand
 
 Configuration is `key = value` lines; unknown keys are refused rather than ignored.
 `enabled` arms this home, and the optional `voice` names a `say` voice, which also selects `say` as the speaker.
-[`docs/examples/speak`](examples/speak) is a starter file that turns spoken replies on.
+[`docs/examples/speak`](examples/speak) is an example file that turns spoken replies on; a new home never installs it on its own.
 The script's header and `--help` own the exact invocation, the environment overrides, and the exit codes.
 [`desk-voice-replies.md`](desk-voice-replies.md) owns when the orchestrator speaks; the session-start digest prints it only in a home opted in here.
 
