@@ -700,8 +700,8 @@ fi
 OUTWARD_SECTION="# Outward actions
 Outward permission: $OUTWARD_LINE
 $OUTWARD_SCOPE
-Reading, searching, listing and creating drafts in connected accounts such as mail, calendar and files are always fine, and so is looking at pages through the Claude in Chrome tools.
-Sending, replying, forwarding, answering or changing calendar events, sharing, trashing, Zapier actions, and clicking, typing or running scripts through the Claude in Chrome tools need the captain's word, and a check refuses them unless this job or this home allows them.
+Reading, searching, listing and creating drafts in connected accounts such as mail, calendar and files are always fine, and so is reading a page already open through the Claude in Chrome tools.
+Sending, replying, forwarding, answering or changing calendar events, sharing, trashing, Zapier actions, and opening a URL, clicking, typing or running scripts through the Claude in Chrome tools need the captain's word, and a check refuses them unless this job or this home allows them.
 When the check refuses something the job needs, do not retry it or reach the same result another way; append \`blocked:\` naming the refused action and stop."
 
 if [ -n "$BASE_BRANCH" ]; then

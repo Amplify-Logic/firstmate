@@ -5,9 +5,10 @@
 # refusal text and the hooks bin/fm-spawn.sh writes, with payloads shaped like
 # Claude Code's. Only a real worker can show that Claude Code still names the
 # claude.ai connector tools mcp__claude_ai_<connector>__<action>, still runs a
-# PreToolUse hook matched by "mcp__.*" with permissions bypassed and honours
-# its refusal, and still hands a PostToolUse hook the connector's answer in a
-# shape the organizer record can read. This guard checks all three against the
+# PreToolUse hook matched by "mcp__claude_ai_.*|mcp__claude-in-chrome__.*"
+# with permissions bypassed and honours its refusal, and still hands a
+# PostToolUse hook the connector's answer in a shape the organizer record can
+# read. This guard checks all three against the
 # Google Calendar connector of the account `claude` is logged in to:
 #   1. delete_event on an event id that does not exist is refused by the hook
 #      and recorded, and never reaches Google.
@@ -38,7 +39,7 @@ jq -n \
   --arg pre "python3 '$CHECK' hook --config '$HOME_DIR/config' $args || { echo 'refused: the check could not run' >&2; exit 2; }" \
   --arg post "python3 '$CHECK' seen $args >/dev/null 2>&1 || true" \
   '{hooks: {
-     PreToolUse: [{matcher: "mcp__.*", hooks: [{type: "command", command: $pre, timeout: 15}]}],
+     PreToolUse: [{matcher: "mcp__claude_ai_.*|mcp__claude-in-chrome__.*", hooks: [{type: "command", command: $pre, timeout: 15}]}],
      PostToolUse: [{matcher: "mcp__claude_ai_.*", hooks: [{type: "command", command: $post, timeout: 15}]}]}}' \
   > "$PROJ/.claude/settings.local.json"
 

@@ -808,16 +808,17 @@ The engine's header owns the exact invocation, questions, criteria, thresholds a
 ## Worker outward actions (config/outward-permissions)
 
 A check that runs before a spawned Claude worker (crewmate or scout) uses a claude.ai connector, such as Gmail, Google Calendar, Drive, Zapier or Claude Docs, or the Claude in Chrome tools that control the captain's browser.
-Anything that acts outward is refused unless this job or this home allows it, so no worker sends, replies, forwards, answers or changes a calendar event, shares, trashes, runs a Zapier action or clicks and types in the captain's browser without the captain's word.
-Reading, searching, listing and creating or updating drafts always pass, and so does looking at pages and moving between browser tabs.
+Anything that acts outward is refused unless this job or this home allows it, so no worker sends, replies, forwards, answers or changes a calendar event, shares, trashes, runs a Zapier action or opens a URL, clicks or types in the captain's browser without the captain's word.
+Reading, searching, listing and creating or updating drafts always pass, and so does reading a page already open in the browser and moving between its tabs.
 
 It is on in every home by default.
 With no `config/outward-permissions` file, every worker can read and draft but cannot act outward.
 The primary, secondmates, other worker harnesses and every other tool, including Bash and locally configured MCP servers, are not checked.
 
 **What counts as outward.** The check reads only the tool name, so it keeps working as connectors add tools.
-An action passes without permission only when its name starts with a reading word (get, list, search, read, query, find, fetch, suggest, guide, export, download, view, count, describe, lookup), creates or updates a draft, or, in the browser, navigates, lists or switches tabs, resizes, or records a GIF, and none of its words is an outward word such as send, reply, forward, share, publish, post, delete, trash, accept, decline or respond.
+An action passes without permission only when its name starts with a reading word (get, list, search, read, query, find, fetch, suggest, guide, export, download, view, count, describe, lookup), creates or updates a draft, or, in the browser, lists, opens or switches tabs, resizes the window, or records a GIF, and none of its words is an outward word such as send, reply, forward, share, publish, post, delete, trash, accept, decline or respond.
 Every other action of a claude.ai connector or the browser needs a permission, and every Zapier tool is treated as an action.
+Opening a URL in the browser needs `control browser`, because a link in the captain's logged-in browser can itself answer an invite, unsubscribe or submit a form.
 
 **Permissions.** A permission is one line of plain words:
 
@@ -829,7 +830,7 @@ Every other action of a claude.ai connector or the browser needs a permission, a
 | `accept invites [from <addresses>]`, `decline invites [from <addresses>]` | only that answer |
 | `change calendar` | creating, updating and deleting calendar events |
 | `organise mail` | labels, trash, spam and other mailbox changes |
-| `control browser` | clicking, typing, form input, scripts and uploads in the captain's browser |
+| `control browser` | opening URLs, clicking, typing, form input, scripts and uploads in the captain's browser |
 | `use <tool name or glob>` | exactly the named connector tools, for example `use mcp__claude_ai_Zapier_MCP__*` |
 
 Addresses are full email addresses or `@domain` for everyone at that domain, separated by commas, spaces or `and`; names such as "the Compass team" are not understood.
@@ -858,8 +859,9 @@ Delete the line to turn the check back on.
 The check reads the file on every connector or browser action, so a change takes effect at once without a relaunch.
 The file is not inherited into secondmate homes.
 
-**How it runs.** `bin/fm-spawn.sh` adds a Claude Code `PreToolUse` hook on `mcp__.*` and a `PostToolUse` hook on `mcp__claude_ai_.*` to every Claude crewmate and scout's `.claude/settings.local.json`, beside its lifecycle hooks.
-A refusal reaches the worker as a denied tool call that names the tool, what it would have done and any permission that came close, says that reading and drafting still work, tells the worker not to retry or route around it but to report a `blocked:` status line, and gives the exact grant command and standing line that would allow it.
+**How it runs.** `bin/fm-spawn.sh` adds a Claude Code `PreToolUse` hook on `mcp__claude_ai_.*|mcp__claude-in-chrome__.*` and a `PostToolUse` hook on `mcp__claude_ai_.*` to every Claude crewmate and scout's `.claude/settings.local.json`, beside its lifecycle hooks.
+A refusal reaches the worker as a denied tool call that names the tool, what it would have done and any permission that came close, says that reading and drafting still work, tells the worker not to retry or route around it but to report a `blocked:` status line, and names the permission that would allow it.
+It never shows the grant command, the permissions file or any other path, so the worker reports the permission and only the captain, through Firstmate, decides whether to give it.
 Any failure inside the check refuses the action, and a check that cannot run at all, such as when `python3` is missing, refuses too.
 Every refusal and every outward action a permission or No Block let through is one JSON line in `state/outward-check.log` naming the task, tool, decision and deciding permission, never the message or event contents.
 [`bin/fm-outward-check.py`](../bin/fm-outward-check.py)'s header owns the matching rules, and dated live results are in [`verification/outward-check.md`](verification/outward-check.md).

@@ -14,6 +14,8 @@
 #       The matching PostToolUse hook. When a calendar tool's answer shows an
 #       event, it records that event's organizer in state/<task>.outward-seen.json
 #       so an `invites from` permission can be checked against the real
+#       organizer. It decodes JSON only from the answer's MCP text blocks, never
+#       from a string inside an event, so an event's own text cannot name an
 #       organizer. It never blocks anything and always exits 0.
 #   fm-outward-check.py parse TEXT...
 #       Check permission text (several permissions separated by ";" or new
@@ -24,6 +26,7 @@
 #   fm-outward-check.py check-config --config DIR
 #       Print each line of config/outward-permissions that is not understood
 #       and exit 1 when there is one; exit 0 when the file is absent or clean.
+#       This operator view names the file; the worker's refusal never does.
 #
 # docs/configuration.md "Worker outward actions" owns the operator contract:
 # what counts as outward, the permission words, standing permissions and the
@@ -36,8 +39,10 @@
 # An action is split into words on "_". It passes without any permission when
 # none of its words is an outward word (OUTWARD_WORDS) and its first word reads
 # (READ_WORDS), or it creates or updates a draft, or on the browser it only
-# looks or moves between tabs (BROWSER_LOOK_WORDS). Every Zapier tool is an
-# action. Everything else needs a permission, so a tool a connector adds later
+# moves between tabs, resizes the window or records a GIF (BROWSER_LOOK_WORDS).
+# Opening a URL (navigate) is an action, because a link in the captain's
+# logged-in browser can itself answer an invite or submit a form. Every Zapier
+# tool is an action. Everything else needs a permission, so a tool a connector adds later
 # is refused until something allows it.
 #
 # PERMISSIONS. A refused kind of action is named in the words a permission uses:
@@ -56,6 +61,9 @@
 # the home's standing permissions are config/outward-permissions, read on every
 # call, so a change takes effect at once. A line `no block` there switches the
 # check off for every worker in the home.
+# A refusal names the permission that would allow the action but never the
+# grant command, the permissions file or any other path: only the captain
+# widens what a worker may do, through Firstmate.
 #
 # RECORD. Every refusal and every outward action a permission or No Block let
 # through is appended as one JSON line to state/outward-check.log: time, task,
@@ -75,7 +83,7 @@ BROWSER_SERVER = "claude-in-chrome"
 READ_WORDS = {"get", "list", "search", "read", "query", "find", "fetch",
               "suggest", "guide", "export", "download", "view", "count",
               "describe", "lookup"}
-BROWSER_LOOK_WORDS = {"tabs", "navigate", "resize", "select", "switch", "gif"}
+BROWSER_LOOK_WORDS = {"tabs", "resize", "select", "switch", "gif"}
 DRAFT_WORDS = {"draft", "drafts"}
 DRAFT_VERBS = {"create", "update"}
 OUTWARD_WORDS = {"send", "reply", "forward", "share", "unshare", "publish",
@@ -180,8 +188,13 @@ def parse_grants(text):
     return grants, errors
 
 
+def error_text(e):
+    """An error's text without the file name an OSError carries."""
+    return e.strerror if isinstance(e, OSError) and e.strerror else str(e)
+
+
 def read_config(config_dir):
-    """config/outward-permissions -> (no_block, grants, problems)."""
+    """config/outward-permissions -> (no_block, grants, problems); problems never name the file's path."""
     path = pathlib.Path(config_dir) / PERMISSIONS_FILE
     no_block, grants, problems = False, [], []
     if not path.exists():
@@ -189,7 +202,7 @@ def read_config(config_dir):
     try:
         lines = path.read_text(encoding="utf-8").splitlines()
     except (OSError, UnicodeDecodeError) as e:
-        return no_block, grants, ["%s could not be read (%s)" % (path, e)]
+        return no_block, grants, ["the standing permissions could not be read (%s)" % error_text(e)]
     for number, raw in enumerate(lines, 1):
         line = raw.split("#", 1)[0].strip()
         if not line:
@@ -200,7 +213,7 @@ def read_config(config_dir):
         try:
             grants.append(parse_one(line))
         except ValueError as e:
-            problems.append("%s line %d: %s" % (path, number, e))
+            problems.append("standing permission line %d: %s" % (number, e))
     return no_block, grants, problems
 
 
@@ -402,28 +415,26 @@ def read_seen(state_dir, task):
         return {}
 
 
-def collect_organizers(obj, out, depth=0):
+def collect_organizers(obj, out, depth=0, decoded=False):
     if depth > 40:
         return
-    if isinstance(obj, str):
-        text = obj.strip()
-        if text[:1] in ("{", "["):
+    if isinstance(obj, dict):
+        if not decoded and obj.get("type") == "text" and isinstance(obj.get("text"), str):
             try:
-                collect_organizers(json.loads(text), out, depth + 1)
+                collect_organizers(json.loads(obj["text"]), out, depth + 1, True)
             except ValueError:
                 pass
-        return
-    if isinstance(obj, dict):
+            return
         event_id = obj.get("id") or obj.get("eventId")
         organizer = obj.get("organizer")
         if isinstance(event_id, str) and isinstance(organizer, dict) \
                 and isinstance(organizer.get("email"), str):
             out[event_id] = organizer["email"].strip().lower()
         for value in obj.values():
-            collect_organizers(value, out, depth + 1)
+            collect_organizers(value, out, depth + 1, decoded)
     elif isinstance(obj, list):
         for value in obj:
-            collect_organizers(value, out, depth + 1)
+            collect_organizers(value, out, depth + 1, decoded)
 
 
 # --- commands -------------------------------------------------------------------
@@ -451,17 +462,17 @@ def deny(reason):
     }}))
 
 
-def refusal(tool, kind, task, config_dir, suggest, reasons, problems):
-    grant_cmd = pathlib.Path(__file__).resolve().parent / "fm-outward-grant.sh"
+def refusal(tool, kind, suggest, reasons, problems):
     lines = ["Starship refused %s: it %s, and neither this job nor this home has permission for that."
              % (tool, DOES.get(kind, DOES[None]))]
     lines += [r[0].upper() + r[1:] + "." for r in reasons]
     lines += ["Note: %s." % p for p in problems]
+    lines.append("The permission that would allow it is '%s'; only the captain can give it." % suggest)
     lines.append("Reading, searching, listing and creating drafts stay allowed.")
-    lines.append("Do not retry this or reach the same result another way (another tool, the browser, a script).")
-    lines.append("If the job needs it, append a blocked: status line naming exactly what was refused and stop.")
-    lines.append("Firstmate can allow it for this job only with: %s %s '%s' - or for every job with the line '%s' in %s."
-                 % (grant_cmd, task, suggest, suggest, pathlib.Path(config_dir) / PERMISSIONS_FILE))
+    lines.append("Do not retry this or reach the same result another way (another tool, the browser, a script),"
+                 " and do not try to give yourself the permission.")
+    lines.append("If the job needs it, append a blocked: status line naming exactly what was refused"
+                 " and the permission '%s', and stop." % suggest)
     return "\n".join(lines)
 
 
@@ -499,11 +510,11 @@ def cmd_hook(argv):
                     reasons.append(why)
         suggest = suggestion(tool, action, kind, tool_input, o["state"], o["task"])
         append_log(o["state"], dict(entry, decision="refuse", by="none"))
-        deny(refusal(tool, kind, o["task"], o["config"], suggest, reasons, problems))
+        deny(refusal(tool, kind, suggest, reasons, problems))
     except Exception as e:  # any failure refuses: this check never steps aside
         deny("Starship refused %s because its outward check failed (%s: %s). "
              "Do not retry it or route around it; append a blocked: status line naming this error and stop."
-             % (tool, type(e).__name__, e))
+             % (tool, type(e).__name__, error_text(e)))
     return 0
 
 
@@ -551,7 +562,7 @@ def cmd_check_config(argv):
     o = opts(argv, ("config",))
     _, _, problems = read_config(o["config"])
     for p in problems:
-        print(p)
+        print("%s: %s" % (pathlib.Path(o["config"]) / PERMISSIONS_FILE, p))
     return 1 if problems else 0
 
 

@@ -5719,9 +5719,10 @@ BUSY_GEN=
       fi
     fi
     # The worker outward check (bin/fm-outward-check.py, docs/configuration.md
-    # "Worker outward actions"): a PreToolUse hook on every MCP tool that
-    # refuses an outward connector or browser action this job or home has not
-    # allowed, and a PostToolUse hook that records calendar event organizers
+    # "Worker outward actions"): a PreToolUse hook on the claude.ai connector
+    # and Claude in Chrome tools, the only ones it guards, that refuses an
+    # outward action this job or home has not allowed, and a PostToolUse
+    # hook that records calendar event organizers
     # for `invites from` permissions. Every crewmate and scout gets it; the
     # hook reads this home's config/outward-permissions on every call, so a
     # standing permission or the No Block switch needs no relaunch. When
@@ -5736,7 +5737,7 @@ BUSY_GEN=
       outward_args="--state $(shell_quote "$STATE_REAL") --task $(shell_quote "$ID")"
       j_outward=$(json_escape "python3 $(shell_quote "$FM_ROOT/bin/fm-outward-check.py") hook --config $(shell_quote "$outward_config") $outward_args || { echo 'Starship refused this action because its outward check could not run; append a blocked: status line naming this and stop.' >&2; exit 2; }")
       j_seen=$(json_escape "python3 $(shell_quote "$FM_ROOT/bin/fm-outward-check.py") seen $outward_args >/dev/null 2>&1 || true")
-      pretool_entries="${pretool_entries:+$pretool_entries,}{\"matcher\":\"mcp__.*\",\"hooks\":[{\"type\":\"command\",\"command\":\"$j_outward\",\"timeout\":15}]}"
+      pretool_entries="${pretool_entries:+$pretool_entries,}{\"matcher\":\"mcp__claude_ai_.*|mcp__claude-in-chrome__.*\",\"hooks\":[{\"type\":\"command\",\"command\":\"$j_outward\",\"timeout\":15}]}"
       posttool_json=",\"PostToolUse\":[{\"matcher\":\"mcp__claude_ai_.*\",\"hooks\":[{\"type\":\"command\",\"command\":\"$j_seen\",\"timeout\":15}]}]"
     fi
     pretool_json=
