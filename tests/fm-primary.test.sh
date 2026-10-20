@@ -1087,19 +1087,20 @@ test_fresh_home_gets_the_starter_settings() {
   local home out name
   home=$(starter_home starter-fresh)
   out=$(starter_launch "$home" opus)
-  for name in crew-dispatch.json:crew-dispatch-claude-only.json speak:speak stt-vocabulary:stt-vocabulary; do
+  for name in crew-dispatch.json:crew-dispatch-claude-only.json stt-vocabulary:stt-vocabulary; do
     cmp -s "$ROOT/docs/examples/${name#*:}" "$home/config/${name%%:*}" \
       || fail "a fresh home's first launch did not install config/${name%%:*} from docs/examples/${name#*:}"
   done
-  assert_contains "$out" "installed the starter settings config/crew-dispatch.json config/speak config/stt-vocabulary" \
+  assert_contains "$out" "installed the starter settings config/crew-dispatch.json config/stt-vocabulary" \
     "the first launch did not say which starter settings it installed"
+  [ ! -e "$home/config/speak" ] || fail "a fresh home's first launch switched spoken replies on"
   jq -e '.default.model == "claude-opus-5-5"' "$home/config/crew-dispatch.json" >/dev/null \
     || fail "the installed routing does not default to Opus 5.5"
 
   # A second launch of the same home changes nothing and says nothing.
-  printf 'enabled = false\n' > "$home/config/speak"
+  printf '# my words\n' > "$home/config/stt-vocabulary"
   out=$(starter_launch "$home" opus)
-  assert_equals "enabled = false" "$(cat "$home/config/speak")" "a later launch overwrote a changed starter file"
+  assert_equals "# my words" "$(cat "$home/config/stt-vocabulary")" "a later launch overwrote a changed starter file"
   assert_not_contains "$out" "starter settings" "a home that has run before was offered the starter settings again"
 
   # A fresh home's own file is kept; only the missing ones arrive.
@@ -1109,8 +1110,8 @@ test_fresh_home_gets_the_starter_settings() {
   out=$(starter_launch "$home" claude-fable)
   assert_equals '{"default":{"harness":"pi"}}' "$(cat "$home/config/crew-dispatch.json")" \
     "the first launch overwrote the home's own crew-dispatch.json"
-  [ -f "$home/config/speak" ] || fail "a fresh home with its own routing did not get the missing starter files"
-  assert_contains "$out" "installed the starter settings config/speak config/stt-vocabulary" \
+  [ -f "$home/config/stt-vocabulary" ] || fail "a fresh home with its own routing did not get the missing starter files"
+  assert_contains "$out" "installed the starter settings config/stt-vocabulary" \
     "the first launch did not name only the files it installed"
 
   # A home that has already run keeps exactly what it has.
@@ -1118,7 +1119,7 @@ test_fresh_home_gets_the_starter_settings() {
   mkdir -p "$home/state"
   : > "$home/state/.last-watcher-beat"
   starter_launch "$home" opus >/dev/null
-  [ ! -e "$home/config/crew-dispatch.json" ] && [ ! -e "$home/config/speak" ] \
+  [ ! -e "$home/config/crew-dispatch.json" ] && [ ! -e "$home/config/stt-vocabulary" ] \
     || fail "a home that has already run was given the starter settings"
 
   # Previews, preflight, and non-Claude profiles never write them.
@@ -1321,15 +1322,15 @@ write_account_registry() {
   "claude": {
     "default": "team",
     "accounts": {
-      "team": {"label": "Aquablu Team (connectors)"},
+      "team": {"label": "Company Team (connectors)"},
       "max": {"label": "Personal Max"}
     }
   },
   "codex": {
-    "default": "lars",
+    "default": "robin",
     "accounts": {
-      "lars": {"label": "Lars personal"},
-      "derya": {"label": "Derya"}
+      "robin": {"label": "Robin personal"},
+      "alex": {"label": "Alex"}
     }
   }
 }
@@ -1340,9 +1341,9 @@ test_account_selection_and_refusals() {
   local out status registry="$HOME_FIX/config/accounts.json"
   local claude_max="$HOME_FIX/data/accounts/claude/max"
   local claude_team="$HOME_FIX/data/accounts/claude/team"
-  local codex_derya="$HOME_FIX/data/accounts/codex/derya"
+  local codex_alex="$HOME_FIX/data/accounts/codex/alex"
   write_account_registry
-  mkdir -p "$claude_max" "$claude_team" "$codex_derya"
+  mkdir -p "$claude_max" "$claude_team" "$codex_alex"
 
   # A valid pin exports the vendor's own isolation variable at the derived home.
   out=$(dry claude-fable --account max 2>/dev/null)
@@ -1350,15 +1351,15 @@ test_account_selection_and_refusals() {
   assert_contains "$out" "CLAUDE_CONFIG_DIR=$claude_max" "a valid Claude pin did not export the derived home"
   assert_not_contains "$out" 'CODEX_HOME' "a Claude pin exported a Codex home"
 
-  out=$(dry codex --account derya 2>/dev/null)
-  assert_contains "$out" "account=derya" "a valid Codex pin did not report the account"
-  assert_contains "$out" "CODEX_HOME=$codex_derya" "a valid Codex pin did not export the derived home"
+  out=$(dry codex --account alex 2>/dev/null)
+  assert_contains "$out" "account=alex" "a valid Codex pin did not report the account"
+  assert_contains "$out" "CODEX_HOME=$codex_alex" "a valid Codex pin did not export the derived home"
   assert_not_contains "$out" 'CLAUDE_CONFIG_DIR' "a Codex pin exported a Claude home"
 
   # astra is a Codex-vendor profile, so it takes a codex account like codex does.
-  out=$(dry astra --account derya 2>/dev/null)
-  assert_contains "$out" "account=derya" "astra did not report the pinned Codex account"
-  assert_contains "$out" "CODEX_HOME=$codex_derya" "astra did not export the derived Codex home"
+  out=$(dry astra --account alex 2>/dev/null)
+  assert_contains "$out" "account=alex" "astra did not report the pinned Codex account"
+  assert_contains "$out" "CODEX_HOME=$codex_alex" "astra did not export the derived Codex home"
   assert_contains "$out" "'--model' 'gpt-6-astra'" "pinning an account changed the astra model"
 
   # The vendor default applies when the flag is omitted.
@@ -1437,7 +1438,7 @@ test_account_login_and_identity_gates() {
 {
   "claude": {
     "accounts": {
-      "team": {"label": "Aquablu Team", "expect": "org-team-0001"}
+      "team": {"label": "Company Team", "expect": "org-team-0001"}
     }
   }
 }
@@ -1491,7 +1492,7 @@ test_account_credential_gates_never_hide_dry_run_argv() {
 {
   "claude": {
     "accounts": {
-      "team": {"label": "Aquablu Team", "expect": "org-team-0001"}
+      "team": {"label": "Company Team", "expect": "org-team-0001"}
     }
   }
 }

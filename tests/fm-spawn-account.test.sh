@@ -195,15 +195,15 @@ write_registry() {  # <home>
   "claude": {
     "default": "team",
     "accounts": {
-      "team": {"label": "Aquablu Team (connectors)"},
+      "team": {"label": "Company Team (connectors)"},
       "max": {"label": "Personal Max"}
     }
   },
   "codex": {
-    "default": "lars",
+    "default": "robin",
     "accounts": {
-      "lars": {"label": "Lars personal"},
-      "derya": {"label": "Derya"}
+      "robin": {"label": "Robin personal"},
+      "alex": {"label": "Alex"}
     }
   }
 }
@@ -344,7 +344,7 @@ test_vendor_default_applies_without_the_flag() {
   rec=$(make_spawn_case account-default codex "$id")
   read_case_record "$rec"
   write_registry "$HOME_DIR"
-  home="$HOME_DIR/data/accounts/codex/lars"
+  home="$HOME_DIR/data/accounts/codex/robin"
   mkdir -p "$home"
 
   out=$(run_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" "$id" "$PROJ_DIR")
@@ -357,7 +357,7 @@ test_vendor_default_applies_without_the_flag() {
     "CODEX_HOME='$home' "* | *"; CODEX_HOME='$home' "*) ;;
     *) fail "omitted --account did not fall back to the codex default account"$'\n'"actual: $launch" ;;
   esac
-  assert_grep "account=lars" "$HOME_DIR/state/$id.meta" "meta did not record the default account"
+  assert_grep "account=robin" "$HOME_DIR/state/$id.meta" "meta did not record the default account"
   pass "fm-spawn: the vendor default account applies when --account is omitted"
 }
 
@@ -428,7 +428,7 @@ test_expect_identity_is_verified_before_launch() {
 {
   "claude": {
     "accounts": {
-      "team": {"label": "Aquablu Team", "expect": "org-team-0001"}
+      "team": {"label": "Company Team", "expect": "org-team-0001"}
     }
   }
 }

@@ -215,7 +215,7 @@ render_payload() {  # <inject> <tray-inject>
   printf '%s limits\n5\t5\t8\n' "$MARK"
   printf '%s vocabulary\n' "$MARK"
   printf 'working\tWORKING\t%s\n' '🔵'
-  printf 'parked\tNEEDS LARS\t%s\n' '🟣'
+  printf 'parked\tNEEDS YOU\t%s\n' '🟣'
   printf '%s tray\n' "$MARK"
   printf '[{"domain":"proactive-outbound","action_kind":"crm.update%s","target":"hubspot://note-1%s","age_secs":3600,"age":"1h","expiry":"2h","expired":false}]\n' \
     "$tray" "$tray"
@@ -345,7 +345,7 @@ test_staged_actions_group_by_order_with_age_and_expiry() {
 $(full_home staged)
 EOF
   out=$(run_deck "$home" "$fb" --once 2>&1)
-  staged=$(printf '%s\n' "$out" | awk '/STAGED FOR YOUR CLICK/,/NEEDS YOU/')
+  staged=$(printf '%s\n' "$out" | awk '/STAGED FOR YOUR CLICK/,/^ NEEDS YOU ─/')
 
   assert_contains "$staged" 'proactive-outbound' "staged actions are grouped under their standing order"
   assert_contains "$staged" 'ARMED' "the group header carries the order's arming state"
@@ -375,7 +375,7 @@ test_needs_you_carries_full_pr_urls_and_distinguishes_asks() {
 $(full_home needs)
 EOF
   out=$(run_deck "$home" "$fb" --once 2>&1)
-  needs=$(printf '%s\n' "$out" | awk '/NEEDS YOU/,/LOOSE ENDS/')
+  needs=$(printf '%s\n' "$out" | awk '/^ NEEDS YOU ─/,/LOOSE ENDS/')
 
   assert_contains "$needs" 'answer' "a parked worker asks him to answer"
   assert_contains "$needs" 'Rework the beta importer' "the parked row names the outcome"
@@ -435,13 +435,13 @@ EOF
   assert_contains "$under" 'Ship the alpha widget' "a live worker shows its outcome"
   assert_contains "$under" 'Alpha' "a live worker shows its project"
   assert_contains "$under" 'WORKING' "a reporting worker shows a state"
-  assert_contains "$under" 'NEEDS LARS' "a parked worker is called out"
+  assert_contains "$under" 'NEEDS YOU' "a parked worker is called out"
   assert_contains "$under" 'BLOCKED' "a blocked worker is called out"
   printf '%s\n' "$under" | grep -Eq 'heard [0-9]+[smhd] ago' \
     || fail "under way does not say how long ago each worker was last heard"
   # Most urgent first: the parked worker outranks the merely working one.
   local parked working
-  parked=$(printf '%s\n' "$under" | awk '/NEEDS LARS/ {print NR; exit}')
+  parked=$(printf '%s\n' "$under" | awk '/NEEDS YOU/ {print NR; exit}')
   working=$(printf '%s\n' "$under" | awk '/WORKING/ {print NR; exit}')
   [ -n "$parked" ] && [ -n "$working" ] && [ "$parked" -lt "$working" ] \
     || fail "under way is not most-urgent-first (lines $parked, $working)"
@@ -638,7 +638,7 @@ EOF
     "pr=https://github.com/acme/alpha/pull/9"
 
   out=$(run_deck "$home" "$fb" --once 2>&1)
-  needs=$(printf '%s\n' "$out" | awk '/NEEDS YOU/,/LOOSE ENDS/')
+  needs=$(printf '%s\n' "$out" | awk '/^ NEEDS YOU ─/,/LOOSE ENDS/')
   assert_not_contains "$needs" 'pull/7' "a dead worker's pull request was offered for review"
   assert_not_contains "$needs" 'Ship the alpha widget' "a dead worker was presented as a review"
 
@@ -670,7 +670,7 @@ EOF
   printf 'done: ready in branch\n' > "$home/state/ship-task.status"
 
   out=$(run_deck "$home" "$fb" --once 2>&1)
-  needs=$(printf '%s\n' "$out" | awk '/NEEDS YOU/,/LOOSE ENDS/')
+  needs=$(printf '%s\n' "$out" | awk '/^ NEEDS YOU ─/,/LOOSE ENDS/')
   assert_contains "$needs" 'https://github.com/acme/alpha/pull/7' \
     "a finished worker's ready pull request left the pane"
   printf '%s\n' "$needs" | grep -q 'review .*Ship the alpha widget' \
@@ -720,7 +720,7 @@ test_needs_you_keeps_a_recorded_pull_request_when_the_backlog_is_unreadable() {
 $(backlogless_home "gap-$cond" "$cond")
 EOF
     out=$(PATH="$path" run_deck "$home" "$fb" --once 2>&1)
-    needs=$(printf '%s\n' "$out" | awk '/NEEDS YOU/,/LOOSE ENDS/')
+    needs=$(printf '%s\n' "$out" | awk '/^ NEEDS YOU ─/,/LOOSE ENDS/')
 
     assert_contains "$needs" 'https://github.com/acme/alpha/pull/7' \
       "$cond: the recorded pull request left the pane"
@@ -761,7 +761,7 @@ EOF
   printf 'done: ready in branch\n' > "$home/state/ship-task.status"
 
   out=$(run_deck "$home" "$fb" --once 2>&1)
-  needs=$(printf '%s\n' "$out" | awk '/NEEDS YOU/,/LOOSE ENDS/')
+  needs=$(printf '%s\n' "$out" | awk '/^ NEEDS YOU ─/,/LOOSE ENDS/')
   rows=$(printf '%s\n' "$needs" | grep -c 'https://github.com/acme/alpha/pull/7' || true)
   [ "$rows" -eq 1 ] \
     || fail "a readable backlog produced $rows rows for one pull request, expected 1"
@@ -788,7 +788,7 @@ EOF
     "outcome=Ship the alpha widget"
 
   out=$(PATH="$path" run_deck "$home" "$fb" --once 2>&1)
-  needs=$(printf '%s\n' "$out" | awk '/NEEDS YOU/,/LOOSE ENDS/')
+  needs=$(printf '%s\n' "$out" | awk '/^ NEEDS YOU ─/,/LOOSE ENDS/')
   assert_not_contains "$needs" 'https://github.com/acme/alpha/pull/7' \
     "a pull request was shown for a worker that never recorded one"
   assert_not_contains "$needs" 'check ' "an ask was invented with nothing behind it"
@@ -817,7 +817,7 @@ EOF
   printf 'working: pushed the same branch\n' > "$home/state/twin-task.status"
 
   out=$(run_deck "$home" "$fb" --once 2>&1)
-  needs=$(printf '%s\n' "$out" | awk '/NEEDS YOU/,/LOOSE ENDS/')
+  needs=$(printf '%s\n' "$out" | awk '/^ NEEDS YOU ─/,/LOOSE ENDS/')
   rows=$(printf '%s\n' "$needs" | grep -c 'https://github.com/acme/alpha/pull/7' || true)
   [ "$rows" -eq 1 ] \
     || fail "one pull request with three records produced $rows rows, expected 1"
@@ -846,7 +846,7 @@ render_needs() {  # <backlog-status> <needs-limit> <width> [backlog-listing]
     printf '%s tasks\n' "$MARK"
     cat
     printf '%s loose_ends\n' "$MARK"
-  } | python3 "$RENDER" "$MARK" | awk '/NEEDS YOU/,/UNDER WAY/'
+  } | python3 "$RENDER" "$MARK" | awk '/^ NEEDS YOU ─/,/UNDER WAY/'
 }
 
 # The one pull request the rules below share, and the backlog listing that
@@ -1028,7 +1028,7 @@ EOF
 
   out=$(run_deck "$home" "$fb" --once 2>&1)
   under=$(printf '%s\n' "$out" | awk '/UNDER WAY/,/JUST IN/')
-  needs=$(printf '%s\n' "$out" | awk '/NEEDS YOU/,/LOOSE ENDS/')
+  needs=$(printf '%s\n' "$out" | awk '/^ NEEDS YOU ─/,/LOOSE ENDS/')
 
   assert_not_contains "$out" 'Approve the forged payment' "a crafted sweep line forged an ask"
   assert_not_contains "$out" 'forged-task' "a crafted sweep line forged a worker"
@@ -1312,7 +1312,7 @@ EOF
   # Under way carries the captain-facing label, never the worker's own note.
   [ "$(printf '%s' "$out" | jq -r '.under_way | length')" = 3 ] || fail "one row per recorded worker: $out"
   [ "$(printf '%s' "$out" | jq -r '.under_way[0].state')" = parked ] || fail "most urgent worker first: $out"
-  [ "$(printf '%s' "$out" | jq -r '.under_way[0].label')" = 'NEEDS LARS' ] || fail "visible label resolved: $out"
+  [ "$(printf '%s' "$out" | jq -r '.under_way[0].label')" = 'NEEDS YOU' ] || fail "visible label resolved: $out"
   assert_not_contains "$out" 'no-mistakes run' "worker status note reached the model"
   assert_not_contains "$out" 'worktree HEAD' "worker status note reached the model"
 
