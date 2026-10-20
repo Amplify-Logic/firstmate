@@ -22,15 +22,28 @@
 # matched case-insensitively as whole words. That list is checked against
 # EVERY scanned file, tests/ and the allowlisted scripts included, because a
 # fixture is exactly where a real name slips in. The list is read from
-# FM_LEAK_WORDS_FILE when set, else FM_HOME's config/, else the config/ of the
-# primary checkout this checkout belongs to (so a task worktree finds its
-# home's list). No list means no word check; CI has none. A hit prints the
-# offending line locally, so the words never leave this machine.
+# FM_HOME's config/ when FM_HOME is set, else from the config/ of the primary
+# checkout this checkout is a worktree of (so a task worktree finds its home's
+# list), else from ~/starship/config/, the default home, which is how a
+# no-mistakes validation copy - a worktree of the gate's own bare mirror that
+# belongs to no home - still finds it. No list means no word check; CI has
+# none. A hit prints the offending line locally, so the words never leave this
+# machine. bin/fm-lint.sh runs --private-words on every default lint, which is
+# how the list is checked before each push.
 #
 # Usage:
-#   fm-leak-guard.sh              scan the whole tracked tree (what CI runs)
-#   fm-leak-guard.sh <path>...    scan only the given paths (developer convenience)
+#   fm-leak-guard.sh                  scan the whole tracked tree (what CI runs)
+#   fm-leak-guard.sh <path>...        scan only the given paths (developer convenience)
+#   fm-leak-guard.sh --private-words [<path>...]
+#                                     check only the private word list, and
+#                                     exit 0 silently when this home has none
 set -eu
+
+WORDS_ONLY=0
+if [ "${1:-}" = --private-words ]; then
+  WORDS_ONLY=1
+  shift
+fi
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT" || exit 1
@@ -48,15 +61,13 @@ TOKEN_PATTERN='(FMX_PAIRING_TOKEN[[:space:]]*=[[:space:]]*['\''\"]?[A-Za-z0-9._-
 
 leak_words_file() {
   local common
-  if [ -n "${FM_LEAK_WORDS_FILE:-}" ]; then
-    printf '%s\n' "$FM_LEAK_WORDS_FILE"
-  elif [ -n "${FM_HOME:-}" ]; then
+  if [ -n "${FM_HOME:-}" ]; then
     printf '%s\n' "$FM_HOME/config/leak-words"
   elif common=$(git -C "$ROOT" rev-parse --path-format=absolute --git-common-dir 2>/dev/null) \
     && [ "${common##*/}" = .git ]; then
     printf '%s\n' "${common%/.git}/config/leak-words"
   else
-    printf '%s\n' "$ROOT/config/leak-words"
+    printf '%s\n' "${HOME:-}/starship/config/leak-words"
   fi
 }
 
@@ -68,6 +79,9 @@ if [ -f "$words_source" ]; then
   trap 'rm -f "$WORDS_LIST"' EXIT
   sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' -e '/^#/d' -e '/^$/d' "$words_source" > "$WORDS_LIST"
   [ -s "$WORDS_LIST" ] || { rm -f "$WORDS_LIST"; WORDS_LIST=; }
+fi
+if [ "$WORDS_ONLY" -eq 1 ] && [ -z "$WORDS_LIST" ]; then
+  exit 0
 fi
 
 # Paths relative to repo root that may contain synthetic fixtures or the
@@ -108,7 +122,7 @@ scan_file() {
     done < <(grep -FIinw -f "$WORDS_LIST" "$file" 2>/dev/null | head -5)
   fi
 
-  if is_allowlisted "$rel"; then
+  if [ "$WORDS_ONLY" -eq 1 ] || is_allowlisted "$rel"; then
     return 0
   fi
 
@@ -158,6 +172,15 @@ else
     [ -n "$f" ] || continue
     scan_file "$ROOT/$f"
   done < <(git -C "$ROOT" ls-files)
+fi
+
+if [ "$WORDS_ONLY" -eq 1 ]; then
+  if [ "$hits" -ne 0 ]; then
+    printf 'fm-leak-guard.sh: FAIL - tracked files contain words from the private list %s (see LEAK_HIT lines above)\n' "$words_source" >&2
+    exit 1
+  fi
+  printf 'fm-leak-guard.sh: PASS - no words from the private list in scanned tracked files\n'
+  exit 0
 fi
 
 if [ "$hits" -ne 0 ]; then

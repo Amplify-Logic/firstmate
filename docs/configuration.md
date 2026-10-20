@@ -3118,8 +3118,8 @@ Any other content restores as off rather than refusing, because a corrupt prefer
 `config/leak-words` is an optional LOCAL, gitignored file listing words and phrases that must never appear in this public repository, such as the names of people and private projects.
 It holds one word or phrase per line; blank lines and lines starting with `#` are ignored, and matching ignores case and takes whole words only.
 Without the file, which is the default, the scan is unchanged.
-`bin/fm-leak-guard.sh` checks every tracked file against it, `tests/` included, and its header owns where it looks for the list, so a run from a task's isolated copy still finds the home's list.
-Run it before pushing a change to this repository; CI has no list, so only a local run catches these words.
+`bin/fm-leak-guard.sh` checks every tracked file against it, `tests/` included, and its header owns where it looks for the list, so a run from a task's isolated copy or a validation run's copy still finds the home's list.
+`bin/fm-lint.sh` runs that check on every default lint, including the validation pipeline's lint step, so these words are caught before each push; CI has no list, and without one the check is silent.
 The file is not inherited by secondmate homes.
 
 ## Bridge pinned links (config/bridge-links)

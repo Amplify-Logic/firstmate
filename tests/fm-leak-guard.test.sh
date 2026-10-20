@@ -24,11 +24,21 @@ make_repo() {
   git -C "$repo" -c user.name=t -c user.email=t@example.invalid commit -q -m init
 }
 
-guard() {  # <repo> [env assignments...] -> output; status in GUARD_STATUS
-  local repo=$1
+# guard <repo> [env assignments...] [-- guard arguments...]: runs the repo's
+# guard with no inherited FM_HOME; output in GUARD_OUT, status in GUARD_STATUS.
+guard() {
+  local repo=$1 envs=()
   shift
+  while [ "$#" -gt 0 ] && [ "$1" != -- ]; do envs+=("$1"); shift; done
+  [ "$#" -eq 0 ] || shift
   GUARD_STATUS=0
-  GUARD_OUT=$(env -u FM_HOME -u FM_LEAK_WORDS_FILE "$@" "$repo/bin/fm-leak-guard.sh" 2>&1) || GUARD_STATUS=$?
+  GUARD_OUT=$(env -u FM_HOME ${envs[@]+"${envs[@]}"} "$repo/bin/fm-leak-guard.sh" "$@" 2>&1) || GUARD_STATUS=$?
+}
+
+# word_home <dir> <list text>: a home whose config/leak-words holds the text.
+word_home() {
+  mkdir -p "$1/config"
+  printf '%b' "$2" > "$1/config/leak-words"
 }
 
 test_no_list_scans_as_before() {
@@ -41,10 +51,10 @@ test_no_list_scans_as_before() {
 }
 
 test_listed_word_fails_in_tests() {
-  local repo="$TMP_ROOT/listed" words="$TMP_ROOT/listed-words"
+  local repo="$TMP_ROOT/listed" home="$TMP_ROOT/listed-home"
   make_repo "$repo"
-  printf '# Notes\n\n  ROBIN  \n' > "$words"
-  guard "$repo" FM_LEAK_WORDS_FILE="$words"
+  word_home "$home" '# Notes\n\n  ROBIN  \n'
+  guard "$repo" FM_HOME="$home"
   [ "$GUARD_STATUS" -eq 1 ] || fail "a listed name in tests/ did not fail the scan: $GUARD_OUT"
   assert_contains "$GUARD_OUT" "LEAK_HIT: private-word: tests/fm-x.test.sh: 1:" "the hit did not name the test file and line"
   assert_contains "$GUARD_OUT" "private words" "the failure did not say private words were found"
@@ -55,15 +65,15 @@ test_listed_word_fails_in_tests() {
 }
 
 test_partial_words_do_not_hit() {
-  local repo="$TMP_ROOT/partial" words="$TMP_ROOT/partial-words"
+  local repo="$TMP_ROOT/partial" home="$TMP_ROOT/partial-home"
   make_repo "$repo"
-  printf 'rob\napproved the\n' > "$words"
-  guard "$repo" FM_LEAK_WORDS_FILE="$words"
+  word_home "$home" 'rob\napproved the\n'
+  guard "$repo" FM_HOME="$home"
   [ "$GUARD_STATUS" -eq 1 ] || fail "a listed phrase did not fail the scan: $GUARD_OUT"
   assert_contains "$GUARD_OUT" "tests/fm-x.test.sh" "a listed phrase was missed"
   assert_not_contains "$GUARD_OUT" "docs/notes.md" "a listed word matched inside a longer word"
-  printf 'rob\n' > "$words"
-  guard "$repo" FM_LEAK_WORDS_FILE="$words"
+  word_home "$home" 'rob\n'
+  guard "$repo" FM_HOME="$home"
   [ "$GUARD_STATUS" -eq 0 ] || fail "a word that only appears inside longer words failed the scan: $GUARD_OUT"
   pass "leak guard: phrases match and a word never matches inside a longer one"
 }
@@ -87,9 +97,48 @@ test_list_found_from_home_and_from_a_task_worktree() {
   pass "leak guard: the list comes from FM_HOME, else the checkout's primary home"
 }
 
+# A no-mistakes validation copy is a worktree of the gate's own bare mirror, so
+# it belongs to no home; the guard then reads the default home's list.
+test_list_found_from_a_validation_copy() {
+  local repo="$TMP_ROOT/gate-src" mirror="$TMP_ROOT/gate/abc123.git" tree="$TMP_ROOT/gate-run" user="$TMP_ROOT/user"
+  make_repo "$repo"
+  git clone -q --bare "$repo" "$mirror"
+  git -C "$mirror" worktree add -q --detach "$tree" HEAD
+  word_home "$user/starship" 'robin\n'
+  guard "$tree" HOME="$user"
+  [ "$GUARD_STATUS" -eq 1 ] || fail "a validation copy did not read the default home's word list: $GUARD_OUT"
+  assert_contains "$GUARD_OUT" "private-word: tests/fm-x.test.sh" "the validation copy scan missed the listed name"
+  rm "$user/starship/config/leak-words"
+  guard "$tree" HOME="$user"
+  [ "$GUARD_STATUS" -eq 0 ] || fail "a validation copy with no default home list failed: $GUARD_OUT"
+  pass "leak guard: a validation copy that belongs to no home reads the default home's list"
+}
+
+test_private_words_mode() {
+  local repo="$TMP_ROOT/words-only" home="$TMP_ROOT/words-only-home" empty="$TMP_ROOT/words-only-empty"
+  make_repo "$repo"
+  printf 'contact someone@acme-mail.com\n' > "$repo/docs/contact.md"
+  git -C "$repo" add -A
+
+  # No list: silent success, and the other patterns are not this mode's job.
+  mkdir -p "$empty"
+  guard "$repo" FM_HOME="$empty" -- --private-words
+  [ "$GUARD_STATUS" -eq 0 ] || fail "the word-only check failed with no list: $GUARD_OUT"
+  [ -z "$GUARD_OUT" ] || fail "the word-only check printed with no list: $GUARD_OUT"
+
+  word_home "$home" 'robin\n'
+  guard "$repo" FM_HOME="$home" -- --private-words
+  [ "$GUARD_STATUS" -eq 1 ] || fail "the word-only check passed a listed word: $GUARD_OUT"
+  assert_contains "$GUARD_OUT" "private-word: tests/fm-x.test.sh" "the word-only check missed the listed name"
+  assert_not_contains "$GUARD_OUT" "LEAK_HIT: email" "the word-only check also ran the email scan"
+  pass "leak guard: --private-words checks only the list and is silent without one"
+}
+
 test_no_list_scans_as_before
 test_listed_word_fails_in_tests
 test_partial_words_do_not_hit
 test_list_found_from_home_and_from_a_task_worktree
+test_list_found_from_a_validation_copy
+test_private_words_mode
 
 echo "# fm-leak-guard.test.sh: all assertions passed"

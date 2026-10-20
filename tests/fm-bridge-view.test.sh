@@ -1684,6 +1684,17 @@ if counts.get("Atelier") != 2:
     raise SystemExit("Atelier count wrong: %s" % groups)
 if counts.get("Loose notes") != 1:
     raise SystemExit("an unregistered repository must be named from its own name: %s" % groups)
+# The item's own repository decides; a registered name inside the owner task
+# id never relabels it, and the owner is read only when there is no repository.
+rules = module.project_label_rules(registry)
+for repo, owner, want in (
+    ("atelier", "atelier-firstmate-hook", "Atelier"),
+    ("loose-notes", "firstmate-notes-sweep", "Loose notes"),
+    ("", "firstmate-notes-sweep", "Fleet"),
+):
+    got = module.project_label(repo, owner, rules)
+    if got != want:
+        raise SystemExit("label for repo %r owner %r: want %r, got %r" % (repo, owner, want, got))
 bare = {group["label"] for group in module.project_observation(model)["waiting"]["groups"]}
 if "City guide" not in bare or "Journey" in bare:
     raise SystemExit("without a registry the labels must come from the repository names: %s" % bare)
