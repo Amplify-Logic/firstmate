@@ -95,7 +95,8 @@ Blocked, failed, or gate-parked live work leads the list.
 Parked holds, recorded duplicates, and retire candidates are excluded from that list by their backlog hold kind and hold reason, not by guessing from titles, and they remain reachable under Waiting.
 If more Needs-you items remain, a quiet "N more waiting on you - show all" control reveals the rest in one tap.
 Waiting is a set of per-project count chips, one per observed project, not a global wall of items.
-A chip is named from the home's `data/projects.md`: a row's `label=<word>` token when it has one, otherwise its registered name in plain words, matched against the item's repository by that name or any `alias=` name; an unregistered repository is named from its own name.
+A chip is named from the home's `data/projects.md`: a row's `label=<word>` token when it has one, otherwise its registered name in plain words.
+A row matches when that name or any `alias=` name equals the item's repository name (the part after any `owner/` prefix) as a whole; an item with no repository matches only by whole dash-separated words of its task id, and an unregistered repository is named from its own name.
 Each chip expands to that project's complete list in one tap.
 Item lines are short captain-facing titles; internal ids, paths, and repro strings are not used as the primary line.
 If the first observation request fails, the buckets replace "Loading…" with "Cannot reach the desk" immediately and the full-page overlay appears.
