@@ -867,7 +867,8 @@ A line the check does not understand allows nothing; refusals name it, and `pyth
 
 The script keeps the style as a `style` line in `config/outward-permissions`, and the broad switches as `broad <switch>` lines that allow nothing in any other style.
 A switch never removes the other lines, so going back to fine print restores exactly the standing permissions there were.
-`/outward-broad` with no switches keeps the ones chosen before, or turns them all on the first time; naming switches, such as `/outward-broad send email, browser`, turns on exactly those.
+`/outward-broad` with no switches keeps the ones chosen before, or turns them all on the first time; naming switches, such as `/outward-broad send email, control browser`, turns on exactly those.
+The script takes only the exact style words `fine-print`, `broad` and `no-block` and the exact switch names above, comma-separated.
 `bin/fm-outward-style.sh show` prints one line such as `Outward: fine print` for any surface that shows the style in force.
 An older bare `no block` line still means no block, and lines naming two different styles leave fine print and are named in refusals.
 

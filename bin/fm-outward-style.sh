@@ -10,11 +10,11 @@
 #       "Outward: no block", for any surface that shows it.
 #   fm-outward-style.sh fine-print
 #   fm-outward-style.sh no-block
-#   fm-outward-style.sh broad ['<switch>[, <switch>...]' | all]
+#   fm-outward-style.sh broad ['<switch>[, <switch>...]']
 #       Switch the style and print one sentence saying which style is now on
-#       and what it means. The broad switches are send email, reply to email,
-#       respond to invites, change calendar, control browser and use zapier
-#       (short forms reply, invites, calendar, browser and zapier work too).
+#       and what it means. The broad switches are exactly send email, reply to
+#       email, respond to invites, change calendar, control browser and use
+#       zapier, comma-separated; name all six to turn every switch on.
 #       Broad with switches turns on exactly those; without, it keeps the ones
 #       chosen before, or turns every switch on when none were. A switch it does
 #       not understand changes nothing.

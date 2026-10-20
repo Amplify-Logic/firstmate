@@ -239,7 +239,7 @@ test_styles_switch_and_the_check_honours_each() {
   assert_equals "Outward: fine print" "$(style "$home")" "a home with no style line is fine print"
   expect_refuse "$home" mcp__claude_ai_Gmail__send_message '{"to":["a@b.example"]}' "a broad line must allow nothing in fine print" >/dev/null
 
-  out=$(style "$home" broad 'send email, browser') || fail "switching to broad switches must succeed: $out"
+  out=$(style "$home" broad 'send email, control browser') || fail "switching to broad switches must succeed: $out"
   assert_equals "Outward style is now broad switches: every worker may send email and control the browser without asking, and anything else still needs its job's own permission or a standing permission." \
     "$out" "the switch must say in one sentence which style is on and what it means"
   assert_equals "Outward: broad switches (send email, control browser)" "$(style "$home" show)" "show must name the style and its switches"
@@ -252,7 +252,7 @@ test_styles_switch_and_the_check_honours_each() {
   expect_allow "$home" mcp__claude_ai_Google_Calendar__respond_to_event '{"eventId":"e1","responseStatus":"accepted"}' \
     "a narrow standing permission must keep holding in broad switches"
 
-  style "$home" broad 'reply; calendar; invites; zapier' >/dev/null || fail "naming switches by their short forms must work"
+  style "$home" broad 'reply to email, change calendar, respond to invites, use zapier' >/dev/null || fail "naming switches must work"
   expect_allow "$home" mcp__claude_ai_Gmail__reply '{"messageId":"m1"}' "the reply switch must allow a reply"
   expect_refuse "$home" mcp__claude_ai_Gmail__send_message '{"to":["a@b.example"]}' "the reply switch must not allow a new message" >/dev/null
   expect_refuse "$home" mcp__claude-in-chrome__navigate '{}' "naming switches must turn the others off" >/dev/null
@@ -265,7 +265,12 @@ test_styles_switch_and_the_check_honours_each() {
   before=$(cat "$home/config/outward-permissions")
   style "$home" broad 'send email to a@b.example' 2>/dev/null && fail "a narrow permission is not a broad switch"
   style "$home" broad 'everything' 2>/dev/null && fail "an unknown switch must be refused"
+  style "$home" broad all 2>/dev/null && fail "all is not a switch"
+  style "$home" broad 'browser' 2>/dev/null && fail "a short form is not a switch"
+  style "$home" broad 'control the browser' 2>/dev/null && fail "another spelling of a switch is not a switch"
   style "$home" sideways 2>/dev/null && fail "an unknown style must be refused"
+  style "$home" 'fine print' 2>/dev/null && fail "only the hyphenated style words switch"
+  style "$home" 'broad switches' 2>/dev/null && fail "only the hyphenated style words switch"
   assert_equals "$before" "$(cat "$home/config/outward-permissions")" "a refused switch must change nothing"
 
   out=$(style "$home" fine-print) || fail "switching to fine print must succeed"
@@ -305,10 +310,13 @@ test_style_lines_that_conflict_or_are_not_understood() {
   reason=$(expect_refuse "$home" mcp__claude_ai_Gmail__send_message '{"to":["a@b.example"]}' "conflicting styles must leave fine print")
   assert_contains "$reason" "more than one style (no block, broad switches), so fine print holds" "the refusal must name the conflict"
   assert_equals "Outward: fine print" "$(style "$home")" "show must report the style that holds"
-  printf 'style sideways\nbroad organise mail\n' > "$home/config/outward-permissions"
+  printf 'style sideways\nbroad organise mail\nstyle broad\nbroad browser\nbroad send emails\n' > "$home/config/outward-permissions"
   out=$(python3 "$CHECK" check-config --config "$home/config") && fail "check-config must fail on a bad style or switch"
   assert_contains "$out" "line 1: 'style sideways' is not a style" "check-config must name a style it does not know"
   assert_contains "$out" "line 2: 'organise mail' is not a broad switch" "check-config must name a line that is not a switch"
+  assert_contains "$out" "line 3: 'style broad' is not a style" "a style line must hold the style's full name"
+  assert_contains "$out" "line 4: 'browser' is not a broad switch" "a broad line must hold the switch's full name"
+  assert_contains "$out" "line 5: 'send emails' is not a broad switch" "a broad line must hold the switch's exact name"
   printf 'kind=ship\noutward=reply to email; use zapier\n' > "$home/state/task-1.meta"
   expect_allow "$home" mcp__claude_ai_Gmail__reply '{"messageId":"m1"}' "a job's reply to email must allow a reply"
   expect_refuse "$home" mcp__claude_ai_Gmail__forward '{"to":["a@b.example"]}' "a job's reply to email must not allow a forward" >/dev/null

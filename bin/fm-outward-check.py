@@ -31,7 +31,7 @@
 #       This operator view names the file; the worker's refusal never does.
 #   fm-outward-check.py style --config DIR [show]
 #   fm-outward-check.py style --config DIR fine-print|no-block
-#   fm-outward-check.py style --config DIR broad [SWITCHES...]
+#   fm-outward-check.py style --config DIR broad [SWITCH[, SWITCH...]]
 #       Show or switch the home's outward style; bin/fm-outward-style.sh is
 #       the operator entry point and its header owns the usage. `show` prints
 #       one line, "Outward: <style>". A switch rewrites only the style line (and,
@@ -80,8 +80,9 @@
 # bare `no block` line still means no block. Lines naming two different styles
 # are a problem and leave fine print. Fine print checks the job's permissions
 # and the plain standing lines. Broad switches also honours each `broad
-# <switch>` line, where a switch is one of BROAD_SWITCHES, for every worker; in
-# any other style those lines are kept but allow nothing. No block switches the
+# <switch>` line, where a switch is exactly one of BROAD_SWITCHES, for every
+# worker; in any other style those lines are kept but allow nothing. The style
+# and switch names are only those exact words. No block switches the
 # check off for every worker in the home. A switch through `style` drops only
 # style lines and, when SWITCHES are given, the broad lines, so narrow standing
 # permissions, comments and lines not understood survive every switch. Broad
@@ -140,12 +141,9 @@ DOES = {
 FINE_PRINT = "fine print"
 BROAD = "broad switches"
 NO_BLOCK = "no block"
-STYLE_NAMES = {"fine print": FINE_PRINT, "fine-print": FINE_PRINT,
-               "broad": BROAD, "broad switches": BROAD,
-               "no block": NO_BLOCK, "no-block": NO_BLOCK}
+STYLES = (FINE_PRINT, BROAD, NO_BLOCK)
+STYLE_COMMANDS = {"fine-print": FINE_PRINT, "broad": BROAD, "no-block": NO_BLOCK}
 BROAD_SWITCHES = (SEND, REPLY, INVITES, CALENDAR, BROWSER, ZAPIER)
-SWITCH_ALIASES = {"reply": REPLY, "invites": INVITES, "calendar": CALENDAR,
-                  "browser": BROWSER, "zapier": ZAPIER}
 SWITCH_PROSE = {SEND: "send email", REPLY: "reply to email", INVITES: "answer calendar invites",
                 CALENDAR: "change the calendar", BROWSER: "control the browser",
                 ZAPIER: "run Zapier actions"}
@@ -252,19 +250,14 @@ def line_style(line):
     if line == "no block":
         return NO_BLOCK
     if line.startswith("style "):
-        return STYLE_NAMES.get(line[len("style "):], "")
+        style = line[len("style "):]
+        return style if style in STYLES else ""
     return None
 
 
 def parse_switch(text):
-    """One broad switch, in its words or a short alias -> its canonical name, or ValueError."""
-    words = " ".join(text.lower().split())
-    if words in SWITCH_ALIASES:
-        return SWITCH_ALIASES[words]
-    try:
-        name = render(parse_one(words))
-    except ValueError:
-        name = ""
+    """One broad switch name -> that name, or ValueError."""
+    name = " ".join(text.lower().split())
     if name not in BROAD_SWITCHES:
         raise ValueError("'%s' is not a broad switch; use one of: %s" % (text.strip(), "; ".join(BROAD_SWITCHES)))
     return name
@@ -289,7 +282,7 @@ def read_config(config_dir):
         style = line_style(line)
         if style == "":
             config["problems"].append("standing permission line %d: '%s' is not a style; use one of: %s"
-                                      % (number, line, "; ".join((FINE_PRINT, BROAD, NO_BLOCK))))
+                                      % (number, line, "; ".join(STYLES)))
         elif style:
             if style not in styles:
                 styles.append(style)
@@ -739,20 +732,21 @@ def cmd_style(argv):
     if action == "show" and len(rest) <= 1:
         print(style_line(read_config(config_dir)))
         return 0
-    style = STYLE_NAMES.get(action)
+    style = STYLE_COMMANDS.get(action)
     if not style or (style != BROAD and len(rest) > 1):
-        print("usage: fm-outward-style.sh [show] | fine-print | no-block | broad [<switch>[, <switch>...] | all]",
+        print("usage: fm-outward-style.sh [show] | fine-print | no-block | broad [<switch>[, <switch>...]]",
               file=sys.stderr)
         return 2
     switches = None
     if len(rest) > 1:
         switches = []
         try:
-            for piece in re.split(r"[;,\n]", " ".join(rest[1:])):
+            for piece in " ".join(rest[1:]).split(","):
                 if not piece.strip():
                     continue
-                names = BROAD_SWITCHES if " ".join(piece.lower().split()) == "all" else [parse_switch(piece)]
-                switches += [name for name in names if name not in switches]
+                name = parse_switch(piece)
+                if name not in switches:
+                    switches.append(name)
         except ValueError as e:
             print("error: %s" % e, file=sys.stderr)
             return 1
