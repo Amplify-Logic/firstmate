@@ -835,6 +835,7 @@ Opening a URL in the browser needs `control browser`, because a link in the capt
 
 Addresses are full email addresses or `@domain` for everyone at that domain, separated by commas, spaces or `and`; names such as "the Compass team" are not understood.
 `send email to` holds only when the recipients are visible in the request: a reply needs an explicit `to`, a reply-all also an explicit `cc`, and a draft sent by its id never shows its recipients, so only plain `send email` covers it.
+Each `to`, `cc` and `bcc` entry must be exactly one plain address such as `ana@example.com`; an entry with a display name, angle brackets, a comma or a space cannot be confirmed, so `send email to` does not cover the send.
 `invites from` holds only for an event the worker has read in the same job, because a hook records each event's organizer from the calendar connector's answer to `get_event`, `list_events` or `search_events`.
 
 **Per job.** When the captain hands over a job that must act outward, pass the permission to both `bin/fm-brief.sh` and `bin/fm-spawn.sh` as `--outward '<permission>[; <permission>...]'`.

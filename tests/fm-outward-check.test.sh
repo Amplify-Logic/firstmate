@@ -87,7 +87,7 @@ test_outward_actions_are_refused() {
     mcp__claude-in-chrome__navigate; do
     expect_refuse "$home" "$tool" '{}' "$tool acts outward and must be refused" >/dev/null
   done
-  reason=$(expect_refuse "$home" mcp__claude_ai_Gmail__send_message '{"to":["Ana <ana@example.com>"],"body":"secret body"}' "a send must be refused")
+  reason=$(expect_refuse "$home" mcp__claude_ai_Gmail__send_message '{"to":["Ana@Example.com"],"body":"secret body"}' "a send must be refused")
   assert_contains "$reason" "Starship refused mcp__claude_ai_Gmail__send_message: it would send email" "the refusal must name the tool and what it would do"
   assert_contains "$reason" "Reading, searching, listing and creating drafts stay allowed." "the refusal must say what still works"
   assert_contains "$reason" "Do not retry this" "the refusal must stop a retry loop"
@@ -110,11 +110,21 @@ test_outward_actions_are_refused() {
 }
 
 test_job_permission_from_the_task_record() {
-  local home reason
+  local home reason to
   home=$(new_home job)
   printf 'kind=ship\noutward=change calendar\noutward=send email to bo@example.com, @team.example\n' > "$home/state/task-1.meta"
-  expect_allow "$home" mcp__claude_ai_Gmail__send_message '{"to":["bo@example.com"],"cc":["Al <al@team.example>"]}' \
+  expect_allow "$home" mcp__claude_ai_Gmail__send_message '{"to":["bo@example.com"],"cc":["Al@Team.example"]}' \
     "listed recipients must be allowed"
+  reason=$(expect_refuse "$home" mcp__claude_ai_Gmail__send_message '{"to":["<bo@example.com>, eve@other.example"]}' \
+    "a bracketed item hiding a second recipient must be refused")
+  assert_contains "$reason" "not exactly one plain email address" "the refusal must say the recipients cannot be confirmed"
+  assert_contains "$reason" "permission that would allow it is 'send email'" "the suggestion must not name only part of the item"
+  for to in '["<bo@example.com> <eve@other.example>"]' '["Bo <bo@example.com>"]' '["bo@example.com eve@other.example"]' \
+    '["bo@example.com,eve@other.example"]' '["bo@example.com@other.example"]' '"bo@example.com"' '[["eve@other.example"]]'; do
+    expect_refuse "$home" mcp__claude_ai_Gmail__send_message "{\"to\":$to}" "the to value $to is not a list of plain addresses" >/dev/null
+  done
+  expect_refuse "$home" mcp__claude_ai_Gmail__send_message '{"to":["bo@example.com"],"bcc":"eve@other.example"}' \
+    "a bcc that is not a list must not be skipped" >/dev/null
   expect_allow "$home" mcp__claude_ai_Gmail__forward '{"messageId":"m1","to":["x@team.example"]}' "a forward to a listed domain must be allowed"
   expect_allow "$home" mcp__claude_ai_Gmail__reply '{"messageId":"m1","to":["bo@example.com"]}' "a reply with a listed explicit to must be allowed"
   reason=$(expect_refuse "$home" mcp__claude_ai_Gmail__send_message '{"to":["bo@example.com"],"bcc":["eve@other.example"]}' "an unlisted bcc must be refused")

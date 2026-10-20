@@ -55,7 +55,9 @@
 # allowed only by "use <tool name or glob>". "send email to <addresses>" holds
 # only when every recipient is visible in the tool input (to, cc, bcc; a reply
 # needs an explicit to, and a reply-all an explicit cc; a draft sent by id never
-# shows its recipients) and each one is a listed address or a listed @domain.
+# shows its recipients), each field is a list whose every item is exactly one
+# plain address (no display name, brackets, commas or spaces), and each one is a
+# listed address or a listed @domain.
 # "accept|decline|respond to invites from <addresses>" holds only when this
 # worker has read the event (get, list or search) so `seen` recorded its
 # organizer, and accept or decline also requires that answer.
@@ -118,6 +120,7 @@ VOCABULARY = ("send email [to <addresses>]; respond to invites [from <addresses>
               "accept invites [from <addresses>]; decline invites [from <addresses>]; "
               "change calendar; organise mail; control browser; use <tool name or glob>")
 
+PLAIN_ADDRESS_RE = re.compile(r"^[^@\s,;<>]+@[^@\s,;<>]+$")
 ADDRESS_RE = re.compile(r"^(?:[^@\s,;<>]+)?@[^@\s,;<>]+\.[^@\s,;<>]+$")
 SEND_RE = re.compile(r"^send (?:e-?mails?|mail)(?: to (?P<who>.+))?$", re.I)
 INVITES_RE = re.compile(
@@ -281,18 +284,19 @@ def classify(server, action):
     return True, None
 
 
-def address_list(value):
-    if isinstance(value, str):
-        value = value.split(",")
+def address_list(field, value):
+    """-> (addresses, None) or (None, why they cannot be confirmed); each item must be one plain address."""
+    if value is None:
+        return [], None
     if not isinstance(value, list):
-        return []
+        return None, "%s is not a list of plain email addresses, so its recipients cannot be confirmed" % field
     out = []
     for item in value:
-        if not isinstance(item, str) or not item.strip():
-            continue
-        m = re.search(r"<([^<>]+)>", item)
-        out.append((m.group(1) if m else item).strip().lower())
-    return out
+        if not isinstance(item, str) or not PLAIN_ADDRESS_RE.match(item.strip()):
+            return None, ("%s entry %s is not exactly one plain email address, so its recipients cannot be confirmed"
+                          % (field, json.dumps(item)))
+        out.append(item.strip().lower())
+    return out, None
 
 
 def recipients(action, tool_input):
@@ -300,9 +304,12 @@ def recipients(action, tool_input):
     words = set(words_of(action))
     if tool_input.get("draftId") or words & DRAFT_WORDS:
         return None, "it sends a saved draft, whose recipients the check cannot see"
-    to = address_list(tool_input.get("to"))
-    cc = address_list(tool_input.get("cc"))
-    bcc = address_list(tool_input.get("bcc"))
+    fields = {}
+    for field in ("to", "cc", "bcc"):
+        fields[field], why = address_list(field, tool_input.get(field))
+        if why:
+            return None, why
+    to, cc, bcc = fields["to"], fields["cc"], fields["bcc"]
     if "reply" in words:
         if not to:
             return None, "a reply to the default recipients does not show who receives it; name them in to"
