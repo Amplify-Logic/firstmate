@@ -14,9 +14,11 @@
 #       The matching PostToolUse hook. When a calendar tool's answer shows an
 #       event, it records that event's organizer in state/<task>.outward-seen.json
 #       so an `invites from` permission can be checked against the real
-#       organizer. It decodes JSON only from the answer's MCP text blocks, never
-#       from a string inside an event, so an event's own text cannot name an
-#       organizer. It never blocks anything and always exits 0.
+#       organizer. It decodes JSON only from the answer itself when Claude Code
+#       passes it as one string (as it does for the calendar connector) or from
+#       its MCP text blocks, never from a string inside the decoded answer, so
+#       an event's own text cannot name an organizer. It never blocks anything
+#       and always exits 0.
 #   fm-outward-check.py parse TEXT...
 #       Check permission text (several permissions separated by ";" or new
 #       lines) and print its normalized form on one line, each permission once
@@ -417,6 +419,13 @@ def read_seen(state_dir, task):
 
 def collect_organizers(obj, out, depth=0, decoded=False):
     if depth > 40:
+        return
+    if isinstance(obj, str):
+        if depth == 0:
+            try:
+                collect_organizers(json.loads(obj), out, depth + 1, True)
+            except ValueError:
+                pass
         return
     if isinstance(obj, dict):
         if not decoded and obj.get("type") == "text" and isinstance(obj.get("text"), str):

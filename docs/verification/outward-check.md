@@ -5,7 +5,7 @@ Current behavior and the operator-facing contract are owned by [`../configuratio
 
 Date: 2026-10-20.
 Python: 3.12.5 (macOS 26.5.1, Darwin arm64).
-Claude Code: 2.1.304.
+Claude Code: 2.1.305.
 
 ## Portable suite
 
@@ -35,6 +35,6 @@ Without the hooks, the same worker's `delete_event` call reaches Google, which a
 $ FM_OUTWARD_CHECK_LIVE_E2E=1 bash tests/fm-outward-check-live-e2e.test.sh
 ok - a real Claude worker with permissions bypassed has a connector delete refused by the hook before it reaches the connector
 ok - the PostToolUse hook reads event organizers from the real connector answer (3 recorded)
-claude 2.1.304 (Claude Code)
+claude 2.1.305 (Claude Code)
 ok - with No Block on, the same delete reaches the connector, and the action is recorded
 ```
