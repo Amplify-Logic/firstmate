@@ -847,8 +847,8 @@ It holds for that task only, including after a relaunch.
 
 ```
 # Compass invites and the weekly update
-accept invites from @compass.example
-send email to team@compass.example
+accept invites from @example.com
+send email to team@example.com
 ```
 
 Blank lines and `#` comments are ignored.
