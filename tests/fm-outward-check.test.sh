@@ -298,8 +298,18 @@ test_styles_switch_and_the_check_honours_each() {
 
   home=$(new_home styles-fresh)
   out=$(style "$home" broad) || fail "broad in a home with no permissions file must succeed"
-  assert_contains "$out" "send email, reply to email, answer calendar invites, change the calendar, control the browser and run Zapier actions" \
-    "broad with no switch chosen before must turn every switch on"
+  assert_equals "Outward style is now broad switches, but no switch is on, so workers still act outward only with their job's own permission or a standing permission; which should every worker be allowed to do: send email, reply to email, answer calendar invites, change the calendar, control the browser or run Zapier actions?" \
+    "$out" "broad with no switch chosen before must turn none on and ask which to allow"
+  assert_equals "Outward: broad switches (none on)" "$(style "$home")" "a bare broad on a fresh home must show no switch on"
+  expect_refuse "$home" mcp__claude_ai_Gmail__send_message '{"to":["a@b.example"]}' "a bare broad must not allow sending" >/dev/null
+  expect_refuse "$home" mcp__claude_ai_Gmail__reply '{"messageId":"m1"}' "a bare broad must not allow replying" >/dev/null
+  expect_refuse "$home" mcp__claude_ai_Google_Calendar__respond_to_event '{"eventId":"e1","responseStatus":"accepted"}' "a bare broad must not allow answering invites" >/dev/null
+  expect_refuse "$home" mcp__claude_ai_Google_Calendar__create_event '{}' "a bare broad must not allow calendar changes" >/dev/null
+  expect_refuse "$home" mcp__claude-in-chrome__navigate '{"url":"https://example.com"}' "a bare broad must not allow browsing" >/dev/null
+  expect_refuse "$home" mcp__claude_ai_Zapier_MCP__run_action '{}' "a bare broad must not allow Zapier" >/dev/null
+  style "$home" broad 'send email' >/dev/null || fail "naming a switch after a bare broad must work"
+  expect_allow "$home" mcp__claude_ai_Gmail__send_message '{"to":["a@b.example"]}' "the named switch must then allow sending"
+  expect_refuse "$home" mcp__claude-in-chrome__navigate '{"url":"https://example.com"}' "an unnamed switch must stay off" >/dev/null
   assert_equals "Outward: fine print" "$(FM_CONFIG_OVERRIDE="$TMP_ROOT/no-config" "$STYLE" show)" "a home with no file must show fine print"
   pass "each outward style is switched by one command that says what it means, the check honours it at once, and narrow permissions survive"
 }

@@ -153,7 +153,7 @@ state/               runtime records and signals; gitignored
   .secondmate-relaunch-<id> .secondmate-relaunch-bound-<id>   durable relaunch history and parked-bound state; never touch (bin/fm-secondmate-liveness-lib.sh owns the ledger contract)
   .watch-triage.log  watcher's absorbed-wake debug log (size-capped); never relied on, safe to delete
   command-guard.log .command-guard-outage  worker command guard decision log (redacted commands, rotated) and its open-outage marker; bin/fm-command-guard.py owns both
-  outward-check.log  worker outward check record of every refusal and every outward action a permission or No Block allowed (no message contents); bin/fm-outward-check.py owns it
+  outward-check.log  worker outward check record of every refusal and every outward action a permission, a broad switch or no block allowed (no message contents); bin/fm-outward-check.py owns it
   .last-watcher-beat watcher liveness beacon, touched every poll (including while absorbing benign wakes); guard scripts read it
   .subsuper-* .supervise-daemon.*   sub-supervisor internals; never touch
 .no-mistakes/        local validation state and evidence; gitignored

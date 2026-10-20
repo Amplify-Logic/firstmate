@@ -16,8 +16,8 @@
 #       email, respond to invites, change calendar, control browser and use
 #       zapier, comma-separated; name all six to turn every switch on.
 #       Broad with switches turns on exactly those; without, it keeps the ones
-#       chosen before, or turns every switch on when none were. A switch it does
-#       not understand changes nothing.
+#       chosen before, or when none were turns no switch on and its sentence
+#       asks which to allow. A switch it does not understand changes nothing.
 #
 # The style lives in this home's config/outward-permissions
 # (FM_CONFIG_OVERRIDE, else $FM_HOME/config), which the worker outward check

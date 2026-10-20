@@ -86,8 +86,8 @@
 # check off for every worker in the home. A switch through `style` drops only
 # style lines and, when SWITCHES are given, the broad lines, so narrow standing
 # permissions, comments and lines not understood survive every switch. Broad
-# with no SWITCHES keeps the existing broad lines, or turns every switch on
-# when there are none.
+# with no SWITCHES keeps the existing broad lines, and with none turns no
+# switch on and asks which to allow.
 # A refusal names the permission that would allow the action but never the
 # grant command, the permissions file or any other path: only the captain
 # widens what a worker may do, through Firstmate.
@@ -691,7 +691,9 @@ def style_sentence(config):
     if style == BROAD:
         if not config["broad"]:
             return ("Outward style is now broad switches, but no switch is on, so workers still act outward"
-                    " only with their job's own permission or a standing permission.")
+                    " only with their job's own permission or a standing permission; which should every worker"
+                    " be allowed to do: %s?"
+                    % prose_list([SWITCH_PROSE[name] for name in BROAD_SWITCHES]).replace(" and ", " or "))
         return ("Outward style is now broad switches: every worker may %s without asking, and anything else"
                 " still needs its job's own permission or a standing permission."
                 % prose_list([SWITCH_PROSE[name] for name in config["broad"]]))
@@ -715,8 +717,6 @@ def write_style(config_dir, style, switches):
         if switches is not None and line.startswith("broad "):
             continue
         kept.append(raw)
-    if style == BROAD and switches is None and not any(plain(raw).startswith("broad ") for raw in kept):
-        switches = list(BROAD_SWITCHES)
     out = ["style " + style] + kept + ["broad " + name for name in switches or []]
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_name(".%s.%d" % (path.name, os.getpid()))
