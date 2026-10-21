@@ -180,6 +180,10 @@ test_hook_reads_body_files_however_they_are_named() {
     "a listed word through the pr new alias must be refused"
   expect_refuse "$HOME_WORDS" 'gh issue new --repo o/public --title "Fix for Robin" --body x' \
     "a listed word through the issue new alias must be refused"
+  expect_refuse "$HOME_WORDS" 'gh pr reopen 7 --repo o/public --comment "reopening for Robin"' \
+    "a reopening comment on a PR must be checked"
+  expect_refuse "$HOME_WORDS" 'gh issue reopen 3 --repo o/public --comment "reopening for Robin"' \
+    "a reopening comment on an issue must be checked"
   export FAKE_GH_PRIVATE=true
   expect_allow "$HOME_WORDS" 'gh pr create --repo o/work --fill' "--fill may publish to a private repository"
   unset FAKE_GH_PRIVATE
@@ -297,8 +301,10 @@ test_hook_passes_clean_private_and_unrelated_commands() {
   assert_contains "$REASON" "could not confirm the repository is private" "the refusal must say why"
   assert_contains "$REASON" "HTTP 404" "the refusal must carry gh's reason"
   assert_contains "$REASON" '"Robin"' "the refusal must name the listed word"
-  assert_contains "$REASON" "explicit --repo" "the refusal must say how to retry"
-  assert_not_contains "$REASON" "blocked:" "a possibly public repository must not stop the worker"
+  assert_contains "$REASON" "o/gone: gh repo view failed" "the refusal must name the unreadable repository"
+  assert_contains "$REASON" "Rewrite the text without it" "the refusal must say how to retry"
+  assert_contains "$REASON" "blocked:" "a private repository that cannot be read must leave the worker a way to stop"
+  assert_not_contains "$REASON" "explicit --repo" "an unreadable repository must not suggest a retry that cannot help"
   unset FAKE_GH_PRIVATE
   expect_allow "$NO_LIST" 'gh pr create --repo o/public --title "Sync fix for Robin" --body x' \
     "a home with no list must pass everything"
