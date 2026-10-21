@@ -16,7 +16,7 @@
 # reads the list itself.
 #
 # WHAT IS CHECKED. Only a Bash command that publishes text: gh or gh-axi
-# `pr|issue create|edit|comment|review|close|merge`, a `gh api` call that sends
+# `pr|issue create|new|edit|comment|review|close|merge`, a `gh api` call that sends
 # fields or an input file, and `no-mistakes axi run|respond`, whose intent and
 # answers reach the PR the pipeline writes. Every other command passes
 # untouched, and so does every other tool. The text checked is the whole
@@ -24,7 +24,7 @@
 # same command all count, plus every existing file the command names anywhere:
 # a body or input flag, a redirect, a `cat` or `$(cat ...)`, or a pipe into
 # `--body-file -`. A listed word in a path or branch name of such a command is
-# refused too, because a branch name is published. A `pr create` given
+# refused too, because a branch name is published. A `pr create` or `pr new` given
 # --fill, -f, --fill-first or --fill-verbose before the next shell operator
 # takes its text from commit messages this check cannot see, so on a public
 # repository it is refused whenever the home has a list.
@@ -42,8 +42,10 @@
 # origin on any other dotted host is not checked, and one that cannot be
 # parsed is refused. A command whose words cannot be parsed while it names a
 # gh form, and a repository whose visibility cannot be read, count as possibly
-# public and are refused. The visibility read happens only after a hit, so a
-# clean command costs no network call.
+# public and are refused, naming the listed words, so the worker rewrites the
+# text without them or runs the publishing command on its own with an explicit
+# --repo. The visibility read happens only after a hit, so a clean command
+# costs no network call.
 #
 # FAILURES. No list means nothing is checked, exactly as before the list
 # existed: bin/fm-leak-guard.sh --text says nothing at all then. An
@@ -62,7 +64,7 @@ FILE_CAP = 1 << 20
 
 REPO_FLAG = r"(?:(?:-R|--repo)(?:=|\s+)\S+\s+)?"
 PR_TEXT = re.compile(r"(?:^|[\s/;&|(`])gh(?:-axi)?\s+" + REPO_FLAG + r"(?:pr|issue)\s+" + REPO_FLAG
-                     + r"(?:create|edit|comment|review|close|merge)\b")
+                     + r"(?:create|new|edit|comment|review|close|merge)\b")
 API = re.compile(r"(?:^|[\s/;&|(`])gh(?:-axi)?\s+api\b")
 API_SENDS = re.compile(r"(?:^|\s)(?:-f|-F|--field|--raw-field|--input)(?:=|\s|$)"
                        r"|(?:-X|--method)(?:=|\s*)(?:POST|PATCH|PUT)\b", re.I)
@@ -74,6 +76,10 @@ PATH_CAP = 1024
 FILL = re.compile(r"--fill(?:-first|-verbose)?(?:=(?!false$).*)?|-[dwe]*f[dwe]*")
 PATHLIKE = re.compile(r"[^\s'\"`()<>|;&=]+")
 REMOTE = re.compile(r"^(?:[a-z+]+://)?(?:[^@/]+@)?([^/:]+)[:/]+(.+?)(?:\.git)?/?$")
+
+
+class UnknownTarget(Exception):
+    """A repository the command could reach that cannot be named, so it counts as possibly public."""
 
 
 def deny(reason):
@@ -117,9 +123,9 @@ def tokens(command):
 
 
 def fills(words):
-    """Whether a `pr create` among the words is given a --fill flag before the next shell operator."""
+    """Whether a `pr create` or `pr new` among the words is given a --fill flag before the next shell operator."""
     for i, word in enumerate(words or []):
-        if word == "create" and i and words[i - 1] == "pr":
+        if word in ("create", "new") and i and words[i - 1] == "pr":
             for arg in words[i + 1:]:
                 if arg and set(arg) <= set(SEPARATORS):
                     break
@@ -180,7 +186,7 @@ def targets(command, words, cwd):
     gh_form = PR_TEXT.search(command) or (API.search(command) and API_SENDS.search(command))
     pipeline = PIPELINE.search(command)
     if words is None and gh_form:
-        raise RuntimeError("Starship could not read which repository this gh command publishes to")
+        raise UnknownTarget("Starship could not read which repository this gh command publishes to")
     repos = []
     if any(os.path.basename(w) in ("gh", "gh-axi") for w in words or []) or (gh_form and not pipeline):
         repos += named_repos(words) + [None]
@@ -189,7 +195,7 @@ def targets(command, words, cwd):
                              capture_output=True, text=True, timeout=10).stdout.strip()
         m = REMOTE.match(url)
         if not m:
-            raise RuntimeError("this checkout's origin remote %r is not a repository URL it can read" % url)
+            raise UnknownTarget("this checkout's origin remote %r is not a repository URL it can read" % url)
         host = m.group(1).lower()
         if "." not in host or host == "github.com" or host.endswith(".github.com"):
             repos.append(m.group(2))
@@ -242,7 +248,12 @@ def cmd_hook(argv):
         else:
             named = "comes from commit messages through --fill, which this check cannot read"
             fix = "Pass --title and --body-file instead of --fill"
-        for repo, where in targets(command, words, cwd):
+        unknown = None
+        try:
+            reached = targets(command, words, cwd)
+        except UnknownTarget as e:
+            reached, unknown = [], str(e)
+        for repo, where in reached:
             seen = visibility(repo, cwd)
             if seen == "private":
                 continue
@@ -253,11 +264,13 @@ def cmd_hook(argv):
                      " %s and run it again; check a draft first with: %s"
                      % (where, named, fix, check_hint(o["home"])))
                 return 0
-            deny("Starship refused this command: the text it would publish to %s %s,"
+            unknown = "%s: %s" % (where, seen)
+            break
+        if unknown:
+            deny("Starship refused this command: the text it would publish %s,"
                  " and Starship could not confirm the repository is private (%s)."
-                 " %s; if the repository is private and this keeps happening,"
-                 " append a blocked: status line naming this and stop." % (where, named, seen, fix))
-            return 0
+                 " %s, or run the publishing command on its own with an explicit --repo, and run it again."
+                 % (named, unknown, fix))
     except Exception as e:  # a command known to publish never passes a check that failed
         deny("Starship refused this command because its PR text check failed (%s: %s)."
              " Do not route around it; append a blocked: status line naming this error and stop."

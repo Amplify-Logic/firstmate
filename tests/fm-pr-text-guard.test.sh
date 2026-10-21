@@ -108,6 +108,10 @@ test_draft_check_passes_clean_text_and_partial_words() {
   STATUS=0
   OUT=$(printf 'clean\n' | FM_HOME="$HOME_WORDS" "$LEAK" --text - 2>&1) || STATUS=$?
   [ "$STATUS" -eq 0 ] || fail "clean stdin must pass: $OUT"
+  STATUS=0
+  OUT=$(cd "$WORK" && printf 'clean\n' | FM_HOME="$HOME_WORDS" "$LEAK" --text - clean.md 2>&1) || STATUS=$?
+  [ "$STATUS" -eq 0 ] || fail "clean stdin and a clean file must pass: $OUT"
+  [ -f "$WORK/clean.md" ] || fail "checking stdin before a file must not delete the file"
   leak_text "$HOME_WORDS" missing.md
   [ "$STATUS" -eq 2 ] || fail "an unreadable draft must not pass as clean: $OUT"
   pass "the draft check passes clean text and words that only appear inside longer words"
@@ -170,6 +174,12 @@ test_hook_reads_body_files_however_they_are_named() {
     "a -f given to another command is not --fill"
   expect_allow "$HOME_WORDS" 'gh pr create --repo o/public --title "Fix lock" --body "Stop calling rm -f on the lock"' \
     "a -f inside the body text is not --fill"
+  expect_refuse "$HOME_WORDS" 'gh pr new --repo o/public --fill' "the pr new alias with --fill must count"
+  assert_contains "$REASON" "--fill" "the refusal must name --fill as the reason"
+  expect_refuse "$HOME_WORDS" 'gh pr new --repo o/public --title "Fix for Robin" --body x' \
+    "a listed word through the pr new alias must be refused"
+  expect_refuse "$HOME_WORDS" 'gh issue new --repo o/public --title "Fix for Robin" --body x' \
+    "a listed word through the issue new alias must be refused"
   export FAKE_GH_PRIVATE=true
   expect_allow "$HOME_WORDS" 'gh pr create --repo o/work --fill' "--fill may publish to a private repository"
   unset FAKE_GH_PRIVATE
@@ -203,6 +213,7 @@ test_hook_finds_the_repository_from_urls_and_gh_repo() {
 It's fixed, thanks Robin
 EOF" "a command whose words cannot be parsed must not fall back to the private default"
   assert_contains "$REASON" "could not read which repository" "the refusal must say the target is unknown"
+  assert_not_contains "$REASON" "blocked:" "an unparsable command must be rewritten, not stop the worker"
   expect_refuse "$HOME_WORDS" 'timeout 60 gh pr comment 7 --repo o/public --body "thanks Robin"' \
     "a gh word behind a wrapper must still be checked against its --repo"
   # shellcheck disable=SC2016 # The loop variable expands inside the checked command, not here.
@@ -285,6 +296,9 @@ test_hook_passes_clean_private_and_unrelated_commands() {
     "an unreadable visibility must refuse"
   assert_contains "$REASON" "could not confirm the repository is private" "the refusal must say why"
   assert_contains "$REASON" "HTTP 404" "the refusal must carry gh's reason"
+  assert_contains "$REASON" '"Robin"' "the refusal must name the listed word"
+  assert_contains "$REASON" "explicit --repo" "the refusal must say how to retry"
+  assert_not_contains "$REASON" "blocked:" "a possibly public repository must not stop the worker"
   unset FAKE_GH_PRIVATE
   expect_allow "$NO_LIST" 'gh pr create --repo o/public --title "Sync fix for Robin" --body x' \
     "a home with no list must pass everything"

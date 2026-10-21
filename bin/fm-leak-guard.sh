@@ -109,9 +109,12 @@ if [ "$TEXT_MODE" -eq 1 ]; then
   for source in "$@"; do
     if [ "$source" = - ]; then
       label=stdin
-      text=$(mktemp "${TMPDIR:-/tmp}/fm-leak-text.XXXXXX")
-      trap 'rm -f "$WORDS_LIST" "$text"' EXIT
-      cat > "$text"
+      if [ -z "${stdin_copy:-}" ]; then
+        stdin_copy=$(mktemp "${TMPDIR:-/tmp}/fm-leak-text.XXXXXX")
+        trap 'rm -f "$WORDS_LIST" "$stdin_copy"' EXIT
+        cat > "$stdin_copy"
+      fi
+      text=$stdin_copy
     else
       label=$source
       case "$source" in
