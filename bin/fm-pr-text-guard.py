@@ -124,6 +124,7 @@ def tokens(command):
     lexer = shlex.shlex(command, posix=True, punctuation_chars=SEPARATORS)
     lexer.whitespace = " \t\r"
     lexer.whitespace_split = True
+    lexer.commenters = ""
     try:
         return list(lexer)
     except ValueError:
@@ -133,7 +134,12 @@ def tokens(command):
 def fills(words):
     """Whether a `pr create` or `pr new` among the words is given a --fill flag before the next shell operator."""
     for i, word in enumerate(words or []):
-        if word in ("create", "new") and i and words[i - 1] == "pr":
+        j = i - 1
+        if j >= 0 and words[j].startswith("--repo="):
+            j -= 1
+        elif j >= 1 and words[j - 1] in ("-R", "--repo"):
+            j -= 2
+        if word in ("create", "new") and j >= 0 and words[j] == "pr":
             for arg in words[i + 1:]:
                 if arg and set(arg) <= set(SEPARATORS):
                     break

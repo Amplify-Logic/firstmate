@@ -175,6 +175,9 @@ test_hook_reads_body_files_however_they_are_named() {
   expect_allow "$HOME_WORDS" 'gh pr create --repo o/public --title "Fix lock" --body "Stop calling rm -f on the lock"' \
     "a -f inside the body text is not --fill"
   expect_refuse "$HOME_WORDS" 'gh pr new --repo o/public --fill' "the pr new alias with --fill must count"
+  expect_refuse "$HOME_WORDS" 'gh pr -R o/public create --fill' "a --fill after a repo flag between pr and create must count"
+  assert_contains "$REASON" "--fill" "the refusal must name --fill as the reason"
+  expect_refuse "$HOME_WORDS" 'gh pr --repo=o/public new --fill' "a --fill after --repo= between pr and new must count"
   assert_contains "$REASON" "--fill" "the refusal must name --fill as the reason"
   expect_refuse "$HOME_WORDS" 'gh pr new --repo o/public --title "Fix for Robin" --body x' \
     "a listed word through the pr new alias must be refused"
@@ -219,6 +222,9 @@ EOF" "a command whose words cannot be parsed must not fall back to the private d
   assert_contains "$REASON" "could not read which repository" "the refusal must say the target is unknown"
   assert_not_contains "$REASON" "blocked:" "an unparsable command must be rewritten, not stop the worker"
   assert_contains "$REASON" "--body-file <file>, with no heredoc" "the refusal must say how to make the command readable"
+  expect_refuse "$HOME_WORDS" 'gh pr create --title Fix#12 --body "thanks Robin" --repo o/public' \
+    "a # inside a word must not hide the --repo after it"
+  assert_contains "$REASON" "o/public, a public repository" "the refusal must name the repository after the #"
   expect_refuse "$HOME_WORDS" 'timeout 60 gh pr comment 7 --repo o/public --body "thanks Robin"' \
     "a gh word behind a wrapper must still be checked against its --repo"
   # shellcheck disable=SC2016 # The loop variable expands inside the checked command, not here.
