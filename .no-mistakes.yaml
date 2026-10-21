@@ -46,9 +46,10 @@ review:
 commands:
   lint: 'bin/fm-lint.sh && bash tests/fm-pi-primary-types.test.sh'
 
-# Keep each run's test evidence on this machine because this repository is public:
-# evidence is never committed to any branch, and screenshots and recordings are
-# never uploaded to the PR.
+# This repository is public, so each run's evidence files and media stay on this
+# machine: they are never committed to any branch or uploaded to the PR.
+# The short inline result text still appears in the public PR description, under
+# the public PR text rule below and the leak check.
 test:
   instructions: |
     Run live Herdr scenarios only through bin/fm-herdr-lab.sh with a named non-default fm-lab-* session, following that helper's prepare, provision, run, and teardown contract exactly.
@@ -60,6 +61,7 @@ test:
     Read docs/herdr-backend.md and the bin/fm-herdr-lab.sh header as the owners of Herdr lab mechanics rather than reproducing that manual here.
     Ship or scout briefs that will drive Herdr lifecycle still require --herdr-lab at scaffold time; these Test-agent instructions are not a substitute for that brief flag.
     Your summaries, findings and evidence become this repository's public PR title, description and comments: name people, companies and projects only by role, such as a colleague or a customer, and never quote a private name from a finding, evidence or the user intent.
+    Inline evidence content is a short result line only, never raw logs, command output, file contents or paths from the home.
   evidence:
     store_in_repo: false
     attach_media: false

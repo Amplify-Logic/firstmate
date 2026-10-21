@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Contract: parsed .no-mistakes.yaml must leave commands.test absent or empty,
-# and must keep test evidence local because this repository is public.
+# and must keep evidence files and media local because this repository is public.
 set -u
 
 # shellcheck source=tests/lib.sh
@@ -40,7 +40,7 @@ puts "#{ev["store_in_repo"].inspect} #{ev.fetch("attach_media", :absent).inspect
   esac
   [ "${val#* }" = false ] \
     || fail "test.evidence.attach_media must be explicitly false (its default is true) so media is never uploaded to the public PR; got: ${val#* }"
-  pass "no-mistakes keeps test evidence on the local machine"
+  pass "no-mistakes keeps evidence files and media on the local machine"
 }
 
 test_nm_has_no_deterministic_test_command
