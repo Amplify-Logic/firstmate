@@ -36,9 +36,12 @@
 # positional arguments of `pr|issue <verb>`, and a repos/<owner>/<repo>
 # endpoint as the first positional argument of `gh api`. An invocation naming
 # none of them reaches gh's own default for the working directory, which
-# `gh repo view` reads there. Whether gh publishes at all is decided from
-# those parsed invocations, so a gh command named inside quoted text never
-# counts; a command that names gh but whose words cannot be parsed has no
+# `gh repo view` reads there. When a publishing gh form appears in the command
+# but no parsed invocation explains it, such as gh after a wrapper like
+# timeout or a reserved word like do, or a gh command named inside quoted
+# text, every --repo/-R and GH_REPO= value among its words plus gh's default
+# for the working directory are the targets, so it passes only when all are
+# private. A command that names gh but whose words cannot be parsed has no
 # known target and is refused on a hit. For no-mistakes, the target is the
 # owner/repo of the origin remote, whether its host is github.com or a dotless
 # SSH alias; an origin on any other dotted host is not checked, and one that
@@ -235,6 +238,9 @@ def targets(command, words, cwd):
             repos += invocation_repos(env, args) or [None]
     if words is None and (PR_TEXT.search(command) or API.search(command)):
         raise RuntimeError("Starship could not read which repository this gh command publishes to")
+    if not repos and (PR_TEXT.search(command) or (API.search(command) and API_SENDS.search(command))):
+        repos = [words[i + 1] for i, w in enumerate(words[:-1]) if w in ("-R", "--repo")]
+        repos += [w.split("=", 1)[1] for w in words if w.startswith(("--repo=", "GH_REPO="))] + [None]
     if PIPELINE.search(command):
         url = subprocess.run(["git", "-C", cwd, "remote", "get-url", "origin"],
                              capture_output=True, text=True, timeout=10).stdout.strip()

@@ -203,6 +203,11 @@ test_hook_finds_the_repository_from_urls_and_gh_repo() {
 It's fixed, thanks Robin
 EOF" "a command whose words cannot be parsed must not fall back to the private default"
   assert_contains "$REASON" "could not read which repository" "the refusal must say the target is unknown"
+  expect_refuse "$HOME_WORDS" 'timeout 60 gh pr comment 7 --repo o/public --body "thanks Robin"' \
+    "a gh word behind a wrapper must still be checked against its --repo"
+  # shellcheck disable=SC2016 # The loop variable expands inside the checked command, not here.
+  expect_refuse "$HOME_WORDS" 'for n in 7 8; do GH_REPO=o/public gh pr comment $n --body "thanks Robin"; done' \
+    "a gh word behind a reserved word must still be checked against its GH_REPO"
   unset FAKE_GH_PRIVATE FAKE_GH_PUBLIC FAKE_GH_PRIVATE_REPOS
   pass "a PR or issue URL, GH_REPO and the gh api endpoint name the repository, and body text never does"
 }
@@ -226,7 +231,7 @@ test_hook_refuses_the_pipeline_intent_on_a_public_github_repo() {
     "an intent read from a file must be checked" "$repo"
   local private="$TMP_ROOT/nm-private"
   git init -q "$private" && git -C "$private" remote add origin git@github.com:o/private.git
-  FAKE_GH_PRIVATE_REPOS=o/private expect_allow "$HOME_WORDS" \
+  FAKE_GH_PRIVATE=true FAKE_GH_PRIVATE_REPOS=o/private expect_allow "$HOME_WORDS" \
     'no-mistakes axi run --intent "Robin wants the worker to run gh pr comment after the merge"' \
     "a gh command named inside a private origin's intent must not stop the pipeline" "$private"
   local alias="$TMP_ROOT/nm-alias" bare="$TMP_ROOT/nm-bare" dotless="$TMP_ROOT/nm-dotless"
