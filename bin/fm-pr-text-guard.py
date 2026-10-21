@@ -24,36 +24,31 @@
 # same command all count, plus every existing file the command names anywhere:
 # a body or input flag, a redirect, a `cat` or `$(cat ...)`, or a pipe into
 # `--body-file -`. A listed word in a path or branch name of such a command is
-# refused too, because a branch name is published. A `gh pr create` invocation
-# given --fill, -f, --fill-first or --fill-verbose among its own arguments
+# refused too, because a branch name is published. A `pr create` given
+# --fill, -f, --fill-first or --fill-verbose before the next shell operator
 # takes its text from commit messages this check cannot see, so on a public
 # repository it is refused whenever the home has a list.
 #
 # PUBLIC ONLY. A private repository may hold these words, so a hit is refused
-# only when a target is public. Targets come from each gh invocation's
-# structure, never from its title or body text: its --repo/-R value, a
-# GH_REPO= assignment right before the gh word, a PR or issue URL among the
-# positional arguments of `pr|issue <verb>`, and a repos/<owner>/<repo>
-# endpoint as the first positional argument of `gh api`. An invocation naming
-# none of them reaches gh's own default for the working directory, which
-# `gh repo view` reads there. When a publishing gh form appears in the command
-# but no parsed invocation explains it, such as gh after a wrapper like
-# timeout or a reserved word like do, or a gh command named inside quoted
-# text, every --repo/-R and GH_REPO= value among its words plus gh's default
-# for the working directory are the targets, so it passes only when all are
-# private. A command that names gh but whose words cannot be parsed has no
-# known target and is refused on a hit. For no-mistakes, the target is the
-# owner/repo of the origin remote, whether its host is github.com or a dotless
-# SSH alias; an origin on any other dotted host is not checked, and one that
-# cannot be parsed is refused.
-# A repository whose visibility cannot be read is refused, naming why.
-# The visibility read happens only after a hit, so a clean command costs no
-# network call.
+# unless every repository the command could reach is proven private. When the
+# command calls gh or gh-axi as a word of its own, or names a publishing gh
+# form that is not part of a no-mistakes command, those repositories are every
+# --repo/-R value, GH_REPO= value, PR or issue URL argument and
+# repos/<owner>/<repo> path among its words, plus gh's own default for the
+# working directory, which `gh repo view` reads there. A gh form named only
+# inside quoted text of a no-mistakes command, such as its intent, adds none.
+# For `no-mistakes axi run|respond`, the repository is the owner/repo of the
+# origin remote, whether its host is github.com or a dotless SSH alias; an
+# origin on any other dotted host is not checked, and one that cannot be
+# parsed is refused. A command whose words cannot be parsed while it names a
+# gh form, and a repository whose visibility cannot be read, count as possibly
+# public and are refused. The visibility read happens only after a hit, so a
+# clean command costs no network call.
 #
 # FAILURES. No list means nothing is checked, exactly as before the list
 # existed: bin/fm-leak-guard.sh --text says nothing at all then. An
-# unreadable payload passes, because it cannot be known to publish anything. Once a command is known to publish, any failure inside the check
-# refuses it.
+# unreadable payload passes, because it cannot be known to publish anything.
+# Once a command is known to publish, any failure inside the check refuses it.
 import json
 import os
 import pathlib
@@ -75,12 +70,7 @@ PIPELINE = re.compile(r"(?:^|[\s/;&|(`])no-mistakes\s+axi\s+(?:run|respond)\b")
 SEPARATORS = "();<>|&\n"
 ENDPOINT_REPO = re.compile(r"^/?repos/([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)(?:/|$)")
 URL_REPO = re.compile(r"https?://([^/\s]+/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)/(?:pull|issues)/\d+(?:[/#?]\S*)?")
-PR_VALUE_FLAGS = {"-b", "--body", "-t", "--title", "-F", "--body-file", "-R", "--repo", "-B", "--base",
-                  "-H", "--head", "-l", "--label", "-r", "--reviewer", "-a", "--assignee", "-m", "--milestone",
-                  "-p", "--project", "-T", "--template", "--subject", "--match-head-commit", "--author-email"}
 PATH_CAP = 1024
-API_VALUE_FLAGS = {"-X", "--method", "-H", "--header", "-f", "--raw-field", "-F", "--field", "--input",
-                   "-q", "--jq", "-t", "--template", "--hostname", "-p", "--preview", "--cache"}
 FILL = re.compile(r"--fill(?:-first|-verbose)?(?:=(?!false$).*)?|-[dwe]*f[dwe]*")
 PATHLIKE = re.compile(r"[^\s'\"`()<>|;&=]+")
 REMOTE = re.compile(r"^(?:[a-z+]+://)?(?:[^@/]+@)?([^/:]+)[:/]+(.+?)(?:\.git)?/?$")
@@ -126,65 +116,15 @@ def tokens(command):
         return None
 
 
-def gh_invocations(words):
-    """Each (GH_REPO assigned right before it or None, arguments) of a gh or gh-axi word opening a command."""
-    found, start = [], 0
-    for end in [i for i, w in enumerate(words) if w and set(w) <= set(SEPARATORS)] + [len(words)]:
-        command, env = words[start:end], None
-        while command and re.match(r"^[A-Za-z_][A-Za-z0-9_]*=", command[0]):
-            if command[0].startswith("GH_REPO="):
-                env = command[0].split("=", 1)[1]
-            command = command[1:]
-        if command and os.path.basename(command[0]) in ("gh", "gh-axi"):
-            found.append((env, command[1:]))
-        start = end + 1
-    return found
-
-
-def subcommand(args):
-    """(index, word) of the gh subcommand: the first argument that is neither -R/--repo nor its value."""
-    i = 0
-    while i < len(args):
-        if args[i] in ("-R", "--repo"):
-            i += 2
-        elif args[i].startswith("--repo="):
-            i += 1
-        else:
-            return i, args[i]
-    return len(args), None
-
-
-def invocation_repos(env, args):
-    """The repositories one gh invocation names by its structure; empty means gh's default."""
-    repos = [env] if env else []
-    flag = flag_value(args, "-R", "--repo")
-    if flag:
-        repos.append(flag)
-    i, sub = subcommand(args)
-    rest = args[i + 1:]
-    if sub in ("pr", "issue"):
-        j = 1
-        while j < len(rest):
-            m = URL_REPO.fullmatch(rest[j])
-            if m:
-                repos.append(m.group(1))
-            j += 2 if rest[j] in PR_VALUE_FLAGS else 1
-    elif sub == "api":
-        j = 0
-        while j < len(rest) and rest[j].startswith("-"):
-            j += 2 if rest[j] in API_VALUE_FLAGS else 1
-        m = ENDPOINT_REPO.match(rest[j]) if j < len(rest) else None
-        if m:
-            repos.append(m.group(1))
-    return repos
-
-
 def fills(words):
-    """Whether a gh pr create invocation is given a --fill flag among its own arguments."""
-    for _, args in gh_invocations(words or []):
-        i, sub = subcommand(args)
-        if sub == "pr" and args[i + 1:i + 2] == ["create"] and any(FILL.fullmatch(a) for a in args[i + 2:]):
-            return True
+    """Whether a `pr create` among the words is given a --fill flag before the next shell operator."""
+    for i, word in enumerate(words or []):
+        if word == "create" and i and words[i - 1] == "pr":
+            for arg in words[i + 1:]:
+                if arg and set(arg) <= set(SEPARATORS):
+                    break
+                if FILL.fullmatch(arg):
+                    return True
     return False
 
 
@@ -221,27 +161,30 @@ def listed_words(text, home):
     return words
 
 
-def flag_value(words, short, long):
+def named_repos(words):
+    """Every repository the words name: --repo/-R and GH_REPO= values, PR or issue URLs, repos/<owner>/<repo> paths."""
+    repos = []
     for i, word in enumerate(words):
-        if word in (short, long) and i + 1 < len(words):
-            return words[i + 1]
-        if word.startswith(long + "="):
-            return word.split("=", 1)[1]
-    return None
+        m = URL_REPO.fullmatch(word) or ENDPOINT_REPO.match(word)
+        if word in ("-R", "--repo") and i + 1 < len(words):
+            repos.append(words[i + 1])
+        elif word.startswith(("--repo=", "GH_REPO=")):
+            repos.append(word.split("=", 1)[1])
+        elif m:
+            repos.append(m.group(1))
+    return repos
 
 
 def targets(command, words, cwd):
-    """Each (repository for gh repo view or None for gh's default in cwd, name to show) the command reaches."""
-    repos = []
-    for env, args in gh_invocations(words or []):
-        if subcommand(args)[1] in ("pr", "issue", "api"):
-            repos += invocation_repos(env, args) or [None]
-    if words is None and (PR_TEXT.search(command) or API.search(command)):
+    """Each (repository for gh repo view or None for gh's default in cwd, name to show) the command could reach."""
+    gh_form = PR_TEXT.search(command) or (API.search(command) and API_SENDS.search(command))
+    pipeline = PIPELINE.search(command)
+    if words is None and gh_form:
         raise RuntimeError("Starship could not read which repository this gh command publishes to")
-    if not repos and (PR_TEXT.search(command) or (API.search(command) and API_SENDS.search(command))):
-        repos = [words[i + 1] for i, w in enumerate(words[:-1]) if w in ("-R", "--repo")]
-        repos += [w.split("=", 1)[1] for w in words if w.startswith(("--repo=", "GH_REPO="))] + [None]
-    if PIPELINE.search(command):
+    repos = []
+    if any(os.path.basename(w) in ("gh", "gh-axi") for w in words or []) or (gh_form and not pipeline):
+        repos += named_repos(words) + [None]
+    if pipeline:
         url = subprocess.run(["git", "-C", cwd, "remote", "get-url", "origin"],
                              capture_output=True, text=True, timeout=10).stdout.strip()
         m = REMOTE.match(url)

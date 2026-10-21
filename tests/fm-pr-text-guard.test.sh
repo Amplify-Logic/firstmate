@@ -208,8 +208,13 @@ EOF" "a command whose words cannot be parsed must not fall back to the private d
   # shellcheck disable=SC2016 # The loop variable expands inside the checked command, not here.
   expect_refuse "$HOME_WORDS" 'for n in 7 8; do GH_REPO=o/public gh pr comment $n --body "thanks Robin"; done' \
     "a gh word behind a reserved word must still be checked against its GH_REPO"
+  expect_refuse "$HOME_WORDS" "gh pr list --json number -q '.[].number' | while read n; do gh pr comment \"\$n\" --repo o/public --body \"thanks Robin\"; done" \
+    "a gh word inside a while-read loop must still be checked against its --repo"
+  expect_refuse "$HOME_WORDS" 'gh pr view 7 --repo o/private && timeout 60 gh pr comment 7 --repo o/public --body "thanks Robin"' \
+    "a private repository read first must not hide a public one commented on later"
+  assert_contains "$REASON" "o/public, a public repository" "the refusal must name the public repository"
   unset FAKE_GH_PRIVATE FAKE_GH_PUBLIC FAKE_GH_PRIVATE_REPOS
-  pass "a PR or issue URL, GH_REPO and the gh api endpoint name the repository, and body text never does"
+  pass "a PR or issue URL, GH_REPO and the gh api endpoint name repositories the text reaches, and body text never hides one"
 }
 
 test_hook_refuses_the_pipeline_intent_on_a_public_github_repo() {
@@ -231,9 +236,11 @@ test_hook_refuses_the_pipeline_intent_on_a_public_github_repo() {
     "an intent read from a file must be checked" "$repo"
   local private="$TMP_ROOT/nm-private"
   git init -q "$private" && git -C "$private" remote add origin git@github.com:o/private.git
-  FAKE_GH_PRIVATE=true FAKE_GH_PRIVATE_REPOS=o/private expect_allow "$HOME_WORDS" \
+  FAKE_GH_PRIVATE_REPOS=o/private expect_allow "$HOME_WORDS" \
     'no-mistakes axi run --intent "Robin wants the worker to run gh pr comment after the merge"' \
     "a gh command named inside a private origin's intent must not stop the pipeline" "$private"
+  expect_allow "$HOME_WORDS" 'no-mistakes axi run --intent "Robin wants the worker to run gh pr comment after the merge"' \
+    "a gh command named inside the intent of an origin off GitHub must not be checked" "$other"
   local alias="$TMP_ROOT/nm-alias" bare="$TMP_ROOT/nm-bare" dotless="$TMP_ROOT/nm-dotless"
   git init -q "$alias" && git -C "$alias" remote add origin git@github-work:o/public.git
   git init -q "$dotless" && git -C "$dotless" remote add origin git@work:o/public.git
