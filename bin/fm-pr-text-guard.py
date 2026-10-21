@@ -41,10 +41,12 @@
 # origin remote, whether its host is github.com or a dotless SSH alias; an
 # origin on any other dotted host is not checked, and one that cannot be
 # parsed is refused. A command whose words cannot be parsed while it names a
-# gh form counts as possibly public and is refused, naming the listed words,
-# so the worker rewrites the text without them, or writes the text to a file
-# and passes it with --body-file <file>, with no heredoc, together with an
-# explicit --repo, which the check can read. A repository whose visibility cannot be
+# gh form, often because of an unmatched quote in a heredoc or comment, counts
+# as possibly public and is refused, naming the listed words, so the worker
+# rewrites the text without them, or drops such comments and passes the text
+# with --body-file <file> and an explicit --repo. Such a command that names a
+# `pr create` or `pr new` form and a standalone --fill flag counts as --fill.
+# A repository whose visibility cannot be
 # read, and an origin that cannot be parsed, count as possibly public too: the
 # refusal names the words and that repository, and tells the worker to rewrite
 # the text without them, or to append a blocked: status line and stop when the
@@ -67,6 +69,7 @@ GUARD = pathlib.Path(__file__).resolve().parent / "fm-leak-guard.sh"
 FILE_CAP = 1 << 20
 
 REPO_FLAG = r"(?:(?:(?:-R|--repo)(?:=|\s+)|-R)\S+\s+)?"
+PR_CREATE = re.compile(r"(?:^|[\s/;&|(`])gh(?:-axi)?\s+" + REPO_FLAG + r"pr\s+" + REPO_FLAG + r"(?:create|new)\b")
 PR_TEXT = re.compile(r"(?:^|[\s/;&|(`])gh(?:-axi)?\s+" + REPO_FLAG + r"(?:pr|issue)\s+" + REPO_FLAG
                      + r"(?:create|new|edit|comment|review|close|reopen|merge)\b")
 API = re.compile(r"(?:^|[\s/;&|(`])gh(?:-axi)?\s+api\b")
@@ -255,7 +258,10 @@ def cmd_hook(argv):
             with open(path, "rb") as f:
                 text += "\n" + f.read(FILE_CAP).decode("utf-8", "replace")
         hits = listed_words(text, o["home"])
-        fill = fills(words)
+        if words is None:
+            fill = bool(PR_CREATE.search(command) and any(FILL.fullmatch(w) for w in command.split()))
+        else:
+            fill = fills(words)
         if hits is None or not (hits or fill):
             return 0
         if hits:
@@ -268,10 +274,10 @@ def cmd_hook(argv):
         try:
             reached = targets(command, words, cwd)
         except UnparsedCommand as e:
-            deny("Starship refused this command: the text it would publish %s, and %s."
-                 " %s, or write the text to a file and pass it with --body-file <file>, with no heredoc,"
-                 " together with an explicit --repo, which the check can read, and run it again."
-                 % (named, e, fix))
+            deny("Starship refused this command: the text it would publish %s, and %s, because the command"
+                 " could not be read, often because of an unmatched quote in a heredoc or comment."
+                 " %s, or drop such comments and pass the text with --body-file <file> and an explicit --repo,"
+                 " and run it again." % (named, e, fix))
             return 0
         except UnknownTarget as e:
             reached, unknown = [], str(e)

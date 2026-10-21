@@ -178,6 +178,11 @@ test_hook_reads_body_files_however_they_are_named() {
   expect_refuse "$HOME_WORDS" 'gh pr -R o/public create --fill' "a --fill after a repo flag between pr and create must count"
   assert_contains "$REASON" "--fill" "the refusal must name --fill as the reason"
   expect_refuse "$HOME_WORDS" 'gh pr --repo=o/public new --fill' "a --fill after --repo= between pr and new must count"
+  expect_refuse "$HOME_WORDS" "gh pr create --repo o/public --fill # it's ready" \
+    "a --fill whose command cannot be parsed because of a trailing comment must still be refused"
+  assert_contains "$REASON" "--fill" "the refusal must name --fill as the reason"
+  expect_refuse "$HOME_WORDS" "# it's ready
+gh pr create --fill --repo o/public" "a --fill whose command cannot be parsed because of a comment line must still be refused"
   assert_contains "$REASON" "--fill" "the refusal must name --fill as the reason"
   expect_refuse "$HOME_WORDS" 'gh pr new --repo o/public --title "Fix for Robin" --body x' \
     "a listed word through the pr new alias must be refused"
@@ -221,7 +226,8 @@ It's fixed, thanks Robin
 EOF" "a command whose words cannot be parsed must not fall back to the private default"
   assert_contains "$REASON" "could not read which repository" "the refusal must say the target is unknown"
   assert_not_contains "$REASON" "blocked:" "an unparsable command must be rewritten, not stop the worker"
-  assert_contains "$REASON" "--body-file <file>, with no heredoc" "the refusal must say how to make the command readable"
+  assert_contains "$REASON" "unmatched quote in a heredoc or comment" "the refusal must say why the command could not be read"
+  assert_contains "$REASON" "--body-file <file> and an explicit --repo" "the refusal must say how to make the command readable"
   expect_refuse "$HOME_WORDS" 'gh pr -Ro/public comment 7 --body "thanks Robin"' \
     "a repo flag with its value attached must still be checked"
   assert_contains "$REASON" "o/public, a public repository" "the refusal must name the attached repository"
