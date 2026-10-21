@@ -218,6 +218,7 @@ It's fixed, thanks Robin
 EOF" "a command whose words cannot be parsed must not fall back to the private default"
   assert_contains "$REASON" "could not read which repository" "the refusal must say the target is unknown"
   assert_not_contains "$REASON" "blocked:" "an unparsable command must be rewritten, not stop the worker"
+  assert_contains "$REASON" "--body-file <file>, with no heredoc" "the refusal must say how to make the command readable"
   expect_refuse "$HOME_WORDS" 'timeout 60 gh pr comment 7 --repo o/public --body "thanks Robin"' \
     "a gh word behind a wrapper must still be checked against its --repo"
   # shellcheck disable=SC2016 # The loop variable expands inside the checked command, not here.

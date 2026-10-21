@@ -42,8 +42,9 @@
 # origin on any other dotted host is not checked, and one that cannot be
 # parsed is refused. A command whose words cannot be parsed while it names a
 # gh form counts as possibly public and is refused, naming the listed words,
-# so the worker rewrites the text without them or runs the publishing command
-# on its own with an explicit --repo. A repository whose visibility cannot be
+# so the worker rewrites the text without them, or writes the text to a file
+# and passes it with --body-file <file>, with no heredoc, together with an
+# explicit --repo, which the check can read. A repository whose visibility cannot be
 # read, and an origin that cannot be parsed, count as possibly public too: the
 # refusal names the words and that repository, and tells the worker to rewrite
 # the text without them, or to append a blocked: status line and stop when the
@@ -260,7 +261,8 @@ def cmd_hook(argv):
             reached = targets(command, words, cwd)
         except UnparsedCommand as e:
             deny("Starship refused this command: the text it would publish %s, and %s."
-                 " %s, or run the publishing command on its own with an explicit --repo, and run it again."
+                 " %s, or write the text to a file and pass it with --body-file <file>, with no heredoc,"
+                 " together with an explicit --repo, which the check can read, and run it again."
                  % (named, e, fix))
             return 0
         except UnknownTarget as e:
