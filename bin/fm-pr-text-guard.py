@@ -21,21 +21,27 @@
 # answers reach the PR the pipeline writes. Every other command passes
 # untouched, and so does every other tool. The text checked is the whole
 # command, so inline titles, bodies, heredocs and variables set earlier in the
-# same command all count, plus every file it names as a body or input
-# (--body-file, -F, --input, field=@file). A listed word in a path or branch
-# name of such a command is refused too, because a branch name is published.
+# same command all count, plus every existing file the command names anywhere:
+# a body or input flag, a redirect, a `cat` or `$(cat ...)`, or a pipe into
+# `--body-file -`. A listed word in a path or branch name of such a command is
+# refused too, because a branch name is published. `gh pr create --fill` (and
+# -f, --fill-first, --fill-verbose) takes its text from commit messages this
+# check cannot see, so on a public repository it is refused whenever the home
+# has a list.
 #
 # PUBLIC ONLY. A private repository may hold these words, so a hit is refused
-# only when the target is public: `gh repo view` reads the repository from
-# --repo/-R, from a repos/<owner>/<repo> API path, or else gh's own default for
-# the working directory, the one the command itself would reach. For
-# no-mistakes, the target is the origin remote; one not on github.com is not
+# only when a target is public: `gh repo view` reads each repository the
+# command names, by a PR or issue URL, --repo/-R, GH_REPO= or a
+# repos/<owner>/<repo> API path, or else gh's own default for the working
+# directory, the one the command itself would reach. For no-mistakes, the
+# target is the origin remote, read by gh in the working directory so an SSH
+# host alias resolves; an origin whose host does not name GitHub is not
 # checked. A repository whose visibility cannot be read is refused, naming why.
 # The visibility read happens only after a hit, so a clean command costs no
 # network call.
 #
 # FAILURES. No list means nothing is checked, exactly as before the list
-# existed. An unreadable payload passes, because it cannot be known to publish
+# existed: bin/fm-leak-guard.sh --text says nothing at all then. An unreadable payload passes, because it cannot be known to publish
 # anything. Once a command is known to publish, any failure inside the check
 # refuses it.
 import json
@@ -57,6 +63,11 @@ API_SENDS = re.compile(r"(?:^|\s)(?:-f|-F|--field|--raw-field|--input)(?:=|\s|$)
                        r"|(?:-X|--method)(?:=|\s*)(?:POST|PATCH|PUT)\b", re.I)
 PIPELINE = re.compile(r"(?:^|[\s/;&|(`])no-mistakes\s+axi\s+(?:run|respond)\b")
 API_REPO = re.compile(r"(?:^|[\s'\"/])repos/([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)")
+URL_REPO = re.compile(r"https?://([^/\s'\"]+/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)/(?:pull|issues)/\d")
+ENV_REPO = re.compile(r"(?:^|[\s;&|(`])GH_REPO=['\"]?([^\s'\";&|)`]+)")
+PR_CREATE = re.compile(r"(?:^|[\s/;&|(`])gh(?:-axi)?\s+" + REPO_FLAG + r"pr\s+" + REPO_FLAG + r"create\b")
+FILL = re.compile(r"(?:^|\s)(?:-f|--fill(?:-first|-verbose)?)(?=\s|$)")
+PATHLIKE = re.compile(r"[^\s'\"`()<>|;&=]+")
 REMOTE = re.compile(r"^(?:[a-z+]+://)?(?:[^@/]+@)?([^/:]+)[:/]+(.+?)(?:\.git)?/?$")
 
 
@@ -96,35 +107,29 @@ def tokens(command):
         return []
 
 
-def named_files(words, cwd):
-    """Every existing file the command names as a body or input."""
+def named_files(command, words, cwd):
+    """Every existing regular file the command names anywhere, as a word or inside one."""
+    candidates = set(PATHLIKE.findall(command))
+    candidates.update(w.split("=", 1)[-1] for w in words)
     found = []
-    for i, word in enumerate(words):
-        if word in ("--body-file", "-F", "--input") and i + 1 < len(words):
-            candidate = words[i + 1]
-        elif word.startswith(("--body-file=", "--input=")):
-            candidate = word.split("=", 1)[1]
-        elif "=@" in word:
-            candidate = word.split("=@", 1)[1]
-        else:
-            continue
+    for candidate in sorted(c.lstrip("@") for c in candidates):
         if candidate in ("", "-"):
             continue
         path = pathlib.Path(os.path.expanduser(candidate))
         if not path.is_absolute():
             path = pathlib.Path(cwd) / path
-        if path.is_file():
-            found.append(path)
+        if path.is_file() and path.resolve() not in found:
+            found.append(path.resolve())
     return found
 
 
 def listed_words(text, home):
-    """The listed words in text, by bin/fm-leak-guard.sh --text."""
+    """The listed words in text, by bin/fm-leak-guard.sh --text; None when the home has no list."""
     env = dict(os.environ, FM_HOME=home)
     result = subprocess.run(["bash", str(GUARD), "--text", "-"], input=text.encode("utf-8", "replace"),
                             capture_output=True, env=env, timeout=20)
     if result.returncode == 0:
-        return []
+        return [] if result.stdout.strip() or result.stderr.strip() else None
     prefix = "LEAK_HIT: private-word: stdin: "
     words = [line[len(prefix):] for line in result.stderr.decode("utf-8", "replace").splitlines()
              if line.startswith(prefix)]
@@ -143,20 +148,20 @@ def flag_value(words, short, long):
     return None
 
 
-def target(command, words, cwd):
-    """(repository for gh repo view or None for gh's default, whether to check it at all)."""
+def targets(command, words, cwd):
+    """Each (repository for gh repo view or None for gh's default in cwd, name to show) the command reaches."""
     if PIPELINE.search(command) and not PR_TEXT.search(command) and not API.search(command):
         url = subprocess.run(["git", "-C", cwd, "remote", "get-url", "origin"],
                              capture_output=True, text=True, timeout=10).stdout.strip()
         m = REMOTE.match(url)
-        if not m or m.group(1).lower() != "github.com":
-            return None, False
-        return m.group(2), True
-    repo = flag_value(words, "-R", "--repo")
-    if not repo:
-        m = API_REPO.search(command)
-        repo = m.group(1) if m else None
-    return repo, True
+        if m and "github" not in m.group(1).lower():
+            return []
+        return [(None, m.group(2) if m else "this checkout's origin")]
+    repos = URL_REPO.findall(command) + ENV_REPO.findall(command) + API_REPO.findall(command)
+    flag = flag_value(words, "-R", "--repo")
+    if flag:
+        repos.append(flag)
+    return [(r, r) for r in dict.fromkeys(repos)] or [(None, "the repository this command reaches")]
 
 
 def visibility(repo, cwd):
@@ -192,31 +197,35 @@ def cmd_hook(argv):
     try:
         words = tokens(command)
         text = command
-        for path in named_files(words, cwd):
+        for path in named_files(command, words, cwd):
             with open(path, "rb") as f:
                 text += "\n" + f.read(FILE_CAP).decode("utf-8", "replace")
         hits = listed_words(text, o["home"])
-        if not hits:
+        fill = bool(PR_CREATE.search(command) and FILL.search(command))
+        if hits is None or not (hits or fill):
             return 0
-        repo, checked = target(command, words, cwd)
-        if not checked:
+        if hits:
+            named = "contains %s, from this home's private word list" % ", ".join('"%s"' % w for w in hits)
+            fix = "Rewrite the text without %s" % ("it" if len(hits) == 1 else "them")
+        else:
+            named = "comes from commit messages through --fill, which this check cannot read"
+            fix = "Pass --title and --body-file instead of --fill"
+        for repo, where in targets(command, words, cwd):
+            seen = visibility(repo, cwd)
+            if seen == "private":
+                continue
+            if seen == "public":
+                deny("Starship refused this command: the text it would publish to %s, a public repository, %s."
+                     " Personal and work details never go into a public"
+                     " repository's PR titles, descriptions, comments or pipeline intent."
+                     " %s and run it again; check a draft first with: %s"
+                     % (where, named, fix, check_hint(o["home"])))
+                return 0
+            deny("Starship refused this command: the text it would publish to %s %s,"
+                 " and Starship could not confirm the repository is private (%s)."
+                 " %s; if the repository is private and this keeps happening,"
+                 " append a blocked: status line naming this and stop." % (where, named, seen, fix))
             return 0
-        named = ", ".join('"%s"' % w for w in hits)
-        where = repo or "the repository this command reaches"
-        seen = visibility(repo, cwd)
-        if seen == "private":
-            return 0
-        if seen == "public":
-            deny("Starship refused this command: the text it would publish to %s, a public repository, contains %s,"
-                 " from this home's private word list. Personal and work details never go into a public"
-                 " repository's PR titles, descriptions, comments or pipeline intent."
-                 " Rewrite the text without %s and run it again; check a draft first with: %s"
-                 % (where, named, "it" if len(hits) == 1 else "them", check_hint(o["home"])))
-            return 0
-        deny("Starship refused this command: the text it would publish to %s contains %s, from this home's private"
-             " word list, and Starship could not confirm the repository is private (%s)."
-             " Rewrite the text without those words; if the repository is private and this keeps happening,"
-             " append a blocked: status line naming this and stop." % (where, named, seen))
     except Exception as e:  # a command known to publish never passes a check that failed
         deny("Starship refused this command because its PR text check failed (%s: %s)."
              " Do not route around it; append a blocked: status line naming this error and stop."

@@ -4,8 +4,8 @@
 # check (bin/fm-leak-guard.sh --text), the Claude worker hook that refuses a
 # publishing command (bin/fm-pr-text-guard.py), the hook bin/fm-spawn.sh
 # installs, and the instruction the ship brief carries. Only gh is faked, so
-# no case reaches the network; it answers a repository's visibility from
-# FAKE_GH_PRIVATE and logs every call.
+# no case reaches the network; it answers public for a repository named in
+# FAKE_GH_PUBLIC, otherwise from FAKE_GH_PRIVATE, and logs every call.
 set -u
 
 # shellcheck source=tests/fixtures.sh
@@ -30,6 +30,9 @@ cat > "$FAKEBIN/gh" <<'EOF'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >> "$FAKE_GH_LOG"
 [ "${1:-} ${2:-}" = "repo view" ] || exit 0
+case " ${FAKE_GH_PUBLIC:-} " in
+  *" ${3:-} "*) echo false; exit 0 ;;
+esac
 if [ "${FAKE_GH_PRIVATE:-}" = unreadable ]; then
   echo "HTTP 404: Not Found" >&2
   exit 1
@@ -68,6 +71,7 @@ expect_allow() {  # <home> <command> <why> [cwd]
 # expect_refuse <home> <command> <why> [cwd]: the deny reason in REASON.
 expect_refuse() {
   hook "$1" "$2" "${4:-}"
+  [ -n "$OUT" ] || fail "$3 (got no output)"
   printf '%s' "$OUT" | jq -e '.hookSpecificOutput.hookEventName == "PreToolUse" and .hookSpecificOutput.permissionDecision == "deny"' \
     >/dev/null || fail "$3 (got: $OUT)"
   REASON=$(printf '%s' "$OUT" | jq -r '.hookSpecificOutput.permissionDecisionReason')
@@ -138,6 +142,48 @@ X
   pass "a Claude worker's PR title, body and comment with a listed word are refused on a public repository"
 }
 
+test_hook_reads_body_files_however_they_are_named() {
+  export FAKE_GH_PRIVATE=false
+  printf 'Thanks Robin\n' > "$WORK/pr.md"
+  # shellcheck disable=SC2016 # The substitution runs inside the checked command, not here.
+  expect_refuse "$HOME_WORDS" 'gh pr create --repo o/public -t x --body "$(cat pr.md)"' \
+    "a body read through \$(cat file) must be checked"
+  expect_refuse "$HOME_WORDS" 'gh pr comment 7 --repo o/public --body-file - < pr.md' \
+    "a body redirected into --body-file - must be checked"
+  expect_refuse "$HOME_WORDS" 'cat pr.md | gh pr comment 7 --repo o/public --body-file -' \
+    "a body piped into --body-file - must be checked"
+  # shellcheck disable=SC2016 # The substitution runs inside the checked command, not here.
+  expect_refuse "$HOME_WORDS" 'gh api repos/o/public/issues/3/comments -F "body=@pr.md"' \
+    "a field read from a file must be checked"
+  for fill in --fill -f --fill-first --fill-verbose; do
+    expect_refuse "$HOME_WORDS" "gh pr create --repo o/public $fill" \
+      "gh pr create $fill takes unchecked commit messages and must be refused on a public repository"
+    assert_contains "$REASON" "--fill" "the refusal must name --fill as the reason"
+  done
+  export FAKE_GH_PRIVATE=true
+  expect_allow "$HOME_WORDS" 'gh pr create --repo o/work --fill' "--fill may publish to a private repository"
+  unset FAKE_GH_PRIVATE
+  expect_allow "$NO_LIST" 'gh pr create --repo o/public --fill' "--fill passes in a home with no list"
+  pass "body files read through \$(cat), a redirect, a pipe or field=@file are checked, and --fill is refused on a public repository"
+}
+
+test_hook_finds_the_repository_from_urls_and_gh_repo() {
+  export FAKE_GH_PRIVATE=true FAKE_GH_PUBLIC="github.com/o/public o/public"
+  expect_refuse "$HOME_WORDS" 'gh pr comment https://github.com/o/public/pull/7 --body "thanks Robin"' \
+    "a PR URL on a public repository must be the target, not the private working directory"
+  assert_contains "$REASON" "github.com/o/public, a public repository" "the refusal must name the URL's repository"
+  expect_refuse "$HOME_WORDS" 'gh issue comment https://github.com/o/public/issues/3 --body "thanks Robin"' \
+    "an issue URL must be the target"
+  expect_refuse "$HOME_WORDS" 'GH_REPO=o/public gh pr comment 7 --body "thanks Robin"' \
+    "a GH_REPO assignment must be the target"
+  expect_refuse "$HOME_WORDS" 'export GH_REPO="o/public"; gh pr comment 7 --body "thanks Robin"' \
+    "an exported GH_REPO must be the target"
+  expect_allow "$HOME_WORDS" 'gh pr comment https://github.com/o/work/pull/7 --body "thanks Robin"' \
+    "a URL on a private repository may hold listed words"
+  unset FAKE_GH_PRIVATE FAKE_GH_PUBLIC
+  pass "a PR or issue URL and GH_REPO name the repository the text reaches"
+}
+
 test_hook_refuses_the_pipeline_intent_on_a_public_github_repo() {
   local repo="$TMP_ROOT/nm-repo" other="$TMP_ROOT/nm-other"
   git init -q "$repo" && git -C "$repo" remote add origin git@github.com:o/public.git
@@ -151,8 +197,26 @@ test_hook_refuses_the_pipeline_intent_on_a_public_github_repo() {
   expect_allow "$HOME_WORDS" 'no-mistakes axi run --intent "Robin wants the sync fixed"' \
     "an origin off github.com cannot be checked and must pass" "$other"
   expect_allow "$HOME_WORDS" 'no-mistakes axi run --intent "fix the sync"' "a clean intent must pass" "$repo"
+  printf 'Robin wants the sync fixed\n' > "$repo/intent.txt"
+  # shellcheck disable=SC2016 # The substitution runs inside the checked command, not here.
+  expect_refuse "$HOME_WORDS" 'no-mistakes axi run --intent "$(cat intent.txt)"' \
+    "an intent read from a file must be checked" "$repo"
+  local alias="$TMP_ROOT/nm-alias" bare="$TMP_ROOT/nm-bare"
+  git init -q "$alias" && git -C "$alias" remote add origin git@github-work:o/public.git
+  git init -q "$bare"
+  : > "$GH_LOG"
+  expect_refuse "$HOME_WORDS" 'no-mistakes axi run --intent "Robin wants the sync fixed"' \
+    "an origin behind an SSH host alias must be checked by gh in the checkout" "$alias"
+  assert_equals "repo view --json isPrivate --jq .isPrivate" "$(cat "$GH_LOG")" "gh must resolve the alias from the checkout"
+  export FAKE_GH_PRIVATE=true
+  expect_allow "$HOME_WORDS" 'no-mistakes axi run --intent "Robin wants the sync fixed"' \
+    "an aliased origin gh reads as private may hold listed words" "$alias"
+  export FAKE_GH_PRIVATE=unreadable
+  expect_refuse "$HOME_WORDS" 'no-mistakes axi run --intent "Robin wants the sync fixed"' \
+    "a checkout with no origin cannot be told apart and must be refused" "$bare"
+  assert_contains "$REASON" "could not confirm the repository is private" "the refusal must say why"
   unset FAKE_GH_PRIVATE
-  pass "the pipeline intent and gate answers are checked against origin's repository on GitHub"
+  pass "the pipeline intent and gate answers are checked against origin's repository on GitHub, however origin is named"
 }
 
 test_hook_passes_clean_private_and_unrelated_commands() {
@@ -218,12 +282,16 @@ test_ship_brief_tells_the_worker_to_check() {
       || fail "$id: scaffold failed"
     brief="$home/data/$id/brief.md"
     assert_grep "## Public PR text" "$brief" "$id: brief missing the PR text instruction"
+    assert_grep "issues/<number>/comments" "$brief" "$id: the read-back must cover the PR's comments"
+    assert_grep "pulls/<number>/comments" "$brief" "$id: the read-back must cover review comments"
     # shellcheck disable=SC2016 # The pattern matches literal backticks in the brief.
     check=$(sed -n 's/.*and run `\(.*\) --text <file>`.*/\1/p' "$brief")
     [ -n "$check" ] || fail "$id: brief does not name the check command"
     OUT=$(printf 'for robin\n' | bash -c "$check --text" 2>&1) && fail "$id: the brief's command must find the home's word: $OUT"
     assert_contains "$OUT" "stdin: robin" "$id: the brief's command must read this home's list"
   done
+  assert_grep "The one exception to keeping the captain's words" "$home/data/brief-prtext-nm/brief.md" \
+    "a no-mistakes brief must state the public-repository exception to the verbatim intent"
   FM_HOME="$home" "$ROOT/bin/fm-brief.sh" brief-prtext-local some-proj --mode local-only >/dev/null 2>&1 \
     || fail "local-only scaffold failed"
   assert_no_grep "## Public PR text" "$home/data/brief-prtext-local/brief.md" \
@@ -235,6 +303,8 @@ test_draft_check_names_each_listed_word
 test_draft_check_passes_clean_text_and_partial_words
 test_draft_check_without_a_list_is_silent
 test_hook_refuses_title_body_and_comment_on_a_public_repo
+test_hook_reads_body_files_however_they_are_named
+test_hook_finds_the_repository_from_urls_and_gh_repo
 test_hook_refuses_the_pipeline_intent_on_a_public_github_repo
 test_hook_passes_clean_private_and_unrelated_commands
 test_spawn_installs_the_hook
