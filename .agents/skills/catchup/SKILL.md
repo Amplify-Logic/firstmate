@@ -38,13 +38,14 @@ To turn it off, set `catchup = off` and run `bin/fm-upstream-watch.sh disarm`; t
 ## Preparing a catch-up
 
 1. One catch-up at a time: when a catch-up task is already under way or its PR is waiting for the captain, do not start another; tell the captain the newer upstream work will be in the next one.
-2. On the captain's request, run `bin/fm-upstream-watch.sh catchup`; on an `UPSTREAM_CATCHUP:` line or an `upstream-catchup:` notice, the weekly run has already written the report it names.
+2. On the captain's request, run `bin/fm-upstream-watch.sh catchup`; on an `UPSTREAM_CATCHUP:` line or an `upstream-catchup:` notice, an earlier run, scheduled or on demand, has already written the report it names.
 3. Read the report.
    When it says there is nothing to catch up, tell the captain so, relay the tool versions, and acknowledge the report.
 4. Otherwise dispatch a ship on this home's firstmate checkout under the ordinary intake: load `firstmate-self-repo`, use the delivery mode this home registers for that checkout, and never add `--upstream-consent` for a catch-up.
    The PR targets the home's own `origin`, never the upstream.
    A home with no publication authority for its own fork delivers the catch-up `local-only`, which publishes nothing.
-5. Fill the brief's captain's intent with the captain's request, or for a scheduled run with the words saved in `data/upstream-watch/standing-request.md`, plus the report's substance: the upstream URL and the exact commit to merge, this home's own commit count, the files both sides changed, and the trial merge's conflicts.
+5. Fill the brief's captain's intent with the captain's own request; when the catch-up came from an `UPSTREAM_CATCHUP:` line or notice rather than a request in this session, use the words saved in `data/upstream-watch/standing-request.md`, and when none are saved, ask the captain for their request before dispatching.
+   Add the report's substance: the upstream URL and the exact commit to merge, this home's own commit count, the files both sides changed, and the trial merge's conflicts.
    Put these build rules in the firstmate spec:
    - Fetch that upstream branch and merge exactly the named commit with `git merge --no-ff`, a real merge commit, never a squash, rebase, or cherry-pick.
    - Before merging, list this home's own commits the upstream lacks and the files both sides changed, and say plainly in the PR which overlaps the merge touched.

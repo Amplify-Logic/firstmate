@@ -3044,8 +3044,8 @@ The scheduled job runs with the PATH it was installed from, so reinstall the sch
 Catch-up is off by default for every home.
 A home opts in with a `catchup = on` line in its own `config/upstream-watch`, beside any `interval_seconds` line; `bin/fm-upstream-lib.sh`'s `fm_upstream_watch_config` owns the file's format and refuses unknown keys and values.
 Opted in, a scheduled run that finds new upstream work adds a catch-up plan to its report: this home's own commits the upstream lacks, the files both sides changed, and the files a trial merge would conflict on.
-Session start then prints `UPSTREAM_CATCHUP: catch-up ready to prepare, private report at <path>`, and `bin/fm-upstream-watch.sh arm` registers a watcher check that tells a running firstmate once per prepared catch-up (`disarm` retires it).
 `bin/fm-upstream-watch.sh catchup` runs the same procedure on demand, with no opt-in, and plans every outstanding upstream commit.
+Whichever run wrote the plan, session start prints `UPSTREAM_CATCHUP: catch-up ready to prepare, private report at <path>` until the report is acknowledged, and `bin/fm-upstream-watch.sh arm` registers a watcher check that tells a running firstmate once per prepared catch-up (`disarm` retires it).
 Neither form merges anything: firstmate prepares the catch-up as a real merge on a branch through the home's normal delivery path, and the captain approves the merge.
 The `catchup` skill owns turning it on and off, the merge rules, and landing.
 

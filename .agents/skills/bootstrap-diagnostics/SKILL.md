@@ -110,7 +110,7 @@ When any diagnostic needs captain attention, report the plain consequence and re
   Read the report, relay only its new gains and named fork collisions, and make no porting change without a separate captain decision.
   After reading, run `bin/fm-upstream-watch.sh acknowledge <path>` so the same report does not surface at later session starts.
   A one-line "nothing to do" report needs only that one-line outcome, never padding from older reports.
-- `UPSTREAM_CATCHUP: catch-up ready to prepare, private report at <path>` - this home opted in to the weekly catch-up and the latest run found new upstream work and wrote its catch-up plan.
+- `UPSTREAM_CATCHUP: catch-up ready to prepare, private report at <path>` - a scheduled run on a home opted in to the weekly catch-up, or an earlier on-demand `bin/fm-upstream-watch.sh catchup` run, found new upstream work and wrote a catch-up plan that is still waiting to be prepared.
   Load the `catchup` skill, which owns preparing, landing, and acknowledging it.
 - `FMX: X mode on ...` / `FMX: X mode off ...` - bootstrap confirmed or removed the local Relay poll artifacts (`docs/configuration.md` "Relay (.env)"); the emitted line still carries Relay's former `X mode` wording.
   Only when a running watcher needs the cadence transition applied immediately, restart the home-scoped watcher through the emitted harness supervision protocol; bootstrap deliberately never restarts the watcher itself.
