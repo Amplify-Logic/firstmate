@@ -1351,17 +1351,24 @@ jq --arg p "$ios_pane" \
   || fail "the agent-free remote pane did not classify dead"
 
 tabs_before=$(grep -c '^tab create' "$HERDR_LOG" || true)
+# The relaunch is a whole remote spawn, and this suite pushes its inheritance
+# one item at a time through the local job worker, so it routinely takes 30 to
+# 60 seconds on a loaded runner. The watcher bounds the relaunch by its own
+# per-relaunch timeout and then wakes either way, auto-relaunched or failed, so
+# the wait for its exit derives from that same timeout plus slack for the probe
+# and the wake; a slow relaunch the watcher still accepts cannot fail this step.
+watch_relaunch_timeout=300
 # exec keeps $! the watcher itself rather than the function's subshell, so a
 # kill reaches the process that probes and writes into the fixture root.
 FM_STATE_OVERRIDE="$WATCH_STATE" FM_SECONDMATE_LIVENESS_SECS=1 FM_POLL=1 \
+  FM_SECONDMATE_LIVENESS_TIMEOUT="$watch_relaunch_timeout" \
   FM_SIGNAL_GRACE=0 FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 \
   remote_env exec "$ROOT/bin/fm-watch.sh" \
   > "$TMP_ROOT/watch-liveness.out" 2> "$TMP_ROOT/watch-liveness.err" &
 watch_pid=$!
-watch_wait=0
-while kill -0 "$watch_pid" 2>/dev/null && [ "$watch_wait" -lt 1500 ]; do
+watch_deadline=$((SECONDS + watch_relaunch_timeout + 60))
+while kill -0 "$watch_pid" 2>/dev/null && [ "$SECONDS" -lt "$watch_deadline" ]; do
   sleep 0.02
-  watch_wait=$((watch_wait + 1))
 done
 if kill -0 "$watch_pid" 2>/dev/null; then
   kill "$watch_pid" 2>/dev/null || true
