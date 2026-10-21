@@ -222,6 +222,11 @@ EOF" "a command whose words cannot be parsed must not fall back to the private d
   assert_contains "$REASON" "could not read which repository" "the refusal must say the target is unknown"
   assert_not_contains "$REASON" "blocked:" "an unparsable command must be rewritten, not stop the worker"
   assert_contains "$REASON" "--body-file <file>, with no heredoc" "the refusal must say how to make the command readable"
+  expect_refuse "$HOME_WORDS" 'gh pr -Ro/public comment 7 --body "thanks Robin"' \
+    "a repo flag with its value attached must still be checked"
+  assert_contains "$REASON" "o/public, a public repository" "the refusal must name the attached repository"
+  expect_allow "$HOME_WORDS" "# post it; it's for the PR
+gh pr comment 7 --repo o/private --body \"thanks Robin\"" "an apostrophe in a comment line must not hide a private --repo"
   expect_refuse "$HOME_WORDS" 'gh pr create --title Fix#12 --body "thanks Robin" --repo o/public' \
     "a # inside a word must not hide the --repo after it"
   assert_contains "$REASON" "o/public, a public repository" "the refusal must name the repository after the #"

@@ -66,7 +66,7 @@ import sys
 GUARD = pathlib.Path(__file__).resolve().parent / "fm-leak-guard.sh"
 FILE_CAP = 1 << 20
 
-REPO_FLAG = r"(?:(?:-R|--repo)(?:=|\s+)\S+\s+)?"
+REPO_FLAG = r"(?:(?:(?:-R|--repo)(?:=|\s+)|-R)\S+\s+)?"
 PR_TEXT = re.compile(r"(?:^|[\s/;&|(`])gh(?:-axi)?\s+" + REPO_FLAG + r"(?:pr|issue)\s+" + REPO_FLAG
                      + r"(?:create|new|edit|comment|review|close|reopen|merge)\b")
 API = re.compile(r"(?:^|[\s/;&|(`])gh(?:-axi)?\s+api\b")
@@ -120,7 +120,10 @@ def publishes(command):
 
 
 def tokens(command):
-    """The command's shell words, each run of shell operators or a newline its own word; None when unparsable."""
+    """The command's shell words, each run of shell operators or a newline its own word; None when unparsable.
+
+    Whole-line shell comments are dropped; a # inside a word stays part of it."""
+    command = "\n".join(line for line in command.split("\n") if not line.lstrip().startswith("#"))
     lexer = shlex.shlex(command, posix=True, punctuation_chars=SEPARATORS)
     lexer.whitespace = " \t\r"
     lexer.whitespace_split = True
@@ -135,7 +138,7 @@ def fills(words):
     """Whether a `pr create` or `pr new` among the words is given a --fill flag before the next shell operator."""
     for i, word in enumerate(words or []):
         j = i - 1
-        if j >= 0 and words[j].startswith("--repo="):
+        if j >= 0 and (words[j].startswith("--repo=") or (words[j].startswith("-R") and len(words[j]) > 2)):
             j -= 1
         elif j >= 1 and words[j - 1] in ("-R", "--repo"):
             j -= 2
@@ -190,6 +193,8 @@ def named_repos(words):
             repos.append(words[i + 1])
         elif word.startswith(("--repo=", "GH_REPO=")):
             repos.append(word.split("=", 1)[1])
+        elif word.startswith("-R") and len(word) > 2:
+            repos.append(word[2:])
         elif m:
             repos.append(m.group(1))
     return repos
