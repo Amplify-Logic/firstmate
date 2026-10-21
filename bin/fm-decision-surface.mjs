@@ -217,8 +217,9 @@ function identityFrom(task) {
 
 // `--kind captain` filters the task kind, so the held list can also carry a
 // captain-kind row held for another reason, such as a `future` follow-up. Only a
-// `captain` hold kind is a decision; every other row is reported and skipped, so
-// one odd row never stops the page from being rewritten.
+// `captain` hold kind is a decision; every other row is skipped, so one odd row
+// never stops the page from being rewritten. A captain hold that cannot be shown,
+// or any row that cannot be read, is returned as `unshown` so the page names it.
 function loadTasks(home) {
   const heldOutput = run(
     "tasks-axi",
@@ -228,15 +229,17 @@ function loadTasks(home) {
   const listed = taskIdsFromList(heldOutput);
   const tasks = [];
   const skipped = [];
+  const unshown = [];
   const warnings = [];
   for (const id of listed.ids) {
     const { task, error } = readTask(home, id);
     if (error) {
-      warnings.push(`skipped: ${id} could not be read: ${error}`);
+      unshown.push({ id, reason: `could not be read: ${error}` });
     } else if (task.hold_kind !== "captain") {
-      skipped.push(`skipped: ${id} is held as ${task.hold_kind || "an unrecorded kind"}, not for a captain decision`);
+      const holdKind = task.hold_kind && task.hold_kind !== "-" ? task.hold_kind : "an unrecorded kind";
+      skipped.push(`skipped: ${id} is held as ${holdKind}, not for a captain decision`);
     } else if (task.state !== "queued" || task.held !== "yes" || task.kind !== "captain") {
-      warnings.push(`skipped: listed captain hold ${id} did not retain the structured held state`);
+      unshown.push({ id, reason: "did not retain the structured held state" });
     } else {
       tasks.push(task);
     }
@@ -261,6 +264,7 @@ function loadTasks(home) {
   return {
     count: listed.count,
     skipped,
+    unshown,
     warnings,
     tasks: tasks.map((task) => {
       const recommendation = recommendationFrom(task.hold_reason || "");
@@ -355,6 +359,9 @@ function renderHtml(manifest) {
       <div class="decision-list">${decisions.map(cardMarkup).join("\n")}</div>
     </section>`).join("\n");
   const blockingCount = manifest.decisions.filter((decision) => decision.dependents.length > 0).length;
+  const unshownMarkup = manifest.unshown.length > 0
+    ? `<section class="unshown" role="alert"><strong>${manifest.unshown.length} captain decision${manifest.unshown.length === 1 ? "" : "s"} could not be shown on this board.</strong> Run generate again and fix what it reports.<ul>${manifest.unshown.map((item) => `<li><code>${escapeHtml(item.id)}</code> - ${escapeHtml(item.reason)}</li>`).join("")}</ul></section>`
+    : "";
   return `<!doctype html>
 <html lang="en" data-lavish-live-reload-root>
 <head>
@@ -410,11 +417,14 @@ function renderHtml(manifest) {
     button { border:0; border-radius:9px; padding:11px 15px; background:var(--sea); color:#082019; font:800 .9rem/1 ui-sans-serif,system-ui,sans-serif; cursor:pointer; }
     button:hover { filter:brightness(1.08); }.answer-actions output { color:var(--sea); font-size:.85rem; }
     .hidden { display:none !important; }
+    .unshown { margin:0 0 28px; padding:14px 16px; background:rgba(255,173,143,.08); border:1px solid rgba(255,173,143,.35); border-radius:12px; }
+    .unshown strong { color:var(--danger); }.unshown ul { margin:.4rem 0 0; padding-left:1.2rem; }.unshown li { overflow-wrap:anywhere; }
     @media (max-width:700px) { main{width:min(100% - 20px,1180px);padding-top:28px}.stats{grid-template-columns:1fr}.decision-card{padding:18px}.domain-heading{align-items:start}.toolbar{top:6px} }
   </style>
 </head>
 <body>
   <main>
+    ${unshownMarkup}
     <p class="kicker">Private loopback register</p>
     <h1>Decisions, all on one deck.</h1>
     <p class="intro">Each answer stays local until it is queued and sent through Lavish. A recommendation is advice, never a preselected answer. Exact custom answers are preserved verbatim.</p>
@@ -697,6 +707,7 @@ switch (args.command) {
       generated_at: new Date().toISOString(),
       count: loaded.tasks.length,
       decisions: loaded.tasks,
+      unshown: loaded.unshown,
     };
     mkdirSync(path.dirname(args.output), { recursive: true, mode: 0o700 });
     // Rename into place so an interrupted run never leaves a half-written page.
@@ -709,6 +720,7 @@ switch (args.command) {
     const lifecycle = manifest.decisions.filter((item) => item.origin && item.key).length;
     console.log(`generated: ${manifest.count} captain decisions (tasks-axi count: ${loaded.count})`);
     for (const note of loaded.skipped) console.log(note);
+    for (const item of loaded.unshown) console.log(`not shown: ${item.id} ${item.reason}`);
     console.log(`groups: ${grouped}; blocking other work: ${blocking}; lifecycle-routable: ${lifecycle}`);
     console.log(`page: ${args.output}`);
     break;
