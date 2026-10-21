@@ -5,7 +5,8 @@
 # publishing command (bin/fm-pr-text-guard.py), the hook bin/fm-spawn.sh
 # installs, and the instruction the ship brief carries. Only gh is faked, so
 # no case reaches the network; it answers public for a repository named in
-# FAKE_GH_PUBLIC, otherwise from FAKE_GH_PRIVATE, and logs every call.
+# FAKE_GH_PUBLIC, private for one named in FAKE_GH_PRIVATE_REPOS, otherwise
+# from FAKE_GH_PRIVATE, and logs every call.
 set -u
 
 # shellcheck source=tests/fixtures.sh
@@ -32,6 +33,9 @@ printf '%s\n' "$*" >> "$FAKE_GH_LOG"
 [ "${1:-} ${2:-}" = "repo view" ] || exit 0
 case " ${FAKE_GH_PUBLIC:-} " in
   *" ${3:-} "*) echo false; exit 0 ;;
+esac
+case " ${FAKE_GH_PRIVATE_REPOS:-} " in
+  *" ${3:-} "*) echo true; exit 0 ;;
 esac
 if [ "${FAKE_GH_PRIVATE:-}" = unreadable ]; then
   echo "HTTP 404: Not Found" >&2
@@ -160,6 +164,12 @@ test_hook_reads_body_files_however_they_are_named() {
       "gh pr create $fill takes unchecked commit messages and must be refused on a public repository"
     assert_contains "$REASON" "--fill" "the refusal must name --fill as the reason"
   done
+  expect_refuse "$HOME_WORDS" 'gh pr create --repo o/public -fd' "a --fill combined with other short flags must count"
+  expect_refuse "$HOME_WORDS" 'gh pr create --repo o/public --fill=true' "a --fill given a value must count"
+  expect_allow "$HOME_WORDS" 'git push -f origin fm/x && gh pr create --repo o/public --title t --body-file clean.md' \
+    "a -f given to another command is not --fill"
+  expect_allow "$HOME_WORDS" 'gh pr create --repo o/public --title "Fix lock" --body "Stop calling rm -f on the lock"' \
+    "a -f inside the body text is not --fill"
   export FAKE_GH_PRIVATE=true
   expect_allow "$HOME_WORDS" 'gh pr create --repo o/work --fill' "--fill may publish to a private repository"
   unset FAKE_GH_PRIVATE
@@ -176,12 +186,18 @@ test_hook_finds_the_repository_from_urls_and_gh_repo() {
     "an issue URL must be the target"
   expect_refuse "$HOME_WORDS" 'GH_REPO=o/public gh pr comment 7 --body "thanks Robin"' \
     "a GH_REPO assignment must be the target"
-  expect_refuse "$HOME_WORDS" 'export GH_REPO="o/public"; gh pr comment 7 --body "thanks Robin"' \
-    "an exported GH_REPO must be the target"
+  expect_refuse "$HOME_WORDS" 'gh api -X POST repos/o/public/issues/3/comments -f body="thanks Robin"' \
+    "the gh api endpoint after a flag and its value must be the target"
   expect_allow "$HOME_WORDS" 'gh pr comment https://github.com/o/work/pull/7 --body "thanks Robin"' \
     "a URL on a private repository may hold listed words"
-  unset FAKE_GH_PRIVATE FAKE_GH_PUBLIC
-  pass "a PR or issue URL and GH_REPO name the repository the text reaches"
+  export FAKE_GH_PRIVATE=false FAKE_GH_PUBLIC='' FAKE_GH_PRIVATE_REPOS="github.com/o/private o/private"
+  expect_refuse "$HOME_WORDS" 'gh pr comment 7 --body "Follows https://github.com/o/private/pull/3, thanks Robin"' \
+    "a private URL in the body text must not replace the public repository the comment reaches"
+  assert_contains "$REASON" "the repository this command reaches, a public repository" "the refusal must name gh's default"
+  expect_refuse "$HOME_WORDS" 'gh issue comment 3 --body "see repos/o/private/pulls and GH_REPO=o/private, thanks Robin"' \
+    "an API path or GH_REPO in the body text must not replace the target"
+  unset FAKE_GH_PRIVATE FAKE_GH_PUBLIC FAKE_GH_PRIVATE_REPOS
+  pass "a PR or issue URL, GH_REPO and the gh api endpoint name the repository, and body text never does"
 }
 
 test_hook_refuses_the_pipeline_intent_on_a_public_github_repo() {
@@ -204,18 +220,22 @@ test_hook_refuses_the_pipeline_intent_on_a_public_github_repo() {
   local alias="$TMP_ROOT/nm-alias" bare="$TMP_ROOT/nm-bare"
   git init -q "$alias" && git -C "$alias" remote add origin git@github-work:o/public.git
   git init -q "$bare"
+  git -C "$repo" remote add upstream git@github.com:o/private.git
   : > "$GH_LOG"
   expect_refuse "$HOME_WORDS" 'no-mistakes axi run --intent "Robin wants the sync fixed"' \
-    "an origin behind an SSH host alias must be checked by gh in the checkout" "$alias"
-  assert_equals "repo view --json isPrivate --jq .isPrivate" "$(cat "$GH_LOG")" "gh must resolve the alias from the checkout"
+    "origin on github.com must be checked by name, whatever gh's default is" "$repo"
+  assert_equals "repo view o/public --json isPrivate --jq .isPrivate" "$(cat "$GH_LOG")" "gh must read origin's repository by name"
+  : > "$GH_LOG"
+  expect_refuse "$HOME_WORDS" 'no-mistakes axi run --intent "Robin wants the sync fixed"' \
+    "an origin behind an SSH host alias must be checked by its owner/repo" "$alias"
+  assert_equals "repo view o/public --json isPrivate --jq .isPrivate" "$(cat "$GH_LOG")" "gh must read the aliased origin by name"
   export FAKE_GH_PRIVATE=true
   expect_allow "$HOME_WORDS" 'no-mistakes axi run --intent "Robin wants the sync fixed"' \
     "an aliased origin gh reads as private may hold listed words" "$alias"
-  export FAKE_GH_PRIVATE=unreadable
+  unset FAKE_GH_PRIVATE
   expect_refuse "$HOME_WORDS" 'no-mistakes axi run --intent "Robin wants the sync fixed"' \
     "a checkout with no origin cannot be told apart and must be refused" "$bare"
-  assert_contains "$REASON" "could not confirm the repository is private" "the refusal must say why"
-  unset FAKE_GH_PRIVATE
+  assert_contains "$REASON" "origin remote" "the refusal must name the unreadable origin"
   pass "the pipeline intent and gate answers are checked against origin's repository on GitHub, however origin is named"
 }
 
