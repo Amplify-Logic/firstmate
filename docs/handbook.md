@@ -265,7 +265,7 @@ Ask the first mate to set one up; each owner page lists what it needs.
 
 Say "update starship" (or "update firstmate", or `/updatefirstmate`) every week or so.
 It pulls the latest shared instructions and scripts and restarts cleanly; your private folders are never touched.
-It skips your home if a file of yours sits in `~/starship` outside those private folders; [ONBOARDING.md](../ONBOARDING.md#already-installed) says how to clear that and what else changed for an existing home.
+It skips your home if a file of yours sits in `~/starship` outside those private folders, or if you changed a Starship file; [ONBOARDING.md](../ONBOARDING.md#already-installed) says how to clear that and what else changed for an existing home.
 If you use firstmate on two of your own machines, [porting.md](porting.md) covers moving your private material between them.
 Porting is for your own machines only: a colleague starts from a fresh clone and builds their own home.
 

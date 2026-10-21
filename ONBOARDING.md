@@ -113,6 +113,7 @@ That first launch also sets up your home the team's way, with nothing to copy:
 - **How hard your first mate thinks.** It follows your Claude plan: `medium` on Pro, `high` on Max 5x, and `xhigh` only on Max 20x. The launch line names the level and your plan.
   A Team or Enterprise seat does not report a plan Starship can read, so it gets `high` and the launch line says "the default when the Claude plan cannot be read"; that is expected, not an error.
 - **Spoken replies and transcription words**; replies stay text only until you set up voice ([desk voice-out](docs/configuration.md#desk-voice-out-configspeak)).
+  Spoken replies are not yet available for teammates, so for you replies stay text.
 
 To change how hard your first mate thinks, write one word, then start it again: `echo high > config/primary-effort`.
 The words, from lightest to deepest, are `low`, `medium`, `high`, `xhigh` and `max`; deeper thinking uses your plan's allowance faster, and `rm config/primary-effort` goes back to your plan's level.
@@ -213,8 +214,11 @@ If you set up Starship before these changes, here is what is different and what 
 - **Your home may still run in tmux.** Homes set up before Herdr became the default stay on tmux, and the guide's `herdr` steps do not apply to them.
   Keep using tmux as before, or switch when no worker is running: in `~/starship` run `bin/fm-herdr-setup.sh` and `echo herdr > config/backend`, then open Herdr and start your first mate there (step 3).
 - **Starter settings are not copied in.** Only a brand-new home gets them; copy them yourself with the lines under [starter settings](#optional-starter-settings-and-the-call-recorder).
-- **"update starship" skips a home with stray files.** Any file of yours inside `~/starship`, outside its private folders, makes the update skip your home as a "dirty working tree".
-  `git -C ~/starship status --short` lists such files; move each one out of `~/starship`, then say "update starship" again.
+- **"update starship" skips a home with stray or changed files.** A file of yours inside `~/starship`, outside its private folders, or a change to a Starship file, makes the update skip your home as a "dirty working tree".
+  `git -C ~/starship status --short` lists them.
+  A line starting with `??` is a file of yours: move it out of `~/starship`.
+  A line starting with `M` is a Starship file you changed: save a copy elsewhere if you want it, then `git -C ~/starship restore <path>`.
+  Then say "update starship" again.
 
 ---
 
@@ -261,7 +265,7 @@ It explains the whole system in plain words, how to connect your mail, calendar 
 | It doesn't call you captain | You are not in the Starship folder; `cd ~/starship` and launch again. |
 | Claude says you reached your usage limit, or workers stop until a reset time | On Claude Pro, your first mate and every Opus worker share one usage window. Wait for the reset time Claude names, then ask the first mate to run fewer workers at a time, or lower its thinking level with `echo low > config/primary-effort` and start it again. |
 | It asks whether to re-certify or pin Claude Code | Ignore it; say "leave it as it is". Nothing is blocked, and that check is the maintainers' job. |
-| `skipped: dirty working tree` after "update starship" | A file of yours sits inside `~/starship`; `git -C ~/starship status --short` lists it. Move it out, then update again. |
+| `skipped: dirty working tree` after "update starship" | `git -C ~/starship status --short` lists the cause. Move a `??` file out of `~/starship`; for an `M` file, save a copy elsewhere if you want it, then `git -C ~/starship restore <path>`. Then update again. |
 | It cannot add Happiness Compass | Your GitHub account cannot see the `happinesscompass` organisation yet; ask its owner to invite you. |
 | It never notices a worker finished | The trust prompt was declined; quit, launch again, and choose **Yes, I trust this folder**. |
 | Nothing happens for minutes | Normal - work runs in the background. Ask "what are you doing?" |
