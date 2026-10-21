@@ -32,12 +32,12 @@ write_registry() {
   "claude": {
     "default": "team",
     "accounts": {
-      "team": {"label": "Aquablu Team (connectors)", "expect": "org-team-0001"},
+      "team": {"label": "Company Team (connectors)", "expect": "org-team-0001"},
       "max": {"label": "Personal Max"}
     }
   },
   "codex": {
-    "accounts": {"derya": {"label": "Derya"}}
+    "accounts": {"alex": {"label": "Alex"}}
   }
 }
 JSON
@@ -46,7 +46,7 @@ JSON
 test_absent_registry_refuses_every_subcommand() {
   local out status
   rm -f "$HOME_FIX/config/accounts.json"
-  for args in "list" "create claude team" "login-command codex derya"; do
+  for args in "list" "create claude team" "login-command codex alex"; do
     status=0
     # shellcheck disable=SC2086 # each case is a deliberate argument list
     out=$(run_account $args) || status=$?
@@ -62,15 +62,15 @@ test_list_reports_definitions_without_touching_anything() {
   out=$(run_account list)
   assert_contains "$out" "claude (CLAUDE_CONFIG_DIR)" "list did not name the Claude isolation variable"
   assert_contains "$out" "codex (CODEX_HOME)" "list did not name the Codex isolation variable"
-  assert_contains "$out" "Aquablu Team (connectors)" "list did not print the account label"
+  assert_contains "$out" "Company Team (connectors)" "list did not print the account label"
   assert_contains "$out" "$HOME_FIX/data/accounts/claude/team" "list did not print the derived home"
   assert_contains "$out" "not created yet" "list did not report an uncreated home"
   assert_contains "$out" "expect: org-team-0001" "list did not report the expected identity"
   assert_absent "$HOME_FIX/data/accounts" "list created account homes as a side effect"
 
   out=$(run_account list codex)
-  assert_contains "$out" "Derya" "vendor-filtered list dropped the codex account"
-  assert_not_contains "$out" "Aquablu Team" "vendor-filtered list still printed the other vendor"
+  assert_contains "$out" "Alex" "vendor-filtered list dropped the codex account"
+  assert_not_contains "$out" "Company Team" "vendor-filtered list still printed the other vendor"
   pass "fm-account: list reports the registry and derived homes without creating anything"
 }
 
@@ -143,8 +143,8 @@ JSON
 test_login_command_prints_only_the_command() {
   local out
   write_registry
-  out=$(run_account login-command codex derya)
-  [ "$out" = "CODEX_HOME=$HOME_FIX/data/accounts/codex/derya codex login" ] \
+  out=$(run_account login-command codex alex)
+  [ "$out" = "CODEX_HOME=$HOME_FIX/data/accounts/codex/alex codex login" ] \
     || fail "login-command printed more than the command: $out"
   pass "fm-account: login-command prints exactly the command to run"
 }

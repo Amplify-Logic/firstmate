@@ -382,7 +382,7 @@ workspace_label() {  # <session> <workspace-id>
     canonical_state "$id"
     state=$(fm_visible_state "$CANONICAL_STATE")
     case "$state" in
-      'NEEDS LARS') needs=$((needs + 1)) ;;
+      'NEEDS YOU') needs=$((needs + 1)) ;;
       FAILED) failed=$((failed + 1)) ;;
       BLOCKED) blocked=$((blocked + 1)) ;;
       WORKING) working=$((working + 1)) ;;

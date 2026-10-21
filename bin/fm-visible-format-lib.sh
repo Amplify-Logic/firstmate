@@ -3,9 +3,9 @@
 #
 # Source this library; it defines functions and runs nothing.
 #
-#   fm_visible_state <canonical-state>   -> NEEDS LARS|FAILED|BLOCKED|WORKING|WAITING|READY
+#   fm_visible_state <canonical-state>   -> NEEDS YOU|FAILED|BLOCKED|WORKING|WAITING|READY
 #   fm_visible_icon <visible-state>      -> the state's colour dot
-#   fm_visible_aggregate <stats>         -> "🟣 1 NEEDS LARS · 🔵 2 WORKING"
+#   fm_visible_aggregate <stats>         -> "🟣 1 NEEDS YOU · 🔵 2 WORKING"
 #
 # <stats> is the six space-separated counts
 # "<needs> <failed> <blocked> <working> <waiting> <ready>", already in urgency
@@ -22,7 +22,7 @@
 
 fm_visible_state() {  # <canonical-state>
   case "$1" in
-    parked) printf 'NEEDS LARS' ;;
+    parked) printf 'NEEDS YOU' ;;
     failed) printf 'FAILED' ;;
     blocked) printf 'BLOCKED' ;;
     working) printf 'WORKING' ;;
@@ -34,7 +34,7 @@ fm_visible_state() {  # <canonical-state>
 
 fm_visible_icon() {  # <visible-state>
   case "$1" in
-    'NEEDS LARS') printf '🟣' ;;
+    'NEEDS YOU') printf '🟣' ;;
     FAILED) printf '🔴' ;;
     BLOCKED) printf '🟠' ;;
     WORKING) printf '🔵' ;;
@@ -49,7 +49,7 @@ fm_visible_aggregate() {  # <stats>
 $1
 EOF
   for part in \
-    "🟣:$needs:NEEDS LARS" \
+    "🟣:$needs:NEEDS YOU" \
     "🔴:$failed:FAILED" \
     "🟠:$blocked:BLOCKED" \
     "🔵:$working:WORKING" \
