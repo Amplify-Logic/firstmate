@@ -107,9 +107,10 @@ When any diagnostic needs captain attention, report the plain consequence and re
   Wait for an explicit captain decision on whether and how to take the upstream commits; taking them is a catch-up through the `catchup` skill.
   Absence of this line is normal for a non-fork home, an offline probe, or a current tip - never invent drift.
 - `UPSTREAM_REPORT: new private report at <path>` - the standing weekly upstream watch produced a new private report.
-  Read the report, relay only its new gains and named fork collisions, and make no porting change without a separate captain decision.
+  Read the report, relay its new gains and named fork collisions, and make no porting change without a separate captain decision.
+  Also relay its tool-version `Behind:` line in plain words and install nothing, following the `catchup` skill's Tool versions rules.
   After reading, run `bin/fm-upstream-watch.sh acknowledge <path>` so the same report does not surface at later session starts.
-  A one-line "nothing to do" report needs only that one-line outcome, never padding from older reports.
+  A quiet report's upstream part is one "nothing to do" line, followed by the tool versions; relay that one-line outcome and the tool versions, never padding from older reports.
 - `UPSTREAM_CATCHUP: catch-up ready to prepare, private report at <path>` - a scheduled run on a home opted in to the weekly catch-up, or an earlier on-demand `bin/fm-upstream-watch.sh catchup` run, found new upstream work and wrote a catch-up plan that is still waiting to be prepared.
   Load the `catchup` skill, which owns preparing, landing, and acknowledging it.
 - `FMX: X mode on ...` / `FMX: X mode off ...` - bootstrap confirmed or removed the local Relay poll artifacts (`docs/configuration.md` "Relay (.env)"); the emitted line still carries Relay's former `X mode` wording.
