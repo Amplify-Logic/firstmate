@@ -174,4 +174,84 @@ show=$(run_tasks show "$access_hold" --full)
 assert_contains "$show" "state: queued" "ambiguous mark resolved a hold"
 pass "ambiguous or forged marks remain unresolved"
 
+# A captain-kind row held as `future` (with or without a date) is not a captain
+# decision, and a captain call deferred with --until is still one; neither may
+# stop the page from being rewritten.
+run_tasks add later-undated "Revisit an undated follow-up" --kind captain --repo sample >/dev/null
+run_tasks hold later-undated --reason "Own follow-up later" --kind future >/dev/null
+run_tasks add later-dated "Revisit a dated follow-up" --kind captain --repo sample >/dev/null
+run_tasks hold later-dated --reason "Own follow-up checkpoint" --kind future --until 2099-01-01 >/dev/null
+run_tasks add deferred-call "Choose a deferred sample call" --kind captain --repo sample >/dev/null
+run_tasks hold deferred-call --reason "Choose: keep vs drop" --kind captain --until 2099-01-01 >/dev/null
+printf 'stale page\n' > "$PAGE"
+FM_HOME="$HOME_DIR" FM_ROOT_OVERRIDE="$ROOT" "$SURFACE" generate > "$HOME_DIR/future.out" 2> "$HOME_DIR/future.err" \
+  || fail "generate aborted on a future-kind hold: $(cat "$HOME_DIR/future.err")"
+assert_grep "generated: 3 captain decisions (tasks-axi count: 5)" "$HOME_DIR/future.out" \
+  "generator did not reconcile skipped rows with tasks-axi"
+assert_grep "skipped: later-undated is held as future, not for a captain decision" "$HOME_DIR/future.out" \
+  "undated future hold was not reported as skipped"
+assert_grep "skipped: later-dated is held as future, not for a captain decision" "$HOME_DIR/future.out" \
+  "dated future hold was not reported as skipped"
+node - "$PAGE" "$access_hold" <<'NODE' || fail "page after future-kind holds did not list exactly the captain decisions"
+const fs = require("node:fs");
+const [page, accessHold] = process.argv.slice(2);
+const html = fs.readFileSync(page, "utf8");
+const match = html.match(/<script id="fm-decision-data" type="application\/json">(.*?)<\/script>/s);
+if (!match) process.exit(1);
+const manifest = JSON.parse(match[1]);
+const ids = manifest.decisions.map((item) => item.id).sort();
+if (JSON.stringify(ids) !== JSON.stringify([accessHold, "deferred-call", "legacy-captain-call"].sort())) process.exit(2);
+if (manifest.count !== 3) process.exit(3);
+NODE
+pass "future-kind holds are skipped and a deferred captain call still renders"
+
+# One row that cannot be read is skipped with a notice instead of aborting the page.
+REAL_TASKS_AXI=$(command -v tasks-axi)
+ODD_BIN="$TMP_ROOT/oddbin"
+mkdir -p "$ODD_BIN"
+cat > "$ODD_BIN/tasks-axi" <<EOF
+#!/usr/bin/env bash
+if [ "\${1:-}" = show ] && [ "\${2:-}" = legacy-captain-call ]; then
+  echo "error: unreadable row" >&2
+  exit 1
+fi
+exec "$REAL_TASKS_AXI" "\$@"
+EOF
+chmod +x "$ODD_BIN/tasks-axi"
+PATH="$ODD_BIN:$PATH" FM_HOME="$HOME_DIR" FM_ROOT_OVERRIDE="$ROOT" "$SURFACE" generate > "$HOME_DIR/odd.out" 2>&1 \
+  || fail "generate aborted on one unreadable row: $(cat "$HOME_DIR/odd.out")"
+assert_grep "generated: 2 captain decisions (tasks-axi count: 5)" "$HOME_DIR/odd.out" \
+  "unreadable row was not excluded from the rendered decisions"
+assert_grep "skipped: legacy-captain-call could not be read" "$HOME_DIR/odd.out" \
+  "unreadable row was not reported as skipped"
+pass "one unreadable row is skipped while the page is still rewritten"
+
+# `open` refuses a page older than the newest generate attempt.
+cat > "$FAKEBIN/lavish-axi" <<EOF
+#!/usr/bin/env bash
+printf '%s\n' "\$*" >> "$HOME_DIR/lavish-open.log"
+EOF
+chmod +x "$FAKEBIN/lavish-axi"
+FM_HOME="$HOME_DIR" FM_ROOT_OVERRIDE="$ROOT" FM_LAVISH_BIN="$FAKEBIN/lavish-axi" "$SURFACE" open > /dev/null \
+  || fail "open refused a freshly generated page"
+assert_grep "$PAGE" "$HOME_DIR/lavish-open.log" "open did not hand the fresh page to Lavish"
+FAIL_BIN="$TMP_ROOT/failbin"
+mkdir -p "$FAIL_BIN"
+printf '#!/usr/bin/env bash\necho "error: backlog unavailable" >&2\nexit 1\n' > "$FAIL_BIN/tasks-axi"
+chmod +x "$FAIL_BIN/tasks-axi"
+if PATH="$FAIL_BIN:$PATH" FM_HOME="$HOME_DIR" FM_ROOT_OVERRIDE="$ROOT" "$SURFACE" generate > /dev/null 2>&1; then
+  fail "generate reported success while the backlog could not be read"
+fi
+: > "$HOME_DIR/lavish-open.log"
+if FM_HOME="$HOME_DIR" FM_ROOT_OVERRIDE="$ROOT" FM_LAVISH_BIN="$FAKEBIN/lavish-axi" \
+  "$SURFACE" open > /dev/null 2> "$HOME_DIR/open-stale.err"; then
+  fail "open showed a page older than the failed generate attempt"
+fi
+assert_grep "older than the last generate attempt" "$HOME_DIR/open-stale.err" "open refusal did not explain the stale page"
+[ ! -s "$HOME_DIR/lavish-open.log" ] || fail "open launched Lavish on a stale page"
+FM_HOME="$HOME_DIR" FM_ROOT_OVERRIDE="$ROOT" "$SURFACE" generate > /dev/null || fail "recovery generate failed"
+FM_HOME="$HOME_DIR" FM_ROOT_OVERRIDE="$ROOT" FM_LAVISH_BIN="$FAKEBIN/lavish-axi" "$SURFACE" open > /dev/null \
+  || fail "open still refused after a successful generate"
+pass "open refuses a page older than the last generate attempt until generate succeeds again"
+
 rm -rf "$TMP_ROOT"

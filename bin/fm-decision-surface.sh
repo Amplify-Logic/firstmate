@@ -2,8 +2,11 @@
 # fm-decision-surface.sh - private Lavish surface for durable captain decisions.
 #
 # Reads every active kind-captain hold through tasks-axi, renders one self-contained
-# HTML page under .lavish/, and launches Lavish only on IPv4 loopback. Each answer
-# carries the exact chosen option in a versioned marker. `poll` validates those
+# HTML page under .lavish/, and launches Lavish only on IPv4 loopback. A listed row
+# held for another hold kind (such as `future`) is reported as skipped, and a row
+# that cannot be read is skipped with a warning, so one odd row never stops the
+# page from being rewritten. Each answer carries the exact chosen option in a
+# versioned marker. `poll` validates those
 # markers against the generated page and refuses ambiguous, stale, forged, or
 # lifecycle-unroutable marks instead of guessing.
 #
@@ -12,6 +15,11 @@
 # file, and delegates ordering and closure to fm-decision-hold.sh resolve. It never
 # calls tasks-axi unhold/done for a decision itself and never invents a second
 # completion policy.
+#
+# `generate` records `<page>.generate-attempt` before it reads the backlog and
+# removes it only once the page is rewritten. While that record exists the page is
+# older than the last generate attempt, and `open` refuses to show it so no
+# decision is answered from stale cards.
 #
 # Parentheses in existing hold reasons are read and rendered verbatim. This command
 # never replays a hold reason through `fm-decision-hold.sh hold`, whose help forbids
@@ -76,7 +84,7 @@ require_runtime() {
 }
 
 command_generate() {
-  local output=$DEFAULT_PAGE
+  local output=$DEFAULT_PAGE attempt
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --output) shift; output=${1:-} ;;
@@ -86,7 +94,11 @@ command_generate() {
   done
   require_runtime
   output=$(private_path output "$output")
+  attempt="$output.generate-attempt"
+  (umask 077 && mkdir -p "$(dirname "$output")")
+  date -u '+%Y-%m-%d %H:%M UTC' > "$attempt"
   node "$ENGINE" generate --home "$FM_HOME" --output "$output"
+  rm -f "$attempt"
 }
 
 command_open() {
@@ -100,6 +112,9 @@ command_open() {
   done
   page=$(private_path page "$page")
   [ -f "$page" ] || fail "page does not exist; run generate first: $page"
+  if [ -e "$page.generate-attempt" ]; then
+    fail "this decision page is older than the last generate attempt (started $(cat "$page.generate-attempt" 2>/dev/null || echo 'at an unknown time')), which did not finish, so its cards may be stale; run generate again and fix what it reports: $page"
+  fi
   command -v "$LAVISH_BIN" >/dev/null 2>&1 || fail "lavish-axi is required"
   LAVISH_AXI_HOST=127.0.0.1 LAVISH_AXI_LINK_HOST=127.0.0.1 LAVISH_AXI_PORT="$LAVISH_PORT" "$LAVISH_BIN" "$page"
 }

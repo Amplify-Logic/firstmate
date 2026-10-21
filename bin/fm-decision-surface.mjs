@@ -3,7 +3,7 @@
 // The shell wrapper owns the operator-facing commands and loopback-only Lavish launch.
 
 import { createHash } from "node:crypto";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
@@ -49,13 +49,14 @@ function run(command, args, cwd, extraEnv = {}) {
   return result.stdout;
 }
 
+// Parsing throws rather than exits so generation can skip one unreadable row.
 function parseYamlScalar(value) {
   const trimmed = value.trim();
   if (trimmed.startsWith('"')) {
     try {
       return JSON.parse(trimmed);
     } catch {
-      fail(`tasks-axi returned an invalid quoted scalar: ${trimmed}`);
+      throw new Error(`tasks-axi returned an invalid quoted scalar: ${trimmed}`);
     }
   }
   return trimmed;
@@ -67,20 +68,37 @@ function parseShow(output) {
     const match = line.match(/^  ([a-z_]+): (.*)$/);
     if (match) task[match[1]] = parseYamlScalar(match[2]);
   }
-  if (!task.id) fail("tasks-axi show returned no task id");
+  if (!task.id) throw new Error("tasks-axi show returned no task id");
   return task;
 }
 
 // Captain-hold reasons are stored encoded; bin/fm-hold-reason-lib.sh owns decoding them.
-function taskShow(home, id) {
-  const shown = run("tasks-axi", ["show", id, "--full"], home);
+// Returns { task } or { error } so a caller decides whether one bad row is fatal.
+function readTask(home, id) {
+  const args = ["show", id, "--full"];
+  const shown = spawnSync("tasks-axi", args, { cwd: home, encoding: "utf8", maxBuffer: 32 * 1024 * 1024 });
+  if (shown.error) return { error: `tasks-axi could not run: ${shown.error.message}` };
+  if (shown.status !== 0) {
+    const detail = (shown.stderr || shown.stdout || `exit ${shown.status}`).trim();
+    return { error: `tasks-axi ${args.join(" ")} failed: ${detail}` };
+  }
   const decoded = spawnSync("bash", ["-c", '. "$1" && fm_hold_reason_decode_stream', "bash", HOLD_REASON_LIB], {
-    input: shown,
+    input: shown.stdout,
     encoding: "utf8",
     maxBuffer: 32 * 1024 * 1024,
   });
-  if (decoded.error || decoded.status !== 0) fail(`could not decode the hold reason of ${id}`);
-  return parseShow(decoded.stdout);
+  if (decoded.error || decoded.status !== 0) return { error: `could not decode the hold reason of ${id}` };
+  try {
+    return { task: parseShow(decoded.stdout) };
+  } catch (error) {
+    return { error: error.message };
+  }
+}
+
+function taskShow(home, id) {
+  const { task, error } = readTask(home, id);
+  if (error) fail(error);
+  return task;
 }
 
 function taskIdsFromList(output) {
@@ -197,6 +215,10 @@ function identityFrom(task) {
   return { origin, key };
 }
 
+// `--kind captain` filters the task kind, so the held list can also carry a
+// captain-kind row held for another reason, such as a `future` follow-up. Only a
+// `captain` hold kind is a decision; every other row is reported and skipped, so
+// one odd row never stops the page from being rewritten.
 function loadTasks(home) {
   const heldOutput = run(
     "tasks-axi",
@@ -204,10 +226,19 @@ function loadTasks(home) {
     home,
   );
   const listed = taskIdsFromList(heldOutput);
-  const tasks = listed.ids.map((id) => taskShow(home, id));
-  for (const task of tasks) {
-    if (task.state !== "queued" || task.held !== "yes" || task.kind !== "captain" || task.hold_kind !== "captain") {
-      fail(`listed captain hold ${task.id} did not retain the structured held state`);
+  const tasks = [];
+  const skipped = [];
+  const warnings = [];
+  for (const id of listed.ids) {
+    const { task, error } = readTask(home, id);
+    if (error) {
+      warnings.push(`skipped: ${id} could not be read: ${error}`);
+    } else if (task.hold_kind !== "captain") {
+      skipped.push(`skipped: ${id} is held as ${task.hold_kind || "an unrecorded kind"}, not for a captain decision`);
+    } else if (task.state !== "queued" || task.held !== "yes" || task.kind !== "captain") {
+      warnings.push(`skipped: listed captain hold ${id} did not retain the structured held state`);
+    } else {
+      tasks.push(task);
     }
   }
 
@@ -215,7 +246,11 @@ function loadTasks(home) {
   const blockedOutput = run("tasks-axi", ["list", "--blocked", "--fields", "blocked_by"], home);
   const blocked = taskIdsFromList(blockedOutput);
   for (const id of blocked.ids) {
-    const dependent = taskShow(home, id);
+    const { task: dependent, error } = readTask(home, id);
+    if (error) {
+      warnings.push(`blocked item ${id} could not be read, so a card may undercount what it blocks: ${error}`);
+      continue;
+    }
     for (const blocker of splitBlockedBy(dependent.blocked_by)) {
       if (dependentMap.has(blocker)) {
         dependentMap.get(blocker).push({ id: dependent.id, title: dependent.title, state: dependent.state });
@@ -225,6 +260,8 @@ function loadTasks(home) {
 
   return {
     count: listed.count,
+    skipped,
+    warnings,
     tasks: tasks.map((task) => {
       const recommendation = recommendationFrom(task.hold_reason || "");
       const identity = identityFrom(task);
@@ -532,7 +569,11 @@ function safeRouteId(holdId) {
 function showExists(home, id) {
   const result = spawnSync("tasks-axi", ["show", id, "--full"], { cwd: home, encoding: "utf8" });
   if (result.status !== 0) return null;
-  return parseShow(result.stdout);
+  try {
+    return parseShow(result.stdout);
+  } catch (error) {
+    fail(error.message);
+  }
 }
 
 function currentDependents(home, holdId) {
@@ -654,15 +695,20 @@ switch (args.command) {
     const manifest = {
       schema: "fm-decision-surface.v1",
       generated_at: new Date().toISOString(),
-      count: loaded.count,
+      count: loaded.tasks.length,
       decisions: loaded.tasks,
     };
     mkdirSync(path.dirname(args.output), { recursive: true, mode: 0o700 });
-    writeFileSync(args.output, renderHtml(manifest), { mode: 0o600 });
+    // Rename into place so an interrupted run never leaves a half-written page.
+    const staging = `${args.output}.${process.pid}.tmp`;
+    writeFileSync(staging, renderHtml(manifest), { mode: 0o600 });
+    renameSync(staging, args.output);
+    for (const warning of loaded.warnings) console.error(`fm-decision-surface: ${warning}`);
     const grouped = new Set(manifest.decisions.map((item) => item.group)).size;
     const blocking = manifest.decisions.filter((item) => item.dependents.length > 0).length;
     const lifecycle = manifest.decisions.filter((item) => item.origin && item.key).length;
     console.log(`generated: ${manifest.count} captain decisions (tasks-axi count: ${loaded.count})`);
+    for (const note of loaded.skipped) console.log(note);
     console.log(`groups: ${grouped}; blocking other work: ${blocking}; lifecycle-routable: ${lifecycle}`);
     console.log(`page: ${args.output}`);
     break;
