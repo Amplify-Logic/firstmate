@@ -192,6 +192,7 @@ test_private_path_and_schedule() {
   assert_contains "$rendered" '<key>StartInterval</key>' 'rendered launchd schedule omitted StartInterval'
   assert_contains "$rendered" '<integer>604800</integer>' 'default launchd cadence is not weekly'
   assert_contains "$rendered" '<string>run</string>' 'launchd schedule does not call the delivery runner'
+  assert_contains "$rendered" '<key>PATH</key>' 'launchd schedule drops PATH, so the tool versions would read as missing'
 
   config="$TMP_ROOT/schedule-home/config"
   mkdir -p "$config"

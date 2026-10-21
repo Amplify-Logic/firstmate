@@ -17,6 +17,7 @@
 # Override it with FM_UPSTREAM_WATCH_INTERVAL_SECONDS or a private
 # config/upstream-watch line: `interval_seconds = N` (bin/fm-upstream-lib.sh's
 # fm_upstream_watch_config owns that file's format).
+# The job runs with the installer's PATH, so reinstall after moving a tool.
 # launchd calls bin/fm-upstream-watch.sh run, which also prepares a catch-up
 # plan when the home has opted in with `catchup = on`; generation remains
 # separately callable by a future private-repository workflow.
@@ -64,6 +65,10 @@ FM_LAUNCHD_LOG_DIR="$DATA/upstream-watch"
 FM_LAUNCHD_AGENTS_DIR=${FM_UPSTREAM_WATCH_LAUNCH_AGENTS_DIR:-$HOME/Library/LaunchAgents}
 FM_LAUNCHD_LAUNCHCTL=${FM_UPSTREAM_WATCH_LAUNCHCTL:-launchctl}
 FM_LAUNCHD_REMOVE_NEEDS_DARWIN=true
+# The installer's PATH, so the report's tool-version section finds the same
+# Herdr, treehouse, no-mistakes, and AXI binaries the home itself runs rather
+# than reporting them missing under launchd's minimal default PATH.
+FM_LAUNCHD_PATH=$PATH
 
 # shellcheck source=bin/fm-launchd-schedule-lib.sh disable=SC1091
 . "$SCRIPT_DIR/fm-launchd-schedule-lib.sh"

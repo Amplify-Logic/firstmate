@@ -3037,6 +3037,7 @@ The generator and delivery scripts never port, merge, rebase, or publish anythin
 
 Every report ends with a tool-version section from `bin/fm-stack-versions.sh`: Herdr, treehouse, no-mistakes, and the AXI tools, each installed version against its latest release and the version Starship's own pins expect.
 It only reports and never installs or upgrades anything; it flags Herdr and treehouse upgrades as needing a quiet window with no workers running.
+The scheduled job runs with the PATH it was installed from, so reinstall the schedule after moving one of those tools.
 
 ### Catching up with the upstream
 
