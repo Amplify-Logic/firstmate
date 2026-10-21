@@ -89,13 +89,18 @@ die() {
 
 # Print the report a pointer file names, only when it is a regular report file.
 safe_pointer() {
-  local pointer=$1 report
+  local pointer=$1 report dir reports
   [ -f "$pointer" ] || return 1
   IFS= read -r report <"$pointer" || return 1
   case "$report" in
-    "$REPORTS"/*.md) ;;
+    /*/*.md) ;;
     *) return 1 ;;
   esac
+  # Pointers keep FM_HOME as the writer spelled it, while the armed check pins
+  # the physical path, so the reports directory is compared physically.
+  dir=$(cd "${report%/*}" 2>/dev/null && pwd -P) || return 1
+  reports=$(cd "$REPORTS" 2>/dev/null && pwd -P) || return 1
+  [ "$dir" = "$reports" ] || return 1
   [ -f "$report" ] && [ ! -L "$report" ] || return 1
   printf '%s\n' "$report"
 }

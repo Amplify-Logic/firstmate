@@ -365,6 +365,26 @@ test_arm_and_disarm_live_notice() {
   pass 'arm binds a watcher check that announces a pending catch-up, and disarm retires it'
 }
 
+test_live_notice_through_symlinked_home() {
+  local w link out shim
+  w="$TMP_ROOT/linked"
+  new_world "$w"
+  catchup_on "$w"
+  mkdir -p "$w/home/state"
+  # The weekly job keeps FM_HOME as spelled, while the armed check pins the
+  # physical path, so the two must still agree on which reports are pending.
+  link="$TMP_ROOT/linked-home"
+  ln -s "$w/home" "$link"
+  FM_HOME="$link" FM_ROOT_OVERRIDE="$w/fork" "$WATCH" arm >/dev/null
+  FM_HOME="$link" FM_ROOT_OVERRIDE="$w/fork" FM_UPSTREAM_LEDGER="$w/ledger.txt" \
+    FM_UPSTREAM_WATCH_STAMP=first FM_UPSTREAM_WATCH_DATE=2026-08-01 "$WATCH" run >/dev/null
+  shim="$w/home/state/upstream-catchup.check.sh"
+  out=$(env -u FM_HOME FM_ROOT_OVERRIDE="$w/fork" "$shim")
+  assert_contains "$out" 'upstream-catchup: catch-up ready to prepare' \
+    'armed check stayed silent for a catch-up recorded through a symlinked home'
+  pass 'the live notice fires when the job reaches the home through a symlink'
+}
+
 test_config_validation() {
   local w out rendered
   w="$TMP_ROOT/config"
@@ -388,6 +408,7 @@ test_catchup_off_by_default
 test_scheduled_catchup_when_opted_in
 test_on_demand_catchup
 test_arm_and_disarm_live_notice
+test_live_notice_through_symlinked_home
 test_config_validation
 test_private_path_and_schedule
 test_crashed_owner_and_slow_fetch_recover
