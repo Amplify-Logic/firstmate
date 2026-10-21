@@ -3056,9 +3056,10 @@ It only reports and never installs or upgrades anything; it flags Herdr and tree
 The scheduled job runs with the PATH it was installed from, so reinstall the schedule after moving one of those tools.
 
 Every home, whether or not it runs the weekly watch, also learns at session start which stack tools are behind.
-The deferred network checks print one `STACK_TOOLS:` line naming each installed tool behind its latest release, with installed and latest versions and whether it is a small update or a quiet-window upgrade, and print nothing when every installed tool is known to be current.
-`bin/fm-stack-versions.sh notice` owns that line and caches the release lookups in this home's `state/` for about a day, so `/updatefirstmate`'s final report repeats the same result without looking again.
-A tool whose release could not be looked up is named as not checked, never as current, and nothing is ever installed without the captain's yes.
+The deferred network checks print one `STACK_TOOLS:` line naming each installed tool behind its target, with installed and target versions and whether it is a small update or a quiet-window upgrade, and print nothing when no installed tool is known to be behind.
+The target is the latest release, except for Herdr, which is judged against the version Starship pins in `bin/fm-install-herdr.sh`, so a newer unverified Herdr release is never reported.
+`bin/fm-stack-versions.sh notice` owns that line and caches the whole lookup result, failed lookups included, in this home's `state/` for one day, so `/updatefirstmate`'s final report repeats the same result without looking again.
+A tool whose version or release could not be read is named as not checked, never as current, at most once a day, and nothing is ever installed without the captain's yes.
 
 ### Catching up with the upstream
 

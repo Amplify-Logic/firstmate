@@ -30,7 +30,7 @@
 #                  [- <R> upstream commits, <D> already delivered here] - <subjects>",
 #                 "UPSTREAM_REPORT: new private report at <path>",
 #                 "UPSTREAM_CATCHUP: catch-up ready to prepare, private report at <path>",
-#                 "STACK_TOOLS: behind: <tool> installed <version>, latest
+#                 "STACK_TOOLS: behind: <tool> installed <version>, latest|pinned
 #                  <version> (small update|quiet-window upgrade); ...",
 #                 "STACK_TOOLS: could not check: <tool>, ...",
 #                 "FMX: X mode on ..." or "FMX: X mode off ...".
@@ -130,8 +130,9 @@
 #          It never merges and never touches projects/; see bin/fm-upstream-lib.sh.
 #          STACK_TOOLS is the read-only network-phase tool-version notice owned
 #          by bin/fm-stack-versions.sh notice, which caches its release lookups
-#          for about a day per home and is silent when every installed stack
-#          tool is known to be current. It installs nothing.
+#          for a day per home, names a tool it could not check at most once a
+#          day, and is otherwise silent unless an installed stack tool is known
+#          to be behind. It installs nothing.
 #          UPSTREAM_REPORT and UPSTREAM_CATCHUP are the read-only pending-report
 #          check owned by bin/fm-upstream-watch.sh. The weekly job writes only
 #          private data/; acknowledge the report after reading it so later
@@ -1847,8 +1848,8 @@ if network_phase; then
   __fm_timing_stamp=$(fm_timing_now_ms)
   gh auth status >/dev/null 2>&1 || echo "NEEDS_GH_AUTH"
   fm_timing_record phase gh-auth "$__fm_timing_stamp"
-  # Read-only: names stack tools behind their latest release, from a once-a-day
-  # cache of the release lookups; bin/fm-stack-versions.sh owns the comparison.
+  # Read-only: names stack tools behind their latest release or Herdr's pin, from
+  # a once-a-day cache of the release lookups; bin/fm-stack-versions.sh owns it.
   __fm_timing_stamp=$(fm_timing_now_ms)
   FM_HOME="$FM_HOME" FM_STATE_OVERRIDE="$STATE" "$SCRIPT_DIR/fm-stack-versions.sh" notice
   fm_timing_record phase stack-versions "$__fm_timing_stamp"
