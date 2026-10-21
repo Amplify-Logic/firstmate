@@ -36,8 +36,9 @@
 # positional arguments of `pr|issue <verb>`, and a repos/<owner>/<repo>
 # endpoint as the first positional argument of `gh api`. An invocation naming
 # none of them reaches gh's own default for the working directory, which
-# `gh repo view` reads there. A command that publishes through gh but whose
-# words cannot be parsed, or whose gh word does not open a command, has no
+# `gh repo view` reads there. Whether gh publishes at all is decided from
+# those parsed invocations, so a gh command named inside quoted text never
+# counts; a command that names gh but whose words cannot be parsed has no
 # known target and is refused on a hit. For no-mistakes, the target is the
 # owner/repo of the origin remote, whether its host is github.com or a dotless
 # SSH alias; an origin on any other dotted host is not checked, and one that
@@ -232,7 +233,7 @@ def targets(command, words, cwd):
     for env, args in gh_invocations(words or []):
         if subcommand(args)[1] in ("pr", "issue", "api"):
             repos += invocation_repos(env, args) or [None]
-    if (PR_TEXT.search(command) or API.search(command)) and not repos:
+    if words is None and (PR_TEXT.search(command) or API.search(command)):
         raise RuntimeError("Starship could not read which repository this gh command publishes to")
     if PIPELINE.search(command):
         url = subprocess.run(["git", "-C", cwd, "remote", "get-url", "origin"],
