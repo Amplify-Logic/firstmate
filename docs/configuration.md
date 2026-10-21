@@ -3122,6 +3122,15 @@ Without the file, which is the default, the scan is unchanged.
 `bin/fm-lint.sh` runs that check on every default lint, including the validation pipeline's lint step, so these words are caught before each push; CI has no list, and without one the check is silent.
 The file is not inherited by secondmate homes.
 
+The same list keeps these words out of what workers publish to a public repository's pull requests: titles, descriptions, comments, and the intent and gate answers the validation pipeline turns into its PR.
+`bin/fm-leak-guard.sh --text [<file>|-]` checks draft text, from the named files or stdin, and names every listed word it contains; it exits 1 on a hit, 0 when the text is clean, and 0 silently without a list.
+Every direct-PR and no-mistakes ship brief tells the worker to run it before opening, editing or commenting on a PR and before passing intent to the pipeline, and to check the published title and description once the PR exists.
+For a spawned Claude worker (crewmate or scout), `bin/fm-pr-text-guard.py` also checks each shell command that publishes such text through `gh` or `gh-axi`, or starts or answers the pipeline, and refuses it, naming the words, when the text holds a listed word and the target repository is public.
+A private repository's PRs may hold the words, a pipeline whose origin is not on GitHub is not checked, and a repository whose visibility cannot be read is refused; the script's header owns which commands count and how the target is found.
+Without the file, nothing is refused.
+The check reads the list on every command, so a list added later needs no relaunch.
+The primary, secondmates and other worker harnesses are not checked by it, and the pipeline's own PR wording is checked only through the worker's read-back.
+
 ## Bridge pinned links (config/bridge-links)
 
 `config/bridge-links` is an optional LOCAL, gitignored file containing one pinned bridge-page link per line as `<label><TAB><https-url>`.

@@ -1,0 +1,241 @@
+#!/usr/bin/env bash
+# tests/fm-pr-text-guard.test.sh - keeping a home's private words out of the
+# text a worker publishes to a public repository's pull requests: the draft
+# check (bin/fm-leak-guard.sh --text), the Claude worker hook that refuses a
+# publishing command (bin/fm-pr-text-guard.py), the hook bin/fm-spawn.sh
+# installs, and the instruction the ship brief carries. Only gh is faked, so
+# no case reaches the network; it answers a repository's visibility from
+# FAKE_GH_PRIVATE and logs every call.
+set -u
+
+# shellcheck source=tests/fixtures.sh
+. "$(dirname "${BASH_SOURCE[0]}")/fixtures.sh"
+
+LEAK="$ROOT/bin/fm-leak-guard.sh"
+HOOK="$ROOT/bin/fm-pr-text-guard.py"
+TMP_ROOT=$(fm_test_tmproot fm-pr-text-guard)
+
+command -v python3 >/dev/null 2>&1 || fail "python3 is required"
+
+HOME_WORDS="$TMP_ROOT/home"
+mkdir -p "$HOME_WORDS/config"
+printf '# people\nRobin\nacme corp\n' > "$HOME_WORDS/config/leak-words"
+NO_LIST="$TMP_ROOT/no-list-home"
+mkdir -p "$NO_LIST/config"
+
+FAKEBIN="$TMP_ROOT/fakebin"
+GH_LOG="$TMP_ROOT/gh.log"
+mkdir -p "$FAKEBIN"
+cat > "$FAKEBIN/gh" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >> "$FAKE_GH_LOG"
+[ "${1:-} ${2:-}" = "repo view" ] || exit 0
+if [ "${FAKE_GH_PRIVATE:-}" = unreadable ]; then
+  echo "HTTP 404: Not Found" >&2
+  exit 1
+fi
+echo "${FAKE_GH_PRIVATE:-false}"
+EOF
+chmod +x "$FAKEBIN/gh"
+
+WORK="$TMP_ROOT/work"
+mkdir -p "$WORK"
+
+# leak_text <home> [args...]: the draft check, run from WORK; output in OUT,
+# status in STATUS. Stdin is passed through.
+leak_text() {
+  local home=$1
+  shift
+  STATUS=0
+  OUT=$(cd "$WORK" && FM_HOME="$home" "$LEAK" --text "$@" 2>&1) || STATUS=$?
+}
+
+# hook <home> <command> [cwd]: the PreToolUse hook on that Bash command; its
+# stdout in OUT. FAKE_GH_PRIVATE is inherited.
+hook() {
+  local home=$1 command=$2 cwd=${3:-$WORK}
+  OUT=$(jq -cn --arg c "$command" --arg cwd "$cwd" \
+      '{hook_event_name: "PreToolUse", tool_name: "Bash", tool_input: {command: $c}, cwd: $cwd}' \
+    | PATH="$FAKEBIN:$PATH" FAKE_GH_LOG="$GH_LOG" python3 "$HOOK" hook --home "$home") \
+    || fail "the hook exited nonzero for: $command"
+}
+
+expect_allow() {  # <home> <command> <why> [cwd]
+  hook "$1" "$2" "${4:-}"
+  assert_equals "" "$OUT" "$3"
+}
+
+# expect_refuse <home> <command> <why> [cwd]: the deny reason in REASON.
+expect_refuse() {
+  hook "$1" "$2" "${4:-}"
+  printf '%s' "$OUT" | jq -e '.hookSpecificOutput.hookEventName == "PreToolUse" and .hookSpecificOutput.permissionDecision == "deny"' \
+    >/dev/null || fail "$3 (got: $OUT)"
+  REASON=$(printf '%s' "$OUT" | jq -r '.hookSpecificOutput.permissionDecisionReason')
+}
+
+test_draft_check_names_each_listed_word() {
+  printf 'Fix the sync that robin reported\n' > "$WORK/title.txt"
+  printf 'Body\n\nAsked by ACME Corp, and Robin again.\n' > "$WORK/body.md"
+  leak_text "$HOME_WORDS" title.txt
+  [ "$STATUS" -eq 1 ] || fail "a title with a listed word must fail: $OUT"
+  assert_contains "$OUT" "LEAK_HIT: private-word: title.txt: robin" "the hit must name the file and the word as written"
+  leak_text "$HOME_WORDS" body.md
+  [ "$STATUS" -eq 1 ] || fail "a body with listed words must fail: $OUT"
+  assert_contains "$OUT" "body.md: ACME Corp" "a listed phrase must be found whatever its case"
+  assert_contains "$OUT" "body.md: Robin" "every listed word must be named"
+  assert_contains "$OUT" "rewrite it without them" "the failure must say what to do"
+  STATUS=0
+  OUT=$(printf 'Thanks, Robin - looks good.\n' | FM_HOME="$HOME_WORDS" "$LEAK" --text 2>&1) || STATUS=$?
+  [ "$STATUS" -eq 1 ] || fail "a comment on stdin with a listed word must fail: $OUT"
+  assert_contains "$OUT" "LEAK_HIT: private-word: stdin: Robin" "stdin must be named as the source"
+  [ "$(printf '%s\n' "$OUT" | grep -c 'stdin: Robin')" -eq 1 ] || fail "a word must be named once: $OUT"
+  pass "the draft check names every listed word in a title, body or comment, whole words, any case"
+}
+
+test_draft_check_passes_clean_text_and_partial_words() {
+  printf 'The robins-egg theme and acme corporation stay.\n' > "$WORK/clean.md"
+  leak_text "$HOME_WORDS" clean.md
+  [ "$STATUS" -eq 0 ] || fail "words only inside longer words must pass: $OUT"
+  assert_contains "$OUT" "PASS" "a clean text must say it passed"
+  STATUS=0
+  OUT=$(printf 'clean\n' | FM_HOME="$HOME_WORDS" "$LEAK" --text - 2>&1) || STATUS=$?
+  [ "$STATUS" -eq 0 ] || fail "clean stdin must pass: $OUT"
+  leak_text "$HOME_WORDS" missing.md
+  [ "$STATUS" -eq 2 ] || fail "an unreadable draft must not pass as clean: $OUT"
+  pass "the draft check passes clean text and words that only appear inside longer words"
+}
+
+test_draft_check_without_a_list_is_silent() {
+  leak_text "$NO_LIST" body.md
+  [ "$STATUS" -eq 0 ] || fail "a home with no list must pass: $OUT"
+  assert_equals "" "$OUT" "a home with no list must check nothing and say nothing"
+  pass "the draft check passes silently in a home with no list"
+}
+
+test_hook_refuses_title_body_and_comment_on_a_public_repo() {
+  export FAKE_GH_PRIVATE=false
+  expect_refuse "$HOME_WORDS" 'gh pr create --repo o/public --title "Sync fix for Robin" --body "Details"' \
+    "a listed word in a PR title must be refused"
+  assert_contains "$REASON" '"Robin"' "the refusal must name the word"
+  assert_contains "$REASON" "o/public, a public repository" "the refusal must name the public repository"
+  assert_contains "$REASON" "--text <file>" "the refusal must say how to check a draft"
+  expect_refuse "$HOME_WORDS" "gh-axi pr edit 7 --repo o/public --body-file $WORK/body.md" \
+    "a listed word in a body file must be refused"
+  assert_contains "$REASON" '"ACME Corp", "Robin"' "every listed word in the file must be named"
+  expect_refuse "$HOME_WORDS" 'gh pr create -R o/public -t "Sync fix" -F body.md' \
+    "a body file given with -F must be read relative to the working directory"
+  expect_refuse "$HOME_WORDS" "gh pr comment 7 --repo o/public --body \"\$(cat <<'X'
+Thanks robin
+X
+)\"" "a listed word in a heredoc comment must be refused"
+  # shellcheck disable=SC2016 # The variable expands inside the checked command, not here.
+  expect_refuse "$HOME_WORDS" 'BODY="acme corp asked"; gh issue comment 3 --repo o/public --body "$BODY"' \
+    "a word set in a variable earlier in the same command must be refused"
+  expect_refuse "$HOME_WORDS" 'gh api repos/o/public/issues/3/comments -f body="hi Robin"' \
+    "a comment sent through gh api must be refused"
+  assert_contains "$REASON" "o/public" "the API path must name the repository"
+  unset FAKE_GH_PRIVATE
+  pass "a Claude worker's PR title, body and comment with a listed word are refused on a public repository"
+}
+
+test_hook_refuses_the_pipeline_intent_on_a_public_github_repo() {
+  local repo="$TMP_ROOT/nm-repo" other="$TMP_ROOT/nm-other"
+  git init -q "$repo" && git -C "$repo" remote add origin git@github.com:o/public.git
+  git init -q "$other" && git -C "$other" remote add origin https://gitlab.example/o/work.git
+  export FAKE_GH_PRIVATE=false
+  expect_refuse "$HOME_WORDS" 'no-mistakes axi run --intent "Robin wants the sync fixed"' \
+    "a listed word in the pipeline intent must be refused" "$repo"
+  assert_contains "$REASON" "o/public" "the refusal must name origin's repository"
+  expect_refuse "$HOME_WORDS" 'no-mistakes axi respond --action answer --message "ask acme corp"' \
+    "a listed word in a gate answer must be refused" "$repo"
+  expect_allow "$HOME_WORDS" 'no-mistakes axi run --intent "Robin wants the sync fixed"' \
+    "an origin off github.com cannot be checked and must pass" "$other"
+  expect_allow "$HOME_WORDS" 'no-mistakes axi run --intent "fix the sync"' "a clean intent must pass" "$repo"
+  unset FAKE_GH_PRIVATE
+  pass "the pipeline intent and gate answers are checked against origin's repository on GitHub"
+}
+
+test_hook_passes_clean_private_and_unrelated_commands() {
+  : > "$GH_LOG"
+  export FAKE_GH_PRIVATE=false
+  expect_allow "$HOME_WORDS" 'gh pr create --repo o/public --title "Sync fix" --body "Details"' "clean text must pass"
+  assert_equals "" "$(cat "$GH_LOG")" "a clean command must cost no visibility read"
+  for command in 'gh pr view 7 --repo o/public --comments' 'grep -rn Robin docs' 'git commit -m "Robin"' \
+    'gh api repos/o/public/pulls/7' 'gh pr list --search "Robin"'; do
+    expect_allow "$HOME_WORDS" "$command" "a command that publishes nothing must pass: $command"
+  done
+  export FAKE_GH_PRIVATE=true
+  expect_allow "$HOME_WORDS" 'gh pr create --repo o/work --title "Sync fix for Robin" --body x' \
+    "a private repository may hold listed words"
+  export FAKE_GH_PRIVATE=unreadable
+  expect_refuse "$HOME_WORDS" 'gh pr create --repo o/gone --title "Sync fix for Robin" --body x' \
+    "an unreadable visibility must refuse"
+  assert_contains "$REASON" "could not confirm the repository is private" "the refusal must say why"
+  assert_contains "$REASON" "HTTP 404" "the refusal must carry gh's reason"
+  unset FAKE_GH_PRIVATE
+  expect_allow "$NO_LIST" 'gh pr create --repo o/public --title "Sync fix for Robin" --body x' \
+    "a home with no list must pass everything"
+  hook "$HOME_WORDS" '' && assert_equals "" "$OUT" "an empty command must pass"
+  OUT=$(printf 'not json' | python3 "$HOOK" hook --home "$HOME_WORDS") || fail "an unreadable payload must not crash the hook"
+  assert_equals "" "$OUT" "an unreadable payload must pass"
+  OUT=$(jq -cn '{tool_name: "Read", tool_input: {file_path: "/x/Robin"}}' | python3 "$HOOK" hook --home "$HOME_WORDS")
+  assert_equals "" "$OUT" "another tool must pass untouched"
+  pass "clean text, private repositories, unrelated commands and a home with no list all pass"
+}
+
+test_spawn_installs_the_hook() {
+  local case_dir="$TMP_ROOT/spawn" home proj wt fakebin settings cmd
+  home="$case_dir/home"
+  proj="$case_dir/project"
+  wt="$case_dir/wt"
+  fakebin=$(make_spawn_fakebin "$case_dir/fake" claude)
+  fm_test_spawn_home "$home" claude
+  printf 'Robin\n' > "$home/config/leak-words"
+  fm_git_worktree "$proj" "$wt" "wt-prtext"
+  fm_test_spawn_brief "$home" prtext
+  fm_test_run_spawn "$home" "$wt" "$fakebin" prtext "$proj" --mode no-mistakes --yolo off >"$case_dir/spawn.out" 2>&1 \
+    || fail "a claude spawn failed: $(cat "$case_dir/spawn.out")"
+  settings="$wt/.claude/settings.local.json"
+  cmd=$(jq -r '[.hooks.PreToolUse[] | select(.matcher == "Bash") | .hooks[0].command | select(test("fm-pr-text-guard[.]py"))] | if length == 1 then .[0] else error("not exactly one") end' \
+    "$settings") || fail "every claude worker must get exactly one PR text hook: $(cat "$settings")"
+  OUT=$(jq -cn --arg cwd "$WORK" '{tool_name: "Bash", tool_input: {command: "gh pr create --repo o/public --title \"for Robin\" --body x"}, cwd: $cwd}' \
+    | PATH="$FAKEBIN:$PATH" FAKE_GH_LOG="$GH_LOG" FAKE_GH_PRIVATE=false bash -c "$cmd")
+  assert_contains "$OUT" '"deny"' "the installed hook must read the home's own list and refuse"
+  : > "$home/config/leak-words"
+  OUT=$(jq -cn --arg cwd "$WORK" '{tool_name: "Bash", tool_input: {command: "gh pr create --repo o/public --title \"for Robin\" --body x"}, cwd: $cwd}' \
+    | PATH="$FAKEBIN:$PATH" FAKE_GH_LOG="$GH_LOG" FAKE_GH_PRIVATE=false bash -c "$cmd")
+  assert_equals "" "$OUT" "the installed hook must read the home's list live"
+  pass "every claude worker gets the PR text hook, reading its home's list on every command"
+}
+
+test_ship_brief_tells_the_worker_to_check() {
+  local home="$TMP_ROOT/brief-home" id brief check
+  mkdir -p "$home/data" "$home/config"
+  printf 'Robin\n' > "$home/config/leak-words"
+  for id_mode in "brief-prtext-nm:no-mistakes" "brief-prtext-direct:direct-PR"; do
+    id=${id_mode%%:*}
+    FM_HOME="$home" "$ROOT/bin/fm-brief.sh" "$id" some-proj --mode "${id_mode##*:}" >/dev/null 2>&1 \
+      || fail "$id: scaffold failed"
+    brief="$home/data/$id/brief.md"
+    assert_grep "## Public PR text" "$brief" "$id: brief missing the PR text instruction"
+    # shellcheck disable=SC2016 # The pattern matches literal backticks in the brief.
+    check=$(sed -n 's/.*and run `\(.*\) --text <file>`.*/\1/p' "$brief")
+    [ -n "$check" ] || fail "$id: brief does not name the check command"
+    OUT=$(printf 'for robin\n' | bash -c "$check --text" 2>&1) && fail "$id: the brief's command must find the home's word: $OUT"
+    assert_contains "$OUT" "stdin: robin" "$id: the brief's command must read this home's list"
+  done
+  FM_HOME="$home" "$ROOT/bin/fm-brief.sh" brief-prtext-local some-proj --mode local-only >/dev/null 2>&1 \
+    || fail "local-only scaffold failed"
+  assert_no_grep "## Public PR text" "$home/data/brief-prtext-local/brief.md" \
+    "a local-only brief opens no PR and must not carry the PR text instruction"
+  pass "direct-PR and no-mistakes briefs tell the worker to check PR text with this home's list"
+}
+
+test_draft_check_names_each_listed_word
+test_draft_check_passes_clean_text_and_partial_words
+test_draft_check_without_a_list_is_silent
+test_hook_refuses_title_body_and_comment_on_a_public_repo
+test_hook_refuses_the_pipeline_intent_on_a_public_github_repo
+test_hook_passes_clean_private_and_unrelated_commands
+test_spawn_installs_the_hook
+test_ship_brief_tells_the_worker_to_check

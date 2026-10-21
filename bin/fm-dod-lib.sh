@@ -353,6 +353,29 @@ Before you append the done line, confirm the PR URL the forge printed is under `
 EOF
 }
 
+# Single owner of the public PR text instruction shared by every ship mode that
+# ends in a pull request: the worker checks draft PR text and the no-mistakes
+# intent with bin/fm-leak-guard.sh --text before publishing it, and checks what
+# was actually published afterwards. It names this checkout's guard and the
+# caller's FM_HOME, whose config/leak-words is the list; bin/fm-pr-text-guard.py
+# enforces the same check on a Claude worker's publishing commands. Rendered
+# beside fm_pr_target_block.
+fm_pr_text_block() {
+  local check
+  check="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/fm-leak-guard.sh"
+  printf -v check '%q' "$check"
+  [ -z "${FM_HOME:-}" ] || check="FM_HOME=$(printf '%q' "$FM_HOME") $check"
+  cat <<EOF
+
+## Public PR text
+Personal and work details never go into a public repository's PR titles, descriptions or comments; this home keeps the words it means in a private list.
+Before you open or edit a PR, comment on one, or pass \`--intent\` or a gate answer to no-mistakes, write the draft text to a file and run \`$check --text <file>\` (or pipe the text to \`$check --text\`).
+It names every listed word the text contains; on a public repository, rewrite the text without each named word and check it again, while a private repository's PR may keep them.
+Once the PR exists, check what was actually published the same way, for example \`gh-axi api "repos/\$ORIGIN_REPO/pulls/<number>" --jq '.title, .body' | $check --text\`, and on a public repository edit any named word out of the title or description, leaving any no-mistakes appendix untouched.
+A Claude worker's publishing commands are refused on a public repository while their text holds a listed word, naming the word, so rewrite and retry rather than routing around the refusal.
+EOF
+}
+
 # The forge-independent middle of the no-mistakes contract: how a worker drives
 # the pipeline, what `--intent` may carry, and the two firstmate-specific rules.
 # Written once; only the two sentences about a green PR depend on the forge,
@@ -516,6 +539,7 @@ If you deliberately keep the PR a draft, append \`paused [at=<epoch>]: {why the 
 Do NOT run /no-mistakes. The configured merge authority decides whether to merge the PR; firstmate relays the outcome.
 EOF
       fm_pr_target_block
+      fm_pr_text_block
       ;;
     local-only:*)
       cat <<EOF
@@ -551,6 +575,7 @@ That CI-ready \`done:\` is accepted only when this copy's HEAD - your latest com
 If you deliberately keep the PR a draft, append \`paused [at=<epoch>]: {why the draft is held}\` instead of done.
 EOF
       fm_pr_target_block
+      fm_pr_text_block
       ;;
     *)
       echo "error: fm_dod_block: unknown delivery mode '$mode'" >&2
