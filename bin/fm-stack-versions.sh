@@ -4,12 +4,23 @@
 #
 # Usage:
 #   fm-stack-versions.sh report
+#   fm-stack-versions.sh notice
 #   fm-stack-versions.sh --help
 #
 # `report` prints one Markdown section to stdout and always exits 0 once its
 # arguments are valid, so a caller can append it to a larger report.
-# It only reports: it never installs, upgrades, downgrades, or pins anything,
-# and it never changes PATH or any package manager's state.
+# `notice` prints at most one line, for every home's session start (the
+# deferred network phase of bin/fm-bootstrap.sh) and /updatefirstmate's final
+# report, and always exits 0:
+#   STACK_TOOLS: behind: <tool> installed <version>, latest <version>
+#     (small update|quiet-window upgrade); ...[ - could not check: <tool>, ...]
+#   STACK_TOOLS: could not check: <tool>, ...
+# It is silent when every installed tool is known to be current. A tool whose
+# installed version or latest release cannot be read is named under "could
+# not check", never counted as current. A tool that is not installed is left
+# to bootstrap's MISSING lines and not named.
+# Both commands only report: they never install, upgrade, downgrade, or pin
+# anything, and never change PATH or any package manager's state.
 #
 # The tools are the stack beneath Starship that runs unmodified: Herdr,
 # treehouse, no-mistakes, and the AXI tools (gh-axi, lavish-axi,
@@ -36,6 +47,18 @@
 #
 # FM_STACK_VERSIONS_TIMEOUT bounds each version probe and each release lookup
 # (default 8 seconds, valid 1..60).
+#
+# `notice` probes and looks up every tool concurrently, and caches each
+# successful release lookup in this home's state/.stack-versions.latest
+# (FM_STATE_OVERRIDE, else FM_HOME/state), one `<source> <version> <epoch>`
+# record per line, so the lookups run at most once per
+# FM_STACK_VERSIONS_CACHE_TTL seconds per home (default 86400, one day).
+# Installed versions are probed on every run, so an upgrade shows at once.
+# A failed lookup is never cached and is retried on the next run.
+# `report` always looks up afresh and leaves the cache alone.
+# Under the test suite (FM_TEST_SEAM=1) `notice` stays silent unless
+# FM_TEST_STACK_VERSIONS_NOTICE=1, so a fixture's fake tools never reach the
+# real release servers.
 set -u
 export LC_ALL=C
 
@@ -60,6 +83,10 @@ die() {
 TIMEOUT=${FM_STACK_VERSIONS_TIMEOUT:-8}
 case "$TIMEOUT" in ''|*[!0-9]*|0) die 'FM_STACK_VERSIONS_TIMEOUT must be a whole number from 1 to 60' ;; esac
 [ "$TIMEOUT" -le 60 ] || die 'FM_STACK_VERSIONS_TIMEOUT must be a whole number from 1 to 60'
+CACHE_TTL=${FM_STACK_VERSIONS_CACHE_TTL:-86400}
+case "$CACHE_TTL" in ''|*[!0-9]*) die 'FM_STACK_VERSIONS_CACHE_TTL must be a whole number of seconds' ;; esac
+STATE_DIR="${FM_STATE_OVERRIDE:-${FM_HOME:-$ROOT}/state}"
+CACHE_FILE="$STATE_DIR/.stack-versions.latest"
 
 # One row per tool:
 #   display|command|latest source|pin kind|pin file|pin variable|quiet window
@@ -244,10 +271,110 @@ report() {
   printf '\nThis is a report only. Nothing was installed or upgraded.\n'
 }
 
+# Latest version cached for <source> within CACHE_TTL, or nothing. A record
+# stamped in the future is treated as stale rather than trusted forever.
+cached_latest() {
+  local source=$1 now
+  [ -f "$CACHE_FILE" ] && [ ! -L "$CACHE_FILE" ] || return 0
+  now=$(date +%s)
+  awk -F '\t' -v source="$source" -v now="$now" -v ttl="$CACHE_TTL" '
+    $1 == source && $3 ~ /^[0-9]+$/ && $3 <= now && now - $3 < ttl { latest = $2 }
+    END { if (latest != "") print latest }
+  ' "$CACHE_FILE" 2>/dev/null
+}
+
+# One `|`-separated row for a tool (a non-blank separator, so an empty field
+# survives `read`):
+#   display|installed|latest|quiet|source|fetched (1 when looked up now)
+notice_row() {
+  local display=$1 command_name=$2 source=$3 quiet=$4 installed latest fetched=0
+  installed=$(installed_version "$command_name")
+  latest=$(cached_latest "$source")
+  if [ -z "$latest" ]; then
+    latest=$(latest_version "$source")
+    [ -z "$latest" ] || fetched=1
+  fi
+  printf '%s|%s|%s|%s|%s|%s\n' "$display" "$installed" "$latest" "$quiet" "$source" "$fetched"
+}
+
+# cache_store <records>: merge fresh `<source> TAB <version>` lines into the
+# cache, replacing each source's earlier record. Best effort: a home without a
+# writable state directory simply looks up again next time.
+cache_store() {
+  local fresh=$1 now tmp
+  [ -d "$STATE_DIR" ] && [ ! -L "$CACHE_FILE" ] || return 0
+  now=$(date +%s)
+  tmp=$(mktemp "$CACHE_FILE.XXXXXX" 2>/dev/null) || return 0
+  if {
+    [ ! -f "$CACHE_FILE" ] || printf '%s' "$fresh" | awk -F '\t' '
+      NR == FNR { fresh[$1] = 1; next }
+      NF == 3 && !($1 in fresh)
+    ' - "$CACHE_FILE"
+    printf '%s' "$fresh" | awk -F '\t' -v OFS='\t' -v now="$now" '{ print $1, $2, now }'
+  } >"$tmp" 2>/dev/null && mv -f "$tmp" "$CACHE_FILE" 2>/dev/null; then
+    return 0
+  fi
+  rm -f "$tmp" 2>/dev/null || true
+}
+
+notice() {
+  local display command_name source pin_kind pin_file pin_var quiet
+  local dir i item installed latest fetched fresh line clause
+  local -a behind=() unknown=()
+  dir=$(mktemp -d "${TMPDIR:-/tmp}/fm-stack-versions.XXXXXX" 2>/dev/null) || return 0
+  i=0
+  while IFS='|' read -r display command_name source pin_kind pin_file pin_var quiet; do
+    [ -n "$display" ] || continue
+    command -v "$command_name" >/dev/null 2>&1 || continue
+    i=$((i + 1))
+    notice_row "$display" "$command_name" "$source" "$quiet" >"$dir/$i" 2>/dev/null &
+  done <<< "$TOOLS"
+  wait
+  fresh=
+  i=1
+  while [ -f "$dir/$i" ]; do
+    IFS='|' read -r display installed latest quiet source fetched <"$dir/$i" || true
+    i=$((i + 1))
+    [ -n "$display" ] || continue
+    [ "$fetched" != 1 ] || fresh="$fresh$source"$'\t'"$latest"$'\n'
+    if [ -z "$installed" ] || [ -z "$latest" ]; then
+      unknown+=("$display")
+      continue
+    fi
+    [ "$(version_cmp "$installed" "$latest")" = older ] || continue
+    if [ -n "$quiet" ]; then
+      behind+=("$display installed $installed, latest $latest (quiet-window upgrade)")
+    else
+      behind+=("$display installed $installed, latest $latest (small update)")
+    fi
+  done
+  rm -rf "$dir"
+  [ -z "$fresh" ] || cache_store "$fresh"
+  clause=
+  [ "${#unknown[@]}" -eq 0 ] || clause="could not check: $(join_names "${unknown[@]}")"
+  if [ "${#behind[@]}" -gt 0 ]; then
+    line="STACK_TOOLS: behind: ${behind[0]}"
+    for item in "${behind[@]:1}"; do
+      line="$line; $item"
+    done
+    [ -z "$clause" ] || line="$line - $clause"
+    printf '%s\n' "$line"
+  elif [ -n "$clause" ]; then
+    printf 'STACK_TOOLS: %s\n' "$clause"
+  fi
+}
+
 case "${1:-}" in
   report)
     [ "$#" -eq 1 ] || die 'report takes no arguments'
     report
+    ;;
+  notice)
+    [ "$#" -eq 1 ] || die 'notice takes no arguments'
+    if [ "${FM_TEST_SEAM:-}" = 1 ] && [ "${FM_TEST_STACK_VERSIONS_NOTICE:-}" != 1 ]; then
+      exit 0
+    fi
+    notice
     ;;
   -h|--help)
     usage
