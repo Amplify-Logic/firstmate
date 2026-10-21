@@ -120,10 +120,7 @@ def publishes(command):
 
 
 def tokens(command):
-    """The command's shell words, each run of shell operators or a newline its own word; None when unparsable.
-
-    Whole-line shell comments are dropped; a # inside a word stays part of it."""
-    command = "\n".join(line for line in command.split("\n") if not line.lstrip().startswith("#"))
+    """The command's shell words, each run of shell operators or a newline its own word; None when unparsable."""
     lexer = shlex.shlex(command, posix=True, punctuation_chars=SEPARATORS)
     lexer.whitespace = " \t\r"
     lexer.whitespace_split = True
@@ -194,7 +191,7 @@ def named_repos(words):
         elif word.startswith(("--repo=", "GH_REPO=")):
             repos.append(word.split("=", 1)[1])
         elif word.startswith("-R") and len(word) > 2:
-            repos.append(word[2:])
+            repos.append(word[3:] if word.startswith("-R=") else word[2:])
         elif m:
             repos.append(m.group(1))
     return repos
