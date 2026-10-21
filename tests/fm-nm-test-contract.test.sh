@@ -32,12 +32,14 @@ test_nm_keeps_test_evidence_local() {
 doc = YAML.load_file(ARGV[0]) || {}
 test = doc["test"].is_a?(Hash) ? doc["test"] : {}
 ev = test["evidence"].is_a?(Hash) ? test["evidence"] : {}
-puts ev["store_in_repo"].inspect
+puts "#{ev["store_in_repo"].inspect} #{ev.fetch("attach_media", :absent).inspect}"
 ' "$NM") || fail "failed to parse .no-mistakes.yaml as YAML"
-  case "$val" in
+  case "${val% *}" in
     nil|false) ;;
-    *) fail "test.evidence.store_in_repo must be false or absent so evidence never reaches the public repository; got: $val" ;;
+    *) fail "test.evidence.store_in_repo must be false or absent so evidence never reaches the public repository; got: ${val% *}" ;;
   esac
+  [ "${val#* }" = false ] \
+    || fail "test.evidence.attach_media must be explicitly false (its default is true) so media is never uploaded to the public PR; got: ${val#* }"
   pass "no-mistakes keeps test evidence on the local machine"
 }
 

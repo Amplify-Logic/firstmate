@@ -46,8 +46,9 @@ review:
 commands:
   lint: 'bin/fm-lint.sh && bash tests/fm-pi-primary-types.test.sh'
 
-# Keep each run's test evidence on this machine: this repository is public, so
-# evidence is never committed to any branch or linked from the PR.
+# Keep each run's test evidence on this machine because this repository is public:
+# evidence is never committed to any branch, and screenshots and recordings are
+# never uploaded to the PR.
 test:
   instructions: |
     Run live Herdr scenarios only through bin/fm-herdr-lab.sh with a named non-default fm-lab-* session, following that helper's prepare, provision, run, and teardown contract exactly.
@@ -61,3 +62,4 @@ test:
     Your summaries, findings and evidence become this repository's public PR title, description and comments: name people, companies and projects only by role, such as a colleague or a customer, and never quote a private name from a finding, evidence or the user intent.
   evidence:
     store_in_repo: false
+    attach_media: false
