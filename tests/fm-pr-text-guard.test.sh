@@ -196,6 +196,15 @@ test_hook_finds_the_repository_from_urls_and_gh_repo() {
   assert_contains "$REASON" "the repository this command reaches, a public repository" "the refusal must name gh's default"
   expect_refuse "$HOME_WORDS" 'gh issue comment 3 --body "see repos/o/private/pulls and GH_REPO=o/private, thanks Robin"' \
     "an API path or GH_REPO in the body text must not replace the target"
+  export FAKE_GH_PRIVATE=true FAKE_GH_PUBLIC="github.com/o/public o/public" FAKE_GH_PRIVATE_REPOS=''
+  expect_refuse "$HOME_WORDS" 'gh pr review --approve https://github.com/o/public/pull/7 --body "thanks Robin"' \
+    "a PR URL after a flag must still be the target"
+  expect_refuse "$HOME_WORDS" "gh pr comment 7 --repo o/public --body-file - <<'EOF'
+It's fixed, thanks Robin
+EOF" "a command whose words cannot be parsed must not fall back to the private default"
+  assert_contains "$REASON" "could not read which repository" "the refusal must say the target is unknown"
+  expect_refuse "$HOME_WORDS" 'timeout 60 gh pr comment 7 --repo o/public --body "thanks Robin"' \
+    "a gh word that does not open the command must not fall back to the private default"
   unset FAKE_GH_PRIVATE FAKE_GH_PUBLIC FAKE_GH_PRIVATE_REPOS
   pass "a PR or issue URL, GH_REPO and the gh api endpoint name the repository, and body text never does"
 }
@@ -217,8 +226,9 @@ test_hook_refuses_the_pipeline_intent_on_a_public_github_repo() {
   # shellcheck disable=SC2016 # The substitution runs inside the checked command, not here.
   expect_refuse "$HOME_WORDS" 'no-mistakes axi run --intent "$(cat intent.txt)"' \
     "an intent read from a file must be checked" "$repo"
-  local alias="$TMP_ROOT/nm-alias" bare="$TMP_ROOT/nm-bare"
+  local alias="$TMP_ROOT/nm-alias" bare="$TMP_ROOT/nm-bare" dotless="$TMP_ROOT/nm-dotless"
   git init -q "$alias" && git -C "$alias" remote add origin git@github-work:o/public.git
+  git init -q "$dotless" && git -C "$dotless" remote add origin git@work:o/public.git
   git init -q "$bare"
   git -C "$repo" remote add upstream git@github.com:o/private.git
   : > "$GH_LOG"
@@ -229,6 +239,10 @@ test_hook_refuses_the_pipeline_intent_on_a_public_github_repo() {
   expect_refuse "$HOME_WORDS" 'no-mistakes axi run --intent "Robin wants the sync fixed"' \
     "an origin behind an SSH host alias must be checked by its owner/repo" "$alias"
   assert_equals "repo view o/public --json isPrivate --jq .isPrivate" "$(cat "$GH_LOG")" "gh must read the aliased origin by name"
+  : > "$GH_LOG"
+  expect_refuse "$HOME_WORDS" 'no-mistakes axi run --intent "Robin wants the sync fixed"' \
+    "a dotless SSH alias that does not name GitHub must still be checked" "$dotless"
+  assert_equals "repo view o/public --json isPrivate --jq .isPrivate" "$(cat "$GH_LOG")" "gh must read the dotless alias by name"
   export FAKE_GH_PRIVATE=true
   expect_allow "$HOME_WORDS" 'no-mistakes axi run --intent "Robin wants the sync fixed"' \
     "an aliased origin gh reads as private may hold listed words" "$alias"
@@ -260,6 +274,14 @@ test_hook_passes_clean_private_and_unrelated_commands() {
   expect_allow "$NO_LIST" 'gh pr create --repo o/public --title "Sync fix for Robin" --body x' \
     "a home with no list must pass everything"
   hook "$HOME_WORDS" '' && assert_equals "" "$OUT" "an empty command must pass"
+  local long_body
+  long_body=$(printf 'A clean sentence about the sync fix and why it holds now. %.0s' $(seq 25))$(printf 'x%.0s' $(seq 300))
+  export FAKE_GH_PRIVATE=false
+  expect_allow "$HOME_WORDS" "gh pr create --repo o/public --title t --body \"$long_body\"" \
+    "a long clean inline body must pass in a home with a list"
+  expect_allow "$NO_LIST" "gh pr create --repo o/public --title t --body \"$long_body\"" \
+    "a long clean inline body must pass in a home with no list"
+  unset FAKE_GH_PRIVATE
   OUT=$(printf 'not json' | python3 "$HOOK" hook --home "$HOME_WORDS") || fail "an unreadable payload must not crash the hook"
   assert_equals "" "$OUT" "an unreadable payload must pass"
   OUT=$(jq -cn '{tool_name: "Read", tool_input: {file_path: "/x/Robin"}}' | python3 "$HOOK" hook --home "$HOME_WORDS")

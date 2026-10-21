@@ -32,13 +32,16 @@
 # PUBLIC ONLY. A private repository may hold these words, so a hit is refused
 # only when a target is public. Targets come from each gh invocation's
 # structure, never from its title or body text: its --repo/-R value, a
-# GH_REPO= assignment right before the gh word, a PR or issue URL right after
-# `pr|issue <verb>`, and a repos/<owner>/<repo> endpoint as the first
-# positional argument of `gh api`. An invocation naming none of them reaches
-# gh's own default for the working directory, which `gh repo view` reads there.
-# For no-mistakes, the target is the owner/repo of the origin remote, whether
-# its host is github.com or an SSH alias for it; an origin whose host does not
-# name GitHub is not checked, and one that cannot be parsed is refused.
+# GH_REPO= assignment right before the gh word, a PR or issue URL among the
+# positional arguments of `pr|issue <verb>`, and a repos/<owner>/<repo>
+# endpoint as the first positional argument of `gh api`. An invocation naming
+# none of them reaches gh's own default for the working directory, which
+# `gh repo view` reads there. A command that publishes through gh but whose
+# words cannot be parsed, or whose gh word does not open a command, has no
+# known target and is refused on a hit. For no-mistakes, the target is the
+# owner/repo of the origin remote, whether its host is github.com or a dotless
+# SSH alias; an origin on any other dotted host is not checked, and one that
+# cannot be parsed is refused.
 # A repository whose visibility cannot be read is refused, naming why.
 # The visibility read happens only after a hit, so a clean command costs no
 # network call.
@@ -67,7 +70,11 @@ API_SENDS = re.compile(r"(?:^|\s)(?:-f|-F|--field|--raw-field|--input)(?:=|\s|$)
 PIPELINE = re.compile(r"(?:^|[\s/;&|(`])no-mistakes\s+axi\s+(?:run|respond)\b")
 SEPARATORS = "();<>|&\n"
 ENDPOINT_REPO = re.compile(r"^/?repos/([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)(?:/|$)")
-URL_REPO = re.compile(r"^https?://([^/\s]+/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)/(?:pull|issues)/\d+")
+URL_REPO = re.compile(r"https?://([^/\s]+/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)/(?:pull|issues)/\d+(?:[/#?]\S*)?")
+PR_VALUE_FLAGS = {"-b", "--body", "-t", "--title", "-F", "--body-file", "-R", "--repo", "-B", "--base",
+                  "-H", "--head", "-l", "--label", "-r", "--reviewer", "-a", "--assignee", "-m", "--milestone",
+                  "-p", "--project", "-T", "--template", "--subject", "--match-head-commit", "--author-email"}
+PATH_CAP = 1024
 API_VALUE_FLAGS = {"-X", "--method", "-H", "--header", "-f", "--raw-field", "-F", "--field", "--input",
                    "-q", "--jq", "-t", "--template", "--hostname", "-p", "--preview", "--cache"}
 FILL = re.compile(r"--fill(?:-first|-verbose)?(?:=(?!false$).*)?|-[dwe]*f[dwe]*")
@@ -105,14 +112,14 @@ def publishes(command):
 
 
 def tokens(command):
-    """The command's shell words, each run of shell operators or a newline its own word."""
+    """The command's shell words, each run of shell operators or a newline its own word; None when unparsable."""
     lexer = shlex.shlex(command, posix=True, punctuation_chars=SEPARATORS)
     lexer.whitespace = " \t\r"
     lexer.whitespace_split = True
     try:
         return list(lexer)
     except ValueError:
-        return []
+        return None
 
 
 def gh_invocations(words):
@@ -151,10 +158,13 @@ def invocation_repos(env, args):
         repos.append(flag)
     i, sub = subcommand(args)
     rest = args[i + 1:]
-    if sub in ("pr", "issue") and len(rest) > 1:
-        m = URL_REPO.match(rest[1])
-        if m:
-            repos.append(m.group(1))
+    if sub in ("pr", "issue"):
+        j = 1
+        while j < len(rest):
+            m = URL_REPO.fullmatch(rest[j])
+            if m:
+                repos.append(m.group(1))
+            j += 2 if rest[j] in PR_VALUE_FLAGS else 1
     elif sub == "api":
         j = 0
         while j < len(rest) and rest[j].startswith("-"):
@@ -167,7 +177,7 @@ def invocation_repos(env, args):
 
 def fills(words):
     """Whether a gh pr create invocation is given a --fill flag among its own arguments."""
-    for _, args in gh_invocations(words):
+    for _, args in gh_invocations(words or []):
         i, sub = subcommand(args)
         if sub == "pr" and args[i + 1:i + 2] == ["create"] and any(FILL.fullmatch(a) for a in args[i + 2:]):
             return True
@@ -177,16 +187,17 @@ def fills(words):
 def named_files(command, words, cwd):
     """Every existing regular file the command names anywhere, as a word or inside one."""
     candidates = set(PATHLIKE.findall(command))
-    candidates.update(w.split("=", 1)[-1] for w in words)
+    candidates.update(w.split("=", 1)[-1] for w in words or [])
     found = []
     for candidate in sorted(c.lstrip("@") for c in candidates):
-        if candidate in ("", "-"):
+        if candidate in ("", "-") or len(candidate) > PATH_CAP:
             continue
-        path = pathlib.Path(os.path.expanduser(candidate))
-        if not path.is_absolute():
-            path = pathlib.Path(cwd) / path
-        if path.is_file() and path.resolve() not in found:
-            found.append(path.resolve())
+        try:
+            path = pathlib.Path(cwd, os.path.expanduser(candidate))
+            if path.is_file() and path.resolve() not in found:
+                found.append(path.resolve())
+        except (OSError, ValueError):
+            continue
     return found
 
 
@@ -218,19 +229,20 @@ def flag_value(words, short, long):
 def targets(command, words, cwd):
     """Each (repository for gh repo view or None for gh's default in cwd, name to show) the command reaches."""
     repos = []
-    for env, args in gh_invocations(words):
+    for env, args in gh_invocations(words or []):
         if subcommand(args)[1] in ("pr", "issue", "api"):
             repos += invocation_repos(env, args) or [None]
+    if (PR_TEXT.search(command) or API.search(command)) and not repos:
+        raise RuntimeError("Starship could not read which repository this gh command publishes to")
     if PIPELINE.search(command):
         url = subprocess.run(["git", "-C", cwd, "remote", "get-url", "origin"],
                              capture_output=True, text=True, timeout=10).stdout.strip()
         m = REMOTE.match(url)
         if not m:
             raise RuntimeError("this checkout's origin remote %r is not a repository URL it can read" % url)
-        if "github" in m.group(1).lower():
+        host = m.group(1).lower()
+        if "." not in host or host == "github.com" or host.endswith(".github.com"):
             repos.append(m.group(2))
-    elif not repos:
-        repos.append(None)
     return [(r, r or "the repository this command reaches") for r in dict.fromkeys(repos)]
 
 
