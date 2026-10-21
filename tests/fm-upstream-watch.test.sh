@@ -107,7 +107,7 @@ catchup_on() {
 }
 
 test_first_report_and_quiet_second_run() {
-  local w first second out before after gains lines
+  local w first second out before after gains
   w="$TMP_ROOT/world"
   new_world "$w"
   before=$(git -C "$w/fork" for-each-ref --format='%(refname) %(objectname)')
