@@ -168,8 +168,8 @@ test_non_decision_refusal_never_claims_a_decision() {
 test_refused_sentence_alone_is_dropped() {
   local dir
   dir=$(make_primary_dir "$TMP_ROOT/refused-sentence")
-  run_hook "$dir" "Captain, the release build finished. All twelve checks passed on both platforms. The changelog is updated. Derya approved the draft notes. The tag goes out tonight."
-  assert_grep 'The changelog is updated. Derya approved the draft notes.' "$dir/refused.log" \
+  run_hook "$dir" "Captain, the release build finished. All twelve checks passed on both platforms. The changelog is updated. Alex approved the draft notes. The tag goes out tonight."
+  assert_grep 'The changelog is updated. Alex approved the draft notes.' "$dir/refused.log" \
     "the whole lead must reach the register first"
   assert_equals "Captain, the release build finished. All twelve checks passed on both platforms. The changelog is updated. The tag goes out tonight. More on screen." \
     "$(spoken "$dir")" "only the refused fourth sentence may be dropped, with a pointer to it"
@@ -179,12 +179,12 @@ test_refused_sentence_alone_is_dropped() {
 test_decision_refusal_of_news_never_claims_a_decision() {
   local dir
   dir=$(make_primary_dir "$TMP_ROOT/approved-news")
-  run_hook "$dir" "Captain, Derya approved the draft and it went out."
-  assert_grep 'Derya approved the draft' "$dir/refused.log" "the news must reach the register first"
+  run_hook "$dir" "Captain, Alex approved the draft and it went out."
+  assert_grep 'Alex approved the draft' "$dir/refused.log" "the news must reach the register first"
   assert_equals "Captain, my reply is on screen." "$(spoken "$dir")" \
     "news the register mistakes for a decision must not be announced as one"
   rm -f "$dir/spoken.log"
-  run_hook "$dir" "Captain, the review is closed. Derya approved the draft."
+  run_hook "$dir" "Captain, the review is closed. Alex approved the draft."
   assert_equals "Captain, the review is closed. More on screen." "$(spoken "$dir")" \
     "the fallback for mistaken news must point at more, not at a choice"
   pass "a decision refusal of plain news never claims a decision"
@@ -301,7 +301,7 @@ test_long_reply_is_capped() {
 test_lead_written_to_the_rule_is_kept_whole() {
   local dir lead
   dir=$(make_primary_dir "$TMP_ROOT/whole-lead")
-  lead="Captain, the filming-rights check is done and nobody was contacted. The app already has footage from three places with no written OK. The oldest clip has been live for a year. Two of the places are partners we still work with. The third has closed. So you and Derya need to decide what to do; the options are on screen."
+  lead="Captain, the filming-rights check is done and nobody was contacted. The app already has footage from three places with no written OK. The oldest clip has been live for a year. Two of the places are partners we still work with. The third has closed. So you and Alex need to decide what to do; the options are on screen."
   run_hook "$dir" "$(printf '%s\n' "$lead" "" "**A.** Ask for permission" "**B.** Remove the footage")"
   assert_equals "$lead" "$(spoken "$dir")" \
     "a six-sentence lead of about 60 words must be spoken whole, with no pointer when it already says on screen"
@@ -362,7 +362,7 @@ test_pointer_names_what_waits_on_screen() {
   assert_equals "Captain, stop works from the Mac. There's a question for you on screen." "$(spoken "$dir")" \
     "a quoted word inside a question is not a choice"
   rm -f "$dir/spoken.log"
-  run_hook "$dir" "$(printf '%s\n' "Captain, the draft is ready." "" "Should it go to Derya as well?")"
+  run_hook "$dir" "$(printf '%s\n' "Captain, the draft is ready." "" "Should it go to Alex as well?")"
   assert_equals "Captain, the draft is ready. There's a question for you on screen." "$(spoken "$dir")" \
     "a later paragraph ending in a question mark must point at the question"
   rm -f "$dir/spoken.log"

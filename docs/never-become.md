@@ -6,7 +6,7 @@
    You decide what gets built and approve what ships.
    Its job is the middle.
 3. Something that mixes your worlds.
-   Personal, Aquablu and Compass stay apart: accounts, data and files.
+   Personal, work and team stay apart: accounts, data and files.
 4. A way your private life leaks into shared code.
    Your own tools live in your private add-on, never in what the team uses.
 5. Something that forces one person's setup on another.
