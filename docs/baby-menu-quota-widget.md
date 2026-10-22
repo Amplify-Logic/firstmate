@@ -16,7 +16,7 @@ bin/fm-install-baby-menu-quota.sh --dry-run  # report what would change, write n
 `bin/fm-install-baby-menu-quota.sh --help` owns the exact flags, the backup behavior, and the refusal cases.
 The app watches its own extensions directory and rebuilds a changed widget by itself, so the installer never starts, stops, or restarts the app.
 
-The installer touches only its own extension directory and one example settings file.
+The installer touches only its own extension directory, its own backups under `backups/`, and one example settings file.
 Other extensions, the app bundle, preferences, credentials, and the app database are left exactly as they were, and a re-run of an unchanged install replaces no widget file and never touches your own settings file - it only re-seeds the example one until you have written your own.
 
 ## The one machine-local setting
