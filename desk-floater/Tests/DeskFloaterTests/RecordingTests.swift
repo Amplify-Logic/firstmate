@@ -148,7 +148,7 @@ final class RecordingTests: XCTestCase {
 
     /// At launch the floater saves a recording a stopped floater left behind,
     /// through bin/fm-desk-voice.sh keep (here a stand-in that records what it
-    /// was asked), drops one too short to hold words, and resumes the retries
+    /// was asked), drops one too short to hold words or near silent, and resumes the retries
     /// of saved talk-to-Firstmate recordings only: a dictation waits for a
     /// manual retry.
     @MainActor
@@ -175,11 +175,13 @@ final class RecordingTests: XCTestCase {
         try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: stub.path)
 
         let long = recording.appendingPathComponent(Recording.fileName(purpose: "dictate"))
-        try FileManager.default.moveItem(at: try wav(seconds: 3), to: long)
+        try FileManager.default.moveItem(at: try words(seconds: 3, peak: 3000), to: long)
         let short = recording.appendingPathComponent(Recording.fileName(purpose: "firstmate"))
-        try FileManager.default.moveItem(at: try wav(seconds: 0.1), to: short)
+        try FileManager.default.moveItem(at: try words(seconds: 0.1, peak: 3000), to: short)
+        let silent = recording.appendingPathComponent(Recording.fileName(purpose: "firstmate"))
+        try FileManager.default.moveItem(at: try words(seconds: 25, peak: 88), to: silent)
         let earlier = Date().addingTimeInterval(-60)
-        for url in [long, short] {
+        for url in [long, short, silent] {
             try FileManager.default.setAttributes([.modificationDate: earlier], ofItemAtPath: url.path)
         }
         let live = recording.appendingPathComponent(Recording.fileName(purpose: "firstmate"))
@@ -194,6 +196,8 @@ final class RecordingTests: XCTestCase {
                       calls)
         XCTAssertFalse(calls.contains(short.path), "a stray press is dropped, not saved")
         XCTAssertFalse(FileManager.default.fileExists(atPath: short.path))
+        XCTAssertFalse(calls.contains(silent.path), "a near-silent recording is dropped, not saved to be retried")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: silent.path))
         XCTAssertFalse(calls.contains(live.path), "a capture still being written is left alone")
         XCTAssertTrue(FileManager.default.fileExists(atPath: live.path))
         XCTAssertTrue(calls.contains("recordings\n"))

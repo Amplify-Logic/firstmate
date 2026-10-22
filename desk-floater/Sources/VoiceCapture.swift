@@ -176,9 +176,13 @@ final class VoiceEngine: CaptureEngine {
             devices: Self.outputDevices()), let unit = engine.outputNode.audioUnit {
             // Best effort: should macOS refuse, the recording is no worse than
             // before, and a near-silent one is reported rather than sent.
-            AudioUnitSetProperty(
+            let status = AudioUnitSetProperty(
                 unit, kAudioOutputUnitProperty_CurrentDevice, kAudioUnitScope_Global, 0,
                 &output, UInt32(MemoryLayout<AudioDeviceID>.size))
+            if status != noErr {
+                NSLog("DeskFloater: macOS refused output device %u as the voice-processing reference (OSStatus %d)",
+                      output, status)
+            }
         }
         input.voiceProcessingOtherAudioDuckingConfiguration =
             AVAudioVoiceProcessingOtherAudioDuckingConfiguration(

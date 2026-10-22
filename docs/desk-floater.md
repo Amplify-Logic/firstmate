@@ -284,7 +284,9 @@ A saved recording is never removed by itself: it goes only once its words are de
 
 A message has no length limit: a ten-minute recording is transcribed whole and arrives like any other.
 A long one takes longer to transcribe, and the status line reads `Transcribing…` until it is done.
-The transcription request cannot hang: each attempt gives up after a time that grows with the recording, about 20 seconds for a short message and about three and a half minutes for a ten-minute one, and a timeout, a dropped connection or a busy Deepgram is retried twice, so a short message waits about a minute and a ten-minute recording about 11 minutes at worst before it fails.
+The transcription request cannot hang: each attempt gives up after a time that grows with the recording, about five minutes for a ten-minute one, so a slow connection still has time to send a long recording.
+An attempt on which nothing has moved for 20 seconds, a little longer for a long recording, also gives up: Deepgram now and then takes a recording and never answers, and the retry usually answers at once, so a short message is not left on `Transcribing…` for minutes.
+A stalled or timed-out attempt, a dropped connection or a busy Deepgram is retried twice, so a ten-minute recording waits about 16 minutes at worst before it fails.
 A recording whose transcription still fails is saved and retried as above.
 `bin/fm-deepgram-stt.sh`'s header owns those limits.
 

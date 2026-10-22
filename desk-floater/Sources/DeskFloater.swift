@@ -1490,7 +1490,8 @@ final class FloaterModel: ObservableObject {
                    Date().timeIntervalSince(modified) < 10 {
                     continue
                 }
-                if Recording.keep(failed: true, duration: Recording.duration(of: url)) {
+                if !Recording.isSilent(url),
+                   Recording.keep(failed: true, duration: Recording.duration(of: url)) {
                     _ = Self.keep(repoRoot: repoRoot, fmHome: fmHome, audio: url,
                                   purpose: Recording.purpose(ofFileName: name),
                                   reason: "the floater stopped before it was sent")
