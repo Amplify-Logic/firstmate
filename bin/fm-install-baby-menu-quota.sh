@@ -127,7 +127,8 @@ LEGACY_BACKUP_GLOB="$EXTENSIONS_DIR/.$BACKUP_PREFIX"
 # rather than merged into or written over an existing backup. That leftover
 # still renders as a second quota panel, so it is reported on stderr and the
 # script exits non-zero once the rest of the install has completed: a scripted
-# re-run must not look converged while the duplicate remains.
+# re-run must not look converged while the duplicate remains. A dry run
+# reports the same taken destination the same way, since it is already true.
 LEGACY_BACKUPS_LEFT=0
 relocate_legacy_backups() {
   local legacy name dest
@@ -135,14 +136,14 @@ relocate_legacy_backups() {
     [ -d "$legacy" ] || continue
     name=$(basename "$legacy")
     dest="$BACKUPS_DIR/${name#.}"
-    if [ "$DRY_RUN" -eq 1 ]; then
-      note "would move the old backup $legacy out of the extensions directory to $dest"
-      continue
-    fi
     if [ -e "$dest" ]; then
       printf '%s: WARNING: %s still sits inside the extensions directory, where Baby Menu shows it as a second quota panel; %s already exists, so move it out by hand\n' \
         "$SELF" "$legacy" "$dest" >&2
       LEGACY_BACKUPS_LEFT=$((LEGACY_BACKUPS_LEFT + 1))
+      continue
+    fi
+    if [ "$DRY_RUN" -eq 1 ]; then
+      note "would move the old backup $legacy out of the extensions directory to $dest"
       continue
     fi
     mkdir -p "$BACKUPS_DIR" || die "could not create $BACKUPS_DIR"
