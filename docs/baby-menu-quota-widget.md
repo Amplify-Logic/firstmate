@@ -87,4 +87,4 @@ That provenance record is the licensing obligation this repository carries; do n
 - Reinstalling replaces the whole widget directory.
   Local edits are kept as a timestamped backup under `~/.baby-menu/backups/`; copy anything you want to keep back out of that directory.
   Backups deliberately stay outside `extensions/`: Baby Menu registers every `widget.tsx` it finds anywhere under that directory, dot-prefixed or not, so a backup kept there renders the whole quota panel a second time.
-  A re-run moves any backup an earlier installer left inside `extensions/` out to `backups/`.
+  A re-run moves any backup an earlier installer left inside `extensions/` out to `backups/`; when that destination name is already taken it leaves the directory in place, reports it on stderr, and exits non-zero, in a dry run too (`--help` owns the details).
