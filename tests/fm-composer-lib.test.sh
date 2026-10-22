@@ -1239,6 +1239,33 @@ test_matrix_claude_suggested_prompt_and_draft() {
   pass "matrix: claude's suggested prompt reads empty wherever styling survives, its typed draft pending"
 }
 
+test_claude_slash_popup_below_composer_is_furniture() {
+  # Real claude 2.1.307 screen read through herdr 0.9.5's ansi viewport after
+  # typing /exit into a sparse pane: the slash-command popup sits directly below
+  # the composer's closing rule and marks its selected entry with the same `❯`.
+  # The composer above is what holds the typed command; the menu is furniture.
+  local screen plain caps out
+  screen=$(cat "$DIALOGS/claude-2.1.307-slash-popup-below.ansi")
+  plain=$(printf '%s\n' "$screen" | fm_composer_strip_ansi)
+  for caps in "$CAPS_STYLED" "$CAPS_STYLED_NOID" "$CAPS_PLAIN"; do
+    out=$(FM_COMPOSER_GHOST_LUMA_MAX=0 fm_composer_extract_selected_content "$caps" "$screen")
+    [ "$out" = /exit ] || fail "the composer above claude's slash popup must read '/exit', got '$out' (caps: ${caps//$'\n'/ })"
+  done
+  [ "$(fm_composer_extract_selected_content "$CAPS_PLAIN" "$plain")" = /exit ] \
+    || fail "the plain capture of claude's slash popup must still read the composer above it"
+  assert_screen "claude slash popup below the composer on herdr" pending "$CAPS_STYLED" "$screen" '' probe-absent
+  # Without styling the box cannot be told from ghost text, so a plain capture
+  # still refuses rather than turning the popup into a verdict either way.
+  assert_screen "claude slash popup below the composer on cmux/orca" unknown "$CAPS_PLAIN" "$plain"
+  # The popup only opens over a typed slash command. The same lower run under
+  # a composer holding ordinary text proves nothing, so the lower same-glyph
+  # row keeps winning exactly as a live composer under stale scrollback does.
+  screen=${screen//$'\xc2\xa0\x1b[0m\x1b[38;2;177;185;249m/exit'/$'\xc2\xa0\x1b[0m\x1b[38;2;177;185;249mhello there'}
+  out=$(FM_COMPOSER_GHOST_LUMA_MAX=0 fm_composer_extract_selected_content "$CAPS_STYLED" "$screen")
+  [ "${out#/exit}" != "$out" ] || fail "a popup-shaped run under a non-slash composer must not be demoted, got '$out'"
+  pass "claude's slash popup below the composer is furniture; the composer above holds the typed command"
+}
+
 test_matrix_claude_wrapped_stash_marker() {
   # A narrow or busy Claude pane wraps `› stashed` onto a footer row of its
   # own (claude 2.1.283, captured live at 54 columns on tmux and about 53 on
@@ -1557,6 +1584,7 @@ test_matrix_kimi_bordered_shell_glyph_box
 test_matrix_claude_inside_zellij_ansi_dump
 test_matrix_claude_selection_dialogs_are_unknown
 test_matrix_claude_suggested_prompt_and_draft
+test_claude_slash_popup_below_composer_is_furniture
 test_matrix_claude_wrapped_stash_marker
 test_selection_dialog_survives_ghost_stripped_option
 test_selection_dialog_rule_is_bounded

@@ -1303,11 +1303,22 @@ No Herdr-specific copy of that protocol exists.
 ### Husks after a server restart
 
 Stopping and restarting a named Herdr server preserves workspace, tab, pane, and label ids.
-The underlying harness processes and live agent registrations do not survive.
+The underlying harness processes do not survive.
+Herdr 0.9.5 resumes an agent whose integration reported a session reference (`resume_agents_on_restore`, on by default), as [Resumed workers in the wrong folder](#resumed-workers-in-the-wrong-folder) describes; every other agent registration is gone.
 A restored same-labeled tab with a missing pane or no registered agent is a husk.
 
 Create replaces only a confidently dead or no-agent husk, creates the replacement before closing the old tab, and refuses live or unknown states.
 This prevents closing the workspace's last tab before a replacement exists.
+
+### Resumed workers in the wrong folder
+
+Herdr runs a resumed agent, such as `claude --resume <session>`, in the pane's top shell.
+A treehouse worker's top shell sits in the project's primary checkout, because `treehouse get` opens the worktree in a nested subshell, so the resumed worker is a live agent in the wrong copy.
+`fm_backend_endpoint_placement` (`bin/backends/herdr.sh`) compares the pane's foreground cwd with the recorded worktree.
+A live agent outside it reads `blocked` with an `endpoint misplaced` detail in `bin/fm-crew-state.sh`, and its session-start digest line reads `endpoint: misplaced` instead of `alive`.
+`bin/fm-control.sh <task> relaunch` then stops the stray and starts the replacement in the worktree.
+A stray still showing Claude's external CLAUDE.md imports dialog is refused until someone answers it, and Escape records a decline that no longer blocks the worktree's trust registration (`bin/fm-claude-trust.sh` header).
+Measured on Herdr 0.9.5 with Claude Code 2.1.307 ([verification](verification/runtime-backends.md) "Herdr restore resumes workers in the primary checkout").
 
 ### Stale agent registrations
 

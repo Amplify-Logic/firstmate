@@ -239,23 +239,47 @@ JSON
 }
 
 # hasClaudeMdExternalIncludesApproved===false with WarningShown===true on the
-# project-root entry is a human's explicit "No, disable" answer, recorded in the SAME store their own
-# interactive sessions read. A spawn must never flip that to true on their
-# behalf: doing so would grant every later interactive session in that
-# checkout silent external-file inclusion the human declined. The whole
-# registration refuses instead, and the store - including the worktree entry,
-# which is never reached - must come back byte-for-byte unchanged.
-test_project_root_entry_declined_external_imports_is_not_overridden() {
-  local rec store out before after
+# project-root entry is a recorded decline in the SAME store the human's own
+# interactive sessions read. Claude Code writes it there whichever directory
+# answered the dialog - a stray a Herdr restore resumed in the primary checkout
+# included - and a worker in a linked worktree under it reaches its composer
+# with imports off and no dialog. So trust registers on both entries while the
+# decline is left exactly as it was: never flipped, never stripped.
+test_project_root_entry_decline_is_kept_and_does_not_block_trust() {
+  local rec store out
   rec=$(make_case project-decline)
   read_case "$rec"
   store="$CONFIG/.claude.json"
   cat > "$store" <<JSON
-{"hasCompletedOnboarding":true,"projects":{"$PROJ":{"hasTrustDialogAccepted":true,"hasClaudeMdExternalIncludesApproved":false,"hasClaudeMdExternalIncludesWarningShown":true,"allowedTools":["Read"]}}}
+{"hasCompletedOnboarding":true,"projects":{"$PROJ":{"hasTrustDialogAccepted":false,"hasClaudeMdExternalIncludesApproved":false,"hasClaudeMdExternalIncludesWarningShown":true,"allowedTools":["Read"]}}}
+JSON
+  out=$(run_trust "$CONFIG" "$WT" "$PROJ")
+  expect_code 0 $? "a decline recorded only on the project entry must not block the worktree's trust: $out"
+  assert_trust_only_no_import_consent "$store" "$WT" \
+    "the worktree entry either lost trust or gained import flags from a project decline"
+  assert_trusted "$store" "$PROJ" "the project-root entry did not gain trust"
+  assert_store_value "$store" false "the project's recorded decline was flipped" \
+    projects "$PROJ" hasClaudeMdExternalIncludesApproved
+  assert_store_value "$store" true "the project's recorded decline was stripped" \
+    projects "$PROJ" hasClaudeMdExternalIncludesWarningShown
+  assert_store_value "$store" '["Read"]' "the project entry's unrelated settings were lost" projects "$PROJ" allowedTools
+  pass "fm-claude-trust.sh: a project-entry decline stays in force and does not block worktree trust"
+}
+
+# The same decline recorded on the worktree's OWN entry is a decision about the
+# exact directory this registration was about to write. The whole registration
+# refuses and the store comes back byte-for-byte unchanged.
+test_worktree_entry_declined_external_imports_is_not_overridden() {
+  local rec store out before after
+  rec=$(make_case worktree-decline)
+  read_case "$rec"
+  store="$CONFIG/.claude.json"
+  cat > "$store" <<JSON
+{"hasCompletedOnboarding":true,"projects":{"$PROJ":{"hasTrustDialogAccepted":true,"hasClaudeMdExternalIncludesApproved":true,"hasClaudeMdExternalIncludesWarningShown":true},"$WT":{"hasTrustDialogAccepted":false,"hasClaudeMdExternalIncludesApproved":false,"hasClaudeMdExternalIncludesWarningShown":true}}}
 JSON
   before=$(cat "$store")
   out=$(run_trust "$CONFIG" "$WT" "$PROJ")
-  expect_code 1 $? "a project that already declined external imports must be refused: $out"
+  expect_code 1 $? "a worktree that already declined external imports must be refused: $out"
   assert_contains "$out" "declined external CLAUDE.md imports" \
     "the refusal did not name the declined-consent reason"
   assert_contains "$out" "approve the imports dialog interactively" \
@@ -263,7 +287,7 @@ JSON
   after=$(cat "$store")
   [ "$before" = "$after" ] || fail "the store was modified despite the refusal"
   assert_not_trusted "$store" "$WT" "the worktree entry was registered despite the refusal"
-  pass "fm-claude-trust.sh: refuses to override a project's declined external-imports consent"
+  pass "fm-claude-trust.sh: refuses to override a worktree's own declined external-imports consent"
 }
 
 # Claude Code's own default project entry carries BOTH external-imports flags as
@@ -842,7 +866,8 @@ test_fresh_worktree_is_trusted
 test_fresh_worktree_also_trusts_the_project_root_without_import_consent
 test_registration_carries_forward_existing_import_consent
 test_project_root_entry_preserves_other_keys
-test_project_root_entry_declined_external_imports_is_not_overridden
+test_project_root_entry_decline_is_kept_and_does_not_block_trust
+test_worktree_entry_declined_external_imports_is_not_overridden
 test_project_root_entry_default_import_flags_are_not_a_decline
 test_registration_is_idempotent
 test_primary_checkout_is_refused
