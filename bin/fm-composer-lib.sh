@@ -108,7 +108,9 @@
 # cannot demonstrate which it is, the refusal is the answer. The zone is
 # bounded further by a blank row, and an envelope that closed over no glyph row
 # (codex's `permissions: YOLO mode` startup banner) proves nothing and demotes
-# nothing.
+# nothing. One run is furniture as a whole: claude's slash-command popup drawn
+# under a composer holding a slash command, whose selected entry carries the
+# same glyph (_fm_composer_slash_popup_opens owns that shape).
 #
 # COVERAGE: this is exercised for the bordered box and the pi separator pair,
 # the two shapes claude 2.x renders. The opencode left bar is wired in for the
@@ -1684,6 +1686,37 @@ _fm_composer_row_is_composer_furniture() {  # <trimmed-row> <proof-glyph>
   [ -n "$proof" ] && [ "$glyph" != "$proof" ]
 }
 
+# _fm_composer_slash_popup_opens: 0 when the row directly below the proven
+# envelope's closing row opens claude's slash-command popup over a composer
+# holding a typed slash command. Claude 2.1.307 draws that popup below the
+# composer whenever the viewport has room there, in place of its mode hint, and
+# marks the selected entry with the composer's own glyph: `  ❯ /exit    Exit
+# the CLI`, then unselected `/<command>    <description>` entries and wrapped
+# description rows (verified live on herdr 0.9.5; the capture is
+# tests/fixtures/composer-claude-dialogs/claude-2.1.307-slash-popup-below.ansi). Read as a
+# composer, that selected entry is the bottom-most same-glyph row, so it won
+# over the composer above and the payload proof read the whole menu as typed
+# text, judged a typed /exit unsent, and cleared it.
+# Both ends must agree before the run counts as the popup: the envelope's own
+# glyph row must hold a slash command (the popup never opens over anything
+# else), and the opening row must be the proof glyph then one slash command,
+# alone or followed by a two-space-separated description. The envelope that is
+# then selected holds that slash command, so this can never move a verdict to
+# `empty`.
+_fm_composer_slash_popup_opens() {  # <plain> <proof-glyph>
+  local plain=$1 proof=$2 typed head
+  [ -n "$proof" ] && [ "$FM_COMPOSER_FOOTER_GLYPH" -ge 0 ] || return 1
+  typed=$(_fm_composer_screen_row "$FM_COMPOSER_FOOTER_GLYPH" "$plain")
+  fm_composer_normalize_trim_var typed
+  case "$typed" in "$proof"*) typed=${typed#"$proof"} ;; *) return 1 ;; esac
+  fm_composer_normalize_trim_var typed
+  case "$typed" in /?*) ;; *) return 1 ;; esac
+  head=$(_fm_composer_screen_row "$((FM_COMPOSER_FOOTER_AFTER + 1))" "$plain")
+  fm_composer_normalize_trim_var head
+  case "$head" in "$proof "/?*) head=${head#"$proof "} ;; *) return 1 ;; esac
+  [[ $head =~ ^/[^[:space:]]+([[:space:]]{2,}[^[:space:]].*)?$ ]]
+}
+
 # _fm_composer_locate_footer_zone: THE composer footer zone of <plain> (see THE
 # COMPOSER FOOTER ZONE in this file's header). Records the bottom-most
 # glyph-PROVEN envelope in FM_COMPOSER_FOOTER_AFTER (its closing row, including
@@ -1692,7 +1725,8 @@ _fm_composer_row_is_composer_furniture() {  # <trimmed-row> <proof-glyph>
 # the closing row). The proof itself is read from the row scan, which already
 # recorded it on its single pass.
 #
-# The zone is furniture only if EVERY row in it is: one non-furniture row makes
+# The zone is furniture only if EVERY row in it is, or if it is claude's slash
+# popup as a whole (_fm_composer_slash_popup_opens): one non-furniture row makes
 # the whole run unclaimed activity, the envelope above it stale, and this
 # function return 1. That is the asymmetry this rule is held to - it may only
 # ever move a verdict toward refusing, never toward `empty`, because `empty` is
@@ -1700,7 +1734,7 @@ _fm_composer_row_is_composer_furniture() {  # <trimmed-row> <proof-glyph>
 # when no envelope is glyph-proven, when a blank row sits directly beneath it,
 # or when the run holds no bare candidate at all (nothing to demote).
 _fm_composer_locate_footer_zone() {  # <plain>
-  local plain=$1 close next trimmed proof=''
+  local plain=$1 close next trimmed proof='' popup
   FM_COMPOSER_FOOTER_AFTER=-1
   FM_COMPOSER_FOOTER_GLYPH=-1
   FM_COMPOSER_FOOTER_LAST=-1
@@ -1735,12 +1769,14 @@ _fm_composer_locate_footer_zone() {  # <plain>
   # there, so settle that from the scan's own record before walking any rows.
   [ "$FM_COMPOSER_SCAN_BARE_ROW" -gt "$FM_COMPOSER_FOOTER_AFTER" ] || return 1
   FM_COMPOSER_FOOTER_LAST=$FM_COMPOSER_FOOTER_AFTER
+  popup=0
+  if _fm_composer_slash_popup_opens "$plain" "$proof"; then popup=1; fi
   next=$((FM_COMPOSER_FOOTER_AFTER + 1))
   while :; do
     trimmed=$(_fm_composer_screen_row "$next" "$plain")
     fm_composer_normalize_trim_var trimmed
     [ -n "$trimmed" ] || break
-    _fm_composer_row_is_composer_furniture "$trimmed" "$proof" || return 1
+    [ "$popup" = 1 ] || _fm_composer_row_is_composer_furniture "$trimmed" "$proof" || return 1
     FM_COMPOSER_FOOTER_LAST=$next
     next=$((next + 1))
   done
