@@ -267,7 +267,7 @@ One that works on a retry is sent to Firstmate as usual, a little later than you
 After the last automatic try the status line reads `Saved, not sent` and the recording stays saved.
 A dictation is not tried again by itself, since its words belong where your cursor was when you spoke: the status line reads `Saved, not sent` and the recording stays saved until you retry it.
 Words held back for screenshots that then fail to send are saved and retried the same way, without the screenshots, which stay in `state/desk-voice/shots/`.
-If the floater stops while a recording is being made or transcribed, it saves that recording the next time it starts and, for talk to Firstmate, tries it again.
+If the floater stops while a recording is being made or transcribed, it saves that recording the next time it starts, unless it is near silent, and, for talk to Firstmate, tries it again.
 
 To see and transcribe saved recordings yourself, or ask Firstmate to:
 
