@@ -1317,7 +1317,9 @@ A treehouse worker's top shell sits in the project's primary checkout, because `
 `fm_backend_endpoint_placement` (`bin/backends/herdr.sh`) compares the pane's foreground cwd with the recorded worktree.
 A live agent outside it reads `blocked` with an `endpoint misplaced` detail in `bin/fm-crew-state.sh`, and its session-start digest line reads `endpoint: misplaced` instead of `alive`.
 `bin/fm-control.sh <task> relaunch` then stops the stray and starts the replacement in the worktree.
-A stray still showing Claude's external CLAUDE.md imports dialog is refused until someone answers it, and Escape records a decline that no longer blocks the worktree's trust registration (`bin/fm-claude-trust.sh` header).
+A stray still showing Claude's external CLAUDE.md imports dialog makes exit and relaunch refuse by naming that dialog, because it is a consent question no lifecycle verb answers.
+A person answers it in the pane, where No is the safe answer, and then retries relaunch.
+That decline no longer blocks the worktree's trust registration, which instead notes on stderr that external imports stay off for the project (`bin/fm-claude-trust.sh` header).
 Measured on Herdr 0.9.5 with Claude Code 2.1.307 ([verification](verification/runtime-backends.md) "Herdr restore resumes workers in the primary checkout").
 
 ### Stale agent registrations

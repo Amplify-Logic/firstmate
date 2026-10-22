@@ -1537,7 +1537,7 @@ EOF
   out=$(run_session_start "$home" "$root" "$fakebin:$BASE_PATH")
   assert_contains "$out" "endpoint: alive (backend=herdr window=sess:p-home)" "a pane running in its worktree must stay alive"
   assert_contains "$out" "endpoint: alive (backend=herdr window=sess:p-sub)" "a pane running below its worktree must stay alive"
-  assert_contains "$out" "endpoint: misplaced (backend=herdr window=sess:p-stray - its live foreground runs in $proj, not its recorded worktree; relaunch it with bin/fm-control.sh task-stray relaunch)" \
+  assert_contains "$out" "endpoint: misplaced (backend=herdr window=sess:p-stray - its live foreground runs in $proj, not its recorded worktree; relaunch it with bin/fm-control.sh task-stray relaunch; if it shows Claude's external CLAUDE.md imports dialog, a person answers it in the pane first, and No is the safe answer)" \
     "a pane running outside its worktree was not reported misplaced"
   assert_not_contains "$out" "endpoint: alive (backend=herdr window=sess:p-stray)" \
     "a misplaced pane was still reported plainly alive"

@@ -987,7 +987,7 @@ for meta in "$STATE"/*.meta; do
     # the bound firing and >=128 is a signal death. Every other nonzero status
     # is the probe's own verdict that the endpoint is gone.
     if [ "$endpoint_rc" -eq 0 ] && [ "${placement%%$'\t'*}" = misplaced ]; then
-      printf 'endpoint: misplaced (backend=%s window=%s - its live foreground runs in %s, not its recorded worktree; relaunch it with bin/fm-control.sh %s relaunch)\n' \
+      printf 'endpoint: misplaced (backend=%s window=%s - its live foreground runs in %s, not its recorded worktree; relaunch it with bin/fm-control.sh %s relaunch; if it shows Claude'\''s external CLAUDE.md imports dialog, a person answers it in the pane first, and No is the safe answer)\n' \
         "$backend" "$window" "${placement#*$'\t'}" "$id"
     elif [ "$endpoint_rc" -eq 0 ]; then
       printf 'endpoint: alive (backend=%s window=%s)\n' "$backend" "$window"

@@ -2103,10 +2103,16 @@ EOF
 # and prints nothing.
 # Recorded 2026-10-05 on Claude Code 2.1.289: /exit while a background shell
 # is still running opens this picker, and its selected row is Exit and stop tasks.
+# Recorded 2026-10-22 on Claude Code 2.1.307 through Herdr 0.9.5: a session
+# whose project CLAUDE.md imports a file outside it stops at startup on
+# "Allow external CLAUDE.md file imports?", with either import option selected.
+# A worker Herdr resumed in the primary checkout sits there, and its option
+# rows used to read as pending composer text.
 fm_composer_blocking_dialog() {  # <screen> -> dialog name
-  local screen=${1-}
+  local screen=${1-} plain
   [ -n "$screen" ] || return 1
-  if printf '%s\n' "$screen" | fm_composer_strip_ansi | LC_ALL=C awk '
+  plain=$(printf '%s\n' "$screen" | fm_composer_strip_ansi)
+  if printf '%s\n' "$plain" | LC_ALL=C awk '
     /^[ \t]*Background work is running[ \t\r]*$/ { heading = 1 }
     heading && /^[ \t]*❯ 1\. Exit and stop tasks[ \t\r]*$/ { selected = 1 }
     /[^ \t\r]/ { last = $0 }
@@ -2115,7 +2121,29 @@ fm_composer_blocking_dialog() {  # <screen> -> dialog name
     printf '%s' 'Claude background-task exit picker'
     return 0
   fi
+  if printf '%s\n' "$plain" | LC_ALL=C awk '
+    /^[ \t]*Allow external CLAUDE\.md file imports\?[ \t\r]*$/ { heading = 1 }
+    heading && /^[ \t]*❯ (No, disable|Yes, allow) external imports[ \t\r]*$/ { selected = 1 }
+    /[^ \t\r]/ { last = $0 }
+    END { exit !(selected && last ~ /^[ \t]*Enter to confirm · Esc to cancel[ \t\r]*$/) }
+  '; then
+    printf '%s' 'Claude external CLAUDE.md imports dialog'
+    return 0
+  fi
   return 1
+}
+
+# fm_composer_blocking_dialog_recovery: the one recovery sentence for a dialog
+# fm_composer_blocking_dialog names, or nothing. The imports dialog is a
+# consent question, so no lifecycle verb answers it: a person does, in the pane.
+# Choosing No is the safe answer, and bin/fm-claude-trust.sh keeps that decline
+# without blocking the worktree's trust, so a relaunch then succeeds.
+fm_composer_blocking_dialog_recovery() {  # <dialog-name>
+  case "${1-}" in
+    'Claude external CLAUDE.md imports dialog')
+      printf '%s' 'A person must answer it in the pane: choosing No, disable external imports is the safe answer, and the worktree trust rule tolerates that decline. Then retry relaunch.'
+      ;;
+  esac
 }
 
 # A command substitution drops a shell variable, and every composer read runs

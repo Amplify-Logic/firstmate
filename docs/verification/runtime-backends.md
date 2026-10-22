@@ -1645,10 +1645,11 @@ Ctrl+C leaves that dialog up, and Escape writes `hasClaudeMdExternalIncludesAppr
 Claude writes that same pair to the primary checkout's entry when the dialog is answered from a linked worktree, and nothing to the worktree's own entry.
 A Claude launched in a worktree under that recorded decline reaches its composer with no dialog.
 
-With the fixes, the lab sequence reads the stray as misplaced at the dialog and at its empty prompt, and after the dialog is answered `bin/fm-control.sh <task> relaunch` stops it, registers trust, and starts the replacement in the worktree:
+With the fixes, `bin/fm-control.sh <task> exit` at that dialog refuses with `blocked on a prompt: Claude external CLAUDE.md imports dialog` and types nothing: the dialog stays up and the store is unchanged.
+The lab sequence reads the stray as misplaced at the dialog and at its empty prompt, and after the dialog is answered `bin/fm-control.sh <task> relaunch` stops it, registers trust, and starts the replacement in the worktree:
 
 ```text
-state: blocked · source: pane · endpoint misplaced: its agent runs in <primary>, not its recorded worktree <worktree>; relaunch it with fm-control.sh hrr relaunch
+state: blocked · source: pane · endpoint misplaced: its agent runs in <primary>, not its recorded worktree <worktree>; relaunch it with fm-control.sh hrr relaunch (if it shows Claude's external CLAUDE.md imports dialog, a person answers it in the pane first, and No is the safe answer)
 relaunched hrr harness=claude from=claude model=default effort=default backend=herdr endpoint=<lab-session>:w1:p1 worktree=<worktree>
 state: working · source: pane · harness busy (claude-hook)
 ```
@@ -1660,13 +1661,18 @@ tests/fm-backend-herdr-smoke.test.sh
 tests/fm-crew-state.test.sh
 tests/fm-session-start.test.sh
 tests/fm-claude-trust.test.sh
+tests/fm-control.test.sh
+tests/fm-composer-lib.test.sh
 ```
 
 ```text
 ok - real herdr: endpoint placement follows the foreground leader's cwd inside or outside the recorded worktree
 ok - herdr: a live agent outside its recorded worktree reads blocked/misplaced, never working
 ok - herdr endpoint placement: a live foreground outside the recorded worktree is reported misplaced, never alive
-ok - fm-claude-trust.sh: a project-entry decline stays in force and does not block worktree trust
+ok - fm-claude-trust.sh: a project-entry decline stays in force, is reported, and does not block worktree trust
+ok - fm-spawn.sh: a claude spawn over a standing imports decline launches and reports that imports stay off
+ok - fm-control exit and relaunch: the external imports dialog is named and never answered
+ok - claude's external CLAUDE.md imports dialog is named from its recorded structure, with a person-answers recovery
 ok - fm-claude-trust.sh: refuses to override a worktree's own declined external-imports consent
 ```
 

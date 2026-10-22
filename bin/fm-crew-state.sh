@@ -367,7 +367,7 @@ if [ -n "$BACKEND_TARGET" ] && [ -n "$WT" ]; then
   case "$PLACEMENT" in
     misplaced$'\t'*)
       if [ "$(fm_backend_agent_state "$TASK_BACKEND" "$BACKEND_TARGET")" = alive ]; then
-        emit blocked pane "endpoint misplaced: its agent runs in ${PLACEMENT#*$'\t'}, not its recorded worktree $WT; relaunch it with fm-control.sh $ID relaunch"
+        emit blocked pane "endpoint misplaced: its agent runs in ${PLACEMENT#*$'\t'}, not its recorded worktree $WT; relaunch it with fm-control.sh $ID relaunch (if it shows Claude's external CLAUDE.md imports dialog, a person answers it in the pane first, and No is the safe answer)"
       fi
       ;;
   esac

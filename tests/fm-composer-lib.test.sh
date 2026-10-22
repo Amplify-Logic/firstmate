@@ -1752,6 +1752,32 @@ test_dialog_note_skips_the_match_when_no_sink_is_set() {
   pass "a dialog note without a sink skips the match, and release leaves a caller RETURN trap"
 }
 
+test_claude_external_imports_dialog_is_named() {
+  local screen out rc
+  screen=$(cat "$DIALOGS/claude-2.1.307-external-imports.ansi")
+  out=$(fm_composer_blocking_dialog "$screen"); rc=$?
+  [ "$rc" -eq 0 ] || fail "claude's external imports dialog must be named"
+  [ "$out" = 'Claude external CLAUDE.md imports dialog' ] || fail "unexpected dialog name '$out'"
+  out=$(fm_composer_blocking_dialog_recovery "$out")
+  assert_contains "$out" "A person must answer it in the pane" "the imports dialog's recovery must hand the answer to a person"
+  # The other option selected is the same dialog.
+  screen=${screen//'❯ No, disable external imports'/'  No, disable external imports'}
+  screen=${screen//'  Yes, allow external imports'/'❯ Yes, allow external imports'}
+  [ "$(fm_composer_blocking_dialog "$screen")" = 'Claude external CLAUDE.md imports dialog' ] \
+    || fail "the imports dialog with Yes selected must be named too"
+  # The same strings quoted above a normal composer are not the dialog.
+  out=$(fm_composer_blocking_dialog "$(printf '%s\n' \
+    'Allow external CLAUDE.md file imports?' \
+    '❯ No, disable external imports' \
+    'Enter to confirm · Esc to cancel' \
+    '' \
+    '❯ ')"); rc=$?
+  [ "$rc" -eq 1 ] || fail "quoted imports-dialog text above a composer must not match, got '$out'"
+  [ -z "$(fm_composer_blocking_dialog_recovery 'Claude background-task exit picker')" ] \
+    || fail "only a dialog with its own recovery prints one"
+  pass "claude's external CLAUDE.md imports dialog is named from its recorded structure, with a person-answers recovery"
+}
+
 test_quoted_exit_picker_text_is_not_a_dialog() {
   local screen out rc sink enters
   screen=$(quoted_exit_picker_screen)
@@ -1788,3 +1814,4 @@ test_background_exit_picker_stays_pending_and_blocks_retry
 test_dialog_heading_and_footer_must_be_the_recorded_lines
 test_dialog_note_skips_the_match_when_no_sink_is_set
 test_quoted_exit_picker_text_is_not_a_dialog
+test_claude_external_imports_dialog_is_named

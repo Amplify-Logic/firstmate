@@ -263,7 +263,13 @@ JSON
   assert_store_value "$store" true "the project's recorded decline was stripped" \
     projects "$PROJ" hasClaudeMdExternalIncludesWarningShown
   assert_store_value "$store" '["Read"]' "the project entry's unrelated settings were lost" projects "$PROJ" allowedTools
-  pass "fm-claude-trust.sh: a project-entry decline stays in force and does not block worktree trust"
+  assert_contains "$out" "external CLAUDE.md imports stay off for project" \
+    "registering over a standing decline must say that imports stay off"
+  assert_contains "$out" "hasClaudeMdExternalIncludesApproved and hasClaudeMdExternalIncludesWarningShown are removed" \
+    "the decline note must name the two keys to remove"
+  out=$(CLAUDE_CONFIG_DIR="$CONFIG" HOME="$CONFIG" "$TRUST" "$WT" "$PROJ" 2>/dev/null)
+  assert_not_contains "$out" "imports stay off" "the decline note belongs on stderr, not stdout"
+  pass "fm-claude-trust.sh: a project-entry decline stays in force, is reported, and does not block worktree trust"
 }
 
 # The same decline recorded on the worktree's OWN entry is a decision about the
@@ -309,6 +315,7 @@ JSON
     "the worktree entry either lost trust or gained unearned import consent"
   assert_trust_only_no_import_consent "$store" "$PROJ" \
     "the project-root entry either lost trust or gained import consent it was never asked for"
+  assert_not_contains "$out" "imports stay off" "a never-asked entry must not report a decline"
   pass "fm-claude-trust.sh: a never-asked default external-imports pair is not treated as a decline"
 }
 
@@ -660,6 +667,36 @@ claude_launch_doorbell() {  # <launch command>
   )
 }
 
+# A spawn over a standing project-entry decline still launches, and the note
+# that imports stay off reaches the caller instead of being discarded with the
+# registration's stdout (fm-control relaunch drops only the spawn's stdout too).
+test_claude_spawn_passes_the_standing_decline_note_through() {
+  local case_dir home proj wt config fakebin launch_log out
+  case_dir="$TMP_ROOT/spawn-decline"
+  home="$case_dir/home"
+  proj="$case_dir/project"
+  wt="$case_dir/wt"
+  config="$case_dir/claude-config"
+  launch_log="$case_dir/launch.log"
+  mkdir -p "$config"
+  fakebin=$(make_spawn_fakebin "$case_dir/fake" claude)
+  fm_test_spawn_home "$home" claude
+  fm_git_worktree "$proj" "$wt" wt-spawn-decline
+  proj=$(cd "$proj" && pwd -P)
+  cat > "$config/.claude.json" <<JSON
+{"hasCompletedOnboarding":true,"projects":{"$proj":{"hasTrustDialogAccepted":true,"hasClaudeMdExternalIncludesApproved":false,"hasClaudeMdExternalIncludesWarningShown":true}}}
+JSON
+  fm_test_spawn_brief "$home" declinespawn
+  out=$(FM_TEST_CLAUDE_CONFIG_DIR="$config" FM_FAKE_LAUNCH_LOG="$launch_log" \
+    fm_test_run_spawn "$home" "$wt" "$fakebin" declinespawn "$proj" claude \
+    --mode no-mistakes --yolo off)
+  expect_code 0 $? "a claude spawn over a standing project decline must succeed: $out"
+  assert_contains "$out" "external CLAUDE.md imports stay off for project $proj" \
+    "the spawn discarded the standing-decline note"
+  assert_present "$launch_log" "the claude spawn sent no launch command"
+  pass "fm-spawn.sh: a claude spawn over a standing imports decline launches and reports that imports stay off"
+}
+
 # The spawn half: a real fm-spawn of a claude worker must pre-register the
 # worktree AND deliver a record-backed doorbell for the brief, with no dialog to
 # answer and no human in the loop.
@@ -888,6 +925,7 @@ test_corrupt_store_fails_closed
 test_missing_node_is_refused
 test_scope_refusal_stays_fail_closed_without_node
 test_claude_spawn_pretrusts_its_worktree_and_reaches_the_brief
+test_claude_spawn_passes_the_standing_decline_note_through
 test_refused_spawn_leaves_no_task_state
 test_secondmate_standalone_clone_home_is_trusted
 test_secondmate_leased_worktree_home_is_trusted

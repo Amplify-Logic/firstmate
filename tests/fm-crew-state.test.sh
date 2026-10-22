@@ -2829,6 +2829,7 @@ test_herdr_live_agent_outside_worktree_reads_misplaced() {
   assert_contains "$out" "endpoint misplaced: its agent runs in $proj, not its recorded worktree $d/wt" \
     "the misplacement must name where the agent runs and where it belongs"
   assert_contains "$out" "fm-control.sh feat-herdr-misplaced relaunch" "the misplacement must name the recovery"
+  assert_contains "$out" "a person answers it in the pane first" "the misplacement must hand the imports dialog to a person"
   # The control: the same pane and run with the agent in its worktree is the
   # ordinary validating worker, and a subdirectory of it is still inside.
   FM_FAKE_HERDR_FG_CWD="$d/wt"

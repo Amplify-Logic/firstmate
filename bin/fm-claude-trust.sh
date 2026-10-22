@@ -72,7 +72,8 @@
 # would grant every future interactive session in that checkout silent
 # external-file inclusion the human declined, permanently and without being
 # asked. On the project entry that decline is simply left in place while
-# trust registers. Claude Code 2.1.307 records the decline there whichever
+# trust registers, and a stderr note says imports stay off until its two keys
+# are removed, since every worker in that project now runs without them. Claude Code 2.1.307 records the decline there whichever
 # directory answered the dialog, the primary checkout or one of its linked
 # worktrees, and a worker launched into a worktree under it reaches its
 # composer with imports disabled and no dialog, so the decline is honoured by
@@ -507,6 +508,7 @@ const declinedExternalImports = (projects, key) =>
 // value, is NOT consent (see the block comment above this script's node call).
 const approvedExternalImports = (projects, key) =>
   projects?.[key]?.hasClaudeMdExternalIncludesApproved === true;
+let projectDeclineKept = false;
 const attempt = () => {
   const original = readStore();
   const before = fingerprint(original);
@@ -533,7 +535,10 @@ const attempt = () => {
       );
     }
     // A project-entry decline is never carried forward as consent and never
-    // touched: only the trust flag lands, so the decline stays in force.
+    // touched: only the trust flag lands, so the decline stays in force. Every
+    // worker in this project then runs without its external imports, so the
+    // registration says so on stderr, which fm-spawn and fm-control pass on.
+    projectDeclineKept = declinedExternalImports(projects, project);
     const carryImportConsent = approvedExternalImports(projects, project);
     const targetFlags = carryImportConsent ? [trustFlag, ...importFlags] : [trustFlag];
     const projectFlags = carryImportConsent ? [trustFlag, ...importFlags] : [trustFlag];
@@ -571,7 +576,14 @@ const attempt = () => {
 try {
   for (let i = 0; i < 3; i += 1) {
     const result = attempt();
-    if (result === "recorded") process.exit(0);
+    if (result === "recorded") {
+      if (projectDeclineKept) {
+        console.error(
+          `note: external CLAUDE.md imports stay off for project ${project} until hasClaudeMdExternalIncludesApproved and hasClaudeMdExternalIncludesWarningShown are removed from its entry in ${store}`,
+        );
+      }
+      process.exit(0);
+    }
     if (result === "moved" && i >= 1) {
       console.error(`error: ${store} was modified while trust was being recorded; refusing to overwrite it`);
       process.exit(1);
