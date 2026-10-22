@@ -306,7 +306,7 @@ test_stt_bounds_a_long_request_and_retries_without_a_length_cap() {
   [ "$out" = "ten minutes of thoughts" ] || fail "unexpected transcript: $out"
   [ "$(cat "$home/uploaded-bytes")" = "$bytes" ] || fail "the whole ten-minute file must be uploaded"
   assert_contains "$(cat "$home/curl.log")" "--connect-timeout 15" "connecting is bounded"
-  assert_contains "$(cat "$home/curl.log")" "--max-time $(( 120 + bytes / 100000 ))" \
+  assert_contains "$(cat "$home/curl.log")" "--max-time $(( 20 + bytes / 100000 ))" \
     "the request bound grows with the recording instead of capping it"
   assert_contains "$(cat "$home/curl.log")" "--retry 2" "a dropped or busy request is retried"
   pass "fm-deepgram-stt: a ten-minute recording is uploaded whole, with a bounded, retried request"
@@ -321,8 +321,28 @@ test_stt_names_the_bound_when_deepgram_never_answers() {
   out=$(DEEPGRAM_API_KEY=test-key-not-real FM_DEEPGRAM_CURL="$home/curl" \
     "$STT" "$home/clip.wav" 2>&1) || status=$?
   [ "$status" -eq 1 ] || fail "a timed-out request must fail with 1, got $status: $out"
-  assert_contains "$out" "no answer within 120s" "the failure names the bound"
+  assert_contains "$out" "no answer within 20s" "the failure names the bound"
   pass "fm-deepgram-stt: a request that times out fails instead of hanging"
+}
+
+# On 22 Oct 2026 Deepgram took a 4.6-second recording and never answered; the
+# attempt waited out a two-minute bound before the retry answered in a second,
+# so the message sat on "Transcribing..." for over two minutes.
+test_stt_bounds_a_short_recording_by_its_length() {
+  local home out bytes
+  home=$(new_home stt-short)
+  long_wav "$home/short.wav" 4.6
+  bytes=$(wc -c < "$home/short.wav" | tr -d ' ')
+  install_stt_curl_sizing "$home" 200 \
+    '{"results":{"channels":[{"alternatives":[{"transcript":"a short reply"}]}]}}'
+  out=$(DEEPGRAM_API_KEY=test-key-not-real FM_DEEPGRAM_CURL="$home/curl" \
+    "$STT" "$home/short.wav" 2>&1) || fail "stt failed on a short recording: $out"
+  [ "$out" = "a short reply" ] || fail "unexpected transcript: $out"
+  assert_contains "$(cat "$home/curl.log")" "--max-time 21 " \
+    "a few seconds of speech waits about twenty seconds for an answer before the retry"
+  assert_contains "$(cat "$home/curl.log")" "--retry 2" "an unanswered request is retried"
+  [ "$bytes" -gt 140000 ] || fail "the stand-in recording must be the size of 4.6 seconds of speech"
+  pass "fm-deepgram-stt: a short recording's request is bounded by its length, not by minutes"
 }
 
 # Runs the helper against a mocked Deepgram that returns <transcript>, with the
@@ -2849,6 +2869,7 @@ test_stt_prints_transcript_from_mocked_deepgram
 test_stt_reports_http_failure
 test_stt_bounds_a_long_request_and_retries_without_a_length_cap
 test_stt_names_the_bound_when_deepgram_never_answers
+test_stt_bounds_a_short_recording_by_its_length
 test_stt_without_vocabulary_sends_no_hints
 test_stt_vocabulary_key_terms_reach_the_request_encoded
 test_stt_starter_vocabulary_sends_only_its_terms

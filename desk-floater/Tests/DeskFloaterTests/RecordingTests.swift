@@ -27,6 +27,46 @@ final class RecordingTests: XCTestCase {
         return url
     }
 
+    /// A recording of words rising and falling in loudness, whose loudest
+    /// sample is <peak> out of 32767.
+    private func words(seconds: Double, peak: Double) throws -> URL {
+        let url = dir.appendingPathComponent("\(UUID().uuidString).wav")
+        let format = AVAudioFormat(commonFormat: .pcmFormatInt16, sampleRate: 16000, channels: 1, interleaved: true)!
+        let file = try AVAudioFile(forWriting: url, settings: format.settings,
+                                   commonFormat: .pcmFormatInt16, interleaved: true)
+        let frames = Int(seconds * 16000)
+        let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(frames))!
+        buffer.frameLength = AVAudioFrameCount(frames)
+        for i in 0..<frames {
+            let t = Double(i) / 16000
+            let syllables = abs(sin(2 * Double.pi * 2 * t))
+            buffer.int16ChannelData![0][i] = Int16(peak * syllables * sin(2 * Double.pi * 180 * t))
+        }
+        try file.write(from: buffer)
+        return url
+    }
+
+    /// The recordings that went wrong on 18 and 22 Oct 2026: 18 to 25 seconds
+    /// of words whose loudest sample was 32 to 88 out of 32767, because macOS
+    /// voice processing left the microphone unboosted.
+    func testWordsAtTheLevelOfAnUnboostedMicrophoneAreSilent() throws {
+        XCTAssertTrue(Recording.isSilent(try words(seconds: 25, peak: 88)))
+        XCTAssertTrue(Recording.isSilent(try words(seconds: 18, peak: 32)))
+        XCTAssertTrue(Recording.isSilent(try wav(seconds: 3)), "digital silence")
+    }
+
+    func testSpokenWordsAreNotSilent() throws {
+        XCTAssertFalse(Recording.isSilent(try words(seconds: 5, peak: 3000)))
+        XCTAssertFalse(Recording.isSilent(try words(seconds: 5, peak: 400)), "quiet speech still counts")
+    }
+
+    func testAFileThatCannotBeReadIsNotCalledSilent() throws {
+        let unfinished = dir.appendingPathComponent("unfinished.wav")
+        try Data(count: 44 + 32_000).write(to: unfinished)
+        XCTAssertFalse(Recording.isSilent(unfinished))
+        XCTAssertFalse(Recording.isSilent(dir.appendingPathComponent("missing.wav")))
+    }
+
     func testEmptyTranscriptsAreKeptOnlyWhenLongEnoughToHoldWords() {
         XCTAssertFalse(Recording.keep(failed: false, duration: 1.2), "a stray press is not kept")
         XCTAssertTrue(Recording.keep(failed: false, duration: 2.5))
@@ -158,6 +198,47 @@ final class RecordingTests: XCTestCase {
         XCTAssertTrue(FileManager.default.fileExists(atPath: live.path))
         XCTAssertTrue(calls.contains("recordings\n"))
         XCTAssertEqual(Array(model.retrying.keys), ["/saved/two.wav"], "a saved dictation is not retried by itself")
+    }
+
+    /// A home whose transcription and delivery scripts are stand-ins that
+    /// record each call in desk.log: the transcript is "hello there" and every
+    /// message is typed into the Firstmate chat.
+    private func standInHome() throws -> (root: URL, log: URL) {
+        let root = dir.appendingPathComponent("home")
+        let bin = root.appendingPathComponent("bin")
+        try FileManager.default.createDirectory(at: bin, withIntermediateDirectories: true)
+        let log = root.appendingPathComponent("desk.log")
+        for (name, reply) in [("fm-deepgram-stt.sh", "hello there"), ("fm-desk-voice.sh", "sent: herdr w1:p1")] {
+            let stub = bin.appendingPathComponent(name)
+            try """
+            #!/bin/sh
+            printf '%s %s\\n' '\(name)' "$*" >> '\(log.path)'
+            printf '%s\\n' '\(reply)'
+            """.write(to: stub, atomically: true, encoding: .utf8)
+            try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: stub.path)
+        }
+        return (root, log)
+    }
+
+    /// A near-silent talk-to-Firstmate recording is reported on the status line
+    /// at once: it is neither transcribed nor saved to be retried.
+    @MainActor
+    func testANearSilentRecordingIsReportedInsteadOfSavedAndRetried() async throws {
+        let home = try standInHome()
+        let model = FloaterModel(repoRoot: home.root.path, fmHome: home.root.path)
+        let silent = try words(seconds: 25, peak: 88)
+        model.transcribeAndDeliver(silent, purpose: .firstmate)
+        try await waitUntil { model.status == FloaterModel.micSilent }
+        XCTAssertFalse(FileManager.default.fileExists(atPath: home.log.path), "nothing was transcribed or saved")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: silent.path))
+        XCTAssertTrue(model.retrying.isEmpty, "nothing waits for a retry")
+
+        let spoken = try words(seconds: 5, peak: 3000)
+        model.transcribeAndDeliver(spoken, purpose: .firstmate)
+        try await waitUntil { model.status == "Sent" }
+        let calls = try String(contentsOf: home.log, encoding: .utf8)
+        XCTAssertTrue(calls.contains("fm-deepgram-stt.sh \(spoken.path)\n"), calls)
+        XCTAssertTrue(calls.contains("fm-desk-voice.sh send --source desk-floater -- hello there\n"), calls)
     }
 
     @MainActor

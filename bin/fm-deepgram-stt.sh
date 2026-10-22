@@ -34,12 +34,16 @@
 #
 # Long recordings: there is no length cap here; the whole file is uploaded.
 # The request is bounded instead of left to hang: each attempt gives up
-# connecting after 15 seconds and gives up in all after 120 seconds plus one
-# second per 100 kB of audio (a 10-minute desk recording is about 19 MB, so
-# about five minutes an attempt). A timeout, a dropped connection or a busy
-# Deepgram (HTTP 408, 429 or 5xx) is retried twice, three seconds apart, before
-# the helper fails, so the worst case is three full attempts: about 16 minutes
-# for a 10-minute recording.
+# connecting after 15 seconds and gives up in all after 20 seconds plus one
+# second per 100 kB of audio, so the bound follows the recording's length (a
+# few seconds of speech, about 150 kB, gets 21 seconds; a 10-minute desk
+# recording, about 19 MB, gets about three and a half minutes). Deepgram
+# answers a short recording in about a second, but now and then it takes the
+# upload and never answers; the attempt then ends at its bound and the retry
+# usually answers at once. A timeout, a dropped connection or a busy Deepgram
+# (HTTP 408, 429 or 5xx) is retried twice, three seconds apart, before the
+# helper fails, so the worst case is three full attempts: about a minute for a
+# short recording and about 11 minutes for a 10-minute one.
 #
 # Exit:
 #   0  transcript printed (may be empty if Deepgram heard silence)
@@ -238,7 +242,7 @@ main() {
   esac
 
   bytes=$(wc -c < "$audio" | tr -d ' ')
-  max_time=$(( 120 + ${bytes:-0} / 100000 ))
+  max_time=$(( 20 + ${bytes:-0} / 100000 ))
 
   tmp=$(mktemp "${TMPDIR:-/tmp}/fm-deepgram-stt.XXXXXX") || die "cannot create a temporary file"
   auth_cfg=$(fm_deepgram_auth_config "$key") || {
