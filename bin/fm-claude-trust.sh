@@ -73,9 +73,9 @@
 # external-file inclusion the human declined, permanently and without being
 # asked. On the project entry that decline is simply left in place while
 # trust registers, and a stderr note says imports stay off until its two keys
-# are removed, since every worker in that project now runs without them. Claude Code 2.1.307 records the decline there whichever
-# directory answered the dialog, the primary checkout or one of its linked
-# worktrees, and a worker launched into a worktree under it reaches its
+# are removed, since every worker in that project now runs without them.
+# Claude Code 2.1.307 records the decline there whichever directory answered
+# the dialog, the primary checkout or one of its linked worktrees, and a worker launched into a worktree under it reaches its
 # composer with imports disabled and no dialog, so the decline is honoured by
 # Claude itself and refusing trust would only wedge the worker on the trust
 # dialog instead (verified in an isolated Herdr lab, the shape a Herdr restore
