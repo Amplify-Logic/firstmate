@@ -44,11 +44,11 @@ WORK_WORDS_FILE = "meeting-work-words"
 
 # An instruction that does one of these toward someone, whatever the model said.
 # "call", "phone", "message" and "post" are nouns only right after one of
-# NOUN_BEFORE, so "mentioned on the call" does not count; anywhere else they
-# are verbs.
+# NOUN_BEFORE or a possessive ("today's call"), so "mentioned on the call" does
+# not count; anywhere else they are verbs.
 OUTWARD_VERBS = re.compile(
     r"\b(send|reply|e-?mail|publish|pay|buy|sign|invite|delete|remove)\b"
-    r"|(?:\b(\w+)\s+)?\b(call|phone|message|post)\b",
+    r"|(?:\b(\w+)(['’]s)?\s+)?\b(call|phone|message|post)\b",
     re.IGNORECASE,
 )
 NOUN_BEFORE = set("""the a an this that these those our my your his her their its on in during after before from
@@ -80,8 +80,11 @@ def iso_epoch(value):
 
 
 def outward(text):
-    return any(match.group(1) or (match.group(2) or "").lower() not in NOUN_BEFORE
-               for match in OUTWARD_VERBS.finditer(text or ""))
+    for match in OUTWARD_VERBS.finditer(text or ""):
+        before = (match.group(2) or "").lower()
+        if match.group(1) or not ((match.group(3) and before != "let") or before in NOUN_BEFORE):
+            return True
+    return False
 
 
 def normalize(text):
@@ -607,30 +610,29 @@ def spoken_text(paragraph):
 
 
 def order_words(order):
-    """The words said around the phrase, or just before the turn when the phrase stood alone."""
-    text = spoken_text(order["text"])
-    match = TRIGGER.search(text)
-    words = (text[:match.start()].split()[-8:] + text[match.end():].split()[:8]) if match else text.split()
-    if not words:
-        words = spoken_text(order["context"]).split()[-8:]
-    return {word for word in words if len(word) > 2 and word not in STOPWORDS}
+    """The words of the candidate's turn and the turn before it, leaving out the phrase itself."""
+    text = TRIGGER.sub(" ", spoken_text(order["context"]) + " " + spoken_text(order["text"]))
+    return {word for word in text.split() if len(word) > 2 and word not in STOPWORDS}
 
 
-def same_order(one, two):
-    """Whether two transcripts' candidates are the same spoken order: most of their words agree."""
+def overlap(one, two):
+    """How much of the smaller candidate's words the larger one also holds."""
     first, second = order_words(one), order_words(two)
-    return 2 * len(first & second) > max(len(first), len(second))
+    smaller = min(len(first), len(second))
+    return len(first & second) / smaller if smaller else 0
 
 
 def pass_only_orders(live, heard):
-    """The orders only the speaker pass heard, each live order matching at most one of them."""
+    """The orders only the speaker pass heard: a pass candidate is the same order as the unmatched live
+    candidate that holds most of its words, and each live candidate matches at most one."""
     unmatched, extra = list(live), []
     for order in heard:
-        match = next((index for index, other in enumerate(unmatched) if same_order(order, other)), None)
-        if match is None:
+        scores = [overlap(order, other) for other in unmatched]
+        best = max(range(len(scores)), key=scores.__getitem__, default=None)
+        if best is None or scores[best] <= 0.5:
             extra.append(dict(order, by_captain=None))
         else:
-            unmatched.pop(match)
+            unmatched.pop(best)
     return extra
 
 
