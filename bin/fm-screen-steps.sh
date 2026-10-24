@@ -64,10 +64,8 @@
 # Automated runs never reach the captain's screen or chat: under CI,
 # GITHUB_ACTIONS or a no-mistakes gate (NO_MISTAKES_GATE, or this script
 # running from a no-mistakes worktree), show and reply refuse before opening
-# a page, starting the card or sending anything, unless
-# FM_SCREEN_STEPS_LIVE=1 is set by hand. No CI job or pipeline sets it; the
-# tests drive show and reply only through stand-ins with those variables
-# cleared.
+# a page, starting the card or sending anything. The tests drive show and
+# reply only through stand-ins with those variables cleared.
 #
 # Environment: FM_HOME selects the home (default: this code root);
 # FM_STATE_OVERRIDE its state directory.
@@ -328,12 +326,10 @@ launch_card() {
   open -n -g "${env[@]}" "$APP_DIR" || die "could not start the card at $APP_DIR"
 }
 
-# Refuses <action> in an automated run unless FM_SCREEN_STEPS_LIVE=1, so a
-# test or pipeline agent never opens Arc, shows the card or types into the
-# captain's chat.
+# Refuses <action> in an automated run, so a test or pipeline agent never
+# opens Arc, shows the card or types into the captain's chat.
 refuse_automated() {  # <action>
   local why=""
-  [ "${FM_SCREEN_STEPS_LIVE:-}" != 1 ] || return 0
   if [ -n "${CI:-}" ]; then
     why=CI
   elif [ -n "${GITHUB_ACTIONS:-}" ]; then

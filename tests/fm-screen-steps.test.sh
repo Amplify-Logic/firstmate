@@ -492,7 +492,7 @@ EOF
 run_steps() {  # <fixture> [args...]
   local fx=$1
   shift
-  env -u CI -u GITHUB_ACTIONS -u NO_MISTAKES_GATE -u FM_SCREEN_STEPS_LIVE \
+  env -u CI -u GITHUB_ACTIONS -u NO_MISTAKES_GATE \
     PATH="$fx/fake:$PATH" FM_HOME="$fx/home" "$fx/root/bin/fm-screen-steps.sh" "$@"
 }
 
@@ -504,7 +504,7 @@ run_automated() {  # <fixture> <VAR=value>... -- [args...]
     shift
   done
   shift
-  env -u CI -u GITHUB_ACTIONS -u NO_MISTAKES_GATE -u FM_SCREEN_STEPS_LIVE "${vars[@]}" \
+  env -u CI -u GITHUB_ACTIONS -u NO_MISTAKES_GATE "${vars[@]}" \
     PATH="$fx/fake:$PATH" FM_HOME="$fx/home" "$fx/root/bin/fm-screen-steps.sh" "$@"
 }
 
@@ -709,7 +709,7 @@ test_reply_sends_through_the_desk_voice_path() {
 
 # A test, CI job or pipeline agent never reaches the captain's screen or chat:
 # in an automated run show and reply refuse before calling open, osascript,
-# the card or the desk-voice delivery, unless FM_SCREEN_STEPS_LIVE=1.
+# the card or the desk-voice delivery.
 test_automated_runs_never_reach_the_screen() {
   local fx var rc
   for var in CI=true GITHUB_ACTIONS=true NO_MISTAKES_GATE=1; do
@@ -738,20 +738,14 @@ test_automated_runs_never_reach_the_screen() {
   mkdir -p "$fx/.no-mistakes/worktrees/run1"
   mv "$fx/root" "$fx/.no-mistakes/worktrees/run1/root"
   rc=0
-  env -u CI -u GITHUB_ACTIONS -u NO_MISTAKES_GATE -u FM_SCREEN_STEPS_LIVE PATH="$fx/fake:$PATH" FM_HOME="$fx/home" \
+  env -u CI -u GITHUB_ACTIONS -u NO_MISTAKES_GATE PATH="$fx/fake:$PATH" FM_HOME="$fx/home" \
     "$fx/.no-mistakes/worktrees/run1/root/bin/fm-screen-steps.sh" show --url https://example.com/form --steps-file "$fx/steps.md" \
     >/dev/null 2>&1 || rc=$?
   expect_code 3 "$rc" "show from a no-mistakes worktree"
   assert_equals 0 "$(grep -c . "$fx/open.log")" "show from a no-mistakes worktree never calls open"
   assert_equals 0 "$(grep -c . "$fx/osascript.log")" "show from a no-mistakes worktree never calls osascript"
 
-  fx=$(new_root automated-live)
-  write_steps "$fx/steps.md"
-  run_automated "$fx" CI=true FM_SCREEN_STEPS_LIVE=1 -- show --url https://example.com/form --steps-file "$fx/steps.md" >/dev/null 2>&1 \
-    || fail "show with FM_SCREEN_STEPS_LIVE=1 was refused"
-  assert_present "$fx/card-pids" "the explicit opt-in starts the card"
-  stop_cards "$fx"
-  pass "fm-screen-steps: CI, GitHub Actions and no-mistakes runs never open a page, start the card or reply unless FM_SCREEN_STEPS_LIVE=1"
+  pass "fm-screen-steps: CI, GitHub Actions and no-mistakes runs never open a page, start the card or reply"
 }
 
 # The card itself is a Swift package, so compiling and testing it needs macOS
