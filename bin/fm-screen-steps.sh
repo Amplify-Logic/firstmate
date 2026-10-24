@@ -61,10 +61,18 @@
 # osascript call is bounded by FM_SCREEN_STEPS_ARC_TIMEOUT seconds (default
 # 20), so a permission dialog nobody answers never hangs show.
 #
+# Automated runs never reach the captain's screen or chat: under CI,
+# GITHUB_ACTIONS or a no-mistakes gate (NO_MISTAKES_GATE, or this script
+# running from a no-mistakes worktree), show and reply refuse before opening
+# a page, starting the card or sending anything, unless
+# FM_SCREEN_STEPS_LIVE=1 is set by hand. No CI job or pipeline sets it; the
+# tests drive show and reply only through stand-ins with those variables
+# cleared.
+#
 # Environment: FM_HOME selects the home (default: this code root);
 # FM_STATE_OVERRIDE its state directory.
 #
-# Exit: 0 ok, 1 failure, 2 bad usage.
+# Exit: 0 ok, 1 failure, 2 bad usage, 3 refused in an automated run.
 set -eu
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -320,6 +328,26 @@ launch_card() {
   open -n -g "${env[@]}" "$APP_DIR" || die "could not start the card at $APP_DIR"
 }
 
+# Refuses <action> in an automated run unless FM_SCREEN_STEPS_LIVE=1, so a
+# test or pipeline agent never opens Arc, shows the card or types into the
+# captain's chat.
+refuse_automated() {  # <action>
+  local why=""
+  [ "${FM_SCREEN_STEPS_LIVE:-}" != 1 ] || return 0
+  if [ -n "${CI:-}" ]; then
+    why=CI
+  elif [ -n "${GITHUB_ACTIONS:-}" ]; then
+    why=GITHUB_ACTIONS
+  elif [ -n "${NO_MISTAKES_GATE:-}" ]; then
+    why=NO_MISTAKES_GATE
+  else
+    case "$ROOT" in */.no-mistakes/worktrees/*) why="a no-mistakes worktree" ;; esac
+  fi
+  [ -n "$why" ] || return 0
+  note "refusing to $1 in an automated run ($why): the captain's screen and Firstmate chat are off limits to tests and pipeline agents"
+  exit 3
+}
+
 cmd_show() {
   local url="" steps=""
   while [ "$#" -gt 0 ]; do
@@ -335,6 +363,7 @@ cmd_show() {
     ''|http://*|https://*) ;;
     *) refuse "only http and https URLs are opened: $url" ;;
   esac
+  refuse_automated "open a page or show the card"
   write_card "$steps" "$url" || exit $?
   [ -z "$url" ] || open_url "$url"
   launch_card
@@ -359,6 +388,7 @@ cmd_reply() {
     esac
   done
   case "$step" in ''|[1-9]|[1-9][0-9]) ;; *) refuse "--step must be a step number: $step" ;; esac
+  refuse_automated "send a reply into the Firstmate chat"
   [ -f "$CARD" ] || die "no card is showing"
   text=$(python3 - "$CARD" "$kind" "$step" <<'PY'
 import json, sys
