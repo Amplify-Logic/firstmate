@@ -50,6 +50,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 }
 
+/// How a value shows in its chip: every character exactly as Copy copies it,
+/// with a zero-width space after each one so a long value wraps at any
+/// character instead of being hyphenated or truncated.
+enum ValueText {
+    static func wrappable(_ value: String) -> String {
+        value.map(String.init).joined(separator: "\u{200B}")
+    }
+}
+
 struct Card: Decodable, Equatable {
     struct Step: Decodable, Equatable {
         let text: String
@@ -415,10 +424,10 @@ struct CardView: View {
 
     private func valueRow(_ value: String) -> some View {
         HStack(spacing: 6) {
-            Text(value)
+            Text(ValueText.wrappable(value))
                 .font(.system(.callout, design: .monospaced))
-                .lineLimit(2)
-                .truncationMode(.middle)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityLabel(value)
                 .padding(.horizontal, 6)
                 .padding(.vertical, 3)
                 .background(

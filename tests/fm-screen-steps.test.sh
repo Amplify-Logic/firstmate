@@ -748,7 +748,8 @@ test_automated_runs_never_reach_the_screen() {
   pass "fm-screen-steps: CI, GitHub Actions and no-mistakes runs never open a page, start the card or reply unless FM_SCREEN_STEPS_LIVE=1"
 }
 
-# The card itself is a Swift package, so compiling it needs macOS and swift.
+# The card itself is a Swift package, so compiling and testing it needs macOS
+# and swift. Its Swift tests never show a window.
 test_card_app_compiles() {
   local out
   if [ "$(uname)" != Darwin ] || ! command -v swift >/dev/null 2>&1; then
@@ -757,7 +758,9 @@ test_card_app_compiles() {
   fi
   out=$(swift build -c release --product ScreenSteps --package-path "$ROOT/screen-steps" \
     --scratch-path "$TMP_ROOT/swift-build" 2>&1) || fail "the card app does not build: $out"
-  pass "fm-screen-steps: the card app builds"
+  out=$(swift test --package-path "$ROOT/screen-steps" \
+    --scratch-path "$TMP_ROOT/swift-test" 2>&1) || fail "card Swift tests failed: $out"
+  pass "fm-screen-steps: the card app builds and its Swift tests pass"
 }
 
 test_show_builds_the_card_and_opens_the_page_in_arc
