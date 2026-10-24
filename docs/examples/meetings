@@ -4,24 +4,18 @@
 # is refused. Every line below shows the default, so an absent file behaves the
 # same as this one. See docs/meetings.md.
 
-# Ask Anarlog for its after-the-call Batch pass (speaker labels) when it ran
-# none itself: auto, or off to use the live transcript as it is.
-speaker_pass = auto
-
-# An existing Anarlog folder for the "(speaker pass)" copies (empty: none).
-speaker_pass_folder =
-
-# Minutes to wait for the speaker pass before using the live transcript.
+# Starship always asks Anarlog for its after-the-call Batch pass (speaker
+# labels) when it ran none itself. Minutes to wait for that speaker pass before
+# using the live transcript.
 speaker_pass_wait_minutes = 180
 
 # Folder that shared glasses-call audio lands in, or off.
 glasses_folder = ~/Library/Mobile Documents/com~apple~CloudDocs/Starship calls
 
 # Words that mark a work meeting, which is never processed. Repeat the line for
-# each word or phrase; every line of the `work_words` file in config/ counts
-# too (none: no file).
+# each word or phrase. Every line of the private config/meeting-work-words (one
+# word or phrase per line, `#` comments) counts too. None ship by default.
 # work_marker = Example Corp
-work_words = leak-words
 
 # Another transcript speaker label that is you, beyond the one Anarlog marks
 # as you. Repeat the line for each.

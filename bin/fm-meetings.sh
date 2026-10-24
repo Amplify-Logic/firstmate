@@ -37,41 +37,49 @@
 # when the live transcript broke off or the meeting has two or more remote
 # participants. So:
 #   - a transcript Anarlog already rewrote with its Batch pass is used as is;
-#   - otherwise, with `speaker_pass = auto`, the meeting's own recording is
-#     imported through `anarlog meetings import` as a second meeting titled
-#     "<title> (speaker pass)", which Anarlog transcribes after the call with
-#     its Batch model, and its transcript is the one the intake reads;
-#   - the live transcript is used only when no recording was kept, the speaker
-#     pass is off, or it failed or did not finish within
-#     speaker_pass_wait_minutes; the intake's outcome then says so.
+#   - otherwise the meeting's own recording is always imported through
+#     `anarlog meetings import` as a second meeting titled "<title> (speaker
+#     pass)", which Anarlog transcribes after the call with its Batch model, and
+#     its transcript is the one the intake reads;
+#   - the live transcript is used only when no recording was kept, or the
+#     speaker pass failed or did not finish within speaker_pass_wait_minutes;
+#     the intake's outcome then says so.
 #
 # GLASSES CALLS. Audio exported from a phone app into `glasses_folder` (default
 # iCloud Drive/Starship calls) is imported into Anarlog the same way once the
 # file has stopped changing for a minute; Anarlog transcribes it with its Batch
 # model, in whichever of its configured spoken languages it hears (add Dutch
 # next to English in Anarlog's Language & Region settings for Dutch calls), and
-# the imported meeting then flows through the same intake. iCloud placeholders
+# the imported meeting then flows through the same intake once Anarlog's
+# summary of it is in, or ten minutes after its transcript. iCloud placeholders
 # are asked to download first. Files in the folder are never moved or deleted;
 # non-audio files are listed by `status` and skipped.
 #
 # INTAKE. `intake` takes in each announced meeting once:
-#   - Work meetings stay out. A meeting whose title, participants, notes or
-#     summary match a work word (each `work_marker`, plus every line of the
-#     `work_words` list, default config/leak-words) is never sent to a model or
-#     actioned; intake prints only `work meeting, not processed: <title>`.
+#   - Work meetings stay out. A meeting whose title, participants, notes,
+#     summary or transcript match a work word (each `work_marker`, plus every
+#     line of the private config/meeting-work-words, one word or phrase per
+#     line with `#` comments; neither ships with any word) is never sent to a
+#     model or actioned; intake prints only `work meeting, not processed:
+#     <title>`.
 #   - Otherwise one model pass (`claude -p`, no tools, no session) reads a
 #     bounded copy of the meeting: Anarlog's summary, the captain's own notes,
 #     action items and the transcript, capped at transcript_chars characters.
 #   - Paragraphs where someone says "Firstmate, do it", "Firstmate, build that"
-#     or "captain's order" are found in the transcript first and handed to the
-#     model as spoken-order candidates; one said by the captain's own speaker
-#     label counts as a clear action, any other stays for review.
+#     or "captain's order" are found first and handed to the model as
+#     spoken-order candidates. They are read from the meeting's own transcript,
+#     where Anarlog labels the captain's speech (the live one when a speaker
+#     pass ran). One said under the captain's own speaker label counts as a
+#     clear action; one said by another labelled speaker, or where the
+#     transcript never labels the captain (so it could not tell who said it),
+#     stays for review.
 #   - Each outcome is sorted in two. A clear, low-risk, internal follow-up whose
 #     quoted source is found in the meeting goes to firstmate as ready-to-start
 #     work: one inbox note per meeting (`fm-inbox.sh note --request-id
-#     meeting-<id>-start`), at most five. Everything else - needing review or
-#     refinement, outward-facing (sending, replying, inviting, paying,
-#     publishing), destructive, touching another person's commitment, or whose
+#     meeting-<id>-start`). Everything else - needing review or refinement,
+#     outward-facing (an instruction to send, reply, email, message, post,
+#     publish, pay, buy, sign, invite or call someone), destructive (delete or
+#     remove), touching another person's commitment, or whose
 #     source cannot be found - goes in a second note (`meeting-<id>-review`)
 #     for firstmate to put on the captain's phone tap page, where it waits.
 #     This layer itself sends nothing anywhere outside this Mac's own inbox.
@@ -91,18 +99,17 @@
 # CONFIG. Optional, private, gitignored config/meetings: `key = value` lines,
 # `#` comments; an unknown key is refused. docs/examples/meetings lists every
 # key with its default:
-#   speaker_pass               auto | off
-#   speaker_pass_folder        an existing Anarlog folder for the speaker-pass copies (default none)
 #   speaker_pass_wait_minutes  how long to wait for the speaker pass before using the live transcript (180)
 #   glasses_folder             the shared-audio folder, or off
 #   work_marker                a work word or phrase; repeatable
-#   work_words                 a word-list file name in config/, or none (default leak-words)
 #   self_label                 another transcript label that is the captain; repeatable
 #   intake_model               the Claude model for the intake (sonnet)
 #   transcript_chars           how much of the meeting the model reads (60000)
 #
 # RECORDS. state/meetings/records.json (what each meeting and shared file has
-# reached; locked, written by rename) and data/meetings/<id>/intake.json.
+# reached; locked, written by rename), state/meetings/check-problem (the last
+# failed or timed-out check line, so it wakes once until a poll succeeds) and
+# data/meetings/<id>/intake.json.
 #
 # Environment overrides (tests): FM_MEETINGS_ANARLOG, FM_MEETINGS_CLAUDE,
 # FM_MEETINGS_INBOX, FM_MEETINGS_SPEAK, FM_MEETINGS_NOW, FM_MEETINGS_PYTHON,
@@ -151,7 +158,7 @@ case "$CHECK_TIMEOUT" in
 esac
 
 action_check() {
-  local budget=${FM_MEETINGS_CHECK_BUDGET:-20} out rc=0 line
+  local budget=${FM_MEETINGS_CHECK_BUDGET:-20} out rc=0 line problem="" marker="$STATE/meetings/check-problem"
   case "$budget" in
     ''|*[!0-9]*) budget=20 ;;
   esac
@@ -163,10 +170,18 @@ action_check() {
   [ "$budget" -ge 1 ] || budget=1
   out=$(fm_run_timed $((budget + 3)) "$PYTHON_BIN" "$CORE" poll --budget "$budget" 2>&1) || rc=$?
   if [ "$rc" -eq 124 ]; then
-    line="meetings: the poll did not finish within $((budget + 3))s; it carries on at the next check"
+    problem="meetings: the poll did not finish within $((budget + 3))s; it carries on at the next check"
   elif [ "$rc" -ne 0 ]; then
-    line="meetings: the poll failed: $(printf '%s\n' "$out" | sed -n '$p')"
+    problem="meetings: the poll failed: $(printf '%s\n' "$out" | sed -n '$p')"
+  fi
+  if [ -n "$problem" ]; then
+    line=
+    if [ "$(cat "$marker" 2>/dev/null)" != "$problem" ]; then
+      line=$problem
+      mkdir -p "$STATE/meetings" && printf '%s\n' "$problem" > "$marker"
+    fi
   else
+    rm -f -- "$marker"
     line=$(printf '%s\n' "$out" | sed -n '/^meetings: /p' | sed -n '1p')
   fi
   if [ -n "$line" ]; then

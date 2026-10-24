@@ -3295,6 +3295,7 @@ It holds the meeting intake's settings: the after-the-call speaker pass, the sha
 Absent, every setting takes its default.
 `key = value` lines; `#` comments and blank lines are ignored, and an unknown key is refused so a typo never silently changes which meetings are processed.
 [`docs/examples/meetings`](examples/meetings) lists every key with its default, `bin/fm-meetings.sh`'s header owns their meaning, and [meetings.md](meetings.md) covers setup and the work-meeting rule.
+The optional, private `config/meeting-work-words` lists more work words, one word or phrase per line.
 
 ## Supervision active alert channels (config/wedge-alarm)
 

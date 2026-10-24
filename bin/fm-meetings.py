@@ -27,7 +27,6 @@ SUMMARY_WAIT_SECONDS = 600    # how long after the end to wait for Anarlog's own
 FILE_STABLE_SECONDS = 60      # a shared audio file must be this old and unchanged before import
 TAKING_STALE_SECONDS = 1800   # an intake that never finished frees its meeting after this long
 MAX_INTAKE_FAILURES = 3
-MAX_CLEAR_ACTIONS = 5
 SUMMARY_KEEP_CHARS = 4000
 SPEAKER_PASS_TITLE = " (speaker pass)"
 REQUEST_PREFIX = "fm-meetings-"
@@ -35,23 +34,20 @@ TRANSCRIPT_KINDS = {"batch": "final transcript with speaker labels", "streaming"
                     "none": "notes and summary only, with no transcript"}
 
 CONFIG_DEFAULTS = {
-    "speaker_pass": "auto",
-    "speaker_pass_folder": "",
     "speaker_pass_wait_minutes": "180",
     "glasses_folder": "~/Library/Mobile Documents/com~apple~CloudDocs/Starship calls",
-    "work_words": "leak-words",
     "intake_model": "sonnet",
     "transcript_chars": "60000",
 }
 REPEATABLE_KEYS = {"work_marker", "self_label"}
+WORK_WORDS_FILE = "meeting-work-words"
 
-# Words that make an action outward-facing or hard to undo whatever the model said.
-RISKY_WORDS = re.compile(
-    r"\b(send|sends|sent|sending|e-?mail|e-?mails|mail|reply|replies|respond|message|messages|"
-    r"whatsapp|sms|call|phone|invite|invites|invitation|share|shares|post|posts|publish|"
-    r"publishes|tweet|announce|pay|pays|payment|buy|buys|purchase|booking|"
-    r"transfer|sign|signs|contract|delete|deletes|remove|removes|cancel|cancels|unsubscribe|"
-    r"wipe|refund|invoice|submit|submits|merge|merges|deploy|deploys|release|releases)\b",
+# An instruction that does one of these toward someone, whatever the model said:
+# the verb opens the instruction or one of its clauses, so "the call" in a
+# description does not count.
+OUTWARD_VERBS = re.compile(
+    r"(?:^|[.;:,!?]\s*|\b(?:and|then)\s+)"
+    r"(send|reply|e-?mail|message|post|publish|pay|buy|sign|invite|call|delete|remove)\b",
     re.IGNORECASE,
 )
 TRIGGER = re.compile(r"\bfirst\s*mate\s+(?:do|build)\s+(?:it|that|this)\b|\bcaptain\s*'?\s*s\s+order\b")
@@ -129,8 +125,6 @@ class Home:
                     config[key] = value
                 else:
                     raise Failure(f"config/meetings line {number}: unknown key {key}")
-        if config["speaker_pass"] not in ("auto", "off"):
-            raise Failure("config/meetings: speaker_pass must be auto or off")
         for key in ("speaker_pass_wait_minutes", "transcript_chars"):
             if not config[key].isdigit() or int(config[key]) < 1:
                 raise Failure(f"config/meetings: {key} must be a whole number above zero")
@@ -138,12 +132,10 @@ class Home:
 
     def work_words(self):
         words = list(self.config["work_marker"])
-        name = self.config["work_words"]
-        if name and name != "none":
-            path = name if os.path.isabs(name) else os.path.join(self.config_dir, name)
-            if os.path.exists(path):
-                with open(path, encoding="utf-8") as handle:
-                    words += [line.strip() for line in handle if line.strip() and not line.lstrip().startswith("#")]
+        path = os.path.join(self.config_dir, WORK_WORDS_FILE)
+        if os.path.exists(path):
+            with open(path, encoding="utf-8") as handle:
+                words += [line.strip() for line in handle if line.strip() and not line.lstrip().startswith("#")]
         return words
 
 
@@ -276,11 +268,8 @@ def recording_path(home, export):
     return None, "the meeting's recording could not be found on this Mac"
 
 
-def import_recording(home, path, title, request_key, folder=""):
-    args = ["import", path, "--title", title, "--request-key", request_key]
-    if folder:
-        args += ["--folder", folder]
-    return meetings_cli(home, *args)
+def import_recording(home, path, title, request_key):
+    return meetings_cli(home, "import", path, "--title", title, "--request-key", request_key)
 
 
 # --- poll ------------------------------------------------------------------
@@ -322,9 +311,6 @@ def poll_recorded(home, record, export):
     if not export.get("transcripts"):
         mark_ready(record, "none", "Anarlog kept no transcript")
         return
-    if home.config["speaker_pass"] == "off":
-        mark_ready(record, "streaming", "the speaker pass is switched off in config/meetings")
-        return
     wait = int(home.config["speaker_pass_wait_minutes"]) * 60
     path, why = recording_path(home, export)
     if not path:
@@ -332,8 +318,7 @@ def poll_recorded(home, record, export):
         return
     title = (export.get("title") or "Meeting").strip() + SPEAKER_PASS_TITLE
     try:
-        job = import_recording(home, path, title, REQUEST_PREFIX + "speakers-" + record["id"],
-                               home.config["speaker_pass_folder"])
+        job = import_recording(home, path, title, REQUEST_PREFIX + "speakers-" + record["id"])
     except Failure as error:
         record["speaker_pass"] = {"error": str(error), "tries": record.get("speaker_pass", {}).get("tries", 0) + 1}
         if now() - ended >= wait:
@@ -366,10 +351,15 @@ def poll_speaker_pass(home, record):
 
 
 def poll_import(record, meeting):
-    """An imported recording (a shared glasses call, or one imported in the app) is ready when its job ends."""
+    """An imported recording (a shared glasses call, or one imported in the app) is ready when its job ends
+    and its summary is in, or SUMMARY_WAIT_SECONDS after the transcript was."""
     job = meeting.get("recording_import") or {}
     state = job.get("processing_status") or meeting.get("processing_status")
     if state == "done":
+        transcribed = record.setdefault("transcribed_at", now())
+        if job.get("summary_status") != "done" and now() - transcribed < SUMMARY_WAIT_SECONDS:
+            record["phase"] = "waiting"
+            return
         mark_ready(record, "batch", "transcribed by Anarlog from the imported recording")
     elif state == "failed":
         record["phase"] = "failed"
@@ -407,7 +397,8 @@ def poll_one(home, records, meeting_id, record, item, problems):
         return
     meeting = meetings_cli(home, "get", meeting_id)
     if record is None:
-        record = known[meeting_id] = {"id": meeting_id, "origin": "recorded", "first_seen": now()}
+        record = known[meeting_id] = {"id": meeting_id, "origin": "recorded", "phase": "waiting",
+                                      "first_seen": now()}
     record.pop("error", None)
     record["title"] = meeting.get("title") or record.get("title") or "Untitled meeting"
     record["date"] = meeting.get("started_at") or meeting.get("created_at") or ""
@@ -510,8 +501,11 @@ def cmd_poll(home, args):
         try:
             try:
                 poll_glasses(home, records, problems, deadline)
+                records["notices"].pop("glasses", None)
             except OSError as error:
-                problems.append(f"the glasses folder cannot be read ({error})")
+                line = notice(records, "glasses", f"the glasses folder cannot be read ({error})")
+                if line:
+                    problems.append(line)
             poll_meetings(home, records, problems, deadline)
             records["notices"].pop("anarlog", None)
         except Failure as error:
@@ -547,8 +541,8 @@ def split_transcript(markdown):
     return head.rstrip(), transcript.strip() if marker else ""
 
 
-def work_hits(home, export):
-    fields = [export.get("title") or ""]
+def work_hits(home, export, *texts):
+    fields = [export.get("title") or ""] + list(texts)
     for person in export.get("participants") or []:
         fields += [person.get(key) or "" for key in ("display_name", "email", "organization_name", "job_title")]
     fields.append((export.get("note") or {}).get("markdown") or "")
@@ -562,29 +556,33 @@ def work_hits(home, export):
     return hits
 
 
-def self_labels(home, *exports):
+def self_labels(home, export):
     labels = {label.strip().lower() for label in home.config["self_label"]}
-    for export in exports:
-        for speaker in export.get("speakers") or []:
-            if speaker.get("is_self") and (speaker.get("name") or "").strip():
-                labels.add(speaker["name"].strip().lower())
+    for speaker in export.get("speakers") or []:
+        if speaker.get("is_self") and (speaker.get("name") or "").strip():
+            labels.add(speaker["name"].strip().lower())
     return labels
 
 
+def paragraph_speaker(paragraph):
+    speaker, sep, _ = paragraph.partition(": ")
+    return speaker.strip() if sep and len(speaker) <= 60 and "\n" not in speaker else ""
+
+
 def scan_spoken_orders(transcript, labels):
-    """Each paragraph where someone said a spoken-order phrase, with whether the captain said it."""
+    """Each paragraph where someone said a spoken-order phrase, with whether the captain said it: known
+    only when the transcript labels the captain's own speech somewhere, otherwise None."""
     paragraphs = [p.strip() for p in transcript.split("\n\n") if p.strip()]
+    speakers = [paragraph_speaker(p) for p in paragraphs]
+    attributed = any(s.lower() in labels for s in speakers if s)
     found = []
     for index, paragraph in enumerate(paragraphs):
         if not TRIGGER.search(normalize(paragraph)):
             continue
-        speaker, sep, _ = paragraph.partition(": ")
-        if sep and len(speaker) <= 60 and "\n" not in speaker:
-            by_captain = speaker.strip().lower() in labels if labels else None
-        else:
-            speaker, by_captain = "", None
+        speaker = speakers[index]
+        by_captain = speaker.lower() in labels if speaker and attributed else None
         context = paragraphs[index - 1] if index else ""
-        found.append({"speaker": speaker.strip(), "by_captain": by_captain,
+        found.append({"speaker": speaker, "by_captain": by_captain,
                       "text": paragraph[:1500], "context": context[-600:]})
     return found
 
@@ -665,7 +663,8 @@ def gate(item, found, extra_reason=""):
         reasons.append(extra_reason)
     if not found:
         reasons.append("its source could not be found in the meeting record")
-    if item.get("outward") or RISKY_WORDS.search(f"{item.get('title', '')} {item.get('instruction', '')}"):
+    if item.get("outward") or OUTWARD_VERBS.search(item.get("title") or "") \
+            or OUTWARD_VERBS.search(item.get("instruction") or ""):
         reasons.append("it would act toward someone outside Starship or cannot easily be undone")
     if item.get("destructive"):
         reasons.append("it cannot be undone")
@@ -696,7 +695,7 @@ def sort_outcomes(home, output, record_text, orders):
         found = bool(evidence) and normalize(evidence) in normalize(order["text"])
         extra = "" if order["by_captain"] else (
             "someone other than the captain said it" if order["by_captain"] is False
-            else "the transcript does not show who said it")
+            else "could not tell who said it")
         entry = {"title": "Spoken order: " + item.get("instruction", "").strip()[:80],
                  "instruction": item.get("instruction", "").strip(), "evidence": evidence, "origin": "spoken order"}
         reasons = gate(dict(item, title=""), found, extra)
@@ -707,10 +706,6 @@ def sort_outcomes(home, output, record_text, orders):
             review.append({"title": "A spoken order that could not be read clearly", "instruction": "",
                            "evidence": order["text"][:300], "origin": "spoken order",
                            "why_review": "the phrase was heard but no clear instruction came with it"})
-    if len(clear) > MAX_CLEAR_ACTIONS:
-        for entry in clear[MAX_CLEAR_ACTIONS:]:
-            review.append(dict(entry, why_review=f"more than {MAX_CLEAR_ACTIONS} clear follow-ups came from one meeting"))
-        clear = clear[:MAX_CLEAR_ACTIONS]
     return clear, review
 
 
@@ -810,12 +805,7 @@ def intake_claimed(home, record):
     if not transcript:
         kind = "batch" if has_batch_transcript(export) else ("streaming" if export.get("transcripts") else "none")
         transcript = {"kind": kind, "note": "read as it stood when the intake ran", "source_meeting": meeting_id}
-    hits = work_hits(home, export)
-    if hits:
-        finish(home, meeting_id, phase="work", title=title, taken_at=now())
-        return f"work meeting, not processed: {title}"
-    markdown = export_markdown(home, meeting_id)
-    head, own_transcript = split_transcript(markdown)
+    head, own_transcript = split_transcript(export_markdown(home, meeting_id))
     exports = [export]
     text = own_transcript
     if transcript.get("source_meeting") and transcript["source_meeting"] != meeting_id:
@@ -823,7 +813,11 @@ def intake_claimed(home, record):
         exports.append(pass_export)
         text = split_transcript(export_markdown(home, transcript["source_meeting"]))[1] or own_transcript
     record_text = head + ("\n\n## Transcript\n\n" + text if text else "")
-    orders = scan_spoken_orders(text, self_labels(home, *exports))
+    if work_hits(home, export, record_text, own_transcript):
+        finish(home, meeting_id, phase="work", title=title, taken_at=now())
+        return f"work meeting, not processed: {title}"
+    labels = self_labels(home, export)
+    orders = scan_spoken_orders(own_transcript, labels) or scan_spoken_orders(text, labels)
     limit = int(home.config["transcript_chars"])
     bounded = record_text if len(record_text) <= limit else \
         record_text[:limit] + "\n\n[the rest of the transcript is left out here]"
