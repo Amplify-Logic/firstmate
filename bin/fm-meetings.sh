@@ -76,7 +76,8 @@
 #     said under the captain's own speaker label; one said by another labelled
 #     speaker, one where the transcript never labels the captain, and one heard
 #     only in the speaker pass (so it could not tell who said it) stays for
-#     review.
+#     review. An action whose quoted source lies in a candidate is filed only
+#     as that spoken order, so this rule alone decides whether it starts.
 #   - Each outcome is sorted in two. A clear, low-risk, internal follow-up whose
 #     quoted source is found in the meeting goes to firstmate as ready-to-start
 #     work: one inbox note per meeting (`fm-inbox.sh note --request-id
