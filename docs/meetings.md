@@ -18,7 +18,7 @@ Calls recorded by smart glasses and shared to an iCloud Drive folder run through
    - Clear, low-risk, internal follow-ups, such as research, planning, drafting something for you to read, or building in your own projects, go to Starship ready to start, with the snippet they came from.
    - Anything that needs your review or more thought, anything outward-facing (an instruction to send, reply, email, message, post, publish, pay, buy, sign, invite or call someone), anything destructive (delete or remove), anything that touches another person's commitment, and anything whose source cannot be found in the meeting waits on your phone for a tap.
    - When you say "Firstmate, do it", "Firstmate, build that" or "captain's order" in the meeting, the instruction that goes with it counts as a clear follow-up when the meeting's own transcript shows you said it.
-     It waits for your tap when someone else said it, or when the transcript does not label your speech, so Starship could not tell who said it.
+     It waits for your tap when someone else said it, or when Starship could not tell who said it: the transcript does not label your speech, or only the after-the-call pass heard the phrase.
 4. One spoken line on the desk says what the meeting settled and how many follow-ups started and wait for you (only when desk voice is on).
 
 Nothing in this layer sends, replies, invites, pays or publishes anything.

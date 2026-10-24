@@ -42,12 +42,13 @@ CONFIG_DEFAULTS = {
 REPEATABLE_KEYS = {"work_marker", "self_label"}
 WORK_WORDS_FILE = "meeting-work-words"
 
-# An instruction that does one of these toward someone, whatever the model said:
-# the verb opens the instruction or one of its clauses, so "the call" in a
-# description does not count.
+# An instruction that does one of these toward someone, whatever the model said.
+# "call", "phone", "message" and "post" count only with a person or object
+# after them, so "mentioned on the call" in a description does not.
 OUTWARD_VERBS = re.compile(
-    r"(?:^|[.;:,!?]\s*|\b(?:and|then)\s+)"
-    r"(send|reply|e-?mail|message|post|publish|pay|buy|sign|invite|call|delete|remove)\b",
+    r"\b(?:send|reply|e-?mail|publish|pay|buy|sign|invite|delete|remove)\b"
+    r"|\b(?:call|phone|message|post)\s+"
+    r"(?!(?:about|after|and|at|before|during|for|from|in|is|of|on|or|that|to|was|were|when|where|which|with)\b)\w",
     re.IGNORECASE,
 )
 TRIGGER = re.compile(r"\bfirst\s*mate\s+(?:do|build)\s+(?:it|that|this)\b|\bcaptain\s*'?\s*s\s+order\b")
@@ -312,12 +313,12 @@ def poll_recorded(home, record, export):
         mark_ready(record, "none", "Anarlog kept no transcript")
         return
     wait = int(home.config["speaker_pass_wait_minutes"]) * 60
-    path, why = recording_path(home, export)
-    if not path:
-        mark_ready(record, "streaming", why)
-        return
     title = (export.get("title") or "Meeting").strip() + SPEAKER_PASS_TITLE
     try:
+        path, why = recording_path(home, export)
+        if not path:
+            mark_ready(record, "streaming", why)
+            return
         job = import_recording(home, path, title, REQUEST_PREFIX + "speakers-" + record["id"])
     except Failure as error:
         record["speaker_pass"] = {"error": str(error), "tries": record.get("speaker_pass", {}).get("tries", 0) + 1}
@@ -454,17 +455,22 @@ def poll_glasses(home, records, problems, deadline):
         if os.path.splitext(name)[1].lower() not in AUDIO_EXTENSIONS:
             files[path] = {"phase": "skipped", "reason": "not an audio file", "first_seen": now()}
             continue
-        stat = os.stat(path)
-        size, mtime = stat.st_size, int(stat.st_mtime)
-        if not entry or entry.get("size") != size or entry.get("mtime") != mtime \
-                or now() - mtime < FILE_STABLE_SECONDS or size == 0:
-            files[path] = dict(entry or {}, phase="seen", size=size, mtime=mtime,
+        try:
+            stat = os.stat(path)
+            size, mtime = stat.st_size, int(stat.st_mtime)
+            if not entry or entry.get("size") != size or entry.get("mtime") != mtime \
+                    or now() - mtime < FILE_STABLE_SECONDS or size == 0:
+                files[path] = dict(entry or {}, phase="seen", size=size, mtime=mtime,
+                                   first_seen=(entry or {}).get("first_seen", now()))
+                continue
+            sha = hashlib.sha256()
+            with open(path, "rb") as handle:
+                for chunk in iter(lambda: handle.read(1 << 20), b""):
+                    sha.update(chunk)
+        except OSError as error:
+            files[path] = dict(entry or {}, phase="retry", error=f"the file cannot be read ({error})",
                                first_seen=(entry or {}).get("first_seen", now()))
             continue
-        sha = hashlib.sha256()
-        with open(path, "rb") as handle:
-            for chunk in iter(lambda: handle.read(1 << 20), b""):
-                sha.update(chunk)
         digest = sha.hexdigest()
         stamp = datetime.datetime.fromtimestamp(mtime).strftime("%Y-%m-%d %H:%M")
         try:
@@ -585,6 +591,21 @@ def scan_spoken_orders(transcript, labels):
         found.append({"speaker": speaker, "by_captain": by_captain,
                       "text": paragraph[:1500], "context": context[-600:]})
     return found
+
+
+def order_words(order):
+    text = normalize(order["text"])
+    match = TRIGGER.search(text)
+    words = text[match.end():].split()[:8] if match else []
+    return {word for word in words if len(word) > 2 and word not in STOPWORDS}
+
+
+def same_order(one, two):
+    """Whether two transcripts' candidates are the same spoken order, judged by the words after the phrase."""
+    first, second = order_words(one), order_words(two)
+    if not first or not second:
+        return not first and not second
+    return 2 * len(first & second) >= min(len(first), len(second))
 
 
 INTAKE_SCHEMA = {
@@ -817,7 +838,10 @@ def intake_claimed(home, record):
         finish(home, meeting_id, phase="work", title=title, taken_at=now())
         return f"work meeting, not processed: {title}"
     labels = self_labels(home, export)
-    orders = scan_spoken_orders(own_transcript, labels) or scan_spoken_orders(text, labels)
+    orders = scan_spoken_orders(own_transcript, labels)
+    if text != own_transcript:
+        orders += [dict(order, by_captain=None) for order in scan_spoken_orders(text, labels)
+                   if not any(same_order(order, live) for live in orders)]
     limit = int(home.config["transcript_chars"])
     bounded = record_text if len(record_text) <= limit else \
         record_text[:limit] + "\n\n[the rest of the transcript is left out here]"
@@ -924,7 +948,7 @@ def values_text(value):
 
 def meeting_hit(home, meeting_id):
     meeting = meetings_cli(home, "get", meeting_id)
-    if work_hits(home, meeting):
+    if work_hits(home, meeting, export_markdown(home, meeting_id)):
         return None
     return {"id": meeting_id, "title": meeting.get("title"), "outcome": "",
             "date": meeting.get("started_at") or meeting.get("created_at") or "",

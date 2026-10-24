@@ -69,9 +69,10 @@
 #     or "captain's order" are found first and handed to the model as
 #     spoken-order candidates. They are read from the meeting's own transcript,
 #     where Anarlog labels the captain's speech (the live one when a speaker
-#     pass ran). One said under the captain's own speaker label counts as a
-#     clear action; one said by another labelled speaker, or where the
-#     transcript never labels the captain (so it could not tell who said it),
+#     pass ran), and from the speaker-pass transcript too. One said under the
+#     captain's own speaker label counts as a clear action; one said by another
+#     labelled speaker, one where the transcript never labels the captain, and
+#     one heard only in the speaker pass (so it could not tell who said it)
 #     stays for review.
 #   - Each outcome is sorted in two. A clear, low-risk, internal follow-up whose
 #     quoted source is found in the meeting goes to firstmate as ready-to-start
