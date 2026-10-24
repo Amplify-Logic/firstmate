@@ -516,6 +516,12 @@ stop_cards() {  # <fixture>
   done < "$1/card-pids"
 }
 
+# Portable mode bits. Platform-detected, never the `stat -f || stat -c` fallback:
+# GNU stat reads the file system under -f and prints that block instead.
+file_mode() {  # <file>
+  if [ "$(uname)" = Darwin ]; then stat -f %Lp "$1"; else stat -c %a "$1"; fi
+}
+
 card_field() {  # <fixture> <python expression over card>
   python3 -c 'import json,sys; card=json.load(open(sys.argv[1])); print(eval(sys.argv[2]))' \
     "$1/home/state/screen-steps/card.json" "$2"
@@ -560,7 +566,7 @@ test_show_builds_the_card_and_opens_the_page_in_arc() {
   assert_equals "Name: \`Happiness Compass\` and SKU \`compass-1\`|Keep the capital letters, **exactly**." \
     "$(card_field "$fx" '"|".join(card["steps"][2]["text"].splitlines())')" "an indented line joins its step"
   assert_equals "['com.example.compass', 'iOS']" "$(card_field "$fx" 'card["steps"][3]["values"]')" "values are kept per step"
-  assert_equals 600 "$(stat -f %Lp "$fx/home/state/screen-steps/card.json" 2>/dev/null || stat -c %a "$fx/home/state/screen-steps/card.json")" "the card file is private"
+  assert_equals 600 "$(file_mode "$fx/home/state/screen-steps/card.json")" "the card file is private"
   assert_equals 1 "$(grep -c build "$fx/swift.log")" "the card app is built on first use"
   assert_absent "$fx/arc-unsupported.log" "every request show made to Arc was understood"
   assert_equals "['https://mail.example.com', 'https://appstoreconnect.apple.com/apps']" \
