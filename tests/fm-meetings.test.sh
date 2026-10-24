@@ -387,6 +387,28 @@ test_spoken_order_evidence_from_the_live_copy_credits_the_captain() {
   pass "fm-meetings: a spoken order credits the captain only when quoted from the captain's live copy"
 }
 
+test_spoken_order_also_listed_as_an_action_is_filed_once() {
+  local home out order
+  order='{"candidates":[1,2],"instruction":"Plan the bike route along the river","evidence":"plan the root along the river","outward":false,"destructive":false,"other_person":false}'
+  home=$(new_home order-once)
+  baseline "$home"
+  speaker_pass_meeting "$home" m-once "Captain: Firstmate, do it: plan the root along the river." \
+    "Speaker 1: Firstmate, do it: plan the route along the river."
+  model_says "$home" "{\"outcome\":\"The route goes along the river.\",\"actions\":[{\"title\":\"Plan the bike route\",\"instruction\":\"Plan the bike route along the river\",\"evidence\":\"plan the route along the river\",\"clear\":true,\"why_review\":\"\",\"outward\":false,\"destructive\":false,\"other_person\":false}],\"spoken_orders\":[$order]}"
+  out=$(run "$home" 180 intake)
+  assert_contains "$out" "Route chat: 1 clear follow-up(s) to start, 0 for the captain's tap" "the captain's order is started once, not again as a meeting action"
+
+  home=$(new_home order-unattributed)
+  baseline "$home"
+  meeting "$home" '{"id":"m-glass","title":"Glasses chat","ended":-900,"source":"batch_transcription","transcript":"Speaker 1: Firstmate, do it, plan the dinner menu.\n\nSpeaker 2: Lovely."}'
+  run "$home" 0 check >/dev/null
+  model_says "$home" '{"outcome":"Dinner is on Friday.","actions":[{"title":"Plan the dinner menu","instruction":"Plan the dinner menu","evidence":"plan the dinner menu","clear":true,"why_review":"","outward":false,"destructive":false,"other_person":false}],"spoken_orders":[{"candidates":[1],"instruction":"Plan the dinner menu","evidence":"plan the dinner menu","outward":false,"destructive":false,"other_person":false}]}'
+  out=$(run "$home" 60 intake)
+  assert_contains "$out" "Glasses chat: 0 clear follow-up(s) to start, 1 for the captain's tap" "an order no one can attribute waits and does not start as a meeting action"
+  assert_grep "could not tell who said it" "$home/inbox/meeting-m-glass-review" "it waits because no one can tell who said it"
+  pass "fm-meetings: a spoken order the model also lists as a meeting action is filed once, by the spoken-order rule"
+}
+
 test_speaker_pass_falls_back_to_the_live_transcript() {
   local home out
   home=$(new_home fallback)
@@ -734,6 +756,7 @@ test_meeting_whose_first_read_fails_is_retried
 test_capture_pending_and_missing_summary_wait
 test_live_only_meeting_gets_a_speaker_pass
 test_spoken_order_evidence_from_the_live_copy_credits_the_captain
+test_spoken_order_also_listed_as_an_action_is_filed_once
 test_speaker_pass_falls_back_to_the_live_transcript
 test_work_meeting_is_never_processed
 test_intake_sorts_clear_actions_from_review_items

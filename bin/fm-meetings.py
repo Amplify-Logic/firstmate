@@ -634,7 +634,7 @@ INTAKE_PROMPT = """You read the record of one of the captain's own personal meet
 
 outcome: one plain sentence under 25 words saying what the meeting settled. No links, ids or tool names.
 
-actions: every concrete next step the record supports for the captain or Starship. Leave out steps that belong only to other people. For each:
+actions: every concrete next step the record supports for the captain or Starship. Leave out steps that belong only to other people, and steps a spoken order candidate below already gives; those go only under spoken_orders. For each:
 - title: a short imperative under 12 words.
 - instruction: a self-contained instruction Starship can act on, with the context it needs from the meeting.
 - evidence: a passage of 4 to 30 words copied exactly from the RECORD that shows this step.
@@ -697,8 +697,11 @@ def gate(item, found, extra_reason=""):
 def sort_outcomes(home, output, record_text, orders):
     clear, review = [], []
     haystack = normalize(record_text)
+    candidates = [normalize(order["text"]) for order in orders]
     for item in output.get("actions") or []:
         evidence = (item.get("evidence") or "").strip()
+        if evidence and any(normalize(evidence) in text for text in candidates):
+            continue  # a spoken order: only the spoken-order rule decides whether it starts
         found = bool(evidence) and normalize(evidence) in haystack
         entry = {"title": item.get("title", "").strip(), "instruction": item.get("instruction", "").strip(),
                  "evidence": evidence, "origin": "meeting"}
