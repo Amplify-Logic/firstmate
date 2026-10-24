@@ -352,6 +352,41 @@ test_live_only_meeting_gets_a_speaker_pass() {
   pass "fm-meetings: a live-only meeting gets Anarlog's Batch pass through its own import"
 }
 
+# speaker_pass_meeting <home> <id> <live transcript> <speaker-pass transcript>:
+# a live-only meeting whose speaker pass has finished and is ready for intake.
+speaker_pass_meeting() {
+  local home=$1 id=$2 live=$3 heard=$4 child
+  mkdir -p "$home/anarlog/sessions/$id"
+  printf 'RIFF-fake-audio' > "$home/anarlog/sessions/$id/audio.wav"
+  meeting "$home" "{\"id\":\"$id\",\"title\":\"Route chat\",\"ended\":-900,\"transcript\":\"$live\",\"attachments\":[{\"relative_path\":\"audio.wav\",\"filename\":\"audio.wav\",\"content_type\":\"audio/wav\"}]}"
+  run "$home" 0 check >/dev/null
+  child=$(python3 -c 'import hashlib,sys; print(hashlib.sha1(sys.argv[1].encode()).hexdigest()[:8])' "fm-meetings-speakers-$id")
+  meeting "$home" "{\"id\":\"imp-$child\",\"title\":\"Route chat (speaker pass)\",\"ended\":-60,\"source\":\"batch_transcription\",\"model\":\"soniqo-parakeet-batch\",\"recording_import\":{\"job_id\":\"job-$child\",\"meeting_id\":\"imp-$child\",\"processing_status\":\"done\",\"summary_status\":\"done\",\"error\":null},\"transcript\":\"$heard\"}"
+  printf '{"processing_status":"done","error":null}\n' > "$home/anarlog/jobs/job-$child.json"
+  run "$home" 120 check >/dev/null
+}
+
+test_spoken_order_evidence_from_the_live_copy_credits_the_captain() {
+  local home out live="Captain: Firstmate, do it: plan the root along the river." \
+    heard="Speaker 1: Firstmate, do it: plan the route along the river."
+  home=$(new_home quote-live)
+  baseline "$home"
+  speaker_pass_meeting "$home" m-quote "$live" "$heard"
+  model_says "$home" '{"outcome":"The route goes along the river.","actions":[],"spoken_orders":[{"candidates":[1,2],"instruction":"Plan the bike route along the river","evidence":"plan the root along the river","outward":false,"destructive":false,"other_person":false}]}'
+  out=$(run "$home" 180 intake)
+  assert_contains "$out" "Route chat: 1 clear follow-up(s) to start, 0 for the captain's tap" "an order quoted from the captain's live copy starts on its own"
+  assert_grep "copied exactly from a covered candidate heard in the meeting transcript" "$(ls "$home"/model/prompt.*)" "the prompt asks for the quote from the live copy"
+
+  home=$(new_home quote-pass)
+  baseline "$home"
+  speaker_pass_meeting "$home" m-quote "$live" "$heard"
+  model_says "$home" '{"outcome":"The route goes along the river.","actions":[],"spoken_orders":[{"candidates":[1,2],"instruction":"Plan the bike route along the river","evidence":"plan the route along the river","outward":false,"destructive":false,"other_person":false}]}'
+  out=$(run "$home" 180 intake)
+  assert_contains "$out" "Route chat: 0 clear follow-up(s) to start, 1 for the captain's tap" "an order quoted only from the speaker-pass wording waits"
+  assert_grep "could not tell who said it" "$home/inbox/meeting-m-quote-review" "and says it could not tell who said it"
+  pass "fm-meetings: a spoken order credits the captain only when quoted from the captain's live copy"
+}
+
 test_speaker_pass_falls_back_to_the_live_transcript() {
   local home out
   home=$(new_home fallback)
@@ -698,6 +733,7 @@ test_native_batch_meeting_is_announced_once
 test_meeting_whose_first_read_fails_is_retried
 test_capture_pending_and_missing_summary_wait
 test_live_only_meeting_gets_a_speaker_pass
+test_spoken_order_evidence_from_the_live_copy_credits_the_captain
 test_speaker_pass_falls_back_to_the_live_transcript
 test_work_meeting_is_never_processed
 test_intake_sorts_clear_actions_from_review_items
