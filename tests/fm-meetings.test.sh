@@ -319,7 +319,7 @@ test_live_only_meeting_gets_a_speaker_pass() {
   # Anarlog keeps a meeting's folder under sessions/, inside any meeting folders.
   mkdir -p "$home/anarlog/sessions/Trips/m-live"
   printf 'RIFF-fake-audio' > "$home/anarlog/sessions/Trips/m-live/audio.wav"
-  meeting "$home" '{"id":"m-live","title":"Bike trip","ended":-900,"transcript":"Captain: Firstmate, do it: plan the route along the river.\n\nRobin: Fine by me.\n\nCaptain: We should compare the shed kits.\n\nCaptain: Firstmate, do it.","attachments":[{"id":"a1","relative_path":"audio.wav","filename":"audio.wav","content_type":"audio/wav","size_bytes":15,"sha256":""}]}'
+  meeting "$home" '{"id":"m-live","title":"Bike trip","ended":-900,"transcript":"Captain: Firstmate, do it: plan the route along the river.\n\nRobin: Fine by me.\n\nCaptain: We should compare the shed kits. first made do it.\n\nCaptain: And plan the route back home. Firstmate, do it.","attachments":[{"id":"a1","relative_path":"audio.wav","filename":"audio.wav","content_type":"audio/wav","size_bytes":15,"sha256":""}]}'
   out=$(run "$home" 0 check)
   assert_equals "" "$out" "nothing is announced while the speaker pass runs"
   assert_grep '"request_key": "fm-meetings-speakers-m-live"' "$home/anarlog/imports.jsonl" "the recording is imported for Anarlog's Batch pass"
@@ -329,7 +329,7 @@ test_live_only_meeting_gets_a_speaker_pass() {
   child=$(python3 -c 'import json,sys; print(json.loads(open(sys.argv[1]).readline())["request_key"])' "$home/anarlog/imports.jsonl")
   child=$(printf '%s' "$child" | python3 -c 'import hashlib,sys; print(hashlib.sha1(sys.stdin.read().encode()).hexdigest()[:8])')
   job="job-$child"
-  meeting "$home" "{\"id\":\"imp-$child\",\"title\":\"Bike trip (speaker pass)\",\"ended\":-60,\"source\":\"batch_transcription\",\"model\":\"soniqo-parakeet-batch\",\"recording_import\":{\"job_id\":\"$job\",\"meeting_id\":\"imp-$child\",\"processing_status\":\"transcribing\",\"summary_status\":\"pending\",\"error\":null},\"transcript\":\"Speaker 1: Firstmate, do it: plan the route along the river.\\n\\nSpeaker 2: Fine by me.\\n\\nSpeaker 1: Firstmate, build that: a packing list for the trip.\\n\\nSpeaker 1: We should compare the shed kits. Firstmate, do it. I will also look at the weather for Saturday.\\n\\nSpeaker 1: And plan the route back home. Firstmate, do it.\"}"
+  meeting "$home" "{\"id\":\"imp-$child\",\"title\":\"Bike trip (speaker pass)\",\"ended\":-60,\"source\":\"batch_transcription\",\"model\":\"soniqo-parakeet-batch\",\"recording_import\":{\"job_id\":\"$job\",\"meeting_id\":\"imp-$child\",\"processing_status\":\"transcribing\",\"summary_status\":\"pending\",\"error\":null},\"transcript\":\"Speaker 1: Firstmate, do it: plan the route along the river.\\n\\nSpeaker 2: Fine by me.\\n\\nSpeaker 1: We should compare the shed kits. Firstmate, do it.\\n\\nSpeaker 1: And plan the route back home. Firstmate, do it.\\n\\nSpeaker 2: Firstmate, do it, maybe.\"}"
   out=$(run "$home" 60 check)
   assert_equals "" "$out" "an unfinished speaker pass keeps waiting"
   printf '{"processing_status":"done","error":null}\n' > "$home/anarlog/jobs/$job.json"
@@ -338,13 +338,14 @@ test_live_only_meeting_gets_a_speaker_pass() {
   assert_not_contains "$out" "(speaker pass)" "the speaker-pass copy is never announced on its own"
   assert_equals 1 "$(grep -c . "$home/anarlog/imports.jsonl")" "the speaker pass is requested once"
 
-  model_says "$home" '{"outcome":"The route goes along the river.","actions":[],"spoken_orders":[{"candidate":1,"instruction":"Plan the bike route along the river","evidence":"plan the route along the river","outward":false,"destructive":false,"other_person":false},{"candidate":2,"instruction":"Compare the shed kits","evidence":"Firstmate, do it","outward":false,"destructive":false,"other_person":false},{"candidate":3,"instruction":"Build a packing list for the trip","evidence":"a packing list for the trip","outward":false,"destructive":false,"other_person":false},{"candidate":4,"instruction":"Plan the route back home","evidence":"plan the route back home","outward":false,"destructive":false,"other_person":false}]}'
+  # Candidates: 1-2 from the live transcript (the captain's), 3-6 from the speaker pass.
+  model_says "$home" '{"outcome":"The route goes along the river.","actions":[],"spoken_orders":[{"candidates":[1,3],"instruction":"Plan the bike route along the river","evidence":"plan the route along the river","outward":false,"destructive":false,"other_person":false},{"candidates":[4],"instruction":"Compare the shed kits","evidence":"We should compare the shed kits","outward":false,"destructive":false,"other_person":false},{"candidates":[2,5],"instruction":"Plan the route back home","evidence":"plan the route back home","outward":false,"destructive":false,"other_person":false}]}'
   out=$(run "$home" 180 intake)
-  assert_contains "$out" "Bike trip: 2 clear follow-up(s) to start, 2 for the captain's tap" "orders heard in both transcripts count once, and those heard only in the speaker pass wait"
-  assert_grep "Compare the shed kits" "$home/inbox/meeting-m-live-start" "an order whose instruction came before the phrase keeps the live attribution"
-  assert_no_grep "Compare the shed kits" "$home/inbox/meeting-m-live-review" "a longer speaker-pass turn holding the same order does not add a second copy"
-  assert_grep "Build a packing list for the trip (waits because could not tell who said it" "$home/inbox/meeting-m-live-review" "an order heard only in the speaker pass could not be attributed"
-  assert_grep "Plan the route back home (waits because could not tell who said it" "$home/inbox/meeting-m-live-review" "a pass-only order is kept even when a live order shares some of its words"
+  assert_contains "$out" "Bike trip: 2 clear follow-up(s) to start, 2 for the captain's tap" "orders heard in both transcripts count once, and the rest wait"
+  assert_grep "Plan the route back home" "$home/inbox/meeting-m-live-start" "an order heard in both transcripts keeps the live attribution"
+  assert_no_grep "Plan the route back home" "$home/inbox/meeting-m-live-review" "an order heard in both transcripts is filed once"
+  assert_grep "Compare the shed kits (waits because could not tell who said it" "$home/inbox/meeting-m-live-review" "an order the live transcript misheard, just before a live-heard one, is kept and waits"
+  assert_grep "A spoken order that could not be read clearly" "$home/inbox/meeting-m-live-review" "a candidate no entry covers still waits"
   assert_not_contains "$out" "live transcript only" "the speaker-pass transcript counts as final"
   assert_grep "Plan the bike route along the river" "$home/inbox/meeting-m-live-start" "the spoken order goes to firstmate ready to start"
   assert_grep "Speaker 2: Fine by me." "$(ls "$home"/model/prompt.*)" "the model reads the speaker-pass transcript"
@@ -455,7 +456,7 @@ test_intake_sorts_clear_actions_from_review_items() {
     {"title":"Draft a planting plan","instruction":"Draft a planting plan","evidence":"words that were never said","clear":true,"why_review":"","outward":false,"destructive":false,"other_person":false},
     {"title":"Email Robin the shed list","instruction":"Email the list","evidence":"Let us compare three shed kits","clear":true,"why_review":"","outward":false,"destructive":false,"other_person":false},
     {"title":"Get measurements from Robin","instruction":"Wait for the measurements","evidence":"I will send you the measurements","clear":false,"why_review":"Robin owns it","outward":false,"destructive":false,"other_person":true}],
-    "spoken_orders":[{"candidate":1,"instruction":"Buy the cheapest shed","evidence":"order the cheapest one","outward":true,"destructive":false,"other_person":false}]}'
+    "spoken_orders":[{"candidates":[1],"instruction":"Buy the cheapest shed","evidence":"order the cheapest one","outward":true,"destructive":false,"other_person":false}]}'
   out=$(run "$home" 60 intake)
   assert_contains "$out" "Garden planning: 2 clear follow-up(s) to start, 4 for the captain's tap, outcome spoken" "the intake reports the split"
   start="$home/inbox/meeting-m-mix-start"
@@ -554,7 +555,7 @@ test_glasses_calls_flow_into_the_same_intake() {
   out=$(run "$home" 600 status)
   assert_contains "$out" "call one.txt" "a non-audio file is listed"
   assert_contains "$out" "skipped" "and skipped"
-  model_says "$home" '{"outcome":"Dinner is on Friday.","actions":[],"spoken_orders":[{"candidate":1,"instruction":"Plan the dinner menu","evidence":"plan the dinner menu","outward":false,"destructive":false,"other_person":false}]}'
+  model_says "$home" '{"outcome":"Dinner is on Friday.","actions":[],"spoken_orders":[{"candidates":[1],"instruction":"Plan the dinner menu","evidence":"plan the dinner menu","outward":false,"destructive":false,"other_person":false}]}'
   touch "$home/spoken.txt.off"
   out=$(run "$home" 660 intake)
   assert_contains "$out" "Glasses call 2026-01-01 01:01: 0 clear follow-up(s) to start, 1 for the captain's tap" "the glasses call runs through the same intake"
