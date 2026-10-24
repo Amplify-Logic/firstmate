@@ -43,14 +43,16 @@ REPEATABLE_KEYS = {"work_marker", "self_label"}
 WORK_WORDS_FILE = "meeting-work-words"
 
 # An instruction that does one of these toward someone, whatever the model said.
-# "call", "phone", "message" and "post" count only with a person or object
-# after them, so "mentioned on the call" in a description does not.
+# "call", "phone", "message" and "post" are nouns only right after one of
+# NOUN_BEFORE, so "mentioned on the call" does not count; anywhere else they
+# are verbs.
 OUTWARD_VERBS = re.compile(
-    r"\b(?:send|reply|e-?mail|publish|pay|buy|sign|invite|delete|remove)\b"
-    r"|\b(?:call|phone|message|post)\s+"
-    r"(?!(?:about|after|and|at|before|during|for|from|in|is|of|on|or|that|to|was|were|when|where|which|with)\b)\w",
+    r"\b(send|reply|e-?mail|publish|pay|buy|sign|invite|delete|remove)\b"
+    r"|(?:\b(\w+)\s+)?\b(call|phone|message|post)\b",
     re.IGNORECASE,
 )
+NOUN_BEFORE = set("""the a an this that these those our my your his her their its on in during after before from
+of at by for with about into""".split())
 TRIGGER = re.compile(r"\bfirst\s*mate\s+(?:do|build)\s+(?:it|that|this)\b|\bcaptain\s*'?\s*s\s+order\b")
 
 
@@ -75,6 +77,11 @@ def iso_epoch(value):
     if stamp.tzinfo is None:
         stamp = stamp.replace(tzinfo=datetime.timezone.utc)
     return int(stamp.timestamp())
+
+
+def outward(text):
+    return any(match.group(1) or (match.group(2) or "").lower() not in NOUN_BEFORE
+               for match in OUTWARD_VERBS.finditer(text or ""))
 
 
 def normalize(text):
@@ -455,13 +462,14 @@ def poll_glasses(home, records, problems, deadline):
         if os.path.splitext(name)[1].lower() not in AUDIO_EXTENSIONS:
             files[path] = {"phase": "skipped", "reason": "not an audio file", "first_seen": now()}
             continue
+        fresh = {key: value for key, value in (entry or {}).items() if key != "error"}
         try:
             stat = os.stat(path)
             size, mtime = stat.st_size, int(stat.st_mtime)
             if not entry or entry.get("size") != size or entry.get("mtime") != mtime \
                     or now() - mtime < FILE_STABLE_SECONDS or size == 0:
-                files[path] = dict(entry or {}, phase="seen", size=size, mtime=mtime,
-                                   first_seen=(entry or {}).get("first_seen", now()))
+                files[path] = dict(fresh, phase="seen", size=size, mtime=mtime,
+                                   first_seen=fresh.get("first_seen", now()))
                 continue
             sha = hashlib.sha256()
             with open(path, "rb") as handle:
@@ -482,7 +490,7 @@ def poll_glasses(home, records, problems, deadline):
                 problems.append(f"the glasses call {name} could not be handed to Anarlog ({error})")
             continue
         meeting_id = job.get("meeting_id")
-        files[path] = dict(entry, phase="imported", sha256=digest, meeting_id=meeting_id, job_id=job.get("job_id"))
+        files[path] = dict(fresh, phase="imported", sha256=digest, meeting_id=meeting_id, job_id=job.get("job_id"))
         if meeting_id and meeting_id not in records["meetings"]:
             records["meetings"][meeting_id] = {"id": meeting_id, "origin": "glasses", "phase": "waiting",
                                                "title": f"Glasses call {stamp}", "file": name, "first_seen": now()}
@@ -593,19 +601,37 @@ def scan_spoken_orders(transcript, labels):
     return found
 
 
+def spoken_text(paragraph):
+    speaker = paragraph_speaker(paragraph)
+    return normalize(paragraph[len(speaker) + 2:] if speaker else paragraph)
+
+
 def order_words(order):
-    text = normalize(order["text"])
+    """The words said around the phrase, or just before the turn when the phrase stood alone."""
+    text = spoken_text(order["text"])
     match = TRIGGER.search(text)
-    words = text[match.end():].split()[:8] if match else []
+    words = (text[:match.start()].split()[-8:] + text[match.end():].split()[:8]) if match else text.split()
+    if not words:
+        words = spoken_text(order["context"]).split()[-8:]
     return {word for word in words if len(word) > 2 and word not in STOPWORDS}
 
 
 def same_order(one, two):
-    """Whether two transcripts' candidates are the same spoken order, judged by the words after the phrase."""
+    """Whether two transcripts' candidates are the same spoken order: most of their words agree."""
     first, second = order_words(one), order_words(two)
-    if not first or not second:
-        return not first and not second
-    return 2 * len(first & second) >= min(len(first), len(second))
+    return 2 * len(first & second) > max(len(first), len(second))
+
+
+def pass_only_orders(live, heard):
+    """The orders only the speaker pass heard, each live order matching at most one of them."""
+    unmatched, extra = list(live), []
+    for order in heard:
+        match = next((index for index, other in enumerate(unmatched) if same_order(order, other)), None)
+        if match is None:
+            extra.append(dict(order, by_captain=None))
+        else:
+            unmatched.pop(match)
+    return extra
 
 
 INTAKE_SCHEMA = {
@@ -684,8 +710,7 @@ def gate(item, found, extra_reason=""):
         reasons.append(extra_reason)
     if not found:
         reasons.append("its source could not be found in the meeting record")
-    if item.get("outward") or OUTWARD_VERBS.search(item.get("title") or "") \
-            or OUTWARD_VERBS.search(item.get("instruction") or ""):
+    if item.get("outward") or outward(item.get("title")) or outward(item.get("instruction")):
         reasons.append("it would act toward someone outside Starship or cannot easily be undone")
     if item.get("destructive"):
         reasons.append("it cannot be undone")
@@ -840,8 +865,7 @@ def intake_claimed(home, record):
     labels = self_labels(home, export)
     orders = scan_spoken_orders(own_transcript, labels)
     if text != own_transcript:
-        orders += [dict(order, by_captain=None) for order in scan_spoken_orders(text, labels)
-                   if not any(same_order(order, live) for live in orders)]
+        orders += pass_only_orders(orders, scan_spoken_orders(text, labels))
     limit = int(home.config["transcript_chars"])
     bounded = record_text if len(record_text) <= limit else \
         record_text[:limit] + "\n\n[the rest of the transcript is left out here]"

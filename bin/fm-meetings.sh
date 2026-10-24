@@ -79,7 +79,9 @@
 #     work: one inbox note per meeting (`fm-inbox.sh note --request-id
 #     meeting-<id>-start`). Everything else - needing review or refinement,
 #     outward-facing (an instruction to send, reply, email, message, post,
-#     publish, pay, buy, sign, invite or call someone), destructive (delete or
+#     publish, pay, buy, sign, invite or call someone; "call", "phone",
+#     "message" and "post" count as nouns only right after a word like "the",
+#     "our" or "on"), destructive (delete or
 #     remove), touching another person's commitment, or whose
 #     source cannot be found - goes in a second note (`meeting-<id>-review`)
 #     for firstmate to put on the captain's phone tap page, where it waits.

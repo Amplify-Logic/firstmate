@@ -319,7 +319,7 @@ test_live_only_meeting_gets_a_speaker_pass() {
   # Anarlog keeps a meeting's folder under sessions/, inside any meeting folders.
   mkdir -p "$home/anarlog/sessions/Trips/m-live"
   printf 'RIFF-fake-audio' > "$home/anarlog/sessions/Trips/m-live/audio.wav"
-  meeting "$home" '{"id":"m-live","title":"Bike trip","ended":-900,"transcript":"Captain: Firstmate, do it: plan the route along the river.\n\nRobin: Fine by me.","attachments":[{"id":"a1","relative_path":"audio.wav","filename":"audio.wav","content_type":"audio/wav","size_bytes":15,"sha256":""}]}'
+  meeting "$home" '{"id":"m-live","title":"Bike trip","ended":-900,"transcript":"Captain: Firstmate, do it: plan the route along the river.\n\nRobin: Fine by me.\n\nCaptain: We should compare the shed kits. Firstmate, do it.","attachments":[{"id":"a1","relative_path":"audio.wav","filename":"audio.wav","content_type":"audio/wav","size_bytes":15,"sha256":""}]}'
   out=$(run "$home" 0 check)
   assert_equals "" "$out" "nothing is announced while the speaker pass runs"
   assert_grep '"request_key": "fm-meetings-speakers-m-live"' "$home/anarlog/imports.jsonl" "the recording is imported for Anarlog's Batch pass"
@@ -329,7 +329,7 @@ test_live_only_meeting_gets_a_speaker_pass() {
   child=$(python3 -c 'import json,sys; print(json.loads(open(sys.argv[1]).readline())["request_key"])' "$home/anarlog/imports.jsonl")
   child=$(printf '%s' "$child" | python3 -c 'import hashlib,sys; print(hashlib.sha1(sys.stdin.read().encode()).hexdigest()[:8])')
   job="job-$child"
-  meeting "$home" "{\"id\":\"imp-$child\",\"title\":\"Bike trip (speaker pass)\",\"ended\":-60,\"source\":\"batch_transcription\",\"model\":\"soniqo-parakeet-batch\",\"recording_import\":{\"job_id\":\"$job\",\"meeting_id\":\"imp-$child\",\"processing_status\":\"transcribing\",\"summary_status\":\"pending\",\"error\":null},\"transcript\":\"Speaker 1: Firstmate, do it: plan the route along the river.\\n\\nSpeaker 2: Fine by me.\\n\\nSpeaker 1: Firstmate, build that: a packing list for the trip.\"}"
+  meeting "$home" "{\"id\":\"imp-$child\",\"title\":\"Bike trip (speaker pass)\",\"ended\":-60,\"source\":\"batch_transcription\",\"model\":\"soniqo-parakeet-batch\",\"recording_import\":{\"job_id\":\"$job\",\"meeting_id\":\"imp-$child\",\"processing_status\":\"transcribing\",\"summary_status\":\"pending\",\"error\":null},\"transcript\":\"Speaker 1: Firstmate, do it: plan the route along the river.\\n\\nSpeaker 2: Fine by me.\\n\\nSpeaker 1: Firstmate, build that: a packing list for the trip.\\n\\nSpeaker 1: We should compare the shed kits. Firstmate, do it.\\n\\nSpeaker 1: And plan the route back home. Firstmate, do it.\"}"
   out=$(run "$home" 60 check)
   assert_equals "" "$out" "an unfinished speaker pass keeps waiting"
   printf '{"processing_status":"done","error":null}\n' > "$home/anarlog/jobs/$job.json"
@@ -338,10 +338,12 @@ test_live_only_meeting_gets_a_speaker_pass() {
   assert_not_contains "$out" "(speaker pass)" "the speaker-pass copy is never announced on its own"
   assert_equals 1 "$(grep -c . "$home/anarlog/imports.jsonl")" "the speaker pass is requested once"
 
-  model_says "$home" '{"outcome":"The route goes along the river.","actions":[],"spoken_orders":[{"candidate":1,"instruction":"Plan the bike route along the river","evidence":"plan the route along the river","outward":false,"destructive":false,"other_person":false},{"candidate":2,"instruction":"Build a packing list for the trip","evidence":"a packing list for the trip","outward":false,"destructive":false,"other_person":false}]}'
+  model_says "$home" '{"outcome":"The route goes along the river.","actions":[],"spoken_orders":[{"candidate":1,"instruction":"Plan the bike route along the river","evidence":"plan the route along the river","outward":false,"destructive":false,"other_person":false},{"candidate":2,"instruction":"Compare the shed kits","evidence":"We should compare the shed kits","outward":false,"destructive":false,"other_person":false},{"candidate":3,"instruction":"Build a packing list for the trip","evidence":"a packing list for the trip","outward":false,"destructive":false,"other_person":false},{"candidate":4,"instruction":"Plan the route back home","evidence":"plan the route back home","outward":false,"destructive":false,"other_person":false}]}'
   out=$(run "$home" 180 intake)
-  assert_contains "$out" "Bike trip: 1 clear follow-up(s) to start, 1 for the captain's tap" "the order heard in both transcripts counts once, and the one heard only in the speaker pass waits"
+  assert_contains "$out" "Bike trip: 2 clear follow-up(s) to start, 2 for the captain's tap" "orders heard in both transcripts count once, and those heard only in the speaker pass wait"
+  assert_grep "Compare the shed kits" "$home/inbox/meeting-m-live-start" "an order whose instruction came before the phrase keeps the live attribution"
   assert_grep "Build a packing list for the trip (waits because could not tell who said it" "$home/inbox/meeting-m-live-review" "an order heard only in the speaker pass could not be attributed"
+  assert_grep "Plan the route back home (waits because could not tell who said it" "$home/inbox/meeting-m-live-review" "a pass-only order is kept even when a live order shares some of its words"
   assert_not_contains "$out" "live transcript only" "the speaker-pass transcript counts as final"
   assert_grep "Plan the bike route along the river" "$home/inbox/meeting-m-live-start" "the spoken order goes to firstmate ready to start"
   assert_grep "Speaker 2: Fine by me." "$(ls "$home"/model/prompt.*)" "the model reads the speaker-pass transcript"
@@ -484,20 +486,26 @@ test_outward_instructions_wait_whatever_the_model_says() {
   baseline "$home"
   meeting "$home" '{"id":"m-out","title":"Shed follow-up","ended":-900,"source":"batch_transcription"}'
   run "$home" 0 check >/dev/null
-  for instruction in "Remember to email Robin the measurements" "Please send Robin the list" "We should invite Robin" \
-    "Make sure we pay the deposit" "Ask Robin to pay" "Research the three shed kits mentioned on the call"; do
+  local waits=("Remember to email Robin the measurements" "Please send Robin the list" "We should invite Robin"
+    "Make sure we pay the deposit" "Ask Robin to pay" "Post on the forum asking about shed kits"
+    "Post in the family group chat that the trip is on" "Call to book the campsite" "Phone at nine to cancel"
+    "Message on WhatsApp to confirm")
+  local clears=("Summarise the call notes into a checklist" "Write up the call transcript"
+    "Research the three shed kits mentioned on the call")
+  for instruction in "${waits[@]}" "${clears[@]}"; do
     action="{\"title\":\"Follow up\",\"instruction\":\"$instruction\",\"evidence\":\"compare three shed kits\",\"clear\":true,\"why_review\":\"\",\"outward\":false,\"destructive\":false,\"other_person\":false}"
     actions="${actions:+$actions,}$action"
   done
   model_says "$home" "{\"outcome\":\"They will follow up on the shed.\",\"actions\":[$actions],\"spoken_orders\":[]}"
   out=$(run "$home" 60 intake)
-  assert_contains "$out" "Shed follow-up: 1 clear follow-up(s) to start, 5 for the captain's tap" "outward instructions wait even when the model called them internal"
+  assert_contains "$out" "Shed follow-up: 3 clear follow-up(s) to start, 10 for the captain's tap" "outward instructions wait even when the model called them internal"
   review="$home/inbox/meeting-m-out-review"
-  for instruction in "Remember to email Robin the measurements" "Please send Robin the list" "We should invite Robin" \
-    "Make sure we pay the deposit" "Ask Robin to pay"; do
+  for instruction in "${waits[@]}"; do
     assert_grep "$instruction" "$review" "an instruction to act outward waits: $instruction"
   done
-  assert_grep "Research the three shed kits mentioned on the call" "$home/inbox/meeting-m-out-start" "a call named only as context starts on its own"
+  for instruction in "${clears[@]}"; do
+    assert_grep "$instruction" "$home/inbox/meeting-m-out-start" "a call named only as a noun starts on its own: $instruction"
+  done
   pass "fm-meetings: an instruction to act outward waits for the captain whatever the model said"
 }
 
@@ -610,6 +618,7 @@ test_unreadable_anarlog_is_reported_once() {
   assert_contains "$(run "$home" 300 status)" "the file cannot be read" "the unreadable file is listed with its error"
   out=$(run "$home" 600 check)
   assert_grep "a call.m4a" "$home/anarlog/imports.jsonl" "the file is retried once it can be read"
+  assert_not_contains "$(run "$home" 600 status)" "the file cannot be read" "an imported file no longer shows its old error"
   pass "fm-meetings: an unreadable Anarlog, config or glasses folder is reported once until it clears"
 }
 
